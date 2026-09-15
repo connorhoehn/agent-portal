@@ -793,67 +793,87 @@
     {
       "method": "GET",
       "path": "/api/distillation/artifacts",
-      "source": "src/routes/distillation.ts:149"
+      "source": "src/routes/distillation.ts:150"
     },
     {
       "method": "POST",
       "path": "/api/distillation/compact",
-      "source": "src/routes/distillation.ts:97"
+      "source": "src/routes/distillation.ts:99"
     },
     {
       "method": "GET",
       "path": "/api/distillation/compactions",
-      "source": "src/routes/distillation.ts:76"
+      "source": "src/routes/distillation.ts:78"
     },
     {
       "method": "GET",
       "path": "/api/distillation/facts/:id/lineage",
-      "source": "src/routes/distillation.ts:162"
+      "source": "src/routes/distillation.ts:163"
     },
     {
       "method": "GET",
       "path": "/api/distillation/ingest",
-      "source": "src/routes/distillation.ts:71"
+      "source": "src/routes/distillation.ts:73"
     },
     {
       "method": "GET",
       "path": "/api/distillation/items",
-      "source": "src/routes/distillation.ts:113"
+      "source": "src/routes/distillation.ts:115"
     },
     {
       "method": "GET",
       "path": "/api/distillation/items/:id",
-      "source": "src/routes/distillation.ts:132"
+      "source": "src/routes/distillation.ts:134"
     },
     {
       "method": "GET",
       "path": "/api/distillation/items/:id/lineage",
-      "source": "src/routes/distillation.ts:140"
+      "source": "src/routes/distillation.ts:142"
     },
     {
       "method": "GET",
       "path": "/api/distillation/levels",
-      "source": "src/routes/distillation.ts:65"
+      "source": "src/routes/distillation.ts:67"
     },
     {
       "method": "GET",
       "path": "/api/distillation/library/:libraryItemId/provenance",
-      "source": "src/routes/distillation.ts:192"
+      "source": "src/routes/distillation.ts:193"
+    },
+    {
+      "method": "GET",
+      "path": "/api/distillation/procedures",
+      "source": "src/routes/distillation.ts:208"
+    },
+    {
+      "method": "GET",
+      "path": "/api/distillation/procedures/:id",
+      "source": "src/routes/distillation.ts:214"
+    },
+    {
+      "method": "GET",
+      "path": "/api/distillation/procedures/:id/applications",
+      "source": "src/routes/distillation.ts:222"
+    },
+    {
+      "method": "POST",
+      "path": "/api/distillation/procedures/:id/apply",
+      "source": "src/routes/distillation.ts:234"
     },
     {
       "method": "GET",
       "path": "/api/distillation/review",
-      "source": "src/routes/distillation.ts:171"
+      "source": "src/routes/distillation.ts:172"
     },
     {
       "method": "POST",
       "path": "/api/distillation/review/:id",
-      "source": "src/routes/distillation.ts:180"
+      "source": "src/routes/distillation.ts:181"
     },
     {
       "method": "GET",
       "path": "/api/distillation/sampling",
-      "source": "src/routes/distillation.ts:89"
+      "source": "src/routes/distillation.ts:91"
     },
     {
       "method": "GET",

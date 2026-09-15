@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-09-15T00:14:49.629Z",
-  "serverHandlerSha": "fedff0d23a4280dd52ec9036114b88c8d8e2840b5b5c78015769a47873743584",
+  "capturedAt": "2026-09-15T01:27:07.303Z",
+  "serverHandlerSha": "d8e3d7b4d31852c80df7a8e0a9ff4bed080ca345f41470074a4832d61e31b89b",
   "baseUrl": "http://127.0.0.1:3012",
   "personas": [
     "orgiq/admin",
@@ -75,6 +75,7 @@
           "distillation-ingest-writers",
           "distillation-library-links",
           "distillation-observations",
+          "distillation-procedure-applications",
           "distillation-review-samples",
           "github-identity",
           "github-orgs",
@@ -195,6 +196,7 @@
           "distillation-ingest-writers",
           "distillation-library-links",
           "distillation-observations",
+          "distillation-procedure-applications",
           "distillation-review-samples",
           "github-identity",
           "github-orgs",
@@ -2055,6 +2057,7 @@
           "convention",
           "decision",
           "insight",
+          "procedure",
           "runbook"
         ]
       }
@@ -2119,22 +2122,32 @@
         "items": "array",
         "items[]": "object",
         "items[].body": "string",
+        "items[].body_markdown": "string",
         "items[].box_id": "string",
+        "items[].cluster_ids": "array",
+        "items[].cluster_ids[]": "string",
         "items[].confidence": "number",
         "items[].created_at": "string",
         "items[].created_by_compaction_id": "string",
+        "items[].facts": "array",
+        "items[].facts[]": "string",
         "items[].id": "string",
         "items[].initiative_id": "string",
         "items[].kind": "string",
         "items[].level": "string",
+        "items[].library_item_id": "null|string",
         "items[].member_observation_ids": "array",
         "items[].member_observation_ids[]": "string",
         "items[].repo": "string",
+        "items[].reviewed_at": "null|string",
+        "items[].reviewed_by": "null|string",
         "items[].session_id": "string",
+        "items[].status": "string",
         "items[].summary": "string",
         "items[].tags": "array",
         "items[].tags[]": "string",
         "items[].title": "string",
+        "items[].type": "string",
         "items[].updated_at": "string",
         "next_cursor": "string"
       },
@@ -2148,7 +2161,15 @@
         ],
         "items[].level": [
           "L0",
-          "L1"
+          "L1",
+          "L2"
+        ],
+        "items[].status": [
+          "draft",
+          "published"
+        ],
+        "items[].type": [
+          "procedure"
         ]
       }
     },
@@ -2247,6 +2268,140 @@
     },
     "GET /api/distillation/library/:libraryItemId/provenance": {
       "skipped": "HTTP 404 (orgiq/admin); HTTP 404 (assessment/admin); HTTP 404 (anonymous)"
+    },
+    "GET /api/distillation/procedures": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "procedures": "array",
+        "procedures[]": "object",
+        "procedures[].applied_per_day": "array",
+        "procedures[].applied_per_day[]": "number",
+        "procedures[].artifact": "object",
+        "procedures[].artifact.body_markdown": "string",
+        "procedures[].artifact.cluster_ids": "array",
+        "procedures[].artifact.cluster_ids[]": "string",
+        "procedures[].artifact.created_at": "string",
+        "procedures[].artifact.created_by_compaction_id": "string",
+        "procedures[].artifact.facts": "array",
+        "procedures[].artifact.facts[]": "string",
+        "procedures[].artifact.id": "string",
+        "procedures[].artifact.library_item_id": "null|string",
+        "procedures[].artifact.reviewed_at": "null|string",
+        "procedures[].artifact.reviewed_by": "null|string",
+        "procedures[].artifact.status": "string",
+        "procedures[].artifact.summary": "string",
+        "procedures[].artifact.title": "string",
+        "procedures[].artifact.type": "string",
+        "procedures[].artifact.updated_at": "string",
+        "procedures[].drift": "object",
+        "procedures[].drift.failed_runs": "number",
+        "procedures[].drift.new_gotcha_clusters": "number",
+        "procedures[].health": "object",
+        "procedures[].health.reason": "string",
+        "procedures[].health.status": "string",
+        "procedures[].last_applied_at": "null|string",
+        "procedures[].last_succeeded_at": "null|string",
+        "procedures[].last_succeeded_by": "null|string",
+        "procedures[].repo": "string",
+        "procedures[].runs": "object",
+        "procedures[].runs.abandoned": "number",
+        "procedures[].runs.failed": "number",
+        "procedures[].runs.succeeded": "number",
+        "procedures[].runs.total": "number",
+        "procedures[].step_count": "number"
+      },
+      "values": {
+        "procedures[].artifact.status": [
+          "draft",
+          "published"
+        ],
+        "procedures[].artifact.type": [
+          "procedure"
+        ],
+        "procedures[].health.status": [
+          "drifting",
+          "proven",
+          "unproven"
+        ]
+      }
+    },
+    "GET /api/distillation/procedures/:id": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "applied_per_day": "array",
+        "applied_per_day[]": "number",
+        "artifact": "object",
+        "artifact.body_markdown": "string",
+        "artifact.cluster_ids": "array",
+        "artifact.cluster_ids[]": "string",
+        "artifact.created_at": "string",
+        "artifact.created_by_compaction_id": "string",
+        "artifact.facts": "array",
+        "artifact.facts[]": "string",
+        "artifact.id": "string",
+        "artifact.library_item_id": "null",
+        "artifact.reviewed_at": "null",
+        "artifact.reviewed_by": "null",
+        "artifact.status": "string",
+        "artifact.summary": "string",
+        "artifact.title": "string",
+        "artifact.type": "string",
+        "artifact.updated_at": "string",
+        "drift": "object",
+        "drift.failed_runs": "number",
+        "drift.new_gotcha_clusters": "number",
+        "health": "object",
+        "health.reason": "string",
+        "health.status": "string",
+        "last_applied_at": "string",
+        "last_succeeded_at": "string",
+        "last_succeeded_by": "string",
+        "repo": "string",
+        "runs": "object",
+        "runs.abandoned": "number",
+        "runs.failed": "number",
+        "runs.succeeded": "number",
+        "runs.total": "number",
+        "step_count": "number"
+      },
+      "values": {
+        "artifact.status": [
+          "draft"
+        ],
+        "artifact.type": [
+          "procedure"
+        ],
+        "health.status": [
+          "drifting"
+        ]
+      }
+    },
+    "GET /api/distillation/procedures/:id/applications": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "applications": "array",
+        "applications[]": "object|object(dictionary)",
+        "applications[].applied_at": "string",
+        "applications[].box_id": "string",
+        "applications[].failed_at_step_id": "null",
+        "applications[].id": "string",
+        "applications[].note": "null",
+        "applications[].outcome": "string",
+        "applications[].procedure_id": "string",
+        "applications[].repo": "string",
+        "applications[].session_id": "string"
+      },
+      "values": {
+        "applications[].outcome": [
+          "succeeded"
+        ]
+      }
     },
     "GET /api/distillation/review": {
       "persona": "orgiq/admin",
@@ -3584,6 +3739,7 @@
         ],
         "related[].asset.roles[]": [
           "hr-admin",
+          "org-leader",
           "sme"
         ]
       }
@@ -5954,6 +6110,7 @@
         "distillation-ingest-writers",
         "distillation-library-links",
         "distillation-observations",
+        "distillation-procedure-applications",
         "distillation-review-samples",
         "enterprise_context",
         "factuality",
@@ -6091,7 +6248,8 @@
       "open": false,
       "values": [
         "pass",
-        "requires_approval"
+        "requires_approval",
+        "succeeded"
       ]
     },
     "role": {
@@ -6174,6 +6332,7 @@
         "delivered",
         "done",
         "draft",
+        "drifting",
         "error",
         "escalated",
         "expired",
@@ -6192,6 +6351,7 @@
         "planning",
         "processed",
         "promoted",
+        "proven",
         "provisioning",
         "published",
         "ready",
@@ -6205,6 +6365,7 @@
         "stalled",
         "succeeded",
         "superseded",
+        "unproven",
         "verified"
       ]
     },
@@ -6234,6 +6395,7 @@
         "insight",
         "longtext",
         "mentors",
+        "procedure",
         "reports_to",
         "runbook",
         "sql",

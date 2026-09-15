@@ -45,7 +45,7 @@ afterEach(() => {
 });
 
 describe('the domain is on the fixture floor', () => {
-  it('registers all eight collections under stable keys', () => {
+  it('registers all nine collections under stable keys', () => {
     const keys = distillationFixtures.map((f) => f.key).sort();
     expect(keys).toEqual([
       'distillation-artifacts',
@@ -55,6 +55,7 @@ describe('the domain is on the fixture floor', () => {
       'distillation-ingest-writers',
       'distillation-library-links',
       'distillation-observations',
+      'distillation-procedure-applications',
       'distillation-review-samples',
     ]);
     for (const fixture of distillationFixtures) {

@@ -1,19 +1,34 @@
 // Distillation → Overview. The front door: the whole loop from an agent's
 // session to the runbook the next agent boots with, drawn as one row of
-// nodes with live counts and tier health; then only what needs attention,
-// how hard the fleet is writing, and whether the human sample dial is
-// calibrated. Drill-ins live on their own routes.
+// nodes with live counts and tier health; then what the fleet can actually
+// DO with what it learned and whether that still works; then only what
+// needs attention, how hard the fleet is writing, and whether the human
+// sample dial is calibrated. Drill-ins live on their own routes.
+import { useNavigate } from 'react-router';
 import {
-  Card, DetailSection, Divider, EmptyState, Inline, InlineAlert, LoadingState,
-  ProgressBar, StatStrip, Stack,
+  Button, Card, Chip, DataTable, DetailSection, Divider, EmptyState, Inline, InlineAlert,
+  Link, LoadingState, MetaLine, ProgressBar, ScoreBarGauge, StatStrip, Stack, TrendSparkline,
+  type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
+import { relativeTime } from '../../lib/relativeTime';
 import { T } from './Text';
 import { ProcessFlow } from './ProcessFlow';
 import {
-  LEVEL_HEALTH_ALERT_TONE, SAMPLING_LABEL, SAMPLING_TONE, pct,
+  LEVEL_HEALTH_ALERT_TONE, PROCEDURE_HEALTH_LABEL, PROCEDURE_HEALTH_TONE, SAMPLING_LABEL,
+  SAMPLING_TONE, pct, procedureRollup, runsLabel, stepsLabel,
 } from './distillationFormat';
-import type { IngestState, LevelsResponse, SamplingResponse } from './types';
+import type { IngestState, LevelsResponse, ProcedureView, ProceduresResponse, SamplingResponse } from './types';
+
+/** Rows on the front door. Six is enough to read the fleet's repertoire at a
+ *  glance; past that the reader wants the filtered catalog, which is a link. */
+const PROCEDURE_ROWS = 6;
+
+function repoShort(repo: string | null): string | null {
+  if (!repo) return null;
+  const i = repo.lastIndexOf('/');
+  return i >= 0 ? repo.slice(i + 1) : repo;
+}
 
 export default function DistillationOverviewPage() {
   const { data: levelsData, isLoading: levelsLoading, error: levelsError } =
@@ -21,9 +36,101 @@ export default function DistillationOverviewPage() {
   const { data: ingestData } = useFetch<IngestState>('/api/distillation/ingest', 20_000);
   const { data: samplingData } = useFetch<SamplingResponse>('/api/distillation/sampling', 60_000);
 
+  const { data: proceduresData, isLoading: proceduresLoading, error: proceduresError } =
+    useFetch<ProceduresResponse>('/api/distillation/procedures', 60_000);
+  const navigate = useNavigate();
+
   const levels = levelsData?.levels ?? [];
   const health = levelsData?.health ?? [];
   const problemLevels = health.filter((h) => h.status !== 'healthy');
+  // Server-sorted drifting → unproven → proven, so the first rows are the
+  // ones that need a person; the rollup is counted here from the same rows.
+  const procedures = proceduresData?.procedures ?? [];
+  const rollup = procedureRollup(procedures);
+
+  const procedureColumns: DataTableColumn<ProcedureView>[] = [
+    {
+      key: 'title',
+      header: 'Procedure',
+      render: (p) => (
+        <Stack gap="xs">
+          {/* A ghost Button rather than a row click: rows are not tab stops,
+              and every door on this page is reachable from the keyboard. */}
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => navigate(`/iq/distillation/artifacts?type=procedure&open=${encodeURIComponent(p.artifact.id)}`)}
+          >
+            {p.artifact.title}
+          </Button>
+          <MetaLine
+            size="xs"
+            items={[
+              stepsLabel(p.step_count),
+              repoShort(p.repo),
+              p.artifact.library_item_id ? 'in Library' : p.artifact.status,
+            ]}
+          />
+        </Stack>
+      ),
+    },
+    {
+      key: 'proof',
+      header: 'Proof',
+      width: '30%',
+      render: (p) => (
+        <Stack gap="xs">
+          <Chip tone={PROCEDURE_HEALTH_TONE[p.health.status]} size="xs" dot="static">
+            {PROCEDURE_HEALTH_LABEL[p.health.status]}
+          </Chip>
+          <T className="text-[11px] text-text-tertiary" title={p.health.reason}>{p.health.reason}</T>
+        </Stack>
+      ),
+    },
+    {
+      key: 'last_proven',
+      header: 'Last proven',
+      render: (p) => (
+        <T className="text-[12px] text-text-secondary">
+          {p.last_succeeded_at ? relativeTime(p.last_succeeded_at) : 'never'}
+        </T>
+      ),
+    },
+    {
+      key: 'runs',
+      header: 'Runs',
+      render: (p) => (
+        // The sparkline is the last 14 UTC days; the caption beside it is the
+        // lifetime count — two windows, so each is labelled as its own.
+        <Inline gap="sm" align="center" wrap={false}>
+          <TrendSparkline
+            points={p.applied_per_day}
+            yMin={0}
+            width={96}
+            height={24}
+            showFill={false}
+            ariaLabel={`${p.applied_per_day.reduce((a, b) => a + b, 0)} runs in the last 14 days`}
+          />
+          <T className="text-[11px] text-text-tertiary">{runsLabel(p.runs)}</T>
+        </Inline>
+      ),
+    },
+    {
+      key: 'success',
+      header: 'Success',
+      width: '14%',
+      render: (p) => (
+        // NaN for an unproven procedure renders an empty gauge by contract —
+        // "no data" rather than a confident 0%.
+        <ScoreBarGauge
+          value={p.runs.total > 0 ? p.runs.succeeded / p.runs.total : Number.NaN}
+          threshold={0.8}
+          size="sm"
+          ariaLabel={`${p.runs.succeeded} of ${p.runs.total} runs succeeded`}
+        />
+      ),
+    },
+  ];
 
   return (
     <Stack gap="lg">
@@ -35,6 +142,14 @@ export default function DistillationOverviewPage() {
           { label: 'L2 artifacts', value: levels.find((l) => l.level === 'L2')?.items ?? '—' },
           { label: 'Active writers', value: ingestData?.activeWriters ?? '—', hint: 'sessions writing right now' },
           { label: 'L1 sample rate', value: samplingData ? `${samplingData.l1SampleRatePct}%` : '—', hint: 'what humans review' },
+          {
+            label: 'Proven procedures',
+            value: proceduresData ? `${rollup.proven}/${rollup.total}` : '—',
+            tone: rollup.drifting > 0 ? 'danger' : 'default',
+            hint: !proceduresData ? undefined
+              : rollup.total === 0 ? 'none yet'
+                : rollup.drifting > 0 ? `${rollup.drifting} drifting` : 'all holding',
+          },
         ]}
       />
 
@@ -65,6 +180,39 @@ export default function DistillationOverviewPage() {
             ))
           )}
         </Stack>
+      </DetailSection>
+
+      {/* The repertoire. A runbook is prose the next agent may or may not
+          follow; a procedure is ordered steps the fleet has actually run, and
+          each row says whether it still works: proven (succeeded recently,
+          nothing moved since), drifting (a failed run or a new gotcha in that
+          repo since it last succeeded), unproven (never run to completion).
+          Every number is counted from run rows, not stored. */}
+      <DetailSection
+        title="What the fleet knows how to do"
+        hint={proceduresData ? rollup.hint : undefined}
+        actions={procedures.length > PROCEDURE_ROWS ? (
+          <Link href="/iq/distillation/artifacts?type=procedure">See all {procedures.length} procedures →</Link>
+        ) : undefined}
+      >
+        {proceduresError ? (
+          <EmptyState title="Could not load procedures" description={proceduresError} />
+        ) : proceduresLoading && !proceduresData ? (
+          <LoadingState label="Loading procedures…" />
+        ) : procedures.length === 0 ? (
+          <EmptyState
+            title="No procedures yet"
+            description="The next L1 → L2 pass mints one when a chunk of clusters pairs a failure with the fix that resolved it."
+          />
+        ) : (
+          <DataTable
+            data={procedures.slice(0, PROCEDURE_ROWS)}
+            keyField={(p) => p.artifact.id}
+            columns={procedureColumns}
+            emptyMessage="No procedures."
+            data-testid="procedure-repertoire"
+          />
+        )}
       </DetailSection>
 
       <DetailSection title="Ingest pressure" hint={ingestData ? `${ingestData.observationsPerHour}/hr` : undefined}>

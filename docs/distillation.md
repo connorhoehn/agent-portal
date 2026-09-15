@@ -12,12 +12,42 @@ distilled fact can be traced back to the evidence it rests on.
 |---|---|---|---|
 | **L0 — observations** | one row per learning a session wrote (`lab_experiences`: worked / failed / gotcha / decision / convention, with the repo and initiative it is about) | many concurrent sessions; duplicates expected | browse per repo or initiative; open an observation to see its session and box |
 | **L1 — clusters** | deduped, merged groups of observations that say the same thing, with a confidence | the L0 → L1 compaction | the tier humans sample: agree or disagree with a cluster's summary against its members |
-| **L2 — artifacts** | stable distilled artifacts — runbooks, insights, conventions, decisions — each carrying its facts and the clusters it was distilled from | the L1 → L2 compaction | read it, open the Library item it was published as, open its lineage |
+| **L2 — artifacts** | stable distilled artifacts — runbooks, insights, conventions, decisions, and **procedures** (ordered steps the fleet has actually run) — each carrying its facts and the clusters it was distilled from | the L1 → L2 compaction | read it, open the Library item it was published as, open its lineage; for a procedure, see whether it still works |
 
 Artifacts move through `draft → published → retired`. A published artifact
 has a `library_item_id`: that is the runbook or skill in **Library** that
 people and agents actually use. Library items show "Distilled from" so the
 link runs both ways.
+
+## Procedures and proof
+
+A runbook is prose the next agent may or may not follow. A **procedure** is
+the fleet's procedural memory: the same L2 artifact, but its facts are
+ordered — each step is a fact with an `ordinal`, backed by the observation
+that taught it — so it can be replayed step by step and blamed step by step.
+The L1 → L2 pass mints one when the chunk of clusters it is distilling pairs
+a trigger (a `failed` or `gotcha` observation: something bit) with an
+outcome (a `worked` or `decision`: something resolved it) and has at least
+two action-shaped members to order into steps. A chunk with no trigger is a
+decision or convention; a failure with no resolution is an insight.
+
+What makes procedural memory different from the rest of the store is that
+it is judged at reuse, not at extraction. Every time a session runs a
+procedure it records an **application** — `succeeded`, `failed` (and the
+step it stopped on), or `abandoned` — and the Overview counts those rows
+into a verdict per procedure:
+
+- **proven** — it succeeded recently and nothing has moved since.
+- **drifting** — since it last succeeded, a run failed, or a new `failed` /
+  `gotcha` cluster was minted in the same repo, or the last success is older
+  than two weeks. Drift is measured at L1 rather than L0, so it moves when
+  a compaction lands a new failed or gotcha cluster in that repo, not on
+  every raw write.
+- **unproven** — published, never run to completion.
+
+The artifact drawer shows the steps toned by the latest run (proven up to
+the step it failed on, blamed there, unknown after) and the run ledger
+those tones come from.
 
 ## What a compaction does
 
@@ -57,8 +87,9 @@ cluster in it really has been sampled.
 
 ```
 session ──written_by──▶ observation ──merged_into──▶ cluster ──distilled_into──▶ artifact ──published_as──▶ library item
-                                                                                     │
+                                                                                     │  │
                                                                           fact ◀──supports── observation
+                                                                                        └──applied_in──▶ application (a run: succeeded / failed at step n / abandoned)
 ```
 
 Click any node for its record and "Focus here" to re-centre the graph on

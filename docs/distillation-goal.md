@@ -108,7 +108,7 @@ Observation (L0)  id · session_id · box_id · repo · initiative_id
 Cluster (L1)      id · title · summary · kind · repo · initiative_id · tags[]
                   · member_observation_ids[] · confidence 0–1
                   · created_by_compaction_id · created_at · updated_at
-Artifact (L2)     id · type runbook|insight|convention|decision
+Artifact (L2)     id · type runbook|insight|convention|decision|procedure
                   · title · summary · body_markdown
                   · cluster_ids[] · facts[] · library_item_id | null
                   · status draft|published|retired
@@ -116,10 +116,18 @@ Artifact (L2)     id · type runbook|insight|convention|decision
                   · created_at · updated_at
 Fact              id · artifact_id · statement · subject · predicate · object
                   · evidence_observation_ids[] · confidence
+                  · ordinal | null   (1-based step position within a procedure; contiguous 1..n)
+ProcedureApplication
+                  id · procedure_id · session_id · box_id · repo · applied_at
+                  · outcome succeeded|failed|abandoned · failed_at_step_id | null · note | null
+                  (stored as rows; runs, success share, last proven and drift are COUNTED)
+ProcedureView     artifact · repo · step_count · runs{total,succeeded,failed,abandoned}
+                  · last_applied_at · last_succeeded_at · applied_per_day[14]
+                  · drift{new_gotcha_clusters, failed_runs} · health{status proven|drifting|unproven, reason}
 ReviewSample      id · target_kind cluster|artifact · target_id · sampled_at
                   · reviewer | null · verdict pending|agree|disagree · note
-Lineage           { nodes: {id, kind: observation|session|cluster|artifact|fact|library_item, label, meta}[],
-                    edges: {from, to, relation: written_by|merged_into|distilled_into|supports|published_as}[] }
+Lineage           { nodes: {id, kind: observation|session|cluster|artifact|fact|library_item|application, label, meta}[],
+                    edges: {from, to, relation: written_by|merged_into|distilled_into|supports|published_as|applied_in}[] }
 ```
 
 Routes (all under `/api/distillation`, existing five stay as they are):
@@ -133,7 +141,22 @@ GET  /facts/:id/lineage                                            → Lineage
 GET  /review?verdict=pending|agree|disagree                        → { samples }
 POST /review/:id            { verdict, note }   ManageBots gate    → the sample
 GET  /library/:libraryItemId/provenance                            → { artifact, lineage } (or 404)
+GET  /procedures                                                   → { procedures: ProcedureView[] } drifting → unproven → proven
+GET  /procedures/:id                                               → ProcedureView (404 unless the artifact is a procedure)
+GET  /procedures/:id/applications                                  → { applications } newest first
+POST /procedures/:id/apply  { outcome, failed_at_step_id?, note }  ManageBots gate → 201 the application
 ```
+
+A `procedure` is minted by the L1 → L2 pass only when the chunk pairs a
+trigger (`failed`|`gotcha`) with an outcome (`worked`|`decision`) and has ≥ 2
+action-shaped members to order (`isProceduralChunk`, unit-tested);
+`ARTIFACT_TYPE_FOR_KIND` stays total over the five observation kinds. Health
+is a pure rule over counted rows (`procedureHealth`): no succeeded run →
+unproven; a failed/abandoned run, a new `failed`/`gotcha` cluster in the
+repo, or a success older than 14 days since the last success → drifting;
+otherwise proven. The Overview shows the repertoire ("What the fleet knows
+how to do") and a "Proven procedures" tile; the artifact drawer shows steps
+toned by the latest run and the run ledger.
 
 Every artifact with `library_item_id` links to a REAL Library item
 (`GET /api/library/:id` must 200 for it); the Library detail page shows a
@@ -141,8 +164,9 @@ Every artifact with `library_item_id` links to a REAL Library item
 `produced: { cluster_ids[], artifact_ids[] }` so a job row can open what it
 made. Mock data: ≥ 60 observations across ≥ 6 sessions and 3 repos, ≥ 18
 clusters, ≥ 8 artifacts (≥ 5 linked to Library runbooks/skills that exist in
-the Library mock, ≥ 2 drafts, 1 retired), ≥ 12 facts with evidence, ≥ 6
-pending review samples and ≥ 20 decided ones — enough that every page has a
+the Library mock, ≥ 2 drafts, 1 retired), ≥ 3 of them procedures with ≥ 3
+steps each and one in each health state, ≥ 12 facts with evidence, ≥ 5
+procedure applications, ≥ 6 pending review samples and ≥ 20 decided ones — enough that every page has a
 real list, a real empty filter, and a real error state to exercise.
 `schema/distillation_schema.sql`: additive DDL for clusters, artifacts,
 facts, review samples (FK to `lab_experiences` where it applies), registered

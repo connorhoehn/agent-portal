@@ -1324,6 +1324,13 @@ export const WRITE_SPECS: readonly WriteSpec[] = [
     build: ok({ verdict: 'agree' }),
   },
   {
+    route: 'POST /api/distillation/procedures/:id/apply',
+    persona: 'orgiq/admin',
+    safe: 'Appends a run to the registered `distillation-procedure-applications` fixture; reset drops it and the procedure’s counted health goes back to the seed. No AWS, no model, no timer. The `:id` is drawn from GET /api/distillation/procedures, which lists only procedure artifacts, so the 404 branch (a non-procedure id) is never what gets captured.',
+    bodyFrom: "routes/distillation.ts: `outcome` ∈ {'succeeded','failed','abandoned'}; `failed_at_step_id` is required for `failed` and must be null for `succeeded`, so a succeeded body carries no step and needs no second lookup.",
+    build: ok({ outcome: 'succeeded' }),
+  },
+  {
     route: 'POST /api/library/evals/:assetId/run',
     persona: 'orgiq/admin',
     safe: 'Scoring is a local deterministic simulation — no model. The one Aurora write is best-effort and swallowed. The run row is appended, never a seeded one changed.',

@@ -11,8 +11,12 @@ import {
   itemsQueryParams, filterByObservationKind, describeActiveFilters, hasActiveFilters,
   filtersSummaryLabel, itemsShownLabel, producedSummaryLabel,
   latestJobFor, compactionFlowModel,
+  ARTIFACT_TYPE_TONE, PROCEDURE_HEALTH_TONE, OUTCOME_SEVERITY,
+  stepsLabel, stepsFromLineage, stepTonesForRun, procedureRollup, runsLabel,
 } from '../distillationFormat.ts';
-import type { CompactionJob, Item, LevelHealth, LevelState, LineageEdge, LineageNode } from '../types.ts';
+import type {
+  CompactionJob, Item, LevelHealth, LevelState, LineageEdge, LineageNode, ProcedureApplication, ProcedureView,
+} from '../types.ts';
 
 test('lagLabel reads caught up at zero, not "0m"', () => {
   assert.equal(lagLabel(0), 'caught up');
@@ -79,6 +83,8 @@ test('tones cover every status and verdict', () => {
 test('artifact and review vocab covers every enum member', () => {
   assert.equal(ARTIFACT_TYPE_LABEL.runbook, 'Runbook');
   assert.equal(ARTIFACT_TYPE_LABEL.decision, 'Decision');
+  assert.equal(ARTIFACT_TYPE_LABEL.procedure, 'Procedure');
+  assert.equal(ARTIFACT_TYPE_TONE.procedure, 'success');
   assert.equal(ARTIFACT_STATUS_TONE.published, 'success');
   assert.equal(ARTIFACT_STATUS_TONE.retired, 'caution');
   assert.equal(REVIEW_VERDICT_TONE.agree, 'success');
@@ -108,6 +114,30 @@ test('layoutLineage places nodes in kind columns, left to right', () => {
   assert.ok(at('obs-1').x < at('cl-1').x);
   assert.ok(at('cl-1').x < at('art-1').x);
   assert.ok(at('art-1').x < at('lib-1').x);
+});
+
+test('layoutLineage places an application node in the rightmost column, level with the library item', () => {
+  const nodes: LineageNode[] = [
+    { id: 'cl-1', kind: 'cluster', label: 'Cluster 1', meta: {} },
+    { id: 'art-1', kind: 'artifact', label: 'Procedure 1', meta: {} },
+    { id: 'fact-1', kind: 'fact', label: 'Step 1', meta: { ordinal: 1 } },
+    { id: 'lib-1', kind: 'library_item', label: 'Lib 1', meta: {} },
+    { id: 'app-1', kind: 'application', label: 'Run 1', meta: { outcome: 'succeeded' } },
+  ];
+  const edges: LineageEdge[] = [
+    { from: 'cl-1', to: 'art-1', relation: 'distilled_into' },
+    { from: 'fact-1', to: 'art-1', relation: 'supports' },
+    { from: 'art-1', to: 'lib-1', relation: 'published_as' },
+    { from: 'art-1', to: 'app-1', relation: 'applied_in' },
+  ];
+  const laid = layoutLineage(nodes, edges);
+  const at = (id: string) => laid.find((n) => n.id === id)!;
+  const maxX = Math.max(...laid.map((n) => n.x));
+  assert.equal(at('app-1').x, maxX);
+  assert.equal(at('app-1').x, at('lib-1').x);
+  assert.ok(at('fact-1').x < at('app-1').x);
+  // Same column, different rows — the two never sit on top of each other.
+  assert.notEqual(at('app-1').y, at('lib-1').y);
 });
 
 test('artifactFactCount counts fact IDs — Artifact.facts carries no resolved objects', () => {
@@ -327,4 +357,106 @@ test('compactionFlowModel: L2 → Library edge is always "published as", neutral
   assert.equal(lib.tone, 'neutral');
   assert.equal(lib.running, false);
   assert.equal(lib.breathing, false);
+});
+
+// ── Procedures (procedural memory) ───────────────────────────────────────
+
+test('procedure health and outcome vocab covers every enum member', () => {
+  assert.equal(PROCEDURE_HEALTH_TONE.proven, 'success');
+  assert.equal(PROCEDURE_HEALTH_TONE.drifting, 'warning');
+  assert.equal(PROCEDURE_HEALTH_TONE.unproven, 'neutral');
+  assert.equal(OUTCOME_SEVERITY.succeeded, 'success');
+  assert.equal(OUTCOME_SEVERITY.failed, 'error');
+  assert.equal(OUTCOME_SEVERITY.abandoned, 'warning');
+});
+
+test('stepsLabel pluralizes on the step count', () => {
+  assert.equal(stepsLabel(1), '1 step');
+  assert.equal(stepsLabel(4), '4 steps');
+  assert.equal(stepsLabel(0), '0 steps');
+});
+
+test('stepsFromLineage sorts fact nodes by ordinal regardless of wire order and drops null-ordinal claims', () => {
+  const lineage = {
+    nodes: [
+      { id: 'art-1', kind: 'artifact' as const, label: 'Procedure', meta: {} },
+      { id: 'fact-3', kind: 'fact' as const, label: 'Redeploy', meta: { ordinal: 3 } },
+      { id: 'fact-claim', kind: 'fact' as const, label: 'Needs ARM64', meta: { ordinal: null } },
+      { id: 'fact-1', kind: 'fact' as const, label: 'Build base', meta: { ordinal: 1 } },
+      { id: 'fact-2', kind: 'fact' as const, label: 'Push images', meta: { ordinal: 2, confidence: 0.8 } },
+      { id: 'obs-1', kind: 'observation' as const, label: 'Obs', meta: { ordinal: 9 } },
+    ],
+  };
+  const steps = stepsFromLineage(lineage);
+  assert.deepEqual(steps.map((s) => s.id), ['fact-1', 'fact-2', 'fact-3']);
+  assert.deepEqual(steps.map((s) => s.ordinal), [1, 2, 3]);
+  assert.equal(steps[1]!.label, 'Push images');
+  assert.equal(steps[1]!.meta['confidence'], 0.8);
+});
+
+test('stepsFromLineage returns nothing for a lineage with no ordered facts', () => {
+  assert.deepEqual(stepsFromLineage({ nodes: [] }), []);
+  assert.deepEqual(
+    stepsFromLineage({ nodes: [{ id: 'fact-1', kind: 'fact', label: 'Claim', meta: {} }] }),
+    [],
+  );
+});
+
+const STEPS = [{ id: 's1' }, { id: 's2' }, { id: 's3' }, { id: 's4' }];
+
+function run(over: Partial<ProcedureApplication>): ProcedureApplication {
+  return {
+    id: 'app-1', procedure_id: 'art-1', session_id: 'sess-1', box_id: 'box-1', repo: 'org/repo',
+    applied_at: '2026-09-10T10:00:00Z', outcome: 'succeeded', failed_at_step_id: null, note: null,
+    ...over,
+  };
+}
+
+test('stepTonesForRun: a succeeded latest run proves every step', () => {
+  assert.deepEqual(stepTonesForRun(STEPS, run({})), ['success', 'success', 'success', 'success']);
+});
+
+test('stepTonesForRun: a failed run proves the steps before the failure, blames the failing step, and says nothing after', () => {
+  assert.deepEqual(
+    stepTonesForRun(STEPS, run({ outcome: 'failed', failed_at_step_id: 's3' })),
+    ['success', 'success', 'danger', 'neutral'],
+  );
+  assert.deepEqual(
+    stepTonesForRun(STEPS, run({ outcome: 'failed', failed_at_step_id: 's1' })),
+    ['danger', 'neutral', 'neutral', 'neutral'],
+  );
+});
+
+test('stepTonesForRun: no run, an abandoned run, or a failure at an unknown step all read neutral', () => {
+  assert.deepEqual(stepTonesForRun(STEPS, null), ['neutral', 'neutral', 'neutral', 'neutral']);
+  assert.deepEqual(stepTonesForRun(STEPS, run({ outcome: 'abandoned' })), ['neutral', 'neutral', 'neutral', 'neutral']);
+  assert.deepEqual(
+    stepTonesForRun(STEPS, run({ outcome: 'failed', failed_at_step_id: 'gone' })),
+    ['neutral', 'neutral', 'neutral', 'neutral'],
+  );
+  assert.deepEqual(stepTonesForRun([], run({})), []);
+});
+
+const view = (status: ProcedureView['health']['status']): Pick<ProcedureView, 'health'> =>
+  ({ health: { status, reason: 'because' } });
+
+test('procedureRollup counts each health bucket and writes the header hint', () => {
+  const r = procedureRollup([view('proven'), view('drifting'), view('unproven')]);
+  assert.equal(r.total, 3);
+  assert.equal(r.proven, 1);
+  assert.equal(r.drifting, 1);
+  assert.equal(r.unproven, 1);
+  assert.equal(r.hint, '3 procedures · 1 proven · 1 drifting · 1 unproven');
+});
+
+test('procedureRollup omits empty buckets from the hint and names the empty list', () => {
+  assert.equal(procedureRollup([view('proven'), view('proven')]).hint, '2 procedures · 2 proven');
+  assert.equal(procedureRollup([view('unproven')]).hint, '1 procedure · 1 unproven');
+  assert.deepEqual(procedureRollup([]), { total: 0, proven: 0, drifting: 0, unproven: 0, hint: 'no procedures' });
+});
+
+test('runsLabel leads with the success count, and says "no runs yet" at zero', () => {
+  assert.equal(runsLabel({ total: 6, succeeded: 4, failed: 1, abandoned: 1 }), '6 runs · 4 succeeded');
+  assert.equal(runsLabel({ total: 1, succeeded: 0, failed: 1, abandoned: 0 }), '1 run · 0 succeeded');
+  assert.equal(runsLabel({ total: 0, succeeded: 0, failed: 0, abandoned: 0 }), 'no runs yet');
 });

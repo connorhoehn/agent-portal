@@ -53,8 +53,8 @@
 //
 // IDS AND WIRE STRINGS ARE NOT INVENTED. `kind` is PromptKind and `tier` is
 // PromptTier (lib/prompt-contract.ts); `lifecycleStatus` values are the ones
-// `observability.prompt_version_meta.lifecycle_status` carries; the five
-// asset ids that carry provenance are exactly the five
+// `observability.prompt_version_meta.lifecycle_status` carries; the seven
+// asset ids that carry provenance are exactly the seven
 // `library_item_id`s seedLibraryLinks() publishes into
 // (mock/distillation.ts), which is what closes the loop in both directions.
 
@@ -189,6 +189,24 @@ function seedAssets(): LibraryAssetRow[] {
       kind: 'skill', tier: 'internal', roles: ['sme', 'hr-admin'], tags: ['aurora', 'runbook', 'infra'],
       ownerName: 'Eli Garcia', version: '2', lifecycleStatus: 'published', evalPassRate: 0.97,
       usedBy: ['devbox'], updatedAt: hoursAgo(26),
+    }),
+    // The two procedures art-009 / art-011 were published as. They exist here
+    // because every library link must resolve to a real asset — a link to an
+    // id the catalog does not carry is a "Distilled from" section pointing at
+    // a 404.
+    asset({
+      id: 'skill-sso-origin-bringup', name: 'Bring SSO up on a new origin',
+      description: 'Use when standing Cognito SSO up on a new origin. Keeps the picker working until an HTTPS front door exists, then sets the callback in the order Cognito accepts.',
+      kind: 'skill', tier: 'internal', roles: ['sme', 'hr-admin'], tags: ['auth', 'cognito', 'runbook'],
+      ownerName: 'Mia Singh', version: '1', lifecycleStatus: 'published', evalPassRate: 0.91,
+      usedBy: ['devbox'], updatedAt: hoursAgo(8),
+    }),
+    asset({
+      id: 'skill-teardown-proposal', name: 'Propose an idle-capacity teardown',
+      description: 'Use when proposing a teardown of idle capacity. Attributes the spend to the owning initiative and names the floor removed, so the case is approvable in one meeting.',
+      kind: 'skill', tier: 'internal', roles: ['sme', 'org-leader'], tags: ['finops', 'runbook'],
+      ownerName: 'Nora DaSilva', version: '1', lifecycleStatus: 'published', evalPassRate: 0.88,
+      usedBy: ['devbox'], updatedAt: hoursAgo(6),
     }),
     asset({
       id: 'skill-pr-review-scoped', name: 'Review a PR diff-scoped',
