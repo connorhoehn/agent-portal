@@ -10,6 +10,7 @@ import {
   Banner,
   Button,
   Card,
+  CardHeader,
   CatalogGrid,
   Checkbox,
   Chip,
@@ -32,6 +33,7 @@ import {
   Textarea,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
+import { useCrumbLabel } from '../../lib/crumbLabels';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { useCapabilities } from '../../lib/capabilities';
 import { toastError, toastSuccess } from '../../lib/toastStore';
@@ -108,6 +110,8 @@ export default function BotDetailPage() {
   const { data: botData, error: botError, refresh: refreshBot } =
     useFetch<{ bot: Bot }>(id ? `/api/bots/${id}` : null, 15_000);
   const bot = botData?.bot ?? null;
+  // The trail reads the bot's name once it loads, not "Bot 32970d0a…".
+  useCrumbLabel(id, bot?.name);
 
   // Runs poll fast while one is in flight, lazily otherwise.
   const [anyRunning, setAnyRunning] = useState(false);
@@ -350,141 +354,6 @@ export default function BotDetailPage() {
         )}
       </Card>
 
-      <CatalogGrid columns={2} className="mb-4 items-start">
-        {/* ── THE MISSION ── */}
-        <Card padding="none" className="overflow-hidden">
-          <Inline gap="sm" align="center" justify="between" className="px-3.5 py-2.5 border-b border-border">
-            <strong className="text-xs font-semibold text-text-secondary tracking-wide select-none">THE MISSION</strong>
-            {canManage && (
-              <Button variant="ghost" size="sm" onClick={() => { setMissionText(bot.prompt); setEditMission((v) => !v); }}>
-                {editMission ? 'cancel' : 'edit'}
-              </Button>
-            )}
-          </Inline>
-          {editMission ? (
-            <Stack gap="xs" className="p-3.5">
-              <Textarea value={missionText} onChange={(e) => setMissionText(e.target.value)} minRows={6} />
-              <Inline justify="end">
-                <Button variant="primary" size="sm" disabled={busy === 'mission' || !missionText.trim()} onClick={() => void saveMission()}>
-                  {busy === 'mission' ? 'saving…' : 'Save mission'}
-                </Button>
-              </Inline>
-            </Stack>
-          ) : (
-            <Stack gap="none" className="px-3.5 py-3 text-[12.5px] text-text-primary leading-relaxed whitespace-pre-wrap">
-              {bot.prompt}
-            </Stack>
-          )}
-        </Card>
-
-        {/* ── GUARDRAILS ── */}
-        <Card padding="none" className="overflow-hidden">
-          <Inline gap="sm" align="center" justify="between" className="px-3.5 py-2.5 border-b border-border">
-            <strong className="text-xs font-semibold text-text-secondary tracking-wide select-none">GUARDRAILS</strong>
-            {canManage && (
-              <Button variant="ghost" size="sm" onClick={() => (editGuards ? setEditGuards(false) : beginEditGuards())}>
-                {editGuards ? 'cancel' : 'edit'}
-              </Button>
-            )}
-          </Inline>
-          {editGuards ? (
-            <Stack gap="sm" className="p-3.5">
-              <FormField label="Model" layout="inline">
-                {(wiring) => (
-                  <Select {...inputWiring(wiring)} value={gModel} onChange={(e) => setGModel(e.target.value)} options={modelOptions} />
-                )}
-              </FormField>
-              <FormField label="Budget / run ($)" layout="inline">
-                {(wiring) => (
-                  <Input {...inputWiring(wiring)} type="number" min={0} step="0.01" value={gPerRun} placeholder="none" onChange={(e) => setGPerRun(e.target.value)} />
-                )}
-              </FormField>
-              <FormField label="Budget / day ($)" layout="inline">
-                {(wiring) => (
-                  <Input {...inputWiring(wiring)} type="number" min={0} step="0.01" value={gPerDay} placeholder="none" onChange={(e) => setGPerDay(e.target.value)} />
-                )}
-              </FormField>
-              <FormField label="Max runs / day" layout="inline">
-                {(wiring) => (
-                  <Input {...inputWiring(wiring)} type="number" min={1} value={gMaxRuns} onChange={(e) => setGMaxRuns(Math.max(1, Number(e.target.value)))} />
-                )}
-              </FormField>
-              <FormField label="Requires review" layout="inline">
-                {(wiring) => (
-                  <Checkbox {...inputWiring(wiring)} aria-labelledby={wiring.labelId} checked={gReview} onChange={setGReview} />
-                )}
-              </FormField>
-              <FormField
-                label="Enforce initiative allocation"
-                layout="inline"
-                hint="A cron fire that would push this initiative past its monthly allocation is skipped and retried next cycle. Off by default — a bot is the maintenance floor."
-              >
-                {(wiring) => (
-                  <Checkbox {...inputWiring(wiring)} aria-labelledby={wiring.labelId} checked={gEnforceAlloc} onChange={setGEnforceAlloc} />
-                )}
-              </FormField>
-              <Inline justify="end">
-                <Button variant="primary" size="sm" disabled={busy === 'guards'} onClick={() => void saveGuards()}>
-                  {busy === 'guards' ? 'saving…' : 'Save guardrails'}
-                </Button>
-              </Inline>
-            </Stack>
-          ) : (
-            <Stack gap="none">
-              <Table>
-                <TableBody>
-                  <TableRow>
-                    <TableTd className="text-text-tertiary w-32">Model</TableTd>
-                    <TableTd title={bot.model}>{modelLabel(bot.model)}</TableTd>
-                  </TableRow>
-                  <TableRow>
-                    <TableTd className="text-text-tertiary">Budget / run</TableTd>
-                    <TableTd>{bot.budgetPerRunUsd != null ? `$${bot.budgetPerRunUsd.toFixed(2)}` : 'none (soft cap unset)'}</TableTd>
-                  </TableRow>
-                  <TableRow>
-                    <TableTd className="text-text-tertiary">Budget / day</TableTd>
-                    <TableTd>{bot.budgetPerDayUsd != null ? `$${bot.budgetPerDayUsd.toFixed(2)}` : 'none (hard cap unset)'}</TableTd>
-                  </TableRow>
-                  <TableRow>
-                    <TableTd className="text-text-tertiary">Max runs / day</TableTd>
-                    <TableTd>{bot.maxRunsPerDay}</TableTd>
-                  </TableRow>
-                  <TableRow>
-                    <TableTd className="text-text-tertiary">Requires review</TableTd>
-                    <TableTd>{bot.requiresReview ? 'yes' : 'no'}</TableTd>
-                  </TableRow>
-                  <TableRow>
-                    <TableTd className="text-text-tertiary">Enforce allocation</TableTd>
-                    <TableTd title="When on, a cron fire that would push this initiative past its monthly allocation is skipped and retried next cycle.">
-                      {botEnforceAllocation(bot) ? 'on — cron fires braked by allocation' : 'off (bot spend is the maintenance floor)'}
-                    </TableTd>
-                  </TableRow>
-                </TableBody>
-              </Table>
-              <Stack gap="xs" className="px-3.5 py-2.5">
-                <MetaLine
-                  size="xs" tone="tertiary"
-                  items={[
-                    `today: ${runSummary.todayRunCount}/${bot.maxRunsPerDay} ${runSummary.todayRunCount === 1 ? 'run' : 'runs'}`,
-                    `$${bot.todaySpendUsd.toFixed(2)}${bot.budgetPerDayUsd != null ? ` of $${bot.budgetPerDayUsd.toFixed(2)}` : ' spent'}`,
-                  ]}
-                />
-                {bot.budgetPerDayUsd != null && bot.budgetPerDayUsd > 0 && (
-                  <ProgressBar
-                    value={Math.min(bot.todaySpendUsd, bot.budgetPerDayUsd)}
-                    max={bot.budgetPerDayUsd}
-                    size="sm"
-                    showRatio={false}
-                    color={bot.todaySpendUsd >= bot.budgetPerDayUsd * 0.8 ? 'var(--color-warning)' : undefined}
-                    aria-label="Today's spend vs daily budget"
-                  />
-                )}
-              </Stack>
-            </Stack>
-          )}
-        </Card>
-      </CatalogGrid>
-
       {/* ── LIVE ACTIVITY — the current run's execution timeline ── */}
       {liveBoxId && (
         <Stack gap="none" className="mb-4">
@@ -500,9 +369,12 @@ export default function BotDetailPage() {
         </Stack>
       )}
 
-      {/* ── Runs ── */}
-      <Card padding="md">
-        <strong className="block text-xs font-semibold text-text-secondary tracking-wide select-none mb-2">RUNS</strong>
+      {/* ── Runs — first, because "what did this bot do lately" is the
+          question this page exists to answer; the mission and guardrails
+          that shaped those runs follow. ── */}
+      <Card padding="none" className="mb-4 overflow-hidden">
+        <CardHeader inset title="Runs" />
+        <Stack gap="none" className="p-3.5">
         {runsFailure ? (
           <UnavailableNotice
             error={runsFailure}
@@ -609,7 +481,145 @@ export default function BotDetailPage() {
             </TableBody>
           </Table>
         )}
+        </Stack>
       </Card>
+
+      <CatalogGrid columns={2} className="mb-4 items-start">
+        {/* ── THE MISSION ── */}
+        <Card padding="none" className="overflow-hidden">
+          <CardHeader
+            inset
+            title="The mission"
+            action={canManage && (
+              <Button variant="ghost" size="sm" onClick={() => { setMissionText(bot.prompt); setEditMission((v) => !v); }}>
+                {editMission ? 'cancel' : 'edit'}
+              </Button>
+            )}
+          />
+          {editMission ? (
+            <Stack gap="xs" className="p-3.5">
+              <Textarea value={missionText} onChange={(e) => setMissionText(e.target.value)} minRows={6} />
+              <Inline justify="end">
+                <Button variant="primary" size="sm" disabled={busy === 'mission' || !missionText.trim()} onClick={() => void saveMission()}>
+                  {busy === 'mission' ? 'saving…' : 'Save mission'}
+                </Button>
+              </Inline>
+            </Stack>
+          ) : (
+            <Stack gap="none" className="px-3.5 py-3 text-[12.5px] text-text-primary leading-relaxed whitespace-pre-wrap">
+              {bot.prompt}
+            </Stack>
+          )}
+        </Card>
+
+        {/* ── GUARDRAILS ── */}
+        <Card padding="none" className="overflow-hidden">
+          <CardHeader
+            inset
+            title="Guardrails"
+            action={canManage && (
+              <Button variant="ghost" size="sm" onClick={() => (editGuards ? setEditGuards(false) : beginEditGuards())}>
+                {editGuards ? 'cancel' : 'edit'}
+              </Button>
+            )}
+          />
+          {editGuards ? (
+            <Stack gap="sm" className="p-3.5">
+              <FormField label="Model" layout="inline">
+                {(wiring) => (
+                  <Select {...inputWiring(wiring)} value={gModel} onChange={(e) => setGModel(e.target.value)} options={modelOptions} />
+                )}
+              </FormField>
+              <FormField label="Budget / run ($)" layout="inline">
+                {(wiring) => (
+                  <Input {...inputWiring(wiring)} type="number" min={0} step="0.01" value={gPerRun} placeholder="none" onChange={(e) => setGPerRun(e.target.value)} />
+                )}
+              </FormField>
+              <FormField label="Budget / day ($)" layout="inline">
+                {(wiring) => (
+                  <Input {...inputWiring(wiring)} type="number" min={0} step="0.01" value={gPerDay} placeholder="none" onChange={(e) => setGPerDay(e.target.value)} />
+                )}
+              </FormField>
+              <FormField label="Max runs / day" layout="inline">
+                {(wiring) => (
+                  <Input {...inputWiring(wiring)} type="number" min={1} value={gMaxRuns} onChange={(e) => setGMaxRuns(Math.max(1, Number(e.target.value)))} />
+                )}
+              </FormField>
+              <FormField label="Requires review" layout="inline">
+                {(wiring) => (
+                  <Checkbox {...inputWiring(wiring)} aria-labelledby={wiring.labelId} checked={gReview} onChange={setGReview} />
+                )}
+              </FormField>
+              <FormField
+                label="Enforce initiative allocation"
+                layout="inline"
+                hint="A cron fire that would push this initiative past its monthly allocation is skipped and retried next cycle. Off by default — a bot is the maintenance floor."
+              >
+                {(wiring) => (
+                  <Checkbox {...inputWiring(wiring)} aria-labelledby={wiring.labelId} checked={gEnforceAlloc} onChange={setGEnforceAlloc} />
+                )}
+              </FormField>
+              <Inline justify="end">
+                <Button variant="primary" size="sm" disabled={busy === 'guards'} onClick={() => void saveGuards()}>
+                  {busy === 'guards' ? 'saving…' : 'Save guardrails'}
+                </Button>
+              </Inline>
+            </Stack>
+          ) : (
+            <Stack gap="none">
+              <Table>
+                <TableBody>
+                  <TableRow>
+                    <TableTd className="text-text-tertiary w-32">Model</TableTd>
+                    <TableTd title={bot.model}>{modelLabel(bot.model)}</TableTd>
+                  </TableRow>
+                  <TableRow>
+                    <TableTd className="text-text-tertiary">Budget / run</TableTd>
+                    <TableTd>{bot.budgetPerRunUsd != null ? `$${bot.budgetPerRunUsd.toFixed(2)}` : 'none (soft cap unset)'}</TableTd>
+                  </TableRow>
+                  <TableRow>
+                    <TableTd className="text-text-tertiary">Budget / day</TableTd>
+                    <TableTd>{bot.budgetPerDayUsd != null ? `$${bot.budgetPerDayUsd.toFixed(2)}` : 'none (hard cap unset)'}</TableTd>
+                  </TableRow>
+                  <TableRow>
+                    <TableTd className="text-text-tertiary">Max runs / day</TableTd>
+                    <TableTd>{bot.maxRunsPerDay}</TableTd>
+                  </TableRow>
+                  <TableRow>
+                    <TableTd className="text-text-tertiary">Requires review</TableTd>
+                    <TableTd>{bot.requiresReview ? 'yes' : 'no'}</TableTd>
+                  </TableRow>
+                  <TableRow>
+                    <TableTd className="text-text-tertiary">Enforce allocation</TableTd>
+                    <TableTd title="When on, a cron fire that would push this initiative past its monthly allocation is skipped and retried next cycle.">
+                      {botEnforceAllocation(bot) ? 'on — cron fires braked by allocation' : 'off (bot spend is the maintenance floor)'}
+                    </TableTd>
+                  </TableRow>
+                </TableBody>
+              </Table>
+              <Stack gap="xs" className="px-3.5 py-2.5">
+                <MetaLine
+                  size="xs" tone="tertiary"
+                  items={[
+                    `today: ${runSummary.todayRunCount}/${bot.maxRunsPerDay} ${runSummary.todayRunCount === 1 ? 'run' : 'runs'}`,
+                    `$${bot.todaySpendUsd.toFixed(2)}${bot.budgetPerDayUsd != null ? ` of $${bot.budgetPerDayUsd.toFixed(2)}` : ' spent'}`,
+                  ]}
+                />
+                {bot.budgetPerDayUsd != null && bot.budgetPerDayUsd > 0 && (
+                  <ProgressBar
+                    value={Math.min(bot.todaySpendUsd, bot.budgetPerDayUsd)}
+                    max={bot.budgetPerDayUsd}
+                    size="sm"
+                    showRatio={false}
+                    color={bot.todaySpendUsd >= bot.budgetPerDayUsd * 0.8 ? 'var(--color-warning)' : undefined}
+                    aria-label="Today's spend vs daily budget"
+                  />
+                )}
+              </Stack>
+            </Stack>
+          )}
+        </Card>
+      </CatalogGrid>
 
       <ConfirmDialog
         open={confirmDelete}

@@ -290,12 +290,19 @@ export default function BotsPage() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search by name, codebase or initiative…"
-              className="min-w-[220px] flex-1"
+              // A fixed width, not flex-1: the search box used to take the
+              // whole row and push the status select and the summary line
+              // onto rows of their own — three full-width rows where one
+              // filter row does.
+              className="w-[320px]"
             />
             <Select
               value={status}
               onChange={(e) => setStatus(e.target.value as BotStatusFilter)}
               options={STATUS_OPTIONS}
+              // Sized to its longest option; the library default is w-full,
+              // which took a whole row of its own beside the search box.
+              className="w-44"
             />
             {hasFilters && (
               <Button variant="ghost" size="sm" onClick={() => { setSearch(''); setStatus('all'); }}>
@@ -304,6 +311,7 @@ export default function BotsPage() {
             )}
             <MetaLine
               size="xs" tone="tertiary"
+              className="ml-auto"
               items={[botsSummaryLine(bots.length, filtered.length), 'every change still passes review + policy gates']}
             />
           </Inline>
