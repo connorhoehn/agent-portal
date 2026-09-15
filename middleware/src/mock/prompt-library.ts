@@ -60,6 +60,7 @@
 
 import { clock, defineFixture } from './core/index.js';
 import { artifacts, clusters, libraryLinks, observations } from './distillation.js';
+import { promptEvalRuns } from './prompt-evals.js';
 // Type-only, so it is erased at compile: providers/prompt-library.ts imports
 // the fixture below at run time, and a value import back the other way would
 // be a genuine cycle rather than a shared shape. Same pattern as
@@ -325,9 +326,26 @@ export function derivationFor(libraryItemId: string, topK = 3): DerivationSummar
 
 /** A stored row, decorated with the provenance the distillation store knows.
  *  This is the only place a `LibraryAsset` is assembled offline. */
+/** The newest eval run for an asset version, or null when it has never been
+ *  run. The runs are the rows; the rate on the asset is read from them. */
+function latestRunRate(assetId: string, version: string): number | null | undefined {
+  let latest: { ranAt: string; passRate: number | null } | undefined;
+  for (const run of promptEvalRuns.rows()) {
+    if (run.assetId !== assetId || run.version !== version) continue;
+    if (!latest || run.ranAt > latest.ranAt) latest = run;
+  }
+  return latest ? latest.passRate : undefined;
+}
+
 export function mockLibraryAssets(): LibraryAsset[] {
   return libraryAssets.rows().map((row) => {
     const derivedFrom = derivationFor(row.id);
-    return derivedFrom ? { ...row, derivedFrom } : { ...row };
+    // Health & usage, Release readiness and the Evals panel used to disagree
+    // on one asset's pass rate — the asset carried a seeded literal while the
+    // panel read the latest run. The run corpus is the source; the seeded
+    // figure stands only for an asset that has never been run.
+    const fromRuns = latestRunRate(row.id, row.version);
+    const evalPassRate = fromRuns === undefined ? row.evalPassRate : fromRuns;
+    return derivedFrom ? { ...row, evalPassRate, derivedFrom } : { ...row, evalPassRate };
   });
 }

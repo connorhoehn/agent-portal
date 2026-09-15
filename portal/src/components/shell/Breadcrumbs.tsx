@@ -12,13 +12,24 @@ import { useLocation, useNavigate } from 'react-router';
 import { Breadcrumbs as UIBreadcrumbs } from '@connorhoehnslalom/ui-components/shared';
 
 import { resolveBreadcrumbs } from './breadcrumbResolve';
+import { useCrumbLabels } from '../../lib/crumbLabels';
 export type { Crumb } from './breadcrumbResolve';
 
 
 export function Breadcrumbs() {
   const { pathname } = useLocation();
   const navigate = useNavigate();
-  const crumbs = useMemo(() => resolveBreadcrumbs(pathname), [pathname]);
+  // A detail page that fetched its entity registers the title under the id
+  // the resolver put on the crumb; until it does (or if it never does) the
+  // shortened id stands.
+  const titles = useCrumbLabels();
+  const crumbs = useMemo(
+    () => resolveBreadcrumbs(pathname).map((c) => {
+      const title = c.id ? titles.get(c.id) : undefined;
+      return title ? { ...c, label: title } : c;
+    }),
+    [pathname, titles],
+  );
 
   // Group crumbs (Build/Org/Operate/System) are context, not destinations, so
   // they carry no href and the library renders them as plain text. The last

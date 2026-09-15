@@ -29,3 +29,16 @@ test('the Design rail pages sit under Design, and a library asset gets a third c
   assert.deepEqual(resolveBreadcrumbs('/iq/promotions').map((c) => c.label), ['Design', 'Promotions']);
   assert.equal(resolveBreadcrumbs('/iq/library/lib-stakeholder-email')[1]!.path, '/iq/library');
 });
+
+test('entity crumbs carry the id so a mounted page can supply the title', () => {
+  const cases: Array<[string, string]> = [
+    ['/iq/designs/des-auth-rotation', 'des-auth-rotation'],
+    ['/iq/library/lib-stakeholder-email', 'lib-stakeholder-email'],
+    ['/iq/work/job-0123456789abcdef', 'job-0123456789abcdef'],
+    ['/admin/bots/bot-nightly-lint', 'bot-nightly-lint'],
+  ];
+  for (const [path, id] of cases) {
+    const last = resolveBreadcrumbs(path).at(-1);
+    assert.equal(last?.id, id, `${path} → ${JSON.stringify(last)}`);
+  }
+});

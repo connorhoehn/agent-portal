@@ -11,6 +11,9 @@ function initiativeName(id: string): string {
 export interface Crumb {
   label: string;
   path?: string;
+  /** The entity id behind a shortened label, so a mounted page can supply
+   *  the real title through `lib/crumbLabels`. */
+  id?: string;
 }
 
 const OBS_LABELS: Record<string, string> = {
@@ -69,16 +72,16 @@ export function resolveBreadcrumbs(pathname: string): Crumb[] {
         if (b === 'changes') return [{ label: 'Build' }, { label: 'Automate', path: '/iq/work' }, { label: 'Graph updates' }];
         if (b === 'queue') return [{ label: 'Build' }, { label: 'Automate', path: '/iq/work' }, { label: 'Queue' }];
         if (b === 'findings') return [{ label: 'Build' }, { label: 'Automate', path: '/iq/work' }, { label: 'Findings' }];
-        return [{ label: 'Build' }, { label: 'Automate', path: '/iq/work' }, { label: `Job ${shortId(b)}` }];
+        return [{ label: 'Build' }, { label: 'Automate', path: '/iq/work' }, { label: `Job ${shortId(b)}`, id: b }];
       case 'projects':
         if (!b) return [{ label: 'Plan' }, { label: 'Initiatives' }];
         return [{ label: 'Plan' }, { label: 'Initiatives', path: '/iq/projects' }, { label: initiativeName(b) }];
       case 'designs':
         if (!b) return [{ label: 'Design' }, { label: 'Designs' }];
-        return [{ label: 'Design' }, { label: 'Designs', path: '/iq/designs' }, { label: shortId(b) }];
+        return [{ label: 'Design' }, { label: 'Designs', path: '/iq/designs' }, { label: shortId(b), id: b }];
       case 'library':
         if (!b) return [{ label: 'Design' }, { label: 'Library' }];
-        return [{ label: 'Design' }, { label: 'Library', path: '/iq/library' }, { label: shortId(b) }];
+        return [{ label: 'Design' }, { label: 'Library', path: '/iq/library' }, { label: shortId(b), id: b }];
       case 'promotions': return [{ label: 'Design' }, { label: 'Promotions' }];
       case 'release': return [{ label: 'Release' }, { label: 'Session config' }];
       case 'sprints': return [{ label: 'Plan' }, { label: 'Initiatives', path: '/iq/projects' }, { label: 'Sprints' }];
@@ -112,7 +115,7 @@ export function resolveBreadcrumbs(pathname: string): Crumb[] {
       case 'budgets': return [{ label: 'Plan' }, { label: 'Budgets' }];
       case 'bots':
         if (!b) return [{ label: 'Build' }, { label: 'Automate' }, { label: 'Bots' }];
-        return [{ label: 'Build' }, { label: 'Automate' }, { label: 'Bots', path: '/admin/bots' }, { label: `Bot ${shortId(b)}` }];
+        return [{ label: 'Build' }, { label: 'Automate' }, { label: 'Bots', path: '/admin/bots' }, { label: `Bot ${shortId(b)}`, id: b }];
       case 'changes': return [{ label: 'Build' }, { label: 'Automate' }, { label: 'Changes' }];
       case 'devbox': return [{ label: 'Build' }, { label: 'Computer Lab' }];
       case 'knowledge':
@@ -120,7 +123,7 @@ export function resolveBreadcrumbs(pathname: string): Crumb[] {
         if (b === 'registry' && c) {
           return [
             { label: 'Operate' }, { label: 'Knowledge', path: '/admin/knowledge' },
-            { label: 'Registry', path: '/admin/knowledge/registry' }, { label: shortId(c) },
+            { label: 'Registry', path: '/admin/knowledge/registry' }, { label: shortId(c), id: c },
           ];
         }
         return [{ label: 'Operate' }, { label: 'Knowledge', path: '/admin/knowledge' }, { label: 'Registry' }];
@@ -135,12 +138,12 @@ export function resolveBreadcrumbs(pathname: string): Crumb[] {
         if (b === 'invocations') {
           if (!c) return [...base, { label: 'Runs' }];
           if (c === 'search') return [...base, { label: 'Runs', path: '/admin/observability/invocations' }, { label: 'Search' }];
-          return [...base, { label: 'Runs', path: '/admin/observability/invocations' }, { label: `Invocation ${shortId(c)}` }];
+          return [...base, { label: 'Runs', path: '/admin/observability/invocations' }, { label: `Invocation ${shortId(c)}`, id: c }];
         }
         if (b === 'harness') {
           if (!c) return [...base, { label: 'Harness' }];
           const harness: Crumb[] = [...base, { label: 'Harness', path: '/admin/observability/harness' }];
-          if (c === 'runs' && d) return [...harness, { label: `Run ${shortId(d)}` }];
+          if (c === 'runs' && d) return [...harness, { label: `Run ${shortId(d)}`, id: d }];
           if (c === 'compare') return [...harness, { label: 'Compare runs' }];
           return harness;
         }

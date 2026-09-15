@@ -30,6 +30,7 @@ import {
   type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
+import { useCrumbLabel } from '../../lib/crumbLabels';
 import { relativeTime } from '../../lib/relativeTime';
 import { AssetDrawer } from './AssetDrawer';
 import { T } from './Text';
@@ -63,6 +64,9 @@ export default function LibraryPage() {
   const { data, isLoading, error } = useFetch<LibraryResponse>(url, 60_000);
 
   const assets = useMemo(() => data?.assets ?? [], [data]);
+  // /iq/library/:assetId — the trail reads the asset's name once the catalog
+  // has it, not the shortened id.
+  useCrumbLabel(routeAssetId, assets.find((a) => a.id === routeAssetId)?.name);
   const kindOptions = useMemo(() => facetOptions(data?.facets.kind ?? {}, KIND_ORDER), [data]);
   const tierOptions = useMemo(() => facetOptions(data?.facets.tier ?? {}, TIER_ORDER), [data]);
 
@@ -142,7 +146,7 @@ export default function LibraryPage() {
   return (
     <PageSection
       title="Library"
-      description="Everything the fleet is instructed by, in one catalog: agent system prompts, prompts a person runs, evaluators a pipeline calls with no human in it, skills the model discovers for itself, and insights injected as fact."
+      description="Everything the fleet is instructed by, in one catalog — system prompts, prompts a person runs, evaluators, skills and insights."
     >
       <Toolbar size="md" aria-label="Library filters">
         <ToolbarGroup aria-label="Kind">

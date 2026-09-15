@@ -31,6 +31,7 @@ import {
   Stack,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
+import { useCrumbLabel } from '../../lib/crumbLabels';
 import { useCapabilities } from '../../lib/capabilities';
 import { relativeTime } from '../../lib/relativeTime';
 import { toastError, toastPending, toastSuccess } from '../../lib/toastStore';
@@ -59,6 +60,8 @@ export default function DesignThreadPage() {
 
   const { data: thread, isLoading, error, refresh } =
     useFetch<DesignThread>(id ? `/api/designs/${encodeURIComponent(id)}` : null, 20_000);
+  // The trail reads the design's title, not "des-auth…".
+  useCrumbLabel(id, thread?.title);
   // The rail's people: the initiative's governance, not just whoever posted.
   const { data: initiative } = useFetch<InitiativeLite>(
     thread ? `/api/graph/projects/${encodeURIComponent(thread.orgProjectId)}` : null, 60_000);
