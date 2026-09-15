@@ -19,6 +19,7 @@ import {
   Switch,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
+import { useCrumbLabel } from '../../lib/crumbLabels';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { T } from './Text';
 import { STATUS_CHIP_TONE, countTelemetryLines, ms, toLogLevel, visibleLogLines, when } from './agentDetailFormat';
@@ -57,6 +58,8 @@ export default function AgentDetailPage() {
 
   const rt = data?.runtime;
   const prompt = data?.prompt;
+  // The trail reads "Supervisor", not "orgiq-supervisor", once the runtime loads.
+  useCrumbLabel(agentId, rt?.name);
 
   const logLines = useMemo(
     () => visibleLogLines(data?.log.events ?? [], hideTelemetry),
@@ -132,7 +135,7 @@ export default function AgentDetailPage() {
 
           {/* ── What it is running ──────────────────────────────────────── */}
           <Card padding="none" className="mb-4 overflow-hidden">
-            <CardHeader className="px-3.5 pt-3 pb-2.5 border-b border-border" title="Running now" subtitle="resolved at invocation time, not from the repo" />
+            <CardHeader inset title="Running now" subtitle="resolved at invocation time, not from the repo" />
 
             {prompt?.source === 'managed' ? (
               <Stack gap="sm" className="px-3.5 py-3">
@@ -176,7 +179,7 @@ export default function AgentDetailPage() {
           {/* ── Recent calls ────────────────────────────────────────────── */}
           <Card padding="none" className="mb-4 overflow-hidden">
             <CardHeader
-              className="px-3.5 pt-3 pb-2.5 border-b border-border"
+              inset
               title="Recent invocations"
               action={(
                 <Link to={`/admin/observability/invocations?agentId=${encodeURIComponent(rt.name)}`}
@@ -237,7 +240,7 @@ export default function AgentDetailPage() {
 
           {/* ── Log ─────────────────────────────────────────────────────── */}
           <Card padding="none" className="overflow-hidden">
-            <CardHeader className="px-3.5 pt-3 pb-2.5 border-b border-border"
+            <CardHeader inset
               title="Log"
               subtitle={data?.log.logGroup}
               action={(

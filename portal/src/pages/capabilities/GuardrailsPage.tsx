@@ -219,7 +219,7 @@ function GuardrailsPage() {
 
         {/* Status + metrics — wrapped in a single Card per spec */}
         <Card padding="none" className="overflow-hidden" data-testid="guardrails-status-card">
-          <CardHeader className="px-3.5 pt-3 pb-2.5 border-b border-border"
+          <CardHeader inset
             title={guardrail.name}
             subtitle={`v${guardrail.version} · Updated ${new Date(guardrail.updatedAt).toLocaleString()}`}
             action={<Chip tone={guardrail.status === 'READY' ? 'success' : 'warning'} size="xs">{guardrail.status}</Chip>}
@@ -329,8 +329,11 @@ function GuardrailsPage() {
             {canEdit && (
               <Card padding="sm" className="mb-4 bg-surface-hover" data-testid="topic-add-form">
                 <Stack gap="sm">
+                  {/* FormField hands its render prop a `labelId` that is not a
+                      DOM attribute (queue: FormField `labelId` DOM leak) — dropped
+                      before the spread, here and below, or React warns on render. */}
                   <FormField label="Topic name">
-                    {p => (
+                    {({ labelId: _labelId, ...p }) => (
                       <Input
                         {...p}
                         type="text"
@@ -342,7 +345,7 @@ function GuardrailsPage() {
                     )}
                   </FormField>
                   <FormField label="Definition" hint="What does this topic cover?">
-                    {p => (
+                    {({ labelId: _labelId, ...p }) => (
                       <Textarea
                         {...p}
                         value={newTopic.definition}
@@ -452,7 +455,7 @@ function GuardrailsPage() {
         }
       >
         <FormField label="Definition" hint="Natural-language description used by the model.">
-          {p => (
+          {({ labelId: _labelId, ...p }) => (
             <Textarea
               {...p}
               value={editingDef}

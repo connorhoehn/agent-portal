@@ -187,7 +187,7 @@ export default function CapabilitiesHomePage() {
 
       {problems.length > 0 && (
         <Card padding="none" className="mb-4 overflow-hidden border-danger/40">
-          <CardHeader className="px-3.5 pt-3 pb-2.5 border-b border-border" title="Needs attention" subtitle="configured ids checked against the account" />
+          <CardHeader inset title="Needs attention" subtitle="configured ids checked against the account" />
           <Stack gap="none">
             {problems.map((c) => (
               <Stack key={c.key} gap="xs" className="border-b border-border px-3.5 py-3 last:border-b-0">
@@ -206,7 +206,7 @@ export default function CapabilitiesHomePage() {
           return (
             <Card key={c.key} padding="none" className="overflow-hidden">
               <CardHeader
-                className="px-3.5 pt-3 pb-2.5 border-b border-border"
+                inset
                 title={c.label}
                 meta={<Chip tone={STATE_TONE[c.state]} size="xs">{STATE_LABEL[c.state]}</Chip>}
                 action={used ? <T className="text-[11px] text-text-tertiary">used {when(used)}</T> : undefined}

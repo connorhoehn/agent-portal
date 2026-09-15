@@ -92,7 +92,7 @@ export function resolveBreadcrumbs(pathname: string): Crumb[] {
         return [{ label: 'Org' }, { label: 'Scores', path: '/iq/scores' }, { label: b === 'cohorts' ? 'Cohorts' : 'Compare' }];
       case 'agents':
         if (!b) return [{ label: 'Operate' }, { label: 'Architecture' }];
-        return [{ label: 'Operate' }, { label: 'Architecture', path: '/iq/agents' }, { label: b }];
+        return [{ label: 'Operate' }, { label: 'Architecture', path: '/iq/agents' }, { label: b, id: b }];
       // Prompt management is the Library's rail (Design); the rail lights
       // Library on these pages, so the crumb says the same.
       case 'prompt-ops': return [{ label: 'Design' }, { label: 'Library', path: '/iq/library' }, { label: 'What is deployed' }];

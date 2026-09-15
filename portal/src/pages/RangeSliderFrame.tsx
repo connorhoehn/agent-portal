@@ -54,11 +54,10 @@ export function RangeSliderFrame({
         // built-in one is switched off — with both on, the raw number sat on
         // the track's end and ran into the next control's label.
         readout={false}
-        // w-36, not narrower: the library Slider's range input is `flex-1`
-        // with no `min-w-0`/`w-full`, so it keeps its intrinsic 129px and
-        // overflows a narrower box — which is how the readout ended up on the
-        // track. Queued in docs/ui-components-queue.md.
-        className="w-36"
+        // The library's range input takes the wrapper's width since 2.261.0
+        // (`w-full min-w-0`), so the box can be as narrow as the toolbar
+        // wants without the track overflowing it.
+        className="w-28"
         min={min}
         max={max}
         step={step}

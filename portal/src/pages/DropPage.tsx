@@ -171,7 +171,7 @@ export default function DropPage() {
 
   return shell(
     <Card padding="none">
-      <CardHeader className="px-3.5 pt-3 pb-2.5 border-b border-border" title="Add documents" subtitle={link.label} />
+      <CardHeader inset title="Add documents" subtitle={link.label} />
 
       <Stack gap="sm" className="p-5">
         <FileUploadDrop
