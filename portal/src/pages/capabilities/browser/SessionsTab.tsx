@@ -62,7 +62,7 @@ export function SessionsTab() {
       {canManage && <LaunchSessionCard onLaunched={refresh} />}
 
       <Card padding="none" className="overflow-hidden">
-        <CardHeader title="Open sessions" action={<MetaLine items={[`${open.length} open`]} />} />
+        <CardHeader className="px-3.5 pt-3 pb-2.5 border-b border-border" title="Open sessions" action={<MetaLine items={[`${open.length} open`]} />} />
         <Stack gap="md" className="px-3.5 py-3">
           {failure ? (
             <InlinePlaceholder align="center" size="sm" tone="surface">
@@ -120,7 +120,7 @@ export function SessionsTab() {
       </Card>
 
       <Card padding="none" className="overflow-hidden">
-        <CardHeader
+        <CardHeader className="px-3.5 pt-3 pb-2.5 border-b border-border"
           title="Past sessions"
           action={<MetaLine items={['from AgentCore Data Plane', `${closed.length} closed`]} />}
         />
@@ -189,7 +189,7 @@ function LaunchSessionCard({ onLaunched }: { onLaunched: () => void }) {
 
   return (
     <Card padding="none" className="overflow-hidden">
-      <CardHeader title="Launch browser session" />
+      <CardHeader className="px-3.5 pt-3 pb-2.5 border-b border-border" title="Launch browser session" />
       <Stack gap="md" className="px-3.5 py-3">
         <Inline gap="sm" wrap={false}>
           <Input

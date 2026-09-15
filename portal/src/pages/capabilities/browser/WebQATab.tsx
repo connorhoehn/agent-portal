@@ -39,7 +39,7 @@ export function WebQATab() {
 
   return (
     <Card padding="none" className="overflow-hidden">
-      <CardHeader
+      <CardHeader className="px-3.5 pt-3 pb-2.5 border-b border-border"
         title="Ask a webpage"
         subtitle="Spins up a sandboxed Chrome, screenshots the page, sends it + your question to Nova Lite (multimodal). Returns an answer grounded in the visible content."
       />

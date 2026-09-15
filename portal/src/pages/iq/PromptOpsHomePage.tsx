@@ -292,6 +292,7 @@ export default function PromptOpsHomePage() {
       {/* ── Full library, classified ── */}
       <Card padding="none" className="overflow-hidden">
         <CardHeader
+          className="px-3.5 pt-3 pb-2.5 border-b border-border"
           title="Prompt library"
           subtitle={`${allPrompts.length} in Bedrock`}
           action={<Link to="/iq/prompts" className="text-[12px] font-semibold text-primary no-underline hover:underline">Open Prompt Studio →</Link>}

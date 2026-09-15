@@ -132,7 +132,7 @@ export default function AgentDetailPage() {
 
           {/* ── What it is running ──────────────────────────────────────── */}
           <Card padding="none" className="mb-4 overflow-hidden">
-            <CardHeader title="Running now" subtitle="resolved at invocation time, not from the repo" />
+            <CardHeader className="px-3.5 pt-3 pb-2.5 border-b border-border" title="Running now" subtitle="resolved at invocation time, not from the repo" />
 
             {prompt?.source === 'managed' ? (
               <Stack gap="sm" className="px-3.5 py-3">
@@ -176,6 +176,7 @@ export default function AgentDetailPage() {
           {/* ── Recent calls ────────────────────────────────────────────── */}
           <Card padding="none" className="mb-4 overflow-hidden">
             <CardHeader
+              className="px-3.5 pt-3 pb-2.5 border-b border-border"
               title="Recent invocations"
               action={(
                 <Link to={`/admin/observability/invocations?agentId=${encodeURIComponent(rt.name)}`}
@@ -236,7 +237,7 @@ export default function AgentDetailPage() {
 
           {/* ── Log ─────────────────────────────────────────────────────── */}
           <Card padding="none" className="overflow-hidden">
-            <CardHeader
+            <CardHeader className="px-3.5 pt-3 pb-2.5 border-b border-border"
               title="Log"
               subtitle={data?.log.logGroup}
               action={(

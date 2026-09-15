@@ -219,7 +219,7 @@ function GuardrailsPage() {
 
         {/* Status + metrics — wrapped in a single Card per spec */}
         <Card padding="none" className="overflow-hidden" data-testid="guardrails-status-card">
-          <CardHeader
+          <CardHeader className="px-3.5 pt-3 pb-2.5 border-b border-border"
             title={guardrail.name}
             subtitle={`v${guardrail.version} · Updated ${new Date(guardrail.updatedAt).toLocaleString()}`}
             action={<Chip tone={guardrail.status === 'READY' ? 'success' : 'warning'} size="xs">{guardrail.status}</Chip>}

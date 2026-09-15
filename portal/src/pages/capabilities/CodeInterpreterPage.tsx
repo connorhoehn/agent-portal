@@ -182,7 +182,7 @@ print(f"mean={statistics.mean(nums):.2f}, stdev={statistics.stdev(nums):.2f}")`)
 
       {canManage && (
         <Card padding="none" className="mb-4 overflow-hidden">
-          <CardHeader
+          <CardHeader className="px-3.5 pt-3 pb-2.5 border-b border-border"
             title="Run Python"
             subtitle="isolated AgentCore sandbox · no network · ~$0.10/hr while running"
             action={(
@@ -266,6 +266,7 @@ print(f"mean={statistics.mean(nums):.2f}, stdev={statistics.stdev(nums):.2f}")`)
 
       <Card padding="none" className="mb-4 overflow-hidden">
         <CardHeader
+          className="px-3.5 pt-3 pb-2.5 border-b border-border"
           title="Code Execution Traces"
           subtitle="every code_execute capability event · in-memory ring (last 50)"
           action={<T className="text-[11px] text-text-tertiary">{codeEvents.length} event{codeEvents.length === 1 ? '' : 's'}</T>}
@@ -342,6 +343,7 @@ print(f"mean={statistics.mean(nums):.2f}, stdev={statistics.stdev(nums):.2f}")`)
 
       <Card padding="none" className="mb-4 overflow-hidden">
         <CardHeader
+          className="px-3.5 pt-3 pb-2.5 border-b border-border"
           title="Agent Sandbox Executions"
           subtitle="code the agents themselves ran during recent invocations"
           action={<T className="text-[11px] text-text-tertiary">{agentSandboxRows.length} execution{agentSandboxRows.length === 1 ? '' : 's'}</T>}
@@ -416,6 +418,7 @@ print(f"mean={statistics.mean(nums):.2f}, stdev={statistics.stdev(nums):.2f}")`)
 
       <Card padding="none" className="overflow-hidden">
         <CardHeader
+          className="px-3.5 pt-3 pb-2.5 border-b border-border"
           title="Past Sessions"
           subtitle="from AgentCore Data Plane · code interpreter sessions auto-terminate after execution"
           action={<T className="text-[11px] text-text-tertiary">{terminated.length} terminated</T>}

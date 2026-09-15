@@ -86,7 +86,7 @@ export function JourneyTab() {
 
   return (
     <Card padding="none" className="overflow-hidden">
-      <CardHeader
+      <CardHeader className="px-3.5 pt-3 pb-2.5 border-b border-border"
         title="Journey Recorder"
         subtitle="Record an ordered series of web pages with screenshots. Replay as a carousel or scrollable timeline."
       />
