@@ -5,10 +5,11 @@
 
 import { relativeTime } from '../../lib/relativeTime.ts';
 import type {
-  Artifact, ArtifactStatus, ArtifactType, CompactableLevel, CompactionFlowEdge, CompactionFlowEdgeTone,
-  CompactionFlowModel, CompactionFlowNode, CompactionJob, CompactionProduced, CompactionStatus, Item, Lineage, Level,
-  LevelHealth, LevelHealthStatus, LevelState, LineageEdge, LineageNode, LineageNodeKind, LineageRelation,
-  ObservationKind, ReviewVerdict, SamplingVerdictLabel,
+  ApplicationOutcome, Artifact, ArtifactStatus, ArtifactType, CompactableLevel, CompactionFlowEdge,
+  CompactionFlowEdgeTone, CompactionFlowModel, CompactionFlowNode, CompactionJob, CompactionProduced,
+  CompactionStatus, Item, Lineage, Level, LevelHealth, LevelHealthStatus, LevelState, LineageEdge, LineageNode,
+  LineageNodeKind, LineageRelation, ObservationKind, ProcedureApplication, ProcedureHealthStatus, ProcedureView,
+  ReviewVerdict, SamplingVerdictLabel,
 } from './types';
 
 export const LEVEL_MEANING: Record<Level, string> = {
@@ -110,11 +111,14 @@ export function pct(n01: number): string {
 // ── Artifacts (L2) ───────────────────────────────────────────────────────
 
 export const ARTIFACT_TYPE_LABEL: Record<ArtifactType, string> = {
-  runbook: 'Runbook', insight: 'Insight', convention: 'Convention', decision: 'Decision',
+  runbook: 'Runbook', insight: 'Insight', convention: 'Convention', decision: 'Decision', procedure: 'Procedure',
 };
 
-export const ARTIFACT_TYPE_TONE: Record<ArtifactType, 'info' | 'accent' | 'neutral' | 'purple'> = {
-  runbook: 'info', insight: 'accent', convention: 'neutral', decision: 'purple',
+/** 'success' for procedure is deliberate: it is the one type that gets
+ *  *proven* by being run, so it borrows the "this worked" colour the rest of
+ *  the surface uses for a succeeded job. */
+export const ARTIFACT_TYPE_TONE: Record<ArtifactType, 'info' | 'accent' | 'neutral' | 'purple' | 'success'> = {
+  runbook: 'info', insight: 'accent', convention: 'neutral', decision: 'purple', procedure: 'success',
 };
 
 export const ARTIFACT_STATUS_LABEL: Record<ArtifactStatus, string> = {
@@ -259,29 +263,37 @@ export const REVIEW_VERDICT_TONE: Record<ReviewVerdict, 'neutral' | 'success' | 
 
 export const LINEAGE_NODE_LABEL: Record<LineageNodeKind, string> = {
   observation: 'Observation', session: 'Session', cluster: 'Cluster',
-  artifact: 'Artifact', fact: 'Fact', library_item: 'Library item',
+  artifact: 'Artifact', fact: 'Fact', library_item: 'Library item', application: 'Application',
 };
 
 export const LINEAGE_NODE_ICON: Record<LineageNodeKind, string> = {
-  observation: '📝', session: '🖥️', cluster: '🧩', artifact: '📦', fact: '🔎', library_item: '📚',
+  observation: '📝', session: '🖥️', cluster: '🧩', artifact: '📦', fact: '🔎', library_item: '📚', application: '▶️',
 };
 
+/** An application's accent is the same secondary grey as a session, because
+ *  it IS a session-side event (a run in a box) — the outcome colour lives on
+ *  the node's outcome chip (OUTCOME_SEVERITY), not on the accent bar, so a
+ *  failed run doesn't paint the whole card red. */
 export const LINEAGE_NODE_ACCENT: Record<LineageNodeKind, string> = {
   observation: 'bg-text-tertiary', session: 'bg-text-secondary', cluster: 'bg-warning',
-  artifact: 'bg-primary', fact: 'bg-success', library_item: 'bg-optimize',
+  artifact: 'bg-primary', fact: 'bg-success', library_item: 'bg-optimize', application: 'bg-text-secondary',
 };
 
 export const LINEAGE_RELATION_LABEL: Record<LineageRelation, string> = {
   written_by: 'written by', merged_into: 'merged into', distilled_into: 'distilled into',
-  supports: 'supports', published_as: 'published as',
+  supports: 'supports', published_as: 'published as', applied_in: 'applied in',
 };
 
 /** Reading order, left to right: raw writes, then merged clusters, then
- *  stable artifacts, then the facts they carry, then what got published. A
- *  node kind not in this map (future-proofing an added kind) falls back to
+ *  stable artifacts, then the facts they carry, then what got published. An
+ *  application shares the rightmost column with the library item: both are
+ *  "what happened to the artifact after it stabilised," and a procedure with
+ *  a run history but no library item would otherwise leave column 4 empty
+ *  and push its runs off to a sixth column for no reading benefit. A node
+ *  kind not in this map (future-proofing an added kind) falls back to
  *  column 0 rather than throwing. */
 const LINEAGE_COLUMN: Record<LineageNodeKind, number> = {
-  observation: 0, session: 0, cluster: 1, artifact: 2, fact: 3, library_item: 4,
+  observation: 0, session: 0, cluster: 1, artifact: 2, fact: 3, library_item: 4, application: 4,
 };
 
 const LINEAGE_COLUMN_WIDTH = 260;
@@ -369,6 +381,117 @@ export function lineageCanvasHeight(positions: LineageLayoutNode[], band: Lineag
   const maxY = Math.max(...positions.map((p) => p.y));
   const contentHeight = maxY + LINEAGE_ROW_HEIGHT + LINEAGE_CANVAS_ROW_ALLOWANCE;
   return Math.min(band.max, Math.max(band.min, contentHeight));
+}
+
+// ── Procedures (procedural memory) ───────────────────────────────────────
+// A procedure's steps are its facts, ordered by `meta.ordinal`; its runs are
+// `application` lineage nodes / ProcedureApplication rows. The server owns
+// the health verdict (ProcedureView.health); this owns how steps, runs and
+// verdicts read on screen.
+
+export const PROCEDURE_HEALTH_LABEL: Record<ProcedureHealthStatus, string> = {
+  proven: 'Proven', drifting: 'Drifting', unproven: 'Unproven',
+};
+
+/** Chip tones. 'unproven' is neutral, not a warning: no evidence isn't bad
+ *  evidence, and a freshly distilled procedure shouldn't look like a
+ *  drifting one before anyone has tried it. */
+export const PROCEDURE_HEALTH_TONE: Record<ProcedureHealthStatus, 'success' | 'warning' | 'neutral'> = {
+  proven: 'success', drifting: 'warning', unproven: 'neutral',
+};
+
+export const OUTCOME_LABEL: Record<ApplicationOutcome, string> = {
+  succeeded: 'Succeeded', failed: 'Failed', abandoned: 'Abandoned',
+};
+
+/** EventRow's severity vocabulary (ui-components `EventRowProps.severity`)
+ *  — 'error' rather than Chip's 'danger', same split as
+ *  LEVEL_HEALTH_ALERT_TONE. Abandoned is a warning, not an error: the run
+ *  stopped without the procedure being shown wrong. */
+export const OUTCOME_SEVERITY: Record<ApplicationOutcome, 'success' | 'error' | 'warning'> = {
+  succeeded: 'success', failed: 'error', abandoned: 'warning',
+};
+
+/** "1 step" / "4 steps". */
+export function stepsLabel(n: number): string {
+  return `${n} step${n === 1 ? '' : 's'}`;
+}
+
+export interface ProcedureStep {
+  id: string;
+  ordinal: number;
+  label: string;
+  meta: Record<string, unknown>;
+}
+
+/** A procedure's steps, in order, from its lineage. Only fact nodes with a
+ *  numeric `meta.ordinal` qualify — a fact with a null ordinal is a plain
+ *  claim the artifact also carries (a precondition, a gotcha) and is not a
+ *  step, so it is dropped rather than sorted to one end. Sorted here
+ *  because lineage nodes arrive in no promised order. */
+export function stepsFromLineage(lineage: Pick<Lineage, 'nodes'>): ProcedureStep[] {
+  const steps: ProcedureStep[] = [];
+  for (const n of lineage.nodes) {
+    if (n.kind !== 'fact') continue;
+    const ordinal = n.meta['ordinal'];
+    if (typeof ordinal !== 'number' || !Number.isFinite(ordinal)) continue;
+    steps.push({ id: n.id, ordinal, label: n.label, meta: n.meta });
+  }
+  return steps.sort((a, b) => a.ordinal - b.ordinal);
+}
+
+export type StepTone = 'success' | 'danger' | 'neutral';
+
+/** One tone per step (index-aligned with `steps`) from the latest run: a
+ *  succeeded run proves every step; a failed run proves the steps before the
+ *  one it failed on, blames that one, and says nothing about the rest; an
+ *  abandoned run, or no run at all, proves nothing. A failed run whose
+ *  `failed_at_step_id` names no known step (the step was since removed)
+ *  reads as all-neutral rather than blaming the wrong step. */
+export function stepTonesForRun(
+  steps: Array<Pick<ProcedureStep, 'id'>>,
+  latestRun: Pick<ProcedureApplication, 'outcome' | 'failed_at_step_id'> | null,
+): StepTone[] {
+  if (!latestRun) return steps.map(() => 'neutral');
+  if (latestRun.outcome === 'succeeded') return steps.map(() => 'success');
+  if (latestRun.outcome === 'abandoned') return steps.map(() => 'neutral');
+  const failedAt = steps.findIndex((s) => s.id === latestRun.failed_at_step_id);
+  if (failedAt < 0) return steps.map(() => 'neutral');
+  return steps.map((_, i) => (i < failedAt ? 'success' : i === failedAt ? 'danger' : 'neutral'));
+}
+
+export interface ProcedureRollup {
+  total: number;
+  proven: number;
+  drifting: number;
+  unproven: number;
+  /** "3 procedures · 1 proven · 1 drifting · 1 unproven" — zero buckets are
+   *  omitted so a healthy fleet reads "3 procedures · 3 proven", not a row
+   *  of "0 drifting · 0 unproven"; "no procedures" when the list is empty. */
+  hint: string;
+}
+
+/** Health counts across the procedures list — the page header's one-line
+ *  summary. Counts what the server said per row; it does not re-judge. */
+export function procedureRollup(views: Array<Pick<ProcedureView, 'health'>>): ProcedureRollup {
+  const counts = { proven: 0, drifting: 0, unproven: 0 };
+  for (const v of views) counts[v.health.status] += 1;
+  const total = views.length;
+  if (total === 0) return { total, ...counts, hint: 'no procedures' };
+  const parts = [`${total} procedure${total === 1 ? '' : 's'}`];
+  for (const status of ['proven', 'drifting', 'unproven'] as const) {
+    if (counts[status] > 0) parts.push(`${counts[status]} ${status}`);
+  }
+  return { total, ...counts, hint: parts.join(' · ') };
+}
+
+/** "6 runs · 4 succeeded" / "1 run · 1 succeeded" / "no runs yet" — the
+ *  list row's run summary. Leads with the success count because that is
+ *  the number a reader compares against total; failed and abandoned are
+ *  the remainder and the health chip already says whether they matter. */
+export function runsLabel(runs: ProcedureView['runs']): string {
+  if (runs.total === 0) return 'no runs yet';
+  return `${runs.total} run${runs.total === 1 ? '' : 's'} · ${runs.succeeded} succeeded`;
 }
 
 // ── Compaction flow (Compactions page — top-of-page tier ladder) ───────────

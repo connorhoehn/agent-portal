@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-09-15T00:14:50.530Z",
-  "serverHandlerSha": "fedff0d23a4280dd52ec9036114b88c8d8e2840b5b5c78015769a47873743584",
+  "capturedAt": "2026-09-15T01:02:22.226Z",
+  "serverHandlerSha": "bcda6fe177b0b802a9a66392f181f2e944ed703a7791eb165d6e04e9826661ed",
   "baseUrl": "http://127.0.0.1:3012",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
@@ -594,6 +594,7 @@
           "distillation-ingest-writers",
           "distillation-library-links",
           "distillation-observations",
+          "distillation-procedure-applications",
           "distillation-review-samples",
           "github-identity",
           "github-orgs",
@@ -1543,6 +1544,30 @@
         "rule": "fires",
         "reason": "Arms or fires something that outlives the capture — a cron registration, an agent job enqueued for the fleet dispatcher, a background sweep. The seeded bots are parked deliberately so the scheduler cannot fire against repos that do not exist yet. Here: schedules a three-second completion timer."
       }
+    },
+    "POST /api/distillation/procedures/:id/apply": {
+      "persona": "orgiq/admin",
+      "status": 201,
+      "shape": {
+        "$": "object",
+        "applied_at": "string",
+        "box_id": "string",
+        "failed_at_step_id": "null",
+        "id": "string",
+        "note": "null",
+        "outcome": "string",
+        "procedure_id": "string",
+        "repo": "string",
+        "session_id": "string"
+      },
+      "values": {
+        "outcome": [
+          "succeeded"
+        ]
+      },
+      "sent": [
+        "outcome"
+      ]
     },
     "POST /api/distillation/review/:id": {
       "persona": "orgiq/admin",

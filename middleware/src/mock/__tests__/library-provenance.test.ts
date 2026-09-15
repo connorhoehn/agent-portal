@@ -46,7 +46,7 @@ describe('registration and scenarios', () => {
 
   it('declares empty rather than inheriting default there', () => {
     expect(libraryAssets.rows('empty')).toEqual([]);
-    expect(libraryAssets.rows('default')).toHaveLength(10);
+    expect(libraryAssets.rows('default')).toHaveLength(12);
   });
 
   it('throws under error — that is how the failed-load state is reachable at all', () => {
@@ -134,8 +134,9 @@ describe('the lineage is closed', () => {
   it('every asset that claims provenance cites observation ids that really exist in L0', () => {
     const observationIds = new Set(observations.rows().map((o) => o.id));
     const withProvenance = mockLibraryAssets().filter((a) => a.derivedFrom);
-    // Five artifacts are published into the Library by seedLibraryLinks().
-    expect(withProvenance).toHaveLength(5);
+    // Seven artifacts are published into the Library by seedLibraryLinks() —
+    // five claims and two procedures.
+    expect(withProvenance).toHaveLength(7);
 
     const phantom = withProvenance.flatMap((a) =>
       (a.derivedFrom?.top ?? [])
@@ -186,6 +187,10 @@ describe('the lineage is closed', () => {
         ['lib-pii-scan', 3, 1],
         ['skill-cold-start-aurora', 3, 1],
         ['skill-flaky-test-triage', 3, 1],
+        // The two procedures: art-009 stands on cl-009 (three observations
+        // from sess-auth-02), art-011 on cl-016 (three from sess-cost-01).
+        ['skill-sso-origin-bringup', 3, 1],
+        ['skill-teardown-proposal', 3, 1],
       ]);
 
       // The evidence itself, strongest first, capped at the declared k.
@@ -223,7 +228,7 @@ describe('the link runs both ways, so emptying one side is visible on the other'
     expect(libraryLinks.rows()).toEqual([]);
     expect(mockLibraryAssets().filter((a) => a.derivedFrom)).toEqual([]);
     // The catalog itself is untouched — nothing was published, that is all.
-    expect(mockLibraryAssets()).toHaveLength(10);
+    expect(mockLibraryAssets()).toHaveLength(12);
   });
 
   it('an unreadable store takes the whole catalog read down rather than quietly dropping provenance', () => {

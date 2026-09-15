@@ -27,11 +27,12 @@ jest.mock('@aws-sdk/client-bedrock-agent', () => ({
 jest.mock('../aurora.js', () => ({ exec: jest.fn() }));
 
 import {
-  observations, clusters, artifacts, facts, reviewSamples,
+  observations, clusters, artifacts, facts, reviewSamples, procedureApplications,
 } from '../../mock/distillation.js';
 import {
   listItems, getItem, lineageFor, factLineage, listArtifacts, listReview, decideReview,
   libraryProvenance, buildLineage, sampling,
+  listProcedures, getProcedure, listApplications, applyProcedure, __resetDistillationMock,
 } from '../distillation.js';
 import { getAsset } from '../prompt-library.js';
 
@@ -46,6 +47,35 @@ describe('mock corpus meets the documented minimums', () => {
     expect(clusters.rows().length).toBeGreaterThanOrEqual(18);
     expect(artifacts.rows().length).toBeGreaterThanOrEqual(8);
     expect(facts.rows().length).toBeGreaterThanOrEqual(12);
+  });
+
+  // A procedure is an artifact whose facts carry an ordinal. The seed has
+  // to hold three of them so every health verdict (proven / drifting /
+  // unproven) is reachable in the default world, and every ordinal-bearing
+  // fact has to belong to one — an ordinal on a runbook's fact would be a
+  // step nothing lists.
+  it('>= 3 procedures, and every step fact belongs to a procedure with contiguous ordinals 1..n', () => {
+    const procedures = artifacts.rows().filter((a) => a.type === 'procedure');
+    expect(procedures.length).toBeGreaterThanOrEqual(3);
+    const byArtifact = new Map(artifacts.rows().map((a) => [a.id, a]));
+    for (const f of facts.rows().filter((x) => x.ordinal !== null)) {
+      expect(byArtifact.get(f.artifact_id)?.type).toBe('procedure');
+    }
+    for (const a of artifacts.rows()) {
+      const ordinals = facts.rows()
+        .filter((f) => f.artifact_id === a.id && f.ordinal !== null)
+        .map((f) => f.ordinal!)
+        .sort((x, y) => x - y);
+      if (a.type === 'procedure') {
+        expect(ordinals.length).toBeGreaterThanOrEqual(2);
+        expect(ordinals).toEqual(ordinals.map((_, i) => i + 1));
+      } else {
+        expect(ordinals).toEqual([]);
+      }
+    }
+    // Twelve step facts across the three seeded procedures, as the file
+    // header claims — a count the validator greps for.
+    expect(facts.rows().filter((f) => f.ordinal !== null).length).toBeGreaterThanOrEqual(11);
   });
 
   it('>= 5 artifacts link to a real Library asset, >= 2 draft, >= 1 retired', async () => {
@@ -97,6 +127,20 @@ describe('every cross-reference in the mock resolves', () => {
     for (const r of reviewSamples.rows()) {
       if (r.target_kind === 'cluster') expect(clusterIds.has(r.target_id)).toBe(true);
       else expect(artifactIds.has(r.target_id)).toBe(true);
+    }
+  });
+
+  it('every application names a procedure artifact, and a failed one names a step of that procedure', () => {
+    const byArtifact = new Map(artifacts.rows().map((a) => [a.id, a]));
+    expect(procedureApplications.rows().length).toBeGreaterThan(0);
+    for (const p of procedureApplications.rows()) {
+      expect(byArtifact.get(p.procedure_id)?.type).toBe('procedure');
+      if (p.outcome === 'succeeded') expect(p.failed_at_step_id).toBeNull();
+      if (p.failed_at_step_id !== null) {
+        const step = facts.rows().find((f) => f.id === p.failed_at_step_id);
+        expect(step?.artifact_id).toBe(p.procedure_id);
+        expect(step?.ordinal).not.toBeNull();
+      }
     }
   });
 });
@@ -216,6 +260,100 @@ describe('listArtifacts', () => {
   it('q matches title/summary/body', async () => {
     const r = await listArtifacts({ q: 'PII' });
     expect(r.some((a) => a.id === 'art-005')).toBe(true);
+  });
+
+  it('type=procedure lists exactly the procedure artifacts', async () => {
+    const procedures = await listArtifacts({ type: 'procedure' });
+    expect(procedures.map((a) => a.id).sort()).toEqual(['art-009', 'art-010', 'art-011']);
+    expect(procedures.every((a) => a.type === 'procedure')).toBe(true);
+  });
+});
+
+// The run side of a procedure: every number on the view is counted from
+// the applications and cluster rows, and the seed reaches all three verdicts.
+describe('procedures', () => {
+  afterEach(() => { __resetDistillationMock(); });
+
+  it('the seed reaches every verdict, and the list opens on the ones needing attention', async () => {
+    const views = await listProcedures();
+    const byId = Object.fromEntries(views.map((v) => [v.artifact.id, v]));
+    expect(byId['art-009']!.health.status).toBe('proven');
+    expect(byId['art-010']!.health.status).toBe('drifting');
+    expect(byId['art-011']!.health.status).toBe('unproven');
+    expect(views.map((v) => v.health.status)).toEqual(['drifting', 'unproven', 'proven']);
+  });
+
+  it('runs, last-run and drift are the applications, counted', async () => {
+    const v = (await getProcedure('art-009'))!;
+    const apps = procedureApplications.rows().filter((p) => p.procedure_id === 'art-009');
+    expect(v.runs.total).toBe(apps.length);
+    expect(v.runs.succeeded).toBe(apps.filter((p) => p.outcome === 'succeeded').length);
+    expect(v.last_applied_at).toBe(apps.map((p) => p.applied_at).sort()[apps.length - 1]);
+    expect(v.last_succeeded_by).toBe('sess-auth-04');
+    expect(v.step_count).toBe(4);
+    expect(v.repo).toBe('connorhoehnslalom/orgiq-auth-service');
+    expect(v.applied_per_day).toHaveLength(14);
+    expect(v.applied_per_day.reduce((n, x) => n + x, 0)).toBe(apps.length);
+    expect(v.drift).toEqual({ new_gotcha_clusters: 0, failed_runs: 0 });
+
+    const drifting = (await getProcedure('art-010'))!;
+    expect(drifting.drift.failed_runs).toBe(1);
+    expect(drifting.health.reason).toMatch(/1 run failed/);
+  });
+
+  it('getProcedure is null for a non-procedure artifact and for an unknown id', async () => {
+    expect(await getProcedure('art-001')).toBeNull();
+    expect(await getProcedure('art-does-not-exist')).toBeNull();
+    expect(await listApplications('art-001')).toBeNull();
+  });
+
+  it('listApplications is newest first', async () => {
+    const apps = (await listApplications('art-009'))!;
+    expect(apps.length).toBe(4);
+    for (let i = 1; i < apps.length; i += 1) {
+      expect(apps[i - 1]!.applied_at >= apps[i]!.applied_at).toBe(true);
+    }
+  });
+
+  it('applyProcedure appends to the registered fixture, moves the verdict, and reset takes it back', async () => {
+    const before = procedureApplications.rows().length;
+    expect((await getProcedure('art-011'))!.health.status).toBe('unproven');
+    const row = await applyProcedure('art-011', { outcome: 'succeeded' }, { sessionId: 'u-test', boxId: 'portal' });
+    expect(row.id).toMatch(/^papp-9\d{3}$/);
+    expect(row.repo).toBe('connorhoehnslalom/orgiq-finops');
+    expect(procedureApplications.rows().length).toBe(before + 1);
+    expect((await getProcedure('art-011'))!.health.status).toBe('proven');
+    expect((await lineageFor('art-011', 1)).edges.some((e) => e.relation === 'applied_in' && e.to === row.id)).toBe(true);
+    __resetDistillationMock();
+    expect(procedureApplications.rows().length).toBe(before);
+    expect((await getProcedure('art-011'))!.health.status).toBe('unproven');
+  });
+
+  it('a failed run must name a step of that procedure; a succeeded run must not', async () => {
+    await expect(applyProcedure('art-009', { outcome: 'failed' }, { sessionId: 'u', boxId: 'portal' }))
+      .rejects.toMatchObject({ status: 400 });
+    await expect(applyProcedure('art-009', { outcome: 'failed', failed_at_step_id: 'fact-020' }, { sessionId: 'u', boxId: 'portal' }))
+      .rejects.toMatchObject({ status: 400 }); // fact-020 is art-010's step
+    await expect(applyProcedure('art-009', { outcome: 'failed', failed_at_step_id: 'fact-017' }, { sessionId: 'u', boxId: 'portal' }))
+      .rejects.toMatchObject({ status: 400 }); // fact-017 supports art-009 but is not a step
+    await expect(applyProcedure('art-009', { outcome: 'succeeded', failed_at_step_id: 'fact-013' }, { sessionId: 'u', boxId: 'portal' }))
+      .rejects.toMatchObject({ status: 400 });
+    await expect(applyProcedure('art-001', { outcome: 'succeeded' }, { sessionId: 'u', boxId: 'portal' }))
+      .rejects.toMatchObject({ status: 404 });
+    const ok = await applyProcedure('art-009', { outcome: 'failed', failed_at_step_id: 'fact-015', note: 'cert not ready' }, { sessionId: 'u', boxId: 'portal' });
+    expect(ok.failed_at_step_id).toBe('fact-015');
+    expect((await getProcedure('art-009'))!.health.status).toBe('drifting');
+  });
+
+  it('lineage resolves an application as a run, not as a session', async () => {
+    const lineage = await lineageFor('art-010', 1);
+    const app = lineage.nodes.find((n) => n.id === 'papp-006');
+    expect(app?.kind).toBe('application');
+    expect(app?.label).toBe('failed · sess-auth-06');
+    expect(app?.meta['failed_at_step_id']).toBe('fact-020');
+    expect(typeof app?.meta['subtitle']).toBe('string');
+    const step = (await factLineage('fact-020')).nodes.find((n) => n.id === 'fact-020');
+    expect(step?.meta['ordinal']).toBe(3);
   });
 });
 

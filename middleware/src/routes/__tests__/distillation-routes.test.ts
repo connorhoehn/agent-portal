@@ -31,7 +31,8 @@ jest.mock('../../providers/aurora.js', () => ({ exec: jest.fn() }));
 import express from 'express';
 import request from '../../test-support/http.js';
 import { distillationRouter } from '../distillation.js';
-import { __setCompactRunMs } from '../../providers/distillation.js';
+import { __setCompactRunMs, __resetDistillationMock } from '../../providers/distillation.js';
+import { procedureApplications } from '../../mock/distillation.js';
 import { errorHandler } from '../../lib/async-handler.js';
 
 function buildApp() {
@@ -220,6 +221,13 @@ describe('GET /api/distillation/artifacts', () => {
     const res = await request(buildApp()).get('/api/distillation/artifacts?status=archived');
     expect(res.status).toBe(400);
   });
+
+  it('?type=procedure is a valid filter and lists only procedures', async () => {
+    const res = await request(buildApp()).get('/api/distillation/artifacts?type=procedure');
+    expect(res.status).toBe(200);
+    expect(res.body.artifacts.length).toBeGreaterThanOrEqual(3);
+    expect(res.body.artifacts.every((a: { type: string }) => a.type === 'procedure')).toBe(true);
+  });
 });
 
 describe('GET /api/distillation/facts/:id/lineage', () => {
@@ -293,5 +301,119 @@ describe('GET /api/distillation/library/:libraryItemId/provenance', () => {
   it('404s for a Library item nothing was distilled into', async () => {
     const res = await request(buildApp()).get('/api/distillation/library/lib-stakeholder-email/provenance');
     expect(res.status).toBe(404);
+  });
+});
+
+// ─── Procedures ──────────────────────────────────────────────────────────────
+// The compaction tests above may have minted clusters into the same repos
+// these procedures are read against, and a health verdict is counted from
+// exactly those rows — so every procedure suite starts from the seed.
+
+describe('GET /api/distillation/procedures', () => {
+  beforeEach(() => { __resetDistillationMock(); });
+
+  it('200s with the procedure views, drifting and unproven ahead of proven', async () => {
+    const res = await request(buildApp()).get('/api/distillation/procedures');
+    expect(res.status).toBe(200);
+    const views = res.body.procedures as Array<{ artifact: { id: string; type: string }; health: { status: string }; runs: { total: number }; step_count: number }>;
+    expect(views.length).toBeGreaterThanOrEqual(3);
+    expect(views.every((v) => v.artifact.type === 'procedure')).toBe(true);
+    expect(views.map((v) => v.health.status)).toEqual(['drifting', 'unproven', 'proven']);
+    expect(views[0]).toHaveProperty('applied_per_day');
+    expect(views[0]).toHaveProperty('drift');
+  });
+});
+
+describe('GET /api/distillation/procedures/:id', () => {
+  beforeEach(() => { __resetDistillationMock(); });
+
+  it('200s with one view', async () => {
+    const res = await request(buildApp()).get('/api/distillation/procedures/art-009');
+    expect(res.status).toBe(200);
+    expect(res.body.artifact.id).toBe('art-009');
+    expect(res.body.health.status).toBe('proven');
+    expect(res.body.step_count).toBe(4);
+    expect(res.body.runs.total).toBe(4);
+  });
+
+  it('404s on an artifact that is not a procedure', async () => {
+    const res = await request(buildApp()).get('/api/distillation/procedures/art-001');
+    expect(res.status).toBe(404);
+  });
+
+  it('400s on a malformed id', async () => {
+    const res = await request(buildApp()).get('/api/distillation/procedures/NOTVALID');
+    expect(res.status).toBe(400);
+  });
+});
+
+describe('GET /api/distillation/procedures/:id/applications', () => {
+  beforeEach(() => { __resetDistillationMock(); });
+
+  it('200s with the runs, newest first', async () => {
+    const res = await request(buildApp()).get('/api/distillation/procedures/art-010/applications');
+    expect(res.status).toBe(200);
+    const apps = res.body.applications as Array<{ id: string; applied_at: string; outcome: string }>;
+    expect(apps.map((a) => a.id)).toEqual(['papp-006', 'papp-005']);
+    expect(apps[0]!.outcome).toBe('failed');
+  });
+
+  it('404s on a non-procedure id', async () => {
+    const res = await request(buildApp()).get('/api/distillation/procedures/art-001/applications');
+    expect(res.status).toBe(404);
+  });
+});
+
+describe('POST /api/distillation/procedures/:id/apply', () => {
+  beforeEach(() => { __resetDistillationMock(); });
+  afterAll(() => { __resetDistillationMock(); });
+
+  it('403s without ManageBots', async () => {
+    gateOpen.value = false;
+    const res = await request(buildApp()).post('/api/distillation/procedures/art-011/apply').send({ outcome: 'succeeded' });
+    expect(res.status).toBe(403);
+  });
+
+  it('400s on a bad outcome', async () => {
+    const res = await request(buildApp()).post('/api/distillation/procedures/art-011/apply').send({ outcome: 'meh' });
+    expect(res.status).toBe(400);
+  });
+
+  it('400s on a failed run with no step, or a step that is not this procedure’s', async () => {
+    const app = buildApp();
+    const noStep = await request(app).post('/api/distillation/procedures/art-009/apply').send({ outcome: 'failed' });
+    expect(noStep.status).toBe(400);
+    const wrongStep = await request(app).post('/api/distillation/procedures/art-009/apply').send({ outcome: 'failed', failed_at_step_id: 'fact-020' });
+    expect(wrongStep.status).toBe(400);
+    const stepOnSuccess = await request(app).post('/api/distillation/procedures/art-009/apply').send({ outcome: 'succeeded', failed_at_step_id: 'fact-013' });
+    expect(stepOnSuccess.status).toBe(400);
+  });
+
+  it('404s on a non-procedure id', async () => {
+    const res = await request(buildApp()).post('/api/distillation/procedures/art-001/apply').send({ outcome: 'succeeded' });
+    expect(res.status).toBe(404);
+  });
+
+  it('201s, lands in the registered fixture, moves the verdict, and reset takes it back', async () => {
+    const app = buildApp();
+    const before = procedureApplications.rows().length;
+    const res = await request(app).post('/api/distillation/procedures/art-011/apply').send({ outcome: 'succeeded', note: 'approved in one meeting' });
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({
+      procedure_id: 'art-011', outcome: 'succeeded', failed_at_step_id: null, note: 'approved in one meeting',
+      session_id: 'u-test', box_id: 'portal',
+    });
+    expect(res.body.id).toMatch(/^papp-9\d{3}$/);
+    expect(procedureApplications.rows().length).toBe(before + 1);
+
+    const view = await request(app).get('/api/distillation/procedures/art-011');
+    expect(view.body.health.status).toBe('proven');
+    const apps = await request(app).get('/api/distillation/procedures/art-011/applications');
+    expect(apps.body.applications[0].id).toBe(res.body.id);
+
+    __resetDistillationMock();
+    expect(procedureApplications.rows().length).toBe(before);
+    const after = await request(app).get('/api/distillation/procedures/art-011');
+    expect(after.body.health.status).toBe('unproven');
   });
 });

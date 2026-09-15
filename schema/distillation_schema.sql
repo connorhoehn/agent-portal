@@ -52,7 +52,7 @@ CREATE INDEX IF NOT EXISTS distillation_cluster_members_obs_idx ON distillation_
 CREATE TABLE IF NOT EXISTS distillation_artifacts (
   id                      TEXT PRIMARY KEY DEFAULT ('art-' || gen_random_uuid()::TEXT),
   type                    TEXT NOT NULL
-                          CHECK (type IN ('runbook','insight','convention','decision')),
+                          CHECK (type IN ('runbook','insight','convention','decision','procedure')),
   title                   TEXT NOT NULL,
   summary                 TEXT NOT NULL DEFAULT '',
   body_markdown           TEXT NOT NULL DEFAULT '',
@@ -96,10 +96,28 @@ CREATE TABLE IF NOT EXISTS distillation_facts (
   -- observation X" is a rare enough path to do with `= ANY`).
   evidence_observation_ids  TEXT[] NOT NULL DEFAULT '{}',
   confidence                REAL NOT NULL DEFAULT 0
-                            CHECK (confidence >= 0 AND confidence <= 1)
+                            CHECK (confidence >= 0 AND confidence <= 1),
+  -- 1-based position when this fact is a STEP of a `procedure` artifact;
+  -- NULL for a plain claim. A procedure's steps are its ordered facts, not a
+  -- list beside them, so a step has one row and one evidence trail.
+  ordinal                   SMALLINT CHECK (ordinal IS NULL OR ordinal >= 1)
 );
 
 CREATE INDEX IF NOT EXISTS distillation_facts_artifact_idx ON distillation_facts (artifact_id);
+
+-- Additive migration for a cluster that built distillation_facts before
+-- `ordinal` existed, and the CHECK swap that admits `procedure` on a cluster
+-- whose distillation_artifacts predates it. Same idempotent DROP/ADD pair
+-- orgiq_work_items_schema.sql uses for work_items_type_check.
+ALTER TABLE distillation_facts ADD COLUMN IF NOT EXISTS ordinal SMALLINT CHECK (ordinal IS NULL OR ordinal >= 1);
+ALTER TABLE distillation_artifacts DROP CONSTRAINT IF EXISTS distillation_artifacts_type_check;
+ALTER TABLE distillation_artifacts ADD CONSTRAINT distillation_artifacts_type_check
+  CHECK (type IN ('runbook','insight','convention','decision','procedure'));
+
+-- Two steps of one procedure cannot share a position; plain claims (NULL)
+-- are unconstrained, which is what the partial index says.
+CREATE UNIQUE INDEX IF NOT EXISTS distillation_facts_step_idx
+  ON distillation_facts (artifact_id, ordinal) WHERE ordinal IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS distillation_review_samples (
   id            TEXT PRIMARY KEY DEFAULT ('rev-' || gen_random_uuid()::TEXT),
@@ -117,3 +135,28 @@ CREATE TABLE IF NOT EXISTS distillation_review_samples (
 
 CREATE INDEX IF NOT EXISTS distillation_review_samples_verdict_idx
   ON distillation_review_samples (verdict, sampled_at DESC);
+
+-- One row per session that ran a procedure. Nothing aggregated lives here:
+-- a procedure's run count, its success share, when it was last proven and
+-- whether it has drifted since are all counted from these rows at read time
+-- (providers/distillation.ts procedureHealth), so there is no `runs` or
+-- `health` column to disagree with them.
+CREATE TABLE IF NOT EXISTS distillation_procedure_applications (
+  id                 TEXT PRIMARY KEY DEFAULT ('papp-' || gen_random_uuid()::TEXT),
+  procedure_id       TEXT NOT NULL REFERENCES distillation_artifacts (id) ON DELETE CASCADE,
+  -- Free-text, same "sessions are wiped, memory isn't" reasoning as
+  -- lab_experiences.session_id / box_id.
+  session_id         TEXT,
+  box_id             TEXT,
+  repo               TEXT,
+  applied_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  outcome            TEXT NOT NULL CHECK (outcome IN ('succeeded','failed','abandoned')),
+  -- The step the run stopped on: a fact of that procedure with a non-null
+  -- ordinal. SET NULL rather than CASCADE so a re-distilled step does not
+  -- erase the record that a run once failed.
+  failed_at_step_id  TEXT REFERENCES distillation_facts (id) ON DELETE SET NULL,
+  note               TEXT
+);
+
+CREATE INDEX IF NOT EXISTS distillation_procedure_applications_proc_idx
+  ON distillation_procedure_applications (procedure_id, applied_at DESC);

@@ -16,19 +16,21 @@ import { requireAction, resolveSession } from '../lib/authz.js';
 import {
   compactionHealth, compactNow, ingest, levels, listCompactions, sampling, samplingVerdict,
   listItems, getItem, lineageFor, listArtifacts, factLineage, listReview, decideReview, libraryProvenance,
+  listProcedures, getProcedure, listApplications, applyProcedure,
   type CompactableLevel, type CompactionStatus, type Level,
-  type ArtifactStatus, type ArtifactType, type ReviewVerdict,
+  type ArtifactStatus, type ArtifactType, type ReviewVerdict, type ApplicationOutcome,
 } from '../providers/distillation.js';
 
-// obs-123, cl-004, art-001, fact-011, orgiq-supervisor-system-prompt,
+// obs-123, cl-004, art-001, fact-011, papp-001, orgiq-supervisor-system-prompt,
 // lib-csrf-check, skill-flaky-test-triage — every id in this domain (and
 // every Library asset id it links to) is lowercase-letters-then-dash
 // followed by alnum/dash.
 const ID_RE = /^[a-z]+-[A-Za-z0-9-]+$/;
 const LEVELS = ['L0', 'L1', 'L2'] as const;
 const ARTIFACT_STATUSES = ['draft', 'published', 'retired'] as const;
-const ARTIFACT_TYPES = ['runbook', 'insight', 'convention', 'decision'] as const;
+const ARTIFACT_TYPES = ['runbook', 'insight', 'convention', 'decision', 'procedure'] as const;
 const REVIEW_VERDICTS = ['pending', 'agree', 'disagree'] as const;
+const APPLICATION_OUTCOMES = ['succeeded', 'failed', 'abandoned'] as const;
 
 function requireId(raw: string, field = 'id'): string {
   if (!ID_RE.test(raw)) throw new ValidationError(`${field} must match ${ID_RE.source}`);
@@ -194,4 +196,55 @@ distillationRouter.get('/library/:libraryItemId/provenance', asyncHandler(async 
   const provenance = await libraryProvenance(id);
   if (!provenance) throw new NotFoundError(`no artifact links to library item ${id}`);
   res.json(provenance);
+}));
+
+// ─── Procedures: ordered steps, and whether they still hold ────────────────
+// Reads are open like every other read here. Recording a run moves state
+// (it changes the procedure's counted health for everyone), so it takes the
+// same ManageBots gate as deciding a review sample.
+
+// GET /api/distillation/procedures — server-sorted: drifting, unproven,
+// proven, then most recently run first, so the list opens on what needs a
+// person's attention.
+distillationRouter.get('/procedures', asyncHandler(async (_req, res) => {
+  res.json({ procedures: await listProcedures() });
+}));
+
+// GET /api/distillation/procedures/:id — 404 for an id that is not a
+// procedure artifact, a runbook included: it has no steps to prove.
+distillationRouter.get('/procedures/:id', asyncHandler(async (req, res) => {
+  const id = requireId(String(req.params['id']));
+  const view = await getProcedure(id);
+  if (!view) throw new NotFoundError(`procedure ${id} not found`);
+  res.json(view);
+}));
+
+// GET /api/distillation/procedures/:id/applications — newest first.
+distillationRouter.get('/procedures/:id/applications', asyncHandler(async (req, res) => {
+  const id = requireId(String(req.params['id']));
+  const applications = await listApplications(id);
+  if (!applications) throw new NotFoundError(`procedure ${id} not found`);
+  res.json({ applications });
+}));
+
+// POST /api/distillation/procedures/:id/apply
+//   { outcome: 'succeeded'|'failed'|'abandoned', failed_at_step_id?, note? }
+// The session is the caller's own (from the cookie, never the body — the
+// same attribution rule bot_runs.dispatched_by follows) and the box is the
+// portal, since a run reported through this route was driven by hand.
+distillationRouter.post('/procedures/:id/apply', manageGate, asyncHandler(async (req, res) => {
+  const id = requireId(String(req.params['id']));
+  const body = req.body as { outcome?: unknown; failed_at_step_id?: unknown; note?: unknown } | undefined;
+  const outcome = enumOrUndefined<ApplicationOutcome>(body?.outcome, 'outcome', APPLICATION_OUTCOMES);
+  if (!outcome) throw new ValidationError(`outcome must be one of ${APPLICATION_OUTCOMES.join(', ')}`);
+  const failedAtStepId = body?.failed_at_step_id === undefined || body?.failed_at_step_id === null
+    ? null : requireId(String(body.failed_at_step_id), 'failed_at_step_id');
+  const note = body?.note === undefined || body?.note === null ? null : String(body.note);
+  const session = resolveSession(req);
+  const application = await applyProcedure(
+    id,
+    { outcome, failed_at_step_id: failedAtStepId, note },
+    { sessionId: session?.sub ?? 'someone', boxId: 'portal' },
+  );
+  res.status(201).json(application);
 }));

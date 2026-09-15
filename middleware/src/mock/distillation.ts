@@ -31,13 +31,19 @@
 // (orgiq-llm-platform) and p-cost-opt (orgiq-finops). 22 clusters group the
 // observations written across 9 sessions; the rest are an unclustered backlog
 // for compactNow('L1') to actually compact — which is also what L1's lag is
-// measured against. 8 artifacts are distilled from a subset of those
-// clusters, 5 of them published into REAL Library assets
-// (providers/prompt-library.ts MOCK_ASSETS — skill-flaky-test-triage,
-// skill-cold-start-aurora, insight-arm64-fargate, lib-csrf-check,
-// lib-pii-scan) via the library-links fixture, 2 still draft, 1 retired. 12
-// facts cite real observation ids as evidence. The review samples give the
-// human sample queue a real backlog and a real history.
+// measured against. 11 artifacts are distilled from a subset of those
+// clusters, 7 of them published into REAL Library assets
+// (mock/prompt-library.ts — skill-flaky-test-triage, skill-cold-start-aurora,
+// insight-arm64-fargate, lib-csrf-check, lib-pii-scan,
+// skill-sso-origin-bringup, skill-teardown-proposal) via the library-links
+// fixture, 3 still draft, 1 retired. 24 facts cite real observation ids as
+// evidence; 12 of them are the ordered STEPS of the three `procedure`
+// artifacts (art-009..011), which is how a procedure is stored — a step is a
+// fact with an `ordinal`, not a `steps[]` list beside the facts. The review
+// samples give the human sample queue a real backlog and a real history. The
+// procedure-applications fixture records which sessions ran which procedure
+// and how it went, and every "proven / drifting / unproven" verdict is
+// counted from those rows at read time.
 //
 // L0 observations mirror `lab_experiences` (schema/lab_loop_schema.sql) —
 // same kind enum, same shape — but live here rather than reading the real
@@ -84,7 +90,9 @@ export interface Cluster {
   updated_at: string;
 }
 
-export type ArtifactType = 'runbook' | 'insight' | 'convention' | 'decision';
+/** `procedure` is the one type with internal order: its facts carry an
+ *  `ordinal`, and the ordered ones are its steps. */
+export type ArtifactType = 'runbook' | 'insight' | 'convention' | 'decision' | 'procedure';
 export type ArtifactStatus = 'draft' | 'published' | 'retired';
 
 export interface Artifact {
@@ -130,6 +138,13 @@ export interface Fact {
   object: string;
   evidence_observation_ids: string[];
   confidence: number;
+  /** 1-based position when this fact is a STEP of a `procedure` artifact;
+   *  null for a plain claim. Contiguous 1..n within one artifact. Steps are
+   *  ordered facts rather than a `steps[]` on the artifact so a step has
+   *  exactly one representation and one evidence trail, like every other
+   *  fact — a second list would be a copy that drifts. Non-procedure
+   *  artifacts always carry null here. */
+  ordinal: number | null;
 }
 
 export type ReviewTargetKind = 'cluster' | 'artifact';
@@ -142,6 +157,31 @@ export interface ReviewSample {
   sampled_at: string;
   reviewer: string | null;
   verdict: ReviewVerdict;
+  note: string | null;
+}
+
+export type ApplicationOutcome = 'succeeded' | 'failed' | 'abandoned';
+
+/**
+ * One session running one procedure, as STORED. Nothing here is a count: a
+ * procedure's run total, its success share, when it was last proven and
+ * whether it has drifted since are all counted by the provider from these
+ * rows — a `runs: 4` beside them would be the tier-card bug again, and a
+ * `health: 'proven'` would be a verdict that never moved when a failed run
+ * landed under it.
+ */
+export interface ProcedureApplication {
+  id: string;
+  /** An artifact id whose type is 'procedure'. */
+  procedure_id: string;
+  session_id: string;
+  box_id: string;
+  repo: string;
+  applied_at: string;
+  outcome: ApplicationOutcome;
+  /** The step (a fact of that procedure with a non-null ordinal) the run
+   *  stopped on; null when it succeeded. */
+  failed_at_step_id: string | null;
   note: string | null;
 }
 
@@ -193,8 +233,12 @@ export interface IngestWriter {
   writes: Pick<Observation, 'kind' | 'title' | 'body' | 'tags'>;
 }
 
-export type LineageNodeKind = 'observation' | 'session' | 'cluster' | 'artifact' | 'fact' | 'library_item';
-export type LineageRelation = 'written_by' | 'merged_into' | 'distilled_into' | 'supports' | 'published_as';
+export type LineageNodeKind = 'observation' | 'session' | 'cluster' | 'artifact' | 'fact' | 'library_item' | 'application';
+/** `applied_in` is the one relation past the artifact on the run side:
+ *  artifact → application. A run's session is reachable from the application
+ *  node's meta rather than by a second edge, so the graph has one edge per
+ *  fact of the world. */
+export type LineageRelation = 'written_by' | 'merged_into' | 'distilled_into' | 'supports' | 'published_as' | 'applied_in';
 
 export interface LineageNode {
   id: string;
@@ -1011,6 +1055,57 @@ function seedArtifacts(): ArtifactRow[] {
       created_by_compaction_id: 'comp-203',
       created_at: clock.hoursAgo(100), updated_at: clock.hoursAgo(80),
     },
+    // ── Procedures ──
+    // The three below are the L2 pass comp-204 distilling a cluster whose
+    // members carry a trigger AND an outcome into ordered steps. Their steps
+    // are the `ordinal`-bearing facts fact-013..024, not a list here; the
+    // body_markdown repeats the step titles for a reader, the facts are what
+    // the provider counts and the lineage walks.
+    {
+      id: 'art-009',
+      type: 'procedure',
+      title: 'Bring SSO up on a new origin without breaking the picker',
+      summary: 'Cognito refuses a non-localhost http callback outright, so a new origin comes up in a fixed order: callback unset (picker stays), local dev on a localhost callback, HTTPS front door, then the callback set and ssoEnabled confirmed.',
+      body_markdown:
+        '## Steps\n1. Leave `COGNITO_CALLBACK_URL` unset so the picker keeps working.\n2. Point local dev at a `localhost` callback — Cognito exempts it from the HTTPS rule.\n3. Put an HTTPS front door up on the new origin.\n4. Set the callback and confirm `GET /api/auth/config` reports `ssoEnabled`.\n\n' +
+        '## Why\n- Cognito rejects a non-localhost http callback before any app code runs, so setting it early takes the whole login path down rather than degrading it.',
+      cluster_ids: ['cl-009'],
+      facts: ['fact-013', 'fact-014', 'fact-015', 'fact-016', 'fact-017'],
+      status: 'published',
+      reviewed_by: 'Mia Singh', reviewed_at: clock.hoursAgo(8),
+      created_by_compaction_id: 'comp-204',
+      created_at: clock.hoursAgo(10), updated_at: clock.hoursAgo(8),
+    },
+    {
+      id: 'art-010',
+      type: 'procedure',
+      title: 'Cut one tenant over from SAML to Cognito',
+      summary: 'One tenant at a time, behind a per-tenant flag that keeps the SAML shim reachable, with zero forced logouts as the hard requirement and a flip back as the rollback.',
+      body_markdown:
+        '## Steps\n1. Flag the tenant’s SAML shim rather than deleting it.\n2. Confirm no active session is forced out by the flip.\n3. Flip the tenant on its own schedule, never in a flag-day cutover.\n4. Flip back to SAML if login misbehaves.\n\n' +
+        'Still draft: the second run stopped on step 3 (the hosted-UI redirect still resolved to the old domain) and the flip-back step has not been exercised as a rollback of that failure yet.',
+      cluster_ids: ['cl-010'],
+      facts: ['fact-018', 'fact-019', 'fact-020', 'fact-021'],
+      status: 'draft',
+      reviewed_by: null, reviewed_at: null,
+      created_by_compaction_id: 'comp-204',
+      created_at: clock.hoursAgo(10), updated_at: clock.hoursAgo(10),
+    },
+    {
+      id: 'art-011',
+      type: 'procedure',
+      title: 'Propose an idle-capacity teardown that gets approved',
+      summary: 'A teardown case is approved in one meeting when the spend is attributed to the initiative that owns it and the proposal names both the floor removed and the initiative billed — never from a vague "it’s expensive".',
+      body_markdown:
+        '## Steps\n1. Attribute the spend to the owning initiative — no shared bucket.\n2. Name the floor removed and the initiative billed in the proposal itself.\n3. Bring the dollar figure to the meeting.\n\n' +
+        '## Why\n- Nobody signs off on tearing down a cluster from "it’s expensive"; the attributed figure is what got the last one decided in one meeting.',
+      cluster_ids: ['cl-016'],
+      facts: ['fact-022', 'fact-023', 'fact-024'],
+      status: 'published',
+      reviewed_by: 'Nora DaSilva', reviewed_at: clock.hoursAgo(6),
+      created_by_compaction_id: 'comp-204',
+      created_at: clock.hoursAgo(10), updated_at: clock.hoursAgo(6),
+    },
   ];
 }
 
@@ -1029,6 +1124,7 @@ function seedFacts(groups: ObservationGroups): Fact[] {
       subject: 'a flaky collector-fleet test', predicate: 'is triaged by', object: 'a rerun-and-diff check',
       evidence_observation_ids: obsIds(groups.C19, 1, 2),
       confidence: 0.91,
+      ordinal: null,
     },
     {
       id: 'fact-002',
@@ -1037,6 +1133,7 @@ function seedFacts(groups: ObservationGroups): Fact[] {
       subject: 'a quarantined flaky test with no diff evidence', predicate: 'can hide', object: 'a real regression',
       evidence_observation_ids: obsIds(groups.C19, 2),
       confidence: 0.83,
+      ordinal: null,
     },
     {
       id: 'fact-003',
@@ -1045,6 +1142,7 @@ function seedFacts(groups: ObservationGroups): Fact[] {
       subject: 'the first Data API call after idle', predicate: 'fails with', object: 'HttpEndpointNotEnabledException',
       evidence_observation_ids: obsIds(groups.C21, 0),
       confidence: 0.95,
+      ordinal: null,
     },
     {
       id: 'fact-004',
@@ -1053,6 +1151,7 @@ function seedFacts(groups: ObservationGroups): Fact[] {
       subject: 'a warm SELECT 1 plus 6x3s retry', predicate: 'clears', object: 'the Aurora cold-start race',
       evidence_observation_ids: obsIds(groups.C21, 1),
       confidence: 0.93,
+      ordinal: null,
     },
     {
       id: 'fact-005',
@@ -1061,6 +1160,7 @@ function seedFacts(groups: ObservationGroups): Fact[] {
       subject: 'an x86_64 image on an unpinned Fargate task', predicate: 'fails with', object: 'exec format error',
       evidence_observation_ids: obsIds(groups.C20, 0, 1),
       confidence: 0.94,
+      ordinal: null,
     },
     {
       id: 'fact-006',
@@ -1069,6 +1169,7 @@ function seedFacts(groups: ObservationGroups): Fact[] {
       subject: 'the CSRF evaluator as a required check', predicate: 'catches', object: 'CSRF-weakening diffs before merge',
       evidence_observation_ids: obsIds(groups.C11, 0, 1),
       confidence: 0.9,
+      ordinal: null,
     },
     {
       id: 'fact-007',
@@ -1077,6 +1178,7 @@ function seedFacts(groups: ObservationGroups): Fact[] {
       subject: 'the PR diff passed to the evaluator', predicate: 'must be treated as', object: 'untrusted, fenced data',
       evidence_observation_ids: obsIds(groups.C11, 2),
       confidence: 0.88,
+      ordinal: null,
     },
     {
       id: 'fact-008',
@@ -1085,6 +1187,7 @@ function seedFacts(groups: ObservationGroups): Fact[] {
       subject: 'a PII scan before ingestion', predicate: 'prevents', object: 'a flagged document reaching the KB',
       evidence_observation_ids: obsIds(groups.C22, 0),
       confidence: 0.89,
+      ordinal: null,
     },
     {
       id: 'fact-009',
@@ -1093,6 +1196,7 @@ function seedFacts(groups: ObservationGroups): Fact[] {
       subject: 'a StatsD/OTel dual-write window', predicate: 'gives on-call', object: 'a fallback dashboard during cutover',
       evidence_observation_ids: obsIds(groups.C5, 1),
       confidence: 0.85,
+      ordinal: null,
     },
     {
       id: 'fact-010',
@@ -1101,6 +1205,7 @@ function seedFacts(groups: ObservationGroups): Fact[] {
       subject: 'a session_epoch bump', predicate: 'invalidates', object: 'pre-switch cookies within about 120 seconds',
       evidence_observation_ids: obsIds(groups.C8, 0, 1),
       confidence: 0.92,
+      ordinal: null,
     },
     {
       id: 'fact-011',
@@ -1109,6 +1214,7 @@ function seedFacts(groups: ObservationGroups): Fact[] {
       subject: 'OpenSearch Serverless', predicate: 'bills', object: 'a 2 OCU floor regardless of traffic',
       evidence_observation_ids: obsIds(groups.C17, 0),
       confidence: 0.96,
+      ordinal: null,
     },
     {
       id: 'fact-012',
@@ -1117,8 +1223,57 @@ function seedFacts(groups: ObservationGroups): Fact[] {
       subject: 'Aurora Serverless v2', predicate: 'bills', object: 'a 0.5 ACU floor (~$45/mo) even idle',
       evidence_observation_ids: obsIds(groups.C18, 0),
       confidence: 0.96,
+      ordinal: null,
     },
+
+    // ── Steps: the ordered facts of the three procedures ──
+    // A step cites the single observation it was lifted from (`step_of`),
+    // ordinals run 1..n with no gap inside one artifact, and a supporting
+    // claim on the same artifact keeps `ordinal: null` and `supports`.
+    ...steps('art-009', [
+      ['fact-013', 'Leave COGNITO_CALLBACK_URL unset so the picker keeps working', obsIds(groups.C9, 1), 0.86],
+      ['fact-014', 'Point local dev at a localhost callback, which Cognito exempts from the HTTPS rule', obsIds(groups.C9, 2), 0.88],
+      ['fact-015', 'Put an HTTPS front door up on the new origin', obsIds(groups.C9, 0), 0.84],
+      ['fact-016', 'Set the callback and confirm ssoEnabled from GET /api/auth/config', obsIds(groups.C9, 0), 0.82],
+    ]),
+    {
+      id: 'fact-017',
+      artifact_id: 'art-009',
+      statement: 'Cognito rejects a non-localhost http callback URL before any application code runs.',
+      subject: 'a non-localhost http callback', predicate: 'is rejected by', object: 'Cognito, before the BFF sees the request',
+      evidence_observation_ids: obsIds(groups.C9, 0),
+      confidence: 0.9,
+      ordinal: null,
+    },
+    ...steps('art-010', [
+      ['fact-018', 'Flag the tenant’s SAML shim instead of deleting it', obsIds(groups.C10, 2), 0.87],
+      ['fact-019', 'Confirm no active session is forced out by the flip', obsIds(groups.C10, 1), 0.85],
+      ['fact-020', 'Flip the tenant on its own schedule, never in one flag-day cutover', obsIds(groups.C10, 0), 0.85],
+      ['fact-021', 'Flip back to SAML if login misbehaves', obsIds(groups.C10, 2), 0.83],
+    ]),
+    ...steps('art-011', [
+      ['fact-022', 'Attribute the spend to the owning initiative — no shared bucket', obsIds(groups.C16, 1), 0.89],
+      ['fact-023', 'Name the floor removed and the initiative billed in the proposal', obsIds(groups.C16, 2), 0.87],
+      ['fact-024', 'Bring the dollar figure to the meeting', obsIds(groups.C16, 0), 0.9],
+    ]),
   ];
+}
+
+/** The ordered facts of one procedure: position in the list IS the ordinal,
+ *  so a step cannot be numbered twice or skip a number by proofreading. */
+function steps(
+  artifactId: string,
+  rows: Array<[id: string, statement: string, evidence: string[], confidence: number]>,
+): Fact[] {
+  return rows.map(([id, statement, evidence, confidence], i) => ({
+    id,
+    artifact_id: artifactId,
+    statement,
+    subject: statement, predicate: 'step_of', object: artifactId,
+    evidence_observation_ids: evidence,
+    confidence,
+    ordinal: i + 1,
+  }));
 }
 
 // ─── Review samples ────────────────────────────────────────────────────────
@@ -1171,6 +1326,11 @@ function seedReviewSamples(): ReviewSample[] {
     mkReview('cluster', 'cl-004', 12, 'Eli Garcia', 'disagree', 'This merged two separate incidents into one cluster; the queue-limit fix and the OOM report aren’t the same learning.'),
     mkReview('cluster', 'cl-009', 20, 'Nora Chang', 'disagree', 'The HTTPS-callback gotcha and the picker-fallback decision read as two different learnings, not one cluster.'),
     mkReview('artifact', 'art-008', 70, 'Layla Hassan', 'disagree', 'Retiring this loses the OpenSearch half of the story — should stay published until a replacement artifact covers OpenSearch on its own.'),
+    // pending — appended last rather than grouped with the other pending rows
+    // because ids are positional (rev-NNN is the row's index): inserting it
+    // above would renumber every decided row after it, and the tests pin
+    // rev-003 as pending and rev-007 as decided.
+    mkReview('artifact', 'art-010', 4, null, 'pending', null),
   ];
 }
 
@@ -1188,13 +1348,17 @@ function seedLibraryLinks(): LibraryLink[] {
     { artifact_id: 'art-003', library_item_id: 'insight-arm64-fargate' },
     { artifact_id: 'art-004', library_item_id: 'lib-csrf-check' },
     { artifact_id: 'art-005', library_item_id: 'lib-pii-scan' },
+    { artifact_id: 'art-009', library_item_id: 'skill-sso-origin-bringup' },
+    { artifact_id: 'art-011', library_item_id: 'skill-teardown-proposal' },
   ];
 }
 
 // ─── Compaction jobs ─────────────────────────────────────────────────────────
-// comp-101..107 are the frequent L0→L1 merges, comp-201..203 the sparser
-// L1→L2 batch that has not run in nearly two days — the gap compactionHealth
-// reports as stalled. comp-104 is the seeded failure: it produced nothing, so
+// comp-101..107 are the frequent L0→L1 merges, comp-201..204 the sparser
+// L1→L2 batch. comp-204 is the pass that minted the three procedures: 10h
+// ago is after the clusters it consumed (cl-009/010 at 11h, cl-016 at 26h)
+// and still longer ago than STALL_WINDOW_MS, so L2 keeps reading as stalled —
+// the gap compactionHealth exists to show. comp-104 is the seeded failure: it produced nothing, so
 // no cluster names it, so every number the provider counts for it comes out
 // zero except the input count, which it borrows from the pass that re-merged
 // its batch (`retriedBy`).
@@ -1228,6 +1392,45 @@ function seedCompactionJobs(): CompactionJobRow[] {
     ranAt('comp-201', 'L2', 40, 6),
     ranAt('comp-202', 'L2', 70, 5),
     ranAt('comp-203', 'L2', 100, 5),
+    ranAt('comp-204', 'L2', 10, 5),
+  ];
+}
+
+// ─── Procedure applications ──────────────────────────────────────────────────
+// One row per session that ran a procedure. Sessions and boxes are the auth
+// writer cast (sess-auth-04..06 in seedIngestWriters), so a run's session is
+// one the ingest panel already shows writing. Ages are spaced by whole hours
+// on purpose: the provider orders a run against another run and against a
+// cluster's created_at ("did a gotcha land since the last success?"), and
+// two `hoursAgo(n)` with the same n are NOT the same instant
+// (mock/core/contract.ts) — a comparison between them would be decided by
+// which fixture materialized first.
+//
+// The story: art-009 ran four times and succeeded every time, the last an
+// hour ago → proven. art-010 succeeded once, then failed on its third step
+// → drifting. art-011 is published and has never been run → unproven.
+
+function seedProcedureApplications(): ProcedureApplication[] {
+  let seq = 0;
+  const applied = (
+    procedureId: string, session: string, box: string, hAgo: number,
+    outcome: ApplicationOutcome, failedAtStepId: string | null, note: string | null,
+  ): ProcedureApplication => {
+    seq += 1;
+    return {
+      id: `papp-${String(seq).padStart(3, '0')}`,
+      procedure_id: procedureId, session_id: session, box_id: box, repo: REPO.AUTH,
+      applied_at: clock.hoursAgo(hAgo), outcome, failed_at_step_id: failedAtStepId, note,
+    };
+  };
+  return [
+    applied('art-009', 'sess-auth-04', 'box-auth-04', 8, 'succeeded', null, null),
+    applied('art-009', 'sess-auth-05', 'box-auth-05', 5, 'succeeded', null, null),
+    applied('art-009', 'sess-auth-06', 'box-auth-06', 2, 'succeeded', null, null),
+    applied('art-009', 'sess-auth-04', 'box-auth-04', 1, 'succeeded', null, null),
+    applied('art-010', 'sess-auth-05', 'box-auth-05', 6, 'succeeded', null, null),
+    applied('art-010', 'sess-auth-06', 'box-auth-06', 1.5, 'failed', 'fact-020',
+      'flag flipped but the hosted-UI redirect still resolved to the old domain'),
   ];
 }
 
@@ -1338,6 +1541,9 @@ const LARGE_REPOS: Array<{ repo: string; initiative: string }> = [
   { repo: REPO.COST, initiative: INITIATIVE.COST },
 ];
 const LARGE_KINDS: ObservationKind[] = ['worked', 'failed', 'gotcha', 'decision', 'convention'];
+// No `procedure` here: the generator has no step structure to hand a
+// procedure (every generated fact is an unordered `supports` claim), and a
+// procedure with zero steps would be a shape the provider never produces.
 const LARGE_TYPES: ArtifactType[] = ['runbook', 'insight', 'convention', 'decision'];
 const LARGE_STATUSES: ArtifactStatus[] = ['published', 'published', 'draft', 'published', 'draft', 'retired'];
 
@@ -1436,6 +1642,7 @@ function largeFacts(): Fact[] {
       object: `art-L${artifactIndex + 1}`,
       evidence_observation_ids: [`obs-L${pad(firstObs, 3)}`, `obs-L${pad(firstObs + 1, 3)}`],
       confidence: Number((0.8 + (i % 4) * 0.03).toFixed(2)),
+      ordinal: null,
     };
   });
 }
@@ -1622,7 +1829,21 @@ export const ingestWriters = defineFixture<IngestWriter>({
   },
 });
 
+/** Who ran which procedure and how it went. Emptied, every procedure reads
+ *  `unproven` honestly — nothing has been run, so nothing is proven — and
+ *  `POST /procedures/:id/apply` appends here, so a reset takes the run back. */
+export const procedureApplications = defineFixture<ProcedureApplication>({
+  key: 'distillation-procedure-applications',
+  scenarios: {
+    default: seedProcedureApplications,
+    empty: () => [],
+    fresh: () => [],
+    error: unreadable('distillation_procedure_applications'),
+  },
+});
+
 /** Every fixture in this domain, for the provider's test-only reset. */
 export const distillationFixtures = [
   observations, clusters, artifacts, facts, libraryLinks, compactionJobs, reviewSamples, ingestWriters,
+  procedureApplications,
 ] as const;

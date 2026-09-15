@@ -135,7 +135,10 @@ export interface Cluster {
   updated_at: string;
 }
 
-export type ArtifactType = 'runbook' | 'insight' | 'convention' | 'decision';
+/** 'procedure' is procedural memory: an ordered recipe ("do A, then B")
+ *  rather than a claim. Its facts are its steps, ordered by `Fact.ordinal`,
+ *  and it is the only type with an application history (ProcedureApplication). */
+export type ArtifactType = 'runbook' | 'insight' | 'convention' | 'decision' | 'procedure';
 export type ArtifactStatus = 'draft' | 'published' | 'retired';
 
 export interface Fact {
@@ -147,6 +150,11 @@ export interface Fact {
   object: string;
   evidence_observation_ids: string[];
   confidence: number;
+  /** 1-based step position when the fact is a step of a procedure; null for
+   *  a plain claim. Ordinal, not array index, because a procedure's steps
+   *  arrive through lineage (unordered nodes), and the reader must be able to
+   *  say "failed at step 3" without depending on node order on the wire. */
+  ordinal: number | null;
 }
 
 export interface Artifact {
@@ -191,8 +199,15 @@ export interface ArtifactsResponse {
 
 // ── Lineage ──────────────────────────────────────────────────────────────
 
-export type LineageNodeKind = 'observation' | 'session' | 'cluster' | 'artifact' | 'fact' | 'library_item';
-export type LineageRelation = 'written_by' | 'merged_into' | 'distilled_into' | 'supports' | 'published_as';
+/** 'application' = one run of a procedure in a session (see
+ *  ProcedureApplication). Its node meta carries { outcome, applied_at,
+ *  session_id, box_id, failed_at_step_id, subtitle }; a 'fact' node that is a
+ *  procedure step additionally carries `meta.ordinal`. */
+export type LineageNodeKind = 'observation' | 'session' | 'cluster' | 'artifact' | 'fact' | 'library_item' | 'application';
+/** 'applied_in' runs artifact → application: the procedure was applied in
+ *  that session, so the edge points at the run the same way `published_as`
+ *  points at the library item. */
+export type LineageRelation = 'written_by' | 'merged_into' | 'distilled_into' | 'supports' | 'published_as' | 'applied_in';
 
 export interface LineageNode {
   id: string;
@@ -231,6 +246,73 @@ export interface ReviewSample {
 /** GET /review?verdict= */
 export interface ReviewResponse {
   samples: ReviewSample[];
+}
+
+// ── Procedures (procedural memory) ───────────────────────────────────────
+// A procedure is an L2 artifact whose facts are ordered steps. Unlike the
+// other artifact types it is *applied*, not just read: each run in a session
+// is recorded as an application, and the middleware folds those runs into a
+// per-procedure health verdict. Same rule as the level health above — the
+// server owns the judgment (`ProcedureHealth.reason` is its sentence), the
+// portal only renders it. snake_case: domain layer, like Artifact/Fact.
+
+export type ApplicationOutcome = 'succeeded' | 'failed' | 'abandoned';
+
+export interface ProcedureApplication {
+  id: string;
+  procedure_id: string;
+  session_id: string;
+  box_id: string;
+  repo: string;
+  applied_at: string;
+  outcome: ApplicationOutcome;
+  /** The step (a Fact id) the run failed on; null unless `outcome` is
+   *  'failed' — an abandoned run stopped without a step blaming itself. */
+  failed_at_step_id: string | null;
+  note: string | null;
+}
+
+/** 'proven' = recent runs succeed; 'drifting' = it used to work but recent
+ *  runs fail or new gotchas cluster around its repo, so the recipe is
+ *  probably stale; 'unproven' = never (or not recently) applied, so there is
+ *  no evidence either way. */
+export type ProcedureHealthStatus = 'proven' | 'drifting' | 'unproven';
+
+export interface ProcedureHealth {
+  status: ProcedureHealthStatus;
+  reason: string;
+}
+
+/** GET /api/distillation/procedures — one row per procedure artifact with
+ *  its run history rolled up server-side, so the list page needs no
+ *  per-row applications fetch. */
+export interface ProcedureView {
+  artifact: Artifact;
+  /** The repo the procedure was distilled for; null when its clusters span
+   *  more than one and no single repo can be named. */
+  repo: string | null;
+  step_count: number;
+  runs: { total: number; succeeded: number; failed: number; abandoned: number };
+  last_applied_at: string | null;
+  last_succeeded_at: string | null;
+  /** The session that last proved it — what the health reason names. */
+  last_succeeded_by: string | null;
+  /** 14 UTC-day buckets, oldest → newest, of applications per day — the
+   *  sparkline input. Always 14 long; a quiet day is a 0, not a gap. */
+  applied_per_day: number[];
+  /** The drift evidence behind `health` — shown next to the verdict so a
+   *  reader can see what the server counted, not just what it concluded. */
+  drift: { new_gotcha_clusters: number; failed_runs: number };
+  health: ProcedureHealth;
+}
+
+export interface ProceduresResponse {
+  procedures: ProcedureView[];
+}
+
+/** GET /api/distillation/procedures/:id/applications — newest first. */
+export interface ApplicationsResponse {
+  applications: ProcedureApplication[];
 }
 
 // ── Library provenance ───────────────────────────────────────────────────

@@ -33,15 +33,16 @@
 // promotions.ts and design-reviews.ts.
 
 import { config } from '../config.js';
-import { NotFoundError, AppError } from '../lib/async-handler.js';
-import { clock, countBy, groupBy, sumBy } from '../mock/core/index.js';
+import { NotFoundError, AppError, ValidationError } from '../lib/async-handler.js';
+import { clock, countBy, groupBy, sumBy, utcDayStartMs, DAY_MS } from '../mock/core/index.js';
 import { getAsset } from './prompt-library.js';
 import {
   observations as observationsFx, clusters as clustersFx, artifacts as artifactsFx,
   facts as factsFx, libraryLinks as libraryLinksFx, compactionJobs as compactionJobsFx,
-  reviewSamples as reviewSamplesFx, ingestWriters as ingestWritersFx, distillationFixtures,
+  reviewSamples as reviewSamplesFx, ingestWriters as ingestWritersFx,
+  procedureApplications as procedureApplicationsFx, distillationFixtures,
   type Observation, type Cluster, type Artifact, type ArtifactRow, type Fact, type ReviewSample,
-  type CompactionJobRow, type IngestWriter,
+  type CompactionJobRow, type IngestWriter, type ProcedureApplication, type ApplicationOutcome,
   type ObservationKind, type ArtifactStatus, type ArtifactType, type ReviewTargetKind, type ReviewVerdict,
   type Level, type CompactionStatus,
   type Lineage, type LineageNode, type LineageEdge, type LineageRelation,
@@ -50,7 +51,7 @@ import {
 export type {
   Observation, Cluster, Artifact, ArtifactRow, Fact, ReviewSample,
   ArtifactStatus, ArtifactType, ReviewTargetKind, ReviewVerdict, Lineage, LineageNode, LineageEdge,
-  Level, CompactionStatus, CompactionJobRow, IngestWriter,
+  Level, CompactionStatus, CompactionJobRow, IngestWriter, ProcedureApplication, ApplicationOutcome,
 } from '../mock/distillation.js';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -280,6 +281,90 @@ export function samplingVerdict(s: SamplingState): SamplingVerdict {
   };
 }
 
+// A procedure that succeeded once, long ago, is not proven today: the repo
+// under it keeps moving whether or not anyone re-ran the steps. Fourteen
+// days is the same window the review banner counts over, and it is flat
+// rather than per-repo for the same reason the lag thresholds above are —
+// nothing to tune against yet.
+const PROVEN_TTL_DAYS = 14;
+
+export type ProcedureHealthStatus = 'proven' | 'drifting' | 'unproven';
+
+export interface ProcedureHealth {
+  status: ProcedureHealthStatus;
+  reason: string;
+}
+
+/** "1h ago" / "3d ago" — the age a reason quotes, never a raw ISO string. */
+function ageLabel(iso: string, nowMs: number): string {
+  const ms = Math.max(0, nowMs - Date.parse(iso));
+  if (ms < 60 * 60_000) return `${Math.round(ms / 60_000)}m ago`;
+  if (ms < DAY_MS) return `${Math.round(ms / 3_600_000)}h ago`;
+  return `${Math.round(ms / DAY_MS)}d ago`;
+}
+
+/**
+ * Is a procedure still worth handing to a session? Three answers, decided
+ * from counted rows only:
+ *
+ *   unproven  — no run has ever completed it. A published procedure nobody
+ *               has run is a claim, not a capability, and a draft with two
+ *               failed runs is the same thing with evidence.
+ *   drifting  — it was proven once, but since that success either a run
+ *               failed/was abandoned, a `failed`/`gotcha` CLUSTER was minted
+ *               in the same repo, or the success is older than
+ *               PROVEN_TTL_DAYS. Drift is read at L1, not L0, on purpose:
+ *               simulated ingest mints a gotcha in orgiq-auth-service every
+ *               minute, so an L0 rule would flip every auth procedure to
+ *               drifting within minutes of boot. A cluster is a gotcha that
+ *               compaction agreed was a pattern.
+ *   proven    — a success, nothing contradicting it since, inside the TTL.
+ *
+ * The reason always names the counts and the repo, because a bare
+ * "drifting" tells the person about to run it nothing about what changed.
+ */
+export function procedureHealth(p: Omit<ProcedureView, 'health'>, nowMs: number): ProcedureHealth {
+  const { runs, repo } = p;
+  const where = repo ?? 'its repo';
+  if (p.last_succeeded_at === null) {
+    if (runs.total === 0) {
+      const state = p.artifact.status === 'published' ? 'published' : `in ${p.artifact.status}`;
+      return {
+        status: 'unproven',
+        reason: `${state} ${ageLabel(p.artifact.created_at, nowMs)}, never run to completion — 0 runs.`,
+      };
+    }
+    return {
+      status: 'unproven',
+      reason: `${runs.total} run${runs.total === 1 ? '' : 's'}, none succeeded — the last stopped ${p.last_applied_at ? ageLabel(p.last_applied_at, nowMs) : 'at an unknown time'}.`,
+    };
+  }
+
+  const since = ageLabel(p.last_succeeded_at, nowMs);
+  const by = p.last_succeeded_by ?? 'an unrecorded session';
+  const { failed_runs, new_gotcha_clusters } = p.drift;
+  if (failed_runs > 0 || new_gotcha_clusters > 0) {
+    const parts: string[] = [];
+    if (failed_runs > 0) parts.push(`${failed_runs} run${failed_runs === 1 ? ' failed or was' : 's failed or were'} abandoned`);
+    if (new_gotcha_clusters > 0) parts.push(`${new_gotcha_clusters} new failed/gotcha cluster${new_gotcha_clusters === 1 ? '' : 's'} landed in ${where}`);
+    return {
+      status: 'drifting',
+      reason: `last proven ${since} by ${by}; since then ${parts.join(' and ')} — re-run it before trusting it.`,
+    };
+  }
+  if (nowMs - Date.parse(p.last_succeeded_at) > PROVEN_TTL_DAYS * DAY_MS) {
+    return {
+      status: 'drifting',
+      reason: `last proven ${since} by ${by}, older than the ${PROVEN_TTL_DAYS}-day window — nothing has contradicted it, but ${where} has had ${PROVEN_TTL_DAYS} days to move underneath it.`,
+    };
+  }
+  const allSucceeded = runs.succeeded === runs.total;
+  return {
+    status: 'proven',
+    reason: `last proven ${since} by ${by}; ${runs.total} run${runs.total === 1 ? '' : 's'}, ${allSucceeded ? 'all succeeded' : `${runs.succeeded} succeeded`}.`,
+  };
+}
+
 // ─── Rows, and the selectors over them ───────────────────────────────────────
 //
 // Every number this module reports is counted here, at read time, from the
@@ -296,6 +381,7 @@ const factRows = (): Fact[] => factsFx.rows();
 const jobRows = (): CompactionJobRow[] => compactionJobsFx.rows();
 const reviewRows = (): ReviewSample[] => reviewSamplesFx.rows();
 const writerRows = (): IngestWriter[] => ingestWritersFx.rows();
+const applicationRows = (): ProcedureApplication[] => procedureApplicationsFx.rows();
 
 /** The Library asset an artifact was published as, or null when no link row
  *  exists — `library_item_id: null` on the wire is the ABSENCE of a row in the
@@ -560,6 +646,7 @@ export function __resetDistillationMock(): void {
   clusterSeq = 0;
   artifactSeq = 0;
   factSeq = 0;
+  applicationSeq = 0;
 }
 
 // ─── Provider ────────────────────────────────────────────────────────────────
@@ -619,6 +706,7 @@ let compactSeq = 0;
 let clusterSeq = 0;
 let artifactSeq = 0;
 let factSeq = 0;
+let applicationSeq = 0;
 
 /** Every observation id already claimed by some cluster — the complement is
  *  the L0 backlog an L1 pass has left to do. */
@@ -636,6 +724,11 @@ function referencedClusterIds(): Set<string> {
   return ids;
 }
 
+// Total over ObservationKind on purpose, and `procedure` is deliberately not
+// reachable from it: which type a lone kind maps to is a per-cluster fact,
+// whereas "this is a procedure" is a property of the whole CHUNK an L2 pass
+// distils (a trigger, an outcome, and enough actions to order). That
+// decision is isProceduralChunk below, taken before this table is consulted.
 const ARTIFACT_TYPE_FOR_KIND: Record<ObservationKind, ArtifactType> = {
   decision: 'decision',
   convention: 'convention',
@@ -643,6 +736,37 @@ const ARTIFACT_TYPE_FOR_KIND: Record<ObservationKind, ArtifactType> = {
   failed: 'insight',
   gotcha: 'insight',
 };
+
+/** Something bit. */
+const TRIGGER_KINDS: ReadonlySet<ObservationKind> = new Set(['failed', 'gotcha']);
+/** Something resolved it. */
+const OUTCOME_KINDS: ReadonlySet<ObservationKind> = new Set(['worked', 'decision']);
+/** Something a session can DO, in order — the raw material of a step. */
+const ACTION_KINDS: ReadonlySet<ObservationKind> = new Set(['worked', 'decision', 'convention']);
+
+/**
+ * A chunk is procedural when its member observations carry a TRIGGER (kind
+ * failed|gotcha: something bit) AND an OUTCOME (kind worked|decision:
+ * something resolved it) AND at least two ACTION-shaped members
+ * (worked|decision|convention) exist to order into steps. This is the same
+ * outcome+trigger shape promotions.ts's classifyPattern uses to tell a
+ * runbook from an insight, lifted from one cluster to the chunk an L2 pass
+ * distils — a single "it worked" with nothing that went wrong first is a
+ * runbook, and a gotcha with nothing that fixed it is an insight; only the
+ * pair, with steps to order, is a procedure. Members whose observation is
+ * missing from L0 are skipped rather than counted, so a dangling id cannot
+ * promote a chunk on its own.
+ */
+export function isProceduralChunk(chunk: Cluster[], observationsById: Map<string, Observation>): boolean {
+  const members = chunk.flatMap((c) => c.member_observation_ids.flatMap((id) => {
+    const o = observationsById.get(id);
+    return o ? [o] : [];
+  }));
+  const hasTrigger = members.some((o) => TRIGGER_KINDS.has(o.kind));
+  const hasOutcome = members.some((o) => OUTCOME_KINDS.has(o.kind));
+  const actions = members.filter((o) => ACTION_KINDS.has(o.kind)).length;
+  return hasTrigger && hasOutcome && actions >= 2;
+}
 
 /**
  * L0 -> L1: take every observation not already a member of some cluster
@@ -680,20 +804,110 @@ function runL1Compaction(jobId: string, startedAt: string): void {
   }
 }
 
+/** Mint the next fact id — one counter for every fact an L2 pass writes,
+ *  step or claim, so ids stay unique across chunks and across types. */
+function nextFactId(): string {
+  factSeq += 1;
+  return `fact-9${String(factSeq).padStart(2, '0')}`;
+}
+
+/**
+ * The facts of a non-procedural chunk: one `supports` claim per member
+ * cluster, evidenced by that cluster's own observations — the shape every
+ * seeded runbook/insight/decision/convention already has.
+ */
+function mintClaimFacts(artifactId: string, chunk: Cluster[]): string[] {
+  return chunk.map((c) => {
+    const fact: Fact = {
+      id: nextFactId(),
+      artifact_id: artifactId,
+      statement: c.summary,
+      subject: c.title,
+      predicate: 'supports',
+      object: artifactId,
+      evidence_observation_ids: c.member_observation_ids.slice(),
+      confidence: c.confidence,
+      ordinal: null,
+    };
+    factRows().push(fact);
+    return fact.id;
+  });
+}
+
+/**
+ * The facts of a procedural chunk. Steps are the ACTION-shaped member
+ * observations across the whole chunk, in the order they were written
+ * (created_at, then id — the order a session actually did them), minted as
+ * facts with ordinal 1..n, each citing exactly the one observation it was
+ * lifted from and carrying its parent cluster's confidence. The trigger
+ * observations (failed|gotcha) become plain `supports` claims with no
+ * ordinal — the "why" under the steps. Returns the fact ids in step order,
+ * claims after, plus the two lists the body is written from.
+ */
+function mintProcedureFacts(
+  artifactId: string, chunk: Cluster[], byId: Map<string, Observation>,
+): { factIds: string[]; steps: Observation[]; triggers: Observation[] } {
+  const members = chunk.flatMap((c) => c.member_observation_ids.flatMap((id) => {
+    const o = byId.get(id);
+    return o ? [{ o, cluster: c }] : [];
+  }));
+  const ordered = members
+    .slice()
+    .sort((a, b) => a.o.created_at.localeCompare(b.o.created_at) || a.o.id.localeCompare(b.o.id));
+  const steps = ordered.filter(({ o }) => ACTION_KINDS.has(o.kind));
+  const triggers = ordered.filter(({ o }) => TRIGGER_KINDS.has(o.kind));
+  const factIds: string[] = [];
+  steps.forEach(({ o, cluster }, i) => {
+    const fact: Fact = {
+      id: nextFactId(),
+      artifact_id: artifactId,
+      statement: o.title,
+      subject: cluster.title,
+      predicate: 'step_of',
+      object: artifactId,
+      evidence_observation_ids: [o.id],
+      confidence: cluster.confidence,
+      ordinal: i + 1,
+    };
+    factRows().push(fact);
+    factIds.push(fact.id);
+  });
+  for (const { o, cluster } of triggers) {
+    const fact: Fact = {
+      id: nextFactId(),
+      artifact_id: artifactId,
+      statement: o.title,
+      subject: cluster.title,
+      predicate: 'supports',
+      object: artifactId,
+      evidence_observation_ids: [o.id],
+      confidence: cluster.confidence,
+      ordinal: null,
+    };
+    factRows().push(fact);
+    factIds.push(fact.id);
+  }
+  return { factIds, steps: steps.map((s) => s.o), triggers: triggers.map((t) => t.o) };
+}
+
 /**
  * L1 -> L2: take every cluster not already referenced by some artifact
  * (oldest first), group same-repo clusters into chunks of up to 3, and
- * distil each chunk into one new draft artifact — plus one fact per member
- * cluster, evidenced by that cluster's own observations, so the new
- * artifacts resolve through getItem/lineageFor/listArtifacts immediately.
- * A newly distilled artifact has no Library link (nobody has published it),
- * which is the absence of a row in the links fixture, not a stored null.
+ * distil each chunk into one new draft artifact. A chunk that carries a
+ * trigger, an outcome and steps to order (isProceduralChunk) becomes a
+ * `procedure` whose facts are its ordered steps; any other chunk keeps
+ * today's one-fact-per-member-cluster shape and the type its first
+ * cluster's kind maps to. Either way the new artifact resolves through
+ * getItem/lineageFor/listArtifacts immediately, and has no Library link
+ * (nobody has published it) — the absence of a row in the links fixture,
+ * not a stored null.
  */
 function runL2Compaction(jobId: string, startedAt: string): void {
   const pending = pendingClusters()
     .slice()
     .sort((a, b) => a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id));
   if (pending.length === 0) return;
+  const byId = new Map(observationRows().map((o) => [o.id, o]));
 
   for (const clustersInRepo of groupBy(pending, (c) => c.repo).values()) {
     for (let i = 0; i < clustersInRepo.length; i += 3) {
@@ -701,29 +915,25 @@ function runL2Compaction(jobId: string, startedAt: string): void {
       artifactSeq += 1;
       const id = `art-9${String(artifactSeq).padStart(2, '0')}`;
       const first = chunk[0]!;
-      const facts: string[] = [];
-      for (const c of chunk) {
-        factSeq += 1;
-        const factId = `fact-9${String(factSeq).padStart(2, '0')}`;
-        const fact: Fact = {
-          id: factId,
-          artifact_id: id,
-          statement: c.summary,
-          subject: c.title,
-          predicate: 'supports',
-          object: id,
-          evidence_observation_ids: c.member_observation_ids.slice(),
-          confidence: c.confidence,
-        };
-        factRows().push(fact);
-        facts.push(factId);
+      const procedural = isProceduralChunk(chunk, byId);
+      let facts: string[];
+      let body_markdown: string;
+      if (procedural) {
+        const minted = mintProcedureFacts(id, chunk, byId);
+        facts = minted.factIds;
+        body_markdown =
+          `## Steps\n${minted.steps.map((o, n) => `${n + 1}. ${o.title}`).join('\n')}\n\n` +
+          `## Why\n${minted.triggers.map((o) => `- ${o.title}`).join('\n')}`;
+      } else {
+        facts = mintClaimFacts(id, chunk);
+        body_markdown = chunk.map((c) => `- ${c.title}: ${c.summary}`).join('\n');
       }
       const artifact: ArtifactRow = {
         id,
-        type: ARTIFACT_TYPE_FOR_KIND[first.kind],
+        type: procedural ? 'procedure' : ARTIFACT_TYPE_FOR_KIND[first.kind],
         title: chunk.length === 1 ? first.title : `${first.title} (+${chunk.length - 1} more)`,
         summary: chunk.map((c) => c.summary).join(' '),
-        body_markdown: chunk.map((c) => `- ${c.title}: ${c.summary}`).join('\n'),
+        body_markdown,
         cluster_ids: chunk.map((c) => c.id),
         facts,
         status: 'draft',
@@ -939,7 +1149,20 @@ function nodeForArtifact(a: Artifact): LineageNode {
 function nodeForFact(f: Fact): LineageNode {
   return {
     id: f.id, kind: 'fact', label: f.statement,
-    meta: { subject: f.subject, predicate: f.predicate, object: f.object, confidence: f.confidence },
+    meta: { subject: f.subject, predicate: f.predicate, object: f.object, confidence: f.confidence, ordinal: f.ordinal },
+  };
+}
+/** A run of a procedure. `subtitle` is what the portal's LineageFrame already
+ *  reads under a node label, so a run shows its box and age without a
+ *  frame change. */
+function nodeForApplication(p: ProcedureApplication): LineageNode {
+  return {
+    id: p.id, kind: 'application', label: `${p.outcome} · ${p.session_id}`,
+    meta: {
+      outcome: p.outcome, applied_at: p.applied_at, session_id: p.session_id, box_id: p.box_id,
+      failed_at_step_id: p.failed_at_step_id,
+      subtitle: `${p.box_id} · ${ageLabel(p.applied_at, clock.now().getTime())}`,
+    },
   };
 }
 async function nodeForLibraryItem(id: string): Promise<LineageNode> {
@@ -971,6 +1194,7 @@ function buildAdjacency(): Map<string, Array<{ id: string; edge: GraphEdge }>> {
     for (const oid of f.evidence_observation_ids) link(oid, f.id, 'supports');
   }
   for (const a of artifactsOnWire()) if (a.library_item_id) link(a.id, a.library_item_id, 'published_as');
+  for (const app of applicationRows()) link(app.procedure_id, app.id, 'applied_in');
   return adj;
 }
 
@@ -984,6 +1208,11 @@ async function resolveNode(id: string): Promise<LineageNode> {
   const f = factRows().find((x) => x.id === id);
   if (f) return nodeForFact(f);
   if (artifactsOnWire().some((x) => x.library_item_id === id)) return nodeForLibraryItem(id);
+  // Before the session fallback: an id nothing else claims is treated as a
+  // session, so an unchecked application id would render as "Session
+  // papp-001" with empty meta rather than as the run it is.
+  const app = applicationRows().find((x) => x.id === id);
+  if (app) return nodeForApplication(app);
   return nodeForSession(id);
 }
 
@@ -1081,4 +1310,170 @@ export async function libraryProvenance(libraryItemId: string): Promise<{ artifa
   const artifact = artifactsOnWire().find((a) => a.library_item_id === libraryItemId);
   if (!artifact) return null;
   return { artifact, lineage: await buildLineage(artifact.id, 3) };
+}
+
+// ─── Procedures: ordered steps, and whether they still hold ────────────────
+//
+// A `procedure` artifact is an artifact whose facts carry an ordinal. What
+// makes it more than a runbook with numbered lines is that sessions RUN it
+// and report back (`procedureApplications`), so the store can say whether
+// the steps have been proven recently, have drifted since, or were never
+// run at all. Every number on that view is counted here from the
+// applications and cluster rows on every read; the health verdict is the
+// pure rule procedureHealth above, so a test can hand it a shape and a
+// clock and check the sentence it produces.
+
+/** How many UTC days of run history the per-day sparkline covers. */
+const APPLIED_WINDOW_DAYS = 14;
+
+export interface ProcedureView {
+  /** The wire artifact — first so a capture that wants "the id" finds the
+   *  procedure's own before any nested one. */
+  artifact: Artifact;
+  /** The first linked cluster's repo, the same rule repoOf applies to an L2
+   *  item; null for a procedure whose clusters are gone. */
+  repo: string | null;
+  step_count: number;
+  runs: { total: number; succeeded: number; failed: number; abandoned: number };
+  last_applied_at: string | null;
+  last_succeeded_at: string | null;
+  /** The session that last ran it to completion — what "proven by" names. */
+  last_succeeded_by: string | null;
+  /** Runs per UTC day, APPLIED_WINDOW_DAYS buckets oldest → newest. */
+  applied_per_day: number[];
+  /** What has happened since the last success (or since the artifact was
+   *  minted, when it has never succeeded): failed|abandoned runs, and
+   *  failed|gotcha CLUSTERS minted in the same repo. See procedureHealth
+   *  for why clusters rather than raw observations. */
+  drift: { new_gotcha_clusters: number; failed_runs: number };
+  health: ProcedureHealth;
+}
+
+const HEALTH_ORDER: Record<ProcedureHealthStatus, number> = { drifting: 0, unproven: 1, proven: 2 };
+
+const isProcedure = (a: Artifact): boolean => a.type === 'procedure';
+
+/** The steps of a procedure, in ordinal order. */
+function stepsOf(artifactId: string): Fact[] {
+  return factRows()
+    .filter((f) => f.artifact_id === artifactId && f.ordinal !== null)
+    .sort((a, b) => (a.ordinal ?? 0) - (b.ordinal ?? 0));
+}
+
+function procedureView(artifact: Artifact, nowMs: number): ProcedureView {
+  const repo = repoOf(tagArtifact(artifact)) ?? null;
+  const apps = applicationRows()
+    .filter((p) => p.procedure_id === artifact.id)
+    .sort((a, b) => b.applied_at.localeCompare(a.applied_at) || a.id.localeCompare(b.id));
+  const byOutcome = countBy(apps, 'outcome');
+  const lastSuccess = apps.find((p) => p.outcome === 'succeeded') ?? null;
+  const since = lastSuccess?.applied_at ?? artifact.created_at;
+
+  const applied_per_day = new Array<number>(APPLIED_WINDOW_DAYS).fill(0);
+  const todayStart = utcDayStartMs(nowMs);
+  for (const p of apps) {
+    const daysBack = Math.floor((todayStart - utcDayStartMs(Date.parse(p.applied_at))) / DAY_MS);
+    if (daysBack >= 0 && daysBack < APPLIED_WINDOW_DAYS) applied_per_day[APPLIED_WINDOW_DAYS - 1 - daysBack] += 1;
+  }
+
+  const view: Omit<ProcedureView, 'health'> = {
+    artifact,
+    repo,
+    step_count: stepsOf(artifact.id).length,
+    runs: {
+      total: apps.length,
+      succeeded: byOutcome.get('succeeded') ?? 0,
+      failed: byOutcome.get('failed') ?? 0,
+      abandoned: byOutcome.get('abandoned') ?? 0,
+    },
+    last_applied_at: apps[0]?.applied_at ?? null,
+    last_succeeded_at: lastSuccess?.applied_at ?? null,
+    last_succeeded_by: lastSuccess?.session_id ?? null,
+    applied_per_day,
+    drift: {
+      failed_runs: apps.filter((p) => p.outcome !== 'succeeded' && p.applied_at > since).length,
+      new_gotcha_clusters: clusterRows().filter((c) =>
+        c.repo === repo && TRIGGER_KINDS.has(c.kind) && c.created_at > since).length,
+    },
+  };
+  return { ...view, health: procedureHealth(view, nowMs) };
+}
+
+/** GET /procedures — every procedure artifact, the ones needing attention
+ *  first (drifting, then unproven, then proven), most recently run first
+ *  within a status, id as the tiebreak so the order is stable across reads. */
+export async function listProcedures(): Promise<ProcedureView[]> {
+  const nowMs = clock.now().getTime();
+  return artifactsOnWire()
+    .filter(isProcedure)
+    .map((a) => procedureView(a, nowMs))
+    .sort((a, b) =>
+      HEALTH_ORDER[a.health.status] - HEALTH_ORDER[b.health.status]
+      || (b.last_applied_at ?? '').localeCompare(a.last_applied_at ?? '')
+      || a.artifact.id.localeCompare(b.artifact.id));
+}
+
+/** GET /procedures/:id — null for an id that is not a procedure artifact,
+ *  including an id that is an artifact of some other type: a runbook has no
+ *  steps to prove, so it is a 404 here rather than an empty view. */
+export async function getProcedure(id: string): Promise<ProcedureView | null> {
+  const artifact = artifactsOnWire().find((a) => a.id === id);
+  if (!artifact || !isProcedure(artifact)) return null;
+  return procedureView(artifact, clock.now().getTime());
+}
+
+/** GET /procedures/:id/applications — newest first. */
+export async function listApplications(procedureId: string): Promise<ProcedureApplication[] | null> {
+  const artifact = artifactsOnWire().find((a) => a.id === procedureId);
+  if (!artifact || !isProcedure(artifact)) return null;
+  return applicationRows()
+    .filter((p) => p.procedure_id === procedureId)
+    .sort((a, b) => b.applied_at.localeCompare(a.applied_at) || b.id.localeCompare(a.id));
+}
+
+export interface ApplyProcedureInput {
+  outcome: ApplicationOutcome;
+  failed_at_step_id?: string | null;
+  note?: string | null;
+}
+
+/**
+ * POST /procedures/:id/apply — a session reporting how a run went. The row
+ * lands in the registered applications fixture, so `POST /api/__mock/reset`
+ * takes it back and the procedure's counted health returns to the seed —
+ * the same posture as decideReview. `failed_at_step_id` is checked against
+ * the procedure's own steps: a run cannot fail on a step it does not have,
+ * and a succeeded run cannot name one at all.
+ */
+export async function applyProcedure(
+  procedureId: string, input: ApplyProcedureInput, by: { sessionId: string; boxId: string },
+): Promise<ProcedureApplication> {
+  const artifact = artifactsOnWire().find((a) => a.id === procedureId);
+  if (!artifact || !isProcedure(artifact)) throw new NotFoundError(`procedure ${procedureId} not found`);
+
+  const stepId = input.failed_at_step_id ?? null;
+  if (input.outcome === 'succeeded' && stepId !== null) {
+    throw new ValidationError('failed_at_step_id must be null for a succeeded run');
+  }
+  if (input.outcome === 'failed' && stepId === null) {
+    throw new ValidationError('failed_at_step_id is required for a failed run');
+  }
+  if (stepId !== null && !stepsOf(procedureId).some((f) => f.id === stepId)) {
+    throw new ValidationError(`failed_at_step_id must be a step (an ordinal-bearing fact) of ${procedureId}`);
+  }
+
+  applicationSeq += 1;
+  const row: ProcedureApplication = {
+    id: `papp-9${String(applicationSeq).padStart(3, '0')}`,
+    procedure_id: procedureId,
+    session_id: by.sessionId,
+    box_id: by.boxId,
+    repo: repoOf(tagArtifact(artifact)) ?? '',
+    applied_at: clock.nowIso(),
+    outcome: input.outcome,
+    failed_at_step_id: stepId,
+    note: input.note ?? null,
+  };
+  applicationRows().push(row);
+  return row;
 }

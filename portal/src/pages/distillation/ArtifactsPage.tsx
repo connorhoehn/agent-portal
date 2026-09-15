@@ -6,8 +6,8 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import {
-  Button, Chip, DataTable, DetailSection, Drawer, EmptyState, FilterChip, Inline, LoadingState,
-  MarkdownView, MetaLine, PageSection, SearchInput, Stack, Toolbar, ToolbarGroup, ToolbarLabel,
+  Button, Chip, DataTable, DetailSection, Drawer, EmptyState, EventRow, FilterChip, Inline, LoadingState,
+  MarkdownView, MetaLine, PageSection, SearchInput, Stack, StackDiagram, Toolbar, ToolbarGroup, ToolbarLabel,
   type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
@@ -15,10 +15,13 @@ import { relativeTime } from '../../lib/relativeTime';
 import { LineageFrame } from './LineageFrame';
 import { T } from './Text';
 import {
-  ARTIFACT_STATUS_LABEL, ARTIFACT_STATUS_TONE, ARTIFACT_TYPE_LABEL, ARTIFACT_TYPE_TONE,
-  artifactFactCount, evidenceLabel, factsFromLineage,
+  ARTIFACT_STATUS_LABEL, ARTIFACT_STATUS_TONE, ARTIFACT_TYPE_LABEL, ARTIFACT_TYPE_TONE, OUTCOME_LABEL,
+  OUTCOME_SEVERITY, artifactFactCount, evidenceLabel, factsFromLineage, runsLabel, stepTonesForRun,
+  stepsFromLineage, stepsLabel,
 } from './distillationFormat';
-import type { Artifact, ArtifactsResponse, ArtifactStatus, ArtifactType, Lineage } from './types';
+import type {
+  ApplicationsResponse, Artifact, ArtifactsResponse, ArtifactStatus, ArtifactType, Lineage,
+} from './types';
 
 const TYPE_FILTERS: Array<{ value: ArtifactType | 'all'; label: string }> = [
   { value: 'all', label: 'All' },
@@ -26,6 +29,7 @@ const TYPE_FILTERS: Array<{ value: ArtifactType | 'all'; label: string }> = [
   { value: 'insight', label: 'Insight' },
   { value: 'convention', label: 'Convention' },
   { value: 'decision', label: 'Decision' },
+  { value: 'procedure', label: 'Procedure' },
 ];
 
 const STATUS_FILTERS: Array<{ value: ArtifactStatus | 'all'; label: string }> = [
@@ -40,7 +44,18 @@ export default function DistillationArtifactsPage() {
   const type = (params.get('type') ?? 'all') as ArtifactType | 'all';
   const status = (params.get('status') ?? 'all') as ArtifactStatus | 'all';
   const [query, setQuery] = useState('');
-  const [openId, setOpenId] = useState<string | null>(null);
+  // `?open=<id>` opens the drawer on arrival — the Overview's repertoire
+  // rows land here — and closing it drops the param so a reload does not
+  // reopen a drawer the reader already dismissed.
+  const [openId, setOpenId] = useState<string | null>(params.get('open'));
+  const closeDrawer = () => {
+    setOpenId(null);
+    if (params.has('open')) {
+      const next = new URLSearchParams(params);
+      next.delete('open');
+      setParams(next, { replace: true });
+    }
+  };
 
   const setFacet = (key: 'type' | 'status', value: string) => {
     const next = new URLSearchParams(params);
@@ -194,7 +209,7 @@ export default function DistillationArtifactsPage() {
         />
       )}
 
-      <Drawer open={open != null} onClose={() => setOpenId(null)} aria-label="Artifact detail" width={720}>
+      <Drawer open={open != null} onClose={closeDrawer} aria-label="Artifact detail" width={720}>
         {open && <ArtifactDrawerBody artifact={open} />}
       </Drawer>
     </PageSection>
@@ -218,10 +233,80 @@ function PublishedAs({ libraryItemId }: { libraryItemId: string }) {
   );
 }
 
+/** The two sections only a procedure has: its steps in order, toned by the
+ *  latest run (proven up to the step it failed on, blamed there, unknown
+ *  after), and the replay ledger those tones come from. Steps are facts
+ *  with an ordinal, so they arrive through the same lineage fetch the
+ *  drawer already makes; the runs are their own read. */
+function ProcedureSections({ artifact: a, lineage }: { artifact: Artifact; lineage: Lineage | null }) {
+  const { data: runsData, isLoading: runsLoading } =
+    useFetch<ApplicationsResponse>(`/api/distillation/procedures/${encodeURIComponent(a.id)}/applications`, 0);
+  const runs = runsData?.applications ?? [];
+  const latest = runs[0] ?? null;
+  const steps = lineage ? stepsFromLineage(lineage) : [];
+  const tones = stepTonesForRun(steps, latest);
+  const evidenceOf = (id: string) => (lineage?.edges ?? []).filter((e) => e.relation === 'supports' && e.to === id).length;
+
+  return (
+    <>
+      <DetailSection title="Steps" hint={steps.length > 0 ? stepsLabel(steps.length) : undefined}>
+        {steps.length === 0 ? (
+          <T className="text-[11px] text-text-tertiary">{lineage ? 'No ordered steps on this procedure.' : 'Loading steps…'}</T>
+        ) : (
+          <StackDiagram
+            orientation="vertical"
+            connector="arrow"
+            data-testid="procedure-steps"
+            layers={steps.map((s, i) => ({
+              id: s.id,
+              label: `${s.ordinal}. ${s.label}`,
+              description: typeof s.meta['confidence'] === 'number'
+                ? `confidence ${Math.round((s.meta['confidence'] as number) * 100)}%`
+                : undefined,
+              tone: tones[i] ?? 'neutral',
+              meta: <Chip tone="neutral" size="xs">{evidenceLabel(evidenceOf(s.id))}</Chip>,
+            }))}
+          />
+        )}
+      </DetailSection>
+
+      <DetailSection title="Runs" hint={runsData ? runsLabel({
+        total: runs.length,
+        succeeded: runs.filter((r) => r.outcome === 'succeeded').length,
+        failed: runs.filter((r) => r.outcome === 'failed').length,
+        abandoned: runs.filter((r) => r.outcome === 'abandoned').length,
+      }) : undefined}>
+        {runsLoading && !runsData ? (
+          <T className="text-[11px] text-text-tertiary">Loading runs…</T>
+        ) : runs.length === 0 ? (
+          <T className="text-[11px] text-text-tertiary">Never run to completion — this procedure is unproven until a session applies it.</T>
+        ) : (
+          <Stack gap="none" data-testid="procedure-runs">
+            {runs.map((r) => {
+              const stoppedAt = r.failed_at_step_id ? steps.find((s) => s.id === r.failed_at_step_id) : undefined;
+              const where = stoppedAt ? ` — stopped at step ${stoppedAt.ordinal}: ${stoppedAt.label}` : '';
+              return (
+                <EventRow
+                  key={r.id}
+                  timestamp={relativeTime(r.applied_at)}
+                  type={OUTCOME_LABEL[r.outcome]}
+                  severity={OUTCOME_SEVERITY[r.outcome]}
+                  summary={`${r.session_id} · ${r.box_id}${where}${r.note ? ` — ${r.note}` : ''}`}
+                />
+              );
+            })}
+          </Stack>
+        )}
+      </DetailSection>
+    </>
+  );
+}
+
 function ArtifactDrawerBody({ artifact: a }: { artifact: Artifact }) {
   const navigate = useNavigate();
   const { data: lineage, isLoading: lineageLoading, error: lineageError } =
     useFetch<Lineage>(`/api/distillation/items/${encodeURIComponent(a.id)}/lineage?depth=2`, 0);
+  const isProcedure = a.type === 'procedure';
 
   return (
     <Stack gap="lg">
@@ -254,11 +339,15 @@ function ArtifactDrawerBody({ artifact: a }: { artifact: Artifact }) {
         <MarkdownView markdown={a.body_markdown} />
       </DetailSection>
 
+      {isProcedure && <ProcedureSections artifact={a} lineage={lineage ?? null} />}
+
       {(() => {
         // A fact's content only exists in lineage — `Artifact.facts` is bare
         // IDs (there is no `GET /facts/:id`) — so this section waits on the
-        // same lineage fetch the mini-lineage below already needs.
-        const facts = lineage ? factsFromLineage(lineage) : [];
+        // same lineage fetch the mini-lineage below already needs. A
+        // procedure's steps are facts too; they are listed once, as steps.
+        const stepIds = new Set(isProcedure && lineage ? stepsFromLineage(lineage).map((s) => s.id) : []);
+        const facts = lineage ? factsFromLineage(lineage).filter((f) => !stepIds.has(f.id)) : [];
         if (lineageLoading && !lineage) return <DetailSection title="Facts"><T className="text-[11px] text-text-tertiary">Loading facts…</T></DetailSection>;
         if (facts.length === 0) return null;
         return (
