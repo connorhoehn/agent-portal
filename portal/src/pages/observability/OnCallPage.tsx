@@ -43,6 +43,7 @@ import { useFetch } from '../../hooks/useFetch';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { T } from './Text';
 import { parsePgTimestampAsUtc } from '../../lib/pgTimestamp';
+import { WindowPicker } from './WindowPicker';
 
 // ── API contracts (mirrors middleware/src/routes/oncall.ts) ────────────────
 
@@ -194,7 +195,7 @@ function OnCallPage() {
       description={undefined}
       actions={
         <Inline align="center" gap="sm">
-          <WindowPicker value={windowIdx} onChange={setWindowIdx} />
+          <WindowPicker options={WINDOW_OPTIONS} value={windowIdx} onChange={setWindowIdx} />
           <Button variant="secondary" size="sm" onClick={refreshTimeline} title="Refresh now">
             Refresh
           </Button>
@@ -563,22 +564,6 @@ function SeverityDot({
   return <StatusDot color={color} size="sm" />;
 }
 
-function WindowPicker({ value, onChange }: { value: number; onChange: (i: number) => void }) {
-  return (
-    <Inline gap="xs">
-      {WINDOW_OPTIONS.map((w, i) => (
-        <Button
-          key={w.label}
-          variant={i === value ? 'primary' : 'secondary'}
-          size="sm"
-          onClick={() => onChange(i)}
-        >
-          {w.label}
-        </Button>
-      ))}
-    </Inline>
-  );
-}
 
 function EmptyState({ text }: { text: string }) {
   return (

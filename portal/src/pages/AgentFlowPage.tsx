@@ -7,7 +7,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { MarkerType, type Node, type Edge } from '@xyflow/react';
 import { Link, useSearchParams } from 'react-router';
-import { Card, Chip, Drawer, Inline, InlineAlert, SegmentedControl, Stack, StatusDot } from '@connorhoehnslalom/ui-components/shared';
+import { Chip, Drawer, Inline, InlineAlert, SectionLabel, SegmentedControl, Stack, StatStrip, StatusDot } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../hooks/useFetch';
 import { UnavailableNotice } from '../components/UnavailableNotice';
 import { AgentFlowFrame, NODE_HEIGHT, NODE_WIDTH, STATUS_COLORS, fmtCount, fmtMs } from './AgentFlowFrame';
@@ -320,13 +320,18 @@ function AgentFlowPage() {
       {/* ── Summary bar ── */}
       <Inline align="center" justify="between" gap="md" className="shrink-0 border-b border-border bg-surface px-4 py-2.5">
         <Inline align="center" gap="lg">
-          <SummaryKV
-            label="Agents"
-            value={fleetFailure ? '— online' : `${onlineCount} / ${Object.keys(AGENTS).length} online`}
+          {/* The library's tiles, frameless because the bar is the frame —
+              this page used to draw its own label-over-value pairs. */}
+          <StatStrip
+            frameless
+            aria-label="Fleet summary"
+            items={[
+              { label: 'Online', value: fleetFailure ? '—' : `${onlineCount}/${Object.keys(AGENTS).length}`, ...(fleetFailure ? { hint: 'unknown' } : {}) },
+              { label: `Calls (${windowHours < 24 ? windowHours + 'h' : windowHours === 24 ? '24h' : '7d'})`, value: topologyError ? '—' : fmtCount(totalCalls) },
+              { label: 'Errors', value: topologyError ? '—' : fmtCount(totalErrors), tone: !topologyError && totalErrors > 0 ? 'danger' : 'default' },
+              { label: 'Err rate', value: topologyError ? '—' : errRate, tone: !topologyError && totalErrors > 0 ? 'danger' : 'default' },
+            ]}
           />
-          <SummaryKV label={`Calls (${windowHours < 24 ? windowHours + 'h' : windowHours === 24 ? '24h' : '7d'})`} value={topologyError ? '—' : fmtCount(totalCalls)} />
-          <SummaryKV label="Errors" value={topologyError ? '—' : fmtCount(totalErrors)} accent={!topologyError && totalErrors > 0 ? 'warn' : undefined} />
-          <SummaryKV label="Err rate" value={topologyError ? '—' : errRate} accent={!topologyError && totalErrors > 0 ? 'warn' : undefined} />
           {topology?.generatedAt && (
             <T className="text-[10.5px] text-text-tertiary">
               Refreshed {new Date(topology.generatedAt).toLocaleTimeString()}
@@ -370,17 +375,6 @@ function AgentFlowPage() {
   );
 }
 
-// ── Summary bar helpers ───────────────────────────────────────────────────────
-
-function SummaryKV({ label, value, accent }: { label: string; value: string; accent?: 'warn' }) {
-  const valColor = accent ? 'text-warning' : 'text-text-primary';
-  return (
-    <Stack gap="none">
-      <T className="text-[9.5px] uppercase tracking-wider text-text-tertiary">{label}</T>
-      <T className={`text-[13px] font-semibold ${valColor}`}>{value}</T>
-    </Stack>
-  );
-}
 
 // ── Drawer body ───────────────────────────────────────────────────────────────
 
@@ -418,22 +412,21 @@ function AgentDrawerBody({
       </Stack>
 
       <Stack gap="sm">
-        <SectionLabel>Metrics</SectionLabel>
-        <Stack gap="sm">
-          <Inline gap="sm">
-            <BigMetric label="Calls"  value={fmtCount(summary?.invocationCount ?? 0)} />
-            <BigMetric label="Errors" value={String(summary?.errorCount ?? 0)} />
-          </Inline>
-          <Inline gap="sm">
-            <BigMetric label="p50" value={fmtMs(summary?.p50Ms ?? null)} />
-            <BigMetric label="p95" value={fmtMs(summary?.p95Ms ?? null)} />
-          </Inline>
-        </Stack>
+        <SectionLabel as="div">Metrics</SectionLabel>
+        <StatStrip
+          aria-label="Agent metrics"
+          items={[
+            { label: 'Calls', value: fmtCount(summary?.invocationCount ?? 0) },
+            { label: 'Errors', value: String(summary?.errorCount ?? 0), tone: (summary?.errorCount ?? 0) > 0 ? 'danger' : 'default' },
+            { label: 'p50', value: fmtMs(summary?.p50Ms ?? null) },
+            { label: 'p95', value: fmtMs(summary?.p95Ms ?? null) },
+          ]}
+        />
       </Stack>
 
       {summary?.tools && summary.tools.length > 0 && (
         <Stack gap="sm">
-          <SectionLabel>Tools</SectionLabel>
+          <SectionLabel as="div">Tools</SectionLabel>
           <Inline wrap gap="xs">
             {summary.tools.map(t => (
               <Chip key={t} tone="neutral" size="xs" mono>{t}</Chip>
@@ -474,21 +467,6 @@ function DrawerKv({ label, value, mono }: { label: string; value: string; mono?:
   );
 }
 
-function BigMetric({ label, value }: { label: string; value: string }) {
-  return (
-    <Card padding="none" className="flex-1 rounded-md border border-border bg-surface-inset px-2.5 py-2">
-      <T className="block text-[9.5px] uppercase tracking-wider text-text-tertiary">{label}</T>
-      <T className="mt-0.5 block text-[15px] font-bold text-text-primary">{value}</T>
-    </Card>
-  );
-}
 
-function SectionLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <T className="block text-[10px] font-bold uppercase tracking-wider text-text-tertiary">
-      {children}
-    </T>
-  );
-}
 
 export default AgentFlowPage;

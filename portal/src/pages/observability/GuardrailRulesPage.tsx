@@ -12,18 +12,7 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import {
-  Button,
-  Card,
-  CardHeader,
-  Table,
-  TableHead,
-  TableBody,
-  TableRow,
-  TableTh,
-  TableTd,
-  Chip,
-  Inline,
-  PageSection,
+  Button, Card, CardHeader, Table, TableHead, TableBody, TableRow, TableTh, TableTd, Chip, PageSection,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { GuardrailRuleBadge } from '../../components/observability/GuardrailRuleBadge';
@@ -31,6 +20,7 @@ import { SmartEmptyState } from '../../components/observability/SmartEmptyState'
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { firstDegraded } from '../../lib/degraded';
 import { T } from './Text';
+import { WindowPicker } from './WindowPicker';
 
 // ── Types (mirrored from middleware/src/routes/guardrails-detail.ts) ───────
 
@@ -112,7 +102,7 @@ function GuardrailRulesPage() {
     <PageSection
       title="Guardrail Rules"
       description={`${totalFires} intervention${totalFires === 1 ? '' : 's'} across ${rules.length} rule${rules.length === 1 ? '' : 's'} · last ${win.label}`}
-      actions={<WindowPicker value={windowIdx} onChange={(i) => { setWindowIdx(i); setSelectedRule(null); }} />}
+      actions={<WindowPicker options={WINDOW_OPTIONS} value={windowIdx} onChange={(i) => { setWindowIdx(i); setSelectedRule(null); }} />}
     >
       {(error || guardrailsDegraded) && (
         <UnavailableNotice
@@ -271,22 +261,6 @@ function SeverityCell({ n, tone }: { n: number; tone: Tone }) {
   );
 }
 
-function WindowPicker({ value, onChange }: { value: number; onChange: (i: number) => void }) {
-  return (
-    <Inline gap="xs">
-      {WINDOW_OPTIONS.map((w, i) => (
-        <Button
-          key={w.label}
-          variant={i === value ? 'primary' : 'secondary'}
-          size="sm"
-          onClick={() => onChange(i)}
-        >
-          {w.label}
-        </Button>
-      ))}
-    </Inline>
-  );
-}
 
 // Row-level "nothing here" that will not say so when it does not know.
 function EmptyState({ text, degraded }: { text: string; degraded?: string | null }) {

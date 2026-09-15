@@ -20,22 +20,7 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import {
-  Button,
-  Card,
-  Chip,
-  Inline,
-  InlinePlaceholder,
-  KPIGrid,
-  PageSection,
-  SectionLabel,
-  Stack,
-  StatCard,
-  Table,
-  TableHead,
-  TableBody,
-  TableRow,
-  TableTh,
-  TableTd,
+  Card, Chip, Inline, InlinePlaceholder, KPIGrid, PageSection, SectionLabel, Stack, StatCard, Table, TableHead, TableBody, TableRow, TableTh, TableTd,
 } from '@connorhoehnslalom/ui-components/shared';
 import {
   BarChart,
@@ -55,6 +40,7 @@ import { CostChip } from '../../components/observability/CostChip';
 import { SmartEmptyState } from '../../components/observability/SmartEmptyState';
 import { T } from './Text';
 import { normalizePgTimestamp, parsePgTimestamp, pgTimestampMs } from '../../lib/pgTimestamp';
+import { WindowPicker } from './WindowPicker';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -383,7 +369,7 @@ function CostPage() {
     <PageSection
       title="Cost"
       description={headerSubline}
-      actions={<WindowPicker value={windowIdx} onChange={setWindowIdx} />}
+      actions={<WindowPicker options={WINDOW_OPTIONS} value={windowIdx} onChange={setWindowIdx} />}
     >
       {/* Every panel below reads from the same cost tables. Saying it once at
           the top beats seven cards each quietly showing $0.00. */}
@@ -701,27 +687,5 @@ function CostPage() {
 
 // ─── Sub-components ─────────────────────────────────────────────────────────
 
-function WindowPicker({
-  value,
-  onChange,
-}: {
-  value: number;
-  onChange: (i: number) => void;
-}) {
-  return (
-    <Inline gap="xs">
-      {WINDOW_OPTIONS.map((w, i) => (
-        <Button
-          key={w.label}
-          size="sm"
-          variant={i === value ? 'primary' : 'secondary'}
-          onClick={() => onChange(i)}
-        >
-          {w.label}
-        </Button>
-      ))}
-    </Inline>
-  );
-}
 
 export default CostPage;

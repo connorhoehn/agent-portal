@@ -49,6 +49,7 @@ import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { firstDegraded } from '../../lib/degraded';
 import { T } from './Text';
 import { parsePgTimestampAsUtc } from '../../lib/pgTimestamp';
+import { WindowPicker } from './WindowPicker';
 
 interface DriftSummary {
   agentId: string;
@@ -218,7 +219,7 @@ function DriftPage() {
     <PageSection
       title="Drift"
       description={`Per-agent · ${rows.length} agent${rows.length === 1 ? '' : 's'} · 30s refresh`}
-      actions={<WindowPicker value={windowIdx} onChange={setWindowIdx} />}
+      actions={<WindowPicker options={WINDOW_OPTIONS} value={windowIdx} onChange={setWindowIdx} />}
     >
       {(summaryError || driftDegraded) && (
         <UnavailableNotice
@@ -621,22 +622,6 @@ function OutlierDetail({
   );
 }
 
-function WindowPicker({ value, onChange }: { value: number; onChange: (i: number) => void }) {
-  return (
-    <Inline as="div" gap="xs">
-      {WINDOW_OPTIONS.map((w, i) => (
-        <Button
-          key={w.label}
-          variant={i === value ? 'primary' : 'secondary'}
-          size="sm"
-          onClick={() => onChange(i)}
-        >
-          {w.label}
-        </Button>
-      ))}
-    </Inline>
-  );
-}
 
 function shortTime(iso: string, hours: number): string {
   const d = parsePgTimestampAsUtc(iso) ?? new Date(Number.NaN);

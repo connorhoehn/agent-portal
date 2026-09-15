@@ -9,6 +9,7 @@ import {
   Stack,
   SubNavLayout,
   type SubNavItem,
+  SkipLink,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { useSession } from '../../lib/auth';
@@ -295,6 +296,10 @@ export function Layout() {
   return (
     <CommandPaletteProvider commands={commands} getDynamicCommands={getDynamicCommands}>
       <Stack ref={shellRef} gap="none" data-tenant={session?.tenant ?? 'orgiq'} className="h-screen">
+        {/* First in the tab order, visible only while focused: a keyboard
+            user lands on the page content without walking the header, the
+            rail and the nested rail first (WCAG 2.4.1, Bypass Blocks). */}
+        <SkipLink targetId="main-content" />
         <ChannelHeader
           className="shell-header"
           avatarUrl={brandMark}
@@ -365,7 +370,7 @@ export function Layout() {
               {/* Where you are, once you're 3+ levels deep — stacked rails say
                   what you can open, the trail says where you stand. */}
               <Breadcrumbs />
-              <Stack gap="none" className="flex-1 min-h-0 overflow-auto">
+              <Stack id="main-content" tabIndex={-1} gap="none" className="flex-1 min-h-0 overflow-auto outline-none">
                 <Outlet />
               </Stack>
             </Stack>

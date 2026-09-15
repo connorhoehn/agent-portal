@@ -16,20 +16,7 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import {
-  Button,
-  Card,
-  CardHeader,
-  Chip,
-  Inline,
-  PageSection,
-  Stack,
-  StatStrip,
-  Table,
-  TableBody,
-  TableHead,
-  TableRow,
-  TableTh,
-  TableTd,
+  Card, CardHeader, Chip, PageSection, Stack, StatStrip, Table, TableBody, TableHead, TableRow, TableTh, TableTd,
 } from '@connorhoehnslalom/ui-components/shared';
 import {
   AreaChart,
@@ -48,6 +35,7 @@ import { firstDegraded } from '../../lib/degraded';
 import { TrafficHeatmapFrame } from './TrafficHeatmapFrame';
 import { T } from './Text';
 import { normalizePgTimestamp, parsePgTimestamp } from '../../lib/pgTimestamp';
+import { WindowPicker } from './WindowPicker';
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -298,7 +286,7 @@ function TrafficPage() {
     <PageSection
       title="Traffic"
       description={headerSubline}
-      actions={<WindowPicker value={windowIdx} onChange={setWindowIdx} />}
+      actions={<WindowPicker options={WINDOW_OPTIONS} value={windowIdx} onChange={setWindowIdx} />}
     >
       {(rpsError || trafficDegraded) && (
         <UnavailableNotice
@@ -531,28 +519,6 @@ function TrafficPage() {
 
 // ── Sub-components ──────────────────────────────────────────────────────────
 
-function WindowPicker({
-  value,
-  onChange,
-}: {
-  value: number;
-  onChange: (i: number) => void;
-}) {
-  return (
-    <Inline gap="xs">
-      {WINDOW_OPTIONS.map((w, i) => (
-        <Button
-          key={w.label}
-          variant={i === value ? 'primary' : 'secondary'}
-          size="sm"
-          onClick={() => onChange(i)}
-        >
-          {w.label}
-        </Button>
-      ))}
-    </Inline>
-  );
-}
 
 // A row-level "nothing here" that refuses to say so when it does not know.
 // The page-level notice above already carries the error and the retry; this

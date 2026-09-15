@@ -14,27 +14,14 @@
 import { Fragment, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
-  Button,
-  Card,
-  CardHeader,
-  Chip,
-  CodeBlock,
-  Inline,
-  PageSection,
-  Select,
-  Stack,
-  Table,
-  TableBody,
-  TableHead,
-  TableRow,
-  TableTd,
-  TableTh,
+  Card, CardHeader, Chip, CodeBlock, Inline, PageSection, Select, Stack, Table, TableBody, TableHead, TableRow, TableTd, TableTh,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { SmartEmptyState } from '../../components/observability/SmartEmptyState';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { firstDegraded } from '../../lib/degraded';
 import { T } from './Text';
+import { WindowPicker } from './WindowPicker';
 
 // ── Types (mirrored from middleware/src/routes/memory.ts) ──────────────────
 
@@ -169,7 +156,7 @@ function MemoryPage() {
     <PageSection
       title="Memory"
       description={`${totalEvents} event${totalEvents === 1 ? '' : 's'} in last ${win.label} · ${totalColdSessions} cold session${totalColdSessions === 1 ? '' : 's'}`}
-      actions={<WindowPicker value={windowIdx} onChange={setWindowIdx} />}
+      actions={<WindowPicker options={WINDOW_OPTIONS} value={windowIdx} onChange={setWindowIdx} />}
     >
       {(statsError || memoryDegraded) && (
         <UnavailableNotice
@@ -371,22 +358,6 @@ function EventDetail({ event }: { event: MemoryEvent }) {
   );
 }
 
-function WindowPicker({ value, onChange }: { value: number; onChange: (i: number) => void }) {
-  return (
-    <Inline gap="xs">
-      {WINDOW_OPTIONS.map((w, i) => (
-        <Button
-          key={w.label}
-          variant={i === value ? 'primary' : 'secondary'}
-          size="sm"
-          onClick={() => onChange(i)}
-        >
-          {w.label}
-        </Button>
-      ))}
-    </Inline>
-  );
-}
 
 // Row-level "nothing here" that will not say so when it does not know.
 function EmptyState({ text, degraded }: { text: string; degraded?: string | null }) {
