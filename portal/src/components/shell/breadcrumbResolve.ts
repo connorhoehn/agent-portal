@@ -19,7 +19,7 @@ const OBS_LABELS: Record<string, string> = {
   cost: 'Cost', calibration: 'Calibration', 'model-compare': 'Model Compare',
   memory: 'Memory', 'guardrail-rules': 'Guardrail Rules', traffic: 'Traffic',
   tools: 'Tool Calls',
-  approvals: 'Approvals',
+  approvals: 'Approval Queue',
 };
 const INGEST_LABELS: Record<string, string> = {
   crawl: 'Sources', history: 'Runs', storage: 'Storage', sources: 'KB sync', schedules: 'Schedule',
@@ -43,9 +43,11 @@ const ASSESSMENT_LABELS: Record<string, string> = {
   enterprise: 'Enterprise', workspace: 'Workspace', prompts: 'Prompts', rules: 'Rules',
   runs: 'Activity', configuration: 'Configuration',
 };
+// The rail's own words (iqSubNavFormat.ts PROMPT_MGMT_ITEMS) — the name a
+// person clicked is the name the trail should repeat.
 const PROMPT_PAGES: Record<string, string> = {
-  prompts: 'Prompt Studio', canary: 'Deployment', history: 'History',
-  diff: 'Diff', evaluations: 'Evaluations',
+  prompts: 'Studio', canary: 'Rollout', history: 'Versions',
+  diff: 'Diff', evaluations: 'Evals',
 };
 const DISTILLATION_LABELS: Record<string, string> = {
   overview: 'Overview', tiers: 'Tiers', artifacts: 'Artifacts',
@@ -90,7 +92,7 @@ export function resolveBreadcrumbs(pathname: string): Crumb[] {
         return [{ label: 'Operate' }, { label: 'Architecture', path: '/iq/agents' }, { label: b }];
       // Prompt management is the Library's rail (Design); the rail lights
       // Library on these pages, so the crumb says the same.
-      case 'prompt-ops': return [{ label: 'Design' }, { label: 'Library', path: '/iq/library' }, { label: 'Prompts' }];
+      case 'prompt-ops': return [{ label: 'Design' }, { label: 'Library', path: '/iq/library' }, { label: 'What is deployed' }];
       case 'distillation': {
         const page = b ?? 'overview';
         return [{ label: 'Build' }, { label: 'Distillation', path: '/iq/distillation' }, { label: DISTILLATION_LABELS[page] ?? page }];

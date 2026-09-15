@@ -97,7 +97,7 @@ export default function PromptOpsHomePage() {
   // instead of rendering links that redirect the moment they're clicked.
   if (!isPlatform) {
     return (
-      <PageSection title="Prompt Management">
+      <PageSection title="What is deployed">
         <Stack gap="none" className="max-w-xl">
           <EmptyState
             title="This is a platform surface"
@@ -122,7 +122,7 @@ export default function PromptOpsHomePage() {
   // that reads as "nothing is deployed".
   if (libraryError) {
     return (
-      <PageSection title="Prompt Management">
+      <PageSection title="What is deployed">
         <UnavailableNotice
           error={libraryError}
           what="the prompt library"
@@ -133,7 +133,7 @@ export default function PromptOpsHomePage() {
   }
 
   return (
-    <PageSection title="Prompt Management">
+    <PageSection title="What is deployed">
       <T className="mt-1 mb-5 max-w-3xl text-[13px] leading-relaxed text-text-secondary" wrap>
         Every prompt here is wired to something running. <b>Agent system prompts</b> are resolved
         from this library by each deployed agent on every invocation (60&nbsp;s cache) — edit one and

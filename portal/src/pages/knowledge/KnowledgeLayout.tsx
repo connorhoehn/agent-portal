@@ -10,7 +10,7 @@ import { SubNavLayout, type SubNavItem } from '@connorhoehnslalom/ui-components/
 import { useSession } from '../../lib/auth';
 
 const KNOWLEDGE_ITEMS: SubNavItem[] = [
-  { path: '/admin/knowledge',          label: 'Overview', hint: 'Health & recent activity', group: 'Knowledge' },
+  { path: '/admin/knowledge',          label: 'Overview', hint: 'Sources, ingestion, and the KBs agents retrieve from', group: 'Knowledge' },
   { path: '/admin/knowledge/registry', label: 'Registry', hint: 'Knowledge bases',          group: 'Knowledge' },
 ];
 

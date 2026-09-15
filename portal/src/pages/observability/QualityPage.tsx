@@ -46,7 +46,7 @@ import { T } from './Text';
 interface QualityScore {
   invocationId: string;
   agentId: string;
-  judgeScore: number;
+  judgeScore: number | null;
   judgeRationale: string;
   ts: string;
   // Sprint 1 cost + provenance (nullable until Agent A's migration lands).
@@ -65,7 +65,12 @@ interface DriftSummaryRow {
 
 type FeedbackLabel = 'good' | 'bad' | 'fixed';
 
-function judgeTone(v: number): 'success' | 'warning' | 'danger' {
+// A judge score can be null — a run the judge never scored (sampled out,
+// or the judge itself errored). Null is "unscored", not zero: it gets a
+// neutral chip and stays out of the histogram rather than landing in the
+// 0.0–0.1 bin as a phantom failure.
+function judgeTone(v: number | null): 'success' | 'warning' | 'danger' | 'neutral' {
+  if (v == null) return 'neutral';
   if (v >= 0.7) return 'success';
   if (v >= 0.5) return 'warning';
   return 'danger';
@@ -140,6 +145,7 @@ function QualityPage() {
       count: 0,
     }));
     for (const s of scores) {
+      if (s.judgeScore == null) continue;
       let idx = Math.floor(s.judgeScore * 10);
       if (idx < 0) idx = 0;
       if (idx > 9) idx = 9;
@@ -363,7 +369,7 @@ function QualityPage() {
                     </TableTd>
                     <TableTd>
                       <Chip tone={judgeTone(r.judgeScore)} size="xs">
-                        {r.judgeScore.toFixed(2)}
+                        {r.judgeScore == null ? '—' : r.judgeScore.toFixed(2)}
                       </Chip>
                     </TableTd>
                     <TableTd

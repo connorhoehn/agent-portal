@@ -41,7 +41,7 @@ const SCORES_ITEMS: SubNavItem[] = [
   { path: '/iq/scores',          label: 'Overview',  hint: 'Ranked influence + expertise', group: 'Scores' },
   { path: '/iq/scores/cohorts',  label: 'Cohorts',   hint: 'Distribution by team',         group: 'Scores' },
   { path: '/iq/scores/compare',  label: 'Compare',   hint: 'Two-person side-by-side',      group: 'Scores' },
-  { path: '/iq/explore',         label: 'Graph',       hint: 'The org as a network',       group: 'Other views' },
+  { path: '/iq/explore',         label: 'Explore',     hint: 'The org as a network',       group: 'Other views' },
 ];
 
 // Explore's rail is only the entity lens now. Ask and Initiatives are
@@ -122,7 +122,9 @@ export function useIqSubNav(pathname: string): IqSubNavSpec | null {
   // its own session picker in-page, so a rail here was a dead 200px column.
   if (pathname.startsWith('/iq/invoke')) return null;
   if (pathname.startsWith('/iq/scores')) {
-    return { title: 'Explore', items: SCORES_ITEMS, storageKey: 'iq-scores-subnav' };
+    // "Scores", like the top-level door, the breadcrumb and the palette —
+    // the Explore side's rail is titled Explore and links here as "Scores".
+    return { title: 'Scores', items: SCORES_ITEMS, storageKey: 'iq-scores-subnav' };
   }
   // The program page carries its own lens toggle and filters — no rail.
   if (pathname.startsWith('/iq/projects')) return null;

@@ -30,7 +30,17 @@ function IqLayout() {
       renderNavItem={(item, children) => {
         const href = item.path.startsWith('/') ? item.path : `/iq/${item.path}`;
         const [linkPath, linkSearch] = href.split('?');
-        const isActive = linkPath === pathname && (linkSearch ? search === `?${linkSearch}` : !search);
+        // Match on the item's OWN param, not the whole query: Explore writes
+        // `layout=` and `focus=` beside `entities=`, and its default view
+        // carries no `entities` at all — exact-string equality lit nothing
+        // on `/iq/explore` and nothing once a second param appeared.
+        const current = new URLSearchParams(search);
+        const wanted = new URLSearchParams(linkSearch ?? '');
+        const isActive = linkPath === pathname && (
+          wanted.size === 0
+            ? true
+            : [...wanted.entries()].every(([k, v]) => (current.get(k) ?? (k === 'entities' ? 'all' : null)) === v)
+        );
         return (
           <Link
             to={item.path}

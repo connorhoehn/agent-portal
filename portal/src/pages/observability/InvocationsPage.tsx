@@ -199,7 +199,7 @@ function InvocationsPage() {
 
   return (
     <PageSection
-      title="Recent Activity"
+      title="Runs"
       description="Live · last 50 invocations · 5s refresh"
       actions={
         <Inline gap="sm" align="center">

@@ -15,9 +15,10 @@
 // produced, with provenance), Operations (running it and keeping it honest).
 import { NavLink, Outlet } from 'react-router';
 import { SubNavLayout, type SubNavItem } from '@connorhoehnslalom/ui-components/shared';
+import { useCapabilities } from '../../lib/capabilities';
 
 const ITEMS: SubNavItem[] = [
-  { group: 'Memory', path: 'overview', label: 'Overview', hint: 'Stat strip, tier health, ingest, sampling' },
+  { group: 'Memory', path: 'overview', label: 'Overview', hint: 'Tier health, ingest, sampling' },
   { group: 'Memory', path: 'tiers', label: 'Tiers', hint: 'L0 observations · L1 clusters · L2 artifacts' },
   { group: 'Knowledge', path: 'artifacts', label: 'Artifacts', hint: 'L2 artifacts, with Library links' },
   { group: 'Knowledge', path: 'lineage', label: 'Lineage', hint: 'Observation → cluster → artifact → library item' },
@@ -25,11 +26,24 @@ const ITEMS: SubNavItem[] = [
   { group: 'Operations', path: 'review', label: 'Review sample', hint: 'The human sample queue + calibration' },
 ];
 
+/** The two Operations hints promise verbs (Compact, agree/disagree) gated on
+ *  ManageBots; a role without it opens a read-only ledger, so its rail should
+ *  say so rather than advertise the verb. */
+const READ_ONLY_HINTS: Record<string, string> = {
+  compactions: 'Job history',
+  review: 'The human sample queue + calibration (read-only for your role)',
+};
+
 function DistillationLayout() {
+  const { can, ready } = useCapabilities();
+  const canManage = ready && can('ManageBots');
+  const items = canManage
+    ? ITEMS
+    : ITEMS.map((i) => (READ_ONLY_HINTS[i.path] ? { ...i, hint: READ_ONLY_HINTS[i.path] } : i));
   return (
     <SubNavLayout
       title="Distillation"
-      items={ITEMS}
+      items={items}
       storageKey="distillation"
       renderNavItem={(item, children) => (
         <NavLink
