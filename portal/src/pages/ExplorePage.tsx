@@ -574,8 +574,11 @@ function ExplorePage() {
         />
         <T className="text-text-tertiary">
           {meGraph
-            ? <><b>{meGraph.nodes.filter(n => n.kind !== 'skill_domain').length}</b> nodes · <b>{meGraph.edges.filter(e => e.type !== 'belongs_to').length}</b> {entityFilter} edges</>
-            : <><b>{visibleNodes.length}</b>{isFiltered ? ` / ${data?.nodes.length ?? 0}` : ''} people · <b>{filteredEdges.length}</b>{isEntityFiltered ? ` ${entityFilter}` : ''} edges</>
+            // `T` is a flex row, and a flex container trims the spaces at the
+            // edges of a bare text run — "56people · 131edges". Non-breaking
+            // spaces survive it.
+            ? <><b>{meGraph.nodes.filter(n => n.kind !== 'skill_domain').length}</b>&nbsp;nodes&nbsp;·&nbsp;<b>{meGraph.edges.filter(e => e.type !== 'belongs_to').length}</b>&nbsp;{entityFilter}&nbsp;edges</>
+            : <><b>{visibleNodes.length}</b>{isFiltered ? ` / ${data?.nodes.length ?? 0}` : ''}&nbsp;people&nbsp;·&nbsp;<b>{filteredEdges.length}</b>{isEntityFiltered ? ` ${entityFilter}` : ''}&nbsp;edges</>
           }
         </T>
         {isFiltered && (
@@ -600,7 +603,6 @@ function ExplorePage() {
           valueLabel={minStrength.toFixed(2)}
           disabled={isSpecificFilter}
           title={isSpecificFilter ? 'Min strength ignored when a specific view is active' : undefined}
-          className="min-w-0 [&>span]:min-w-7"
         />
         {entityFilter === 'projects' && meGraph?.allStatuses && meGraph.allStatuses.length > 0 && (
           <Inline gap="xs" align="center">
@@ -811,7 +813,7 @@ function ExplorePage() {
                 />
                 {selectedIds.size === 0 && !chatOpen && (
                   <T className="absolute bottom-3 left-3 px-2.5 py-1.5 bg-surface border border-border rounded text-[11px] text-text-tertiary">
-                    Click people to select them, then <b>Ask about selection</b> to query with the graph in view.
+                    Click people to select them, then&nbsp;<b>Ask about selection</b>&nbsp;to query with the graph in view.
                   </T>
                 )}
               </>

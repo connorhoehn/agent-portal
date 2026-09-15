@@ -3,7 +3,7 @@
  *
  * This used to hand-roll the whole thing, with a note saying "replace with
  * `Slider` from `/shared` once it is exported there". As of 2.241.0 it is: the
- * track below is the library control, and the raw `<input type="range">` and
+ * track below is the library control, and the raw range input and
  * its hand-set `accent-primary` are gone.
  *
  * The wrapper stays because `Slider` has no `label` slot and no `id`, so a
@@ -42,12 +42,23 @@ export function RangeSliderFrame({
       gap="xs"
       wrap={false}
       title={title}
-      className={`inline-flex text-text-secondary ${disabled ? 'opacity-[0.35]' : ''} ${className}`}
+      // shrink-0: a toolbar that runs out of room must wrap this control, not
+      // squeeze it — squeezed, the value ran over the end of the track.
+      className={`inline-flex shrink-0 text-text-secondary ${disabled ? 'opacity-[0.35]' : ''} ${className}`}
     >
       {label}
       <Slider
         aria-label={ariaLabel ?? label}
-        className="w-20"
+        // The library Slider prints its own readout by default; this frame
+        // prints the FORMATTED value after the track (0.60, not 60), so the
+        // built-in one is switched off — with both on, the raw number sat on
+        // the track's end and ran into the next control's label.
+        readout={false}
+        // w-36, not narrower: the library Slider's range input is `flex-1`
+        // with no `min-w-0`/`w-full`, so it keeps its intrinsic 129px and
+        // overflows a narrower box — which is how the readout ended up on the
+        // track. Queued in docs/ui-components-queue.md.
+        className="w-36"
         min={min}
         max={max}
         step={step}
