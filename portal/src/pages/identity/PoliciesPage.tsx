@@ -26,6 +26,7 @@ import { KeyValue } from '../../components/KeyValue';
 import { parsePolicy, buildPolicy, type Effect, type ParsedPolicy } from '../../lib/cedarPolicy';
 import { effectTone, inputWiring } from './identityFormat';
 import { toastError } from '../../lib/toastStore';
+import { writeJson } from '../../lib/writeJson';
 
 interface PolicyEntry {
   policyId: string;
@@ -125,62 +126,42 @@ function PoliciesPage() {
   async function saveEdit(policyId: string) {
     if (!draft) return;
     setBusy(true); setErrMsg(null);
-    try {
-      const res = await fetch(`/api/identity/policies/${policyId}`, {
-        method: 'PUT',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ description: draft.description, statement: draft.statement }),
-      });
-      if (!res.ok) {
-        const j = await res.json().catch(() => ({}));
-        throw new Error(j.detail ?? j.error ?? `${res.status}`);
-      }
+    const res = await writeJson<{ detail?: string; error?: string }>(`/api/identity/policies/${policyId}`, 'PUT', {
+      description: draft.description, statement: draft.statement,
+    });
+    if (!res.ok) {
+      setErrMsg(res.data?.detail ?? res.data?.error ?? `${res.status}`);
+    } else {
       cancelEdit();
       await refresh();
-    } catch (e) {
-      setErrMsg((e as Error).message);
-    } finally {
-      setBusy(false);
     }
+    setBusy(false);
   }
 
   async function deletePolicy(policyId: string) {
     setBusy(true); setErrMsg(null);
-    try {
-      const res = await fetch(`/api/identity/policies/${policyId}`, {
-        method: 'DELETE', credentials: 'include',
-      });
-      if (!res.ok) throw new Error(`${res.status}`);
+    const res = await writeJson(`/api/identity/policies/${policyId}`, 'DELETE');
+    if (!res.ok) {
+      setErrMsg(`${res.status}`);
+    } else {
       await refresh();
-    } catch (e) {
-      setErrMsg((e as Error).message);
-    } finally {
-      setBusy(false);
     }
+    setBusy(false);
   }
 
   async function createPolicy() {
     setBusy(true); setErrMsg(null);
-    try {
-      const res = await fetch('/api/identity/policies', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ description: createDraft.description, statement: createDraft.statement }),
-      });
-      if (!res.ok) {
-        const j = await res.json().catch(() => ({}));
-        throw new Error(j.detail ?? j.error ?? `${res.status}`);
-      }
+    const res = await writeJson<{ detail?: string; error?: string }>('/api/identity/policies', 'POST', {
+      description: createDraft.description, statement: createDraft.statement,
+    });
+    if (!res.ok) {
+      setErrMsg(res.data?.detail ?? res.data?.error ?? `${res.status}`);
+    } else {
       setCreating(false);
       setCreateDraft(makeDraft('', buildPolicy(NEW_TEMPLATE)));
       await refresh();
-    } catch (e) {
-      setErrMsg((e as Error).message);
-    } finally {
-      setBusy(false);
     }
+    setBusy(false);
   }
 
   return (

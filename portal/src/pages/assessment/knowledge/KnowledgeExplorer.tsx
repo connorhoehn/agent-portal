@@ -39,6 +39,7 @@ import {
 import { useGateway, usePresence } from '@connorhoehnslalom/realtime-modules/client';
 import { useFetch } from '../../../hooks/useFetch';
 import { useCapabilities } from '../../../lib/capabilities';
+import { sendJson } from '../../../lib/writeJson';
 import { DocPane, FolderPane } from './DocPane';
 import { ActivityBar } from './ActivityBar';
 import { ExplorerFrame } from './ExplorerFrame';
@@ -71,14 +72,6 @@ import type {
   KnowledgeSection,
   KnowledgeTreeResponse,
 } from './types';
-
-async function postJson<T = unknown>(url: string, body: unknown): Promise<T> {
-  const res = await fetch(url, {
-    method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
-  });
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-  return res.json() as Promise<T>;
-}
 
 // ─── Which single thing the main pane shows ─────────────────────────────────
 // Mirrors the source's MainView: exactly one of a selected doc or the
@@ -156,7 +149,7 @@ function SectionPullControl({ sectionKey, sseEvents, onTreeChanged }: {
     requestedAtRef.current = new Date().toISOString();
     setPulling(true);
     try {
-      await postJson('/api/assessment/knowledge/pull', { section: sectionKey });
+      await sendJson('/api/assessment/knowledge/pull', 'POST', { section: sectionKey });
     } catch (err) {
       setPulling(false);
       setError(err instanceof Error ? err.message : 'Failed to pull.');

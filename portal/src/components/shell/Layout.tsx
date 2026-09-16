@@ -11,6 +11,8 @@ import {
   type SubNavItem,
   SkipLink,
   type Command,
+  activeNavItemClassName,
+  inactiveNavItemClassName,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { useSession } from '../../lib/auth';
@@ -360,10 +362,15 @@ export function Layout() {
             railWidth={200}
             storageKey="orgiq-shell"
             railLabel={`${tenantLabel} navigation`}
-            renderNavItem={(item, children, baseStyle) => (
+            renderNavItem={(item, children) => (
               <NavLink
                 to={item.path}
-                style={({ isActive }) => {
+                // className, not the inline `style` the composite's own doc
+                // comment used to force: ui-components 2.275.1 exports the
+                // class-name equivalents of `activeNavItemStyle`, so the whole
+                // app's primary rail paints from tokens through Tailwind like
+                // every nested rail does. See docs/ui-components-queue.md.
+                className={({ isActive }) => {
                   // Two door-widening rules: /iq/sprints still redirects into
                   // the sprints lens (keep Initiatives lit for that instant),
                   // and Bots/Changes live BEHIND the Automate door.
@@ -383,9 +390,20 @@ export function Layout() {
                       pathname.startsWith('/iq/canary')
                     )
                   );
+                  // The library's active class fills with `bg-surface-hover`,
+                  // which is right for a nested rail but drops the brand tint
+                  // the shell's PRIMARY rail is recorded as carrying
+                  // (docs/branding-journeys/*.md measure the active fill as
+                  // --color-brand-soft, and `bg-primary-soft` resolves to it
+                  // per tenant). Compose rather than fork: structure and the
+                  // brand border come from the library, the tint is ours.
+                  // It must REPLACE the library's fill rather than sit beside
+                  // it: two same-specificity utilities are resolved by
+                  // stylesheet order, not class-attribute order, so appending
+                  // `bg-primary-soft` silently lost to `bg-surface-hover`.
                   return active
-                    ? { ...baseStyle, borderLeft: '3px solid var(--color-brand)', background: 'var(--color-brand-soft)', color: 'var(--color-text-primary)' }
-                    : baseStyle;
+                    ? activeNavItemClassName.replace('bg-surface-hover', 'bg-primary-soft')
+                    : inactiveNavItemClassName;
                 }}
               >
                 {children}

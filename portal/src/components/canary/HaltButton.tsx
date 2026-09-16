@@ -12,6 +12,7 @@ import {
   setHalted,
   useCanaryStore,
 } from './canaryStore.js';
+import { writeJson } from '../../lib/writeJson';
 
 export function HaltButton(): React.ReactElement {
   const halted = useCanaryStore((s) => s.halted);
@@ -25,31 +26,17 @@ export function HaltButton(): React.ReactElement {
     setSubmitting(true);
     const previous = halted;
     setHalted(true);
-    try {
-      const res = await fetch('/api/observability/canary/halt', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ halt: true }),
-      });
-      if (!res.ok) {
-        const body = (await res.json().catch(() => ({}))) as {
-          message?: string;
-          error?: string;
-        };
-        const reason = body.message ?? body.error ?? `${res.status} ${res.statusText}`;
-        setHalted(previous);
-        toast(`Halt failed: ${reason}`, { type: 'error' });
-      } else {
-        toast('Canary halted — all traffic pinned to version A.', { type: 'success' });
-        closeHaltConfirm();
-      }
-    } catch (e) {
+    const res = await writeJson<{ message?: string; error?: string }>(
+      '/api/observability/canary/halt', 'POST', { halt: true },
+    );
+    if (!res.ok) {
       setHalted(previous);
-      toast(`Halt failed: ${(e as Error).message}`, { type: 'error' });
-    } finally {
-      setSubmitting(false);
+      toast(`Halt failed: ${res.data?.message ?? res.error}`, { type: 'error' });
+    } else {
+      toast('Canary halted — all traffic pinned to version A.', { type: 'success' });
+      closeHaltConfirm();
     }
+    setSubmitting(false);
   }
 
   return (

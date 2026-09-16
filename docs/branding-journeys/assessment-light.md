@@ -25,3 +25,31 @@ THE ONE THING THAT DID CHANGE IS THE PREVIOUS PASS'S OWN CAVEAT, AND IT IS NOW W
 Console errors: 0 on the dashboard, submissions, reports, feedback, activity, configuration, the team page and Workspace.
 
 re-observed 2026-09-16 05:34 (ui-components 2.273.0 adoption changed both halves of this log's digest — app.css's nested-pane reset now targets SubNavLayout's content-pane class because nested layouts render a named `<section>` instead of a second `<main>`, and Layout.tsx renders ChannelHeader as a real `<header>` with the rail `<nav>` labelled "Assessment navigation"): re-measured as Asha Nair in the light theme — body rgb(238,241,246); rhythm dashboard=16px submissions=16px reports=16px feedback=16px activity=16px configuration=16px team-detail=17px · title 20px 600 on all seven surfaces; exactly one `<main>` on every surface; the header is a `<header>` landmark; nothing recorded above moved. Console errors 0.
+
+--- freshness re-observation, 2026-09-16 08:40 (the shell rail's nav items moved off inline styles) ---
+Why: `portal/src/components/shell/Layout.tsx` is half this log's freshness
+digest. Its `renderNavItem` stopped hand-computing an inline `style` object and
+now returns ui-components 2.275.1's `activeNavItemClassName` /
+`inactiveNavItemClassName`. That is a paint change on the one element this
+log's `brand:` line measures, so the colours were re-read rather than carried
+forward (u-asha on /assessment/teams, light).
+  THE CHANGE CAUGHT A REGRESSION AND IT IS FIXED. The library's active class
+  fills with `bg-surface-hover`, which is right for a nested rail but not for
+  the shell's primary rail, whose recorded brand expression is a
+  `--color-brand-soft` tint. Adopting the class verbatim moved the orgiq-light
+  active fill from rgb(238,242,255) to rgb(238,242,247) — a grey. The shell now
+  swaps that one utility for `bg-primary-soft` (which resolves to the tenant's
+  brand-soft) and keeps everything else the library supplies. A second trap
+  worth recording: appending `bg-primary-soft` alongside `bg-surface-hover` did
+  NOT win — two same-specificity Tailwind utilities are resolved by stylesheet
+  order, not by class-attribute order — so the fill has to be replaced, not
+  added.
+  Re-measured with `getComputedStyle`: active nav border-left rgb(13,148,136) over a rgb(204,251,241) fill — the values this log already
+  records, restored exactly. Layers: body rgb(238,241,246) · nav rgb(244,246,250) · card rgb(255,255,255). Contrast: 15.77 on bg and 17.85 on surface.
+  Zero `<a>` elements under `[data-shell-nav]` carry a `style` attribute now
+  (was every one of them), and exactly one item is lit per rail.
+  The `rhythm:` line is unchanged and was not re-measured: this edit alters
+  `border-left-color` and `background-color` on one anchor and touches no box
+  the rhythm datum is taken from.
+Console errors: 0.
+

@@ -20,6 +20,8 @@ import {
   StatStrip,
   SubNavLayout,
   type SubNavItem,
+  activeNavItemClassName,
+  inactiveNavItemClassName,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
@@ -36,11 +38,6 @@ const MONTH_LABEL = new Date().toLocaleDateString('en-US', { month: 'long', year
 // Reproduces SubNavLayout's own default active/inactive nav-item look (see
 // the library's `renderNavItem` doc comment, and its `activeNavItemStyle`
 // export) as Tailwind classes instead of a computed `style` object.
-function navItemClassName(isActive: boolean): string {
-  return isActive
-    ? 'block px-[14px] py-2 border-l-[3px] border-l-primary bg-surface-hover text-text-primary no-underline cursor-pointer'
-    : 'block px-[14px] py-2 border-l-[3px] border-transparent text-text-secondary no-underline cursor-pointer';
-}
 
 export default function BudgetsPage() {
   const { can, ready } = useCapabilities();
@@ -182,7 +179,7 @@ export default function BudgetsPage() {
               if (wantsSprints) next.set('report', 'sprints'); else next.delete('report');
               setParams(next, { replace: true });
             }}
-            className={navItemClassName(isActive)}
+            className={isActive ? activeNavItemClassName : inactiveNavItemClassName}
           >
             {children}
           </NavLink>

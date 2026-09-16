@@ -10,8 +10,8 @@
 // "what does this take and where did it come from" is asked while scanning the
 // list, not instead of it.
 
-import { useMemo, useState, useEffect } from 'react';
-import { Link, useSearchParams, useParams } from 'react-router';
+import { useMemo, useState } from 'react';
+import { Link, useSearchParams, useParams, useNavigate, useLocation } from 'react-router';
 import {
   Button,
   Chip,
@@ -58,11 +58,22 @@ export default function LibraryPage() {
   // every keystroke straight into the URL and re-fetch on each one.
   const [query, setQuery] = useState('');
   const { searchText, onSearchChange, cancelPending } = useDebouncedSearch(query, setQuery, SEARCH_DEBOUNCE_MS);
-  // /iq/library/:assetId opens that asset's drawer on load and follows the
-  // URL when it changes (a link from Distillation → Artifacts lands here).
+  // /iq/library/:assetId is the single source of truth for the drawer — a
+  // link from Distillation → Artifacts lands here with it already set, and
+  // opening an asset now NAVIGATES there too. It used to only be read on
+  // mount (`useState(routeAssetId ?? null)`): clicking a row opened the
+  // drawer in local state alone, so the URL stayed at the bare `/iq/library`
+  // the whole time a drawer was open — a reload, a copied link, or Back all
+  // silently lost it. `replace: true` mirrors the facet setter below: opening
+  // or closing a drawer is not a page a reader would expect Back to step
+  // through one click at a time.
   const { assetId: routeAssetId } = useParams<{ assetId?: string }>();
-  const [openId, setOpenId] = useState<string | null>(routeAssetId ?? null);
-  useEffect(() => { if (routeAssetId) setOpenId(routeAssetId); }, [routeAssetId]);
+  const navigate = useNavigate();
+  const location = useLocation();
+  const openId = routeAssetId ?? null;
+  const setOpenId = (id: string | null) => {
+    navigate(`/iq/library${id ? `/${encodeURIComponent(id)}` : ''}${location.search}`, { replace: true });
+  };
 
   const setFacet = (key: 'kind' | 'tier', value: string) => {
     const next = new URLSearchParams(params);

@@ -7,9 +7,9 @@
 // `useFetch` hook, defensive parsing, EmptyState component, CostChip +
 // PromptVersionChip reused verbatim from Sprint 1.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
-import { Link, useNavigate } from 'react-router';
+import { Link, useNavigate, useSearchParams } from 'react-router';
 import {
   Button,
   Card,
@@ -130,6 +130,43 @@ function defaultFilters(): FilterState {
   };
 }
 
+/** Every `FilterState` key that maps straight onto a same-named URL param. */
+const FILTER_KEYS = ['q', 'agentId', 'mode', 'minScore', 'maxScore', 'since', 'until', 'promptVersion', 'userId'] as const;
+
+/** Applied filters → URL, so a search that was actually run round-trips
+ *  through a reload or a copied link — not just the handful of fields a
+ *  deep link from TrafficPage's Top-Users table happens to seed. Defaults
+ *  (`mode: 'all'`, empty strings) are omitted so an untouched field doesn't
+ *  clutter the address bar. */
+function filtersToSearchParams(f: FilterState): URLSearchParams {
+  const params = new URLSearchParams();
+  for (const key of FILTER_KEYS) {
+    const val = f[key];
+    if (!val) continue;
+    if (key === 'mode' && val === 'all') continue;
+    params.set(key, val);
+  }
+  return params;
+}
+
+/** The inverse: URL → a `FilterState`, layered over the defaults so a param
+ *  that was never set (or an unrecognized `mode`) falls back honestly. */
+function searchParamsToFilters(sp: URLSearchParams): FilterState {
+  const base = defaultFilters();
+  const mode = sp.get('mode');
+  return {
+    q: sp.get('q') ?? base.q,
+    agentId: sp.get('agentId') ?? base.agentId,
+    mode: mode === 'live' || mode === 'sim' ? mode : base.mode,
+    minScore: sp.get('minScore') ?? base.minScore,
+    maxScore: sp.get('maxScore') ?? base.maxScore,
+    since: sp.get('since') ?? base.since,
+    until: sp.get('until') ?? base.until,
+    promptVersion: sp.get('promptVersion') ?? base.promptVersion,
+    userId: sp.get('userId') ?? base.userId,
+  };
+}
+
 function buildUrl(f: FilterState): string {
   const params = new URLSearchParams();
   if (f.q) params.set('q', f.q);
@@ -154,36 +191,23 @@ function snip(s: string | null | undefined, max = 80): string {
 
 function InvocationSearchPage() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Deep links seed the URL before this component ever mounts — TrafficPage's
+  // Top-Users table links here with `?userId=u_alice` etc — so both the
+  // working draft and the applied filters can hydrate straight from it, read
+  // once here rather than in an effect (the URL is already there on first
+  // render; there is nothing to wait for).
+  const hasDeepLinkedFilter = FILTER_KEYS.some((k) => searchParams.has(k));
+  const initialFilters = hasDeepLinkedFilter ? searchParamsToFilters(searchParams) : defaultFilters();
 
   // Working filter state (edited freely until Search pressed).
-  const [draft, setDraft] = useState<FilterState>(defaultFilters);
+  const [draft, setDraft] = useState<FilterState>(initialFilters);
   // Applied filter state (only this drives the fetch URL — protects against
-  // typing-as-you-go thrash).
-  const [applied, setApplied] = useState<FilterState | null>(null);
-
-  // Pull deep-link query params on mount — TrafficPage Top-Users table links
-  // here with `?userId=u_alice` etc. We hydrate the draft + auto-apply so the
-  // researcher lands on a filtered table without having to hit Search.
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const sp = new URLSearchParams(window.location.search);
-    const userId = sp.get('userId') ?? '';
-    const agentId = sp.get('agentId') ?? '';
-    const q = sp.get('q') ?? '';
-    if (!userId && !agentId && !q) return;
-    setDraft((d) => {
-      const next: FilterState = {
-        ...d,
-        ...(userId ? { userId } : {}),
-        ...(agentId ? { agentId } : {}),
-        ...(q ? { q } : {}),
-      };
-      setApplied(next);
-      return next;
-    });
-    // Only on mount.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // typing-as-you-go thrash). A deep link auto-applies so the researcher
+  // lands on a filtered table without having to hit Search; a bare visit
+  // starts with nothing applied, same as before.
+  const [applied, setApplied] = useState<FilterState | null>(hasDeepLinkedFilter ? initialFilters : null);
 
   const url = applied ? buildUrl(applied) : '';
   const { data, isLoading, error } = useFetch<SearchResponse>(url, 30_000);
@@ -217,12 +241,19 @@ function InvocationSearchPage() {
   function onSubmit(e: FormEvent) {
     e.preventDefault();
     setApplied({ ...draft });
+    // The filters that were actually run, not just the handful a deep link
+    // seeded — this used to only ever be read on mount, so hitting Search
+    // again with a changed field left the URL describing the PREVIOUS
+    // search. `replace` because refining a search is an edit to the same
+    // view, not a new page for Back to step through.
+    setSearchParams(filtersToSearchParams(draft), { replace: true });
   }
 
   function onClear() {
     const fresh = defaultFilters();
     setDraft(fresh);
     setApplied(null);
+    setSearchParams(new URLSearchParams(), { replace: true });
   }
 
   function update<K extends keyof FilterState>(key: K, val: FilterState[K]) {

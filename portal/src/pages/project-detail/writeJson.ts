@@ -7,10 +7,8 @@
 // make the confirm explicit — the caller reverts or reconciles on failure.
 
 import { toastError, toastInfo } from '../../lib/toastStore';
-import { sendJson, HttpError } from '../../lib/writeJson';
+import { HttpError } from '../../lib/writeJson';
 import type { WorkItemTree } from './types';
-
-export { sendJson, HttpError };
 
 /** Rewrite every node in a tree, children first. */
 export function mapTree(nodes: WorkItemTree[], fn: (n: WorkItemTree) => WorkItemTree): WorkItemTree[] {

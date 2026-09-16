@@ -22,7 +22,6 @@ import {
   Button,
   Card,
   Chip,
-  CollapsibleSection,
   ConfirmDialog,
   DataTable,
   EmptyState,
@@ -39,6 +38,7 @@ import { T } from './Text';
 import { nodeTypes, edgeTypes } from '../components/canary/index.js';
 import { useCanaryStream } from '../components/canary/useCanaryStream.js';
 import { toastError } from '../lib/toastStore';
+import { writeJson } from '../lib/writeJson';
 import {
   setManualSliderOpen,
   resetExperiment,
@@ -609,34 +609,29 @@ function CanaryToolbar({
 
   const confirmNewExperimentAction = useCallback(async () => {
     setResetting(true);
-    try {
-      const res = await fetch('/api/observability/canary/reset', { method: 'POST', credentials: 'include' });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({})) as { error?: string };
-        toastError(null, 'Could not end experiment', body.error ?? `HTTP ${res.status}`);
-        return;
-      }
+    const res = await writeJson('/api/observability/canary/reset', 'POST');
+    if (!res.ok) {
+      toastError(null, 'Could not end experiment', res.error ?? `HTTP ${res.status}`);
+    } else {
       resetExperiment();
-    } catch (err) {
-      toastError(null, 'Could not end experiment', err instanceof Error ? err.message : undefined);
-    } finally {
-      setResetting(false);
-      setConfirmNewExperiment(false);
     }
+    setResetting(false);
+    setConfirmNewExperiment(false);
   }, []);
 
   return (
     <Stack gap="sm">
       <Toolbar
         aria-label="Canary controls"
+        wrap
         end={
-          <Inline gap="sm" align="center">
+          <Inline gap="sm" align="center" wrap>
             {canManage && (
               // Debug-only controls (weight slider, debug switch, "+ New
-              // experiment", Halt) stay inline at `lg` and up; below that
-              // they move into the CollapsibleSection beneath the toolbar so
-              // the row has an overflow path instead of clipping.
-              <Inline gap="sm" align="center" className="hidden lg:flex">
+              // experiment", Halt). `Toolbar`'s `wrap` drops `end` to its own
+              // line when the row won't fit, so these stay inline at every
+              // width instead of needing a breakpoint-gated duplicate.
+              <Inline gap="sm" align="center">
                 {debug && <ManualWeightSlider />}
                 <Inline gap="xs" align="center">
                   <Switch checked={debug} onChange={onDebugChange} aria-label="Debug" size="sm" />
@@ -670,33 +665,6 @@ function CanaryToolbar({
           </T>
         </Inline>
       </Toolbar>
-
-      {canManage && (
-        <CollapsibleSection
-          title="Debug controls"
-          className="lg:hidden"
-          storageKey="canary-debug-controls-open"
-        >
-          <Stack gap="sm">
-            <Inline gap="xs" align="center">
-              <Switch checked={debug} onChange={onDebugChange} aria-label="Debug" size="sm" />
-              <T className="text-[11px] text-text-secondary">Debug</T>
-            </Inline>
-            {debug && <ManualWeightSlider />}
-            <Inline gap="sm" wrap align="center">
-              <Button
-                variant="secondary"
-                size="sm"
-                title="End this experiment and return to the setup wizard (traffic pins back to A)"
-                onClick={() => setConfirmNewExperiment(true)}
-              >
-                ＋ New experiment
-              </Button>
-              {!halted && <HaltButton />}
-            </Inline>
-          </Stack>
-        </CollapsibleSection>
-      )}
 
       <ConfirmDialog
         open={confirmNewExperiment}

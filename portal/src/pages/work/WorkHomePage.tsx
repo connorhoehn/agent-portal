@@ -16,10 +16,12 @@ import { useCapabilities } from '../../lib/capabilities';
 import { useSession } from '../../lib/auth';
 import { relativeTime } from '../../lib/relativeTime';
 import { toastError, toastPending, toastSuccess } from '../../lib/toastStore';
+import { sendJson, writeJson } from '../../lib/writeJson';
+import { usd } from '../../lib/format';
 import { DEVBOX_ROLES } from './automateNav';
 import { QueuePulse } from './QueuePulse';
 import {
-  BotOrigin, GraphUpdatesLink, PROPOSAL_LABELS, ServesItem, T, money, post, toToolCallStripItems,
+  BotOrigin, GraphUpdatesLink, PROPOSAL_LABELS, ServesItem, T, money, toToolCallStripItems,
   type Job, type LabConsult, type Proposal, type Summary,
 } from './workShared';
 
@@ -67,8 +69,7 @@ export default function WorkHomePage() {
   async function answerConsult(id: string, answer: string) {
     setAnsweringId(id);
     try {
-      const res = await post(`/api/lab/consults/${id}/answer`, { answer });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      await sendJson(`/api/lab/consults/${id}/answer`, 'POST', { answer });
       toastSuccess(null, 'Answer sent', 'The agent picks it up on its next poll (≤2s).');
       refreshAll();
     } catch (err) {
@@ -81,8 +82,7 @@ export default function WorkHomePage() {
   async function reviewJob(job: Job, decision: 'accept' | 'reject') {
     const tid = toastPending(decision === 'accept' ? 'Accepting work' : 'Rejecting work', job.title);
     try {
-      const res = await post(`/api/work/jobs/${job.id}/review`, { decision });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      await sendJson(`/api/work/jobs/${job.id}/review`, 'POST', { decision });
       toastSuccess(tid, decision === 'accept' ? 'Accepted' : 'Rejected');
       refreshAll();
     } catch (err) { toastError(tid, 'Review failed', (err as Error).message); }
@@ -91,9 +91,7 @@ export default function WorkHomePage() {
   async function decideProposal(p: Proposal, decision: 'approve' | 'reject') {
     const tid = toastPending(decision === 'approve' ? 'Applying to the graph' : 'Rejecting proposal', p.kind);
     try {
-      const res = await post(`/api/work/proposals/${p.id}/decide`, { decision });
-      const body = await res.json() as Proposal;
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const body = await sendJson<Proposal>(`/api/work/proposals/${p.id}/decide`, 'POST', { decision });
       if (body.status === 'failed') toastError(tid, 'Apply failed', body.applyError ?? 'unknown error');
       else toastSuccess(tid, decision === 'approve' ? 'Applied to the graph' : 'Rejected');
       refreshAll();
@@ -108,11 +106,8 @@ export default function WorkHomePage() {
     let applied = 0;
     let failed = 0;
     for (const p of group) {
-      try {
-        const res = await post(`/api/work/proposals/${p.id}/decide`, { decision });
-        const body = await res.json() as Proposal;
-        if (!res.ok || body.status === 'failed') failed++; else applied++;
-      } catch { failed++; }
+      const res = await writeJson<Proposal>(`/api/work/proposals/${p.id}/decide`, 'POST', { decision });
+      if (!res.ok || res.data?.status === 'failed') failed++; else applied++;
     }
     if (failed > 0) toastError(tid, `${failed} of ${group.length} failed`, `${applied} applied`);
     else toastSuccess(tid, decision === 'approve' ? `${applied} applied to the graph` : `${applied} rejected`);
@@ -330,7 +325,7 @@ export default function WorkHomePage() {
       <StatCard
         className="mt-3 max-w-xs"
         label="Rediscovery avoided"
-        value={rediscovery ? `$${rediscovery.usdAvoided.toFixed(2)}` : '—'}
+        value={rediscovery ? usd(rediscovery.usdAvoided) : '—'}
         {...(rediscovery && rediscovery.usdAvoidedSeries.some((v) => v > 0)
           ? { sparklineData: rediscovery.usdAvoidedSeries }
           : {})}

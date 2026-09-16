@@ -23,6 +23,7 @@ import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';
 import { parsePgTimestampAsUtc } from '../../lib/pgTimestamp';
 import { relativeTime } from '../../lib/relativeTime';
+import { botStatusChip, runStateChip } from '../../lib/statusTone';
 import { CostVsEstimate, runEstimate } from './EstimateDrawer';
 import {
   TEMPLATE_TONE,
@@ -32,13 +33,6 @@ import {
 } from '../../pages/bots/BotsPage';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-const RUN_STATUS_TONE: Record<BotRun['status'], 'warning' | 'success' | 'danger' | 'neutral'> = {
-  running: 'warning',
-  done: 'success',
-  failed: 'danger',
-  skipped: 'neutral',
-};
 
 /** Aurora stamps carry a `+00` offset ISO 8601 does not allow — shared parser. */
 function parseTs(iso: string): number {
@@ -181,8 +175,7 @@ export function AgentsRailCard({ activity }: { activity: InitiativeAgentActivity
         />
       ) : (
         bots.map((bot) => {
-          // Paused is either half: operator-disabled OR self-paused (budget).
-          const paused = !bot.enabled || bot.pausedReason != null;
+          const statusChip = botStatusChip(bot);
           return (
             <Stack key={bot.id} gap="none" className="px-3 py-2 border-b border-border last:border-b-0">
               <Inline gap="xs" align="center" wrap className="min-w-0">
@@ -197,11 +190,9 @@ export function AgentsRailCard({ activity }: { activity: InitiativeAgentActivity
                   <EntityCell label={bot.name} className="min-w-0" />
                 )}
                 <Chip tone={TEMPLATE_TONE[bot.template]} size="xs">{bot.template}</Chip>
-                {paused ? (
-                  <Chip tone="warning" size="xs" dot="static" className="ml-auto" title={bot.pausedReason ?? undefined}>paused</Chip>
-                ) : (
-                  <Chip tone="success" size="xs" dot="static" className="ml-auto">on</Chip>
-                )}
+                <Chip tone={statusChip.tone} size="xs" dot="static" className="ml-auto" title={statusChip.title}>
+                  {statusChip.label}
+                </Chip>
               </Inline>
               <MetaLine
                 size="xs"
@@ -278,7 +269,7 @@ export function OutcomesRailCard({ activity }: { activity: InitiativeAgentActivi
           <Stack key={r.id} gap="none" className="px-3 py-2 border-b border-border last:border-b-0">
             <Inline gap="xs" align="center" wrap>
               <MetaLine size="xs" tone="secondary" items={[r.trigger]} />
-              <Chip tone={RUN_STATUS_TONE[r.status]} size="xs" dot={r.status === 'running' ? 'pulse' : undefined}>
+              <Chip tone={runStateChip(r.status).tone} size="xs" dot={r.status === 'running' ? 'pulse' : undefined}>
                 {r.status}
               </Chip>
               <Inline as="span" gap="none" className="flex-1" />

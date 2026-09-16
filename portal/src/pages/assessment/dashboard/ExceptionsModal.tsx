@@ -23,9 +23,13 @@ import {
 import { useFetch } from '../../../hooks/useFetch';
 import { useCapabilities } from '../../../lib/capabilities';
 import { toastError, toastSuccess } from '../../../lib/toastStore';
+import { sendJson } from '../../../lib/writeJson';
 import { fmtDate, type ExceptionStatus, type TeamException, type TeamExceptionsResponse } from '../types';
 
-const STATUS_STATE: Record<ExceptionStatus, StatusPillState> = {
+// Named apart from RunsPage.tsx's run-status table — both used to be called
+// `STATUS_STATE` locally, which read as the same concept from the name alone
+// even though one is an agent run and the other an N/A exception request.
+const EXCEPTION_STATUS_STATE: Record<ExceptionStatus, StatusPillState> = {
   requested: 'pending',
   approved: 'success',
   denied: 'error',
@@ -52,19 +56,11 @@ export function ExceptionsModal({ open, onClose, teamId, dimensionTitle }: Excep
   async function decide(dimensionId: string, status: 'approved' | 'denied') {
     setBusyDimension(dimensionId);
     try {
-      const res = await fetch(
+      await sendJson(
         `/api/assessment/teams/${encodeURIComponent(teamId)}/exceptions/${encodeURIComponent(dimensionId)}`,
-        {
-          method: 'PATCH',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status }),
-        },
+        'PATCH',
+        { status },
       );
-      if (!res.ok) {
-        const body = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(body.error ?? `HTTP ${res.status}`);
-      }
       toastSuccess(null, status === 'approved' ? 'Exception approved' : 'Exception denied');
       refresh();
     } catch (err) {
@@ -128,7 +124,7 @@ export function ExceptionsModal({ open, onClose, teamId, dimensionTitle }: Excep
               // column, which is what pushed the row actions past the edge.
               render: (e) => (
                 <Stack gap="none">
-                  <StatusPill state={STATUS_STATE[e.status]} label={e.status} size="sm" />
+                  <StatusPill state={EXCEPTION_STATUS_STATE[e.status]} label={e.status} size="sm" />
                   {e.status !== 'requested' && <MetaLine size="xs" items={[e.approved_by, fmtDate(e.approved_at)]} />}
                 </Stack>
               ),

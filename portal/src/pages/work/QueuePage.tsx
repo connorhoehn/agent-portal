@@ -25,10 +25,11 @@ import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';
 import { relativeTime } from '../../lib/relativeTime';
 import { toastError, toastPending, toastSuccess } from '../../lib/toastStore';
+import { sendJson, writeJson } from '../../lib/writeJson';
 import { AssignJobModal } from './AssignJobModal';
 import {
   BotOrigin, GraphUpdatesLink, JobStatusPill, LIVE_STATUSES, ServesItem,
-  SUGGESTION_LABEL, SUGGESTION_TONE, T, post, serves,
+  SUGGESTION_LABEL, SUGGESTION_TONE, T, money, serves,
   type Job, type WorkSuggestion,
 } from './workShared';
 
@@ -81,16 +82,14 @@ export default function QueuePage() {
 
   async function requeue(job: Job) {
     const tid = toastPending('Requeueing job', job.title);
-    try {
-      const res = await post(`/api/work/jobs/${job.id}/requeue`);
-      const body = await res.json() as Job & { error?: string };
-      if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
-      toastSuccess(tid, 'Back on the queue', 'the next idle worker picks it up');
-      refreshJobs();
-      navigate(`/iq/work/${body.id}`);
-    } catch (err) {
-      toastError(tid, 'Requeue failed', (err as Error).message);
+    const res = await writeJson<Job>(`/api/work/jobs/${job.id}/requeue`, 'POST');
+    if (!res.ok || !res.data) {
+      toastError(tid, 'Requeue failed', res.error ?? `HTTP ${res.status}`);
+      return;
     }
+    toastSuccess(tid, 'Back on the queue', 'the next idle worker picks it up');
+    refreshJobs();
+    navigate(`/iq/work/${res.data.id}`);
   }
 
   async function enqueueFreeform(title: string, prompt: string) {
@@ -98,9 +97,7 @@ export default function QueuePage() {
     setComposerBusy(true);
     const tid = toastPending('Queueing job', title.trim());
     try {
-      const res = await post('/api/work/jobs', { title: title.trim(), prompt: prompt.trim() });
-      if (!res.ok) throw new Error((await res.json() as { error?: string }).error ?? `HTTP ${res.status}`);
-      const job = await res.json() as Job;
+      const job = await sendJson<Job>('/api/work/jobs', 'POST', { title: title.trim(), prompt: prompt.trim() });
       toastSuccess(tid, 'Job queued', 'an idle worker picks it up within ~10s');
       refreshJobs();
       navigate(`/iq/work/${job.id}`);
@@ -212,7 +209,7 @@ export default function QueuePage() {
       render: (s) => (
         <T className="text-[12px] text-text-secondary tabular-nums whitespace-nowrap">
           {s.storyPoints != null ? `${s.storyPoints} pts` : '—'}
-          {s.estimatedCostUsd != null ? ` · $${s.estimatedCostUsd.toFixed(2)}` : ''}
+          {s.estimatedCostUsd != null ? ` · ${money(s.estimatedCostUsd)}` : ''}
         </T>
       ),
     },

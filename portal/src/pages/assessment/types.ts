@@ -471,7 +471,7 @@ export const levelTone = (level: number | null | undefined, isNa?: boolean): Chi
 };
 
 export const levelBadgeLabel = (level: number | null | undefined, isNa?: boolean): string => {
-  if (isNa) return 'N/A';
+  if (isNa) return '—';
   if (level === null || level === undefined) return '—';
   return `L${level}`;
 };

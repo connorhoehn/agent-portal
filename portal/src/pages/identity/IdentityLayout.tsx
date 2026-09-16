@@ -1,5 +1,5 @@
 import { NavLink, Outlet } from 'react-router';
-import { SubNavLayout, type SubNavItem } from '@connorhoehnslalom/ui-components/shared';
+import { SubNavLayout, type SubNavItem, activeNavItemClassName, inactiveNavItemClassName } from '@connorhoehnslalom/ui-components/shared';
 
 const ITEMS: SubNavItem[] = [
   { path: 'users',    label: 'Users',    hint: 'Identities + tenant grants' },
@@ -17,11 +17,6 @@ const ITEMS: SubNavItem[] = [
 // tokens instead, so no inline `style` is needed. Same fix as
 // `ingest/IngestLayout.tsx`; queued once for the library in
 // docs/ui-components-queue.md rather than per-directory.
-function navItemClassName(isActive: boolean): string {
-  return isActive
-    ? 'block px-[14px] py-2 border-l-[3px] border-l-primary bg-surface-hover text-text-primary no-underline cursor-pointer'
-    : 'block px-[14px] py-2 border-l-[3px] border-transparent text-text-secondary no-underline cursor-pointer';
-}
 
 function IdentityLayout() {
   return (
@@ -31,7 +26,7 @@ function IdentityLayout() {
       contentAs="section"
       contentLabel="Identity"
       renderNavItem={(item, children) => (
-        <NavLink to={item.path} className={({ isActive }) => navItemClassName(isActive)}>
+        <NavLink to={item.path} className={({ isActive }) => (isActive ? activeNavItemClassName : inactiveNavItemClassName)}>
           {children}
         </NavLink>
       )}

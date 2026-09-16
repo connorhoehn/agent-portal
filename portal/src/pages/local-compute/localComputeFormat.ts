@@ -1,23 +1,22 @@
 // Pure formatting for local-compute displays.
 
+import type { ChipTone } from '@connorhoehnslalom/ui-components/shared';
+import { runStateChip } from '../../lib/statusTone.ts';
+
 export type JobStatus = 'queued' | 'claimed' | 'running' | 'awaiting_review' | 'done' | 'failed' | 'cancelled';
 
+// Both thin wrappers over the shared runStateChip (lib/statusTone.ts), the
+// work lane's canonical job-status tone map. This used to disagree with it
+// on two states: `running` read 'info' (now the louder solid accent tone —
+// it's the one state actually in flight right now) and `awaiting_review`
+// read 'info' (now 'warning' — it needs someone's attention). Both are
+// visible colour changes on this page's job tables.
 export function statusLabel(status: JobStatus): string {
-  switch (status) {
-    case 'awaiting_review': return 'awaiting review';
-    default: return status;
-  }
+  return runStateChip(status).label;
 }
 
-export function statusTone(status: JobStatus): 'success' | 'warning' | 'danger' | 'info' | 'neutral' {
-  switch (status) {
-    case 'done': return 'success';
-    case 'awaiting_review': return 'info';
-    case 'running': return 'info';
-    case 'failed': return 'danger';
-    case 'cancelled': return 'neutral';
-    default: return 'neutral';
-  }
+export function statusTone(status: JobStatus): ChipTone {
+  return runStateChip(status).tone;
 }
 
 export function truncate(text: string, max: number): string {

@@ -17,6 +17,7 @@ import {
   PageSection,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
+import { writeJson } from '../../lib/writeJson';
 import { decisionTone, inputWiring, truncateId } from './identityFormat';
 
 interface SchemaResponse {
@@ -65,27 +66,21 @@ function PolicyTestPage() {
     }
     setBusy(true); setErrMsg(null);
     const results: TestResult[] = [];
-    try {
-      for (const action of actions) {
-        const res = await fetch('/api/identity/policies/test', {
-          method: 'POST',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ role, action }),
-        });
-        const j = await res.json();
-        results.push({
-          ...(res.ok ? j : { error: j.error ?? `${res.status}` }),
-          ts: new Date().toISOString(),
-          request: { role, action },
-        });
+    for (const action of actions) {
+      const res = await writeJson<Record<string, unknown>>('/api/identity/policies/test', 'POST', { role, action });
+      if (res.status === 0) {
+        setErrMsg(res.error ?? 'Request failed');
+        setBusy(false);
+        return;
       }
-      setHistory(prev => [...results, ...prev].slice(0, 50));
-    } catch (e) {
-      setErrMsg((e as Error).message);
-    } finally {
-      setBusy(false);
+      results.push({
+        ...(res.ok ? res.data : { error: res.data?.error ?? `${res.status}` }),
+        ts: new Date().toISOString(),
+        request: { role, action },
+      } as TestResult);
     }
+    setHistory(prev => [...results, ...prev].slice(0, 50));
+    setBusy(false);
   }
 
   return (

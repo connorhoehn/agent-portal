@@ -7,9 +7,10 @@ import { DEVBOX_MODELS } from '../../lib/devboxModels.ts';
 import { parsePgTimestampAsUtc } from '../../lib/pgTimestamp.ts';
 import type { BudgetRow, InitiativeOption } from './types';
 
-export function usd(n: number): string {
-  return `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
+// Promoted to lib/format.ts — the app-wide canonical `usd`. Re-exported here
+// so existing `from './budgetsFormat'` imports keep working.
+import { usd } from '../../lib/format.ts';
+export { usd };
 
 /** Bedrock inference-profile id → the short label the rest of the app uses. */
 export function modelLabelFor(id: string): string {

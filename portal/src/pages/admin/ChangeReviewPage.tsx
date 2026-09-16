@@ -37,6 +37,8 @@ import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';
 import { absoluteTime } from '../../lib/relativeTime';
 import { toastPending, toastSuccess, toastError } from '../../lib/toastStore';
+import { sendJson } from '../../lib/writeJson';
+import { STATUS_TONE, STATUS_LABEL } from './changesFormat';
 import { KeyValue } from '../../components/KeyValue';
 
 type Verdict = 'approve' | 'request_changes' | 'reject';
@@ -57,17 +59,6 @@ interface Change {
   error: string | null; createdAt: string; reviews: Review[]; gates: Gate[];
 }
 
-const STATUS_TONE: Record<string, 'success' | 'warning' | 'danger' | 'neutral'> = {
-  needs_approval: 'warning', changes_requested: 'warning', in_review: 'neutral',
-  captured: 'neutral', approved: 'success', delivering: 'neutral',
-  delivered: 'success', blocked: 'danger', rejected: 'danger', failed: 'danger',
-};
-const STATUS_LABEL: Record<string, string> = {
-  needs_approval: 'needs you', changes_requested: 'changes requested',
-  in_review: 'reviewing', captured: 'captured', approved: 'approved',
-  delivering: 'delivering', delivered: 'delivered', blocked: 'blocked',
-  rejected: 'rejected', failed: 'failed',
-};
 const VERDICT_LABEL: Record<Verdict, string> = {
   approve: 'approved', request_changes: 'requested changes', reject: 'rejected',
 };
@@ -101,13 +92,7 @@ export default function ChangeReviewPage() {
     setBusy(true);
     const tid = toastPending(verb, '');
     try {
-      const res = await fetch(`/api/sdlc/changes/${id}/${path}`, {
-        method: 'POST', credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      const out = await res.json() as { error?: string; prUrl?: string; status?: string };
-      if (!res.ok) throw new Error(out.error ?? `HTTP ${res.status}`);
+      const out = await sendJson<{ prUrl?: string; status?: string }>(`/api/sdlc/changes/${id}/${path}`, 'POST', body);
       toastSuccess(tid, 'Done', out.prUrl ? 'Pull request opened.' : (out.status ?? 'updated'));
       refresh();
     } catch (err) {

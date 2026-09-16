@@ -22,3 +22,31 @@ the first-row datum, stated properly this time. The earlier note recorded "first
 the header badge is now tenant-gated, which is the change that made this log stale. `Layout.tsx:304` reads `{session?.tenant === 'orgiq' && <LocalComputeBadge />}`. For orgiq this changes nothing observable -- and it still does not paint for a seeded user: `/api/local-compute/nodes` returns `{"nodes":[]}` for u-theo, so the library's MachinePresenceMenu renders null, `.shell-header` stays 61px, and no header text matches /Computer|machine/. The gate is what closes the tenant leak the assessment logs recorded; see those two logs and docs/assessment-journeys/isolation/DEFECTS.md #2.
 
 re-observed 2026-09-16 05:30 (ui-components 2.273.0 adoption changed both halves of this log's digest — app.css's nested-pane reset now targets SubNavLayout's content-pane class because nested layouts render a named `<section>` instead of a second `<main>`, and Layout.tsx renders ChannelHeader as a real `<header>` with the rail `<nav>` labelled): re-measured as Rachel Kowalski (hr-admin; the rhythm is CSS, not role) in the light theme — body rgb(238,241,246); rhythm initiatives=16px library=16px promotions=16px designs=16px budgets=16px automate=16px initiative-detail=16px · title 20px 600 on all seven surfaces; exactly one `<main>` on every surface including the nested layouts (budgets, automate); the header is a `<header>` landmark; nothing recorded above moved. Console errors 0.
+
+--- freshness re-observation, 2026-09-16 08:40 (the shell rail's nav items moved off inline styles) ---
+Why: `portal/src/components/shell/Layout.tsx` is half this log's freshness
+digest. Its `renderNavItem` stopped hand-computing an inline `style` object and
+now returns ui-components 2.275.1's `activeNavItemClassName` /
+`inactiveNavItemClassName`. That is a paint change on the one element this
+log's `brand:` line measures, so the colours were re-read rather than carried
+forward (u-theo on /iq/projects, light).
+  THE CHANGE CAUGHT A REGRESSION AND IT IS FIXED. The library's active class
+  fills with `bg-surface-hover`, which is right for a nested rail but not for
+  the shell's primary rail, whose recorded brand expression is a
+  `--color-brand-soft` tint. Adopting the class verbatim moved the orgiq-light
+  active fill from rgb(238,242,255) to rgb(238,242,247) — a grey. The shell now
+  swaps that one utility for `bg-primary-soft` (which resolves to the tenant's
+  brand-soft) and keeps everything else the library supplies. A second trap
+  worth recording: appending `bg-primary-soft` alongside `bg-surface-hover` did
+  NOT win — two same-specificity Tailwind utilities are resolved by stylesheet
+  order, not by class-attribute order — so the fill has to be replaced, not
+  added.
+  Re-measured with `getComputedStyle`: active nav border-left rgb(99,102,241) over a rgb(238,242,255) fill — the values this log already
+  records, restored exactly. Layers: body rgb(238,241,246) · nav rgb(244,246,250) · header rgb(255,255,255) · card rgb(255,255,255). Contrast: 15.77 on bg and 17.85 on surface (text-primary rgb(15,23,42)).
+  Zero `<a>` elements under `[data-shell-nav]` carry a `style` attribute now
+  (was every one of them), and exactly one item is lit per rail.
+  The `rhythm:` line is unchanged and was not re-measured: this edit alters
+  `border-left-color` and `background-color` on one anchor and touches no box
+  the rhythm datum is taken from.
+Console errors: 0.
+

@@ -21,6 +21,7 @@ import {
 import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch';
 import { KeyValue } from '../../components/KeyValue';
+import { writeJson } from '../../lib/writeJson';
 
 interface SchemaResponse {
   schema: {
@@ -102,15 +103,9 @@ function SchemaPage() {
           actions: nextActions,
         },
       };
-      const res = await fetch('/api/identity/schema', {
-        method: 'PUT',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ schema: nextSchema }),
-      });
+      const res = await writeJson<{ detail?: string; error?: string }>('/api/identity/schema', 'PUT', { schema: nextSchema });
       if (!res.ok) {
-        const j = await res.json().catch(() => ({}));
-        throw new Error(j.detail ?? j.error ?? `${res.status}`);
+        throw new Error(res.data?.detail ?? res.data?.error ?? `${res.status}`);
       }
       await refresh();
     } catch (e) {

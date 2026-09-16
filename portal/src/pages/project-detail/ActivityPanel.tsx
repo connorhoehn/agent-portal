@@ -20,6 +20,7 @@ import { useMemo, useState } from 'react';
 import { MetricsGraph } from '@connorhoehnslalom/ui-components/observability';
 import { Card, EmptyState, Inline, SectionLabel, SegmentedControl, Stack, StatStrip } from '@connorhoehnslalom/ui-components/shared';
 import type { BotRun } from '../bots/BotsPage';
+import { usd } from '../../lib/format';
 import { T } from './Text';
 import { activityBuckets, flattenWorkItems } from './projectFormat';
 import type { WorkItemTree } from './types';
@@ -83,7 +84,7 @@ export function ActivityPanel({
               <StatStrip
                 frameless
                 items={[
-                  { label: 'Agent spend', value: `$${buckets.totals.spendUsd.toFixed(2)}`, hint: `over ${days}d` },
+                  { label: 'Agent spend', value: usd(buckets.totals.spendUsd), hint: `over ${days}d` },
                   { label: 'Runs', value: String(buckets.totals.runs) },
                   { label: 'Completed', value: String(buckets.totals.completed), hint: 'items' },
                 ]}

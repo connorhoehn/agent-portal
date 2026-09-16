@@ -14,7 +14,7 @@
 // a scroll position: Memory (what's in the store), Knowledge (what it
 // produced, with provenance), Operations (running it and keeping it honest).
 import { NavLink, Outlet } from 'react-router';
-import { SubNavLayout, type SubNavItem } from '@connorhoehnslalom/ui-components/shared';
+import { SubNavLayout, activeNavItemClassName, inactiveNavItemClassName, type SubNavItem } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 
 const ITEMS: SubNavItem[] = [
@@ -50,7 +50,7 @@ function DistillationLayout() {
       renderNavItem={(item, children) => (
         <NavLink
           to={item.path}
-          className={({ isActive }) => navItemClassName(isActive)}
+          className={({ isActive }) => (isActive ? activeNavItemClassName : inactiveNavItemClassName)}
         >
           {children}
         </NavLink>
@@ -66,10 +66,5 @@ function DistillationLayout() {
 // NavLink's `className` prop instead of a computed `style` object — a real
 // router integration still needs `renderNavItem`, but nothing here needs an
 // inline style to get it.
-function navItemClassName(isActive: boolean): string {
-  return isActive
-    ? 'block px-[14px] py-2 border-l-[3px] border-l-primary bg-surface-hover text-text-primary no-underline cursor-pointer'
-    : 'block px-[14px] py-2 border-l-[3px] border-transparent text-text-secondary no-underline cursor-pointer';
-}
 
 export default DistillationLayout;

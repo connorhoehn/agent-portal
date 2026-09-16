@@ -10,10 +10,12 @@ import {
   Button, Card, Chip, DetailSection, Divider, Inline, Modal, Stack,
 } from '@connorhoehnslalom/ui-components/shared';
 import { KeyValue } from '../../components/KeyValue';
+import { sendJson } from '../../lib/writeJson';
 import { toastError, toastPending, toastSuccess } from '../../lib/toastStore';
+import { usd } from '../../lib/format';
 import { RediscoveryPanel } from './RediscoveryPanel';
 import {
-  SUGGESTION_LABEL, SUGGESTION_TONE, T, post, serves,
+  SUGGESTION_LABEL, SUGGESTION_TONE, T, serves,
   type Job, type WorkSuggestion,
 } from './workShared';
 
@@ -30,11 +32,9 @@ export function AssignJobModal({ suggestion, onClose, onQueued }: {
     setBusy(true);
     const tid = toastPending('Queueing job', s.title);
     try {
-      const res = await post('/api/work/jobs', {
+      const job = await sendJson<Job>('/api/work/jobs', 'POST', {
         title: s.title, prompt: s.prompt, suggestionId: s.id,
       });
-      if (!res.ok) throw new Error((await res.json() as { error?: string }).error ?? `HTTP ${res.status}`);
-      const job = await res.json() as Job;
       const sv = serves(job);
       toastSuccess(tid, 'Job queued', sv
         ? `Serving “${sv.itemTitle}” · ${sv.initiativeName} — the first idle computer picks it up within ~10s`
@@ -73,7 +73,7 @@ export function AssignJobModal({ suggestion, onClose, onQueued }: {
           <KeyValue layout="row" labelWidth="w-[110px]" label="Estimate">
             <T className="tabular-nums">
               {s.storyPoints != null ? `${s.storyPoints} pts` : 'unestimated'}
-              {s.estimatedCostUsd != null ? ` · ~$${s.estimatedCostUsd.toFixed(2)}` : ''}
+              {s.estimatedCostUsd != null ? ` · ~${usd(s.estimatedCostUsd)}` : ''}
             </T>
           </KeyValue>
           <KeyValue

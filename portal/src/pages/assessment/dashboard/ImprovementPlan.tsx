@@ -23,6 +23,7 @@ import {
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../../hooks/useFetch';
 import { toastError, toastSuccess } from '../../../lib/toastStore';
+import { sendJson } from '../../../lib/writeJson';
 import { useCapabilities } from '../../../lib/capabilities';
 import {
   certificationFor,
@@ -80,13 +81,9 @@ function DraftStoryButton({ teamId, rec }: { teamId: string; rec: Recommendation
   const draft = async () => {
     setBusy(true);
     try {
-      const res = await fetch('/api/assessment/runs', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ command: 'develop-jira-story', args: { team: teamId, recommendation: rec.dimension_id } }),
+      await sendJson('/api/assessment/runs', 'POST', {
+        command: 'develop-jira-story', args: { team: teamId, recommendation: rec.dimension_id },
       });
-      if (!res.ok) throw new Error(`${res.status}`);
       toastSuccess(null, 'Story draft started', `Dimension ${rec.dimension_id} — check the Stories tab shortly.`);
     } catch (err) {
       toastError(null, 'Could not start the draft', err instanceof Error ? err.message : String(err));

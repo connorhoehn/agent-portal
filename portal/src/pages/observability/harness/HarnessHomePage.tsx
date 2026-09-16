@@ -42,6 +42,7 @@ import { ModeChip } from '../../../components/observability/ModeChip';
 import { SmartEmptyState } from '../../../components/observability/SmartEmptyState';
 import { T } from '../Text';
 import { RowEmpty } from '../ReadState';
+import { statusTone, passRateTone, fmtPct, type RunStatus } from './harnessShared';
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
@@ -56,8 +57,6 @@ interface TestCase {
   active: boolean;
   notes: string | null;
 }
-
-type RunStatus = 'pending' | 'running' | 'done' | 'failed';
 
 interface TestRun {
   runId: string;
@@ -94,12 +93,7 @@ interface RunStatusResp {
   passRate: number | null;
 }
 
-type Tone = 'success' | 'warning' | 'danger';
-
 // ── helpers ───────────────────────────────────────────────────────────────────
-
-const passRateTone = (v: number | null): Tone =>
-  v == null ? 'warning' : v >= 0.85 ? 'success' : v >= 0.7 ? 'warning' : 'danger';
 
 const passRateColor = (v: number | null): string => {
   if (v == null) return 'var(--color-text-tertiary)';
@@ -107,15 +101,6 @@ const passRateColor = (v: number | null): string => {
   if (v >= 0.7) return 'var(--color-warning)';
   return 'var(--color-danger)';
 };
-
-const statusTone = (s: RunStatus): Tone => {
-  if (s === 'done') return 'success';
-  if (s === 'failed') return 'danger';
-  return 'warning'; // pending / running
-};
-
-const fmtPct = (v: number | null, digits = 1): string =>
-  v != null && Number.isFinite(v) ? `${(v * 100).toFixed(digits)}%` : '—';
 
 function relTime(iso: string | null): string {
   if (!iso) return 'never';

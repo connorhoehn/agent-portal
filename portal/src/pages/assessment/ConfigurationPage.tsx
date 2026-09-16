@@ -5,7 +5,6 @@
 // score and publish but not reconfigure the program).
 
 import { useEffect, useState } from 'react';
-import { inputWiring } from './assessmentFormat';
 import {
   Button,
   FormField,
@@ -22,6 +21,7 @@ import {
 import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';
 import { toastError, toastSuccess } from '../../lib/toastStore';
+import { sendJson } from '../../lib/writeJson';
 import type { AssessmentConfiguration, SecondaryMotionConfig } from './secondaryTypes';
 
 const LEVEL_OPTIONS = [1, 2, 3, 4, 5].map((n) => ({ value: String(n), label: `Level ${n}` }));
@@ -50,15 +50,8 @@ export default function ConfigurationPage() {
     if (!config || !canManage) return;
     setSaving(true);
     try {
-      const res = await fetch('/api/assessment/configuration', {
-        method: 'PUT',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(config),
-      });
-      const body = (await res.json().catch(() => ({}))) as Partial<AssessmentConfiguration> & { error?: string };
-      if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
-      setConfig(body as AssessmentConfiguration);
+      const body = await sendJson<AssessmentConfiguration>('/api/assessment/configuration', 'PUT', config);
+      setConfig(body);
       toastSuccess(null, 'Configuration saved');
     } catch (err) {
       toastError(null, 'Could not save', (err as Error).message);
@@ -91,7 +84,7 @@ export default function ConfigurationPage() {
               <FormField label="Target level">
                 {(wiring) => (
                   <Select
-                    {...inputWiring(wiring)}
+                    {...wiring}
                     value={String(config.target_level)}
                     onChange={(e) => setConfig({ ...config, target_level: Number(e.target.value) })}
                     options={LEVEL_OPTIONS}
@@ -111,17 +104,17 @@ export default function ConfigurationPage() {
                 <FormRow key={motion.cohort}>
                   <FormField label="Title">
                     {(wiring) => (
-                      <Input {...inputWiring(wiring)} value={motion.title} onChange={(e) => updateMotion(i, { title: e.target.value })} disabled={!canManage} />
+                      <Input {...wiring} value={motion.title} onChange={(e) => updateMotion(i, { title: e.target.value })} disabled={!canManage} />
                     )}
                   </FormField>
                   <FormField label="Tag">
                     {(wiring) => (
-                      <Input {...inputWiring(wiring)} value={motion.tag} onChange={(e) => updateMotion(i, { tag: e.target.value })} disabled={!canManage} />
+                      <Input {...wiring} value={motion.tag} onChange={(e) => updateMotion(i, { tag: e.target.value })} disabled={!canManage} />
                     )}
                   </FormField>
                   <FormField label="Accent">
                     {(wiring) => (
-                      <Input {...inputWiring(wiring)} value={motion.accent} onChange={(e) => updateMotion(i, { accent: e.target.value })} disabled={!canManage} />
+                      <Input {...wiring} value={motion.accent} onChange={(e) => updateMotion(i, { accent: e.target.value })} disabled={!canManage} />
                     )}
                   </FormField>
                 </FormRow>

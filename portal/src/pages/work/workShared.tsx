@@ -7,6 +7,8 @@ import { Link } from 'react-router';
 import { Chip, Inline, type ChipTone } from '@connorhoehnslalom/ui-components/shared';
 import type { ReactNode } from 'react';
 import type { JobToolCall } from './toolCallFormat';
+import { runStateChip, severityTone } from '../../lib/statusTone';
+import { usd } from '../../lib/format';
 
 export type { JobToolCall, ToolCallStripItem } from './toolCallFormat';
 export { toToolCallStripItems } from './toolCallFormat';
@@ -98,18 +100,6 @@ export const SUGGESTION_LABEL: Record<WorkSuggestion['kind'], string> = {
   maintenance: 'upkeep',
 };
 
-/** Job status → Chip tone (+ solid for the one state that's actually running
- *  right now, so "running" reads louder than everything merely queued). */
-export const STATUS_CHIP: Record<string, { tone: ChipTone; solid?: boolean }> = {
-  running: { tone: 'accent', solid: true },
-  claimed: { tone: 'accent' },
-  queued: { tone: 'neutral' },
-  awaiting_review: { tone: 'warning' },
-  done: { tone: 'success' },
-  failed: { tone: 'danger' },
-  cancelled: { tone: 'neutral' },
-};
-
 /** Statuses whose detail page streams live rather than replaying a transcript. */
 export const LIVE_STATUSES = new Set(['claimed', 'running']);
 
@@ -135,12 +125,6 @@ export const PROPOSAL_STATUS_CHIP: Record<string, ChipTone> = {
 // pure (no React), so it can be unit-tested and it covers every sweep kind
 // including group headings on the dismissed bucket, not just the tone table.
 
-export const SEVERITY_TONE: Record<Finding['severity'], ChipTone> = {
-  critical: 'danger',
-  warning: 'warning',
-  info: 'neutral',
-};
-
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 /** What a job is for, in the words the board uses. */
@@ -151,15 +135,7 @@ export function serves(job: Job): { itemTitle: string; initiativeId: string; ini
 }
 
 export function money(n: number | undefined): string {
-  return typeof n === 'number' ? `$${n.toFixed(4)}` : '—';
-}
-
-export async function post(url: string, body?: unknown): Promise<Response> {
-  return fetch(url, {
-    method: 'POST', credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
-    ...(body ? { body: JSON.stringify(body) } : {}),
-  });
+  return usd(n, { precision: 4 });
 }
 
 // ─── Fragments ───────────────────────────────────────────────────────────────
@@ -237,18 +213,17 @@ export function ServesItem({ job, onOpenInitiative }: { job: Job; onOpenInitiati
 
 /** Small status pill for a queue row. */
 export function JobStatusPill({ status }: { status: string }) {
-  const c = STATUS_CHIP[status] ?? { tone: 'neutral' as const };
+  const c = runStateChip(status);
   return (
     <Chip tone={c.tone} solid={c.solid} size="xs" className="shrink-0 whitespace-nowrap">
-      {status.replace('_', ' ')}
+      {c.label}
     </Chip>
   );
 }
 
 /** Small severity pill shared by findings rows and sweep group headers. */
 export function SeverityChip({ severity }: { severity: string }) {
-  const tone = SEVERITY_TONE[severity as Finding['severity']] ?? 'neutral';
-  return <Chip tone={tone} size="xs" className="shrink-0">{severity}</Chip>;
+  return <Chip tone={severityTone(severity)} size="xs" className="shrink-0">{severity}</Chip>;
 }
 
 /** The one link that leaves the loop's run surfaces: what reached the graph. */

@@ -22,6 +22,7 @@ import {
   Select,
   Stack,
   StatStrip,
+  T,
   WorkflowStepper,
   type ChipTone,
 } from '@connorhoehnslalom/ui-components/shared';
@@ -190,19 +191,11 @@ export function AssessorDesk({
             key: 'name',
             header: 'Team',
             sortable: true,
-            // The row's one focusable, Enter-activatable control: DataTable's
-            // row click is a bare <tr onClick>, so a keyboard user needs a
-            // real button in the row to open it.
+            // DataTable rows with onRowClick are keyboard-reachable on their
+            // own now (tabIndex + Enter/Space), so the name cell is plain text.
             render: (t) => (
               <Stack gap="none" align="start">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="px-0 font-semibold text-text-primary"
-                  onClick={(e) => { e.stopPropagation(); onSelectTeam(t.id); }}
-                >
-                  {t.name}
-                </Button>
+                <T className="font-semibold text-text-primary">{t.name}</T>
                 <MetaLine size="xs" tone="tertiary" items={[t.id, t.assessment_lead || 'no lead yet']} />
               </Stack>
             ),

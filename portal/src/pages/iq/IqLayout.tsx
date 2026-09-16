@@ -1,15 +1,10 @@
 import { Link, Outlet, useLocation } from 'react-router';
-import { SubNavLayout } from '@connorhoehnslalom/ui-components/shared';
+import { SubNavLayout, activeNavItemClassName, inactiveNavItemClassName } from '@connorhoehnslalom/ui-components/shared';
 import { useIqSubNav } from './iqSubNavCatalog';
 
 // Reproduces SubNavLayout's own default active/inactive nav-item look (see
 // the library's `renderNavItem` doc comment, and its `activeNavItemStyle`
 // export) as Tailwind classes instead of a computed `style` object.
-function navItemClassName(isActive: boolean): string {
-  return isActive
-    ? 'block px-[14px] py-2 border-l-[3px] border-l-primary bg-surface-hover text-text-primary no-underline cursor-pointer'
-    : 'block px-[14px] py-2 border-l-[3px] border-transparent text-text-secondary no-underline cursor-pointer';
-}
 
 function IqLayout() {
   const { pathname, search } = useLocation();
@@ -52,7 +47,7 @@ function IqLayout() {
         return (
           <Link
             to={item.path}
-            className={navItemClassName(isActive)}
+            className={isActive ? activeNavItemClassName : inactiveNavItemClassName}
           >
             {children}
           </Link>

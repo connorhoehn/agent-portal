@@ -18,6 +18,7 @@ import {
   type Edge, type Node,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import { formatTokenCount } from '../lib/format';
 import { Card, Chip, Inline, Stack, StatusDot } from '@connorhoehnslalom/ui-components/shared';
 import { T } from './Text';
 
@@ -62,8 +63,11 @@ export function fmtMs(ms: number | null): string {
   return ms < 1000 ? `${Math.round(ms)}ms` : `${(ms / 1000).toFixed(1)}s`;
 }
 
+// Same compact-count shape as lib/format.ts's formatTokenCount(..., { compact:
+// true }) — delegated here rather than duplicated, kept under its own name
+// since call/error counts (not just tokens) use it.
 export function fmtCount(n: number): string {
-  return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
+  return formatTokenCount(n, { compact: true });
 }
 
 // ── Custom AgentNode ──────────────────────────────────────────────────────────

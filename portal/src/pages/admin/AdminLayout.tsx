@@ -1,16 +1,11 @@
 import { NavLink, Outlet, useLocation } from 'react-router';
-import { Inline, Stack, SubNavLayout } from '@connorhoehnslalom/ui-components/shared';
+import { Inline, Stack, SubNavLayout, activeNavItemClassName, inactiveNavItemClassName } from '@connorhoehnslalom/ui-components/shared';
 import { KBHealthBadge } from '../../components/kb/KBHealthBadge.js';
 import { useAutomateSpec } from '../work/automateNav';
 
 // Reproduces SubNavLayout's own default active/inactive nav-item look (see
 // the library's `renderNavItem` doc comment, and its `activeNavItemStyle`
 // export) as Tailwind classes instead of a computed `style` object.
-function navItemClassName(isActive: boolean): string {
-  return isActive
-    ? 'block px-[14px] py-2 border-l-[3px] border-l-primary bg-surface-hover text-text-primary no-underline cursor-pointer'
-    : 'block px-[14px] py-2 border-l-[3px] border-transparent text-text-secondary no-underline cursor-pointer';
-}
 
 // Mostly no rail of its own — the global shell already lists the admin
 // destinations. The exception is the Automate family: Bots and Changes are
@@ -47,7 +42,7 @@ function AdminLayout() {
           return (
             <NavLink
               to={item.path}
-              className={navItemClassName(isActive)}
+              className={isActive ? activeNavItemClassName : inactiveNavItemClassName}
             >
               {children}
             </NavLink>

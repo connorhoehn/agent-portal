@@ -13,6 +13,8 @@ import {
 import { useFetch } from '../../hooks/useFetch';
 import { relativeTime } from '../../lib/relativeTime';
 import { useSession } from '../../lib/auth';
+import { botStatusChip } from '../../lib/statusTone';
+import { usd } from '../../lib/format';
 import { BOTS_ROLES } from './automateNav';
 import { T } from './workShared';
 import { avgJobMinutes, botsOnQueue, estimateDrainMinutes, pausedBotCount, pullingBotIds, type QueueJobLike } from './queueMath';
@@ -127,6 +129,7 @@ export function QueuePulse({ summary, jobs, degraded }: {
           {roster.map((bot) => {
             const isPulling = pulling.has(bot.id);
             const paused = !bot.enabled || bot.pausedReason != null;
+            const statusChip = botStatusChip(bot, isPulling);
             const name = canOpenBot ? (
               <Link to={`/admin/bots/${bot.id}`} className="text-[12px] font-semibold text-text-primary no-underline hover:text-primary hover:underline truncate">
                 {bot.name}
@@ -146,13 +149,9 @@ export function QueuePulse({ summary, jobs, degraded }: {
                   {bot.orgProjectName ?? bot.agentProjectRepo ?? ''}
                 </T>
                 <T className="flex-1" />
-                {isPulling ? (
-                  <Chip tone="success" size="xs" dot="pulse">processing</Chip>
-                ) : paused ? (
-                  <Chip tone="warning" size="xs" title={bot.pausedReason ?? undefined}>paused</Chip>
-                ) : (
-                  <Chip tone="neutral" size="xs">idle</Chip>
-                )}
+                <Chip tone={statusChip.tone} size="xs" dot={isPulling ? 'pulse' : undefined} title={statusChip.title}>
+                  {statusChip.label}
+                </Chip>
                 <T className="text-[11px] text-text-tertiary whitespace-nowrap">{cadence(bot)}</T>
                 <T className="text-[11px] text-text-tertiary whitespace-nowrap hidden md:inline">
                   {lastRan(bot.lastRunAt)}
@@ -165,7 +164,7 @@ export function QueuePulse({ summary, jobs, degraded }: {
                   className="hidden md:flex"
                   data-testid={`bot-quota-${bot.id}`}
                 />
-                <MetaLine size="xs" items={[`$${bot.todaySpendUsd.toFixed(2)} today`]} className="hidden md:flex" />
+                <MetaLine size="xs" items={[`${usd(bot.todaySpendUsd)} today`]} className="hidden md:flex" />
               </Inline>
             );
           })}

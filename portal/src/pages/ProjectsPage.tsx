@@ -15,8 +15,10 @@ import {
   ToolbarLabel,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../hooks/useFetch';
+import { useDebouncedSearch } from '../hooks/useDebouncedSearch';
 import { UnavailableNotice } from '../components/UnavailableNotice';
 import { useSession } from '../lib/auth';
+import { useUrlState } from '../lib/useUrlState';
 import { InitiativeCard } from './projects/InitiativeCard';
 import { ProjectTable } from './projects/ProjectTable';
 import { SprintsLens } from './projects/SprintsLens';
@@ -52,6 +54,9 @@ const VIEW_OPTIONS = [
  *  activity column refreshes itself rather than waiting for a reload. */
 const POLL_MS = 15_000;
 
+// Same cadence TiersPage.tsx set for this exact pattern.
+const SEARCH_DEBOUNCE_MS = 250;
+
 function ProjectsPage() {
   const navigate = useNavigate();
   const { session } = useSession();
@@ -71,10 +76,33 @@ function ProjectsPage() {
   // on their own slice — the same default /api/sprints resolves.
   const isLeader = session?.role === 'org-leader' || session?.role === 'hr-admin'
     || session?.role === 'program-owner' || session?.role === 'admin';
-  const [scope, setScope] = useState<Scope>(isLeader ? 'all' : 'mine');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [query, setQuery] = useState('');
-  const [sortKey, setSortKey] = useState<ProjectSortKey>('activity');
+  // Filters live in the URL — `?scope=&status=&sort=&q=` — so a filtered
+  // program wall is a shareable link and survives a reload the way `?lens=`
+  // already did above. `scope`'s default still depends on the session
+  // (leaders default to everyone, everyone else to their own slice), so an
+  // absent `?scope=` resolves through `isLeader` rather than a fixed literal.
+  const [scope, setScope] = useUrlState<Scope>(
+    'scope',
+    (raw) => (raw === 'all' || raw === 'mine' ? raw : (isLeader ? 'all' : 'mine')),
+    (v) => v,
+  );
+  const [statusFilter, setStatusFilter] = useUrlState<string>(
+    'status',
+    (raw) => raw ?? 'all',
+    (v) => (v === 'all' ? null : v),
+  );
+  const [query, setQuery] = useUrlState<string>(
+    'q',
+    (raw) => raw ?? '',
+    (v) => (v ? v : null),
+  );
+  const { searchText, onSearchChange, cancelPending: cancelSearchPending } =
+    useDebouncedSearch(query, setQuery, SEARCH_DEBOUNCE_MS);
+  const [sortKey, setSortKey] = useUrlState<ProjectSortKey>(
+    'sort',
+    (raw) => (SORT_OPTIONS.some((o) => o.value === raw) ? (raw as ProjectSortKey) : 'activity'),
+    (v) => (v === 'activity' ? null : v),
+  );
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
     try { return (localStorage.getItem('projects-view') as ViewMode) ?? 'grid'; } catch { return 'grid'; }
   });
@@ -230,8 +258,8 @@ function ProjectsPage() {
         </ToolbarGroup>
         <ToolbarGroup divided aria-label="Search">
           <SearchInput
-            value={query}
-            onChange={setQuery}
+            value={searchText}
+            onChange={onSearchChange}
             placeholder="Name, owner, SME, repo…"
             aria-label="Search initiatives"
             className="w-[190px]"
@@ -249,6 +277,7 @@ function ProjectsPage() {
           actionLabel={scope === 'mine' && projects.length === 0 ? 'Show all initiatives' : 'Clear filters'}
           onAction={() => {
             if (scope === 'mine' && projects.length === 0) { setScope('all'); return; }
+            cancelSearchPending();
             setStatusFilter('all'); setQuery('');
           }}
         />

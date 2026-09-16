@@ -50,7 +50,7 @@ import { firstDegraded } from '../../lib/degraded';
 import { T } from './Text';
 import { RowEmpty } from './ReadState';
 import { parsePgTimestampAsUtc } from '../../lib/pgTimestamp';
-import { WindowPicker } from './WindowPicker';
+import { WindowPicker, useWindowUrlState } from './WindowPicker';
 
 interface DriftSummary {
   agentId: string;
@@ -145,7 +145,7 @@ const WINDOW_OPTIONS: Array<{ label: string; hours: number; bucket: number }> = 
 
 function DriftPage() {
   const navigate = useNavigate();
-  const [windowIdx, setWindowIdx] = useState(2); // 24h default
+  const [windowIdx, setWindowIdx] = useWindowUrlState(WINDOW_OPTIONS, 2); // 24h default, ?window=
   const win = WINDOW_OPTIONS[windowIdx];
 
   // NOTE THE TYPE. /drift/summary answers a BARE ARRAY when healthy and the

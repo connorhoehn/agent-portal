@@ -5,6 +5,7 @@ import {
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
+import { formatTokenCount } from '../../lib/format';
 import { T } from './Text';
 
 interface ObsSummary {
@@ -276,7 +277,9 @@ function SummaryPage() {
       {!blind && runtimes.length > 0 && (
         <Card padding="md">
           <SectionLabel as="div">Fleet</SectionLabel>
-          <KPIGrid columns={4} className="mt-3">
+          {/* mdColumns: this page lives inside ObservabilityLayout's nested
+              rail, narrower at the md band than a full-width page. */}
+          <KPIGrid columns={4} mdColumns={2} className="mt-3">
             {runtimes.map((a) => (
               <StatCard
                 key={a.id}
@@ -346,7 +349,7 @@ function SummaryPage() {
         items={[
           { label: 'Invocations (24h)', value: summary?.totalInvocations24h.toLocaleString() ?? '—' },
           { label: 'Avg Latency', value: summary ? `${(summary.avgLatencyMs / 1000).toFixed(1)}s` : '—' },
-          { label: 'Tokens (24h, account)', value: summary ? `${(summary.totalTokens24h / 1000).toFixed(0)}k` : '—' },
+          { label: 'Tokens (24h, account)', value: summary ? formatTokenCount(summary.totalTokens24h, { compact: true }) : '—' },
           { label: 'Success Rate', value: summary ? `${summary.successRate}%` : '—', tone: 'accent' },
           {
             label: 'Errors (24h)',

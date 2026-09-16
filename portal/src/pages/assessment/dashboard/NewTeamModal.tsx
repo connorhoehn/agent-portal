@@ -14,6 +14,7 @@ import {
   Stack,
 } from '@connorhoehnslalom/ui-components/shared';
 import { toastError, toastSuccess } from '../../../lib/toastStore';
+import { sendJson } from '../../../lib/writeJson';
 import { validateNewTeamForm, type NewTeamFormState } from '../assessmentFormat';
 import { MOTIONS, type Cohort } from '../types';
 
@@ -43,14 +44,7 @@ export function NewTeamModal({ open, onClose, onCreated }: {
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch('/api/assessment/teams', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(check.value),
-      });
-      const body = (await res.json().catch(() => ({}))) as { id?: string; name?: string; error?: string };
-      if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
+      const body = await sendJson<{ id?: string; name?: string }>('/api/assessment/teams', 'POST', check.value);
       toastSuccess(null, 'Team created', `${check.value.name} is ready to assess.`);
       if (body.id) onCreated({ id: body.id, name: body.name ?? check.value.name });
       onClose();

@@ -14,20 +14,13 @@
 //   other      → action as-given
 
 import { Chip } from '@connorhoehnslalom/ui-components/shared';
-
-type Tone = 'success' | 'warning' | 'danger' | 'neutral';
+import { severityTone } from '../../lib/statusTone';
 
 interface Props {
   ruleName: string;
   action: string;
   severity?: string | null;
   size?: 'xs' | 'sm';
-}
-
-function toneFor(severity: string | null | undefined): Tone {
-  if (severity === 'HIGH') return 'danger';
-  if (severity === 'MEDIUM') return 'warning';
-  return 'neutral';
 }
 
 function actionLabel(action: string): string {
@@ -38,7 +31,7 @@ function actionLabel(action: string): string {
 
 export function GuardrailRuleBadge({ ruleName, action, severity, size = 'xs' }: Props) {
   return (
-    <Chip tone={toneFor(severity)} size={size}>
+    <Chip tone={severityTone(severity)} size={size}>
       {ruleName} · {actionLabel(action)}
     </Chip>
   );

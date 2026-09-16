@@ -6,9 +6,22 @@
 // (`ui/src/components/submissions/types.ts` `groupSubmissions`).
 
 import type {
-  ApiSubmissionEnvelope, FeedbackTask, LinkStatus, RowStatus, RunRecord, SubmissionGroupRef, SubmissionListItem, SubmissionRevisionGroup } from './secondaryTypes';
+  ApiSubmissionEnvelope, FeedbackTask, LinkStatus, RowStatus, RunRecord, RunStatus, SubmissionGroupRef, SubmissionListItem, SubmissionRevisionGroup } from './secondaryTypes';
 import type { AssessmentSSEEvent } from './knowledge/types';
 import type { ChipTone } from '@connorhoehnslalom/ui-components/shared';
+
+// ─── Agent-run status → StatusPill state ────────────────────────────────────
+//
+// RunsPage.tsx and RunPromptStep.tsx each declared this table locally under
+// the same name (`STATUS_STATE` / `RUN_STATE`) — harmless while they agreed,
+// but nothing stopped them drifting apart on what "running" reads as.
+// Centralised here; each page keeps its own label convention (RunsPage shows
+// the raw status word, RunPromptStep shows it Title Cased).
+export const RUN_STATUS_PILL_STATE: Record<RunStatus, 'info' | 'success' | 'error'> = {
+  running: 'info',
+  completed: 'success',
+  failed: 'error',
+};
 
 // ─── Forms export CSV parsing (client-side; no multipart parser on the server) ─
 // RFC-4180-ish: quoted fields, doubled-quote escapes ("" -> "), commas and

@@ -171,9 +171,10 @@ export function durationLabel(job: Pick<CompactionJob, 'startedAt' | 'finishedAt
   return secs % 60 === 0 ? `${mins}m` : `${mins}m ${secs % 60}s`;
 }
 
-export function usd(n: number): string {
-  return `$${n.toFixed(2)}`;
-}
+// Promoted to lib/format.ts — the app-wide canonical `usd`. This used to skip
+// thousands separators (`$1234.56` instead of `$1,234.56`); repointing fixes
+// that for any distillation spend figure at or above $1,000.
+export { usd } from '../../lib/format.ts';
 
 export function pct(n01: number): string {
   return `${Math.round(n01 * 100)}%`;

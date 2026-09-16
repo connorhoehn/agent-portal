@@ -5,7 +5,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Button, Card, Chip, Inline, MetaLine, Stack, StatusPill } from '@connorhoehnslalom/ui-components/shared';
-import { launchResponseMessage } from '../secondaryFormat';
+import { launchResponseMessage, RUN_STATUS_PILL_STATE } from '../secondaryFormat';
 import type { CommitResponse, RunRecord, RunStatus } from '../secondaryTypes';
 import { useCapabilities } from '../../../lib/capabilities';
 import { toastError, toastSuccess } from '../../../lib/toastStore';
@@ -13,10 +13,13 @@ import { toastError, toastSuccess } from '../../../lib/toastStore';
 const POLL_MS = 4000;
 const COMMAND = 'process-self-assessment';
 
-const RUN_STATE: Record<RunStatus, { state: 'info' | 'success' | 'error'; label: string }> = {
-  running: { state: 'info', label: 'Running' },
-  completed: { state: 'success', label: 'Completed' },
-  failed: { state: 'error', label: 'Failed' },
+// Label only — the tone (state) is the shared RUN_STATUS_PILL_STATE
+// (secondaryFormat.ts), so this can't quietly disagree with RunsPage on what
+// "running" reads as, the way this file's own local table used to.
+const RUN_STATE_LABEL: Record<RunStatus, string> = {
+  running: 'Running',
+  completed: 'Completed',
+  failed: 'Failed',
 };
 
 function RunCard({ teamId, envelopeId }: { teamId: string; envelopeId: string }) {
@@ -96,7 +99,7 @@ function RunCard({ teamId, envelopeId }: { teamId: string; envelopeId: string })
       <Inline align="center" gap="sm" className="mb-2">
         <Chip tone="neutral">{teamId}</Chip>
         <MetaLine size="xs" items={[envelopeId]} />
-        {status && <StatusPill state={RUN_STATE[status].state} label={RUN_STATE[status].label} size="sm" />}
+        {status && <StatusPill state={RUN_STATUS_PILL_STATE[status]} label={RUN_STATE_LABEL[status]} size="sm" />}
       </Inline>
 
       {status === 'completed' ? (

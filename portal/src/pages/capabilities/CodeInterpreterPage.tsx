@@ -28,6 +28,7 @@ import { UnavailableNotice, orUnknown } from '../../components/UnavailableNotice
 import { useFetch } from '../../hooks/useFetch';
 import { relativeTime } from '../../lib/relativeTime';
 import { toastError } from '../../lib/toastStore';
+import { writeJson } from '../../lib/writeJson';
 import { T } from './Text';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -110,22 +111,18 @@ print(f"mean={statistics.mean(nums):.2f}, stdev={statistics.stdev(nums):.2f}")`)
     setRunning(true);
     // NB: don't clear result here — keep the previous output visible while we
     // wait so the panel doesn't flicker / appear to vanish between runs.
-    try {
-      const r = await fetch('/api/capabilities/code-interpreter/execute', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code, language: 'python' }),
-      });
-      const body = await r.json();
-      setResult(body);
-    } catch (e) {
-      setResult({ output: '', durationMs: 0, sessionId: '', error: (e as Error).message });
-    } finally {
-      setRunning(false);
-      // We don't refresh() the sessions list here — the 10s poll picks it up
-      // naturally, and a fast refresh just re-renders the Active Sessions
-      // card right under the result, pushing it off-screen.
+    const res = await writeJson<{ output: string; durationMs: number; sessionId: string; error?: string }>(
+      '/api/capabilities/code-interpreter/execute', 'POST', { code, language: 'python' },
+    );
+    if (res.data) {
+      setResult(res.data);
+    } else {
+      setResult({ output: '', durationMs: 0, sessionId: '', error: res.error ?? 'Request failed' });
     }
+    setRunning(false);
+    // We don't refresh() the sessions list here — the 10s poll picks it up
+    // naturally, and a fast refresh just re-renders the Active Sessions
+    // card right under the result, pushing it off-screen.
   }
 
   function clearResult() {
@@ -133,17 +130,12 @@ print(f"mean={statistics.mean(nums):.2f}, stdev={statistics.stdev(nums):.2f}")`)
   }
 
   async function terminateSession(sessionId: string) {
-    try {
-      const res = await fetch(`/api/capabilities/code-sessions/${sessionId}`, { method: 'DELETE' });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({})) as { error?: string };
-        toastError(null, 'Could not terminate session', body.error ?? `HTTP ${res.status}`);
-        return;
-      }
-      refresh();
-    } catch (err) {
-      toastError(null, 'Could not terminate session', err instanceof Error ? err.message : undefined);
+    const res = await writeJson(`/api/capabilities/code-sessions/${sessionId}`, 'DELETE');
+    if (!res.ok) {
+      toastError(null, 'Could not terminate session', res.error ?? `HTTP ${res.status}`);
+      return;
     }
+    refresh();
   }
 
   const sessions = data?.sessions ?? [];

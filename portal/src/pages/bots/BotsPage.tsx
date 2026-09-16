@@ -30,6 +30,8 @@ import { useFetch } from '../../hooks/useFetch';
 import { relativeTime } from '../../lib/relativeTime';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { useCapabilities } from '../../lib/capabilities';
+import { botStatusChip } from '../../lib/statusTone';
+import { usd } from '../../lib/format';
 import { BotCreateWizard } from './BotCreateWizard';
 import { botListLastRanText, botsRollup, botsSummaryLine, filterBots, type BotStatusFilter } from './botsFormat';
 
@@ -165,12 +167,8 @@ export default function BotsPage() {
       key: 'paused',
       header: 'Status',
       render: (bot) => {
-        const paused = !bot.enabled || bot.pausedReason != null;
-        return paused ? (
-          <Chip tone="warning" size="xs" dot="static" title={bot.pausedReason ?? undefined}>paused</Chip>
-        ) : (
-          <Chip tone="success" size="xs" dot="static">enabled</Chip>
-        );
+        const c = botStatusChip(bot);
+        return <Chip tone={c.tone} size="xs" dot="static" title={c.title}>{c.label}</Chip>;
       },
     },
     {
@@ -231,7 +229,7 @@ export default function BotsPage() {
           <MetaLine
             size="xs"
             tone="tertiary"
-            items={[`$${bot.todaySpendUsd.toFixed(2)}${bot.budgetPerDayUsd != null ? ` of $${bot.budgetPerDayUsd.toFixed(2)}` : ' spent'}`]}
+            items={[`${usd(bot.todaySpendUsd)}${bot.budgetPerDayUsd != null ? ` of ${usd(bot.budgetPerDayUsd)}` : ' spent'}`]}
           />
         </Stack>
       ),
@@ -290,8 +288,8 @@ export default function BotsPage() {
               { label: 'Paused', value: rollup.paused },
               {
                 label: 'Spend today',
-                value: `$${rollup.spendTodayUsd.toFixed(2)}`,
-                hint: rollup.budgetTodayUsd != null ? `of $${rollup.budgetTodayUsd.toFixed(2)} daily budget` : undefined,
+                value: usd(rollup.spendTodayUsd),
+                hint: rollup.budgetTodayUsd != null ? `of ${usd(rollup.budgetTodayUsd)} daily budget` : undefined,
               },
               {
                 label: 'Near budget',

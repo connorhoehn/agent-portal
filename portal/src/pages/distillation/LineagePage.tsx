@@ -14,6 +14,7 @@ import { useFetch } from '../../hooks/useFetch';
 import { useDebouncedSearch } from '../../hooks/useDebouncedSearch';
 import { KeyValue } from '../../components/KeyValue';
 import { toastError, toastSuccess } from '../../lib/toastStore';
+import { writeJson } from '../../lib/writeJson';
 import { ArtifactAssetCard } from './ArtifactAssetCard';
 import { ArtifactDrawerBody } from './ArtifactDrawer';
 import { LineageFrame } from './LineageFrame';
@@ -21,19 +22,11 @@ import { T } from './Text';
 import { LINEAGE_NODE_LABEL } from './distillationFormat';
 import type { Artifact, ArtifactsResponse, Lineage, LineageNode, ReviewResponse } from './types';
 
-/** POSTs with the session cookie, same fetch shape RecordRunForm/decideReview
- *  already use elsewhere in this feature — no shared helper exists for it
- *  yet, and this is the second and third call site, not the first. */
+/** Thin wrapper over the shared writeJson so call sites keep their existing
+ *  `{ ok, error }` shape. */
 async function postJson(path: string, body: unknown): Promise<{ ok: boolean; error: string | null }> {
-  const res = await fetch(path, {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  if (res.ok) return { ok: true, error: null };
-  const parsed = (await res.json().catch(() => ({}))) as { error?: string };
-  return { ok: false, error: parsed.error ?? `HTTP ${res.status}` };
+  const res = await writeJson(path, 'POST', body);
+  return { ok: res.ok, error: res.error };
 }
 
 // Same cadence TiersPage.tsx set for this exact pattern.

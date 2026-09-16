@@ -147,7 +147,7 @@ function ScoresPage() {
 
   const handleCompare = useCallback(() => {
     if (comparisonIds.size < 2) return;
-    const ids = Array.from(comparisonIds).join(',');
+    const ids = Array.from(comparisonIds).map(encodeURIComponent).join(',');
     const wParam = searchParams.get('w');
     const query = wParam ? `?ids=${ids}&w=${wParam}` : `?ids=${ids}`;
     navigate(`/iq/scores/compare${query}`);

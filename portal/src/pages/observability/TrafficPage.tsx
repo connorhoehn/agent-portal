@@ -13,7 +13,7 @@
 //   GET /top-users?windowHours=&limit=10
 //   GET /per-agent-summary?windowHours=
 
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { Link } from 'react-router';
 import {
   Card, CardHeader, Chip, PageSection, Stack, StatStrip, Table, TableBody, TableHead, TableRow, TableTh, TableTd,
@@ -36,7 +36,7 @@ import { TrafficHeatmapFrame } from './TrafficHeatmapFrame';
 import { T } from './Text';
 import { RowEmpty } from './ReadState';
 import { normalizePgTimestamp, parsePgTimestamp } from '../../lib/pgTimestamp';
-import { WindowPicker } from './WindowPicker';
+import { WindowPicker, useWindowUrlState } from './WindowPicker';
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -196,7 +196,7 @@ const costTone = (c: number): 'success' | 'warning' | 'danger' => {
 // ── Page ────────────────────────────────────────────────────────────────────
 
 function TrafficPage() {
-  const [windowIdx, setWindowIdx] = useState(1); // 24h default
+  const [windowIdx, setWindowIdx] = useWindowUrlState(WINDOW_OPTIONS, 1); // 24h default, ?window=
   const win = WINDOW_OPTIONS[windowIdx];
 
   const { data: rpsData, error: rpsError, refresh: refreshRps } = useFetch<RpsResponse>(

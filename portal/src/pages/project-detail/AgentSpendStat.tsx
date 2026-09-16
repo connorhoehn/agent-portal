@@ -8,6 +8,7 @@
 // budget statement that is simply false.
 
 import { StatCard } from '@connorhoehnslalom/ui-components/shared';
+import { usd } from '../../lib/format';
 
 export interface AgentSpendInputs {
   serverSpendUsd: number | null;
@@ -23,7 +24,7 @@ export function resolveAgentSpend(
 ): { value: string; label: string; title: string; unknown: boolean } {
   if (serverSpendUsd != null) {
     return {
-      value: `$${serverSpendUsd.toFixed(2)}`,
+      value: usd(serverSpendUsd),
       label: 'agent spend',
       title: 'Every agent run attributed to this initiative, totalled by the server — the same figure the Initiatives list shows.',
       unknown: false,
@@ -41,7 +42,7 @@ export function resolveAgentSpend(
     };
   }
   return {
-    value: `$${clientSpendUsd.toFixed(2)}`,
+    value: usd(clientSpendUsd),
     label: 'agent spend',
     title: 'Totalled from the agent runs visible to this session — the server reported no rollup for this initiative.',
     unknown: false,

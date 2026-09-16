@@ -79,3 +79,26 @@ navigation"). Tenant gating is untouched. Re-checked the API floor with fresh se
 orgiq persona (u-theo, u-nora, u-mia, u-vera, u-rachel) still gets 403 from GET
 /api/assessment/teams, each assessment persona (u-asha, u-jonas, u-farah) still gets 403 from
 GET /api/graph/people, and the cookie-less demo identity gets 403. Console errors 0.
+
+--- freshness re-observation, 2026-09-16 08:20 (the shell rail moved off inline styles) ---
+Why: `portal/src/components/shell/Layout.tsx` is in this log's `pages:` digest —
+its `renderNavItem` stopped hand-computing an inline `style` object and now
+returns ui-components 2.275.1's `activeNavItemClassName`/`inactiveNavItemClassName`.
+That changes how a rail item is painted, not which items exist, but this log's
+whole claim is about which items exist, so every fact below was re-taken rather
+than carried forward.
+  Rail, orgiq side (u-theo, member, /iq/projects): 11 anchors, 0 matching
+  /assessment, the string "assessment" occurs 0 times in the document, exactly
+  one item lit (Initiatives) and 0 anchors carry a `style` attribute.
+  Rail, assessment side (u-asha, assessor, /assessment/teams): 8 anchors, 0
+  matching /iq/ or /admin/, one lit (Dashboard), 0 inline styles.
+  Direct routes: /assessment/teams as u-theo → /iq/projects (h1 "Initiatives"),
+  no flash of assessment content; /iq/projects as u-asha → /assessment/teams
+  (h1 "Assessor's desk").
+  API floor, fresh cookie jars: GET /api/assessment/teams → 403 for u-theo,
+  u-nora, u-mia, u-vera and u-rachel; GET /api/graph/people → 403 for u-asha,
+  u-jonas and u-farah. Cookie-less: /api/assessment/teams 403, /api/graph/people
+  404 (that route is not mounted for an anonymous caller, so no guard runs — it
+  is recorded here as measured rather than as the 403 an earlier entry claimed).
+Console errors: 0.
+addendum, same session: `Layout.tsx` was edited once more after the observation above — the active rail item's fill class was swapped from the library's `bg-surface-hover` to `bg-primary-soft`, restoring the brand tint the branding cells record (see docs/branding-journeys/*.md, 2026-09-16 08:40). That is a `background-color` change on the one already-lit anchor: it adds, removes and re-targets no rail item, so every isolation fact re-taken above stands unchanged.

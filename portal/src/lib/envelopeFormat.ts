@@ -38,6 +38,8 @@
 // Note `startsOn`/`endsOn` really do come back null for a sprint-less standing
 // grant, so nothing here may assume a window exists.
 
+import { usd } from './format.ts';
+
 export interface EnvelopeRow {
   grantId: string;
   orgProjectId: string;
@@ -68,12 +70,11 @@ export interface EnvelopesResponse {
 }
 
 // ─── Money ───────────────────────────────────────────────────────────────────
-
-/** Matches the server's own `money()` in lib/bot-runner.ts, so the number in a
- *  409 and the number on the page are spelled the same way. */
-export function usd(n: number): string {
-  return `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
+//
+// Promoted to lib/format.ts — the app-wide canonical `usd`, matching the
+// server's own `money()` in middleware/src/lib/bot-runner.ts. Re-exported
+// here so existing `from './envelopeFormat'` imports keep working.
+export { usd } from './format.ts';
 
 /** The shape guard, used everywhere instead of `attributionAvailable`: a row
  *  whose remaining is not a number cannot be reported as an amount, whatever

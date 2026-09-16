@@ -6,7 +6,7 @@
 // click from the Knowledge home.
 
 import { NavLink, Outlet } from 'react-router';
-import { SubNavLayout } from '@connorhoehnslalom/ui-components/shared';
+import { SubNavLayout, activeNavItemClassName, inactiveNavItemClassName } from '@connorhoehnslalom/ui-components/shared';
 import { useSession } from '../../lib/auth';
 import { knowledgeItemsFor } from './knowledgeNav';
 
@@ -27,7 +27,7 @@ export default function KnowledgeLayout() {
           to={item.path}
           // Overview must match exactly, or it stays active on /registry too.
           end={item.path === '/admin/knowledge'}
-          className={({ isActive }) => navItemClassName(isActive)}
+          className={({ isActive }) => (isActive ? activeNavItemClassName : inactiveNavItemClassName)}
         >
           {children}
         </NavLink>
@@ -43,8 +43,3 @@ export default function KnowledgeLayout() {
 // NavLink's `className` prop instead of a computed `style` object — a real
 // router integration still needs `renderNavItem`, but nothing here needs an
 // inline style to get it.
-function navItemClassName(isActive: boolean): string {
-  return isActive
-    ? 'block px-[14px] py-2 border-l-[3px] border-l-primary bg-surface-hover text-text-primary no-underline cursor-pointer'
-    : 'block px-[14px] py-2 border-l-[3px] border-transparent text-text-secondary no-underline cursor-pointer';
-}

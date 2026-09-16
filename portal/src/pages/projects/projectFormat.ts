@@ -118,9 +118,10 @@ export function openWorkLine(p: ProjectSummary): string | null {
   return parts.length > 0 ? parts.join(' · ') : null;
 }
 
-export function usd(n: number): string {
-  return `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
+// Promoted to lib/format.ts — the app-wide canonical `usd`. Re-exported here
+// so existing `from './projectFormat'` imports keep working.
+import { usd } from '../../lib/format.ts';
+export { usd };
 
 /**
  * The one-line agent-spend summary for a card.

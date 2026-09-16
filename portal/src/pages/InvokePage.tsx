@@ -23,6 +23,7 @@ import {
 } from '@connorhoehnslalom/ui-components/shared';
 import { ChatPanel } from '@connorhoehnslalom/ui-components/social';
 import { useFetch } from '../hooks/useFetch';
+import { useUrlState } from '../lib/useUrlState';
 import { Markdown } from '../components/Markdown';
 import { T } from './Text';
 import {
@@ -191,7 +192,16 @@ function InvokePage() {
     [agents, canIngest],
   );
 
-  const [selectedId, setSelectedId] = useState('orgiq-supervisor');
+  // ?agent=<id> — the chosen agent, distinct from `?agentId=` below (a
+  // one-shot arrival param from the Architecture graph / agent detail page
+  // that pre-selects and then strips itself). This one keeps reflecting the
+  // current selection so a link built from the address bar reopens on the
+  // same agent, the way `?session=` reopens the same conversation.
+  const [selectedId, setSelectedId] = useUrlState<string>(
+    'agent',
+    (raw) => raw || 'orgiq-supervisor',
+    (v) => (v === 'orgiq-supervisor' ? null : v),
+  );
   // A history load that FAILED, kept apart from a conversation that is empty.
   // Auto-resume fires on mount, so an expired cookie or a 500 used to land the
   // user in the "send a message to start" empty state — the app quietly

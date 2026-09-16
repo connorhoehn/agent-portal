@@ -28,31 +28,21 @@ import {
   TableTd,
 } from '@connorhoehnslalom/ui-components/shared';
 import { toastError, toastSuccess } from '../../lib/toastStore';
+import { writeJson } from '../../lib/writeJson';
 import { usd, modelLabelFor, ago, rowBudgetStats } from './budgetsFormat';
 import { T } from './Text';
 import type { BudgetRow, BudgetSummary, InitiativeOption } from './types';
 
 async function putAllocation(orgProjectId: string, allocatedUsd: number): Promise<boolean> {
-  try {
-    const res = await fetch(`/api/budgets/${encodeURIComponent(orgProjectId)}`, {
-      method: 'PUT',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ allocatedUsd }),
-    });
-    if (!res.ok) {
-      const body = (await res.json().catch(() => null)) as { error?: string } | null;
-      toastError(null, 'Failed to set budget', body?.error ?? `${res.status}`);
-      return false;
-    }
-    // A money write with no acknowledgement read as "did that take?" — the row
-    // re-renders, but the person is looking at the cell they just left.
-    toastSuccess(null, 'Budget set', `$${allocatedUsd.toFixed(2)} / month`);
-    return true;
-  } catch (err) {
-    toastError(null, 'Failed to set budget', err instanceof Error ? err.message : undefined);
+  const res = await writeJson(`/api/budgets/${encodeURIComponent(orgProjectId)}`, 'PUT', { allocatedUsd });
+  if (!res.ok) {
+    toastError(null, 'Failed to set budget', res.error ?? undefined);
     return false;
   }
+  // A money write with no acknowledgement read as "did that take?" — the row
+  // re-renders, but the person is looking at the cell they just left.
+  toastSuccess(null, 'Budget set', `$${allocatedUsd.toFixed(2)} / month`);
+  return true;
 }
 
 // ─── Breakdown card (spend by model / by trigger) ────────────────────────────
@@ -281,19 +271,11 @@ export function InitiativesReport({
   const [showFirstBudget, setShowFirstBudget] = useState(false);
 
   async function deleteAllocation(row: BudgetRow) {
-    try {
-      const res = await fetch(`/api/budgets/${encodeURIComponent(row.orgProjectId)}`, {
-        method: 'DELETE',
-        credentials: 'include',
-      });
-      if (!res.ok) {
-        const body = (await res.json().catch(() => null)) as { error?: string } | null;
-        toastError(null, 'Failed to remove allocation', body?.error ?? `${res.status}`);
-      } else {
-        toastSuccess(null, 'Allocation removed', row.orgProjectName ?? row.orgProjectId);
-      }
-    } catch (err) {
-      toastError(null, 'Failed to remove allocation', err instanceof Error ? err.message : undefined);
+    const res = await writeJson(`/api/budgets/${encodeURIComponent(row.orgProjectId)}`, 'DELETE');
+    if (!res.ok) {
+      toastError(null, 'Failed to remove allocation', res.error ?? undefined);
+    } else {
+      toastSuccess(null, 'Allocation removed', row.orgProjectName ?? row.orgProjectId);
     }
     setConfirmDelete(null);
     refresh();

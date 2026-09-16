@@ -15,7 +15,7 @@
 // same as before). One section's query failing lands only that section's
 // name in the envelope's `degraded` array, not the whole page.
 
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { useNavigate } from 'react-router';
 import {
   Card, Chip, Inline, InlinePlaceholder, KPIGrid, PageSection, SectionLabel, Stack, StatCard, Table, TableHead, TableBody, TableRow, TableTh, TableTd,
@@ -38,7 +38,7 @@ import { CostChip } from '../../components/observability/CostChip';
 import { SmartEmptyState } from '../../components/observability/SmartEmptyState';
 import { T } from './Text';
 import { normalizePgTimestamp, parsePgTimestamp, pgTimestampMs } from '../../lib/pgTimestamp';
-import { WindowPicker } from './WindowPicker';
+import { WindowPicker, useWindowUrlState } from './WindowPicker';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -244,7 +244,7 @@ const snippetCellCls = 'max-w-[360px] truncate text-[12px]';
 
 function CostPage() {
   const navigate = useNavigate();
-  const [windowIdx, setWindowIdx] = useState(1); // 24h default
+  const [windowIdx, setWindowIdx] = useWindowUrlState(WINDOW_OPTIONS, 1); // 24h default, ?window=
   const win = WINDOW_OPTIONS[windowIdx];
 
   const {

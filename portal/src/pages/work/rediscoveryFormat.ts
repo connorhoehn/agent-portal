@@ -9,6 +9,8 @@
 // a stale match rendered as confidently as a fresh one just trades a slow
 // rediscovery for a fast wrong turn.
 
+import { usd as formatUsd } from '../../lib/format.ts';
+
 export type ExperienceKind = 'worked' | 'failed' | 'gotcha' | 'decision' | 'convention';
 export type Verdict = 'applies' | 'partial' | 'stale';
 
@@ -75,7 +77,7 @@ export function provenanceLine(m: RediscoveryMatch): string {
  *  already uses, computed at the moment of the short-circuit. */
 export function savingsLine(usd: number | null, minutes: number | null): string | null {
   if (usd == null || minutes == null) return null;
-  return `~$${usd.toFixed(2)} and ~${Math.round(minutes)} min not spent`;
+  return `~${formatUsd(usd)} and ~${Math.round(minutes)} min not spent`;
 }
 
 /** Score floor below which a match is noise, not a lead. Kept as one

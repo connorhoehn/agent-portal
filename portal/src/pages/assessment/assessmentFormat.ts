@@ -546,19 +546,6 @@ export function countOpenFollowUps(questions: { status: string }[]): number {
   return questions.filter((q) => isOpenFollowUp(q.status)).length;
 }
 
-/**
- * What a FormField's render-prop wiring may be spread onto an `<Input>`.
- * The library hands `labelId` along for controls that take `aria-labelledby`;
- * spreading it onto a DOM input makes React warn "does not recognize the
- * `labelId` prop" on every load of the page. Keep the id + aria wiring, drop
- * the label id.
- */
-export function inputWiring<W extends { labelId: string }>(wiring: W): Omit<W, 'labelId'> {
-  const { labelId: _labelId, ...rest } = wiring;
-  void _labelId;
-  return rest;
-}
-
 // ─── The assessor's desk: what moves each team next ─────────────────────────
 
 export type NextActionKind = 'intake' | 'assess' | 'close_claims' | 'answer' | 'publish' | 'follow_up';

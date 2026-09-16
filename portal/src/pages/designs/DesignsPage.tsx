@@ -2,7 +2,7 @@
 // threads — where the agents' ideation stands, which threads are waiting on a
 // human, what has been ratified into the knowledge base.
 
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import {
   Chip,
@@ -19,6 +19,7 @@ import {
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
+import { useUrlState } from '../../lib/useUrlState';
 import { relativeTime } from '../../lib/relativeTime';
 import { STATUS_LABEL, STATUS_TONE, filterDesigns, reviewStateLine } from './designFormat';
 import { T } from './Text';
@@ -36,7 +37,11 @@ export default function DesignsPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const initiative = searchParams.get('initiative') ?? '';
-  const [filter, setFilter] = useState('all');
+  const [filter, setFilter] = useUrlState<string>(
+    'status',
+    (raw) => (raw && FILTERS.some((f) => f.value === raw) ? raw : 'all'),
+    (v) => (v === 'all' ? null : v),
+  );
 
   const { data, isLoading, error, degraded, refresh } = useFetch<{ reviews: DesignReview[] }>(
     `/api/designs${initiative ? `?initiative=${encodeURIComponent(initiative)}` : ''}`, 30_000);

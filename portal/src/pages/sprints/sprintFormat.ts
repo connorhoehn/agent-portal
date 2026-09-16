@@ -12,9 +12,9 @@ import type { Contributor, RosterPerson, Sprint, WorkItem, WorkTreeNode } from '
 
 // ─── Money and dates ─────────────────────────────────────────────────────────
 
-export function usd(n: number): string {
-  return `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
+// Promoted to lib/format.ts — the app-wide canonical `usd`. Re-exported here
+// so existing `from './sprintFormat'` imports keep working.
+export { usd } from '../../lib/format.ts';
 
 /** `2026-08-24` → `24 Aug`. Sprint dates are DATEs, so they are parsed as UTC
  *  and formatted in UTC — reading them locally shifts a sprint boundary by a

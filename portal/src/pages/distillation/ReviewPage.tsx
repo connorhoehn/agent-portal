@@ -11,8 +11,10 @@ import {
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';
+import { useUrlState } from '../../lib/useUrlState';
 import { relativeTime } from '../../lib/relativeTime';
 import { toastError, toastSuccess } from '../../lib/toastStore';
+import { sendJson } from '../../lib/writeJson';
 import { T } from './Text';
 import {
   REVIEW_VERDICT_LABEL, REVIEW_VERDICT_TONE, SAMPLING_LABEL, SAMPLING_TONE, artifactFactCount,
@@ -24,7 +26,12 @@ type DecidedVerdict = Extract<ReviewVerdict, 'agree' | 'disagree'>;
 export default function DistillationReviewPage() {
   const { can, ready } = useCapabilities();
   const canReview = ready && can('ManageBots');
-  const [tab, setTab] = useState<'pending' | 'decided'>('pending');
+  // ?tab=pending|decided
+  const [tab, setTab] = useUrlState<'pending' | 'decided'>(
+    'tab',
+    (raw) => (raw === 'decided' ? 'decided' : 'pending'),
+    (v) => (v === 'pending' ? null : v),
+  );
   // The banner counts the same samples the queue lists, so a decision must
   // refresh it too — on a 60s poll alone it sat contradicting the queue
   // beneath it for up to a minute.
@@ -47,11 +54,7 @@ export default function DistillationReviewPage() {
       : cur.map((s) => (s.id === id ? { ...s, verdict, note: note || null } : s))));
     void (async () => {
       try {
-        const res = await fetch(`/api/distillation/review/${encodeURIComponent(id)}`, {
-          method: 'POST', credentials: 'include',
-          headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ verdict, note }),
-        });
-        if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+        await sendJson(`/api/distillation/review/${encodeURIComponent(id)}`, 'POST', { verdict, note });
         toastSuccess(null, `Marked ${REVIEW_VERDICT_LABEL[verdict].toLowerCase()}`);
         refresh();
         refreshSampling();

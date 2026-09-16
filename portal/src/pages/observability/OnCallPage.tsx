@@ -13,7 +13,7 @@
 //
 // Polling: 15s for the page (operational), 30s for the events feed.
 
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { useNavigate } from 'react-router';
 import {
   Button,
@@ -44,7 +44,8 @@ import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { T } from './Text';
 import { RowEmpty } from './ReadState';
 import { parsePgTimestampAsUtc } from '../../lib/pgTimestamp';
-import { WindowPicker } from './WindowPicker';
+import { severityTone } from '../../lib/statusTone';
+import { WindowPicker, useWindowUrlState } from './WindowPicker';
 
 // ── API contracts (mirrors middleware/src/routes/oncall.ts) ────────────────
 
@@ -114,7 +115,7 @@ const WINDOW_OPTIONS: Array<{ label: string; hours: number; bucket: number }> = 
 
 function OnCallPage() {
   const navigate = useNavigate();
-  const [windowIdx, setWindowIdx] = useState(2); // 24h default
+  const [windowIdx, setWindowIdx] = useWindowUrlState(WINDOW_OPTIONS, 2); // 24h default, ?window=
   const win = WINDOW_OPTIONS[windowIdx]!;
 
   // Timeline (drift/judge/cost/errors + deploy markers + alarms in one shot).
@@ -427,18 +428,19 @@ function OnCallPage() {
 
 // ── Sub-components ─────────────────────────────────────────────────────────
 
+// Chip tone (danger/warning/neutral/success) → InlineAlert tone
+// (error/warning/info/success). A straight rename of the same four buckets —
+// InlineAlert just spells "danger" and "neutral" differently.
+const ALERT_TONE: Record<string, 'error' | 'warning' | 'info' | 'success'> = {
+  danger: 'error', warning: 'warning', neutral: 'info', success: 'success',
+};
+
 function AlarmChip({ alarm }: { alarm: AlarmState }) {
-  // 'unknown' must not fall through to the success branch. A probe that could
-  // not run rendered as a green tick here, which is the same false all-clear
-  // the server used to emit.
-  const tone = alarm.severity === 'critical' ? 'danger'
-    : alarm.severity === 'warning' ? 'warning'
-    : alarm.severity === 'unknown' ? 'neutral'
-    : 'success';
-  const alertTone = alarm.severity === 'critical' ? 'error'
-    : alarm.severity === 'warning' ? 'warning'
-    : alarm.severity === 'unknown' ? 'info'
-    : 'success';
+  // severityTone already guards 'unknown' from falling through to the
+  // success branch — a probe that could not run must not render as a green
+  // tick, which is the same false all-clear the server used to emit.
+  const tone = severityTone(alarm.severity);
+  const alertTone = ALERT_TONE[tone] ?? 'info';
   return (
     <InlineAlert tone={alertTone}>
       <Stack gap="none">
@@ -510,19 +512,18 @@ const EVENT_GLYPH: Record<EventKind, string> = {
 };
 
 function EventRow({ event, onClick }: { event: RecentEvent; onClick: () => void }) {
-  const tone: 'success' | 'warning' | 'danger' | 'info' =
-    event.severity === 'critical' ? 'danger'
-      : event.severity === 'warning' ? 'warning'
-      : 'info';
+  // Only critical/warning get a loud treatment here — anything else (deploys,
+  // resolved judge spikes) reads as quiet good news, same as before.
+  const tone = severityTone(event.severity);
   const clickable = !!event.relatedInvocationId;
-  const dotColor = event.severity === 'critical'
+  const dotColor = tone === 'danger'
     ? 'var(--color-danger)'
-    : event.severity === 'warning'
+    : tone === 'warning'
     ? 'var(--color-warning)'
     : 'var(--color-success)';
-  const glyphClass = event.severity === 'critical'
+  const glyphClass = tone === 'danger'
     ? 'text-danger'
-    : event.severity === 'warning'
+    : tone === 'warning'
     ? 'text-warning'
     : 'text-text-secondary';
   return (
@@ -557,11 +558,17 @@ function SeverityDot({
 }: {
   severity: 'critical' | 'warning' | 'ok' | 'unknown';
 }) {
-  const color = severity === 'critical'
+  const tone = severityTone(severity);
+  // 'unknown' used to fall through to the green branch here — the same
+  // false all-clear AlarmChip's own comment (above) already guards against.
+  // Now both read the same way: unknown is neutral, not a green tick.
+  const color = tone === 'danger'
     ? 'var(--color-danger)'
-    : severity === 'warning'
+    : tone === 'warning'
     ? 'var(--color-warning)'
-    : 'var(--color-success)';
+    : tone === 'success'
+    ? 'var(--color-success)'
+    : 'var(--color-text-tertiary)';
   return <StatusDot color={color} size="sm" />;
 }
 

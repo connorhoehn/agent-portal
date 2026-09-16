@@ -38,6 +38,7 @@ import {
 import { useFetch } from '../../hooks/useFetch';
 import { BOT_STARTERS, type BotStarter } from './botTemplates';
 import { toastError, toastSuccess } from '../../lib/toastStore';
+import { writeJson } from '../../lib/writeJson';
 import { DEVBOX_MODELS, DEFAULT_DEVBOX_MODEL } from '../../lib/devboxModels';
 import {
   budgetsSummaryText,
@@ -222,36 +223,27 @@ export function BotCreateWizard({ open, onClose }: BotCreateWizardProps) {
   async function handleLaunch() {
     setSubmitting(true);
     setSubmitError(null);
-    try {
-      const res = await fetch('/api/bots', {
-        method: 'POST', credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: step1.name.trim(),
-          template: step1.template,
-          prompt: step1.prompt.trim(),
-          agentProjectId: step2.targetKind === 'codebase' ? step2.agentProjectId : null,
-          orgProjectId: step2.targetKind === 'initiative' ? step2.orgProjectId : null,
-          model: step3.model,
-          trigger: step4.trigger,
-          cronExpr: step4.trigger === 'cron' ? step4.cronExpr.trim() : null,
-          budgetPerRunUsd: step3.budgetPerRunUsd.trim() === '' ? null : Number(step3.budgetPerRunUsd),
-          budgetPerDayUsd: step3.budgetPerDayUsd.trim() === '' ? null : Number(step3.budgetPerDayUsd),
-          maxRunsPerDay: step3.maxRunsPerDay,
-          requiresReview: step3.requiresReview,
-        }),
-      });
-      const body = await res.json().catch(() => ({})) as { bot?: Bot; error?: string; message?: string };
-      if (res.status !== 201 || !body.bot) {
-        setSubmitError(body.error ?? body.message ?? `HTTP ${res.status}`);
-        return;
-      }
-      setCreatedBot(body.bot);
-    } catch (err) {
-      setSubmitError(err instanceof Error ? err.message : 'Network error');
-    } finally {
+    const res = await writeJson<{ bot?: Bot; error?: string; message?: string }>('/api/bots', 'POST', {
+      name: step1.name.trim(),
+      template: step1.template,
+      prompt: step1.prompt.trim(),
+      agentProjectId: step2.targetKind === 'codebase' ? step2.agentProjectId : null,
+      orgProjectId: step2.targetKind === 'initiative' ? step2.orgProjectId : null,
+      model: step3.model,
+      trigger: step4.trigger,
+      cronExpr: step4.trigger === 'cron' ? step4.cronExpr.trim() : null,
+      budgetPerRunUsd: step3.budgetPerRunUsd.trim() === '' ? null : Number(step3.budgetPerRunUsd),
+      budgetPerDayUsd: step3.budgetPerDayUsd.trim() === '' ? null : Number(step3.budgetPerDayUsd),
+      maxRunsPerDay: step3.maxRunsPerDay,
+      requiresReview: step3.requiresReview,
+    });
+    if (res.status !== 201 || !res.data?.bot) {
+      setSubmitError(res.data?.error ?? res.data?.message ?? res.error ?? `HTTP ${res.status}`);
       setSubmitting(false);
+      return;
     }
+    setCreatedBot(res.data.bot);
+    setSubmitting(false);
   }
 
   function openDetail(bot: Bot) {
@@ -263,22 +255,12 @@ export function BotCreateWizard({ open, onClose }: BotCreateWizardProps) {
     const bot = createdBot;
     if (!bot) return;
     setSubmitting(true);
-    try {
-      const res = await fetch(`/api/bots/${bot.id}/run`, {
-        method: 'POST', credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
-      });
-      const body = await res.json().catch(() => ({})) as { error?: string };
-      if (res.status === 409) toastError(null, 'Not run', body.error ?? 'The bot refused this run.');
-      else if (!res.ok) toastError(null, 'Could not start', body.error ?? `HTTP ${res.status}`);
-      else toastSuccess(null, 'First run started', 'It streams on the bot page as it works.');
-    } catch (err) {
-      toastError(null, 'Could not start', (err as Error).message);
-    } finally {
-      setSubmitting(false);
-      openDetail(bot);
-    }
+    const res = await writeJson<{ error?: string }>(`/api/bots/${bot.id}/run`, 'POST', {});
+    if (res.status === 409) toastError(null, 'Not run', res.data?.error ?? 'The bot refused this run.');
+    else if (!res.ok) toastError(null, 'Could not start', res.error ?? `HTTP ${res.status}`);
+    else toastSuccess(null, 'First run started', 'It streams on the bot page as it works.');
+    setSubmitting(false);
+    openDetail(bot);
   }
 
   // ── Small shared bits ───────────────────────────────────────────────────────

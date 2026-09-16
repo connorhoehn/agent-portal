@@ -30,11 +30,12 @@ import { CostChip } from '../../../components/observability/CostChip';
 import { ModeChip } from '../../../components/observability/ModeChip';
 import { T } from '../Text';
 import { RowEmpty } from '../ReadState';
-import { PassChip, SchemaChip, ErrorBlock, RunIdLine } from './harnessShared';
+import {
+  PassChip, SchemaChip, ErrorBlock, RunIdLine,
+  statusTone, passRateTone, fmtPct, type RunStatus, type Tone,
+} from './harnessShared';
 
 // ── types ─────────────────────────────────────────────────────────────────────
-
-type RunStatus = 'pending' | 'running' | 'done' | 'failed';
 
 interface TestRun {
   runId: string;
@@ -86,24 +87,10 @@ interface RunDetailResp {
   results: TestResult[];
 }
 
-type Tone = 'success' | 'warning' | 'danger';
-
 // ── helpers ───────────────────────────────────────────────────────────────────
-
-const passRateTone = (v: number | null): Tone =>
-  v == null ? 'warning' : v >= 0.85 ? 'success' : v >= 0.7 ? 'warning' : 'danger';
-
-const statusTone = (s: RunStatus): Tone => {
-  if (s === 'done') return 'success';
-  if (s === 'failed') return 'danger';
-  return 'warning';
-};
 
 const judgeTone = (v: number | null): Tone =>
   v == null ? 'warning' : v >= 0.75 ? 'success' : v >= 0.55 ? 'warning' : 'danger';
-
-const fmtPct = (v: number | null, digits = 1): string =>
-  v != null && Number.isFinite(v) ? `${(v * 100).toFixed(digits)}%` : '—';
 
 const fmt = (v: number | null, digits = 2): string =>
   v != null && Number.isFinite(v) ? v.toFixed(digits) : '—';

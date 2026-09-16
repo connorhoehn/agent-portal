@@ -69,4 +69,4 @@ Console errors: 0.
 --- freshness re-observation, 2026-09-16 09:10 (portal/src/pages/assessment changed: a11y + responsive pass) ---
 Why: the screen-reader and narrow-width audits; re-observed as u-asha on TEAM-001 and the enterprise explorer.
   No runtime path changed; the scorecard pane heading level and the explorer rail width are markup/CSS only.
-Console errors: 0. Re-audit 2026-09-16 06:35: Write-path pass: DocPane writes use the shared helper; the realtime doc path is unchanged. Code-verified. Console errors 0.
+Console errors: 0. Re-audit 2026-09-16 06:35: Write-path pass: DocPane writes use the shared helper; the realtime doc path is unchanged. Code-verified. Console errors 0. Re-audit 2026-09-16 08:05: No realtime change; the pass touched status vocabulary and URL state. Code-verified. Console errors 0.

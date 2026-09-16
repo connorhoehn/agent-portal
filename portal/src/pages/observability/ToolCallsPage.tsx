@@ -52,6 +52,7 @@ import {
 } from '@connorhoehnslalom/ui-components/shared';
 
 import { useFetch } from '../../hooks/useFetch';
+import { useUrlState } from '../../lib/useUrlState';
 import { SmartEmptyState } from '../../components/observability/SmartEmptyState';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { firstDegraded } from '../../lib/degraded';
@@ -88,7 +89,14 @@ const ERROR_LIMIT = 100;
 const SOURCE = 'Tool calls are projected into the Aurora observability tables from agent spans';
 
 function ToolCallsPage() {
-  const [windowLabel, setWindowLabel] = useState('24h');
+  // ?window=<label> — same convention AgentFlowPage.tsx established; this
+  // page already keyed its window by label string rather than an index, so
+  // it only needed the URL swapped in under it.
+  const [windowLabel, setWindowLabel] = useUrlState<string>(
+    'window',
+    (raw) => (raw != null && TOOL_WINDOWS.some((w) => w.label === raw) ? raw : '24h'),
+    (v) => v,
+  );
   const [agentId, setAgentId] = useState('all');
   const [query, setQuery] = useState('');
   const [failingOnly, setFailingOnly] = useState(false);

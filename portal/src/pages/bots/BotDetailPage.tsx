@@ -37,22 +37,18 @@ import { useCrumbLabel } from '../../lib/crumbLabels';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { useCapabilities } from '../../lib/capabilities';
 import { toastError, toastSuccess } from '../../lib/toastStore';
+import { writeJson } from '../../lib/writeJson';
 import { CostVsEstimate, runEstimate } from '../../components/marketplace/EstimateDrawer';
 import { RunTimeline } from '../../components/runs/RunTimeline';
 import { DEVBOX_MODELS } from '../../lib/devboxModels';
 import { parsePgTimestampAsUtc } from '../../lib/pgTimestamp';
 import { relativeTime } from '../../lib/relativeTime';
+import { botStatusChip, runStateChip } from '../../lib/statusTone';
+import { usd } from '../../lib/format';
 import { botRunSummary, inputWiring, lastRanText } from './botsFormat';
 import { TEMPLATE_TONE, triggerSummary, type Bot, type BotRun } from './BotsPage';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-const RUN_STATUS_TONE: Record<BotRun['status'], 'warning' | 'success' | 'danger' | 'neutral'> = {
-  running: 'warning',
-  done: 'success',
-  failed: 'danger',
-  skipped: 'neutral',
-};
 
 /** Aurora stamps carry a `+00` offset ISO 8601 does not allow — shared parser. */
 function parseTs(iso: string): number {
@@ -154,44 +150,37 @@ export default function BotDetailPage() {
 
   async function patchBot(patch: Record<string, unknown>, successLabel?: string): Promise<boolean> {
     if (!bot) return false;
-    try {
-      const res = await fetch(`/api/bots/${bot.id}`, {
-        method: 'PATCH', credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(patch),
-      });
-      const body = await res.json().catch(() => ({})) as { error?: string };
-      if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
-      refreshBot();
-      if (successLabel) toastSuccess(null, successLabel, bot.name);
-      return true;
-    } catch (err) {
-      toastError(null, 'Update failed', (err as Error).message);
+    const res = await writeJson(`/api/bots/${bot.id}`, 'PATCH', patch);
+    if (!res.ok) {
+      toastError(null, 'Update failed', res.error ?? `HTTP ${res.status}`);
       return false;
     }
+    refreshBot();
+    if (successLabel) toastSuccess(null, successLabel, bot.name);
+    return true;
   }
 
   async function runNow() {
     if (!bot || busy) return;
     setBusy('run');
-    try {
-      const res = await fetch(`/api/bots/${bot.id}/run`, {
-        method: 'POST', credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(instruction.trim() ? { instruction: instruction.trim() } : {}),
-      });
-      const body = await res.json().catch(() => ({})) as { error?: string };
-      if (res.status === 409) {
-        toastError(null, 'Not run', body.error ?? 'The bot refused this run (budget or run cap reached).');
-        return;
-      }
-      if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
-      toastSuccess(null, 'Run started', 'It streams below as it works.');
-      setRunOpen(false); setInstruction('');
-      refreshRuns(); refreshBot();
-    } catch (err) {
-      toastError(null, 'Could not start', (err as Error).message);
-    } finally { setBusy(null); }
+    const res = await writeJson<{ error?: string }>(
+      `/api/bots/${bot.id}/run`, 'POST',
+      instruction.trim() ? { instruction: instruction.trim() } : {},
+    );
+    if (res.status === 409) {
+      toastError(null, 'Not run', res.data?.error ?? 'The bot refused this run (budget or run cap reached).');
+      setBusy(null);
+      return;
+    }
+    if (!res.ok) {
+      toastError(null, 'Could not start', res.error ?? `HTTP ${res.status}`);
+      setBusy(null);
+      return;
+    }
+    toastSuccess(null, 'Run started', 'It streams below as it works.');
+    setRunOpen(false); setInstruction('');
+    refreshRuns(); refreshBot();
+    setBusy(null);
   }
 
   async function pauseOrResume() {
@@ -201,34 +190,30 @@ export default function BotDetailPage() {
     const isPaused = !bot.enabled || bot.pausedReason != null;
     const action = isPaused ? 'resume' : 'pause';
     setBusy(action);
-    try {
-      const res = await fetch(`/api/bots/${bot.id}/${action}`, {
-        method: 'POST', credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
-      });
-      const body = await res.json().catch(() => ({})) as { error?: string };
-      if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
-      toastSuccess(null, action === 'pause' ? 'Paused' : 'Resumed');
-      refreshBot();
-    } catch (err) {
-      toastError(null, `Could not ${action}`, (err as Error).message);
-    } finally { setBusy(null); }
+    const res = await writeJson(`/api/bots/${bot.id}/${action}`, 'POST', {});
+    if (!res.ok) {
+      toastError(null, `Could not ${action}`, res.error ?? `HTTP ${res.status}`);
+      setBusy(null);
+      return;
+    }
+    toastSuccess(null, action === 'pause' ? 'Paused' : 'Resumed');
+    refreshBot();
+    setBusy(null);
   }
 
   async function deleteBot() {
     if (!bot || busy) return;
     setBusy('delete');
-    try {
-      const res = await fetch(`/api/bots/${bot.id}`, { method: 'DELETE', credentials: 'include' });
-      const body = await res.json().catch(() => ({})) as { error?: string };
-      if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
-      toastSuccess(null, 'Bot deleted', `${bot.name} and its run history are gone.`);
-      navigate('/admin/bots');
-    } catch (err) {
-      toastError(null, 'Could not delete', (err as Error).message);
+    const res = await writeJson(`/api/bots/${bot.id}`, 'DELETE');
+    if (!res.ok) {
+      toastError(null, 'Could not delete', res.error ?? `HTTP ${res.status}`);
       setConfirmDelete(false);
-    } finally { setBusy(null); }
+      setBusy(null);
+      return;
+    }
+    toastSuccess(null, 'Bot deleted', `${bot.name} and its run history are gone.`);
+    navigate('/admin/bots');
+    setBusy(null);
   }
 
   function beginEditGuards() {
@@ -307,11 +292,10 @@ export default function BotDetailPage() {
           <Inline gap="sm" wrap align="center">
             <Link to="/admin/bots" className="text-[12px] text-primary no-underline hover:underline shrink-0">← Bots</Link>
             <Chip tone={TEMPLATE_TONE[bot.template]} size="xs">{bot.template}</Chip>
-            {paused ? (
-              <Chip tone="warning" size="xs" dot="static" title={bot.pausedReason ?? undefined}>paused</Chip>
-            ) : (
-              <Chip tone="success" size="xs" dot="static">enabled</Chip>
-            )}
+            {(() => {
+              const c = botStatusChip(bot);
+              return <Chip tone={c.tone} size="xs" dot="static" title={c.title}>{c.label}</Chip>;
+            })()}
             <MetaLine
               size="xs" tone="tertiary"
               items={[
@@ -418,7 +402,7 @@ export default function BotDetailPage() {
                 <TableRow key={r.id}>
                   <TableTd className="text-[12px] text-text-secondary">{r.trigger}</TableTd>
                   <TableTd>
-                    <Chip tone={RUN_STATUS_TONE[r.status]} size="xs" dot={r.status === 'running' ? 'pulse' : undefined}>
+                    <Chip tone={runStateChip(r.status).tone} size="xs" dot={r.status === 'running' ? 'pulse' : undefined}>
                       {r.status}
                     </Chip>
                   </TableTd>
@@ -580,11 +564,11 @@ export default function BotDetailPage() {
                   </TableRow>
                   <TableRow>
                     <TableTd className="text-text-tertiary">Budget / run</TableTd>
-                    <TableTd>{bot.budgetPerRunUsd != null ? `$${bot.budgetPerRunUsd.toFixed(2)}` : 'none (soft cap unset)'}</TableTd>
+                    <TableTd>{bot.budgetPerRunUsd != null ? usd(bot.budgetPerRunUsd) : 'none (soft cap unset)'}</TableTd>
                   </TableRow>
                   <TableRow>
                     <TableTd className="text-text-tertiary">Budget / day</TableTd>
-                    <TableTd>{bot.budgetPerDayUsd != null ? `$${bot.budgetPerDayUsd.toFixed(2)}` : 'none (hard cap unset)'}</TableTd>
+                    <TableTd>{bot.budgetPerDayUsd != null ? usd(bot.budgetPerDayUsd) : 'none (hard cap unset)'}</TableTd>
                   </TableRow>
                   <TableRow>
                     <TableTd className="text-text-tertiary">Max runs / day</TableTd>
@@ -607,7 +591,7 @@ export default function BotDetailPage() {
                   size="xs" tone="tertiary"
                   items={[
                     `today: ${runSummary.todayRunCount}/${bot.maxRunsPerDay} ${runSummary.todayRunCount === 1 ? 'run' : 'runs'}`,
-                    `$${bot.todaySpendUsd.toFixed(2)}${bot.budgetPerDayUsd != null ? ` of $${bot.budgetPerDayUsd.toFixed(2)}` : ' spent'}`,
+                    `${usd(bot.todaySpendUsd)}${bot.budgetPerDayUsd != null ? ` of ${usd(bot.budgetPerDayUsd)}` : ' spent'}`,
                   ]}
                 />
                 {bot.budgetPerDayUsd != null && bot.budgetPerDayUsd > 0 && (

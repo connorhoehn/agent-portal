@@ -12,6 +12,7 @@ import {
   PageSection,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
+import { formatTokenCount } from '../../lib/format';
 import { T } from './Text';
 
 interface Invocation {
@@ -137,7 +138,7 @@ function AgentMetricsPage() {
                     </TableTd>
                     <TableTd className="text-[11px] text-[var(--color-text-tertiary)]">
                       {r.tokensIn + r.tokensOut > 0
-                        ? `${r.tokensIn.toLocaleString()} / ${r.tokensOut.toLocaleString()}`
+                        ? `${formatTokenCount(r.tokensIn)} / ${formatTokenCount(r.tokensOut)}`
                         : '—'}
                     </TableTd>
                     <TableTd className="text-[12px]">

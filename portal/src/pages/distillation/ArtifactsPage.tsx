@@ -12,6 +12,7 @@ import {
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { useDebouncedSearch } from '../../hooks/useDebouncedSearch';
+import { useUrlState } from '../../lib/useUrlState';
 import { relativeTime } from '../../lib/relativeTime';
 import { ArtifactDrawerBody } from './ArtifactDrawer';
 import { T } from './Text';
@@ -49,18 +50,18 @@ export default function DistillationArtifactsPage() {
   // filter, and re-renders the list) `SEARCH_DEBOUNCE_MS` after typing stops.
   const [query, setQuery] = useState('');
   const { searchText, onSearchChange, cancelPending } = useDebouncedSearch(query, setQuery, SEARCH_DEBOUNCE_MS);
-  // `?open=<id>` opens the drawer on arrival — the Overview's repertoire
-  // rows land here — and closing it drops the param so a reload does not
-  // reopen a drawer the reader already dismissed.
-  const [openId, setOpenId] = useState<string | null>(params.get('open'));
-  const closeDrawer = () => {
-    setOpenId(null);
-    if (params.has('open')) {
-      const next = new URLSearchParams(params);
-      next.delete('open');
-      setParams(next, { replace: true });
-    }
-  };
+  // `?open=<id>` is the single source of truth for the drawer — the
+  // Overview's repertoire rows land here with it already set, a row click
+  // now WRITES it (it used to only be read on mount, so a click opened the
+  // drawer without ever touching the URL — a reload or a copied link
+  // silently lost it), and closing deletes it so a reload does not reopen a
+  // drawer the reader already dismissed.
+  const [openId, setOpenId] = useUrlState<string | null>(
+    'open',
+    (raw) => raw,
+    (v) => v,
+  );
+  const closeDrawer = () => setOpenId(null);
 
   const setFacet = (key: 'type' | 'status', value: string) => {
     const next = new URLSearchParams(params);
@@ -70,7 +71,6 @@ export default function DistillationArtifactsPage() {
     // drawer vanished when the filter dropped its artifact and popped back
     // unasked when the filter brought it back.
     next.delete('open');
-    setOpenId(null);
     setParams(next, { replace: true });
   };
 

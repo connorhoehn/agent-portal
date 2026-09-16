@@ -18,6 +18,7 @@ import {
 } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../../lib/capabilities';
 import { toastError, toastSuccess } from '../../../lib/toastStore';
+import { sendJson } from '../../../lib/writeJson';
 
 interface TeamActionsMenuProps {
   teamId: string;
@@ -27,11 +28,6 @@ interface TeamActionsMenuProps {
   onChanged: () => void;
   /** DELETE succeeded — the team is gone, navigate away from its scorecard. */
   onDeleted: () => void;
-}
-
-async function readError(res: Response): Promise<string> {
-  const body = (await res.json().catch(() => ({}))) as { error?: string };
-  return body.error ?? `HTTP ${res.status}`;
 }
 
 export function TeamActionsMenu({ teamId, teamName, currentLead, onChanged, onDeleted }: TeamActionsMenuProps) {
@@ -49,13 +45,7 @@ export function TeamActionsMenu({ teamId, teamName, currentLead, onChanged, onDe
   async function saveLead() {
     setBusy(true);
     try {
-      const res = await fetch(`/api/assessment/teams/${encodeURIComponent(teamId)}`, {
-        method: 'PATCH',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ assessment_lead: lead.trim() }),
-      });
-      if (!res.ok) throw new Error(await readError(res));
+      await sendJson(`/api/assessment/teams/${encodeURIComponent(teamId)}`, 'PATCH', { assessment_lead: lead.trim() });
       toastSuccess(null, 'Assessment lead updated');
       setLeadOpen(false);
       onChanged();
@@ -69,11 +59,7 @@ export function TeamActionsMenu({ teamId, teamName, currentLead, onChanged, onDe
   async function resetAssessment() {
     setBusy(true);
     try {
-      const res = await fetch(`/api/assessment/teams/${encodeURIComponent(teamId)}/reset-assessment`, {
-        method: 'POST',
-        credentials: 'include',
-      });
-      if (!res.ok) throw new Error(await readError(res));
+      await sendJson(`/api/assessment/teams/${encodeURIComponent(teamId)}/reset-assessment`, 'POST');
       toastSuccess(null, 'Assessment reset', `${teamName}'s scoring is back to a clean slate.`);
       setResetOpen(false);
       onChanged();
@@ -87,11 +73,7 @@ export function TeamActionsMenu({ teamId, teamName, currentLead, onChanged, onDe
   async function deleteTeam() {
     setBusy(true);
     try {
-      const res = await fetch(`/api/assessment/teams/${encodeURIComponent(teamId)}`, {
-        method: 'DELETE',
-        credentials: 'include',
-      });
-      if (!res.ok) throw new Error(await readError(res));
+      await sendJson(`/api/assessment/teams/${encodeURIComponent(teamId)}`, 'DELETE');
       toastSuccess(null, 'Team deleted', `${teamName} (${teamId}) has been removed.`);
       setDeleteOpen(false);
       onDeleted();

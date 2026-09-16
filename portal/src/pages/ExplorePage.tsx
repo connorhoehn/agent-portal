@@ -46,6 +46,7 @@ import {
   Tooltip,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../hooks/useFetch';
+import { nextSearch } from '../lib/useUrlState';
 import { useSession } from '../lib/auth';
 import { parseFocusIds } from '../components/org-graph/graphInsights';
 import { Markdown } from '../components/Markdown';
@@ -212,9 +213,21 @@ function ExplorePage() {
   const showInfluence =
     session?.role === 'org-leader' || session?.role === 'hr-admin' || session?.role === 'admin';
 
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  // Selection and detail seed from the URL on first render (`?selected=`,
+  // `?detail=`) — kept as plain `useState`, not `useUrlState`, because the
+  // selection is mutated all over this file via the functional-updater form
+  // (`setSelectedIds(prev => ...)`), which a single-value URL setter doesn't
+  // support. A separate effect below mirrors both back into the URL on every
+  // change, the same way `?focus=` already round-trips a selection IN — this
+  // is what lets a chosen view (who's selected, whose detail panel is open)
+  // survive a reload or get pasted into a message, without touching any of
+  // the existing updater call sites.
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => {
+    const raw = searchParams.get('selected');
+    return raw ? new Set(raw.split(',').filter(Boolean)) : new Set();
+  });
   // Most recently selected person — drives the detail side panel.
-  const [detailId, setDetailId] = useState<string | null>(null);
+  const [detailId, setDetailId] = useState<string | null>(() => searchParams.get('detail'));
   // Department focus chip — highlights one department's people.
   const [activeDepartment, setActiveDepartment] = useState<string | null>(null);
   // "Rare skills" toolbar toggle — the org-wide bus-factor strip, shown
@@ -282,6 +295,18 @@ function ExplorePage() {
     next.delete('focus');
     setSearchParams(next, { replace: true });
   }, [searchParams, setSearchParams]);
+
+  // Mirror the current selection back into the URL — `?selected=<id>[,<id>…]`
+  // and `?detail=<id>`. This runs after the `?focus=` effect above, so a
+  // focus link's ids land here too, not just a manual click.
+  useEffect(() => {
+    setSearchParams((prev) => {
+      const ids = Array.from(selectedIds);
+      let next = nextSearch(prev, 'selected', ids.length > 0 ? ids.join(',') : null);
+      next = nextSearch(next, 'detail', detailId);
+      return next;
+    }, { replace: true });
+  }, [selectedIds, detailId, setSearchParams]);
 
   // ── Graph filtering ────────────────────────────────────────────────────────
 

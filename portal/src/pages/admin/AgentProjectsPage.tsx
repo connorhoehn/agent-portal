@@ -42,6 +42,7 @@ import { useCapabilities } from '../../lib/capabilities';
 import { toastError, toastSuccess, toastPending } from '../../lib/toastStore';
 import { openShell, useCompute, type Computer } from '@connorhoehnslalom/ui-components/compute';
 import { DEVBOX_MODELS, DEFAULT_DEVBOX_MODEL } from '../../lib/devboxModels';
+import { usd } from '../../lib/format';
 import { durationLabel, relativeTime } from '../../lib/relativeTime';
 import { ConnectionSetup } from '../../components/codebases/ConnectionSetup';
 import { RepoDiscovery } from '../../components/codebases/RepoDiscovery';
@@ -570,7 +571,7 @@ export default function AgentProjectsPage() {
                               r.model,
                               r.durationMs != null ? durationLabel(r.durationMs) : null,
                               r.filesChanged != null ? `${r.filesChanged} ${r.filesChanged === 1 ? 'file' : 'files'} changed` : null,
-                              r.costUsd != null ? `$${r.costUsd.toFixed(4)}` : null,
+                              r.costUsd != null ? usd(r.costUsd, { precision: 4 }) : null,
                             ]}
                           />
                           {r.diffSummary && (

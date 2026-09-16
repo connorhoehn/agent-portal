@@ -49,6 +49,7 @@ import { useFetch } from '../../hooks/useFetch';
 import { useSession } from '../../lib/auth';
 import { preflightEnvelope } from '../../lib/envelopeFormat';
 import type { EnvelopesResponse } from '../../lib/envelopeFormat';
+import { usd as money } from '../../lib/format';
 import { toastError, toastPending, toastSuccess } from '../../lib/toastStore';
 import type { BotRun } from '../../pages/bots/BotsPage';
 
@@ -176,10 +177,11 @@ export interface EstimateDrawerProps {
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function money(n: number): string {
-  return `$${n.toFixed(2)}`;
-}
+//
+// `money` is lib/format.ts's `usd`, aliased — this used to be a local
+// `` `$${n.toFixed(2)}` `` with no thousands separator, so `$1234.56` read
+// differently here than on every other money surface in the app above
+// $1,000. Same bug workShared's QueuePage estimate column had.
 
 function rangeText(est: WorkEstimate): string {
   return `${money(est.costUsdP25)}–${money(est.costUsdP75)} · ${Math.round(est.minutesP25)}–${Math.round(est.minutesP75)} min`;

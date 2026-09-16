@@ -21,7 +21,7 @@ import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { firstDegraded } from '../../lib/degraded';
 import { T } from './Text';
 import { RowEmpty } from './ReadState';
-import { WindowPicker } from './WindowPicker';
+import { WindowPicker, useWindowUrlState } from './WindowPicker';
 
 // ── Types (mirrored from middleware/src/routes/guardrails-detail.ts) ───────
 
@@ -71,7 +71,7 @@ function categoryTone(cat: string | null): Tone {
 }
 
 function GuardrailRulesPage() {
-  const [windowIdx, setWindowIdx] = useState(2); // 24h
+  const [windowIdx, setWindowIdx] = useWindowUrlState(WINDOW_OPTIONS, 2); // 24h, ?window=
   const win = WINDOW_OPTIONS[windowIdx];
 
   const { data, error, refresh } = useFetch<ByRuleResponse>(

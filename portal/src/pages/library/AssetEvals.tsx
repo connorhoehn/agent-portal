@@ -14,6 +14,7 @@ import {
 import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';
 import { toastError, toastPending, toastSuccess } from '../../lib/toastStore';
+import { writeJson } from '../../lib/writeJson';
 import { T } from './Text';
 import {
   assertionSummary, caseResultFor, formatPassRate, latestRun, progressColor,
@@ -39,28 +40,22 @@ export function AssetEvals({ assetId, version }: { assetId: string; version: str
     if (busy) return;
     setBusy(true);
     const tid = toastPending('Running evals', `v${version}`);
-    try {
-      const res = await fetch(`${base}/run`, {
-        method: 'POST', credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ version }),
-      });
-      const body = await res.json() as EvalRun & { error?: string; action?: string };
-      // Surface the server's own text plus which capability it wanted — a
-      // stale capability cache can still let a disallowed request through to
-      // here, and a bare "Forbidden" toast gave no next step (DEFECTS.md #11).
-      if (!res.ok) {
-        throw new Error(
-          body.action ? `${body.error ?? 'Forbidden'} — Run evals needs ${body.action}.` : (body.error ?? `HTTP ${res.status}`),
-        );
-      }
-      toastSuccess(tid, 'Eval run complete', `${formatPassRate(body.passRate)} — ${body.passed}/${body.total} passed`);
-      refreshRuns();
-    } catch (err) {
-      toastError(tid, 'Eval run failed', (err as Error).message);
-    } finally {
+    const res = await writeJson<EvalRun & { error?: string; action?: string }>(`${base}/run`, 'POST', { version });
+    // Surface the server's own text plus which capability it wanted — a
+    // stale capability cache can still let a disallowed request through to
+    // here, and a bare "Forbidden" toast gave no next step (DEFECTS.md #11).
+    if (!res.ok || !res.data) {
+      const body = res.data;
+      const message = body?.action
+        ? `${body.error ?? 'Forbidden'} — Run evals needs ${body.action}.`
+        : (res.error ?? `HTTP ${res.status}`);
+      toastError(tid, 'Eval run failed', message);
       setBusy(false);
+      return;
     }
+    toastSuccess(tid, 'Eval run complete', `${formatPassRate(res.data.passRate)} — ${res.data.passed}/${res.data.total} passed`);
+    refreshRuns();
+    setBusy(false);
   }
 
   if (casesError) return <EmptyState title="Could not load the eval set" description={casesError} />;

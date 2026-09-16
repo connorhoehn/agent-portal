@@ -30,7 +30,7 @@ import { grantUrl, grantsUrl, validateGrantAmount } from './sprintForm';
 import { usd } from './sprintFormat';
 import { PeopleSelect, usePeopleOptions } from './PeopleSelect';
 import { T } from './Text';
-import { writeJson } from './writeJson';
+import { writeJson } from '../../lib/writeJson';
 import type { GrantRow, Sprint } from './types';
 
 const EDIT_PREFIX = 'edit:';

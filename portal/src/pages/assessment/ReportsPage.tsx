@@ -8,7 +8,7 @@
 // portfolio by dimension: a program lead could see 41 dimensions at target
 // but not which ones, nor which teams' claims run ahead of their evidence.
 import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router';
+import { Link, useNavigate, useSearchParams } from 'react-router';
 import {
   Button,
   Chip,
@@ -135,9 +135,11 @@ function MaturityHeatmap({ teams, onSelectTeam }: { teams: TeamSummary[]; onSele
   );
 }
 
-function WhereToStart({ onSelectTeam }: { onSelectTeam: (id: string) => void }) {
+function WhereToStart({ onSelectTeam, teamId }: { onSelectTeam: (id: string) => void; teamId?: string }) {
   const { data, isLoading: loading, error, degraded, refresh } = useFetch<RecommendationsResponse>('/api/assessment/recommendations');
-  const groups: RecommendationTeamGroup[] = (data?.teams ?? []).filter((g) => g.top != null);
+  const groups: RecommendationTeamGroup[] = (data?.teams ?? [])
+    .filter((g) => g.top != null)
+    .filter((g) => !teamId || g.id === teamId);
   if (loading) return <LoadingState label="Reading each team's plan…" />;
   if (error) return <ErrorState title="Couldn't load recommendations" description={error} actionLabel="Retry" onAction={refresh} />;
   if (degraded) {
@@ -150,7 +152,7 @@ function WhereToStart({ onSelectTeam }: { onSelectTeam: (id: string) => void }) 
       />
     );
   }
-  if (groups.length === 0) return <EmptyState title="Nothing open" body="No team has an open recommendation right now." />;
+  if (groups.length === 0) return <EmptyState title="Nothing open" body={teamId ? 'This team has no open recommendation right now.' : 'No team has an open recommendation right now.'} />;
   return (
     <DataTable<RecommendationTeamGroup>
       data={groups}
@@ -187,6 +189,19 @@ export default function ReportsPage() {
   const [publishing, setPublishing] = useState(false);
   const openTeam = (id: string) => navigate(`/assessment/teams/${encodeURIComponent(id)}`);
 
+  // TeamScorecard's "Report" button (dashboard/TeamScorecard.tsx) opens
+  // `/assessment/reports?team=<id>` in a new tab expecting a report scoped
+  // to that one team — this page used to ignore the param entirely and
+  // always render the portfolio rollup, so the button silently landed on
+  // the wrong report. There is no separate per-team report route, so the
+  // honest fix is here: scope the heatmap and "where to start" table to the
+  // one team when `?team=` names one on the roster, and fall back to the
+  // full portfolio otherwise (unknown/absent id).
+  const [searchParams] = useSearchParams();
+  const teamParam = searchParams.get('team');
+  const scopedTeam = teamParam ? teams.find((t) => t.id === teamParam) : undefined;
+  const isScoped = Boolean(teamParam && scopedTeam);
+
   async function publish() {
     setPublishing(true);
     try {
@@ -206,9 +221,21 @@ export default function ReportsPage() {
   return (
     <Stack gap="lg">
       <PageHeader
-        title="Portfolio"
-        description="Every team against every dimension: what verification has reached, where the claims run ahead of it, and the one thing each team should start with."
-        actions={canPublish ? <Button onClick={() => void publish()} disabled={publishing}>{publishing ? 'Publishing…' : 'Publish report'}</Button> : undefined}
+        title={isScoped ? `Report — ${scopedTeam!.name}` : 'Portfolio'}
+        description={
+          isScoped
+            ? `${scopedTeam!.name}'s maturity heatmap and open recommendations — the printable single-team report.`
+            : "Every team against every dimension: what verification has reached, where the claims run ahead of it, and the one thing each team should start with."
+        }
+        actions={
+          isScoped ? (
+            <Link to="/assessment/reports" className="text-[12px] text-[var(--color-primary)] no-underline">
+              ← Portfolio
+            </Link>
+          ) : canPublish ? (
+            <Button onClick={() => void publish()} disabled={publishing}>{publishing ? 'Publishing…' : 'Publish report'}</Button>
+          ) : undefined
+        }
       />
       {loading ? (
         <LoadingState label="Loading the portfolio…" />
@@ -223,34 +250,41 @@ export default function ReportsPage() {
         />
       ) : rollup ? (
         <>
-          <StatStrip
-            aria-label="Portfolio summary"
-            items={[
-              { label: 'Teams', value: rollup.teams_total },
-              { label: 'Dimensions assessed', value: `${rollup.dimensions_assessed} / ${rollup.dimensions_applicable}`, hint: 'of applicable' },
-              { label: `At or above L${rollup.target_level}`, value: rollup.at_or_above_target, tone: 'accent', hint: 'dimensions' },
-              { label: 'Claims open', value: rollup.claims_open, tone: rollup.claims_open > 0 ? 'danger' : 'default', hint: 'verification below the claim' },
-            ]}
-          />
-          <PageSection title="Maturity heatmap" description="Rows are teams, columns are the rubric's seventeen dimensions.">
-            <MaturityHeatmap teams={teams} onSelectTeam={openTeam} />
-          </PageSection>
-          <PageSection title="Where to start" description="Each team's top-ranked entry, ranked by the server — never re-ordered here. Closing a claim asks for an artifact, advancing a practice is real work, answering a question unblocks assessment.">
-            <WhereToStart onSelectTeam={openTeam} />
-          </PageSection>
-          <PageSection title="By cohort">
-            <DataTable<[string, RollupResponse['by_cohort'][string]]>
-              data={Object.entries(rollup.by_cohort)}
-              keyField={([cohort]) => cohort}
-              striped
-              columns={[
-                { key: 'cohort', header: 'Cohort', render: ([cohort]) => cohort.replace('_', ' ') },
-                { key: 'teams', header: 'Teams', align: 'right', render: ([, c]) => c.teams },
-                { key: 'assessed', header: 'Assessed', align: 'right', render: ([, c]) => `${c.assessed} / ${c.applicable}` },
-                { key: 'target', header: `At or above L${rollup.target_level}`, align: 'right', render: ([, c]) => c.at_or_above_target },
+          {!isScoped && (
+            <StatStrip
+              aria-label="Portfolio summary"
+              items={[
+                { label: 'Teams', value: rollup.teams_total },
+                { label: 'Dimensions assessed', value: `${rollup.dimensions_assessed} / ${rollup.dimensions_applicable}`, hint: 'of applicable' },
+                { label: `At or above L${rollup.target_level}`, value: rollup.at_or_above_target, tone: 'accent', hint: 'dimensions' },
+                { label: 'Claims open', value: rollup.claims_open, tone: rollup.claims_open > 0 ? 'danger' : 'default', hint: 'verification below the claim' },
               ]}
             />
+          )}
+          <PageSection
+            title={isScoped ? 'Maturity' : 'Maturity heatmap'}
+            description={isScoped ? 'Columns are the rubric\'s seventeen dimensions.' : "Rows are teams, columns are the rubric's seventeen dimensions."}
+          >
+            <MaturityHeatmap teams={isScoped ? [scopedTeam!] : teams} onSelectTeam={openTeam} />
           </PageSection>
+          <PageSection title="Where to start" description="Each team's top-ranked entry, ranked by the server — never re-ordered here. Closing a claim asks for an artifact, advancing a practice is real work, answering a question unblocks assessment.">
+            <WhereToStart onSelectTeam={openTeam} teamId={isScoped ? scopedTeam!.id : undefined} />
+          </PageSection>
+          {!isScoped && (
+            <PageSection title="By cohort">
+              <DataTable<[string, RollupResponse['by_cohort'][string]]>
+                data={Object.entries(rollup.by_cohort)}
+                keyField={([cohort]) => cohort}
+                striped
+                columns={[
+                  { key: 'cohort', header: 'Cohort', render: ([cohort]) => cohort.replace('_', ' ') },
+                  { key: 'teams', header: 'Teams', align: 'right', render: ([, c]) => c.teams },
+                  { key: 'assessed', header: 'Assessed', align: 'right', render: ([, c]) => `${c.assessed} / ${c.applicable}` },
+                  { key: 'target', header: `At or above L${rollup.target_level}`, align: 'right', render: ([, c]) => c.at_or_above_target },
+                ]}
+              />
+            </PageSection>
+          )}
         </>
       ) : (
         <EmptyState title="No data" />

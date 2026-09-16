@@ -93,7 +93,15 @@ def _get_runtime_arn(agent_name: str) -> str:
 
 
 def _invoke_sub_agent(runtime_arn: str, input_text: str, session_id: str = "") -> str:
-    """Invoke a sub-agent via the AgentCore A2A invoke API.
+    """Invoke a sub-agent over the AgentCore Runtime invoke API.
+
+    NOT A2A, despite what this docstring said until 2026-09-16: the call below
+    is ``bedrock-agentcore.invoke_agent_runtime`` against the sub-agent's own
+    runtime ARN. A2A (``bedrock-agentcore[a2a]``) is a different transport the
+    supervisor pins but does not use on this path — the distinction matters
+    because a reader looking for the A2A wire will not find one, and because
+    the topology edges below come from the threaded ``parentInvocationId``,
+    not from any A2A protocol field. See docs/research-strands-graph-2026-09-16.md.
 
     Threads ``parentInvocationId`` from the supervisor's active TraceContext
     into the sub-agent's payload so the middleware can stitch the trace tree

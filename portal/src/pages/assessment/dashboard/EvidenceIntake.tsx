@@ -22,9 +22,9 @@ import {
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../../hooks/useFetch';
 import { toastError, toastSuccess } from '../../../lib/toastStore';
+import { sendJson } from '../../../lib/writeJson';
 import { useCapabilities } from '../../../lib/capabilities';
 import { fmtDate, type ProvenanceLedgerResponse, type SourceType } from '../types';
-import { inputWiring } from '../assessmentFormat';
 import { useTeamDetail } from './useTeamDetail';
 
 interface EvidenceIntakeProps {
@@ -65,19 +65,13 @@ function TouchpointForm({ teamId, onSaved }: { teamId: string; onSaved: () => vo
   const submit = async () => {
     setBusy(true);
     try {
-      const res = await fetch(`/api/assessment/teams/${encodeURIComponent(teamId)}/intake/text`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          source_type: 'touchpoint',
-          text,
-          title: title || undefined,
-          captured_at: meetingDate || undefined,
-          captured_by: recordedBy,
-        }),
+      await sendJson(`/api/assessment/teams/${encodeURIComponent(teamId)}/intake/text`, 'POST', {
+        source_type: 'touchpoint',
+        text,
+        title: title || undefined,
+        captured_at: meetingDate || undefined,
+        captured_by: recordedBy,
       });
-      if (!res.ok) throw new Error(`${res.status}`);
       toastSuccess(null, 'Touchpoint note saved.');
       setRecordedBy('');
       setTitle('');
@@ -100,22 +94,22 @@ function TouchpointForm({ teamId, onSaved }: { teamId: string; onSaved: () => vo
       <Stack gap="sm" className="mt-3">
         <FormField label="Recorded by" required>
           {(wiring) => (
-            <Input {...inputWiring(wiring)} type="text" value={recordedBy} onChange={(e) => setRecordedBy(e.target.value)} />
+            <Input {...wiring} type="text" value={recordedBy} onChange={(e) => setRecordedBy(e.target.value)} />
           )}
         </FormField>
         <FormField label="Meeting date">
           {(wiring) => (
-            <Input {...inputWiring(wiring)} type="date" value={meetingDate} onChange={(e) => setMeetingDate(e.target.value)} />
+            <Input {...wiring} type="date" value={meetingDate} onChange={(e) => setMeetingDate(e.target.value)} />
           )}
         </FormField>
         <FormField label="Title" hint="Optional">
           {(wiring) => (
-            <Input {...inputWiring(wiring)} type="text" value={title} onChange={(e) => setTitle(e.target.value)} />
+            <Input {...wiring} type="text" value={title} onChange={(e) => setTitle(e.target.value)} />
           )}
         </FormField>
         <FormField label="Note">
           {(wiring) => (
-            <Textarea {...inputWiring(wiring)} minRows={5} autoResize placeholder="Paste transcript or write a discussion summary…"
+            <Textarea {...wiring} minRows={5} autoResize placeholder="Paste transcript or write a discussion summary…"
               value={text} onChange={(e) => setText(e.target.value)} />
           )}
         </FormField>
@@ -149,13 +143,9 @@ function DocumentDropForm({ teamId, onSaved }: { teamId: string; onSaved: () => 
     setBusy(true);
     try {
       const text = await file.text();
-      const res = await fetch(`/api/assessment/teams/${encodeURIComponent(teamId)}/intake/text`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ source_type: 'document', text, title: file.name, captured_by: 'upload' }),
+      await sendJson(`/api/assessment/teams/${encodeURIComponent(teamId)}/intake/text`, 'POST', {
+        source_type: 'document', text, title: file.name, captured_by: 'upload',
       });
-      if (!res.ok) throw new Error(`${res.status}`);
       toastSuccess(null, `${file.name} ingested.`);
       onSaved();
     } catch (err) {
@@ -204,18 +194,12 @@ function CodebaseIntakeForm({ teamId, onSaved }: { teamId: string; onSaved: () =
     const matched = repos.find((r) => r.gitlab_url === ref);
     setBusy(true);
     try {
-      const res = await fetch(`/api/assessment/teams/${encodeURIComponent(teamId)}/intake/text`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          source_type: 'codebase',
-          text: ref,
-          title: matched?.name ?? ref,
-          captured_by: 'repo',
-        }),
+      await sendJson(`/api/assessment/teams/${encodeURIComponent(teamId)}/intake/text`, 'POST', {
+        source_type: 'codebase',
+        text: ref,
+        title: matched?.name ?? ref,
+        captured_by: 'repo',
       });
-      if (!res.ok) throw new Error(`${res.status}`);
       toastSuccess(null, 'Repository linked as evidence.');
       setUrl('');
       onSaved();
@@ -245,7 +229,7 @@ function CodebaseIntakeForm({ teamId, onSaved }: { teamId: string; onSaved: () =
         <FormField label="Repo URL">
           {(wiring) => (
             <Input
-              {...inputWiring(wiring)}
+              {...wiring}
               type="text"
               value={url}
               onChange={(e) => setUrl(e.target.value)}

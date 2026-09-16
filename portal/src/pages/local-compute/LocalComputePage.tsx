@@ -33,7 +33,9 @@ import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { toastError, toastPending, toastSuccess } from '../../lib/toastStore';
-import { writeJson } from './writeJson';
+import { writeJson } from '../../lib/writeJson';
+import { presenceChip } from '../../lib/statusTone';
+import { usd } from '../../lib/format';
 import { PairMachineDialog, WORKER_COMMAND } from './PairMachineDialog';
 import { statusLabel, statusTone, truncate, when, type JobStatus } from './localComputeFormat';
 
@@ -243,9 +245,9 @@ export default function LocalComputePage() {
             <EntityCell label={n.label} />
           </Button>
           <Chip
-            tone={n.presence.status === 'connected' ? 'success' : n.presence.status === 'stale' ? 'warning' : 'neutral'}
+            tone={presenceChip(n.presence.status).tone}
             size="xs"
-            dot={n.presence.status === 'connected' ? 'pulse' : 'static'}
+            dot={presenceChip(n.presence.status).dot}
           >
             {n.presence.status}
           </Chip>
@@ -343,7 +345,7 @@ export default function LocalComputePage() {
       header: 'Cost',
       render: (r) => {
         if (r.result?.provider === 'local') return <Chip tone="success" size="xs">$0</Chip>;
-        if (r.result?.costUsd != null) return <MetaLine size="xs" items={[`$${r.result.costUsd.toFixed(2)}`]} />;
+        if (r.result?.costUsd != null) return <MetaLine size="xs" items={[usd(r.result.costUsd)]} />;
         return <MetaLine size="xs" tone="tertiary" items={['—']} />;
       },
     },
@@ -472,7 +474,7 @@ export default function LocalComputePage() {
                           { key: 'title', header: 'Work item', render: (r) => <EntityCell label={r.title} id={r.workItemId} /> },
                           { key: 'initiative', header: 'Initiative', render: (r) => r.initiativeName },
                           { key: 'why', header: 'Why now', render: (r) => <MetaLine items={[r.reason]} /> },
-                          { key: 'size', header: 'Size', render: (r) => [r.storyPoints != null ? `${r.storyPoints} pts` : null, r.estimatedCostUsd != null ? `$${r.estimatedCostUsd.toFixed(2)}` : null].filter(Boolean).join(' · ') || '—' },
+                          { key: 'size', header: 'Size', render: (r) => [r.storyPoints != null ? `${r.storyPoints} pts` : null, r.estimatedCostUsd != null ? usd(r.estimatedCostUsd) : null].filter(Boolean).join(' · ') || '—' },
                           { key: 'send', header: '', render: (r) => (
                             <Button size="sm" variant="secondary" disabled={!selectedNode.acceptJobs || sending === r.workItemId} onClick={(e) => { e.stopPropagation(); void send({ workItemId: r.workItemId }, r.title); }}>
                               {sending === r.workItemId ? 'Sending…' : `Send to ${selectedNode.label}`}

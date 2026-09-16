@@ -33,6 +33,7 @@ import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch';
 import { toastError, toastSuccess } from '../../lib/toastStore';
+import { sendJson } from '../../lib/writeJson';
 import { useTeams } from './dashboard/useTeams';
 import { envelopesToListItems, formatRelativeTime, groupSubmissions, revisionLabel } from './secondaryFormat';
 import type { CommitResponse, ParseResponse, SubmissionRevisionGroup, SubmissionsListResponse } from './secondaryTypes';
@@ -157,14 +158,10 @@ export default function SubmissionsPage() {
   async function deleteGroup(group: SubmissionRevisionGroup) {
     setBusy(true);
     try {
-      const res = await fetch(
+      await sendJson(
         `/api/assessment/submissions/${encodeURIComponent(group.teamId)}/${encodeURIComponent(group.current.envelope_id)}`,
-        { method: 'DELETE', credentials: 'include' },
+        'DELETE',
       );
-      if (!res.ok) {
-        const body = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(body.error ?? `HTTP ${res.status}`);
-      }
       toastSuccess(null, 'Submission deleted');
       load();
     } catch (err) {
@@ -182,16 +179,7 @@ export default function SubmissionsPage() {
     if (targets.length === 0) return;
     setBusy(true);
     try {
-      const res = await fetch('/api/assessment/submissions/clear', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items: targets, reset_assessments: true }),
-      });
-      if (!res.ok) {
-        const body = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(body.error ?? `HTTP ${res.status}`);
-      }
+      await sendJson('/api/assessment/submissions/clear', 'POST', { items: targets, reset_assessments: true });
       toastSuccess(null, `Cleared ${targets.length} submission${targets.length === 1 ? '' : 's'}`);
       setSelected(new Set());
       load();
@@ -326,7 +314,9 @@ export default function SubmissionsPage() {
                 </Stack>
               ),
             },
-            { key: 'submitter', header: 'Submitter', getFilterText: (g) => g.current.submitter_name ?? '', render: (g) => g.current.submitter_name || '—' },
+            // getFilterText dropped: the render already returns the same string
+            // DataTable's rendered-text search fallback would extract.
+            { key: 'submitter', header: 'Submitter', render: (g) => g.current.submitter_name || '—' },
             { key: 'received', header: 'Received', render: (g) => formatRelativeTime(g.current.submitted_at) },
             {
               key: 'status',

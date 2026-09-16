@@ -21,6 +21,7 @@ import {
   Tabs,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../hooks/useFetch';
+import { useUrlState } from '../lib/useUrlState';
 import { useCapabilities } from '../lib/capabilities';
 import { useSession } from '../lib/auth';
 import { githubRepoUrl } from '../lib/repoLink';
@@ -40,14 +41,13 @@ import {
   sumForestPoints,
 } from './project-detail/projectFormat';
 import {
-  HttpError,
   dropFromTree,
   insertChild,
   isPendingId,
   mapTree,
-  sendJson,
   surfaceWriteError,
 } from './project-detail/writeJson';
+import { HttpError, sendJson } from '../lib/writeJson';
 import { toastError } from '../lib/toastStore';
 import type {
   Codebase,
@@ -141,7 +141,13 @@ function ProjectDetailPage() {
     setOpenPerson({ id: personId, role });
   }, []);
 
-  const [tab, setTab] = useState('work');
+  // ?tab= — work | decisions | contributors, defaulting to work so an
+  // unscoped or stale link still lands somewhere real.
+  const [tab, setTab] = useUrlState<string>(
+    'tab',
+    (raw) => (raw === 'decisions' || raw === 'contributors' ? raw : 'work'),
+    (v) => (v === 'work' ? null : v),
+  );
 
   const { data: project, isLoading: projLoading, error: projError } =
     useFetch<ProjectDetail>(id ? `/api/graph/projects/${encodeURIComponent(id)}` : '');

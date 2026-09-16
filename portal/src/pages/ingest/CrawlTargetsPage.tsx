@@ -4,6 +4,7 @@ import {
   Stack,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
+import { sendJson, writeJson } from '../../lib/writeJson';
 import { SiteSurveyPanel } from '../../components/ingest/SiteSurveyPanel';
 import { ConnectedSources } from '../../components/ingest/ConnectedSources';
 import { useFetch } from '../../hooks/useFetch';
@@ -55,16 +56,7 @@ function CrawlTargetsPage() {
       ? `/api/ingest/crawl-targets/${encodeURIComponent(editTarget.id)}`
       : '/api/ingest/crawl-targets';
     const method = editTarget ? 'PATCH' : 'POST';
-    const r = await fetch(url, {
-      method,
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(draft),
-    });
-    if (!r.ok) {
-      const body = await r.json().catch(() => ({})) as { error?: string };
-      throw new Error(body.error ?? `Failed to save target (${r.status})`);
-    }
+    await sendJson(url, method, draft);
     setActionMessage({
       tone: 'ok',
       text: editTarget ? `Target "${draft.label}" updated` : `Target "${draft.label}" created`,
@@ -77,30 +69,23 @@ function CrawlTargetsPage() {
   async function runTarget(t: CrawlTarget) {
     setTargetBusy(t.id);
     setActionMessage(null);
-    try {
-      const r = await fetch(`/api/ingest/crawl-targets/${encodeURIComponent(t.id)}/run`, { method: 'POST', credentials: 'include' });
-      const body = await r.json() as { session?: CrawlSession; error?: string };
-      if (!r.ok || !body.session) {
-        setActionMessage({ tone: 'err', text: body.error ?? 'Failed to start crawl' });
-      } else {
-        setActionMessage({ tone: 'ok', text: `Crawl started for "${t.label}"` });
-        refreshCrawls();
-        setDrawerCrawlId(body.session.id);
-        setDrawerInitial(body.session);
-      }
-    } catch (e) {
-      setActionMessage({ tone: 'err', text: (e as Error).message });
-    } finally {
-      setTargetBusy(null);
-      refreshTargets();
+    const res = await writeJson<{ session: CrawlSession }>(`/api/ingest/crawl-targets/${encodeURIComponent(t.id)}/run`, 'POST');
+    if (!res.ok || !res.data?.session) {
+      setActionMessage({ tone: 'err', text: res.error ?? 'Failed to start crawl' });
+    } else {
+      setActionMessage({ tone: 'ok', text: `Crawl started for "${t.label}"` });
+      refreshCrawls();
+      setDrawerCrawlId(res.data.session.id);
+      setDrawerInitial(res.data.session);
     }
+    setTargetBusy(null);
+    refreshTargets();
   }
 
   async function runDeleteTarget(t: CrawlTarget) {
-    const r = await fetch(`/api/ingest/crawl-targets/${encodeURIComponent(t.id)}`, { method: 'DELETE', credentials: 'include' });
-    if (!r.ok) {
-      const body = await r.json().catch(() => ({})) as { error?: string };
-      setActionMessage({ tone: 'err', text: body.error ?? 'Failed to delete target' });
+    const res = await writeJson(`/api/ingest/crawl-targets/${encodeURIComponent(t.id)}`, 'DELETE');
+    if (!res.ok) {
+      setActionMessage({ tone: 'err', text: res.error ?? 'Failed to delete target' });
       return;
     }
     setActionMessage({ tone: 'ok', text: `Target "${t.label}" deleted` });
@@ -108,25 +93,18 @@ function CrawlTargetsPage() {
   }
 
   async function toggleTarget(t: CrawlTarget, enabled: boolean) {
-    const r = await fetch(`/api/ingest/crawl-targets/${encodeURIComponent(t.id)}`, {
-      method: 'PATCH',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ enabled }),
-    });
-    if (!r.ok) {
-      const body = await r.json().catch(() => ({})) as { error?: string };
-      setActionMessage({ tone: 'err', text: body.error ?? 'Failed to toggle target' });
+    const res = await writeJson(`/api/ingest/crawl-targets/${encodeURIComponent(t.id)}`, 'PATCH', { enabled });
+    if (!res.ok) {
+      setActionMessage({ tone: 'err', text: res.error ?? 'Failed to toggle target' });
       return;
     }
     refreshTargets();
   }
 
   async function cancelCrawl(id: string) {
-    const r = await fetch(`/api/ingest/crawl/${encodeURIComponent(id)}`, { method: 'DELETE', credentials: 'include' });
-    if (!r.ok) {
-      const body = await r.json().catch(() => ({})) as { error?: string };
-      setActionMessage({ tone: 'err', text: body.error ?? 'Failed to cancel crawl' });
+    const res = await writeJson(`/api/ingest/crawl/${encodeURIComponent(id)}`, 'DELETE');
+    if (!res.ok) {
+      setActionMessage({ tone: 'err', text: res.error ?? 'Failed to cancel crawl' });
       return;
     }
     setActionMessage({ tone: 'ok', text: 'Crawl cancellation requested' });

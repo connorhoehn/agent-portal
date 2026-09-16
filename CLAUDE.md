@@ -99,6 +99,16 @@ Two deliberate exceptions: the supervisor takes `bedrock-agentcore[a2a,ag-ui]`
 (everyone else takes `[ag-ui]`), and `agents/devbox` pins only
 `bedrock-agentcore` — it is not a Strands agent and has no ag-ui dependency.
 
+⚠️ Those extras are what each `pyproject.toml` DECLARES, not what the images
+install: `agents/base/Dockerfile` installs the superset
+`bedrock-agentcore[a2a,ag-ui]` once and `agents/Dockerfile.agent` is a thin
+`FROM ${BASE_IMAGE}`, so every shipped agent image carries the `a2a` extra
+whether or not its pin asks for it — and nothing uses it. The supervisor's
+sub-agent calls are `invoke_agent_runtime` against each sub-agent's runtime
+ARN, the plain Runtime API, not A2A; its docstring claimed otherwise until
+2026-09-16. See `docs/research-strands-graph-2026-09-16.md` for why the
+routing stays hand-rolled rather than becoming a Strands `Graph`.
+
 ## CDK vs AgentCore CLI — what deploys what
 
 | Resource | Deployed by |
@@ -214,7 +224,7 @@ python3.11 -m venv .venv-synth && .venv-synth/bin/pip install -r schema/synth/re
 ## Project dependencies
 
 - **ui-components** (`~/projects/ui-components`): `@connorhoehnslalom/ui-components`,
-  installed at **2.273.1** (sha `ad1af461`, 2026-09-16). The portal pins it by **git sha** in `package.json`
+  installed at **2.275.1** (sha `4e7ba823`, 2026-09-16). The portal pins it by **git sha** in `package.json`
   (`github:connorhoehnslalom/ui-components#<sha>`) rather than resolving a range
   from GitHub Packages — bump by moving the sha. It resolves over SSH, so no
   `GITHUB_TOKEN` and no registry `.npmrc` are needed; `portal/.npmrc` holds only

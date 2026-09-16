@@ -11,6 +11,7 @@ import {
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';
+import { useUrlState } from '../../lib/useUrlState';
 import { KeyValue } from '../../components/KeyValue';
 import { relativeTime } from '../../lib/relativeTime';
 import { toastError, toastPending, toastSuccess } from '../../lib/toastStore';
@@ -45,8 +46,17 @@ const LEVEL_FILTERS: Array<{ value: string; label: string }> = [
 export default function DistillationCompactionsPage() {
   const { can, ready } = useCapabilities();
   const canCompact = ready && can('ManageBots');
-  const [levelFilter, setLevelFilter] = useState('all');
-  const [statusFilter, setStatusFilter] = useState('all');
+  // ?level=&status= — a filtered run log is a shareable link.
+  const [levelFilter, setLevelFilter] = useUrlState<string>(
+    'level',
+    (raw) => (raw && LEVEL_FILTERS.some((f) => f.value === raw) ? raw : 'all'),
+    (v) => (v === 'all' ? null : v),
+  );
+  const [statusFilter, setStatusFilter] = useUrlState<string>(
+    'status',
+    (raw) => (raw && STATUS_FILTERS.some((f) => f.value === raw) ? raw : 'all'),
+    (v) => (v === 'all' ? null : v),
+  );
   const [openId, setOpenId] = useState<string | null>(null);
   const [busy, setBusy] = useState<CompactableLevel | null>(null);
   // Jobs THIS tab launched, id → its live toast, so the completion toast

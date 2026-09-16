@@ -27,7 +27,6 @@ import {
 import {
   cohortCards,
   countOpenFollowUps,
-  inputWiring,
   countsSentence,
   countsTotal,
   dimensionLabel,
@@ -186,7 +185,7 @@ test('levelTone maps L0..L5 onto Chip tones and N/A onto neutral', () => {
 test('levelBadgeLabel', () => {
   assert.equal(levelBadgeLabel(3), 'L3');
   assert.equal(levelBadgeLabel(null), '—');
-  assert.equal(levelBadgeLabel(3, true), 'N/A');
+  assert.equal(levelBadgeLabel(3, true), '—');
 });
 
 test('fmtDate falls back to the raw string on an unparseable date', () => {
@@ -526,11 +525,4 @@ test('validateNewTeamForm trims the name and omits an empty lead', () => {
 test('validateNewTeamForm trims and includes a non-empty lead', () => {
   const result = validateNewTeamForm({ name: 'Checkout', cohort: 'general', assessment_lead: '  Dana Ko  ' });
   assert.deepEqual(result, { ok: true, value: { name: 'Checkout', cohort: 'general', assessment_lead: 'Dana Ko' } });
-});
-
-// FormField's wiring carries `labelId` for aria-labelledby controls; spread
-// onto an <Input> it reaches the DOM and React warns on every page load.
-test('inputWiring keeps the id + aria wiring and drops labelId', () => {
-  const w = { id: 'f1', labelId: 'f1-label', 'aria-describedby': 'f1-hint', 'aria-invalid': false };
-  assert.deepEqual(inputWiring(w), { id: 'f1', 'aria-describedby': 'f1-hint', 'aria-invalid': false });
 });

@@ -32,15 +32,26 @@ export const STATUS_TONE: Record<PromotionStatus, 'neutral' | 'warning' | 'dange
   promoted: 'success',
 };
 
+/** Chip tone → StatusPill state: a straight rename of the same four buckets,
+ *  not a second judgment. `STATUS_PILL_STATE` used to be its own parallel
+ *  table and disagreed with `STATUS_TONE` on `approved` (warning vs the
+ *  StatusPill-only 'pending') — the row's Chip and the drawer's header badge
+ *  read different colours for the exact same status. Deriving one from the
+ *  other makes that impossible. */
+const CHIP_TONE_TO_PILL_STATE: Record<'neutral' | 'warning' | 'danger' | 'success', 'neutral' | 'warning' | 'error' | 'success'> = {
+  neutral: 'neutral',
+  warning: 'warning',
+  danger: 'error',
+  success: 'success',
+};
+
 /** Same statuses, mapped to the library StatusPill's own state vocabulary —
  *  used for the drawer's header badge, which is the one place a reader
  *  checks "did my click actually land" after Approve/Dismiss. */
-export const STATUS_PILL_STATE: Record<PromotionStatus, 'success' | 'error' | 'warning' | 'info' | 'neutral' | 'pending'> = {
-  candidate: 'neutral',
-  approved: 'pending',
-  dismissed: 'error',
-  promoted: 'success',
-};
+export const STATUS_PILL_STATE: Record<PromotionStatus, 'success' | 'error' | 'warning' | 'info' | 'neutral' | 'pending'> =
+  Object.fromEntries(
+    Object.entries(STATUS_TONE).map(([status, tone]) => [status, CHIP_TONE_TO_PILL_STATE[tone]]),
+  ) as Record<PromotionStatus, 'success' | 'error' | 'warning' | 'info' | 'neutral' | 'pending'>;
 
 export function isTerminalStatus(status: PromotionStatus): boolean {
   return status === 'promoted' || status === 'dismissed';

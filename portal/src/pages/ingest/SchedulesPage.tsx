@@ -10,6 +10,7 @@ import { EmptyState } from '../../components/ingest/ui';
 import { toastError, toastPending, toastSuccess } from '../../lib/toastStore';
 import { writeJson } from '../../lib/writeJson';
 import { T } from './Text';
+import { JOB_STATUS_TONE } from './ingestFormat';
 
 interface DataSource {
   id: string; name: string; status: string; description: string;
@@ -21,10 +22,6 @@ interface IngestSchedule {
   cronExpr: string; label: string; enabled: boolean;
   createdAt: string; lastRunAt: string | null; lastJobId: string | null; lastStatus: string | null;
 }
-
-const JOB_STATUS_TONE: Record<string, 'success' | 'warning' | 'danger' | 'neutral'> = {
-  COMPLETE: 'success', IN_PROGRESS: 'warning', STARTING: 'warning', FAILED: 'danger', STOPPED: 'neutral',
-};
 
 const CRON_PRESETS = [
   { label: 'Every hour',       expr: '0 * * * *'   },
@@ -194,13 +191,10 @@ function ScheduleForm({ sources, onCreated }: { sources: DataSource[]; onCreated
     try {
       const ds = sources.find(s => s.id === dsId);
       const resolvedLabel = label || CRON_PRESETS.find(p => p.expr === cronExpr)?.label || cronExpr;
-      const r = await fetch('/api/ingest/schedules', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dataSourceId: dsId, dataSourceName: ds?.name ?? dsId, cronExpr, label: resolvedLabel, enabled: true }),
+      const res = await writeJson('/api/ingest/schedules', 'POST', {
+        dataSourceId: dsId, dataSourceName: ds?.name ?? dsId, cronExpr, label: resolvedLabel, enabled: true,
       });
-      const body = await r.json() as { error?: string };
-      if (!r.ok) { setError(body.error ?? 'Failed to create schedule'); return; }
+      if (!res.ok) { setError(res.error ?? 'Failed to create schedule'); return; }
       onCreated();
     } finally {
       setSaving(false);

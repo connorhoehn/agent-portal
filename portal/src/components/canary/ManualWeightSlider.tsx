@@ -5,6 +5,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Inline, SectionLabel, Slider, useToast } from '@connorhoehnslalom/ui-components/shared';
 import { setWeight, useCanaryStore } from './canaryStore.js';
+import { writeJson } from '../../lib/writeJson';
 
 const DEBOUNCE_MS = 250;
 
@@ -41,27 +42,12 @@ export function ManualWeightSlider(): React.ReactElement {
   async function putWeight(value: number): Promise<void> {
     const previous = storeWeightB;
     setWeight(value); // optimistic
-    try {
-      const res = await fetch('/api/observability/canary/weight', {
-        method: 'PUT',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ weight_b: value, source: 'manual' }),
-      });
-      if (!res.ok) {
-        const body = (await res.json().catch(() => ({}))) as {
-          message?: string;
-          error?: string;
-        };
-        setWeight(previous);
-        toast(
-          `Weight update failed: ${body.message ?? body.error ?? res.statusText}`,
-          { type: 'error' },
-        );
-      }
-    } catch (e) {
+    const res = await writeJson<{ message?: string; error?: string }>(
+      '/api/observability/canary/weight', 'PUT', { weight_b: value, source: 'manual' },
+    );
+    if (!res.ok) {
       setWeight(previous);
-      toast(`Weight update failed: ${e instanceof Error ? e.message : String(e)}`, { type: 'error' });
+      toast(`Weight update failed: ${res.data?.message ?? res.error}`, { type: 'error' });
     }
   }
 

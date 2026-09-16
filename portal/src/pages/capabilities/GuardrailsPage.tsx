@@ -30,6 +30,7 @@ import {
 } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch';
+import { writeJson } from '../../lib/writeJson';
 import { T } from './Text';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -92,64 +93,43 @@ function GuardrailsPage() {
   const [deleting, setDeleting] = useState(false);
 
   async function patchPii(type: string, patch: { action?: PiiAction; enabled?: boolean }) {
-    try {
-      const res = await fetch(`/api/capabilities/guardrail/pii`, {
-        method: 'PATCH',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type, ...patch }),
-      });
-      if (!res.ok) throw new Error(`PATCH /pii failed: ${res.status}`);
-      toast(`PII filter ${type} updated`, { type: 'success' });
-      refresh();
-    } catch (err) {
-      console.error(err);
+    const res = await writeJson(`/api/capabilities/guardrail/pii`, 'PATCH', { type, ...patch });
+    if (!res.ok) {
+      console.error(new Error(`PATCH /pii failed: ${res.status}`));
       toast(`Failed to update PII filter ${type}`, { type: 'error' });
       refresh(); // restore prior value by re-reading
+      return;
     }
+    toast(`PII filter ${type} updated`, { type: 'success' });
+    refresh();
   }
 
   async function patchTopicEnabled(name: string, enabled: boolean) {
-    try {
-      const res = await fetch(
-        `/api/capabilities/guardrail/topics/${encodeURIComponent(name)}`,
-        {
-          method: 'PATCH',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ enabled }),
-        },
-      );
-      if (!res.ok) throw new Error(`PATCH /topics/${name} failed: ${res.status}`);
-      toast(`Topic ${name} ${enabled ? 'enabled' : 'disabled'}`, { type: 'success' });
-      refresh();
-    } catch (err) {
-      console.error(err);
+    const res = await writeJson(`/api/capabilities/guardrail/topics/${encodeURIComponent(name)}`, 'PATCH', { enabled });
+    if (!res.ok) {
+      console.error(new Error(`PATCH /topics/${name} failed: ${res.status}`));
       toast(`Failed to update topic ${name}`, { type: 'error' });
       refresh();
+      return;
     }
+    toast(`Topic ${name} ${enabled ? 'enabled' : 'disabled'}`, { type: 'success' });
+    refresh();
   }
 
   async function addTopic() {
     if (!newTopic.name.trim() || !newTopic.definition.trim()) return;
     setAdding(true);
-    try {
-      const res = await fetch('/api/capabilities/guardrail/topics', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newTopic),
-      });
-      if (!res.ok) throw new Error(`POST /topics failed: ${res.status}`);
-      toast(`Topic "${newTopic.name}" added`, { type: 'success' });
-      setNewTopic({ name: '', definition: '' });
-      refresh();
-    } catch (err) {
-      console.error(err);
+    const res = await writeJson('/api/capabilities/guardrail/topics', 'POST', newTopic);
+    if (!res.ok) {
+      console.error(new Error(`POST /topics failed: ${res.status}`));
       toast('Failed to add topic', { type: 'error' });
-    } finally {
       setAdding(false);
+      return;
     }
+    toast(`Topic "${newTopic.name}" added`, { type: 'success' });
+    setNewTopic({ name: '', definition: '' });
+    refresh();
+    setAdding(false);
   }
 
   function openEdit(topic: DeniedTopic) {
@@ -160,46 +140,33 @@ function GuardrailsPage() {
   async function saveEdit() {
     if (!editing) return;
     setSavingEdit(true);
-    try {
-      const res = await fetch(
-        `/api/capabilities/guardrail/topics/${encodeURIComponent(editing.name)}`,
-        {
-          method: 'PATCH',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ definition: editingDef }),
-        },
-      );
-      if (!res.ok) throw new Error(`PATCH /topics/${editing.name} failed: ${res.status}`);
-      toast(`Topic "${editing.name}" updated`, { type: 'success' });
-      setEditing(null);
-      refresh();
-    } catch (err) {
-      console.error(err);
+    const res = await writeJson(`/api/capabilities/guardrail/topics/${encodeURIComponent(editing.name)}`, 'PATCH', { definition: editingDef });
+    if (!res.ok) {
+      console.error(new Error(`PATCH /topics/${editing.name} failed: ${res.status}`));
       toast('Failed to update topic', { type: 'error' });
-    } finally {
       setSavingEdit(false);
+      return;
     }
+    toast(`Topic "${editing.name}" updated`, { type: 'success' });
+    setEditing(null);
+    refresh();
+    setSavingEdit(false);
   }
 
   async function doDelete() {
     if (!confirmDelete) return;
     setDeleting(true);
-    try {
-      const res = await fetch(
-        `/api/capabilities/guardrail/topics/${encodeURIComponent(confirmDelete.name)}`,
-        { method: 'DELETE', credentials: 'include' },
-      );
-      if (!res.ok) throw new Error(`DELETE /topics/${confirmDelete.name} failed: ${res.status}`);
-      toast(`Topic "${confirmDelete.name}" removed`, { type: 'success' });
-      setConfirmDelete(null);
-      refresh();
-    } catch (err) {
-      console.error(err);
+    const res = await writeJson(`/api/capabilities/guardrail/topics/${encodeURIComponent(confirmDelete.name)}`, 'DELETE');
+    if (!res.ok) {
+      console.error(new Error(`DELETE /topics/${confirmDelete.name} failed: ${res.status}`));
       toast('Failed to remove topic', { type: 'error' });
-    } finally {
       setDeleting(false);
+      return;
     }
+    toast(`Topic "${confirmDelete.name}" removed`, { type: 'success' });
+    setConfirmDelete(null);
+    refresh();
+    setDeleting(false);
   }
 
   if (!guardrail) {

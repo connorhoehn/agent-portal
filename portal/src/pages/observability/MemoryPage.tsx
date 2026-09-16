@@ -36,7 +36,7 @@ import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { firstDegraded } from '../../lib/degraded';
 import { T } from './Text';
 import { KeyValue } from '../../components/KeyValue';
-import { WindowPicker } from './WindowPicker';
+import { WindowPicker, useWindowUrlState } from './WindowPicker';
 
 // ── Types (mirrored from middleware/src/routes/memory.ts) ──────────────────
 
@@ -123,7 +123,7 @@ const kindTone = (kind: string): Tone => {
 const KIND_OPTIONS = ['', 'retrieve', 'write', 'summarize', 'expire'];
 
 function MemoryPage() {
-  const [windowIdx, setWindowIdx] = useState(2); // 24h default
+  const [windowIdx, setWindowIdx] = useWindowUrlState(WINDOW_OPTIONS, 2); // 24h default, ?window=
   const win = WINDOW_OPTIONS[windowIdx];
 
   const [agentFilter, setAgentFilter] = useState<string>('');

@@ -17,7 +17,7 @@ const CLASS_LABEL: Record<EvidenceClassKey, string> = {
   attested: 'Attested',
   documented: 'Documented',
   observed: 'Observed',
-  na: 'N/A',
+  na: '—',
   unassessed: 'Unassessed',
 };
 

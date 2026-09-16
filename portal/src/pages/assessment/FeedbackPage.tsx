@@ -32,7 +32,10 @@ import { Link } from 'react-router';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch';
+import { useDebouncedSearch } from '../../hooks/useDebouncedSearch';
+import { useUrlState } from '../../lib/useUrlState';
 import { toastError, toastSuccess } from '../../lib/toastStore';
+import { sendJson } from '../../lib/writeJson';
 import { feedbackActionPath, formatRelativeTime } from './secondaryFormat';
 import type { FeedbackListResponse, FeedbackTask, HitlStatus } from './secondaryTypes';
 import { useTeams } from './dashboard/useTeams';
@@ -87,16 +90,7 @@ function QuestionDrawer({
     if (!task) return;
     setBusy(true);
     try {
-      const res = await fetch(feedbackActionPath(task, action), {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: action === 'resolve' ? JSON.stringify({ response }) : undefined,
-      });
-      if (!res.ok) {
-        const body = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(body.error ?? `HTTP ${res.status}`);
-      }
+      await sendJson(feedbackActionPath(task, action), 'POST', action === 'resolve' ? { response } : undefined);
       toastSuccess(null, action === 'resolve' ? 'Answer recorded' : 'Dismissed');
       onChanged();
       onClose();
@@ -196,9 +190,25 @@ function QuestionDrawer({
 }
 
 export default function FeedbackPage() {
-  const [status, setStatus] = useState<HitlStatus | 'ALL'>('OPEN');
-  const [team, setTeam] = useState<string>('all');
-  const [search, setSearch] = useState('');
+  // Filters live in the URL — `?status=&team=&q=` — so a filtered feedback
+  // queue is a shareable link and survives a reload.
+  const [status, setStatus] = useUrlState<HitlStatus | 'ALL'>(
+    'status',
+    (raw) => (STATUS_OPTIONS.some((o) => o.value === raw) ? (raw as HitlStatus | 'ALL') : 'OPEN'),
+    (v) => (v === 'OPEN' ? null : v),
+  );
+  const [team, setTeam] = useUrlState<string>(
+    'team',
+    (raw) => raw ?? 'all',
+    (v) => (v === 'all' ? null : v),
+  );
+  const [search, setSearch] = useUrlState<string>(
+    'q',
+    (raw) => raw ?? '',
+    (v) => (v ? v : null),
+  );
+  const { searchText, onSearchChange, cancelPending: cancelSearchPending } =
+    useDebouncedSearch(search, setSearch, 250);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const feedbackUrl = useMemo(() => {
@@ -267,13 +277,13 @@ export default function FeedbackPage() {
         />
         <Input
           type="text"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          value={searchText}
+          onChange={(e) => onSearchChange(e.target.value)}
           placeholder="Search questions, dimensions or teams…"
           className="w-[320px]"
         />
         {(team !== 'all' || search) && (
-          <Button variant="ghost" size="sm" onClick={() => { setTeam('all'); setSearch(''); }}>Clear filters</Button>
+          <Button variant="ghost" size="sm" onClick={() => { setTeam('all'); cancelSearchPending(); setSearch(''); }}>Clear filters</Button>
         )}
         <MetaLine size="xs" tone="tertiary" className="ml-auto" items={['click a row to answer it']} />
       </Inline>

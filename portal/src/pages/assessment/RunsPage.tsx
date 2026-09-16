@@ -22,6 +22,7 @@ import {
   PageSection,
   Select,
   StatusPill,
+  T,
 } from '@connorhoehnslalom/ui-components/shared';
 import { KeyValue } from '../../components/KeyValue';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
@@ -30,14 +31,8 @@ import { useCapabilities } from '../../lib/capabilities';
 import { toastError, toastSuccess } from '../../lib/toastStore';
 import { useTeams } from './dashboard/useTeams';
 import { useAssessmentEvents } from './knowledge/useAssessmentEvents';
-import { applyRunEvent, formatDuration, formatRelativeTime, launchResponseMessage } from './secondaryFormat';
-import type { AgentCommand, AgentCommandsResponse, RunRecord, RunStatus, RunsListResponse } from './secondaryTypes';
-
-const STATUS_STATE: Record<RunStatus, 'info' | 'success' | 'error'> = {
-  running: 'info',
-  completed: 'success',
-  failed: 'error',
-};
+import { applyRunEvent, formatDuration, formatRelativeTime, launchResponseMessage, RUN_STATUS_PILL_STATE } from './secondaryFormat';
+import type { AgentCommand, AgentCommandsResponse, RunRecord, RunsListResponse } from './secondaryTypes';
 
 function RunACommandPanel({ onLaunched }: { onLaunched: () => void }) {
   const { can, ready } = useCapabilities();
@@ -204,20 +199,16 @@ export default function RunsPage() {
             {
               key: 'id',
               header: 'Run',
-              // A real Button, not just the row's onClick — DataTable's
-              // row-click is a bare <tr onClick> with no keyboard handling.
-              render: (r) => (
-                <Button variant="ghost" size="sm" className="font-mono text-xs" onClick={(e) => { e.stopPropagation(); setDetailId(r.id); }}>
-                  {r.id}
-                </Button>
-              ),
+              // DataTable rows with onRowClick are keyboard-reachable on
+              // their own now, so this is plain text, not a Button.
+              render: (r) => <T className="font-mono text-xs">{r.id}</T>,
             },
             { key: 'command', header: 'Command', render: (r) => r.command },
             { key: 'team', header: 'Team', render: (r) => r.team_id ?? '—' },
             {
               key: 'status',
               header: 'Status',
-              render: (r) => <StatusPill state={STATUS_STATE[r.status]} label={r.status} size="sm" />,
+              render: (r) => <StatusPill state={RUN_STATUS_PILL_STATE[r.status]} label={r.status} size="sm" />,
             },
             { key: 'started', header: 'Started', render: (r) => formatRelativeTime(r.started_at) },
             { key: 'duration', header: 'Duration', render: (r) => formatDuration(r.started_at, r.finished_at) },
@@ -230,7 +221,7 @@ export default function RunsPage() {
       <Drawer open={detail !== null} onClose={() => setDetailId(null)} title={detail?.command} subtitle={detail?.id}>
         {detail && (
           <Stack gap="sm" className="text-sm">
-            <StatusPill state={STATUS_STATE[detail.status]} label={detail.status} size="sm" />
+            <StatusPill state={RUN_STATUS_PILL_STATE[detail.status]} label={detail.status} size="sm" />
             <KeyValue layout="row" label="Team" value={detail.team_id ?? '—'} mono />
             <KeyValue layout="row" label="Started" value={formatRelativeTime(detail.started_at)} />
             <KeyValue layout="row" label="Duration" value={formatDuration(detail.started_at, detail.finished_at)} mono />

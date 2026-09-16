@@ -5,9 +5,11 @@ import {
   TableTd, TableTh,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
+import { writeJson } from '../../lib/writeJson';
 import { useFetch } from '../../hooks/useFetch';
 import { EmptyState, StatusDot } from '../../components/ingest/ui';
 import { T } from './Text';
+import { JOB_STATUS_TONE } from './ingestFormat';
 
 interface DataSource {
   id: string; name: string; status: string; description: string;
@@ -21,10 +23,6 @@ interface IngestionJob {
   documentsFailed: number; documentsDeleted: number;
   failureReasons: string[];
 }
-
-const JOB_STATUS_TONE: Record<string, 'success' | 'warning' | 'danger' | 'neutral'> = {
-  COMPLETE: 'success', IN_PROGRESS: 'warning', STARTING: 'warning', FAILED: 'danger', STOPPED: 'neutral',
-};
 
 const ACTIVE_STATUSES = new Set(['IN_PROGRESS', 'STARTING']);
 
@@ -97,34 +95,20 @@ function DataSourcesPage() {
   async function triggerSync(dataSourceId: string) {
     setTriggering(dataSourceId);
     setActionMessage(null);
-    try {
-      const r = await fetch('/api/ingest/start', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dataSourceId }),
+    const res = await writeJson<{ job?: { jobId: string; status: string } }>('/api/ingest/start', 'POST', { dataSourceId });
+    if (!res.ok) {
+      setActionMessage({
+        tone: res.conflict ? 'busy' : 'err',
+        text: res.error ?? 'Sync failed',
       });
-      const body = await r.json() as {
-        ok?: boolean; error?: string; conflict?: boolean;
-        job?: { jobId: string; status: string };
-      };
-      if (!r.ok || !body.ok) {
-        setActionMessage({
-          tone: body.conflict ? 'busy' : 'err',
-          text: body.error ?? 'Sync failed',
-        });
-        // A conflict means a job IS running — showing it is the useful response.
-        if (body.conflict) refreshJobs();
-      } else {
-        setActionMessage({ tone: 'ok', text: `Job ${body.job?.jobId.slice(0, 12) ?? 'unknown'}… started` });
-        refreshJobs();
-      }
-    } catch (e) {
-      setActionMessage({ tone: 'err', text: (e as Error).message });
-    } finally {
-      setTriggering(null);
-      refreshSources();
+      // A conflict means a job IS running — showing it is the useful response.
+      if (res.conflict) refreshJobs();
+    } else {
+      setActionMessage({ tone: 'ok', text: `Job ${res.data?.job?.jobId.slice(0, 12) ?? 'unknown'}… started` });
+      refreshJobs();
     }
+    setTriggering(null);
+    refreshSources();
   }
 
   return (

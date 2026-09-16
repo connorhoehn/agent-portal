@@ -33,7 +33,10 @@ function SprintMoney({ s }: { s: Sprint }) {
   const overEnvelope = isOverEnvelope(s);
   return (
     <Stack gap="sm">
-      <KPIGrid columns={4}>
+      {/* mdColumns: this panel is rendered inside an 880px Drawer (SprintsLens),
+          narrower than a full-width page at the same viewport — four tiles at
+          the md band would cram. */}
+      <KPIGrid columns={4} mdColumns={2}>
         <StatCard
           label="Points"
           value={`${s.pointsDone} / ${s.pointsTotal}`}

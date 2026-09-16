@@ -85,3 +85,26 @@ export function RunIdPairLine({ runIdA, runIdB }: { runIdA?: string; runIdB?: st
     </Inline>
   );
 }
+
+// ─── Tone + number formatting ────────────────────────────────────────────────
+//
+// HarnessHomePage and RunDetailPage each declared `Tone`, `statusTone`,
+// `passRateTone` and `fmtPct` byte-identically — centralised here so the
+// roster and the detail page can't drift apart on what "done" or "0.72 pass
+// rate" reads as.
+
+export type Tone = 'success' | 'warning' | 'danger';
+
+export type RunStatus = 'pending' | 'running' | 'done' | 'failed';
+
+export const statusTone = (s: RunStatus): Tone => {
+  if (s === 'done') return 'success';
+  if (s === 'failed') return 'danger';
+  return 'warning'; // pending / running
+};
+
+export const passRateTone = (v: number | null): Tone =>
+  v == null ? 'warning' : v >= 0.85 ? 'success' : v >= 0.7 ? 'warning' : 'danger';
+
+export const fmtPct = (v: number | null, digits = 1): string =>
+  v != null && Number.isFinite(v) ? `${(v * 100).toFixed(digits)}%` : '—';

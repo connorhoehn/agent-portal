@@ -9,10 +9,13 @@ test('statusLabel normalizes job statuses', () => {
   assert.equal(statusLabel('failed'), 'failed');
 });
 
+// Tones now come from the shared runStateChip (lib/statusTone.ts), the work
+// lane's canonical map — `running` and `awaiting_review` changed colour here
+// to match it (see localComputeFormat.ts's doc comment).
 test('statusTone maps statuses to tones', () => {
   assert.equal(statusTone('done'), 'success');
-  assert.equal(statusTone('awaiting_review'), 'info');
-  assert.equal(statusTone('running'), 'info');
+  assert.equal(statusTone('awaiting_review'), 'warning');
+  assert.equal(statusTone('running'), 'accent');
   assert.equal(statusTone('failed'), 'danger');
   assert.equal(statusTone('cancelled'), 'neutral');
   assert.equal(statusTone('queued'), 'neutral');

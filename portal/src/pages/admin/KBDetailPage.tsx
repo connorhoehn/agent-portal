@@ -35,6 +35,7 @@ import {
 import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch.js';
 import { useCrumbLabel } from '../../lib/crumbLabels';
+import { useUrlState } from '../../lib/useUrlState';
 import type { Reconciled } from '../knowledge/knowledgeFormat';
 import { ConfigurationTab } from './kb/ConfigurationTab';
 import { DeleteButton } from './kb/DeleteButton';
@@ -63,7 +64,12 @@ export function KBDetailPage() {
   const { can, ready } = useCapabilities();
   const canManage = ready && can('ManageKB');
 
-  const [activeTab, setActiveTab] = useState<KbTabId>('landing-zone');
+  // ?tab= — one of KbTabId, defaulting to landing-zone.
+  const [activeTab, setActiveTab] = useUrlState<KbTabId>(
+    'tab',
+    (raw) => (TABS.some((t) => t.value === raw) ? (raw as KbTabId) : 'landing-zone'),
+    (v) => (v === 'landing-zone' ? null : v),
+  );
   const [provisionOpen, setProvisionOpen] = useState(false);
 
   // Polls fast: CREATING and PENDING rows change under you.
