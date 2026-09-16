@@ -8,6 +8,7 @@ import { useEffect, useState } from 'react';
 import {
   Button,
   Card,
+  CardHeader,
   Chip,
   DataTable,
   Drawer,
@@ -16,7 +17,6 @@ import {
   InlineAlert,
   LoadingState,
   MetaLine,
-  SectionLabel,
   Stack,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../../hooks/useFetch';
@@ -83,7 +83,7 @@ export function ScoringLogsDrawer({ open, onClose, teamId, dimensionTitle }: Sco
               />
               {log.scores.map((s) => (
                 <Card key={s.dimension_id} padding="sm">
-                  <SectionLabel>{dimensionTitle(s.dimension_id)}</SectionLabel>
+                  <CardHeader title={dimensionTitle(s.dimension_id)} />
                   <Inline gap="xs" wrap className="mt-1.5">
                     {s.is_na ? <Chip size="xs" tone="neutral">N/A</Chip> : <LevelBadge level={s.suggested_level} size="xs" />}
                     <Chip size="xs" tone="info">{s.confidence}</Chip>
@@ -91,7 +91,7 @@ export function ScoringLogsDrawer({ open, onClose, teamId, dimensionTitle }: Sco
                   <Stack gap="none" className="mt-2 text-xs text-text-secondary">{s.rationale}</Stack>
                   {s.evidence_excerpts.length > 0 && (
                     <Stack gap="xs" className="mt-2">
-                      <SectionLabel>Evidence cited</SectionLabel>
+                      <CardHeader title="Evidence cited" />
                       {s.evidence_excerpts.map((excerpt, i) => (
                         <MetaLine key={i} size="xs" items={[excerpt]} />
                       ))}

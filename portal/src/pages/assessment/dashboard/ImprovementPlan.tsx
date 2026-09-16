@@ -12,6 +12,7 @@ import {
   Button,
   Card,
   Chip,
+  CollapsibleSection,
   EmptyState,
   Inline,
   LoadingState,
@@ -102,7 +103,6 @@ function DraftStoryButton({ teamId, rec }: { teamId: string; rec: Recommendation
 }
 
 function RecommendationCard({ rec, teamId }: { rec: Recommendation; teamId: string }) {
-  const [open, setOpen] = useState(false);
   const cert = certificationFor(rec);
   const statement = dimensionCertificationStatement(cert);
 
@@ -128,12 +128,12 @@ function RecommendationCard({ rec, teamId }: { rec: Recommendation; teamId: stri
         )}
       </Inline>
 
-      <Button variant="ghost" size="sm" className="mt-3" onClick={() => setOpen((v) => !v)}>
-        {open ? 'Hide what this involves' : 'Show what this involves'}
-      </Button>
-
-      {open && (
-        <Stack gap="sm" className="mt-3 border-l-2 border-border pl-4">
+      <CollapsibleSection
+        className="mt-3"
+        title="What this involves"
+        badge={rec.existing_stories.length > 0 ? <Chip size="xs" mono>{rec.existing_stories.length}</Chip> : undefined}
+      >
+        <Stack gap="sm" className="px-4 py-3">
           <Stack gap="none">
             <SectionLabel>Why this is on the list</SectionLabel>
             {rec.why && <Stack gap="none" className="mt-1 text-sm text-text-primary">{rec.why}</Stack>}
@@ -189,13 +189,12 @@ function RecommendationCard({ rec, teamId }: { rec: Recommendation; teamId: stri
             )}
           </Stack>
         </Stack>
-      )}
+      </CollapsibleSection>
     </Card>
   );
 }
 
 function UnassessedGroup({ recs }: { recs: Recommendation[] }) {
-  const [open, setOpen] = useState(false);
   return (
     <Card padding="md" className="border-l-4 border-l-border">
       <Inline justify="between" align="start" wrap gap="sm">
@@ -209,11 +208,12 @@ function UnassessedGroup({ recs }: { recs: Recommendation[] }) {
         </Stack>
         <KindChip kind="answer" />
       </Inline>
-      <Button variant="ghost" size="sm" className="mt-3" onClick={() => setOpen((v) => !v)}>
-        {open ? 'Hide which dimensions these are' : 'Show which dimensions these are'}
-      </Button>
-      {open && (
-        <Stack gap="md" className="mt-3 border-l-2 border-border pl-4">
+      <CollapsibleSection
+        className="mt-3"
+        title="Which dimensions these are"
+        badge={<Chip size="xs" mono>{recs.length}</Chip>}
+      >
+        <Stack gap="md" className="px-4 py-3">
           {recs.map((rec) => (
             <Stack key={`${rec.dimension_id}-${rec.rank}`} gap="none">
               <strong className="text-sm font-semibold text-text-primary">Dimension {rec.dimension_id} — {rec.dimension_title}</strong>
@@ -221,7 +221,7 @@ function UnassessedGroup({ recs }: { recs: Recommendation[] }) {
             </Stack>
           ))}
         </Stack>
-      )}
+      </CollapsibleSection>
     </Card>
   );
 }

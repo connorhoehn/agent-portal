@@ -23,6 +23,7 @@ import {
   Select,
   StatusPill,
 } from '@connorhoehnslalom/ui-components/shared';
+import { KeyValue } from '../../components/KeyValue';
 import { useCapabilities } from '../../lib/capabilities';
 import { toastError, toastSuccess } from '../../lib/toastStore';
 import { useAssessmentEvents } from './knowledge/useAssessmentEvents';
@@ -230,30 +231,19 @@ export default function RunsPage() {
         {detail && (
           <Stack gap="sm" className="text-sm">
             <StatusPill state={STATUS_STATE[detail.status]} label={detail.status} size="sm" />
-            <Inline gap="xs">
-              <strong className="font-semibold">Team: </strong>{detail.team_id ?? '—'}
-            </Inline>
-            <Inline gap="xs">
-              <strong className="font-semibold">Started: </strong>{formatRelativeTime(detail.started_at)}
-            </Inline>
-            <Inline gap="xs">
-              <strong className="font-semibold">Duration: </strong>{formatDuration(detail.started_at, detail.finished_at)}
-            </Inline>
+            <KeyValue layout="row" label="Team" value={detail.team_id ?? '—'} mono />
+            <KeyValue layout="row" label="Started" value={formatRelativeTime(detail.started_at)} />
+            <KeyValue layout="row" label="Duration" value={formatDuration(detail.started_at, detail.finished_at)} mono />
             {detail.progress?.phase && (
-              <Inline gap="xs">
-                <strong className="font-semibold">Progress: </strong>
-                {detail.progress.phase}{detail.progress.detail ? ` — ${detail.progress.detail}` : ''}
-              </Inline>
+              <KeyValue
+                layout="row"
+                label="Progress"
+                value={`${detail.progress.phase}${detail.progress.detail ? ` — ${detail.progress.detail}` : ''}`}
+              />
             )}
-            {detail.summary && (
-              <Inline gap="xs">
-                <strong className="font-semibold">Summary: </strong>{detail.summary}
-              </Inline>
-            )}
+            {detail.summary && <KeyValue layout="row" label="Summary" value={detail.summary} />}
             {detail.error && (
-              <Inline gap="xs" className="text-danger">
-                <strong className="font-semibold">Error: </strong>{detail.error}
-              </Inline>
+              <KeyValue layout="row" label="Error" value={detail.error} className="text-danger" />
             )}
             {canStop && detail.status === 'running' && (
               <Button variant="danger" disabled={stopping} onClick={() => void stop(detail)}>

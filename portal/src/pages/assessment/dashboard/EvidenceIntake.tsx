@@ -8,13 +8,14 @@ import { useState } from 'react';
 import {
   Button,
   Card,
+  CardHeader,
   Chip,
   DataTable,
   FileUploadDrop,
   FormField,
   Inline,
   Input,
-  SectionLabel,
+  MetaLine,
   Stack,
   Textarea,
   type DataTableColumn,
@@ -24,6 +25,7 @@ import { toastError, toastSuccess } from '../../../lib/toastStore';
 import { useCapabilities } from '../../../lib/capabilities';
 import { fmtDate, type ProvenanceLedgerResponse, type SourceType } from '../types';
 import { inputWiring } from '../assessmentFormat';
+import { useTeamDetail } from './useTeamDetail';
 
 interface EvidenceIntakeProps {
   teamId: string;
@@ -91,10 +93,10 @@ function TouchpointForm({ teamId, onSaved }: { teamId: string; onSaved: () => vo
 
   return (
     <Card padding="md">
-      <SectionLabel>Log a 1:1 / discussion note</SectionLabel>
-      <Stack gap="none" className="mt-1 text-xs text-text-secondary">
-        Capture a quick note from a 1:1 assessment review or team discussion — paste a transcript or write a summary.
-      </Stack>
+      <CardHeader
+        title="Log a 1:1 / discussion note"
+        subtitle="Capture a quick note from a 1:1 assessment review or team discussion — paste a transcript or write a summary."
+      />
       <Stack gap="sm" className="mt-3">
         <FormField label="Recorded by" required>
           {(wiring) => (
@@ -165,10 +167,11 @@ function DocumentDropForm({ teamId, onSaved }: { teamId: string; onSaved: () => 
 
   return (
     <Card padding="md">
-      <SectionLabel>Document drop</SectionLabel>
-      <Stack gap="none" className="mt-1 mb-3 text-xs text-text-secondary">
-        Drop a plain-text or markdown artifact (design doc, runbook, postmortem) to link as evidence.
-      </Stack>
+      <CardHeader
+        title="Document drop"
+        subtitle="Drop a plain-text or markdown artifact (design doc, runbook, postmortem) to link as evidence."
+        className="mb-3"
+      />
       <FileUploadDrop
         accept=".md,.txt,.json"
         multiple={false}
@@ -177,6 +180,85 @@ function DocumentDropForm({ teamId, onSaved }: { teamId: string; onSaved: () => 
         onError={(msg) => toastError(null, 'Upload failed', msg)}
         label={busy ? 'Ingesting…' : 'Drop a document, or click to choose one'}
       />
+    </Card>
+  );
+}
+
+/** Point at one of the team's own repos as evidence — the SDLC surface every
+ *  dimension is assessed against (docs/assessment-ux-goal.md slice 4).
+ *  Reuses the same text-intake route as the other two forms; a repo Chip's
+ *  "Use" button just fills the URL field, it never submits by itself. */
+function CodebaseIntakeForm({ teamId, onSaved }: { teamId: string; onSaved: () => void }) {
+  const { can } = useCapabilities();
+  const { data } = useTeamDetail(teamId);
+  const [url, setUrl] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  if (!can('ScoreAssessment')) return null;
+
+  const repos = data?.team.repos ?? [];
+  const canSubmit = url.trim() !== '' && !busy;
+
+  const submit = async () => {
+    const ref = url.trim();
+    const matched = repos.find((r) => r.gitlab_url === ref);
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/assessment/teams/${encodeURIComponent(teamId)}/intake/text`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          source_type: 'codebase',
+          text: ref,
+          title: matched?.name ?? ref,
+          captured_by: 'repo',
+        }),
+      });
+      if (!res.ok) throw new Error(`${res.status}`);
+      toastSuccess(null, 'Repository linked as evidence.');
+      setUrl('');
+      onSaved();
+    } catch (err) {
+      toastError(null, 'Failed to link repository', err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Card padding="md">
+      <CardHeader title="Point at a repo" subtitle="Link one of the team's own repositories as evidence." className="mb-3" />
+      {repos.length === 0 ? (
+        <MetaLine size="xs" items={['No repositories on file']} />
+      ) : (
+        <Inline gap="sm" wrap className="mb-3">
+          {repos.map((r) => (
+            <Inline key={r.gitlab_url || r.name} gap="xs" align="center">
+              <Chip size="xs" mono>{r.name}</Chip>
+              <Button variant="ghost" size="sm" onClick={() => setUrl(r.gitlab_url)}>Use</Button>
+            </Inline>
+          ))}
+        </Inline>
+      )}
+      <Stack gap="sm">
+        <FormField label="Repo URL">
+          {(wiring) => (
+            <Input
+              {...inputWiring(wiring)}
+              type="text"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder="https://gitlab.example.com/team/repo"
+            />
+          )}
+        </FormField>
+        <Inline>
+          <Button variant="primary" size="sm" disabled={!canSubmit} onClick={submit}>
+            {busy ? 'Linking…' : 'Link repository'}
+          </Button>
+        </Inline>
+      </Stack>
     </Card>
   );
 }
@@ -228,8 +310,7 @@ export function EvidenceIntake({ teamId }: EvidenceIntakeProps) {
   return (
     <Stack gap="lg">
       <Card padding="md">
-        <SectionLabel>Add evidence</SectionLabel>
-        <Stack gap="none" className="mt-1 mb-4 text-sm text-text-secondary">Where new evidence for this team comes from.</Stack>
+        <CardHeader title="Add evidence" subtitle="Where new evidence for this team comes from." className="mb-4" />
         <Inline gap="md" wrap align="start">
           <Stack gap="none" className="min-w-[280px] flex-1">
             <TouchpointForm teamId={teamId} onSaved={refresh} />
@@ -237,14 +318,18 @@ export function EvidenceIntake({ teamId }: EvidenceIntakeProps) {
           <Stack gap="none" className="min-w-[280px] flex-1">
             <DocumentDropForm teamId={teamId} onSaved={refresh} />
           </Stack>
+          <Stack gap="none" className="min-w-[280px] flex-1">
+            <CodebaseIntakeForm teamId={teamId} onSaved={refresh} />
+          </Stack>
         </Inline>
       </Card>
 
       <Card padding="md">
-        <SectionLabel>Lineage ledger</SectionLabel>
-        <Stack gap="none" className="mt-1 mb-4 text-sm text-text-secondary">
-          Every input ingested for this team, with provenance back to its source.
-        </Stack>
+        <CardHeader
+          title="Lineage ledger"
+          subtitle="Every input ingested for this team, with provenance back to its source."
+          className="mb-4"
+        />
         <DataTable<LedgerItem>
           data={items}
           columns={LEDGER_COLUMNS}

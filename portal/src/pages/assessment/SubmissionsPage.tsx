@@ -13,6 +13,7 @@ import {
   Button,
   Card,
   Checkbox,
+  Chip,
   ConfirmDialog,
   DataTable,
   Drawer,
@@ -25,6 +26,8 @@ import {
   Stack,
   StatStrip,
   StatusPill,
+  Toolbar,
+  ToolbarLabel,
   Wizard,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
@@ -247,12 +250,16 @@ export default function SubmissionsPage() {
       )}
 
       {canManage && selected.size > 0 && (
-        <Inline align="center" gap="sm" className="rounded-md bg-surface-secondary px-4 py-2">
-          <strong className="text-sm font-semibold">{selected.size} selected</strong>
-          <Button variant="danger" size="sm" onClick={() => setConfirmingClear(true)} disabled={busy}>
-            Clear selected
-          </Button>
-        </Inline>
+        <Toolbar
+          aria-label="Selection actions"
+          end={
+            <Button variant="danger" size="sm" onClick={() => setConfirmingClear(true)} disabled={busy}>
+              Clear selected
+            </Button>
+          }
+        >
+          <ToolbarLabel>{selected.size} selected</ToolbarLabel>
+        </Toolbar>
       )}
 
       {loading ? (
@@ -339,7 +346,17 @@ export default function SubmissionsPage() {
             {
               key: 'links',
               header: 'Links',
-              render: (g) => `${g.current.links_total - g.current.links_pending}/${g.current.links_total}`,
+              render: (g) => {
+                const fetched = g.current.links_total - g.current.links_pending;
+                if (!g.processed && g.current.links_pending > 0) {
+                  return (
+                    <Chip tone="warning" size="xs" mono title={`${fetched}/${g.current.links_total} links fetched`}>
+                      Fetch {g.current.links_pending} link{g.current.links_pending === 1 ? '' : 's'}
+                    </Chip>
+                  );
+                }
+                return <MetaLine size="xs" items={[`${fetched}/${g.current.links_total}`]} />;
+              },
             },
             ...(canManage
               ? [{

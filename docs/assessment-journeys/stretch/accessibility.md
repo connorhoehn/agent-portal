@@ -276,3 +276,8 @@ live at 1692px as u-jonas (TEAM-002), u-farah (TEAM-001) and u-operator (TEAM-00
     the rows re-render with the new children and the MutationObserver re-applies the roles.
 Console errors: 0 on every page.
 Addendum 2026-09-15 21:20: one further change to DimensionRow.tsx / assessmentFormat.ts after the note above — a pending dimension shows no `role="meter"` (nothing rated yet) and counts as "Unassessed" in the coverage strip rather than "Attested"; re-observed on TEAM-003 (rows 09–17 badge-only, strip "Documented 8 · Unassessed 9"), 36 of 36 controls reachable, console errors 0.
+
+--- freshness re-observation, 2026-09-16 00:12 (portal/src/pages/assessment changed: secondary-page findings from the audit fan-out) ---
+Why: five Sonnet fix agents applied the read-only audit's findings; re-observed as u-asha on TEAM-001 (all five scorecard tabs), /assessment/submissions and /assessment/runs.
+  - the dimension pane header's eyebrow and basis captions are SectionLabels (real text, 10px caps), its claim chip is text ("↑5") with a title that spells the claim out, and the header has no raw wrappers; the Improvement Plan's reveals are CollapsibleSection buttons with aria-expanded (four on TEAM-001) instead of ghost buttons toggling a bare block; the submissions selection bars are the library Toolbar (role=toolbar); the intake's repo "Use" buttons are real buttons that fill the URL field.
+Console errors: 0.

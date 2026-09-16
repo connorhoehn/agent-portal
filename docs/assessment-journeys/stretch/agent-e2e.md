@@ -181,3 +181,8 @@ Console errors: 0 on both surfaces.
 
 --- freshness re-observation, 2026-09-15 21:20 (TeamScorecard.tsx changed: slices 4 + 5 of docs/assessment-ux-goal.md) ---
 Why: the scorecard header now renders the team's repos and contacts from the same `GET /teams/:id` payload, and the Certification tab opens with the evidence coverage strip above the master-detail. The run-a-scoring-agent path this log records (Runs page → launch → the scorecard reflecting applied scores) is unchanged: the strip and the rail rows re-derive from the refreshed payload, so an applied score moves a chip from "Unassessed" to its class and a row from badge-only to badge + meter without a reload beyond the one this page already does. Re-opened TEAM-001 and TEAM-003 as u-asha / u-operator after the change: console errors 0.
+
+--- freshness re-observation, 2026-09-16 00:12 (portal/src/pages/assessment changed: secondary-page findings from the audit fan-out) ---
+Why: five Sonnet fix agents applied the read-only audit's findings; re-observed as u-asha on TEAM-001 (all five scorecard tabs), /assessment/submissions and /assessment/runs.
+  RunsPage.tsx changed only in the run-detail drawer (Team / Started / Duration / Progress / Summary / Error are shared KeyValue rows); the launch → ledger → scorecard path this log records is unchanged.
+Console errors: 0.

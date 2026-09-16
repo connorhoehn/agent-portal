@@ -6,7 +6,7 @@
 // open in it, never a judgement on anyone.
 
 import {
-  CodeBlock, Card, Chip, EmptyState, Inline, LoadingState, MetaLine, SectionLabel, Stack,
+  CardHeader, CodeBlock, Card, Chip, EmptyState, Inline, LoadingState, MetaLine, SectionLabel, Stack,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../../hooks/useFetch';
 import { dimensionLabel, needsInputSentence, pushCommandFor, statusMeta, type Story, type StoriesResponse } from '../assessmentFormat';
@@ -91,18 +91,14 @@ export function StoriesPanel({ teamId }: { teamId: string }) {
 
   return (
     <Stack gap="lg">
-      <Stack gap="xs">
-        <SectionLabel>Drafted stories</SectionLabel>
-        <Stack gap="none" className="max-w-4xl text-lg font-semibold leading-snug text-text-primary">
-          {stories.length === 0
+      <CardHeader
+        title={
+          stories.length === 0
             ? 'Nothing has been drafted for this team yet.'
-            : `${stories.length} ${stories.length === 1 ? 'story has' : 'stories have'} been drafted from this team's improvement plan.`}
-        </Stack>
-        <Stack gap="none" className="max-w-4xl text-xs leading-relaxed text-text-tertiary">
-          Each story was written from one plan entry and is reviewed before it goes anywhere. Pushing one to Jira is
-          a command a person runs from the repo root — nothing on this page creates a ticket.
-        </Stack>
-      </Stack>
+            : `${stories.length} ${stories.length === 1 ? 'story has' : 'stories have'} been drafted from this team's improvement plan.`
+        }
+        subtitle="Each story was written from one plan entry and is reviewed before it goes anywhere. Pushing one to Jira is a command a person runs from the repo root — nothing on this page creates a ticket."
+      />
 
       {stories.length === 0 ? (
         <EmptyState

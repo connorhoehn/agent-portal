@@ -4,7 +4,7 @@
 // hand-rolled table.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Button, Checkbox, Chip, DataTable, Inline, InlineAlert, MetaLine, Select, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { Button, Checkbox, Chip, DataTable, InlineAlert, MetaLine, Select, Stack, Toolbar, ToolbarGroup, ToolbarLabel } from '@connorhoehnslalom/ui-components/shared';
 import { formatRelativeTime, resolveRowStatusDisplay } from '../secondaryFormat';
 import type { CommitResponse, CommitSelection, ParsedRow, ParseResponse, TeamOption } from '../secondaryTypes';
 import { useCapabilities } from '../../../lib/capabilities';
@@ -156,25 +156,31 @@ export default function PreviewStep({ parse, onCommitted, onBack }: PreviewStepP
         ]}
       />
 
-      <Inline align="center" justify="between" gap="sm" className="rounded-md bg-surface-secondary px-4 py-3">
-        <strong className="text-sm font-semibold">
-          {selectedRows.length} submission{selectedRows.length === 1 ? '' : 's'} selected
-          {blockedCount > 0 && <strong className="ml-2 font-normal text-danger"> ({blockedCount} need a team)</strong>}
-        </strong>
-        <Inline align="center" gap="sm">
-          <Button variant="secondary" onClick={onBack}>
-            ← Back
-          </Button>
-          {canManage && (
-            <Button
-              onClick={() => void commit()}
-              disabled={selectedRows.length === 0 || blockedCount > 0 || committing}
-            >
-              {committing ? 'Committing…' : `Commit ${selectedRows.length} submission${selectedRows.length === 1 ? '' : 's'}`}
+      <Toolbar
+        aria-label="Selection actions"
+        end={
+          <ToolbarGroup>
+            <Button variant="secondary" onClick={onBack}>
+              ← Back
             </Button>
-          )}
-        </Inline>
-      </Inline>
+            {canManage && (
+              <Button
+                onClick={() => void commit()}
+                disabled={selectedRows.length === 0 || blockedCount > 0 || committing}
+              >
+                {committing ? 'Committing…' : `Commit ${selectedRows.length} submission${selectedRows.length === 1 ? '' : 's'}`}
+              </Button>
+            )}
+          </ToolbarGroup>
+        }
+      >
+        <ToolbarLabel>
+          {selectedRows.length} submission{selectedRows.length === 1 ? '' : 's'} selected
+        </ToolbarLabel>
+        {blockedCount > 0 && (
+          <ToolbarLabel className="text-danger">({blockedCount} need a team)</ToolbarLabel>
+        )}
+      </Toolbar>
     </Stack>
   );
 }
