@@ -296,3 +296,8 @@ Console errors: 0.
 Why: the last innovation-audit item for the desk; re-observed as u-asha on /assessment/teams and TEAM-001.
   The desk's Step cell is the WorkflowStepper (the active step carries aria-current="step", done steps a check glyph with text); the stepper scrolls horizontally inside a 160px cell — a keyboard user reaches the overflow by focusing the cell's scroll container. Nothing else in the tab order changed.
 Console errors: 0.
+
+--- freshness re-observation, 2026-09-16 09:10 (portal/src/pages/assessment changed: a11y + responsive pass) ---
+Why: the screen-reader and narrow-width audits; re-observed as u-asha on TEAM-001 and the enterprise explorer.
+  Heading order on the scorecard: the dimension title is an h2 (was h3) so the outline reads h1 → h2; the explorer rail narrows below 1280px.
+Console errors: 0.

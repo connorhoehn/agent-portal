@@ -293,7 +293,7 @@ export default function ChangeReviewPage() {
         )}
       </Inline>
 
-      <RailLayout rail={rail}>
+      <RailLayout rail={rail} railWidth="sm">
         {c.diff ? (
           <DiffViewer
             diff={c.diff}

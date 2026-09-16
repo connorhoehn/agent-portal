@@ -7,9 +7,11 @@ import {
   Button,
   ChatComposer,
   EmptyState,
+  EntityCell,
   ExpertCard,
   Inline,
   MessageBubble,
+  MetaLine,
   QuickPromptGrid,
   FollowUpChips,
   SectionLabel,
@@ -35,7 +37,7 @@ import { PresenceAvatarGroup } from '../components/shell/PresenceAvatarGroup';
 import { deriveSources, extractSources } from '../components/chat/answerSources';
 import { useCapabilities } from '../lib/capabilities';
 import { SourceChips } from '../components/chat/SourceChips';
-import { summarizeToolCalls } from '../components/chat/toolCallSummary';
+import { friendlyToolName } from '../components/chat/toolCallSummary';
 import { coalesceAssistantMessages } from '../components/chat/coalesceMessages';
 import { collapseFailedTurn } from '../components/chat/collapseFailedTurn';
 import { FeedbackControl } from '../components/chat/FeedbackControl';
@@ -318,22 +320,9 @@ function InvokePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams.get('agentId')]);
 
-  // Honor deep-links like /iq/invoke?prompt=<slug-or-text> — the subnav
-  // "Suggested" searches ("Who knows X?", "Decisions about X"…) point here.
-  // Resolve a known slug to its full prompt, else send the text verbatim, run
-  // it once, and strip the param so a reload doesn't re-fire it. Previously
-  // these links redirected to /invoke and the param was dropped, so every
-  // suggested search did nothing.
-  useEffect(() => {
-    const p = searchParams.get('prompt');
-    if (!p) return;
-    const resolved = PROMPT_SLUGS[p] ?? p;
-    const next = new URLSearchParams(searchParams);
-    next.delete('prompt');
-    setSearchParams(next, { replace: true });
-    void sendMessage(resolved);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams.get('prompt')]);
+  // The `?prompt=`(+`?focus=`) deep-link is handled further down, once the
+  // org-graph fetch (`graph`) it needs to resolve `focus` ids into names is
+  // in scope — see the effect right after that `useFetch` call.
 
   // Auto-resume: with no deep-link, reload lands back in the last conversation
   // instead of a fresh one (transcript restored from AgentCore Memory). A
@@ -499,7 +488,40 @@ function InvokePage() {
   // (word-boundary hits against actual graph people), so the "People in this
   // answer" panel and the follow-ups are accurate — unlike guessing at any two
   // capitalized words. Harvested from the retired dedicated search page.
-  const { data: graph } = useFetch<GraphEntities>('/api/graph/entities');
+  const { data: graph, error: graphFetchError } = useFetch<GraphEntities>('/api/graph/entities');
+
+  // Honor deep-links like /iq/invoke?prompt=<slug-or-text>[&focus=<id1,id2,…>]
+  // — the subnav "Suggested" searches ("Who knows X?", "Decisions about X"…)
+  // AND Explore's "Open in Ask →" link (which adds `focus`) both point here.
+  // Resolve a known slug to its full prompt, else send the text verbatim; when
+  // `focus` ids are present, name the people they refer to and append "About:
+  // <names>" so the first turn carries who Explore was showing — the
+  // simplest honest hand-off, no new middleware. Names resolve from `graph`
+  // (fetched above), so this waits one render for that fetch to settle
+  // before firing rather than sending an unfleshed-out prompt; a fetch that
+  // fails (`graphFetchError`) is not worth blocking on, so the prompt still
+  // sends, just without the names. Runs once, then strips both params so a
+  // reload doesn't re-fire it.
+  useEffect(() => {
+    const p = searchParams.get('prompt');
+    if (!p) return;
+    const focusParam = searchParams.get('focus');
+    const focusIds = focusParam ? focusParam.split(',').map((s) => s.trim()).filter(Boolean) : [];
+    if (focusIds.length > 0 && !graph && !graphFetchError) return; // wait for names to resolve
+    let resolved = PROMPT_SLUGS[p] ?? p;
+    if (focusIds.length > 0 && graph) {
+      const names = focusIds
+        .map((id) => graph.nodes.find((n) => n.id === id)?.name)
+        .filter((n): n is string => Boolean(n));
+      if (names.length > 0) resolved = `${resolved}\n\nAbout: ${names.join(', ')}`;
+    }
+    const next = new URLSearchParams(searchParams);
+    next.delete('prompt');
+    next.delete('focus');
+    setSearchParams(next, { replace: true });
+    void sendMessage(resolved);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams.get('prompt'), searchParams.get('focus'), graph, graphFetchError]);
 
   // ── The Find-Help merge: Ask IS the org search ────────────────────────────
   //
@@ -541,9 +563,14 @@ function InvokePage() {
     [messages, selectedId, suggestionSeed, mentionedPeople],
   );
 
+  // A follow-up chip is the same affordance as the work-suggestion cards
+  // above it (onSelect={() => send(sg.prompt)}) — clicking either should
+  // send the turn, not just stage it in the composer. `send` already guards
+  // `isStreaming`, so a chip clicked mid-stream is a no-op rather than a
+  // race with the in-flight turn.
   const handleSuggestion = useCallback((s: string) => {
-    setInput(s);
-  }, []);
+    send(s);
+  }, [send]);
 
   return (
     <Inline gap="none" wrap={false} align="stretch" className="h-full min-h-0">
@@ -728,25 +755,23 @@ function InvokePage() {
             const { cleaned, sources, provenance } = msg.role === 'assistant'
               ? deriveSources({ content: msg.content, toolCalls: msg.toolCalls })
               : { cleaned: msg.content, sources: [], provenance: undefined };
-            const toolSummary = msg.role === 'assistant' ? summarizeToolCalls(msg.toolCalls) : null;
             return (
               <Stack gap="none" key={msg.id}>
                 <MessageBubble
                   role={msg.role}
                   content={cleaned}
+                  // One channel for tool-call provenance: the friendly label
+                  // (toolCallSummary's FRIENDLY map) IS the pill name, rather
+                  // than a raw tool id echoed here AND a second, redundant
+                  // plain-text summary line below the bubble.
                   toolCalls={(msg.toolCalls ?? []).map(tc => ({
                     id: tc.id,
-                    name: tc.name,
+                    name: friendlyToolName(tc.name),
                     done: Boolean(tc.result),
                   }))}
                   agentName={selectedAgent?.name ?? 'Agent'}
                   renderMarkdown={(content) => renderMessageContent(content, false)}
                 />
-                {toolSummary && (
-                  <T className="text-[11px] text-text-tertiary mt-0.5">
-                    {toolSummary}
-                  </T>
-                )}
                 <SourceChips sources={sources} {...(provenance ? { provenance } : {})} />
                 {msg.role === 'assistant' && (
                   <FeedbackControl invocationId={answerInvocationId(msg)} />
@@ -760,7 +785,7 @@ function InvokePage() {
               content={extractSources(streamingText).cleaned}
               toolCalls={activeToolCalls.map(tc => ({
                 id: tc.id,
-                name: tc.name,
+                name: friendlyToolName(tc.name),
                 done: tc.done,
                 args: tc.args,
               }))}
@@ -790,22 +815,44 @@ function InvokePage() {
         </Stack>
 
         {/* People in this answer — the org-graph names the response actually
-            mentioned, each a jump into the graph. The organizational-intelligence
-            payoff: an answer about "who knows X" surfaces the real people. */}
+            mentioned, each a jump into the graph, with the context (title ·
+            department) an org search should carry rather than a bare name
+            pill. Full ExpertCard is a "why them" card (avatar, skill
+            evidence, an "ask" footer) built for the 1-3-wide evidence rail
+            (see "People with evidence" below) — dropped inline here for up
+            to 8 mentions it would tower over the transcript, so this reuses
+            the same EntityCell + MetaLine pattern other compact rows in the
+            portal use for a name plus its meta line. */}
         {mentionedPeople.length > 0 && (
-          <Inline wrap align="center" gap="xs" className="mb-2">
+          <Stack gap="xs" className="mb-2">
             <SectionLabel>People in this answer</SectionLabel>
-            {mentionedPeople.slice(0, 8).map((p) => (
+            <Inline wrap align="stretch" gap="xs">
+              {mentionedPeople.slice(0, 8).map((p) => (
+                <Link
+                  key={p.id}
+                  to={`/iq/explore?focus=${encodeURIComponent(p.id)}`}
+                  title={`Show ${p.name} in the org graph`}
+                  className="no-underline"
+                >
+                  <Stack
+                    gap="none"
+                    className="min-w-0 max-w-[200px] rounded-md border border-border px-2.5 py-1.5 hover:border-border-emphasis hover:bg-surface-hover transition-colors"
+                  >
+                    <EntityCell label={p.name} />
+                    <MetaLine items={[p.title, p.department]} size="xs" tone="tertiary" />
+                  </Stack>
+                </Link>
+              ))}
+            </Inline>
+            {mentionedPeople.length > 1 && (
               <Link
-                key={p.id}
-                to={`/iq/explore?focus=${encodeURIComponent(p.id)}`}
-                title={`Show ${p.name} in the org graph`}
-                className="text-[12px] font-semibold no-underline px-2.5 py-0.5 rounded-full border border-primary text-primary bg-transparent"
+                to={`/iq/explore?focus=${mentionedPeople.map((p) => encodeURIComponent(p.id)).join(',')}`}
+                className="text-[12px] font-semibold text-primary no-underline hover:underline self-start"
               >
-                {p.name}
+                Show all {mentionedPeople.length} in Explore →
               </Link>
-            ))}
-          </Inline>
+            )}
+          </Stack>
         )}
 
         {/* Suggested search bubbles — shown when conversation has messages */}

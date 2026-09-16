@@ -67,8 +67,11 @@ export function CanaryDeploymentsView(): React.ReactElement {
         </Inline>
       </Inline>
 
-      <Card padding="none" className="overflow-hidden">
-        <Table>
+      {/* `overflow-x-auto` (not `overflow-hidden`) so narrow viewports scroll
+          the table horizontally instead of clipping the trailing columns —
+          the six columns don't fit under ~1100px. */}
+      <Card padding="none" className="overflow-x-auto">
+        <Table className="min-w-[720px]">
           <TableHead>
             <TableRow>
               <TableTh className="w-[170px]">Time</TableTh>

@@ -15,6 +15,7 @@ import {
   Inline,
   LoadingState,
   PageSection,
+  RailLayout,
   Stack,
   TabPanel,
   Tabs,
@@ -359,84 +360,14 @@ function ProjectDetailPage() {
 
   return (
     <Stack gap="lg" className="pb-16">
-      {/* Two columns from the top of the page: the header, tabs and table on
-          the left; the rail on the right runs the full height beside them
-          and stays put while the left column scrolls. */}
-      <Inline gap="lg" align="start" wrap={false} className="items-start">
-        <Stack gap="lg" className="min-w-0 flex-1 basis-[520px]">
-      <InitiativeHeader
-        project={project}
-        projectId={id ?? ''}
-        contributors={contributors}
-        ownerId={ownerId}
-        ownerName={ownerName}
-        smes={smes}
-        points={points}
-        openDecisionCount={openDecisionCount}
-        escalatedCount={escalatedCount}
-        spend={{
-          serverSpendUsd,
-          serverPending: projectListLoading,
-          clientSpendUsd: agentActivity.spendUsd,
-          // Blind if we could not read the roster OR could not read a bot's
-          // run history — either way the client sum is a floor, not a total.
-          clientBlind: agentActivity.botsError != null || agentActivity.runsError != null,
-          clientPending: agentActivity.botsLoading,
-        }}
-        repoUrl={repoUrl ?? project.githubUrl ?? null}
-        repoLabel={projectRollup?.repoFullName ?? (repoUrl ? null : project.githubUrl ? 'GitHub' : null)}
-        repoCount={codebases.length}
-        onOwner={(oid, oname) => setOwnerOverride({ ownerId: oid, ownerName: oname })}
-        onRole={handleRoleOverride}
-      />
-
-        <Stack gap="md">
-          <Tabs
-            idPrefix="initiative"
-            aria-label="Initiative detail"
-            items={tabs}
-            value={tab}
-            onValueChange={setTab}
-          />
-
-          <TabPanel id="work" when={tab} idPrefix="initiative">
-            <WorkPanel
-              workTree={workTree}
-              workLoading={workLoading}
-              canDispatch={canDispatch}
-              showGrantCue={showGrantCue}
-              marketRuns={marketRuns}
-              onStatusToggle={handleStatusToggle}
-              onAddItem={handleAddItem}
-              onAddEpic={handleAddEpic}
-              onEstimate={setEstimateItem}
-            />
-          </TabPanel>
-
-          <TabPanel id="decisions" when={tab} idPrefix="initiative">
-            <DecisionQueue decisions={decisions ?? []} />
-          </TabPanel>
-
-          <TabPanel id="contributors" when={tab} idPrefix="initiative">
-            <ContributorsTable
-              contributors={contributors}
-              projectId={id ?? ''}
-              onRole={handleRoleOverride}
-              onOpenPerson={handleOpenPerson}
-            />
-          </TabPanel>
-        </Stack>
-        </Stack>
-
-        {/* The rail is fixed: it sticks to the top of the shell's scroll
-            container and scrolls inside itself when its cards are taller than
-            that container. Its ceiling is the container's height (the
-            viewport minus the shell chrome, --shell-chrome-h in app.css) — a
-            rail taller than the container cannot be pinned and clips. */}
-        <Stack
-          gap="sm"
-          className="sticky top-0 max-h-[calc(100vh-var(--shell-chrome-h))] w-[320px] shrink-0 self-start overflow-y-auto rounded-lg bg-surface-panel p-3"
-        >
+      {/* RailLayout stacks the rail below the main column under `lg`
+          (1024px) instead of crushing a fixed-520px main column against a
+          fixed-320px rail — the hand-rolled Inline split never scrolled
+          below that. Sticky positioning is RailLayout's own (`lg:sticky
+          lg:top-4`); it no longer pins to the shell's scroll container. */}
+      <RailLayout
+        railWidth="lg"
+        rail={(
           <InitiativeRail
             initiativeId={id}
             activity={agentActivity}
@@ -444,8 +375,73 @@ function ProjectDetailPage() {
             runs={marketplaceRuns}
             workTree={workTree}
           />
+        )}
+      >
+        <Stack gap="lg">
+          <InitiativeHeader
+            project={project}
+            projectId={id ?? ''}
+            contributors={contributors}
+            ownerId={ownerId}
+            ownerName={ownerName}
+            smes={smes}
+            points={points}
+            openDecisionCount={openDecisionCount}
+            escalatedCount={escalatedCount}
+            spend={{
+              serverSpendUsd,
+              serverPending: projectListLoading,
+              clientSpendUsd: agentActivity.spendUsd,
+              // Blind if we could not read the roster OR could not read a bot's
+              // run history — either way the client sum is a floor, not a total.
+              clientBlind: agentActivity.botsError != null || agentActivity.runsError != null,
+              clientPending: agentActivity.botsLoading,
+            }}
+            repoUrl={repoUrl ?? project.githubUrl ?? null}
+            repoLabel={projectRollup?.repoFullName ?? (repoUrl ? null : project.githubUrl ? 'GitHub' : null)}
+            repoCount={codebases.length}
+            onOwner={(oid, oname) => setOwnerOverride({ ownerId: oid, ownerName: oname })}
+            onRole={handleRoleOverride}
+          />
+
+          <Stack gap="md">
+            <Tabs
+              idPrefix="initiative"
+              aria-label="Initiative detail"
+              items={tabs}
+              value={tab}
+              onValueChange={setTab}
+            />
+
+            <TabPanel id="work" when={tab} idPrefix="initiative">
+              <WorkPanel
+                workTree={workTree}
+                workLoading={workLoading}
+                canDispatch={canDispatch}
+                showGrantCue={showGrantCue}
+                marketRuns={marketRuns}
+                onStatusToggle={handleStatusToggle}
+                onAddItem={handleAddItem}
+                onAddEpic={handleAddEpic}
+                onEstimate={setEstimateItem}
+              />
+            </TabPanel>
+
+            <TabPanel id="decisions" when={tab} idPrefix="initiative">
+              <DecisionQueue decisions={decisions ?? []} />
+            </TabPanel>
+
+            <TabPanel id="contributors" when={tab} idPrefix="initiative">
+              <ContributorsTable
+                contributors={contributors}
+                projectId={id ?? ''}
+                onRole={handleRoleOverride}
+                onOpenPerson={handleOpenPerson}
+              />
+            </TabPanel>
+          </Stack>
         </Stack>
-      </Inline>
+      </RailLayout>
 
       {/* Contributor detail card — opened from the identity line or the table,
           keeping the user (and their breadcrumb) on this initiative. */}

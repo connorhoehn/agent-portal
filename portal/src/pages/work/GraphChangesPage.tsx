@@ -142,7 +142,7 @@ export default function GraphChangesPage() {
         </Inline>
       )}
 
-      <Toolbar aria-label="Change filters">
+      <Toolbar wrap aria-label="Change filters">
         <ToolbarGroup aria-label="Status">
           {(['all', 'applied', 'pending', 'rejected', 'failed'] as const).map((f) => (
             <FilterChip key={f} active={filter === f} onClick={() => setFilter(f)} size="sm">

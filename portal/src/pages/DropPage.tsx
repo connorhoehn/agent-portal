@@ -52,6 +52,13 @@ const STATE_TONE: Record<FileState, string> = {
   pending: 'var(--color-text-tertiary)',
 };
 
+const STATE_LABEL: Record<FileState, string> = {
+  done: 'uploaded',
+  failed: 'failed',
+  uploading: 'uploading',
+  pending: 'queued',
+};
+
 function shell(children: ReactNode) {
   return (
     <Stack align="center" className="min-h-screen bg-bg px-4 py-14">
@@ -196,7 +203,12 @@ export default function DropPage() {
               key={u.id} gap="sm" align="center"
               className="px-5 py-2.5 border-b border-border last:border-b-0"
             >
-              <StatusDot color={STATE_TONE[u.state]} pulse={u.state === 'uploading'} />
+              <StatusDot
+                color={STATE_TONE[u.state]}
+                pulse={u.state === 'uploading'}
+                title={STATE_LABEL[u.state]}
+                aria-label={STATE_LABEL[u.state]}
+              />
               <T className="text-[12px] text-text-primary truncate flex-1">{u.name}</T>
               {u.error
                 ? <T className="text-[11px] text-danger truncate max-w-[50%]" title={u.error}>{u.error}</T>

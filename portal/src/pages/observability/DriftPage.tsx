@@ -407,6 +407,7 @@ function DriftPage() {
             </T>
           </Inline>
           <Select
+            aria-label="Filter outliers by agent"
             value={selectedAgent}
             onChange={(e) => { setSelectedAgent(e.target.value); setExpanded(null); }}
             disabled={rows.length === 0}

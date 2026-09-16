@@ -206,7 +206,14 @@ export default function LocalComputePage() {
       header: 'Machine',
       render: (n) => (
         <Inline gap="xs" align="center">
-          <EntityCell label={n.label} />
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-pressed={n.id === selectedNodeId}
+            onClick={() => setSelectedNodeId(n.id)}
+          >
+            <EntityCell label={n.label} />
+          </Button>
           <Chip
             tone={n.presence.status === 'connected' ? 'success' : n.presence.status === 'stale' ? 'warning' : 'neutral'}
             size="xs"
@@ -382,7 +389,11 @@ export default function LocalComputePage() {
                 ) : (
                   <DataTable<RunRow>
                     columns={[
-                      { key: 'title', header: 'Work', render: (r) => <EntityCell label={r.title} id={r.kind} /> },
+                      { key: 'title', header: 'Work', render: (r) => (
+                        <Button variant="ghost" size="sm" onClick={() => setSelectedRunId(r.id)}>
+                          <EntityCell label={r.title} id={r.kind} />
+                        </Button>
+                      ) },
                       { key: 'status', header: 'Status', render: (r) => <Chip tone={statusTone(r.status)} size="xs">{statusLabel(r.status)}</Chip> },
                       { key: 'target', header: 'Targeted', render: (r) => (r.nodeId ? 'this machine' : 'any machine in the kind') },
                       { key: 'queued', header: 'Queued', render: (r) => when(r.createdAt) },

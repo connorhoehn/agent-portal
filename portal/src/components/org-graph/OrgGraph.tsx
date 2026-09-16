@@ -1,10 +1,11 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { useForceLayout, type LayoutMode } from './useForceLayout';
 import { OrgGraphNode } from './OrgGraphNode';
 import { OrgGraphEdge } from './OrgGraphEdge';
 import { OrgGraphTooltip } from './OrgGraphTooltip';
 import { OrgGraphLegend } from './OrgGraphLegend';
 import type { GraphPerson, GraphRelationship, GraphDepartment, GraphNode as GNode } from './types';
+import { degreeMap as buildDegreeMap, maxDegree as maxOfDegreeMap } from './graphInsights';
 import { Button, Inline, Stack } from '@connorhoehnslalom/ui-components/shared';
 
 interface OrgGraphProps {
@@ -21,6 +22,10 @@ interface OrgGraphProps {
   layout?: LayoutMode;
   /** Presence filter — dims nodes that don't match. null/undefined = no filter. */
   presenceFilter?: 'office' | 'remote' | 'away' | null;
+  /** True only for roles allowed to see influence (org-leader/hr-admin/admin)
+   *  — sizes nodes by influence. Everyone else sizes by connection count so a
+   *  bigger circle can't leak a number the tooltip and detail card hide. */
+  showInfluence?: boolean;
 }
 
 export function OrgGraph({
@@ -33,6 +38,7 @@ export function OrgGraph({
   spotlightIds,
   layout,
   presenceFilter,
+  showInfluence = false,
 }: OrgGraphProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
@@ -70,6 +76,14 @@ export function OrgGraph({
     height: dimensions.height,
     layout,
   });
+
+  // Degree in the graph currently on screen — the size signal for roles that
+  // may not see influence (see graphInsights.ts's node-sizing section).
+  const degrees = useMemo(
+    () => buildDegreeMap(links.map(l => ({ source: l.source.id, target: l.target.id }))),
+    [links],
+  );
+  const maxDeg = useMemo(() => maxOfDegreeMap(degrees), [degrees]);
 
   const connectedIds = useCallback((id: string | null): Set<string> => {
     if (!id) return new Set();
@@ -178,6 +192,9 @@ export function OrgGraph({
                 onSelect={handleSelect}
                 onHover={setHoveredId}
                 presenceFilter={presenceFilter}
+                showInfluence={showInfluence}
+                degree={degrees.get(node.id) ?? 0}
+                maxDegree={maxDeg}
               />
             );
           })}

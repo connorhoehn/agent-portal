@@ -9,7 +9,7 @@
 // lane is not an appendix.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router';
+import { Link, useNavigate, useSearchParams } from 'react-router';
 import {
   Button,
   Card,
@@ -75,10 +75,24 @@ export default function FindingsPage() {
   // on screen can never disagree with the pressed pill — a fetch that
   // resolves late (a fast click, a slow network) can't flash a stale
   // status's rows under the newly-selected filter.
-  const findings = useMemo(
-    () => filterFindings(findingsData?.findings ?? [], findingStatus),
-    [findingsData, findingStatus],
-  );
+  // Deep links from Explore's rare-skill strip arrive as ?sweep=bus_factor&q=<skill>:
+  // the sweep narrows the groups, the text narrows the rows. Both are shown
+  // as removable chips so the reader can see what the URL did to the list.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const sweepParam = searchParams.get('sweep')?.trim() || null;
+  const qParam = searchParams.get('q')?.trim() || null;
+  const clearParam = (key: 'sweep' | 'q') => {
+    const next = new URLSearchParams(searchParams);
+    next.delete(key);
+    setSearchParams(next, { replace: true });
+  };
+  const findings = useMemo(() => {
+    const byStatus = filterFindings(findingsData?.findings ?? [], findingStatus);
+    const q = qParam?.toLowerCase();
+    return byStatus.filter((f) =>
+      (!sweepParam || f.sweep === sweepParam)
+      && (!q || JSON.stringify(f).toLowerCase().includes(q)));
+  }, [findingsData, findingStatus, sweepParam, qParam]);
   const deadLettered = useMemo(
     () => (jobsData?.jobs ?? []).filter((j) => j.status === 'failed' || j.status === 'cancelled'),
     [jobsData],
@@ -281,7 +295,7 @@ export default function FindingsPage() {
 
       {/* ── Sweep findings, grouped. The group header is the unit of
              attention; the rows are the drill-in. ── */}
-      <Toolbar aria-label="Finding filters">
+      <Toolbar wrap aria-label="Finding filters">
         <ToolbarGroup aria-label="Status">
           <ToolbarLabel>Findings</ToolbarLabel>
           {(['open', 'promoted', 'resolved', 'dismissed'] as const).map((st) => (
@@ -290,6 +304,20 @@ export default function FindingsPage() {
             </FilterChip>
           ))}
         </ToolbarGroup>
+        {(sweepParam || qParam) && (
+          <ToolbarGroup aria-label="Deep-link filters">
+            {sweepParam && (
+              <FilterChip active size="sm" onClick={() => clearParam('sweep')}>
+                Sweep: {sweepLabel(sweepParam)} ×
+              </FilterChip>
+            )}
+            {qParam && (
+              <FilterChip active size="sm" onClick={() => clearParam('q')}>
+                “{qParam}” ×
+              </FilterChip>
+            )}
+          </ToolbarGroup>
+        )}
       </Toolbar>
 
       <Card padding="none" className="overflow-hidden">

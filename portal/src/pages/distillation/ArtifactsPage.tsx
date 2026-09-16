@@ -162,7 +162,7 @@ export default function DistillationArtifactsPage() {
       title="Artifacts"
       description="L2 artifacts with their clusters, evidence and the Library item each became."
     >
-      <Toolbar size="md" aria-label="Artifact filters">
+      <Toolbar size="md" wrap aria-label="Artifact filters">
         <ToolbarGroup aria-label="Type">
           <ToolbarLabel>Type</ToolbarLabel>
           {TYPE_FILTERS.map((f) => (

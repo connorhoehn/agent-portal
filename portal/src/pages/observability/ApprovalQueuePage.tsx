@@ -15,6 +15,7 @@ import {
   CodeBlock,
   Inline,
   Input,
+  LiveRegion,
   PageSection,
   StatusDot,
   Table,
@@ -192,6 +193,10 @@ function ApprovalQueuePage() {
           <T>{streaming ? 'live' : 'reconnecting…'}</T>
           <T className="text-text-tertiary">·</T>
           <T><strong>{sorted.length}</strong> pending</T>
+          <LiveRegion
+            politeness="polite"
+            message={`${sorted.length} approval${sorted.length === 1 ? '' : 's'} pending`}
+          />
         </Inline>
       }
     >

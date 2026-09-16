@@ -17,6 +17,7 @@ import {
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { useSession } from '../../lib/auth';
+import { relativeTime } from '../../lib/relativeTime';
 import { CONNECTION_TYPE_LABELS, firstName } from './graphInsights';
 import { MeterRow } from './graphOverlay';
 
@@ -162,17 +163,22 @@ export function PersonDetailCard({ personId, onClose, onFocusPerson, onAsk }: Pe
                 <CardHeader title="Evidence" subtitle={`${evidenceDocs.length} documents`} />
                 <Stack gap="xs">
                   {evidenceDocs.slice(0, 6).map((doc) => (
-                    <Inline key={doc.id} gap="xs" align="center" wrap={false}>
-                      <Chip size="xs" uppercase>{doc.source || 'doc'}</Chip>
-                      <Inline as="span" gap="none" title={doc.title} className="min-w-0 flex-1 truncate text-[11px]">
-                        {doc.title}
-                      </Inline>
-                      {doc.mentionCount > 1 && (
-                        <Inline as="span" gap="none" className="shrink-0 text-[10px] tabular-nums text-text-tertiary">
-                          ×{doc.mentionCount}
+                    <Stack key={doc.id} gap="none" className="min-w-0">
+                      <Inline gap="xs" align="center" wrap={false}>
+                        <Chip size="xs" uppercase>{doc.source || 'doc'}</Chip>
+                        <Inline as="span" gap="none" title={doc.title} className="min-w-0 flex-1 truncate text-[11px]">
+                          {doc.title}
                         </Inline>
-                      )}
-                    </Inline>
+                        {doc.mentionCount > 1 && (
+                          <Inline as="span" gap="none" className="shrink-0 text-[10px] tabular-nums text-text-tertiary">
+                            ×{doc.mentionCount}
+                          </Inline>
+                        )}
+                      </Inline>
+                      {/* When a document was ingested — how fresh the evidence
+                          behind this person's skills/connections actually is. */}
+                      <MetaLine size="xs" items={[doc.ingestedAt ? relativeTime(doc.ingestedAt) : null]} />
+                    </Stack>
                   ))}
                 </Stack>
               </Stack>

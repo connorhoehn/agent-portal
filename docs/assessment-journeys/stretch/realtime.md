@@ -65,3 +65,8 @@ Nothing on this proof. The banner's age is now correct within one re-render, the
 Why: the last three open audit findings for this tenant; re-observed as u-asha (/assessment/runs, /assessment/submissions, the wizard) and as u-operator (a knowledge doc's History).
   RunsPage's command panel is a DataTable; the ledger's live event wiring (the SSE-driven progress on running rows) is untouched and was re-observed on 12 ledger rows as Asha.
 Console errors: 0.
+
+--- freshness re-observation, 2026-09-16 09:10 (portal/src/pages/assessment changed: a11y + responsive pass) ---
+Why: the screen-reader and narrow-width audits; re-observed as u-asha on TEAM-001 and the enterprise explorer.
+  No runtime path changed; the scorecard pane heading level and the explorer rail width are markup/CSS only.
+Console errors: 0.

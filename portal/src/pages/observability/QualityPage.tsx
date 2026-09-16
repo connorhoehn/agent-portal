@@ -209,6 +209,7 @@ function QualityPage() {
       description={`Last 24h · 30s refresh · ${scores.length} sample${scores.length === 1 ? '' : 's'}`}
       actions={
         <Select
+          aria-label="Filter by agent"
           value={selectedAgent}
           onChange={(e) => setSelectedAgent(e.target.value)}
           disabled={agentOptions.length === 0}

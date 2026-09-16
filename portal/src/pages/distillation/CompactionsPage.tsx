@@ -211,7 +211,7 @@ export default function DistillationCompactionsPage() {
     >
       <CompactionFlow jobs={jobs} height={200} />
 
-      <Toolbar size="md" aria-label="Compaction filters">
+      <Toolbar size="md" wrap aria-label="Compaction filters">
         <ToolbarGroup aria-label="Merge">
           <ToolbarLabel>Merge</ToolbarLabel>
           {LEVEL_FILTERS.map((f) => (

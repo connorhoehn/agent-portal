@@ -27,6 +27,12 @@ function IqLayout() {
       secondaryTitle={spec.secondaryTitle}
       secondaryItems={spec.secondaryItems}
       secondaryStorageKey={spec.secondaryStorageKey}
+      // The canary secondary rail was eating the library defaults (220 +
+      // 200 = 420px on top of the 200px shell rail — 620px of chrome before
+      // 1280px). Narrowing both here leaves more room for the live graph at
+      // 1024–1279px.
+      railWidth={200}
+      secondaryRailWidth={160}
       contentAs="section"
       contentLabel={spec.title}
       renderNavItem={(item, children) => {

@@ -14,7 +14,7 @@ import {
   provenanceNote,
   retrievedDocuments,
 } from '../answerSources.ts';
-import { summarizeToolCalls } from '../toolCallSummary.ts';
+import { friendlyToolName, summarizeToolCalls } from '../toolCallSummary.ts';
 
 const S3 = 's3://orgiq-documents-647757222309-us-east-1/perf/perf-Theo%20Williams.txt';
 
@@ -303,4 +303,16 @@ test('supervisor tools summarize as data, and build_graph is not a query', () =>
   assert.equal(summarizeToolCalls([{ name: 'build_graph' }]), 'updated the org graph');
   assert.equal(summarizeToolCalls([{ name: 'query_knowledge_base' }]), 'searched knowledge base');
   assert.equal(summarizeToolCalls([]), null);
+});
+
+// friendlyToolName is the per-call form of the same FRIENDLY table
+// summarizeToolCalls uses — it backs the tool-call pills InvokePage passes to
+// MessageBubble, so pills read "searched knowledge base" rather than a raw
+// tool id, with no separate summary line duplicating the same information.
+test('friendlyToolName maps a single tool id the same way summarizeToolCalls does', () => {
+  assert.equal(friendlyToolName('query_knowledge_base'), 'searched knowledge base');
+  assert.equal(friendlyToolName('get_expertise_scores'), 'read expertise scores');
+  assert.equal(friendlyToolName('build_graph'), 'updated the org graph');
+  // Unknown tools keep their raw name rather than disappearing or throwing.
+  assert.equal(friendlyToolName('some_unmapped_tool'), 'some_unmapped_tool');
 });

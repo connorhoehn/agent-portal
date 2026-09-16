@@ -44,6 +44,8 @@ import {
   Tooltip,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../hooks/useFetch';
+import { useSession } from '../lib/auth';
+import { parseFocusIds } from '../components/org-graph/graphInsights';
 import { Markdown } from '../components/Markdown';
 import { T } from './Text';
 import { RangeSliderFrame } from './RangeSliderFrame';
@@ -201,11 +203,22 @@ function ExplorePage() {
   const { data, error: graphError, refresh: refreshGraph } = useFetch<GraphData>('/api/graph/entities');
   const [searchParams, setSearchParams] = useSearchParams();
 
+  // Influence is leadership analytics (ViewLeaderboard tier) — same gate
+  // OrgGraphTooltip and PersonDetailCard already apply, mirrored here so node
+  // SIZE can't leak the number to a role that can't see it in either of those.
+  const { session } = useSession();
+  const showInfluence =
+    session?.role === 'org-leader' || session?.role === 'hr-admin' || session?.role === 'admin';
+
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   // Most recently selected person — drives the detail side panel.
   const [detailId, setDetailId] = useState<string | null>(null);
   // Department focus chip — highlights one department's people.
   const [activeDepartment, setActiveDepartment] = useState<string | null>(null);
+  // "Rare skills" toolbar toggle — the org-wide bus-factor strip, shown
+  // without first picking a department. A department chip takes priority
+  // when both are active (see the strip render below).
+  const [rareSkillsOpen, setRareSkillsOpen] = useState(false);
   const [topK, setTopK] = useState(4);
   const [minStrength, setMinStrength] = useState(0.6);
   const [chatOpen, setChatOpen] = useState(false);
@@ -239,13 +252,16 @@ function ExplorePage() {
     setSelectedIds(new Set());
     setActiveStatuses(null);
     setActiveDepartment(null);
+    setRareSkillsOpen(false);
   }, [entityFilter]);
 
-  // ?focus=<id> arrives from related-people cards on /search.
+  // ?focus=<id>[,<id>…] arrives from related-people cards on /search (one id)
+  // and from Ask's "Show all N in Explore" link (comma-joined). Union every
+  // id into the selection either way.
   useEffect(() => {
-    const focus = searchParams.get('focus');
-    if (!focus) return;
-    setSelectedIds(prev => { const n = new Set(prev); n.add(focus); return n; });
+    const ids = parseFocusIds(searchParams.get('focus'));
+    if (ids.length === 0) return;
+    setSelectedIds(prev => { const n = new Set(prev); for (const id of ids) n.add(id); return n; });
     const next = new URLSearchParams(searchParams);
     next.delete('focus');
     setSearchParams(next, { replace: true });
@@ -410,10 +426,9 @@ function ExplorePage() {
     }
   }, [isStreaming, messages, data]);
 
-  function openAndAsk(ids?: string[]) {
-    setChatOpen(true);
-    if (!ids || ids.length === 0 || isStreaming) return;
-
+  // Shared by the "Ask about selection →" chat button AND the "Open in Ask →"
+  // link, so the two can never disagree about what question the selection asks.
+  function buildAskForSelection(ids: string[]): { question: string; personIds: string[] } | null {
     // Resolve display labels for each selected ID. For person nodes use data.nodes
     // (which has real names); for skill/domain/project nodes fall back to meGraph.nodes.
     const resolveLabel = (id: string): string | undefined => {
@@ -432,7 +447,7 @@ function ExplorePage() {
     const nonPersonLabels = nonPersonNodes.map(n => n.label);
 
     // Bail gracefully if we couldn't resolve any labels.
-    if (allLabels.length === 0) return;
+    if (allLabels.length === 0) return null;
 
     let question: string;
     if (nonPersonLabels.length > 0 && personIds.length === 0) {
@@ -464,9 +479,30 @@ function ExplorePage() {
       question = `What connects ${rest} and ${last}? Describe their shared skills, collaborations, and any overlapping projects.`;
     }
 
-    pendingSelectionRef.current = { peopleIds: personIds.length > 0 ? personIds : ids };
-    void sendMessage(question);
+    return { question, personIds: personIds.length > 0 ? personIds : ids };
   }
+
+  function openAndAsk(ids?: string[]) {
+    setChatOpen(true);
+    if (!ids || ids.length === 0 || isStreaming) return;
+    const built = buildAskForSelection(ids);
+    if (!built) return;
+    pendingSelectionRef.current = { peopleIds: built.personIds };
+    void sendMessage(built.question);
+  }
+
+  // Same question, as a deep link to the full-width Ask page instead of the
+  // side panel — for a selection worth more room than 380px, or for sharing
+  // the link itself. `focus` is comma-joined ids; InvokePage resolves them
+  // into names before sending, same as the chat panel does here.
+  const askSelectionUrl = useMemo(() => {
+    if (selectedIds.size === 0) return null;
+    const built = buildAskForSelection(Array.from(selectedIds));
+    if (!built) return null;
+    const params = new URLSearchParams({ prompt: built.question, focus: built.personIds.join(',') });
+    return `/iq/invoke?${params.toString()}`;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedIds, data, meGraph]);
 
   function handleSend() {
     if (!input.trim() || isStreaming) return;
@@ -535,6 +571,15 @@ function ExplorePage() {
                 <Button variant="primary" size="sm" onClick={() => openAndAsk(Array.from(selectedIds))}>
                   Ask about selection →
                 </Button>
+                {askSelectionUrl && (
+                  <Link
+                    to={askSelectionUrl}
+                    title="Ask the same question full-width on the Ask page"
+                    className="text-[12px] text-primary no-underline hover:underline"
+                  >
+                    Open in Ask →
+                  </Link>
+                )}
               </ToolbarGroup>
             )}
             <Button variant="secondary" size="sm" onClick={() => chatOpen ? handleClose() : setChatOpen(true)}>
@@ -693,15 +738,26 @@ function ExplorePage() {
             }}
           />
         )}
+        {(entityFilter === 'all' || entityFilter === 'people' || entityFilter === 'hierarchy') && (
+          <FilterChip
+            active={rareSkillsOpen}
+            size="sm"
+            onClick={() => setRareSkillsOpen(v => !v)}
+          >
+            ⚠ Rare skills · org-wide
+          </FilterChip>
+        )}
       </Toolbar>
 
-      {/* ── Department insight strip — active department chip ─────────────── */}
-      {activeDepartment && (
+      {/* ── Rare-skill insight strip — an active department chip wins over the
+             org-wide toggle, since a department is a more specific view. ── */}
+      {(activeDepartment || rareSkillsOpen) && (
         <DepartmentInsightStrip
           department={activeDepartment}
           people={data.nodes}
           onFocusPerson={(id) => {
             setActiveDepartment(null);
+            setRareSkillsOpen(false);
             setSelectedIds(new Set([id]));
             setDetailId(id);
             setFilterToSelection(true);
@@ -810,6 +866,7 @@ function ExplorePage() {
                   spotlightIds={selectedIds}
                   layout={layoutMode}
                   presenceFilter={presenceFilter ?? undefined}
+                  showInfluence={showInfluence}
                 />
                 {selectedIds.size === 0 && !chatOpen && (
                   <T className="absolute bottom-3 left-3 px-2.5 py-1.5 bg-surface border border-border rounded text-[11px] text-text-tertiary">

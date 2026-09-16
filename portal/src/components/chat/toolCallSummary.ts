@@ -24,6 +24,16 @@ const FRIENDLY: Array<[RegExp, string]> = [
 ];
 
 /**
+ * The same FRIENDLY mapping `summarizeToolCalls` uses, exposed per-call so a
+ * tool-call strip (InvokePage's MessageBubble pills) can read "searched
+ * knowledge base" instead of a raw tool id, without duplicating this table.
+ * Unknown tools keep their raw name.
+ */
+export function friendlyToolName(name: string): string {
+  return FRIENDLY.find(([re]) => re.test(name))?.[1] ?? name;
+}
+
+/**
  * Summarize a turn's tool calls, e.g. 'searched knowledge base ×3 · queried
  * the org graph'. Unknown tools keep their raw name. Returns null when there
  * is nothing to say.
@@ -33,7 +43,7 @@ export function summarizeToolCalls(toolCalls: Array<{ name: string }> | undefine
   const counts = new Map<string, number>();
   for (const tc of toolCalls) {
     if (!tc?.name) continue;
-    const label = FRIENDLY.find(([re]) => re.test(tc.name))?.[1] ?? tc.name;
+    const label = friendlyToolName(tc.name);
     counts.set(label, (counts.get(label) ?? 0) + 1);
   }
   if (counts.size === 0) return null;

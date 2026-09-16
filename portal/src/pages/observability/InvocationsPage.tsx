@@ -210,6 +210,7 @@ function InvocationsPage() {
             Search & triage →
           </Link>
           <Select
+            aria-label="Filter by agent"
             value={resolvedAgentFilter}
             onChange={(e) => setAgentFilter(e.target.value)}
             size="sm"
@@ -219,6 +220,7 @@ function InvocationsPage() {
             ]}
           />
           <Select
+            aria-label="Filter by status"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
             size="sm"

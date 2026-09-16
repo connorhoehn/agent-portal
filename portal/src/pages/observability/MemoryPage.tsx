@@ -253,6 +253,7 @@ function MemoryPage() {
           action={
             <Inline gap="xs">
               <Select
+                aria-label="Filter by agent"
                 size="sm"
                 value={agentFilter}
                 onChange={(e) => { setAgentFilter(e.target.value); setExpanded(null); }}
@@ -262,6 +263,7 @@ function MemoryPage() {
                 ]}
               />
               <Select
+                aria-label="Filter by kind"
                 size="sm"
                 value={kindFilter}
                 onChange={(e) => { setKindFilter(e.target.value); setExpanded(null); }}

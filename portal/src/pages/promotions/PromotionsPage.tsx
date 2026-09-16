@@ -318,7 +318,7 @@ export default function PromotionsPage() {
       title="Promotions"
       description="Where an agent session's observations earn their way into the library: three sightings across two sessions make a pattern, a pattern with a repeatable trigger and outcome is a runbook, and only an approved runbook with a passing dry run ships as a skill the fleet runs unattended."
     >
-      <Toolbar size="md" aria-label="Promotion filters">
+      <Toolbar size="md" wrap aria-label="Promotion filters">
         <ToolbarGroup aria-label="Status">
           <ToolbarLabel>Status</ToolbarLabel>
           {FILTERS.map((f) => (

@@ -22,7 +22,8 @@
 import type { ReactNode } from 'react';
 
 export interface ExplorerFrameProps {
-  /** Left rail content — flush to the pane's left edge, 300px, its own
+  /** Left rail content — flush to the pane's left edge, 300px at `xl` and up
+   *  (240px below it), its own
    *  border, scrolls independently of the pane. */
   rail: ReactNode;
   /** The main pane's content. */
@@ -35,7 +36,7 @@ export interface ExplorerFrameProps {
 export function ExplorerFrame({ rail, children, aside }: ExplorerFrameProps) {
   return (
     <div className="flex h-full min-h-0">
-      <nav className="h-full w-[300px] flex-shrink-0 overflow-y-auto border-r border-border bg-surface-panel">
+      <nav className="h-full w-[240px] xl:w-[300px] flex-shrink-0 overflow-y-auto border-r border-border bg-surface-panel">
         {rail}
       </nav>
       <div className="flex min-h-0 min-w-0 flex-1 flex-col 2xl:flex-row">

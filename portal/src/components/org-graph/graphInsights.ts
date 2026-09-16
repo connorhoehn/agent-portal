@@ -129,3 +129,106 @@ export function departmentInsight(people: GraphPerson[], department: string): De
 export function firstName(full: string): string {
   return full.split(' ')[0] ?? full;
 }
+
+/** Parse a `?focus=` query param into individual ids. Accepts a single id
+ *  (related-people cards on /search) or a comma-joined list ("Open in Ask →"
+ *  / "Show all N in Explore" round-trip) alike; trims whitespace and drops
+ *  empties so a trailing comma or stray space never adds a blank selection. */
+export function parseFocusIds(focus: string | null): string[] {
+  if (!focus) return [];
+  return focus.split(',').map((s) => s.trim()).filter(Boolean);
+}
+
+// ── Org-wide rare skills ─────────────────────────────────────────────────────
+
+/** Same bus-factor rule as `departmentInsight`'s `atRisk`, but with no
+ *  department to pick "the" holder from — every holder of a rare skill gets
+ *  its own entry (same `AtRiskSkill` shape, so callers that already render
+ *  `atRisk` need no branching), sorted rarest-first. */
+export function orgInsight(people: GraphPerson[]): { atRisk: AtRiskSkill[] } {
+  const orgHolders = new Map<string, GraphPerson[]>();
+  for (const p of people) {
+    for (const s of p.skills) {
+      const arr = orgHolders.get(s);
+      if (arr) arr.push(p);
+      else orgHolders.set(s, [p]);
+    }
+  }
+  const atRisk = [...orgHolders.entries()]
+    .filter(([, holders]) => holders.length <= RARE_THRESHOLD)
+    .flatMap(([skill, holders]) =>
+      holders.map((holder) => ({ skill, holder, holderCount: holders.length })))
+    .sort((a, b) => a.holderCount - b.holderCount || a.skill.localeCompare(b.skill))
+    .slice(0, 16);
+  return { atRisk };
+}
+
+/** Sweep id the org-sweep scheduler files bus-factor findings under
+ *  (`schema`/work findings — see `findingsFilter.ts`'s `SWEEP_TITLES`). */
+export const RARE_SKILL_SWEEP = 'bus_factor';
+
+/** Where the rare-skill pill sends you: Work → Findings, filtered to the
+ *  bus-factor sweep and this skill. `FindingsPage` reads `?sweep=`/`?q=`. */
+export function rareSkillFindingsUrl(skill: string): string {
+  const params = new URLSearchParams({ sweep: RARE_SKILL_SWEEP, q: skill });
+  return `/iq/work/findings?${params.toString()}`;
+}
+
+// ── Node sizing ──────────────────────────────────────────────────────────────
+//
+// Influence is leadership analytics — the same ViewLeaderboard-tier number
+// OrgGraphTooltip and PersonDetailCard already hide from everyone but
+// org-leader/hr-admin/admin. Sizing every node by influenceScore regardless of
+// role leaked that number visually: a bigger circle IS the figure, so a member
+// who can't see it in the tooltip could still read it off the canvas. For
+// roles that may not see it, size by degree (how many edges touch the node in
+// the graph currently on screen) instead — a real, role-agnostic signal.
+
+const MIN_RADIUS = 12;
+const RADIUS_RANGE = 18;
+
+function clamp01(n: number): number {
+  if (!Number.isFinite(n)) return 0;
+  return Math.max(0, Math.min(1, n));
+}
+
+/**
+ * `showInfluence` true → size by `influenceScore` (0..1), the original rule.
+ * `showInfluence` false → size by `degree` relative to `maxDegree` in the
+ * currently-rendered graph (0 when there are no edges at all, so an edgeless
+ * graph draws every node at the minimum radius rather than one arbitrary node
+ * reading as "biggest").
+ */
+export function nodeRadius(
+  showInfluence: boolean,
+  influenceScore: number,
+  degree: number,
+  maxDegree: number,
+): number {
+  const t = showInfluence
+    ? clamp01(influenceScore)
+    : maxDegree > 0
+      ? clamp01(degree / maxDegree)
+      : 0;
+  return MIN_RADIUS + t * RADIUS_RANGE;
+}
+
+/** id → degree (count of links touching that id), from a flat list of
+ *  {source, target} pairs. Self-loops (shouldn't occur in this graph) count
+ *  once, not twice. */
+export function degreeMap(links: Array<{ source: string; target: string }>): Map<string, number> {
+  const m = new Map<string, number>();
+  const bump = (id: string) => m.set(id, (m.get(id) ?? 0) + 1);
+  for (const l of links) {
+    bump(l.source);
+    if (l.target !== l.source) bump(l.target);
+  }
+  return m;
+}
+
+/** Largest value in a degree map, or 0 for an empty graph. */
+export function maxDegree(map: Map<string, number>): number {
+  let max = 0;
+  for (const v of map.values()) if (v > max) max = v;
+  return max;
+}

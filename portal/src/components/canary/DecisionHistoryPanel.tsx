@@ -13,8 +13,11 @@ export function DecisionHistoryPanel(): React.ReactElement {
   const decisions = useCanaryStore((s) => s.recentDecisions);
   const scrollRef = useRef<HTMLDivElement>(null);
   const lastLenRef = useRef(0);
-  // Start expanded so users can see what the panel does.
-  const [collapsed, setCollapsed] = useState(false);
+  // Start expanded on large screens where there's room for it; collapsed by
+  // default below `lg` (1024px) so the panel doesn't eat the live graph.
+  const [collapsed, setCollapsed] = useState(() => (
+    typeof window !== 'undefined' ? window.innerWidth < 1024 : false
+  ));
 
   useEffect(() => {
     if (decisions.length > lastLenRef.current) {
@@ -28,12 +31,13 @@ export function DecisionHistoryPanel(): React.ReactElement {
   const ordered: Decision[] = decisions.slice().reverse();
 
   return (
-    // The collapsed/expanded width is animated from state, so it stays a style;
-    // everything else about the panel is a class now.
     <Stack
       gap="none"
-      className="h-full bg-surface border-l border-border shrink-0 transition-[width] duration-200"
-      style={{ width: collapsed ? 44 : 320 }}
+      className={
+        collapsed
+          ? 'h-full w-11 bg-surface border-l border-border shrink-0 transition-[width] duration-200'
+          : 'h-full w-full max-w-[min(320px,35vw)] bg-surface border-l border-border shrink-0 transition-[width] duration-200'
+      }
     >
       <Inline
         gap="sm"

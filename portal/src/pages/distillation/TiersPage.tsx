@@ -157,7 +157,7 @@ export default function DistillationTiersPage() {
 
       <DetailSection title={`${level} — ${DOOR_LABEL[level]}`} hint="Load more to page through the rest">
         <Stack gap="sm">
-          <Toolbar size="md" aria-label="Item filters">
+          <Toolbar size="md" wrap aria-label="Item filters">
             <ToolbarGroup aria-label="Repo">
               <ToolbarLabel>Repo</ToolbarLabel>
               <Select

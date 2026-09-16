@@ -58,6 +58,7 @@ function CapabilityEventsPage() {
       description="Browser + code interpreter activity · live · 5s refresh"
       actions={
         <Select
+          aria-label="Filter by capability kind"
           size="sm"
           value={kindFilter}
           onChange={(e) => setKindFilter(e.target.value as KindFilter)}

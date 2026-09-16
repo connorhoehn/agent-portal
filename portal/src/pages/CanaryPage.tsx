@@ -22,6 +22,7 @@ import {
   Button,
   Card,
   Chip,
+  CollapsibleSection,
   DataTable,
   EmptyState,
   Inline,
@@ -601,51 +602,86 @@ function CanaryToolbar({
   /** ManageCanary — controls that mutate the experiment hide without it. */
   canManage: boolean;
 }): React.ReactElement {
+  const handleNewExperiment = useCallback(() => {
+    if (!window.confirm('End this experiment and start a new one?\nTraffic pins back to 100% A; decision history is kept.')) return;
+    void fetch('/api/observability/canary/reset', { method: 'POST', credentials: 'include' })
+      .catch(() => { /* store reset still returns the UI to the wizard */ })
+      .finally(() => resetExperiment());
+  }, []);
+
   return (
-    <Toolbar
-      aria-label="Canary controls"
-      end={
-        <Inline gap="sm" align="center">
-          {canManage && (
-            <>
-              {debug && <ManualWeightSlider />}
-              <Inline gap="xs" align="center">
-                <Switch checked={debug} onChange={onDebugChange} aria-label="Debug" size="sm" />
-                <T className="text-[11px] text-text-secondary">Debug</T>
+    <Stack gap="sm">
+      <Toolbar
+        aria-label="Canary controls"
+        end={
+          <Inline gap="sm" align="center">
+            {canManage && (
+              // Debug-only controls (weight slider, debug switch, "+ New
+              // experiment", Halt) stay inline at `lg` and up; below that
+              // they move into the CollapsibleSection beneath the toolbar so
+              // the row has an overflow path instead of clipping.
+              <Inline gap="sm" align="center" className="hidden lg:flex">
+                {debug && <ManualWeightSlider />}
+                <Inline gap="xs" align="center">
+                  <Switch checked={debug} onChange={onDebugChange} aria-label="Debug" size="sm" />
+                  <T className="text-[11px] text-text-secondary">Debug</T>
+                </Inline>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  title="End this experiment and return to the setup wizard (traffic pins back to A)"
+                  onClick={handleNewExperiment}
+                >
+                  ＋ New experiment
+                </Button>
+                {!halted && <HaltButton />}
               </Inline>
+            )}
+            <Button
+              variant={scenariosOpen ? 'primary' : 'ghost'}
+              size="sm"
+              onClick={onScenariosToggle}
+            >
+              {scenariosOpen ? '✕ Scenarios' : '▶ Scenarios'}
+            </Button>
+          </Inline>
+        }
+      >
+        <Inline gap="md" align="center">
+          <StatusPill state={halted ? 'error' : 'success'} label={halted ? 'Halted' : 'Active'} size="sm" />
+          <T className="text-[11px] text-text-tertiary">
+            {lastJudgedAt ? `Last judged ${new Date(lastJudgedAt).toLocaleTimeString()}` : 'Awaiting first judgement…'}
+          </T>
+        </Inline>
+      </Toolbar>
+
+      {canManage && (
+        <CollapsibleSection
+          title="Debug controls"
+          className="lg:hidden"
+          storageKey="canary-debug-controls-open"
+        >
+          <Stack gap="sm">
+            <Inline gap="xs" align="center">
+              <Switch checked={debug} onChange={onDebugChange} aria-label="Debug" size="sm" />
+              <T className="text-[11px] text-text-secondary">Debug</T>
+            </Inline>
+            {debug && <ManualWeightSlider />}
+            <Inline gap="sm" wrap align="center">
               <Button
                 variant="secondary"
                 size="sm"
                 title="End this experiment and return to the setup wizard (traffic pins back to A)"
-                onClick={() => {
-                  if (!window.confirm('End this experiment and start a new one?\nTraffic pins back to 100% A; decision history is kept.')) return;
-                  void fetch('/api/observability/canary/reset', { method: 'POST', credentials: 'include' })
-                    .catch(() => { /* store reset still returns the UI to the wizard */ })
-                    .finally(() => resetExperiment());
-                }}
+                onClick={handleNewExperiment}
               >
                 ＋ New experiment
               </Button>
               {!halted && <HaltButton />}
-            </>
-          )}
-          <Button
-            variant={scenariosOpen ? 'primary' : 'ghost'}
-            size="sm"
-            onClick={onScenariosToggle}
-          >
-            {scenariosOpen ? '✕ Scenarios' : '▶ Scenarios'}
-          </Button>
-        </Inline>
-      }
-    >
-      <Inline gap="md" align="center">
-        <StatusPill state={halted ? 'error' : 'success'} label={halted ? 'Halted' : 'Active'} size="sm" />
-        <T className="text-[11px] text-text-tertiary">
-          {lastJudgedAt ? `Last judged ${new Date(lastJudgedAt).toLocaleTimeString()}` : 'Awaiting first judgement…'}
-        </T>
-      </Inline>
-    </Toolbar>
+            </Inline>
+          </Stack>
+        </CollapsibleSection>
+      )}
+    </Stack>
   );
 }
 

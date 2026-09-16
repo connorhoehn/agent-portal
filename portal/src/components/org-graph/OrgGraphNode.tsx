@@ -1,4 +1,6 @@
+import type { KeyboardEvent } from 'react';
 import type { GraphNode, GraphDepartment, PresenceStatus } from './types';
+import { nodeRadius } from './graphInsights';
 
 // ── Presence palette ──────────────────────────────────────────────────────────
 // Visual language mirrors Slack/Teams status dots + vacation indicators.
@@ -25,12 +27,23 @@ interface OrgGraphNodeProps {
   onHover: (id: string | null) => void;
   /** When set, dim nodes that don't match the given presence filter. null/undefined = no filter. */
   presenceFilter?: 'office' | 'remote' | 'away' | null;
+  /** True only for roles allowed to see influence (org-leader/hr-admin/admin)
+   *  — everyone else sizes by connection count so the circle can't leak the
+   *  hidden number. */
+  showInfluence: boolean;
+  /** This node's degree in the currently-rendered graph (edges touching it). */
+  degree: number;
+  /** Largest degree in the currently-rendered graph, for normalizing `degree`. */
+  maxDegree: number;
 }
 
-export function OrgGraphNode({ node, departments, isSelected, isHighlighted, onSelect, onHover, presenceFilter }: OrgGraphNodeProps) {
+export function OrgGraphNode({
+  node, departments, isSelected, isHighlighted, onSelect, onHover, presenceFilter,
+  showInfluence, degree, maxDegree,
+}: OrgGraphNodeProps) {
   const dept = departments.find(d => d.name === node.department);
   const color = dept?.color ?? '#64748b';
-  const radius = 12 + node.influenceScore * 18;
+  const radius = nodeRadius(showInfluence, node.influenceScore, degree, maxDegree);
 
   // Presence
   const pres: PresenceStatus = node.presence ?? 'unknown';
@@ -55,12 +68,26 @@ export function OrgGraphNode({ node, departments, isSelected, isHighlighted, onS
   // Vacation/PTO badge: small ✈ or ☀ text above node
   const awayIcon = pres === 'vacation' ? '☀' : pres === 'pto' ? '🏖' : pres === 'sick' ? '🤒' : pres === 'travel' ? '✈' : null;
 
+  function handleKeyDown(e: KeyboardEvent<SVGGElement>) {
+    if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') {
+      e.preventDefault();
+      onSelect(node.id);
+    }
+  }
+
   return (
     <g
       transform={`translate(${node.x}, ${node.y})`}
       onClick={() => onSelect(node.id)}
       onMouseEnter={() => onHover(node.id)}
       onMouseLeave={() => onHover(null)}
+      onFocus={() => onHover(node.id)}
+      onBlur={() => onHover(null)}
+      onKeyDown={handleKeyDown}
+      tabIndex={0}
+      role="button"
+      aria-label={`${node.name} · ${node.title} · ${node.department}`}
+      aria-pressed={isSelected}
       className="cursor-pointer"
       style={{ opacity }}
     >

@@ -12,7 +12,7 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router';
 import {
-  Button, Card, Chip, IconButton, Inline, ProgressBar, Select, SectionLabel, SelectableCard, Stack, StatStrip, Switch,
+  Button, Card, Chip, CollapsibleSection, IconButton, Inline, ProgressBar, Select, SectionLabel, SelectableCard, Stack, StatStrip, Switch,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { useCanaryStream } from '../../components/canary/useCanaryStream.js';
@@ -210,50 +210,48 @@ function dimensionCells(scores: Record<string, number>): Array<[string, number |
 }
 
 function ScoreRow({ entry, i }: { entry: JudgeHistoryEntry; i: number }) {
-  const [open, setOpen] = useState(false);
   const composite01 = entry.composite; // already 0–1
   return (
-    <Stack gap="none" className="overflow-hidden rounded-md border border-border bg-surface">
-      <Inline gap="sm" align="center" className="cursor-pointer px-3 py-2" onClick={() => setOpen(o => !o)}>
-        <T className="w-6 shrink-0 text-[10px] text-text-tertiary">#{i + 1}</T>
-        <Chip tone={entry.side === 'A' ? 'accent' : 'success'} size="xs">{entry.side}</Chip>
-        <ProgressBar
-          value={composite01 * 100}
-          max={100}
-          color={scoreColorVar(composite01)}
-          size="sm"
-          showRatio={false}
-          className="flex-1"
-          aria-label="Composite score"
-        />
-        <T className={`w-7 shrink-0 text-right text-[12px] font-bold ${scoreColorClass(composite01)}`}>
-          {(composite01 * 10).toFixed(1)}
-        </T>
-        <T className="shrink-0 text-[10px] text-text-tertiary">{fmtTime(entry.ts)}</T>
-        <T className="shrink-0 text-[9px] text-text-tertiary">{open ? '▲' : '▼'}</T>
+    <CollapsibleSection
+      className="rounded-md"
+      title={
+        <Inline gap="sm" align="center" className="w-full">
+          <T className="w-6 shrink-0 text-[10px] text-text-tertiary">#{i + 1}</T>
+          <Chip tone={entry.side === 'A' ? 'accent' : 'success'} size="xs">{entry.side}</Chip>
+          <ProgressBar
+            value={composite01 * 100}
+            max={100}
+            color={scoreColorVar(composite01)}
+            size="sm"
+            showRatio={false}
+            className="flex-1"
+            aria-label="Composite score"
+          />
+          <T className={`w-7 shrink-0 text-right text-[12px] font-bold ${scoreColorClass(composite01)}`}>
+            {(composite01 * 10).toFixed(1)}
+          </T>
+          <T className="shrink-0 text-[10px] text-text-tertiary">{fmtTime(entry.ts)}</T>
+        </Inline>
+      }
+    >
+      <Inline gap="sm" wrap className="grid grid-cols-4 gap-2 px-3 py-2">
+        {dimensionCells(entry.scores).map(([k, v]) => (
+          <Stack key={k} gap="none">
+            <SectionLabel className={DIM_COLOR_CLASS[k]}>{k}</SectionLabel>
+            {v === undefined ? (
+              <T
+                className="text-[11px] italic leading-[1.45] text-text-tertiary"
+                title={`The judge abstained on ${k} — not scored, not scored zero. The composite renormalises over the dimensions that were judged.`}
+              >
+                not judged
+              </T>
+            ) : (
+              <T className={`text-[16px] font-bold ${scoreColorClass(v)}`}>{fmt01(v)}</T>
+            )}
+          </Stack>
+        ))}
       </Inline>
-      {open && (
-        <Stack gap="none" className="border-t border-surface-hover bg-surface-panel px-3 py-2">
-          <Inline gap="sm" wrap className="grid grid-cols-4 gap-2">
-            {dimensionCells(entry.scores).map(([k, v]) => (
-              <Stack key={k} gap="none">
-                <SectionLabel className={DIM_COLOR_CLASS[k]}>{k}</SectionLabel>
-                {v === undefined ? (
-                  <T
-                    className="text-[11px] italic leading-[1.45] text-text-tertiary"
-                    title={`The judge abstained on ${k} — not scored, not scored zero. The composite renormalises over the dimensions that were judged.`}
-                  >
-                    not judged
-                  </T>
-                ) : (
-                  <T className={`text-[16px] font-bold ${scoreColorClass(v)}`}>{fmt01(v)}</T>
-                )}
-              </Stack>
-            ))}
-          </Inline>
-        </Stack>
-      )}
-    </Stack>
+    </CollapsibleSection>
   );
 }
 

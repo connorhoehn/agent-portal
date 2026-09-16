@@ -233,7 +233,7 @@ export default function QueuePage() {
       />
 
       {/* ── The queue itself ── */}
-      <Toolbar aria-label="Job filters">
+      <Toolbar wrap aria-label="Job filters">
         <ToolbarGroup aria-label="State">
           <ToolbarLabel>State</ToolbarLabel>
           {JOB_FILTERS.map((f) => (

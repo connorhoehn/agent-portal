@@ -97,7 +97,7 @@ export default function DesignsPage() {
       title="Designs"
       description="Agents restate the problem, iterate a plan, and raise questions when intent is unclear; people answer and sign off. An approved design is an ADR — logged to the knowledge base, and a gate for the designs built on it."
     >
-      <Toolbar size="md" aria-label="Design filters">
+      <Toolbar size="md" wrap aria-label="Design filters">
         <ToolbarGroup aria-label="Status">
           <ToolbarLabel>Status</ToolbarLabel>
           {FILTERS.map((f) => (

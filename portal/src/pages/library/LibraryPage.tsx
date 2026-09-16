@@ -148,7 +148,7 @@ export default function LibraryPage() {
       title="Library"
       description="Everything the fleet is instructed by, in one catalog — system prompts, prompts a person runs, evaluators, skills and insights."
     >
-      <Toolbar size="md" aria-label="Library filters">
+      <Toolbar size="md" wrap aria-label="Library filters">
         <ToolbarGroup aria-label="Kind">
           <ToolbarLabel>Kind</ToolbarLabel>
           <FilterChip active={kind === 'all'} onClick={() => setFacet('kind', 'all')} size="sm">All</FilterChip>
