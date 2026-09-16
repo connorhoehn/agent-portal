@@ -316,15 +316,60 @@ export interface HumanLabelRow {
 
 const ALLOWED_HUMAN_LABELS = new Set(['good', 'bad', 'fixed']);
 
+/**
+ * Resolve a label's row by CONTENT, not position.
+ *
+ * Each entry below is a demo narrative about a specific invocation — a
+ * timeout, a guardrail miss, an answer worth citing — and `mock-inv-N` is a
+ * RANK, not an identity: `mock/invocations.ts` interleaves the day's errors
+ * through its tail (docs/mock-floor.md, "The error band, and what it
+ * costs"), so the id a given prompt lands at moves whenever the corpus's
+ * volume or error mix does. A hardcoded id here would silently detach a note
+ * from the row it describes the next time the corpus changed shape — which is
+ * exactly what interleaving did to the id that used to be 'mock-inv-0'. Anchor
+ * by `agentId` + `promptSnippet` (both stable — they're the AUTHORED text)
+ * instead, so a label stays on the row its note is actually about.
+ */
+function labelTarget(agentId: string, promptSnippet: string): string {
+  const row = mockInvocationRows().find((r) => r.agentId === agentId && r.promptSnippet === promptSnippet);
+  if (!row) {
+    throw new Error(`observability.ts: no seeded row for human-label target ${agentId} / "${promptSnippet}"`);
+  }
+  return row.id;
+}
+
 export const humanLabels = defineFixture<HumanLabelRow>({
   key: 'observability-human-labels',
   scenarios: {
     default: (): HumanLabelRow[] => [
-      { invocationId: 'mock-inv-0', label: 'bad', note: 'Timed out mid-route; the sub-agent never answered.' },
-      { invocationId: 'mock-inv-2', label: 'bad', note: 'Blocked on a question the guardrail should not have caught.' },
-      { invocationId: 'mock-inv-14', label: 'good', note: null },
-      { invocationId: 'mock-inv-40', label: 'good', note: 'Correct owner, correct citation.' },
-      { invocationId: 'mock-inv-77', label: 'fixed', note: 'Re-ran after the KB sync; answer is now grounded.' },
+      {
+        invocationId: labelTarget(
+          'orgiq-supervisor',
+          'Route this to the scoring agent and get PageRank for the platform team',
+        ),
+        label: 'bad',
+        note: 'Timed out mid-route; the sub-agent never answered.',
+      },
+      {
+        invocationId: labelTarget('orgiq-search', 'What is our employee compensation band for L5 engineers?'),
+        label: 'bad',
+        note: 'Blocked on a question the guardrail should not have caught.',
+      },
+      {
+        invocationId: labelTarget('orgiq-supervisor', 'Who knows Kubernetes best on the platform team?'),
+        label: 'good',
+        note: null,
+      },
+      {
+        invocationId: labelTarget('orgiq-search', 'Find every decision record mentioning Aurora cold starts'),
+        label: 'good',
+        note: 'Correct owner, correct citation.',
+      },
+      {
+        invocationId: labelTarget('orgiq-ingestion', 'Ingest the Q3 all-hands recap deck'),
+        label: 'fixed',
+        note: 'Re-ran after the KB sync; answer is now grounded.',
+      },
     ],
     empty: () => [],
   },

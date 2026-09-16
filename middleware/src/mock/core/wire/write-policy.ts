@@ -1693,7 +1693,7 @@ export const WRITE_SPECS: readonly WriteSpec[] = [
   {
     route: 'POST /api/observability/quality/feedback',
     persona: 'orgiq/admin',
-    safe: 'A REAL relabel of a seeded trace. Refused as `spends` for "UPDATEs through the RDS Data API with no mock branch"; routes/quality.ts branches into `mockSetHumanLabel` against the registered `observability-human-labels` fixture (mock/observability.ts), which ships five labelled invocations. Verified by hand: `mock-inv-0` reads `bad`, the write makes it `good`, reset makes it `bad` again.',
+    safe: 'A REAL relabel of a seeded trace. Refused as `spends` for "UPDATEs through the RDS Data API with no mock branch"; routes/quality.ts branches into `mockSetHumanLabel` against the registered `observability-human-labels` fixture (mock/observability.ts), which ships five labelled invocations anchored by agentId + prompt rather than by a fixed `mock-inv-N` id (the day\'s errors are interleaved through the tail, so a hardcoded id would drift onto the wrong row). Verified by hand: the supervisor\'s Kubernetes-experts row reads `good`, the write makes it `fixed`, reset makes it `good` again.',
     bodyFrom: "routes/quality.ts: `invocationId` required and, offline, must name a row the trace tail serves (the mock reproduces the real query's `RETURNING` miss as a 404); `label` ∈ ALLOWED_LABELS ('good'|'bad'|'fixed'), spelled in the handler. The id comes off GET /api/observability/recent-invocations; `note` is free text.",
     intercepts: ['aurora'],
     build: async (ctx) => {

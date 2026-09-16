@@ -1928,17 +1928,17 @@
     {
       "method": "GET",
       "path": "/api/observability/memory/events",
-      "source": "src/routes/memory.ts:119"
+      "source": "src/routes/memory.ts:121"
     },
     {
       "method": "POST",
       "path": "/api/observability/memory/events",
-      "source": "src/routes/memory.ts:273"
+      "source": "src/routes/memory.ts:275"
     },
     {
       "method": "GET",
       "path": "/api/observability/memory/stats",
-      "source": "src/routes/memory.ts:195"
+      "source": "src/routes/memory.ts:197"
     },
     {
       "method": "GET",

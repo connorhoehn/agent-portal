@@ -108,26 +108,33 @@ describe('the trace corpus is the invocation tail', () => {
 
   it('pins the exact facets of one row, so a silent change to the derivation shows up here', () => {
     const r = traceRows().find((x) => x.invocation_id === 'mock-inv-0')!;
+    // mock-inv-0 used to be, by construction, the supervisor's A2A-timeout
+    // row: errors were banded strictly ahead of every clean row, so the
+    // newest rank was always a thrown one. Interleaving the errors through
+    // the tail (docs/mock-floor.md, "The error band, and what it costs")
+    // means the newest rank is just whatever the day's own interleave order
+    // puts there, which is now the supervisor's cleanly-answered Kubernetes
+    // question. `mock/observability.ts`'s human-label fixture anchors by
+    // content (agentId + prompt) rather than position precisely so a note
+    // stays attached to the row it describes across a reorder like this one
+    // — which is why `human_label` below is 'good', not the old 'bad'.
     expect(r).toMatchObject({
       agent_id: 'orgiq-supervisor',
       agent_name: 'Supervisor',
       template_id: 'orgiq.supervisor.route',
       model_id: 'amazon.nova-pro-v1:0',
-      // The run threw, so there is no output: nothing to grade, nothing to
-      // embed, and `schema_valid` false — which is half the error predicate.
-      judge_score: null,
-      judge_rationale: null,
-      schema_valid: false,
+      judge_score: 0.745,
+      judge_rationale: 'Answers the question but leaves one claim uncited; a reader would have to verify it.',
+      schema_valid: true,
       guardrail_action: null,
-      input_tokens: 410,
-      output_tokens: 0,
-      est_cost_usd: 0.000328,
-      judge_cost_usd: null,
-      total_cost_usd: 0.000328,
-      // The seeded human verdict on this row.
-      human_label: 'bad',
+      input_tokens: 620,
+      output_tokens: 240,
+      est_cost_usd: 0.001264,
+      judge_cost_usd: 0.000566,
+      total_cost_usd: 0.00183,
+      human_label: 'good',
     });
-    expect(modelledDistance(r)).toBeNull();
+    expect(modelledDistance(r)).not.toBeNull();
   });
 
   it('gives a graded row a judge score inside its agent’s authored band', () => {
@@ -203,6 +210,17 @@ describe('every rollup is reachable from the list beneath it', () => {
     // Weak answers are counted separately and are NOT in the error count. If a
     // future change folds them together this number moves into error_count and
     // this line fails, which is the entire point of it.
+    //
+    // The pinned count itself is not a designed target: `judge_score` is a
+    // deterministic hash of each row's `invocation_id` (mock/observability.ts),
+    // and interleaving the errors through the tail (docs/mock-floor.md, "The
+    // error band, and what it costs") changed which of ingestion's 12 clean
+    // rows land on which id, which moves how many hash into the <0.3 bucket —
+    // it happens to still be 6 once the errors were re-confined to
+    // `ERROR_WINDOW` (40 ranks, not 50) to survive the parity invariant's
+    // live-traffic case, but that is coincidence, not a restored guarantee.
+    // What matters, and what's still true, is that it agrees with a direct
+    // count over the same rows the list shows.
     expect(ingestion['low_quality_count']).toBe(6);
 
     const window = tracesInWindow(24).filter((t) => t.agent_id === 'orgiq-ingestion');

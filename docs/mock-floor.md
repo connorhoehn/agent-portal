@@ -784,30 +784,68 @@ now takes about 1.4s. Set `MOCK_STREAM_PACE_MS=0` for a capture server.
 
 ## The error band, and what it costs
 
-`mock/invocations.ts` ranks every THROWN run into 0.05–8h and every clean run
-into 8–24h, so in newest-first order every error outranks every success.
-`trace-sink-union.test.ts` pins that as a contract, and there is a real defect
-behind it: spread evenly across the day, the day's errors competed for slots
-with clean rows and two fell past `/recent-invocations`' fixed 50-row window,
-so Health linked to a list that could not show the errors Health had just
-counted.
+`mock/invocations.ts` used to rank every THROWN run into 0.05–8h and every
+clean run into 8–24h, so in newest-first order every error outranked every
+success. `trace-sink-union.test.ts` pinned that as a contract, and there was a
+real defect behind it: spread evenly across the day, the day's errors competed
+for slots with clean rows and two fell past `/recent-invocations`' fixed
+50-row window, so Health linked to a list that could not show the errors
+Health had just counted.
 
-The cost is that the Runs page opens wall-to-wall red. All fourteen of the
-day's errors are inside the fifty most recent rows by construction, so the
-error share of what is on screen is 28% while Overview, reading the same
-corpus, says 4.2%. Two pages, one day of traffic, opposite impressions.
+The cost was that the Runs page opened wall-to-wall red. All fourteen of the
+day's errors landed inside the fifty most recent rows by construction, so the
+error share of what was on screen was 28% while Overview, reading the same
+corpus, said 4.2%. Two pages, one day of traffic, opposite impressions.
 
-Interleaving the errors through the window instead of ahead of it satisfies
-the underlying requirement — every error still lands inside the tail — and was
-tried on 2026-09-16. It breaks three further behaviours that lean on the
-stronger disjoint-band property rather than on the requirement: the 1-hour
-drift/outlier window is asserted empty *because* it holds only failed runs,
-and a written row is asserted reachable there *because* seeded clean rows
-cannot be. Changing the band means re-deriving all three, which is a larger
-piece of work than it looks and was reverted rather than half-done.
+A first attempt at interleaving the errors through the window instead of
+ahead of it, on 2026-09-16, was reverted rather than half-done: it satisfied
+the underlying requirement (every error still inside the tail) but broke three
+further behaviours that leaned on the stronger disjoint-band property rather
+than on the requirement itself, and re-deriving all three honestly looked
+bigger than it turned out to be.
 
-What shipped instead is the page saying what it is showing: Runs reads
-"last 50 invocations, 14 of them errored", so a reader who has just seen 4.2%
-on Overview can see this is a window rather than a contradiction. If the band
-is ever revisited, weaken the test to the requirement — every error inside the
-tail — not to the mechanism.
+**It shipped on the second pass.** `mock/invocations.ts` now exports
+`TAIL_WINDOW` (50, matching `/recent-invocations`' default) and
+`interleaveThroughTail(errors, clean, TAIL_WINDOW)` spreads the day's errors
+evenly across the first `TAIL_WINDOW` ranks — mixed with clean rows rather
+than staged ahead of them — before the rest of the day's clean rows fill out
+to 24h. The 14 seeded errors now land roughly one every three or four rows
+inside the tail, which is what a bad hour actually looks like, rather than a
+wall. The three dependent behaviours were re-derived, not bent:
+
+- **`trace-sink-union.test.ts`, "leaves the seeded error band ahead of the
+  seeded clean band"** pinned the mechanism (every thrown row outranks every
+  clean row). It's now "keeps every seeded error inside the tail window the
+  Runs list actually shows" — it asserts the REQUIREMENT instead: every
+  thrown row's rank is `< TAIL_WINDOW`, whatever the corpus size.
+- **`trace-sink-union.test.ts`, "shows up in the 1h outlier list, which the
+  seeded clean rows cannot reach"** depended on the old band leaving the
+  1-hour drift/outlier window with nothing but failures (no embedding, no
+  distance) in it. That premise is gone — some of the day's own clean rows now
+  legitimately fall inside the newest hour too, so the list is non-empty
+  before any write. The honest post-change property, and what the test (now
+  "is reachable in the 1h outlier list on the strength of its own measured
+  distance") asserts instead: a written row still reaches the list on its own
+  measured distance (0 — one written row is its own centroid), landing at the
+  bottom of the dist-descending sort rather than needing an empty list to
+  appear in at all.
+- **`observability-fixtures.test.ts`, "separates a real failure from a weak
+  answer — the errorRate gotcha"** pinned ingestion's `low_quality_count` at
+  6. That number was never a designed target — `judge_score` is a
+  deterministic hash of each row's `invocation_id`, and interleaving changed
+  which of ingestion's clean rows land on which id, which moved how many hash
+  into the `< 0.3` bucket. It's 4 now; the test still asserts it against a
+  direct count over the same rows the list shows, which is the property that
+  actually matters.
+
+One further thing broke that wasn't on the anticipated list: `mock/observability.ts`'s
+`humanLabels` fixture hardcoded five demo narratives — "Timed out mid-route",
+"Blocked on a question the guardrail should not have caught" — against literal
+`mock-inv-N` ids. Those ids are RANKS, not identities, so the moment
+interleaving moved which row lands on `mock-inv-0`, its note started
+describing a row that hadn't timed out. `humanLabels` now resolves each
+target by `agentId` + `promptSnippet` (`labelTarget()`) instead of a bare id,
+so a label stays attached to the row its note is actually about regardless of
+how the corpus is ordered — and the two entries whose targets never actually
+matched their notes even under the old band (a preexisting mismatch, not
+something this change caused) got pointed at rows that do.

@@ -149,19 +149,40 @@ const GENERIC_ERRORS = [
   'Bedrock ModelStreamErrorException mid-stream',
 ];
 
-// Two disjoint recency bands. ALL error rows land in [0.05h, 8h) and ALL
-// clean rows in [8h, 24h), so in the newest-first sort every error outranks
-// every non-error row.
+// The requirement (org-leader.md #14, re-audited as
+// `mock/core/parity/invariants.ts` "the promised errors survive the default
+// 50-row window"): every error the day produced must land inside
+// `/api/observability/recent-invocations`' fixed tail window (default 50,
+// capped at 200) — EVEN AFTER `getRecentInvocations` prepends live ring
+// traffic ahead of this fixture. The invariant models that prepend directly:
+// it records ten live invocations (`recordInvocation`, "a handful of real
+// chat turns, as a manual audit session leaves behind") and re-checks the
+// 50-row window afterward. Ten live rows ahead of the mock tail leaves only
+// the tail's own top `TAIL_WINDOW - LIVE_RING_HEADROOM` ranks visible inside
+// that 50-row page — so the real placement budget is 40, not 50, and
+// treating 50 as the budget (an earlier attempt at this) left errors ranked
+// 40–49 that the invariant's live-traffic case pushed straight out of frame.
 //
-// This is not decoration. `/api/observability/recent-invocations` is a fixed
-// window (default 50, capped at 200) and `getRecentInvocations` prepends live
-// ring traffic ahead of this tail. Spread evenly across the day, the errors
-// competed for tail slots with the clean rows and two of them fell past the
-// cutoff — Health linked to a list that could not show what Health promised
-// (org-leader.md #14). Banded, the day's errors occupy the first ranks of the
-// mock tail by construction, whatever the corpus size.
-const ERROR_BAND_END_H = 8;
-const CLEAN_BAND_END_H = 24;
+// A first version of this satisfied the *bare* requirement (no live traffic)
+// by putting every error ahead of every clean row in time — two disjoint
+// bands, errors in [0.05h, 8h) and clean rows in [8h, 24h). That
+// over-satisfies it: it also guarantees the tail is wall-to-wall red (every
+// error outranks every success, so the top of the newest-first list reads as
+// a much higher error rate than the day actually had — 28% of the visible
+// rows vs. the fleet's real 4.2%). The requirement only needs each error
+// somewhere inside the window that survives live traffic, not all of them
+// ahead of everything else in it.
+//
+// `interleaveThroughTail` below spreads the errors evenly across the first
+// `ERROR_WINDOW` ranks instead, mixed with clean rows, and lets the remaining
+// clean rows fill out the rest of the 24-hour day after that. The corpus's 14
+// errors land roughly one every three rows inside that window, which is what
+// a real bad hour looks like, rather than a wall — with ten rows of headroom
+// still free for whatever the live ring has prepended.
+export const TAIL_WINDOW = 50;
+const LIVE_RING_HEADROOM = 10;
+export const ERROR_WINDOW = TAIL_WINDOW - LIVE_RING_HEADROOM;
+const DAY_END_H = 24;
 
 /**
  * Round-robin the rows across agents, keeping each agent's own order.
@@ -187,6 +208,56 @@ function interleave(rows: Authored[]): Authored[] {
       const row = list[i];
       if (row) out.push(row);
     }
+  }
+  return out;
+}
+
+/**
+ * Spread `errors` evenly across the first `window` ranks of the combined,
+ * newest-first list, mixed with `clean` rows rather than staged ahead of
+ * them, then let the rest of `clean` fill out the remainder in its own order.
+ *
+ * This is the mechanism for the tail requirement above: as long as
+ * `errors.length <= window` (true for every scenario this fixture builds —
+ * `large`'s 28 errors still fit under `ERROR_WINDOW`'s 40), every error is
+ * guaranteed a rank below `window` without any of them needing to be older or
+ * newer than a clean row on principle. Spacing is even (`window /
+ * errors.length`), not random, so the corpus stays deterministic.
+ */
+function interleaveThroughTail(errors: Authored[], clean: Authored[], window: number): Authored[] {
+  const out: Authored[] = [];
+  const gap = window / Math.max(1, errors.length);
+  let cleanIdx = 0;
+  let errorIdx = 0;
+  // Start half a gap in, so the very first row is not always an error.
+  let nextErrorSlot = gap / 2;
+
+  while (out.length < window && (errorIdx < errors.length || cleanIdx < clean.length)) {
+    const dueForError = errorIdx < errors.length && out.length >= nextErrorSlot;
+    if (dueForError) {
+      out.push(errors[errorIdx]!);
+      errorIdx++;
+      nextErrorSlot += gap;
+    } else if (cleanIdx < clean.length) {
+      out.push(clean[cleanIdx]!);
+      cleanIdx++;
+    } else if (errorIdx < errors.length) {
+      out.push(errors[errorIdx]!);
+      errorIdx++;
+    } else {
+      break;
+    }
+  }
+  // Any errors the window could not fit (only possible if errors.length >
+  // window, which none of today's scenarios produce) go right after it —
+  // still ahead of the rest of the day, so the requirement holds even then.
+  while (errorIdx < errors.length) {
+    out.push(errors[errorIdx]!);
+    errorIdx++;
+  }
+  while (cleanIdx < clean.length) {
+    out.push(clean[cleanIdx]!);
+    cleanIdx++;
   }
   return out;
 }
@@ -242,6 +313,7 @@ function corpus(scale: { rows: number; errors: number }): MockInvocation[] {
 
   const errors = interleave(built.filter((row) => row.error));
   const clean = interleave(built.filter((row) => !row.error));
+  const ordered = interleaveThroughTail(errors, clean, ERROR_WINDOW);
   const rank = (list: Authored[], from: number, to: number): MockInvocation[] =>
     list.map((row, i) => ({
       ...row,
@@ -249,8 +321,7 @@ function corpus(scale: { rows: number; errors: number }): MockInvocation[] {
       hoursAgo: from + (i / Math.max(1, list.length)) * (to - from),
     }));
 
-  return [...rank(errors, 0.05, ERROR_BAND_END_H), ...rank(clean, ERROR_BAND_END_H, CLEAN_BAND_END_H)]
-    .map((row, i) => ({ ...row, id: `mock-inv-${i}` }));
+  return rank(ordered, 0.05, DAY_END_H).map((row, i) => ({ ...row, id: `mock-inv-${i}` }));
 }
 
 /**

@@ -260,18 +260,24 @@ describe('the numbers on the wire describe one fleet', () => {
 });
 
 describe('the reads that stay honest about what they cannot do', () => {
-  it('drift/outliers is empty because its 1-hour window holds only failed runs', async () => {
+  it('drift/outliers reads the clean half of the last hour, and the last hour holds both halves', async () => {
+    // This used to read "empty because its 1-hour window holds only failed
+    // runs": `mock/invocations.ts` banded EVERY thrown run 0.05–8h back and
+    // every clean row 8–24h back, so a 1-hour window could only ever hold
+    // failures — which have no embedding (`embedText('')` is null), hence no
+    // distance to rank, hence an outlier list that was always []. That band
+    // is gone: the day's errors are now interleaved through the default
+    // 50-row tail instead of staged ahead of it (docs/mock-floor.md, "The
+    // error band, and what it costs"), so the newest hour legitimately holds
+    // a mix of both — which is what a real fleet's last hour looks like, not
+    // a defect this route needs to paper over.
     const app = buildApp();
     const res = await request(app).get('/drift/outliers?limit=20').expect(200);
-    // NOT degraded — nothing failed. The query is `ts > now() - 1 hour AND
-    // output_embedding IS NOT NULL`, and the fleet fixture bands every recent
-    // row as an error (mock/invocations.ts: all errors newer than all clean
-    // rows, so `/recent-invocations` can show them). A run that threw produced
-    // no output, so `embedText('')` returns null and there is no embedding to
-    // rank — offline and in production alike. Widen the window and the rows
-    // appear, which is what the next assertion shows.
     expect(res.body.degraded).toBeUndefined();
-    expect(res.body.outliers).toEqual([]);
+    // Not empty any more: some of the day's own clean rows fall inside the
+    // newest hour, and each has a real distance to rank.
+    expect(res.body.outliers.length).toBeGreaterThan(0);
+    expect(res.body.outliers.every((o: { schemaValid: boolean | null }) => o.schemaValid !== false)).toBe(true);
 
     const recent = (await request(app)
       .get('/invocations/search?limit=500').expect(200)).body.invocations as Array<{
@@ -283,7 +289,11 @@ describe('the reads that stay honest about what they cannot do', () => {
     // without minutes is not valid ISO-8601, so the strict path rejects it.)
     const lastHour = recent.filter((r) => Date.parse(r.ts) > Date.parse(AT) - 3_600_000);
     expect(lastHour.length).toBeGreaterThan(0);
-    expect(lastHour.every((r) => r.schemaValid === false)).toBe(true);
+    // Both halves are represented: a thrown row within the window (the tail
+    // requirement this whole mechanism exists for, now checked at 1h too) and
+    // a clean one (the window is no longer error-only).
+    expect(lastHour.some((r) => r.schemaValid === false)).toBe(true);
+    expect(lastHour.some((r) => r.schemaValid !== false)).toBe(true);
   });
 
   it('drift/summary over 24h does have the rows the 1-hour window lacks', async () => {

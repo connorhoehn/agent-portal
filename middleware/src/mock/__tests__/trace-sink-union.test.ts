@@ -53,6 +53,7 @@ import {
   isRealFailure, mockDriftOutliers, mockDriftSummary, mockInvocationSearch,
   mockInvocationToolCalls, mockMemoryStats, mockToolLatency, mockTrafficPerAgentSummary,
 } from '../observability-queries.js';
+import { ERROR_WINDOW } from '../invocations.js';
 
 const AT = '2026-09-08T09:15:00.000Z';
 const AGENT = 'orgiq-search';
@@ -130,21 +131,37 @@ describe('the seeded day is unchanged by anything written beside it', () => {
     }
   });
 
-  it('leaves the seeded error band ahead of the seeded clean band', async () => {
+  it('keeps every seeded error inside the tail window the Runs list actually shows', async () => {
     await postTrace();
     const rows = seeded(traceRows());
-    // The band is drawn in `mock/invocations.ts` around a THROWN run — the rows
-    // carrying `error`, which project to `schema_valid: false`. A guardrail
-    // block is not in that band (it produced no exception and sits among the
-    // clean rows), so this is deliberately not `isRealFailure`, which counts
-    // both. Errors occupy 0.05–8h and clean rows 8–24h, so in the newest-first
-    // order every thrown row outranks every row that did not throw — which is
-    // what `/recent-invocations`' fixed 50-row window depends on.
+    // The REQUIREMENT (org-leader.md #14), not the mechanism: every THROWN run
+    // — the rows carrying `error`, which project to `schema_valid: false` —
+    // must rank inside `ERROR_WINDOW` (`mock/invocations.ts`), because
+    // `getRecentInvocations` prepends live ring traffic ahead of this fixture
+    // before applying `/recent-invocations`'s default 50-row cap. The bare
+    // `/recent-invocations` route only needs `TAIL_WINDOW` (50); the parity
+    // invariant "the promised errors survive the default 50-row window"
+    // (mock/core/parity/invariants.ts) models a manual audit session's live
+    // traffic — ten rows — landing ahead of the mock tail, which is why the
+    // real placement budget is `TAIL_WINDOW - LIVE_RING_HEADROOM` (40), not
+    // the full 50: an error ranked 40-49 survives the route's bare window but
+    // not the one with live traffic in front of it, and Health counts it
+    // either way. A guardrail block is deliberately not part of this — it
+    // produced no exception, so it is not `isRealFailure`, which counts both.
+    //
+    // `mock/invocations.ts` used to satisfy this with two disjoint recency
+    // bands — every error strictly ahead of every clean row — which over-shot
+    // the requirement and made the Runs list wall-to-wall red (see
+    // docs/mock-floor.md, "The error band, and what it costs"). Errors are now
+    // interleaved through `ERROR_WINDOW` instead, so this only asserts what
+    // the route (and the invariant that models its live-traffic case)
+    // actually depends on, whatever the corpus size.
     const threw = (r: MockTraceRow) => r.schema_valid === false;
-    const lastErrorRank = rows.reduce((m, r, i) => (threw(r) ? i : m), -1);
-    expect(lastErrorRank).toBeGreaterThan(0);
-    expect(rows.slice(0, lastErrorRank + 1).every(threw)).toBe(true);
-    expect(rows.slice(lastErrorRank + 1).some(threw)).toBe(false);
+    const errorRanks = rows.reduce<number[]>((acc, r, i) => (threw(r) ? [...acc, i] : acc), []);
+    expect(errorRanks.length).toBeGreaterThan(0);
+    for (const rank of errorRanks) {
+      expect(rank).toBeLessThan(ERROR_WINDOW);
+    }
   });
 
   it('a reset takes the written row away and leaves the day standing', async () => {
@@ -334,15 +351,32 @@ describe('a written row brings its own telemetry and is given none', () => {
     );
   });
 
-  it('shows up in the 1h outlier list, which the seeded clean rows cannot reach', async () => {
-    // The seeded corpus bands its clean rows 8–24h back, so the 1h window holds
-    // only failures, which have no embedding and therefore no distance. A
-    // written row is the only thing that can appear here — which makes this the
-    // sharpest evidence that the union reached the drift surface at all.
-    expect(mockDriftOutliers(undefined, 20)).toEqual([]);
+  it('is reachable in the 1h outlier list on the strength of its own measured distance', async () => {
+    // This used to read "the seeded clean rows cannot reach here": the old
+    // two-band corpus put every clean row 8–24h back, so the 1h window held
+    // only failures (no embedding, no distance) and a written row was the
+    // ONLY thing that could ever appear. That is no longer true — interleaving
+    // the errors through the tail (docs/mock-floor.md, "The error band, and
+    // what it costs") means some of the day's own clean rows now legitimately
+    // fall inside the newest hour too, so the list is non-empty before any
+    // write. What's still true, and what this asserts instead: a written row
+    // reaches the list on its own measured distance, not by having an empty
+    // list to appear in.
+    const before = mockDriftOutliers(undefined, 20);
+    expect(before.length).toBeGreaterThan(0);
+    expect(before.some((r) => r['agent_id'] === AGENT)).toBe(true); // seeded orgiq-search rows
+
     const result = await postTrace();
-    expect(mockDriftOutliers(undefined, 20).map((r) => r['invocation_id']))
-      .toEqual([result.invocationId]);
+    const after = mockDriftOutliers(undefined, 20);
+    expect(after).toHaveLength(before.length + 1);
+
+    const mine = after.find((r) => r['invocation_id'] === result.invocationId);
+    expect(mine).toBeDefined();
+    // One written row is its own centroid (see the distance-0 case above), so
+    // sorted by dist descending it sinks to the very bottom rather than
+    // displacing a seeded outlier that scored higher.
+    expect(mine!['dist']).toBe(0);
+    expect(after[after.length - 1]!['invocation_id']).toBe(result.invocationId);
   });
 });
 
