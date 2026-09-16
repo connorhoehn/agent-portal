@@ -180,7 +180,15 @@ print(f"mean={statistics.mean(nums):.2f}, stdev={statistics.stdev(nums):.2f}")`)
           // An em dash, not a zero: "0 active sessions" and "we could not ask
           // how many sessions are active" must not read the same.
           { label: 'Active Sessions', value: orUnknown(active.length, !!sessionsFailure), tone: 'accent' },
-          { label: 'Sessions (lifetime)', value: orUnknown(sessions.length, !!sessionsFailure) },
+          // NOT "lifetime". This was `sessions.length` under that label, which
+          // made it the length of one list rather than a total: the control
+          // plane prunes terminated sessions, so the number it reported was
+          // whatever ListCodeInterpreterSessions still remembered. With
+          // nothing terminated yet it read identically to Active Sessions —
+          // two tiles, one number, one of them claiming to count history.
+          // Terminated comes off the same list and is a claim that list can
+          // actually support.
+          { label: 'Terminated', value: orUnknown(terminated.length, !!sessionsFailure) },
           { label: 'Last Activity', value: sessionsFailure ? '—' : lastEverActive ? relativeTime(lastEverActive.lastActivityAt) : '—' },
         ]}
       />
@@ -282,7 +290,15 @@ print(f"mean={statistics.mean(nums):.2f}, stdev={statistics.stdev(nums):.2f}")`)
           <LoadingState label="Loading code execution traces…" />
         ) : codeEvents.length === 0 ? (
           <InlinePlaceholder size="sm" align="center" className="px-3.5 py-6">
-            No code executions recorded yet. Use the Run Python panel above or invoke an agent that calls the sandbox.
+            {/* Why this can read zero while Last Activity above reads "just
+                now": the ring lives in this middleware process and starts
+                empty on every restart, whereas the sessions come from the
+                control plane and outlive it. Without saying so, the two
+                panels look like they disagree about whether anything ran. */}
+            No code executions in this process. The ring is held in memory and
+            empties whenever the middleware restarts, so a recent session above
+            can have no trace here. Use Run Python, or invoke an agent that
+            calls the sandbox.
           </InlinePlaceholder>
         ) : (
           <Table>

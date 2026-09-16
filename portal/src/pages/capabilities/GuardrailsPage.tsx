@@ -33,6 +33,7 @@ import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch';
 import { writeJson } from '../../lib/writeJson';
 import { T } from './Text';
+import { Link } from 'react-router';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -177,8 +178,17 @@ function GuardrailsPage() {
   return (
     <>
     <Stack gap="lg" data-testid="guardrails-page">
+      {/* Naming it matters. Three role guardrails exist (member, org leader,
+          HR admin) and all three rows on Capabilities drill in HERE, but this
+          editor reads and writes the single configured GUARDRAIL_ID — so
+          someone arriving from the org-leader row could edit a different
+          resource than the one they clicked, on a safety control. Saying which
+          one is open does not close that gap, but it stops the page from
+          quietly implying it is per-role. */}
       <Banner variant="warning" data-testid="guardrails-live-banner">
-        Changes apply to the live guardrail DRAFT immediately.
+        {`Changes apply immediately to the live DRAFT of ${guardrail.name}. Per-role guardrails (member, org leader, HR admin) are separate resources and are not edited here — `}
+        <Link to="/admin/capabilities" className="font-medium text-primary no-underline hover:underline">Capabilities</Link>
+        {' lists which id each role uses.'}
       </Banner>
 
         {/* Status + metrics — wrapped in a single Card per spec */}
@@ -458,10 +468,19 @@ function MetricsSparkline({ series }: { series: Array<{ timestamp: string; invoc
       return `${x.toFixed(1)},${y.toFixed(1)}`;
     }).join(' ');
 
-  if (series.length === 0) {
+  // An all-zero window is not the same as an absent one, and it must not be
+  // DRAWN. CloudWatch returns a bucket per interval whether or not anything
+  // happened, so a quiet six hours arrived here as a full series of zeros and
+  // the renderer dutifully plotted two flat lines along the axis — which reads
+  // as a broken chart, not as a quiet guardrail. Only a series with something
+  // in it is worth a chart.
+  const hasSignal = series.some((p) => p.invocations > 0 || p.interventions > 0);
+  if (series.length === 0 || !hasSignal) {
     return (
       <InlinePlaceholder size="sm" align="center">
-        No metrics yet — guardrail hasn't been invoked recently.
+        {series.length === 0
+          ? 'No metrics returned for this window. CloudWatch had nothing to report, which can also mean the guardrail id is not the one being invoked.'
+          : 'No invocations in this window. The guardrail is configured and ready; nothing has passed through it.'}
       </InlinePlaceholder>
     );
   }

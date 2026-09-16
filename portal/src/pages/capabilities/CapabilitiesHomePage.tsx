@@ -22,13 +22,15 @@ import { Link } from 'react-router';
 import {
   Card,
   CardHeader,
-  CatalogGrid,
   Chip,
+  DataTable,
+  EntityCell,
+  Inline,
   LoadingState,
   MetaLine,
   PageSection,
-  SectionLabel,
   Stack,
+  type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { useSession, type SessionRole } from '../../lib/auth';
@@ -142,6 +144,11 @@ const EVENT_KIND_BY_KEY: Record<string, CapabilityStatus['key']> = {
   code_execute: 'codeInterpreter',
 };
 
+/** The capabilities that emit capability events at all. Only these can have a
+ *  "last used" — for the rest an empty cell means nothing is recorded, which
+ *  is a different claim from "it has never run". */
+const OBSERVED_KEYS = new Set<CapabilityStatus['key']>(Object.values(EVENT_KIND_BY_KEY));
+
 export default function CapabilitiesHomePage() {
   const { session } = useSession();
   const canOpenIngest = !!session && (session.role === 'admin' || INGEST_ROLES.includes(session.role));
@@ -161,6 +168,85 @@ export default function CapabilitiesHomePage() {
     .filter(Boolean)
     .sort()
     .reverse()[0];
+
+  const columns: DataTableColumn<CapabilityStatus>[] = [
+    {
+      key: 'label',
+      header: 'Capability',
+      sortable: true,
+      render: (c) => (
+        <Stack gap="none">
+          <EntityCell label={c.label} />
+          <T className="text-[11px] leading-snug text-text-tertiary" wrap>{ROLES[c.key].purpose}</T>
+        </Stack>
+      ),
+    },
+    {
+      key: 'state',
+      header: 'Status',
+      sortable: true,
+      render: (c) => (
+        <Chip tone={STATE_TONE[c.state]} size="xs" dot="static">{STATE_LABEL[c.state]}</Chip>
+      ),
+    },
+    {
+      key: 'usedBy',
+      header: 'What uses it',
+      render: (c) => {
+        const used = ROLES[c.key].usedBy;
+        // Stated plainly rather than dressed up. A capability nobody has found
+        // a job for is worth knowing about — it is a candidate to adopt or to
+        // stop paying for.
+        if (!used) return <T className="text-[11.5px] text-text-tertiary">Nothing uses it yet</T>;
+        const gated = used.to === '/admin/ingest/crawl' && !canOpenIngest;
+        return (
+          <Stack gap="none">
+            {gated ? (
+              <T className="text-[12px] font-semibold text-text-tertiary">{used.label} (HR admin)</T>
+            ) : (
+              <Link to={used.to} className="text-[12px] font-semibold text-primary no-underline hover:underline">
+                {used.label} →
+              </Link>
+            )}
+            <T className="text-[11px] leading-snug text-text-tertiary" wrap>{used.description}</T>
+          </Stack>
+        );
+      },
+    },
+    {
+      key: 'configuredId',
+      header: 'Configured id',
+      render: (c) => (
+        c.configuredId
+          ? <T className="font-mono text-[11px] text-text-secondary" title={c.configuredId}>{c.configuredId}</T>
+          : <T className="text-[11px] text-text-tertiary">—</T>
+      ),
+    },
+    {
+      key: 'used',
+      header: 'Last used',
+      render: (c) => {
+        const at = lastUse(c.key);
+        // Absent is not "never": only three of the seven emit capability
+        // events at all, so a blank here means nothing was recorded rather
+        // than that nothing happened.
+        if (!at) return <T className="text-[11px] text-text-tertiary">{OBSERVED_KEYS.has(c.key) ? 'not in the last 100 events' : 'not recorded'}</T>;
+        return <T className="text-[11.5px] text-text-secondary">{relativeTime(at)}</T>;
+      },
+    },
+    {
+      key: 'tools',
+      header: '',
+      render: (c) => {
+        const tools = ROLES[c.key].tools;
+        return tools ? (
+          <Link to={tools.to} className="whitespace-nowrap text-[12px] font-medium text-primary no-underline hover:underline">
+            {tools.label} →
+          </Link>
+        ) : null;
+      },
+    },
+  ];
 
   return (
     <PageSection
@@ -194,65 +280,23 @@ export default function CapabilitiesHomePage() {
       {isLoading && caps.length === 0 ? (
         <LoadingState label="Loading capability status…" />
       ) : (
-      <CatalogGrid columns={2}>
-        {caps.map((c) => {
-          const role = ROLES[c.key];
-          const used = lastUse(c.key);
-          return (
-            <Card key={c.key} padding="none" className="overflow-hidden">
-              <CardHeader
-                inset
-                title={c.label}
-                meta={<Chip tone={STATE_TONE[c.state]} size="xs">{STATE_LABEL[c.state]}</Chip>}
-                action={used ? <T className="text-[11px] text-text-tertiary">used {relativeTime(used)}</T> : undefined}
-              />
-
-              <Stack gap="sm" className="px-3.5 py-3">
-                <T className="text-[12px] leading-snug text-text-secondary" wrap>{role.purpose}</T>
-
-                <Stack gap="xs">
-                  <SectionLabel as="div">What uses it here</SectionLabel>
-                  {role.usedBy ? (
-                    <Stack gap="none">
-                      {role.usedBy.to === '/admin/ingest/crawl' && !canOpenIngest ? (
-                        <T className="text-[12px] font-semibold text-text-tertiary">
-                          {role.usedBy.label} (HR admin)
-                        </T>
-                      ) : (
-                        <Link to={role.usedBy.to} className="text-[12px] font-semibold text-primary no-underline hover:underline">
-                          {role.usedBy.label} →
-                        </Link>
-                      )}
-                      <T className="mt-0.5 text-[11px] leading-snug text-text-tertiary" wrap>
-                        {role.usedBy.description}
-                      </T>
-                    </Stack>
-                  ) : (
-                    // Stated plainly rather than dressed up with a demo. A
-                    // capability nobody has found a job for is worth knowing
-                    // about — it is a candidate to use or to stop paying for.
-                    <T className="text-[11px] leading-snug text-text-tertiary" wrap>
-                      Nothing in this app uses it yet.
-                    </T>
-                  )}
-                </Stack>
-
-                {c.configuredId && (
-                  <MetaLine items={[<T className="truncate font-mono" title={c.configuredId}>{c.configuredId}</T>]} />
-                )}
-              </Stack>
-
-              {role.tools && (
-                <Stack gap="none" className="border-t border-border bg-surface-hover/40 px-3.5 py-2">
-                  <Link to={role.tools.to} className="text-[11px] text-primary no-underline hover:underline">
-                    {role.tools.label} →
-                  </Link>
-                </Stack>
-              )}
-            </Card>
-          );
-        })}
-      </CatalogGrid>
+        // A table, not a grid of cards.
+        //
+        // The content here was right and the shape was not: seven cards over a
+        // screen and a half, with the status word — the one thing a person
+        // comes to this page for — repeated seven times in seven different
+        // places. Three of the seven were the guardrails, which differ only by
+        // role and so read as the same card printed three times. As rows they
+        // are seven lines with the status in one scannable column, all of it
+        // above the fold, and the guardrails become what they are: one thing
+        // configured three ways.
+        <DataTable<CapabilityStatus>
+          data={caps}
+          keyField={(c) => c.key}
+          striped
+          columns={columns}
+          emptyMessage="No capabilities reported. The reconcile endpoint returned an empty list, which means the account has none configured rather than that the check failed."
+        />
       )}
 
       <T className="mt-4 text-[11px] leading-snug text-text-tertiary" wrap>

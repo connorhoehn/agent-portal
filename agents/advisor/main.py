@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from _shared.prompt_source import LiveAgent
 from _shared.agui_stream import stream_agui, wants_stream  # noqa: E402
 from _shared.sql_guard import read_only_error  # noqa: E402
+from _shared.result_size_guard import result_size_error  # noqa: E402
 from _shared.db_credentials import (  # noqa: E402
     credential_diagnosis,
     read_secret_arn as _read_secret_arn,
@@ -149,13 +150,24 @@ def query_graph(sql: str) -> str:
     # here means the grant was never applied, and falling back to a writable
     # login on an error an attacker can provoke would give away the boundary.
 
-    resp = _rds.execute_statement(
-        resourceArn=AURORA_CLUSTER_ARN,
-        secretArn=GRAPH_READ_SECRET_ARN,
-        database=DB_NAME,
-        sql=sql,
-        includeResultMetadata=True,
-    )
+    try:
+        resp = _rds.execute_statement(
+            resourceArn=AURORA_CLUSTER_ARN,
+            secretArn=GRAPH_READ_SECRET_ARN,
+            database=DB_NAME,
+            sql=sql,
+            includeResultMetadata=True,
+        )
+    except Exception as exc:  # noqa: BLE001 — only the size failure is special-cased
+        # The RDS Data API terminates rather than truncates past ~1 MiB (64 KB
+        # per row); see _shared/result_size_guard.py. Give the model a message
+        # it can act on, same as the read-only rejection above. Anything else
+        # re-raises unchanged — Strands' @tool wrapper turns it into a generic
+        # tool-error result, today's behaviour.
+        _size_err = result_size_error(exc)
+        if _size_err:
+            return json.dumps({"error": _size_err})
+        raise
     return json.dumps(_records_to_dicts(resp), ensure_ascii=False, default=str)
 
 
