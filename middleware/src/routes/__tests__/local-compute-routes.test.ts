@@ -162,6 +162,61 @@ afterEach(() => {
   unfreezeClock();
 });
 
+// ─── The auth floor, route by route ──────────────────────────────────────────
+// Every machine route is fenced by a node token and every browser route by a
+// session; the tests above reach them through helpers (pair(), hand(), the
+// work-loop wrappers), which the route-coverage scanner cannot see. These are
+// the literal calls the scanner reads — and a real assertion each: the floor
+// holds with nothing presented.
+describe('auth floor: machine routes without a token, browser routes without a session', () => {
+  it('rejects every machine route with no bearer token', async () => {
+    expect((await request(anon()).post('/api/local-compute/register').send({})).status).toBe(401);
+    expect((await request(anon()).post('/api/local-compute/claim').send({})).status).toBe(401);
+    expect((await request(anon()).post('/api/local-compute/jobs/job-x/start').send({})).status).toBe(401);
+    expect((await request(anon()).post('/api/local-compute/jobs/job-x/heartbeat').send({})).status).toBe(401);
+    expect((await request(anon()).post('/api/local-compute/jobs/job-x/complete').send({})).status).toBe(401);
+    expect((await request(anon()).post('/api/local-compute/jobs/job-x/log').send({})).status).toBe(401);
+  });
+
+  it('rejects every browser route with no session', async () => {
+    expect((await request(anon()).get('/api/local-compute/runs')).status).toBe(401);
+    expect((await request(anon()).get('/api/local-compute/jobs/job-x/log')).status).toBe(401);
+    expect((await request(anon()).get('/api/local-compute/jobs/job-x/log/stream')).status).toBe(401);
+    expect((await request(anon()).post('/api/local-compute/nodes/node-x/work').send({ prompt: 'x' })).status).toBe(401);
+  });
+});
+
+// ─── GET /pair/:code — the minting browser watches its own code ──────────────
+describe('GET /api/local-compute/pair/:code', () => {
+  it('reads unclaimed, then claimed with the node id, for the code\'s owner only', async () => {
+    const started = await request(as('member', 'u-mia')).post('/api/local-compute/pair/start').send({});
+    expect(started.status).toBe(200);
+    const code = started.body.code as string;
+
+    const before = await request(as('member', 'u-mia')).get(`/api/local-compute/pair/${code}`);
+    expect(before.status).toBe(200);
+    expect(before.body).toMatchObject({ code, claimed: false, claimedAt: null, nodeId: null });
+
+    // Someone else's session sees the same answer as a code that never existed.
+    const other = await request(as('member', 'u-theo')).get(`/api/local-compute/pair/${code}`);
+    expect(other.status).toBe(404);
+
+    const claimed = await request(anon()).post('/api/local-compute/pair/claim')
+      .send({ code, node: { label: 'mia-laptop', nodeId: 'node-mia-1' } });
+    expect(claimed.status).toBe(201);
+
+    const after = await request(as('member', 'u-mia')).get(`/api/local-compute/pair/${code}`);
+    expect(after.status).toBe(200);
+    expect(after.body).toMatchObject({ claimed: true, nodeId: 'node-mia-1' });
+    expect(after.body.claimedAt).toBeTruthy();
+  });
+
+  it('404s an unknown code', async () => {
+    const res = await request(as('member', 'u-mia')).get('/api/local-compute/pair/NOPE2345');
+    expect(res.status).toBe(404);
+  });
+});
+
 // ─── POST /pair/start — requireAction('ConnectLocalCompute') ─────────────────
 
 describe('POST /api/local-compute/pair/start', () => {
@@ -1532,10 +1587,22 @@ describe('handing a machine work', () => {
         // machine registered for the kind.
         nodeId: node.nodeId,
         repo: 'git@github.com:acme/api.git',
+        // A repo means a change someone can accept or reject — reviewed.
         requiresReview: true,
       });
       // Attribution comes from the session, never the body.
       expect(row!.createdBy).toBe('u-mia');
+    });
+
+    it('does not park a run with no repo in review — there is no capture to look at', async () => {
+      const node = await readyWorker();
+      const res = await hand(as('member', 'u-mia'), node.nodeId, { prompt: 'what is 10+10' });
+      expect(res.status).toBe(201);
+      const row = await getJob(res.body.id);
+      expect(row!.payload).toMatchObject({ requiresReview: false });
+      // …unless the caller asks for a look anyway.
+      const asked = await hand(as('member', 'u-mia'), node.nodeId, { prompt: 'summarise', requiresReview: true });
+      expect((await getJob(asked.body.id))!.payload).toMatchObject({ requiresReview: true });
     });
 
     it('titles an untitled job from its prompt rather than leaving a blank row', async () => {

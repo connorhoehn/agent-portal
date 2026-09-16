@@ -34,6 +34,7 @@ import {
   pairingCodes,
   mockClaimPairingCode,
   mockCreatePairingCode,
+  mockPairingCodeStatus,
   mockGetNode,
   mockListAllNodes,
   mockListNodesByOwner,
@@ -150,6 +151,38 @@ export async function createPairingCode(ownerId: string): Promise<PairingCode> {
     [s('code', code), s('owner', ownerId), s('expires', expiresAt)],
   );
   return { code, expiresAt };
+}
+
+export interface PairingCodeStatus {
+  code: string;
+  expiresAt: string;
+  claimedAt: string | null;
+  /** Set once claimed on the mock path; Aurora keeps no node column on the
+   *  code row, so the browser falls back to diffing its own node list. */
+  nodeId: string | null;
+}
+
+/** What a browser that minted a code wants to know while it waits: has a
+ *  machine claimed it yet. Owner-scoped — a code you did not mint reads as
+ *  unknown. */
+export async function getPairingCodeStatus(code: string, ownerId: string): Promise<PairingCodeStatus | null> {
+  const upper = code.toUpperCase();
+  if (config.mock.aurora) {
+    const row = mockPairingCodeStatus(upper, ownerId);
+    return row ? { code: row.code, expiresAt: row.expiresAt, claimedAt: row.claimedAt, nodeId: row.claimedNodeId } : null;
+  }
+  const rows = await exec(
+    `SELECT code, expires_at, claimed_at FROM compute_pairing_codes WHERE code = :code AND owner_id = :owner`,
+    [s('code', upper), s('owner', ownerId)],
+  );
+  const r = rows[0];
+  if (!r) return null;
+  return {
+    code: toStr(r['code']),
+    expiresAt: toStr(r['expires_at']),
+    claimedAt: r['claimed_at'] ? toStr(r['claimed_at']) : null,
+    nodeId: null,
+  };
 }
 
 /**

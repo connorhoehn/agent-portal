@@ -177,6 +177,44 @@ re-announces within one heartbeat. In-memory fallback for `compute_nodes`
 when Aurora is unconfigured, mirroring the identity provider's pattern, so
 `dev:mock` demos the whole feature offline.
 
+## What the first real pairing taught (2026-09-15)
+
+A person paired a laptop from the portal, saw it listed offline with no
+runnable kinds, read that as a failed pairing, and ran the (single-use) code
+again; started the worker; handed it "what is 10+10" from the page's free
+prompt; got `awaiting_review` back; and saw a black log box. Each of those
+is now a contract:
+
+- **Pairing registers; the worker connects.** Every message on the path —
+  the plugin's success line, the dialog, the page's offline banner — names
+  the next command (`node tools/local-compute-worker.mjs`). The dialog polls
+  `GET /api/local-compute/pair/:code` (owner-scoped; `{claimed, claimedAt,
+  nodeId}`) every 2.5s and advances to the worker step the moment a machine
+  claims, then closes itself when that machine's presence reads `connected`.
+- **Presence is acknowledged, never assumed.** The worker checks every
+  announce/heartbeat response: a 401/403 first re-reads the token file (a
+  second pairing of the same machine rotates the token under a running
+  worker — the row is upserted by node id, so nothing duplicates, but the old
+  token dies) and adopts a newer token; if the server still refuses it says
+  so and exits. Reachability failures print once per state change. A worker
+  that says "connected" while the portal says offline was the bug.
+- **Review is for a change.** `requiresReview` defaults to `Boolean(repo)`
+  on both the dispatch route and the worker: a run with no repo produced no
+  capture, so it lands in `done`; a caller wanting a look anyway sends
+  `requiresReview: true`.
+- **Work reaches a machine from governed paths only.** The page no longer
+  carries a free-prompt composer. It shows the machine's lane — queued,
+  claimed and running jobs targeted at it or untargeted in a kind it
+  registered — and links to bots (`/admin/bots`, scheduled, budgeted,
+  reviewed) and initiative work (`/iq/projects`). `POST
+  /api/local-compute/nodes/:id/work` stays for those callers; it is not a
+  page affordance.
+- **The log console reads the theme.** ui-components' `LogStream` paints
+  `var(--color-surface-subtle, #0b1020)`; the portal now defines that token
+  in both themes (light `#f1f5f9`, dark `#0b1020`) so the box is no longer
+  black on a light page. The library-side fix (a defined token or a real
+  `tone` prop) is queued in `docs/ui-components-queue.md`.
+
 ## Authorization
 
 - New Cedar action **`ConnectLocalCompute`** — gates pairing-code creation

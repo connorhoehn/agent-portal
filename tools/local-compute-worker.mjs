@@ -237,14 +237,49 @@ function presenceSessions() {
   return sessions;
 }
 
+// Presence is best-effort in the sense that a missed announce must never take
+// down the run loop — but it is not silent. The first version swallowed every
+// response, so a worker whose token had been rotated (a second pairing of the
+// same machine re-keys the row) kept printing its normal cadence while the
+// server aged the machine to offline: the operator's terminal said connected
+// and the portal said otherwise, with nothing to reconcile them.
+let presenceState = 'unknown'; // 'ok' | 'failing' | 'unknown'
 async function announce(config) {
+  let res;
   try {
-    await post(config, '/api/local-compute/announce',
+    res = await post(config, '/api/local-compute/announce',
       { sessions: presenceSessions() }, authHeaders(config));
-  } catch {
-    // Presence is best-effort — a missed announce just lets the badge age. Never
-    // let it take down the run loop.
+  } catch (err) {
+    if (presenceState !== 'failing') console.error(`presence: cannot reach ${config.baseUrl} (${err.message}) — the portal will show this machine stale, then offline, until it can`);
+    presenceState = 'failing';
+    return;
   }
+  if (res.status === 401 || res.status === 403) {
+    // The token on disk may be newer than the one in memory (re-paired while
+    // running). Adopt it once; if the server still refuses, say so and stop —
+    // an unauthenticated worker can neither claim nor report, so idling here
+    // only looks like working.
+    const fresh = reloadToken(config);
+    if (fresh) { console.error('presence: token was rotated on disk (re-paired) — adopted the new one'); presenceState = 'unknown'; return; }
+    console.error(`presence: ${config.baseUrl} rejected this machine's token (${res.status}) — re-pair from Local compute › Pair a machine, then restart this worker`);
+    process.exit(2);
+  }
+  if (!res.ok) {
+    if (presenceState !== 'failing') console.error(`presence: announce failed (${res.status}) — retrying every tick`);
+    presenceState = 'failing';
+    return;
+  }
+  if (presenceState !== 'ok') console.log(`presence: acknowledged by ${config.baseUrl} — the portal shows this machine connected`);
+  presenceState = 'ok';
+}
+
+/** Re-read the pairing file; true when it carries a different token. */
+function reloadToken(config) {
+  try {
+    const next = JSON.parse(readFileSync(CONFIG_PATH, 'utf8'));
+    if (next?.nodeToken && next.nodeToken !== config.nodeToken) { config.nodeToken = next.nodeToken; return true; }
+  } catch { /* unreadable — nothing to adopt */ }
+  return false;
 }
 
 // Ship a chunk of run output to the middleware's per-job log. Fenced by the
@@ -445,6 +480,10 @@ async function heartbeat(config, jobId) {
   const res = await post(config, `/api/local-compute/jobs/${jobId}/heartbeat`, {
     claimToken: claim.claimToken,
   }, authHeaders(config));
+  if (res.status === 401 || res.status === 403) {
+    console.error(`  heartbeat for ${jobId} rejected (${res.status}) — this machine's token no longer authenticates; re-pair and restart`);
+    return false;
+  }
   if (res.status === 409) {
     const body = await res.json();
     if (body.gate === 'claim_lost') {
@@ -527,10 +566,14 @@ async function runJob(config, claim) {
     // `payload.requiresReview` is the same field the push-side dispatcher honours
     // (middleware lib/job-dispatcher.ts), and this is where the pull side keeps
     // its half of that contract: a run that needs a human look lands in
-    // `awaiting_review`, not `done`. Defaults to true — the same default the
-    // composer sends — so a job that omits it is reviewed rather than silently
-    // accepted. A failure is never "awaiting review": there is no output to look at.
-    const needsReview = job.payload?.requiresReview !== false;
+    // `awaiting_review`, not `done`. Review is for a run that produced a change
+    // someone can accept or reject — one with a repo. A job that names no repo
+    // and says nothing about review has nothing to review, so it lands in
+    // `done`; "what is 10+10" parked in a review lane was the bug. A failure is
+    // never "awaiting review": there is no output to look at.
+    const needsReview = typeof job.payload?.requiresReview === 'boolean'
+      ? job.payload.requiresReview
+      : Boolean(repoUrl);
     const status = outcome.ok ? (needsReview ? 'awaiting_review' : 'done') : 'failed';
     await complete(config, job.id, status, outcome);
   } catch (err) {

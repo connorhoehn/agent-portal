@@ -15,6 +15,7 @@ import {
   EmptyState,
   EntityCell,
   Inline,
+  InlinePlaceholder,
   MetaLine,
   PageSection,
   Select,
@@ -22,7 +23,8 @@ import {
   Switch,
   type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
-import { TaskComposer, LogStream, type LogLine } from '@connorhoehnslalom/ui-components/shared';
+import { LogStream, type LogLine } from '@connorhoehnslalom/ui-components/shared';
+import { Link as RouterLink } from 'react-router';
 import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
@@ -75,7 +77,6 @@ export default function LocalComputePage() {
   const canDispatch = ready && can('ConnectLocalCompute');
 
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
-  const [dispatching, setDispatching] = useState(false);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   // The accept-jobs switch, while its PATCH is in flight: the row shows the
   // requested state immediately rather than the 15s-poll-old one, and a
@@ -83,11 +84,6 @@ export default function LocalComputePage() {
   // flipped without one clobbering the other.
   const [pendingAccept, setPendingAccept] = useState<Record<string, boolean>>({});
   const [acceptError, setAcceptError] = useState<string | null>(null);
-  // A refused dispatch (paused machine, no registered kinds, queue down) used
-  // to go through window.alert — a modal that blocks every browser event,
-  // including the automation that audits this page. It is a Banner now, next
-  // to the composer that caused it.
-  const [dispatchError, setDispatchError] = useState<string | null>(null);
   // The pairing door. Anyone who may hand a machine work may pair one
   // (ConnectLocalCompute gates both routes); everyone else sees the empty
   // state without a dead-end call to action.
@@ -132,22 +128,18 @@ export default function LocalComputePage() {
     });
   };
 
-  const handleDispatch = async (submission: { title?: string; prompt: string }) => {
-    if (!selectedNode) return;
-    setDispatchError(null);
-    setDispatching(true);
-    const res = await writeJson<{ id: string }>(
-      `/api/local-compute/nodes/${selectedNode.id}/work`,
-      'POST',
-      { title: submission.title, prompt: submission.prompt, kind: 'local:task' },
-    );
-    setDispatching(false);
-    if (res.ok) {
-      refreshRuns();
-    } else {
-      setDispatchError(res.error ?? 'Failed to dispatch work');
-    }
-  };
+  // What this machine will pick up: queued or in-flight runs targeted at it,
+  // plus untargeted ones in a kind it has registered for. Work reaches a
+  // machine from the governed paths — a bot's schedule, an initiative's work
+  // item — never from a free prompt typed here. The composer this replaced
+  // let anyone hand "what is 10+10" to a machine with no budget, no grant and
+  // no attribution, and then parked the answer in a review lane built for
+  // code changes.
+  const upNext = useMemo(() => {
+    if (!selectedNode) return [] as RunRow[];
+    return runs.filter((r) => (r.status === 'queued' || r.status === 'claimed' || r.status === 'running')
+      && (r.nodeId === selectedNode.id || (r.nodeId === null && selectedNode.jobKinds.includes(r.kind))));
+  }, [runs, selectedNode]);
 
   const nodeColumns: DataTableColumn<ComputeNode>[] = [
     {
@@ -250,7 +242,7 @@ export default function LocalComputePage() {
   return (
     <PageSection
       title="Local compute"
-      description="Hand work to your paired machines — they run it with their own models and credentials, reporting back here."
+      description="Your paired machines and the work in their lane — they run it with their own models and credentials, and report back here."
     >
       {nodesFailure && (
         <UnavailableNotice
@@ -266,7 +258,7 @@ export default function LocalComputePage() {
         <EmptyState
           title="No paired machines"
           description={canDispatch
-            ? 'Pair a machine and it appears here, ready to accept work — the dialog gives you a code and the one command to run on it.'
+            ? 'Pair a machine and it appears here; the dialog gives you a code, the command to run on it, and moves on by itself once the machine claims it.'
             : 'Pairing a machine needs the ConnectLocalCompute capability; ask a platform operator to pair one for you.'}
           {...(canDispatch ? { actionLabel: 'Pair a machine', onAction: () => setPairOpen(true) } : {})}
         />
@@ -294,12 +286,12 @@ export default function LocalComputePage() {
             </Stack>
           </DetailSection>
 
-          {canDispatch && selectedNode && (
-            <DetailSection title={`Hand work to ${selectedNode.label}`}>
+          {selectedNode && (
+            <DetailSection title={`Up next on ${selectedNode.label}`} hint={upNext.length > 0 ? `${upNext.length} in its lane` : undefined}>
               <Stack gap="sm">
                 {!selectedNode.acceptJobs ? (
                   <Banner variant="warning">
-                    This machine is paused — switch on “Accepting work” in the row above before handing it work.
+                    This machine is paused — switch on “Accepting work” in the row above and it will start claiming from its lane.
                   </Banner>
                 ) : selectedNode.presence.status === 'offline' && selectedNode.jobKinds.length === 0 ? (
                   // Paired but never announced: the worker has not run on it
@@ -315,19 +307,33 @@ export default function LocalComputePage() {
                   </Banner>
                 ) : selectedNode.presence.status === 'offline' ? (
                   <Banner variant="warning">
-                    This machine is offline — work queued here will wait until it reconnects.
+                    This machine is offline — anything queued for it waits until its worker announces again.
                   </Banner>
                 ) : null}
-                {dispatchError && (
-                  <Banner variant="error">{dispatchError}</Banner>
+                {upNext.length === 0 ? (
+                  <InlinePlaceholder>
+                    Nothing queued for this machine. Work reaches it from a bot's schedule or an initiative's work item, in the kinds it registered
+                    {selectedNode.jobKinds.length > 0 ? ` (${selectedNode.jobKinds.join(', ')})` : ''}.
+                  </InlinePlaceholder>
+                ) : (
+                  <DataTable<RunRow>
+                    columns={[
+                      { key: 'title', header: 'Work', render: (r) => <EntityCell label={r.title} id={r.kind} /> },
+                      { key: 'status', header: 'Status', render: (r) => <Chip tone={statusTone(r.status)} size="xs">{statusLabel(r.status)}</Chip> },
+                      { key: 'target', header: 'Targeted', render: (r) => (r.nodeId ? 'this machine' : 'any machine in the kind') },
+                      { key: 'queued', header: 'Queued', render: (r) => when(r.createdAt) },
+                    ]}
+                    data={upNext}
+                    keyField={(r) => r.id}
+                    onRowClick={(r) => setSelectedRunId(r.id)}
+                  />
                 )}
-                <TaskComposer
-                  title="Dispatch work"
-                  promptPlaceholder="What should this machine do?"
-                  onSubmit={handleDispatch}
-                  submitLabel="Dispatch"
-                  hint={selectedNode.localModels.length > 0 ? `Using ${selectedNode.localModels[0]}` : undefined}
-                  busy={dispatching}
+                <MetaLine
+                  size="xs"
+                  items={[
+                    <RouterLink key="bots" to="/admin/bots" className="text-primary hover:underline">Schedule work with a bot →</RouterLink>,
+                    <RouterLink key="work" to="/iq/projects" className="text-primary hover:underline">Dispatch from an initiative's work →</RouterLink>,
+                  ]}
                 />
               </Stack>
             </DetailSection>

@@ -34,6 +34,7 @@
   --color-surface: #ffffff;
   --color-surface-inset: #f8fafc;
   --color-surface-hover: #eef2f7;
+  --color-surface-subtle: #f1f5f9;   /* quiet inset — log consoles, code wells (LogStream reads it) */
 
   --color-border: #dfe4ec;
   --color-border-emphasis: #c3cbd8;
@@ -129,6 +130,7 @@ html[data-theme="dark"] {
   --color-surface: #172033;
   --color-surface-inset: #0f172a;
   --color-surface-hover: #1e293b;
+  --color-surface-subtle: #0b1020;
   --color-surface-raised: #1e293b;
 
   --color-border: #263247;

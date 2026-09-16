@@ -37,17 +37,18 @@ import { rateLimit } from '../lib/rate-limit.js';
 import { requireAction, requireSession, requireTenant, resolveSession } from '../lib/authz.js';
 import { FLEET_WIDE_ROLES } from '../lib/devbox-visibility.js';
 import {
-  createPairingCode,
   claimPairingCode,
+  createPairingCode,
   getNodeByToken,
-  listNodesByOwner,
-  listAllNodes,
-  renameNode,
-  setAcceptJobs,
-  revokeNode,
-  touchNode,
-  recordNodeCapabilities,
+  getPairingCodeStatus,
   hasNodeCapabilityColumns,
+  listAllNodes,
+  listNodesByOwner,
+  recordNodeCapabilities,
+  renameNode,
+  revokeNode,
+  setAcceptJobs,
+  touchNode,
   type ComputeNode,
 } from '../providers/local-compute.js';
 import {
@@ -176,6 +177,26 @@ localComputeRouter.post(
     const session = resolveSession(req)!;
     const pairing = await createPairingCode(session.sub);
     res.json(pairing);
+  }),
+);
+
+// The browser that minted a code polls this while its dialog is open, so the
+// dialog can say "paired" the moment the machine claims — instead of sitting
+// on a code until someone closes it by hand. Owner-scoped: a code you did not
+// mint 404s, the same answer as a code that never existed.
+localComputeRouter.get(
+  '/pair/:code',
+  browserTenant,
+  requireAction('ConnectLocalCompute'),
+  asyncHandler(async (req, res) => {
+    const session = resolveSession(req)!;
+    const code = String(req.params['code'] ?? '').trim();
+    const status = code ? await getPairingCodeStatus(code, session.sub) : null;
+    if (!status) {
+      res.status(404).json({ error: 'no such pairing code' });
+      return;
+    }
+    res.json({ ...status, claimed: status.claimedAt !== null });
   }),
 );
 
@@ -811,9 +832,11 @@ localComputeRouter.post(
         // would put the prompt text on a stranger's disk.
         nodeId: node.id,
         // Honoured on the local path by the worker, which completes with
-        // `awaiting_review` rather than `done` when this is not false. A payload
-        // field nothing reads is worse than no field at all.
-        requiresReview: body.requiresReview !== false,
+        // `awaiting_review` rather than `done` when this is true. Review is
+        // for a run that produced something a person can accept or reject —
+        // a change in a repo. A run with no repo has no capture to review, so
+        // it lands in `done`; a caller that wants a look anyway says so.
+        requiresReview: typeof body.requiresReview === 'boolean' ? body.requiresReview : Boolean(repo),
         ...(repo ? { repo } : {}),
       },
       ...(typeof body.priority === 'number' ? { priority: body.priority } : {}),

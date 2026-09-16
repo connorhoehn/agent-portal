@@ -114,6 +114,9 @@ export interface PairingCodeRow {
   ownerId: string;
   expiresAt: string;
   claimedAt: string | null;
+  /** The node the claim minted (or re-keyed) — what a browser polling the
+   *  code's status needs in order to watch that machine come online. */
+  claimedNodeId: string | null;
 }
 
 /**
@@ -340,6 +343,7 @@ function seededPairingCodes(): PairingCodeRow[] {
       ownerId: OPERATOR_OWNER,
       expiresAt: new Date(clock.now().getTime() + PAIRING_TTL_MS).toISOString(),
       claimedAt: null,
+      claimedNodeId: null,
     },
   ];
 }
@@ -600,7 +604,14 @@ export function mockRevokeNode(id: string, ownerId: string): boolean {
 
 /** `INSERT INTO compute_pairing_codes (code, owner_id, expires_at)`. */
 export function mockCreatePairingCode(code: string, ownerId: string, expiresAt: string): void {
-  pairingCodes.rows().push({ code, ownerId, expiresAt, claimedAt: null });
+  pairingCodes.rows().push({ code, ownerId, expiresAt, claimedAt: null, claimedNodeId: null });
+}
+
+/** Owner-scoped read of a code's state — unknown or someone else's code reads
+ *  as null so the route can 404 without saying which. */
+export function mockPairingCodeStatus(code: string, ownerId: string): PairingCodeRow | null {
+  const row = pairingCodes.rows().find((c) => c.code === code && c.ownerId === ownerId);
+  return row ? { ...row } : null;
 }
 
 /**
@@ -626,6 +637,7 @@ export function mockClaimPairingCode(
   const pending = pairingCodes.rows().find((c) => c.code === code);
   if (!pending || pending.claimedAt !== null || Date.parse(pending.expiresAt) <= nowMs) return null;
   pending.claimedAt = clock.nowIso();
+  pending.claimedNodeId = node.nodeId;
 
   const existing = byId(node.nodeId);
   if (existing) {

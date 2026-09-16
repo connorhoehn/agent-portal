@@ -105,8 +105,15 @@ async function pair(code, baseUrl) {
     process.exit(1);
   }
   const { nodeId, nodeToken } = await res.json();
+  const rePaired = Boolean(config.nodeToken);
   writeJson(CONFIG_PATH, { baseUrl, nodeId, nodeToken, label });
   console.log(`paired as ${label} (${nodeId}) against ${baseUrl}`);
+  if (rePaired) {
+    // Same machine, same node id, NEW token: the server re-keyed the row. A
+    // worker started before this moment still holds the old token; it adopts
+    // the new one on its next announce, but say it here too.
+    console.log('this replaced the machine\'s previous token — a worker already running here picks the new one up on its next presence tick, or restart it.');
+  }
   console.log(`token written to ${CONFIG_PATH} (0600) — it is shown nowhere else`);
   console.log('');
   console.log('Pairing only registers the machine — the portal shows it offline with no runnable');
