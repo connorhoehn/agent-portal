@@ -3,6 +3,7 @@ import { GatewayProxyClient } from '@connorhoehnslalom/realtime-modules/proxy-cl
 import type { ConnectionState } from '@connorhoehnslalom/realtime-modules/client/ws';
 import { useGateway } from '@connorhoehnslalom/realtime-modules/client/ws';
 import { Inline, StatusDot } from '@connorhoehnslalom/ui-components/shared';
+import { nextPollDelay, isDocumentHidden } from '../../hooks/pollSchedule';
 
 // VITE_GATEWAY_URL is exposed to the browser bundle by Vite at build time.
 // We avoid `import.meta.env` typing concerns (no vite-env.d.ts in this repo)
@@ -44,6 +45,14 @@ const POLL_MS = 30_000;
  * health data (uptime, node count) remains available without a live WS.
  *
  * Gateway base URL: `VITE_GATEWAY_URL` (default `http://localhost:8080`).
+ *
+ * Not `useFetch`: the gateway is a separate origin from the portal's `/api`
+ * and this client's `request()` sends no `credentials`, so routing it
+ * through `useFetch` (which always fetches with `credentials: 'include'`)
+ * would change a same-origin-safe call into a cross-origin credentialed one
+ * with no corresponding CORS contract on the gateway side. The scheduling —
+ * visibility-pause and failure backoff — is still shared with `useFetch` via
+ * `hooks/pollSchedule`, so this differs from it only in the transport.
  */
 export function GatewayStatusBadge() {
   const [httpStatus, setHttpStatus] = useState<HttpStatus>('unknown');
@@ -51,23 +60,41 @@ export function GatewayStatusBadge() {
 
   useEffect(() => {
     let cancelled = false;
+    let failures = 0;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
-    const check = () => {
-      client.getHealth().then(
-        () => {
-          if (!cancelled) setHttpStatus('healthy');
-        },
-        () => {
-          if (!cancelled) setHttpStatus('unhealthy');
-        }
-      );
+    const scheduleNext = () => {
+      if (isDocumentHidden()) return;
+      timeoutId = setTimeout(() => { void check(); }, nextPollDelay(failures, POLL_MS));
     };
 
-    check();
-    const t = setInterval(check, POLL_MS);
+    const check = async () => {
+      try {
+        await client.getHealth();
+        if (!cancelled) { setHttpStatus('healthy'); failures = 0; }
+      } catch {
+        if (!cancelled) { setHttpStatus('unhealthy'); failures += 1; }
+      } finally {
+        if (!cancelled) scheduleNext();
+      }
+    };
+
+    const onVisibilityChange = () => {
+      if (isDocumentHidden()) {
+        if (timeoutId) { clearTimeout(timeoutId); timeoutId = undefined; }
+        return;
+      }
+      if (timeoutId) { clearTimeout(timeoutId); timeoutId = undefined; }
+      void check();
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    void check();
+
     return () => {
       cancelled = true;
-      clearInterval(t);
+      if (timeoutId) clearTimeout(timeoutId);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
     };
   }, []);
 

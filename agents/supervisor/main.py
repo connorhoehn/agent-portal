@@ -487,6 +487,63 @@ def _event_type(event) -> str:
     return str(getattr(raw, "value", raw) or "")
 
 
+def _event_attr(event, name: str):
+    """Tolerant field access, same two shapes as `_event_type`."""
+    if isinstance(event, dict):
+        return event.get(name)
+    return getattr(event, name, None)
+
+
+# Sub-agent routing tools whose TOOL_CALL_START/TOOL_CALL_RESULT pair should
+# bracket a STEP_STARTED/STEP_FINISHED for the portal's run-phase stepper.
+#
+# Strands' Graph/Swarm multi-agent orchestration gets STEP events for free
+# from `ag_ui_strands` (they fire off its multiagent_node_start/stop
+# callbacks) — this supervisor instead routes to sub-agents with a
+# hand-rolled `@tool` + `invoke_agent_runtime` call (`_invoke_sub_agent`
+# above), which the adapter only ever sees as an ordinary tool call. No
+# upstream code path emits a STEP event for that shape, so today's stream
+# carries TOOL_CALL_* only (docs/research-agui-steps-2026-09-16.md). This
+# map is the low-effort substitute: one synthesized step per sub-agent tool
+# call, keyed off the tool name the model actually invoked.
+# `run_in_sandbox` and `request_approval` are deliberately absent — neither
+# routes to a sub-agent, so neither gets a step.
+SUB_AGENT_STEP_NAMES: dict[str, str] = {
+    "search_organization": "search",
+    "get_expertise_scores": "scoring",
+    "get_strategic_advice": "advisor",
+    "ingest_documents": "ingestion",
+    "build_graph": "graph-builder",
+}
+
+
+def _step_started_event(step_name: str):
+    """STEP_STARTED for a sub-agent routing call, closed by `_step_finished_event`.
+
+    Built the same defensive way as `_run_error_event` (falls back to a plain
+    dict if the SDK ever renames the class) and yielded from inside the same
+    ``async for event in ag_ui_agent.run(...)`` loop that forwards every other
+    AG-UI event, so it reaches the SSE encoder in the same order, not via a
+    side channel.
+    """
+    try:
+        from ag_ui.core import EventType, StepStartedEvent
+
+        return StepStartedEvent(type=EventType.STEP_STARTED, step_name=step_name)
+    except Exception:  # noqa: BLE001
+        return {"type": "STEP_STARTED", "step_name": step_name}
+
+
+def _step_finished_event(step_name: str):
+    """STEP_FINISHED matching `_step_started_event` — see its docstring."""
+    try:
+        from ag_ui.core import EventType, StepFinishedEvent
+
+        return StepFinishedEvent(type=EventType.STEP_FINISHED, step_name=step_name)
+    except Exception:  # noqa: BLE001
+        return {"type": "STEP_FINISHED", "step_name": step_name}
+
+
 def _run_error_event(message: str, code: str = "supervisor_stream_error"):
     """Terminal AG-UI event for a stream that died partway through.
 
@@ -552,6 +609,11 @@ async def _handle_streaming(payload: dict, input_text: str, role: str, tenant: s
     t0 = time.monotonic()
     streamed_text: list[str] = []
     stream_error: str | None = None
+    # tool_call_id -> step_name, for sub-agent routing calls currently in
+    # flight. Closed on TOOL_CALL_RESULT (see the loop below); any survivors
+    # when the stream dies are force-closed in the except block, so a step
+    # that started always finishes.
+    active_steps: dict[str, str] = {}
 
     # Everything from here on lives inside the try, so that *building* the
     # RunAgentInput is covered too: a ValidationError there used to escape
@@ -608,6 +670,7 @@ async def _handle_streaming(payload: dict, input_text: str, role: str, tenant: s
             prompt_version=_prompt_sha,
         ) as oi_span:
             async for event in ag_ui_agent.run(run_input):
+                etype = _event_type(event)
                 # Accumulate assistant text so the persisted trace carries
                 # a real response snippet instead of an empty string.
                 #
@@ -616,11 +679,34 @@ async def _handle_streaming(payload: dict, input_text: str, role: str, tenant: s
                 # one splices a tool's JSON arguments into the text stored
                 # as the assistant's answer — and the transcript, the judge
                 # and the canary then all score a reply the user never saw.
-                if _event_type(event) == "TEXT_MESSAGE_CONTENT":
-                    delta = event.get("delta") if isinstance(event, dict) else getattr(event, "delta", None)
+                if etype == "TEXT_MESSAGE_CONTENT":
+                    delta = _event_attr(event, "delta")
                     if isinstance(delta, str) and delta:
                         streamed_text.append(delta)
                 yield event
+
+                # Synthesize STEP_STARTED/STEP_FINISHED around each sub-agent
+                # routing call (SUB_AGENT_STEP_NAMES). TOOL_CALL_START fires
+                # once the model finishes streaming the tool's *arguments* —
+                # before `_invoke_sub_agent` has actually run — and
+                # ag_ui_strands emits TOOL_CALL_END at that same point (args
+                # complete), not when the tool returns. TOOL_CALL_RESULT is
+                # the one event that only appears after the tool's Python
+                # call has actually returned, so it — not TOOL_CALL_END — is
+                # what closes the step; closing on END would show "finished"
+                # while the sub-agent invocation is still in flight over the
+                # network.
+                if etype == "TOOL_CALL_START":
+                    step_name = SUB_AGENT_STEP_NAMES.get(_event_attr(event, "tool_call_name"))
+                    tool_call_id = _event_attr(event, "tool_call_id")
+                    if step_name and tool_call_id:
+                        active_steps[tool_call_id] = step_name
+                        yield _step_started_event(step_name)
+                elif etype == "TOOL_CALL_RESULT":
+                    tool_call_id = _event_attr(event, "tool_call_id")
+                    step_name = active_steps.pop(tool_call_id, None) if tool_call_id else None
+                    if step_name:
+                        yield _step_finished_event(step_name)
             record_guardrail_action(oi_span, action=None, pii_detected=None)
     except Exception as exc:  # noqa: BLE001
         # Say it failed, then let it fail. The event is for the portal — a
@@ -628,6 +714,13 @@ async def _handle_streaming(payload: dict, input_text: str, role: str, tenant: s
         # the re-raise keeps the runtime's own error accounting honest.
         stream_error = str(exc) or type(exc).__name__
         log.exception("supervisor: AG-UI stream failed: %s", stream_error)
+        # A step that started must finish: close any sub-agent step left open
+        # by a stream that died mid-call, before the terminal RUN_ERROR, so
+        # the portal's stepper doesn't hang on a step that will never
+        # otherwise resolve.
+        for step_name in active_steps.values():
+            yield _step_finished_event(step_name)
+        active_steps.clear()
         yield _run_error_event(stream_error)
         raise
     finally:

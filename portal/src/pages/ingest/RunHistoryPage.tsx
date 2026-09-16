@@ -9,13 +9,17 @@ import { EmptyState } from '../../components/ingest/ui';
 
 function RunHistoryPage() {
   const navigate = useNavigate();
+  // Same URL + interval as IngestLayout's nav-badge poll and
+  // CrawlTargetsPage — `share: true` collapses the three into one request.
   const { data: targetsData } = useFetch<{ targets: CrawlTarget[] }>(
     '/api/ingest/crawl-targets',
     30_000,
+    { share: true },
   );
   const { data: crawlsData } = useFetch<{ crawls: CrawlSession[] }>(
     '/api/ingest/crawls',
     10_000,
+    { share: true },
   );
 
   const targets = targetsData?.targets ?? [];

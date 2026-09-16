@@ -1193,6 +1193,20 @@ function mockStreamTick(ms: number): Promise<void> {
   return ms > 0 ? new Promise((r) => setTimeout(r, ms)) : Promise.resolve();
 }
 
+
+/** The supervisor's routing tools → the sub-agent step they open
+ *  (agents/supervisor/main.py SUB_AGENT_STEP_NAMES). The seeded mock answers
+ *  carry the sub-agent's own graph queries, so an unmapped tool is the search
+ *  agent at work. */
+const MOCK_SUB_AGENT_STEPS: Record<string, string> = {
+  search_organization: 'search',
+  get_expertise_scores: 'scoring',
+  get_strategic_advice: 'advisor',
+};
+function mockStepNameFor(toolName: string): string {
+  return MOCK_SUB_AGENT_STEPS[toolName] ?? 'search';
+}
+
 export const mockAgentCore: AgentCoreProvider = {
   /**
    * The offline half of the degraded answer.
@@ -1268,19 +1282,33 @@ export const mockAgentCore: AgentCoreProvider = {
     const m = selectMockResponse(payload.message);
     const msgId = `mock-${Date.now()}`;
     yield { type: 'RUN_STARTED', threadId: payload.sessionId ?? 'mock', runId: msgId };
-    // Deterministic STEP_STARTED/STEP_FINISHED pair around the answer, so
-    // the portal's step strip (useAgentStream `steps`) is reachable under
-    // dev:mock. A real supervisor's AG-UI sequence is RunStarted ->
-    // StepStarted("routing") -> TextMessageContent -> ToolCallStart ->
-    // StepFinished -> RunFinished (CONSTITUTION.md ~146) — this mirrors that
-    // shape rather than inventing a different one.
-    yield { type: 'STEP_STARTED', stepName: 'routing' };
+    // The real supervisor (agents/supervisor/main.py) brackets each routed
+    // sub-agent call with STEP_STARTED/STEP_FINISHED named after the sub-agent
+    // (search / scoring / advisor), opened on TOOL_CALL_START and closed on
+    // TOOL_CALL_RESULT — not on TOOL_CALL_END, which fires when the model has
+    // finished streaming ARGUMENTS, before the network call runs. The mock
+    // mirrors that sequence per seeded tool call so the portal's step strip
+    // and tool-call pills behave the same offline as against the fleet
+    // (docs/research-agui-steps-2026-09-16.md).
+    //
     // Pace the chunks. Unpaced, the whole run lands in one ~2ms SSE read, React
     // batches every event into a single render, and no in-flight state — the
     // step strip, the streaming bubble, the tool-call pills — is ever painted;
     // a real Nova answer streams for seconds. Jest keeps it instant.
     const pace = mockStreamPaceMs();
-    await mockStreamTick(pace * 8);
+    for (const tc of m.toolCalls) {
+      const id = randomUUID();
+      const step = mockStepNameFor(tc.name);
+      yield { type: 'TOOL_CALL_START', toolCallId: id, toolCallName: tc.name };
+      yield { type: 'STEP_STARTED', stepName: step };
+      await mockStreamTick(pace * 4);
+      yield { type: 'TOOL_CALL_ARGS', toolCallId: id, delta: typeof tc.args === 'string' ? tc.args : JSON.stringify(tc.args) };
+      yield { type: 'TOOL_CALL_END', toolCallId: id };
+      await mockStreamTick(pace * 12);
+      yield { type: 'TOOL_CALL_RESULT', toolCallId: id, content: tc.result };
+      yield { type: 'STEP_FINISHED', stepName: step };
+    }
+    await mockStreamTick(pace * 4);
     yield { type: 'TEXT_MESSAGE_START', messageId: msgId, role: 'assistant' };
     const words = m.response.split(/(\s+)/);
     for (let i = 0; i < words.length; i += 3) {
@@ -1288,8 +1316,6 @@ export const mockAgentCore: AgentCoreProvider = {
       yield { type: 'TEXT_MESSAGE_CONTENT', messageId: msgId, delta: words.slice(i, i + 3).join('') };
     }
     yield { type: 'TEXT_MESSAGE_END', messageId: msgId };
-    await mockStreamTick(pace * 4);
-    yield { type: 'STEP_FINISHED', stepName: 'routing' };
     yield { type: 'RUN_FINISHED' };
   },
 

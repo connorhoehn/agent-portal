@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-09-16T07:41:15.571Z",
-  "serverHandlerSha": "029dee65c91fbb687d98590acfda9ee2c6a062c229c91c81d67e1120f77e3e9b",
+  "capturedAt": "2026-09-16T08:53:36.769Z",
+  "serverHandlerSha": "81f988d4775ee2937f5c2abde12f374e53241bd5bb9916305381d9c7035ee566",
   "baseUrl": "http://127.0.0.1:3012",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
@@ -2357,7 +2357,15 @@
         "dryRunPassed": "null",
         "id": "string",
         "observations": "array",
-        "observations[]": "object(dictionary)",
+        "observations[]": "object",
+        "observations[].body": "string",
+        "observations[].createdAt": "string",
+        "observations[].id": "string",
+        "observations[].initiativeId": "null",
+        "observations[].kind": "string",
+        "observations[].repo": "string",
+        "observations[].sessionId": "string",
+        "observations[].title": "string",
         "proposedKind": "string",
         "rationale": "string",
         "sessionCount": "number",
@@ -2366,6 +2374,11 @@
         "title": "string"
       },
       "values": {
+        "observations[].kind": [
+          "decision",
+          "failed",
+          "worked"
+        ],
         "status": [
           "dismissed"
         ]
@@ -2382,7 +2395,15 @@
         "dryRunPassed": "boolean",
         "id": "string",
         "observations": "array",
-        "observations[]": "object(dictionary)",
+        "observations[]": "object",
+        "observations[].body": "string",
+        "observations[].createdAt": "string",
+        "observations[].id": "string",
+        "observations[].initiativeId": "null",
+        "observations[].kind": "string",
+        "observations[].repo": "string",
+        "observations[].sessionId": "string",
+        "observations[].title": "string",
         "proposedKind": "string",
         "rationale": "string",
         "sessionCount": "number",
@@ -2391,6 +2412,11 @@
         "title": "string"
       },
       "values": {
+        "observations[].kind": [
+          "decision",
+          "failed",
+          "worked"
+        ],
         "status": [
           "promoted"
         ]

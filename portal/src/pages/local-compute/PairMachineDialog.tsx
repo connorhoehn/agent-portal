@@ -77,37 +77,37 @@ export function PairMachineDialog({ open, onClose, onPaired }: { open: boolean; 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  // Watch the code until a machine claims it.
+  // One watcher for both steps of the flow — step 1 (waiting for a claim)
+  // needs both the pair-status and the node list every tick; step 2 (waiting
+  // for the worker to announce) only ever needed the node list, so folding
+  // both into one interval drops a redundant `/nodes` read per tick instead
+  // of running two independent 2.5s loops side by side. Stops the instant
+  // the dialog closes (the `open` dependency tears the interval down), same
+  // as the two loops it replaces.
   useEffect(() => {
-    if (!open || !pairing || claimed) return;
+    if (!open || !pairing) return;
     let cancelled = false;
     const tick = async () => {
       const [statusRes, nodesRes] = await Promise.all([
-        fetch(`/api/local-compute/pair/${encodeURIComponent(pairing.code)}`, { credentials: 'same-origin' }).then((r) => (r.ok ? r.json() : null)).catch(() => null) as Promise<PairStatus | null>,
+        claimed
+          ? Promise.resolve(null)
+          : fetch(`/api/local-compute/pair/${encodeURIComponent(pairing.code)}`, { credentials: 'same-origin' }).then((r) => (r.ok ? r.json() : null)).catch(() => null) as Promise<PairStatus | null>,
         fetch('/api/local-compute/nodes', { credentials: 'same-origin' }).then((r) => (r.ok ? r.json() : null)).catch(() => null) as Promise<{ nodes?: NodeLite[] } | null>,
       ]);
       if (cancelled) return;
       const nodes = nodesRes?.nodes ?? [];
-      const fresh = nodes.find((n) => !knownIdsRef.current.has(n.id));
-      if (statusRes?.claimed || fresh) {
-        const node = (statusRes?.nodeId ? nodes.find((n) => n.id === statusRes.nodeId) : undefined) ?? fresh ?? null;
-        setClaimed({ nodeId: node?.id ?? statusRes?.nodeId ?? null, label: node?.label ?? null });
-        onPaired?.();
-      }
-    };
-    void tick();
-    const id = window.setInterval(() => { void tick(); }, WATCH_MS);
-    return () => { cancelled = true; window.clearInterval(id); };
-  }, [open, pairing, claimed, onPaired]);
 
-  // Then watch the machine until its worker announces — and get out of the way.
-  useEffect(() => {
-    if (!open || !claimed) return;
-    let cancelled = false;
-    const tick = async () => {
-      const res = await fetch('/api/local-compute/nodes', { credentials: 'same-origin' }).then((r) => (r.ok ? r.json() : null)).catch(() => null) as { nodes?: NodeLite[] } | null;
-      if (cancelled) return;
-      const node = (res?.nodes ?? []).find((n) => (claimed.nodeId ? n.id === claimed.nodeId : n.label === claimed.label));
+      if (!claimed) {
+        const fresh = nodes.find((n) => !knownIdsRef.current.has(n.id));
+        if (statusRes?.claimed || fresh) {
+          const node = (statusRes?.nodeId ? nodes.find((n) => n.id === statusRes.nodeId) : undefined) ?? fresh ?? null;
+          setClaimed({ nodeId: node?.id ?? statusRes?.nodeId ?? null, label: node?.label ?? null });
+          onPaired?.();
+        }
+        return;
+      }
+
+      const node = nodes.find((n) => (claimed.nodeId ? n.id === claimed.nodeId : n.label === claimed.label));
       if (node && node.presence.status === 'connected') {
         toast?.toast(`${node.label} is connected`, { type: 'success' });
         onClose();
@@ -116,7 +116,7 @@ export function PairMachineDialog({ open, onClose, onPaired }: { open: boolean; 
     void tick();
     const id = window.setInterval(() => { void tick(); }, WATCH_MS);
     return () => { cancelled = true; window.clearInterval(id); };
-  }, [open, claimed, onClose, toast]);
+  }, [open, pairing, claimed, onPaired, onClose, toast]);
 
   return (
     <Modal

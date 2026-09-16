@@ -152,6 +152,7 @@ export default function BudgetsPage() {
             hasData={data != null}
             canManage={canManage}
             refresh={refresh}
+            initiatives={initiativesData}
           />
         )}
       </Stack>

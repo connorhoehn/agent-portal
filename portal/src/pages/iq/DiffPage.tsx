@@ -10,6 +10,7 @@ import {
   Chip, CodeBlock, EmptyState, Select, SectionLabel, Stack, Inline, Tabs,
 } from '@connorhoehnslalom/ui-components/shared';
 import { usePromptList, usePromptVersions } from '../../components/canary/usePromptLibrary.js';
+import type { PromptLibraryEntry } from '../../components/canary/types.js';
 import { diffStats, lineDiff } from './diffFormat';
 import { DiffFrame } from './DiffFrame';
 import { T } from './Text';
@@ -38,20 +39,27 @@ function useTemplateText(promptId: string | null, version: string | null): { tex
 
 function PromptVersionPicker({
   label,
+  prompts,
   promptId,
   version,
+  versions,
   onPromptChange,
   onVersionChange,
 }: {
   label: string;
+  /** Lifted to DiffPage — both panes share the SAME prompt list, so it is
+      fetched once there instead of once per picker. */
+  prompts: PromptLibraryEntry[];
   promptId: string | null;
   version: string | null;
+  /** Lifted to DiffPage too. Each pane has its own promptId, so this is
+      still a genuinely separate fetch per pane — it just runs once, in the
+      parent, instead of once inside this picker on top of whatever the
+      parent already fetched for itself. */
+  versions: PromptLibraryEntry[];
   onPromptChange: (id: string) => void;
   onVersionChange: (v: string) => void;
 }): React.ReactElement {
-  const { prompts } = usePromptList();
-  const { versions } = usePromptVersions(promptId);
-
   return (
     <Stack gap="xs" className="min-w-[220px] flex-1">
       <SectionLabel as="div">{label}</SectionLabel>
@@ -148,6 +156,11 @@ export default function DiffPage(): React.ReactElement {
     }
   }, [prompts, promptIdA]);
 
+  // Lifted from PromptVersionPicker — see its comment. `prompts` above is
+  // already shared between both panes; these two are the per-pane halves.
+  const { versions: versionsA } = usePromptVersions(promptIdA);
+  const { versions: versionsB } = usePromptVersions(promptIdB);
+
   const { text: textA, loading: loadingA } = useTemplateText(promptIdA, versionA);
   const { text: textB, loading: loadingB } = useTemplateText(promptIdB, versionB);
 
@@ -181,8 +194,10 @@ export default function DiffPage(): React.ReactElement {
       <Inline gap="md" align="end" wrap className="shrink-0 flex-wrap border-b border-border bg-surface px-5 py-4">
         <PromptVersionPicker
           label="Version A (baseline)"
+          prompts={prompts}
           promptId={promptIdA}
           version={versionA}
+          versions={versionsA}
           onPromptChange={id => { setPromptIdA(id); setVersionA(null); }}
           onVersionChange={setVersionA}
         />
@@ -191,8 +206,10 @@ export default function DiffPage(): React.ReactElement {
 
         <PromptVersionPicker
           label="Version B (challenger)"
+          prompts={prompts}
           promptId={promptIdB}
           version={versionB}
+          versions={versionsB}
           onPromptChange={id => { setPromptIdB(id); setVersionB(null); }}
           onVersionChange={setVersionB}
         />

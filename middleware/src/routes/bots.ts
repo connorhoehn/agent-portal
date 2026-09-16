@@ -21,6 +21,7 @@ import { degradedFields } from '../lib/upstream.js';
 import { readForRolesElseAction, requireAction, requireSession } from '../lib/authz.js';
 import {
   listBotsResult, getBot, createBot, updateBot, deleteBot, setPausedReason, listBotRunsResult,
+  listBotRunsForBotsResult,
   listMarketplaceRuns,
   listActiveRuns, runCostSamples, perPointCostSamples,
   type BotTemplate, type BotTrigger, type BotPatch,
@@ -525,6 +526,21 @@ botsRouter.get('/marketplace-runs', marketReadGate, asyncHandler(async (req, res
   const orgProjectId = String(req.query['orgProjectId'] ?? '').trim();
   if (!orgProjectId) throw new ValidationError('orgProjectId is required');
   res.json({ runs: await listMarketplaceRuns(orgProjectId) });
+}));
+
+// GET /api/bots/runs?botIds=a,b,c
+//
+// Bulk run history for several bots in one request — what
+// `InitiativeAgentRail` needs to feed its Agents/Outcomes cards without
+// firing one `/:id/runs` per bot targeting the initiative (the N+1 the rail
+// used to do). Registered ahead of `/:id` below: Express would otherwise
+// route this path to the param handler with id="runs".
+botsRouter.get('/runs', readGate, asyncHandler(async (req, res) => {
+  const raw = String(req.query['botIds'] ?? '').trim();
+  const botIds = raw ? raw.split(',').map((s) => s.trim()).filter(Boolean) : [];
+  if (botIds.length === 0) { res.json({ runs: [] }); return; }
+  const history = await listBotRunsForBotsResult(botIds, 50);
+  res.json({ runs: history.items, ...degradedFields(history) });
 }));
 
 // ─── CRUD ────────────────────────────────────────────────────────────────────

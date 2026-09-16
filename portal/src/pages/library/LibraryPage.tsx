@@ -30,6 +30,7 @@ import {
   type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
+import { useDebouncedSearch } from '../../hooks/useDebouncedSearch';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { useCrumbLabel } from '../../lib/crumbLabels';
 import { relativeTime } from '../../lib/relativeTime';
@@ -42,13 +43,21 @@ import {
 } from './libraryFormat';
 import type { AssetKind, AssetTier, LibraryAsset, LibraryResponse } from './types';
 
+// Same cadence TiersPage.tsx set for this exact pattern.
+const SEARCH_DEBOUNCE_MS = 250;
+
 export default function LibraryPage() {
   // Facets live in the URL so a filtered library is a shareable link — "the
   // security evaluators" is a thing people send each other.
   const [params, setParams] = useSearchParams();
   const kind = (params.get('kind') ?? 'all') as AssetKind | 'all';
   const tier = (params.get('tier') ?? 'all') as AssetTier | 'all';
+  // `query` is what actually drives the fetch URL below; the box shows
+  // `searchText` and only commits to `query` (and so only fires a new
+  // request) `SEARCH_DEBOUNCE_MS` after typing stops — this used to put
+  // every keystroke straight into the URL and re-fetch on each one.
   const [query, setQuery] = useState('');
+  const { searchText, onSearchChange, cancelPending } = useDebouncedSearch(query, setQuery, SEARCH_DEBOUNCE_MS);
   // /iq/library/:assetId opens that asset's drawer on load and follows the
   // URL when it changes (a link from Distillation → Artifacts lands here).
   const { assetId: routeAssetId } = useParams<{ assetId?: string }>();
@@ -183,8 +192,8 @@ export default function LibraryPage() {
         </ToolbarGroup>
         <ToolbarGroup divided aria-label="Search">
           <SearchInput
-            value={query}
-            onChange={setQuery}
+            value={searchText}
+            onChange={onSearchChange}
             placeholder="Name, description, tag, owner…"
             aria-label="Search the library"
             className="w-[220px]"
@@ -215,7 +224,7 @@ export default function LibraryPage() {
           title="Nothing matches"
           description="No asset matches these facets. Clear a filter or widen the search."
           actionLabel="Clear filters"
-          onAction={() => { setParams(new URLSearchParams(), { replace: true }); setQuery(''); }}
+          onAction={() => { cancelPending(); setParams(new URLSearchParams(), { replace: true }); setQuery(''); }}
         />
       ) : emptyKind === 'catalog-empty' ? (
         <EmptyState

@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
 import type { ReactElement } from 'react';
 import { useNavigate } from 'react-router';
 import { Button, Inline } from '@connorhoehnslalom/ui-components/shared';
+import { useFetch } from '../../hooks/useFetch';
 
 interface KBHealthEntry {
   id: string;
@@ -51,28 +51,14 @@ const SYMBOL: Record<Severity, string> = {
   failed:   '✕',
 };
 
+const POLL_MS = 60_000;
+
 export function KBHealthBadge(): ReactElement | null {
-  const [data, setData] = useState<KBHealthResponse | null>(null);
   const navigate = useNavigate();
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function fetch_() {
-      try {
-        const res = await fetch('/api/admin/kb-registry/health');
-        if (!res.ok) return;
-        const json = (await res.json()) as KBHealthResponse;
-        if (!cancelled) setData(json);
-      } catch {
-        // fail silent
-      }
-    }
-
-    fetch_();
-    const id = setInterval(fetch_, 60_000);
-    return () => { cancelled = true; clearInterval(id); };
-  }, []);
+  // Fail silent, same as the old hand-rolled poll: this is a glanceable
+  // chip over the knowledge pages, not a page that owes anyone an error
+  // state — `error` is simply ignored and the badge renders nothing.
+  const { data } = useFetch<KBHealthResponse>('/api/admin/kb-registry/health', POLL_MS);
 
   if (!data) return null;
 

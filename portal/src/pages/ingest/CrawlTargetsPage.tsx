@@ -20,13 +20,18 @@ function CrawlTargetsPage() {
   // Target CRUD, runs and cancels all ride /api/ingest (ManageIngest).
   const { can, ready } = useCapabilities();
   const canManage = ready && can('ManageIngest');
+  // Same URL + interval as IngestLayout's nav-badge poll and RunHistoryPage
+  // — `share: true` so the three collapse into one request per tick instead
+  // of three.
   const { data: targetsData, refresh: refreshTargets } = useFetch<{ targets: CrawlTarget[] }>(
     '/api/ingest/crawl-targets',
     30_000,
+    { share: true },
   );
   const { data: crawlsData, refresh: refreshCrawls } = useFetch<{ crawls: CrawlSession[] }>(
     '/api/ingest/crawls',
     10_000,
+    { share: true },
   );
 
   const targets = targetsData?.targets ?? [];

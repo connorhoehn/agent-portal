@@ -67,7 +67,12 @@ function seedExperiences(): LabExperience[] {
     {
       id: 'exp-mock-2',
       sessionId: 'sess-mock-arm64-fargate-0000000000001', boxId: 'box-mock-1',
-      repo: 'aws-agentcore', initiativeId: 'p-agent-fleet-ops',
+      // Was 'p-agent-fleet-ops' — no such row in mock/budgets.ts's fourteen
+      // initiatives (there is no "fleet ops" initiative in the OrgIQ demo
+      // cast). This is the platform's own middleware deploy, not one of the
+      // fourteen business initiatives, so null is the honest "no initiative
+      // context" — same as con-mock-3 below.
+      repo: 'aws-agentcore', initiativeId: null,
       kind: 'failed',
       title: 'Fargate replaced the middleware task in a loop with exec format error',
       body: 'The image was built on Apple Silicon and Fargate defaulted the task definition to '
@@ -91,7 +96,12 @@ function seedExperiences(): LabExperience[] {
     {
       id: 'exp-mock-4',
       sessionId: 'sess-mock-custodian-sg-drift-000000001', boxId: 'box-mock-2',
-      repo: 'aws-agentcore', initiativeId: 'p-security-baseline',
+      // Was 'p-security-baseline' — no such row in mock/budgets.ts. Repointed
+      // to the nearest real initiative this story is actually about: security
+      // group ingress hardening is squarely 'p-zero-trust' work ("service
+      // identity everywhere, policy-engine enforced"). Kept in sync with the
+      // same incident's observations in mock/promotions.ts.
+      repo: 'aws-agentcore', initiativeId: 'p-zero-trust',
       kind: 'decision',
       title: 'Decided to allow-list the caller CIDR rather than fight the custodian',
       body: 'custodian-restrict-security-group-admin-ingress revokes 0.0.0.0/0 ingress within '

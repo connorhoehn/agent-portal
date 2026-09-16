@@ -492,7 +492,9 @@ export default function LocalComputePage() {
               title="Log"
               actions={<Button variant="ghost" size="sm" onClick={() => setSelectedRunId(null)}>Close</Button>}
             >
-              <RunLog jobId={selectedRunId} />
+              {/* Keyed on the run id: RunLog's "have we reached done" state must
+                  not survive a switch to a different run's log. */}
+              <RunLog key={selectedRunId} jobId={selectedRunId} />
             </DetailSection>
           )}
         </Stack>
@@ -504,43 +506,26 @@ export default function LocalComputePage() {
 
 // ─── Log viewer ──────────────────────────────────────────────────────────────
 
+interface RunLogPayload {
+  entries: Array<{ seq: number; text: string }>;
+  done: boolean;
+}
+
 function RunLog({ jobId }: { jobId: string }) {
-  const [lines, setLines] = useState<LogLine[]>([]);
+  // Poll every 2s while the run is non-terminal; once the server reports
+  // `done`, stop — the old hand-rolled interval kept hitting this endpoint
+  // every 2s forever, for as long as the log panel stayed open.
   const [done, setDone] = useState(false);
+  const { data } = useFetch<RunLogPayload>(
+    `/api/local-compute/jobs/${jobId}/log`,
+    done ? undefined : 2_000,
+  );
 
   useEffect(() => {
-    let mounted = true;
-    const controller = new AbortController();
+    if (data?.done) setDone(true);
+  }, [data]);
 
-    // Poll for logs every 2s
-    const poll = async () => {
-      try {
-        const res = await fetch(`/api/local-compute/jobs/${jobId}/log`, {
-          credentials: 'include',
-          signal: controller.signal,
-        });
-        if (!res.ok) return;
-        const data = await res.json() as {
-          entries: Array<{ seq: number; text: string }>;
-          done: boolean;
-        };
-        if (!mounted) return;
-        setLines(data.entries.map((e) => ({ id: String(e.seq), message: e.text })));
-        setDone(data.done);
-      } catch {
-        // ignore
-      }
-    };
-
-    void poll();
-    const interval = setInterval(poll, 2000);
-
-    return () => {
-      mounted = false;
-      controller.abort();
-      clearInterval(interval);
-    };
-  }, [jobId]);
+  const lines: LogLine[] = (data?.entries ?? []).map((e) => ({ id: String(e.seq), message: e.text }));
 
   return (
     <LogStream

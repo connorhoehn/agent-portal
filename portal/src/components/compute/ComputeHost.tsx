@@ -10,17 +10,36 @@
 // mutate, the model catalogue, where a notice goes, and which initiatives a
 // computer can be charged to.
 
-import { useEffect, useMemo, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   ComputeProvider, installMockShellSocket,
   type ComputeNotice, type ComputeProject,
 } from '@connorhoehnslalom/ui-components/compute';
 import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch';
+import { isDocumentHidden } from '../../hooks/pollSchedule';
 import { DEVBOX_MODELS } from '../../lib/devboxModels';
 import { toastError, toastInfo, toastSuccess } from '../../lib/toastStore';
 
 const IS_DEV = !!(import.meta as unknown as { env?: Record<string, unknown> }).env?.['DEV'];
+
+// Glanceable header-chip cadence, not a terminal-grade one — the dock/palette
+// only need to know a computer exists and roughly what it's doing. The
+// library's own default (pollIntervalMs 5000) was fine in isolation, but see
+// the `clientOptions` note below for why it was firing far hotter than that
+// in practice.
+const FLEET_POLL_MS = 15_000;
+
+/** Tab visibility, so the fleet poll can pause in a background tab. */
+function useIsDocumentVisible(): boolean {
+  const [visible, setVisible] = useState(() => !isDocumentHidden());
+  useEffect(() => {
+    const onChange = () => setVisible(!isDocumentHidden());
+    document.addEventListener('visibilitychange', onChange);
+    return () => document.removeEventListener('visibilitychange', onChange);
+  }, []);
+  return visible;
+}
 
 /** /api/graph/projects, narrowed to what a cost centre needs. */
 interface OrgProject {
@@ -58,6 +77,25 @@ function notify(notice: ComputeNotice): void {
 export function ComputeHost({ children }: { children: ReactNode }) {
   const { can, ready } = useCapabilities();
   const canManage = ready && can('ManageDevbox');
+  const visible = useIsDocumentVisible();
+  // A backgrounded tab has no dock to glance at, so pause the fleet poll
+  // there too — same reasoning as `enabled={canManage}` below, just gated on
+  // a different reason to skip fetching.
+  const pollEnabled = canManage && visible;
+
+  // `clientOptions` MUST be a stable reference. The library memoizes its
+  // client on this prop's identity (`useMemo(() => client ?? createClient(
+  // clientOptions), [client, clientOptions])`), and an inline object literal
+  // here recreated a NEW client on every ComputeHost render — which the
+  // library reads as "the transport changed", tearing down and immediately
+  // re-firing BOTH the fleet poll (`GET /boxes`) and the one-shot runtime
+  // probe (`GET /status`) together. That is the "devbox/boxes + devbox/status
+  // paired, far hotter than the 5s default" behavior the shell-baseline audit
+  // measured — not a second poller, one client being reborn on every render.
+  const clientOptions = useMemo(
+    () => ({ baseUrl: '/api/devbox', credentials: 'include' as const }),
+    [],
+  );
 
   // Route `mock-shell:` sockets to the library's PTY simulator, in dev only.
   //
@@ -126,13 +164,15 @@ export function ComputeHost({ children }: { children: ReactNode }) {
 
   return (
     <ComputeProvider
-      clientOptions={{ baseUrl: '/api/devbox', credentials: 'include' }}
+      clientOptions={clientOptions}
       canManage={canManage}
       // This provider polls on a timer for every user on every page, and every
       // route under it is ManageDevbox-gated — without this it would be a 403
-      // every five seconds for anyone who lacks the capability, invisible in
-      // development because the developer always has it.
-      enabled={canManage}
+      // every poll for anyone who lacks the capability, invisible in
+      // development because the developer always has it. Also paused while
+      // the tab is backgrounded — see `pollEnabled` above.
+      enabled={pollEnabled}
+      pollIntervalMs={FLEET_POLL_MS}
       // Real fleet only. Fixtures belong in stories; a sample computer here is
       // indistinguishable from a real one you simply cannot connect to.
       useFixtures={false}

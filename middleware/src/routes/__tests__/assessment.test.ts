@@ -97,6 +97,43 @@ describe('GET /teams/:id — TeamDetailResponse shape', () => {
   });
 });
 
+describe('GET /dimension-index — the heatmap bulk read', () => {
+  it('returns every seeded team with all 17 dimensions, lean shape only', async () => {
+    const res = await request(buildApp()).get('/api/assessment/dimension-index');
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body.teams)).toBe(true);
+    const t002 = res.body.teams.find((t: { id: string }) => t.id === 'TEAM-002');
+    expect(t002).toBeDefined();
+    expect(t002.dimensions).toHaveLength(17);
+    const dim1 = t002.dimensions.find((d: { id: string }) => d.id === '1');
+    expect(dim1.id).toBe('1');
+    expect(typeof dim1.title).toBe('string');
+    expect(typeof dim1.is_na).toBe('boolean');
+    expect(dim1.current_level === null || typeof dim1.current_level === 'number').toBe(true);
+    expect(dim1.certification.verified_level === null || typeof dim1.certification.verified_level === 'number').toBe(true);
+    expect(dim1.certification.claimed_level === null || typeof dim1.certification.claimed_level === 'number').toBe(true);
+    expect(typeof dim1.certification.statement).toBe('string');
+    // Lean, on purpose — not the full team-detail Dimension shape.
+    expect(dim1.rubric_levels).toBeUndefined();
+    expect(dim1.evidence).toBeUndefined();
+    expect(dim1.history).toBeUndefined();
+  });
+
+  it('agrees with GET /teams/:id for the same team — one computation, two callers', async () => {
+    const [indexRes, detailRes] = await Promise.all([
+      request(buildApp()).get('/api/assessment/dimension-index'),
+      request(buildApp()).get('/api/assessment/teams/TEAM-002'),
+    ]);
+    const indexDim4 = indexRes.body.teams.find((t: { id: string }) => t.id === 'TEAM-002').dimensions.find((d: { id: string }) => d.id === '4');
+    const detailDim4 = detailRes.body.dimensions.find((d: { id: string }) => d.id === '4');
+    expect(indexDim4.current_level).toBe(detailDim4.current_level);
+    expect(indexDim4.is_na).toBe(detailDim4.is_na);
+    expect(indexDim4.certification.verified_level).toBe(detailDim4.certification.verified_level);
+    expect(indexDim4.certification.claimed_level).toBe(detailDim4.certification.claimed_level);
+    expect(indexDim4.certification.statement).toBe(detailDim4.certification.statement);
+  });
+});
+
 describe('team id validation (400, not a 500 or a path traversal)', () => {
   it('rejects an id with no TEAM- prefix', async () => {
     const res = await request(buildApp()).get('/api/assessment/teams/nope');

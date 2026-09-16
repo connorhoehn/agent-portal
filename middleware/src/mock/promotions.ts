@@ -64,6 +64,11 @@ function obs(over: Pick<Observation, 'id' | 'kind' | 'title' | 'body' | 'session
  */
 function seedCandidates(): SeededCandidate[] {
   return [
+  // These observations' initiativeId used to be 'p-platform-reliability' —
+  // no such row exists in mock/budgets.ts's fourteen initiatives. The Aurora
+  // cold-start race is the platform's own infra, not one of the demo's
+  // business initiatives, so null ("no initiative context") is what's honest,
+  // same as promo-arm64-fargate below and con-mock-3 in mock/lab.ts.
   {
     id: 'promo-aurora-cold-start',
     proposedKind: 'skill',
@@ -76,22 +81,26 @@ function seedCandidates(): SeededCandidate[] {
         id: 'obs-aurora-1', kind: 'failed', sessionId: 'sess-914',
         title: 'Aurora Data API call failed with HttpEndpointNotEnabledException on first request',
         body: 'schema/load_schema.py hit HttpEndpointNotEnabledException calling a just-created 0.5-ACU cluster — the Data API endpoint was not enabled yet, not a real SQL error.',
-        initiativeId: 'p-platform-reliability', createdAt: ago(19),
+        initiativeId: null, createdAt: ago(19),
       }),
       obs({
         id: 'obs-aurora-2', kind: 'decision', sessionId: 'sess-914',
         title: 'Decided to retry the cold-start exception with backoff instead of failing loud',
         body: 'A cold 0.5-ACU cluster fails the first Data API call until the HTTP endpoint enables. Decision: warm-up SELECT 1 first, then retry HttpEndpointNotEnabledException and its resume/scale siblings 6x with a 3s backoff before treating it as a real failure.',
-        initiativeId: 'p-platform-reliability', createdAt: ago(19),
+        initiativeId: null, createdAt: ago(19),
       }),
       obs({
         id: 'obs-aurora-3', kind: 'worked', sessionId: 'sess-1032',
         title: 'Warm-up SELECT 1 plus 6x3s retry cleared the same cold-start race in a second rebuild',
         body: 'Ran the retry loop again against a freshly redeployed OrgIQ-Aurora after a full teardown — same exception, same fix, cleared on attempt 2 of 6. Genuine SQL errors still raise immediately, so the loop does not mask real bugs.',
-        initiativeId: 'p-platform-reliability', createdAt: ago(6),
+        initiativeId: null, createdAt: ago(6),
       }),
     ],
   },
+  // Same fix as above: initiativeId was 'p-agent-fleet-ops', also not one of
+  // the fourteen mock/budgets.ts initiatives. The middleware's own deploy
+  // platform, not a business initiative — null, paired with exp-mock-2 in
+  // mock/lab.ts (the same incident).
   {
     id: 'promo-arm64-fargate',
     proposedKind: 'skill',
@@ -104,19 +113,19 @@ function seedCandidates(): SeededCandidate[] {
         id: 'obs-arm64-1', kind: 'failed', sessionId: 'sess-701', repo: 'aws-agentcore/middleware',
         title: 'Middleware Fargate task crash-looped with exec format error after image push',
         body: 'Task stuck UPDATE_IN_PROGRESS, replaced in a loop. The image was built on Apple Silicon and Fargate defaulted the task definition to x86_64.',
-        initiativeId: 'p-agent-fleet-ops', createdAt: ago(41),
+        initiativeId: null, createdAt: ago(41),
       }),
       obs({
         id: 'obs-arm64-2', kind: 'decision', sessionId: 'sess-701', repo: 'aws-agentcore/middleware',
         title: 'Decided to pin runtimePlatform to ARM64 explicitly rather than rely on the Fargate default',
         body: 'MiddlewareServiceStack now sets runtimePlatform: ARM64 — also the cheaper option, so this is not a workaround with a cost tradeoff, it is strictly better.',
-        initiativeId: 'p-agent-fleet-ops', createdAt: ago(41),
+        initiativeId: null, createdAt: ago(41),
       }),
       obs({
         id: 'obs-arm64-3', kind: 'worked', sessionId: 'sess-889', repo: 'aws-agentcore/middleware',
         title: 'Explicit ARM64 runtimePlatform stopped the crash-loop on a second, unrelated rebuild',
         body: 'Same fix applied to a fresh OrgIQ-MiddlewareService redeploy — task went healthy on the first attempt, no more exec format error.',
-        initiativeId: 'p-agent-fleet-ops', createdAt: ago(12),
+        initiativeId: null, createdAt: ago(12),
       }),
     ],
   },
@@ -148,6 +157,14 @@ function seedCandidates(): SeededCandidate[] {
       }),
     ],
   },
+  // initiativeId was 'p-security-baseline' — also not a real initiative.
+  // Repointed to 'p-zero-trust' (network perimeter hardening is squarely
+  // that initiative's work), matching exp-mock-4 in mock/lab.ts for the same
+  // incident. `driftedFrom: 'skl-custodian-sg-allowlist'` below is left as
+  // is — it points at a skill that was demoted back to runbook (see the
+  // rationale), so the id legitimately no longer resolves in
+  // mock/prompt-library.ts; it's a historical pointer, not a live FK, and
+  // it's pinned by providers/__tests__/promotions.test.ts.
   {
     id: 'promo-custodian-sg-drift',
     proposedKind: 'runbook',
@@ -161,19 +178,19 @@ function seedCandidates(): SeededCandidate[] {
         id: 'obs-custodian-1', kind: 'gotcha', sessionId: 'sess-410',
         title: 'custodian-restrict-security-group-admin-ingress revoked our 0.0.0.0/0 ALB rule within seconds',
         body: 'CFN authorized the rule at 14:20:22, custodian revoked it at 14:20:28 — no stack event, no drift, task healthy and target group green with zero traffic reaching it.',
-        initiativeId: 'p-security-baseline', createdAt: ago(58),
+        initiativeId: 'p-zero-trust', createdAt: ago(58),
       }),
       obs({
         id: 'obs-custodian-2', kind: 'worked', sessionId: 'sess-410',
         title: 'Setting openListener: false and passing an explicit allow-list CIDR kept the rule alive',
         body: 'Reissued the ALB ingress scoped to a /32 instead of 0.0.0.0/0 — custodian left it alone. Promoted this to a skill after a second clean session repeated the same result.',
-        initiativeId: 'p-security-baseline', createdAt: ago(58),
+        initiativeId: 'p-zero-trust', createdAt: ago(58),
       }),
       obs({
         id: 'obs-custodian-3', kind: 'failed', sessionId: 'sess-1201',
         title: 'The allow-list skill ran its recorded steps and the rule was revoked anyway',
         body: 'Same openListener: false + allow-list CIDR pattern, applied by the skill exactly as recorded — custodian revoked it 4s later. The account now appears to also flag the allow-listed CIDR when it is wider than /28, which the skill\'s steps never accounted for.',
-        initiativeId: 'p-security-baseline', createdAt: ago(2),
+        initiativeId: 'p-zero-trust', createdAt: ago(2),
       }),
     ],
   },

@@ -4,13 +4,14 @@
 // Library's facets are. Filters (repo/initiative/kind/q) live in the same
 // URL — `?level=&repo=&initiative=&kind=&q=` — so a card click, a filter
 // pick, and a reload all keep state (defect #2).
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import {
   Chip, DetailSection, EmptyState, Inline, LoadingState, PageSection, SegmentedControl,
   SearchInput, Select, Stack, Toolbar, ToolbarGroup, ToolbarLabel,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
+import { useDebouncedSearch } from '../../hooks/useDebouncedSearch';
 import { ItemsList } from './ItemsList';
 import { T } from './Text';
 import {
@@ -70,14 +71,7 @@ export default function DistillationTiersPage() {
   const kind = (level === 'L0' ? (params.get('kind') ?? '') : '') as ObservationKind | '';
   const q = params.get('q') ?? '';
 
-  const [searchText, setSearchText] = useState(q);
-  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [visibleCount, setVisibleCount] = useState(0);
-
-  // Keep the box in sync when `q` changes from outside typing (Clear
-  // filters, back/forward navigation) without fighting the debounce timer.
-  useEffect(() => { setSearchText(q); }, [q]);
-  useEffect(() => () => { if (searchTimer.current) clearTimeout(searchTimer.current); }, []);
 
   const [pollMs, setPollMs] = useState<number>(IDLE_POLL_MS);
   const { data: jobsData } = useFetch<CompactionsResponse>('/api/distillation/compactions', pollMs);
@@ -97,15 +91,11 @@ export default function DistillationTiersPage() {
     setParams(next, { replace: true });
   }
 
-  function handleSearchChange(value: string) {
-    setSearchText(value);
-    if (searchTimer.current) clearTimeout(searchTimer.current);
-    searchTimer.current = setTimeout(() => setFilter('q', value), SEARCH_DEBOUNCE_MS);
-  }
+  const { searchText, onSearchChange: handleSearchChange, cancelPending } =
+    useDebouncedSearch(q, (value) => setFilter('q', value), SEARCH_DEBOUNCE_MS);
 
   function clearFilters() {
-    if (searchTimer.current) clearTimeout(searchTimer.current);
-    setSearchText('');
+    cancelPending();
     const next = new URLSearchParams();
     next.set('level', level);
     setParams(next, { replace: true });

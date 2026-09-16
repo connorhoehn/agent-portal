@@ -97,6 +97,14 @@ export interface ProjectDetail {
   sponsorId: string | null;
   sponsorName: string | null;
   sponsorTitle: string | null;
+  /** Agent spend MONTH-TO-DATE, same window/definition as
+      ProjectSummary.agentSpendUsd — carried here so the detail page (and its
+      header) never has to refetch the whole /api/graph/projects list to read
+      one row's number. Null when the underlying tables predate the
+      work-items schema. */
+  agentSpendUsd: number | null;
+  /** Same repo-link rollup as ProjectSummary.repoFullName, scoped to this id. */
+  repoFullName: string | null;
   contributors: Array<{
     personId: string;
     name: string;
@@ -300,7 +308,7 @@ const MOCK_PROJECTS: Array<Omit<ProjectSummary, keyof typeof EMPTY_ROLLUPS>> = M
 
 // Owner and sponsor fields are defaulted at the return site so the fixtures
 // don't need per-entry churn every time the detail shape grows.
-const MOCK_PROJECT_DETAILS: Record<string, Omit<ProjectDetail, 'ownerId' | 'ownerName' | 'sponsorId' | 'sponsorName' | 'sponsorTitle'>> =
+const MOCK_PROJECT_DETAILS: Record<string, Omit<ProjectDetail, 'ownerId' | 'ownerName' | 'sponsorId' | 'sponsorName' | 'sponsorTitle' | 'agentSpendUsd' | 'repoFullName'>> =
   Object.fromEntries(MOCK_INITIATIVES.map((p) => [p.id, {
     id: p.id,
     name: p.name,
@@ -545,6 +553,10 @@ export async function getProject(id: string): Promise<ProjectDetail | null> {
     const owner = mock.contributors[0];
     const cast = MOCK_INITIATIVES.find((m) => m.id === id);
     const sponsor = cast ? CAST[cast.sponsor] : undefined;
+    // Same ledger-derived spend listProjects reads — not a second fixture —
+    // so this row and the Initiatives-list row for the same id agree.
+    const ledger = MOCK_BUDGETS.find((b) => b.id === id);
+    const budgetRow = ledger ? mockBudgetRow(ledger) : null;
     return {
       ...mock,
       ownerId: owner?.personId ?? null,
@@ -552,6 +564,8 @@ export async function getProject(id: string): Promise<ProjectDetail | null> {
       sponsorId: sponsor?.personId ?? null,
       sponsorName: sponsor?.name ?? null,
       sponsorTitle: sponsor?.title ?? null,
+      agentSpendUsd: budgetRow ? budgetRow.spentThisPeriodUsd : 0,
+      repoFullName: cast?.repo ?? null,
     };
   }
 
@@ -620,6 +634,39 @@ export async function getProject(id: string): Promise<ProjectDetail | null> {
     }
   } catch { /* columns absent — pre-summary/sponsor schema */ }
 
+  // Agent spend (month-to-date) + repo link — the SAME rollup listProjects
+  // computes for the list view (linkPredicate/spendPredicate there),
+  // reproduced here scoped to just this id, so the detail page never has to
+  // refetch the whole /api/graph/projects list to read one row's numbers
+  // (that refetch is what ProjectDetailPage.tsx used to do for its header).
+  // Guarded like owner/summary above: bot_runs/agent_projects predate the
+  // work-items schema on some clusters.
+  let agentSpendUsd: number | null = null;
+  let repoFullName: string | null = null;
+  try {
+    const linkPredicate = `(
+          br.work_item_id IN (SELECT w2.id FROM work_items w2 WHERE w2.project_id = :id)
+          OR br.bot_id IN (
+            SELECT b.id FROM bots b
+             WHERE b.org_project_id = :id
+                OR b.agent_project_id IN (SELECT ap.id FROM agent_projects ap WHERE ap.org_project_id = :id)
+          )
+        )`;
+    const spendRows = await exec(
+      `SELECT
+         (SELECT COALESCE(SUM(br.cost_usd), 0)::float8 FROM bot_runs br
+            WHERE br.started_at >= ${PERIOD_START_SQL} AND br.cost_usd IS NOT NULL AND ${linkPredicate}) AS agent_spend_usd,
+         (SELECT ap.repo_full_name FROM agent_projects ap
+            WHERE ap.org_project_id = :id ORDER BY ap.created_at ASC LIMIT 1) AS repo_full_name`,
+      [strParam('id', id)],
+    );
+    const row = spendRows[0];
+    if (row) {
+      agentSpendUsd = row['agent_spend_usd'] != null ? Number(row['agent_spend_usd']) : null;
+      repoFullName = row['repo_full_name'] != null ? String(row['repo_full_name']) : null;
+    }
+  } catch { /* bot_runs/agent_projects absent — pre-work-items schema */ }
+
   return {
     id: String(proj['id'] ?? ''),
     name: String(proj['name'] ?? ''),
@@ -631,6 +678,8 @@ export async function getProject(id: string): Promise<ProjectDetail | null> {
     sponsorId,
     sponsorName,
     sponsorTitle,
+    agentSpendUsd,
+    repoFullName,
     contributors: contribRows.map((r) => ({
       personId: String(r['person_id'] ?? ''),
       name: String(r['name'] ?? ''),

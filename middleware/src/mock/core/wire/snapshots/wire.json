@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-09-16T07:41:14.923Z",
-  "serverHandlerSha": "029dee65c91fbb687d98590acfda9ee2c6a062c229c91c81d67e1120f77e3e9b",
+  "capturedAt": "2026-09-16T08:53:36.118Z",
+  "serverHandlerSha": "81f988d4775ee2937f5c2abde12f374e53241bd5bb9916305381d9c7035ee566",
   "baseUrl": "http://127.0.0.1:3012",
   "personas": [
     "orgiq/admin",
@@ -674,6 +674,27 @@
         "motions[].title": "string",
         "target_level": "number",
         "updated_at": "string"
+      },
+      "values": {}
+    },
+    "GET /api/assessment/dimension-index": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "teams": "array",
+        "teams[]": "object",
+        "teams[].dimensions": "array",
+        "teams[].dimensions[]": "object",
+        "teams[].dimensions[].certification": "object",
+        "teams[].dimensions[].certification.claimed_level": "null|number",
+        "teams[].dimensions[].certification.statement": "string",
+        "teams[].dimensions[].certification.verified_level": "null|number",
+        "teams[].dimensions[].current_level": "null|number",
+        "teams[].dimensions[].id": "string",
+        "teams[].dimensions[].is_na": "boolean",
+        "teams[].dimensions[].title": "string",
+        "teams[].id": "string"
       },
       "values": {}
     },
@@ -1626,6 +1647,15 @@
     "GET /api/bots/marketplace-runs": {
       "skipped": "HTTP 400 (orgiq/admin); HTTP 400 (assessment/admin); HTTP 403 (anonymous)"
     },
+    "GET /api/bots/runs": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "runs": "array"
+      },
+      "values": {}
+    },
     "GET /api/budgets": {
       "persona": "orgiq/admin",
       "status": 200,
@@ -2567,6 +2597,40 @@
       },
       "values": {}
     },
+    "GET /api/environments/:id/enter": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "access": "object",
+        "access.accessRoleArn": "string",
+        "access.allowed": "boolean",
+        "access.awsAccountId": "string",
+        "access.awsRegion": "string",
+        "access.clusterName": "string",
+        "access.environmentId": "string",
+        "access.namespace": "string",
+        "repo": "string",
+        "runs": "array",
+        "runs[]": "object",
+        "runs[].actor": "string",
+        "runs[].branch": "string",
+        "runs[].conclusion": "null|string",
+        "runs[].createdAt": "string",
+        "runs[].durationMs": "null|number",
+        "runs[].id": "number",
+        "runs[].name": "string",
+        "runs[].sha": "string",
+        "runs[].status": "string",
+        "runs[].url": "string"
+      },
+      "values": {
+        "runs[].status": [
+          "completed",
+          "in_progress"
+        ]
+      }
+    },
     "GET /api/environments/:id/runs": {
       "persona": "orgiq/admin",
       "status": 200,
@@ -2840,6 +2904,7 @@
       "status": 200,
       "shape": {
         "$": "object",
+        "agentSpendUsd": "number",
         "contributors": "array",
         "contributors[]": "object",
         "contributors[].name": "string",
@@ -2852,6 +2917,7 @@
         "name": "string",
         "ownerId": "string",
         "ownerName": "string",
+        "repoFullName": "string",
         "sponsorId": "string",
         "sponsorName": "string",
         "sponsorTitle": "string",
@@ -3535,7 +3601,7 @@
         "experiences[].boxId": "string",
         "experiences[].createdAt": "string",
         "experiences[].id": "string",
-        "experiences[].initiativeId": "string",
+        "experiences[].initiativeId": "null|string",
         "experiences[].kind": "string",
         "experiences[].repo": "string",
         "experiences[].sessionId": "string",
@@ -5130,7 +5196,15 @@
         "candidates[].dryRunPassed": "boolean|null",
         "candidates[].id": "string",
         "candidates[].observations": "array",
-        "candidates[].observations[]": "object(dictionary)",
+        "candidates[].observations[]": "object|object(dictionary)",
+        "candidates[].observations[].body": "string",
+        "candidates[].observations[].createdAt": "string",
+        "candidates[].observations[].id": "string",
+        "candidates[].observations[].initiativeId": "null",
+        "candidates[].observations[].kind": "string",
+        "candidates[].observations[].repo": "string",
+        "candidates[].observations[].sessionId": "string",
+        "candidates[].observations[].title": "string",
         "candidates[].proposedKind": "string",
         "candidates[].rationale": "string",
         "candidates[].sessionCount": "number",
@@ -5139,6 +5213,11 @@
         "candidates[].title": "string"
       },
       "values": {
+        "candidates[].observations[].kind": [
+          "decision",
+          "failed",
+          "worked"
+        ],
         "candidates[].status": [
           "candidate",
           "promoted"
@@ -5153,7 +5232,15 @@
         "dryRunPassed": "null",
         "id": "string",
         "observations": "array",
-        "observations[]": "object(dictionary)",
+        "observations[]": "object",
+        "observations[].body": "string",
+        "observations[].createdAt": "string",
+        "observations[].id": "string",
+        "observations[].initiativeId": "null",
+        "observations[].kind": "string",
+        "observations[].repo": "string",
+        "observations[].sessionId": "string",
+        "observations[].title": "string",
         "proposedKind": "string",
         "rationale": "string",
         "sessionCount": "number",
@@ -5162,6 +5249,11 @@
         "title": "string"
       },
       "values": {
+        "observations[].kind": [
+          "decision",
+          "failed",
+          "worked"
+        ],
         "status": [
           "candidate"
         ]

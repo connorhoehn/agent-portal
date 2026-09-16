@@ -99,6 +99,12 @@ export interface ProjectDetail {
   sponsorName?: string | null;
   sponsorTitle?: string | null;
   createdAt: string | null;
+  /** Agent spend month-to-date — same window/number the Initiatives list
+      reports for this id. Null when the underlying tables predate the
+      work-items schema. */
+  agentSpendUsd?: number | null;
+  /** The `owner/repo` this initiative's code lives in, null when unlinked. */
+  repoFullName?: string | null;
   contributors: ProjectContributor[];
 }
 

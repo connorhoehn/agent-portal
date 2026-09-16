@@ -110,31 +110,32 @@ function EnvironmentRow({ env }: { env: Environment }) {
   const retired = env.status === 'retired';
 
   // Fetched on first expand, once — the answer does not change mid-visit, and
-  // collapsing should not forget it.
+  // collapsing should not forget it. One request for both halves: the access
+  // decision and the latest runs are always asked together the instant a row
+  // opens, so `GET /:id/enter` answers both instead of the row firing
+  // `/access` and `/runs` back to back.
   useEffect(() => {
     if (!open || access) return;
     let cancelled = false;
-    fetch(`/api/environments/${env.id}/access`, { credentials: 'include' })
+    fetch(`/api/environments/${env.id}/enter`, { credentials: 'include' })
       .then(async (r) => {
-        const body = (await r.json()) as AccessDecision & { error?: string };
+        const body = (await r.json()) as {
+          access?: AccessDecision & { error?: string };
+          runs?: WorkflowRun[];
+        } & Record<string, unknown>;
         if (cancelled) return;
-        if (r.ok) setAccess(body);
-        else setAccess({ allowed: false, reason: body.error ?? `HTTP ${r.status}` });
-      })
-      .catch(() => { if (!cancelled) setAccess({ allowed: false, reason: 'could not reach the API' }); });
-    fetch(`/api/environments/${env.id}/runs`, { credentials: 'include' })
-      .then(async (r) => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return (await r.json()) as { runs?: WorkflowRun[] };
-      })
-      .then((body) => {
-        if (cancelled) return;
+        if (r.ok && body.access) {
+          setAccess(body.access);
+        } else {
+          setAccess({ allowed: false, reason: body.access?.error ?? `HTTP ${r.status}` });
+        }
         setRunsError(readDegraded(body));
         setRuns((body.runs ?? []).slice(0, 3));
       })
-      .catch((e: unknown) => {
+      .catch(() => {
         if (cancelled) return;
-        setRunsError(e instanceof Error ? e.message : 'could not reach the API');
+        setAccess({ allowed: false, reason: 'could not reach the API' });
+        setRunsError('could not reach the API');
         setRuns([]);
       });
     return () => { cancelled = true; };

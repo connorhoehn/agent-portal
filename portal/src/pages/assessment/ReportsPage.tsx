@@ -37,8 +37,8 @@ import { toastError, toastSuccess } from '../../lib/toastStore';
 import { RECOMMENDATION_KIND_LABEL, type RecommendationsResponse, type RecommendationTeamGroup, type RollupResponse, type SecondaryRecommendationKind } from './secondaryTypes';
 import { useTeams } from './dashboard/useTeams';
 import { LevelBadge } from './dashboard/LevelBadge';
-import { useDimensionIndex } from './useDimensionIndex';
-import { highestVerifiedLevel, motionFor, type Dimension, type TeamSummary } from './types';
+import { useHeatmapIndex, type HeatmapDimension } from './useHeatmapIndex';
+import { highestVerifiedLevel, motionFor, type TeamSummary } from './types';
 
 const KIND_TONE: Record<SecondaryRecommendationKind, ChipTone> = {
   close_claim: 'warning',
@@ -47,14 +47,14 @@ const KIND_TONE: Record<SecondaryRecommendationKind, ChipTone> = {
 };
 
 /** Dimension ids are "1".."17"; the column order is the rubric's. */
-function dimensionColumns(index: ReturnType<typeof useDimensionIndex>['index']): Dimension[] {
+function dimensionColumns(index: ReturnType<typeof useHeatmapIndex>['index']): HeatmapDimension[] {
   for (const dims of index.values()) {
     if (dims.size > 0) return Array.from(dims.values()).sort((a, b) => Number(a.id) - Number(b.id));
   }
   return [];
 }
 
-function HeatmapCell({ dim }: { dim: Dimension | undefined }) {
+function HeatmapCell({ dim }: { dim: HeatmapDimension | undefined }) {
   if (!dim) return <TableTd className="px-1.5 py-1 text-center" data-verified="" data-claimed="">—</TableTd>;
   const cert = dim.certification;
   const verified = cert?.verified_level ?? dim.current_level;
@@ -82,8 +82,7 @@ function HeatmapCell({ dim }: { dim: Dimension | undefined }) {
 }
 
 function MaturityHeatmap({ teams, onSelectTeam }: { teams: TeamSummary[]; onSelectTeam: (id: string) => void }) {
-  const ids = useMemo(() => teams.map((t) => t.id), [teams]);
-  const { index, loading } = useDimensionIndex(ids);
+  const { index, loading } = useHeatmapIndex();
   const columns = useMemo(() => dimensionColumns(index), [index]);
   if (teams.length === 0) return <EmptyState title="No teams yet" />;
   if (columns.length === 0) return loading ? <LoadingState label="Reading every team's scorecard…" /> : <EmptyState title="No dimensions scored yet" />;

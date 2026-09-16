@@ -134,6 +134,38 @@ function seededSprints(): MockSprint[] {
     sprint('spr-mob-s1', 'p-mobile-redesign', 'Mobile App Redesign',
       'Sprint 31 — Routing', 'Every marketing link deep-links to a real screen.',
       'p-035', 'Ben Okafor', 'active', 14, 0),
+    // The eight schema/seed_program.sql mints that this fixture's own header
+    // comment already claims are here ("every sprint a work-items.ts row
+    // carries a sprintId for") and were not: work-items.ts cites all eight
+    // below by id, and every one of them 404'd on /iq/sprints while its work
+    // items rendered fine — the same dangling-reference shape as the findings
+    // bug this file's sibling (org-findings.ts) was fixed for, just on a
+    // different pair of fixtures. Dates, stewards and goals are the seed's own.
+    sprint('spr-auth-s1', 'p-auth-migration', 'Auth Migration',
+      'Sprint 41 — OIDC core', 'Code+PKCE flow live; JWKS rotation survives a key roll.',
+      'p-051', 'Nora Chang', 'done', 35, 21),
+    sprint('spr-cost-s1', 'p-cost-opt', 'Cost Optimization',
+      'Sprint 23 — Floors and orphans', 'Idle floors documented; orphan sweep automated.',
+      'p-011', 'Eli Garcia', 'done', 28, 14),
+    sprint('spr-rta-s1', 'p-realtime-analytics', 'Real-time Analytics Pipeline',
+      'Sprint 15 — Checkpoint + schema', 'Recovery under 60s; producers on registry contracts.',
+      'p-019', 'Lena Dubois', 'active', 14, 0),
+    // The seed's own future-dated window (spr-zt-s1 is the other one here).
+    sprint('spr-lake-s1', 'p-data-lake', 'Data Lake Migration',
+      'Sprint 3 — Format decision', 'Table format chosen with a written ADR.',
+      'p-017', 'Daniel Chang', 'active', 10, -4),
+    sprint('spr-fs-s1', 'p-feature-store', 'ML Feature Store',
+      'Sprint 11 — Freshness', 'Every online feature group has a freshness SLA and an owner.',
+      'p-019', 'Lena Dubois', 'active', 14, 0),
+    sprint('spr-ds-s1', 'p-design-v3', 'Design System v3',
+      'Sprint 19 — Token sync', 'A token edit in Figma lands as a PR the same day.',
+      'p-038', 'Isabel Vasquez', 'active', 14, 0),
+    sprint('spr-soc2-s1', 'p-soc2', 'SOC2 Compliance',
+      'Sprint 9 — Collectors', 'Change-management evidence collected without manual export.',
+      'p-055', 'Mia Chen', 'active', 14, 0),
+    sprint('spr-dsapi-s1', 'p-design-system-api', 'Design System API',
+      'Sprint 6 — Contracts', 'Consumers upgrade via codemod, not by reading a changelog.',
+      'p-035', 'Ben Okafor', 'active', 14, 0),
   ];
 }
 

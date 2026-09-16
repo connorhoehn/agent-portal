@@ -1,8 +1,12 @@
 // Distillation → Overview, top of page: the whole loop from an agent's
-// session to the runbook the next agent boots with. Fetches what
-// `processFlowModel` needs and reduces it; all rendering is the same
-// `CompactionFlowFrame` the Compactions ladder uses, so the two views can
-// never disagree about a tier's count or health.
+// session to the runbook the next agent boots with. `processFlowModel` needs
+// four of these reads that OverviewPage (the only caller) already made for
+// its own header/table rendering — levels, ingest, compactions, sampling —
+// so those come in as props instead of a second fetch of the same route on
+// the same page; ProcessFlow still owns the other five (artifacts, findings,
+// bundle, bots, promotions), which OverviewPage has no other use for. All
+// rendering is the same `CompactionFlowFrame` the Compactions ladder uses, so
+// the two views can never disagree about a tier's count or health.
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router';
 import { useFetch } from '../../hooks/useFetch';
@@ -18,12 +22,24 @@ interface SamplingLite { reviewedLast30d?: number; queueDepth?: number }
 
 const LAB_SWEEP = 'lab-signal';
 
-export function ProcessFlow({ height = 400 }: { height?: number }) {
+interface ProcessFlowProps {
+  height?: number;
+  /** From OverviewPage's own `/api/distillation/levels` read. */
+  levelsData: LevelsResponse | null;
+  levelsLoading: boolean;
+  levelsError: string | null;
+  /** From OverviewPage's own `/api/distillation/ingest` read. */
+  ingestData: IngestState | null;
+  /** From OverviewPage's own `/api/distillation/compactions` read. */
+  jobsData: CompactionsResponse | null;
+  /** From OverviewPage's own `/api/distillation/sampling` read. */
+  samplingData: SamplingLite | null;
+}
+
+export function ProcessFlow({
+  height = 400, levelsData, levelsLoading, levelsError, ingestData, jobsData, samplingData,
+}: ProcessFlowProps) {
   const navigate = useNavigate();
-  const { data: levelsData, isLoading: levelsLoading, error: levelsError } =
-    useFetch<LevelsResponse>('/api/distillation/levels', 20_000);
-  const { data: ingestData } = useFetch<IngestState>('/api/distillation/ingest', 20_000);
-  const { data: jobsData } = useFetch<CompactionsResponse>('/api/distillation/compactions', 20_000);
   const { data: artifactsData } = useFetch<ArtifactsResponse>('/api/distillation/artifacts?status=published', 60_000);
   const { data: findingsData } = useFetch<FindingsResponse>('/api/work/findings?status=open', 60_000);
   const { data: bundle } = useFetch<LiveBundleResponse>('/api/session-bundle/live', 60_000);
@@ -36,7 +52,6 @@ export function ProcessFlow({ height = 400 }: { height?: number }) {
   } = useFetch<BotsResponse>('/api/bots', 60_000);
   const botsError = botsTransportError ?? botsDegraded;
   const { data: promotionsData } = useFetch<PromotionsResponse>('/api/promotions', 60_000);
-  const { data: samplingData } = useFetch<SamplingLite>('/api/distillation/sampling', 60_000);
 
   // Guard on shape, not presence: every count below is derived from an
   // array that must actually be there, never from a status filter alone.

@@ -190,15 +190,12 @@ function ProjectDetailPage() {
   // are ManageDevbox-gated while /iq/projects has no role gate — so an SME or
   // member reaching this page got 403s, summed nothing, and read "$0.00 agent
   // spend" for an initiative that GET /api/graph/projects reports as $4.10 one
-  // click away. That list endpoint is tenant-gated only and every role that can
-  // open this page can read it, so take the number from there and let the
-  // Initiatives list and this header agree by construction.
-  const { data: projectList, isLoading: projectListLoading } =
-    useFetch<Array<{ id: string; agentSpendUsd: number | null; repoFullName?: string | null }>>('/api/graph/projects', 60_000);
-  const projectRollup = (projectList ?? []).find((p) => p.id === id);
-  const serverSpendUsd = projectRollup?.agentSpendUsd ?? null;
-  // Mission-2 codebase link — the initiative's repo, from the same rollup.
-  const repoUrl = githubRepoUrl(projectRollup?.repoFullName);
+  // click away. That number — and the repo link — now ride the single-project
+  // read (`project` above) instead of a second fetch of the WHOLE initiatives
+  // list just to pick out this one row.
+  const serverSpendUsd = project?.agentSpendUsd ?? null;
+  // Mission-2 codebase link — the initiative's repo, from the same read.
+  const repoUrl = githubRepoUrl(project?.repoFullName);
 
   const marketRuns = runsByWorkItem(marketplaceRuns);
   const workTree = localItems ?? rawTree ?? [];
@@ -390,7 +387,7 @@ function ProjectDetailPage() {
             escalatedCount={escalatedCount}
             spend={{
               serverSpendUsd,
-              serverPending: projectListLoading,
+              serverPending: projLoading,
               clientSpendUsd: agentActivity.spendUsd,
               // Blind if we could not read the roster OR could not read a bot's
               // run history — either way the client sum is a floor, not a total.
@@ -398,7 +395,7 @@ function ProjectDetailPage() {
               clientPending: agentActivity.botsLoading,
             }}
             repoUrl={repoUrl ?? project.githubUrl ?? null}
-            repoLabel={projectRollup?.repoFullName ?? (repoUrl ? null : project.githubUrl ? 'GitHub' : null)}
+            repoLabel={project.repoFullName ?? (repoUrl ? null : project.githubUrl ? 'GitHub' : null)}
             repoCount={codebases.length}
             onOwner={(oid, oname) => setOwnerOverride({ ownerId: oid, ownerName: oname })}
             onRole={handleRoleOverride}

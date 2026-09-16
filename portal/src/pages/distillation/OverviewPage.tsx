@@ -230,7 +230,14 @@ export default function DistillationOverviewPage() {
         hint="sessions, bot runs, sweeps and lab signals → L0 → L1 → L2 → Library, Promotions, Session config"
       >
         <Stack gap="sm">
-          <ProcessFlow />
+          <ProcessFlow
+            levelsData={levelsData}
+            levelsLoading={levelsLoading}
+            levelsError={levelsError}
+            ingestData={ingestData}
+            jobsData={jobsData}
+            samplingData={samplingData}
+          />
           {/* Tier health is on the nodes; below the flow only what needs a
               hand — three stacked cards repeating "healthy" were the wasted
               space the reader scrolled past to reach the numbers. */}

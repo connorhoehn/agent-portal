@@ -22,12 +22,15 @@ interface RecentInvocation {
 }
 
 function ObservabilityLayout() {
-  // Lightweight polling for nav badges. Same endpoints the sub-pages hit,
-  // so the browser cache de-dupes — no extra network cost.
-  const { data: summary } = useFetch<ObsSummary>('/api/observability/summary', 30_000);
+  // Lightweight polling for nav badges. Same endpoints, same interval, as
+  // the sub-pages that also read them (SummaryPage, InvocationsPage) —
+  // `share: true` collapses concurrent polls into one request; a bare URL
+  // match does nothing for two independent `fetch()` calls on its own.
+  const { data: summary } = useFetch<ObsSummary>('/api/observability/summary', 30_000, { share: true });
   const { data: recent } = useFetch<{ invocations: RecentInvocation[] }>(
     '/api/observability/recent-invocations?limit=50',
-    10_000,
+    5_000,
+    { share: true },
   );
   // Open the detail views when the page IS one — a deep link from ⌘K, a
   // breadcrumb or a bookmark used to land on a rail with nothing lit.

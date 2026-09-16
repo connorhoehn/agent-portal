@@ -28,9 +28,10 @@ import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';
 import { toastError, toastSuccess } from '../../lib/toastStore';
+import { useTeams } from './dashboard/useTeams';
 import { useAssessmentEvents } from './knowledge/useAssessmentEvents';
 import { applyRunEvent, formatDuration, formatRelativeTime, launchResponseMessage } from './secondaryFormat';
-import type { AgentCommand, AgentCommandsResponse, RunRecord, RunStatus, RunsListResponse, TeamOption } from './secondaryTypes';
+import type { AgentCommand, AgentCommandsResponse, RunRecord, RunStatus, RunsListResponse } from './secondaryTypes';
 
 const STATUS_STATE: Record<RunStatus, 'info' | 'success' | 'error'> = {
   running: 'info',
@@ -42,24 +43,13 @@ function RunACommandPanel({ onLaunched }: { onLaunched: () => void }) {
   const { can, ready } = useCapabilities();
   const canRun = ready && can('RunAssessmentAgent');
 
-  const [commands, setCommands] = useState<AgentCommand[]>([]);
-  const [teams, setTeams] = useState<TeamOption[]>([]);
+  const { data: commandsResp } = useFetch<AgentCommandsResponse>('/api/assessment/agent/commands');
+  const commands = commandsResp?.commands ?? [];
+  // Reuses the shared roster hook instead of a second `/teams` fetch this
+  // panel used to run on its own — same request DashboardPage already makes.
+  const { teams } = useTeams();
   const [teamId, setTeamId] = useState('');
   const [launching, setLaunching] = useState<string | null>(null);
-
-  useEffect(() => {
-    fetch('/api/assessment/agent/commands', { credentials: 'include' })
-      .then((res) => (res.ok ? res.json() : { commands: [] }))
-      .then((body: AgentCommandsResponse) => setCommands(body.commands ?? []))
-      .catch(() => setCommands([]));
-    fetch('/api/assessment/teams', { credentials: 'include' })
-      .then((res) => (res.ok ? res.json() : []))
-      .then((body: unknown) => {
-        const list = Array.isArray(body) ? body : Array.isArray((body as { teams?: unknown })?.teams) ? (body as { teams: unknown[] }).teams : [];
-        setTeams(list as TeamOption[]);
-      })
-      .catch(() => setTeams([]));
-  }, []);
 
   async function launch(command: string) {
     if (!canRun || !teamId) return;

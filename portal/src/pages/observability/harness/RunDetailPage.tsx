@@ -156,12 +156,18 @@ function RunDetailPage() {
   // Sprint 3 (M8) — promote modal toggle.
   const [promoteOpen, setPromoteOpen] = useState(false);
 
-  // Poll active runs every 5s; once terminal it's basically static so longer is fine.
+  // Poll active runs every 5s; once the run reaches a terminal state it is
+  // static, so stop polling entirely rather than just widening the interval.
+  const [terminal, setTerminal] = useState(false);
+  useEffect(() => { setTerminal(false); }, [runId]);
   const { data: detailData, isLoading, error } = useFetch<RunDetailResp>(
     runId ? `/api/observability/harness/runs/${encodeURIComponent(runId)}` : '',
-    5_000,
+    terminal ? undefined : 5_000,
   );
   const run = detailData?.run ?? null;
+  useEffect(() => {
+    if (run && (run.status === 'done' || run.status === 'failed')) setTerminal(true);
+  }, [run]);
   // The trail reads the run's label ("nightly-2026-08-24"), not "Run b000…".
   useCrumbLabel(runId, run?.label);
   const results = useMemo<TestResult[]>(

@@ -19,6 +19,7 @@ import {
   PageSection,
   Select,
 } from '@connorhoehnslalom/ui-components/shared';
+import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';
 import { toastError, toastSuccess } from '../../lib/toastStore';
 import type { AssessmentConfiguration, SecondaryMotionConfig } from './secondaryTypes';
@@ -29,18 +30,13 @@ export default function ConfigurationPage() {
   const { can, ready } = useCapabilities();
   const canManage = ready && can('ManageAssessmentConfig');
 
+  const { data: fetched, isLoading: loading, error } = useFetch<AssessmentConfiguration>('/api/assessment/configuration');
   const [config, setConfig] = useState<AssessmentConfiguration | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    fetch('/api/assessment/configuration', { credentials: 'include' })
-      .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`))))
-      .then((body: AssessmentConfiguration) => { setConfig(body); setError(null); })
-      .catch((err: Error) => setError(err.message))
-      .finally(() => setLoading(false));
-  }, []);
+  // Editable local copy, seeded once the read lands — motion edits below
+  // mutate this copy, never `fetched` directly.
+  useEffect(() => { if (fetched) setConfig(fetched); }, [fetched]);
 
   function updateMotion(index: number, patch: Partial<SecondaryMotionConfig>) {
     setConfig((prev) => {

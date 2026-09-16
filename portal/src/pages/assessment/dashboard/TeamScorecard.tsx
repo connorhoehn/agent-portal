@@ -59,9 +59,22 @@ export function TeamScorecard({ teamId, tab, onTabChange }: TeamScorecardProps) 
   const [selectedDimId, setSelectedDimId] = useState<string | null>(null);
   const [exceptionsOpen, setExceptionsOpen] = useState(false);
   const [scoringLogsOpen, setScoringLogsOpen] = useState(false);
+  // Certification ('scorecard') is always mounted; the other four panes mount
+  // on FIRST selection and stay mounted afterward (never unmounted once
+  // visited), so a team open costs only the certification pane's reads
+  // (ImprovementPlan/StoriesPanel/EvidenceIntake each fetch on mount) instead
+  // of all five, while tab-switch state (e.g. EvidenceIntake's form) still
+  // survives round-trips exactly as it did when every pane stayed mounted.
+  const [visited, setVisited] = useState<Set<ScorecardTab>>(() => new Set<ScorecardTab>(['scorecard', tab]));
 
-  // Switching teams collapses any dimension selection back to the team level.
-  useEffect(() => { setSelectedDimId(null); }, [teamId]);
+  // Switching teams collapses any dimension selection back to the team level,
+  // and resets which non-default panes have been opened for the new team.
+  useEffect(() => { setSelectedDimId(null); setVisited(new Set<ScorecardTab>(['scorecard', tab]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [teamId]);
+  useEffect(() => {
+    setVisited((prev) => (prev.has(tab) ? prev : new Set(prev).add(tab)));
+  }, [tab]);
 
   if (isLoading) return <LoadingState label="Loading certification…" />;
   // A 404 is a wrong id (typed, stale link, deleted team) — say so and offer
@@ -210,17 +223,23 @@ export function TeamScorecard({ teamId, tab, onTabChange }: TeamScorecardProps) 
         <DimensionMasterDetail dimensions={dimensions} selectedId={selectedDimId} onSelect={setSelectedDimId} />
       </Stack>
 
-      <Stack hidden={tab !== 'plan'}>
-        <ImprovementPlan teamId={team.id} />
-      </Stack>
+      {visited.has('plan') && (
+        <Stack hidden={tab !== 'plan'}>
+          <ImprovementPlan teamId={team.id} />
+        </Stack>
+      )}
 
-      <Stack hidden={tab !== 'stories'}>
-        <StoriesPanel teamId={team.id} />
-      </Stack>
+      {visited.has('stories') && (
+        <Stack hidden={tab !== 'stories'}>
+          <StoriesPanel teamId={team.id} />
+        </Stack>
+      )}
 
-      <Stack hidden={tab !== 'evidence'}>
-        <EvidenceIntake teamId={team.id} />
-      </Stack>
+      {visited.has('evidence') && (
+        <Stack hidden={tab !== 'evidence'}>
+          <EvidenceIntake teamId={team.id} />
+        </Stack>
+      )}
 
       <Stack hidden={tab !== 'documents'}>
         <EmptyState

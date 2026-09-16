@@ -697,6 +697,46 @@ export async function listBotRunsResult(botId: string, limit = 50): Promise<Upst
 }
 
 /**
+ * Run history for MULTIPLE bots in one call.
+ *
+ * `InitiativeAgentRail` used to fire one `GET /:id/runs` per bot targeting
+ * an initiative — an N+1 that scaled with the roster, not with the page. This
+ * merges those into one round trip while preserving what N separate calls
+ * would have returned: each bot still caps at `limitPerBot` runs (a window
+ * function partitioned by bot_id, mirroring the single-bot query's `LIMIT`),
+ * so a busy bot cannot push a quiet bot's runs out of the merged list.
+ */
+export async function listBotRunsForBotsResult(botIds: string[], limitPerBot = 50): Promise<Upstream<BotRun[]>> {
+  const ids = [...new Set(botIds)].filter(isUuid);
+  if (ids.length === 0) return reached([]);
+
+  if (config.mock.aurora) {
+    const results = await Promise.all(ids.map((id) => listBotRunsResult(id, limitPerBot)));
+    const degradedOne = results.find((r) => r.degraded);
+    const runs = results.flatMap((r) => r.items);
+    return degradedOne ? unreachable(runs, degradedOne.error) : reached(runs);
+  }
+
+  const lim = Math.min(Math.max(limitPerBot, 1), 200);
+  const params: SqlParameter[] = [int('lim', lim)];
+  const placeholders = ids.map((id, i) => {
+    params.push(s(`bid${i}`, id));
+    return `:bid${i}::uuid`;
+  });
+  const rows = await safeExecResult(
+    `SELECT * FROM (
+       SELECT *, ROW_NUMBER() OVER (PARTITION BY bot_id ORDER BY started_at DESC) AS rn
+         FROM bot_runs WHERE bot_id IN (${placeholders.join(', ')})
+     ) ranked
+     WHERE rn <= :lim
+     ORDER BY started_at DESC`,
+    params,
+  );
+  const runs = rows.items.map(rowToRun);
+  return rows.degraded ? unreachable(runs, rows.error) : reached(runs);
+}
+
+/**
  * Marketplace runs for one initiative: bot-less firings (bot_id IS NULL) whose
  * work item belongs to the initiative, newest first. Keyed through work_items
  * because the bot_run itself carries no project linkage.

@@ -32,7 +32,7 @@ import { logAuthz, eventFromSession } from '../lib/audit.js';
 import {
   listEnvironments, getEnvironment, createEnvironment, updateEnvironment,
   deleteEnvironment, repoForInitiative,
-  ENVIRONMENT_KINDS, ENVIRONMENT_STATUSES, type EnvironmentInput,
+  ENVIRONMENT_KINDS, ENVIRONMENT_STATUSES, type EnvironmentInput, type Environment,
 } from '../providers/environments.js';
 import { listWorkflowRuns } from '../lib/github-connector.js';
 
@@ -112,44 +112,46 @@ environmentsRouter.get('/:id', readGate, asyncHandler(async (req, res) => {
  * That is a role NAME, and returning it grants nothing on its own: STS still
  * has to allow the devbox's identity to assume it. Two independent gates.
  */
-environmentsRouter.get('/:id/access', requireSession('EnterEnvironment'), asyncHandler(async (req, res) => {
-  const env = await getEnvironment(String(req.params['id'] ?? ''));
-  if (!env) throw new NotFoundError('No such environment');
-
-  const session = resolveSession(req);
-  if (!session) throw new NotFoundError('No such environment');
-
+/**
+ * The EnterEnvironment decision for one environment, against one session —
+ * factored out so `/:id/access` and the combined `/:id/enter` below (see its
+ * comment) share one implementation instead of two copies of the same Cedar
+ * call and audit log line drifting apart.
+ */
+async function resolveAccess(
+  session: NonNullable<ReturnType<typeof resolveSession>>,
+  env: Environment,
+  path: string,
+): Promise<Record<string, unknown>> {
   const allowed = await isAllowed(session, 'EnterEnvironment', environmentAttrs(env));
   logAuthz(eventFromSession(session, 'EnterEnvironment', allowed ? 'ALLOW' : 'DENY', {
-    path: req.path,
+    path,
     reason: `${env.orgProjectId}/${env.name}`,
   }));
 
   if (!allowed) {
-    res.json({
+    return {
       allowed: false,
       environmentId: env.id,
       reason: env.status === 'retired'
         ? 'This environment is retired — it is recorded for history, not for access.'
         : `The ${session.role} role cannot reach environments.`,
-    });
-    return;
+    };
   }
 
   if (!env.accessRoleArn) {
     // Authorized, but there is nothing to assume. Distinguished from a denial
     // because the remedy is completely different: describe the role, don't
     // change anybody's permissions.
-    res.json({
+    return {
       allowed: true,
       environmentId: env.id,
       accessRoleArn: null,
       reason: 'No access role is recorded for this environment yet.',
-    });
-    return;
+    };
   }
 
-  res.json({
+  return {
     allowed: true,
     environmentId: env.id,
     accessRoleArn: env.accessRoleArn,
@@ -157,7 +159,17 @@ environmentsRouter.get('/:id/access', requireSession('EnterEnvironment'), asyncH
     awsRegion: env.awsRegion,
     clusterName: env.clusterName,
     namespace: env.namespace,
-  });
+  };
+}
+
+environmentsRouter.get('/:id/access', requireSession('EnterEnvironment'), asyncHandler(async (req, res) => {
+  const env = await getEnvironment(String(req.params['id'] ?? ''));
+  if (!env) throw new NotFoundError('No such environment');
+
+  const session = resolveSession(req);
+  if (!session) throw new NotFoundError('No such environment');
+
+  res.json(await resolveAccess(session, env, req.path));
 }));
 
 /**
@@ -189,18 +201,15 @@ environmentsRouter.get('/:id/access', requireSession('EnterEnvironment'), asyncH
  * The upstream being unreachable is a STATED degraded state, never an empty
  * list, and never a 500 in a reader's face either.
  */
-environmentsRouter.get('/:id/runs', readGate, asyncHandler(async (req, res) => {
-  const env = await getEnvironment(String(req.params['id'] ?? ''));
-  if (!env) throw new NotFoundError('No such environment');
-
+/** Same factoring as `resolveAccess` above, for the workflow-runs half. */
+async function resolveRuns(
+  env: Environment,
+  limit: number,
+): Promise<Record<string, unknown>> {
   const repo = await repoForInitiative(env.orgProjectId);
   if (!repo) {
-    res.json({ runs: [], repo: null, note: 'No repository is linked to this initiative.' });
-    return;
+    return { runs: [], repo: null, note: 'No repository is linked to this initiative.' };
   }
-
-  const limitRaw = Number(req.query['limit'] ?? 10);
-  const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(limitRaw, 1), 50) : 10;
 
   try {
     const runs = await listWorkflowRuns(repo.repoFullName, limit, {
@@ -208,21 +217,57 @@ environmentsRouter.get('/:id/runs', readGate, asyncHandler(async (req, res) => {
     });
     if (runs.length === 0) {
       // Said out loud rather than left to inference, because the shape of this
-      // response is otherwise byte-identical to the degraded one above it.
-      res.json({
+      // response is otherwise byte-identical to the degraded one below it.
+      return {
         runs: [], repo: repo.repoFullName,
         note: `${repo.repoFullName} has no workflow runs to report.`,
-      });
-      return;
+      };
     }
-    res.json({ runs, repo: repo.repoFullName });
+    return { runs, repo: repo.repoFullName };
   } catch (err) {
     // First line only, so a multi-line upstream error stays a label — same
     // trim as cost.ts, for the same reason.
     const error = (err as Error).message.split('\n')[0]?.slice(0, 160) ?? 'workflow runs unavailable';
     console.warn(`[environments] workflow runs for ${repo.repoFullName} failed:`, error);
-    res.json({ runs: [], repo: repo.repoFullName, degraded: true, error });
+    return { runs: [], repo: repo.repoFullName, degraded: true, error };
   }
+}
+
+environmentsRouter.get('/:id/runs', readGate, asyncHandler(async (req, res) => {
+  const env = await getEnvironment(String(req.params['id'] ?? ''));
+  if (!env) throw new NotFoundError('No such environment');
+
+  const limitRaw = Number(req.query['limit'] ?? 10);
+  const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(limitRaw, 1), 50) : 10;
+  res.json(await resolveRuns(env, limit));
+}));
+
+/**
+ * Access + latest runs, in one round trip.
+ *
+ * `InitiativeEnvironmentsRail` asks both questions the instant a row is
+ * expanded — never independently — so it used to fire `/:id/access` and
+ * `/:id/runs` as two separate requests per expand. This combines them into
+ * one, reusing the exact same `resolveAccess`/`resolveRuns` logic (and the
+ * same EnterEnvironment audit log line) the two standalone routes still
+ * serve for any other caller. Takes the SAME session floor as `/:id/access`
+ * — not `readGate` — because it carries the access decision.
+ */
+environmentsRouter.get('/:id/enter', requireSession('EnterEnvironment'), asyncHandler(async (req, res) => {
+  const env = await getEnvironment(String(req.params['id'] ?? ''));
+  if (!env) throw new NotFoundError('No such environment');
+
+  const session = resolveSession(req);
+  if (!session) throw new NotFoundError('No such environment');
+
+  const limitRaw = Number(req.query['limit'] ?? 10);
+  const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(limitRaw, 1), 50) : 10;
+
+  const [access, runsBody] = await Promise.all([
+    resolveAccess(session, env, req.path),
+    resolveRuns(env, limit),
+  ]);
+  res.json({ access, ...runsBody });
 }));
 
 environmentsRouter.post('/', writeGate, asyncHandler(async (req, res) => {

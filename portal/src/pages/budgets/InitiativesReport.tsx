@@ -27,7 +27,6 @@ import {
   TableTh,
   TableTd,
 } from '@connorhoehnslalom/ui-components/shared';
-import { useFetch } from '../../hooks/useFetch';
 import { toastError } from '../../lib/toastStore';
 import { usd, modelLabelFor, ago, rowBudgetStats } from './budgetsFormat';
 import { T } from './Text';
@@ -208,8 +207,7 @@ function AllocationCell({ row, canManage, onSaved }: {
 
 // ─── First-budget form (empty state) ─────────────────────────────────────────
 
-function FirstBudgetForm({ onSaved }: { onSaved: () => void }) {
-  const { data: initiatives } = useFetch<InitiativeOption[]>('/api/graph/projects?limit=100');
+function FirstBudgetForm({ initiatives, onSaved }: { initiatives: InitiativeOption[] | null; onSaved: () => void }) {
   const [projectId, setProjectId] = useState('');
   const [amount, setAmount] = useState('');
   const [busy, setBusy] = useState(false);
@@ -264,9 +262,18 @@ export interface InitiativesReportProps {
   hasData: boolean;
   canManage: boolean;
   refresh: () => void;
+  /**
+   * BudgetsPage's own `/api/graph/projects?limit=100` read, passed down so
+   * the empty-state "set the first budget" form doesn't open a second poll
+   * of the same route the page already has (it only rendered on a rare,
+   * click-triggered path, but it was still the same request twice).
+   */
+  initiatives: InitiativeOption[] | null;
 }
 
-export function InitiativesReport({ budgets, summary, error, hasData, canManage, refresh }: InitiativesReportProps) {
+export function InitiativesReport({
+  budgets, summary, error, hasData, canManage, refresh, initiatives,
+}: InitiativesReportProps) {
   const [confirmDelete, setConfirmDelete] = useState<BudgetRow | null>(null);
   const [showFirstBudget, setShowFirstBudget] = useState(false);
 
@@ -306,7 +313,10 @@ export function InitiativesReport({ budgets, summary, error, hasData, canManage,
             : {})}
         />
         {canManage && showFirstBudget && (
-          <FirstBudgetForm onSaved={() => { setShowFirstBudget(false); refresh(); }} />
+          <FirstBudgetForm
+            initiatives={initiatives}
+            onSaved={() => { setShowFirstBudget(false); refresh(); }}
+          />
         )}
       </>
     );

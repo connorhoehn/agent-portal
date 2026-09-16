@@ -3,7 +3,7 @@
 // grant in a tenant cannot switch into it (enforced server-side in the
 // session routes), so this page is where tenant isolation is administered.
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   Button,
   Card,
@@ -24,9 +24,9 @@ import {
 import type { DataTableColumn } from '@connorhoehnslalom/ui-components/shared';
 import { useSession } from '../../lib/auth';
 import { useCapabilities } from '../../lib/capabilities';
+import { useFetch } from '../../hooks/useFetch';
 import { toastError } from '../../lib/toastStore';
 import { UnavailableNotice, orUnknown } from '../../components/UnavailableNotice';
-import { firstDegraded } from '../../lib/degraded';
 import {
   grantChipLabels,
   inputWiring,
@@ -65,44 +65,53 @@ function UsersPage() {
   // Tenant/user creation and grant edits ride /api/identity (ManageUsers).
   const { can, ready } = useCapabilities();
   const canManage = ready && can('ManageUsers');
-  const [tenants, setTenants] = useState<TenantInfo[]>([]);
-  const [roles, setRoles] = useState<RoleInfo[]>([]);
-  const [users, setUsers] = useState<UserInfo[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [degraded, setDegraded] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+
+  // Three independent reads — no combined endpoint exists — each on
+  // useFetch instead of a hand-rolled Promise.all, so retry/degraded/loading
+  // all come from the one shared implementation instead of a bespoke
+  // try/catch/finally that reimplemented it.
+  const {
+    data: tenantsData, isLoading: tenantsLoading, error: tenantsError, degraded: tenantsDegraded,
+    refresh: refreshTenants,
+  } = useFetch<TenantInfo[]>('/api/identity/tenants');
+  const {
+    data: rolesData, isLoading: rolesLoading, error: rolesError, degraded: rolesDegraded,
+    refresh: refreshRoles,
+  } = useFetch<RoleInfo[]>('/api/identity/roles');
+  const {
+    data: usersData, isLoading: usersLoading, error: usersError, degraded: usersDegraded,
+    refresh: refreshUsers,
+  } = useFetch<UserInfo[]>('/api/identity/users');
+
+  const tenants = tenantsData ?? [];
+  const roles = rolesData ?? [];
+  const users = usersData ?? [];
+  const loading = tenantsLoading || rolesLoading || usersLoading;
+  // A mutation (grant save, create user/tenant) surfaces its OWN failure
+  // here; a read failure comes straight off the three fetches above — same
+  // "first one that has something to say" order the old firstDegraded(t, r,
+  // u) call made.
+  const [mutationError, setMutationError] = useState<string | null>(null);
+  const error = mutationError ?? tenantsError ?? rolesError ?? usersError;
+  const degraded = tenantsDegraded ?? rolesDegraded ?? usersDegraded;
+
   const [grantsUser, setGrantsUser] = useState<UserInfo | null>(null); // user with the "Edit grants" drawer open
   const [draftGrants, setDraftGrants] = useState<Record<string, string[]>>({});
   const [busy, setBusy] = useState(false);
   const [showNewUser, setShowNewUser] = useState(false);
   const [showNewTenant, setShowNewTenant] = useState(false);
 
-  const load = useCallback(async () => {
-    try {
-      const [t, r, u] = await Promise.all([
-        api<TenantInfo[]>('/api/identity/tenants'),
-        api<RoleInfo[]>('/api/identity/roles'),
-        api<UserInfo[]>('/api/identity/users'),
-      ]);
-      setTenants(t); setRoles(r); setUsers(u); setError(null);
-      setDegraded(firstDegraded(t, r, u));
-    } catch (e) {
-      setError((e as Error).message);
-      setDegraded(null);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { void load(); }, [load]);
+  /** Re-fire all three reads — the replacement for the old `load()`'s single
+   *  Promise.all, used after a mutation and by the UnavailableNotice retry. */
+  const load = () => { refreshTenants(); refreshRoles(); refreshUsers(); };
 
   // Roles selectable for a tenant = that tenant's roles + cross-tenant roles.
   const rolesForTenant = useMemo(() => rolesForTenantMap(tenants, roles), [tenants, roles]);
 
   const run = async (fn: () => Promise<void>) => {
     setBusy(true);
-    setError(null);
-    try { await fn(); } catch (e) { setError((e as Error).message); } finally { setBusy(false); }
+    setMutationError(null);
+    try { await fn(); } catch (e) { setMutationError((e as Error).message); } finally { setBusy(false); }
   };
 
   const openGrantsEditor = (u: UserInfo) => {
@@ -122,7 +131,7 @@ function UsersPage() {
       body: JSON.stringify({ grants: draftGrants }),
     });
     setGrantsUser(null);
-    await load();
+    load();
     // If we just edited the signed-in user, their session grants are stale
     // until the next login — refresh so the switcher reflects reality.
     if (session?.sub === userId) await refresh();
@@ -136,7 +145,7 @@ function UsersPage() {
       method: 'PUT',
       body: JSON.stringify({ personId }),
     });
-    await load();
+    load();
   });
 
   const canSignInAs = !ssoRequired;
@@ -271,7 +280,7 @@ function UsersPage() {
           onSubmit={(id, name) => run(async () => {
             await api('/api/identity/tenants', { method: 'POST', body: JSON.stringify({ id, displayName: name }) });
             setShowNewTenant(false);
-            await load();
+            load();
           })}
         />
       </Drawer>
@@ -290,7 +299,7 @@ function UsersPage() {
           onSubmit={(input) => run(async () => {
             await api('/api/identity/users', { method: 'POST', body: JSON.stringify(input) });
             setShowNewUser(false);
-            await load();
+            load();
           })}
         />
       </Drawer>

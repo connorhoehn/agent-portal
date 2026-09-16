@@ -50,7 +50,7 @@ describe('requireTenant(assessment) — outside roles', () => {
   for (const s of OUTSIDE) {
     it(`${s.tenant}/${s.role} gets 403 on every assessment read and write`, async () => {
       const app = appAs(s);
-      for (const path of ['/api/assessment/teams', '/api/assessment/teams/TEAM-001', '/api/assessment/knowledge/tree', '/api/assessment/runs', '/api/assessment/rollup']) {
+      for (const path of ['/api/assessment/teams', '/api/assessment/teams/TEAM-001', '/api/assessment/knowledge/tree', '/api/assessment/runs', '/api/assessment/rollup', '/api/assessment/dimension-index']) {
         const res = await request(app).get(path);
         expect({ path, status: res.status }).toEqual({ path, status: 403 });
         expect(res.body.requiredTenant).toBe('assessment');

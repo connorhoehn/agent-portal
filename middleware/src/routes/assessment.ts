@@ -290,6 +290,13 @@ assessmentRouter.delete('/teams/:id', scoreGate, asyncHandler(async (req, res) =
 
 // ─── Cross-team ─────────────────────────────────────────────────────────────
 
+// One bulk read for the portfolio heatmap (ReportsPage's MaturityHeatmap) —
+// replaces the N `GET /teams/:id` calls `useDimensionIndex` used to fire per
+// team just to read each cell's verified/claimed level.
+assessmentRouter.get('/dimension-index', viewGate, asyncHandler(async (_req, res) => {
+  res.json(await provider.getDimensionIndex());
+}));
+
 assessmentRouter.get('/recommendations', viewGate, asyncHandler(async (req, res) => {
   const cohort = req.query['cohort'] as Cohort | undefined;
   res.json(await provider.listPortfolioRecommendations(cohort));

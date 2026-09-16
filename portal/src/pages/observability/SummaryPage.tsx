@@ -166,7 +166,9 @@ function deriveNextSteps(
 }
 
 function SummaryPage() {
-  const { data: summary } = useFetch<ObsSummary>('/api/observability/summary', 30000);
+  // Same URL + interval as ObservabilityLayout's nav-badge poll —
+  // `share: true` collapses the two into one request per tick.
+  const { data: summary } = useFetch<ObsSummary>('/api/observability/summary', 30000, { share: true });
   const { data: guardrail } = useFetch<GuardrailMetrics>(
     '/api/capabilities/guardrail/metrics?hours=6',
     60000,

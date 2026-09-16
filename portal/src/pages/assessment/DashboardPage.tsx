@@ -28,7 +28,10 @@ function DashboardPage() {
   const { teamId } = useParams<{ teamId?: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { teams, isLoading, isError, degraded, refresh } = useTeams();
+  // The roster is only rendered on the desk view below — a scorecard shows
+  // one team, not the list — so it is fetched only when there is no teamId
+  // (a null URL through useFetch, never an unused response).
+  const { teams, isLoading, isError, degraded, refresh } = useTeams(!teamId);
   const [newTeamOpen, setNewTeamOpen] = useState(false);
 
   // ── View 3: scorecard ──────────────────────────────────────────────────

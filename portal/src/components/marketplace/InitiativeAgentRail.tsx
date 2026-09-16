@@ -6,7 +6,7 @@
 // what is running right now, and what the recent agent activity produced and
 // cost. The bots themselves are managed on the Bots page — these cards observe.
 
-import { useEffect, useState } from 'react';
+import { useMemo } from 'react';
 import { Link } from 'react-router';
 import {
   Card,
@@ -19,7 +19,6 @@ import {
   SectionLabel,
   Stack,
 } from '@connorhoehnslalom/ui-components/shared';
-import { readDegraded } from '../../lib/degraded';
 import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';
 import { parsePgTimestampAsUtc } from '../../lib/pgTimestamp';
@@ -105,45 +104,27 @@ export function useInitiativeAgentActivity(
       )
     : [];
 
-  // Lazily fetch each targeting bot's runs, once per bot.
-  const [botRuns, setBotRuns] = useState<Record<string, BotRun[]>>({});
-  const [runsError, setRunsError] = useState<string | null>(null);
+  // One bulk read for every targeting bot's runs, instead of one `/:id/runs`
+  // request per bot (the N+1 this hook used to do). `GET /api/bots/runs`
+  // returns the merged, per-bot-capped list directly.
   const botIdsKey = bots.map((b) => b.id).sort().join(',');
-  useEffect(() => {
-    if (!botIdsKey) return;
-    let cancelled = false;
-    for (const botId of botIdsKey.split(',')) {
-      if (botRuns[botId]) continue;
-      fetch(`/api/bots/${encodeURIComponent(botId)}/runs`, { credentials: 'include' })
-        .then(async (res) => {
-          if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-          return (await res.json()) as { runs?: BotRun[] };
-        })
-        .then((body) => {
-          if (cancelled) return;
-          // 200 with `{ runs: [] }` and a marker is not "this bot never ran".
-          const d = readDegraded(body);
-          if (d) setRunsError(d);
-          setBotRuns((prev) => (prev[botId] ? prev : { ...prev, [botId]: body.runs ?? [] }));
-        })
-        .catch((e: unknown) => {
-          if (cancelled) return;
-          setRunsError(e instanceof Error ? e.message : 'a run history could not be read');
-          setBotRuns((prev) => (prev[botId] ? prev : { ...prev, [botId]: [] }));
-        });
-    }
-    return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [botIdsKey]);
+  const { data: bulkRunsData, error: bulkRunsFetchError, degraded: bulkRunsDegraded } = useFetch<{ runs: BotRun[] }>(
+    botIdsKey ? `/api/bots/runs?botIds=${encodeURIComponent(botIdsKey)}` : null,
+  );
+  const runsError = bulkRunsFetchError ?? bulkRunsDegraded;
+  const botRuns = bulkRunsData?.runs ?? [];
 
-  const seen = new Set<string>();
-  const runs: BotRun[] = [];
-  for (const r of [...marketplaceRuns, ...bots.flatMap((b) => botRuns[b.id] ?? [])]) {
-    if (seen.has(r.id)) continue;
-    seen.add(r.id);
-    runs.push(r);
-  }
-  runs.sort((a, b) => parseTs(b.startedAt) - parseTs(a.startedAt));
+  const runs = useMemo(() => {
+    const seen = new Set<string>();
+    const merged: BotRun[] = [];
+    for (const r of [...marketplaceRuns, ...botRuns]) {
+      if (seen.has(r.id)) continue;
+      seen.add(r.id);
+      merged.push(r);
+    }
+    merged.sort((a, b) => parseTs(b.startedAt) - parseTs(a.startedAt));
+    return merged;
+  }, [marketplaceRuns, botRuns]);
   const spendUsd = runs.reduce((sum, r) => sum + (r.costUsd ?? 0), 0);
 
   return { bots, botsLoading: isLoading, botsError, runs, runsError, spendUsd };

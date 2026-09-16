@@ -10,6 +10,7 @@ import {
   Banner, Button, Card, Chip, Drawer, EmptyState, Inline, LoadingState, PageSection, SearchInput, Stack,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
+import { useDebouncedSearch } from '../../hooks/useDebouncedSearch';
 import { KeyValue } from '../../components/KeyValue';
 import { ArtifactAssetCard } from './ArtifactAssetCard';
 import { ArtifactDrawerBody } from './ArtifactDrawer';
@@ -33,10 +34,17 @@ async function postJson(path: string, body: unknown): Promise<{ ok: boolean; err
   return { ok: false, error: parsed.error ?? `HTTP ${res.status}` };
 }
 
+// Same cadence TiersPage.tsx set for this exact pattern.
+const SEARCH_DEBOUNCE_MS = 250;
+
 export default function DistillationLineagePage() {
   const [params, setParams] = useSearchParams();
   const focus = params.get('focus');
+  // `query` drives `artifactsUrl` below — the box shows `searchText` and only
+  // commits to `query` (so only re-fetches) `SEARCH_DEBOUNCE_MS` after typing
+  // stops. This used to put every keystroke straight into the fetch URL.
   const [query, setQuery] = useState('');
+  const { searchText, onSearchChange } = useDebouncedSearch(query, setQuery, SEARCH_DEBOUNCE_MS);
   const [selected, setSelected] = useState<LineageNode | null>(null);
   // The picker's own "expand" drawer — same ArtifactDrawerBody Artifacts
   // uses, so a reader sees the identical record whether they opened it from
@@ -116,8 +124,8 @@ export default function DistillationLineagePage() {
       >
         <Stack gap="md">
           <SearchInput
-            value={query}
-            onChange={setQuery}
+            value={searchText}
+            onChange={onSearchChange}
             placeholder="Search artifacts by title or summary…"
             aria-label="Search artifacts for lineage"
             className="w-[320px]"

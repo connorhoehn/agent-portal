@@ -88,9 +88,13 @@ interface BedrockInvocation {
 }
 
 function InvocationsPage() {
+  // Same URL as ObservabilityLayout's nav-badge poll, now on the same 5s
+  // cadence (it used to be 10s there) with `share: true` so the two collapse
+  // into one request per tick.
   const { data: recent } = useFetch<{ invocations: Invocation[] }>(
     '/api/observability/recent-invocations?limit=50',
     5000,
+    { share: true },
   );
   const { data: bedrock } = useFetch<{ entries: BedrockInvocation[] }>(
     '/api/observability/bedrock-invocations?limit=20&sinceMin=60',

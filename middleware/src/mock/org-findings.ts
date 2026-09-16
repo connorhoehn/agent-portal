@@ -105,27 +105,49 @@ function seedFindings(): Finding[] {
       firstSeenAt: clock.hoursAgo(30), lastSeenAt: clock.hoursAgo(6),
       fingerprint: 'stale_docs:doc-runbook-cost-opt',
     },
+    // Was 'dec-cognito-hosted-ui' — mock/decisions.ts has never had an id by
+    // that name (the real Cognito-flavored row there, 'd-cognito-cutover', is
+    // already cited by p-auth-migration and wi-auth-e2, so it isn't an orphan
+    // to begin with). 'd-aurora' is the org-wide ADR that genuinely has
+    // `projectId: null` and no `workItemId` — the other one, 'd-k8s', is
+    // find-mock-2's. Owner is d-aurora's decider.
+    // `evidence.candidateInitiative` STAYS 'p-auth-migration' — it is pinned
+    // by name in routes/__tests__/work-findings-promote.test.ts
+    // (FINDING_AUTH_CANDIDATE), which promotes this exact finding as the
+    // sme persona (Nora, p-004) who holds an active grant there. It reads as
+    // an arbitrary pairing with an Aurora-vs-Neptune decision, and honestly
+    // is one: every initiative depends on the Aurora/pgvector store this
+    // decision picked, so naming any one of them a "candidate" owner is a
+    // little arbitrary — p-auth-migration is not a materially worse home for
+    // it than another initiative would be, which is what the detail below
+    // says instead of pretending a thematic tie that isn't there.
     {
       id: 'find-mock-5',
       sweep: 'orphan_decisions', severity: 'warning',
-      title: 'Decision "Move auth to Cognito hosted UI" links to no initiative',
-      detail: 'dec-cognito-hosted-ui has an owner (Sienna Garcia, p-005) but no initiative or work item cites it; p-auth-migration is the obvious home.',
-      entityType: 'decision', entityId: 'dec-cognito-hosted-ui',
-      evidence: { ownerId: 'p-005', candidateInitiative: 'p-auth-migration', citedBy: 0 },
+      title: 'Decision "Adopt Aurora over Neptune" links to no initiative',
+      detail: 'd-aurora has an owner (Caleb Patel, p-046) but no initiative or work item cites it; every initiative depends on the Aurora/pgvector store this decision picked, and p-auth-migration is as reasonable a place as any to record that it happened.',
+      entityType: 'decision', entityId: 'd-aurora',
+      evidence: { ownerId: 'p-046', candidateInitiative: 'p-auth-migration', citedBy: 0 },
       status: 'open', jobId: null,
       firstSeenAt: clock.hoursAgo(54), lastSeenAt: clock.hoursAgo(6),
-      fingerprint: 'orphan_decisions:dec-cognito-hosted-ui',
+      fingerprint: 'orphan_decisions:d-aurora',
     },
+    // Was 'dec-titan-1024' — no such id in mock/decisions.ts, and there is no
+    // Titan/embeddings-dimension decision row to rename it to (the KB's
+    // embedding-dims choice was never itself raised as a `decisions` row).
+    // 'd-nova' is the closest resolved LLM-platform decision that genuinely
+    // carries `projectId: 'p-llm-platform'`, which is what "resolved, now
+    // linked" needs to be honest about.
     {
       id: 'find-mock-6',
       sweep: 'orphan_decisions', severity: 'info',
-      title: 'Decision "Pin Titan v2 at 1024 dims" superseded by the KB rebuild',
-      detail: 'Resolved when p-llm-platform re-linked it to the knowledge-base initiative.',
-      entityType: 'decision', entityId: 'dec-titan-1024',
-      evidence: { ownerId: 'p-003', linkedTo: 'p-llm-platform' },
+      title: 'Decision "Standardize on Nova Pro" linked to the LLM platform initiative',
+      detail: 'd-nova is resolved and carries p-llm-platform as its initiative of record.',
+      entityType: 'decision', entityId: 'd-nova',
+      evidence: { ownerId: 'p-043', linkedTo: 'p-llm-platform' },
       status: 'resolved', jobId: null,
       firstSeenAt: clock.hoursAgo(200), lastSeenAt: clock.hoursAgo(26),
-      fingerprint: 'orphan_decisions:dec-titan-1024',
+      fingerprint: 'orphan_decisions:d-nova',
     },
     {
       id: 'find-mock-7',

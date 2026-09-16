@@ -198,6 +198,26 @@ export interface TeamDetailResponse {
   dimensions: DimensionOut[];
 }
 
+/**
+ * The lean cross-team shape the maturity heatmap actually reads — one row
+ * per dimension, just the fields `MaturityHeatmap`/`HeatmapCell`
+ * (portal/src/pages/assessment/ReportsPage.tsx) draw from: no rubric levels,
+ * evidence, follow-ups or history. `getDimensionIndex` below computes it from
+ * the SAME per-team rows `assembleTeamDetail` does, so this can never disagree
+ * with what `GET /teams/:id` shows for the same team.
+ */
+export interface DimensionIndexEntry {
+  id: string;
+  title: string;
+  current_level: number | null;
+  is_na: boolean;
+  certification: Pick<DimensionCertification, 'verified_level' | 'claimed_level' | 'statement'>;
+}
+
+export interface DimensionIndexResponse {
+  teams: Array<{ id: string; dimensions: DimensionIndexEntry[] }>;
+}
+
 export const WORKFLOW_STEP_LABELS = ['Intake', 'Classify', 'Score', 'Review', 'Publish', 'Follow-up'] as const;
 
 /** The one place `WORKFLOW_STEP_LABELS` becomes a `WorkflowStepInfo[]` — shared by the summary and detail wires so they cannot disagree. */
@@ -574,6 +594,47 @@ export async function getTeamDetail(id: string): Promise<TeamDetailResponse | nu
     A.fetchDimensionScores(id), A.fetchConfiguration(), A.fetchProvenanceRaw(id),
   ]);
   return assembleTeamDetail(team, dims, cfg.target_level, prov.historical);
+}
+
+function dimensionIndexEntry(
+  def: M.RubricDimensionDef, score: M.MockDimensionScore, targetLevel: number,
+): DimensionIndexEntry {
+  const cert = dimensionCertification(score, targetLevel);
+  return {
+    id: def.id, title: def.title, current_level: score.current_level, is_na: score.is_na,
+    certification: { verified_level: cert.verified_level, claimed_level: cert.claimed_level, statement: cert.statement },
+  };
+}
+
+/**
+ * One bulk read for the portfolio heatmap instead of the N `GET /teams/:id`
+ * calls `useDimensionIndex` used to fire (one per team, just to read each
+ * cell) — see CLAUDE.md's request-budget audit. Every team, every dimension,
+ * the verified/claimed levels and the statement — nothing else.
+ */
+export async function getDimensionIndex(): Promise<DimensionIndexResponse> {
+  if (config.mock.aurora) {
+    const target = M.configuration().target_level;
+    return {
+      teams: M.teams().map((team) => {
+        const dims = M.scoresFor(team.id) ?? {};
+        return {
+          id: team.id,
+          dimensions: M.RUBRIC_DIMENSIONS.map((def) => dimensionIndexEntry(def, dims[def.id] ?? emptyScore(def.id), target)),
+        };
+      }),
+    };
+  }
+  const [teams, dimsByTeam, cfg] = await Promise.all([A.fetchAllTeams(), A.fetchAllDimensionScores(), A.fetchConfiguration()]);
+  return {
+    teams: teams.map((team) => {
+      const dims = dimsByTeam.get(team.id) ?? {};
+      return {
+        id: team.id,
+        dimensions: M.RUBRIC_DIMENSIONS.map((def) => dimensionIndexEntry(def, dims[def.id] ?? emptyScore(def.id), cfg.target_level)),
+      };
+    }),
+  };
 }
 
 export async function patchTeam(

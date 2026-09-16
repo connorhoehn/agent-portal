@@ -21,8 +21,15 @@ export interface UseTeamsResult {
   refresh: () => void;
 }
 
-export function useTeams(): UseTeamsResult {
-  const { data, isLoading, error, degraded, refresh } = useFetch<TeamSummary[]>('/api/assessment/teams');
+/**
+ * `enabled` (default true) lets a caller that does not need the roster right
+ * now — the team scorecard view, which renders one team, not the list —
+ * skip the fetch entirely by passing a null URL to `useFetch`. Without this,
+ * opening a scorecard fetched the whole roster and never read it
+ * (CLAUDE.md's request-budget audit finding #2).
+ */
+export function useTeams(enabled = true): UseTeamsResult {
+  const { data, isLoading, error, degraded, refresh } = useFetch<TeamSummary[]>(enabled ? '/api/assessment/teams' : null);
   return {
     teams: data ?? [],
     isLoading,

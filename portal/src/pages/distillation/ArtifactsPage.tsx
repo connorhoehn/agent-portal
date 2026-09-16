@@ -11,6 +11,7 @@ import {
   type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
+import { useDebouncedSearch } from '../../hooks/useDebouncedSearch';
 import { relativeTime } from '../../lib/relativeTime';
 import { ArtifactDrawerBody } from './ArtifactDrawer';
 import { T } from './Text';
@@ -36,11 +37,18 @@ const STATUS_FILTERS: Array<{ value: ArtifactStatus | 'all'; label: string }> = 
   { value: 'retired', label: 'Retired' },
 ];
 
+// Same cadence TiersPage.tsx set for this exact pattern.
+const SEARCH_DEBOUNCE_MS = 250;
+
 export default function DistillationArtifactsPage() {
   const [params, setParams] = useSearchParams();
   const type = (params.get('type') ?? 'all') as ArtifactType | 'all';
   const status = (params.get('status') ?? 'all') as ArtifactStatus | 'all';
+  // `query` drives the client-side title/summary filter below; the box
+  // shows `searchText` and only commits to `query` (so only re-runs the
+  // filter, and re-renders the list) `SEARCH_DEBOUNCE_MS` after typing stops.
   const [query, setQuery] = useState('');
+  const { searchText, onSearchChange, cancelPending } = useDebouncedSearch(query, setQuery, SEARCH_DEBOUNCE_MS);
   // `?open=<id>` opens the drawer on arrival — the Overview's repertoire
   // rows land here — and closing it drops the param so a reload does not
   // reopen a drawer the reader already dismissed.
@@ -181,8 +189,8 @@ export default function DistillationArtifactsPage() {
         </ToolbarGroup>
         <ToolbarGroup divided aria-label="Search">
           <SearchInput
-            value={query}
-            onChange={setQuery}
+            value={searchText}
+            onChange={onSearchChange}
             placeholder="Title or summary…"
             aria-label="Search artifacts"
             className="w-[220px]"
@@ -199,7 +207,7 @@ export default function DistillationArtifactsPage() {
           title="No artifacts"
           description="No artifact matches these filters."
           actionLabel="Clear filters"
-          onAction={() => { setParams(new URLSearchParams(), { replace: true }); setQuery(''); }}
+          onAction={() => { cancelPending(); setParams(new URLSearchParams(), { replace: true }); setQuery(''); }}
         />
       ) : (
         <DataTable<Artifact>

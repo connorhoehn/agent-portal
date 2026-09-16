@@ -6,15 +6,19 @@ import type { CrawlSession, CrawlTarget } from '../../components/ingest/types';
 import { knowledgeItemsFor } from '../knowledge/knowledgeNav';
 
 function IngestLayout() {
-  // Lightweight polling for nav badges. Same endpoints the sub-pages use,
-  // so React Query / browser cache de-dupes — no extra network cost.
+  // Lightweight polling for nav badges. Same endpoints, same interval, as
+  // the sub-pages that render the tables (CrawlTargetsPage, RunHistoryPage)
+  // — `share: true` collapses concurrent polls into one request rather than
+  // the plain `fetch()` that a bare URL match does nothing to de-dupe.
   const { data: targetsData } = useFetch<{ targets: CrawlTarget[] }>(
     '/api/ingest/crawl-targets',
     30_000,
+    { share: true },
   );
   const { data: crawlsData } = useFetch<{ crawls: CrawlSession[] }>(
     '/api/ingest/crawls',
     10_000,
+    { share: true },
   );
 
   const targetCount = targetsData?.targets.length;

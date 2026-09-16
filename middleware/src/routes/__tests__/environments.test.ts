@@ -313,6 +313,67 @@ describe('workflow runs are reported, never triggered', () => {
   });
 });
 
+// GET /api/environments/:id/enter — access + latest runs in one round trip.
+// InitiativeEnvironmentsRail used to fire /access and /runs back to back the
+// instant a row expanded; this combines them so the rail issues one request.
+// It must carry the SAME Cedar-per-call guarantee as /access (not the read
+// fast-path) since it still returns the access decision.
+describe('GET /api/environments/:id/enter', () => {
+  test('returns the access decision AND the runs together', async () => {
+    getMock.mockResolvedValue(PROD);
+    repoMock.mockResolvedValue({ repoFullName: 'acme/obs', connectionName: 'gh' });
+    runsMock.mockResolvedValue([{ id: 1, name: 'Deploy', status: 'completed', conclusion: 'success' }]);
+    const res = await request(app('sme')).get(`/api/environments/${PROD.id}/enter`);
+    expect(res.status).toBe(200);
+    expect(res.body.access.allowed).toBe(true);
+    expect(res.body.access.accessRoleArn).toBe(PROD.accessRoleArn);
+    expect(res.body.repo).toBe('acme/obs');
+    expect(res.body.runs).toHaveLength(1);
+  });
+
+  test('the read fast-path does NOT leak in here either — Cedar is consulted', async () => {
+    getMock.mockResolvedValue(PROD);
+    repoMock.mockResolvedValue(null);
+    enterAllow.value = false;
+    const res = await request(app('member')).get(`/api/environments/${PROD.id}/enter`);
+    expect(res.body.access.allowed).toBe(false);
+    expect(isAllowedMock).toHaveBeenCalledTimes(1);
+  });
+
+  test('a denial still reports the runs half — seeing where it runs is not gated', async () => {
+    getMock.mockResolvedValue(PROD);
+    repoMock.mockResolvedValue({ repoFullName: 'acme/obs', connectionName: 'gh' });
+    runsMock.mockResolvedValue([]);
+    enterAllow.value = false;
+    const res = await request(app('member')).get(`/api/environments/${PROD.id}/enter`);
+    expect(res.body.access.allowed).toBe(false);
+    expect(res.body.repo).toBe('acme/obs');
+  });
+
+  test('a GitHub failure degrades the runs half without touching the access half', async () => {
+    getMock.mockResolvedValue(PROD);
+    repoMock.mockResolvedValue({ repoFullName: 'acme/obs', connectionName: null });
+    runsMock.mockRejectedValue(new Error('GitHub rate limit reached'));
+    const res = await request(app('sme')).get(`/api/environments/${PROD.id}/enter`);
+    expect(res.body.access.allowed).toBe(true);
+    expect(res.body.degraded).toBe(true);
+    expect(String(res.body.error)).toContain('rate limit');
+  });
+
+  test('an anonymous caller is 401, never asked about', async () => {
+    getMock.mockResolvedValue(PROD);
+    const res = await request(app(null)).get(`/api/environments/${PROD.id}/enter`);
+    expect(res.status).toBe(401);
+    expect(isAllowedMock).not.toHaveBeenCalled();
+  });
+
+  test('404s an unknown environment', async () => {
+    getMock.mockResolvedValue(null);
+    const res = await request(app('sme')).get(`/api/environments/nope/enter`);
+    expect(res.status).toBe(404);
+  });
+});
+
 // GET /api/environments/:id — the record read, as distinct from /:id/access.
 // The two look alike and behave very differently on purpose: reading the MAP
 // is wide (readGate fast-paths any tenant role), asking whether you may get

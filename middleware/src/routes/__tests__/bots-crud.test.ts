@@ -47,6 +47,7 @@ jest.mock('../../lib/authz.js', () => ({
 jest.mock('../../providers/bots.js', () => ({
   listActiveRuns: jest.fn(),
   listBots: jest.fn(), listBotsResult: jest.fn(), listBotRunsResult: jest.fn(),
+  listBotRunsForBotsResult: jest.fn(),
   getBot: jest.fn(), createBot: jest.fn(), updateBot: jest.fn(),
   deleteBot: jest.fn(), setPausedReason: jest.fn(), listBotRuns: jest.fn(),
   listMarketplaceRuns: jest.fn(), runCostSamples: jest.fn(), perPointCostSamples: jest.fn(),
@@ -68,6 +69,7 @@ import { botsRouter } from '../bots.js';
 import { errorHandler } from '../../lib/async-handler.js';
 import {
   listBotsResult, getBot, createBot, updateBot, deleteBot, listBotRunsResult,
+  listBotRunsForBotsResult,
   runCostSamples, perPointCostSamples,
 } from '../../providers/bots.js';
 import { fireBot, decideRunBudget } from '../../lib/bot-runner.js';
@@ -392,5 +394,42 @@ describe('GET /api/bots/:id/runs', () => {
   it('returns an empty history for a bot that has never fired', async () => {
     m(listBotRunsResult).mockResolvedValue({ items: [] });
     expect((await request(buildApp()).get('/api/bots/bot-9/runs')).body).toEqual({ runs: [] });
+  });
+});
+
+// GET /api/bots/runs?botIds=a,b,c — the bulk read InitiativeAgentRail uses
+// instead of one `/:id/runs` request per bot targeting an initiative.
+// Registered ahead of `/:id` in routes/bots.ts on purpose: these tests would
+// fail with "runs" read back as a bot id if that ordering ever regressed.
+describe('GET /api/bots/runs', () => {
+  it('parses the comma-separated ids and wraps the merged history', async () => {
+    m(listBotRunsForBotsResult).mockResolvedValue({ items: [{ id: 'run-1' }, { id: 'run-2' }] });
+    const res = await request(buildApp()).get('/api/bots/runs?botIds=bot-1,bot-2');
+    expect(res.status).toBe(200);
+    expect(Object.keys(res.body)).toEqual(['runs']);
+    expect(res.body.runs).toHaveLength(2);
+    expect(listBotRunsForBotsResult).toHaveBeenCalledWith(['bot-1', 'bot-2'], 50);
+  });
+
+  it('answers an empty list without calling the provider when no ids are given', async () => {
+    const res = await request(buildApp()).get('/api/bots/runs');
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ runs: [] });
+    expect(listBotRunsForBotsResult).not.toHaveBeenCalled();
+  });
+
+  it('carries the degraded marker through when the provider could not read', async () => {
+    m(listBotRunsForBotsResult).mockResolvedValue({ items: [], degraded: true, error: 'bots schema not applied' });
+    const res = await request(buildApp()).get('/api/bots/runs?botIds=bot-1');
+    expect(res.body.degraded).toBe(true);
+    expect(res.body.error).toBe('bots schema not applied');
+  });
+
+  it('is registered ahead of /:id — "runs" never reads back as a bot id', async () => {
+    m(listBotRunsForBotsResult).mockResolvedValue({ items: [] });
+    m(getBot).mockResolvedValue(null);
+    const res = await request(buildApp()).get('/api/bots/runs?botIds=bot-1');
+    expect(res.status).toBe(200);
+    expect(getBot).not.toHaveBeenCalled();
   });
 });
