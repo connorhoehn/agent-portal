@@ -26,6 +26,7 @@ import {
   Card, Chip, CodeBlock, EmptyState, Inline, InlineAlert, MetaLine, SectionLabel, Stack,
 } from '@connorhoehnslalom/ui-components/shared';
 import { Markdown } from '../Markdown';
+import { toolSummary as summarizeTool } from './toolSummary';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -49,16 +50,10 @@ const WATCHDOG_EVERY_MS = 10_000;
 
 const mono = 'font-["Fira_Code","Cascadia_Code","JetBrains_Mono",monospace]';
 
-export function toolSummary(name: string, input: Record<string, unknown>): { summary: string; detail?: string } {
-  if (name === 'Bash') {
-    return { summary: String(input['command'] ?? ''), detail: input['description'] ? String(input['description']) : undefined };
-  }
-  if (name === 'Write' || name === 'Edit' || name === 'Read' || name === 'NotebookEdit') {
-    return { summary: String(input['file_path'] ?? input['notebook_path'] ?? '') };
-  }
-  const json = JSON.stringify(input);
-  return { summary: json.length > 120 ? json.slice(0, 120) + '…' : json };
-}
+// `toolSummary` now lives in ./toolSummary so the local-compute console can
+// share the vocabulary without importing this component. Re-exported here
+// because call sites already import it from this module.
+export { toolSummary } from './toolSummary';
 
 function toolIcon(name: string): string {
   if (name === 'Bash') return '$';
@@ -172,7 +167,7 @@ export const RunTimeline = forwardRef<RunTimelineHandle, RunTimelineProps>(funct
           pushTimeline(box, (prev) => [...prev, { id: nextId(), kind: 'text', text: String(block['text']) }]);
         } else if (block['type'] === 'tool_use') {
           const name = String(block['name'] ?? 'tool');
-          const { summary, detail } = toolSummary(name, (block['input'] ?? {}) as Record<string, unknown>);
+          const { summary, detail } = summarizeTool(name, (block['input'] ?? {}) as Record<string, unknown>);
           // Keyed by the tool_use id so the matching tool_result attaches below.
           pushTimeline(box, (prev) => [...prev, { id: String(block['id'] ?? nextId()), kind: 'tool', name, summary, detail }]);
         }

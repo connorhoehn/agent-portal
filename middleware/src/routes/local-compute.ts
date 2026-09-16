@@ -98,6 +98,7 @@ import {
   decideClaim,
   allowedKinds,
   capConcurrency,
+  frameLocalPrompt,
   LOCAL_JOB_KINDS,
   LOCAL_HEARTBEAT_INTERVAL_S,
 } from '../lib/local-work.js';
@@ -492,7 +493,24 @@ localComputeRouter.post('/claim', workLoopLimit, requireNodeToken(async (_req, r
   }
 
   res.json({
-    job: claim.job,
+    // The prompt the worker runs is framed here rather than stored framed, so
+    // the job row keeps the task somebody actually asked for. See
+    // `frameLocalPrompt` for why an unframed prompt ends the run with a
+    // question nobody can answer.
+    job: {
+      ...claim.job,
+      payload: {
+        ...claim.job.payload,
+        ...(typeof claim.job.payload['prompt'] === 'string'
+          ? {
+            prompt: frameLocalPrompt(
+              claim.job.payload['prompt'] as string,
+              claim.job.payload['requiresReview'] !== false,
+            ),
+          }
+          : {}),
+      },
+    },
     claimToken: claim.claimToken,
     sessionId,
     heartbeatIntervalS: LOCAL_HEARTBEAT_INTERVAL_S,

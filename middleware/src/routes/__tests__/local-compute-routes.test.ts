@@ -1427,6 +1427,56 @@ describe('POST /api/local-compute/register', () => {
 // ─── The work loop: claim → start → heartbeat → complete ─────────────────────
 
 describe('POST /api/local-compute/claim', () => {
+  // The claim response frames the prompt as a non-interactive run. Without it
+  // a model handed a bare task with an unresolved decision asks a clarifying
+  // question, `claude -p` has no stdin to answer from, and the run ends in
+  // seconds having done nothing — parked in review carrying a question the
+  // review screen cannot answer. Observed on a real run before this landed.
+  it('hands the worker a framed prompt, and leaves the stored task alone', async () => {
+    const node = await pair({ sub: 'u-mia' }, { label: 'mia-mbp' });
+    await request(as('member', 'u-mia')).patch(`${BASE}/nodes/${node.nodeId}`).send({ acceptJobs: true });
+    await request(anon()).post(`${BASE}/register`).set(bearer(node.nodeToken)).send({ jobKinds: ['local:task'] });
+    const queued = await queueLocal('cutover runbook', { prompt: 'Write the tenant cutover runbook.' });
+
+    const res = await request(anon()).post(`${BASE}/claim`).set(bearer(node.nodeToken)).send({});
+    expect(res.status).toBe(200);
+    const prompt = res.body.job.payload.prompt as string;
+    expect(prompt).toContain('non-interactively');
+    expect(prompt).toContain('Never stop to ask.');
+    // The task itself survives verbatim, at the end.
+    expect(prompt.endsWith('Write the tenant cutover runbook.')).toBe(true);
+    // And the stored row is untouched — the job page shows what a person
+    // asked for, not this wrapper.
+    const stored = await getJob(queued.id);
+    expect(stored!.payload['prompt']).toBe('Write the tenant cutover runbook.');
+  });
+
+  it('frames differently depending on whether anyone will review the result', async () => {
+    const node = await pair({ sub: 'u-mia' }, { label: 'mia-mbp' });
+    await request(as('member', 'u-mia')).patch(`${BASE}/nodes/${node.nodeId}`).send({ acceptJobs: true });
+    await request(anon()).post(`${BASE}/register`).set(bearer(node.nodeToken)).send({ jobKinds: ['local:task'] });
+    await queueLocal('unreviewed', { prompt: 'Do the thing.', requiresReview: false });
+
+    const res = await request(anon()).post(`${BASE}/claim`).set(bearer(node.nodeToken)).send({});
+    expect(res.status).toBe(200);
+    expect(res.body.job.payload.prompt).toContain('Nobody will review this before it lands');
+    // requiresReview rides through untouched — the worker reads it to decide
+    // where the finished job lands.
+    expect(res.body.job.payload.requiresReview).toBe(false);
+  });
+
+  it('a job carrying no prompt claims unchanged rather than gaining bare framing', async () => {
+    const node = await pair({ sub: 'u-mia' }, { label: 'mia-mbp' });
+    await request(as('member', 'u-mia')).patch(`${BASE}/nodes/${node.nodeId}`).send({ acceptJobs: true });
+    await request(anon()).post(`${BASE}/register`).set(bearer(node.nodeToken)).send({ jobKinds: ['local:task'] });
+    await queueLocal('no prompt', { repo: 'https://github.com/x/y' });
+
+    const res = await request(anon()).post(`${BASE}/claim`).set(bearer(node.nodeToken)).send({});
+    expect(res.status).toBe(200);
+    expect(res.body.job.payload.prompt).toBeUndefined();
+    expect(res.body.job.payload.repo).toBe('https://github.com/x/y');
+  });
+
   it('401s every work-loop route with no token, and with a browser session', async () => {
     for (const path of ['/claim', '/jobs/job-1/start', '/jobs/job-1/heartbeat', '/jobs/job-1/complete']) {
       expect([path, (await request(anon()).post(`${BASE}${path}`).send({})).status]).toEqual([path, 401]);
@@ -1486,7 +1536,12 @@ describe('POST /api/local-compute/claim', () => {
     const res = await request(anon()).post(`${BASE}/claim`).set(bearer(node.nodeToken)).send({});
     expect(res.status).toBe(200);
     expect(res.body.job.id).toBe(queued.id);
-    expect(res.body.job.payload).toEqual({ repo: 'aws-agentcore', prompt: 'distil' });
+    // Everything in the payload rides through untouched EXCEPT the prompt,
+    // which is framed as a non-interactive run on the way out (see
+    // `frameLocalPrompt`). The task itself is still the tail of it.
+    expect(res.body.job.payload.repo).toBe('aws-agentcore');
+    expect(res.body.job.payload.prompt.endsWith('distil')).toBe(true);
+    expect(res.body.job.payload.prompt).toContain('Never stop to ask.');
     expect(res.body.claimToken).toMatch(/^clm_[0-9a-f]{32}$/);
     expect(res.body.heartbeatIntervalS).toBe(30);
     expect(res.body.staleMinutes).toBe(30);

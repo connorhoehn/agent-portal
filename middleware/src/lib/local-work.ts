@@ -165,3 +165,46 @@ export function decideClaim(input: {
   }
   return { kind: 'proceed', kinds, limit };
 }
+
+/**
+ * Tell a claimed run that it is not a conversation.
+ *
+ * WHY THIS EXISTS. A local job's prompt is the work item's title and
+ * description and nothing else, and the worker hands it to `claude -p`, which
+ * is non-interactive by construction. Given a bare task with an unresolved
+ * decision inside it, a model does the sensible conversational thing: it asks.
+ * The question goes to a closed stdin, the run ends in a couple of seconds
+ * having written nothing, and the job parks in review carrying a request for
+ * input that cannot be answered from where it is shown. Observed exactly that
+ * on a real run: "the tenant cutover order is still unresolved ... Want me to
+ * draft the runbook with the sequencing left as a TODO? Or should I wait?"
+ *
+ * So the framing states the two things the model cannot otherwise know: that
+ * nobody is listening, and what to do with an ambiguity instead of asking.
+ * Choosing and declaring an assumption beats stopping — a reviewer can correct
+ * an assumption they can read, and can do nothing with a question asked into a
+ * closed pipe.
+ *
+ * APPLIED AT CLAIM, NOT AT ENQUEUE. Six call sites create jobs and only one of
+ * them is the local dispatch route; a bot-scheduled job can reach a paired
+ * machine too. Claiming is the one chokepoint every locally-run job passes
+ * through. It also leaves the stored payload alone, so the job row still shows
+ * the task somebody actually asked for rather than this wrapper.
+ *
+ * `reviewed` moves only where the assumptions are addressed. A run nobody will
+ * review still has to finish.
+ */
+export function frameLocalPrompt(task: string, reviewed: boolean): string {
+  return [
+    'You are running non-interactively on a paired workstation. Nothing is reading your output as you write it, and there is nobody to answer a question: anything you ask ends the run without doing the work.',
+    '',
+    'Do the task. Where something is ambiguous or a decision is unresolved, choose the most reasonable option, say plainly which one you chose and why, and carry on. Never stop to ask.',
+    reviewed
+      ? 'Someone will read the result afterwards, so put every assumption you made where they will see it.'
+      : 'Nobody will review this before it lands, so take the conservative option wherever you have to choose, and state what you assumed at the end.',
+    '',
+    'The task:',
+    '',
+    task,
+  ].join('\n');
+}

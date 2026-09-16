@@ -34,6 +34,7 @@ import {
 } from '@connorhoehnslalom/ui-components/shared';
 import { LogStream, type LogLine } from '@connorhoehnslalom/ui-components/shared';
 import { Link as RouterLink } from 'react-router';
+import { runLogLines, type RunLogLine } from './runLogLines';
 import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
@@ -94,6 +95,30 @@ interface RunRow {
   attempts?: number;
   maxAttempts?: number;
   result: { provider?: string; costUsd?: number; summary?: string } | null;
+  /** What the run is ABOUT. `GET /runs` spreads the whole job, so the origin
+   *  the dispatch route wrote (`workItemId` + `initiativeId`, or `botId`) has
+   *  always been on the wire — the page simply never declared it, so a run
+   *  named its title and led nowhere. That is the "no link to the work"
+   *  report: every field needed to link was already here. */
+  payload?: {
+    workItemId?: string;
+    initiativeId?: string;
+    botId?: string;
+    requiresReview?: boolean;
+  };
+  botId?: string | null;
+  botName?: string | null;
+}
+
+/** Where a run's subject lives, if it has one a person can open. */
+function runOrigin(r: RunRow): { href: string; label: string } | null {
+  const p = r.payload ?? {};
+  if (p.workItemId && p.initiativeId) {
+    return { href: `/iq/projects/${p.initiativeId}?item=${encodeURIComponent(p.workItemId)}`, label: 'work item' };
+  }
+  const bot = p.botId ?? r.botId;
+  if (bot) return { href: `/admin/bots/${bot}`, label: r.botName ?? 'bot' };
+  return null;
 }
 
 interface WorkSuggestion {
@@ -134,6 +159,9 @@ export default function LocalComputePage() {
   const { data: suggestData } = useFetch<{ suggestions: WorkSuggestion[] }>(canDispatch ? '/api/work/suggestions' : null, 60_000);
   const { data: botsData } = useFetch<{ bots: BotRow[] }>(canDispatch && canRunBots ? '/api/bots' : null, 60_000);
   const [pick, setPick] = useState<'work' | 'bots'>('work');
+  // Whether a finished run waits for a person. True by default: a run that
+  // touched a repo should be looked at unless someone says otherwise.
+  const [requiresReview, setRequiresReview] = useState(true);
   const [sending, setSending] = useState<string | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
   const toast = useToastOptional();
@@ -272,10 +300,25 @@ export default function LocalComputePage() {
     const key = 'workItemId' in origin ? origin.workItemId : origin.botId;
     setSendError(null);
     setSending(key);
-    const res = await writeJson<{ id: string }>(`/api/local-compute/nodes/${selectedNode.id}/work`, 'POST', origin);
+    // `requiresReview` is a field the dispatch route has always accepted and
+    // the worker has always honoured — this page just never offered it, so
+    // every repo-backed run parked itself in `awaiting_review` and there was
+    // no way to say "run it and be done". The default stays true, because a
+    // run that changes a repo should be looked at unless someone chooses
+    // otherwise.
+    const res = await writeJson<{ id: string }>(
+      `/api/local-compute/nodes/${selectedNode.id}/work`,
+      'POST',
+      { ...origin, requiresReview },
+    );
     setSending(null);
     if (res.ok) {
-      toast?.toast(`${label} queued for ${selectedNode.label}`, { type: 'success' });
+      toast?.toast(
+        requiresReview
+          ? `${label} queued for ${selectedNode.label} — it will wait for your review`
+          : `${label} queued for ${selectedNode.label} — it will finish without asking`,
+        { type: 'success' },
+      );
       refreshRuns();
     } else {
       setSendError(res.error ?? `Could not hand ${label} to ${selectedNode.label}`);
@@ -435,14 +478,30 @@ export default function LocalComputePage() {
       key: 'title',
       header: 'Run',
       sortable: true,
-      render: (r) => (
-        <Stack gap="none">
-          <EntityCell label={r.title} />
-          {r.result?.summary && (
-            <MetaLine size="xs" tone="tertiary" items={[truncate(r.result.summary, 80)]} />
-          )}
-        </Stack>
-      ),
+      // The run's own page (/iq/work/:jobId) is where the readable activity,
+      // the produced proposals and the Accept/Reject live. This row used to be
+      // a dead label: a machine would finish a job, park it in review, and the
+      // only place that said so offered no way to go and look at it.
+      render: (r) => {
+        const origin = runOrigin(r);
+        return (
+          <Stack gap="none">
+            <EntityCell label={r.title} href={`/iq/work/${encodeURIComponent(r.id)}`} />
+            {origin && (
+              <RouterLink
+                to={origin.href}
+                onClick={(e) => e.stopPropagation()}
+                className="text-[11px] text-primary no-underline hover:underline"
+              >
+                {origin.label} →
+              </RouterLink>
+            )}
+            {r.result?.summary && (
+              <MetaLine size="xs" tone="tertiary" items={[truncate(r.result.summary, 80)]} />
+            )}
+          </Stack>
+        );
+      },
     },
     {
       key: 'status',
@@ -468,6 +527,24 @@ export default function LocalComputePage() {
         if (r.result?.costUsd != null) return <MetaLine size="xs" items={[usd(r.result.costUsd)]} />;
         return <MetaLine size="xs" tone="tertiary" items={['—']} />;
       },
+    },
+    {
+      key: 'act',
+      header: '',
+      // `awaiting_review` is a request addressed to a person, and until now it
+      // was delivered as a grey chip with nowhere to go. A state that is
+      // waiting on you should carry the thing you do about it.
+      render: (r) => (
+        r.status === 'awaiting_review' ? (
+          <RouterLink
+            to={`/iq/work/${encodeURIComponent(r.id)}`}
+            onClick={(e) => e.stopPropagation()}
+            className="text-[12px] font-medium text-primary no-underline hover:underline"
+          >
+            Review →
+          </RouterLink>
+        ) : null
+      ),
     },
   ];
 
@@ -593,6 +670,25 @@ export default function LocalComputePage() {
                         ? `${pickWork.length} open on your initiatives`
                         : `${pickBots.length} enabled bot${pickBots.length === 1 ? '' : 's'}`]}
                     />
+                    <ToolbarSeparator />
+                    {/* The other half of the review lane. Every repo-backed run
+                        parked itself in `awaiting_review` with no way to opt
+                        out, so a machine that finished its work still sat
+                        waiting on a person who had not asked to be asked. */}
+                    <ToolbarLabel>Wait for my review</ToolbarLabel>
+                    <Switch
+                      size="sm"
+                      checked={requiresReview}
+                      onChange={setRequiresReview}
+                      aria-label="Wait for my review before the run is finished"
+                    />
+                    <MetaLine
+                      size="xs"
+                      tone="tertiary"
+                      items={[requiresReview
+                        ? 'It parks in review when it finishes'
+                        : 'It finishes on its own — nothing waits for you']}
+                    />
                   </Toolbar>
 
                     {sendError && <Banner variant="error">{sendError}</Banner>}
@@ -655,6 +751,12 @@ export default function LocalComputePage() {
                 keyField={(r) => r.id}
                 columns={runColumns}
                 striped
+                // The console, from here too. Only the Queue table opened it,
+                // so a run's output became unreachable the moment the run
+                // ended: it left the queue for this table, and this table had
+                // no way in. The transcript is worth most AFTER the run, which
+                // is exactly when it could not be opened.
+                onRowClick={(r) => setSelectedRunId(r.id)}
                 // Full run history for this machine, across every session
                 // it's ever worked — 20 keeps a long-lived machine's ledger
                 // a screenful instead of an ever-growing scroll.
@@ -716,6 +818,17 @@ interface RunLogPayload {
 // live tail is for, and say so when older ones are dropped.
 const RUN_LOG_LINE_CAP = 500;
 
+/** How each parsed line is toned in the stream. A tool result that failed and
+ *  a run that failed are the only two things worth colouring as trouble. */
+const LOG_LEVEL: Record<RunLogLine['kind'], LogLine['level']> = {
+  meta: 'debug',
+  text: 'info',
+  tool: 'info',
+  result: 'info',
+  raw: 'debug',
+  error: 'error',
+};
+
 function RunLog({ jobId }: { jobId: string }) {
   // Poll every 2s while the run is non-terminal; once the server reports
   // `done`, stop — the old hand-rolled interval kept hitting this endpoint
@@ -734,12 +847,18 @@ function RunLog({ jobId }: { jobId: string }) {
   // component happens to take part in (parent state changes elsewhere on
   // the page) — the old version remapped and re-sliced on every one of
   // those, not just on an actual new poll result.
+  //
+  // The transform is the fix for "the console doesn't update": it always did,
+  // but the worker ships `claude -p --output-format stream-json` verbatim, so
+  // each poll appended another `{"type":"assistant","message":{"id":"msg_01…`
+  // and nothing a reader could follow ever changed. runLogLines turns those
+  // frames into the same vocabulary the devbox timeline uses.
   const { lines, totalLines } = useMemo(() => {
-    const entries = data?.entries ?? [];
-    const capped = entries.length > RUN_LOG_LINE_CAP ? entries.slice(entries.length - RUN_LOG_LINE_CAP) : entries;
+    const parsed = runLogLines(data?.entries);
+    const capped = parsed.length > RUN_LOG_LINE_CAP ? parsed.slice(parsed.length - RUN_LOG_LINE_CAP) : parsed;
     return {
-      lines: capped.map((e) => ({ id: String(e.seq), message: e.text }) as LogLine),
-      totalLines: entries.length,
+      lines: capped.map((l) => ({ id: l.id, message: l.text, level: LOG_LEVEL[l.kind] }) as LogLine),
+      totalLines: parsed.length,
     };
   }, [data]);
   const truncated = totalLines > RUN_LOG_LINE_CAP;
