@@ -73,6 +73,12 @@ function ApprovalQueuePage() {
    *  reconnect. A page that says "reconnecting…" before it has ever connected
    *  reports a failure that has not happened. */
   const [connectedOnce, setConnectedOnce] = useState(false);
+  // Why this exists: the seed fetch below used to `return` on !res.ok and
+  // swallow its catch, with the comment "empty state handles it". The empty
+  // state says "Nothing is waiting on you" — on an APPROVALS queue that is the
+  // worst possible thing to say from no data, because the entire purpose of
+  // the page is to tell you when something is blocked on your decision.
+  const [seedError, setSeedError] = useState<string | null>(null);
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [expandedPayload, setExpandedPayload] = useState<Set<string>>(new Set());
   const [denied, setDenied] = useState<Record<string, true>>({});
@@ -82,7 +88,9 @@ function ApprovalQueuePage() {
   // a 404 with nothing on screen to say so.
   const [busy, setBusy] = useState<Set<string>>(new Set());
 
-  // Initial fetch. Tolerate 404 with empty list.
+  // Initial fetch. A 404 genuinely means "no such endpoint yet" and is the one
+  // status worth tolerating as empty; everything else is a failed read and has
+  // to say so.
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -90,12 +98,19 @@ function ApprovalQueuePage() {
         const res = await fetch('/api/observability/approvals?status=PENDING', {
           credentials: 'include',
         });
-        if (!res.ok) return;
+        if (res.status === 404) return;
+        if (!res.ok) {
+          if (!cancelled) setSeedError(`the approvals list returned HTTP ${res.status}`);
+          return;
+        }
         const json = (await res.json()) as { approvals?: Approval[] } | Approval[];
         const list = Array.isArray(json) ? json : (json.approvals ?? []);
-        if (!cancelled) setItems(list);
-      } catch {
-        // swallow — empty state handles it
+        if (!cancelled) {
+          setItems(list);
+          setSeedError(null);
+        }
+      } catch (err) {
+        if (!cancelled) setSeedError((err as Error).message || 'the approvals list could not be reached');
       }
     })();
     return () => {
@@ -223,6 +238,9 @@ function ApprovalQueuePage() {
       <Card padding="md">
         {sorted.length === 0 ? (
           <SmartEmptyState
+            degraded={seedError}
+            degradedWhat="the approval queue"
+            degradedSource="Pending approvals are read from the middleware, which reads them from Aurora"
             title="Nothing is waiting on you"
             detail="An agent lands here when it reaches an action it is not allowed to take alone — spending over its cap, or writing where a person has to sign off. An empty queue means nothing is currently blocked on a decision."
             actions={[

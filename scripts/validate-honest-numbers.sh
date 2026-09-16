@@ -120,11 +120,14 @@ else
   fi
   [ "$n3" -lt "$budget3" ] && note "budget is stale: lower $BUDGET3_FILE to $n3"
   if [ "$n3" -gt 0 ]; then
-    note "candidates for human triage (calls useFetch, renders EmptyState, never checks error/degraded):"
+    note "candidates for human triage:"
     node -e '
       const fs = require("fs");
       const lines = fs.readFileSync(process.argv[1], "utf8").trim().split("\n").filter(Boolean);
-      for (const line of lines) console.log("      " + JSON.parse(line).file);
+      for (const line of lines) {
+        const f = JSON.parse(line);
+        console.log("      " + f.file + (f.line ? ":" + f.line : "") + "  [" + f.rule + "]");
+      }
     ' "$TMP/empty.jsonl"
   fi
 fi
@@ -138,6 +141,45 @@ if [ -f "$PORTAL/src/pages/work/FindingsPage.tsx" ]; then
   else
     ok "class 3 calibration: FindingsPage.tsx (checks error/degraded) correctly NOT flagged"
   fi
+fi
+
+# Calibration for rule B (SmartEmptyState without a `degraded` prop). Two
+# halves, because this rule has failed in both directions in one sitting:
+#
+#   RECALL — the pre-fix ApprovalQueuePage is the shape the rule exists for.
+#   Its seed fetch swallowed every failure under "empty state handles it"
+#   while the empty state said "Nothing is waiting on you". If a rewrite of
+#   the scanner stops flagging that file, the rule is decorative.
+#
+#   PRECISION — ToolCallsPage passes `degraded`, but its `title` prop holds
+#   `allErrors.length > 0 ? … `, and the first draft of the tag parser treated
+#   that `>` as the end of the opening tag and never reached the prop. It must
+#   stay UNflagged.
+CAL3="$TMP/cal3"; mkdir -p "$CAL3"
+cat > "$CAL3/RecallCase.tsx" <<'EOF_CAL'
+export function RecallCase() {
+  return <SmartEmptyState title="Nothing is waiting on you" detail="An empty queue." />;
+}
+EOF_CAL
+cat > "$CAL3/PrecisionCase.tsx" <<'EOF_CAL'
+export function PrecisionCase() {
+  return (
+    <SmartEmptyState
+      title={allErrors.length > 0 ? 'No errors match these filters' : 'No tool errors'}
+      degraded={errorPanelBlind}
+    />
+  );
+}
+EOF_CAL
+if node "$REPO/scripts/lib/honest-numbers-emptystate.cjs" "$CAL3/RecallCase.tsx" 2>/dev/null | grep -q 'smartemptystate-no-degraded-prop'; then
+  ok "class 3 rule B recall: a bare <SmartEmptyState> (no degraded prop) is flagged"
+else
+  fail "class 3 rule B recall: a bare <SmartEmptyState> was NOT flagged — the rule has stopped working"
+fi
+if node "$REPO/scripts/lib/honest-numbers-emptystate.cjs" "$CAL3/PrecisionCase.tsx" 2>/dev/null | grep -q .; then
+  fail "class 3 rule B precision: a <SmartEmptyState> that DOES pass degraded was flagged — the tag parser is tripping on a '>' inside a prop expression again"
+else
+  ok "class 3 rule B precision: degraded passed alongside a '>' in a prop expression correctly NOT flagged"
 fi
 
 # ── Class 4: a measurement where there is none ──────────────────────────────

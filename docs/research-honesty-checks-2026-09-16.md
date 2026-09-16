@@ -318,3 +318,54 @@ overwrite them with a fabricated value when CloudWatch returns no samples, but
 the construction-time `latencyP50Ms: 0` is still a zero a page will render.
 Widening that pair is one coordinated move, not a drive-by; it stays in the
 class-4 budget as a candidate so the scanner keeps it visible.
+
+---
+
+## Class 3, rule B: the exemption that wasn't (2026-09-16)
+
+With class 3 ratcheted to 0, the budget is only worth what the scanner catches.
+The original rule exempted `<SmartEmptyState` from the check, on this reasoning
+(quoted from the scanner's own header): "not `<SmartEmptyState`, which already
+takes a `degraded` prop and does the right thing internally".
+
+It takes the prop. It does not conjure it. `degraded` is **optional** on
+`SmartEmptyStateProps`, so a page that never passes it is exactly as blind as
+one rendering a bare `<EmptyState` — while spending a whole file-level
+exemption to look disciplined. Rule B closes that: any `<SmartEmptyState>`
+*element* not passed a `degraded` prop is a finding. Per-element, not per-file;
+the prop belongs to a render site, so the precision argument that keeps rule A
+file-level does not apply.
+
+Two sites were hiding in the gap:
+
+- **`InvocationSearchPage.tsx`** destructured `error` but not `degraded`. A
+  search the server could not run comes back as a 200 whose body says so, and
+  the page answered "No invocations match" — a claim about the corpus, from a
+  query that never ran.
+- **`ApprovalQueuePage.tsx`** was worse. Its seed fetch had `if (!res.ok)
+  return;` and a bare `catch {}` under the comment `// swallow — empty state
+  handles it`. The empty state says **"Nothing is waiting on you."** On an
+  approvals queue that is the highest-stakes false negative in the app: the
+  page's entire purpose is to tell you when something is blocked on your
+  decision, and it was willing to say nothing was, having failed to ask. A 404
+  is still tolerated as genuinely empty; every other status and every thrown
+  error now sets `seedError`, which reaches `SmartEmptyState` as `degraded`.
+
+### The rule caught the scanner, too
+
+Rule B's first draft reported a third hit, `ToolCallsPage.tsx:360`. It was a
+false positive, and an instructive one: that element *does* pass `degraded`,
+but its `title` prop holds `allErrors.length > 0 ? … `, and the tag parser
+scanned for the next `>` to find the end of the opening tag. The comparison
+operator ended the tag early and the real prop was never reached. The parser
+now tracks `{}` depth and skips string literals, accepting a `>` only at brace
+depth 0.
+
+Both directions are now pinned in `validate-honest-numbers.sh` with synthetic
+fixtures rather than real files, so neither calibration rots when the real
+pages change:
+
+- **recall** — a bare `<SmartEmptyState title=… />` must be flagged, or the
+  rule is decorative.
+- **precision** — a `<SmartEmptyState>` that passes `degraded` *and* contains a
+  `>` inside a prop expression must not be.

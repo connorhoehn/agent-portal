@@ -210,7 +210,7 @@ function InvocationSearchPage() {
   const [applied, setApplied] = useState<FilterState | null>(hasDeepLinkedFilter ? initialFilters : null);
 
   const url = applied ? buildUrl(applied) : '';
-  const { data, isLoading, error } = useFetch<SearchResponse>(url, 30_000);
+  const { data, isLoading, error, degraded } = useFetch<SearchResponse>(url, 30_000);
 
   const rows = useMemo<InvocationSearchResult[]>(() => {
     if (!data) return [];
@@ -434,6 +434,13 @@ function InvocationSearchPage() {
             <LoadingState label="Searching…" />
           ) : (
             <SmartEmptyState
+              // `error` is handled by the branch above, but `degraded` was not:
+              // a search the server could not run came back as a 200 whose body
+              // says so, and this rendered "No invocations match" — a claim
+              // about the corpus made from a query that never ran.
+              degraded={degraded}
+              degradedWhat="the invocation search"
+              degradedSource="Search runs against observability.invocation_traces in Aurora"
               title="No invocations match"
               detail="Try widening the time range or removing filters."
             />
