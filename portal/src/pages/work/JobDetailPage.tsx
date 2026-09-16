@@ -437,7 +437,7 @@ export default function JobDetailPage() {
 
       {/* ── Timeline ── */}
       <Card padding="md">
-        <SectionLabel as="div" className="text-[10px] font-semibold uppercase tracking-wide text-text-tertiary mb-2">
+        <SectionLabel as="div" className="mb-2">
           Timeline
         </SectionLabel>
         <Stack as="dl" gap="xs" className="grid gap-x-6 gap-y-1 text-[12px] grid-cols-[auto_1fr] max-w-md">

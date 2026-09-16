@@ -1,6 +1,6 @@
 import type React from 'react';
 import { Link } from 'react-router';
-import { Card, Inline, PageSection, Stack, StatCard, StatStrip } from '@connorhoehnslalom/ui-components/shared';
+import { Card, Inline, PageSection, SectionLabel, Stack, StatCard, StatStrip } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { T } from './Text';
@@ -270,9 +270,7 @@ function SummaryPage() {
 
       {/* ── What to do next ───────────────────────────────────────────── */}
       <Card padding="md">
-        <T as="div" className="text-xs uppercase tracking-wide text-[var(--color-text-tertiary)]">
-          What to do next
-        </T>
+        <SectionLabel as="div">What to do next</SectionLabel>
         <Stack gap="sm" className="mt-3">
           {steps.map((s) => (
             <Link

@@ -287,9 +287,7 @@ function InvocationDetailPage() {
               {invocationId}
             </T>
             <Inline gap="sm" wrap align="center">
-              <T className="text-[10px] font-semibold uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
-                judge
-              </T>
+              <SectionLabel>judge</SectionLabel>
               <Chip tone={judgeTone(inv.judgeScore)} size="xs">
                 {inv.judgeScore != null && Number.isFinite(inv.judgeScore)
                   ? Number(inv.judgeScore).toFixed(2)

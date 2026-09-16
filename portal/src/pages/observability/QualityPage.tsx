@@ -26,14 +26,15 @@ import {
   Inline,
   Input,
   PageSection,
+  SectionLabel,
   Select,
   Stack,
   Table,
-  TableHead,
   TableBody,
+  TableHead,
   TableRow,
-  TableTh,
   TableTd,
+  TableTh,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch';
@@ -257,12 +258,7 @@ function QualityPage() {
               gap="none"
               className="flex-1 border border-[var(--color-border)] rounded-[var(--radius-md)] p-3 bg-[var(--color-surface)]"
             >
-              <T
-                as="div"
-                className="text-[11px] font-semibold text-[var(--color-text-tertiary)] uppercase tracking-[0.5px] mb-2"
-              >
-                Time series
-              </T>
+              <SectionLabel as="div" className="mb-2">Time series</SectionLabel>
               <ResponsiveContainer width="100%" height={220}>
                 <LineChart
                   data={chartData}
@@ -302,12 +298,7 @@ function QualityPage() {
               gap="none"
               className="flex-1 border border-[var(--color-border)] rounded-[var(--radius-md)] p-3 bg-[var(--color-surface)]"
             >
-              <T
-                as="div"
-                className="text-[11px] font-semibold text-[var(--color-text-tertiary)] uppercase tracking-[0.5px] mb-2"
-              >
-                Histogram (10 bins)
-              </T>
+              <SectionLabel as="div" className="mb-2">Histogram (10 bins)</SectionLabel>
               <ResponsiveContainer width="100%" height={220}>
                 <BarChart
                   data={histogram}

@@ -22,6 +22,7 @@ import { useFetch } from '../../hooks/useFetch';
 import { useCrumbLabel } from '../../lib/crumbLabels';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { T } from './Text';
+import { KeyValue } from '../../components/KeyValue';
 import { STATUS_CHIP_TONE, countTelemetryLines, ms, toLogLevel, visibleLogLines, when } from './agentDetailFormat';
 
 interface Runtime {
@@ -140,12 +141,12 @@ export default function AgentDetailPage() {
             {prompt?.source === 'managed' ? (
               <Stack gap="sm" className="px-3.5 py-3">
                 <CatalogGrid columns={4} dense>
-                  <Kv label="Prompt" value={prompt.name} mono />
-                  <Kv label="Version" value={prompt.version ?? '—'} />
-                  <Kv label="Prompt sha" value={prompt.sha ?? '—'} mono />
-                  <Kv label="Changed" value={when(prompt.updatedAt)} />
-                  <Kv label="Model" value={prompt.modelId || rt.model || '—'} mono />
-                  <Kv label="Length" value={prompt.characters != null ? `${prompt.characters} chars` : '—'} />
+                  <KeyValue label="Prompt" value={prompt.name} mono />
+                  <KeyValue label="Version" value={prompt.version ?? '—'} />
+                  <KeyValue label="Prompt sha" value={prompt.sha ?? '—'} mono />
+                  <KeyValue label="Changed" value={when(prompt.updatedAt)} />
+                  <KeyValue label="Model" value={prompt.modelId || rt.model || '—'} mono />
+                  <KeyValue label="Length" value={prompt.characters != null ? `${prompt.characters} chars` : '—'} />
                 </CatalogGrid>
                 {prompt.excerpt && (
                   <CollapsibleSection title="Prompt text">
@@ -283,14 +284,3 @@ export default function AgentDetailPage() {
   );
 }
 
-
-function Kv({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
-  return (
-    <Stack gap="none" className="min-w-0">
-      <T className="text-[10px] font-semibold uppercase tracking-wide text-text-tertiary">{label}</T>
-      <T className={`mt-0.5 truncate text-[12px] text-text-primary ${mono ? 'font-mono' : ''}`} title={value}>
-        {value}
-      </T>
-    </Stack>
-  );
-}

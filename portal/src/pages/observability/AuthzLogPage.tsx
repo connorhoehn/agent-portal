@@ -11,6 +11,7 @@ import {
   Inline,
   Input,
   PageSection,
+  SectionLabel,
   Select,
   StatusDot,
   Table,
@@ -206,8 +207,9 @@ function AuthzLogPage() {
 
 function FilterField({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <Inline as="label" gap="xs" align="center" className="text-[11px] text-text-tertiary uppercase tracking-[0.5px]">
-      {label} {children}
+    <Inline as="label" gap="xs" align="center">
+      <SectionLabel>{label}</SectionLabel>
+      {children}
     </Inline>
   );
 }

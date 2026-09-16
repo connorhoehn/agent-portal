@@ -14,13 +14,28 @@
 import { Fragment, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
-  Card, CardHeader, Chip, CodeBlock, Inline, PageSection, Select, Stack, Table, TableBody, TableHead, TableRow, TableTd, TableTh,
+  Card,
+  CardHeader,
+  Chip,
+  CodeBlock,
+  Inline,
+  PageSection,
+  SectionLabel,
+  Select,
+  Stack,
+  Table,
+  TableBody,
+  TableHead,
+  TableRow,
+  TableTd,
+  TableTh,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { SmartEmptyState } from '../../components/observability/SmartEmptyState';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { firstDegraded } from '../../lib/degraded';
 import { T } from './Text';
+import { KeyValue } from '../../components/KeyValue';
 import { WindowPicker } from './WindowPicker';
 
 // ── Types (mirrored from middleware/src/routes/memory.ts) ──────────────────
@@ -321,25 +336,16 @@ function MemoryPage() {
   );
 }
 
-function MetaRow({ label, value, mono }: { label: string; value: ReactNode; mono?: boolean }) {
-  return (
-    <Inline gap="sm" align="baseline">
-      <T className="text-[10px] font-semibold text-text-tertiary uppercase tracking-wide w-20 shrink-0">{label}</T>
-      <T className={`text-[11.5px] text-text-secondary ${mono ? 'font-mono' : ''}`}>{value}</T>
-    </Inline>
-  );
-}
-
 function EventDetail({ event }: { event: MemoryEvent }) {
   return (
     <Inline gap="md" align="start">
       <Stack gap="xs" className="flex-1 min-w-0">
-        <T as="div" className="text-[10px] font-bold text-text-tertiary tracking-wide">METADATA</T>
+        <SectionLabel as="div">Metadata</SectionLabel>
         <Stack gap="xs">
-          <MetaRow label="session" value={event.sessionId ?? '—'} />
-          <MetaRow label="memory id" value={event.memoryId ?? '—'} />
-          <MetaRow label="invocation" value={event.invocationId ?? '—'} mono />
-          {event.queryText && <MetaRow label="query" value={event.queryText} />}
+          <KeyValue layout="row" label="session" value={event.sessionId ?? '—'} />
+          <KeyValue layout="row" label="memory id" value={event.memoryId ?? '—'} />
+          <KeyValue layout="row" label="invocation" value={event.invocationId ?? '—'} mono />
+          {event.queryText && <KeyValue layout="row" label="query" value={event.queryText} />}
         </Stack>
       </Stack>
       <Stack gap="xs" className="flex-1 min-w-0">

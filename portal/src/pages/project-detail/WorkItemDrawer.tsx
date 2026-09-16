@@ -19,6 +19,7 @@ import {
 } from '@connorhoehnslalom/ui-components/shared';
 import { PersonRef } from './PersonRef';
 import { T } from './Text';
+import { KeyValue } from '../../components/KeyValue';
 import { PrBadge, StatusChip } from './WorkItemChips';
 import type { FlatWorkItem } from './projectFormat';
 import type { WorkItemTree } from './types';
@@ -51,15 +52,6 @@ export function useOpenWorkItem(items: FlatWorkItem[]): {
       setParams(next, { replace: true });
     },
   };
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <Inline gap="md" align="start" wrap={false} className="py-1 text-[12.5px]">
-      <T className="w-[104px] shrink-0 text-text-tertiary">{label}</T>
-      <T className="min-w-0 flex-1 text-text-primary">{children}</T>
-    </Inline>
-  );
 }
 
 export function WorkItemDrawer({
@@ -102,36 +94,36 @@ export function WorkItemDrawer({
             {item.prStatus && <PrBadge prStatus={item.prStatus} prUrl={item.prUrl} />}
           </Inline>
 
-          <Field label="ID"><T className="font-mono text-[11.5px]">{item.id}</T></Field>
-          <Field label="Epic">
+          <KeyValue layout="row" labelWidth="w-[104px]" label="ID"><T className="font-mono text-[11.5px]">{item.id}</T></KeyValue>
+          <KeyValue layout="row" labelWidth="w-[104px]" label="Epic">
             <Stack gap="none">
               <span>{item.epicTitle}</span>
               <T className="font-mono text-[11px] text-text-tertiary">{item.epicId}</T>
             </Stack>
-          </Field>
-          <Field label="Initiative">
+          </KeyValue>
+          <KeyValue layout="row" labelWidth="w-[104px]" label="Initiative">
             <Stack gap="none">
               <span>{item.projectName}</span>
               <T className="font-mono text-[11px] text-text-tertiary">{item.projectId}</T>
             </Stack>
-          </Field>
-          <Field label="Assignee">
+          </KeyValue>
+          <KeyValue layout="row" labelWidth="w-[104px]" label="Assignee">
             <PersonRef
               personId={item.assigneeId}
               name={item.assigneeName}
               department={item.assigneeDept}
             />
-          </Field>
-          <Field label="Priority">{item.priority}</Field>
-          <Field label="Complexity">
+          </KeyValue>
+          <KeyValue layout="row" labelWidth="w-[104px]" label="Priority">{item.priority}</KeyValue>
+          <KeyValue layout="row" labelWidth="w-[104px]" label="Complexity">
             {item.storyPoints != null ? `${item.storyPoints} pts` : 'unestimated'}
-          </Field>
+          </KeyValue>
           {item.labels.length > 0 && (
-            <Field label="Labels">
+            <KeyValue layout="row" labelWidth="w-[104px]" label="Labels">
               <Inline gap="xs">
                 {item.labels.map((l) => <Chip key={l} size="xs">{l}</Chip>)}
               </Inline>
-            </Field>
+            </KeyValue>
           )}
 
           {item.description && (
