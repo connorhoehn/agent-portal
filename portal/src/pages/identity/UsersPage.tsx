@@ -9,6 +9,7 @@ import {
   Card,
   Checkbox,
   Chip,
+  ConfirmDialog,
   DataTable,
   Drawer,
   FormField,
@@ -28,6 +29,7 @@ import { toastError } from '../../lib/toastStore';
 import { sendJson } from '../../lib/writeJson';
 import { UnavailableNotice, orUnknown } from '../../components/UnavailableNotice';
 import {
+  describeGrantDiff,
   grantChipLabels,
   inputWiring,
   rolesForTenantMap,
@@ -88,6 +90,7 @@ function UsersPage() {
 
   const [grantsUser, setGrantsUser] = useState<UserInfo | null>(null); // user with the "Edit grants" drawer open
   const [draftGrants, setDraftGrants] = useState<Record<string, string[]>>({});
+  const [confirmingGrants, setConfirmingGrants] = useState(false); // "Save grants" clicked, awaiting confirm
   const [busy, setBusy] = useState(false);
   const [showNewUser, setShowNewUser] = useState(false);
   const [showNewTenant, setShowNewTenant] = useState(false);
@@ -113,6 +116,9 @@ function UsersPage() {
   const toggleGrant = (tenant: string, role: string) => {
     setDraftGrants(prev => toggleGrantSet(prev, tenant, role));
   };
+
+  const grantDiff = grantsUser ? describeGrantDiff(grantsUser.grants, draftGrants) : { added: [], removed: [] };
+  const grantsDirty = grantDiff.added.length > 0 || grantDiff.removed.length > 0;
 
   const saveGrants = () => run(async () => {
     if (!grantsUser) return;
@@ -295,7 +301,7 @@ function UsersPage() {
         footer={
           <Inline gap="xs" justify="end">
             <Button variant="secondary" onClick={() => setGrantsUser(null)} disabled={busy}>Cancel</Button>
-            <Button onClick={saveGrants} disabled={busy}>Save grants</Button>
+            <Button onClick={() => setConfirmingGrants(true)} disabled={busy || !grantsDirty}>Save grants</Button>
           </Inline>
         }
       >
@@ -313,6 +319,24 @@ function UsersPage() {
           </Inline>
         )}
       </Drawer>
+
+      {/* Grants gate what a user can reach — a save with no stated effect
+          is the wrong click-weight for a privilege change. Named here, not
+          just implied by the checkbox state the drawer already closed on. */}
+      <ConfirmDialog
+        open={confirmingGrants}
+        onConfirm={() => { setConfirmingGrants(false); void saveGrants(); }}
+        onCancel={() => setConfirmingGrants(false)}
+        tone={grantDiff.removed.length > 0 ? 'destructive' : 'caution'}
+        title={grantsUser ? `Change access for ${grantsUser.displayName}?` : 'Change access?'}
+        body={
+          [
+            grantDiff.added.length > 0 ? `Grants: ${grantDiff.added.join(', ')}.` : null,
+            grantDiff.removed.length > 0 ? `Revokes: ${grantDiff.removed.join(', ')}.` : null,
+            'Takes effect immediately.',
+          ].filter(Boolean).join(' ')
+        }
+      />
     </PageSection>
   );
 }

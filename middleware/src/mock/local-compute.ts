@@ -42,6 +42,7 @@
 
 import { createHash } from 'node:crypto';
 import { clock, defineFixture } from './core/index.js';
+import { loadDevPairings, saveDevPairing } from './dev-pairings.js';
 import type { ComputeNode } from '../providers/local-compute.js';
 import type { LocalSession, NodeMetricsSnapshot } from '../lib/local-compute-fleet.js';
 
@@ -437,7 +438,12 @@ function largePresence(): NodePresenceRow[] {
 export const computeNodes = defineFixture<ComputeNodeRow>({
   key: 'compute-nodes',
   scenarios: {
-    default: () => seededNodes(),
+    // `default` re-adopts machines paired by hand in this dev session — see
+    // mock/dev-pairings.ts for why, and for the env gate that keeps the wire
+    // capture and the test suites seeing the seeded world untouched. The other
+    // scenarios do NOT: each is a specific world someone asked for, and a real
+    // laptop appearing inside `empty` would be the opposite of the request.
+    default: () => [...seededNodes(), ...loadDevPairings<ComputeNodeRow>()],
     empty: () => [],
     fresh: () => seededNodes().map((n) => ({ ...n, lastSeenAt: null })),
     large: () => largeNodes(),
@@ -732,6 +738,9 @@ export function mockClaimPairingCode(
     tokenHash: node.tokenHash,
   };
   computeNodes.rows().push(created);
+  // So a `tsx watch` restart does not silently unpair the machine someone just
+  // walked through pairing. No-op unless MOCK_PERSIST_PAIRINGS=1.
+  saveDevPairing(created);
   return toNode(created);
 }
 

@@ -28,7 +28,9 @@
 
 import { clock, type ScenarioName } from './core/index.js';
 import {
+  approvalRequests,
   bucketStart,
+  bucketStartMs,
   excludeTestTraffic,
   interventionRows,
   memoryEventRows,
@@ -38,6 +40,7 @@ import {
   toolCallRows,
   traceRows,
   tracesInWindow,
+  type MockApprovalRow,
   type MockMemoryEventRow,
   type MockToolCallRow,
   type MockTraceRow,
@@ -909,5 +912,202 @@ export function mockCostDeployMarkers(windowHours: number): Row[] {
       agent_id: r.agentId,
       registered_at: r.registeredAt,
       notes: r.notes,
+    }));
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// routes/oncall.ts
+//
+// The one router that read straight through `exec()` with no mock branch at
+// all — every one of its four routes threw under `dev:mock`, was caught, and
+// answered an empty payload, so the incident surface rendered blank while the
+// pages either side of it (drift, cost) showed the same 24h of traffic. The
+// quality-signal half of the alarm probe is NOT duplicated here: it is
+// byte-for-byte the same per-agent cnt/conformance/p05/drift_p95 rollup
+// `mockDriftSummary` already computes, so `routes/oncall.ts` calls that
+// selector directly over a 1-hour window rather than this file growing a
+// second copy of it. Everything below is the other half: the HITL queue
+// (`observability.approvals`, a table no other router reads) and the
+// per-bucket / per-event shapes unique to this router's SQL.
+// ═══════════════════════════════════════════════════════════════════════════
+
+function approvalsAll(scenario?: ScenarioName): MockApprovalRow[] {
+  return approvalRequests.rows(scenario);
+}
+
+/** `EXTRACT(EPOCH FROM (decided_at - requested_at))` — NULL until decided. */
+function decisionSecondsOf(r: MockApprovalRow): number | null {
+  return r.decided_at
+    ? (new Date(r.decided_at).getTime() - new Date(r.requested_at).getTime()) / 1000
+    : null;
+}
+
+/**
+ * `computeAlarms()`'s HITL probe — pending count and the oldest pending
+ * request's age, over the WHOLE table. The real query carries no
+ * `WHERE ts > …` at all, so this reads every row regardless of `windowHours`
+ * — deliberately unwindowed, the same as the SQL beside it.
+ */
+export function mockOncallHitlAlarmProbe(scenario?: ScenarioName): Row[] {
+  const pending = approvalsAll(scenario).filter((r) => r.status === 'PENDING');
+  const oldestAgeS = pending.length === 0
+    ? null
+    : (nowMs() - Math.min(...pending.map((r) => new Date(r.requested_at).getTime()))) / 1000;
+  return [{ pending: pending.length, oldest_age_s: oldestAgeS }];
+}
+
+/**
+ * GET /timeline's `bucketsSql` — per-bucket rollup ACROSS the whole fleet
+ * (unlike `mockDriftSummary`, which groups by agent), test traffic excluded.
+ * `drift_p95`/`judge_p05` are plain percentiles, NULL over no rows: the real
+ * SQL's `COALESCE(PERCENTILE_CONT(...), NULL)` is a no-op, so — unlike the
+ * alarm probe's `COALESCE(..., 0)` — a quiet bucket stays NULL, not 0.
+ */
+export function mockOncallTimelineBuckets(
+  windowHours: number,
+  bucketMin: number,
+  scenario?: ScenarioName,
+): Row[] {
+  const rows = excludeTestTraffic(tracesInWindow(windowHours, scenario));
+  const buckets = group(rows, (r) => bucketStart(r.tsIso, bucketMin));
+  return [...buckets.entries()]
+    .map(([bucket, group_]) => ({
+      bucket_start: bucket,
+      invocations: group_.length,
+      drift_p95: percentileCont(distances(group_), 0.95),
+      judge_p05: percentileCont(judgeScores(group_), 0.05),
+      errors: group_.filter(isRealFailure).length,
+      cost_usd: sum(group_.map((r) => r.total_cost_usd)),
+    }))
+    .sort((a, b) => a.bucket_start.localeCompare(b.bucket_start));
+}
+
+/**
+ * GET /timeline's `hitlSql` — decided count per bucket plus the running
+ * pending count at each bucket's END. The bucket SET comes from
+ * `invocation_traces` with NO test-traffic filter, matching the real
+ * `buckets` CTE exactly — this is the one bucketing read in the router that
+ * does not exclude `test:%`. `pending` mirrors the correlated subquery: a
+ * request counts as pending at a bucket when it was requested at-or-before
+ * the bucket's end and either was never decided or was decided after it.
+ * Bucketing is done in epoch ms internally (`bucketStartMs`) and only
+ * converted to the `::text` wire form at the end, so the two bucket sets this
+ * function and `mockOncallTimelineBuckets` produce key-match exactly — the
+ * route merges the two by that string.
+ */
+export function mockOncallTimelineHitl(
+  windowHours: number,
+  bucketMin: number,
+  scenario?: ScenarioName,
+): Row[] {
+  const cutoff = nowMs() - windowHours * 3_600_000;
+  const bucketStartsMs = new Set(
+    tracesInWindow(windowHours, scenario).map((r) => bucketStartMs(r.tsIso, bucketMin)),
+  );
+  const approvals = approvalsAll(scenario);
+  const decidedInWindow = approvals.filter(
+    (r) => r.decided_at !== null && new Date(r.decided_at).getTime() > cutoff,
+  );
+  const decidedByBucketMs = group(decidedInWindow, (r) => String(bucketStartMs(r.decided_at!, bucketMin)));
+
+  return [...bucketStartsMs]
+    .sort((a, b) => a - b)
+    .map((startMs) => {
+      const endMs = startMs + bucketMin * 60_000;
+      const decided = (decidedByBucketMs.get(String(startMs)) ?? []).length;
+      const pending = approvals.filter((r) => {
+        const requestedMs = new Date(r.requested_at).getTime();
+        const decidedMs = r.decided_at ? new Date(r.decided_at).getTime() : null;
+        return r.status === 'PENDING' && requestedMs <= endMs && (decidedMs === null || decidedMs > endMs);
+      }).length;
+      return { bucket_start: pgTimestamp(startMs), decided, pending };
+    });
+}
+
+/**
+ * GET /hitl-sla — queue health over `windowHours`. `pending_count` and
+ * `oldest_pending_age_s` are the two subqueries in the real SQL that read
+ * `observability.approvals` with NO `requested_at` filter at all; everything
+ * else reads the `win` CTE, which does apply the window.
+ */
+export function mockOncallHitlSla(windowHours: number, scenario?: ScenarioName): Row[] {
+  const cutoff = nowMs() - windowHours * 3_600_000;
+  const all = approvalsAll(scenario);
+  const win = all.filter((r) => new Date(r.requested_at).getTime() > cutoff);
+
+  const pendingAll = all.filter((r) => r.status === 'PENDING');
+  const oldestPendingAgeS = pendingAll.length === 0
+    ? null
+    : (nowMs() - Math.min(...pendingAll.map((r) => new Date(r.requested_at).getTime()))) / 1000;
+
+  const decided = win.filter(
+    (r) => r.decided_at !== null && (r.status === 'APPROVED' || r.status === 'REJECTED'),
+  ).length;
+
+  const decisionSecondsInWin = win.map(decisionSecondsOf).filter((s): s is number => s !== null);
+  const expired = win.filter((r) => r.status === 'EXPIRED').length;
+  const SLA_SECONDS = 5 * 60;
+
+  return [{
+    pending_count: pendingAll.length,
+    oldest_pending_age_s: oldestPendingAgeS,
+    decided,
+    p50_s: percentileCont(decisionSecondsInWin, 0.5),
+    p99_s: percentileCont(decisionSecondsInWin, 0.99),
+    expired,
+    within_sla: decisionSecondsInWin.filter((s) => s < SLA_SECONDS).length,
+    sla_total: decisionSecondsInWin.length,
+  }];
+}
+
+/**
+ * GET /recent-events' deploy source — same registry read as
+ * `/cost/deploy-markers` (`mockCostDeployMarkers`), re-aliased to `ts` (the
+ * real SQL's `registered_at::text AS ts`) and re-ordered DESC LIMIT 200 to
+ * match this route's own SQL rather than the cost route's ASC.
+ */
+export function mockOncallRecentDeploys(windowHours: number): Row[] {
+  return mockCostDeployMarkers(windowHours)
+    .slice()
+    .sort((a, b) => String(b['registered_at']).localeCompare(String(a['registered_at'])))
+    .slice(0, 200)
+    .map((r) => ({
+      ts: r['registered_at'],
+      agent_id: r['agent_id'],
+      prompt_version: r['prompt_version'],
+      notes: r['notes'],
+    }));
+}
+
+/** GET /recent-events' HITL source — decided (incl. expired) in the window, newest first, LIMIT 200. */
+export function mockOncallHitlDecisionEvents(windowHours: number, scenario?: ScenarioName): Row[] {
+  const cutoff = nowMs() - windowHours * 3_600_000;
+  return approvalsAll(scenario)
+    .filter((r) => r.decided_at !== null && new Date(r.decided_at).getTime() > cutoff)
+    .sort((a, b) => b.decided_at!.localeCompare(a.decided_at!))
+    .slice(0, 200)
+    .map((r) => ({
+      approval_id: r.approval_id,
+      ts: pgTimestamp(r.decided_at!),
+      status: r.status,
+      agent_id: r.agent_id,
+      decided_by: r.decided_by,
+      decided_note: r.decided_note,
+    }));
+}
+
+/** GET /recent-events' judge-regression source — `judge_score < 0.3` in the window, test traffic excluded, newest first, LIMIT 200. */
+export function mockOncallJudgeRegressions(windowHours: number, scenario?: ScenarioName): Row[] {
+  return excludeTestTraffic(tracesInWindow(windowHours, scenario))
+    .filter((r) => r.judge_score !== null && r.judge_score < 0.3)
+    .sort((a, b) => b.tsIso.localeCompare(a.tsIso))
+    .slice(0, 200)
+    .map((r) => ({
+      invocation_id: r.invocation_id,
+      ts: r.ts,
+      agent_id: r.agent_id,
+      judge_score: r.judge_score,
+      judge_rationale: r.judge_rationale,
+      response_snippet: r.response_snippet,
     }));
 }

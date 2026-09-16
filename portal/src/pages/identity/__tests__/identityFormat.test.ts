@@ -6,7 +6,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { decisionTone, effectTone, grantChipLabels, inputWiring, matrixActions, rolesForTenantMap, tenantIdProblem, tenantUserCount, toggleGrantSet, truncateId } from '../identityFormat.ts';
+import { decisionTone, describeGrantDiff, effectTone, grantChipLabels, inputWiring, matrixActions, rolesForTenantMap, tenantIdProblem, tenantUserCount, toggleGrantSet, truncateId } from '../identityFormat.ts';
 
 test('inputWiring strips labelId but keeps the rest', () => {
   const wiring = { id: 'f-1', labelId: 'f-1-label', 'aria-describedby': 'f-1-desc', 'aria-invalid': undefined };
@@ -76,6 +76,20 @@ test('toggleGrantSet adds a role not yet held', () => {
 
 test('toggleGrantSet removes a role already held, dropping the tenant key when empty', () => {
   assert.deepEqual(toggleGrantSet({ orgiq: ['member'] }, 'orgiq', 'member'), {});
+});
+
+test('describeGrantDiff reports added and removed "tenant/role" labels', () => {
+  const before = { orgiq: ['member', 'sme'] };
+  const after = { orgiq: ['member'], assessment: ['assessor'] };
+  assert.deepEqual(describeGrantDiff(before, after), {
+    added: ['assessment/assessor'],
+    removed: ['orgiq/sme'],
+  });
+});
+
+test('describeGrantDiff is empty when nothing changed', () => {
+  const grants = { orgiq: ['member'] };
+  assert.deepEqual(describeGrantDiff(grants, grants), { added: [], removed: [] });
 });
 
 test('toggleGrantSet leaves other tenants untouched', () => {

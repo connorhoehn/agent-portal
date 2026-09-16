@@ -28,8 +28,32 @@ import { Router } from 'express';
 import type { SqlParameter } from '@aws-sdk/client-rds-data';
 import { asyncHandler } from '../lib/async-handler.js';
 import { exec } from '../providers/aurora.js';
+import { config } from '../config.js';
+import {
+  mockDriftSummary,
+  mockOncallHitlAlarmProbe,
+  mockOncallHitlDecisionEvents,
+  mockOncallHitlSla,
+  mockOncallJudgeRegressions,
+  mockOncallRecentDeploys,
+  mockOncallTimelineBuckets,
+  mockOncallTimelineHitl,
+  mockCostDeployMarkers,
+} from '../mock/observability-queries.js';
 
 export const oncallRouter = Router();
+
+/**
+ * Marks a response whose underlying read failed — same shape as
+ * `routes/cost.ts` and `routes/guardrails-detail.ts`'s local `degraded()`
+ * helpers, so a real Aurora failure on this surface reads the same way it
+ * does on its siblings rather than being indistinguishable from a quiet
+ * window. Added only when something actually failed: a healthy read carries
+ * no `degraded` key at all, exactly like the sibling routers.
+ */
+function degraded<T extends object>(body: T, err: unknown): T & { degraded: true; error: string } {
+  return { ...body, degraded: true, error: (err as Error).message.split('\n')[0]?.slice(0, 160) ?? 'query failed' };
+}
 
 // ── Shared types (mirrored by the portal) ──────────────────────────────────
 
@@ -79,6 +103,18 @@ interface RecentEvent {
   relatedAgentId?: string;
 }
 
+/**
+ * The fewest calls in the window a per-agent rate alarm may be computed from.
+ *
+ * Below this a percentage is arithmetic, not evidence: one errored response in
+ * a quiet hour is 0% conformance, and firing a warning on it puts a false
+ * story on the one page someone reads during an incident. Low on purpose —
+ * the window is an hour and the fleet is small, so this drops samples that
+ * cannot support a rate rather than waiting for statistical comfort while
+ * something is actually broken.
+ */
+const MIN_ALARM_SAMPLE = 5;
+
 // ── Param helpers ──────────────────────────────────────────────────────────
 
 function longParam(name: string, value: number): SqlParameter {
@@ -101,7 +137,14 @@ function parseBucketMin(raw: unknown, def: number): number {
 // Compute synthetic alarm states from invocation_traces + approvals in the
 // last hour. Returns thresholded results — see CONSTITUTION-aligned cutoffs
 // in the task spec.
-async function computeAlarms(): Promise<AlarmState[]> {
+//
+// `failedProbes` is returned alongside the alarms rather than only folded
+// into the 'evaluation' beacon: `/alarms` and `/recent-events` fold it back
+// into that same beacon (unchanged), but `/timeline` and `/alarms` also use
+// it to decide whether their OWN response needs a `degraded` marker — a
+// failed probe is real signal loss on this router, not just something for
+// the alarm list to say.
+async function computeAlarms(): Promise<{ alarms: AlarmState[]; failedProbes: string[] }> {
   const out: AlarmState[] = [];
   const now = new Date().toISOString();
   // Which probes actually completed. An 'ok' beacon is only honest if every
@@ -110,7 +153,11 @@ async function computeAlarms(): Promise<AlarmState[]> {
 
   // 1) Per-agent quality signals: schema conformance, judge P05, drift P95.
   try {
-    const rows = await exec(`
+    // Same per-agent cnt/conformance/p05/drift_p95 rollup as
+    // `mockDriftSummary`'s 1-hour call — see mock/observability-queries.ts.
+    const rows = config.mock.aurora
+      ? mockDriftSummary(1)
+      : await exec(`
       WITH window_rows AS (
         SELECT *
           FROM observability.invocation_traces
@@ -144,15 +191,35 @@ async function computeAlarms(): Promise<AlarmState[]> {
 
     for (const r of rows) {
       const agentId = String(r['agent_id'] ?? 'unknown');
+      const cnt = Number(r['cnt'] ?? 0);
       const conf = r['conformance'] == null ? 1 : Number(r['conformance']);
       const p05 = r['p05'] == null ? null : Number(r['p05']);
       const drift = r['drift_p95'] == null ? 0 : Number(r['drift_p95']);
+
+      // A rate over one call is not a rate.
+      //
+      // `cnt` was selected here and never read, so every probe below fired off
+      // whatever landed in the window however small: one errored response in a
+      // quiet hour put "Schema conformance 0.0% (threshold 95%)" on the
+      // incident board for that agent, while the 24-hour Drift view showed the
+      // same agent at 97.8%. Two pages, same signal, opposite stories — and
+      // the alarming one is the page someone reads at 3am.
+      //
+      // Five is deliberately low: this window is an hour, the fleet is small,
+      // and the point is to drop samples that cannot support a percentage, not
+      // to wait for statistical comfort while something is genuinely broken.
+      // An agent quiet enough to fall under it has nothing to alarm about yet.
+      if (cnt < MIN_ALARM_SAMPLE) continue;
+      // Said out loud on every alarm, because "0.0% of 6" and "0.0% of 600"
+      // ask for very different reactions and the reason line is all the reader
+      // gets before deciding whether to wake someone.
+      const of = ` over ${cnt} call${cnt === 1 ? '' : 's'}`;
 
       if (Number.isFinite(conf) && conf < 0.95) {
         out.push({
           name: `schema-conformance:${agentId}`,
           severity: 'warning',
-          reason: `Schema conformance ${(conf * 100).toFixed(1)}% (threshold 95%)`,
+          reason: `Schema conformance ${(conf * 100).toFixed(1)}% (threshold 95%)${of}`,
           firedAt: now,
           affectedAgent: agentId,
         });
@@ -162,7 +229,7 @@ async function computeAlarms(): Promise<AlarmState[]> {
           out.push({
             name: `judge-p05:${agentId}`,
             severity: 'critical',
-            reason: `Judge P05 ${p05.toFixed(2)} (critical < 0.25)`,
+            reason: `Judge P05 ${p05.toFixed(2)} (critical < 0.25)${of}`,
             firedAt: now,
             affectedAgent: agentId,
           });
@@ -170,7 +237,7 @@ async function computeAlarms(): Promise<AlarmState[]> {
           out.push({
             name: `judge-p05:${agentId}`,
             severity: 'warning',
-            reason: `Judge P05 ${p05.toFixed(2)} (warning < 0.4)`,
+            reason: `Judge P05 ${p05.toFixed(2)} (warning < 0.4)${of}`,
             firedAt: now,
             affectedAgent: agentId,
           });
@@ -193,7 +260,9 @@ async function computeAlarms(): Promise<AlarmState[]> {
 
   // 2) HITL queue depth + oldest-pending age.
   try {
-    const rows = await exec(`
+    const rows = config.mock.aurora
+      ? mockOncallHitlAlarmProbe()
+      : await exec(`
       SELECT COUNT(*) FILTER (WHERE status = 'PENDING')::bigint AS pending,
              EXTRACT(EPOCH FROM (now() - MIN(requested_at)
                                  FILTER (WHERE status = 'PENDING')))::float8 AS oldest_age_s
@@ -246,7 +315,7 @@ async function computeAlarms(): Promise<AlarmState[]> {
       firedAt: now,
       affectedAgent: null,
     });
-    return out;
+    return { alarms: out, failedProbes };
   }
 
   // Every probe ran and nothing fired: surface a single 'ok' beacon so the UI
@@ -261,7 +330,7 @@ async function computeAlarms(): Promise<AlarmState[]> {
     });
   }
 
-  return out;
+  return { alarms: out, failedProbes };
 }
 
 // ── GET /timeline ──────────────────────────────────────────────────────────
@@ -375,17 +444,30 @@ oncallRouter.get('/timeline', asyncHandler(async (req, res) => {
     longParam('bucket', bucketMin),
   ];
 
+  // Independent reads — one failing must not take the other three down with
+  // it, so each gets its own try/catch and its own name in `failures`, which
+  // becomes the route's single `degraded` marker below (same idea as
+  // cost.ts's `/summary`, condensed to one flag rather than a per-section
+  // envelope since this route's wire shape predates that pattern).
+  const failures: string[] = [];
+
   let bucketRows: Record<string, unknown>[] = [];
   let hitlRows: Record<string, unknown>[] = [];
   try {
-    bucketRows = await exec(bucketsSql, params);
+    bucketRows = config.mock.aurora
+      ? mockOncallTimelineBuckets(windowHours, bucketMin)
+      : await exec(bucketsSql, params);
   } catch (err) {
     console.warn('[oncall] /timeline buckets failed:', (err as Error).message);
+    failures.push(`buckets: ${(err as Error).message}`);
   }
   try {
-    hitlRows = await exec(hitlSql, params);
+    hitlRows = config.mock.aurora
+      ? mockOncallTimelineHitl(windowHours, bucketMin)
+      : await exec(hitlSql, params);
   } catch (err) {
     console.warn('[oncall] /timeline hitl failed:', (err as Error).message);
+    failures.push(`hitl buckets: ${(err as Error).message}`);
   }
 
   // Merge HITL buckets onto signal buckets by bucket_start.
@@ -419,7 +501,9 @@ oncallRouter.get('/timeline', asyncHandler(async (req, res) => {
   // potential deploy. We don't try to dedupe vs. agentcore deploys here.
   let deployMarkers: DeployMarker[] = [];
   try {
-    const rows = await exec(`
+    const rows = config.mock.aurora
+      ? mockCostDeployMarkers(windowHours)
+      : await exec(`
       SELECT registered_at::text AS registered_at,
              agent_id, prompt_version, notes
         FROM observability.prompt_versions
@@ -435,19 +519,25 @@ oncallRouter.get('/timeline', asyncHandler(async (req, res) => {
     }));
   } catch (err) {
     console.warn('[oncall] /timeline deploys failed:', (err as Error).message);
+    failures.push(`deploy markers: ${(err as Error).message}`);
   }
 
-  const activeAlarms = await computeAlarms();
+  const { alarms: activeAlarms, failedProbes } = await computeAlarms();
+  if (failedProbes.length > 0) {
+    failures.push(`alarms: could not evaluate ${failedProbes.join(' and ')}`);
+  }
 
   const payload: TimelineResponse = { buckets, deployMarkers, activeAlarms };
-  res.json(payload);
+  res.json(failures.length > 0 ? degraded(payload, new Error(failures.join('; '))) : payload);
 }));
 
 // ── GET /alarms ────────────────────────────────────────────────────────────
 
 oncallRouter.get('/alarms', asyncHandler(async (_req, res) => {
-  const alarms = await computeAlarms();
-  res.json({ alarms });
+  const { alarms, failedProbes } = await computeAlarms();
+  res.json(failedProbes.length > 0
+    ? degraded({ alarms }, new Error(`Could not evaluate ${failedProbes.join(' and ')}`))
+    : { alarms });
 }));
 
 // ── GET /hitl-sla ──────────────────────────────────────────────────────────
@@ -460,7 +550,9 @@ oncallRouter.get('/hitl-sla', asyncHandler(async (req, res) => {
   const windowHours = parseHours(req.query['windowHours'], 24, 24 * 14);
 
   try {
-    const rows = await exec(`
+    const rows = config.mock.aurora
+      ? mockOncallHitlSla(windowHours)
+      : await exec(`
       WITH win AS (
         SELECT *,
                CASE WHEN decided_at IS NOT NULL
@@ -505,7 +597,7 @@ oncallRouter.get('/hitl-sla', asyncHandler(async (req, res) => {
     });
   } catch (err) {
     console.warn('[oncall] /hitl-sla failed:', (err as Error).message);
-    res.json({
+    res.json(degraded({
       pendingCount: 0,
       oldestPendingAgeSeconds: null,
       decidedInWindow: 0,
@@ -514,7 +606,7 @@ oncallRouter.get('/hitl-sla', asyncHandler(async (req, res) => {
       expiredInWindow: 0,
       slaCompliantFraction: 1,
       slaThresholdSeconds: SLA_THRESHOLD_SECONDS,
-    });
+    }, err));
   }
 }));
 
@@ -528,10 +620,13 @@ oncallRouter.get('/recent-events', asyncHandler(async (req, res) => {
     : 50;
 
   const events: RecentEvent[] = [];
+  const failures: string[] = [];
 
   // 1) Deploys (prompt_versions registrations in last 24h)
   try {
-    const rows = await exec(
+    const rows = config.mock.aurora
+      ? mockOncallRecentDeploys(24)
+      : await exec(
       `SELECT registered_at::text AS ts,
               agent_id, prompt_version, notes
          FROM observability.prompt_versions
@@ -553,11 +648,14 @@ oncallRouter.get('/recent-events', asyncHandler(async (req, res) => {
     }
   } catch (err) {
     console.warn('[oncall] events:deploys failed:', (err as Error).message);
+    failures.push(`deploys: ${(err as Error).message}`);
   }
 
   // 2) HITL decisions (decided + expired in last 24h)
   try {
-    const rows = await exec(
+    const rows = config.mock.aurora
+      ? mockOncallHitlDecisionEvents(24)
+      : await exec(
       `SELECT approval_id::text AS approval_id,
               decided_at::text AS ts,
               status, agent_id, decided_by, decided_note
@@ -594,12 +692,15 @@ oncallRouter.get('/recent-events', asyncHandler(async (req, res) => {
     }
   } catch (err) {
     console.warn('[oncall] events:hitl failed:', (err as Error).message);
+    failures.push(`hitl decisions: ${(err as Error).message}`);
   }
 
   // 3) Judge regressions — invocation_traces rows with judge_score < 0.3
   //    in last 24h. We don't try to dedupe (each bad row is its own event).
   try {
-    const rows = await exec(
+    const rows = config.mock.aurora
+      ? mockOncallJudgeRegressions(24)
+      : await exec(
       `SELECT invocation_id::text AS invocation_id,
               ts::text AS ts,
               agent_id, judge_score, judge_rationale, response_snippet
@@ -628,12 +729,16 @@ oncallRouter.get('/recent-events', asyncHandler(async (req, res) => {
     }
   } catch (err) {
     console.warn('[oncall] events:judge failed:', (err as Error).message);
+    failures.push(`judge regressions: ${(err as Error).message}`);
   }
 
   // 4) Active alarms — synthesize one event per current alarm so the feed
   //    has the same surface as the alarm chip strip.
   try {
-    const alarms = await computeAlarms();
+    const { alarms, failedProbes } = await computeAlarms();
+    if (failedProbes.length > 0) {
+      failures.push(`alarms: could not evaluate ${failedProbes.join(' and ')}`);
+    }
     for (const a of alarms) {
       if (a.severity === 'ok') continue;
       events.push({
@@ -649,9 +754,11 @@ oncallRouter.get('/recent-events', asyncHandler(async (req, res) => {
     }
   } catch (err) {
     console.warn('[oncall] events:alarms failed:', (err as Error).message);
+    failures.push(`alarms: ${(err as Error).message}`);
   }
 
   // Sort newest-first and truncate.
   events.sort((a, b) => String(b.ts).localeCompare(String(a.ts)));
-  res.json({ events: events.slice(0, limit) });
+  const payload = { events: events.slice(0, limit) };
+  res.json(failures.length > 0 ? degraded(payload, new Error(failures.join('; '))) : payload);
 }));

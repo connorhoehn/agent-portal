@@ -23,6 +23,7 @@ import {
   Inline,
   InlineAlert,
   LoadingState,
+  MetaLine,
   PageSection,
   Stack,
   StatCard,
@@ -390,7 +391,7 @@ function OnCallPage() {
           <Card padding="md">
             <CardHeader title="HITL SLA" subtitle={`approval-queue health · window ${win.label}`} />
             {hitl ? (
-              <HitlSlaBody hitl={hitl} onViewQueue={() => navigate('/admin/observability/approvals')} />
+              <HitlSlaBody hitl={hitl} windowLabel={win.label} onViewQueue={() => navigate('/admin/observability/approvals')} />
             ) : (
               <LoadingState label="Loading approval-queue stats…" />
             )}
@@ -457,9 +458,12 @@ function AlarmChip({ alarm }: { alarm: AlarmState }) {
 
 function HitlSlaBody({
   hitl,
+  windowLabel,
   onViewQueue,
 }: {
   hitl: HitlSlaResponse;
+  /** Named so the empty case can say WHICH window had no decisions. */
+  windowLabel: string;
   onViewQueue: () => void;
 }) {
   const oldestMin = hitl.oldestPendingAgeSeconds == null
@@ -481,22 +485,35 @@ function HitlSlaBody({
           </Chip>
         )}
       </Inline>
-      <Inline gap="xs" wrap>
-        <Chip tone="neutral" size="xs">
-          p50 {hitl.p50DecisionSeconds.toFixed(1)}s
-        </Chip>
-        <Chip tone="neutral" size="xs">
-          p99 {hitl.p99DecisionSeconds.toFixed(1)}s
-        </Chip>
-        <Chip tone={slaTone} size="xs">
-          SLA {slaPct}%
-        </Chip>
-        {hitl.expiredInWindow > 0 && (
-          <Chip tone="danger" size="xs">
-            {hitl.expiredInWindow} expired
+      {/* Nothing decided means there is no decision latency and no SLA. The
+          percentiles come back 0 and the compliant fraction comes back 1, so
+          an untouched queue rendered "p50 0.0s · p99 0.0s · SLA 100.0%" in
+          success green — a performance claim nobody earned, on the page an
+          operator reads during an incident. */}
+      {hitl.decidedInWindow === 0 ? (
+        <MetaLine
+          size="xs"
+          tone="tertiary"
+          items={[`No approvals decided in the last ${windowLabel} — no decision latency to measure yet.`]}
+        />
+      ) : (
+        <Inline gap="xs" wrap>
+          <Chip tone="neutral" size="xs">
+            p50 {hitl.p50DecisionSeconds.toFixed(1)}s
           </Chip>
-        )}
-      </Inline>
+          <Chip tone="neutral" size="xs">
+            p99 {hitl.p99DecisionSeconds.toFixed(1)}s
+          </Chip>
+          <Chip tone={slaTone} size="xs" title={`${hitl.decidedInWindow} decided, threshold ${hitl.slaThresholdSeconds}s`}>
+            SLA {slaPct}%
+          </Chip>
+          {hitl.expiredInWindow > 0 && (
+            <Chip tone="danger" size="xs">
+              {hitl.expiredInWindow} expired
+            </Chip>
+          )}
+        </Inline>
+      )}
       <Button variant="secondary" size="sm" className="mt-3 self-start" onClick={onViewQueue} type="button">
         View queue →
       </Button>

@@ -9,6 +9,7 @@ import {
   Card,
   Chip,
   CollapsibleSection,
+  ConfirmDialog,
   ErrorState,
   Inline,
   InlineAlert,
@@ -47,6 +48,7 @@ function SchemaPage() {
   const [busy, setBusy] = useState(false);
   const [errMsg, setErrMsg] = useState<string | null>(null);
   const [pendingActions, setPendingActions] = useState<string[] | null>(null);
+  const [confirmingSave, setConfirmingSave] = useState(false);
 
   const liveActions = useMemo(
     () => Object.keys(data?.schema?.OrgIQ?.actions ?? {}).sort(),
@@ -78,6 +80,11 @@ function SchemaPage() {
   const entityTypes = Object.keys(namespace?.entityTypes ?? {}).sort();
   const actions = pendingActions ?? liveActions;
   const dirty = pendingActions !== null && pendingActions.join(',') !== liveActions.join(',');
+  // What "Save changes" actually does — a schema PUT is enforced on every
+  // middleware request platform-wide the moment AVP accepts it, so the
+  // confirm names the effect instead of asking to confirm a click.
+  const addedActions = pendingActions ? pendingActions.filter(a => !liveActions.includes(a)) : [];
+  const removedActions = pendingActions ? liveActions.filter(a => !pendingActions.includes(a)) : [];
 
   function setActions(next: string[]) {
     setPendingActions(next);
@@ -128,12 +135,27 @@ function SchemaPage() {
         canEdit && dirty ? (
           <>
             <Button variant="secondary" onClick={discard} disabled={busy}>Discard</Button>
-            <Button onClick={save} disabled={busy}>Save changes</Button>
+            <Button onClick={() => setConfirmingSave(true)} disabled={busy}>Save changes</Button>
           </>
         ) : undefined
       }
     >
       {errMsg && <InlineAlert tone="error">{errMsg}</InlineAlert>}
+
+      <ConfirmDialog
+        open={confirmingSave}
+        onConfirm={() => { setConfirmingSave(false); void save(); }}
+        onCancel={() => setConfirmingSave(false)}
+        tone={removedActions.length > 0 ? 'destructive' : 'caution'}
+        title="Save schema changes?"
+        body={
+          [
+            'Enforced by AVP on every middleware request as soon as this saves.',
+            addedActions.length > 0 ? `Adds: ${addedActions.join(', ')}.` : null,
+            removedActions.length > 0 ? `Removes: ${removedActions.join(', ')} — rejected if a live policy still references one of them.` : null,
+          ].filter(Boolean).join(' ')
+        }
+      />
 
       <Card>
         <Stack gap="lg">

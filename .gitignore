@@ -24,3 +24,7 @@ resource_tracker.json
 .claude/worktrees
 infra/destroy-*.log
 infra/deploy-*.log
+
+# Machines paired by hand in a dev:mock session — see middleware/src/mock/dev-pairings.ts.
+# Someone's own laptop and its token hash; never committed.
+.dev-pairings.json

@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-09-16T19:23:05.829Z",
-  "serverHandlerSha": "fc298c0ae767a8f42a77bbe4a959882cc2360ad4e1e316f30bfdc6bc677f2da8",
+  "capturedAt": "2026-09-16T20:39:12.318Z",
+  "serverHandlerSha": "8d75d42fc8702b3faafa5038ca457cc49022f131b6621364e30de47114fe40ee",
   "baseUrl": "http://127.0.0.1:3012",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
@@ -628,6 +628,7 @@
           "library-assets",
           "local-presence",
           "observability-agent-profiles",
+          "observability-approvals",
           "observability-human-labels",
           "observability-memory-writes",
           "org-findings",

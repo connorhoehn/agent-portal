@@ -156,7 +156,15 @@ describe('the reconcile page\'s sync state in dev:mock', () => {
   it('the error scenario puts a FAILED job at the head, so the page can render it',
     async () => {
       fixtureRegistry.resetAll('error');
-      const target = await syncTarget();
+      // Not `syncTarget()`: the registry fixture's OWN 'error' scenario (also
+      // reset by the call above) marks every row FAILED, which is correctly a
+      // reportable drift now that a registry status disagreeing with the live
+      // account's ACTIVE is caught either direction — so no row here still
+      // qualifies as `drift === 'ok'`. This test is about the ingestion job
+      // fixture's error scenario, not the registry's, so it selects the row
+      // whose history it is actually reading directly.
+      const { entries } = await reconcileKnowledgeBases();
+      const target = entries.find((e) => e.slug === 'orgiq-default')!;
       const newest = newestJob();
 
       expect(newest!.status).toBe('FAILED');

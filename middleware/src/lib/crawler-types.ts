@@ -125,6 +125,13 @@ export interface StorageBreakdown {
   totalBytes: number;
   byType: Array<{ extension: string; count: number; bytes: number }>;
   byPrefix: Array<{ prefix: string; count: number; bytes: number }>;
+  /**
+   * True when the S3 scan behind `totalObjects`/`byType`/`byPrefix` failed —
+   * those fields are then a stale 0, not a real "nothing stored". Absent
+   * (rather than false) on a healthy read, matching the wire's `degraded`
+   * convention.
+   */
+  s3ScanFailed?: true;
   kb: {
     /**
      * Distinct documents the vector store actually holds — null when it could

@@ -20,9 +20,17 @@
 //   * `/recent-events` merging four independent sources, sorting newest-first,
 //     truncating to the limit, and SURVIVING the failure of any one source,
 //   * an `unknown` alarm downgraded to `info` in the event feed, which styles
-//     only three severities.
+//     only three severities,
+//   * a `degraded` marker on EVERY route when one of its underlying reads
+//     fails, and its ABSENCE when nothing failed — the offline mock branch
+//     for these same four routes lives in oncall-mock-branch.test.ts.
 
 jest.mock('../../providers/aurora.js', () => ({ exec: jest.fn() }));
+// Pins the LIVE SQL path (`config.mock.aurora === false`), same convention as
+// cost-routes.test.ts / cost-mock-branch.test.ts.
+jest.mock('../../config.js', () => ({
+  config: { region: 'us-east-1', mock: { aurora: false } },
+}));
 
 import express from 'express';
 import request from '../../test-support/http.js';
@@ -79,6 +87,43 @@ describe('GET /alarms — the honesty property', () => {
     expect(res.body.alarms[0]).toMatchObject({ name: 'overall', severity: 'ok' });
   });
 
+  it('will not compute a rate from a sample too small to carry one', async () => {
+    // A single errored response in a quiet hour is 0% conformance. Before the
+    // minimum sample, that put "Schema conformance 0.0% (threshold 95%)" on
+    // the incident board for two agents while the 24-hour Drift view showed
+    // the same agents at 97.8% and 98.3% — two pages, one signal, opposite
+    // stories, and the alarming one is what someone reads at 3am.
+    routeExec({
+      quality: [
+        { agent_id: 'orgiq-supervisor', cnt: '1', conformance: 0, p05: 0.1, drift_p95: 0.9 },
+        { agent_id: 'orgiq-search', cnt: '4', conformance: 0, p05: 0.1, drift_p95: 0.9 },
+      ],
+      approvalsAgg: [{ pending: '0', oldest_age_s: null }],
+    });
+    const res = await request(buildApp()).get('/api/observability/oncall/alarms');
+    const names = (res.body.alarms as Array<{ name: string }>).map((a) => a.name);
+    // Neither agent clears the floor, so neither raises anything — and the
+    // probe DID run, so the honest answer is the ok beacon, not `unknown`.
+    expect(names).toEqual(['overall']);
+    expect(res.body.alarms[0]).toMatchObject({ severity: 'ok' });
+  });
+
+  it('fires once the sample can carry a rate, and says how big it was', async () => {
+    routeExec({
+      quality: [
+        { agent_id: 'orgiq-supervisor', cnt: '40', conformance: 0.5, p05: 0.8, drift_p95: 0.1 },
+      ],
+      approvalsAgg: [{ pending: '0', oldest_age_s: null }],
+    });
+    const res = await request(buildApp()).get('/api/observability/oncall/alarms');
+    const conf = (res.body.alarms as Array<{ name: string; reason: string }>)
+      .find((a) => a.name === 'schema-conformance:orgiq-supervisor');
+    expect(conf).toBeDefined();
+    // "0.0% of 6" and "0.0% of 600" ask for different reactions, and the
+    // reason line is all the reader gets before deciding whether to escalate.
+    expect(conf!.reason).toMatch(/over 40 calls/);
+  });
+
   it('says UNKNOWN — never ok — when a probe could not be evaluated', async () => {
     // A dead database rendering as "all signals within thresholds" is the
     // failure this severity exists to prevent.
@@ -94,6 +139,17 @@ describe('GET /alarms — the honesty property', () => {
       .find((a) => a.name === 'evaluation')!;
     expect(unknown.reason).toMatch(/Could not evaluate quality/);
     expect(unknown.reason).toMatch(/unknown, not clear/);
+    // The alarm list already says a probe failed — the route also marks its
+    // own response `degraded`, the same way its siblings (cost.ts,
+    // guardrails-detail.ts) do on a real read failure.
+    expect(res.body.degraded).toBe(true);
+    expect(typeof res.body.error).toBe('string');
+  });
+
+  it('carries no `degraded` marker on the ok beacon — every probe really ran', async () => {
+    routeExec({ quality: [], approvalsAgg: [{ pending: '0', oldest_age_s: null }] });
+    const res = await request(buildApp()).get('/api/observability/oncall/alarms');
+    expect(res.body.degraded).toBeUndefined();
   });
 
   it('names BOTH failed probes when neither could run', async () => {
@@ -120,8 +176,10 @@ describe('GET /alarms — the honesty property', () => {
         .map((a) => [a.name, a]),
     );
     expect(byName['schema-conformance:a-schema']!.severity).toBe('warning');
-    // The reason carries the number AND the threshold, so an operator can act.
-    expect(byName['schema-conformance:a-schema']!.reason).toBe('Schema conformance 90.0% (threshold 95%)');
+    // The reason carries the number, the threshold AND the sample it was
+    // computed from, so an operator can act — 90% of 10 and 90% of 1000 are
+    // different calls.
+    expect(byName['schema-conformance:a-schema']!.reason).toBe('Schema conformance 90.0% (threshold 95%) over 10 calls');
     expect(byName['judge-p05:a-critical']!.severity).toBe('critical');
     expect(byName['judge-p05:a-warning']!.severity).toBe('warning');
     expect(byName['drift-p95:a-drift']!.reason).toMatch(/Drift P95 0\.70 \(threshold 0\.6\)/);
@@ -214,6 +272,19 @@ describe('GET /timeline', () => {
     const res = await request(buildApp()).get('/api/observability/oncall/timeline');
     expect(res.status).toBe(200);
     expect(res.body.deployMarkers).toEqual([]);
+    // A real read failing is not the same as a quiet window — the surface
+    // says so, distinguishable from the healthy-empty case below.
+    expect(res.body.degraded).toBe(true);
+    expect(typeof res.body.error).toBe('string');
+  });
+
+  it('carries no `degraded` marker on a genuinely quiet window — every read ran, nothing to say', async () => {
+    routeExec({
+      buckets: [], hitlBuckets: [], deploys: [], quality: [], approvalsAgg: [{ pending: '0', oldest_age_s: null }],
+    });
+    const res = await request(buildApp()).get('/api/observability/oncall/timeline');
+    expect(res.status).toBe(200);
+    expect(res.body.degraded).toBeUndefined();
   });
 });
 
@@ -255,6 +326,19 @@ describe('GET /hitl-sla', () => {
     expect(res.status).toBe(200);
     expect(res.body.pendingCount).toBe(0);
     expect(res.body.slaCompliantFraction).toBe(1);
+    expect(res.body.degraded).toBe(true);
+    expect(typeof res.body.error).toBe('string');
+  });
+
+  it('carries no `degraded` marker when the queue is genuinely empty', async () => {
+    routeExec({
+      sla: [{
+        pending_count: '0', oldest_pending_age_s: null, decided: '0',
+        p50_s: null, p99_s: null, expired: '0', within_sla: '0', sla_total: '0',
+      }],
+    });
+    const res = await request(buildApp()).get('/api/observability/oncall/hitl-sla');
+    expect(res.body.degraded).toBeUndefined();
   });
 });
 
@@ -337,6 +421,15 @@ describe('GET /recent-events', () => {
     expect(kinds).toContain('hitl-decided');
     expect(kinds).not.toContain('deploy');
     expect(kinds).not.toContain('judge-spike');
+    // Surviving is not the same as being healthy — two of four sources
+    // actually failed, and the response says so.
+    expect(res.body.degraded).toBe(true);
+  });
+
+  it('carries no `degraded` marker when every source succeeds', async () => {
+    routeExec(base);
+    const res = await request(buildApp()).get('/api/observability/oncall/recent-events');
+    expect(res.body.degraded).toBeUndefined();
   });
 
   it('clamps the limit into 1..500 and truncates AFTER sorting', async () => {

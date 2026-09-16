@@ -46,12 +46,9 @@ interface SchemaResponse {
   schema: { OrgIQ?: { actions?: Record<string, unknown> } };
 }
 
-const ROLE_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: '', label: '— No role condition (matches everyone)' },
-  { value: 'member', label: 'member' },
-  { value: 'org-leader', label: 'org-leader' },
-  { value: 'hr-admin', label: 'hr-admin' },
-];
+interface RoleInfo { id: string; tenant: string | null; label: string }
+
+const NO_ROLE_OPTION = { value: '', label: '— No role condition (matches everyone)' };
 
 interface Draft {
   description: string;
@@ -85,6 +82,22 @@ function PoliciesPage() {
   const allActions = useMemo(
     () => Object.keys(schema?.schema?.OrgIQ?.actions ?? {}).sort(),
     [schema],
+  );
+  // Every role a `when { principal.role == "…" }` clause could name, not just
+  // orgiq's three — the store holds policies for every tenant (GET /policies
+  // is store-wide), and a hardcoded list here silently made sme,
+  // program-owner, admin and every assessment-tenant role unbuildable from
+  // the visual editor. Same gap the sandbox (PolicyTestPage) already fixed.
+  const { data: rolesData } = useFetch<RoleInfo[]>('/api/identity/roles');
+  const roleOptions = useMemo(
+    () => [
+      NO_ROLE_OPTION,
+      ...(rolesData ?? []).map(r => ({
+        value: r.id,
+        label: r.tenant ? `${r.label} (${r.tenant})` : `${r.label} (all tenants)`,
+      })),
+    ],
+    [rolesData],
   );
 
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -188,7 +201,7 @@ function PoliciesPage() {
               </Inline>
             )}
           />
-          <PolicyEditor draft={createDraft} setDraft={setCreateDraft} allActions={allActions} />
+          <PolicyEditor draft={createDraft} setDraft={setCreateDraft} allActions={allActions} roleOptions={roleOptions} />
         </Card>
       )}
 
@@ -216,7 +229,7 @@ function PoliciesPage() {
             />
 
             {isEditing && draft ? (
-              <PolicyEditor draft={draft} setDraft={(next) => setDraft(typeof next === 'function' ? (next as (d: Draft) => Draft)(draft) : next)} allActions={allActions} />
+              <PolicyEditor draft={draft} setDraft={(next) => setDraft(typeof next === 'function' ? (next as (d: Draft) => Draft)(draft) : next)} allActions={allActions} roleOptions={roleOptions} />
             ) : (
               <PolicySummary parsed={parsed} statement={p.statement} />
             )}
@@ -248,10 +261,12 @@ function PolicyEditor({
   draft,
   setDraft,
   allActions,
+  roleOptions,
 }: {
   draft: Draft;
   setDraft: (d: Draft) => void;
   allActions: string[];
+  roleOptions: Array<{ value: string; label: string }>;
 }) {
   // Switch back to builder when toggling, but only if the current raw text
   // can still be parsed. Otherwise force the user to fix syntax first.
@@ -316,7 +331,7 @@ function PolicyEditor({
       </Inline>
 
       {draft.mode === 'builder' && draft.parsed ? (
-        <BuilderForm parsed={draft.parsed} allActions={allActions} onChange={patchParsed} />
+        <BuilderForm parsed={draft.parsed} allActions={allActions} roleOptions={roleOptions} onChange={patchParsed} />
       ) : null}
 
       {draft.mode === 'builder' && draft.parsed && (
@@ -335,10 +350,12 @@ function PolicyEditor({
 function BuilderForm({
   parsed,
   allActions,
+  roleOptions,
   onChange,
 }: {
   parsed: ParsedPolicy;
   allActions: string[];
+  roleOptions: Array<{ value: string; label: string }>;
   onChange: (patch: Partial<ParsedPolicy>) => void;
 }) {
   return (
@@ -361,7 +378,7 @@ function BuilderForm({
             <Select
               {...inputWiring(wiring)}
               className="min-w-[220px]"
-              options={ROLE_OPTIONS}
+              options={roleOptions}
               value={parsed.role ?? ''}
               onChange={e => onChange({ role: e.target.value === '' ? null : e.target.value })}
             />

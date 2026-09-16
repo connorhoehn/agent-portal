@@ -138,6 +138,20 @@ describe('GET /api/ingest/data-sources', () => {
     expect(Object.keys(res.body)).toEqual(['sources']);
     expect(res.body.sources[0].dataSourceId).toBe('ds-1');
   });
+
+  // The failure this pair of tests exists for: the provider used to swallow a
+  // refused ListDataSources into `[]`, so "Bedrock said no" and "this
+  // knowledge base has no data sources attached" were the same answer — and
+  // the page says the reassuring one. The route now asks for the throw and
+  // marks the empty body it answers with.
+  it('marks a failed listing degraded rather than answering an empty list', async () => {
+    m(listDataSources).mockRejectedValue(new Error('AccessDeniedException: not authorized'));
+    const res = await request(buildApp()).get('/api/ingest/data-sources');
+    expect(res.status).toBe(200);
+    expect(res.body.sources).toEqual([]);
+    expect(res.body.degraded).toBe(true);
+    expect(res.body.error).toMatch(/AccessDeniedException/);
+  });
 });
 
 describe('GET /api/ingest/jobs', () => {
@@ -146,7 +160,7 @@ describe('GET /api/ingest/jobs', () => {
     const res = await request(buildApp()).get('/api/ingest/jobs');
     expect(res.status).toBe(200);
     expect(Object.keys(res.body)).toEqual(['jobs']);
-    expect(listIngestionJobs).toHaveBeenCalledWith(undefined, 20);
+    expect(listIngestionJobs).toHaveBeenCalledWith(undefined, 20, { silent: false });
   });
 
   it('clamps the limit into 1..100 and forwards the data source', async () => {
@@ -160,6 +174,18 @@ describe('GET /api/ingest/jobs', () => {
     await request(app).get('/api/ingest/jobs?limit=0');
     expect(m(listIngestionJobs).mock.calls.map((c) => c[1])).toEqual([1, 100, 20, 1]);
     expect(m(listIngestionJobs).mock.calls[0]![0]).toBe('ds-1');
+  });
+
+  // Same shape as the data-sources case: an unmarked empty list here reads as
+  // "this knowledge base has never synced", which is the opposite diagnosis
+  // from "Bedrock refused the listing".
+  it('marks a failed job listing degraded rather than answering an empty list', async () => {
+    m(listIngestionJobs).mockRejectedValue(new Error('ThrottlingException: rate exceeded'));
+    const res = await request(buildApp()).get('/api/ingest/jobs');
+    expect(res.status).toBe(200);
+    expect(res.body.jobs).toEqual([]);
+    expect(res.body.degraded).toBe(true);
+    expect(res.body.error).toMatch(/ThrottlingException/);
   });
 });
 

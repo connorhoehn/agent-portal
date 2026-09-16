@@ -132,6 +132,19 @@ export function bucketStart(iso: string, bucketMin: number): string {
   return pgTimestamp(Math.floor(seconds / width) * width * 1000);
 }
 
+/**
+ * Same epoch-floor bucketing as `bucketStart`, but as epoch ms rather than a
+ * `::text` string. `oncall.ts`'s HITL-by-bucket read needs the numeric bucket
+ * END (`bucket_start + bucketMin minutes`) to decide whether an approval was
+ * still pending at that boundary — arithmetic that only works on a number, not
+ * on the Postgres text form the wire actually carries.
+ */
+export function bucketStartMs(iso: string, bucketMin: number): number {
+  const seconds = Math.floor(new Date(iso).getTime() / 1000);
+  const width = Math.max(1, bucketMin) * 60;
+  return Math.floor(seconds / width) * width * 1000;
+}
+
 // ── Statistics ─────────────────────────────────────────────────────────────
 
 /**
@@ -334,6 +347,119 @@ export function mockSetHumanLabel(invocationId: string, label: string, note: str
   }
   return true;
 }
+
+// ── HITL approvals ──────────────────────────────────────────────────────────
+
+/**
+ * One row of `observability.approvals`, in `exec()` shape — the table
+ * `routes/oncall.ts` reads directly for the HITL alarm probe, the timeline
+ * overlay and `/hitl-sla`. This is a SEPARATE table from `routes/approvals.ts`'s
+ * own `mockStore` (which exists to keep the live request/decide/poll loop
+ * working end-to-end under `MOCK_ENABLED`, in-memory, with no clock and no
+ * scenario control) — that loop is out of scope here and untouched; this
+ * fixture exists only so the four `oncall.ts` reads have honest offline rows
+ * to summarise, following the same contract every other fixture in this file
+ * does.
+ *
+ * `agent_id` is `orgiq-ingestion` on every row: it is the only one of the six
+ * agents whose tool list actually carries `request_approval`
+ * (`agents/ingestion/main.py`; `agents/supervisor/main.py` imports the tool
+ * but does not wire it into its own `Agent(tools=[...])`), and it is also the
+ * one agent the telemetry profile already marks `degraded` — a re-sync that
+ * needs a human's sign-off before it overwrites or deletes KB content is
+ * exactly the kind of action that agent's job produces.
+ *
+ * `default` — five requests over the last ~30 hours: one approved outside the
+ *             default 24h window (so a wider `windowHours` shows something a
+ *             24h read does not), two decided inside it (one within the 5-min
+ *             SLA, one over it), one that timed out and auto-expired, and one
+ *             still `PENDING` a few minutes old — recent enough that neither
+ *             HITL alarm threshold (10m warning / 30m critical) fires, so the
+ *             default demo stays quiet exactly where computeAlarms already
+ *             is for this agent's quality signals.
+ * `empty`   — no approval has ever been requested, which is the honest state
+ *             before ingestion's first high-stakes sync.
+ * `error`   — `observability.approvals` is unreachable, reached over HTTP the
+ *             same way `agentTelemetryProfiles`'s `error` scenario is.
+ */
+export interface MockApprovalRow {
+  approval_id: string;
+  tx_id: string;
+  agent_id: string;
+  reason: string | null;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'EXPIRED';
+  requested_at: string;
+  decided_at: string | null;
+  decided_by: string | null;
+  decided_note: string | null;
+}
+
+export const approvalRequests = defineFixture<MockApprovalRow>({
+  key: 'observability-approvals',
+  scenarios: {
+    default: (): MockApprovalRow[] => [
+      {
+        approval_id: 'ap-ing-legal-updates-01',
+        tx_id: 'ing-sync-legal-updates-01',
+        agent_id: 'orgiq-ingestion',
+        reason: 'Re-sync would overwrite 42 existing KB chunks under legal/ with conflicting revision hashes.',
+        status: 'APPROVED',
+        requested_at: clock.hoursAgo(30),
+        decided_at: clock.hoursAgo(29 + 57 / 60),
+        decided_by: 'u-vera',
+        decided_note: 'Confirmed the source bucket is authoritative — proceed.',
+      },
+      {
+        approval_id: 'ap-ing-perf-reviews-09',
+        tx_id: 'ing-sync-perf-reviews-09',
+        agent_id: 'orgiq-ingestion',
+        reason: 'New Slack export batch has 3 files flagged as possible PII ahead of re-embedding.',
+        status: 'REJECTED',
+        requested_at: clock.hoursAgo(20),
+        decided_at: clock.hoursAgo(20 - 15 / 60),
+        decided_by: 'u-vera',
+        decided_note: 'Redact the flagged files first, then resubmit.',
+      },
+      {
+        approval_id: 'ap-ing-adr-batch-14',
+        tx_id: 'ing-sync-adr-batch-14',
+        agent_id: 'orgiq-ingestion',
+        reason: 'Sync would delete 6 ADR documents no longer present in the source bucket.',
+        status: 'APPROVED',
+        requested_at: clock.hoursAgo(9),
+        decided_at: clock.hoursAgo(9 - 3 / 60),
+        decided_by: 'u-vera',
+        decided_note: 'Confirmed those ADRs were deprecated last sprint — proceed.',
+      },
+      {
+        approval_id: 'ap-ing-allhands-recap-22',
+        tx_id: 'ing-sync-allhands-recap-22',
+        agent_id: 'orgiq-ingestion',
+        reason: 'Re-embedding would replace the current all-hands recap corpus mid-day.',
+        status: 'EXPIRED',
+        requested_at: clock.hoursAgo(6),
+        decided_at: clock.hoursAgo(6 - 5 / 60),
+        decided_by: 'system',
+        decided_note: 'auto-expired after 5min',
+      },
+      {
+        approval_id: 'ap-ing-postmortem-03',
+        tx_id: 'ing-sync-postmortem-03',
+        agent_id: 'orgiq-ingestion',
+        reason: 'Ingesting a postmortem doc that references a live security incident — needs sign-off before indexing.',
+        status: 'PENDING',
+        requested_at: clock.hoursAgo(3 / 60, { keepWithinToday: true }),
+        decided_at: null,
+        decided_by: null,
+        decided_note: null,
+      },
+    ],
+    empty: () => [],
+    error: () => {
+      throw new Error('observability.approvals unavailable: relation does not exist');
+    },
+  },
+});
 
 // ── Trace rows ─────────────────────────────────────────────────────────────
 

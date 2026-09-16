@@ -37,6 +37,7 @@ import { firstDegraded } from '../../lib/degraded';
 import { T } from './Text';
 import { KeyValue } from '../../components/KeyValue';
 import { WindowPicker, useWindowUrlState } from './WindowPicker';
+import { relativeTime } from '../../lib/relativeTime';
 
 // ── Types (mirrored from middleware/src/routes/memory.ts) ──────────────────
 
@@ -297,8 +298,8 @@ function MemoryPage() {
                       className="cursor-pointer"
                     >
                       <TableTd className="text-[12px] font-medium whitespace-nowrap">{e.agentId}</TableTd>
-                      <TableTd className="text-[11px] text-text-tertiary whitespace-nowrap">
-                        {new Date(e.ts).toLocaleTimeString()}
+                      <TableTd className="text-[11px] text-text-tertiary whitespace-nowrap" title={new Date(e.ts).toLocaleString()}>
+                        {relativeTime(e.ts)}
                       </TableTd>
                       <TableTd>
                         <Chip tone={kindTone(e.kind)} size="xs">{e.kind}</Chip>

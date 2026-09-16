@@ -394,6 +394,16 @@ function TreeNode({ node, depth, selected, defaultOpen = false }: {
             browser
           </Chip>
         )}
+        {/* The "N unreadable" strip above says how many pages failed but not
+            why — a page that failed because the browser capability is
+            misconfigured (see the BROWSER_ID drift gotcha) looked identical
+            to one that is genuinely bot-blocked. The reason the survey
+            already computed is now on the node it happened to. */}
+        {node.page?.status === 'failed' && (
+          <Chip tone="danger" size="xs" className="shrink-0" title={node.page.error || 'Could not read this page'}>
+            unreadable
+          </Chip>
+        )}
         <MetaLine
           size="xs"
           className="ml-auto shrink-0 tabular-nums"

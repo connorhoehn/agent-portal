@@ -427,7 +427,7 @@ export async function getKb(): Promise<KbSummary | null> {
   }
 }
 
-export async function listDataSources(): Promise<DataSourceSummary[]> {
+export async function listDataSources(opts?: { silent?: boolean }): Promise<DataSourceSummary[]> {
   const kbId = config.knowledgeBase.id;
   if (mockAws()) return kbDataSourceRows.rows().slice();
   if (!kbId) return [];
@@ -461,11 +461,16 @@ export async function listDataSources(): Promise<DataSourceSummary[]> {
       });
   } catch (err) {
     console.warn('[kb] listDataSources failed:', (err as Error).message);
+    if (opts?.silent === false) throw err;
     return [];
   }
 }
 
-export async function listIngestionJobs(dataSourceId?: string, limit = 20): Promise<IngestionJobSummary[]> {
+export async function listIngestionJobs(
+  dataSourceId?: string,
+  limit = 20,
+  opts?: { silent?: boolean },
+): Promise<IngestionJobSummary[]> {
   const kbId = config.knowledgeBase.id;
   if (mockAws()) return mockListIngestionJobs(dataSourceId, limit);
   if (!kbId) return [];
@@ -512,6 +517,7 @@ export async function listIngestionJobs(dataSourceId?: string, limit = 20): Prom
     return all.sort((a, b) => b.startedAt.localeCompare(a.startedAt)).slice(0, limit);
   } catch (err) {
     console.warn('[kb] listIngestionJobs failed:', (err as Error).message);
+    if (opts?.silent === false) throw err;
     return [];
   }
 }
@@ -1016,6 +1022,7 @@ export async function getStorageBreakdown(s3Prefix?: string): Promise<StorageBre
   const byPrefixMap = new Map<string, { count: number; bytes: number }>();
   let totalObjects = 0;
   let totalBytes = 0;
+  let s3ScanFailed = false;
 
   if (bucket) {
     try {
@@ -1043,6 +1050,7 @@ export async function getStorageBreakdown(s3Prefix?: string): Promise<StorageBre
       } while (token && totalObjects < 10000);
     } catch (err) {
       console.warn('[kb] getStorageBreakdown s3 scan failed:', (err as Error).message);
+      s3ScanFailed = true;
     }
   }
 
@@ -1101,6 +1109,7 @@ export async function getStorageBreakdown(s3Prefix?: string): Promise<StorageBre
     totalBytes,
     byType,
     byPrefix,
+    ...(s3ScanFailed ? { s3ScanFailed: true as const } : {}),
     kb: { totalDocuments, lastIngestedAt },
   };
 }

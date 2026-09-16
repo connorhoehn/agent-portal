@@ -65,9 +65,12 @@ export default function KnowledgeHomePage() {
 
   const { data: rec, isLoading: recLoading, error: recError, refresh: refreshRec } =
     useFetch<{ entries: Reconciled[]; problem?: string }>('/api/admin/kb-registry/reconcile', 30_000);
-  const { data: jobs } = useFetch<{ jobs: IngestJob[] }>('/api/ingest/jobs?limit=10', 30_000);
+  // `jobs`/`storage` can now carry `degraded` (a failed Bedrock/S3 read, not
+  // an empty pipeline) — read it so the stat strip below says "unknown"
+  // rather than a confident 0 the two pipeline pages themselves no longer show.
+  const { data: jobs, degraded: jobsDegraded } = useFetch<{ jobs: IngestJob[] }>('/api/ingest/jobs?limit=10', 30_000);
   const { data: targets } = useFetch<{ targets: CrawlTarget[] }>('/api/ingest/crawl-targets', 60_000);
-  const { data: storage } = useFetch<StorageBreakdown>('/api/ingest/storage', 60_000);
+  const { data: storage, degraded: storageDegraded } = useFetch<StorageBreakdown>('/api/ingest/storage', 60_000);
 
   const [busy, setBusy] = useState<string | null>(null);
   const [search, setSearch] = useState('');
@@ -295,6 +298,30 @@ export default function KnowledgeHomePage() {
             );
           }
           if (e.drift === 'status-drift') {
+            // A "Re-sync" hint here used to point at the wrong lever: starting
+            // an ingestion job never touches `knowledge_bases.status` (grep
+            // confirms only `adoptKnowledgeBase` and the provisioning
+            // callback write that column), so the row that most needs this —
+            // stuck at PENDING while the account already reports the
+            // knowledge base ACTIVE, the exact state that makes it invisible
+            // to `resolve_kb_id`'s `status = 'ACTIVE'` filter — had no working
+            // remedy on the page at all. Repointing at the SAME id it already
+            // names refreshes the registry's status from the account, the
+            // same write `adopt` does for an unclaimed knowledge base.
+            if (e.slug && e.liveKbId) {
+              if (!canManage) return actionHint('Needs Manage KB — an HR admin can do it from Knowledge.');
+              const slug = e.slug;
+              const liveKbId = e.liveKbId;
+              return (
+                <Button
+                  variant="secondary" size="sm"
+                  disabled={busy === slug}
+                  onClick={() => void adopt(slug, liveKbId)}
+                >
+                  {busy === slug ? 'refreshing…' : 'refresh status from account'}
+                </Button>
+              );
+            }
             return actionHint(
               canManage
                 ? 'Re-sync to refresh the account status.'
@@ -438,20 +465,24 @@ export default function KnowledgeHomePage() {
           },
           {
             label: 'Ingestion',
-            value: jobs ? String(jobs.jobs?.length ?? 0) : '—',
+            value: jobsDegraded ? '—' : jobs ? String(jobs.jobs?.length ?? 0) : '—',
             hint: (
               <>
-                {jobs?.jobs?.[0]?.status ? `last ${jobs.jobs[0].status.toLowerCase()} ${when(jobs.jobs[0].startedAt)}` : 'no ingestion has run'}
+                {jobsDegraded
+                  ? 'job history unreadable — not the same as none run'
+                  : jobs?.jobs?.[0]?.status ? `last ${jobs.jobs[0].status.toLowerCase()} ${when(jobs.jobs[0].startedAt)}` : 'no ingestion has run'}
                 {canIngest && <> · <Link to="/admin/ingest/sources" className="text-primary no-underline hover:underline">history →</Link></>}
               </>
             ),
           },
           {
             label: 'Storage',
-            value: storage?.totalObjects != null ? storage.totalObjects.toLocaleString() : '—',
+            value: storageDegraded ? '—' : storage?.totalObjects != null ? storage.totalObjects.toLocaleString() : '—',
             hint: (
               <>
-                {storage?.totalBytes ? bytes(storage.totalBytes) : 'nothing stored yet'}
+                {storageDegraded
+                  ? 'S3 listing unreadable — not the same as empty'
+                  : storage?.totalBytes ? bytes(storage.totalBytes) : 'nothing stored yet'}
                 {canIngest && <> · <Link to="/admin/ingest/storage" className="text-primary no-underline hover:underline">browse →</Link></>}
               </>
             ),

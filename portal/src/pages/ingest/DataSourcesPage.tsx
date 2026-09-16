@@ -8,6 +8,7 @@ import { useCapabilities } from '../../lib/capabilities';
 import { writeJson } from '../../lib/writeJson';
 import { useFetch } from '../../hooks/useFetch';
 import { EmptyState, StatusDot } from '../../components/ingest/ui';
+import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { T } from './Text';
 import { JOB_STATUS_TONE } from './ingestFormat';
 
@@ -63,14 +64,14 @@ function DataSourcesPage() {
   // Starting a KB sync POSTs /api/ingest/start (ManageIngest).
   const { can, ready } = useCapabilities();
   const canManage = ready && can('ManageIngest');
-  const { data: sourcesData, isLoading: sourcesLoading, refresh: refreshSources } = useFetch<{ sources: DataSource[] }>(
-    '/api/ingest/data-sources',
-    30_000,
-  );
-  const { data: jobsData, isLoading: jobsLoading, refresh: refreshJobs } = useFetch<{ jobs: IngestionJob[] }>(
-    '/api/ingest/jobs?limit=20',
-    10_000,
-  );
+  const {
+    data: sourcesData, isLoading: sourcesLoading, error: sourcesError, degraded: sourcesDegraded, refresh: refreshSources,
+  } = useFetch<{ sources: DataSource[] }>('/api/ingest/data-sources', 30_000);
+  const {
+    data: jobsData, isLoading: jobsLoading, error: jobsError, degraded: jobsDegraded, refresh: refreshJobs,
+  } = useFetch<{ jobs: IngestionJob[] }>('/api/ingest/jobs?limit=20', 10_000);
+  const sourcesFailure = sourcesError ?? sourcesDegraded;
+  const jobsFailure = jobsError ?? jobsDegraded;
 
   const sources = sourcesData?.sources ?? [];
   const jobs = jobsData?.jobs ?? [];
@@ -137,7 +138,14 @@ function DataSourcesPage() {
         {/* Data Sources */}
         <Card padding="md">
           <CardHeader title="Data Sources" />
-          {sourcesLoading && sources.length === 0 ? (
+          {sourcesFailure ? (
+            <UnavailableNotice
+              error={sourcesFailure}
+              what="the data sources"
+              source="Data sources are listed live from Bedrock"
+              onRetry={refreshSources}
+            />
+          ) : sourcesLoading && sources.length === 0 ? (
             <LoadingState label="Loading data sources…" />
           ) : sources.length === 0 ? (
             <EmptyState title="No data sources" body="No data sources attached to this Knowledge Base." />
@@ -194,7 +202,14 @@ function DataSourcesPage() {
               ? <T className="text-[11px] text-text-tertiary">last: {new Date(jobs[0].startedAt).toLocaleString()}</T>
               : undefined}
           />
-          {jobsLoading && jobs.length === 0 ? (
+          {jobsFailure ? (
+            <UnavailableNotice
+              error={jobsFailure}
+              what="the ingestion job history"
+              source="Jobs are listed live from Bedrock"
+              onRetry={refreshJobs}
+            />
+          ) : jobsLoading && jobs.length === 0 ? (
             <LoadingState label="Loading ingestion jobs…" />
           ) : jobs.length === 0 ? (
             <EmptyState title="No ingestion jobs yet" />

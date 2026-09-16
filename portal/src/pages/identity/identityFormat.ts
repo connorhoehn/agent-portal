@@ -61,6 +61,21 @@ export function grantChipLabels(grants: Record<string, string[]>): string[] {
   return Object.entries(grants).flatMap(([tenant, roleIds]) => roleIds.map(r => `${tenant}/${r}`));
 }
 
+/** What a grants edit actually changes, as "tenant/role" labels — the confirm
+ * dialog's body, so granting or revoking access says exactly what it does
+ * rather than asking to confirm a save with no stated effect. */
+export function describeGrantDiff(
+  before: Record<string, string[]>,
+  after: Record<string, string[]>,
+): { added: string[]; removed: string[] } {
+  const beforeSet = new Set(grantChipLabels(before));
+  const afterSet = new Set(grantChipLabels(after));
+  return {
+    added: [...afterSet].filter(l => !beforeSet.has(l)).sort(),
+    removed: [...beforeSet].filter(l => !afterSet.has(l)).sort(),
+  };
+}
+
 export function tenantUserCount(
   tenantId: string,
   users: Array<{ grants: Record<string, string[]> }>,

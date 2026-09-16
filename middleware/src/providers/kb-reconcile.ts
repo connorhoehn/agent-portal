@@ -361,6 +361,17 @@ export async function reconcileKnowledgeBases(): Promise<{
     } else if (registryStatus === 'ACTIVE' && match.status !== 'ACTIVE') {
       drift = 'status-drift';
       detail = `Registry says ACTIVE; the account reports ${match.status}.`;
+    } else if (match.status === 'ACTIVE' && registryStatus !== 'ACTIVE') {
+      // The mirror case, and the one that actually bites: agents resolve a
+      // knowledge base with `WHERE status = 'ACTIVE'` (kb_resolver.py), so a
+      // row stuck at PENDING/CREATING/UPDATING — even though the account
+      // shows the real knowledge base live and healthy — is invisible to
+      // every agent. They silently fall through to the KB_ID env var, which
+      // usually still works, so nothing here LOOKS broken. Before this
+      // branch existed the loop fell through to `drift = 'ok'` for exactly
+      // this row.
+      drift = 'status-drift';
+      detail = `The account reports ACTIVE; registry still says ${registryStatus}. Agents resolve by status = ACTIVE, so this row is invisible to them until it syncs.`;
     }
 
     const sync = match ? await syncState(match.id) : reached({ ...NO_SYNC_STATE });

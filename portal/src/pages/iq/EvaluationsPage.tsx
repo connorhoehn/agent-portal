@@ -357,6 +357,13 @@ export default function EvaluationsPage(): React.ReactElement {
   // Reverse so newest is at top.
   const historyDesc = useMemo(() => [...judgeHistory].reverse(), [judgeHistory]);
 
+  // rollingMeanA/B default to 0 in the store until a judge_score for that
+  // side has actually arrived (mean([]) === 0) — rendering that as "0.00"
+  // reads as "this variant scored zero" rather than "not judged yet". Gate
+  // the display on whether the side has any history at all.
+  const hasScoresA = useMemo(() => judgeHistory.some(e => e.side === 'A'), [judgeHistory]);
+  const hasScoresB = useMemo(() => judgeHistory.some(e => e.side === 'B'), [judgeHistory]);
+
   const statItems = [
     { key: 'helpfulness', label: 'Helpfulness' },
     { key: 'factuality', label: 'Factuality' },
@@ -526,8 +533,8 @@ export default function EvaluationsPage(): React.ReactElement {
         {/* Rolling means */}
         <StatStrip
           items={[
-            { label: 'Rolling mean A', value: (rollingMeanA * 10).toFixed(2), tone: scoreStripTone(rollingMeanA) },
-            { label: 'Rolling mean B', value: (rollingMeanB * 10).toFixed(2), tone: scoreStripTone(rollingMeanB) },
+            { label: 'Rolling mean A', value: hasScoresA ? (rollingMeanA * 10).toFixed(2) : '—', tone: hasScoresA ? scoreStripTone(rollingMeanA) : 'default' },
+            { label: 'Rolling mean B', value: hasScoresB ? (rollingMeanB * 10).toFixed(2) : '—', tone: hasScoresB ? scoreStripTone(rollingMeanB) : 'default' },
             ...(lastJudgedAt ? [{ label: 'Last judged', value: fmtTime(lastJudgedAt) }] : []),
           ]}
         />

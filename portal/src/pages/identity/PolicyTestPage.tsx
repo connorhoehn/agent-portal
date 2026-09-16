@@ -1,7 +1,7 @@
 // Policy sandbox: dry-run "what happens if user with role X does action Y"
 // against AVP. Shows the decision and the determining policy IDs.
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Button,
   Card,
@@ -18,7 +18,7 @@ import {
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { writeJson } from '../../lib/writeJson';
-import { decisionTone, inputWiring, truncateId } from './identityFormat';
+import { decisionTone, inputWiring, rolesForTenantMap, truncateId } from './identityFormat';
 
 interface SchemaResponse {
   schema: { OrgIQ?: { actions?: Record<string, unknown> } };
@@ -29,20 +29,31 @@ interface PolicyEntry {
   description: string;
 }
 
+interface TenantInfo { id: string; displayName: string }
+interface RoleInfo { id: string; tenant: string | null; label: string }
+
 interface TestResult {
   decision?: 'ALLOW' | 'DENY';
   determiningPolicies?: Array<{ policyId: string }>;
   errors?: Array<{ errorDescription?: string }>;
   error?: string;
   ts: string;
-  request: { role: string; action: string };
+  request: { role: string; action: string; tenant: string };
 }
-
-const ROLE_OPTIONS = ['member', 'org-leader', 'hr-admin'].map(r => ({ value: r, label: r }));
 
 function PolicyTestPage() {
   const { data: schema } = useFetch<SchemaResponse>('/api/identity/schema');
   const { data: policies } = useFetch<{ policies: PolicyEntry[] }>('/api/identity/policies');
+  // Tenant + role live off the same registries Users/Roles read — a
+  // hardcoded 3-role list here used to silently drop sme, program-owner,
+  // admin and every assessment-tenant role from what the sandbox could test,
+  // with no sign that more roles existed.
+  const { data: tenantsData } = useFetch<TenantInfo[]>('/api/identity/tenants');
+  const { data: rolesData } = useFetch<RoleInfo[]>('/api/identity/roles');
+  const tenants = tenantsData ?? [];
+  const roles = rolesData ?? [];
+  const rolesForTenant = useMemo(() => rolesForTenantMap(tenants, roles), [tenants, roles]);
+
   const allActions = useMemo(
     () => Object.keys(schema?.schema?.OrgIQ?.actions ?? {}).sort(),
     [schema],
@@ -53,11 +64,25 @@ function PolicyTestPage() {
     return m;
   }, [policies]);
 
+  const [tenant, setTenant] = useState<string>('orgiq');
   const [role, setRole] = useState<string>('member');
   const [actions, setActions] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [errMsg, setErrMsg] = useState<string | null>(null);
   const [history, setHistory] = useState<TestResult[]>([]);
+
+  const tenantOptions = tenants.map(t => ({ value: t.id, label: t.displayName }));
+  const roleOptions = (rolesForTenant.get(tenant) ?? []).map(r => ({ value: r.id, label: r.label }));
+
+  // Keep the selected role valid for the selected tenant — switching from
+  // orgiq to assessment used to leave "member" selected even though that
+  // role doesn't exist there, testing a role that could never actually sign
+  // in to that tenant.
+  useEffect(() => {
+    if (roleOptions.length > 0 && !roleOptions.some(o => o.value === role)) {
+      setRole(roleOptions[0]!.value);
+    }
+  }, [tenant, roleOptions, role]);
 
   async function runTests() {
     if (actions.length === 0) {
@@ -67,7 +92,7 @@ function PolicyTestPage() {
     setBusy(true); setErrMsg(null);
     const results: TestResult[] = [];
     for (const action of actions) {
-      const res = await writeJson<Record<string, unknown>>('/api/identity/policies/test', 'POST', { role, action });
+      const res = await writeJson<Record<string, unknown>>('/api/identity/policies/test', 'POST', { role, action, tenant });
       if (res.status === 0) {
         setErrMsg(res.error ?? 'Request failed');
         setBusy(false);
@@ -76,7 +101,7 @@ function PolicyTestPage() {
       results.push({
         ...(res.ok ? res.data : { error: res.data?.error ?? `${res.status}` }),
         ts: new Date().toISOString(),
-        request: { role, action },
+        request: { role, action, tenant },
       } as TestResult);
     }
     setHistory(prev => [...results, ...prev].slice(0, 50));
@@ -86,13 +111,18 @@ function PolicyTestPage() {
   return (
     <PageSection
       title="Policy Sandbox"
-      description="Dry-run AVP authorization. Pick a role + one or more actions to see what each policy would decide."
+      description="Dry-run AVP authorization. Pick a tenant + role + one or more actions to see what each policy would decide."
     >
       <Card>
         <Stack gap="md">
+          <FormField label="Tenant" layout="inline">
+            {(wiring) => (
+              <Select {...inputWiring(wiring)} className="min-w-[220px]" options={tenantOptions} value={tenant} onChange={e => setTenant(e.target.value)} />
+            )}
+          </FormField>
           <FormField label="Role" layout="inline">
             {(wiring) => (
-              <Select {...inputWiring(wiring)} className="min-w-[220px]" options={ROLE_OPTIONS} value={role} onChange={e => setRole(e.target.value)} />
+              <Select {...inputWiring(wiring)} className="min-w-[220px]" options={roleOptions} value={role} onChange={e => setRole(e.target.value)} />
             )}
           </FormField>
           <FormField label="Actions" layout="inline">
@@ -131,7 +161,7 @@ function PolicyTestPage() {
                   <DecisionChip value={r.decision} hasError={!!r.error} />
                   <Stack gap="xs" className="min-w-0 flex-1">
                     <Inline as="span" gap="xs" className="text-[13px] font-medium">
-                      <code>{r.request.role}</code>
+                      <code>{r.request.tenant}/{r.request.role}</code>
                       <Inline as="span" className="text-text-tertiary">→</Inline>
                       <code>{r.request.action}</code>
                     </Inline>

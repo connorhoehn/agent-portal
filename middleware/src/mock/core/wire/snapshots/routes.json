@@ -3,22 +3,22 @@
     {
       "method": "POST",
       "path": "/api/__mock/reset",
-      "source": "src/routes/mock-control.ts:328"
+      "source": "src/routes/mock-control.ts:329"
     },
     {
       "method": "POST",
       "path": "/api/__mock/scenario",
-      "source": "src/routes/mock-control.ts:296"
+      "source": "src/routes/mock-control.ts:297"
     },
     {
       "method": "GET",
       "path": "/api/__mock/scenarios",
-      "source": "src/routes/mock-control.ts:274"
+      "source": "src/routes/mock-control.ts:275"
     },
     {
       "method": "GET",
       "path": "/api/__mock/state",
-      "source": "src/routes/mock-control.ts:351"
+      "source": "src/routes/mock-control.ts:356"
     },
     {
       "method": "GET",
@@ -1163,162 +1163,162 @@
     {
       "method": "POST",
       "path": "/api/ingest/crawl",
-      "source": "src/routes/ingest.ts:330"
+      "source": "src/routes/ingest.ts:358"
     },
     {
       "method": "GET",
       "path": "/api/ingest/crawl-targets",
-      "source": "src/routes/ingest.ts:513"
+      "source": "src/routes/ingest.ts:541"
     },
     {
       "method": "POST",
       "path": "/api/ingest/crawl-targets",
-      "source": "src/routes/ingest.ts:517"
+      "source": "src/routes/ingest.ts:545"
     },
     {
       "method": "DELETE",
       "path": "/api/ingest/crawl-targets/:id",
-      "source": "src/routes/ingest.ts:570"
+      "source": "src/routes/ingest.ts:598"
     },
     {
       "method": "PATCH",
       "path": "/api/ingest/crawl-targets/:id",
-      "source": "src/routes/ingest.ts:548"
+      "source": "src/routes/ingest.ts:576"
     },
     {
       "method": "POST",
       "path": "/api/ingest/crawl-targets/:id/run",
-      "source": "src/routes/ingest.ts:576"
+      "source": "src/routes/ingest.ts:604"
     },
     {
       "method": "DELETE",
       "path": "/api/ingest/crawl/:id",
-      "source": "src/routes/ingest.ts:361"
+      "source": "src/routes/ingest.ts:389"
     },
     {
       "method": "GET",
       "path": "/api/ingest/crawl/:id",
-      "source": "src/routes/ingest.ts:355"
+      "source": "src/routes/ingest.ts:383"
     },
     {
       "method": "GET",
       "path": "/api/ingest/crawl/:id/manifest",
-      "source": "src/routes/ingest.ts:470"
+      "source": "src/routes/ingest.ts:498"
     },
     {
       "method": "GET",
       "path": "/api/ingest/crawl/:id/page/:idx",
-      "source": "src/routes/ingest.ts:412"
+      "source": "src/routes/ingest.ts:440"
     },
     {
       "method": "GET",
       "path": "/api/ingest/crawl/:id/page/:idx/screenshot",
-      "source": "src/routes/ingest.ts:437"
+      "source": "src/routes/ingest.ts:465"
     },
     {
       "method": "GET",
       "path": "/api/ingest/crawl/:id/stream",
-      "source": "src/routes/ingest.ts:367"
+      "source": "src/routes/ingest.ts:395"
     },
     {
       "method": "POST",
       "path": "/api/ingest/crawl/:id/sync",
-      "source": "src/routes/ingest.ts:499"
+      "source": "src/routes/ingest.ts:527"
     },
     {
       "method": "GET",
       "path": "/api/ingest/crawls",
-      "source": "src/routes/ingest.ts:351"
+      "source": "src/routes/ingest.ts:379"
     },
     {
       "method": "GET",
       "path": "/api/ingest/data-sources",
-      "source": "src/routes/ingest.ts:56"
+      "source": "src/routes/ingest.ts:69"
     },
     {
       "method": "GET",
       "path": "/api/ingest/job/:jobId",
-      "source": "src/routes/ingest.ts:71"
+      "source": "src/routes/ingest.ts:99"
     },
     {
       "method": "GET",
       "path": "/api/ingest/jobs",
-      "source": "src/routes/ingest.ts:61"
+      "source": "src/routes/ingest.ts:84"
     },
     {
       "method": "GET",
       "path": "/api/ingest/kb",
-      "source": "src/routes/ingest.ts:49"
+      "source": "src/routes/ingest.ts:62"
     },
     {
       "method": "GET",
       "path": "/api/ingest/queue",
-      "source": "src/routes/ingest.ts:135"
+      "source": "src/routes/ingest.ts:163"
     },
     {
       "method": "GET",
       "path": "/api/ingest/schedules",
-      "source": "src/routes/ingest.ts:163"
+      "source": "src/routes/ingest.ts:191"
     },
     {
       "method": "POST",
       "path": "/api/ingest/schedules",
-      "source": "src/routes/ingest.ts:167"
+      "source": "src/routes/ingest.ts:195"
     },
     {
       "method": "DELETE",
       "path": "/api/ingest/schedules/:id",
-      "source": "src/routes/ingest.ts:193"
+      "source": "src/routes/ingest.ts:221"
     },
     {
       "method": "PATCH",
       "path": "/api/ingest/schedules/:id/toggle",
-      "source": "src/routes/ingest.ts:202"
+      "source": "src/routes/ingest.ts:230"
     },
     {
       "method": "POST",
       "path": "/api/ingest/start",
-      "source": "src/routes/ingest.ts:216"
+      "source": "src/routes/ingest.ts:244"
     },
     {
       "method": "GET",
       "path": "/api/ingest/stats",
-      "source": "src/routes/ingest.ts:291"
+      "source": "src/routes/ingest.ts:319"
     },
     {
       "method": "GET",
       "path": "/api/ingest/storage",
-      "source": "src/routes/ingest.ts:595"
+      "source": "src/routes/ingest.ts:623"
     },
     {
       "method": "GET",
       "path": "/api/ingest/stream",
-      "source": "src/routes/ingest.ts:87"
+      "source": "src/routes/ingest.ts:115"
     },
     {
       "method": "POST",
       "path": "/api/ingest/survey",
-      "source": "src/routes/ingest.ts:620"
+      "source": "src/routes/ingest.ts:652"
     },
     {
       "method": "GET",
       "path": "/api/ingest/survey/:id",
-      "source": "src/routes/ingest.ts:637"
+      "source": "src/routes/ingest.ts:669"
     },
     {
       "method": "POST",
       "path": "/api/ingest/survey/:id/target",
-      "source": "src/routes/ingest.ts:649"
+      "source": "src/routes/ingest.ts:681"
     },
     {
       "method": "GET",
       "path": "/api/ingest/surveys",
-      "source": "src/routes/ingest.ts:633"
+      "source": "src/routes/ingest.ts:665"
     },
     {
       "method": "POST",
       "path": "/api/ingest/upload",
-      "source": "src/routes/ingest.ts:302"
+      "source": "src/routes/ingest.ts:330"
     },
     {
       "method": "GET",
@@ -1943,22 +1943,22 @@
     {
       "method": "GET",
       "path": "/api/observability/oncall/alarms",
-      "source": "src/routes/oncall.ts:448"
+      "source": "src/routes/oncall.ts:536"
     },
     {
       "method": "GET",
       "path": "/api/observability/oncall/hitl-sla",
-      "source": "src/routes/oncall.ts:459"
+      "source": "src/routes/oncall.ts:549"
     },
     {
       "method": "GET",
       "path": "/api/observability/oncall/recent-events",
-      "source": "src/routes/oncall.ts:524"
+      "source": "src/routes/oncall.ts:616"
     },
     {
       "method": "GET",
       "path": "/api/observability/oncall/timeline",
-      "source": "src/routes/oncall.ts:271"
+      "source": "src/routes/oncall.ts:340"
     },
     {
       "method": "GET",

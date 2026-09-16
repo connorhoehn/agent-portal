@@ -46,6 +46,7 @@ import {
 import { requireServiceAuth, MOCK_CONTROL_SERVICE_AUTH } from '../lib/service-auth.js';
 import { join } from 'node:path';
 import { handlerSha, handlerSourceFiles } from '../mock/core/wire/handler-sha.js';
+import { clearDevPairings } from '../mock/dev-pairings.js';
 
 export const mockControlRouter = Router();
 
@@ -339,6 +340,10 @@ mockControlRouter.post('/api/__mock/reset', ...gate, (req, res) => {
   }
 
   unpinAll(registry);
+  // The dev-pairing file as well as the rows: without this, a machine paired
+  // by hand reappears on the next boot and `reset` silently means "reset most
+  // of it". No-op unless MOCK_PERSIST_PAIRINGS=1 (see mock/dev-pairings.ts).
+  clearDevPairings();
   registry.resetAll(DEFAULT_SCENARIO);
   globalScenario = DEFAULT_SCENARIO;
   res.json({ reset: { fixture: null, scenario: DEFAULT_SCENARIO }, ...readState(registry) });

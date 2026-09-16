@@ -14,6 +14,7 @@ import {
   PageSection,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
+import { relativeTime } from '../../lib/relativeTime';
 
 type CapabilityKind =
   | 'browser_navigate'
@@ -75,7 +76,10 @@ function CapabilityEventsPage() {
           <InlinePlaceholder align="center" className="p-6 text-[12px]">
             {events.length === 0 ? (
               <>
-                No browser or code-interpreter activity yet. Trigger some from the{' '}
+                No browser or code-interpreter activity in this process. The feed is
+                held in memory and starts empty whenever the middleware restarts, so
+                this is not a claim that the capabilities have never run. Trigger some
+                from the{' '}
                 <Link to="/admin/capabilities" className="text-[var(--color-primary)] no-underline">
                   Capabilities page
                 </Link>.
@@ -102,8 +106,8 @@ function CapabilityEventsPage() {
                     <TableTd className="text-[10px] font-mono text-[var(--color-text-tertiary)]">
                       {ev.sessionId ? ev.sessionId.slice(0, 12) + '…' : '—'}
                     </TableTd>
-                    <TableTd className="text-[11px] text-[var(--color-text-tertiary)] whitespace-nowrap">
-                      {new Date(ev.startedAt).toLocaleTimeString()}
+                    <TableTd className="text-[11px] text-[var(--color-text-tertiary)] whitespace-nowrap" title={new Date(ev.startedAt).toLocaleString()}>
+                      {relativeTime(ev.startedAt)}
                     </TableTd>
                     <TableTd>
                       <Chip tone={ev.kind.startsWith('browser') ? 'neutral' : 'info'} size="xs">

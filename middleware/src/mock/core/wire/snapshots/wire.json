@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-09-16T19:23:05.191Z",
-  "serverHandlerSha": "fc298c0ae767a8f42a77bbe4a959882cc2360ad4e1e316f30bfdc6bc677f2da8",
+  "capturedAt": "2026-09-16T20:39:11.747Z",
+  "serverHandlerSha": "8d75d42fc8702b3faafa5038ca457cc49022f131b6621364e30de47114fe40ee",
   "baseUrl": "http://127.0.0.1:3012",
   "personas": [
     "orgiq/admin",
@@ -108,6 +108,7 @@
           "library-assets",
           "local-presence",
           "observability-agent-profiles",
+          "observability-approvals",
           "observability-human-labels",
           "observability-memory-writes",
           "org-findings",
@@ -232,6 +233,7 @@
           "library-assets",
           "local-presence",
           "observability-agent-profiles",
+          "observability-approvals",
           "observability-human-labels",
           "observability-memory-writes",
           "org-findings",
@@ -4949,7 +4951,7 @@
       },
       "values": {
         "alarms[].severity": [
-          "unknown"
+          "ok"
         ]
       }
     },
@@ -4957,15 +4959,7 @@
       "persona": "orgiq/admin",
       "status": 200,
       "shape": {
-        "$": "object",
-        "decidedInWindow": "number",
-        "expiredInWindow": "number",
-        "oldestPendingAgeSeconds": "null",
-        "p50DecisionSeconds": "number",
-        "p99DecisionSeconds": "number",
-        "pendingCount": "number",
-        "slaCompliantFraction": "number",
-        "slaThresholdSeconds": "number"
+        "$": "object(dictionary)"
       },
       "values": {}
     },
@@ -4978,16 +4972,23 @@
         "events[]": "object",
         "events[].detail": "string",
         "events[].kind": "string",
+        "events[].relatedAgentId": "string",
+        "events[].relatedInvocationId": "string",
         "events[].severity": "string",
         "events[].title": "string",
         "events[].ts": "string"
       },
       "values": {
         "events[].kind": [
-          "alarm"
+          "deploy",
+          "hitl-decided",
+          "hitl-expired",
+          "judge-spike"
         ],
         "events[].severity": [
-          "info"
+          "critical",
+          "info",
+          "warning"
         ]
       }
     },
@@ -5004,11 +5005,25 @@
         "activeAlarms[].reason": "string",
         "activeAlarms[].severity": "string",
         "buckets": "array",
-        "deployMarkers": "array"
+        "buckets[]": "object",
+        "buckets[].bucketStart": "string",
+        "buckets[].costUsd": "number",
+        "buckets[].driftP95": "null|number",
+        "buckets[].errorRate": "number",
+        "buckets[].hitlDecided": "number",
+        "buckets[].hitlPending": "number",
+        "buckets[].invocations": "number",
+        "buckets[].judgeP05": "null|number",
+        "deployMarkers": "array",
+        "deployMarkers[]": "object",
+        "deployMarkers[].agentId": "string",
+        "deployMarkers[].notes": "string",
+        "deployMarkers[].promptVersion": "string",
+        "deployMarkers[].registeredAt": "string"
       },
       "values": {
         "activeAlarms[].severity": [
-          "unknown"
+          "ok"
         ]
       }
     },
@@ -6417,7 +6432,6 @@
       "values": [
         "advance",
         "agent",
-        "alarm",
         "analysis",
         "answer",
         "artifact",
@@ -6428,6 +6442,7 @@
         "confluence",
         "convention",
         "decision",
+        "deploy",
         "devbox:task",
         "eks",
         "evaluator",
@@ -6437,9 +6452,12 @@
         "general",
         "github",
         "gotcha",
+        "hitl-decided",
+        "hitl-expired",
         "in-review",
         "insight",
         "jira",
+        "judge-spike",
         "lambda",
         "llm",
         "local",
@@ -6521,10 +6539,11 @@
     "severity": {
       "open": false,
       "values": [
+        "critical",
         "info",
         "low",
         "medium",
-        "unknown",
+        "ok",
         "warning"
       ]
     },

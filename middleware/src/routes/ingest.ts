@@ -44,6 +44,19 @@ import {
 import type { CrawlTarget, CrawlMode } from '../lib/crawler-types.js';
 import { startSurvey, getSurvey, listSurveys } from '../lib/site-survey.js';
 
+/**
+ * Marks a response whose upstream call failed — same convention as
+ * routes/kb-admin.ts (which is where the marker was worth catching first for
+ * this pipeline: /data-sources and /jobs both call through providers that
+ * used to swallow a failed Bedrock call into a plain `[]`, indistinguishable
+ * from a knowledge base with nothing to show yet). Kept local rather than
+ * shared so each router owns its own copy, matching every other router that
+ * defines this.
+ */
+function degraded<T extends object>(body: T, err: unknown): T & { degraded: true; error: string } {
+  return { ...body, degraded: true, error: (err as Error).message.split('\n')[0]?.slice(0, 160) ?? 'query failed' };
+}
+
 export const ingestRouter = Router();
 
 ingestRouter.get('/kb', asyncHandler(async (_req, res) => {
@@ -54,8 +67,18 @@ ingestRouter.get('/kb', asyncHandler(async (_req, res) => {
 }));
 
 ingestRouter.get('/data-sources', asyncHandler(async (_req, res) => {
-  const sources = await listDataSources();
-  res.json({ sources });
+  // `{ silent: false }` so a real ListDataSources/GetDataSource failure
+  // reaches here instead of the provider's default swallow-to-`[]` — the "KB
+  // sync" page's Data Sources table used to render a failed Bedrock call as
+  // "No data sources attached", the same sentence it uses for a knowledge
+  // base that has none.
+  try {
+    const sources = await listDataSources({ silent: false });
+    res.json({ sources });
+  } catch (err) {
+    console.warn('[ingest] GET /data-sources failed:', (err as Error).message);
+    res.json(degraded({ sources: [] }, err));
+  }
 }));
 
 ingestRouter.get('/jobs', asyncHandler(async (req, res) => {
@@ -64,8 +87,13 @@ ingestRouter.get('/jobs', asyncHandler(async (req, res) => {
   // only NaN should fall back to the default, and 0 clamps to 1.
   const rawLimit = parseInt((req.query['limit'] as string) ?? '20', 10);
   const limit = Math.max(1, Math.min(100, Number.isNaN(rawLimit) ? 20 : rawLimit));
-  const jobs = await listIngestionJobs(dataSourceId, limit);
-  res.json({ jobs });
+  try {
+    const jobs = await listIngestionJobs(dataSourceId, limit, { silent: false });
+    res.json({ jobs });
+  } catch (err) {
+    console.warn('[ingest] GET /jobs failed:', (err as Error).message);
+    res.json(degraded({ jobs: [] }, err));
+  }
 }));
 
 ingestRouter.get('/job/:jobId', asyncHandler(async (req, res) => {
@@ -606,8 +634,12 @@ ingestRouter.get('/storage', asyncHandler(async (req, res) => {
     }
     prefix = entry.s3Prefix || undefined;
   }
-  const breakdown = await getStorageBreakdown(prefix);
-  res.json(kbSlug ? { ...breakdown, kbSlug, s3Prefix: prefix ?? null } : breakdown);
+  const { s3ScanFailed, ...breakdown } = await getStorageBreakdown(prefix);
+  const body = kbSlug ? { ...breakdown, kbSlug, s3Prefix: prefix ?? null } : breakdown;
+  // `s3ScanFailed` means `totalObjects`/`byType`/`byPrefix` are a stale 0 from
+  // a failed ListObjectsV2, not an empty bucket — the Storage page used to
+  // have no way to tell those apart.
+  res.json(s3ScanFailed ? degraded(body, new Error('S3 object listing failed — see server logs')) : body);
 }));
 
 // ── Site survey — reconnaissance before a crawl ─────────────────────────────

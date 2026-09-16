@@ -164,10 +164,14 @@ describe('a marketplace dispatch, end to end in dev:mock', () => {
     expect(dispatch.status).toBe(202);
     const jobId = dispatch.body.run.jobId as string;
 
-    // The route answers the moment the run exists, so the job is still queued
-    // — the state an operator watching the queue actually sees first.
+    // The route answers the moment the run exists, so the job has not finished
+    // — the state an operator watching the queue actually sees first. Either
+    // non-terminal state counts: pinning this to exactly `queued` would also
+    // assert that this process wins a race against its own dispatcher, which
+    // holds on an idle machine and fails on a loaded one (seen failing with
+    // `claimed` under three parallel suites, passing alone seconds later).
     const first = await request(app).get(`/api/work/jobs/${jobId}`);
-    expect(first.body.status).toBe('queued');
+    expect(['queued', 'claimed']).toContain(first.body.status);
 
     const seen = new Set<string>([first.body.status as string]);
     const deadline = Date.now() + 4_000;
@@ -176,7 +180,8 @@ describe('a marketplace dispatch, end to end in dev:mock', () => {
       seen.add(poll.body.status as string);
       if (poll.body.status === 'done') break;
     }
-    expect([...seen]).toEqual(expect.arrayContaining(['queued', 'done']));
+    expect(seen.has('done')).toBe(true);
+    expect([...seen].some((st) => st === 'queued' || st === 'claimed' || st === 'running')).toBe(true);
     // The intermediate hops are what "a progression" means: a job that went
     // straight from queued to done would satisfy every other assertion here.
     expect(seen.has('claimed') || seen.has('running')).toBe(true);

@@ -16,7 +16,7 @@
 
 import { useCallback, useState } from 'react';
 import {
-  Button, Card, Chip, EmptyState, EntityCell, FilterChip, FormField, Inline, Input,
+  Button, Card, Chip, ConfirmDialog, EmptyState, EntityCell, FilterChip, FormField, Inline, Input,
   MetaLine, SectionLabel, Select, Stack, Toolbar,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
@@ -53,6 +53,7 @@ export function ConnectedSources() {
   const [apiKey, setApiKey] = useState('');
   const [busy, setBusy] = useState(false);
 
+  const [removeTarget, setRemoveTarget] = useState<ConnectedSource | null>(null);
   const [openSource, setOpenSource] = useState<string | null>(null);
   const [identity, setIdentity] = useState<Identity | null>(null);
   const [repos, setRepos] = useState<RepoRef[] | null>(null);
@@ -253,7 +254,7 @@ export function ConnectedSources() {
               </Button>
             )}
             {canManage && (
-              <Button variant="danger" size="sm" onClick={() => void disconnect(s.name)}>
+              <Button variant="danger" size="sm" onClick={() => setRemoveTarget(s)}>
                 Remove
               </Button>
             )}
@@ -342,6 +343,21 @@ export function ConnectedSources() {
           )}
         </Stack>
       ))}
+
+      <ConfirmDialog
+        open={!!removeTarget}
+        onConfirm={() => {
+          if (removeTarget) {
+            const name = removeTarget.name;
+            setRemoveTarget(null);
+            void disconnect(name);
+          }
+        }}
+        onCancel={() => setRemoveTarget(null)}
+        tone="destructive"
+        title={removeTarget ? `Remove "${removeTarget.name}"?` : 'Remove connection?'}
+        body="Deletes the stored credential from the vault. You'll need to re-enter it to reconnect — the token is never shown back to you."
+      />
     </Card>
   );
 }

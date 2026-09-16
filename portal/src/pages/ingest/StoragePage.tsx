@@ -6,9 +6,11 @@ import { useFetch } from '../../hooks/useFetch';
 import { formatBytes } from '../../components/ingest/types';
 import type { StorageBreakdown } from '../../components/ingest/types';
 import { EmptyState } from '../../components/ingest/ui';
+import { UnavailableNotice } from '../../components/UnavailableNotice';
 
 function StoragePage() {
-  const { data: storage, isLoading } = useFetch<StorageBreakdown>('/api/ingest/storage', 60_000);
+  const { data: storage, isLoading, error, degraded, refresh } = useFetch<StorageBreakdown>('/api/ingest/storage', 60_000);
+  const failure = error ?? degraded;
 
   return (
     <PageSection
@@ -16,10 +18,18 @@ function StoragePage() {
       description="Where ingested documents land in S3, and how much of it the knowledge base has chunked."
     >
       <Stack gap="md">
+        {failure && (
+          <UnavailableNotice
+            error={failure}
+            what="the storage breakdown"
+            source="Counted live from S3"
+            onRetry={refresh}
+          />
+        )}
         {/* By extension */}
         <Card padding="md">
           <CardHeader title="By File Type" />
-          {!storage && isLoading ? (
+          {failure ? null : !storage && isLoading ? (
             <LoadingState label="Loading file types…" />
           ) : !storage || storage.byType.length === 0 ? (
             <EmptyState title="No S3 objects yet." />
@@ -60,7 +70,7 @@ function StoragePage() {
         {/* By prefix */}
         <Card padding="md">
           <CardHeader title="By Prefix" />
-          {!storage && isLoading ? (
+          {failure ? null : !storage && isLoading ? (
             <LoadingState label="Loading prefixes…" />
           ) : !storage || storage.byPrefix.length === 0 ? (
             <EmptyState title="No S3 objects yet." />
@@ -116,7 +126,7 @@ function StoragePage() {
             ingested, as opposed to what is sitting in S3. */}
         <Card padding="md">
           <CardHeader title="Knowledge Base" />
-          {!storage ? (
+          {failure ? null : !storage ? (
             <LoadingState label="Loading storage breakdown…" />
           ) : (
             <KPIGrid columns={2}>
