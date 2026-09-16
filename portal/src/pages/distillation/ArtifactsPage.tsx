@@ -6,7 +6,7 @@
 import { useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import {
-  Button, Chip, DataTable, Drawer, EmptyState, FilterChip, LoadingState, MetaLine, PageSection, SearchInput, Stack,
+  Button, Chip, DataTable, Drawer, EmptyState, FilterChip, MetaLine, PageSection, SearchInput, Stack,
   Toolbar, ToolbarGroup, ToolbarLabel,
   type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
@@ -198,11 +198,10 @@ export default function DistillationArtifactsPage() {
         </ToolbarGroup>
       </Toolbar>
 
+      {/* See the shared list-page loading pattern comment in QueuePage.tsx. */}
       {error ? (
         <EmptyState title="Could not load artifacts" description={error} />
-      ) : isLoading && !data ? (
-        <LoadingState label="Loading artifacts…" />
-      ) : artifacts.length === 0 ? (
+      ) : !(isLoading && !data) && artifacts.length === 0 ? (
         <EmptyState
           title="No artifacts"
           description="No artifact matches these filters."
@@ -217,6 +216,7 @@ export default function DistillationArtifactsPage() {
           onRowClick={(a) => setOpenId(a.id)}
           pageSize={25}
           emptyMessage="No artifacts"
+          loading={isLoading && !data}
         />
       )}
 

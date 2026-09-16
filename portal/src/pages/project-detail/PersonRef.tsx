@@ -23,7 +23,7 @@
 
 import { useCallback, useEffect, useId, useReducer, useRef, useState, type KeyboardEvent, type RefObject } from 'react';
 import { Link } from 'react-router';
-import { Avatar, Chip, Inline, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { Avatar, Chip, Inline, LoadingState, Stack } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { useSession } from '../../lib/auth';
 import { PersonCardFrame } from './PersonCardFrame';
@@ -42,7 +42,7 @@ export function personPath(personId: string): string {
 function HoverDetail({ personId }: { personId: string }) {
   const { data, error } = useFetch<PersonDetail>(`/api/graph/people/${encodeURIComponent(personId)}`);
   if (error) return <T className="text-[11px] text-text-tertiary">Couldn’t load details.</T>;
-  if (!data) return <T className="text-[11px] text-text-tertiary">Loading…</T>;
+  if (!data) return <LoadingState label="Loading…" spinnerSize="sm" />;
   const skills = data.skills.slice(0, 5);
   return (
     <Stack gap="xs">

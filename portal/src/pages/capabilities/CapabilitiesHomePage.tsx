@@ -24,6 +24,7 @@ import {
   CardHeader,
   CatalogGrid,
   Chip,
+  LoadingState,
   MetaLine,
   PageSection,
   SectionLabel,
@@ -145,7 +146,7 @@ export default function CapabilitiesHomePage() {
   const { session } = useSession();
   const canOpenIngest = !!session && (session.role === 'admin' || INGEST_ROLES.includes(session.role));
 
-  const { data, error, refresh } = useFetch<{ capabilities: CapabilityStatus[] }>(
+  const { data, isLoading, error, refresh } = useFetch<{ capabilities: CapabilityStatus[] }>(
     '/api/capabilities/reconcile', 60_000,
   );
   const { data: events } = useFetch<{ events: CapabilityEvent[] }>(
@@ -190,6 +191,9 @@ export default function CapabilitiesHomePage() {
         </Card>
       )}
 
+      {isLoading && caps.length === 0 ? (
+        <LoadingState label="Loading capability status…" />
+      ) : (
       <CatalogGrid columns={2}>
         {caps.map((c) => {
           const role = ROLES[c.key];
@@ -249,6 +253,7 @@ export default function CapabilitiesHomePage() {
           );
         })}
       </CatalogGrid>
+      )}
 
       <T className="mt-4 text-[11px] leading-snug text-text-tertiary" wrap>
         Prompts moved to <Link to="/iq/prompts" className="text-primary no-underline hover:underline">Prompts</Link>,

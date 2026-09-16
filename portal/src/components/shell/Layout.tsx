@@ -65,6 +65,13 @@ const PALETTE_PLACEHOLDER: Record<string, string> = {
   assessment: 'Jump to a page, find a team (TEAM-0NN) or a command…',
 };
 
+// ⌘I scopes the same ⌘K dialog down to just the Devbox group (see
+// DevboxQuickSwitch's own comment on why there's no real pre-filtered-dialog
+// API to open instead). The placeholder used to stay the tenant default even
+// while scoped, advertising "paste an invocation id, search runs…" search
+// that scope isn't offering — every one of those commands is hidden.
+const DEVBOX_PALETTE_PLACEHOLDER = 'Search computers, or + New computer…';
+
 // Tenant/universal items (visible per tenant + role, not just to admins).
 const NAV_ITEMS: NavItem[] = [
   // Plan's front door. Sprints are a lens on this page (?lens=sprints), not a
@@ -420,7 +427,13 @@ export function Layout() {
             </Stack>
           </SubNavLayout>
         </Stack>
-        <CommandPalette placeholder={PALETTE_PLACEHOLDER[session?.tenant ?? 'orgiq'] ?? 'Jump to a page…'} />
+        <CommandPalette
+          placeholder={
+            paletteScope === 'devbox'
+              ? DEVBOX_PALETTE_PLACEHOLDER
+              : PALETTE_PLACEHOLDER[session?.tenant ?? 'orgiq'] ?? 'Jump to a page…'
+          }
+        />
         {/* The Computer Lab is an orgiq surface. Mounting its quick-switch and
             dock in every tenant's shell put orgiq journeys one click away from
             an assessment session — the tenants are separate products on a

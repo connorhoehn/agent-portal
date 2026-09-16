@@ -37,8 +37,8 @@ Three design rules carried over from the memory harness, verbatim:
 2. **The database is the queue** (s7/s25). The sidecar's outbox
    (`synced_at IS NULL`) is the pending-work signal; presence just reports it.
 3. **Record reachability honestly** (s19). The portal must never offer an
-   affordance ("open a shell on this box") that the node can't serve. A local
-   node is *presence + optional job claiming*, not a remote shell target,
+   affordance ("open a shell on this box") that the machine can't serve. A local
+   machine is *presence + optional job claiming*, not a remote shell target,
    until it explicitly advertises that capability.
 
 ## What exists today (the seams)
@@ -51,31 +51,33 @@ All confirmed by survey on 2026-09-02; line numbers from `main`.
 | Status-dot precedent | `portal/src/components/shell/GatewayStatusBadge.tsx` | Two-dot indicator: one HTTP poll, one live WS state. |
 | Dropdown precedent | `portal/src/components/shell/MasqueradeMenu.tsx:118-133` | Hand-rolled header panel (trigger + positioned panel + click-outside). Precedent, **not** the pattern to copy — see UI section. |
 | Fleet registry | `middleware/src/lib/devbox-fleet.ts` | In-memory `FleetBox` map; `registerBox()` (`:119`), status derived from event flow not client claims (`:220-288`). No heartbeat protocol; no durable table. |
-| Dispatcher | `middleware/src/lib/job-dispatcher.ts:139-146` | Claims `agent_jobs` per idle box every 10s. **Any registered box is automatically dispatch-eligible** — a local node needs an explicit opt-in. |
+| Dispatcher | `middleware/src/lib/job-dispatcher.ts:139-146` | Claims `agent_jobs` per idle box every 10s. **Any registered box is automatically dispatch-eligible** — a local machine needs an explicit opt-in. |
 | Reaper | `middleware/src/lib/devbox-reaper.ts:29-58` | 20m idle / 60m lifetime kill for microVMs. A laptop is not billable — must be exempt. |
-| Visibility | `middleware/src/lib/devbox-visibility.ts:49-55` | `ownerId`-only boxes are visible to the owner + fleet-wide roles. A local node is naturally this shape. |
+| Visibility | `middleware/src/lib/devbox-visibility.ts:49-55` | `ownerId`-only boxes are visible to the owner + fleet-wide roles. A local machine is naturally this shape. |
 | Lab UI | `@connorhoehnslalom/ui-components/compute` — `Computer` (`compute.d.ts:306-362`) | Already carries `currentTask`, `projectId`/`project`, `contextUsed`, `activeModel`, `spendUsd`, `tokensUsed` — nearly every dropdown field except memory sync. `ComputeProvider` mounted once in `portal/src/components/compute/ComputeHost.tsx:128-142`. |
 | Live transport | `middleware/src/lib/sse.ts` + `routes/devbox.ts:442` (tail), `routes/work.ts` (dispatcher stream) | SSE is the house style for live status; the gateway WS (realtime-modules) carries chat/presence/activity for a *separate* service. |
 | Jobs | `middleware/src/providers/agent-jobs.ts` — `claimNextJob` (`:252-285`, `FOR UPDATE SKIP LOCKED`), `agent_jobs.box_id/session_id` (`schema/agentic_work_schema.sql:37-38`) | The claim path a local runner can reuse unchanged. |
 | Attribution | `bot_runs.dispatched_by` (`schema/agent_run_attribution_schema.sql`), envelope gates in `lib/bot-runner.ts` | The governance rails local work must ride, not bypass. |
 | Session identity | `portal/src/lib/auth.tsx:12-21` (`session.sub`), `routes/devbox.ts:389` (owner always from session, never body) | The ownership rule to preserve. |
 | Memory (server) | `middleware/src/providers/memory.ts` (AgentCore Memory event store), `capability-reconcile.ts:140` (probe) | "Is memory connected" exists server-side; **no mesh/sync concept exists yet** — the local sidecar is the first component that has one. |
-| Machine-auth precedent | CLAUDE.md gotcha: `requireServiceAuth`/`requireTraceAuth` on agent-callback routes | Machine callbacks get token auth per-route, never a session floor. The local node follows this rule. |
+| Machine-auth precedent | CLAUDE.md gotcha: `requireServiceAuth`/`requireTraceAuth` on agent-callback routes | Machine callbacks get token auth per-route, never a session floor. The local machine follows this rule. |
 
 Schema gap: **there is no table for boxes/nodes/heartbeats anywhere.** The
-fleet dies with the middleware process. Local nodes need pairing tokens that
+fleet dies with the middleware process. Local machines need pairing tokens that
 survive restarts, so this feature introduces the first durable compute table.
 
 ## Domain model
 
 Two entities, deliberately not one:
 
-- **Node** — a machine. Durable (survives restarts), paired once, owns a
+- **Node** — a machine, called `node` in the schema and API. This doc says
+  "machine" everywhere else and reserves `node` for schema/API references.
+  Durable (survives restarts), paired once, owns a
   token. `node_id` is stable (host UUID). Carries: label ("connor-macbook"),
   platform, hardware hints (arch, RAM, GPU), advertised capabilities
   (`accept_jobs`, `local_models: ["qwen2.5-coder:14b", …]`), owner
   (`app_users` sub), created/last-seen.
-- **Session** — a live Claude Code (or other harness) session on a node.
+- **Session** — a live Claude Code (or other harness) session on a machine.
   Ephemeral (in-memory, like `devbox-fleet`), announced at SessionStart,
   heartbeated, ended at Stop or by staleness. This is the s19 presence
   record, near-verbatim:
@@ -172,7 +174,7 @@ CREATE TABLE compute_pairing_codes (
 
 Sessions stay in-memory in a new `middleware/src/lib/local-compute-fleet.ts`
 (sibling of `devbox-fleet.ts`, same subscribe/replay idiom) — consistent with
-the existing fleet's posture and honest about what a restart costs: the node
+the existing fleet's posture and honest about what a restart costs: the machine
 re-announces within one heartbeat. In-memory fallback for `compute_nodes`
 when Aurora is unconfigured, mirroring the identity provider's pattern, so
 `dev:mock` demos the whole feature offline.
@@ -230,23 +232,111 @@ is now a contract:
   black on a light page. The library-side fix (a defined token or a real
   `tone` prop) is queued in `docs/ui-components-queue.md`.
 
+## Live metrics and a merged event stream (2026-09-16)
+
+The presence page had nothing to show connection status transitioning,
+whether a run is queued/running/stopped/failed, or any signal of the
+machine's own health — just a badge that changed color on a poll. Two
+additions close that, both server-side; the portal consumes them separately.
+
+**Machine metrics ride the announce, not the heartbeat.** `worker.mjs`'s
+periodic loop only ever calls `POST /api/local-compute/announce` on a
+repeating timer — `POST /api/local-compute/heartbeat` exists as a
+machine-callback route but nothing in the shipped worker calls it — so that
+is where an OPTIONAL `metrics` object attaches, all fields independently
+optional so an older worker (or a degraded reading — `node:os` can throw in a
+sandbox) keeps working byte-for-byte:
+
+```jsonc
+// POST /api/local-compute/announce
+{
+  "sessions": [...],
+  "metrics": {
+    "loadAvg1": 1.25,        // os.loadavg()[0]
+    "cpuCount": 10,          // os.cpus().length
+    "memTotalMb": 32768,
+    "memFreeMb": 8192,
+    "uptimeS": 12345,        // os.uptime()
+    "workerVersion": "1.1.0",
+    "activeJobs": 1
+  }
+}
+```
+
+Validated and clamped at the route (`routes/local-compute.ts` `parseMetrics`):
+a present-but-malformed object (non-finite, negative, or past a generous
+absurd ceiling; `workerVersion` not a string) 400s the WHOLE announce rather
+than storing a partial guess — the same all-or-nothing shape `parseSessions`
+already uses. Absent is a no-op: the previously stored snapshot, if any, is
+left alone rather than wiped, which is what makes an older worker safe.
+Storage lives beside presence in `lib/local-compute-fleet.ts` (in-memory,
+keyed by node id, stamped with the observation time) rather than in
+`compute_nodes` — a CPU/memory reading is a live signal with the same
+lifecycle as a session, not a durable fact about the machine, and putting it
+there needed no schema migration. `metricsOf()` hides a stale snapshot the
+same way `presenceOf()` hides sessions once a node ages past the offline
+horizon (5 min) — a number from ten minutes ago is presence the machine can
+no longer back.
+
+`GET /api/local-compute/nodes` gained a `metrics: {...} | null` field per
+node, sibling to `presence`, for exactly this reason: a wire consumer that
+only reads the announce contract would miss that the same object rides the
+existing "my machines" read.
+
+**`GET /api/local-compute/events`** is a second SSE stream, guarded and
+owner-scoped exactly like `GET /nodes` (`browserTenant` +
+`requireSession('ViewLocalCompute')`), additive to the existing `/stream`
+route rather than a replacement for it. One connection now carries everything
+the page needs:
+
+```jsonc
+// on connect — a full snapshot, same node shape GET /nodes returns, so the
+// client never needs a second round-trip just to bootstrap
+{"type":"hello","nodes":[{ id, ownerId, label, ..., presence, metrics }]}
+
+// a node's connected/stale/offline status changed, OR new metrics landed —
+// one frame kind for both, since both are "this machine's presence record
+// changed" and a second type would be a distinction the client gains nothing
+// from
+{"type":"presence","nodeId":"...","status":"connected","lastSeenAt":"...","metrics":{...}|null}
+
+// a job belonging to one of THIS owner's machines changed state — queued,
+// claimed, running, done/failed/cancelled/awaiting_review
+{"type":"job","jobId":"...","nodeId":"...","status":"claimed","title":"...","at":"..."}
+```
+
+Job events are emitted from the provider (`providers/agent-jobs.ts`
+`jobEvents`, a small `EventEmitter` in the same shape as `job-dispatcher.ts`'s
+existing `dispatcherEvents`), not polled inside the route: every write that
+moves a job's `status` — enqueue, the pull-side claim, the fenced
+running/complete transitions, cancel, review — emits, and the route resolves
+which machine a job belongs to from its `box_id` once claimed or from
+`payload.nodeId` before that (a queued-but-unclaimed targeted job has no
+`box_id` yet, and that is exactly the window "up next on `<machine>`" is
+watching). Every frame is filtered to the connecting owner's own node ids
+before it is written — never another owner's machine or job, proven by a
+route test that pairs and dispatches to a second owner's machine on the same
+stream and asserts none of it appears in the buffer. `initSSE`'s existing
+`heartbeat` named event is the periodic keepalive; nothing new was needed for
+that.
+
 ## Authorization
 
 - New Cedar action **`ConnectLocalCompute`** — gates pairing-code creation
-  and the browser-facing node list/revoke. Granted to `sme`, `org-leader`,
+  and the browser-facing machine list/revoke. Granted to `sme`, `org-leader`,
   `hr-admin` in `middleware/seeds/roles/orgiq/*.cedar`; `member` can hold it
   too (presence is personal and read-only) — decide at implementation with a
   default of *yes for every OrgIQ role that can hold a session*, since the
-  node only ever shows the owner their own machine.
+  feature only ever shows the owner their own machine.
 - Added in **both** `middleware/src/lib/authz.ts:34` (`CAPABILITY_ACTIONS`)
   and `portal/src/lib/capabilities.tsx:15` (the `Action` union) — the survey
   confirmed these drift when only one is edited.
 - Job participation (P2) reuses the existing money/attribution rails
-  unchanged: dispatch to a local node still flows through `agent_jobs`, still
+  unchanged: dispatch to a local machine still flows through `agent_jobs`, still
   carries `dispatched_by` from a real session sub, still hits the envelope
-  gates in `bot-runner.ts`. A local node lowers the *cost* of a run, not the
+  gates in `bot-runner.ts`. A local machine lowers the *cost* of a run, not the
   *governance* of it.
-- Visibility: local nodes/sessions are owner-visible plus the existing
+- Visibility: local machines/sessions are owner-visible plus the existing
   `FLEET_WIDE_ROLES` (`devbox-visibility.ts:32`) — a release manager can see
   that a machine is contributing, but `touching` paths and intents are
   presence data about a person's live work; default the *detail* (intent,
@@ -259,17 +349,17 @@ is now a contract:
 ### P0 — the header presence chip
 
 Lives in the `ChannelHeader` `actions` slot (`Layout.tsx:251-255`), rendered
-only when the session user owns ≥1 paired node (zero-state: nothing — no
+only when the session user owns ≥1 paired machine (zero-state: nothing — no
 chrome for a feature you haven't paired).
 
-- **Chip**: dot (green connected / amber stale / gray offline) + `⌂ connor-macbook · 3` (sessions). Multiple nodes: `⌂ 2 machines · 5`.
+- **Chip**: dot (green connected / amber stale / gray offline) + `⌂ connor-macbook · 3` (sessions). Multiple machines: `⌂ 2 machines · 5`.
 - **Dropdown panel**, per session:
   - project + branch (`p-realtime · worktree-local-compute-presence`)
   - intent / current task, one line
   - model provider chip — `bedrock · nova-pro` vs `anthropic · claude-sonnet-5` vs `ollama · qwen2.5-coder:14b` (each provider rendered distinctly; the seeded demo machine shows the anthropic case, since the worker runs plain `claude -p` on the operator's own login by default, pinned to Sonnet or Haiku — never a frontier model for ticket work)
   - context meter (fraction, `DotMeter`)
   - memory sync line — `● synced`, `◐ 14 pending`, `○ offline — queuing`, with pull-cursor age on hover
-  - footer: node totals + "Open in Computer Lab" deep link (`/admin/devbox?box=local:<nodeId>`), "Manage machines" → settings page (revoke, rename, pairing)
+  - footer: machine totals + "Open in Computer Lab" deep link (`/admin/devbox?box=local:<nodeId>`), "Manage machines" → settings page (revoke, rename, pairing)
 
 **Component discipline.** No hand-rolled panel. The dropdown is a genuine
 missing primitive in ui-components (`MasqueradeMenu` hand-rolls it today, and
@@ -284,14 +374,14 @@ the primitive — and `MasqueradeMenu` migrates onto it in the same pass.
 
 ### P1 — Computer Lab integration
 
-Local nodes project into the lab as `Computer`s: `id: "local:<nodeId>:<sessionId>"`,
+Local machines project into the lab as `Computer`s: `id: "local:<nodeId>:<sessionId>"`,
 `activeModel`, `contextUsed`, `currentTask`, `projectId` all map 1:1. Two
 honest gaps to respect:
 
 - `Computer` has no `kind` discriminator and no memory-sync field. Cross-repo
   ask: `kind?: 'microvm' | 'local'` + `memorySync?: {...}` on `Computer`, and
   the lab renders local boxes with a distinct glyph and **without** shell
-  affordances unless the node advertises them (rule 3: never offer an
+  affordances unless the machine advertises them (rule 3: never offer an
   unreachable affordance — `runCommand`/`shell-url` don't exist for a laptop).
 - Injection point: middleware merges local sessions into `GET /api/devbox/boxes`
   (server-side merge keeps `ComputeProvider` untouched) — preferred over a
@@ -302,10 +392,10 @@ honest gaps to respect:
 
 ### P2 — working the queue
 
-A node with `accept_jobs: true` runs a small local runner (plugin-side) that
+A machine with `accept_jobs: true` runs a small local runner (plugin-side) that
 polls `POST /api/local-compute/claim` → middleware calls the existing
-`claimNextJob(boxId, sessionId)` with jobs filtered to what the node can run
-(job `kind` allowlist + the node's `local_models`). Results flow back through
+`claimNextJob(boxId, sessionId)` with jobs filtered to what the machine can run
+(job `kind` allowlist + the machine's `local_models`). Results flow back through
 the existing job completion path; spend attribution records
 `modelProvider: 'ollama'` runs at $0 marginal model cost but still meters
 tokens — the budget story becomes "this initiative's maintenance floor
@@ -322,9 +412,9 @@ corpus-wide reads. Interactive runs stay on the cloud fleet.
 When the shared memory fabric materializes (harness Part III; `graph_proposals`
 and `agent_jobs` `memory.merge` already exist in schema), the dropdown's
 memory line deepens: which packs are imported (capability registry, project
-90d replica), claim/lease state when the node is doing fabric work
+90d replica), claim/lease state when the machine is doing fabric work
 (distributed-core `DistributedLock` fencing per s30), and the merge-queue
-depth for proposals the node authored. Nothing in P0–P2 blocks on this; the
+depth for proposals the machine authored. Nothing in P0–P2 blocks on this; the
 `memory` object in the announce payload is deliberately open-shaped so the
 sidecar can enrich it without a protocol rev.
 
@@ -334,18 +424,18 @@ sidecar can enrich it without a protocol rev.
 1. Pair a machine from the portal; token lands in the plugin config; node row survives middleware restart.
 2. Start a local Claude Code session → chip appears within one heartbeat showing 1 session with project/branch/intent/model/memory line.
 3. Kill the network → chip goes stale then offline within 5min; restore → recovers with no local errors (backoff observable in plugin logs).
-4. A second portal user cannot see the node detail; fleet-wide roles see machine+count only.
-5. Works end-to-end in `dev:mock` (in-memory node store, a fixture node).
+4. A second portal user cannot see the machine detail; fleet-wide roles see machine+count only.
+5. Works end-to-end in `dev:mock` (in-memory machine store, a fixture machine).
 
 **P1 — lab** — local sessions appear in ComputerLab grouped under their
 projects, distinct glyph, no shell affordance; ⌘I/⌘K find them; reaper and
 dispatcher provably skip them (unit tests on `decideReaping` + the dispatch
 filter).
 
-**P2 — work** — an `accept_jobs` node claims a seeded `agent_jobs` batch
+**P2 — work** — an `accept_jobs` machine claims a seeded `agent_jobs` batch
 job, completes it, and the run shows attribution + $0 model cost in the
 lab's project rollup; envelope gates still fire for over-budget dispatches
-targeting local nodes.
+targeting local machines.
 
 **P3 — mesh** — spec'd separately once the fabric exists; only the payload
 seam is reserved here.
@@ -370,7 +460,7 @@ Other agent sessions are concurrently editing **ui-components**,
   rule; also `isolation: worktree` does not protect them). Cross-repo asks are
   filed as explicit TODOs for the sessions that own those repos:
   1. ui-components: `HeaderStatusMenu` primitive (trigger + panel + menu internals); migrate `MasqueradeMenu` onto it.
-  2. ui-components `/compute`: `Computer.kind?: 'microvm' | 'local'`, `Computer.memorySync?`, local-node rendering (glyph, suppressed shell affordances).
+  2. ui-components `/compute`: `Computer.kind?: 'microvm' | 'local'`, `Computer.memorySync?`, local-machine rendering (glyph, suppressed shell affordances).
   3. realtime-modules: none required. The gateway WS presence channel is a *possible* later transport for the badge's live lane; P0–P2 deliberately use middleware SSE/poll so this feature has zero coupling to that team's churn.
 - **Version bumps**: consume ui-components asks by moving the git sha in
   `portal/package.json` only after the owning session lands them on `main`;
@@ -386,7 +476,7 @@ Other agent sessions are concurrently editing **ui-components**,
   queue — the harness doc specs those; this feature only *reports* the local
   sidecar's relationship to them.
 - Not a remote-shell/SSH path to the laptop. No inbound connections to the
-  machine, ever; the node only dials out.
+  machine, ever; the machine only dials out.
 - Not presence for cloud sessions (Claude Code on the web, ECS harnesses) —
   they're already visible via the devbox fleet and traces.
 - Not per-file locking/claims in P0–P2 (`touching` is informational; the

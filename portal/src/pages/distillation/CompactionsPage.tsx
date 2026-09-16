@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import {
   Button, Chip, DataTable, DetailSection, Drawer, EmptyState, FilterChip, Inline, InlineAlert,
-  LoadingState, PageSection, Stack, Toolbar, ToolbarGroup, ToolbarLabel,
+  PageSection, Stack, Toolbar, ToolbarGroup, ToolbarLabel,
   type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
@@ -240,11 +240,10 @@ export default function DistillationCompactionsPage() {
         </ToolbarGroup>
       </Toolbar>
 
+      {/* See the shared list-page loading pattern comment in QueuePage.tsx. */}
       {jobsError ? (
         <EmptyState title="Could not load compaction history" description={jobsError} />
-      ) : jobsLoading && !jobsData ? (
-        <LoadingState label="Loading compactions…" />
-      ) : filteredJobs.length === 0 ? (
+      ) : !(jobsLoading && !jobsData) && filteredJobs.length === 0 ? (
         <EmptyState title="No compactions" description="No compaction jobs match this filter." />
       ) : (
         <DataTable<CompactionJob>
@@ -254,6 +253,7 @@ export default function DistillationCompactionsPage() {
           onRowClick={(j) => setOpenId(j.id)}
           pageSize={25}
           emptyMessage="No compactions"
+          loading={jobsLoading && !jobsData}
         />
       )}
 

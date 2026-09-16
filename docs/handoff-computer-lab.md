@@ -1,4 +1,4 @@
-# Handoff — Computer Lab and the environments domain
+# Handoff — Computer Lab and Environments
 
 > **Updated after the nine-agent integration (2026-09-01).** The "What is
 > left" list below is largely CLOSED: the portal adopted ComputerLab (inline,
@@ -19,7 +19,7 @@ Two pieces of work, in two repos, that have not yet met each other.
 1. **`@connorhoehnslalom/ui-components/compute`** — a new surface package: a
    tmux-shaped multiplexer over AgentCore microVM sessions, plus the primitives
    it needed. All of it lives in ui-components and is on `main` there.
-2. **The environments domain in aws-agentcore** — schema, provider, routes and
+2. **Environments, in aws-agentcore** — schema, provider, routes and
    Cedar actions for "where an initiative's code runs, and who may reach it."
    Backend only; nothing renders it yet.
 
@@ -194,7 +194,7 @@ not `tone`.
 
 ---
 
-## Part 2 — the environments domain (aws-agentcore)
+## Part 2 — Environments (aws-agentcore)
 
 Backend for "an initiative has environments; developers reach them through
 bastion computers; access is decided by the auth profile."

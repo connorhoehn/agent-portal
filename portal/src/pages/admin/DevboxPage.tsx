@@ -42,7 +42,7 @@ export default function DevboxPage() {
     return (
       <ErrorState
         title="No computers here"
-        body="Reaching a computer needs the ManageDevbox capability. An SME gets their own plus the ones shared on their initiatives; ask a platform operator if you expected one."
+        body="Reaching a computer needs computer access. An SME gets their own plus the ones shared on their initiatives; ask a platform operator if you expected one."
       />
     );
   }
@@ -70,7 +70,7 @@ export default function DevboxPage() {
       {readOnly && (
         <InlineAlert tone="info" className="mx-4 mt-3">
           You can see the fleet but not drive it. Opening a shell or dispatching work
-          needs the ManageDevbox capability — an SME or a platform operator can.
+          needs computer access, which an SME or a platform operator can grant.
         </InlineAlert>
       )}
       <Stack gap="none" className="min-h-0 flex-1">

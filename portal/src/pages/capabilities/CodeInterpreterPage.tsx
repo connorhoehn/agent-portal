@@ -10,6 +10,7 @@ import {
   Inline,
   InlineAlert,
   InlinePlaceholder,
+  LoadingState,
   MetaLine,
   PageSection,
   SectionLabel,
@@ -90,11 +91,11 @@ function CodeInterpreterPage() {
     data, error: sessionsError, degraded: sessionsDegraded, refresh,
   } = useFetch<{ sessions: CodeSession[] }>('/api/capabilities/code-sessions', 10000);
   const sessionsFailure = sessionsError ?? sessionsDegraded;
-  const { data: eventsData } = useFetch<{ events: CodeCapabilityEvent[] }>(
+  const { data: eventsData, isLoading: eventsLoading } = useFetch<{ events: CodeCapabilityEvent[] }>(
     '/api/observability/capability-events?kind=code_execute&limit=50',
     10000,
   );
-  const { data: invData } = useFetch<{ invocations: InvocationWithSandbox[] }>(
+  const { data: invData, isLoading: invLoading } = useFetch<{ invocations: InvocationWithSandbox[] }>(
     '/api/observability/recent-invocations?limit=50',
     10000,
   );
@@ -277,7 +278,9 @@ print(f"mean={statistics.mean(nums):.2f}, stdev={statistics.stdev(nums):.2f}")`)
           subtitle="every code_execute capability event · in-memory ring (last 50)"
           action={<T className="text-[11px] text-text-tertiary">{codeEvents.length} event{codeEvents.length === 1 ? '' : 's'}</T>}
         />
-        {codeEvents.length === 0 ? (
+        {eventsLoading && codeEvents.length === 0 ? (
+          <LoadingState label="Loading code execution traces…" />
+        ) : codeEvents.length === 0 ? (
           <InlinePlaceholder size="sm" align="center" className="px-3.5 py-6">
             No code executions recorded yet. Use the Run Python panel above or invoke an agent that calls the sandbox.
           </InlinePlaceholder>
@@ -354,7 +357,9 @@ print(f"mean={statistics.mean(nums):.2f}, stdev={statistics.stdev(nums):.2f}")`)
           subtitle="code the agents themselves ran during recent invocations"
           action={<T className="text-[11px] text-text-tertiary">{agentSandboxRows.length} execution{agentSandboxRows.length === 1 ? '' : 's'}</T>}
         />
-        {agentSandboxRows.length === 0 ? (
+        {invLoading && agentSandboxRows.length === 0 ? (
+          <LoadingState label="Loading agent sandbox executions…" />
+        ) : agentSandboxRows.length === 0 ? (
           <InlinePlaceholder size="sm" align="center" className="px-3.5 py-6">
             No agent-driven sandbox executions in the last 50 invocations.
           </InlinePlaceholder>

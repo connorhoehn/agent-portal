@@ -22,6 +22,7 @@ import {
   Chip,
   Inline,
   InlineAlert,
+  LoadingState,
   PageSection,
   Stack,
   StatCard,
@@ -391,7 +392,7 @@ function OnCallPage() {
             {hitl ? (
               <HitlSlaBody hitl={hitl} onViewQueue={() => navigate('/admin/observability/approvals')} />
             ) : (
-              <RowEmpty text="Loading approval-queue stats…" />
+              <LoadingState label="Loading approval-queue stats…" />
             )}
           </Card>
         </Stack>

@@ -31,7 +31,7 @@ interface Props {
 /** Translate an API failure into what the user can act on. */
 function describeFailure(status: number, body: { error?: string; problem?: string }): string {
   if (status === 403) {
-    return 'You don’t have permission to manage connections — this needs ManageIngest (the hr-admin role).';
+    return 'You don’t have permission to manage connections — this needs the hr-admin role.';
   }
   return body.error ?? `HTTP ${status}`;
 }

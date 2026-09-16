@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { clearContextChosen, markContextChosen } from './contextChoice';
 import { tenantHome } from './tenantHome';
 import { clearTenantScopedCaches } from './tenantCaches';
-import { Button, Inline, MetaLine, SectionLabel, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { Button, Inline, LoadingState, MetaLine, SectionLabel, Stack } from '@connorhoehnslalom/ui-components/shared';
 
 export type Role = 'member' | 'sme' | 'program-owner' | 'org-leader' | 'hr-admin';
 export type SessionRole = Role | 'admin';
@@ -337,7 +337,7 @@ export function RequireTenant({ tenant, children, fallback = null }: {
   fallback?: ReactNode;
 }) {
   const { session, isLoading } = useSession();
-  if (isLoading) return null;
+  if (isLoading) return <LoadingState label="Loading session…" />;
   if (!session || (session.role !== 'admin' && session.tenant !== tenant)) return <>{fallback}</>;
   return <>{children}</>;
 }
@@ -348,7 +348,7 @@ export function RequireRole({ roles, children, fallback = null }: {
   fallback?: ReactNode;
 }) {
   const { session, isLoading } = useSession();
-  if (isLoading) return null;
+  if (isLoading) return <LoadingState label="Loading session…" />;
   // The cross-tenant 'admin' role always passes role gates.
   if (!session || (session.role !== 'admin' && !roles.includes(session.role))) return <>{fallback}</>;
   return <>{children}</>;

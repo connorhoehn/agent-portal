@@ -108,6 +108,33 @@ export interface NodePresence {
   sessions: LocalSession[];
 }
 
+/**
+ * A machine health snapshot, self-reported by the worker on its periodic
+ * `/announce` call (`tools/local-compute-worker.mjs` `announce()`, the call
+ * that actually repeats — `/heartbeat` exists but nothing in that worker calls
+ * it). Every field is OPTIONAL, independently: a worker degrades silently
+ * when a `node:os` read throws, so a partial report (e.g. memory but no load
+ * average) is a legitimate shape, not a malformed one.
+ */
+export interface NodeMetrics {
+  /** `os.loadavg()[0]`. */
+  loadAvg1?: number;
+  /** `os.cpus().length`. */
+  cpuCount?: number;
+  memTotalMb?: number;
+  memFreeMb?: number;
+  /** `os.uptime()`, seconds. */
+  uptimeS?: number;
+  workerVersion?: string;
+  /** How many jobs this worker currently holds. */
+  activeJobs?: number;
+}
+
+/** A `NodeMetrics` plus the server-stamped instant it was observed. */
+export interface NodeMetricsSnapshot extends NodeMetrics {
+  at: string;
+}
+
 const CONNECTED_HORIZON_MS = 90_000;
 const STALE_HORIZON_MS = 5 * 60_000;
 const INTENT_MAX = 200;
@@ -144,8 +171,18 @@ function sanitize(s: LocalSession): LocalSession {
  * plugin owns the truth about what is running on its machine, so sessions
  * absent from the snapshot are dropped rather than lingered. (A crash between
  * announces is covered by the staleness horizon, not by tombstones.)
+ *
+ * `metrics` is a SEPARATE, older-worker-compatible channel: `undefined`/`null`
+ * means this call said nothing about metrics — an older worker byte-for-byte
+ * unchanged — and the previously stored snapshot (if any) is left alone
+ * rather than wiped. A worker that DOES report replaces the whole snapshot,
+ * stamped with the observation time.
  */
-export function recordAnnounce(nodeId: string, sessions: LocalSession[]): NodePresence {
+export function recordAnnounce(
+  nodeId: string,
+  sessions: LocalSession[],
+  metrics?: NodeMetrics | null,
+): NodePresence {
   // Deduplicated by sessionId, last write winning at the first position the id
   // appeared — what the `Map` this replaced did, kept because an announce
   // carrying one id twice must not produce two rows for one session.
@@ -161,7 +198,11 @@ export function recordAnnounce(nodeId: string, sessions: LocalSession[]): NodePr
       deduped[at] = sanitize(s);
     }
   }
-  upsertPresenceRow({ nodeId, lastSeenAt: now(), sessions: deduped });
+  const existing = presenceRowFor(nodeId);
+  const nextMetrics: NodeMetricsSnapshot | null = metrics
+    ? { ...metrics, at: now() }
+    : (existing?.metrics ?? null);
+  upsertPresenceRow({ nodeId, lastSeenAt: now(), sessions: deduped, metrics: nextMetrics });
   notify(nodeId);
   return presenceOf(nodeId);
 }
@@ -212,6 +253,18 @@ export function presenceOf(nodeId: string): NodePresence {
  *  survives even a shallow copy. */
 function copySession(s: LocalSession): LocalSession {
   return { ...s, ...(s.touching ? { touching: [...s.touching] } : {}) };
+}
+
+/**
+ * The machine's last-reported metrics, or null when it has never reported
+ * any — or, same rule as sessions in `presenceOf`, when the machine has aged
+ * past the offline horizon. A CPU/memory snapshot from ten minutes ago is
+ * presence the machine cannot back any more than an offline session list is.
+ */
+export function metricsOf(nodeId: string): NodeMetricsSnapshot | null {
+  const row = presenceRowFor(nodeId);
+  if (!row?.metrics) return null;
+  return statusOfNode(row.lastSeenAt) === 'offline' ? null : { ...row.metrics };
 }
 
 /** Presence change feed. The callback receives the nodeId that changed; the

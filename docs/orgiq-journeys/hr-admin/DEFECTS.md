@@ -517,3 +517,4 @@ legs (Test enter/exit, Edit enter/exit) hold for hr-admin.)_
   sat empty beside them. The Work page's queue and assign modal already
   showed the initiative in their own column, so dropping it from the reason
   removed a repetition there too.
+copy note 2026-09-16: the error quoted above as "Prompt library unreachable" now reads "Prompt studio unreachable" — it was borrowing the Library page's name for a different page.

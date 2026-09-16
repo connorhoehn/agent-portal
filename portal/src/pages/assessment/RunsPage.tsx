@@ -15,7 +15,6 @@ import {
   EmptyState,
   ErrorState,
   Inline,
-  LoadingState,
   MetaLine,
   PageHeader,
   Stack,
@@ -176,9 +175,13 @@ export default function RunsPage() {
         badge={<ConnectionPill state={connected ? 'connected' : 'connecting'} compact />}
       />
 
-      {loading ? (
-        <LoadingState label="Loading activity…" />
-      ) : error ? (
+      {/* See the shared list-page loading pattern comment in QueuePage.tsx:
+          `load()` re-fires on every live run event (above), which set
+          `loading` true on every event and blanked the whole table to a
+          bare LoadingState on a healthy, fast-moving ledger. Gate on
+          `loading && !data` — first load only — and hand that to
+          DataTable's own `loading` prop instead. */}
+      {error ? (
         <ErrorState title="Couldn't load activity" description={error} actionLabel="Retry" onAction={load} />
       ) : degraded ? (
         <UnavailableNotice
@@ -187,7 +190,7 @@ export default function RunsPage() {
           source="Runs are read from the assessment database"
           onRetry={load}
         />
-      ) : runs.length === 0 ? (
+      ) : !(loading && !runsResp) && runs.length === 0 ? (
         <EmptyState title="No activity yet" />
       ) : (
         <DataTable<RunRecord>
@@ -195,6 +198,7 @@ export default function RunsPage() {
           keyField={(r) => r.id}
           striped
           onRowClick={(r) => setDetailId(r.id)}
+          loading={loading && !runsResp}
           columns={[
             {
               key: 'id',

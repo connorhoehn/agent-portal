@@ -440,7 +440,7 @@ export default function AgentProjectsPage() {
         <UnavailableNotice
           error={projectsFailure}
           what="the codebase registry"
-          source="Projects are read from /api/agent-projects"
+          source="Codebases are read from /api/agent-projects"
           onRetry={refresh}
           className="mb-4"
         />
@@ -448,7 +448,7 @@ export default function AgentProjectsPage() {
 
       {!projectsFailure && projects.length === 0 ? (
         <EmptyState
-          title="No projects linked"
+          title="No codebases linked"
           body="Link a repository to clone it into a workspace and run agents against it. Public repositories need no credential."
         />
       ) : projectsFailure ? null : (
@@ -625,6 +625,11 @@ export default function AgentProjectsPage() {
         }
       >
         <Stack gap="sm">
+          <MetaLine
+            size="xs"
+            tone="tertiary"
+            items={['Sends this prompt to Claude Code inside the codebase’s workspace.']}
+          />
           <Textarea
             autoFocus
             value={prompt}

@@ -28,7 +28,12 @@ test('when formats timestamps', () => {
   assert.equal(when('invalid'), '—');
   assert.equal(when(new Date(now - 30_000).toISOString()), 'just now');
   assert.equal(when(new Date(now - 5 * 60_000).toISOString()), '5m ago');
-  assert.equal(when(new Date(now - 90 * 60_000).toISOString()), '2h ago');
+  // Floors rather than rounds, since 2026-09-16: `when` delegates to the
+  // shared lib/relativeTime instead of parsing with `new Date` itself (the
+  // naive-timestamp bug), and that helper floors. "1h ago" for ninety minutes
+  // is the honest reading — the old local copy rounded it up to "2h ago",
+  // overstating how stale the fact was.
+  assert.equal(when(new Date(now - 90 * 60_000).toISOString()), '1h ago');
   assert.equal(when(new Date(now - 2 * 24 * 60 * 60_000).toISOString()), '2d ago');
 });
 

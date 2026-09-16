@@ -18,6 +18,7 @@ import {
   EmptyState,
   FilterChip,
   Inline,
+  LoadingState,
   PageSection,
   Stack,
   Toolbar,
@@ -61,9 +62,14 @@ export default function FindingsPage() {
 
   const [findingStatus, setFindingStatus] = useState<FindingStatus>('open');
 
-  const { data: findingsData, refresh: refreshFindings } = useFetch<{ findings: Finding[] }>(
+  const { data: findingsData, isLoading: findingsLoading, refresh: refreshFindings } = useFetch<{ findings: Finding[] }>(
     `/api/work/findings?status=${findingStatus}&limit=200`, 20_000);
-  const { data: jobsData, refresh: refreshJobs } = useFetch<{ jobs: Job[] }>('/api/work/jobs?limit=100', 15_000);
+  const { data: jobsData, isLoading: jobsLoading, refresh: refreshJobs } = useFetch<{ jobs: Job[] }>('/api/work/jobs?limit=100', 15_000);
+  // See the shared list-page loading pattern comment in QueuePage.tsx: only
+  // the FIRST fetch for each list counts as "loading" for skeleton purposes,
+  // never a background poll refresh of data already on screen.
+  const jobsLoadingFirst = jobsLoading && !jobsData;
+  const findingsLoadingFirst = findingsLoading && !findingsData;
 
   useEffect(() => {
     const es = new EventSource('/api/work/events');
@@ -278,7 +284,7 @@ export default function FindingsPage() {
         <T className="text-[13px] font-semibold text-text-primary">Dead-letter queue</T>
         <T className="text-[11px] text-text-tertiary">jobs that failed or were cancelled — requeue puts a clone back on the queue</T>
       </Inline>
-      {deadLettered.length === 0 ? (
+      {!jobsLoadingFirst && deadLettered.length === 0 ? (
         <Card padding="md" className="mb-6">
           <T className="text-[12px] text-text-tertiary">Nothing dead-lettered. Failed jobs land here with their error and a requeue button.</T>
         </Card>
@@ -291,6 +297,7 @@ export default function FindingsPage() {
             onRowClick={(j) => navigate(`/iq/work/${j.id}`)}
             pageSize={10}
             emptyMessage="Nothing dead-lettered"
+            loading={jobsLoadingFirst}
           />
         </Stack>
       )}
@@ -328,7 +335,13 @@ export default function FindingsPage() {
       </Toolbar>
 
       <Card padding="none" className="overflow-hidden">
-        {findings.length === 0 ? (
+        {findingsLoadingFirst ? (
+          // Findings render as grouped, custom rows (CollapsibleSection +
+          // hand-rolled row markup below), not a DataTable — there's no
+          // `loading` prop to hand this to, so the frame (toolbar, Card)
+          // stays mounted and this is the narrowest honest stand-in.
+          <LoadingState label="Loading findings…" />
+        ) : findings.length === 0 ? (
           <EmptyState
             title="Nothing here"
             description={findingStatus === 'open'

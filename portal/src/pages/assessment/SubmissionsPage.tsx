@@ -19,7 +19,6 @@ import {
   EmptyState,
   ErrorState,
   InlinePlaceholder,
-  LoadingState,
   MetaLine,
   PageHeader,
   Stack,
@@ -236,9 +235,12 @@ export default function SubmissionsPage() {
         </Toolbar>
       )}
 
-      {loading ? (
-        <LoadingState label="Loading submissions…" />
-      ) : error ? (
+      {/* See the shared list-page loading pattern comment in QueuePage.tsx:
+          `loading` (isLoading) goes true again on every post-mutation
+          refresh (delete/clear), so gate on `loading && !data` — a first
+          load only — and hand that to DataTable's own `loading` prop rather
+          than swapping out the whole region. */}
+      {error ? (
         <ErrorState title="Couldn't load submissions" description={error} actionLabel="Retry" onAction={load} />
       ) : degraded ? (
         <UnavailableNotice
@@ -247,7 +249,7 @@ export default function SubmissionsPage() {
           source="Submissions are read from the assessment database"
           onRetry={load}
         />
-      ) : groups.length === 0 ? (
+      ) : !(loading && !data) && groups.length === 0 ? (
         <EmptyState
           title="No submissions ingested yet"
           body="Add a Microsoft Forms export to get started."
@@ -260,6 +262,7 @@ export default function SubmissionsPage() {
           keyField={(g) => g.key}
           striped
           searchable
+          loading={loading && !data}
           columns={[
             ...(canManage
               ? [{

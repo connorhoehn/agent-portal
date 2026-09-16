@@ -18,6 +18,7 @@ import {
   EmptyState,
   Inline,
   Input,
+  LoadingState,
   MetaLine,
   PageSection,
   ProgressBar,
@@ -124,7 +125,7 @@ export default function BotsPage() {
   // read fails (lib/upstream.ts). Without reading that marker the page draws
   // its "No bots yet" onboarding card — an invitation to create a second copy
   // of every bot that already exists.
-  const { data, error, degraded, refresh } = useFetch<{ bots: Bot[] }>('/api/bots', 15_000);
+  const { data, isLoading, error, degraded, refresh } = useFetch<{ bots: Bot[] }>('/api/bots', 15_000);
   const failure = error ?? degraded;
   const [wizardOpen, setWizardOpen] = useState(false);
   const { can, ready } = useCapabilities();
@@ -272,7 +273,9 @@ export default function BotsPage() {
         />
       )}
 
-      {!failure && bots.length === 0 ? (
+      {!failure && isLoading && bots.length === 0 ? (
+        <LoadingState label="Loading bots…" />
+      ) : !failure && bots.length === 0 ? (
         <EmptyState
           title="No bots yet"
           description="A bot is a durable, mission-configured agent — a written mission with budget guardrails and a trigger, whose every change still passes review and policy gates."

@@ -307,19 +307,19 @@ function ProjectDetailPage() {
   }, [rawTree]);
 
   if (projLoading) {
-    return <PageSection title="Project"><LoadingState label="Loading project…" /></PageSection>;
+    return <PageSection title="Initiative"><LoadingState label="Loading initiative…" /></PageSection>;
   }
   if (projError) {
     return (
-      <PageSection title="Project">
-        <ErrorState title="Failed to load this project" body={projError} action={<BackToProjects />} />
+      <PageSection title="Initiative">
+        <ErrorState title="Failed to load this initiative" body={projError} action={<BackToProjects />} />
       </PageSection>
     );
   }
   if (!project) {
     return (
-      <PageSection title="Project">
-        <ErrorState title="Project not found" action={<BackToProjects />} />
+      <PageSection title="Initiative">
+        <ErrorState title="Initiative not found" action={<BackToProjects />} />
       </PageSection>
     );
   }

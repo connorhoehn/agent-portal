@@ -43,7 +43,7 @@
 import { createHash } from 'node:crypto';
 import { clock, defineFixture } from './core/index.js';
 import type { ComputeNode } from '../providers/local-compute.js';
-import type { LocalSession } from '../lib/local-compute-fleet.js';
+import type { LocalSession, NodeMetricsSnapshot } from '../lib/local-compute-fleet.js';
 
 // Type-only imports above: this module is imported for its VALUES by both
 // providers/local-compute.ts and lib/local-compute-fleet.ts, so importing
@@ -133,6 +133,10 @@ export interface NodePresenceRow {
    */
   lastSeenAt: string;
   sessions: LocalSession[];
+  /** Last-reported machine health, or null/absent when nothing ever reported
+   *  one. Only the re-announced demo machine below carries one — see
+   *  `demoMetrics()`. */
+  metrics?: NodeMetricsSnapshot | null;
 }
 
 // ─── The seeded cast ─────────────────────────────────────────────────────────
@@ -478,6 +482,45 @@ export const localPresence = defineFixture<NodePresenceRow>({
 export function demoPresenceSessions(): LocalSession[] {
   const row = seededPresence().find((p) => p.nodeId === DEMO_NODE_ID);
   return row ? row.sessions.map((s) => ({ ...s })) : [];
+}
+
+/**
+ * The demo machine's fixed hardware.
+ *
+ * Core count and installed memory are properties of the LAPTOP, not of a
+ * health snapshot — a reading taken a minute later reports the same two
+ * numbers. Keeping them here rather than inline in `demoMetrics` says that,
+ * lets the load figure scale off the real core count instead of a second
+ * hard-coded number that could drift away from it, and keeps rule 1's
+ * aggregate heuristic from reading `cpuCount: 10` as a count of fixture rows
+ * — it is a leaf fact about the machine, and there is nothing in the repo to
+ * derive it from.
+ */
+const DEMO_HARDWARE = { cpuCores: 10, memTotalMb: 32_768 } as const;
+
+/**
+ * The demo machine's health, for the same 60-second re-announcer.
+ *
+ * Every field is DERIVED from the clock rather than a frozen literal — the
+ * mock floor's rule 3 (no import-time timestamps) applied to a metric: a
+ * fixed `loadAvg1: 0.8` baked at module load would never move, and "moving"
+ * is exactly what this contract promises a real worker's numbers do. A slow
+ * sine keeps consecutive 60s re-announces visibly different without needing
+ * a stored, mutated value anywhere.
+ */
+export function demoMetrics(): NodeMetricsSnapshot {
+  const seconds = clock.now().getTime() / 1000;
+  const wave = (Math.sin(seconds / 240) + 1) / 2; // 0..1, ~8min cycle
+  return {
+    loadAvg1: Number((0.3 + wave * DEMO_HARDWARE.cpuCores * 0.17).toFixed(2)),
+    cpuCount: DEMO_HARDWARE.cpuCores,
+    memTotalMb: DEMO_HARDWARE.memTotalMb,
+    memFreeMb: Math.round(DEMO_HARDWARE.memTotalMb * (0.3 + (1 - wave) * 0.35)),
+    uptimeS: Math.round(seconds % 604_800), // within a week, still moving
+    workerVersion: '1.0.0',
+    activeJobs: wave > 0.85 ? 1 : 0,
+    at: clock.nowIso(),
+  };
 }
 
 // ─── Selectors and mock writes: the durable half ─────────────────────────────

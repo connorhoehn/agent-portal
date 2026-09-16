@@ -10,6 +10,7 @@ import {
   Inline,
   InlineAlert,
   InlinePlaceholder,
+  LoadingState,
   MetaLine,
   PageSection,
   SectionLabel,
@@ -91,11 +92,18 @@ function InvocationsPage() {
   // Same URL as ObservabilityLayout's nav-badge poll, now on the same 5s
   // cadence (it used to be 10s there) with `share: true` so the two collapse
   // into one request per tick.
-  const { data: recent } = useFetch<{ invocations: Invocation[] }>(
+  const { data: recent, isLoading: recentLoading } = useFetch<{ invocations: Invocation[] }>(
     '/api/observability/recent-invocations?limit=50',
     5000,
     { share: true },
   );
+  // First load only (isLoading && !data) — this page polls every 5s, and
+  // without the `!data` half every tick would re-trigger the "no
+  // invocations yet" branch's loading stand-in over a table that already
+  // has rows. This table is hand-rolled (Table/TableRow/…), not DataTable,
+  // so there are no skeleton rows to reach for — see the shared list-page
+  // loading pattern comment in QueuePage.tsx for the DataTable version.
+  const recentLoadingFirst = recentLoading && !recent;
   const { data: bedrock } = useFetch<{ entries: BedrockInvocation[] }>(
     '/api/observability/bedrock-invocations?limit=20&sinceMin=60',
     20000,
@@ -240,7 +248,9 @@ function InvocationsPage() {
       }
     >
       <Card padding="md">
-        {filtered.length === 0 ? (
+        {recentLoadingFirst ? (
+          <LoadingState label="Loading invocations…" />
+        ) : filtered.length === 0 ? (
           allInvocations.length === 0 ? (
             <InlinePlaceholder align="center" size="sm">
               No invocations yet. Send a message via the Agent Tools page and it'll appear here

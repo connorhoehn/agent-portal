@@ -63,7 +63,7 @@ export default function KnowledgeHomePage() {
   const canManage = ready && can('ManageKB');
   const canIngest = ready && can('ManageIngest');
 
-  const { data: rec, error: recError, refresh: refreshRec } =
+  const { data: rec, isLoading: recLoading, error: recError, refresh: refreshRec } =
     useFetch<{ entries: Reconciled[]; problem?: string }>('/api/admin/kb-registry/reconcile', 30_000);
   const { data: jobs } = useFetch<{ jobs: IngestJob[] }>('/api/ingest/jobs?limit=10', 30_000);
   const { data: targets } = useFetch<{ targets: CrawlTarget[] }>('/api/ingest/crawl-targets', 60_000);
@@ -239,6 +239,7 @@ export default function KnowledgeHomePage() {
         data={filtered}
         columns={columns}
         keyField={(e) => e.id ?? e.slug ?? e.liveKbId ?? e.name}
+        loading={recLoading && entries.length === 0}
         emptyMessage={entries.length === 0 ? 'No knowledge bases registered yet.' : 'No knowledge bases match the current filters.'}
         rowActions={(e) => {
           // The only automatic repair offered. Creating, deleting or syncing

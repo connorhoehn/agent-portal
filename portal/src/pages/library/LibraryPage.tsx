@@ -20,7 +20,6 @@ import {
   EmptyState,
   FilterChip,
   Inline,
-  LoadingState,
   PageSection,
   SearchInput,
   Stack,
@@ -221,6 +220,11 @@ export default function LibraryPage() {
         </T>
       )}
 
+      {/* See the shared list-page loading pattern comment in QueuePage.tsx:
+          the toolbar above stays mounted through every state, and the body
+          fills with DataTable's own skeleton rows on first load rather than
+          swapping out for a bare LoadingState (which used to drop the table
+          header and shove the toolbar's own filter counts around). */}
       {libraryFailure ? (
         <UnavailableNotice
           error={libraryFailure}
@@ -228,16 +232,14 @@ export default function LibraryPage() {
           source="Assets are read from the library catalog"
           onRetry={refresh}
         />
-      ) : isLoading && !data ? (
-        <LoadingState label="Loading the library…" />
-      ) : emptyKind === 'filtered' ? (
+      ) : !(isLoading && !data) && emptyKind === 'filtered' ? (
         <EmptyState
           title="Nothing matches"
           description="No asset matches these facets. Clear a filter or widen the search."
           actionLabel="Clear filters"
           onAction={() => { cancelPending(); setParams(new URLSearchParams(), { replace: true }); setQuery(''); }}
         />
-      ) : emptyKind === 'catalog-empty' ? (
+      ) : !(isLoading && !data) && emptyKind === 'catalog-empty' ? (
         <EmptyState
           title="The library has no assets yet"
           description="Assets ship here from Distillation, once a runbook, insight or skill is promoted and published."
@@ -255,6 +257,7 @@ export default function LibraryPage() {
           onRowClick={(a) => setOpenId(a.id)}
           pageSize={25}
           emptyMessage="No assets"
+          loading={isLoading && !data}
         />
       )}
 

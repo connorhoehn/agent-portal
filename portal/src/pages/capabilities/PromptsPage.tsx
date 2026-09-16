@@ -75,7 +75,7 @@ function PromptsPage() {
         {!selection && !loading && mode !== 'create' && (
           error ? (
             <ErrorState
-              title="Prompt library unreachable"
+              title="Prompt studio unreachable"
               description={friendlyLibraryError(error)}
               actionLabel="Retry"
               onAction={refresh}

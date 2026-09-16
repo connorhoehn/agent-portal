@@ -13,6 +13,7 @@ import {
   Chip,
   CodeBlock,
   Inline,
+  LoadingState,
   Modal,
   PageSection,
   Select,
@@ -285,9 +286,7 @@ function RunDetailPage() {
     return (
       <PageSection title="Harness Run">
         <Card padding="md">
-          <T as="div" className="text-text-tertiary text-[12px]">
-            Loading run…
-          </T>
+          <LoadingState label="Loading run…" />
         </Card>
       </PageSection>
     );

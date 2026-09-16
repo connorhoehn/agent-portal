@@ -17,6 +17,7 @@
 //   GET    /api/local-compute/nodes/all       fleet-wide, session detail stripped (fleet-wide role)
 //   GET    /api/local-compute/presence/repos  org-wide, per-repo presence counts only (fleet-wide role)
 //   GET    /api/local-compute/stream          same, as SSE (browser session)
+//   GET    /api/local-compute/events          presence + job SSE, hello snapshot on connect (browser session)
 //   GET    /api/local-compute/runs            what my machines have been doing (browser session, owner-scoped)
 //   PATCH  /api/local-compute/nodes/:id       rename / accept-jobs toggle (owner)
 //   POST   /api/local-compute/nodes/:id/work  hand this machine a job (owner)
@@ -34,7 +35,7 @@ import { randomUUID } from 'node:crypto';
 import { Router } from 'express';
 import type { Request, Response, NextFunction } from 'express';
 import { asyncHandler } from '../lib/async-handler.js';
-import { initSSE, writeSSE } from '../lib/sse.js';
+import { initSSE, writeSSE, endSSE } from '../lib/sse.js';
 import { rateLimit } from '../lib/rate-limit.js';
 import { requireAction, requireSession, requireTenant, resolveSession } from '../lib/authz.js';
 import { FLEET_WIDE_ROLES } from '../lib/devbox-visibility.js';
@@ -58,10 +59,14 @@ import {
   recordHeartbeat,
   endSession,
   presenceOf,
+  metricsOf,
   subscribePresence,
   localBoxId,
+  nodeIdFromBoxId,
   type LocalSession,
   type NodePresence,
+  type NodeMetrics,
+  type NodeMetricsSnapshot,
 } from '../lib/local-compute-fleet.js';
 import {
   appendLog,
@@ -80,7 +85,9 @@ import {
   heartbeatJob,
   markRunning,
   completeJob,
+  jobEvents,
   type AgentJob,
+  type JobChangeEvent,
 } from '../providers/agent-jobs.js';
 import { getWorkItem } from '../providers/work-items.js';
 import { getBot } from '../providers/bots.js';
@@ -96,7 +103,7 @@ import {
 } from '../lib/local-work.js';
 import { STALE_MINUTES } from '../lib/job-dispatcher.js';
 import { parseReportedCost, resolveRunCost } from '../lib/run-cost.js';
-import { DEMO_NODE_ID, demoPresenceSessions } from '../mock/local-compute.js';
+import { DEMO_NODE_ID, demoPresenceSessions, demoMetrics } from '../mock/local-compute.js';
 
 export const localComputeRouter = Router();
 
@@ -126,7 +133,11 @@ const browserTenant = requireTenant('orgiq');
 // dev:mock. Env-read directly, like every flag in devbox.ts, to stay importable
 // under the CJS jest config.
 if (process.env['MOCK_AURORA'] === 'true') {
-  const announceDemo = () => recordAnnounce(DEMO_NODE_ID, demoPresenceSessions());
+  // demoMetrics() is clock-derived, not a frozen literal — see its own
+  // comment — so the re-announce also keeps the demo machine's CPU/memory
+  // numbers visibly moving, the offline-world stand-in for a real worker's
+  // node:os reads.
+  const announceDemo = () => recordAnnounce(DEMO_NODE_ID, demoPresenceSessions(), demoMetrics());
   announceDemo();
   setInterval(announceDemo, 60_000).unref();
 }
@@ -267,13 +278,66 @@ function parseSessions(body: unknown): LocalSession[] | null {
   return out;
 }
 
+/**
+ * The optional `metrics` object off an announce body — all fields
+ * independently optional, matching the contract worker.mjs reads from
+ * `node:os` and may fail to fully populate. `false` means present but
+ * malformed (wrong type, a negative/non-finite/absurd number) — the whole
+ * write is rejected rather than storing a value nobody would trust; `null`
+ * means the field was absent or explicitly null, a no-op for an older or
+ * degraded worker.
+ */
+const METRIC_BOUNDS: Record<string, number> = {
+  loadAvg1: 1_000,
+  cpuCount: 4_096,
+  memTotalMb: 100_000_000, // ~100 TB — headroom, not a real ceiling
+  memFreeMb: 100_000_000,
+  uptimeS: 3_155_760_000, // ~100 years
+  activeJobs: 1_000,
+};
+const INTEGER_METRICS = new Set(['cpuCount', 'activeJobs']);
+const MAX_WORKER_VERSION_LEN = 40;
+
+function parseMetrics(body: unknown): NodeMetrics | null | false {
+  const raw = (body as { metrics?: unknown })?.metrics;
+  if (raw === undefined || raw === null) return null;
+  if (typeof raw !== 'object' || Array.isArray(raw)) return false;
+  const m = raw as Record<string, unknown>;
+  const out: NodeMetrics = {};
+  for (const [key, max] of Object.entries(METRIC_BOUNDS)) {
+    const v = m[key];
+    if (v === undefined) continue;
+    if (
+      typeof v !== 'number' || !Number.isFinite(v) || v < 0 || v > max
+      || (INTEGER_METRICS.has(key) && !Number.isInteger(v))
+    ) {
+      return false;
+    }
+    (out as Record<string, number>)[key] = v;
+  }
+  if (m['workerVersion'] !== undefined) {
+    if (typeof m['workerVersion'] !== 'string') return false;
+    out.workerVersion = m['workerVersion'].trim().slice(0, MAX_WORKER_VERSION_LEN);
+  }
+  return out;
+}
+
 localComputeRouter.post('/announce', requireNodeToken(async (req, res, node) => {
   const sessions = parseSessions(req.body);
   if (sessions === null) {
     res.status(400).json({ error: `sessions must be an array of ≤${MAX_SESSIONS_PER_ANNOUNCE} session records` });
     return;
   }
-  const presence = recordAnnounce(node.id, sessions);
+  const metrics = parseMetrics(req.body);
+  if (metrics === false) {
+    res.status(400).json({
+      error: 'metrics, when present, must be an object of finite non-negative numbers '
+        + '(loadAvg1, cpuCount, memTotalMb, memFreeMb, uptimeS, activeJobs, all optional and within '
+        + 'sane bounds) plus an optional workerVersion string',
+    });
+    return;
+  }
+  const presence = recordAnnounce(node.id, sessions, metrics);
   await touchNode(node.id);
   res.json({ ok: true, nodeId: node.id, sessions: presence.sessions.length });
 }));
@@ -640,6 +704,16 @@ interface NodeView extends ComputeNode {
   presence: NodePresence;
 }
 
+/** What `GET /nodes` and `GET /events`'s hello frame both render — the owned
+ *  shape, with the machine's last-reported health alongside its presence. */
+interface OwnedNodeView extends NodeView {
+  metrics: NodeMetricsSnapshot | null;
+}
+
+function ownedView(node: ComputeNode): OwnedNodeView {
+  return { ...node, presence: presenceOf(node.id), metrics: metricsOf(node.id) };
+}
+
 /** Presence detail is about a person's live work (intents, worktree paths) —
  *  it stays with the owner. Fleet-wide roles see that machines exist and how
  *  many sessions they carry, not what those sessions are doing. */
@@ -665,7 +739,7 @@ localComputeRouter.get(
   asyncHandler(async (req, res) => {
     const session = resolveSession(req)!;
     const own = await listNodesByOwner(session.sub);
-    const nodes: NodeView[] = own.map((node) => ({ ...node, presence: presenceOf(node.id) }));
+    const nodes: OwnedNodeView[] = own.map(ownedView);
     res.json({ nodes });
   }),
 );
@@ -767,6 +841,70 @@ localComputeRouter.get('/stream', browserTenant, requireSession('ViewLocalComput
   });
   req.on('close', unsubscribe);
 }));
+
+/**
+ * The presence-page live feed: one connect-time snapshot plus every
+ * presence/metrics/job event that touches this owner's OWN machines,
+ * scoped the same way `/nodes` is (`listNodesByOwner`) and the same way
+ * `/stream` already scopes presence (`ownIds`). Two feeds, one stream,
+ * because the page that motivated this (connection status, running/stopped
+ * state, live metrics) needs both without opening two SSE connections.
+ *
+ * `/stream` is left exactly as it is — this is additive, not a replacement,
+ * and existing callers of `/stream` keep the shape they have.
+ */
+localComputeRouter.get(
+  '/events',
+  browserTenant,
+  requireSession('ViewLocalCompute'),
+  asyncHandler(async (req, res) => {
+    const session = resolveSession(req)!;
+    const own = await listNodesByOwner(session.sub);
+    const ownIds = new Set(own.map((n) => n.id));
+
+    initSSE(res);
+    // One full snapshot in the same shape /nodes returns, so a client that
+    // opens this stream cold has something to render before the first live
+    // event — never a second round-trip to GET /nodes just to bootstrap.
+    writeSSE(res, { type: 'hello', nodes: own.map(ownedView) });
+
+    const onPresence = (nodeId: string) => {
+      if (!ownIds.has(nodeId)) return;
+      const presence = presenceOf(nodeId);
+      writeSSE(res, {
+        type: 'presence',
+        nodeId,
+        status: presence.status,
+        lastSeenAt: presence.lastSeenAt,
+        // Riding the same notify() a session announce/heartbeat/end already
+        // fires — a metrics-only change lands on the SAME frame kind a
+        // status transition does, since both are "this machine's presence
+        // record changed" and a second frame TYPE for one field would be a
+        // distinction the client gains nothing from.
+        metrics: metricsOf(nodeId),
+      });
+    };
+    const unsubscribePresence = subscribePresence(onPresence);
+
+    // A job's owner is its box id (`local:<nodeId>`) once claimed, or its
+    // TARGETING `payload.nodeId` before that — a queued-but-unclaimed job
+    // handed to a machine has no box id yet, and that is exactly the window
+    // someone watching "up next on <machine>" cares about.
+    const onJob = (ev: JobChangeEvent) => {
+      const nodeId = nodeIdFromBoxId(ev.boxId)
+        ?? (typeof ev.payload['nodeId'] === 'string' ? (ev.payload['nodeId'] as string) : null);
+      if (!nodeId || !ownIds.has(nodeId)) return;
+      writeSSE(res, { type: 'job', jobId: ev.jobId, nodeId, status: ev.status, title: ev.title, at: ev.at });
+    };
+    jobEvents.on('change', onJob);
+
+    req.on('close', () => {
+      unsubscribePresence();
+      jobEvents.off('change', onJob);
+      endSSE(res);
+    });
+  }),
+);
 
 // ─── Node management (owner) ─────────────────────────────────────────────────
 

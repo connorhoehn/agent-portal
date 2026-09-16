@@ -37,7 +37,7 @@ export function resolveAgentSpend(
     return {
       value: '—',
       label: 'agent spend unknown',
-      title: 'Agent spend is unknown to this role: the bot roster needs the ManageDevbox authority, and the server has no rollup for this initiative. Unknown, not zero.',
+      title: 'Agent spend is unknown to this role: the bot roster needs computer access, and the server has no rollup for this initiative. Unknown, not zero.',
       unknown: true,
     };
   }

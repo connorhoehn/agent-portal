@@ -18,13 +18,18 @@ import {
   Inline,
   InlinePlaceholder,
   MetaLine,
-  SectionLabel,
   SegmentedControl,
   useToastOptional,
   PageSection,
   Select,
   Stack,
   Switch,
+  PresenceDot,
+  Tabs,
+  Toolbar,
+  ToolbarLabel,
+  ToolbarSeparator,
+  T,
   type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
 import { LogStream, type LogLine } from '@connorhoehnslalom/ui-components/shared';
@@ -37,7 +42,11 @@ import { writeJson } from '../../lib/writeJson';
 import { presenceChip } from '../../lib/statusTone';
 import { usd } from '../../lib/format';
 import { PairMachineDialog, WORKER_COMMAND } from './PairMachineDialog';
-import { statusLabel, statusTone, truncate, when, type JobStatus } from './localComputeFormat';
+import { statusLabel, statusTone, truncate, when, isLive, elapsedLabel, type JobStatus } from './localComputeFormat';
+import { useNow } from '../../hooks/useNow';
+import { LiveJobCell } from './LiveJobCell';
+import { MachineConnection, type MachineMetrics } from './MachineConnection';
+import { useLocalComputeStream } from './useLocalComputeStream';
 
 // ─── Wire shapes ─────────────────────────────────────────────────────────────
 
@@ -59,8 +68,14 @@ interface ComputeNode {
   acceptJobs: boolean;
   localModels: string[];
   jobKinds: string[];
+  maxConcurrency?: number;
   presence: NodePresence;
+  /** What the worker last reported about the machine it runs on. Null until a
+   *  worker new enough to send it has announced. */
+  metrics?: MachineMetrics | null;
 }
+
+type MachineTab = 'lane' | 'hand' | 'activity' | 'connection';
 
 interface RunRow {
   id: string;
@@ -70,8 +85,14 @@ interface RunRow {
   nodeId: string | null;
   nodeLabel: string | null;
   createdAt: string;
+  claimedAt?: string | null;
   startedAt: string | null;
   finishedAt: string | null;
+  /** Retry context. `GET /runs` spreads the whole job, so these already ride
+   *  the wire — they were simply never declared here, which is why a second
+   *  attempt used to look identical to a first. */
+  attempts?: number;
+  maxAttempts?: number;
   result: { provider?: string; costUsd?: number; summary?: string } | null;
 }
 
@@ -134,6 +155,7 @@ export default function LocalComputePage() {
   // fire two DELETEs for the same machine.
   const [unpairTarget, setUnpairTarget] = useState<ComputeNode | null>(null);
   const [unpairBusy, setUnpairBusy] = useState<string | null>(null);
+  const [tab, setTab] = useState<MachineTab>('lane');
 
   const nodes = useMemo(
     () => (nodesData?.nodes ?? []).map((n) => (
@@ -208,6 +230,36 @@ export default function LocalComputePage() {
       && (r.nodeId === selectedNode.id || (r.nodeId === null && selectedNode.jobKinds.includes(r.kind))));
   }, [runs, selectedNode]);
 
+  // The clock behind every elapsed label on this page. It ticks only while at
+  // least one job is actually in flight — a page of settled runs re-renders
+  // exactly as often as its polls, which is what the request-budget pass asked
+  // for — and it pauses with the tab.
+  const anythingLive = useMemo(() => runs.some((r) => isLive(r.status)), [runs]);
+  const now = useNow(anythingLive);
+
+  // Live push on top of the 15s poll. The stream carries presence transitions,
+  // new metrics and job state changes for this owner's machines; when it drops
+  // the poll underneath is still the floor, and the panel says which of the
+  // two the reader is looking at rather than claiming "live" either way.
+  const { connected: streamLive } = useLocalComputeStream({
+    onChange: () => { void refreshNodes(); void refreshRuns(); },
+  });
+
+  // What the selected machine is doing, counted from the runs already on the
+  // page rather than asked for separately.
+  const machineJobs = useMemo(() => {
+    const mine = selectedNode ? runs.filter((r) => r.nodeId === selectedNode.id) : [];
+    const current = mine.find((r) => r.status === 'running') ?? mine.find((r) => r.status === 'claimed');
+    return {
+      running: mine.filter((r) => r.status === 'running').length,
+      queued: mine.filter((r) => r.status === 'queued').length,
+      failedRecently: mine.filter((r) => r.status === 'failed' || r.status === 'cancelled').length,
+      currentTitle: current?.title ?? null,
+      currentStatus: current?.status ?? null,
+      currentSince: current?.startedAt ?? current?.claimedAt ?? current?.createdAt ?? null,
+    };
+  }, [runs, selectedNode]);
+
   const pickWork = (suggestData?.suggestions ?? []).slice(0, PICK_LIMIT);
   const pickBots = (botsData?.bots ?? []).filter((b) => b.enabled && !b.pausedReason).slice(0, PICK_LIMIT);
 
@@ -230,28 +282,138 @@ export default function LocalComputePage() {
     }
   };
 
+  // Presence maps onto the library's three-state dot; `stale` is its "away".
+  const presenceState = (status: ComputeNode['presence']['status']): 'online' | 'away' | 'offline' =>
+    status === 'connected' ? 'online' : status === 'stale' ? 'away' : 'offline';
+
+  // One row per machine, carrying everything the tall panel below used to:
+  // presence, a ticking heartbeat, what the worker reports about the hardware,
+  // what it is doing, and the actions. A person with three laptops compares
+  // them by scanning a column, which a stack of per-machine cards cannot do.
   const nodeColumns: DataTableColumn<ComputeNode>[] = [
     {
       key: 'label',
       header: 'Machine',
       render: (n) => (
-        <Inline gap="xs" align="center">
+        <Stack gap="none">
+          <EntityCell label={n.label} id={n.platform ?? undefined} />
+        </Stack>
+      ),
+    },
+    {
+      key: 'models',
+      header: 'Models',
+      // Self-registered: the worker announces what it can actually run, so
+      // this is the machine telling you, not a setting someone typed.
+      render: (n) => (
+        n.localModels.length === 0
+          ? <MetaLine size="xs" tone="tertiary" items={['none announced']} />
+          : (
+            <Inline gap="xs" wrap>
+              {n.localModels.map((m) => <Chip key={m} tone="neutral" size="xs">{m}</Chip>)}
+            </Inline>
+          )
+      ),
+    },
+    {
+      key: 'kinds',
+      header: 'Runs',
+      render: (n) => (
+        n.jobKinds.length === 0
+          ? <MetaLine size="xs" tone="tertiary" items={['no kinds']} />
+          : <MetaLine size="xs" items={[n.jobKinds.join(', ')]} />
+      ),
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      render: (n) => {
+        const beat = elapsedLabel(n.presence.lastSeenAt, now);
+        return (
+          <Stack gap="none">
+            <Inline gap="xs" align="center">
+              <PresenceDot state={presenceState(n.presence.status)} label={n.presence.status} />
+              {!n.acceptJobs && <Chip tone="neutral" size="xs">paused</Chip>}
+            </Inline>
+            <MetaLine size="xs" tone="tertiary" aria-live="polite" items={[beat ? `beat ${beat} ago` : 'never announced']} />
+          </Stack>
+        );
+      },
+    },
+    {
+      key: 'load',
+      header: 'Load',
+      render: (n) => {
+        const m = n.metrics;
+        if (m?.loadAvg1 == null) return <MetaLine size="xs" tone="tertiary" items={['—']} />;
+        const pct = m.cpuCount ? Math.round((m.loadAvg1 / m.cpuCount) * 100) : null;
+        return (
+          <Stack gap="none">
+            <T className="text-[13px] tabular-nums">{m.loadAvg1.toFixed(2)}</T>
+            <MetaLine size="xs" tone="tertiary" items={[pct != null ? `${pct}% of ${m.cpuCount}` : 'cores unknown']} />
+          </Stack>
+        );
+      },
+    },
+    {
+      key: 'memory',
+      header: 'Memory',
+      render: (n) => {
+        const m = n.metrics;
+        if (!m?.memTotalMb || m.memFreeMb == null) return <MetaLine size="xs" tone="tertiary" items={['—']} />;
+        const used = m.memTotalMb - m.memFreeMb;
+        const pct = Math.round((used / m.memTotalMb) * 100);
+        return (
+          <Stack gap="none">
+            <T className="text-[13px] tabular-nums">{pct}%</T>
+            <MetaLine size="xs" tone="tertiary" items={[`${(used / 1024).toFixed(1)}G of ${(m.memTotalMb / 1024).toFixed(0)}G`]} />
+          </Stack>
+        );
+      },
+    },
+    {
+      key: 'work',
+      header: 'Work',
+      render: (n) => {
+        const mine = runs.filter((r) => r.nodeId === n.id);
+        const running = mine.filter((r) => r.status === 'running').length;
+        const queued = mine.filter((r) => r.status === 'queued' || r.status === 'claimed').length;
+        const failed = mine.filter((r) => r.status === 'failed' || r.status === 'cancelled').length;
+        return (
+          <Inline gap="xs" align="center">
+            {running > 0 && <Chip tone="accent" size="xs" dot="pulse">{running} running</Chip>}
+            {queued > 0 && <Chip tone="neutral" size="xs">{queued} queued</Chip>}
+            {failed > 0 && <Chip tone="danger" size="xs">{failed} failed</Chip>}
+            {running + queued + failed === 0 && <MetaLine size="xs" tone="tertiary" items={['idle']} />}
+          </Inline>
+        );
+      },
+    },
+    {
+      key: 'accept',
+      header: 'Accepting',
+      render: (n) => (
+        <Switch
+          checked={n.acceptJobs}
+          disabled={!canDispatch || n.id in pendingAccept}
+          aria-label={`Accepting work on ${n.label}`}
+          onChange={(v) => { void handleAcceptJobs(n, v); }}
+        />
+      ),
+    },
+    {
+      key: 'actions',
+      header: '',
+      render: (n) => (
+        <Inline gap="xs" align="center" className="justify-end">
           <Button
             variant="ghost"
             size="sm"
-            aria-pressed={n.id === selectedNodeId}
-            onClick={() => setSelectedNodeId(n.id)}
+            onClick={(e) => { e.stopPropagation(); void refreshNodes(); void refreshRuns(); }}
+            aria-label={`Refresh ${n.label}`}
           >
-            <EntityCell label={n.label} />
+            Refresh
           </Button>
-          <Chip
-            tone={presenceChip(n.presence.status).tone}
-            size="xs"
-            dot={presenceChip(n.presence.status).dot}
-          >
-            {n.presence.status}
-          </Chip>
-          {!n.acceptJobs && <Chip tone="neutral" size="xs">paused</Chip>}
           {canDispatch && (
             <Button
               variant="ghost"
@@ -266,46 +428,6 @@ export default function LocalComputePage() {
         </Inline>
       ),
     },
-    {
-      key: 'models',
-      header: 'Models',
-      render: (n) => (
-        <MetaLine size="xs" items={n.localModels.length > 0 ? n.localModels.slice(0, 3) : ['none']} />
-      ),
-    },
-    {
-      key: 'kinds',
-      header: 'Kinds',
-      render: (n) => (
-        <MetaLine size="xs" tone="tertiary" items={n.jobKinds.length > 0 ? n.jobKinds : ['default']} />
-      ),
-    },
-    {
-      key: 'sessions',
-      header: 'Sessions',
-      render: (n) => {
-        const count = n.presence.sessions.length;
-        return <MetaLine size="xs" items={[`${count} ${count === 1 ? 'session' : 'sessions'}`]} />;
-      },
-    },
-    {
-      key: 'acceptJobs',
-      header: 'Accepting work',
-      render: (n) => (
-        // Stop the row's click so flipping the switch doesn't also read as
-        // "select this machine" (which would be harmless, but surprising).
-        <span onClick={(e) => e.stopPropagation()}>
-          <Switch
-            checked={n.acceptJobs}
-            disabled={!canDispatch || n.id in pendingAccept}
-            onChange={(next) => { void handleAcceptJobs(n, next); }}
-            size="sm"
-            aria-label={`${n.acceptJobs ? 'Pause' : 'Resume'} work on ${n.label}`}
-            data-testid={`accept-jobs-${n.id}`}
-          />
-        </span>
-      ),
-    },
   ];
 
   const runColumns: DataTableColumn<RunRow>[] = [
@@ -315,9 +437,7 @@ export default function LocalComputePage() {
       sortable: true,
       render: (r) => (
         <Stack gap="none">
-          <Button variant="ghost" size="sm" onClick={() => setSelectedRunId(r.id)}>
-            {r.title}
-          </Button>
+          <EntityCell label={r.title} />
           {r.result?.summary && (
             <MetaLine size="xs" tone="tertiary" items={[truncate(r.result.summary, 80)]} />
           )}
@@ -327,7 +447,7 @@ export default function LocalComputePage() {
     {
       key: 'status',
       header: 'Status',
-      render: (r) => <Chip tone={statusTone(r.status)} size="xs">{statusLabel(r.status)}</Chip>,
+      render: (r) => <LiveJobCell job={r} now={now} />,
     },
     {
       key: 'machine',
@@ -371,7 +491,7 @@ export default function LocalComputePage() {
           title="No paired machines"
           description={canDispatch
             ? 'Pair a machine and it appears here; the dialog gives you a code, the command to run on it, and moves on by itself once the machine claims it.'
-            : 'Pairing a machine needs the ConnectLocalCompute capability; ask a platform operator to pair one for you.'}
+            : 'Pairing a machine needs machine-pairing access; ask a platform operator to pair one for you.'}
           {...(canDispatch ? { actionLabel: 'Pair a machine', onAction: () => setPairOpen(true) } : {})}
         />
       ) : (
@@ -399,29 +519,32 @@ export default function LocalComputePage() {
           </DetailSection>
 
           {selectedNode && (
-            <DetailSection title={`Up next on ${selectedNode.label}`} hint={upNext.length > 0 ? `${upNext.length} in its lane` : undefined}>
-              <Stack gap="sm">
-                {!selectedNode.acceptJobs ? (
-                  <Banner variant="warning">
-                    This machine is paused — switch on “Accepting work” in the row above and it will start claiming from its lane.
-                  </Banner>
-                ) : selectedNode.presence.status === 'offline' && selectedNode.jobKinds.length === 0 ? (
-                  // Paired but never announced: the worker has not run on it
-                  // yet. Say the command here, because "offline" alone read as
-                  // a failed pairing to the first person who hit it.
-                  <Banner variant="warning">
-                    <Stack gap="xs">
-                      <Inline as="span" gap="none" wrap>
-                        This machine is paired but its worker has not run yet, so it is offline and has announced nothing it can run. On that machine, from the repo checkout:
-                      </Inline>
-                      <CodeBlock code={WORKER_COMMAND} language="bash" copyButton ariaLabel="Worker command" />
-                    </Stack>
-                  </Banner>
-                ) : selectedNode.presence.status === 'offline' ? (
-                  <Banner variant="warning">
-                    This machine is offline — anything queued for it waits until its worker announces again.
-                  </Banner>
-                ) : null}
+            <DetailSection title="Machine details" hint={selectedNode.label}>
+              {/* One tabbed area instead of four stacked sections. The page
+                  used to run past a screen and a half for a single machine:
+                  a per-machine card repeating what the row already said, then
+                  its lane, then the pick list, then history — each with its
+                  own heading and rule. These are four views of one machine,
+                  not four topics, so they are tabs. */}
+              <Tabs
+                idPrefix="machine"
+                aria-label={`${selectedNode.label} detail`}
+                value={tab}
+                onValueChange={(id) => setTab(id as MachineTab)}
+                items={[
+                  { id: 'lane', label: upNext.length > 0 ? `Queue · ${upNext.length}` : 'Queue' },
+                  ...(canDispatch ? [{ id: 'hand', label: 'Assign work' }] : []),
+                  { id: 'activity', label: 'History' },
+                  { id: 'connection', label: 'Details' },
+                ]}
+              />
+
+              <Stack hidden={tab !== 'lane'} gap="sm">
+{/* The offline / paused / never-announced banners that used to
+                    sit here are gone: MachineConnection above says the same
+                    thing in its status line and carries the worker command
+                    with it, so the page no longer explains the same state
+                    twice in two different voices. */}
                 {upNext.length === 0 ? (
                   <InlinePlaceholder>
                     Nothing queued for this machine. Work reaches it from a bot's schedule or an initiative's work item, in the kinds it registered
@@ -430,12 +553,10 @@ export default function LocalComputePage() {
                 ) : (
                   <DataTable<RunRow>
                     columns={[
-                      { key: 'title', header: 'Work', render: (r) => (
-                        <Button variant="ghost" size="sm" onClick={() => setSelectedRunId(r.id)}>
-                          <EntityCell label={r.title} id={r.kind} />
-                        </Button>
+                      { key: 'title', header: 'Work', render: (r) => <EntityCell label={r.title} id={r.kind} /> },
+                      { key: 'status', header: 'Status', render: (r) => (
+                        <LiveJobCell job={r} now={now} lanePosition={upNext.findIndex((u) => u.id === r.id) + 1} />
                       ) },
-                      { key: 'status', header: 'Status', render: (r) => <Chip tone={statusTone(r.status)} size="xs">{statusLabel(r.status)}</Chip> },
                       { key: 'target', header: 'Targeted', render: (r) => (r.nodeId ? 'this machine' : 'any machine in the kind') },
                       { key: 'queued', header: 'Queued', render: (r) => when(r.createdAt) },
                     ]}
@@ -444,35 +565,46 @@ export default function LocalComputePage() {
                     onRowClick={(r) => setSelectedRunId(r.id)}
                   />
                 )}
-                {canDispatch && (
-                  <Stack gap="xs" data-testid="pick-list">
-                    <Inline gap="sm" align="center" wrap>
-                      <SectionLabel as="div">Hand it something</SectionLabel>
-                      <SegmentedControl
-                        size="sm"
-                        aria-label="What to pick from"
-                        value={pick}
-                        onChange={(v) => setPick(v as 'work' | 'bots')}
-                        options={[
-                          { label: `Initiative work · ${pickWork.length}`, value: 'work' },
-                          ...(canRunBots ? [{ label: `Bots · ${pickBots.length}`, value: 'bots' }] : []),
-                        ]}
-                      />
-                      <MetaLine
-                        className="ml-auto"
-                        items={[
-                          pick === 'work'
-                            ? <RouterLink key="all" to="/iq/projects" className="text-primary hover:underline">Browse all initiatives →</RouterLink>
-                            : <RouterLink key="all" to="/admin/bots" className="text-primary hover:underline">All bots →</RouterLink>,
-                        ]}
-                      />
-                    </Inline>
+              </Stack>
+
+              {canDispatch && (
+                <Stack hidden={tab !== 'hand'} gap="sm">
+                  {/* A labelled switch between the two places work comes
+                      from, not two counted chips with a link floating beside
+                      them — the counts read as filters over one list, which
+                      is not what they are: these are different sources. */}
+                  <Toolbar wrap>
+                    <ToolbarLabel>Source</ToolbarLabel>
+                    <SegmentedControl
+                      size="sm"
+                      aria-label="Where the work comes from"
+                      value={pick}
+                      onChange={(v) => setPick(v as 'work' | 'bots')}
+                      options={[
+                        { label: 'Initiative work', value: 'work' },
+                        ...(canRunBots ? [{ label: 'Bots', value: 'bots' }] : []),
+                      ]}
+                    />
+                    <ToolbarSeparator />
+                    <MetaLine
+                      size="xs"
+                      tone="tertiary"
+                      items={[pick === 'work'
+                        ? `${pickWork.length} open on your initiatives`
+                        : `${pickBots.length} enabled bot${pickBots.length === 1 ? '' : 's'}`]}
+                    />
+                  </Toolbar>
+
                     {sendError && <Banner variant="error">{sendError}</Banner>}
                     {pick === 'work' ? (
                       <DataTable<WorkSuggestion>
                         columns={[
-                          { key: 'title', header: 'Work item', render: (r) => <EntityCell label={r.title} id={r.workItemId} /> },
-                          { key: 'initiative', header: 'Initiative', render: (r) => r.initiativeName },
+                          { key: 'title', header: 'Work item', render: (r) => (
+                            <EntityCell label={r.title} id={r.workItemId} href={`/iq/projects/${r.initiativeId}?item=${encodeURIComponent(r.workItemId)}`} />
+                          ) },
+                          { key: 'initiative', header: 'Initiative', render: (r) => (
+                            <RouterLink to={`/iq/projects/${r.initiativeId}`} className="text-primary hover:underline">{r.initiativeName}</RouterLink>
+                          ) },
                           { key: 'why', header: 'Why now', render: (r) => <MetaLine items={[r.reason]} /> },
                           { key: 'size', header: 'Size', render: (r) => [r.storyPoints != null ? `${r.storyPoints} pts` : null, r.estimatedCostUsd != null ? usd(r.estimatedCostUsd) : null].filter(Boolean).join(' · ') || '—' },
                           { key: 'send', header: '', render: (r) => (
@@ -488,7 +620,9 @@ export default function LocalComputePage() {
                     ) : (
                       <DataTable<BotRow>
                         columns={[
-                          { key: 'name', header: 'Bot', render: (b) => <EntityCell label={b.name} id={b.repoFullName ?? undefined} /> },
+                          { key: 'name', header: 'Bot', render: (b) => (
+                            <EntityCell label={b.name} id={b.repoFullName ?? undefined} href={`/admin/bots/${b.id}`} />
+                          ) },
                           { key: 'schedule', header: 'Schedule', render: (b) => b.cronExpr ?? 'manual' },
                           { key: 'model', header: 'Model', render: (b) => b.model },
                           { key: 'last', header: 'Last ran', render: (b) => (b.lastRunAt ? when(b.lastRunAt) : 'never') },
@@ -503,13 +637,11 @@ export default function LocalComputePage() {
                         emptyMessage="No enabled bots to run."
                       />
                     )}
-                  </Stack>
-                )}
-              </Stack>
-            </DetailSection>
-          )}
+                </Stack>
+              )}
 
-          <DetailSection title="Your runs">
+              <Stack hidden={tab !== 'activity'} gap="sm">
+
             {runsFailure ? (
               <UnavailableNotice
                 error={runsFailure}
@@ -526,7 +658,18 @@ export default function LocalComputePage() {
                 emptyMessage="No runs yet."
               />
             )}
-          </DetailSection>
+              </Stack>
+
+              <Stack hidden={tab !== 'connection'} gap="sm">
+                <MachineConnection
+                  machine={selectedNode}
+                  jobs={machineJobs}
+                  now={now}
+                  streamLive={streamLive}
+                />
+              </Stack>
+            </DetailSection>
+          )}
 
           {selectedRunId && (
             <DetailSection

@@ -16,6 +16,8 @@
 //   1. In the portal header menu (or POST /api/local-compute/pair/start),
 //      mint a pairing code, then:
 //        node orgiq-presence.mjs pair <CODE> [--base http://localhost:3001]
+//      ...or, in one command that also starts the worker:
+//        node tools/local-compute-worker.mjs --pair <CODE> [--base <url>]
 //   2. Wire hooks in ~/.claude/settings.json:
 //        "hooks": {
 //          "SessionStart":      [{ "hooks": [{ "type": "command", "command": "node <here>/orgiq-presence.mjs hook" }] }],
@@ -124,7 +126,10 @@ async function pair(code, baseUrl) {
 
 /** The one command every pairing message points at. The worker reads the token
  *  this step just wrote, announces the machine's models/kinds, and heartbeats. */
-const NEXT_STEP = 'node tools/local-compute-worker.mjs   (from the aws-agentcore checkout; JOB_KINDS/LOCAL_MODELS env optional)';
+// The worker waits for "Accepting work" now rather than exiting, so this is
+// genuinely the last thing to type — and `--pair <code>` on the worker does
+// both halves at once, which is what the portal offers.
+const NEXT_STEP = 'node tools/local-compute-worker.mjs   (from the aws-agentcore checkout; it waits if the machine is not switched on yet)';
 
 // ─── hook: maintain the session snapshot, then announce it ───────────────────
 

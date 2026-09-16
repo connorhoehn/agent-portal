@@ -13,6 +13,7 @@
 // window go back to queued if attempts remain, else fail with a clear reason.
 
 import { randomUUID } from 'node:crypto';
+import { EventEmitter } from 'node:events';
 import { exec } from './aurora.js';
 import { config } from '../config.js';
 import { hasColumns, _resetColumnProbes } from './column-probe.js';
@@ -61,6 +62,46 @@ export interface AgentJob {
   /** Resolved on reads that join bots; null on INSERT ... RETURNING. */
   botName: string | null;
   botTrigger: string | null;
+}
+
+/**
+ * Fires whenever a job's status changes — every job, not only local-compute
+ * ones. `routes/local-compute.ts`'s `GET /events` SSE stream is the one
+ * listener that filters this down to an owner's own `local:` box ids (plus
+ * targeted-but-unclaimed rows, via `payload.nodeId`); `job-dispatcher.ts`'s
+ * `dispatcherEvents` is a separate, older feed for the work-queue pages and is
+ * untouched by this. One emitter here, in the provider, rather than each
+ * write site inventing its own shape.
+ *
+ * Only instrumented on the transitions a paired workstation's job actually
+ * goes through — `enqueueJob`, `claimNextJobForWorker`, the FENCED branch of
+ * `markRunning`/`completeJob` (pull-side; the unfenced branch is
+ * job-dispatcher.ts's own in-process path, already served by
+ * `dispatcherEvents`), `cancelJob`, `reviewJob`. In `config.mock.aurora` every
+ * branch is the same shared code path, so mock-mode jobs of any kind emit —
+ * harmless, since a listener filters by node ownership regardless.
+ */
+export const jobEvents = new EventEmitter();
+jobEvents.setMaxListeners(256);
+
+export interface JobChangeEvent {
+  jobId: string;
+  boxId: string | null;
+  status: JobStatus;
+  title: string;
+  payload: Record<string, unknown>;
+  at: string;
+}
+
+function emitJobChange(job: Pick<AgentJob, 'id' | 'boxId' | 'status' | 'title' | 'payload'>): void {
+  jobEvents.emit('change', {
+    jobId: job.id,
+    boxId: job.boxId,
+    status: job.status,
+    title: job.title,
+    payload: job.payload,
+    at: new Date().toISOString(),
+  } satisfies JobChangeEvent);
 }
 
 export interface ToolCallSummary { name: string; done: boolean }
@@ -273,6 +314,7 @@ export async function enqueueJob(input: {
       botTrigger: null,
     };
     mockJobs.push(job);
+    emitJobChange(job);
     return job;
   }
   const rows = await exec(
@@ -291,7 +333,9 @@ export async function enqueueJob(input: {
         : { name: 'bot_id', value: { isNull: true } },
     ],
   );
-  return rows[0] ? rowToJob(rows[0]) : null;
+  const job = rows[0] ? rowToJob(rows[0]) : null;
+  if (job) emitJobChange(job);
+  return job;
 }
 
 /**
@@ -616,6 +660,7 @@ export async function claimNextJobForWorker(opts: {
     next.claimedAt = clock.nowIso();
     next.attempts += 1;
     MOCK_CLAIM_TOKENS.set(next.id, claimToken);
+    emitJobChange(next);
     return { job: { ...next }, claimToken };
   }
 
@@ -641,7 +686,10 @@ export async function claimNextJobForWorker(opts: {
     [strParam('box', opts.boxId), strParam('session', opts.sessionId),
       strParam('token', claimToken), strParam('node', opts.nodeId ?? ''), ...kindParams],
   );
-  return rows[0] ? { job: rowToJob(rows[0]), claimToken } : null;
+  if (!rows[0]) return null;
+  const job = rowToJob(rows[0]);
+  emitJobChange(job);
+  return { job, claimToken };
 }
 
 /**
@@ -706,6 +754,7 @@ export async function markRunning(id: string, claimToken?: string): Promise<bool
     if (claimToken !== undefined && MOCK_CLAIM_TOKENS.get(id) !== claimToken) return false;
     job.status = 'running';
     job.startedAt = clock.nowIso();
+    emitJobChange(job);
     return true;
   }
   // The new columns appear ONLY on the fenced path. A cluster that has not
@@ -723,9 +772,18 @@ export async function markRunning(id: string, claimToken?: string): Promise<bool
   }
   const rows = await exec(
     `UPDATE agent_jobs SET status='running', started_at=NOW(), heartbeat_at=NOW(), updated_at=NOW()
-      WHERE id=:id AND claim_token=:token RETURNING id`,
+      WHERE id=:id AND claim_token=:token RETURNING id, box_id, title, payload::text AS payload`,
     [strParam('id', id), strParam('token', claimToken)],
   );
+  if (rows[0]) {
+    emitJobChange({
+      id: toStr(rows[0]['id']),
+      boxId: rows[0]['box_id'] ? toStr(rows[0]['box_id']) : null,
+      status: 'running',
+      title: toStr(rows[0]['title']),
+      payload: toJson(rows[0]['payload']) ?? {},
+    });
+  }
   return rows.length > 0;
 }
 
@@ -764,6 +822,7 @@ export async function completeJob(id: string, opts: {
     if (opts.result) job.result = opts.result;
     job.error = opts.error ?? null;
     job.finishedAt = clock.nowIso();
+    emitJobChange(job);
     return true;
   }
   const params = [
@@ -803,9 +862,18 @@ export async function completeJob(id: string, opts: {
             claim_token = NULL,
             finished_at = NOW(), updated_at = NOW()
       WHERE id = :id AND claim_token = :token AND status IN ('claimed','running')
-      RETURNING id`,
+      RETURNING id, box_id, title, payload::text AS payload`,
     [...params, strParam('token', opts.claimToken)],
   );
+  if (rows[0]) {
+    emitJobChange({
+      id: toStr(rows[0]['id']),
+      boxId: rows[0]['box_id'] ? toStr(rows[0]['box_id']) : null,
+      status: opts.status,
+      title: toStr(rows[0]['title']),
+      payload: toJson(rows[0]['payload']) ?? {},
+    });
+  }
   return rows.length > 0;
 }
 
@@ -816,6 +884,7 @@ export async function reviewJob(id: string, decision: 'accept' | 'reject', note?
     if (!job) return null;
     job.status = decision === 'accept' ? 'done' : 'failed';
     job.result = { ...(job.result ?? {}), reviewNote: note ?? '' };
+    emitJobChange(job);
     return { ...job };
   }
   const rows = await exec(
@@ -831,7 +900,9 @@ export async function reviewJob(id: string, decision: 'accept' | 'reject', note?
       strParam('note', note ?? ''),
     ],
   );
-  return rows[0] ? rowToJob(rows[0]) : null;
+  const job = rows[0] ? rowToJob(rows[0]) : null;
+  if (job) emitJobChange(job);
+  return job;
 }
 
 export async function cancelJob(id: string): Promise<boolean> {
@@ -840,13 +911,23 @@ export async function cancelJob(id: string): Promise<boolean> {
     if (!job) return false;
     job.status = 'cancelled';
     job.finishedAt = clock.nowIso();
+    emitJobChange(job);
     return true;
   }
   const rows = await exec(
     `UPDATE agent_jobs SET status='cancelled', finished_at=NOW(), updated_at=NOW()
-      WHERE id=:id AND status IN ('queued','claimed') RETURNING id`,
+      WHERE id=:id AND status IN ('queued','claimed') RETURNING id, box_id, title, payload::text AS payload`,
     [strParam('id', id)],
   );
+  if (rows[0]) {
+    emitJobChange({
+      id: toStr(rows[0]['id']),
+      boxId: rows[0]['box_id'] ? toStr(rows[0]['box_id']) : null,
+      status: 'cancelled',
+      title: toStr(rows[0]['title']),
+      payload: toJson(rows[0]['payload']) ?? {},
+    });
+  }
   return rows.length > 0;
 }
 

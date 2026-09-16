@@ -224,7 +224,7 @@ export default function ReportsPage() {
         title={isScoped ? `Report — ${scopedTeam!.name}` : 'Portfolio'}
         description={
           isScoped
-            ? `${scopedTeam!.name}'s maturity heatmap and open recommendations — the printable single-team report.`
+            ? `${scopedTeam!.name}'s certification heatmap and open recommendations — the printable single-team report.`
             : "Every team against every dimension: what verification has reached, where the claims run ahead of it, and the one thing each team should start with."
         }
         actions={
@@ -262,7 +262,7 @@ export default function ReportsPage() {
             />
           )}
           <PageSection
-            title={isScoped ? 'Maturity' : 'Maturity heatmap'}
+            title={isScoped ? 'Certification' : 'Certification heatmap'}
             description={isScoped ? 'Columns are the rubric\'s seventeen dimensions.' : "Rows are teams, columns are the rubric's seventeen dimensions."}
           >
             <MaturityHeatmap teams={isScoped ? [scopedTeam!] : teams} onSelectTeam={openTeam} />

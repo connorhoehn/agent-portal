@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import {
-  Button, Card, CardHeader, Chip, ConfirmDialog, EmptyState, Inline, InlineAlert, PageSection,
-  Stack,
+  Button, Card, CardHeader, Chip, ConfirmDialog, EmptyState, Inline, InlineAlert, LoadingState,
+  PageSection, Stack,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { sendJson, writeJson } from '../../lib/writeJson';
@@ -24,7 +24,7 @@ function CrawlTargetsPage() {
   // Same URL + interval as IngestLayout's nav-badge poll and RunHistoryPage
   // — `share: true` so the three collapse into one request per tick instead
   // of three.
-  const { data: targetsData, refresh: refreshTargets } = useFetch<{ targets: CrawlTarget[] }>(
+  const { data: targetsData, isLoading: targetsLoading, refresh: refreshTargets } = useFetch<{ targets: CrawlTarget[] }>(
     '/api/ingest/crawl-targets',
     30_000,
     { share: true },
@@ -142,7 +142,9 @@ function CrawlTargetsPage() {
               </Button>
             </Inline>
           )}
-          {targets.length === 0 ? (
+          {targetsLoading && targets.length === 0 ? (
+            <LoadingState label="Loading crawl targets…" />
+          ) : targets.length === 0 ? (
             <EmptyState title="No crawl targets yet" body="Define a target to start ingesting public web content with vision-LLM extraction." />
           ) : (
             <TargetsTable

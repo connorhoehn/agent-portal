@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
 import {
-  Button, Card, CardHeader, Chip, Inline, InlineAlert, InlinePlaceholder, PageSection,
-  ProgressBar, Stack, StatStrip, Table, TableBody, TableHead, TableRow,
+  Button, Card, CardHeader, Chip, Inline, InlineAlert, InlinePlaceholder, LoadingState,
+  PageSection, ProgressBar, Stack, StatStrip, Table, TableBody, TableHead, TableRow,
   TableTd, TableTh,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
@@ -63,11 +63,11 @@ function DataSourcesPage() {
   // Starting a KB sync POSTs /api/ingest/start (ManageIngest).
   const { can, ready } = useCapabilities();
   const canManage = ready && can('ManageIngest');
-  const { data: sourcesData, refresh: refreshSources } = useFetch<{ sources: DataSource[] }>(
+  const { data: sourcesData, isLoading: sourcesLoading, refresh: refreshSources } = useFetch<{ sources: DataSource[] }>(
     '/api/ingest/data-sources',
     30_000,
   );
-  const { data: jobsData, refresh: refreshJobs } = useFetch<{ jobs: IngestionJob[] }>(
+  const { data: jobsData, isLoading: jobsLoading, refresh: refreshJobs } = useFetch<{ jobs: IngestionJob[] }>(
     '/api/ingest/jobs?limit=20',
     10_000,
   );
@@ -137,7 +137,9 @@ function DataSourcesPage() {
         {/* Data Sources */}
         <Card padding="md">
           <CardHeader title="Data Sources" />
-          {sources.length === 0 ? (
+          {sourcesLoading && sources.length === 0 ? (
+            <LoadingState label="Loading data sources…" />
+          ) : sources.length === 0 ? (
             <EmptyState title="No data sources" body="No data sources attached to this Knowledge Base." />
           ) : (
             <Table>
@@ -192,7 +194,9 @@ function DataSourcesPage() {
               ? <T className="text-[11px] text-text-tertiary">last: {new Date(jobs[0].startedAt).toLocaleString()}</T>
               : undefined}
           />
-          {jobs.length === 0 ? (
+          {jobsLoading && jobs.length === 0 ? (
+            <LoadingState label="Loading ingestion jobs…" />
+          ) : jobs.length === 0 ? (
             <EmptyState title="No ingestion jobs yet" />
           ) : (
             <JobHistoryTable jobs={jobs} />

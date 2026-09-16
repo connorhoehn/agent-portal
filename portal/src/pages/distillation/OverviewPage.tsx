@@ -275,6 +275,10 @@ export default function DistillationOverviewPage() {
           <Link href="/iq/distillation/artifacts?type=procedure">See all {procedures.length} procedures →</Link>
         ) : undefined}
       >
+        {/* See the shared list-page loading pattern comment in
+            QueuePage.tsx — DetailSection's own title/hint above already
+            stays mounted; this just fills its body with skeleton rows on
+            first load instead of a bare LoadingState. */}
         {proceduresFailure ? (
           <UnavailableNotice
             error={proceduresFailure}
@@ -282,9 +286,7 @@ export default function DistillationOverviewPage() {
             source="Procedures are read from the distillation pipeline"
             onRetry={refreshProcedures}
           />
-        ) : proceduresLoading && !proceduresData ? (
-          <LoadingState label="Loading procedures…" />
-        ) : procedures.length === 0 ? (
+        ) : !(proceduresLoading && !proceduresData) && procedures.length === 0 ? (
           <EmptyState
             title="No procedures yet"
             description="The next L1 → L2 pass mints one when a chunk of clusters pairs a failure with the fix that resolved it."
@@ -296,6 +298,7 @@ export default function DistillationOverviewPage() {
             columns={procedureColumns}
             emptyMessage="No procedures."
             data-testid="procedure-repertoire"
+            loading={proceduresLoading && !proceduresData}
           />
         )}
       </DetailSection>

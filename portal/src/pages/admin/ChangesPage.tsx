@@ -192,10 +192,10 @@ export default function ChangesPage() {
               title="You cannot see the review queue"
               description={
                 <>
-                  Reading change requests requires the <code>ManageDevbox</code> authority,
+                  Reading change requests requires computer access,
                   which this role does not hold — so this page cannot say whether anything is waiting.
                   It is not empty; it is unreadable. Dispatch rights
-                  (<code>DispatchAgentRun</code>) let you start governed runs but not review
+                  let you start governed runs but not review
                   what they produce. Switch to HR Admin from the identity menu, top right, or ask an admin for the
                   grant.
                 </>

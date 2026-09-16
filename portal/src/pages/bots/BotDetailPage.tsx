@@ -362,7 +362,7 @@ export default function BotDetailPage() {
           question this page exists to answer; the mission and guardrails
           that shaped those runs follow. ── */}
       <Card padding="none" className="mb-4 overflow-hidden">
-        <CardHeader inset title="Runs" />
+        <CardHeader inset title="Runs" subtitle="This bot's dispatch history — what it did each time it fired." />
         <Stack gap="none" className="p-3.5">
         {runsFailure ? (
           <UnavailableNotice

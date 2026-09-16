@@ -18,7 +18,6 @@ import {
   ErrorState,
   Inline,
   Input,
-  LoadingState,
   MetaLine,
   PageHeader,
   Select,
@@ -288,9 +287,10 @@ export default function FeedbackPage() {
         <MetaLine size="xs" tone="tertiary" className="ml-auto" items={['click a row to answer it']} />
       </Inline>
 
-      {loading && !data ? (
-        <LoadingState label="Loading the queue…" />
-      ) : error ? (
+      {/* See the shared list-page loading pattern comment in QueuePage.tsx —
+          the filter toolbar above stays mounted; only the table body needs
+          the skeleton. */}
+      {error ? (
         <ErrorState title="Couldn't load the queue" description={error} actionLabel="Retry" onAction={load} />
       ) : degraded ? (
         <UnavailableNotice
@@ -305,6 +305,7 @@ export default function FeedbackPage() {
           keyField={(t) => t.task_id}
           onRowClick={(t) => setSelectedId(t.task_id)}
           striped
+          loading={loading && !data}
           emptyMessage={tasks.length === 0 ? (status === 'OPEN' ? 'No open questions.' : 'No questions with this status.') : 'No questions match the current filters.'}
           columns={[
             {

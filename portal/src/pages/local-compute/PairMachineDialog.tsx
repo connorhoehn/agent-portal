@@ -39,7 +39,11 @@ function minutesLeft(expiresAt: string): number {
  *  /api to the middleware, and in a deployment the two share a front door. */
 function pairCommand(code: string): string {
   const base = typeof window === 'undefined' ? '' : window.location.origin;
-  return `node tools/local-compute-plugin/orgiq-presence.mjs pair ${code} --base ${base}`;
+  // ONE command, not two. Pairing and starting the worker were separate
+  // pastes, and the gap between them is where a first run goes wrong: the
+  // portal shows the machine paired but offline, and nothing on screen says
+  // the second half is missing. The worker claims the code itself now.
+  return `node tools/local-compute-worker.mjs --pair ${code} --base ${base}`;
 }
 
 /** The worker command, verbatim from tools/local-compute-worker.mjs's header. */
@@ -51,7 +55,12 @@ export function PairMachineDialog({ open, onClose, onPaired }: { open: boolean; 
   const [minting, setMinting] = useState(false);
   // Step state: minted → claimed (a machine took the code) → connected (its
   // worker announced), at which point the dialog closes itself.
-  const [claimed, setClaimed] = useState<{ nodeId: string | null; label: string | null } | null>(null);
+  const [claimed, setClaimed] = useState<{ nodeId: string | null; label: string | null; at: number } | null>(null);
+  // Ticks while step 2 is open so the wait is visibly alive. A worker
+  // announces every 25s, so the first one can legitimately be twenty-odd
+  // seconds after the claim — with a bare spinner that reads as a hang, which
+  // is exactly how it was reported.
+  const [waitedS, setWaitedS] = useState(0);
   const knownIdsRef = useRef<Set<string>>(new Set());
   const toast = useToastOptional();
 
@@ -101,13 +110,20 @@ export function PairMachineDialog({ open, onClose, onPaired }: { open: boolean; 
         const fresh = nodes.find((n) => !knownIdsRef.current.has(n.id));
         if (statusRes?.claimed || fresh) {
           const node = (statusRes?.nodeId ? nodes.find((n) => n.id === statusRes.nodeId) : undefined) ?? fresh ?? null;
-          setClaimed({ nodeId: node?.id ?? statusRes?.nodeId ?? null, label: node?.label ?? null });
+          setClaimed({ nodeId: node?.id ?? statusRes?.nodeId ?? null, label: node?.label ?? null, at: Date.now() });
           onPaired?.();
         }
         return;
       }
 
-      const node = nodes.find((n) => (claimed.nodeId ? n.id === claimed.nodeId : n.label === claimed.label));
+      // Match by id when the claim gave us one, then by label, then by "a
+      // machine that was not here when this dialog opened". The single
+      // expression this replaced fell through to `n.label === null` whenever
+      // the claim carried neither, which matches nothing — so a re-pair of a
+      // machine that kept its id left this dialog waiting forever.
+      const node = (claimed.nodeId ? nodes.find((n) => n.id === claimed.nodeId) : undefined)
+        ?? (claimed.label ? nodes.find((n) => n.label === claimed.label) : undefined)
+        ?? nodes.find((n) => !knownIdsRef.current.has(n.id));
       if (node && node.presence.status === 'connected') {
         toast?.toast(`${node.label} is connected`, { type: 'success' });
         onClose();
@@ -117,6 +133,19 @@ export function PairMachineDialog({ open, onClose, onPaired }: { open: boolean; 
     const id = window.setInterval(() => { void tick(); }, WATCH_MS);
     return () => { cancelled = true; window.clearInterval(id); };
   }, [open, pairing, claimed, onPaired, onClose, toast]);
+
+  // The wait, counted out loud. A worker announces every 25 seconds, so the
+  // gap between claiming a code and the machine reporting in is legitimately
+  // twenty-odd seconds — and a bare spinner through that window is
+  // indistinguishable from a hang, which is how it was reported.
+  useEffect(() => {
+    if (!open || !claimed) { setWaitedS(0); return; }
+    setWaitedS(Math.floor((Date.now() - claimed.at) / 1000));
+    const id = window.setInterval(() => {
+      setWaitedS(Math.floor((Date.now() - claimed.at) / 1000));
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [open, claimed]);
 
   return (
     <Modal
@@ -144,13 +173,13 @@ export function PairMachineDialog({ open, onClose, onPaired }: { open: boolean; 
           <Stack gap="sm">
             <SectionLabel as="div">Pairing code</SectionLabel>
             <CodeBlock code={pairing.code} language="text" copyButton ariaLabel="Pairing code" />
-            <SectionLabel as="div">1 · Pair it — on the machine</SectionLabel>
+            <SectionLabel as="div">Run this on the machine you want in the fleet</SectionLabel>
             <CodeBlock code={pairCommand(pairing.code)} language="bash" copyButton ariaLabel="Pairing command" />
             <MetaLine
               size="xs"
               items={[
                 `Code expires in ${minutesLeft(pairing.expiresAt)} min and is single-use — mint a new one if it lapses`,
-                'This dialog moves on by itself the moment a machine claims the code',
+                'It pairs, then starts polling — this dialog moves on by itself the moment the machine reports in',
               ]}
             />
             {/* Pairing registers the machine and nothing more: it shows as
@@ -175,7 +204,20 @@ export function PairMachineDialog({ open, onClose, onPaired }: { open: boolean; 
                 'This dialog closes itself when the machine reports connected',
               ]}
             />
-            <LoadingState label="Waiting for the worker to announce…" />
+            <LoadingState label={`Waiting for the worker to announce… ${waitedS}s`} />
+            {waitedS >= 20 && (
+              <Banner variant="warning">
+                <Stack gap="xs">
+                  <Inline as="span" gap="none" wrap>
+                    Still nothing after {waitedS}s. A worker announces every 25 seconds, so a short wait is normal — but if this keeps counting, check that the command above is running on that machine, in this repo checkout, and that it prints no error. A middleware restart also clears pairings in dev, in which case mint a new code.
+                  </Inline>
+                  <Inline gap="sm">
+                    <Button variant="secondary" size="sm" onClick={() => { void mint(); }}>New code</Button>
+                    <Button variant="ghost" size="sm" onClick={onClose}>Close and watch the row</Button>
+                  </Inline>
+                </Stack>
+              </Banner>
+            )}
           </Stack>
         )}
       </Stack>

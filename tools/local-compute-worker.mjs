@@ -33,6 +33,10 @@
 // The worker reads ~/.claude-mem/orgiq-presence.json for the node token (written
 // by the pairing step) and announces its capabilities on every boot, so a
 // restart picks up changes to the env vars below without requiring re-pairing.
+// Every announce also carries a `metrics` snapshot (load average, CPU count,
+// free/total memory, uptime, this file's version, how many jobs are held) so
+// the fleet view can show live machine health, not only connected/stale/
+// offline — see gatherMetrics() below.
 //
 // Environment (all optional, with sane defaults):
 //   LOCAL_MODELS           comma-separated model list the machine advertises
@@ -58,10 +62,10 @@
 // shell — a failed claim, a dead network, or a revoked token all exit non-zero,
 // and the operator decides whether to restart it.
 
-import { readFileSync, mkdirSync, existsSync, createWriteStream } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync, createWriteStream } from 'node:fs';
 import { execSync, spawn } from 'node:child_process';
-import { join, basename } from 'node:path';
-import { homedir } from 'node:os';
+import { join, basename, dirname } from 'node:path';
+import { homedir, hostname, platform, arch, loadavg, cpus, totalmem, freemem, uptime } from 'node:os';
 
 const CONFIG_PATH = process.env.ORGIQ_PRESENCE_CONFIG ?? join(homedir(), '.claude-mem', 'orgiq-presence.json');
 const REPOS_DIR = process.env.REPOS_DIR ?? join(homedir(), 'repos-worker');
@@ -100,11 +104,141 @@ const JOB_KINDS = (process.env.JOB_KINDS ?? 'local:task')
   .split(',').map((s) => s.trim()).filter(Boolean);
 const MAX_CONCURRENCY = Math.max(1, parseInt(process.env.MAX_CONCURRENCY ?? '2', 10) || 2);
 
+// Bumped by hand when this file's behaviour changes in a way worth seeing on
+// the fleet view (a job kind added, a claim-loop fix). Reported in
+// `metrics.workerVersion` — informational only, nothing server-side gates on
+// it today.
+const WORKER_VERSION = '1.1.0';
+
+// ─── Logging ─────────────────────────────────────────────────────────────────
+//
+// One line, one fact, stamped. The worker runs unattended in a terminal that
+// someone scrolls back through hours later, usually to answer "what was it
+// doing when the portal said X" — and the old output had no clock in it at
+// all, so a run could not be lined up against anything. Levels are a single
+// glyph rather than a word: they scan in a narrow terminal and they do not
+// pretend to be a structured log this thing does not ship.
+const LEVEL_GLYPH = { info: '·', ok: '✓', warn: '!', err: '✗', step: '→' };
+
+function stamp() {
+  const d = new Date();
+  const p2 = (n) => String(n).padStart(2, '0');
+  return `${p2(d.getHours())}:${p2(d.getMinutes())}:${p2(d.getSeconds())}`;
+}
+
+/** `indent` is for lines that belong to the job above them. */
+function emit(level, msg, indent = 0) {
+  const line = `${stamp()} ${LEVEL_GLYPH[level] ?? '·'} ${'  '.repeat(indent)}${msg}`;
+  if (level === 'err' || level === 'warn') console.error(line); else console.log(line);
+}
+
+const log = {
+  info: (m, i) => emit('info', m, i),
+  ok: (m, i) => emit('ok', m, i),
+  warn: (m, i) => emit('warn', m, i),
+  err: (m, i) => emit('err', m, i),
+  step: (m, i) => emit('step', m, i),
+  /** A blank separator that still carries the stamp column's width. */
+  gap: () => console.log(''),
+};
+
+/** Short form of a job id for line prefixes — the uuid tail is enough. */
+function shortId(id) {
+  return typeof id === 'string' && id.length > 12 ? `${id.slice(0, 8)}…` : String(id ?? '?');
+}
+
+/**
+ * A failed response, said usefully.
+ *
+ * The old text was `claim failed: 500 ` — status, then an empty body, then
+ * nothing about what to do. An empty body on a dev middleware almost always
+ * means it restarted mid-request (its pairings live in memory), so that is
+ * worth naming rather than leaving someone to guess.
+ */
+async function describeFailure(res) {
+  let body = '';
+  try { body = (await res.text()).trim(); } catch { body = ''; }
+  let detail = body;
+  try { const j = JSON.parse(body); detail = j.error ?? body; } catch { /* not json */ }
+  if (!detail) {
+    detail = res.status >= 500
+      ? '<empty body> — the server may have restarted mid-request'
+      : '<empty body>';
+  }
+  return `${res.status} ${detail}`;
+}
+
+// ─── Pairing, so first run is one command ────────────────────────────────────
+//
+// It used to take two: claim the code with the presence plugin, then start
+// this worker. Two commands to paste, and the gap between them is where a
+// first run goes wrong — the portal shows the machine paired but offline, and
+// nothing on screen says the second command is the missing half. `--pair
+// <code>` folds the claim in: same endpoint and same token file the plugin
+// writes, so the two paths cannot drift, and running it with a code already
+// on disk re-keys the machine exactly as a re-pair does.
+function parseArgs(argv) {
+  const out = { pairCode: null, baseUrl: null };
+  for (let i = 0; i < argv.length; i += 1) {
+    if (argv[i] === '--pair') { out.pairCode = argv[i + 1] ?? null; i += 1; }
+    else if (argv[i] === '--base') { out.baseUrl = (argv[i + 1] ?? '').replace(/\/$/, '') || null; i += 1; }
+  }
+  return out;
+}
+
+async function pairWithCode(code, baseUrl) {
+  const label = hostname().replace(/\.local$/, '');
+  let existing = {};
+  try { existing = JSON.parse(readFileSync(CONFIG_PATH, 'utf8')); } catch { /* first pairing */ }
+  const base = baseUrl ?? existing.baseUrl ?? 'http://localhost:3001';
+  const res = await fetch(`${base}/api/local-compute/pair/claim`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      code,
+      node: { ...(existing.nodeId ? { nodeId: existing.nodeId } : {}), label, platform: `${platform()}/${arch()}` },
+    }),
+  });
+  if (!res.ok) {
+    log.err(`pairing failed: ${await describeFailure(res)}`);
+    // The server answers the same way for spent, expired and unknown codes on
+    // purpose — a claim probe must learn nothing. This side knows more.
+    if (existing.nodeToken && existing.baseUrl === base) {
+      log.info(`this machine is already paired as ${existing.label ?? label} (${existing.nodeId}) against ${base}; a code is single-use, so a second run is expected to fail.`, 1);
+      log.info('drop --pair and just run this worker.', 1);
+    } else {
+      log.info('mint a fresh code from Local compute › Pair a machine — codes expire and are single-use.', 1);
+    }
+    process.exit(1);
+  }
+  const { nodeId, nodeToken } = await res.json();
+  const rePaired = Boolean(existing.nodeToken);
+  // The claim has already succeeded here and a pairing code is SINGLE-USE, so
+  // anything that throws between this line and a written token burns the code
+  // with nothing to show for it. On a machine that has never run the presence
+  // plugin, ~/.claude-mem does not exist and writeFileSync fails with ENOENT —
+  // which is exactly the fresh-machine case this flag exists to serve. Create
+  // the directory first (the plugin has always done this) and, if the write
+  // still fails, say plainly that the code is spent rather than exiting on a
+  // stack trace.
+  try {
+    mkdirSync(dirname(CONFIG_PATH), { recursive: true });
+    writeFileSync(CONFIG_PATH, JSON.stringify({ baseUrl: base, nodeId, nodeToken, label }, null, 2), { mode: 0o600 });
+  } catch (err) {
+    log.err(`paired, but the token could not be written to ${CONFIG_PATH}: ${err.message}`);
+    log.info('That code is now spent — mint a fresh one from Local compute › Pair a machine once the path is writable.', 1);
+    process.exit(1);
+  }
+  log.ok(`paired as ${label} (${nodeId}) against ${base}`);
+  if (rePaired) log.info('this replaced the previous token on this machine', 1);
+  log.info(`token written to ${CONFIG_PATH} (0600) — it is shown nowhere else`, 1);
+}
+
 function readConfig() {
   try {
     return JSON.parse(readFileSync(CONFIG_PATH, 'utf8'));
   } catch {
-    console.error(`config not found at ${CONFIG_PATH} — pair the machine first`);
+    log.err(`config not found at ${CONFIG_PATH} — pair this machine first from Local compute › Pair a machine`);
     process.exit(1);
   }
 }
@@ -124,7 +258,7 @@ function authHeaders(config) {
 
 // ─── Registration ────────────────────────────────────────────────────────────
 
-async function register(config) {
+async function register(config, { quiet = false } = {}) {
   const res = await post(config, '/api/local-compute/register', {
     localModels: LOCAL_MODELS,
     jobKinds: JOB_KINDS,
@@ -133,7 +267,7 @@ async function register(config) {
 
   if (!res.ok) {
     const text = await res.text();
-    console.error(`registration failed: ${res.status} ${text}`);
+    log.err(`registration failed: ${res.status} ${text.trim() || '<empty body>'}`);
     process.exit(1);
   }
 
@@ -141,15 +275,53 @@ async function register(config) {
   if (typeof body.heartbeatIntervalS === 'number' && body.heartbeatIntervalS > 0) {
     heartbeatIntervalS = body.heartbeatIntervalS;
   }
-  console.log(`registered: ${body.jobKinds.length} kind(s), ${body.maxConcurrency} slot(s), ${body.localModels.length} model(s)`);
-  if (body.rejectedKinds?.length) {
-    console.log(`  rejected kinds: ${body.rejectedKinds.join(', ')}`);
-    console.log(`  runnable kinds: ${body.runnableKinds.join(', ')}`);
+  if (!quiet) {
+    log.ok(`registered as ${config.label ?? 'this machine'} against ${config.baseUrl}`);
+    log.info(`kinds: ${body.jobKinds.join(', ') || 'none'} · models: ${body.localModels.join(', ') || 'none'} · slots: ${body.maxConcurrency}`, 1);
   }
-  if (!body.acceptJobs) {
-    console.log(`  machine is paired but NOT accepting jobs — turn on "accept jobs" in the portal`);
+  if (!quiet && body.rejectedKinds?.length) {
+    log.warn(`rejected kinds: ${body.rejectedKinds.join(', ')} — the fleet does not run these here`, 1);
+    log.info(`runnable kinds: ${body.runnableKinds.join(', ')}`, 1);
   }
   return body;
+}
+
+/**
+ * Park until the portal switches this machine on.
+ *
+ * The first version of this printed a sentence and exited, which meant the
+ * documented first run — pair, start the worker, then flip "Accepting work" —
+ * always ended with the worker dead and a second `node tools/…` to type. It
+ * now re-registers on the poll interval and starts the moment the switch
+ * flips, saying so once rather than every tick.
+ */
+async function waitForAcceptJobs(config, why) {
+  log.warn(`paused: ${why}.`);
+  log.info('Switch on "Accepting work" for this machine under Local compute — this worker picks it up on its own, no restart needed.', 1);
+  let ticks = 0;
+  for (;;) {
+    await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_S * 1000));
+    ticks += 1;
+    let reg;
+    try {
+      // Quiet: this re-registers on every poll tick, and repeating the
+      // whole registration block ten times a minute buries the one line that
+      // matters when the switch finally flips.
+      reg = await register(config, { quiet: true });
+    } catch (err) {
+      log.warn(`still paused — cannot reach ${config.baseUrl} (${err.message})`, 1);
+      continue;
+    }
+    if (reg.acceptJobs) {
+      log.ok('switched on in the portal — claiming again');
+      return reg;
+    }
+    // Once a minute, not every ten seconds: a reminder that repeats faster
+    // than you can act on it is just noise in the scrollback.
+    if (ticks % Math.max(1, Math.round(60 / POLL_INTERVAL_S)) === 0) {
+      log.info(`still waiting for "Accepting work" (${ticks * POLL_INTERVAL_S}s)`, 1);
+    }
+  }
 }
 
 // ─── Claim loop ──────────────────────────────────────────────────────────────
@@ -173,23 +345,26 @@ async function claim(config) {
   if (res.status === 409) {
     const body = await res.json();
     if (body.gate === 'accept_jobs') {
-      console.error('machine is not accepting jobs — turn on "accept jobs" in the portal, then restart');
-      process.exit(1);
+      // Was `process.exit(1)`. Switching the machine off in the portal is a
+      // normal, reversible thing to do — it should pause this worker, not
+      // kill it and make someone come back to the terminal to restart it.
+      await waitForAcceptJobs(config, 'the portal switched this machine off');
+      return null;
     }
     if (body.gate === 'kinds') {
-      console.error('no runnable job kinds registered — check JOB_KINDS env var and restart');
+      log.err('no runnable job kinds registered — set JOB_KINDS to a kind the fleet dispatches and restart');
       process.exit(1);
     }
   }
   if (res.status === 503) {
     const body = await res.json();
     if (body.gate === 'migration') {
-      console.error('cluster has not applied schema/local_compute_worker_schema.sql — cannot fence claims');
+      log.err('cluster has not applied schema/local_compute_worker_schema.sql — cannot fence claims');
       process.exit(1);
     }
   }
   if (!res.ok) {
-    console.error(`claim failed: ${res.status} ${await res.text()}`);
+    log.warn(`claim failed: ${await describeFailure(res)} — retrying in ${POLL_INTERVAL_S}s`);
     return null;
   }
 
@@ -203,9 +378,9 @@ async function claim(config) {
     child: null,
     logSeq: 0,
   });
-  console.log(`claimed: ${body.job.title} (${body.job.id})`);
-  console.log(`  heartbeat every ${body.heartbeatIntervalS}s, stale after ${body.staleMinutes}m`);
-  console.log(`  slots: ${body.slots.held}/${body.slots.limit}`);
+  log.gap();
+  log.ok(`claimed ${shortId(body.job.id)} — ${body.job.title}`);
+  log.info(`slots ${body.slots.held}/${body.slots.limit} · heartbeat ${body.heartbeatIntervalS}s · stale after ${body.staleMinutes}m`, 1);
   return body;
 }
 
@@ -237,6 +412,26 @@ function presenceSessions() {
   return sessions;
 }
 
+/**
+ * Machine health for the announce tick — cheap, synchronous, `node:os` only.
+ * Each reading is wrapped individually: a single throwing call (a sandboxed
+ * environment, a container missing `/proc`) drops that one field rather than
+ * the whole announce, matching the contract's "all fields optional" and the
+ * instruction to degrade silently. Never any I/O, so it can never make the
+ * announce tick slower than the network call it rides on.
+ */
+function gatherMetrics() {
+  const metrics = { workerVersion: WORKER_VERSION, activeJobs: held.size };
+  try { metrics.loadAvg1 = loadavg()[0]; } catch { /* not available on this platform */ }
+  try { metrics.cpuCount = cpus().length; } catch { /* not available on this platform */ }
+  try {
+    metrics.memTotalMb = Math.round(totalmem() / (1024 * 1024));
+    metrics.memFreeMb = Math.round(freemem() / (1024 * 1024));
+  } catch { /* not available on this platform */ }
+  try { metrics.uptimeS = Math.round(uptime()); } catch { /* not available on this platform */ }
+  return metrics;
+}
+
 // Presence is best-effort in the sense that a missed announce must never take
 // down the run loop — but it is not silent. The first version swallowed every
 // response, so a worker whose token had been rotated (a second pairing of the
@@ -248,9 +443,9 @@ async function announce(config) {
   let res;
   try {
     res = await post(config, '/api/local-compute/announce',
-      { sessions: presenceSessions() }, authHeaders(config));
+      { sessions: presenceSessions(), metrics: gatherMetrics() }, authHeaders(config));
   } catch (err) {
-    if (presenceState !== 'failing') console.error(`presence: cannot reach ${config.baseUrl} (${err.message}) — the portal will show this machine stale, then offline, until it can`);
+    if (presenceState !== 'failing') log.warn(`presence: cannot reach ${config.baseUrl} (${err.message}) — the portal will show this machine stale, then offline, until it can`);
     presenceState = 'failing';
     return;
   }
@@ -260,16 +455,18 @@ async function announce(config) {
     // an unauthenticated worker can neither claim nor report, so idling here
     // only looks like working.
     const fresh = reloadToken(config);
-    if (fresh) { console.error('presence: token was rotated on disk (re-paired) — adopted the new one'); presenceState = 'unknown'; return; }
-    console.error(`presence: ${config.baseUrl} rejected this machine's token (${res.status}) — re-pair from Local compute › Pair a machine, then restart this worker`);
+    if (fresh) { log.ok('presence: token was rotated on disk (re-paired) — adopted the new one without restarting'); presenceState = 'unknown'; return; }
+    log.err(`presence: ${config.baseUrl} rejected this machine's token (${res.status}).`);
+    log.info('Most often this is the dev middleware having restarted: it keeps pairings in memory, so every restart forgets this machine.', 1);
+    log.info('Re-pair from Local compute › Pair a machine, then start this worker again.', 1);
     process.exit(2);
   }
   if (!res.ok) {
-    if (presenceState !== 'failing') console.error(`presence: announce failed (${res.status}) — retrying every tick`);
+    if (presenceState !== 'failing') log.warn(`presence: announce failed (${res.status}) — retrying every tick`);
     presenceState = 'failing';
     return;
   }
-  if (presenceState !== 'ok') console.log(`presence: acknowledged by ${config.baseUrl} — the portal shows this machine connected`);
+  if (presenceState !== 'ok') log.ok('presence: acknowledged — the portal shows this machine connected');
   presenceState = 'ok';
 }
 
@@ -307,13 +504,13 @@ function ensureRepo(repoUrl) {
   if (!existsSync(REPOS_DIR)) mkdirSync(REPOS_DIR, { recursive: true });
 
   if (existsSync(repoPath)) {
-    console.log(`  updating ${name}...`);
+    log.step(`updating ${name}`, 1);
     // Discard any local changes — the workspace is ephemeral and the worker is
     // the only writer, so anything uncommitted is leftover junk from a prior run.
     execSync('git reset --hard HEAD && git clean -fd', { cwd: repoPath, stdio: 'ignore' });
     execSync('git pull --ff-only', { cwd: repoPath, stdio: 'ignore' });
   } else {
-    console.log(`  cloning ${name}...`);
+    log.step(`cloning ${name}`, 1);
     // The machine uses its OWN git credentials, not a borrowed token. Shipping
     // the middleware's GitHub token to a laptop would make a stolen node token
     // a way to clone every private repo the service account can reach.
@@ -376,14 +573,14 @@ function runTask(config, jobId, cwd, prompt) {
   const inferenceLabel = INFERENCE === 'loopback' ? ANTHROPIC_BASE_URL : 'anthropic (this machine\'s Claude Code login)';
   const modelLabel = ANTHROPIC_MODEL ?? 'account default';
 
-  console.log(`  running: claude -p "${prompt.slice(0, 60)}${prompt.length > 60 ? '...' : ''}"`);
-  console.log(`  inference: ${inferenceLabel}, model: ${modelLabel}`);
+  log.step(`claude -p "${prompt.slice(0, 60)}${prompt.length > 60 ? '…' : ''}"`, 1);
+  log.info(`inference: ${inferenceLabel} · model: ${modelLabel}`, 1);
 
   if (!existsSync(LOG_DIR)) mkdirSync(LOG_DIR, { recursive: true });
   const logPath = join(LOG_DIR, `${jobId}.log`);
   const logFile = createWriteStream(logPath, { flags: 'w' });
   logFile.write(`[worker] job ${jobId}\n[worker] model ${modelLabel} via ${inferenceLabel}\n[worker] cwd ${cwd}\n[worker] started\n\n`);
-  console.log(`  log: ${logPath}`);
+  log.info(`transcript: ${logPath}`, 1);
 
   return new Promise((resolve) => {
     // Claude Code refuses to start inside another Claude Code session (it
@@ -481,13 +678,13 @@ async function heartbeat(config, jobId) {
     claimToken: claim.claimToken,
   }, authHeaders(config));
   if (res.status === 401 || res.status === 403) {
-    console.error(`  heartbeat for ${jobId} rejected (${res.status}) — this machine's token no longer authenticates; re-pair and restart`);
+    log.err(`heartbeat for ${shortId(jobId)} rejected (${res.status}) — this machine's token no longer authenticates; re-pair and start this worker again`, 1);
     return false;
   }
   if (res.status === 409) {
     const body = await res.json();
     if (body.gate === 'claim_lost') {
-      console.log(`  claim expired for ${jobId} — abandoning run`);
+      log.warn(`claim on ${shortId(jobId)} expired — another worker may take it; abandoning this run`, 1);
       // Kill the orphaned child: its result would be fenced out on completion
       // anyway, so letting it keep spending the local model's slots is pure waste.
       if (claim.child && !claim.child.killed) claim.child.kill('SIGTERM');
@@ -533,12 +730,12 @@ async function complete(config, jobId, status, outcome) {
   held.delete(jobId);
 
   if (!res.ok) {
-    console.error(`  completion failed: ${res.status} ${await res.text()}`);
+    log.err(`completion failed: ${await describeFailure(res)}`, 1);
     return false;
   }
 
   const reply = await res.json();
-  console.log(`  recorded: ${reply.status}, $${reply.costUsd} (${reply.provider})`);
+  log.ok(`recorded ${reply.status} · $${reply.costUsd} (${reply.provider})`, 1);
   return true;
 }
 
@@ -550,7 +747,7 @@ async function runJob(config, claim) {
 
   try {
     await markRunning(config, job.id);
-    console.log(`  → running`);
+    log.step('running', 1);
 
     const repoUrl = job.payload.repo;
     const prompt = job.payload.prompt;
@@ -562,7 +759,7 @@ async function runJob(config, claim) {
     const cwd = ensureRepo(repoUrl);
     const outcome = await runTask(config, job.id, cwd, prompt);
 
-    console.log(`  finished in ${(outcome.durationMs / 1000).toFixed(1)}s, exit ${outcome.exitCode}`);
+    log[outcome.exitCode === 0 ? 'ok' : 'warn'](`finished in ${(outcome.durationMs / 1000).toFixed(1)}s · exit ${outcome.exitCode}`, 1);
     // `payload.requiresReview` is the same field the push-side dispatcher honours
     // (middleware lib/job-dispatcher.ts), and this is where the pull side keeps
     // its half of that contract: a run that needs a human look lands in
@@ -577,7 +774,7 @@ async function runJob(config, claim) {
     const status = outcome.ok ? (needsReview ? 'awaiting_review' : 'done') : 'failed';
     await complete(config, job.id, status, outcome);
   } catch (err) {
-    console.error(`  run failed: ${err.message}`);
+    log.err(`run failed: ${err.message}`, 1);
     await complete(config, job.id, 'failed', { ok: false, result: { error: err.message } }).catch(() => {});
   }
 }
@@ -594,7 +791,7 @@ async function loop(config) {
         await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_S * 1000));
       }
     } catch (err) {
-      console.error(`loop error: ${err.message}`);
+      log.err(`loop error: ${err.message} — retrying in ${POLL_INTERVAL_S}s`);
       await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_S * 1000));
     }
   }
@@ -602,20 +799,24 @@ async function loop(config) {
 
 // ─── Entry ───────────────────────────────────────────────────────────────────
 
+const args = parseArgs(process.argv.slice(2));
+if (args.pairCode) {
+  await pairWithCode(args.pairCode, args.baseUrl);
+}
+
 const config = readConfig();
 const reg = await register(config);
 
 if (!reg.acceptJobs) {
-  console.log('machine is paired but not switched on — exiting');
-  console.log('turn on "accept jobs" in the portal under Local compute, then restart this worker');
-  process.exit(0);
+  await waitForAcceptJobs(config, 'this machine is paired but not switched on');
 }
 
 if (reg.jobKinds.length === 0) {
-  console.log('no runnable job kinds — check JOB_KINDS env var and restart');
+  log.err('no runnable job kinds — set JOB_KINDS to a kind the fleet dispatches, then start this worker again');
   process.exit(1);
 }
 
-console.log(`polling every ${POLL_INTERVAL_S}s, announcing presence every ${Math.max(5, Math.min(heartbeatIntervalS, 25))}s...`);
+log.info(`polling for work every ${POLL_INTERVAL_S}s · announcing presence every ${Math.max(5, Math.min(heartbeatIntervalS, 25))}s`);
+log.info('Ctrl-C to stop. Anything claimed is handed back to the fleet if this worker dies mid-run.');
 startPresenceLoop(config);
 await loop(config);

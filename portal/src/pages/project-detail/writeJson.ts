@@ -33,7 +33,7 @@ export function insertChild(nodes: WorkItemTree[], parentId: string, child: Work
  *  client-minted id that never reached the server is a 404 worth naming. */
 export function surfaceWriteError(err: unknown, what: string): void {
   if (err instanceof HttpError && err.status === 403) {
-    toastInfo('Needs dispatch rights', `${what} requires the DispatchAgentRun authority on this initiative.`);
+    toastInfo('Needs dispatch rights', `${what} requires dispatch rights on this initiative.`);
     return;
   }
   toastError(null, `${what} failed`, err instanceof Error ? err.message : String(err));

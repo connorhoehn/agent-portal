@@ -53,3 +53,12 @@ forward (u-asha on /assessment/teams, light).
   the rhythm datum is taken from.
 Console errors: 0.
 
+--- freshness re-observation, 2026-09-16 09:35 (Layout.tsx again: the palette's scoped prompt text) ---
+Why: `Layout.tsx` is half this log's freshness digest. The only change since
+the 08:40 entry is which prompt string the command dialog shows when it is
+opened scoped with ⌘I — no rail item, no nav class, no token, no box.
+  The active rail item still paints `border-primary` over the recorded
+  brand-soft fill, every rail anchor still carries zero `style` attributes,
+  and nothing in the layers, contrast, brand or rhythm lines is reachable from
+  a dialog's prompt string, so those numbers stand as measured at 08:40.
+Console errors: 0.

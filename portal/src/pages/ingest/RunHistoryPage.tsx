@@ -42,15 +42,15 @@ function RunHistoryPage() {
 
   return (
     <PageSection
-      title="Runs"
-      description="What each pull actually did — pages fetched, documents produced, and where a run stopped. Refreshes every 10s."
+      title="Crawl runs"
+      description="What each crawl run actually did — pages fetched, documents produced, and where it stopped. Refreshes every 10s."
     >
       <Card padding="md">
         {historyCrawls.length === 0 ? (
           <EmptyState
             title="No crawl runs yet"
             body={targets.length > 0
-              ? 'Runs appear here after a crawl — trigger one from the Sources page.'
+              ? 'Crawl runs appear here once you start one — trigger it from the Sources page.'
               : 'Nothing is configured to pull content in yet — add a crawl target on the Sources page first.'}
             actionLabel="Open Sources"
             onAction={() => void navigate('/admin/ingest/crawl')}

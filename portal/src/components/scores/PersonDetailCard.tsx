@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Button, Card, Chip, CollapsibleSection, EntityCell, Inline, MetaLine, SectionLabel, Stack } from '@connorhoehnslalom/ui-components/shared';
 import { PersonDetail } from './types';
 import { relativeTime } from '../../lib/relativeTime';
@@ -55,6 +56,44 @@ export function PersonDetailCard({ detail, compositeScore, influenceScore, deptC
   const { data: contributions } = useFetch<ContributionsResponse>(
     detail.id ? `/api/scores/${encodeURIComponent(detail.id)}/contributions` : '',
   );
+
+  // Escape-to-close and focus management — the only dialog-ish surface in
+  // the app not built on the library Modal/InlinePopover, so it never got
+  // either for free. Runs once per mount, not per `detail` change: jumping
+  // to a connection (`onSelectConnection`) swaps `detail` on this SAME
+  // instance rather than remounting it (ScoresPage renders this card with
+  // no `key`), so re-running on every `detail` change would capture the
+  // connection row — a plain `onClick` `Inline` with no tabIndex, never the
+  // keyboard focus — as the thing to restore focus to, discarding the real
+  // trigger the panel traces back to. Focus target for restore-on-close is
+  // re-queried by a stable `data-*` selector rather than held as a node
+  // ref, same reasoning as pages/budgets/InitiativesReport.tsx:100-124 —
+  // the element that opened this panel lives in a sibling component
+  // (Leaderboard) that can re-render its rows independently.
+  useEffect(() => {
+    const active = document.activeElement;
+    const returnFocusSelector = '[data-person-card-return-focus="true"]';
+    let taggedActive = false;
+    if (active instanceof HTMLElement && !active.dataset.personCardReturnFocus) {
+      active.dataset.personCardReturnFocus = 'true';
+      taggedActive = true;
+    }
+    document.querySelector<HTMLButtonElement>('[data-person-card-close]')?.focus({ preventScroll: true });
+    return () => {
+      const el = document.querySelector<HTMLElement>(returnFocusSelector);
+      el?.focus({ preventScroll: true });
+      if (taggedActive) delete el?.dataset.personCardReturnFocus;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') onClose();
+    }
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [onClose]);
+
   return (
     <Card padding="md" className="mt-4">
       <Inline align="start" justify="between" className="mb-2">
@@ -70,7 +109,7 @@ export function PersonDetailCard({ detail, compositeScore, influenceScore, deptC
             items={[<Inline as="span" gap="none" key="d" style={{ color: deptColors[detail.department] ?? 'var(--color-text-tertiary)' }}>{detail.department}</Inline>]}
           />
         </Stack>
-        <Button variant="ghost" size="sm" onClick={onClose}>Close</Button>
+        <Button data-person-card-close="true" variant="ghost" size="sm" onClick={onClose}>Close</Button>
       </Inline>
 
       <SectionLabel as="div" className={SECTION_HEADER}>Skills</SectionLabel>

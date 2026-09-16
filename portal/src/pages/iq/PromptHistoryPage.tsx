@@ -194,7 +194,12 @@ function useAuroraVersionHistory(promptId: string | null): { versions: VersionEn
     return () => { cancelled = true; };
   }, [promptId]);
 
-  return { versions, loading, error };
+  // `loading` only means something to a caller with nothing to show yet —
+  // the same `isLoading && !data` shape useFetch enforces. A prompt switch
+  // or a re-fetch of the SAME prompt (e.g. after a publish) keeps the prior
+  // list on screen and updates it in place instead of flashing a spinner
+  // over content that is still valid.
+  return { versions, loading: loading && versions.length === 0, error };
 }
 
 // Merges Bedrock version list with Aurora metadata. Falls back gracefully when
@@ -270,7 +275,8 @@ function useVersionDetail(promptId: string | null, version: string | null): { te
     return () => { cancelled = true; };
   }, [promptId, version]);
 
-  return { templateText, loading };
+  // Same isLoading && !data shape as useAuroraVersionHistory above.
+  return { templateText, loading: loading && !templateText };
 }
 
 // ── Main page ─────────────────────────────────────────────────────────────────
@@ -384,7 +390,7 @@ export default function PromptHistoryPage(): React.ReactElement {
               )}
             </Inline>
 
-            {versionsLoading && <LoadingState label="Loading versions…" />}
+            {versionsLoading && versions.length === 0 && <LoadingState label="Loading versions…" />}
             {versionsError && <T className="block px-3.5 py-3 text-[12px] text-danger">{versionsError}</T>}
             {!versionsLoading && !versionsError && versions.length === 0 && (
               <InlinePlaceholder align="center" className="px-3.5 py-3">

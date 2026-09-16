@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import {
-  Button, Card, CardHeader, Chip, ConfirmDialog, FormField, FormRow, Input, PageSection,
-  Select, Stack, Switch, Table, TableBody, TableHead, TableRow, TableTd,
+  Button, Card, CardHeader, Chip, ConfirmDialog, FormField, FormRow, Input, LoadingState,
+  PageSection, Select, Stack, Switch, Table, TableBody, TableHead, TableRow, TableTd,
   TableTh,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
@@ -62,7 +62,7 @@ function SchedulesPanel({ sources }: { sources: DataSource[] }) {
   // Schedule CRUD rides /api/ingest/schedules (ManageIngest).
   const { can, ready } = useCapabilities();
   const canManage = ready && can('ManageIngest');
-  const { data, refresh } = useFetch<{ schedules: IngestSchedule[] }>('/api/ingest/schedules', 30_000);
+  const { data, isLoading, refresh } = useFetch<{ schedules: IngestSchedule[] }>('/api/ingest/schedules', 30_000);
   const schedules = data?.schedules ?? [];
   const [showForm, setShowForm] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -108,7 +108,9 @@ function SchedulesPanel({ sources }: { sources: DataSource[] }) {
           />
         )}
 
-        {schedules.length === 0 && !showForm ? (
+        {isLoading && schedules.length === 0 && !showForm ? (
+          <LoadingState label="Loading schedules…" />
+        ) : schedules.length === 0 && !showForm ? (
           <EmptyState title="No schedules configured" body={'Ingestion runs only on manual "Sync now" trigger.'} />
         ) : schedules.length > 0 ? (
           <Table>

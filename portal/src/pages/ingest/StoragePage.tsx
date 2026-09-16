@@ -1,5 +1,5 @@
 import {
-  Card, CardHeader, KPIGrid, PageSection, StatCard, Stack, Table, TableBody,
+  Card, CardHeader, KPIGrid, LoadingState, PageSection, StatCard, Stack, Table, TableBody,
   TableHead, TableRow, TableTd, TableTh,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
@@ -8,7 +8,7 @@ import type { StorageBreakdown } from '../../components/ingest/types';
 import { EmptyState } from '../../components/ingest/ui';
 
 function StoragePage() {
-  const { data: storage } = useFetch<StorageBreakdown>('/api/ingest/storage', 60_000);
+  const { data: storage, isLoading } = useFetch<StorageBreakdown>('/api/ingest/storage', 60_000);
 
   return (
     <PageSection
@@ -27,7 +27,7 @@ function StoragePage() {
         <Card padding="md">
           <CardHeader title="Knowledge Base" />
           {!storage ? (
-            <EmptyState title="Loading storage breakdown…" />
+            <LoadingState label="Loading storage breakdown…" />
           ) : (
             <KPIGrid columns={2}>
               {/* "Indexed" was the wrong noun as well as the wrong number: the
@@ -49,7 +49,9 @@ function StoragePage() {
         {/* By extension */}
         <Card padding="md">
           <CardHeader title="By File Type" />
-          {!storage || storage.byType.length === 0 ? (
+          {!storage && isLoading ? (
+            <LoadingState label="Loading file types…" />
+          ) : !storage || storage.byType.length === 0 ? (
             <EmptyState title="No S3 objects yet." />
           ) : (
             <Table>
@@ -88,7 +90,9 @@ function StoragePage() {
         {/* By prefix */}
         <Card padding="md">
           <CardHeader title="By Prefix" />
-          {!storage || storage.byPrefix.length === 0 ? (
+          {!storage && isLoading ? (
+            <LoadingState label="Loading prefixes…" />
+          ) : !storage || storage.byPrefix.length === 0 ? (
             <EmptyState title="No S3 objects yet." />
           ) : (
             <Table>

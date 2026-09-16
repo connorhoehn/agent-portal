@@ -292,7 +292,7 @@ export function OutcomesRailCard({ activity }: { activity: InitiativeAgentActivi
                       size="xs"
                       tone="secondary"
                       className="font-mono"
-                      items={[<span key="c" title="The review queue needs the ManageDevbox authority">change {r.outcome.changeId.slice(0, 8)}</span>]}
+                      items={[<span key="c" title="Viewing the review queue needs computer access">change {r.outcome.changeId.slice(0, 8)}</span>]}
                     />
                   )
                 )}
@@ -317,7 +317,7 @@ export function OutcomesRailCard({ activity }: { activity: InitiativeAgentActivi
                     <MetaLine
                       size="xs"
                       className="font-mono"
-                      items={[<span key="b" title="Computers needs the ManageDevbox authority">box {r.outcome.boxId.slice(0, 8)}</span>]}
+                      items={[<span key="b" title="Opening this box needs computer access">box {r.outcome.boxId.slice(0, 8)}</span>]}
                     />
                   )
                 )}

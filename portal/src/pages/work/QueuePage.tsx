@@ -53,9 +53,22 @@ export default function QueuePage() {
   const [assigning, setAssigning] = useState<WorkSuggestion | null>(null);
   const [composerBusy, setComposerBusy] = useState(false);
 
-  const { data: jobsData, refresh: refreshJobs } = useFetch<{ jobs: Job[] }>('/api/work/jobs?limit=100', 8_000);
-  const { data: suggestionsData, error: suggestionsError } =
+  const { data: jobsData, isLoading: jobsLoading, refresh: refreshJobs } =
+    useFetch<{ jobs: Job[] }>('/api/work/jobs?limit=100', 8_000);
+  const { data: suggestionsData, isLoading: suggestionsLoading, error: suggestionsError } =
     useFetch<{ suggestions: WorkSuggestion[] }>(canManage ? '/api/work/suggestions' : null, 60_000);
+
+  // Shared list-page loading pattern (see also ProjectsPage.tsx): the page
+  // frame — title, toolbar, filter chips, table header — stays mounted
+  // through every state. `DataTable`'s own `loading` prop fills the body
+  // with skeleton rows on first load instead of the page blanking to a bare
+  // loader. Gate it `isLoading && !data` (the shape useFetch's own callers
+  // use), never `isLoading` alone — a background poll tick (the queue polls
+  // every 8s) sets `isLoading` true again on every refresh, and re-showing
+  // the skeleton then would flash good rows out from under the reader. Once
+  // `data` has landed once, later poll ticks update the table in place.
+  const jobsLoadingFirst = jobsLoading && !jobsData;
+  const suggestionsLoadingFirst = suggestionsLoading && !suggestionsData;
 
   // Live queue events — a job changing state updates the table without
   // waiting for the next poll.
@@ -241,7 +254,7 @@ export default function QueuePage() {
         </ToolbarGroup>
       </Toolbar>
 
-      {filtered.length === 0 ? (
+      {!jobsLoadingFirst && filtered.length === 0 ? (
         <EmptyState
           title={filter === 'failed' ? 'Nothing dead-lettered' : 'Nothing here'}
           description={filter !== 'all'
@@ -274,6 +287,7 @@ export default function QueuePage() {
           onRowClick={(j) => navigate(`/iq/work/${j.id}`)}
           pageSize={25}
           emptyMessage="No jobs"
+          loading={jobsLoadingFirst}
         />
       )}
 
@@ -292,7 +306,7 @@ export default function QueuePage() {
                 Could not read your work items — the composer below still works.
               </T>
             </Card>
-          ) : suggestions != null && suggestions.length === 0 ? (
+          ) : !suggestionsLoadingFirst && suggestions != null && suggestions.length === 0 ? (
             <Card padding="md" className="w-full">
               <T className="text-[12px] text-text-tertiary">
                 Nothing blocked, in review, or waiting to start on your initiatives.
@@ -307,6 +321,7 @@ export default function QueuePage() {
               pageSize={10}
               emptyMessage="Nothing to assign"
               className="w-full"
+              loading={suggestionsLoadingFirst}
             />
           )}
         </Stack>

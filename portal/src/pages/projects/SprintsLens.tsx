@@ -103,7 +103,7 @@ export function SprintsLens({ view }: { view: 'grid' | 'list' }) {
           <>
             {error}
             {error.startsWith('403')
-              ? ' — the org-wide scope needs ManageBudgets; switch back to “Mine”.'
+              ? ' — the org-wide scope needs budget-administration access; switch back to “Mine”.'
               : ''}
           </>
         }

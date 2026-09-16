@@ -128,14 +128,11 @@ function ProjectsPage() {
 
   const openProject = (project: ProjectSummary) => navigate(`/iq/projects/${project.id}`);
 
-  if (lens === 'initiatives' && isLoading && !data) {
-    return (
-      <CatalogGrid columns={3} dense>
-        {[1, 2, 3, 4, 5, 6].map(i => <SkeletonCard key={i} height={190} />)}
-      </CatalogGrid>
-    );
-  }
-
+  // Loading is handled inline, below, in the list body — the title, KPI
+  // strip and toolbar stay mounted (see the shared list-page pattern comment
+  // at the CatalogGrid/skeleton branch) so the page doesn't jump when data
+  // arrives. Only a hard failure with nothing to show bails out of the frame
+  // entirely, since there's nothing for the toolbar to filter.
   if (lens === 'initiatives' && projectsFailure && !data) {
     return (
       <UnavailableNotice
@@ -268,7 +265,17 @@ function ProjectsPage() {
         </ToolbarGroup>
       </Toolbar>
 
-      {filtered.length === 0 ? (
+      {/* List-page pattern: the frame above (title, KPI strip, toolbar) stays
+          mounted through every state. First load fills the body with
+          skeleton cards instead of blanking the page; a background refetch
+          (isLoading true but `data` already populated) leaves the existing
+          list on screen and swaps it in place when the new page lands — it
+          never re-shows the skeleton or drops back to a bare loader. */}
+      {isLoading && !data ? (
+        <CatalogGrid columns={3} dense>
+          {[1, 2, 3, 4, 5, 6].map(i => <SkeletonCard key={i} height={190} />)}
+        </CatalogGrid>
+      ) : filtered.length === 0 ? (
         <EmptyState
           title={scope === 'mine' && projects.length === 0 ? 'Nothing linked to you' : 'No matching initiatives'}
           description={scope === 'mine' && projects.length === 0

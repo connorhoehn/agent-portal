@@ -1,7 +1,8 @@
 import type React from 'react';
 import { Link } from 'react-router';
 import {
-  Card, Inline, KPIGrid, LineChart, NotificationCenter, PageSection, SectionLabel, Stack, StatCard, StatStrip,
+  Card, Inline, KPIGrid, LineChart, LoadingState, NotificationCenter, PageSection, SectionLabel, Stack, StatCard,
+  StatStrip,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
@@ -62,8 +63,19 @@ function deriveNextSteps(
   health: Health | null,
   /** The fleet read failed, so `agents` is an empty floor, not a reading. */
   fleetFailure?: string | null,
+  /**
+   * The fleet read is still in flight — a THIRD way `agents` can be an empty
+   * floor rather than a reading, alongside failure and degradation. Without
+   * this the loading instant reads exactly like a healthy empty fleet: "Nothing
+   * needs you. All 0 deployed agents are healthy" — told to the operator before
+   * anything has actually loaded. Callers must not derive next-steps at all
+   * while this is true.
+   */
+  stillLoading?: boolean,
 ): NextStep[] {
   const steps: NextStep[] = [];
+
+  if (stillLoading) return steps;
 
   // Say this first and let it stand alone. Every other step below is derived
   // from a runtime list, and with a failed read that list is empty — which
@@ -179,7 +191,7 @@ function SummaryPage() {
   // and a green "Nothing needs you / All 0 deployed agents are healthy" is the
   // quiet-system illusion in its purest form.
   const {
-    data: agentsResp, error: agentsError, degraded: agentsDegraded, refresh: refreshAgents,
+    data: agentsResp, error: agentsError, degraded: agentsDegraded, isLoading: agentsLoading, refresh: refreshAgents,
   } = useFetch<{ agents: AgentRuntime[] }>('/api/agents', 60000);
   const agents = agentsResp?.agents;
   const fleetFailure = agentsError ?? agentsDegraded;
@@ -193,7 +205,11 @@ function SummaryPage() {
   const alarms = alarmData?.alarms ?? [];
   const healthy = runtimes.filter((a) => a.status === 'healthy').length;
   const firing = alarms.filter((a) => a.severity !== 'ok');
-  const steps = deriveNextSteps(alarms, runtimes, summary ?? null, health ?? null, fleetFailure);
+  // The fleet read has not resolved (no data yet) and has not errored either —
+  // distinct from "resolved and empty". Only this state may not answer with a
+  // reassurance.
+  const fleetStillLoading = agentsLoading && agents === undefined && !fleetFailure;
+  const steps = deriveNextSteps(alarms, runtimes, summary ?? null, health ?? null, fleetFailure, fleetStillLoading);
 
   // With no usable credentials every AWS-backed panel comes back empty, and an
   // empty result is indistinguishable from a healthy one unless we say so. A
@@ -296,6 +312,11 @@ function SummaryPage() {
       {/* ── What to do next ───────────────────────────────────────────── */}
       <Card padding="md">
         <SectionLabel as="div">What to do next</SectionLabel>
+        {fleetStillLoading ? (
+          <Stack gap="none" className="mt-3">
+            <LoadingState label="Checking fleet health…" />
+          </Stack>
+        ) : (
         <Stack gap="sm" className="mt-3">
           {steps.map((s) => (
             <Link
@@ -318,6 +339,7 @@ function SummaryPage() {
             </Link>
           ))}
         </Stack>
+        )}
       </Card>
 
       {/* ── Alarms, in full ────────────────────────────────────────────── */}

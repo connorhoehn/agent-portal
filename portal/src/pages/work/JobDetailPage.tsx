@@ -15,12 +15,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router';
 import {
-  Button, Card, Chip, ConfirmDialog, EmptyState, ErrorState, Inline, MetaLine, PageSection, SectionLabel, Stack,
-  ToolCallStrip, Toolbar,
+  Button, Card, Chip, ConfirmDialog, EmptyState, ErrorState, Inline, LoadingState, MetaLine, PageSection,
+  SectionLabel, Stack, ToolCallStrip, Toolbar,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch';
-import { useCrumbLabel } from '../../lib/crumbLabels';
+import { crumbLabel, useCrumbLabel } from '../../lib/crumbLabels';
 import { absoluteTime, durationLabel } from '../../lib/relativeTime';
 import { toastPending, toastSuccess, toastError } from '../../lib/toastStore';
 import { JobStatusPill, LIVE_STATUSES, T, money, toToolCallStripItems, type JobToolCall } from './workShared';
@@ -252,7 +252,7 @@ export default function JobDetailPage() {
     // infinite spinner.
     if (error && isNotFoundFetchError(error)) {
       return (
-        <PageSection title="Job">
+        <PageSection title={crumbLabel(jobId) ?? 'Job'}>
           <EmptyState
             title="Job not found"
             description={<>No job with id <code>{jobId}</code> — it may have been pruned.</>}
@@ -264,7 +264,7 @@ export default function JobDetailPage() {
     }
     if (error) {
       return (
-        <PageSection title="Job">
+        <PageSection title={crumbLabel(jobId) ?? 'Job'}>
           <ErrorState
             title="Failed to load job"
             body={error}
@@ -275,8 +275,8 @@ export default function JobDetailPage() {
       );
     }
     return (
-      <PageSection title="Job">
-        <T className="text-[13px] text-text-tertiary">Loading job {jobId}…</T>
+      <PageSection title={crumbLabel(jobId) ?? 'Job'}>
+        <LoadingState label={`Loading job ${jobId}…`} />
       </PageSection>
     );
   }

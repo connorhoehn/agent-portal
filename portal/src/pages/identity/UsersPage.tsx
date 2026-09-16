@@ -15,7 +15,6 @@ import {
   Inline,
   InlineAlert,
   Input,
-  LoadingState,
   PageSection,
   SectionLabel,
   Stack,
@@ -73,7 +72,12 @@ function UsersPage() {
   const tenants = tenantsData ?? [];
   const roles = rolesData ?? [];
   const users = usersData ?? [];
-  const loading = tenantsLoading || rolesLoading || usersLoading;
+  // See the shared list-page loading pattern comment in QueuePage.tsx: only
+  // the first read counts for skeleton purposes — a bare `||` of the three
+  // isLoading flags goes true again after every mutation's refresh() (grant
+  // save, create user/tenant) even though data is still populated, which
+  // would flash a full-height loader over the table after every save.
+  const loadingFirst = (tenantsLoading && !tenantsData) || (rolesLoading && !rolesData) || (usersLoading && !usersData);
   // A mutation (grant save, create user/tenant) surfaces its OWN failure
   // here; a read failure comes straight off the three fetches above — same
   // "first one that has something to say" order the old firstDegraded(t, r,
@@ -219,15 +223,14 @@ function UsersPage() {
         />
       )}
 
-      {(error ?? degraded) ? null : loading ? (
-        <LoadingState label="Loading users…" />
-      ) : (
+      {(error ?? degraded) ? null : (
         <DataTable
           data={users}
           keyField={u => u.id}
           columns={columns}
           searchable
           searchPlaceholder="Search users…"
+          loading={loadingFirst}
           rowActions={(u) => (
             <Inline gap="xs" justify="end">
               {/* Become this user. Deliberately here and not in the header

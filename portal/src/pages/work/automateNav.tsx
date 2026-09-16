@@ -19,7 +19,7 @@ export interface AutomateSpec {
 const RUN_ITEMS: SubNavItem[] = [
   { path: '/iq/work',          label: 'Overview', hint: 'The loop at a glance + what needs you', group: 'Run' },
   { path: '/iq/work/queue',    label: 'Queue',    hint: 'Jobs in flight + work ready to assign', group: 'Run' },
-  { path: '/iq/work/findings', label: 'Findings', hint: 'Sweep findings + the dead-letter queue', group: 'Run' },
+  { path: '/iq/work/findings', label: 'Findings', hint: 'Sweep findings + failed jobs', group: 'Run' },
 ];
 
 const BOTS_ITEM: SubNavItem = {

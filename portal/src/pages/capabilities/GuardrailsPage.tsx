@@ -11,6 +11,7 @@ import {
   Inline,
   InlinePlaceholder,
   Input,
+  LoadingState,
   MetaLine,
   Modal,
   PageSection,
@@ -170,11 +171,7 @@ function GuardrailsPage() {
   }
 
   if (!guardrail) {
-    return (
-      <InlinePlaceholder size="sm" align="center" data-testid="guardrails-page-loading">
-        Loading guardrail...
-      </InlinePlaceholder>
-    );
+    return <LoadingState label="Loading guardrail…" testId="guardrails-page-loading" />;
   }
 
   return (

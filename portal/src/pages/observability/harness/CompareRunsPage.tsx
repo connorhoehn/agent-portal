@@ -219,9 +219,7 @@ function CompareRunsPage() {
     return (
       <PageSection title="Compare Runs">
         <Card padding="md">
-          <T className="text-text-tertiary text-[12px]">
-            Loading comparison…
-          </T>
+          <LoadingState label="Loading comparison…" />
         </Card>
       </PageSection>
     );

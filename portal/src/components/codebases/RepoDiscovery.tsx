@@ -47,7 +47,7 @@ function ago(iso: string | null | undefined): string | null {
 
 function describeFailure(status: number, body: { error?: string }): string {
   if (status === 403) {
-    return 'You don’t have permission to browse connections — this needs ManageIngest (the hr-admin role).';
+    return 'You don’t have permission to browse connections — this needs the hr-admin role.';
   }
   return body.error ?? `HTTP ${status}`;
 }

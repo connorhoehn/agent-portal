@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-09-16T10:03:38.723Z",
-  "serverHandlerSha": "921cc36726ae644eeca56233de1e0575d953e42fba2ee92c1d6b62a78a4ff668",
+  "capturedAt": "2026-09-16T13:03:14.918Z",
+  "serverHandlerSha": "a8b10e4739e465f6c2ef0c926d5601e7639076636d5ee30038dd7268650887e0",
   "baseUrl": "http://127.0.0.1:3012",
   "personas": [
     "orgiq/admin",
@@ -3872,6 +3872,9 @@
     "GET /api/library/evals/runs/:runId": {
       "skipped": "no value found for :runId under /api/library/evals/runs (orgiq/admin); no value found for :runId under /api/library/evals/runs (assessment/admin); no value found for :runId under /api/library/evals/runs (anonymous)"
     },
+    "GET /api/local-compute/events": {
+      "skipped": "server-sent event stream (orgiq/admin); server-sent event stream (assessment/admin); server-sent event stream (anonymous)"
+    },
     "GET /api/local-compute/jobs/:jobId/log": {
       "skipped": "HTTP 404 (orgiq/admin); HTTP 404 (assessment/admin); HTTP 404 (anonymous)"
     },
@@ -3895,6 +3898,7 @@
         "nodes[].localModels": "array",
         "nodes[].localModels[]": "string",
         "nodes[].maxConcurrency": "number",
+        "nodes[].metrics": "null",
         "nodes[].ownerId": "string",
         "nodes[].platform": "string",
         "nodes[].presence": "object",

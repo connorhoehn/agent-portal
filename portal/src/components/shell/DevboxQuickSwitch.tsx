@@ -90,7 +90,7 @@ export function DevboxQuickSwitch({ onScopeChange }: DevboxQuickSwitchProps) {
   useRegisterCommand(useMemo<Command>(() => ({
     id: 'devbox:no-access',
     label: 'You don’t have access to computers',
-    hint: 'Ask an admin for the ManageDevbox capability (SME or HR admin)',
+    hint: 'Ask an SME or HR admin to grant you computer access',
     group: 'Devbox',
     when: () => !canManage,
     run: () => {},

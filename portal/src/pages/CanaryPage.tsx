@@ -26,6 +26,7 @@ import {
   DataTable,
   EmptyState,
   Inline,
+  LoadingState,
   Select,
   Stack,
   StatusPill,
@@ -502,7 +503,7 @@ function CanaryPage(): React.ReactElement {
         </Toolbar>
         <Stack align="center" justify="center" className="min-h-0 flex-1 bg-bg p-6">
           {canManage ? (
-            <React.Suspense fallback={<T className="text-[13px] text-text-tertiary">Loading…</T>}>
+            <React.Suspense fallback={<LoadingState label="Loading setup…" />}>
               <CanarySetupFlow onStarted={() => { /* store handles state transition */ }} />
             </React.Suspense>
           ) : (

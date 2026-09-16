@@ -330,7 +330,7 @@ export default function EvaluationsPage(): React.ReactElement {
         body: JSON.stringify(cfg),
       });
       if (res.status === 403) {
-        throw new Error('Your role cannot change judge config (needs ManageCanary — org-leader or hr-admin).');
+        throw new Error('Your role cannot change judge config — that needs org-leader or hr-admin.');
       }
       if (!res.ok) {
         const body = (await res.json().catch(() => null)) as { error?: string } | null;

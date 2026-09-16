@@ -485,6 +485,106 @@ describe('POST /api/local-compute/announce', () => {
   });
 });
 
+// ─── POST /announce — the optional `metrics` object ──────────────────────────
+//
+// Attached to /announce, not /heartbeat: tools/local-compute-worker.mjs's
+// presence loop only ever calls /announce on a repeating timer (job
+// heartbeats hit a different, per-job route) — see the route's own comment.
+
+describe('POST /api/local-compute/announce — metrics', () => {
+  const metrics = {
+    loadAvg1: 1.25, cpuCount: 10, memTotalMb: 32_768, memFreeMb: 8_192,
+    uptimeS: 12_345, workerVersion: '1.1.0', activeJobs: 1,
+  };
+
+  it('is a no-op when absent — an older worker keeps working byte-for-byte', async () => {
+    const node = await pair({ sub: 'u-mia' }, { label: 'mia-mbp' });
+    const res = await request(anon()).post('/api/local-compute/announce')
+      .set(bearer(node.nodeToken)).send({ sessions: [] });
+    expect(res.status).toBe(200);
+
+    const listed = await request(as('member', 'u-mia')).get('/api/local-compute/nodes');
+    expect(listed.body.nodes[0].metrics).toBeNull();
+  });
+
+  it('stores a valid metrics object and surfaces it on GET /nodes with the observation time', async () => {
+    const node = await pair({ sub: 'u-mia' }, { label: 'mia-mbp' });
+    const res = await request(anon()).post('/api/local-compute/announce')
+      .set(bearer(node.nodeToken)).send({ sessions: [], metrics });
+    expect(res.status).toBe(200);
+
+    const listed = await request(as('member', 'u-mia')).get('/api/local-compute/nodes');
+    const seen = listed.body.nodes[0].metrics;
+    expect(seen).toMatchObject(metrics);
+    expect(Date.parse(seen.at)).not.toBeNaN();
+  });
+
+  it('leaves a previously stored snapshot alone when a later announce sends none', async () => {
+    const node = await pair({ sub: 'u-mia' }, { label: 'mia-mbp' });
+    await request(anon()).post('/api/local-compute/announce').set(bearer(node.nodeToken)).send({ sessions: [], metrics });
+    await request(anon()).post('/api/local-compute/announce').set(bearer(node.nodeToken)).send({ sessions: [] });
+
+    const listed = await request(as('member', 'u-mia')).get('/api/local-compute/nodes');
+    expect(listed.body.nodes[0].metrics).toMatchObject(metrics);
+  });
+
+  it('accepts a partial object — every field is independently optional', async () => {
+    const node = await pair({ sub: 'u-mia' }, { label: 'mia-mbp' });
+    const res = await request(anon()).post('/api/local-compute/announce')
+      .set(bearer(node.nodeToken)).send({ sessions: [], metrics: { loadAvg1: 0.5 } });
+    expect(res.status).toBe(200);
+
+    const listed = await request(as('member', 'u-mia')).get('/api/local-compute/nodes');
+    expect(listed.body.nodes[0].metrics).toMatchObject({ loadAvg1: 0.5 });
+    expect(listed.body.nodes[0].metrics).not.toHaveProperty('cpuCount');
+  });
+
+  it('rejects a bad payload — a non-object, a negative/non-finite/absurd number, a non-string version', async () => {
+    const node = await pair({ sub: 'u-mia' }, { label: 'mia-mbp' });
+    const post = (m: unknown) => request(anon()).post('/api/local-compute/announce')
+      .set(bearer(node.nodeToken)).send({ sessions: [], metrics: m });
+
+    for (const bad of [
+      'nope',
+      42,
+      ['not', 'an', 'object'],
+      { loadAvg1: -1 },
+      { loadAvg1: Number.NaN },
+      { loadAvg1: Number.POSITIVE_INFINITY },
+      { cpuCount: 4.5 }, // must be an integer
+      { memTotalMb: 1_000_000_000_000 }, // past the absurd ceiling
+      { workerVersion: 12345 },
+    ]) {
+      const res = await post(bad);
+      expect([bad, res.status]).toEqual([bad, 400]);
+    }
+
+    // Nothing from any rejected call was stored.
+    const listed = await request(as('member', 'u-mia')).get('/api/local-compute/nodes');
+    expect(listed.body.nodes[0].metrics).toBeNull();
+  });
+
+  it('clamps workerVersion to 40 chars', async () => {
+    const node = await pair({ sub: 'u-mia' }, { label: 'mia-mbp' });
+    await request(anon()).post('/api/local-compute/announce').set(bearer(node.nodeToken))
+      .send({ sessions: [], metrics: { workerVersion: 'v'.repeat(80) } });
+
+    const listed = await request(as('member', 'u-mia')).get('/api/local-compute/nodes');
+    expect(listed.body.nodes[0].metrics.workerVersion).toHaveLength(40);
+  });
+
+  it('hides metrics once the machine ages past the offline horizon, like sessions', async () => {
+    const node = await pair({ sub: 'u-mia' }, { label: 'mia-mbp' });
+    await request(anon()).post('/api/local-compute/announce').set(bearer(node.nodeToken)).send({ sessions: [], metrics });
+
+    const restore = freezeClock(new Date(Date.now() + 10 * 60_000)); // past the offline horizon
+    const listed = await request(as('member', 'u-mia')).get('/api/local-compute/nodes');
+    restore();
+    expect(listed.body.nodes[0].presence.status).toBe('offline');
+    expect(listed.body.nodes[0].metrics).toBeNull();
+  });
+});
+
 // ─── POST /heartbeat — requireNodeToken ──────────────────────────────────────
 
 describe('POST /api/local-compute/heartbeat', () => {
@@ -618,8 +718,11 @@ describe('GET /api/local-compute/nodes', () => {
     const row = res.body.nodes.find((n: { id: string }) => n.id === node.nodeId);
     expect(Object.keys(row).sort()).toEqual([
       'acceptJobs', 'createdAt', 'id', 'jobKinds', 'label', 'lastSeenAt',
-      'localModels', 'maxConcurrency', 'ownerId', 'platform', 'presence', 'revokedAt',
+      'localModels', 'maxConcurrency', 'metrics', 'ownerId', 'platform', 'presence', 'revokedAt',
     ]);
+    // This announce carried no `metrics` — an older-worker announce, byte for
+    // byte. Absent is null, never a fabricated snapshot.
+    expect(row.metrics).toBeNull();
     expect(row.ownerId).toBe('u-mia');
     expect(row.label).toBe('mia-mbp');
     expect(row.platform).toBe('darwin/arm64');
@@ -947,6 +1050,111 @@ describe('GET /api/local-compute/stream', () => {
     const buf = await streamed;
     expect(buf).toContain('mia-mbp');       // her own opening frame arrived
     expect(buf).not.toContain(theirs.nodeId);
+    expect(buf).not.toContain('raj private work');
+  });
+});
+
+// ─── GET /events — presence + job SSE, owner-scoped ──────────────────────────
+//
+// Additive to /stream, not a replacement: a hello snapshot on connect (so the
+// client never needs a second GET /nodes just to bootstrap), presence frames
+// carrying `metrics` alongside status, and job frames for this owner's
+// machines — targeted-but-unclaimed jobs included, via payload.nodeId, since
+// box_id does not exist until a job is claimed.
+
+describe('GET /api/local-compute/events', () => {
+  const framesOf = (buf: string) =>
+    buf.split('\n\n').filter((f) => f.startsWith('data: ')).map((f) => JSON.parse(f.slice('data: '.length)));
+
+  it('401s a cookie-less caller before opening a stream', async () => {
+    const res = await request(anon()).get('/api/local-compute/events');
+    expect(res.status).toBe(401);
+    expect(res.body).toMatchObject({ error: 'Unauthenticated' });
+  });
+
+  it('401s a node token — the stream is a browser surface', async () => {
+    const node = await pair({ sub: 'u-mia' }, { label: 'mia-mbp' });
+    const res = await request(anon()).get('/api/local-compute/events').set(bearer(node.nodeToken));
+    expect(res.status).toBe(401);
+  });
+
+  it('opens with a hello snapshot in the same shape GET /nodes returns', async () => {
+    const node = await pair({ sub: 'u-mia' }, { label: 'mia-mbp' });
+    const app = buildApp({ role: 'member', sub: 'u-mia' });
+
+    const buf = await readStream(app, (b) => b.includes('"type":"hello"'), { path: '/api/local-compute/events' });
+    const frames = framesOf(buf);
+    expect(frames[0].type).toBe('hello');
+    expect(frames[0].nodes).toHaveLength(1);
+    expect(frames[0].nodes[0]).toMatchObject({
+      id: node.nodeId, label: 'mia-mbp', metrics: null,
+      presence: { status: 'offline', sessions: [] },
+    });
+  });
+
+  it('pushes a presence frame carrying metrics on announce', async () => {
+    const node = await pair({ sub: 'u-mia' }, { label: 'mia-mbp' });
+    const app = buildApp({ role: 'member', sub: 'u-mia' });
+
+    const streamed = readStream(app, (b) => b.includes('"type":"presence"'), { path: '/api/local-compute/events' });
+    await new Promise((r) => setTimeout(r, 50));
+    await request(anon()).post('/api/local-compute/announce').set(bearer(node.nodeToken))
+      .send({ sessions: [], metrics: { loadAvg1: 0.9, cpuCount: 8 } });
+
+    const frames = framesOf(await streamed);
+    const presence = frames.find((f) => f.type === 'presence');
+    expect(presence).toMatchObject({
+      nodeId: node.nodeId, status: 'connected', metrics: { loadAvg1: 0.9, cpuCount: 8 },
+    });
+    expect(Date.parse(presence.lastSeenAt)).not.toBeNaN();
+  });
+
+  it('pushes job frames through queued → claimed → done, all carrying THIS machine\'s nodeId', async () => {
+    const node = await readyWorker({ sub: 'u-mia' });
+    const app = buildApp({ role: 'member', sub: 'u-mia' });
+
+    const streamed = readStream(app, (b) => b.includes('"status":"done"'), {
+      path: '/api/local-compute/events', timeoutMs: 2000,
+    });
+    await new Promise((r) => setTimeout(r, 50));
+
+    const handed = await request(as('member', 'u-mia')).post(`${BASE}/nodes/${node.nodeId}/work`)
+      .send({ prompt: 'distill yesterday' });
+    expect(handed.status).toBe(201);
+
+    const claimed = await request(anon()).post(`${BASE}/claim`).set(bearer(node.nodeToken)).send({});
+    expect(claimed.status).toBe(200);
+    const completed = await request(anon()).post(`${BASE}/jobs/${claimed.body.job.id}/complete`)
+      .set(bearer(node.nodeToken)).send({ claimToken: claimed.body.claimToken, status: 'done' });
+    expect(completed.status).toBe(200);
+
+    const jobFrames = framesOf(await streamed).filter((f) => f.type === 'job');
+    expect(jobFrames.map((f) => f.status)).toEqual(['queued', 'claimed', 'done']);
+    for (const f of jobFrames) {
+      expect(f.nodeId).toBe(node.nodeId);
+      expect(f.jobId).toBe(claimed.body.job.id);
+      expect(typeof f.title).toBe('string');
+      expect(Date.parse(f.at)).not.toBeNaN();
+    }
+  });
+
+  it('never leaks another owner\'s machine or job into the stream', async () => {
+    await pair({ sub: 'u-mia' }, { label: 'mia-mbp' });
+    const theirs = await readyWorker({ sub: 'u-raj', label: 'raj-mbp' });
+    const app = buildApp({ role: 'member', sub: 'u-mia' });
+
+    const streamed = readStream(app, () => false, { path: '/api/local-compute/events', timeoutMs: 400 });
+    await new Promise((r) => setTimeout(r, 50));
+
+    await request(anon()).post('/api/local-compute/announce').set(bearer(theirs.nodeToken))
+      .send({ sessions: [{ sessionId: 's-raj' }], metrics: { loadAvg1: 1 } });
+    await request(as('member', 'u-raj')).post(`${BASE}/nodes/${theirs.nodeId}/work`)
+      .send({ prompt: 'raj private work' });
+
+    const buf = await streamed;
+    expect(buf).toContain('mia-mbp');   // her own hello frame arrived
+    expect(buf).not.toContain(theirs.nodeId);
+    expect(buf).not.toContain('raj-mbp');
     expect(buf).not.toContain('raj private work');
   });
 });

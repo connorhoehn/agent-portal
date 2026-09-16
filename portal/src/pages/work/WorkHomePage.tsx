@@ -311,13 +311,13 @@ export default function WorkHomePage() {
                 : 'all idle · next job within ~10s',
           },
           {
-            label: 'Findings + DLQ',
+            label: 'Findings + failed jobs',
             value: summaryError ? '—' : (s?.findings.open ?? 0) + failedCount,
             tone: !summaryError && ((s?.findings.critical ?? 0) > 0 || failedCount > 0) ? 'danger' : 'default',
             href: '/iq/work/findings',
             hint: summaryError
               ? 'unknown'
-              : `${s?.findings.open ?? 0} open finding${(s?.findings.open ?? 0) === 1 ? '' : 's'} · ${failedCount} dead-lettered job${failedCount === 1 ? '' : 's'}`,
+              : `${s?.findings.open ?? 0} open finding${(s?.findings.open ?? 0) === 1 ? '' : 's'} · ${failedCount} failed job${failedCount === 1 ? '' : 's'}`,
           },
         ]}
       />
