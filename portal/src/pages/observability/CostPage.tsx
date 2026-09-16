@@ -7,15 +7,13 @@
 //   4. Top expensive invocations table (linkable to invocation detail)
 //   5. By-model cost breakdown
 //
-// Data sources (all under /api/observability/cost, polled every 30s):
-//   GET /total?windowHours=
-//   GET /a2a-overhead?windowHours=
-//   GET /value-ratio?windowHours=
-//   GET /per-agent?windowHours=
-//   GET /timeseries?windowHours=&bucketMin=
-//   GET /top?windowHours=&limit=
-//   GET /by-model?windowHours=
-//   GET /deploy-markers?windowHours=
+// Data source: one envelope, polled every 30s —
+//   GET /api/observability/cost/summary?windowHours=&bucketMin=&limit=
+// carrying all eight sections that used to be eight independently-polled
+// reads (total, a2aOverhead, valueRatio, perAgent, timeseries, top, byModel,
+// deployMarkers — the last pinned server-side to its own 168h lookback,
+// same as before). One section's query failing lands only that section's
+// name in the envelope's `degraded` array, not the whole page.
 
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
@@ -154,6 +152,22 @@ interface CostDeployMarkersResponse {
   windowHours: number;
 }
 
+interface CostSummaryResponse {
+  windowHours: number;
+  sections: {
+    total: CostTotalResponse;
+    perAgent: CostPerAgentResponse;
+    timeseries: CostTimeseriesResponse;
+    top: CostTopResponse;
+    byModel: CostByModelResponse;
+    a2aOverhead: CostA2AOverheadResponse;
+    valueRatio: CostValueRatioResponse;
+    deployMarkers: CostDeployMarkersResponse;
+  };
+  /** Names of sections whose query failed this poll — see routes/cost.ts. */
+  degraded: string[];
+}
+
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 const WINDOW_OPTIONS: Array<{ label: string; hours: number; bucket: number }> = [
@@ -234,41 +248,23 @@ function CostPage() {
   const win = WINDOW_OPTIONS[windowIdx];
 
   const {
-    data: total, error: totalError, refresh: refreshTotal,
-  } = useFetch<CostTotalResponse>(
-    `/api/observability/cost/total?windowHours=${win.hours}`,
+    data: summary, error: summaryError, refresh: refreshSummary,
+  } = useFetch<CostSummaryResponse>(
+    `/api/observability/cost/summary?windowHours=${win.hours}&bucketMin=${win.bucket}&limit=20`,
     30_000,
   );
-  const { data: a2a } = useFetch<CostA2AOverheadResponse>(
-    `/api/observability/cost/a2a-overhead?windowHours=${win.hours}`,
-    30_000,
-  );
-  const { data: valueRatio } = useFetch<CostValueRatioResponse>(
-    `/api/observability/cost/value-ratio?windowHours=${win.hours}`,
-    30_000,
-  );
-  const { data: perAgent } = useFetch<CostPerAgentResponse>(
-    `/api/observability/cost/per-agent?windowHours=${win.hours}`,
-    30_000,
-  );
-  const { data: timeseries } = useFetch<CostTimeseriesResponse>(
-    `/api/observability/cost/timeseries?windowHours=${win.hours}&bucketMin=${win.bucket}`,
-    30_000,
-  );
-  const { data: top } = useFetch<CostTopResponse>(
-    `/api/observability/cost/top?windowHours=${win.hours}&limit=20`,
-    30_000,
-  );
-  const { data: byModel } = useFetch<CostByModelResponse>(
-    `/api/observability/cost/by-model?windowHours=${win.hours}`,
-    30_000,
-  );
-  const { data: deployMarkers } = useFetch<CostDeployMarkersResponse>(
-    // Always pull a generous 7-day window of markers — they're sparse and the
-    // chart filters them client-side to the current view extent anyway.
-    `/api/observability/cost/deploy-markers?windowHours=168`,
-    60_000,
-  );
+
+  // Deploy markers keep their own 168h server-side default independent of
+  // the window picker — they're sparse and the chart filters them
+  // client-side to the current view extent anyway. See routes/cost.ts.
+  const total = summary?.sections.total;
+  const a2a = summary?.sections.a2aOverhead;
+  const valueRatio = summary?.sections.valueRatio;
+  const perAgent = summary?.sections.perAgent;
+  const timeseries = summary?.sections.timeseries;
+  const top = summary?.sections.top;
+  const byModel = summary?.sections.byModel;
+  const deployMarkers = summary?.sections.deployMarkers;
 
   // All eight panels read the same cost tables, so when that read breaks they
   // break together — one sentence at the top, not eight stacked banners.
@@ -377,12 +373,12 @@ function CostPage() {
           transport error is not the only way to be blind here — `degraded`
           is the server saying it could not read the numbers, and it can come
           from any of the eight, not just /total. */}
-      {(totalError || costDegraded) && (
+      {(summaryError || costDegraded) && (
         <UnavailableNotice
-          error={totalError ?? costDegraded ?? 'the cost query failed'}
+          error={summaryError ?? costDegraded ?? 'the cost query failed'}
           what="cost data"
           source="Spend is aggregated from Aurora and CloudWatch"
-          onRetry={refreshTotal}
+          onRetry={refreshSummary}
           className="mb-4"
         />
       )}
@@ -451,7 +447,7 @@ function CostPage() {
             degraded={costDegraded}
             degradedWhat="the cost chart"
             degradedSource="Spend is aggregated from Aurora and CloudWatch"
-            onRetry={refreshTotal}
+            onRetry={refreshSummary}
             actions={[
               {
                 label: 'Run the test harness',

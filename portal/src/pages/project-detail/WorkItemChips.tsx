@@ -14,9 +14,19 @@ import { useCapabilities } from '../../lib/capabilities';
 import { relativeTime } from '../../lib/relativeTime';
 import { DEFAULT_DEVBOX_MODEL } from '../../lib/devboxModels';
 import { toastError, toastPending, toastSuccess } from '../../lib/toastStore';
+import { writeJson } from '../../lib/writeJson';
 import type { BotRun } from '../bots/BotsPage';
 import { PR_ICONS, PR_TONE, STATUS_DOT_COLOR, STATUS_TONE } from './projectFormat';
 import type { PrStatus, WorkItemStatus, WorkItemTree } from './types';
+
+// Mirrors the gate vocabulary dispatch-work answers a 409 with (see
+// EstimateDrawer.tsx's "Four different 409s") — named here so the toast can
+// say which brake tripped instead of a generic "needs authorizing".
+const GATE_LABEL: Record<string, string> = {
+  'run-budget': 'your per-run cap',
+  allocation: "the initiative's allocation",
+  envelope: 'your sprint envelope',
+};
 
 /** Status as a dot plus a toned chip — the dot survives at glance distance,
  *  the chip carries the word. */
@@ -105,28 +115,28 @@ export function EstimateChip({
     if (dispatching) return;
     setDispatching(true);
     const tid = toastPending('Dispatching', item.title);
-    try {
-      const res = await fetch('/api/bots/dispatch-work', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          workItemId: item.id,
-          model: DEFAULT_DEVBOX_MODEL,
-          estimate: item.estimateForecast,
-        }),
-      });
-      if (res.ok) {
-        toastSuccess(tid, 'Agent dispatched', `${item.title} — on the standing estimate.`);
-        return;
-      }
-      toastError(tid, 'Needs authorizing', 'Opening the estimate drawer.');
-      onEstimate(item);
-    } catch (err) {
-      toastError(tid, 'Could not dispatch', (err as Error).message);
-    } finally {
+    const res = await writeJson<{ run?: unknown }>('/api/bots/dispatch-work', 'POST', {
+      workItemId: item.id,
+      model: DEFAULT_DEVBOX_MODEL,
+      estimate: item.estimateForecast,
+    });
+    if (res.ok) {
+      toastSuccess(tid, 'Agent dispatched', `${item.title} — on the standing estimate.`);
       setDispatching(false);
+      return;
     }
+    // Say which brake actually tripped (EstimateDrawer.tsx's "Four different
+    // 409s" chain), then hand off to the drawer — it is the surface that
+    // knows how to explain all four and collect the right confirm flag.
+    if (res.status === 403) {
+      toastError(tid, "You can't dispatch this", res.error ?? 'you hold no active sprint grant on this initiative');
+    } else if (res.status === 409 && res.gate) {
+      toastError(tid, `Over ${GATE_LABEL[res.gate] ?? res.gate}`, 'opening the estimate drawer to confirm past it');
+    } else {
+      toastError(tid, 'Could not dispatch', res.error ?? 'unknown error');
+    }
+    onEstimate(item);
+    setDispatching(false);
   }
 
   return (

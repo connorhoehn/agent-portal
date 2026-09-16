@@ -123,9 +123,12 @@ asks to share.
   debounced through `hooks/useDebouncedSearch.ts`; `DiffPage` fetches the
   library once; identity Users and the assessment Configuration/Run panels
   read through `useFetch`.
-- Not done: `CostPage`'s eight `windowHours` endpoints. `routes/cost.ts` is
-  eight independent Aurora queries with their own mock branches; a summary
-  route is a separate piece of work, queued.
+- Done the next day: `GET /api/observability/cost/summary?windowHours=`
+  runs the eight section queries with `Promise.allSettled` and names a
+  failing section in `degraded`; `CostPage` reads it once per 30s (was eight
+  requests per cycle). The refactor exposed that `routes/cost.ts` never had a
+  mock branch — offline the page was eight UnavailableNotices — so the
+  sections now derive from the costed bot-run and trace fixtures.
 
 The measurement caveat worth keeping: a Chrome tab driven by automation can
 report `visibilityState: hidden`, which now pauses every poll — measure

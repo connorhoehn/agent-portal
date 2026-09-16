@@ -145,6 +145,13 @@ export interface MockBudget {
    *  every card on that page claim the identical last-activity. Mirrors
    *  MOCK_INITIATIVES.activeHoursAgo there; the parity test pins the pair. */
   activityHoursAgo: number;
+  /** Who last moved the allocation and when. Unset on a seeded row (the seed
+   *  reads as the release manager, six days ago); set by `upsertAllocation`
+   *  so a write reads back attributed to the session that made it — the
+   *  Aurora path stores `updated_by`/`updated_at` and the ledger renders them,
+   *  so an offline write that kept naming the seed author was a lie. */
+  updatedBy?: string | null;
+  updatedAt?: string | null;
 }
 
 /**
@@ -311,9 +318,9 @@ export function mockBudgetRow(m: MockBudget): BudgetRow {
     orgProjectName: m.name,
     allocatedUsd: m.allocated,
     period: m.allocated == null ? null : 'monthly',
-    updatedBy: m.allocated == null ? null : 'u-release',
-    updatedByName: m.allocated == null ? null : displayNameForSubject('u-release'),
-    updatedAt: m.allocated == null ? null : new Date(clock.now().getTime() - 6 * 86_400_000).toISOString(),
+    updatedBy: m.allocated == null ? null : (m.updatedBy ?? 'u-release'),
+    updatedByName: m.allocated == null ? null : displayNameForSubject(m.updatedBy ?? 'u-release'),
+    updatedAt: m.allocated == null ? null : (m.updatedAt ?? new Date(clock.now().getTime() - 6 * 86_400_000).toISOString()),
     spentThisPeriodUsd: spend.spentUsd,
     runCountThisPeriod: spend.runCount,
     lastAgentActivityAt: new Date(clock.now().getTime() - m.activityHoursAgo * 3_600_000).toISOString(),
@@ -512,8 +519,11 @@ export async function upsertAllocation(
     // (INSERT). `POST /api/__mock/reset` puts the seeded allocations back.
     const rows = initiativeBudgets.rows();
     const existing = rows.find((b) => b.id === orgProjectId);
+    const stamp = clock.now().toISOString();
     if (existing) {
       existing.allocated = allocatedUsd;
+      existing.updatedBy = updatedBy;
+      existing.updatedAt = stamp;
     } else {
       rows.push({
         id: orgProjectId,
@@ -526,6 +536,8 @@ export async function upsertAllocation(
         // yet; 0 hours ago is "as of this write", which is what NOW() would
         // stamp on the row the INSERT creates.
         activityHoursAgo: 0,
+        updatedBy,
+        updatedAt: stamp,
       });
     }
     // Re-read through the list shape, exactly as the Aurora path does, so the

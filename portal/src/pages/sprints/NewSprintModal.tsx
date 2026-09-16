@@ -17,7 +17,7 @@ import { useFetch } from '../../hooks/useFetch';
 import { toastError, toastSuccess } from '../../lib/toastStore';
 import { SPRINT_STATUSES, validateNewSprint, type NewSprintForm } from './sprintForm';
 import { PeopleSelect, usePeopleOptions } from './PeopleSelect';
-import { writeJson } from './writeJson';
+import { writeJson } from '../../lib/writeJson';
 import type { InitiativeOption, Sprint } from './types';
 
 const EMPTY_FORM: NewSprintForm = {

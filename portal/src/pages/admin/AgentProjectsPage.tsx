@@ -22,6 +22,7 @@ import {
   Card,
   CatalogGrid,
   Chip,
+  ConfirmDialog,
   EmptyState,
   Inline,
   Input,
@@ -144,6 +145,7 @@ export default function AgentProjectsPage() {
   const [orgProject, setOrgProject] = useState('');
   const [repoOptions, setRepoOptions] = useState<RepoRef[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
+  const [confirmUnlink, setConfirmUnlink] = useState<Project | null>(null);
 
   // The run box: one prompt, one project, fired into a workspace.
   const [runFor, setRunFor] = useState<Project | null>(null);
@@ -200,6 +202,7 @@ export default function AgentProjectsPage() {
   }, [repo, connection, orgProject, refresh]);
 
   const unlink = useCallback(async (p: Project) => {
+    setBusy(`unlink:${p.id}`);
     const tid = toastPending('Unlinking', p.repoFullName);
     try {
       const res = await fetch(`/api/agent-projects/${p.id}`, { method: 'DELETE', credentials: 'include' });
@@ -208,6 +211,9 @@ export default function AgentProjectsPage() {
       refresh();
     } catch (err) {
       toastError(tid, 'Could not unlink', (err as Error).message);
+    } finally {
+      setBusy(null);
+      setConfirmUnlink(null);
     }
   }, [refresh]);
 
@@ -486,7 +492,14 @@ export default function AgentProjectsPage() {
                     )}
                   </Inline>
                   {canDevbox && (
-                    <Button variant="ghost" size="sm" onClick={() => void unlink(p)}>unlink</Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={busy === `unlink:${p.id}`}
+                      onClick={() => setConfirmUnlink(p)}
+                    >
+                      unlink
+                    </Button>
                   )}
                 </Inline>
 
@@ -629,6 +642,17 @@ export default function AgentProjectsPage() {
           />
         </Stack>
       </Modal>
+
+      <ConfirmDialog
+        open={confirmUnlink != null}
+        tone="destructive"
+        title="Unlink this codebase?"
+        body={confirmUnlink ? `${confirmUnlink.repoFullName} is removed from this project list. The checkout in the workspace is left alone.` : ''}
+        confirmLabel={confirmUnlink && busy === `unlink:${confirmUnlink.id}` ? 'Unlinking…' : 'Unlink'}
+        confirmDisabled={confirmUnlink != null && busy === `unlink:${confirmUnlink.id}`}
+        onConfirm={() => { if (confirmUnlink) void unlink(confirmUnlink); }}
+        onCancel={() => setConfirmUnlink(null)}
+      />
     </PageSection>
   );
 }

@@ -23,6 +23,7 @@ import {
   Card,
   Chip,
   CollapsibleSection,
+  ConfirmDialog,
   DataTable,
   EmptyState,
   Inline,
@@ -37,6 +38,7 @@ import type { DataTableColumn } from '@connorhoehnslalom/ui-components/shared';
 import { T } from './Text';
 import { nodeTypes, edgeTypes } from '../components/canary/index.js';
 import { useCanaryStream } from '../components/canary/useCanaryStream.js';
+import { toastError } from '../lib/toastStore';
 import {
   setManualSliderOpen,
   resetExperiment,
@@ -602,11 +604,25 @@ function CanaryToolbar({
   /** ManageCanary — controls that mutate the experiment hide without it. */
   canManage: boolean;
 }): React.ReactElement {
-  const handleNewExperiment = useCallback(() => {
-    if (!window.confirm('End this experiment and start a new one?\nTraffic pins back to 100% A; decision history is kept.')) return;
-    void fetch('/api/observability/canary/reset', { method: 'POST', credentials: 'include' })
-      .catch(() => { /* store reset still returns the UI to the wizard */ })
-      .finally(() => resetExperiment());
+  const [confirmNewExperiment, setConfirmNewExperiment] = useState(false);
+  const [resetting, setResetting] = useState(false);
+
+  const confirmNewExperimentAction = useCallback(async () => {
+    setResetting(true);
+    try {
+      const res = await fetch('/api/observability/canary/reset', { method: 'POST', credentials: 'include' });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string };
+        toastError(null, 'Could not end experiment', body.error ?? `HTTP ${res.status}`);
+        return;
+      }
+      resetExperiment();
+    } catch (err) {
+      toastError(null, 'Could not end experiment', err instanceof Error ? err.message : undefined);
+    } finally {
+      setResetting(false);
+      setConfirmNewExperiment(false);
+    }
   }, []);
 
   return (
@@ -630,7 +646,7 @@ function CanaryToolbar({
                   variant="secondary"
                   size="sm"
                   title="End this experiment and return to the setup wizard (traffic pins back to A)"
-                  onClick={handleNewExperiment}
+                  onClick={() => setConfirmNewExperiment(true)}
                 >
                   ＋ New experiment
                 </Button>
@@ -672,7 +688,7 @@ function CanaryToolbar({
                 variant="secondary"
                 size="sm"
                 title="End this experiment and return to the setup wizard (traffic pins back to A)"
-                onClick={handleNewExperiment}
+                onClick={() => setConfirmNewExperiment(true)}
               >
                 ＋ New experiment
               </Button>
@@ -681,6 +697,17 @@ function CanaryToolbar({
           </Stack>
         </CollapsibleSection>
       )}
+
+      <ConfirmDialog
+        open={confirmNewExperiment}
+        tone="destructive"
+        title="End this experiment and start a new one?"
+        body="Traffic pins back to 100% A; decision history is kept."
+        confirmLabel={resetting ? 'Ending…' : 'End experiment'}
+        confirmDisabled={resetting}
+        onConfirm={() => void confirmNewExperimentAction()}
+        onCancel={() => setConfirmNewExperiment(false)}
+      />
     </Stack>
   );
 }

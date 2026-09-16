@@ -17,9 +17,20 @@
 //   * `/top` restricting to rows that actually have a cost, so a null-cost row
 //     cannot mask the real top-N,
 //   * `/deploy-markers` defaulting to a WIDER 7-day window than the others,
-//     and reading prompt_versions rather than the trace table.
+//     and reading prompt_versions rather than the trace table,
+//   * `/summary` — the one-shot envelope over all eight above: each section
+//     is exactly the shape its own route answers, `deployMarkers` keeps its
+//     own 168h default independent of the top-level `windowHours`, and one
+//     section's query failing lands ONLY that section's name in the
+//     top-level `degraded` array without touching the other seven.
 
 jest.mock('../../providers/aurora.js', () => ({ exec: jest.fn() }));
+// Pins the LIVE SQL path (`config.mock.aurora === false`). The offline half —
+// same routes, `aurora: true`, answering from the observability fixtures —
+// is its own file: cost-mock-branch.test.ts.
+jest.mock('../../config.js', () => ({
+  config: { region: 'us-east-1', mock: { aurora: false } },
+}));
 
 import express from 'express';
 import request from '../../test-support/http.js';
@@ -330,5 +341,87 @@ describe('GET /deploy-markers', () => {
     const res = await request(buildApp()).get('/api/observability/cost/deploy-markers?windowHours=99999');
     expect(longOf(0, 'hours')).toBe(24 * 30);
     expect(res.body.markers[0].notes).toBeNull();
+  });
+});
+
+describe('GET /summary', () => {
+  const SECTION_NAMES = [
+    'total', 'perAgent', 'timeseries', 'top', 'byModel',
+    'a2aOverhead', 'valueRatio', 'deployMarkers',
+  ];
+
+  it('composes all eight sections in one envelope, with none degraded on a healthy empty window', async () => {
+    execMock.mockResolvedValue([]);
+    const res = await request(buildApp()).get('/api/observability/cost/summary?windowHours=6');
+    expect(res.status).toBe(200);
+    expect(Object.keys(res.body).sort()).toEqual(['degraded', 'sections', 'windowHours']);
+    expect(res.body.windowHours).toBe(6);
+    expect(res.body.degraded).toEqual([]);
+    expect(Object.keys(res.body.sections).sort()).toEqual([...SECTION_NAMES].sort());
+    // Each section is exactly the shape its own route answers on a healthy
+    // empty window — no `degraded`/`error`, same field names.
+    expect(res.body.sections.total).toEqual({
+      totalCostUsd: 0, invocations: 0, inputTokens: 0, outputTokens: 0, withCost: 0, windowHours: 6,
+    });
+    expect(res.body.sections.perAgent).toEqual({ byAgent: [], withCost: 0, windowHours: 6 });
+    expect(res.body.sections.timeseries).toEqual({ points: [], withCost: 0, bucketMin: 60, windowHours: 6 });
+    expect(res.body.sections.top).toEqual({ invocations: [], withCost: 0, windowHours: 6 });
+    expect(res.body.sections.byModel).toEqual({ byModel: [], withCost: 0, windowHours: 6 });
+    expect(res.body.sections.a2aOverhead).toEqual({
+      totalCostUsd: 0, a2aCostUsd: 0, directCostUsd: 0, a2aFraction: 0,
+      a2aInvocations: 0, directInvocations: 0, windowHours: 6,
+    });
+    expect(res.body.sections.valueRatio).toEqual({ byAgent: [], windowHours: 6 });
+    // deployMarkers keeps its own default 168h window, independent of the
+    // top-level windowHours=6 the other seven sections used.
+    expect(res.body.sections.deployMarkers).toEqual({ markers: [], windowHours: 168 });
+    for (const name of SECTION_NAMES) {
+      expect(res.body.sections[name]).not.toHaveProperty('degraded');
+    }
+  });
+
+  it('forwards bucketMin and limit to the sections that use them', async () => {
+    execMock.mockResolvedValue([]);
+    const res = await request(buildApp())
+      .get('/api/observability/cost/summary?windowHours=6&bucketMin=30&limit=5');
+    expect(res.body.sections.timeseries.bucketMin).toBe(30);
+    expect(res.body.windowHours).toBe(6);
+    // /top itself doesn't echo the limit, but the same clamp rules the
+    // standalone route uses still apply (checked against sqlOf below).
+    const topCall = execMock.mock.calls.find((c) => String(c[0]).includes('LIMIT :lim'));
+    expect(topCall).toBeDefined();
+  });
+
+  it('lands exactly the failing section in `degraded`, with the others answering healthy', async () => {
+    execMock.mockImplementation(async (sql: string) => {
+      if (String(sql).includes('observability.prompt_versions')) {
+        throw new Error('relation "observability.prompt_versions" does not exist\nHINT: ...');
+      }
+      return [];
+    });
+    const res = await request(buildApp()).get('/api/observability/cost/summary');
+    expect(res.status).toBe(200);
+    expect(res.body.degraded).toEqual(['deployMarkers']);
+    expect(res.body.sections.deployMarkers).toEqual({
+      markers: [], windowHours: 168,
+      degraded: true, error: 'relation "observability.prompt_versions" does not exist',
+    });
+    // Every other section is unaffected — one failing query does not fail
+    // the envelope or bleed into sections that read a different table.
+    for (const name of SECTION_NAMES) {
+      if (name === 'deployMarkers') continue;
+      expect(res.body.sections[name]).not.toHaveProperty('degraded');
+    }
+  });
+
+  it('marks every section degraded when the whole table is unreadable, and the response is still 200', async () => {
+    execMock.mockRejectedValue(new Error('connection terminated'));
+    const res = await request(buildApp()).get('/api/observability/cost/summary');
+    expect(res.status).toBe(200);
+    expect(res.body.degraded.sort()).toEqual([...SECTION_NAMES].sort());
+    for (const name of SECTION_NAMES) {
+      expect(res.body.sections[name].degraded).toBe(true);
+      expect(typeof res.body.sections[name].error).toBe('string');
+    }
   });
 });

@@ -27,7 +27,7 @@ import {
   TableTh,
   TableTd,
 } from '@connorhoehnslalom/ui-components/shared';
-import { toastError } from '../../lib/toastStore';
+import { toastError, toastSuccess } from '../../lib/toastStore';
 import { usd, modelLabelFor, ago, rowBudgetStats } from './budgetsFormat';
 import { T } from './Text';
 import type { BudgetRow, BudgetSummary, InitiativeOption } from './types';
@@ -45,6 +45,9 @@ async function putAllocation(orgProjectId: string, allocatedUsd: number): Promis
       toastError(null, 'Failed to set budget', body?.error ?? `${res.status}`);
       return false;
     }
+    // A money write with no acknowledgement read as "did that take?" — the row
+    // re-renders, but the person is looking at the cell they just left.
+    toastSuccess(null, 'Budget set', `$${allocatedUsd.toFixed(2)} / month`);
     return true;
   } catch (err) {
     toastError(null, 'Failed to set budget', err instanceof Error ? err.message : undefined);
@@ -286,6 +289,8 @@ export function InitiativesReport({
       if (!res.ok) {
         const body = (await res.json().catch(() => null)) as { error?: string } | null;
         toastError(null, 'Failed to remove allocation', body?.error ?? `${res.status}`);
+      } else {
+        toastSuccess(null, 'Allocation removed', row.orgProjectName ?? row.orgProjectId);
       }
     } catch (err) {
       toastError(null, 'Failed to remove allocation', err instanceof Error ? err.message : undefined);

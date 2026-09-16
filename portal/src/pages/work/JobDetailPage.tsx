@@ -15,8 +15,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router';
 import {
-  Button, Card, Chip, EmptyState, ErrorState, Inline, MetaLine, PageSection, SectionLabel, Stack, ToolCallStrip,
-  Toolbar,
+  Button, Card, Chip, ConfirmDialog, EmptyState, ErrorState, Inline, MetaLine, PageSection, SectionLabel, Stack,
+  ToolCallStrip, Toolbar,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch';
@@ -122,6 +122,8 @@ export default function JobDetailPage() {
 
   const [live, setLive] = useState<ActivityEntry[]>([]);
   const [tailState, setTailState] = useState<'idle' | 'open' | 'retrying' | 'unavailable'>('idle');
+  const [confirmCancel, setConfirmCancel] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
   const isLive = !!job && LIVE_STATUSES.has(job.status);
@@ -230,6 +232,7 @@ export default function JobDetailPage() {
 
   async function cancel() {
     if (!job) return;
+    setCancelling(true);
     const tid = toastPending('Cancelling job', job.title);
     try {
       const res = await fetch(`/api/work/jobs/${job.id}`, { method: 'DELETE', credentials: 'include' });
@@ -237,6 +240,7 @@ export default function JobDetailPage() {
       toastSuccess(tid, 'Cancelled');
       void refresh();
     } catch (err) { toastError(tid, 'Cancel failed', (err as Error).message); }
+    finally { setCancelling(false); setConfirmCancel(false); }
   }
 
   if (!job) {
@@ -327,7 +331,7 @@ export default function JobDetailPage() {
         </Inline>
         <Inline gap="sm">
           {canManage && (job.status === 'queued' || job.status === 'claimed') && (
-            <Button variant="secondary" size="sm" onClick={() => void cancel()}>Cancel</Button>
+            <Button variant="secondary" size="sm" onClick={() => setConfirmCancel(true)}>Cancel</Button>
           )}
           {canManage && job.status === 'awaiting_review' && (
             <>
@@ -451,6 +455,17 @@ export default function JobDetailPage() {
           <KeyValue layout="row" labelWidth="w-20" label="Finished" value={absoluteTime(job.finishedAt)} />
         </Stack>
       </Card>
+
+      <ConfirmDialog
+        open={confirmCancel}
+        tone="destructive"
+        title="Cancel this job?"
+        body={`This job is currently ${job.status}. Cancelling stops it and cannot be undone.`}
+        confirmLabel={cancelling ? 'Cancelling…' : 'Cancel job'}
+        confirmDisabled={cancelling}
+        onConfirm={() => void cancel()}
+        onCancel={() => setConfirmCancel(false)}
+      />
     </PageSection>
   );
 }

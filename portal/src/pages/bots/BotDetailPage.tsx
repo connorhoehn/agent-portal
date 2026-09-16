@@ -152,7 +152,7 @@ export default function BotDetailPage() {
   const [editMission, setEditMission] = useState(false);
   const [missionText, setMissionText] = useState('');
 
-  async function patchBot(patch: Record<string, unknown>): Promise<boolean> {
+  async function patchBot(patch: Record<string, unknown>, successLabel?: string): Promise<boolean> {
     if (!bot) return false;
     try {
       const res = await fetch(`/api/bots/${bot.id}`, {
@@ -163,6 +163,7 @@ export default function BotDetailPage() {
       const body = await res.json().catch(() => ({})) as { error?: string };
       if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
       refreshBot();
+      if (successLabel) toastSuccess(null, successLabel, bot.name);
       return true;
     } catch (err) {
       toastError(null, 'Update failed', (err as Error).message);
@@ -250,7 +251,7 @@ export default function BotDetailPage() {
       maxRunsPerDay: gMaxRuns,
       requiresReview: gReview,
       enforceAllocation: gEnforceAlloc,
-    });
+    }, 'Guardrails updated');
     setBusy(null);
     if (ok) setEditGuards(false);
   }
@@ -258,7 +259,7 @@ export default function BotDetailPage() {
   async function saveMission() {
     if (!missionText.trim()) return;
     setBusy('mission');
-    const ok = await patchBot({ prompt: missionText.trim() });
+    const ok = await patchBot({ prompt: missionText.trim() }, 'Mission updated');
     setBusy(null);
     if (ok) setEditMission(false);
   }

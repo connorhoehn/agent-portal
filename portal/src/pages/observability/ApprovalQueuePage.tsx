@@ -27,6 +27,8 @@ import {
 } from '@connorhoehnslalom/ui-components/shared';
 import { SmartEmptyState } from '../../components/observability/SmartEmptyState';
 import { useCapabilities } from '../../lib/capabilities';
+import { toastError, toastPending, toastSuccess } from '../../lib/toastStore';
+import { writeJson } from '../../lib/writeJson';
 import { T } from './Text';
 
 interface Approval {
@@ -68,6 +70,11 @@ function ApprovalQueuePage() {
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [expandedPayload, setExpandedPayload] = useState<Set<string>>(new Set());
   const [denied, setDenied] = useState<Record<string, true>>({});
+  // Per-row lock so a double-click (or a slow network + an impatient click)
+  // can't fire the same decision twice — the second Approve used to land on
+  // a row the first request had already removed, silently no-op'ing against
+  // a 404 with nothing on screen to say so.
+  const [busy, setBusy] = useState<Set<string>>(new Set());
 
   // Initial fetch. Tolerate 404 with empty list.
   useEffect(() => {
@@ -140,36 +147,43 @@ function ApprovalQueuePage() {
   }
 
   async function decide(id: string, decision: 'APPROVED' | 'REJECTED') {
+    if (busy.has(id)) return;
     const snapshot = items.find((i) => i.approvalId === id);
     if (!snapshot) return;
     const note = notes[id]?.trim() || undefined;
 
+    setBusy((prev) => new Set(prev).add(id));
     // Optimistic remove.
     setItems((prev) => prev.filter((p) => p.approvalId !== id));
+    const tid = toastPending(
+      decision === 'APPROVED' ? 'Approving' : 'Rejecting',
+      snapshot.reason,
+    );
 
-    try {
-      const res = await fetch(
-        `/api/observability/approvals/${encodeURIComponent(id)}/decision`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({ decision, note }),
-        },
-      );
-      if (res.status === 403) {
-        // Cedar denied — restore row and mark as denied.
-        setItems((prev) => [snapshot, ...prev]);
-        setDenied((d) => ({ ...d, [id]: true }));
-        return;
-      }
-      if (!res.ok) {
-        // Other failure — restore row, no special flag.
-        setItems((prev) => [snapshot, ...prev]);
-      }
-    } catch {
+    const res = await writeJson(
+      `/api/observability/approvals/${encodeURIComponent(id)}/decision`,
+      'POST',
+      { decision, note },
+    );
+
+    if (!res.ok) {
+      // Restore the row on any failure — the optimistic remove was wrong.
       setItems((prev) => [snapshot, ...prev]);
+      if (res.status === 403) {
+        setDenied((d) => ({ ...d, [id]: true }));
+        toastError(tid, 'Not authorized', res.error ?? 'you cannot decide this approval');
+      } else {
+        toastError(tid, decision === 'APPROVED' ? 'Approve failed' : 'Reject failed', res.error ?? 'unknown error');
+      }
+    } else {
+      toastSuccess(tid, decision === 'APPROVED' ? 'Approved' : 'Rejected');
     }
+
+    setBusy((prev) => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
   }
 
   const sorted = useMemo(
@@ -264,16 +278,18 @@ function ApprovalQueuePage() {
                             <Button
                               variant="primary"
                               size="sm"
+                              disabled={busy.has(a.approvalId)}
                               onClick={() => decide(a.approvalId, 'APPROVED')}
                             >
-                              Approve
+                              {busy.has(a.approvalId) ? 'Approving…' : 'Approve'}
                             </Button>
                             <Button
                               variant="danger-solid"
                               size="sm"
+                              disabled={busy.has(a.approvalId)}
                               onClick={() => decide(a.approvalId, 'REJECTED')}
                             >
-                              Reject
+                              {busy.has(a.approvalId) ? 'Rejecting…' : 'Reject'}
                             </Button>
                             {denied[a.approvalId] && (
                               <Chip tone="danger" size="xs">

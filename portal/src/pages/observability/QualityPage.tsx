@@ -42,6 +42,8 @@ import { CostChip } from '../../components/observability/CostChip';
 import { SmartEmptyState } from '../../components/observability/SmartEmptyState';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { firstDegraded } from '../../lib/degraded';
+import { toastError } from '../../lib/toastStore';
+import { writeJson } from '../../lib/writeJson';
 import { T } from './Text';
 
 interface QualityScore {
@@ -169,21 +171,17 @@ function QualityPage() {
   async function submitFeedback(invocationId: string, label: FeedbackLabel, note?: string) {
     const prev = feedback[invocationId] ?? null;
     setFeedback((m) => ({ ...m, [invocationId]: label }));
-    try {
-      const res = await fetch('/api/observability/quality/feedback', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ invocationId, label, note }),
-      });
-      if (!res.ok) throw new Error(`${res.status}`);
-      // Refresh after a successful note submission so the rationale column
-      // can pick up any backend-side updates.
-      if (label === 'fixed') refresh();
-    } catch {
-      // Revert on error.
+    const res = await writeJson('/api/observability/quality/feedback', 'POST', { invocationId, label, note });
+    if (!res.ok) {
+      // Revert on error, and say so — a silent revert reads as the click
+      // having done nothing, not as a refused write.
       setFeedback((m) => ({ ...m, [invocationId]: prev }));
+      toastError(null, 'Feedback not saved', res.error ?? 'unknown error');
+      return;
     }
+    // Refresh after a successful note submission so the rationale column
+    // can pick up any backend-side updates.
+    if (label === 'fixed') refresh();
   }
 
   function startNote(invocationId: string) {

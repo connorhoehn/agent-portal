@@ -49,6 +49,7 @@ export function ConnectionSetup({ sources, onChanged }: Props) {
   const [busy, setBusy] = useState(false);
   const [verified, setVerified] = useState<{ name: string; identity: Verified } | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [removing, setRemoving] = useState<string | null>(null);
 
   const connect = useCallback(async () => {
     if (!label.trim() || !pat.trim()) return;
@@ -88,6 +89,7 @@ export function ConnectionSetup({ sources, onChanged }: Props) {
   }, [label, pat, onChanged]);
 
   const remove = useCallback(async (name: string) => {
+    setRemoving(name);
     const tid = toastPending('Deleting connection', name);
     try {
       const res = await fetch(`/api/connections/${encodeURIComponent(name)}`, {
@@ -100,6 +102,9 @@ export function ConnectionSetup({ sources, onChanged }: Props) {
       onChanged();
     } catch (err) {
       toastError(tid, 'Could not delete', (err as Error).message);
+    } finally {
+      setRemoving(null);
+      setDeleting(null);
     }
   }, [onChanged, verified]);
 
@@ -191,7 +196,14 @@ export function ConnectionSetup({ sources, onChanged }: Props) {
             >
               <Chip size="xs" mono>{c.name}</Chip>
               {canManage && (
-                <Button variant="ghost" size="sm" onClick={() => setDeleting(c.name)}>delete</Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={removing === c.name}
+                  onClick={() => setDeleting(c.name)}
+                >
+                  delete
+                </Button>
               )}
             </Inline>
           ))
@@ -200,17 +212,13 @@ export function ConnectionSetup({ sources, onChanged }: Props) {
 
       <ConfirmDialog
         open={!!deleting}
-        onConfirm={() => {
-          if (deleting) {
-            const name = deleting;
-            setDeleting(null);
-            void remove(name);
-          }
-        }}
+        onConfirm={() => { if (deleting) void remove(deleting); }}
         onCancel={() => setDeleting(null)}
         tone="destructive"
         title={deleting ? `Delete "${deleting}"?` : 'Delete connection?'}
-        body="The token is removed from the vault. Repositories linked with it keep working until their next re-clone, which will need another credential."
+        body="This credential is shared with Knowledge → Sources, which manages the same connections. Deleting it here removes it from the vault everywhere. Repositories linked with it keep working until their next re-clone, which will need another credential."
+        confirmLabel={deleting && removing === deleting ? 'Deleting…' : 'Delete connection'}
+        confirmDisabled={!!deleting && removing === deleting}
       />
     </Card>
   );

@@ -10,6 +10,7 @@ import {
   Button,
   Chip,
   CodeBlock,
+  ConfirmDialog,
   DataTable,
   DetailSection,
   EmptyState,
@@ -31,6 +32,7 @@ import { Link as RouterLink } from 'react-router';
 import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
+import { toastError, toastPending, toastSuccess } from '../../lib/toastStore';
 import { writeJson } from './writeJson';
 import { PairMachineDialog, WORKER_COMMAND } from './PairMachineDialog';
 import { statusLabel, statusTone, truncate, when, type JobStatus } from './localComputeFormat';
@@ -125,6 +127,11 @@ export default function LocalComputePage() {
   // (ConnectLocalCompute gates both routes); everyone else sees the empty
   // state without a dead-end call to action.
   const [pairOpen, setPairOpen] = useState(false);
+  // Unpair: the machine pending confirmation, and a busy lock keyed by its id
+  // so a double-click (or a second row's dialog opening mid-request) cannot
+  // fire two DELETEs for the same machine.
+  const [unpairTarget, setUnpairTarget] = useState<ComputeNode | null>(null);
+  const [unpairBusy, setUnpairBusy] = useState<string | null>(null);
 
   const nodes = useMemo(
     () => (nodesData?.nodes ?? []).map((n) => (
@@ -163,6 +170,27 @@ export default function LocalComputePage() {
       delete next[node.id];
       return next;
     });
+  };
+
+  // Unpair: a soft revoke server-side (providers/local-compute.ts
+  // `revokeNode`) — the row stays for audit, but the token dies immediately,
+  // so the machine has to be paired again to reconnect. Confirmed first: this
+  // is the one action on this page that stops a worker mid-flight.
+  const handleUnpair = async () => {
+    if (!unpairTarget || unpairBusy) return;
+    const node = unpairTarget;
+    setUnpairBusy(node.id);
+    const toastId = toastPending(`Unpairing ${node.label}…`);
+    const res = await writeJson<{ ok: boolean }>(`/api/local-compute/nodes/${node.id}`, 'DELETE');
+    setUnpairBusy(null);
+    if (res.ok) {
+      toastSuccess(toastId, `${node.label} unpaired`, 'Its token stopped working — pair it again to reconnect.');
+      setUnpairTarget(null);
+      if (selectedNodeId === node.id) setSelectedNodeId(null);
+      await refreshNodes();
+    } else {
+      toastError(toastId, `Could not unpair ${node.label}`, res.error ?? 'request failed');
+    }
   };
 
   // What this machine will pick up: queued or in-flight runs targeted at it,
@@ -222,6 +250,17 @@ export default function LocalComputePage() {
             {n.presence.status}
           </Chip>
           {!n.acceptJobs && <Chip tone="neutral" size="xs">paused</Chip>}
+          {canDispatch && (
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={unpairBusy === n.id}
+              onClick={(e) => { e.stopPropagation(); setUnpairTarget(n); }}
+              aria-label={`Unpair ${n.label}`}
+            >
+              Unpair
+            </Button>
+          )}
         </Inline>
       ),
     },
@@ -500,6 +539,16 @@ export default function LocalComputePage() {
         </Stack>
       )}
       <PairMachineDialog open={pairOpen} onClose={() => setPairOpen(false)} />
+      <ConfirmDialog
+        open={unpairTarget !== null}
+        tone="destructive"
+        title={unpairTarget ? `Unpair ${unpairTarget.label}?` : 'Unpair this machine?'}
+        body="Its token stops working immediately — any worker running on it loses its connection, and you'll need to pair it again from this page to reconnect."
+        confirmLabel={unpairTarget && unpairBusy === unpairTarget.id ? 'Unpairing…' : 'Unpair'}
+        confirmDisabled={unpairTarget !== null && unpairBusy === unpairTarget.id}
+        onConfirm={() => void handleUnpair()}
+        onCancel={() => setUnpairTarget(null)}
+      />
     </PageSection>
   );
 }

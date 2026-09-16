@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Button, Card, CardHeader, Inline, InlineAlert, InlinePlaceholder, Input, MetaLine, SectionLabel, SegmentedControl, Stack } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../../lib/capabilities';
 import { useFetch } from '../../../hooks/useFetch';
+import { toastError } from '../../../lib/toastStore';
 import { JourneyCarousel } from './JourneyCarousel';
 import { JourneyTimeline } from './JourneyTimeline';
 import { SESSIONS_URL, closeSession, journeyUrl, launchSession, navigateSession } from './browserApi';
@@ -78,10 +79,14 @@ export function JourneyTab() {
 
   async function endJourney() {
     if (!activeSessionId) return;
-    await closeSession(activeSessionId);
-    refreshSessions();
-    setActiveSessionId(null);
-    setCarouselIdx(0);
+    try {
+      await closeSession(activeSessionId);
+      refreshSessions();
+      setActiveSessionId(null);
+      setCarouselIdx(0);
+    } catch (err) {
+      toastError(null, 'Could not end journey', err instanceof Error ? err.message : undefined);
+    }
   }
 
   return (

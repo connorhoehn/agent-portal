@@ -100,6 +100,7 @@ function DataSourcesPage() {
     try {
       const r = await fetch('/api/ingest/start', {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ dataSourceId }),
       });
@@ -272,7 +273,7 @@ function JobHistoryTable({ jobs }: { jobs: IngestionJob[] }) {
   async function loadDetails(jobId: string, dataSourceId: string) {
     if (details[jobId]) { setExpanded(e => e === jobId ? null : jobId); return; }
     try {
-      const r = await fetch(`/api/ingest/job/${encodeURIComponent(jobId)}?dataSourceId=${encodeURIComponent(dataSourceId)}`);
+      const r = await fetch(`/api/ingest/job/${encodeURIComponent(jobId)}?dataSourceId=${encodeURIComponent(dataSourceId)}`, { credentials: 'include' });
       const body = await r.json() as { job?: IngestionJob };
       if (body.job) setDetails(d => ({ ...d, [jobId]: body.job! }));
     } catch { /* ignore */ }

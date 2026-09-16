@@ -9,8 +9,9 @@
 // and a Publish action for the pending bundle that surfaces exactly why a
 // publish is refused rather than a bare 403/409.
 
+import { useState } from 'react';
 import {
-  Button, Card, Chip, DataTable, EmptyState, InlineAlert, Inline, LoadingState,
+  Button, Card, Chip, ConfirmDialog, DataTable, EmptyState, InlineAlert, Inline, LoadingState,
   PageSection, Stack, StatStrip, Toolbar, ToolbarGroup, ToolbarLabel,
   type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
@@ -85,8 +86,11 @@ function SkillsTable({ skills }: { skills: BundledSkill[] }) {
 function PublishAction({ bundle, onPublished }: { bundle: SessionBundleDetail; onPublished: () => void }) {
   const { can, ready } = useCapabilities();
   const staticReason = publishBlockedReason(bundle);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [publishing, setPublishing] = useState(false);
 
   async function publish() {
+    setPublishing(true);
     try {
       const res = await fetch(`/api/session-bundle/${encodeURIComponent(bundle.id)}/publish`, {
         method: 'POST', credentials: 'include',
@@ -105,6 +109,9 @@ function PublishAction({ bundle, onPublished }: { bundle: SessionBundleDetail; o
       onPublished();
     } catch (err) {
       toastError(null, 'Could not publish', (err as Error).message);
+    } finally {
+      setPublishing(false);
+      setConfirmOpen(false);
     }
   }
 
@@ -122,10 +129,10 @@ function PublishAction({ bundle, onPublished }: { bundle: SessionBundleDetail; o
         variant="primary"
         size="sm"
         className="w-fit"
-        disabled={staticReason != null}
-        onClick={() => void publish()}
+        disabled={staticReason != null || publishing}
+        onClick={() => setConfirmOpen(true)}
       >
-        Publish to fleet
+        {publishing ? 'Publishing…' : 'Publish to fleet'}
       </Button>
       {staticReason && (
         <T className="text-[11px] text-danger">{staticReason}</T>
@@ -137,6 +144,17 @@ function PublishAction({ bundle, onPublished }: { bundle: SessionBundleDetail; o
           {' '}— and a named approver; a real refusal from the server will show here if either is missing.
         </T>
       )}
+
+      <ConfirmDialog
+        open={confirmOpen}
+        tone="destructive"
+        title="Publish to fleet?"
+        body={`Bundle ${bundle.id} goes live fleet-wide and restarts ${bundle.sessionsAffected} session${bundle.sessionsAffected === 1 ? '' : 's'}. This includes its SessionStart hook, which fires on every session unattended.`}
+        confirmLabel={publishing ? 'Publishing…' : 'Publish to fleet'}
+        confirmDisabled={publishing}
+        onConfirm={() => void publish()}
+        onCancel={() => setConfirmOpen(false)}
+      />
     </Stack>
   );
 }

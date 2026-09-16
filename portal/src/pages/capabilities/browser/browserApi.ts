@@ -44,7 +44,11 @@ export function navigateSession(sessionId: string, url: string, captureScreensho
 }
 
 export async function closeSession(sessionId: string): Promise<void> {
-  await fetch(`${SESSIONS}/${sessionId}`, { method: 'DELETE' });
+  const res = await fetch(`${SESSIONS}/${sessionId}`, { method: 'DELETE' });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(body.error ?? `HTTP ${res.status}`);
+  }
 }
 
 export const SESSIONS_URL = SESSIONS;

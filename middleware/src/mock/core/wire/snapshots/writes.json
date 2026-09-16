@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-09-16T08:53:36.769Z",
-  "serverHandlerSha": "81f988d4775ee2937f5c2abde12f374e53241bd5bb9916305381d9c7035ee566",
+  "capturedAt": "2026-09-16T10:03:39.606Z",
+  "serverHandlerSha": "921cc36726ae644eeca56233de1e0575d953e42fba2ee92c1d6b62a78a4ff668",
   "baseUrl": "http://127.0.0.1:3012",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
@@ -548,6 +548,7 @@
       "values": {
         "fixtures[].key": [
           "agent-fleet",
+          "agent-jobs",
           "agent-project-runs",
           "agent-projects",
           "assessment-archetypes",
@@ -1995,10 +1996,8 @@
       ]
     },
     "POST /api/local-compute/claim": {
-      "refused": {
-        "rule": "unclassified",
-        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
-      }
+      "skipped": "non-JSON (no content-type) (HTTP 204) (anonymous)",
+      "sent": []
     },
     "POST /api/local-compute/heartbeat": {
       "persona": "anonymous",
@@ -2011,34 +2010,34 @@
       "sent": []
     },
     "POST /api/local-compute/jobs/:jobId/complete": {
-      "refused": {
-        "rule": "unclassified",
-        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
-      }
+      "skipped": "no body: a live claimToken only exists once POST /claim actually claims a row for this node, and this harness's BodyContext exposes GET only — it cannot chain a prior WRITE's response into this one, and every route is captured against an independently-reset world, so no claim from another spec's replay survives to be reused here"
     },
     "POST /api/local-compute/jobs/:jobId/heartbeat": {
-      "refused": {
-        "rule": "unclassified",
-        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
-      }
+      "skipped": "no body: a live claimToken only exists once POST /claim actually claims a row for this node, and this harness's BodyContext exposes GET only — it cannot chain a prior WRITE's response into this one, and every route is captured against an independently-reset world, so no claim from another spec's replay survives to be reused here"
     },
     "POST /api/local-compute/jobs/:jobId/log": {
-      "refused": {
-        "rule": "unclassified",
-        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
-      }
+      "skipped": "no body: a live claimToken only exists once POST /claim actually claims a row for this node, and this harness's BodyContext exposes GET only — it cannot chain a prior WRITE's response into this one, and every route is captured against an independently-reset world, so no claim from another spec's replay survives to be reused here"
     },
     "POST /api/local-compute/jobs/:jobId/start": {
-      "refused": {
-        "rule": "unclassified",
-        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
-      }
+      "skipped": "no body: a live claimToken only exists once POST /claim actually claims a row for this node, and this harness's BodyContext exposes GET only — it cannot chain a prior WRITE's response into this one, and every route is captured against an independently-reset world, so no claim from another spec's replay survives to be reused here"
     },
     "POST /api/local-compute/nodes/:nodeId/work": {
-      "refused": {
-        "rule": "unclassified",
-        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
-      }
+      "persona": "orgiq/admin",
+      "status": 409,
+      "shape": {
+        "$": "object",
+        "error": "string",
+        "gate": "string"
+      },
+      "values": {
+        "gate": [
+          "accept_jobs"
+        ]
+      },
+      "sent": [
+        "kind",
+        "prompt"
+      ]
     },
     "POST /api/local-compute/pair/claim": {
       "persona": "anonymous",
@@ -2722,7 +2721,7 @@
     "POST /api/work/jobs": {
       "refused": {
         "rule": "fires",
-        "reason": "Arms or fires something that outlives the capture — a cron registration, an agent job enqueued for the fleet dispatcher, a background sweep. The seeded bots are parked deliberately so the scheduler cannot fire against repos that do not exist yet. Here: enqueues an agent job the dispatcher will claim."
+        "reason": "Arms or fires something that outlives the capture — a cron registration, an agent job enqueued for the fleet dispatcher, a background sweep. The seeded bots are parked deliberately so the scheduler cannot fire against repos that do not exist yet. Here: enqueues into the registered `agent-jobs` fixture (reset restores it), but the always-running job-dispatcher timer claims and runs a `devbox:task` row for real within ~10s, and an untargeted `local:*` row is claimable by any real paired local worker polling this server — both outlive the request."
       }
     },
     "POST /api/work/jobs/:id/requeue": {

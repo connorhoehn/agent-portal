@@ -7,11 +7,13 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import {
-  Banner, Button, Card, Chip, Drawer, EmptyState, Inline, LoadingState, PageSection, SearchInput, Stack,
+  Banner, Button, Card, Chip, ConfirmDialog, Drawer, EmptyState, Inline, LoadingState, PageSection, SearchInput,
+  Stack,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { useDebouncedSearch } from '../../hooks/useDebouncedSearch';
 import { KeyValue } from '../../components/KeyValue';
+import { toastError, toastSuccess } from '../../lib/toastStore';
 import { ArtifactAssetCard } from './ArtifactAssetCard';
 import { ArtifactDrawerBody } from './ArtifactDrawer';
 import { LineageFrame } from './LineageFrame';
@@ -52,6 +54,7 @@ export default function DistillationLineagePage() {
   const [openId, setOpenId] = useState<string | null>(null);
   const [busy, setBusy] = useState<{ id: string; action: 'publish' | 'review' } | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [confirmPublishId, setConfirmPublishId] = useState<string | null>(null);
 
   const lineageUrl = focus
     ? (focus.startsWith('fact-')
@@ -103,7 +106,9 @@ export default function DistillationLineagePage() {
     setBusy({ id, action: 'publish' });
     const res = await postJson(`/api/distillation/artifacts/${encodeURIComponent(id)}/publish`, {});
     setBusy(null);
-    if (!res.ok) { setActionError(res.error); return; }
+    setConfirmPublishId(null);
+    if (!res.ok) { setActionError(res.error); toastError(null, 'Could not publish', res.error ?? undefined); return; }
+    toastSuccess(null, 'Published', 'Now visible in the Library.');
     refreshArtifacts();
   }
 
@@ -112,7 +117,8 @@ export default function DistillationLineagePage() {
     setBusy({ id, action: 'review' });
     const res = await postJson('/api/distillation/review', { target_kind: 'artifact', target_id: id });
     setBusy(null);
-    if (!res.ok) { setActionError(res.error); return; }
+    if (!res.ok) { setActionError(res.error); toastError(null, 'Could not request review', res.error ?? undefined); return; }
+    toastSuccess(null, 'Review requested');
     refreshReview();
   }
 
@@ -147,7 +153,7 @@ export default function DistillationLineagePage() {
                   busy={busy?.id === a.id ? busy.action : null}
                   onOpen={setOpenId}
                   onTraceLineage={focusOn}
-                  onPublish={(id) => { void handlePublish(id); }}
+                  onPublish={(id) => setConfirmPublishId(id)}
                   onRequestReview={(id) => { void handleRequestReview(id); }}
                 />
               ))}
@@ -158,6 +164,16 @@ export default function DistillationLineagePage() {
         <Drawer open={open != null} onClose={() => setOpenId(null)} aria-label="Artifact detail" width={720}>
           {open && <ArtifactDrawerBody artifact={open} />}
         </Drawer>
+
+        <ConfirmDialog
+          open={confirmPublishId != null}
+          title="Publish this artifact?"
+          body={`${artifactsData?.artifacts.find((a) => a.id === confirmPublishId)?.title ?? 'This artifact'} becomes visible in the Library.`}
+          confirmLabel={busy?.action === 'publish' ? 'Publishing…' : 'Publish'}
+          confirmDisabled={busy?.action === 'publish'}
+          onConfirm={() => { if (confirmPublishId) void handlePublish(confirmPublishId); }}
+          onCancel={() => setConfirmPublishId(null)}
+        />
       </PageSection>
     );
   }

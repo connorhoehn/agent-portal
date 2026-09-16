@@ -228,13 +228,13 @@
 // A visible gap beats an assumed-away one — the same rule the GET sweep's
 // `skipped` list already follows.
 
-import { MOCK_NODE_TOKEN, pairingCodes } from '../../local-compute.js';
+import { MOCK_NODE_TOKEN, MOCK_NODE_TOKENS, pairingCodes } from '../../local-compute.js';
 import { type PersonaName } from './http.js';
 import { type Json } from './shape.js';
 
-// The two imports above are the only VALUES this policy takes from outside
-// itself, and both are credentials-shaped things that must not be retyped:
-// the seeded node token and the seeded pairing code are defined in
+// The imports above are the only VALUES this policy takes from outside
+// itself, and all are credentials-shaped things that must not be retyped:
+// the seeded node tokens and the seeded pairing code are defined in
 // mock/local-compute.ts, which is also what the server serves them from. A
 // copy here would be a second source of truth for a string whose whole job is
 // to match — the `enterprise` / `enterprise_context` bug, with a bearer token.
@@ -574,7 +574,23 @@ const FIRES: Family[] = [
   { pattern: 'PATCH /api/bots/*', what: 'calls registerBot, which re-arms the patched bot on the live cron scheduler' },
   { pattern: 'POST /api/bots/dispatch-work', what: 'authorizes a run and enqueues it for the fleet dispatcher' },
   { pattern: 'POST /api/work/dispatch', what: 'drives one dispatcher tick synchronously, claiming queued jobs' },
-  { pattern: 'POST /api/work/jobs', what: 'enqueues an agent job the dispatcher will claim' },
+  // `providers/agent-jobs.ts`'s queue is a registered fixture now
+  // (`mock/agent-jobs.ts` — `agent-jobs`), so the row this enqueues is no
+  // longer the problem; `POST /api/__mock/reset` takes it back exactly the
+  // way it takes back everything else in that fixture. What keeps this route
+  // refused is `lib/job-dispatcher.ts`'s tick: `startJobDispatcher()` runs an
+  // unconditional `setInterval` (not gated by any `config.mock` flag) that
+  // claims and RUNS a queued `devbox:task` row within `JOB_DISPATCH_INTERVAL_MS`
+  // (10s default) through `runDevboxTask` — real AgentCore spend unless the
+  // server being captured happens to intercept it, which this policy has no
+  // way to require the way `intercepts` does for a route's OWN handler. An
+  // enqueued `local:*` job is worse in a different way: the push-side
+  // dispatcher excludes local kinds by construction (`claimNextJob`'s `kind
+  // NOT IN` clause), so nothing here claims it automatically, but nothing
+  // targets it to one machine either — it sits claimable by ANY real paired
+  // local worker polling this exact server. Both outcomes outlive the
+  // request, which is rule 4, independent of the fixture behind the row.
+  { pattern: 'POST /api/work/jobs', what: "enqueues into the registered `agent-jobs` fixture (reset restores it), but the always-running job-dispatcher timer claims and runs a `devbox:task` row for real within ~10s, and an untargeted `local:*` row is claimable by any real paired local worker polling this server — both outlive the request" },
   { pattern: 'POST /api/work/jobs/*/requeue', what: 'enqueues a fresh copy of the job' },
   { pattern: 'POST /api/work/findings/*/promote', what: 'enqueues an agent job the dispatcher will claim' },
   { pattern: 'POST /api/assessment/runs', what: 'starts progress timers that auto-complete the run eight seconds later' },
@@ -597,22 +613,43 @@ const FIRES: Family[] = [
  * the control plane was built to end.
  */
 const UNRESETTABLE: Family[] = [
-  // EMPTY, ON PURPOSE — and that is a fact about the providers, not a
-  // relaxation of the rule. Everything this list used to name has since been
-  // put behind `defineFixture`, which is the fix the rule always pointed at:
+  // Not empty any more, but everything ABOVE this comment that used to be
+  // named here has since been put behind `defineFixture`, which is the fix
+  // the rule always pointed at:
   //
   //   * promotions      -> `promotion-candidates` (mock/promotions.ts). Promote
   //                        and dismiss are replayed by the allowlist below.
   //   * session bundles -> `session-bundles` (mock/session-bundle.ts). Publish
   //                        is replayed, predecessor supersession included.
-  //   * local compute   -> `compute-nodes`, `compute-pairing-codes` and
-  //                        `local-presence` (mock/local-compute.ts), read by
+  //   * local compute (presence half) -> `compute-nodes`,
+  //                        `compute-pairing-codes` and `local-presence`
+  //                        (mock/local-compute.ts), read by
   //                        providers/local-compute.ts and
   //                        lib/local-compute-fleet.ts. The module `Map`s this
   //                        list described are gone; a rename, an announce, a
   //                        heartbeat, a session end and a spent pairing code
   //                        all come back on `POST /api/__mock/reset` (verified
   //                        by hand against a running dev:mock).
+  //   * the pull-side job-claim lifecycle -> `agent-jobs` (mock/agent-jobs.ts),
+  //                        read by providers/agent-jobs.ts. This used to be
+  //                        `MOCK_JOBS`, a bare module-level array, plus a
+  //                        second bare `Map` (`MOCK_CLAIM_TOKENS`) fencing
+  //                        pull-side claims — both un-registered, so `POST
+  //                        /claim` and the four `POST /jobs/:jobId/*` writes
+  //                        sat here, refused, because a claim, a start, a
+  //                        heartbeat or a completed run MUTATED a row nothing
+  //                        could put back. `_resetMockQueue()` existed only as
+  //                        a jest hook `routes/mock-control.ts` never called.
+  //                        Both are registered now (`agentJobs.reset()` also
+  //                        clears the claim-token map, so a fenced write is
+  //                        undone as completely as an append), and
+  //                        `mock/__tests__/agent-jobs-fixture-writes.test.ts`
+  //                        proves a claim → start → heartbeat → complete cycle
+  //                        resets clean. What keeps these five off the
+  //                        ALLOWLIST is not resettability any more — see each
+  //                        entry there for the actual reason (an empty queue
+  //                        under the seeded world, or a claim token this
+  //                        harness has no way to chain from a prior write).
   //
   // The rule is not idle, though — one provider still has exactly the shape it
   // describes, and the allowlist handles it the other way the header allows.
@@ -622,14 +659,14 @@ const UNRESETTABLE: Family[] = [
   // the row byte-identical — which is rule 5's other permitted move and needs
   // no entry here. This list is for a route with no such move available.
   //
-  // The six local-compute routes fell to `unclassified` after that migration —
-  // "nobody has written a WriteSpec for them yet", which was true and is now
-  // not: all six are on the allowlist below, plus the soft revoke that the
-  // `destructive` rule used to swallow. Each carries `intercepts: ['aurora']`,
-  // because the fixtures those routes reach are read only inside
-  // `if (config.mock.aurora)` in providers/local-compute.ts. The RULE stays,
-  // stated, so a provider that goes back to a bare array can be tested against
-  // it.
+  // The six local-compute PRESENCE routes fell to `unclassified` after that
+  // migration — "nobody has written a WriteSpec for them yet", which was true
+  // and is now not: all six are on the allowlist below, plus the soft revoke
+  // that the `destructive` rule used to swallow. Each carries
+  // `intercepts: ['aurora']`, because the fixtures those routes reach are read
+  // only inside `if (config.mock.aurora)` in providers/local-compute.ts. The
+  // RULE stays, stated, so a provider that goes back to a bare array can be
+  // tested against it.
 ];
 
 /**
@@ -2027,6 +2064,109 @@ export const WRITE_SPECS: readonly WriteSpec[] = [
     safe: 'The one delete on the allowlist, and it deletes nothing: `revokeNode` is a soft revoke that stamps `revoked_at` on a row kept for audit, inside the registered `compute-nodes` fixture, so reset clears the stamp and the machine is listed again. See RESTORABLE_DELETES for why the `destructive` rule lets it through — and note the rule itself is unchanged for every other DELETE.',
     bodyFrom: 'routes/local-compute.ts: no body; `:id` is a node off GET /api/local-compute/nodes, which lists only machines this persona owns, so the ownership clause in the UPDATE is satisfied by construction.',
     intercepts: ['aurora'],
+  },
+
+  // ── the pull-side job-claim lifecycle ───────────────────────────────────────
+  //
+  // `providers/agent-jobs.ts`'s queue moved behind a registered fixture
+  // (`mock/agent-jobs.ts` — `agent-jobs`), which is what makes these six safe
+  // to put HERE rather than in UNRESETTABLE above: whatever any of them
+  // mutates, `POST /api/__mock/reset` now restores it, proven by
+  // `mock/__tests__/agent-jobs-fixture-writes.test.ts`'s claim → start →
+  // heartbeat → complete → reset cycle. Two different reasons still keep five
+  // of the six from producing a captured 2xx shape, and each entry below says
+  // which:
+  //
+  //   * `POST /claim` always finds an empty queue under the seeded `default`
+  //     world (every seeded row comes from bot-run history and is already
+  //     terminal), so it 204s with no body — a genuine empty-queue answer, not
+  //     a refusal, and `capture-writes.ts` records that honestly as
+  //     "uncaptured" on its own, with no `unsynthesisable` needed.
+  //   * `start`/`heartbeat`/`log`/`complete` all require a LIVE `claimToken`,
+  //     minted only by a real `POST /claim` that actually claimed a row. This
+  //     harness's `BodyContext` (see `build?` above) exposes GET only
+  //     (`ctx.get`/`ctx.pick`) — it cannot chain a prior WRITE's response into
+  //     a later one, and every route in this file is captured against a
+  //     server `POST /api/__mock/reset` just reset, independently of every
+  //     other route's own capture. So no claim survives from one spec's
+  //     replay to the next, and there is no live token to present. Each
+  //     `build` says so via `unsynthesisable`, which is what makes the
+  //     snapshot's "uncaptured" line for these four exact rather than a guess.
+  {
+    route: 'POST /api/local-compute/claim',
+    persona: 'anonymous',
+    safe: "Claims (or, honestly, tries to) against the registered `agent-jobs` fixture — status, box/session id and attempts all land on a row reset restores. `node-operator-thinkpad` is the one seeded machine with `acceptJobs` on and a registered kind (`local:distill`/`local:consolidate`; mock/local-compute.ts), so it is the only node whose token is worth presenting. Under the seeded `default` world there is nothing queued for it — every job seedAgentJobs() mints is `devbox:task` and already terminal — so this always answers 204 with no body, the SAME empty-queue answer a real idle worker gets, not a policy refusal.",
+    bodyFrom: 'routes/local-compute.ts: no body; the node is identified entirely by its bearer token.',
+    intercepts: ['aurora'],
+    headers: { authorization: `Bearer ${MOCK_NODE_TOKENS['node-operator-thinkpad']}` },
+  },
+  {
+    route: 'POST /api/local-compute/jobs/:jobId/start',
+    persona: 'anonymous',
+    safe: 'On the allowlist because the fixture behind it resets cleanly, not because this harness can produce a 2xx: `markRunning` needs a claimToken this node actually holds, and nothing here can mint one — see the section header above.',
+    bodyFrom: "routes/local-compute.ts: `claimToken` is required in the body. `:jobId` resolves to a real row off GET /api/work/jobs (this node holds no claim on it, which is exactly why `build` bails before the route would 404 for a less exact reason).",
+    intercepts: ['aurora'],
+    headers: { authorization: `Bearer ${MOCK_NODE_TOKENS['node-operator-thinkpad']}` },
+    build: async () => unsynthesisable("a live claimToken only exists once POST /claim actually claims a row for this node, and this harness's BodyContext exposes GET only — it cannot chain a prior WRITE's response into this one, and every route is captured against an independently-reset world, so no claim from another spec's replay survives to be reused here"),
+  },
+  {
+    route: 'POST /api/local-compute/jobs/:jobId/heartbeat',
+    persona: 'anonymous',
+    safe: 'Same shape as `start` immediately above: the fixture resets, the claimToken chain is what this harness lacks.',
+    bodyFrom: 'routes/local-compute.ts: `claimToken` is required in the body; `:jobId` resolves the same way `start` does.',
+    intercepts: ['aurora'],
+    headers: { authorization: `Bearer ${MOCK_NODE_TOKENS['node-operator-thinkpad']}` },
+    build: async () => unsynthesisable("a live claimToken only exists once POST /claim actually claims a row for this node, and this harness's BodyContext exposes GET only — it cannot chain a prior WRITE's response into this one, and every route is captured against an independently-reset world, so no claim from another spec's replay survives to be reused here"),
+  },
+  {
+    route: 'POST /api/local-compute/jobs/:jobId/log',
+    persona: 'anonymous',
+    safe: 'Same shape again: `appendLog` writes to `lib/local-compute-logs.ts`\'s own `logs` Map (fine to leave unregistered on its own terms — that module\'s header: a log has no seed and nothing to reset to but empty), but `fencedJob` gates every write in this group on the same live claimToken `start`/`heartbeat`/`complete` need.',
+    bodyFrom: 'routes/local-compute.ts: `claimToken` required in the body, plus `seq`/`chunk` this harness never reaches; `:jobId` resolves the same way `start` does.',
+    intercepts: ['aurora'],
+    headers: { authorization: `Bearer ${MOCK_NODE_TOKENS['node-operator-thinkpad']}` },
+    build: async () => unsynthesisable("a live claimToken only exists once POST /claim actually claims a row for this node, and this harness's BodyContext exposes GET only — it cannot chain a prior WRITE's response into this one, and every route is captured against an independently-reset world, so no claim from another spec's replay survives to be reused here"),
+  },
+  {
+    route: 'POST /api/local-compute/jobs/:jobId/complete',
+    persona: 'anonymous',
+    safe: 'Same shape again, and the route whose absence from the allowlist mattered most before this migration: `completeJob` writes a TERMINAL status. It is on the allowlist now because the row it would touch lives in a registered fixture — reset undoes a terminal write exactly as completely as it undoes any other — but the claimToken chain this harness lacks still keeps it from producing a 2xx.',
+    bodyFrom: 'routes/local-compute.ts: `claimToken` required, plus a `status` this harness never reaches; `:jobId` resolves the same way `start` does.',
+    intercepts: ['aurora'],
+    headers: { authorization: `Bearer ${MOCK_NODE_TOKENS['node-operator-thinkpad']}` },
+    build: async () => unsynthesisable("a live claimToken only exists once POST /claim actually claims a row for this node, and this harness's BodyContext exposes GET only — it cannot chain a prior WRITE's response into this one, and every route is captured against an independently-reset world, so no claim from another spec's replay survives to be reused here"),
+  },
+  {
+    route: 'POST /api/local-compute/nodes/:nodeId/work',
+    persona: 'orgiq/admin',
+    // SAFE either way this lands, which is what actually matters here: if it
+    // enqueues, the row lands in the registered `agent-jobs` fixture
+    // (`payload.nodeId`-targeted, so reset removes it and no OTHER real
+    // paired worker could ever claim it — unlike the generic `POST
+    // /api/work/jobs`, refused above under `fires`, an untargeted `local:*`
+    // row there is claimable by any real local worker polling this server).
+    // If it 409s, nothing is written at all.
+    //
+    // It reliably does the LATTER. `:nodeId` has no PARAM_SOURCES override, so
+    // it resolves via the default `prefix` source — `GET
+    // /api/local-compute/nodes` for `u-operator`, first id in `nodes[]` — and
+    // `mockListNodesByOwner` (mock/local-compute.ts) orders that
+    // `ORDER BY created_at` ascending, same as the real SELECT. Verified live:
+    // `node-operator-mini` (`createdAt: daysAgo(96)`) sorts before
+    // `node-operator-thinkpad` (`createdAt: hoursAgo(5)`), so `:nodeId`
+    // resolves to the machine with `acceptJobs: false` — the gate this route
+    // checks first, before it ever reaches the queue. `alsoAccept: [409]` pins
+    // that shape (`{gate:'accept_jobs', error: '...'}`) rather than treating
+    // it as a failed capture; there is no PARAM_SOURCES mechanism to filter
+    // the owned-nodes list by `acceptJobs`, and hand-writing one path-param
+    // override for one persona's fixture-specific ordering would be a second,
+    // narrower source of truth for exactly the kind of drift this file exists
+    // to avoid.
+    safe: "Either enqueues into the registered `agent-jobs` fixture (targeted, reset restores it, nothing else could claim it) or, as it reliably does under the default fixtures, 409s on the accept-jobs gate before touching the queue at all — see the comment above for why `:nodeId` resolves to `node-operator-mini` rather than `node-operator-thinkpad`, the only node that would actually accept the kind.",
+    bodyFrom: "routes/local-compute.ts: `prompt` is required unless a `workItemId`/`botId` supplies one, and `kind` must be one of LOCAL_JOB_KINDS.",
+    intercepts: ['aurora'],
+    alsoAccept: [409],
+    build: async () => ({ prompt: 'wire capture: local compute dispatch smoke test', kind: 'local:distill' }),
   },
 ];
 

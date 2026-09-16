@@ -42,6 +42,7 @@ import {
   type MockToolCallRow,
   type MockTraceRow,
 } from './observability.js';
+import { mockListPromptVersions } from './prompt-versions.js';
 
 type Row = Record<string, unknown>;
 
@@ -686,4 +687,162 @@ export function mockMemoryStats(windowHours: number, scenario?: ScenarioName): R
       };
     })
     .sort((a, b) => b.retrieves - a.retrieves || b.writes - a.writes);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// routes/cost.ts
+//
+// Seven of the eight reads are the SAME windowed, test-traffic-excluded rows
+// every other surface in this file counts — cost is just another cut of
+// `observability.invocation_traces`, so a change to the corpus above (a
+// telemetry profile's `usdPer1kIn`/`usdPer1kOut`, the tail's token counts)
+// moves these rollups exactly as it moves Drift's and Traffic's. Nothing here
+// is a stored dollar figure: every total is `sum()`/`group()` over
+// `est_cost_usd`/`judge_cost_usd`/`total_cost_usd`, the same fields
+// `traceRows()` already derives from each row's tail entry and its agent's
+// authored per-token rate.
+//
+// `deploy-markers` is the one exception: the route reads
+// `observability.prompt_versions`, not the trace table, and the mock follows
+// it there — `mock/prompt-versions.ts` already carries every field the route
+// needs (agentId, the content whose short SHA IS `prompt_version`,
+// registeredAt, notes), so no new fixture rows are added for this section.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** `SUM(x) FILTER (WHERE cond)` — same skip-NULL rule as `sum()` above. */
+function sumWhere<T>(rows: readonly T[], cond: (r: T) => boolean, value: (r: T) => number | null): number {
+  return sum(rows.filter(cond).map(value));
+}
+
+/** GET /total — the single-row aggregate over the window. */
+export function mockCostTotal(windowHours: number, scenario?: ScenarioName): Row[] {
+  const rows = excludeTestTraffic(tracesInWindow(windowHours, scenario));
+  return [{
+    invocations: rows.length,
+    with_cost: rows.filter((r) => r.total_cost_usd !== null).length,
+    total_cost_usd: sum(rows.map((r) => r.total_cost_usd)),
+    input_tokens: sum(rows.map((r) => r.input_tokens)),
+    output_tokens: sum(rows.map((r) => r.output_tokens)),
+  }];
+}
+
+/** GET /per-agent — `ORDER BY total_cost_usd DESC, invocations DESC`. */
+export function mockCostPerAgent(windowHours: number, scenario?: ScenarioName): Row[] {
+  const rows = excludeTestTraffic(tracesInWindow(windowHours, scenario));
+  return [...group(rows, (r) => r.agent_id).entries()]
+    .map(([agentId, group_]) => ({
+      agent_id: agentId,
+      invocations: group_.length,
+      with_cost: group_.filter((r) => r.total_cost_usd !== null).length,
+      input_tokens: sum(group_.map((r) => r.input_tokens)),
+      output_tokens: sum(group_.map((r) => r.output_tokens)),
+      est_cost_usd: sum(group_.map((r) => r.est_cost_usd)),
+      judge_cost_usd: sum(group_.map((r) => r.judge_cost_usd)),
+      total_cost_usd: sum(group_.map((r) => r.total_cost_usd)),
+    }))
+    .sort((a, b) => b.total_cost_usd - a.total_cost_usd || b.invocations - a.invocations);
+}
+
+/** GET /timeseries — bucketed per-agent cost, optional agent filter. */
+export function mockCostTimeseries(
+  windowHours: number,
+  bucketMin: number,
+  agentId: string | undefined,
+  scenario?: ScenarioName,
+): Row[] {
+  const rows = excludeTestTraffic(tracesInWindow(windowHours, scenario))
+    .filter((r) => !agentId || r.agent_id === agentId);
+  const buckets = group(rows, (r) => `${bucketStart(r.tsIso, bucketMin)}|${r.agent_id}`);
+  return [...buckets.entries()]
+    .map(([key, group_]) => {
+      const [bucket, agent] = key.split('|');
+      return {
+        bucket_start: bucket!,
+        agent_id: agent!,
+        invocations: group_.length,
+        with_cost: group_.filter((r) => r.total_cost_usd !== null).length,
+        total_cost_usd: sum(group_.map((r) => r.total_cost_usd)),
+      };
+    })
+    .sort((a, b) => a.bucket_start.localeCompare(b.bucket_start) || a.agent_id.localeCompare(b.agent_id));
+}
+
+/** GET /top — the most expensive invocations. `total_cost_usd IS NOT NULL` only. */
+export function mockCostTop(windowHours: number, limit: number, scenario?: ScenarioName): Row[] {
+  return excludeTestTraffic(tracesInWindow(windowHours, scenario))
+    .filter((r) => r.total_cost_usd !== null)
+    .sort((a, b) => (b.total_cost_usd ?? 0) - (a.total_cost_usd ?? 0))
+    .slice(0, Math.max(0, limit))
+    .map((r) => ({
+      invocation_id: r.invocation_id,
+      agent_id: r.agent_id,
+      prompt_snippet: r.prompt_snippet,
+      total_cost_usd: r.total_cost_usd,
+      input_tokens: r.input_tokens,
+      output_tokens: r.output_tokens,
+      ts: r.ts,
+      prompt_version: r.prompt_version,
+    }));
+}
+
+/** GET /by-model — `COALESCE(model_id, '(unknown)')`, same ordering as per-agent. */
+export function mockCostByModel(windowHours: number, scenario?: ScenarioName): Row[] {
+  const rows = excludeTestTraffic(tracesInWindow(windowHours, scenario));
+  return [...group(rows, (r) => r.model_id ?? '(unknown)').entries()]
+    .map(([modelId, group_]) => ({
+      model_id: modelId,
+      invocations: group_.length,
+      with_cost: group_.filter((r) => r.total_cost_usd !== null).length,
+      input_tokens: sum(group_.map((r) => r.input_tokens)),
+      output_tokens: sum(group_.map((r) => r.output_tokens)),
+      total_cost_usd: sum(group_.map((r) => r.total_cost_usd)),
+    }))
+    .sort((a, b) => b.total_cost_usd - a.total_cost_usd || b.invocations - a.invocations);
+}
+
+/** GET /a2a-overhead — spend split on `parent_invocation_id IS NOT NULL`. */
+export function mockCostA2AOverhead(windowHours: number, scenario?: ScenarioName): Row[] {
+  const rows = excludeTestTraffic(tracesInWindow(windowHours, scenario));
+  const isA2a = (r: MockTraceRow): boolean => r.parent_invocation_id !== null;
+  return [{
+    total_invocations: rows.length,
+    a2a_invocations: rows.filter(isA2a).length,
+    direct_invocations: rows.filter((r) => !isA2a(r)).length,
+    total_cost_usd: sum(rows.map((r) => r.total_cost_usd)),
+    a2a_cost_usd: sumWhere(rows, isA2a, (r) => r.total_cost_usd),
+    direct_cost_usd: sumWhere(rows, (r) => !isA2a(r), (r) => r.total_cost_usd),
+  }];
+}
+
+/** GET /value-ratio — cost per "good" (`judge_score >= 0.7`) response, per agent. */
+export function mockCostValueRatio(windowHours: number, scenario?: ScenarioName): Row[] {
+  const rows = excludeTestTraffic(tracesInWindow(windowHours, scenario));
+  const isGood = (r: MockTraceRow): boolean => r.judge_score !== null && r.judge_score >= 0.7;
+  return [...group(rows, (r) => r.agent_id).entries()]
+    .map(([agentId, group_]) => ({
+      agent_id: agentId,
+      total_responses: group_.length,
+      total_cost_usd: sum(group_.map((r) => r.total_cost_usd)),
+      good_responses: group_.filter(isGood).length,
+      good_cost_usd: sumWhere(group_, isGood, (r) => r.total_cost_usd),
+    }))
+    .sort((a, b) => a.agent_id.localeCompare(b.agent_id));
+}
+
+/**
+ * GET /deploy-markers — `ORDER BY registered_at ASC`, reading the prompt
+ * registry rather than the trace table. `windowHours` is the route's own
+ * (wider) default/cap; this selector applies whatever it is handed.
+ */
+export function mockCostDeployMarkers(windowHours: number): Row[] {
+  const cutoff = nowMs() - windowHours * 3_600_000;
+  return mockListPromptVersions(10_000)
+    .filter((r) => new Date(r.registeredAt).getTime() > cutoff)
+    .sort((a, b) => a.registeredAt.localeCompare(b.registeredAt))
+    .map((r) => ({
+      prompt_version: r.promptVersion,
+      agent_id: r.agentId,
+      registered_at: r.registeredAt,
+      notes: r.notes,
+    }));
 }

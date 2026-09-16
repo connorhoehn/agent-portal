@@ -214,6 +214,17 @@ export const PARAM_SOURCES: Record<string, string> = {
   // two resolves to the wrong string without one.
   'name@/api/capabilities/guardrail/topics': '/api/capabilities/guardrail#deniedTopics[].name',
   'sessionId@/api/local-compute/sessions': '/api/local-compute/nodes#nodes[].presence.sessions[].sessionId',
+  // `GET /api/work/jobs` carries no auth guard at all (routes/work.ts), so the
+  // `anonymous` persona these local-compute machine-callback writes replay as
+  // can read it — and `agent_jobs` is the ONE table both surfaces share
+  // (mock/agent-jobs.ts backs both `/api/work/jobs` and
+  // `/api/local-compute/jobs/:jobId/*`), so a real, live id is available here
+  // even though this node holds no claim on it. The specs below all bail out
+  // via `unsynthesisable` before that ownership gap matters — see their
+  // `safe`/`build` in write-policy.ts — but a resolvable `:jobId` is what lets
+  // them reach `build` at all instead of failing earlier, at path resolution,
+  // for a less exact reason.
+  'jobId@/api/local-compute/jobs': '/api/work/jobs#id',
   'id@/api/distillation/review': '/api/distillation/review?verdict=pending#id',
   // Unfiltered, the collection's default sort (most-recently-updated first)
   // hands back a published artifact — publish would then 409. Filtering to

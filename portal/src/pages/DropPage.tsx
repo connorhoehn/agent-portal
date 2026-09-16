@@ -78,7 +78,7 @@ export default function DropPage() {
     let cancelled = false;
     void (async () => {
       try {
-        const res = await fetch(`/api/drop/${encodeURIComponent(token)}`);
+        const res = await fetch(`/api/drop/${encodeURIComponent(token)}`, { credentials: 'include' });
         if (!res.ok) { if (!cancelled) setInvalid(true); return; }
         const body = await res.json() as LinkView;
         if (!cancelled) setLink(body);
@@ -126,6 +126,7 @@ export default function DropPage() {
           `/api/drop/${encodeURIComponent(token)}/upload?filename=${encodeURIComponent(file.name)}`,
           {
             method: 'POST',
+            credentials: 'include',
             headers: { 'Content-Type': file.type || 'application/octet-stream' },
             body: file,
           },
@@ -141,7 +142,7 @@ export default function DropPage() {
     }
     // Re-read the link so the remaining-files count reflects what just landed.
     try {
-      const res = await fetch(`/api/drop/${encodeURIComponent(token)}`);
+      const res = await fetch(`/api/drop/${encodeURIComponent(token)}`, { credentials: 'include' });
       if (res.ok) setLink(await res.json() as LinkView);
     } catch { /* the uploads already reported themselves */ }
   }, [token, link?.maxBytes]);

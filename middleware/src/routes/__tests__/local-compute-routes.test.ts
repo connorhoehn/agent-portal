@@ -1065,21 +1065,18 @@ describe('DELETE /api/local-compute/nodes/:id', () => {
     }
   });
 
-  it('a second revoke does not revive the row or the token', async () => {
-    // ⚠️ The STATUS CODE of a repeat revoke diverges between the two provider
-    // branches and is deliberately not asserted here — see the note in the
-    // report accompanying this suite. Aurora's UPDATE carries
-    // `AND revoked_at IS NULL` (providers/local-compute.ts:287) so the second
-    // call matches no row and the route 404s; the MOCK branch
-    // (providers/local-compute.ts:279-284) omits that predicate, returns true
-    // again, and the route answers 200 while re-stamping revoked_at to a later
-    // instant than the actual revocation. Pinning either code here would
-    // freeze one of the two disagreeing answers as correct. What must hold in
-    // both, and is asserted, is that a repeat revoke never brings the machine
-    // or its credential back.
+  it('a second revoke 404s rather than reviving the row or the token', async () => {
+    // Both provider branches carry the same guard now: Aurora's UPDATE has
+    // `AND revoked_at IS NULL` (providers/local-compute.ts revokeNode) and the
+    // mock's `mockRevokeNode` (mock/local-compute.ts) checks `row.revokedAt`
+    // before it stamps — added when the mock moved off the old module-level
+    // `Map`s onto a registered `compute-nodes` fixture. A second revoke
+    // therefore matches no row on EITHER path and the route 404s both ways,
+    // rather than re-stamping `revoked_at` to a later instant.
     const node = await pair({ sub: 'u-mia' }, { label: 'mia-mbp' });
     expect((await request(as('member', 'u-mia')).delete(`/api/local-compute/nodes/${node.nodeId}`)).status).toBe(200);
-    await request(as('member', 'u-mia')).delete(`/api/local-compute/nodes/${node.nodeId}`);
+    const second = await request(as('member', 'u-mia')).delete(`/api/local-compute/nodes/${node.nodeId}`);
+    expect(second.status).toBe(404);
 
     const listed = await request(as('member', 'u-mia')).get('/api/local-compute/nodes');
     expect(listed.body.nodes.map((n: { id: string }) => n.id)).not.toContain(node.nodeId);

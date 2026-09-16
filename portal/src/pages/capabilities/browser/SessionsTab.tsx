@@ -21,6 +21,7 @@ import { useCapabilities } from '../../../lib/capabilities';
 import { useFetch } from '../../../hooks/useFetch';
 import { UnavailableNotice } from '../../../components/UnavailableNotice';
 import { relativeTimeSeconds } from '../../../lib/relativeTime';
+import { toastError } from '../../../lib/toastStore';
 import { SESSIONS_URL, closeSession, launchSession } from './browserApi';
 import { closedSessions, isBlankUrl, openSessions, sessionTone } from './browserFormat';
 import type { BrowserSession } from './types';
@@ -47,6 +48,15 @@ export function SessionsTab() {
   const sessions = data?.sessions ?? [];
   const open = openSessions(sessions);
   const closed = closedSessions(sessions);
+
+  async function handleClose(sessionId: string) {
+    try {
+      await closeSession(sessionId);
+      refresh();
+    } catch (err) {
+      toastError(null, 'Could not close session', err instanceof Error ? err.message : undefined);
+    }
+  }
 
   return (
     <Stack gap="lg">
@@ -105,7 +115,7 @@ export function SessionsTab() {
                         <Button
                           variant="secondary"
                           size="sm"
-                          onClick={() => { void closeSession(session.sessionId).then(refresh); }}
+                          onClick={() => void handleClose(session.sessionId)}
                         >
                           Close
                         </Button>

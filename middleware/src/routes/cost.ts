@@ -21,10 +21,32 @@
 //   GET /a2a-overhead?windowHours=24       (Sprint 3 M7)
 //   GET /value-ratio?windowHours=24        (Sprint 3 M7)
 //   GET /deploy-markers?windowHours=168    (Sprint 3 M7)
+//   GET /summary?windowHours=24&bucketMin=60&limit=20
+//     One-shot envelope over all eight reads above, so a page that renders
+//     one dataset stops firing eight independently-polled requests. Each
+//     section is fetched with the SAME functions the individual routes call
+//     (no duplicated SQL) via Promise.allSettled, so one section's query
+//     blowing up cannot fail the other seven — it lands in that section with
+//     the route's own `degraded` shape and its name is added to the
+//     top-level `degraded` array. `deployMarkers` keeps its own wider
+//     default window (168h) independent of the `windowHours` the other seven
+//     use, exactly as the individual /deploy-markers route does.
 
 import { Router } from 'express';
 import { asyncHandler } from '../lib/async-handler.js';
 import { exec } from '../providers/aurora.js';
+import { config } from '../config.js';
+import {
+  mockCostA2AOverhead,
+  mockCostByModel,
+  mockCostDeployMarkers,
+  mockCostPerAgent,
+  mockCostTimeseries,
+  mockCostTop,
+  mockCostTotal,
+  mockCostValueRatio,
+} from '../mock/observability-queries.js';
+import type { SqlParameter } from '@aws-sdk/client-rds-data';
 
 
 /**
@@ -70,9 +92,11 @@ interface CostTotalResponse {
   windowHours: number;
 }
 
-costRouter.get('/total', asyncHandler(async (req, res) => {
-  const windowHours = clampWindowHours(req.query['windowHours'] as string | undefined);
+function emptyCostTotal(windowHours: number): CostTotalResponse {
+  return { totalCostUsd: 0, invocations: 0, inputTokens: 0, outputTokens: 0, withCost: 0, windowHours };
+}
 
+async function fetchCostTotal(windowHours: number): Promise<CostTotalResponse> {
   const sql = `
     SELECT COUNT(*)::bigint                                         AS invocations,
            COUNT(total_cost_usd)::bigint                             AS with_cost,
@@ -83,29 +107,27 @@ costRouter.get('/total', asyncHandler(async (req, res) => {
      WHERE ts > now() - (INTERVAL '1 hour' * :hours)
        AND (template_id NOT LIKE 'test:%' OR template_id IS NULL)`;
 
+  const rows = config.mock.aurora
+    ? mockCostTotal(windowHours)
+    : await exec(sql, [{ name: 'hours', value: { longValue: windowHours } }]);
+  const r = rows[0] ?? {};
+  return {
+    totalCostUsd: r['total_cost_usd'] == null ? 0 : Number(r['total_cost_usd']),
+    invocations: Number(r['invocations'] ?? 0),
+    inputTokens: Number(r['input_tokens'] ?? 0),
+    outputTokens: Number(r['output_tokens'] ?? 0),
+    withCost: Number(r['with_cost'] ?? 0),
+    windowHours,
+  };
+}
+
+costRouter.get('/total', asyncHandler(async (req, res) => {
+  const windowHours = clampWindowHours(req.query['windowHours'] as string | undefined);
   try {
-    const rows = await exec(sql, [{ name: 'hours', value: { longValue: windowHours } }]);
-    const r = rows[0] ?? {};
-    const out: CostTotalResponse = {
-      totalCostUsd: r['total_cost_usd'] == null ? 0 : Number(r['total_cost_usd']),
-      invocations: Number(r['invocations'] ?? 0),
-      inputTokens: Number(r['input_tokens'] ?? 0),
-      outputTokens: Number(r['output_tokens'] ?? 0),
-      withCost: Number(r['with_cost'] ?? 0),
-      windowHours,
-    };
-    res.json(out);
+    res.json(await fetchCostTotal(windowHours));
   } catch (err) {
     console.warn('[cost] /total failed:', (err as Error).message);
-    const empty: CostTotalResponse = {
-      totalCostUsd: 0,
-      invocations: 0,
-      inputTokens: 0,
-      outputTokens: 0,
-      withCost: 0,
-      windowHours,
-    };
-    res.json(degraded(empty, err));
+    res.json(degraded(emptyCostTotal(windowHours), err));
   }
 }));
 
@@ -128,9 +150,11 @@ interface CostPerAgentResponse {
   windowHours: number;
 }
 
-costRouter.get('/per-agent', asyncHandler(async (req, res) => {
-  const windowHours = clampWindowHours(req.query['windowHours'] as string | undefined);
+function emptyCostPerAgent(windowHours: number): CostPerAgentResponse {
+  return { byAgent: [], withCost: 0, windowHours };
+}
 
+async function fetchCostPerAgent(windowHours: number): Promise<CostPerAgentResponse> {
   const sql = `
     SELECT agent_id,
            COUNT(*)::bigint                                          AS invocations,
@@ -146,26 +170,32 @@ costRouter.get('/per-agent', asyncHandler(async (req, res) => {
      GROUP BY agent_id
      ORDER BY total_cost_usd DESC, invocations DESC`;
 
+  const rows = config.mock.aurora
+    ? mockCostPerAgent(windowHours)
+    : await exec(sql, [{ name: 'hours', value: { longValue: windowHours } }]);
+  let withCost = 0;
+  const byAgent: CostPerAgentRow[] = rows.map((r) => {
+    withCost += Number(r['with_cost'] ?? 0);
+    return {
+      agentId: String(r['agent_id'] ?? 'unknown'),
+      invocations: Number(r['invocations'] ?? 0),
+      inputTokens: Number(r['input_tokens'] ?? 0),
+      outputTokens: Number(r['output_tokens'] ?? 0),
+      estCostUsd: r['est_cost_usd'] == null ? 0 : Number(r['est_cost_usd']),
+      judgeCostUsd: r['judge_cost_usd'] == null ? 0 : Number(r['judge_cost_usd']),
+      totalCostUsd: r['total_cost_usd'] == null ? 0 : Number(r['total_cost_usd']),
+    };
+  });
+  return { byAgent, withCost, windowHours };
+}
+
+costRouter.get('/per-agent', asyncHandler(async (req, res) => {
+  const windowHours = clampWindowHours(req.query['windowHours'] as string | undefined);
   try {
-    const rows = await exec(sql, [{ name: 'hours', value: { longValue: windowHours } }]);
-    let withCost = 0;
-    const byAgent: CostPerAgentRow[] = rows.map((r) => {
-      withCost += Number(r['with_cost'] ?? 0);
-      return {
-        agentId: String(r['agent_id'] ?? 'unknown'),
-        invocations: Number(r['invocations'] ?? 0),
-        inputTokens: Number(r['input_tokens'] ?? 0),
-        outputTokens: Number(r['output_tokens'] ?? 0),
-        estCostUsd: r['est_cost_usd'] == null ? 0 : Number(r['est_cost_usd']),
-        judgeCostUsd: r['judge_cost_usd'] == null ? 0 : Number(r['judge_cost_usd']),
-        totalCostUsd: r['total_cost_usd'] == null ? 0 : Number(r['total_cost_usd']),
-      };
-    });
-    const out: CostPerAgentResponse = { byAgent, withCost, windowHours };
-    res.json(out);
+    res.json(await fetchCostPerAgent(windowHours));
   } catch (err) {
     console.warn('[cost] /per-agent failed:', (err as Error).message);
-    res.json(degraded({ byAgent: [], withCost: 0, windowHours } satisfies CostPerAgentResponse, err));
+    res.json(degraded(emptyCostPerAgent(windowHours), err));
   }
 }));
 
@@ -188,11 +218,15 @@ interface CostTimeseriesResponse {
   windowHours: number;
 }
 
-costRouter.get('/timeseries', asyncHandler(async (req, res) => {
-  const windowHours = clampWindowHours(req.query['windowHours'] as string | undefined);
-  const bucketMin = clampBucketMin(req.query['bucketMin'] as string | undefined);
-  const agentId = (req.query['agentId'] as string | undefined)?.trim();
+function emptyCostTimeseries(windowHours: number, bucketMin: number): CostTimeseriesResponse {
+  return { points: [], withCost: 0, bucketMin, windowHours };
+}
 
+async function fetchCostTimeseries(
+  windowHours: number,
+  bucketMin: number,
+  agentId?: string,
+): Promise<CostTimeseriesResponse> {
   const whereAgent = agentId ? 'AND agent_id = :agent' : '';
   const sql = `
     SELECT to_timestamp(
@@ -210,29 +244,38 @@ costRouter.get('/timeseries', asyncHandler(async (req, res) => {
      GROUP BY bucket_start, agent_id
      ORDER BY bucket_start ASC, agent_id ASC`;
 
-  const params: import('@aws-sdk/client-rds-data').SqlParameter[] = [
+  const params: SqlParameter[] = [
     { name: 'hours',  value: { longValue: windowHours } },
     { name: 'bucket', value: { longValue: bucketMin } },
   ];
   if (agentId) params.push({ name: 'agent', value: { stringValue: agentId } });
 
+  const rows = config.mock.aurora
+    ? mockCostTimeseries(windowHours, bucketMin, agentId)
+    : await exec(sql, params);
+  let withCost = 0;
+  const points: CostTimeseriesPoint[] = rows.map((r) => {
+    withCost += Number(r['with_cost'] ?? 0);
+    return {
+      bucketStart: String(r['bucket_start'] ?? ''),
+      agentId: String(r['agent_id'] ?? ''),
+      invocations: Number(r['invocations'] ?? 0),
+      totalCostUsd: r['total_cost_usd'] == null ? 0 : Number(r['total_cost_usd']),
+    };
+  });
+  return { points, withCost, bucketMin, windowHours };
+}
+
+costRouter.get('/timeseries', asyncHandler(async (req, res) => {
+  const windowHours = clampWindowHours(req.query['windowHours'] as string | undefined);
+  const bucketMin = clampBucketMin(req.query['bucketMin'] as string | undefined);
+  const agentId = (req.query['agentId'] as string | undefined)?.trim();
+
   try {
-    const rows = await exec(sql, params);
-    let withCost = 0;
-    const points: CostTimeseriesPoint[] = rows.map((r) => {
-      withCost += Number(r['with_cost'] ?? 0);
-      return {
-        bucketStart: String(r['bucket_start'] ?? ''),
-        agentId: String(r['agent_id'] ?? ''),
-        invocations: Number(r['invocations'] ?? 0),
-        totalCostUsd: r['total_cost_usd'] == null ? 0 : Number(r['total_cost_usd']),
-      };
-    });
-    const out: CostTimeseriesResponse = { points, withCost, bucketMin, windowHours };
-    res.json(out);
+    res.json(await fetchCostTimeseries(windowHours, bucketMin, agentId));
   } catch (err) {
     console.warn('[cost] /timeseries failed:', (err as Error).message);
-    res.json(degraded({ points: [], withCost: 0, bucketMin, windowHours } satisfies CostTimeseriesResponse, err));
+    res.json(degraded(emptyCostTimeseries(windowHours, bucketMin), err));
   }
 }));
 
@@ -256,10 +299,11 @@ interface CostTopResponse {
   windowHours: number;
 }
 
-costRouter.get('/top', asyncHandler(async (req, res) => {
-  const windowHours = clampWindowHours(req.query['windowHours'] as string | undefined);
-  const limit = clampLimit(req.query['limit'] as string | undefined, 20, 500);
+function emptyCostTop(windowHours: number): CostTopResponse {
+  return { invocations: [], withCost: 0, windowHours };
+}
 
+async function fetchCostTop(windowHours: number, limit: number): Promise<CostTopResponse> {
   // Order by total_cost_usd DESC NULLS LAST so null-cost rows fall to the
   // bottom rather than masking the real top-N. Only rows with a real cost
   // value are interesting in a "most expensive" list.
@@ -279,30 +323,38 @@ costRouter.get('/top', asyncHandler(async (req, res) => {
      ORDER BY total_cost_usd DESC NULLS LAST
      LIMIT :lim`;
 
+  const rows = config.mock.aurora
+    ? mockCostTop(windowHours, limit)
+    : await exec(sql, [
+        { name: 'hours', value: { longValue: windowHours } },
+        { name: 'lim',   value: { longValue: limit } },
+      ]);
+  const invocations: CostTopInvocation[] = rows.map((r) => ({
+    invocationId: String(r['invocation_id'] ?? ''),
+    agentId: String(r['agent_id'] ?? ''),
+    promptSnippet: String(r['prompt_snippet'] ?? ''),
+    totalCostUsd: r['total_cost_usd'] == null ? 0 : Number(r['total_cost_usd']),
+    inputTokens: Number(r['input_tokens'] ?? 0),
+    outputTokens: Number(r['output_tokens'] ?? 0),
+    ts: String(r['ts'] ?? ''),
+    promptVersion: r['prompt_version'] == null ? null : String(r['prompt_version']),
+  }));
+  return {
+    invocations,
+    withCost: invocations.length,
+    windowHours,
+  };
+}
+
+costRouter.get('/top', asyncHandler(async (req, res) => {
+  const windowHours = clampWindowHours(req.query['windowHours'] as string | undefined);
+  const limit = clampLimit(req.query['limit'] as string | undefined, 20, 500);
+
   try {
-    const rows = await exec(sql, [
-      { name: 'hours', value: { longValue: windowHours } },
-      { name: 'lim',   value: { longValue: limit } },
-    ]);
-    const invocations: CostTopInvocation[] = rows.map((r) => ({
-      invocationId: String(r['invocation_id'] ?? ''),
-      agentId: String(r['agent_id'] ?? ''),
-      promptSnippet: String(r['prompt_snippet'] ?? ''),
-      totalCostUsd: r['total_cost_usd'] == null ? 0 : Number(r['total_cost_usd']),
-      inputTokens: Number(r['input_tokens'] ?? 0),
-      outputTokens: Number(r['output_tokens'] ?? 0),
-      ts: String(r['ts'] ?? ''),
-      promptVersion: r['prompt_version'] == null ? null : String(r['prompt_version']),
-    }));
-    const out: CostTopResponse = {
-      invocations,
-      withCost: invocations.length,
-      windowHours,
-    };
-    res.json(out);
+    res.json(await fetchCostTop(windowHours, limit));
   } catch (err) {
     console.warn('[cost] /top failed:', (err as Error).message);
-    res.json(degraded({ invocations: [], withCost: 0, windowHours } satisfies CostTopResponse, err));
+    res.json(degraded(emptyCostTop(windowHours), err));
   }
 }));
 
@@ -323,9 +375,11 @@ interface CostByModelResponse {
   windowHours: number;
 }
 
-costRouter.get('/by-model', asyncHandler(async (req, res) => {
-  const windowHours = clampWindowHours(req.query['windowHours'] as string | undefined);
+function emptyCostByModel(windowHours: number): CostByModelResponse {
+  return { byModel: [], withCost: 0, windowHours };
+}
 
+async function fetchCostByModel(windowHours: number): Promise<CostByModelResponse> {
   // COALESCE model_id → '(unknown)' so older rows without provenance still
   // appear (so total$ across models == total$ for the window). They're easy
   // to filter in the UI if a user wants only labeled rows.
@@ -342,24 +396,30 @@ costRouter.get('/by-model', asyncHandler(async (req, res) => {
      GROUP BY COALESCE(model_id, '(unknown)')
      ORDER BY total_cost_usd DESC, invocations DESC`;
 
+  const rows = config.mock.aurora
+    ? mockCostByModel(windowHours)
+    : await exec(sql, [{ name: 'hours', value: { longValue: windowHours } }]);
+  let withCost = 0;
+  const byModel: CostByModelRow[] = rows.map((r) => {
+    withCost += Number(r['with_cost'] ?? 0);
+    return {
+      modelId: String(r['model_id'] ?? '(unknown)'),
+      invocations: Number(r['invocations'] ?? 0),
+      inputTokens: Number(r['input_tokens'] ?? 0),
+      outputTokens: Number(r['output_tokens'] ?? 0),
+      totalCostUsd: r['total_cost_usd'] == null ? 0 : Number(r['total_cost_usd']),
+    };
+  });
+  return { byModel, withCost, windowHours };
+}
+
+costRouter.get('/by-model', asyncHandler(async (req, res) => {
+  const windowHours = clampWindowHours(req.query['windowHours'] as string | undefined);
   try {
-    const rows = await exec(sql, [{ name: 'hours', value: { longValue: windowHours } }]);
-    let withCost = 0;
-    const byModel: CostByModelRow[] = rows.map((r) => {
-      withCost += Number(r['with_cost'] ?? 0);
-      return {
-        modelId: String(r['model_id'] ?? '(unknown)'),
-        invocations: Number(r['invocations'] ?? 0),
-        inputTokens: Number(r['input_tokens'] ?? 0),
-        outputTokens: Number(r['output_tokens'] ?? 0),
-        totalCostUsd: r['total_cost_usd'] == null ? 0 : Number(r['total_cost_usd']),
-      };
-    });
-    const out: CostByModelResponse = { byModel, withCost, windowHours };
-    res.json(out);
+    res.json(await fetchCostByModel(windowHours));
   } catch (err) {
     console.warn('[cost] /by-model failed:', (err as Error).message);
-    res.json(degraded({ byModel: [], withCost: 0, windowHours } satisfies CostByModelResponse, err));
+    res.json(degraded(emptyCostByModel(windowHours), err));
   }
 }));
 
@@ -380,9 +440,19 @@ interface CostA2AOverheadResponse {
   windowHours: number;
 }
 
-costRouter.get('/a2a-overhead', asyncHandler(async (req, res) => {
-  const windowHours = clampWindowHours(req.query['windowHours'] as string | undefined);
+function emptyCostA2AOverhead(windowHours: number): CostA2AOverheadResponse {
+  return {
+    totalCostUsd: 0,
+    a2aCostUsd: 0,
+    directCostUsd: 0,
+    a2aFraction: 0,
+    a2aInvocations: 0,
+    directInvocations: 0,
+    windowHours,
+  };
+}
 
+async function fetchCostA2AOverhead(windowHours: number): Promise<CostA2AOverheadResponse> {
   // SUM(...) FILTER (WHERE ...) gives us both branches in a single round-trip
   // without GROUP BY gymnastics. Cost columns may be NULL on older rows — the
   // COALESCE keeps the totals zero-safe.
@@ -399,34 +469,31 @@ costRouter.get('/a2a-overhead', asyncHandler(async (req, res) => {
      WHERE ts > now() - (INTERVAL '1 hour' * :hours)
        AND (template_id NOT LIKE 'test:%' OR template_id IS NULL)`;
 
+  const rows = config.mock.aurora
+    ? mockCostA2AOverhead(windowHours)
+    : await exec(sql, [{ name: 'hours', value: { longValue: windowHours } }]);
+  const r = rows[0] ?? {};
+  const totalCostUsd = r['total_cost_usd'] == null ? 0 : Number(r['total_cost_usd']);
+  const a2aCostUsd = r['a2a_cost_usd'] == null ? 0 : Number(r['a2a_cost_usd']);
+  const directCostUsd = r['direct_cost_usd'] == null ? 0 : Number(r['direct_cost_usd']);
+  return {
+    totalCostUsd,
+    a2aCostUsd,
+    directCostUsd,
+    a2aFraction: totalCostUsd > 0 ? a2aCostUsd / totalCostUsd : 0,
+    a2aInvocations: Number(r['a2a_invocations'] ?? 0),
+    directInvocations: Number(r['direct_invocations'] ?? 0),
+    windowHours,
+  };
+}
+
+costRouter.get('/a2a-overhead', asyncHandler(async (req, res) => {
+  const windowHours = clampWindowHours(req.query['windowHours'] as string | undefined);
   try {
-    const rows = await exec(sql, [{ name: 'hours', value: { longValue: windowHours } }]);
-    const r = rows[0] ?? {};
-    const totalCostUsd = r['total_cost_usd'] == null ? 0 : Number(r['total_cost_usd']);
-    const a2aCostUsd = r['a2a_cost_usd'] == null ? 0 : Number(r['a2a_cost_usd']);
-    const directCostUsd = r['direct_cost_usd'] == null ? 0 : Number(r['direct_cost_usd']);
-    const out: CostA2AOverheadResponse = {
-      totalCostUsd,
-      a2aCostUsd,
-      directCostUsd,
-      a2aFraction: totalCostUsd > 0 ? a2aCostUsd / totalCostUsd : 0,
-      a2aInvocations: Number(r['a2a_invocations'] ?? 0),
-      directInvocations: Number(r['direct_invocations'] ?? 0),
-      windowHours,
-    };
-    res.json(out);
+    res.json(await fetchCostA2AOverhead(windowHours));
   } catch (err) {
     console.warn('[cost] /a2a-overhead failed:', (err as Error).message);
-    const empty: CostA2AOverheadResponse = {
-      totalCostUsd: 0,
-      a2aCostUsd: 0,
-      directCostUsd: 0,
-      a2aFraction: 0,
-      a2aInvocations: 0,
-      directInvocations: 0,
-      windowHours,
-    };
-    res.json(degraded(empty, err));
+    res.json(degraded(emptyCostA2AOverhead(windowHours), err));
   }
 }));
 
@@ -451,9 +518,11 @@ interface CostValueRatioResponse {
   windowHours: number;
 }
 
-costRouter.get('/value-ratio', asyncHandler(async (req, res) => {
-  const windowHours = clampWindowHours(req.query['windowHours'] as string | undefined);
+function emptyCostValueRatio(windowHours: number): CostValueRatioResponse {
+  return { byAgent: [], windowHours };
+}
 
+async function fetchCostValueRatio(windowHours: number): Promise<CostValueRatioResponse> {
   // Compute "good" cost+count branches inline using FILTER. costPerGood comes
   // from the client side (null when goodResponses == 0).
   const sql = `
@@ -469,28 +538,34 @@ costRouter.get('/value-ratio', asyncHandler(async (req, res) => {
      GROUP BY agent_id
      ORDER BY agent_id ASC`;
 
+  const rows = config.mock.aurora
+    ? mockCostValueRatio(windowHours)
+    : await exec(sql, [{ name: 'hours', value: { longValue: windowHours } }]);
+  const byAgent: CostValueRatioRow[] = rows.map((r) => {
+    const totalResponses = Number(r['total_responses'] ?? 0);
+    const totalCostUsd = r['total_cost_usd'] == null ? 0 : Number(r['total_cost_usd']);
+    const goodResponses = Number(r['good_responses'] ?? 0);
+    const goodCostUsd = r['good_cost_usd'] == null ? 0 : Number(r['good_cost_usd']);
+    return {
+      agentId: String(r['agent_id'] ?? 'unknown'),
+      goodResponses,
+      goodCostUsd,
+      costPerGood: goodResponses > 0 ? goodCostUsd / goodResponses : null,
+      totalResponses,
+      totalCostUsd,
+      goodRate: totalResponses > 0 ? goodResponses / totalResponses : 0,
+    };
+  });
+  return { byAgent, windowHours };
+}
+
+costRouter.get('/value-ratio', asyncHandler(async (req, res) => {
+  const windowHours = clampWindowHours(req.query['windowHours'] as string | undefined);
   try {
-    const rows = await exec(sql, [{ name: 'hours', value: { longValue: windowHours } }]);
-    const byAgent: CostValueRatioRow[] = rows.map((r) => {
-      const totalResponses = Number(r['total_responses'] ?? 0);
-      const totalCostUsd = r['total_cost_usd'] == null ? 0 : Number(r['total_cost_usd']);
-      const goodResponses = Number(r['good_responses'] ?? 0);
-      const goodCostUsd = r['good_cost_usd'] == null ? 0 : Number(r['good_cost_usd']);
-      return {
-        agentId: String(r['agent_id'] ?? 'unknown'),
-        goodResponses,
-        goodCostUsd,
-        costPerGood: goodResponses > 0 ? goodCostUsd / goodResponses : null,
-        totalResponses,
-        totalCostUsd,
-        goodRate: totalResponses > 0 ? goodResponses / totalResponses : 0,
-      };
-    });
-    const out: CostValueRatioResponse = { byAgent, windowHours };
-    res.json(out);
+    res.json(await fetchCostValueRatio(windowHours));
   } catch (err) {
     console.warn('[cost] /value-ratio failed:', (err as Error).message);
-    res.json(degraded({ byAgent: [], windowHours } satisfies CostValueRatioResponse, err));
+    res.json(degraded(emptyCostValueRatio(windowHours), err));
   }
 }));
 
@@ -511,15 +586,11 @@ interface CostDeployMarkersResponse {
   windowHours: number;
 }
 
-costRouter.get('/deploy-markers', asyncHandler(async (req, res) => {
-  // Default to a 7-day window — deploy markers are sparse, so a wider lookback
-  // is more useful when the user picks a tight cost window.
-  const windowHours = clampWindowHours(
-    req.query['windowHours'] as string | undefined,
-    168,
-    24 * 30,
-  );
+function emptyCostDeployMarkers(windowHours: number): CostDeployMarkersResponse {
+  return { markers: [], windowHours };
+}
 
+async function fetchCostDeployMarkers(windowHours: number): Promise<CostDeployMarkersResponse> {
   const sql = `
     SELECT prompt_version,
            agent_id,
@@ -529,18 +600,114 @@ costRouter.get('/deploy-markers', asyncHandler(async (req, res) => {
      WHERE registered_at > now() - (INTERVAL '1 hour' * :hours)
      ORDER BY registered_at ASC`;
 
+  const rows = config.mock.aurora
+    ? mockCostDeployMarkers(windowHours)
+    : await exec(sql, [{ name: 'hours', value: { longValue: windowHours } }]);
+  const markers: CostDeployMarker[] = rows.map((r) => ({
+    promptVersion: String(r['prompt_version'] ?? ''),
+    agentId: String(r['agent_id'] ?? ''),
+    registeredAt: String(r['registered_at'] ?? ''),
+    notes: r['notes'] == null ? null : String(r['notes']),
+  }));
+  return { markers, windowHours };
+}
+
+costRouter.get('/deploy-markers', asyncHandler(async (req, res) => {
+  // Default to a 7-day window — deploy markers are sparse, so a wider lookback
+  // is more useful when the user picks a tight cost window.
+  const windowHours = clampWindowHours(
+    req.query['windowHours'] as string | undefined,
+    168,
+    24 * 30,
+  );
+
   try {
-    const rows = await exec(sql, [{ name: 'hours', value: { longValue: windowHours } }]);
-    const markers: CostDeployMarker[] = rows.map((r) => ({
-      promptVersion: String(r['prompt_version'] ?? ''),
-      agentId: String(r['agent_id'] ?? ''),
-      registeredAt: String(r['registered_at'] ?? ''),
-      notes: r['notes'] == null ? null : String(r['notes']),
-    }));
-    const out: CostDeployMarkersResponse = { markers, windowHours };
-    res.json(out);
+    res.json(await fetchCostDeployMarkers(windowHours));
   } catch (err) {
     console.warn('[cost] /deploy-markers failed:', (err as Error).message);
-    res.json(degraded({ markers: [], windowHours } satisfies CostDeployMarkersResponse, err));
+    res.json(degraded(emptyCostDeployMarkers(windowHours), err));
   }
+}));
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /summary — All eight sections above in one envelope.
+//
+// The portal's CostPage fired all eight (seven on the primary window, one
+// pinned to a 168h deploy-marker lookback) every 30s for what is one
+// dataset. This composes the SAME fetch functions the individual routes call
+// via Promise.allSettled: one section failing marks it `degraded` in the
+// envelope rather than taking the other seven down with it (matching how a
+// single route already answers 200 + degraded rather than 500).
+// `deployMarkers` keeps its own default 168h/30d-cap window, independent of
+// `windowHours`, exactly like GET /deploy-markers does on its own.
+// ─────────────────────────────────────────────────────────────────────────────
+interface CostSummaryResponse {
+  windowHours: number;
+  sections: {
+    total: CostTotalResponse;
+    perAgent: CostPerAgentResponse;
+    timeseries: CostTimeseriesResponse;
+    top: CostTopResponse;
+    byModel: CostByModelResponse;
+    a2aOverhead: CostA2AOverheadResponse;
+    valueRatio: CostValueRatioResponse;
+    deployMarkers: CostDeployMarkersResponse;
+  };
+  degraded: string[];
+}
+
+costRouter.get('/summary', asyncHandler(async (req, res) => {
+  const windowHours = clampWindowHours(req.query['windowHours'] as string | undefined);
+  const bucketMin = clampBucketMin(req.query['bucketMin'] as string | undefined);
+  const limit = clampLimit(req.query['limit'] as string | undefined, 20, 500);
+  const agentId = (req.query['agentId'] as string | undefined)?.trim();
+  const deployWindowHours = clampWindowHours(
+    req.query['deployWindowHours'] as string | undefined,
+    168,
+    24 * 30,
+  );
+
+  const sections = [
+    { name: 'total' as const, run: () => fetchCostTotal(windowHours), empty: emptyCostTotal(windowHours) },
+    { name: 'perAgent' as const, run: () => fetchCostPerAgent(windowHours), empty: emptyCostPerAgent(windowHours) },
+    {
+      name: 'timeseries' as const,
+      run: () => fetchCostTimeseries(windowHours, bucketMin, agentId),
+      empty: emptyCostTimeseries(windowHours, bucketMin),
+    },
+    { name: 'top' as const, run: () => fetchCostTop(windowHours, limit), empty: emptyCostTop(windowHours) },
+    { name: 'byModel' as const, run: () => fetchCostByModel(windowHours), empty: emptyCostByModel(windowHours) },
+    {
+      name: 'a2aOverhead' as const,
+      run: () => fetchCostA2AOverhead(windowHours),
+      empty: emptyCostA2AOverhead(windowHours),
+    },
+    {
+      name: 'valueRatio' as const,
+      run: () => fetchCostValueRatio(windowHours),
+      empty: emptyCostValueRatio(windowHours),
+    },
+    {
+      name: 'deployMarkers' as const,
+      run: () => fetchCostDeployMarkers(deployWindowHours),
+      empty: emptyCostDeployMarkers(deployWindowHours),
+    },
+  ];
+
+  const results = await Promise.allSettled(sections.map((s) => s.run()));
+  const degradedNames: string[] = [];
+  const out = {} as CostSummaryResponse['sections'];
+  results.forEach((r, i) => {
+    const s = sections[i]!;
+    if (r.status === 'fulfilled') {
+      (out as Record<string, unknown>)[s.name] = r.value;
+    } else {
+      console.warn(`[cost] /summary section "${s.name}" failed:`, (r.reason as Error).message);
+      (out as Record<string, unknown>)[s.name] = degraded(s.empty, r.reason);
+      degradedNames.push(s.name);
+    }
+  });
+
+  const out2: CostSummaryResponse = { windowHours, sections: out, degraded: degradedNames };
+  res.json(out2);
 }));

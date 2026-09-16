@@ -16,7 +16,7 @@ import {
   Stack,
 } from '@connorhoehnslalom/ui-components/shared';
 import { ProvisioningProgress } from '../../../components/kb/ProvisioningProgress.js';
-import { writeJson } from './writeJson';
+import { writeJson } from '../../../lib/writeJson';
 import type { KbRegistryEntry } from './types';
 
 export function ProvisionModal({

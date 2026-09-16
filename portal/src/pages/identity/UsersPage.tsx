@@ -26,6 +26,7 @@ import { useSession } from '../../lib/auth';
 import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch';
 import { toastError } from '../../lib/toastStore';
+import { sendJson } from '../../lib/writeJson';
 import { UnavailableNotice, orUnknown } from '../../components/UnavailableNotice';
 import {
   grantChipLabels,
@@ -44,20 +45,6 @@ interface UserInfo {
   email: string | null;
   personId: string | null;
   grants: Record<string, string[]>;
-}
-
-async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(path, {
-    credentials: 'include',
-    headers: init?.body ? { 'Content-Type': 'application/json' } : undefined,
-    ...init,
-  });
-  if (!res.ok) {
-    let msg = `${res.status}`;
-    try { msg = ((await res.json()) as { error?: string }).error ?? msg; } catch { /* keep status */ }
-    throw new Error(msg);
-  }
-  return (await res.json()) as T;
 }
 
 function UsersPage() {
@@ -126,10 +113,7 @@ function UsersPage() {
   const saveGrants = () => run(async () => {
     if (!grantsUser) return;
     const userId = grantsUser.id;
-    await api(`/api/identity/users/${userId}/grants`, {
-      method: 'PUT',
-      body: JSON.stringify({ grants: draftGrants }),
-    });
+    await sendJson(`/api/identity/users/${userId}/grants`, 'PUT', { grants: draftGrants });
     setGrantsUser(null);
     load();
     // If we just edited the signed-in user, their session grants are stale
@@ -141,10 +125,7 @@ function UsersPage() {
   // the create form only sets this at creation, so this is the only route an
   // operator with an unlinked account (or anyone else's) can use to fix it.
   const linkPerson = (userId: string, personId: string | null) => run(async () => {
-    await api(`/api/identity/users/${userId}/person`, {
-      method: 'PUT',
-      body: JSON.stringify({ personId }),
-    });
+    await sendJson(`/api/identity/users/${userId}/person`, 'PUT', { personId });
     load();
   });
 
@@ -278,7 +259,7 @@ function UsersPage() {
           error={error}
           onCancel={() => setShowNewTenant(false)}
           onSubmit={(id, name) => run(async () => {
-            await api('/api/identity/tenants', { method: 'POST', body: JSON.stringify({ id, displayName: name }) });
+            await sendJson('/api/identity/tenants', 'POST', { id, displayName: name });
             setShowNewTenant(false);
             load();
           })}
@@ -297,7 +278,7 @@ function UsersPage() {
           rolesForTenant={rolesForTenant}
           onCancel={() => setShowNewUser(false)}
           onSubmit={(input) => run(async () => {
-            await api('/api/identity/users', { method: 'POST', body: JSON.stringify(input) });
+            await sendJson('/api/identity/users', 'POST', input);
             setShowNewUser(false);
             load();
           })}

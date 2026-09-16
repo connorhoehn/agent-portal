@@ -457,6 +457,7 @@ export function KBCreateWizard({ open, onClose, onCreated }: KBCreateWizardProps
     try {
       const res = await fetch(
         `/api/admin/kb-registry/check?slug=${encodeURIComponent(step1.slug)}&name=${encodeURIComponent(step1.name.trim())}`,
+        { credentials: 'include' },
       );
       if (!res.ok) {
         const body = await res.json().catch(() => ({})) as { error?: string };
@@ -492,6 +493,7 @@ export function KBCreateWizard({ open, onClose, onCreated }: KBCreateWizardProps
     try {
       const res = await fetch('/api/admin/kb-registry', {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name:             step1.name.trim(),

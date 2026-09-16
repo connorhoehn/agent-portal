@@ -8,6 +8,7 @@ import { useEffect, useReducer, useState, type KeyboardEvent } from 'react';
 import {
   Button,
   Card,
+  ConfirmDialog,
   FormField,
   InlineAlert,
   InlinePlaceholder,
@@ -188,6 +189,9 @@ export function GrantsPanel({ sprint, onChanged }: { sprint: Sprint; onChanged: 
   // identically, with no dependency on frame scheduling.
   const [pendingFocus, setPendingFocus] = useState<string | null>(null);
 
+  // Revoking a grant is irreversible money — confirm before the DELETE.
+  const [confirmRevoke, setConfirmRevoke] = useState<GrantRow | null>(null);
+
   useEffect(() => {
     if (!pendingFocus) return;
     document.querySelector<HTMLElement>(pendingFocus)?.focus();
@@ -255,6 +259,7 @@ export function GrantsPanel({ sprint, onChanged }: { sprint: Sprint; onChanged: 
     setBusy(true);
     const res = await writeJson<{ ok: true }>(grantUrl(g.id), 'DELETE');
     setBusy(false);
+    setConfirmRevoke(null);
     if (!res.ok) { toastError(null, 'Could not revoke grant', res.error ?? ''); return; }
     toastSuccess(null, 'Envelope revoked', `${g.granteeName ?? 'grantee'}'s grant removed.`);
     reload();
@@ -315,12 +320,25 @@ export function GrantsPanel({ sprint, onChanged }: { sprint: Sprint; onChanged: 
                 onEdit={() => openEdit(g.id)}
                 onCancelEdit={() => closeEdit(g.id)}
                 onSave={(amount, note) => void saveEdit(g.id, amount, note)}
-                onRevoke={() => void revoke(g)}
+                onRevoke={() => setConfirmRevoke(g)}
               />
             ))}
           </TableBody>
         </Table>
       )}
+
+      <ConfirmDialog
+        open={confirmRevoke != null}
+        tone="destructive"
+        title="Revoke grant?"
+        body={confirmRevoke
+          ? `${confirmRevoke.granteeName ?? confirmRevoke.granteePersonId}'s ${usd(confirmRevoke.allocatedUsd)} envelope is removed immediately. This cannot be undone.`
+          : ''}
+        confirmLabel={busy ? 'Revoking…' : 'Revoke grant'}
+        confirmDisabled={busy}
+        onConfirm={() => { if (confirmRevoke) void revoke(confirmRevoke); }}
+        onCancel={() => setConfirmRevoke(null)}
+      />
     </Stack>
   );
 }

@@ -19,6 +19,7 @@ import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';
 import { absoluteTime } from '../../lib/relativeTime';
 import { toastPending, toastSuccess, toastError } from '../../lib/toastStore';
+import { writeJson } from '../../lib/writeJson';
 import { PROPOSAL_STATUS_CHIP, T } from './workShared';
 
 interface Proposal {
@@ -90,18 +91,11 @@ export default function GraphChangesPage() {
   // permanently with nothing a reviewer could do about it.
   async function decide(p: Proposal, decision: 'approve' | 'reject') {
     const tid = toastPending(decision === 'approve' ? 'Retrying' : 'Rejecting', p.rationale ?? p.kind);
-    try {
-      const res = await fetch(`/api/work/proposals/${p.id}/decide`, {
-        method: 'POST', credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ decision }),
-      });
-      const body = await res.json() as Proposal;
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      if (body.status === 'failed') toastError(tid, 'Still failing', body.applyError ?? 'unknown error');
-      else toastSuccess(tid, body.status === 'applied' ? 'Applied to the graph' : 'Rejected');
-      void refresh();
-    } catch (err) { toastError(tid, 'Could not decide', (err as Error).message); }
+    const res = await writeJson<Proposal>(`/api/work/proposals/${p.id}/decide`, 'POST', { decision });
+    if (!res.ok || !res.data) { toastError(tid, 'Could not decide', res.error ?? 'unknown error'); return; }
+    if (res.data.status === 'failed') toastError(tid, 'Still failing', res.data.applyError ?? 'unknown error');
+    else toastSuccess(tid, res.data.status === 'applied' ? 'Applied to the graph' : 'Rejected');
+    void refresh();
   }
 
   const proposals = useMemo(() => {

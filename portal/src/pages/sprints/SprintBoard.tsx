@@ -24,7 +24,7 @@ import { T } from './Text';
 import { toastError, toastSuccess } from '../../lib/toastStore';
 import { sprintItemUrl, sprintItemsUrl } from './sprintForm';
 import { addableItems, bucketByColumn, PRIORITY_TONE, usd } from './sprintFormat';
-import { writeJson } from './writeJson';
+import { writeJson } from '../../lib/writeJson';
 import type { WorkItem, WorkTreeNode } from './types';
 
 // Move an item INTO this sprint. The candidate list is the initiative's work

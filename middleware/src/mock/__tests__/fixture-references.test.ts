@@ -48,10 +48,16 @@
 //     the literal string is pinned by
 //     providers/__tests__/promotions.test.ts, so it must not be "fixed" into
 //     resolving.
-//   * `Finding.jobId` / `BotRun.jobId` ('job-<slug>-maint-N') — references the
-//     `agent_jobs` table, which has no registered fixture at all (no fixture
-//     anywhere declares a job's row shape), so there is nothing to resolve
-//     against.
+//   * `BotRun.jobId` ('job-<slug>-maint-N') now DOES resolve, against
+//     mock/agent-jobs.ts's `agent-jobs` fixture — it registers a matching row
+//     for every bot-run jobId (see that module's seed), so every seeded
+//     `job-<slug>-maint-N` has one to find. `Finding.jobId` is never checked
+//     against it: every seeded finding carries `jobId: null` (no finding in
+//     mock/org-findings.ts has ever been promoted into a job in the fixture
+//     sense), and `checkValue` skips null values the same way it skips every
+//     other absent reference. The `jobId` resolver itself is restricted to
+//     `bot-runs` (`onlyInFixture`) because `mock/knowledge-base.ts` reuses the
+//     same field name for an unrelated Bedrock KB ingestion job id.
 //   * `ReviewRow.reviewer` / `ChangeRow.decidedBy` / local-compute's `ownerId`
 //     values like 'u-nora', 'agent', 'demo-user' — an `app_user` identity or a
 //     literal, not an org-graph person id. Handled by shape-gating rather than
@@ -95,6 +101,7 @@ import { teamsFixture } from '../assessment.js';
 import { githubRepoRows } from '../github.js';
 import { agentProjects } from '../agent-projects.js';
 import { libraryAssets } from '../prompt-library.js';
+import { agentJobs } from '../agent-jobs.js';
 
 type Json = null | boolean | number | string | Json[] | { [k: string]: Json };
 
@@ -110,6 +117,7 @@ const sprintIds = new Set(sprints.rows('default').map((s) => s.id));
 const teamIds = new Set(teamsFixture.rows('default').map((t) => t.id));
 const agentProjectUuids = new Set(agentProjects.rows('default').map((p) => p.id));
 const libraryAssetIds = new Set(libraryAssets.rows('default').map((a) => a.id));
+const agentJobIds = new Set(agentJobs.rows('default').map((j) => j.id));
 const repoFullNames = new Set([
   ...githubRepoRows.rows('default').map((r) => r.fullName),
   ...agentProjects.rows('default').map((p) => p.repoFullName),
@@ -149,6 +157,17 @@ const team: Resolver = { target: 'a team id in mock/assessment.ts', ok: (v) => t
 const repoFullName: Resolver = { target: 'a repo full name in mock/github.ts or mock/agent-projects.ts', ok: (v) => repoFullNames.has(v) };
 const libraryAsset: Resolver = { target: 'a library asset id in mock/prompt-library.ts', ok: (v) => libraryAssetIds.has(v) };
 const agentProjectId: Resolver = { target: 'an agent_projects uuid in mock/agent-projects.ts', ok: (v) => agentProjectUuids.has(v) };
+/** `jobId` is overloaded too: `BotRun.jobId` (mock/bots.ts) references
+ *  `agent_jobs`, but `mock/knowledge-base.ts`'s ingestion-job rows use the
+ *  SAME field name for a Bedrock KB job id ('IJMOCK0003') — a different id
+ *  space entirely, not a row this fixture could ever seed. Restricted to
+ *  `bot-runs` rather than shape-gated, because both id shapes are free text
+ *  and a prefix check would be one more thing to keep in sync with the seed. */
+const agentJob: Resolver = {
+  target: 'an agent_jobs id in mock/agent-jobs.ts',
+  ok: (v) => agentJobIds.has(v),
+  onlyInFixture: 'bot-runs',
+};
 /** `projectId` is overloaded: an initiative slug (decisions.ts, work-items.ts,
  *  local-compute.ts) or an `agent_projects` uuid (agent-project-runs.ts,
  *  sdlc.ts) — branch on the value's own shape rather than the field name. */
@@ -168,6 +187,7 @@ const FIELD_RESOLVERS: Record<string, Resolver> = {
   holderIds: person,
   decisionId: decision,
   botId: bot,
+  jobId: agentJob,
   workItemId: workItem,
   parentId: workItem,
   sprintId: sprint,

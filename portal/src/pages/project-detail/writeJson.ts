@@ -7,7 +7,10 @@
 // make the confirm explicit — the caller reverts or reconciles on failure.
 
 import { toastError, toastInfo } from '../../lib/toastStore';
+import { sendJson, HttpError } from '../../lib/writeJson';
 import type { WorkItemTree } from './types';
+
+export { sendJson, HttpError };
 
 /** Rewrite every node in a tree, children first. */
 export function mapTree(nodes: WorkItemTree[], fn: (n: WorkItemTree) => WorkItemTree): WorkItemTree[] {
@@ -26,24 +29,6 @@ export function insertChild(nodes: WorkItemTree[], parentId: string, child: Work
   return nodes.map((n) => (n.id === parentId
     ? { ...n, children: [...n.children, child] }
     : { ...n, children: insertChild(n.children, parentId, child) }));
-}
-
-export class HttpError extends Error {
-  constructor(public status: number, message: string) { super(message); }
-}
-
-/** Send a write and insist on an answer. Non-2xx throws with the server's own
- *  message, so a refusal can never be mistaken for success. */
-export async function sendJson<T>(url: string, method: 'POST' | 'PATCH', body: unknown): Promise<T> {
-  const res = await fetch(url, {
-    method,
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  const payload = await res.json().catch(() => ({})) as { error?: string };
-  if (!res.ok) throw new HttpError(res.status, payload.error ?? `HTTP ${res.status}`);
-  return payload as T;
 }
 
 /** Say what actually went wrong. 403 is a missing authority, not a bug; a

@@ -35,6 +35,7 @@ import { useFetch } from '../../hooks/useFetch';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { useCapabilities } from '../../lib/capabilities';
 import { toastError, toastPending, toastSuccess } from '../../lib/toastStore';
+import { writeJson } from '../../lib/writeJson';
 import {
   KIND_TONE, PROPOSED_LABEL, STATUS_LABEL, STATUS_PILL_STATE, STATUS_TONE,
   allowedActions, filterPromotions, isTerminalStatus, nextStep, readyToPromote, supportLine,
@@ -49,14 +50,6 @@ const FILTERS: Array<{ value: string; label: string }> = [
   { value: 'promoted', label: 'Promoted' },
   { value: 'dismissed', label: 'Dismissed' },
 ];
-
-async function post(url: string, body: unknown): Promise<Response> {
-  return fetch(url, {
-    method: 'POST', credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-}
 
 function ObservationRow({ o }: { o: PromotionCandidate['observations'][number] }) {
   return (
@@ -223,10 +216,9 @@ export default function PromotionsPage() {
     setActionError(null);
     const tid = toastPending('Promoting', 'recording approval');
     try {
-      const res = await post(`/api/promotions/${encodeURIComponent(id)}/promote`, { dryRunPassed });
-      const body = await res.json() as PromotionCandidate & { error?: string };
-      if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
-      toastSuccess(tid, body.status === 'promoted' ? 'Promoted' : 'Approval recorded', nextStep(body));
+      const res = await writeJson<PromotionCandidate>(`/api/promotions/${encodeURIComponent(id)}/promote`, 'POST', { dryRunPassed });
+      if (!res.ok || !res.data) throw new Error(res.error ?? 'unknown error');
+      toastSuccess(tid, res.data.status === 'promoted' ? 'Promoted' : 'Approval recorded', nextStep(res.data));
     } catch (err) {
       const message = (err as Error).message;
       toastError(tid, 'Could not promote', message);
@@ -247,8 +239,8 @@ export default function PromotionsPage() {
     setActionError(null);
     const tid = toastPending('Dismissing');
     try {
-      const res = await post(`/api/promotions/${encodeURIComponent(id)}/dismiss`, { reason });
-      if (!res.ok) throw new Error((await res.json() as { error?: string }).error ?? `HTTP ${res.status}`);
+      const res = await writeJson(`/api/promotions/${encodeURIComponent(id)}/dismiss`, 'POST', { reason });
+      if (!res.ok) throw new Error(res.error ?? 'unknown error');
       toastSuccess(tid, 'Dismissed');
     } catch (err) {
       const message = (err as Error).message;

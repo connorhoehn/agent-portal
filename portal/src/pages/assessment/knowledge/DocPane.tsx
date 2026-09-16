@@ -34,6 +34,7 @@ import { useChannel, useCRDT, useGateway } from '@connorhoehnslalom/realtime-mod
 import { useFetch } from '../../../hooks/useFetch';
 import { useCapabilities } from '../../../lib/capabilities';
 import { useSession } from '../../../lib/auth';
+import { sendJson } from '../../../lib/writeJson';
 import {
   CLASSIFICATION_LABEL,
   channelForDoc,
@@ -129,20 +130,12 @@ function sendPresence(docId: string, tabId: string, action: 'enter' | 'heartbeat
   }).catch(() => {});
 }
 
-async function putJson<T>(url: string, body: unknown): Promise<T> {
-  const res = await fetch(url, {
-    method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
-  });
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-  return res.json() as Promise<T>;
+function putJson<T>(url: string, body: unknown): Promise<T> {
+  return sendJson<T>(url, 'PUT', body);
 }
 
-async function postJson<T>(url: string, body: unknown): Promise<T> {
-  const res = await fetch(url, {
-    method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
-  });
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-  return res.json() as Promise<T>;
+function postJson<T>(url: string, body: unknown): Promise<T> {
+  return sendJson<T>(url, 'POST', body);
 }
 
 // ChatPanel (ui-components/social) renders its built-in composer as a plain

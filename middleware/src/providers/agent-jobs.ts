@@ -18,15 +18,16 @@ import { config } from '../config.js';
 import { hasColumns, _resetColumnProbes } from './column-probe.js';
 import { type SqlParameter } from '@aws-sdk/client-rds-data';
 // Every timestamp the mock queue writes comes from here, never `new Date()`:
-// the mock branches below are fixture writes living outside src/mock, and a
-// stamp minted off the wall clock cannot be frozen by freezeClock (so no test
-// can pin what a transition wrote) and lands in yesterday when the process
-// runs a minute after UTC midnight.
+// the mock branches below write into a registered fixture (mock/agent-jobs.ts)
+// living outside src/mock, and a stamp minted off the wall clock cannot be
+// frozen by freezeClock (so no test can pin what a transition wrote) and lands
+// in yesterday when the process runs a minute after UTC midnight.
 import { clock } from '../mock/core/index.js';
-// Mock-mode only: the roster + run history a bot's "job →" links point at
-// (see seedMockJobsFromBotRuns below). bots.ts never imports this module, so
-// this is a one-way dependency, not a cycle.
-import { MOCK_BOTS, MOCK_BOT_RUNS, type BotRun } from './bots.js';
+// The queue itself: the registered `agent-jobs` fixture (rows + reset),
+// the live array view every mock branch below reads and mutates in place,
+// and the pull-side claim-token map. See mock/agent-jobs.ts for why the seed
+// and the claim tokens live there instead of here.
+import { agentJobs, mockJobs, MOCK_CLAIM_TOKENS } from '../mock/agent-jobs.js';
 // The kinds only a paired workstation may run. Imported here rather than
 // duplicated because `claimNextJob` (push side) must EXCLUDE exactly the set
 // `claimNextJobForWorker` (pull side) selects — two copies that drifted apart
@@ -200,7 +201,13 @@ function rowToJob(r: Record<string, unknown>): AgentJob {
 // concurrency story). Nothing dispatches it unless a devbox worker registers,
 // which in mock mode leaves rows sitting visibly `queued` — the honest answer,
 // and the one the page renders.
-const MOCK_JOBS: AgentJob[] = [];
+//
+// The rows themselves, the seed that mints them from bot-run history, and the
+// pull-side claim-token map all live in mock/agent-jobs.ts now (imported
+// above as `mockJobs`/`agentJobs`/`MOCK_CLAIM_TOKENS`) — a registered fixture,
+// so `POST /api/__mock/reset` puts the queue back after a claim/complete
+// cycle. What stays here is id-minting and sort order, which are provider
+// behaviour, not seed data.
 
 /**
  * A queue id in the shape the table itself mints.
@@ -211,7 +218,7 @@ const MOCK_JOBS: AgentJob[] = [];
  * mock used to mint `job-mock-1`, `job-mock-2` … — a third dialect that
  * belongs to neither, so a "job →" link from a run recorded offline opened an
  * id Aurora could never hold, and the same click worked in dev:mock and 404'd
- * on the cluster. That is the same defect seedMockJobsFromBotRuns() below was
+ * on the cluster. That is the same defect mock/agent-jobs.ts's seed was
  * written to fix for the *seeded* runs; this closes it for newly enqueued
  * ones. A slug-and-counter id would be wrong here for a second reason: a
  * hand-driven dispatch is not maintenance, and borrowing `-maint-N` would
@@ -230,100 +237,6 @@ function mockOrder(a: AgentJob, b: AgentJob): number {
   if (a.priority !== b.priority) return a.priority - b.priority;
   return b.createdAt.localeCompare(a.createdAt);
 }
-
-/** BotRun.status → AgentJob.status. Every run bots.ts seeds today is 'done',
- *  but the mapping is written generically (not a single hard-coded 'done')
- *  so a future 'failed'/'running' fixture lands on the right job state
- *  without anyone having to remember to update this file too. 'skipped'
- *  never reaches here in practice (a skipped firing never dispatches, so
- *  genRun() never gives it a jobId) but maps to 'cancelled' rather than
- *  silently defaulting to 'done'. */
-function jobStatusForRunStatus(status: BotRun['status']): JobStatus {
-  switch (status) {
-    case 'done': return 'done';
-    case 'failed': return 'failed';
-    case 'running': return 'running';
-    case 'skipped': return 'cancelled';
-  }
-}
-
-/**
- * Mint a matching mock `agent_jobs` row for every seeded bot run that carries
- * a jobId, so the "job →" link on a bot's run history (BotDetailPage.tsx)
- * always resolves at GET /api/work/jobs/:id instead of 404ing — defect #11:
- * bots.ts's mock run generator (genRun) mints jobIds like `job-obs-maint-1`
- * that no job provider knew about, so every run-history "job →" link led to
- * a page stuck on "Loading job …" forever.
- *
- * Reads MOCK_BOTS/MOCK_BOT_RUNS directly (the SAME fixtures the bots
- * provider and BotDetailPage's run list use) rather than a second, hand-typed
- * list of ids — the two cannot drift apart, and a job's title/model/prompt
- * provenance genuinely comes from the bot that "ran" it, matching how a real
- * dispatch enqueues (lib/bot-runner.ts fireBot: kind 'devbox:task', title is
- * the bot's name, payload carries prompt/model/botId, bot_id column set).
- */
-function seedMockJobsFromBotRuns(): void {
-  for (const bot of MOCK_BOTS) {
-    for (const run of MOCK_BOT_RUNS[bot.id] ?? []) {
-      if (!run.jobId || MOCK_JOBS.some((j) => j.id === run.jobId)) continue;
-      const status = jobStatusForRunStatus(run.status);
-      const terminal = status === 'done' || status === 'failed' || status === 'cancelled';
-      const durationMs = run.finishedAt
-        ? new Date(run.finishedAt).getTime() - new Date(run.startedAt).getTime()
-        : null;
-      const reason = typeof run.outcome['reason'] === 'string' ? run.outcome['reason'] as string : 'scheduled maintenance';
-      MOCK_JOBS.push({
-        id: run.jobId,
-        kind: 'devbox:task',
-        title: bot.name,
-        payload: { prompt: bot.prompt, requiresReview: bot.requiresReview, botId: bot.id, model: bot.model },
-        status,
-        priority: 100,
-        boxId: null,
-        sessionId: null,
-        attempts: terminal ? 1 : 0,
-        // The seed writes max_attempts 1 on every scheduled job. Typing 2 here
-        // made a one-shot job read as retryable offline, so the reaper's
-        // "attempts 1/1 — exhausted" state was unreachable in dev:mock. New
-        // jobs created at run time still default to 2 (`enqueue` below); this
-        // is the seeded history, and it says 1.
-        maxAttempts: 1,
-        result: status === 'done'
-          ? {
-              summary: `${reason} — completed.`,
-              costUsd: run.costUsd ?? undefined,
-              durationMs: durationMs ?? undefined,
-              // Pass the outcome's counts through when the seed recorded them —
-              // the same two numbers a real run's outcome carries — so the
-              // job reads "3 turns · 4 tool calls" and the tool-call strip
-              // derives from a count instead of from nothing.
-              ...(typeof run.outcome['turns'] === 'number' ? { turns: run.outcome['turns'] } : {}),
-              ...(typeof run.outcome['toolCalls'] === 'number' ? { toolCalls: run.outcome['toolCalls'] } : {}),
-            }
-          : null,
-        error: status === 'failed' ? reason : null,
-        // Provenance, not a placeholder. A cron firing was minted by the
-        // scheduler and nobody authorized it from inside an envelope — which
-        // is why bot_runs.dispatched_by is null for one. `?? 'portal'` read
-        // that null as "a person did this from the portal", so all nine
-        // job-obs-maint-* rows claimed a human origin the seed spells
-        // 'scheduler'; /iq/work then attributed scheduled maintenance to
-        // someone's morning. Fall back per trigger, and only a genuinely
-        // hand-driven run with no attribution column reads as 'portal'.
-        createdBy: run.dispatchedBy ?? (run.trigger === 'cron' || run.trigger === 'pr_watch' ? 'scheduler' : 'portal'),
-        createdAt: run.startedAt,
-        claimedAt: run.startedAt,
-        startedAt: run.startedAt,
-        finishedAt: run.finishedAt,
-        botId: bot.id,
-        botName: bot.name,
-        botTrigger: run.trigger,
-      });
-    }
-  }
-}
-
-if (config.mock.aurora) seedMockJobsFromBotRuns();
 
 export async function enqueueJob(input: {
   kind: string;
@@ -359,7 +272,7 @@ export async function enqueueJob(input: {
       botName: null,
       botTrigger: null,
     };
-    MOCK_JOBS.push(job);
+    mockJobs.push(job);
     return job;
   }
   const rows = await exec(
@@ -404,7 +317,7 @@ export async function requeueJob(id: string, requeuedBy?: string): Promise<Agent
 
 export async function listJobs(opts: { status?: string; limit?: number } = {}): Promise<AgentJob[]> {
   if (config.mock.aurora) {
-    return MOCK_JOBS
+    return mockJobs
       .filter((j) => !opts.status || j.status === opts.status)
       .sort(mockOrder)
       .slice(0, Math.min(Math.max(opts.limit ?? 50, 1), 200))
@@ -455,7 +368,7 @@ export async function listJobsForBoxes(
   const nodeSet = new Set(nodeIds);
 
   if (config.mock.aurora) {
-    return MOCK_JOBS
+    return mockJobs
       .filter((j) => (j.boxId && boxSet.has(j.boxId))
         || (typeof j.payload['nodeId'] === 'string' && nodeSet.has(j.payload['nodeId'] as string)))
       .sort(mockOrder)
@@ -487,7 +400,7 @@ export async function listJobsForBoxes(
 
 export async function getJob(id: string): Promise<AgentJob | null> {
   if (config.mock.aurora) {
-    const job = MOCK_JOBS.find((j) => j.id === id);
+    const job = mockJobs.find((j) => j.id === id);
     return job ? { ...job } : null;
   }
   const rows = await exec(
@@ -523,7 +436,7 @@ export async function getJob(id: string): Promise<AgentJob | null> {
 export async function claimNextJob(boxId: string, sessionId: string): Promise<AgentJob | null> {
   const pullOnly = LOCAL_JOB_KINDS as readonly string[];
   if (config.mock.aurora) {
-    const next = MOCK_JOBS
+    const next = mockJobs
       .filter((j) => j.status === 'queued' && !pullOnly.includes(j.kind))
       .sort((a, b) => a.priority - b.priority || a.createdAt.localeCompare(b.createdAt))[0];
     if (!next) return null;
@@ -569,7 +482,7 @@ export async function claimNextJob(boxId: string, sessionId: string): Promise<Ag
  */
 export async function claimJob(id: string, boxId: string, sessionId: string): Promise<AgentJob | null> {
   if (config.mock.aurora) {
-    const job = MOCK_JOBS.find((j) => j.id === id && j.status === 'queued');
+    const job = mockJobs.find((j) => j.id === id && j.status === 'queued');
     if (!job) return null;
     job.status = 'claimed';
     job.boxId = boxId;
@@ -693,7 +606,7 @@ export async function claimNextJobForWorker(opts: {
   };
 
   if (config.mock.aurora) {
-    const next = MOCK_JOBS
+    const next = mockJobs
       .filter((j) => j.status === 'queued' && opts.kinds.includes(j.kind) && targetOk(j.payload))
       .sort((a, b) => a.priority - b.priority || a.createdAt.localeCompare(b.createdAt))[0];
     if (!next) return null;
@@ -740,7 +653,7 @@ export async function claimNextJobForWorker(opts: {
  */
 export async function countLiveJobsForBox(boxId: string): Promise<number> {
   if (config.mock.aurora) {
-    return MOCK_JOBS.filter((j) => j.boxId === boxId && (j.status === 'claimed' || j.status === 'running')).length;
+    return mockJobs.filter((j) => j.boxId === boxId && (j.status === 'claimed' || j.status === 'running')).length;
   }
   const rows = await exec(
     `SELECT count(*)::int AS n FROM agent_jobs
@@ -766,7 +679,7 @@ export async function countLiveJobsForBox(boxId: string): Promise<number> {
  */
 export async function heartbeatJob(id: string, claimToken: string): Promise<boolean> {
   if (config.mock.aurora) {
-    const job = MOCK_JOBS.find((j) => j.id === id);
+    const job = mockJobs.find((j) => j.id === id);
     if (!job || MOCK_CLAIM_TOKENS.get(id) !== claimToken) return false;
     return job.status === 'claimed' || job.status === 'running';
   }
@@ -779,9 +692,6 @@ export async function heartbeatJob(id: string, claimToken: string): Promise<bool
   return rows.length > 0;
 }
 
-/** Mock-mode fencing tokens. Not persisted — the mock queue is in-process. */
-const MOCK_CLAIM_TOKENS = new Map<string, string>();
-
 /**
  * Move a claimed job to `running`.
  *
@@ -791,7 +701,7 @@ const MOCK_CLAIM_TOKENS = new Map<string, string>();
  */
 export async function markRunning(id: string, claimToken?: string): Promise<boolean> {
   if (config.mock.aurora) {
-    const job = MOCK_JOBS.find((j) => j.id === id);
+    const job = mockJobs.find((j) => j.id === id);
     if (!job) return false;
     if (claimToken !== undefined && MOCK_CLAIM_TOKENS.get(id) !== claimToken) return false;
     job.status = 'running';
@@ -843,7 +753,7 @@ export async function completeJob(id: string, opts: {
   claimToken?: string;
 }): Promise<boolean> {
   if (config.mock.aurora) {
-    const job = MOCK_JOBS.find((j) => j.id === id);
+    const job = mockJobs.find((j) => j.id === id);
     if (!job) return false;
     if (opts.claimToken !== undefined) {
       if (MOCK_CLAIM_TOKENS.get(id) !== opts.claimToken) return false;
@@ -902,7 +812,7 @@ export async function completeJob(id: string, opts: {
 /** Human accepted or rejected the artifact an awaiting_review job produced. */
 export async function reviewJob(id: string, decision: 'accept' | 'reject', note?: string): Promise<AgentJob | null> {
   if (config.mock.aurora) {
-    const job = MOCK_JOBS.find((j) => j.id === id && j.status === 'awaiting_review');
+    const job = mockJobs.find((j) => j.id === id && j.status === 'awaiting_review');
     if (!job) return null;
     job.status = decision === 'accept' ? 'done' : 'failed';
     job.result = { ...(job.result ?? {}), reviewNote: note ?? '' };
@@ -926,7 +836,7 @@ export async function reviewJob(id: string, decision: 'accept' | 'reject', note?
 
 export async function cancelJob(id: string): Promise<boolean> {
   if (config.mock.aurora) {
-    const job = MOCK_JOBS.find((j) => j.id === id && (j.status === 'queued' || j.status === 'claimed'));
+    const job = mockJobs.find((j) => j.id === id && (j.status === 'queued' || j.status === 'claimed'));
     if (!job) return false;
     job.status = 'cancelled';
     job.finishedAt = clock.nowIso();
@@ -1021,7 +931,7 @@ export async function queueStats(): Promise<Record<JobStatus | 'total', number>>
     done: 0, failed: 0, cancelled: 0, total: 0,
   } as Record<JobStatus | 'total', number>;
   if (config.mock.aurora) {
-    for (const j of MOCK_JOBS) { base[j.status] += 1; base.total += 1; }
+    for (const j of mockJobs) { base[j.status] += 1; base.total += 1; }
     return base;
   }
   const rows = await exec(`SELECT status, count(*)::int AS n FROM agent_jobs GROUP BY status`);
@@ -1037,16 +947,14 @@ export async function queueStats(): Promise<Record<JobStatus | 'total', number>>
 /**
  * Test hook — put the mock queue back to the seeded history and nothing else.
  *
- * The array is module-level and lives for the whole process, so a test that
- * enqueues leaks a claimable row into every later test in the file. That matters
- * specifically for the pull-side claim, which takes the OLDEST matching queued
- * row: the leftover wins, the test's own job is not the one claimed, and the
- * failure reads as a bug in the route rather than as shared state. Spliced in
- * place rather than reassigned because every function above closes over this
- * exact array.
+ * A thin wrapper over the registered fixture's own `reset()` (which also
+ * clears the claim-token map — see mock/agent-jobs.ts), kept under its old
+ * name because routes/__tests__/work-jobs-tool-call-list.test.ts and
+ * routes/__tests__/local-compute-routes.test.ts both call it directly in
+ * `beforeEach`. `POST /api/__mock/reset` reaches the same `reset()` through
+ * the fixture registry, so this and the control plane can no longer disagree
+ * about what "reset" means for this queue.
  */
 export function _resetMockQueue(): void {
-  MOCK_JOBS.length = 0;
-  MOCK_CLAIM_TOKENS.clear();
-  if (config.mock.aurora) seedMockJobsFromBotRuns();
+  agentJobs.reset();
 }

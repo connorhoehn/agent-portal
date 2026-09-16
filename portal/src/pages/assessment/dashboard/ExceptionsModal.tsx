@@ -8,6 +8,7 @@ import { useState } from 'react';
 import {
   Button,
   Chip,
+  ConfirmDialog,
   DataTable,
   EmptyState,
   Inline,
@@ -46,6 +47,7 @@ export function ExceptionsModal({ open, onClose, teamId, dimensionTitle }: Excep
     open ? `/api/assessment/teams/${encodeURIComponent(teamId)}/exceptions` : null,
   );
   const [busyDimension, setBusyDimension] = useState<string | null>(null);
+  const [confirmDecision, setConfirmDecision] = useState<{ dimensionId: string; status: 'approved' | 'denied' } | null>(null);
 
   async function decide(dimensionId: string, status: 'approved' | 'denied') {
     setBusyDimension(dimensionId);
@@ -69,6 +71,7 @@ export function ExceptionsModal({ open, onClose, teamId, dimensionTitle }: Excep
       toastError(null, 'Could not update exception', (err as Error).message);
     } finally {
       setBusyDimension(null);
+      setConfirmDecision(null);
     }
   }
 
@@ -105,10 +108,10 @@ export function ExceptionsModal({ open, onClose, teamId, dimensionTitle }: Excep
           rowActions={canDecide ? (e) => (
             e.status === 'requested' ? (
               <Inline gap="xs">
-                <Button size="sm" variant="secondary" disabled={busyDimension === e.dimension_id} onClick={() => void decide(e.dimension_id, 'approved')}>
+                <Button size="sm" variant="secondary" disabled={busyDimension === e.dimension_id} onClick={() => setConfirmDecision({ dimensionId: e.dimension_id, status: 'approved' })}>
                   Approve
                 </Button>
-                <Button size="sm" variant="danger" disabled={busyDimension === e.dimension_id} onClick={() => void decide(e.dimension_id, 'denied')}>
+                <Button size="sm" variant="danger" disabled={busyDimension === e.dimension_id} onClick={() => setConfirmDecision({ dimensionId: e.dimension_id, status: 'denied' })}>
                   Deny
                 </Button>
               </Inline>
@@ -133,6 +136,23 @@ export function ExceptionsModal({ open, onClose, teamId, dimensionTitle }: Excep
           ]}
         />
       )}
+
+      <ConfirmDialog
+        open={confirmDecision != null}
+        tone={confirmDecision?.status === 'denied' ? 'caution' : 'info'}
+        title={confirmDecision?.status === 'approved' ? 'Approve this exception?' : 'Deny this exception?'}
+        body={confirmDecision
+          ? `${dimensionTitle(confirmDecision.dimensionId)} is marked N/A ${confirmDecision.status === 'approved' ? 'and excluded from scoring' : 'is not excused and stays in scope for scoring'}. This decision is recorded against the team.`
+          : ''}
+        confirmLabel={
+          confirmDecision && busyDimension === confirmDecision.dimensionId
+            ? 'Saving…'
+            : confirmDecision?.status === 'approved' ? 'Approve' : 'Deny'
+        }
+        confirmDisabled={!!confirmDecision && busyDimension === confirmDecision.dimensionId}
+        onConfirm={() => { if (confirmDecision) void decide(confirmDecision.dimensionId, confirmDecision.status); }}
+        onCancel={() => setConfirmDecision(null)}
+      />
     </Modal>
   );
 }

@@ -29,9 +29,10 @@ import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';
 import { relativeTime } from '../../lib/relativeTime';
 import { toastError, toastPending, toastSuccess } from '../../lib/toastStore';
+import { writeJson } from '../../lib/writeJson';
 import { filterFindings, sweepLabel, type FindingStatus } from './findingsFilter';
 import {
-  BotOrigin, JobStatusPill, SeverityChip, T, post,
+  BotOrigin, JobStatusPill, SeverityChip, T,
   type Finding, type Job,
 } from './workShared';
 
@@ -128,109 +129,96 @@ export default function FindingsPage() {
 
   async function requeue(job: Job) {
     const tid = toastPending('Requeueing job', job.title);
-    try {
-      const res = await post(`/api/work/jobs/${job.id}/requeue`);
-      const body = await res.json() as Job & { error?: string };
-      if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
-      toastSuccess(tid, 'Back on the queue', 'the next idle worker picks it up');
-      refreshJobs();
-      navigate(`/iq/work/${body.id}`);
-    } catch (err) {
-      toastError(tid, 'Requeue failed', (err as Error).message);
-    }
+    const res = await writeJson<Job>(`/api/work/jobs/${job.id}/requeue`, 'POST');
+    if (!res.ok || !res.data) { toastError(tid, 'Requeue failed', res.error ?? 'unknown error'); return; }
+    toastSuccess(tid, 'Back on the queue', 'the next idle worker picks it up');
+    refreshJobs();
+    navigate(`/iq/work/${res.data.id}`);
   }
 
   async function promote(f: Finding) {
     const tid = toastPending('Putting a worker on it', f.title);
-    try {
-      // No prompt here on purpose: the remedy belongs to the sweep that
-      // produced the finding, so the server builds it.
-      const res = await post(`/api/work/findings/${f.id}/promote`);
-      const body = await res.json() as Job & { error?: string; jobId?: string };
-      if (res.status === 409 && body.jobId) {
+    // No prompt here on purpose: the remedy belongs to the sweep that
+    // produced the finding, so the server builds it.
+    const res = await writeJson<Job & { jobId?: string }>(`/api/work/findings/${f.id}/promote`, 'POST');
+    if (!res.ok) {
+      if (res.status === 409 && res.data?.jobId) {
         toastError(tid, 'Already has a worker', 'opening the existing job');
-        navigate(`/iq/work/${body.jobId}`);
+        navigate(`/iq/work/${res.data.jobId}`);
         return;
       }
-      if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
-      toastSuccess(tid, 'Worker queued', 'opening the job so you can watch it run');
-      refreshFindings();
-      navigate(`/iq/work/${body.id}`);
-    } catch (err) { toastError(tid, 'Promote failed', (err as Error).message); }
+      toastError(tid, 'Promote failed', res.error ?? 'unknown error');
+      return;
+    }
+    toastSuccess(tid, 'Worker queued', 'opening the job so you can watch it run');
+    refreshFindings();
+    navigate(`/iq/work/${res.data!.id}`);
   }
 
   async function analyze(f: Finding) {
     const tid = toastPending('Reading the document', 'extracting the links it should have');
-    try {
-      const res = await post(`/api/work/findings/${f.id}/analyze`);
-      const a = await res.json() as {
-        links?: unknown[]; proposals?: unknown[]; problem?: string; candidatesConsidered?: number;
-      };
-      if (!res.ok) throw new Error(a.problem ?? `HTTP ${res.status}`);
-      if (a.problem) { toastError(tid, 'Could not analyse', a.problem); return; }
-      const n = a.proposals?.length ?? 0;
-      if (n === 0) {
-        toastSuccess(tid, 'No links found',
-          `Nothing in the graph (${a.candidatesConsidered ?? 0} entities) is genuinely referenced.`);
-      } else {
-        toastSuccess(tid, `${n} link${n === 1 ? '' : 's'} proposed`, 'review them on the Overview before they touch the graph');
-      }
-      refreshFindings();
-    } catch (err) { toastError(tid, 'Analysis failed', (err as Error).message); }
+    const res = await writeJson<{
+      links?: unknown[]; proposals?: unknown[]; problem?: string; candidatesConsidered?: number;
+    }>(`/api/work/findings/${f.id}/analyze`, 'POST');
+    if (!res.ok) { toastError(tid, 'Analysis failed', res.error ?? 'unknown error'); return; }
+    const a = res.data!;
+    if (a.problem) { toastError(tid, 'Could not analyse', a.problem); return; }
+    const n = a.proposals?.length ?? 0;
+    if (n === 0) {
+      toastSuccess(tid, 'No links found',
+        `Nothing in the graph (${a.candidatesConsidered ?? 0} entities) is genuinely referenced.`);
+    } else {
+      toastSuccess(tid, `${n} link${n === 1 ? '' : 's'} proposed`, 'review them on the Overview before they touch the graph');
+    }
+    refreshFindings();
   }
 
   async function analyzeBatch(sweep: string, count: number) {
     const n = Math.min(count, 10);
     const tid = toastPending(`Reading ${n} documents`, 'extracting the links each one should have');
-    try {
-      const res = await post('/api/work/findings/analyze-batch', { sweep, limit: n });
-      const r = await res.json() as {
-        analysed: number; proposed: number; alreadyKnown: number;
-        noLinks: number; failed: number; remaining: number;
-      };
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const parts = [
-        r.proposed > 0 ? `${r.proposed} links proposed` : null,
-        r.noLinks > 0 ? `${r.noLinks} had nothing to link` : null,
-        r.alreadyKnown > 0 ? `${r.alreadyKnown} already proposed` : null,
-        r.failed > 0 ? `${r.failed} failed` : null,
-        r.remaining > 0 ? `${r.remaining} still to go` : null,
-      ].filter(Boolean);
-      toastSuccess(tid, `Analysed ${r.analysed} documents`, parts.join(' · ') || 'nothing to do');
-      refreshFindings();
-    } catch (err) { toastError(tid, 'Batch analysis failed', (err as Error).message); }
+    const res = await writeJson<{
+      analysed: number; proposed: number; alreadyKnown: number;
+      noLinks: number; failed: number; remaining: number;
+    }>('/api/work/findings/analyze-batch', 'POST', { sweep, limit: n });
+    if (!res.ok) { toastError(tid, 'Batch analysis failed', res.error ?? 'unknown error'); return; }
+    const r = res.data!;
+    const parts = [
+      r.proposed > 0 ? `${r.proposed} links proposed` : null,
+      r.noLinks > 0 ? `${r.noLinks} had nothing to link` : null,
+      r.alreadyKnown > 0 ? `${r.alreadyKnown} already proposed` : null,
+      r.failed > 0 ? `${r.failed} failed` : null,
+      r.remaining > 0 ? `${r.remaining} still to go` : null,
+    ].filter(Boolean);
+    toastSuccess(tid, `Analysed ${r.analysed} documents`, parts.join(' · ') || 'nothing to do');
+    refreshFindings();
   }
 
   async function dismiss(f: Finding) {
     const tid = toastPending('Dismissing finding', f.title);
-    try {
-      const res = await post(`/api/work/findings/${f.id}/dismiss`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      toastSuccess(tid, 'Dismissed', 'it will stay quiet unless it changes');
-      refreshFindings();
-    } catch (err) { toastError(tid, 'Dismiss failed', (err as Error).message); }
+    const res = await writeJson(`/api/work/findings/${f.id}/dismiss`, 'POST');
+    if (!res.ok) { toastError(tid, 'Dismiss failed', res.error ?? 'unknown error'); return; }
+    toastSuccess(tid, 'Dismissed', 'it will stay quiet unless it changes');
+    refreshFindings();
   }
 
   async function runSweeps() {
     const tid = toastPending('Running org sweeps', 'scanning the graph and knowledge base…');
-    try {
-      const res = await post('/api/work/sweeps/run', {});
-      const body = await res.json() as {
-        results?: Array<{ sweep: string; found: number; created: number; resolved: number }>;
-        released?: number;
-      };
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const results = body.results ?? [];
-      const created = results.reduce((n, r) => n + r.created, 0);
-      const resolved = results.reduce((n, r) => n + r.resolved, 0);
-      const parts = [
-        created > 0 ? `${created} new` : null,
-        resolved > 0 ? `${resolved} resolved` : null,
-        body.released ? `${body.released} put back (worker never delivered)` : null,
-      ].filter(Boolean);
-      toastSuccess(tid, 'Sweeps complete', parts.length ? parts.join(' · ') : 'nothing changed');
-      refreshFindings();
-    } catch (err) { toastError(tid, 'Sweep failed', (err as Error).message); }
+    const res = await writeJson<{
+      results?: Array<{ sweep: string; found: number; created: number; resolved: number }>;
+      released?: number;
+    }>('/api/work/sweeps/run', 'POST', {});
+    if (!res.ok) { toastError(tid, 'Sweeps failed', res.error ?? 'unknown error'); return; }
+    const body = res.data!;
+    const results = body.results ?? [];
+    const created = results.reduce((n, r) => n + r.created, 0);
+    const resolved = results.reduce((n, r) => n + r.resolved, 0);
+    const parts = [
+      created > 0 ? `${created} new` : null,
+      resolved > 0 ? `${resolved} resolved` : null,
+      body.released ? `${body.released} put back (worker never delivered)` : null,
+    ].filter(Boolean);
+    toastSuccess(tid, 'Sweeps complete', parts.length ? parts.join(' · ') : 'nothing changed');
+    refreshFindings();
   }
 
   const dlqColumns: DataTableColumn<Job>[] = [

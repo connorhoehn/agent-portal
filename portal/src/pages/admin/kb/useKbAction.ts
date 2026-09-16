@@ -8,7 +8,7 @@
 // stated choice instead of an accident.
 
 import { useCallback, useState } from 'react';
-import { writeJson } from './writeJson';
+import { writeJson } from '../../../lib/writeJson';
 
 export interface KbAction {
   /** True from dispatch until the request settles. Disables the control. */
@@ -28,7 +28,7 @@ export interface KbAction {
 
 export function useKbAction(
   url: string,
-  method: string,
+  method: 'POST' | 'PUT' | 'PATCH' | 'DELETE',
   onDone: () => void,
   opts: { settleOnSuccess?: boolean } = {},
 ): KbAction {

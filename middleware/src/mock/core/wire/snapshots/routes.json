@@ -1703,42 +1703,47 @@
     {
       "method": "GET",
       "path": "/api/observability/cost/a2a-overhead",
-      "source": "src/routes/cost.ts:383"
+      "source": "src/routes/cost.ts:490"
     },
     {
       "method": "GET",
       "path": "/api/observability/cost/by-model",
-      "source": "src/routes/cost.ts:326"
+      "source": "src/routes/cost.ts:416"
     },
     {
       "method": "GET",
       "path": "/api/observability/cost/deploy-markers",
-      "source": "src/routes/cost.ts:514"
+      "source": "src/routes/cost.ts:615"
     },
     {
       "method": "GET",
       "path": "/api/observability/cost/per-agent",
-      "source": "src/routes/cost.ts:131"
+      "source": "src/routes/cost.ts:192"
+    },
+    {
+      "method": "GET",
+      "path": "/api/observability/cost/summary",
+      "source": "src/routes/cost.ts:659"
     },
     {
       "method": "GET",
       "path": "/api/observability/cost/timeseries",
-      "source": "src/routes/cost.ts:191"
+      "source": "src/routes/cost.ts:269"
     },
     {
       "method": "GET",
       "path": "/api/observability/cost/top",
-      "source": "src/routes/cost.ts:259"
+      "source": "src/routes/cost.ts:349"
     },
     {
       "method": "GET",
       "path": "/api/observability/cost/total",
-      "source": "src/routes/cost.ts:73"
+      "source": "src/routes/cost.ts:124"
     },
     {
       "method": "GET",
       "path": "/api/observability/cost/value-ratio",
-      "source": "src/routes/cost.ts:454"
+      "source": "src/routes/cost.ts:562"
     },
     {
       "method": "GET",

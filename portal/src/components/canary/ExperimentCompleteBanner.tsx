@@ -28,6 +28,7 @@ export function ExperimentCompleteBanner({ onReset }: ExperimentCompleteBannerPr
     try {
       const res = await fetch('/api/observability/canary/start', {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           subject_a_arn: subjectBArn,

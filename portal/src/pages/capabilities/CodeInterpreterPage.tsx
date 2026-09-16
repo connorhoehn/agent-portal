@@ -27,6 +27,7 @@ import { useCapabilities } from '../../lib/capabilities';
 import { UnavailableNotice, orUnknown } from '../../components/UnavailableNotice';
 import { useFetch } from '../../hooks/useFetch';
 import { relativeTime } from '../../lib/relativeTime';
+import { toastError } from '../../lib/toastStore';
 import { T } from './Text';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -132,8 +133,17 @@ print(f"mean={statistics.mean(nums):.2f}, stdev={statistics.stdev(nums):.2f}")`)
   }
 
   async function terminateSession(sessionId: string) {
-    await fetch(`/api/capabilities/code-sessions/${sessionId}`, { method: 'DELETE' });
-    refresh();
+    try {
+      const res = await fetch(`/api/capabilities/code-sessions/${sessionId}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string };
+        toastError(null, 'Could not terminate session', body.error ?? `HTTP ${res.status}`);
+        return;
+      }
+      refresh();
+    } catch (err) {
+      toastError(null, 'Could not terminate session', err instanceof Error ? err.message : undefined);
+    }
   }
 
   const sessions = data?.sessions ?? [];

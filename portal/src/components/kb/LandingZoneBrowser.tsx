@@ -64,7 +64,7 @@ export function LandingZoneBrowser({ kbId, s3Prefix }: LandingZoneBrowserProps) 
         ? `/api/admin/kb-registry/${kbId}/landing-zone/files?limit=50&nextToken=${encodeURIComponent(token)}`
         : `/api/admin/kb-registry/${kbId}/landing-zone/files?limit=50`;
 
-      const res = await fetch(url);
+      const res = await fetch(url, { credentials: 'include' });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
       const data: FilesResponse = await res.json();
@@ -101,7 +101,7 @@ export function LandingZoneBrowser({ kbId, s3Prefix }: LandingZoneBrowserProps) 
 
       const res = await fetch(
         `/api/admin/kb-registry/${kbId}/landing-zone/upload`,
-        { method: 'POST', body: form },
+        { method: 'POST', credentials: 'include', body: form },
       );
 
       if (!res.ok) throw new Error(`Upload failed: HTTP ${res.status}`);

@@ -61,7 +61,7 @@ export function RunDetailDrawer({
       return;
     }
     let cancelled = false;
-    fetch(`/api/ingest/crawl/${encodeURIComponent(crawlId)}`)
+    fetch(`/api/ingest/crawl/${encodeURIComponent(crawlId)}`, { credentials: 'include' })
       .then(r => r.ok ? r.json() as Promise<{ session: CrawlSession }> : Promise.reject(r.statusText))
       .then(body => { if (!cancelled) setSnapshot(body.session); })
       .catch(() => { /* drawer can render from stream once it arrives */ });
@@ -77,6 +77,7 @@ export function RunDetailDrawer({
     try {
       const r = await fetch(`/api/ingest/crawl/${encodeURIComponent(crawlId)}/sync`, {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
       });
       const body = await r.json() as { ok?: boolean; error?: string; jobId?: string };

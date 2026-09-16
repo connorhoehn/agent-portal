@@ -10,7 +10,7 @@
 
 import { useCallback, useState } from 'react';
 import {
-  Button, Card, Chip, FormField, Inline, Input, MetaLine, SectionLabel,
+  Button, Card, Chip, ConfirmDialog, FormField, Inline, Input, MetaLine, SectionLabel,
   Select, Stack, Textarea,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
@@ -129,6 +129,8 @@ export function PolicyEditor() {
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [busy, setBusy] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState<Policy | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const save = useCallback(async (policy: {
     id?: string; name: string; enabled: boolean; kind: PolicyKind; config: Record<string, unknown>; action: PolicyAction;
@@ -159,6 +161,7 @@ export function PolicyEditor() {
   }, [save]);
 
   const remove = useCallback(async (p: Policy) => {
+    setDeletingId(p.id);
     const tid = toastPending('Deleting policy', p.name);
     try {
       const res = await fetch(`/api/sdlc/policies/${p.id}`, { method: 'DELETE', credentials: 'include' });
@@ -167,6 +170,9 @@ export function PolicyEditor() {
       refresh();
     } catch (err) {
       toastError(tid, 'Could not delete', (err as Error).message);
+    } finally {
+      setDeletingId(null);
+      setConfirmDelete(null);
     }
   }, [refresh]);
 
@@ -330,12 +336,29 @@ export function PolicyEditor() {
               <MetaLine size="xs" className="truncate" items={[describe(p)]} />
             </Stack>
             <Chip size="xs" className={`shrink-0 ${ACTION_TONE[p.action]}`}>{ACTION_LABEL[p.action]}</Chip>
-            <Button variant="secondary" size="sm" className="shrink-0" onClick={() => void remove(p)}>
+            <Button
+              variant="secondary"
+              size="sm"
+              className="shrink-0"
+              disabled={deletingId === p.id}
+              onClick={() => setConfirmDelete(p)}
+            >
               Delete
             </Button>
           </Inline>
         ))
       )}
+
+      <ConfirmDialog
+        open={confirmDelete != null}
+        tone="destructive"
+        title="Delete policy?"
+        body={confirmDelete ? `"${confirmDelete.name}" no longer checks agent changes. This cannot be undone.` : ''}
+        confirmLabel={confirmDelete && deletingId === confirmDelete.id ? 'Deleting…' : 'Delete policy'}
+        confirmDisabled={confirmDelete != null && deletingId === confirmDelete.id}
+        onConfirm={() => { if (confirmDelete) void remove(confirmDelete); }}
+        onCancel={() => setConfirmDelete(null)}
+      />
     </Card>
   );
 }

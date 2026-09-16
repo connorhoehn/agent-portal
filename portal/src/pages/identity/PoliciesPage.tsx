@@ -25,6 +25,7 @@ import { useFetch } from '../../hooks/useFetch';
 import { KeyValue } from '../../components/KeyValue';
 import { parsePolicy, buildPolicy, type Effect, type ParsedPolicy } from '../../lib/cedarPolicy';
 import { effectTone, inputWiring } from './identityFormat';
+import { toastError } from '../../lib/toastStore';
 
 interface PolicyEntry {
   policyId: string;
@@ -277,7 +278,8 @@ function PolicyEditor({
     if (mode === 'builder') {
       const parsed = parsePolicy(draft.statement);
       if (!parsed) {
-        alert('This Cedar source uses constructs the builder can\'t represent yet (e.g. complex when clauses). Stay in Raw mode.');
+        toastError(null, 'Can\'t switch to Builder',
+          'This Cedar source uses constructs the builder can\'t represent yet (e.g. complex when clauses). Stay in Raw mode.');
         return;
       }
       setDraft({ ...draft, mode: 'builder', parsed });

@@ -36,6 +36,7 @@ import { useCrumbLabel } from '../../lib/crumbLabels';
 import { useCapabilities } from '../../lib/capabilities';
 import { relativeTime } from '../../lib/relativeTime';
 import { toastError, toastPending, toastSuccess } from '../../lib/toastStore';
+import { writeJson } from '../../lib/writeJson';
 import { STATUS_LABEL, STATUS_TONE, latestSignoffs, nextStep } from './designFormat';
 import { T } from './Text';
 import type { DesignThread } from './types';
@@ -43,14 +44,6 @@ import type { DesignThread } from './types';
 interface InitiativeLite {
   ownerName: string | null;
   contributors: Array<{ personId: string; name: string; role: string | null }>;
-}
-
-async function post(url: string, body: unknown): Promise<Response> {
-  return fetch(url, {
-    method: 'POST', credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
 }
 
 export default function DesignThreadPage() {
@@ -72,8 +65,8 @@ export default function DesignThreadPage() {
     setBusy(true);
     const tid = toastPending('Answering the agent', 'the loop continues from here');
     try {
-      const res = await post(`/api/designs/${encodeURIComponent(id)}/answer`, { questionPostId, body });
-      if (!res.ok) throw new Error((await res.json() as { error?: string }).error ?? `HTTP ${res.status}`);
+      const res = await writeJson(`/api/designs/${encodeURIComponent(id)}/answer`, 'POST', { questionPostId, body });
+      if (!res.ok) throw new Error(res.error ?? 'unknown error');
       toastSuccess(tid, 'Question resolved', 'the agent posted a revision — review it below');
       refresh();
     } catch (err) {
@@ -86,15 +79,14 @@ export default function DesignThreadPage() {
     setBusy(true);
     const tid = toastPending(decision === 'approve' ? 'Signing off' : 'Rejecting', thread?.title ?? '');
     try {
-      const res = await post(`/api/designs/${encodeURIComponent(id)}/signoff`, { decision });
-      const body = await res.json() as DesignThread & { error?: string; blockingId?: string };
+      const res = await writeJson<DesignThread & { blockingId?: string }>(`/api/designs/${encodeURIComponent(id)}/signoff`, 'POST', { decision });
       if (!res.ok) {
-        throw new Error(body.blockingId
-          ? `${body.error} — see the blocking design`
-          : body.error ?? `HTTP ${res.status}`);
+        throw new Error(res.data?.blockingId
+          ? `${res.error} — see the blocking design`
+          : res.error ?? 'unknown error');
       }
       toastSuccess(tid, decision === 'approve'
-        ? (body.status === 'approved' ? 'Approved — logged to the knowledge base' : 'Sign-off recorded')
+        ? (res.data?.status === 'approved' ? 'Approved — logged to the knowledge base' : 'Sign-off recorded')
         : 'Rejected');
       refresh();
     } catch (err) {

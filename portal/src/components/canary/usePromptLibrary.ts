@@ -28,7 +28,7 @@ export function usePromptList(): {
     setLoading(true);
     setError(null);
 
-    fetch('/api/observability/canary/library')
+    fetch('/api/observability/canary/library', { credentials: 'include' })
       .then(async (res) => {
         if (!res.ok) {
           const msg = await res.text().catch(() => res.statusText);
@@ -80,7 +80,7 @@ export function usePromptVersions(promptId: string | null): {
     setLoading(true);
     setError(null);
 
-    fetch(`/api/observability/canary/library/${encodeURIComponent(promptId)}/versions`)
+    fetch(`/api/observability/canary/library/${encodeURIComponent(promptId)}/versions`, { credentials: 'include' })
       .then(async (res) => {
         if (!res.ok) {
           const msg = await res.text().catch(() => res.statusText);
@@ -136,7 +136,7 @@ export function usePromptVersionDetail(
     setError(null);
 
     const url = `/api/observability/canary/library/${encodeURIComponent(promptId)}/version/${encodeURIComponent(version)}`;
-    fetch(url)
+    fetch(url, { credentials: 'include' })
       .then(async (res) => {
         if (!res.ok) {
           const msg = await res.text().catch(() => res.statusText);
@@ -176,6 +176,7 @@ export async function createPrompt(opts: {
 }): Promise<{ id: string; arn: string; name: string }> {
   const res = await fetch('/api/observability/canary/library', {
     method: 'POST',
+    credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       name: opts.name,
@@ -203,6 +204,7 @@ export async function saveDraft(
     `/api/observability/canary/library/${encodeURIComponent(promptId)}/draft`,
     {
       method: 'PUT',
+      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         name,
@@ -226,6 +228,7 @@ export async function publishVersion(
     `/api/observability/canary/library/${encodeURIComponent(promptId)}/publish`,
     {
       method: 'POST',
+      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ description }),
     },
@@ -244,6 +247,7 @@ export async function startCanaryExperiment(
 ): Promise<void> {
   const res = await fetch('/api/observability/canary/start', {
     method: 'POST',
+    credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       subject_a_arn: subjectAArn,
@@ -261,6 +265,7 @@ export async function startCanaryExperiment(
 export async function resetCanaryExperiment(): Promise<void> {
   const res = await fetch('/api/observability/canary/reset', {
     method: 'POST',
+    credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
   });
   if (!res.ok) {
@@ -287,6 +292,7 @@ export async function invokePrompt(
     `/api/observability/canary/library/${encodeURIComponent(promptId)}/invoke`,
     {
       method: 'POST',
+      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         version: opts.version,
@@ -339,6 +345,7 @@ export async function optimizePrompt(
     `/api/observability/canary/library/${encodeURIComponent(promptId)}/optimize`,
     {
       method: 'POST',
+      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ templateText, targetMetric }),
     },

@@ -44,6 +44,7 @@ import {
   Select,
   Textarea,
   Button,
+  ConfirmDialog,
   PageSection,
   Stack,
   useToast,
@@ -187,6 +188,8 @@ function CalibrationPage() {
   }>({ open: false, busy: false, err: null, editing: null });
 
   const [expandedResult, setExpandedResult] = useState<string | null>(null);
+  const [archiveTarget, setArchiveTarget] = useState<CalibrationCase | null>(null);
+  const [archiving, setArchiving] = useState(false);
 
   const judgeModelId = runs[0]?.judgeModelId
     ?? latestRun?.run.judgeModelId
@@ -251,12 +254,23 @@ function CalibrationPage() {
   }
 
   async function archiveCase(c: CalibrationCase) {
-    if (!confirm(`Archive case for ${c.agentId}? It will stop appearing in future runs.`)) return;
-    const resp = await fetch(`/api/observability/calibration/cases/${encodeURIComponent(c.calibrationId)}`, {
-      method: 'DELETE',
-      credentials: 'include',
-    });
-    if (resp.ok) refreshCases();
+    setArchiving(true);
+    try {
+      const resp = await fetch(`/api/observability/calibration/cases/${encodeURIComponent(c.calibrationId)}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      if (!resp.ok) {
+        const j = await resp.json().catch(() => ({}));
+        throw new Error(String(j.error ?? `${resp.status} ${resp.statusText}`));
+      }
+      refreshCases();
+    } catch (e) {
+      toast(`Archive failed: ${e instanceof Error ? e.message : 'unknown error'}`, { type: 'error' });
+    } finally {
+      setArchiving(false);
+      setArchiveTarget(null);
+    }
   }
 
   return (
@@ -588,7 +602,7 @@ function CalibrationPage() {
                     <Button
                       variant="danger"
                       size="sm"
-                      onClick={() => archiveCase(c)}
+                      onClick={() => setArchiveTarget(c)}
                     >
                       Archive
                     </Button>
@@ -687,6 +701,17 @@ function CalibrationPage() {
           }}
         />
       )}
+
+      <ConfirmDialog
+        open={archiveTarget != null}
+        tone="destructive"
+        title="Archive this case?"
+        body={archiveTarget ? `The calibration case for ${archiveTarget.agentId} stops appearing in future runs.` : ''}
+        confirmLabel={archiving ? 'Archiving…' : 'Archive case'}
+        confirmDisabled={archiving}
+        onConfirm={() => { if (archiveTarget) void archiveCase(archiveTarget); }}
+        onCancel={() => setArchiveTarget(null)}
+      />
     </PageSection>
   );
 }

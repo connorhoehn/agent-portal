@@ -57,6 +57,7 @@ function CrawlTargetsPage() {
     const method = editTarget ? 'PATCH' : 'POST';
     const r = await fetch(url, {
       method,
+      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(draft),
     });
@@ -77,7 +78,7 @@ function CrawlTargetsPage() {
     setTargetBusy(t.id);
     setActionMessage(null);
     try {
-      const r = await fetch(`/api/ingest/crawl-targets/${encodeURIComponent(t.id)}/run`, { method: 'POST' });
+      const r = await fetch(`/api/ingest/crawl-targets/${encodeURIComponent(t.id)}/run`, { method: 'POST', credentials: 'include' });
       const body = await r.json() as { session?: CrawlSession; error?: string };
       if (!r.ok || !body.session) {
         setActionMessage({ tone: 'err', text: body.error ?? 'Failed to start crawl' });
@@ -96,7 +97,7 @@ function CrawlTargetsPage() {
   }
 
   async function runDeleteTarget(t: CrawlTarget) {
-    const r = await fetch(`/api/ingest/crawl-targets/${encodeURIComponent(t.id)}`, { method: 'DELETE' });
+    const r = await fetch(`/api/ingest/crawl-targets/${encodeURIComponent(t.id)}`, { method: 'DELETE', credentials: 'include' });
     if (!r.ok) {
       const body = await r.json().catch(() => ({})) as { error?: string };
       setActionMessage({ tone: 'err', text: body.error ?? 'Failed to delete target' });
@@ -109,6 +110,7 @@ function CrawlTargetsPage() {
   async function toggleTarget(t: CrawlTarget, enabled: boolean) {
     const r = await fetch(`/api/ingest/crawl-targets/${encodeURIComponent(t.id)}`, {
       method: 'PATCH',
+      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ enabled }),
     });
@@ -121,7 +123,7 @@ function CrawlTargetsPage() {
   }
 
   async function cancelCrawl(id: string) {
-    const r = await fetch(`/api/ingest/crawl/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    const r = await fetch(`/api/ingest/crawl/${encodeURIComponent(id)}`, { method: 'DELETE', credentials: 'include' });
     if (!r.ok) {
       const body = await r.json().catch(() => ({})) as { error?: string };
       setActionMessage({ tone: 'err', text: body.error ?? 'Failed to cancel crawl' });

@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import {
-  Button, Card, CardHeader, Chip, FormField, FormRow, Input, PageSection,
+  Button, Card, CardHeader, Chip, ConfirmDialog, FormField, FormRow, Input, PageSection,
   Select, Stack, Switch, Table, TableBody, TableHead, TableRow, TableTd,
   TableTh,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch';
 import { EmptyState } from '../../components/ingest/ui';
+import { toastError, toastPending, toastSuccess } from '../../lib/toastStore';
+import { writeJson } from '../../lib/writeJson';
 import { T } from './Text';
 
 interface DataSource {
@@ -66,18 +68,25 @@ function SchedulesPanel({ sources }: { sources: DataSource[] }) {
   const { data, refresh } = useFetch<{ schedules: IngestSchedule[] }>('/api/ingest/schedules', 30_000);
   const schedules = data?.schedules ?? [];
   const [showForm, setShowForm] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   async function onDelete(id: string) {
-    await fetch(`/api/ingest/schedules/${id}`, { method: 'DELETE' });
+    const s = schedules.find(x => x.id === id);
+    const tid = toastPending('Removing schedule', s?.label ?? id);
+    const res = await writeJson(`/api/ingest/schedules/${id}`, 'DELETE');
+    if (!res.ok) { toastError(tid, 'Could not remove schedule', res.error ?? 'unknown error'); return; }
+    toastSuccess(tid, 'Schedule removed');
     refresh();
   }
 
   async function onToggle(id: string, enabled: boolean) {
-    await fetch(`/api/ingest/schedules/${id}/toggle`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ enabled }),
-    });
+    const s = schedules.find(x => x.id === id);
+    const res = await writeJson(`/api/ingest/schedules/${id}/toggle`, 'PATCH', { enabled });
+    if (!res.ok) {
+      toastError(null, enabled ? 'Could not enable schedule' : 'Could not disable schedule', res.error ?? 'unknown error');
+      return;
+    }
+    toastSuccess(null, enabled ? 'Schedule enabled' : 'Schedule disabled', s?.label);
     refresh();
   }
 
@@ -140,7 +149,7 @@ function SchedulesPanel({ sources }: { sources: DataSource[] }) {
                   </TableTd>
                   <TableTd>
                     {canManage && (
-                      <Button variant="danger" size="sm" onClick={() => onDelete(s.id)}>
+                      <Button variant="danger" size="sm" onClick={() => setConfirmDeleteId(s.id)}>
                         Remove
                       </Button>
                     )}
@@ -151,6 +160,18 @@ function SchedulesPanel({ sources }: { sources: DataSource[] }) {
           </Table>
         ) : null}
       </Stack>
+      <ConfirmDialog
+        open={confirmDeleteId !== null}
+        onConfirm={() => {
+          const id = confirmDeleteId;
+          setConfirmDeleteId(null);
+          if (id) void onDelete(id);
+        }}
+        onCancel={() => setConfirmDeleteId(null)}
+        tone="destructive"
+        title="Remove this schedule?"
+        body={`"${schedules.find(s => s.id === confirmDeleteId)?.label ?? ''}" will stop syncing on its own — the data source still syncs on manual "Sync now".`}
+      />
     </Card>
   );
 }

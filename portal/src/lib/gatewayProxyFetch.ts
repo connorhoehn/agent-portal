@@ -25,7 +25,7 @@ export interface PresenceEntry {
  * Gateway returns `{ users: PresenceEntry[] }`.
  */
 export async function fetchPresence(channel: string): Promise<PresenceEntry[]> {
-  const res = await fetch(`${BASE}/presence/${encodeURIComponent(channel)}`);
+  const res = await fetch(`${BASE}/presence/${encodeURIComponent(channel)}`, { credentials: 'include' });
   if (!res.ok) throw new Error(`fetchPresence failed: ${res.status}`);
   const body = await res.json() as { users?: PresenceEntry[] } | PresenceEntry[];
   if (Array.isArray(body)) return body;
@@ -42,6 +42,7 @@ export async function publishToChannel(
 ): Promise<void> {
   await fetch(`${BASE}/channels/${encodeURIComponent(channel)}/messages`, {
     method: 'POST',
+    credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
@@ -59,6 +60,7 @@ export interface ActivityEntry {
 export async function fetchActivityHistory(channel: string, limit = 20): Promise<ActivityEntry[]> {
   const res = await fetch(
     `${BASE}/activity/${encodeURIComponent(channel)}/history?limit=${limit}`,
+    { credentials: 'include' },
   );
   if (!res.ok) throw new Error(`fetchActivityHistory failed: ${res.status}`);
   const body = await res.json() as { events?: ActivityEntry[] } | ActivityEntry[];

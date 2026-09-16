@@ -13,6 +13,7 @@
 
 import { useEffect, useState } from 'react';
 import { Button, Card, Chip, Inline, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { writeJson } from '../../lib/writeJson';
 import { T } from './workShared';
 import {
   VERDICT_LABEL, VERDICT_TONE, matchQualifies, provenanceLine, savingsLine, worthShowing,
@@ -23,14 +24,6 @@ interface CheckResponse {
   matches: RediscoveryMatch[];
   estimateAvoidedUsd: number | null;
   estimateAvoidedMinutes: number | null;
-}
-
-async function postJson(url: string, body: unknown): Promise<Response> {
-  return fetch(url, {
-    method: 'POST', credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
 }
 
 export function RediscoveryPanel({ problem, repo, initiativeId, workItemId, onUse }: {
@@ -52,10 +45,9 @@ export function RediscoveryPanel({ problem, repo, initiativeId, workItemId, onUs
     if (!problem.trim()) return;
     (async () => {
       try {
-        const res = await postJson('/api/rediscovery/check', { problem, repo, initiativeId, workItemId });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const body = await res.json() as CheckResponse;
-        if (!cancelled) setResp(body);
+        const res = await writeJson<CheckResponse>('/api/rediscovery/check', 'POST', { problem, repo, initiativeId, workItemId });
+        if (!res.ok || !res.data) throw new Error(res.error ?? 'rediscovery check failed');
+        if (!cancelled) setResp(res.data);
       } catch {
         // No error state on purpose — see file header.
       }
@@ -64,10 +56,10 @@ export function RediscoveryPanel({ problem, repo, initiativeId, workItemId, onUs
   }, [problem, repo, initiativeId, workItemId]);
 
   function outcome(experienceId: string, action: 'used' | 'dismissed') {
-    void postJson('/api/rediscovery/outcome', { experienceId, workItemId, action }).catch(() => {
-      // Best-effort telemetry — losing one outcome ping shouldn't block the
-      // action it's reporting on.
-    });
+    // Best-effort telemetry — losing one outcome ping shouldn't block the
+    // action it's reporting on, so the result is intentionally unawaited
+    // and unchecked.
+    void writeJson('/api/rediscovery/outcome', 'POST', { experienceId, workItemId, action });
   }
 
   if (!resp || !worthShowing(resp.matches)) return null;
