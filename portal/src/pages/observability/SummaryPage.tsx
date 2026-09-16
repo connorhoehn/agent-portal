@@ -302,7 +302,11 @@ function SummaryPage() {
                 label={a.name}
                 value={a.invocationsLast24h}
                 danger={a.errorsLast24h > 0}
-                hint={`p50 ${a.latencyP50Ms}ms${a.errorsLast24h > 0 ? ` · ${a.errorsLast24h} errors` : ''}`}
+                hint={
+                  a.invocationsLast24h === 0
+                    ? 'no runs in 24h'
+                    : `p50 ${a.latencyP50Ms}ms${a.errorsLast24h > 0 ? ` · ${a.errorsLast24h} errors` : ''}`
+                }
               />
             ))}
           </KPIGrid>
