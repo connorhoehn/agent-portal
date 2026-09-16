@@ -447,8 +447,8 @@ function InvocationSearchPage() {
             <Table>
               <TableHead>
                 <TableRow>
-                  <TableTh>When</TableTh>
                   <TableTh>Agent</TableTh>
+                  <TableTh>When</TableTh>
                   <TableTh>Prompt</TableTh>
                   <TableTh>Response</TableTh>
                   <TableTh>Score</TableTh>
@@ -466,11 +466,11 @@ function InvocationSearchPage() {
                     }
                     className="cursor-pointer"
                   >
-                    <TableTd className="text-[11px] text-text-tertiary whitespace-nowrap">
-                      {new Date(r.ts).toLocaleString()}
-                    </TableTd>
                     <TableTd className="text-[12px] font-medium whitespace-nowrap">
                       {r.agentName || r.agentId}
+                    </TableTd>
+                    <TableTd className="text-[11px] text-text-tertiary whitespace-nowrap">
+                      {new Date(r.ts).toLocaleString()}
                     </TableTd>
                     <TableTd className="text-[12px] max-w-[280px] truncate" title={r.promptSnippet}>
                       {snip(r.promptSnippet, 100)}

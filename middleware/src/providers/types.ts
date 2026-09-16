@@ -40,6 +40,14 @@ export interface GraphSnapshot {
   nodes: Person[];
   edges: Relationship[];
   departments: Department[];
+  /**
+   * The TRUE count of people in the graph, independent of how many `nodes`
+   * carries. `fetchAllPeople` applies a bounded circuit-breaker LIMIT
+   * (`PEOPLE_GRAPH_LIMIT` in providers/aurora.ts) so the graph can never grow
+   * unbounded server-side — this field is what lets a caller say "showing N
+   * of M" instead of the payload silently claiming to be complete.
+   */
+  peopleTotal: number;
 }
 
 export interface PersonDetail extends Person {
@@ -127,6 +135,8 @@ export interface SkillsGraphSnapshot {
   skills: SkillNode[];
   people: Person[];
   personSkillEdges: PersonSkillEdge[];
+  /** See GraphSnapshot.peopleTotal — same circuit breaker, same contract. */
+  peopleTotal: number;
 }
 
 export interface ProjectNode {
@@ -146,6 +156,8 @@ export interface ProjectsGraphSnapshot {
   projects: ProjectNode[];
   people: Person[];
   personProjectEdges: ProjectPersonEdge[];
+  /** See GraphSnapshot.peopleTotal — same circuit breaker, same contract. */
+  peopleTotal: number;
 }
 
 /** A document that mentions a person — the "how do we know?" behind a skill/score. */

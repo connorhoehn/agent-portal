@@ -386,15 +386,22 @@ async function dbSearchWorkItems(opts: SearchWorkItemsOpts): Promise<WorkItem[]>
   return rows.map(rowToWorkItem);
 }
 
-async function dbGetProjectWorkItems(projectId: string): Promise<WorkItem[]> {
+// A circuit-breaker LIMIT, not an everyday cap — a single initiative's work
+// items are normally a few dozen to a few hundred. Ordering epics first (the
+// existing `wi.type DESC`) means a cap that does engage cuts stories/bugs
+// before the epics they hang off, rather than orphaning a tree mid-hierarchy.
+const PROJECT_WORK_ITEMS_LIMIT = 500;
+
+async function dbGetProjectWorkItems(projectId: string, limit: number = PROJECT_WORK_ITEMS_LIMIT): Promise<WorkItem[]> {
   const withNames = await appUsersAvailable();
   const sql = `
     SELECT ${ITEM_COLUMNS}${nameColumns(withNames)}
     ${ITEM_FROM}${nameJoins(withNames)}
     WHERE wi.project_id = :pid
     ORDER BY wi.type DESC, wi.created_at ASC
+    LIMIT :lim
   `;
-  const rows = await safeExec(sql, [strParam('pid', projectId)]);
+  const rows = await safeExec(sql, [strParam('pid', projectId), intParam('lim', Math.max(1, Math.min(limit, PROJECT_WORK_ITEMS_LIMIT)))]);
   return rows.map(rowToWorkItem);
 }
 
@@ -416,7 +423,12 @@ async function dbGetPersonWorkItems(personId: string, opts: { status?: string; l
   return rows.map(rowToWorkItem);
 }
 
-async function dbGetProjectDecisions(projectId: string): Promise<ProjectDecision[]> {
+// Same circuit-breaker reasoning as PROJECT_WORK_ITEMS_LIMIT: one project's
+// decision queue is normally small, and escalated/open sort first so a cap
+// that does engage drops the least urgent rows.
+const PROJECT_DECISIONS_LIMIT = 500;
+
+async function dbGetProjectDecisions(projectId: string, limit: number = PROJECT_DECISIONS_LIMIT): Promise<ProjectDecision[]> {
   const sql = `
     SELECT
       d.id, d.topic, d.summary, d.status,
@@ -428,8 +440,9 @@ async function dbGetProjectDecisions(projectId: string): Promise<ProjectDecision
     ORDER BY
       CASE d.status WHEN 'escalated' THEN 0 WHEN 'open' THEN 1 ELSE 2 END,
       COALESCE(d.escalated_at, d.created_at) DESC
+    LIMIT :lim
   `;
-  const rows = await safeExec(sql, [strParam('pid', projectId)]);
+  const rows = await safeExec(sql, [strParam('pid', projectId), intParam('lim', Math.max(1, Math.min(limit, PROJECT_DECISIONS_LIMIT)))]);
   return rows.map((r) => ({
     id: String(r['id'] ?? ''),
     topic: String(r['topic'] ?? ''),
@@ -879,15 +892,15 @@ export async function searchWorkItems(opts: SearchWorkItemsOpts): Promise<WorkIt
   return items.slice(0, Math.min(opts.limit ?? 50, 200));
 }
 
-export async function getProjectWorkItems(projectId: string): Promise<WorkItem[]> {
+export async function getProjectWorkItems(projectId: string, limit: number = PROJECT_WORK_ITEMS_LIMIT): Promise<WorkItem[]> {
   if (!config.mock.aurora) {
-    return dbGetProjectWorkItems(projectId);
+    return dbGetProjectWorkItems(projectId, limit);
   }
-  return mockWorkItems().filter((i) => i.projectId === projectId);
+  return mockWorkItems().filter((i) => i.projectId === projectId).slice(0, limit);
 }
 
-export async function getProjectWorkTree(projectId: string): Promise<WorkItemTree[]> {
-  const items = await getProjectWorkItems(projectId);
+export async function getProjectWorkTree(projectId: string, limit: number = PROJECT_WORK_ITEMS_LIMIT): Promise<WorkItemTree[]> {
+  const items = await getProjectWorkItems(projectId, limit);
   return buildWorkItemTree(items);
 }
 
@@ -901,11 +914,11 @@ export async function getPersonWorkItems(personId: string, opts: { status?: stri
   return items.slice(0, opts.limit ?? 30);
 }
 
-export async function getProjectDecisions(projectId: string): Promise<ProjectDecision[]> {
+export async function getProjectDecisions(projectId: string, limit: number = PROJECT_DECISIONS_LIMIT): Promise<ProjectDecision[]> {
   if (!config.mock.aurora) {
-    return dbGetProjectDecisions(projectId);
+    return dbGetProjectDecisions(projectId, limit);
   }
-  return mockProjectDecisions(projectId);
+  return mockProjectDecisions(projectId).slice(0, limit);
 }
 
 export async function createWorkItem(data: CreateWorkItemInput): Promise<WorkItem> {

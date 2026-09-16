@@ -318,6 +318,61 @@ const MOCK_PROGRAM_FIELDS: Record<string, { sprintId?: string; estimatedCostUsd?
 };
 
 /**
+ * A seed, normalized to a full `WorkItem` — the shared body `default` and
+ * `large` both call, so the field list (and the "no seeded item has an
+ * authorized estimate" rule) is written once. `idOverride` is how `large`
+ * relabels a clone's id/parentId without duplicating everything else.
+ */
+function normalizeSeed(seed: MockSeed, idOverride?: { id: string; parentId: string | null }): WorkItem {
+  return {
+    sprintId: null,
+    estimatedCostUsd: null,
+    ...seed,
+    ...MOCK_PROGRAM_FIELDS[seed.id],
+    ...(idOverride ?? {}),
+    // A missing name falls back to the id rather than to '': an id with no
+    // initiative is a bug worth seeing on the page, not a blank label.
+    projectName: mockProjectName(seed.projectId) ?? seed.projectId,
+    // No seeded item has an authorized estimate — see the MockSeed note.
+    estimatedBy: null,
+    estimatedByName: null,
+    estimatedAt: null,
+    estimateModel: null,
+    estimateForecast: null,
+    estimateReviewedBy: null,
+    estimateReviewedByName: null,
+    estimateReviewedAt: null,
+  };
+}
+
+// The busiest seeded initiative (`p-observability`) carries 14 items;
+// `LARGE_ROUNDS` clones of the WHOLE seed set (so every initiative grows in
+// proportion, not just one) puts it at 14 * 36 = 504 — past
+// `PROJECT_WORK_ITEMS_LIMIT` (500, providers/work-items.ts), the circuit
+// breaker on a single initiative's Work tab — and the board overall past the
+// 200-row cap `searchWorkItems` applies by default. Round 0 keeps the seed's
+// own ids; later rounds suffix `-x<round>`, translating `parentId` the same
+// way so each round's epic/story/bug tree stays intact.
+const LARGE_ROUNDS = 36;
+
+function suffixId(id: string, round: number): string {
+  return round === 0 ? id : `${id}-x${round}`;
+}
+
+function largeWorkItems(): WorkItem[] {
+  const out: WorkItem[] = [];
+  for (let round = 0; round < LARGE_ROUNDS; round += 1) {
+    for (const seed of MOCK_WORK_ITEM_SEEDS) {
+      out.push(normalizeSeed(seed, {
+        id: suffixId(seed.id, round),
+        parentId: seed.parentId ? suffixId(seed.parentId, round) : null,
+      }));
+    }
+  }
+  return out;
+}
+
+/**
  * The board.
  *
  * `default` — every work item schema/seed_program.sql gives the fourteen
@@ -327,6 +382,8 @@ const MOCK_PROGRAM_FIELDS: Record<string, { sprintId?: string; estimatedCostUsd?
  *             `default`, so an unwritten `empty` would not be empty — and the
  *             "no work items yet" copy on an initiative's Work tab is the one
  *             state a fully seeded board can never show.
+ * `large`   — the seed replayed across `LARGE_ROUNDS` rounds (see above), for
+ *             both the board-wide and the per-initiative caps.
  *
  * The rows are built in the factory, not at module scope, so `projectName` is
  * resolved after providers/projects.ts has finished evaluating (see the import
@@ -335,25 +392,9 @@ const MOCK_PROGRAM_FIELDS: Record<string, { sprintId?: string; estimatedCostUsd?
 export const workItems = defineFixture<WorkItem>({
   key: 'work-items',
   scenarios: {
-    default: () => MOCK_WORK_ITEM_SEEDS.map((seed) => ({
-      sprintId: null,
-      estimatedCostUsd: null,
-      ...seed,
-      ...MOCK_PROGRAM_FIELDS[seed.id],
-      // A missing name falls back to the id rather than to '': an id with no
-      // initiative is a bug worth seeing on the page, not a blank label.
-      projectName: mockProjectName(seed.projectId) ?? seed.projectId,
-      // No seeded item has an authorized estimate — see the MockSeed note.
-      estimatedBy: null,
-      estimatedByName: null,
-      estimatedAt: null,
-      estimateModel: null,
-      estimateForecast: null,
-      estimateReviewedBy: null,
-      estimateReviewedByName: null,
-      estimateReviewedAt: null,
-    })),
+    default: () => MOCK_WORK_ITEM_SEEDS.map((seed) => normalizeSeed(seed)),
     empty: () => [],
+    large: largeWorkItems,
   },
 });
 

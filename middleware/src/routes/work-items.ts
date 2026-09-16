@@ -170,14 +170,16 @@ async function parentMissing(res: Response, kind: 'project' | 'person', id: stri
 }
 
 // ── Project work tree ─────────────────────────────────────────────────────────
-// GET /api/graph/projects/:id/work
+// GET /api/graph/projects/:id/work?limit=
 workItemsRouter.get(
   '/projects/:id/work',
   asyncHandler(async (req, res) => {
     const id = req.params['id'] as string;
     if (!id) { res.status(400).json({ error: 'Missing project id' }); return; }
     if (await parentMissing(res, 'project', id)) return;
-    const tree = await getProjectWorkTree(id);
+    const rawLimit = parseInt(req.query['limit'] as string ?? '500', 10);
+    const limit = Number.isNaN(rawLimit) ? 500 : Math.min(Math.max(rawLimit, 1), 500);
+    const tree = await getProjectWorkTree(id, limit);
     res.json(tree);
   }),
 );
@@ -221,14 +223,16 @@ workItemsRouter.get(
 );
 
 // ── Project decision queue ────────────────────────────────────────────────────
-// GET /api/graph/projects/:id/decisions
+// GET /api/graph/projects/:id/decisions?limit=
 workItemsRouter.get(
   '/projects/:id/decisions',
   asyncHandler(async (req, res) => {
     const id = req.params['id'] as string;
     if (!id) { res.status(400).json({ error: 'Missing project id' }); return; }
     if (await parentMissing(res, 'project', id)) return;
-    const decisions = await getProjectDecisions(id);
+    const rawLimit = parseInt(req.query['limit'] as string ?? '500', 10);
+    const limit = Number.isNaN(rawLimit) ? 500 : Math.min(Math.max(rawLimit, 1), 500);
+    const decisions = await getProjectDecisions(id, limit);
     res.json(decisions);
   }),
 );

@@ -159,6 +159,9 @@ function WhereToStart({ onSelectTeam, teamId }: { onSelectTeam: (id: string) => 
       keyField={(g) => g.id}
       striped
       onRowClick={(g) => onSelectTeam(g.id)}
+      // Every team with an open recommendation, program-wide — 20 is a
+      // full-page screenful.
+      pageSize={20}
       columns={[
         {
           key: 'name', header: 'Team',

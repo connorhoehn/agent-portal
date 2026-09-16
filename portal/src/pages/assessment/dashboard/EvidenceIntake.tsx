@@ -321,6 +321,10 @@ export function EvidenceIntake({ teamId }: EvidenceIntakeProps) {
           loading={isLoading}
           emptyMessage={error ? 'Could not load the ledger.' : 'No evidence ingested yet. Add evidence above to start this team’s lineage ledger.'}
           frameless
+          // A ledger accumulates for as long as the team is assessed — 25
+          // keeps a long history navigable instead of growing the page
+          // without bound.
+          pageSize={25}
         />
       </Card>
     </Stack>

@@ -4,8 +4,10 @@
 //   * the auth floor: the two reads are open (this router is mounted with no
 //     capability gate), the SYNC is gated on ManageKB because it spends real
 //     Bedrock/OpenSearch resources,
-//   * `total` is the count of the documents shipped beside it, never an
-//     independently authored number (contract.ts bug class 1),
+//   * `total` is a real COUNT(*) over the SAME filter as the page
+//     (`countIngestedDocs`), never `documents.length` — that collapses to
+//     the page size the moment the corpus outgrows the limit, silently,
+//     which is the shape contract.ts bug class 1 warns about,
 //   * the limit clamp (1..500, default 50, non-numeric falls back) and the
 //     `since` passthrough,
 //   * the sync failure branch: a 500 with `ok: false` and the underlying
@@ -25,6 +27,7 @@ jest.mock('../../config.js', () => ({
 }));
 jest.mock('../../providers/knowledge-base.js', () => ({
   listIngestedDocs: jest.fn(),
+  countIngestedDocs: jest.fn(),
   listDataSourcesWithStatus: jest.fn(),
   startSync: jest.fn(),
 }));
@@ -34,10 +37,11 @@ import request from '../../test-support/http.js';
 import { knowledgeBaseRouter } from '../knowledge-base.js';
 import { errorHandler } from '../../lib/async-handler.js';
 import {
-  listIngestedDocs, listDataSourcesWithStatus, startSync,
+  listIngestedDocs, countIngestedDocs, listDataSourcesWithStatus, startSync,
 } from '../../providers/knowledge-base.js';
 
 const docsMock = listIngestedDocs as unknown as jest.Mock;
+const countMock = countIngestedDocs as unknown as jest.Mock;
 const sourcesMock = listDataSourcesWithStatus as unknown as jest.Mock;
 const syncMock = startSync as unknown as jest.Mock;
 
@@ -55,7 +59,10 @@ function buildApp() {
 }
 
 beforeEach(() => {
-  docsMock.mockReset(); sourcesMock.mockReset(); syncMock.mockReset();
+  docsMock.mockReset(); countMock.mockReset(); sourcesMock.mockReset(); syncMock.mockReset();
+  // Most tests don't care about the count independently of the page —
+  // default it to match, and override in the tests that DO care.
+  countMock.mockImplementation(async () => 0);
 });
 
 describe('auth floor', () => {
@@ -65,13 +72,25 @@ describe('auth floor', () => {
 });
 
 describe('GET /api/knowledge-base/documents', () => {
-  it('reports a total that COUNTS the rows it ships', async () => {
+  it('reports a total from countIngestedDocs, not the page length', async () => {
     docsMock.mockResolvedValue([DOC, { ...DOC, id: 'd-2' }]);
+    countMock.mockResolvedValue(2);
     const res = await request(buildApp()).get('/api/knowledge-base/documents');
     expect(res.status).toBe(200);
     expect(Object.keys(res.body).sort()).toEqual(['documents', 'total']);
-    expect(res.body.total).toBe(res.body.documents.length);
+    expect(res.body.total).toBe(2);
     expect(res.body.documents[0].sourceUri).toBe('s3://x/adr-14.md');
+  });
+
+  // The whole point of the fix: a two-row page must still report the REAL
+  // population behind it. Fails against the old implementation, which
+  // answered `total: documents.length` (2).
+  it('reports the true count even when the page is capped well below it', async () => {
+    docsMock.mockResolvedValue([DOC, { ...DOC, id: 'd-2' }]);
+    countMock.mockResolvedValue(613);
+    const res = await request(buildApp()).get('/api/knowledge-base/documents?limit=2');
+    expect(res.body.documents).toHaveLength(2);
+    expect(res.body.total).toBe(613);
   });
 
   it('defaults to 50 and clamps the limit into 1..500', async () => {
@@ -85,13 +104,15 @@ describe('GET /api/knowledge-base/documents', () => {
       .toEqual([50, 50, 500, 50]);
   });
 
-  it('passes `since` through, and undefined when absent', async () => {
+  it('passes `since` through to BOTH the page and the count, and undefined when absent', async () => {
     docsMock.mockResolvedValue([]);
     const app = buildApp();
     await request(app).get('/api/knowledge-base/documents?since=2026-08-01T00:00:00Z');
     await request(app).get('/api/knowledge-base/documents');
     expect((docsMock.mock.calls[0]![0] as { since?: string }).since).toBe('2026-08-01T00:00:00Z');
     expect((docsMock.mock.calls[1]![0] as { since?: string }).since).toBeUndefined();
+    expect((countMock.mock.calls[0]![0] as { since?: string }).since).toBe('2026-08-01T00:00:00Z');
+    expect((countMock.mock.calls[1]![0] as { since?: string }).since).toBeUndefined();
   });
 
   it('serves an un-ingested corpus as an empty list with total 0', async () => {

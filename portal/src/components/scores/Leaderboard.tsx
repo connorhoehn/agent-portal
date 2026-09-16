@@ -24,24 +24,6 @@ interface Props {
 export function Leaderboard({ entries, selectedId, onSelect, deptColors, rankedBy, weight = 0.55, comparisonIds, onToggleCompare, compareDisabled }: Props) {
   const columns: DataTableColumn<ScoreEntry>[] = [
     {
-      key: 'compare',
-      header: '',
-      width: '32px',
-      render: (s) => {
-        const inComparison = comparisonIds.has(s.personId);
-        const checkboxDisabled = compareDisabled && !inComparison;
-        return (
-          <Checkbox
-            checked={inComparison}
-            disabled={checkboxDisabled}
-            onChange={() => onToggleCompare(s.personId)}
-            onClick={(e) => e.stopPropagation()}
-            aria-label={`Compare ${s.name}`}
-          />
-        );
-      },
-    },
-    {
       key: 'rank',
       header: '#',
       className: 'text-text-tertiary',
@@ -71,6 +53,24 @@ export function Leaderboard({ entries, selectedId, onSelect, deptColors, rankedB
           >
             {s.name}
           </Button>
+        );
+      },
+    },
+    {
+      key: 'compare',
+      header: '',
+      width: '32px',
+      render: (s) => {
+        const inComparison = comparisonIds.has(s.personId);
+        const checkboxDisabled = compareDisabled && !inComparison;
+        return (
+          <Checkbox
+            checked={inComparison}
+            disabled={checkboxDisabled}
+            onChange={() => onToggleCompare(s.personId)}
+            onClick={(e) => e.stopPropagation()}
+            aria-label={`Compare ${s.name}`}
+          />
         );
       },
     },

@@ -70,6 +70,25 @@ describe('GET /teams — TeamSummary shape', () => {
     expect(t002.workflow_steps).toHaveLength(6);
     expect(t002.workflow_steps.find((s: { active: boolean }) => s.active).step).toBe(t002.workflow_step);
   });
+
+  // `/teams` used to take no query params at all and always answer the
+  // full roster unbounded — a scale audit flagged it as one of the reads
+  // that should take a clamped limit. This is the fix, proven against the
+  // real seeded team count so it fails if the route silently drops the
+  // limit or over-honours it past the clamp.
+  it('clamps `limit`, defaulting to the full roster', async () => {
+    const full = await request(buildApp()).get('/api/assessment/teams');
+    expect(full.body.length).toBeGreaterThan(1);
+
+    const capped = await request(buildApp()).get('/api/assessment/teams?limit=1');
+    expect(capped.body).toHaveLength(1);
+
+    // An oversized limit is clamped, not honoured verbatim — the roster is
+    // small enough that any value past its true size proves nothing about
+    // clamping on its own, so this only asserts it never exceeds the full set.
+    const over = await request(buildApp()).get('/api/assessment/teams?limit=999999');
+    expect(over.body.length).toBe(full.body.length);
+  });
 });
 
 describe('GET /teams/:id — TeamDetailResponse shape', () => {

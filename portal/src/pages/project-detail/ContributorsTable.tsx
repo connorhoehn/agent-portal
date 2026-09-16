@@ -53,10 +53,6 @@ export function ContributorsTable({
       ),
     },
     {
-      key: 'personId', header: 'ID', width: '92px', sortable: true,
-      render: (c) => <T className="font-mono text-[11px] text-text-tertiary">{c.personId}</T>,
-    },
-    {
       key: 'title', header: 'Title', sortable: true,
       render: (c) => <T className="text-text-secondary">{c.title ?? '—'}</T>,
     },

@@ -25,12 +25,11 @@ import {
   docCountLabel,
   formatDate,
   syncTone,
-  tenantTone,
   truncate,
 } from './kbFormat';
 import type { KbRegistryEntry } from './types';
 
-const COLUMNS = ['Name', 'Tenant', 'Purpose', 'Status', 'Documents', 'Last sync', ''] as const;
+const COLUMNS = ['Name', 'Purpose', 'Status', 'Documents', 'Last sync', ''] as const;
 
 export function KbRegistryTable({
   kbs,
@@ -59,10 +58,6 @@ export function KbRegistryTable({
           <TableRow key={kb.id} clickable onClick={() => onOpen(kb)}>
             <TableTd>
               <EntityCell label={kb.name} id={kb.slug} />
-            </TableTd>
-
-            <TableTd>
-              <Chip tone={tenantTone(kb.tenant)} size="xs">{kb.tenant}</Chip>
             </TableTd>
 
             <TableTd className="text-[12px] text-text-secondary">{kb.purpose}</TableTd>

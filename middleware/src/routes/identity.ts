@@ -93,9 +93,22 @@ identityRouter.post('/tenants', requireAction('ManageUsers'), asyncHandler(async
   res.status(201).json(await createTenant(id, displayName || id));
 }));
 
+// A silent clamp, not a 400: the seeded cast is 14 users and this list feeds
+// the identity admin page, not a picker with its own paging, so the default
+// has to keep shipping everyone today while still bounding an unbounded
+// `SELECT ... FROM app_users` against a cluster that grew.
+const DEFAULT_USERS_LIMIT = 500;
+const MAX_USERS_LIMIT = 2000;
+
+function clampUsersLimit(raw: unknown): number {
+  const n = parseInt(String(raw ?? ''), 10);
+  return Number.isFinite(n) && n > 0 ? Math.min(n, MAX_USERS_LIMIT) : DEFAULT_USERS_LIMIT;
+}
+
 identityRouter.get('/users', identityRead, asyncHandler(async (req, res) => {
   const only = scopedToOwnTenant(req.session);
-  const users = await listUsers();
+  const limit = clampUsersLimit(req.query['limit']);
+  const users = (await listUsers()).slice(0, limit);
   // A tenant-scoped manager sees the people provisioned in their tenant,
   // and only that tenant's grants on them — not the org's whole roster.
   res.json(only

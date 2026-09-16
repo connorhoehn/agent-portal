@@ -4,7 +4,7 @@
 jest.mock('../aurora.js', () => ({ exec: jest.fn() }));
 jest.mock('../../config.js', () => ({ config: { mock: { aurora: true } } }));
 
-import { listFindings, getFinding, runSweep } from '../org-sweeps.js';
+import { listFindings, getFinding, runSweep, findingStats } from '../org-sweeps.js';
 
 describe('mock findings seed', () => {
   it('lists seeded findings across open / promoted / resolved / dismissed', async () => {
@@ -35,5 +35,17 @@ describe('mock findings seed', () => {
     expect(r.found).toBe(2);
     expect(r.updated).toBe(2);
     expect(r.created).toBe(0);
+  });
+
+  it('findingStats groups by sweep/status/severity and sums to the same population listFindings sees', async () => {
+    const all = await listFindings();
+    const stats = await findingStats();
+    const total = stats.reduce((sum, row) => sum + row.n, 0);
+    expect(total).toBe(all.length);
+    // Every group is non-empty and each finding lands in exactly one group.
+    for (const row of stats) expect(row.n).toBeGreaterThan(0);
+    const openFromStats = stats.filter((r) => r.status === 'open').reduce((s, r) => s + r.n, 0);
+    const openFromList = all.filter((f) => f.status === 'open').length;
+    expect(openFromStats).toBe(openFromList);
   });
 });

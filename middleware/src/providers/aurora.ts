@@ -44,6 +44,8 @@ import type {
 import {
   mockPeople,
   mockRelationships,
+  graphPeople,
+  graphRelationships,
   departments as mockDepartments,
 } from '../mock/people.js';
 import { mockScores } from '../mock/scores.js';
@@ -279,11 +281,27 @@ async function fetchSkillsByPerson(): Promise<Map<string, string[]>> {
   return out;
 }
 
-async function fetchAllPeople(): Promise<Person[]> {
+// A circuit breaker, not an everyday cap: the seeded cast is a few dozen
+// people. It exists so a graph that somehow grew past a sane bound cannot
+// make deriveHierarchyEdges' O(n^2) pass, or the entities/skills/projects
+// payloads, unbounded — while fetchPeopleCount() reports the TRUE total
+// beside the capped list, so a caller that hits this can say "showing N of
+// M" rather than silently claiming the graph is complete.
+const PEOPLE_GRAPH_LIMIT = 500;
+
+async function fetchPeopleCount(): Promise<number> {
+  const rows = await exec(`SELECT count(*)::int AS n FROM people`);
+  return toNumber(rows[0]?.n, 0);
+}
+
+async function fetchAllPeople(limit: number = PEOPLE_GRAPH_LIMIT): Promise<Person[]> {
   const rows = await exec(
     `SELECT id, name, title, team,
             COALESCE(pagerank_score, expertise_score / 100.0, 0) AS influence
-       FROM people`,
+       FROM people
+      ORDER BY id
+      LIMIT :lim`,
+    [intParam('lim', Math.max(1, Math.min(limit, PEOPLE_GRAPH_LIMIT)))],
   );
   const skills = await fetchSkillsByPerson();
   return rows.map<Person>((r) => {
@@ -419,13 +437,13 @@ function deriveHierarchyEdges(people: Person[]): Relationship[] {
 }
 
 async function realFetchGraph(): Promise<GraphSnapshot> {
-  const [nodes, edges] = await Promise.all([fetchAllPeople(), fetchAllEdges()]);
+  const [nodes, edges, peopleTotal] = await Promise.all([fetchAllPeople(), fetchAllEdges(), fetchPeopleCount()]);
   const departments = departmentsFromTeams(nodes.map((n) => n.department));
-  return { nodes, edges: [...edges, ...deriveHierarchyEdges(nodes)], departments };
+  return { nodes, edges: [...edges, ...deriveHierarchyEdges(nodes)], departments, peopleTotal };
 }
 
 async function realFetchSkillsGraph(): Promise<SkillsGraphSnapshot> {
-  const [people, skillRows, edgeRows] = await Promise.all([
+  const [people, skillRows, edgeRows, peopleTotal] = await Promise.all([
     fetchAllPeople(),
     exec(
       `SELECT s.id, s.name, COALESCE(s.domain, 'General') AS domain,
@@ -439,6 +457,7 @@ async function realFetchSkillsGraph(): Promise<SkillsGraphSnapshot> {
          FROM person_skills ps
          JOIN skills s ON s.id = ps.skill_id`,
     ),
+    fetchPeopleCount(),
   ]);
 
   const skills: SkillsGraphSnapshot['skills'] = skillRows.map((r) => ({
@@ -462,11 +481,11 @@ async function realFetchSkillsGraph(): Promise<SkillsGraphSnapshot> {
     weight: clamp01(toNumber(r.weight, 0.5)),
   }));
 
-  return { domains, skills, people, personSkillEdges };
+  return { domains, skills, people, personSkillEdges, peopleTotal };
 }
 
 async function realFetchProjectsGraph(): Promise<ProjectsGraphSnapshot> {
-  const [people, projectRows, edgeRows] = await Promise.all([
+  const [people, projectRows, edgeRows, peopleTotal] = await Promise.all([
     fetchAllPeople(),
     exec(
       `SELECT p.id, p.name, COALESCE(p.status, 'active') AS status,
@@ -479,6 +498,7 @@ async function realFetchProjectsGraph(): Promise<ProjectsGraphSnapshot> {
       `SELECT pc.person_id, pc.project_id, COALESCE(pc.weight, 0.5) AS weight
          FROM project_contributions pc`,
     ),
+    fetchPeopleCount(),
   ]);
 
   const projects: ProjectsGraphSnapshot['projects'] = projectRows.map((r) => ({
@@ -494,7 +514,7 @@ async function realFetchProjectsGraph(): Promise<ProjectsGraphSnapshot> {
     weight: clamp01(toNumber(r.weight, 0.5)),
   }));
 
-  return { projects, people, personProjectEdges };
+  return { projects, people, personProjectEdges, peopleTotal };
 }
 
 async function realFetchPersonGraph(personId: string): Promise<PersonDetail | null> {
@@ -589,22 +609,32 @@ async function realFetchPersonGraph(personId: string): Promise<PersonDetail | nu
 
 async function realGetLeaderboard(opts: { department?: string; limit?: number }): Promise<Leaderboard> {
   const limit = Math.max(1, Math.min(opts.limit ?? 25, 200));
-  const params: SqlParameter[] = [
-    intParam('lim', limit),
-    nullableStrParam('dept', opts.department ?? null),
-  ];
-  const rows = await exec(
-    `SELECT id, name, team,
-            COALESCE(pagerank_score, 0) * 100   AS influence,
-            COALESCE(expertise_score, 0)         AS expertise,
-            COALESCE(composite_score, 0)         AS composite,
-            scored_at::text                      AS scored_at
-       FROM people
-      WHERE (:dept::text IS NULL OR LOWER(team) LIKE LOWER('%' || :dept || '%'))
-      ORDER BY composite_score DESC NULLS LAST
-      LIMIT :lim`,
-    params,
-  );
+  const deptParam = nullableStrParam('dept', opts.department ?? null);
+  const params: SqlParameter[] = [intParam('lim', limit), deptParam];
+  // Same WHERE clause as the page query below, without the LIMIT — this is
+  // the true count behind the capped page. `entries.length` (the old total)
+  // silently equals the LIMIT the instant the department has more than
+  // `limit` people, and does so without any error to notice it by.
+  const [rows, countRows] = await Promise.all([
+    exec(
+      `SELECT id, name, team,
+              COALESCE(pagerank_score, 0) * 100   AS influence,
+              COALESCE(expertise_score, 0)         AS expertise,
+              COALESCE(composite_score, 0)         AS composite,
+              scored_at::text                      AS scored_at
+         FROM people
+        WHERE (:dept::text IS NULL OR LOWER(team) LIKE LOWER('%' || :dept || '%'))
+        ORDER BY composite_score DESC NULLS LAST
+        LIMIT :lim`,
+      params,
+    ),
+    exec(
+      `SELECT count(*)::int AS n
+         FROM people
+        WHERE (:dept::text IS NULL OR LOWER(team) LIKE LOWER('%' || :dept || '%'))`,
+      [deptParam],
+    ),
+  ]);
   const entries: ScoreEntry[] = rows.map((r) => ({
     personId: toStr(r.id),
     name: toStr(r.name),
@@ -622,7 +652,8 @@ async function realGetLeaderboard(opts: { department?: string; limit?: number })
   const mostRecentScoredAt = nonNullDates.length > 0
     ? nonNullDates.reduce((a, b) => (a > b ? a : b))
     : null;
-  return { entries, total: entries.length, mostRecentScoredAt };
+  const total = toNumber(countRows[0]?.n, entries.length);
+  return { entries, total, mostRecentScoredAt };
 }
 
 async function realGetSkillLeaderboard(opts: { skill: string; limit?: number }): Promise<Leaderboard> {
@@ -1086,11 +1117,25 @@ async function realGetContributions(personId: string): Promise<ContributionsResp
 const mockPeopleByDept = (): Department[] =>
   mockDepartments.map((d) => ({ id: d.id, name: d.name, color: d.color }));
 
+/**
+ * The capped node list plus the true count beside it — same contract as
+ * `PEOPLE_GRAPH_LIMIT`/`fetchPeopleCount` on the real provider. Under
+ * `default` the cast is 56, so the slice is a no-op and `peopleTotal` equals
+ * `nodes.length` same as before; under `large` (mock/people.ts's
+ * `graphPeople`) the cast is 616, so the cap actually engages and the two
+ * numbers diverge — which is the whole point of a `large` scenario for a
+ * route whose real circuit breaker nothing offline could otherwise reach.
+ */
+function cappedGraphPeople(): { nodes: Person[]; peopleTotal: number } {
+  const people = graphPeople.rows();
+  return {
+    nodes: people.slice(0, PEOPLE_GRAPH_LIMIT).map(p => ({ ...p, presence: generatePresence(p.id) })),
+    peopleTotal: people.length,
+  };
+}
+
 async function mockFetchGraph(): Promise<GraphSnapshot> {
-  const nodes = (mockPeople as Person[]).map(p => ({
-    ...p,
-    presence: generatePresence(p.id),
-  }));
+  const { nodes, peopleTotal } = cappedGraphPeople();
   return {
     nodes,
     // `deriveHierarchyEdges` is the same call `realFetchGraph` makes, and
@@ -1099,8 +1144,16 @@ async function mockFetchGraph(): Promise<GraphSnapshot> {
     // `reports_to`/`mentors`, matched nothing, and painted an empty canvas
     // with no error. The function reads only id/title/department, all of which
     // mock people carry, so it produces the same edges here as in production.
-    edges: [...(mockRelationships as Relationship[]), ...deriveHierarchyEdges(nodes)],
+    //
+    // `graphRelationships.rows()` mirrors `graphPeople.rows()` scenario for
+    // scenario — under `large` it is `mockRelationships` replayed across
+    // every round of the inflated cast (mock/people.ts), and like the real
+    // `fetchAllEdges` it is not itself filtered to the capped node set, so an
+    // edge naming a person past the cap is the same shape a real cluster's
+    // `collaborations` table can hand back too.
+    edges: [...graphRelationships.rows(), ...deriveHierarchyEdges(nodes)],
     departments: mockPeopleByDept(),
+    peopleTotal,
   };
 }
 
@@ -1109,7 +1162,7 @@ async function mockFetchGraph(): Promise<GraphSnapshot> {
 // the rows rather than stored, so a fixture edit cannot leave a stale total
 // behind — see the header of mock/graph-taxonomy.ts.
 async function mockFetchSkillsGraph(): Promise<SkillsGraphSnapshot> {
-  const people = (mockPeople as Person[]).map(p => ({ ...p, presence: generatePresence(p.id) }));
+  const { nodes: people, peopleTotal } = cappedGraphPeople();
   const known = new Set(people.map(p => p.id));
 
   const perSkill = new Map<string, number>();
@@ -1135,11 +1188,11 @@ async function mockFetchSkillsGraph(): Promise<SkillsGraphSnapshot> {
     skillCount,
   }));
 
-  return { domains, skills, people, personSkillEdges };
+  return { domains, skills, people, personSkillEdges, peopleTotal };
 }
 
 async function mockFetchProjectsGraph(): Promise<ProjectsGraphSnapshot> {
-  const people = (mockPeople as Person[]).map(p => ({ ...p, presence: generatePresence(p.id) }));
+  const { nodes: people, peopleTotal } = cappedGraphPeople();
   const known = new Set(people.map(p => p.id));
 
   const perProject = new Map<string, number>();
@@ -1157,7 +1210,7 @@ async function mockFetchProjectsGraph(): Promise<ProjectsGraphSnapshot> {
     contributorCount: perProject.get(pr.id) ?? 0,
   }));
 
-  return { projects, people, personProjectEdges };
+  return { projects, people, personProjectEdges, peopleTotal };
 }
 
 async function mockFetchPersonGraph(personId: string): Promise<PersonDetail | null> {

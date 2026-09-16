@@ -707,13 +707,35 @@ describe('GET /:id/docs', () => {
     expect(String(m(exec).mock.calls[0]![0])).toMatch(/kb_registry_slug = :slug/);
   });
 
+  // The whole point of the fix: a page capped at 1 must still report the
+  // REAL population behind it. Fails against the old implementation, which
+  // answered `total: documents.length` (1).
+  it('reports the true COUNT(*), not the length of the capped page', async () => {
+    m(getKb).mockResolvedValue(KB);
+    m(exec)
+      .mockResolvedValueOnce([
+        { id: 'd-1', source: 'adr', source_uri: null, title: 'ADR 1', ingested_at: null },
+      ])
+      .mockResolvedValueOnce([{ n: 842 }]);
+    const res = await request(buildApp()).get('/api/admin/kb-registry/kb-row-1/docs?limit=1');
+    expect(res.body.documents).toHaveLength(1);
+    expect(res.body.total).toBe(842);
+    // The count query scopes to the SAME slug as the page query.
+    const countParams = m(exec).mock.calls[1]![1] as Array<{ name: string; value: Record<string, unknown> }>;
+    expect(countParams.find((p) => p.name === 'slug')!.value['stringValue']).toBe('orgiq-default');
+    expect(String(m(exec).mock.calls[1]![0])).toMatch(/count\(\*\)/);
+  });
+
   it('clamps the limit into 1..500 and degrades to an empty list', async () => {
     m(getKb).mockResolvedValue(KB);
     m(exec).mockResolvedValue([]);
     const app = buildApp();
     await request(app).get('/api/admin/kb-registry/kb-row-1/docs');
     await request(app).get('/api/admin/kb-registry/kb-row-1/docs?limit=9999');
-    const lims = m(exec).mock.calls.map((c) =>
+    // Only the page query carries `lim` — the count query has no limit.
+    const limCalls = m(exec).mock.calls.filter((c) =>
+      (c[1] as Array<{ name: string }>).some((p) => p.name === 'lim'));
+    const lims = limCalls.map((c) =>
       (c[1] as Array<{ name: string; value: Record<string, unknown> }>)
         .find((p) => p.name === 'lim')!.value['longValue']);
     expect(lims).toEqual([50, 500]);

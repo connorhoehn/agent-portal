@@ -732,17 +732,26 @@ kbAdminRouter.get('/:id/docs', asyncHandler(async (req, res) => {
   const lim = limitRaw ? Math.min(Math.max(1, parseInt(String(limitRaw), 10) || 50), 500) : 50;
 
   try {
-    const rows = await exec(
-      `SELECT id::text, source, source_uri, title, ingested_at::text
-         FROM documents
-        WHERE kb_registry_slug = :slug
-        ORDER BY ingested_at DESC NULLS LAST
-        LIMIT :lim`,
-      [
-        strParam('slug', entry.slug),
-        intParam('lim', lim),
-      ],
-    );
+    // The page AND the true count behind it, in parallel: `total` used to be
+    // `documents.length`, which is just the LIMIT the moment a KB holds more
+    // documents than the page size — silently, with no error to notice it by.
+    const [rows, countRows] = await Promise.all([
+      exec(
+        `SELECT id::text, source, source_uri, title, ingested_at::text
+           FROM documents
+          WHERE kb_registry_slug = :slug
+          ORDER BY ingested_at DESC NULLS LAST
+          LIMIT :lim`,
+        [
+          strParam('slug', entry.slug),
+          intParam('lim', lim),
+        ],
+      ),
+      exec(
+        `SELECT count(*)::int AS n FROM documents WHERE kb_registry_slug = :slug`,
+        [strParam('slug', entry.slug)],
+      ),
+    ]);
 
     const documents = rows.map((r) => ({
       id: String(r['id'] ?? ''),
@@ -752,7 +761,8 @@ kbAdminRouter.get('/:id/docs', asyncHandler(async (req, res) => {
       ingestedAt: r['ingested_at'] == null ? null : String(r['ingested_at']),
     }));
 
-    res.json({ documents, total: documents.length });
+    const total = countRows[0]?.['n'] != null ? Number(countRows[0]['n']) : documents.length;
+    res.json({ documents, total });
   } catch (err) {
     console.warn(`[kb-admin] GET /:id/docs failed:`, (err as Error).message);
     // Same, with a number attached: `total: 0` over a failed query is an

@@ -23,7 +23,6 @@ import {
   TableTh,
   TableTd,
   Chip,
-  IconButton,
   Inline,
   PageSection,
   Select,
@@ -427,8 +426,8 @@ function DriftPage() {
           <Table>
             <TableHead>
               <TableRow>
-                <TableTh>When</TableTh>
                 <TableTh>Template</TableTh>
+                <TableTh>When</TableTh>
                 <TableTh>Prompt</TableTh>
                 <TableTh>Response</TableTh>
                 <TableTh>Judge</TableTh>
@@ -443,11 +442,11 @@ function DriftPage() {
                 return (
                   <Fragment key={o.invocationId}>
                     <TableRow>
-                      <TableTd className="text-[11px] text-[var(--color-text-tertiary)] whitespace-nowrap">
-                        {new Date(o.ts).toLocaleTimeString()}
-                      </TableTd>
                       <TableTd className="text-[11px] text-[var(--color-text-tertiary)] font-[ui-monospace,monospace] whitespace-nowrap">
                         {o.templateId ?? '(none)'}
+                      </TableTd>
+                      <TableTd className="text-[11px] text-[var(--color-text-tertiary)] whitespace-nowrap">
+                        {new Date(o.ts).toLocaleTimeString()}
                       </TableTd>
                       <TableTd
                         className="text-[12px] max-w-[320px] overflow-hidden text-ellipsis whitespace-nowrap cursor-pointer"
@@ -474,17 +473,16 @@ function DriftPage() {
                       </TableTd>
                       <TableTd className="whitespace-nowrap text-right">
                         {o.invocationId ? (
-                          <IconButton
-                            aria-label="Open invocation detail"
-                            title="Open invocation detail"
-                            icon="→"
+                          <Button
                             variant="ghost"
                             size="sm"
                             onClick={(e) => {
                               e.stopPropagation();
                               navigate(`/admin/observability/invocations/${o.invocationId}`);
                             }}
-                          />
+                          >
+                            Open
+                          </Button>
                         ) : null}
                       </TableTd>
                     </TableRow>

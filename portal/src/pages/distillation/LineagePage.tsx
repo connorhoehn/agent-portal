@@ -13,6 +13,7 @@ import {
 import { useFetch } from '../../hooks/useFetch';
 import { useDebouncedSearch } from '../../hooks/useDebouncedSearch';
 import { KeyValue } from '../../components/KeyValue';
+import { showingLabel } from '../../lib/format';
 import { toastError, toastSuccess } from '../../lib/toastStore';
 import { writeJson } from '../../lib/writeJson';
 import { ArtifactAssetCard } from './ArtifactAssetCard';
@@ -32,6 +33,13 @@ async function postJson(path: string, body: unknown): Promise<{ ok: boolean; err
 // Same cadence TiersPage.tsx set for this exact pattern.
 const SEARCH_DEBOUNCE_MS = 250;
 
+// GET /api/distillation/artifacts carries no server-side limit — the picker
+// gets the whole library back for a search. Bound the sidebar's rendered
+// card list client-side and reveal more a batch at a time; a card is
+// heavier than a table row, so the batch is smaller than the ledger-style
+// pages elsewhere in this pass.
+const ARTIFACT_PICKER_PAGE_SIZE = 30;
+
 export default function DistillationLineagePage() {
   const [params, setParams] = useSearchParams();
   const focus = params.get('focus');
@@ -48,6 +56,10 @@ export default function DistillationLineagePage() {
   const [busy, setBusy] = useState<{ id: string; action: 'publish' | 'review' } | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [confirmPublishId, setConfirmPublishId] = useState<string | null>(null);
+  const [artifactLimit, setArtifactLimit] = useState(ARTIFACT_PICKER_PAGE_SIZE);
+  // A narrower search shouldn't inherit a "show more" position built up
+  // under a wider one (or vice versa).
+  useEffect(() => setArtifactLimit(ARTIFACT_PICKER_PAGE_SIZE), [query]);
 
   const lineageUrl = focus
     ? (focus.startsWith('fact-')
@@ -138,7 +150,10 @@ export default function DistillationLineagePage() {
             <EmptyState title="No artifacts" description="No artifact matches this search." />
           ) : (
             <Stack gap="xs">
-              {artifactsData!.artifacts.map((a) => (
+              <T className="text-text-tertiary">
+                {showingLabel(Math.min(artifactLimit, artifactsData!.artifacts.length), artifactsData!.artifacts.length, 'artifacts')}
+              </T>
+              {artifactsData!.artifacts.slice(0, artifactLimit).map((a) => (
                 <ArtifactAssetCard
                   key={a.id}
                   artifact={a}
@@ -150,6 +165,17 @@ export default function DistillationLineagePage() {
                   onRequestReview={(id) => { void handleRequestReview(id); }}
                 />
               ))}
+              {artifactsData!.artifacts.length > artifactLimit && (
+                <Inline justify="center">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setArtifactLimit((l) => l + ARTIFACT_PICKER_PAGE_SIZE)}
+                  >
+                    Show {Math.min(ARTIFACT_PICKER_PAGE_SIZE, artifactsData!.artifacts.length - artifactLimit)} more
+                  </Button>
+                </Inline>
+              )}
             </Stack>
           )}
         </Stack>

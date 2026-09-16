@@ -91,6 +91,29 @@ export async function listIngestedDocs(opts: { limit?: number; since?: string } 
   }
 }
 
+// The TRUE count behind `listIngestedDocs`' page — same filters, no LIMIT.
+// `/api/knowledge-base/documents` used to report `total: documents.length`,
+// which is just the page size the moment the corpus outgrows it.
+export async function countIngestedDocs(opts: { since?: string } = {}): Promise<number> {
+  if (mockDocs()) {
+    return kbDocumentRows
+      .rows()
+      .filter((d) => !opts.since || (d.ingestedAt != null && d.ingestedAt > opts.since!))
+      .length;
+  }
+  const sincePart = opts.since ? 'AND ingested_at > :since' : '';
+  const sql = `SELECT count(*)::int AS n FROM documents WHERE 1=1 ${sincePart}`;
+  const params: import('@aws-sdk/client-rds-data').SqlParameter[] = [];
+  if (opts.since) params.push({ name: 'since', value: { stringValue: opts.since } });
+  try {
+    const rows = await exec(sql, params);
+    return Number(rows[0]?.['n'] ?? 0);
+  } catch (err) {
+    console.warn('[kb] countIngestedDocs failed:', (err as Error).message);
+    return 0;
+  }
+}
+
 // List data sources with their latest ingestion job status.
 // Returns [] when kbId is empty.
 export async function listDataSourcesWithStatus(kbId: string): Promise<DataSource[]> {

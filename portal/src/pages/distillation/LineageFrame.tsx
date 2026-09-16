@@ -326,6 +326,11 @@ export function LineageFrame({
             zoomOnScroll={!compact}
             preventScrolling={!wheelScrollsPage}
             aria-label="Distillation lineage graph"
+            // Culls off-viewport nodes/edges instead of keeping the whole
+            // lineage graph mounted — the scale-audit fix, applied here too
+            // since a deep compaction lineage can run well past what fits
+            // on screen.
+            onlyRenderVisibleElements
           >
             {!compact && <Background color="var(--color-border)" />}
             {!compact && <Controls />}

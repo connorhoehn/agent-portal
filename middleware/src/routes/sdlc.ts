@@ -23,11 +23,22 @@ export const sdlcRouter: Router = Router();
 
 // ─── Policies ─────────────────────────────────────────────────────────────────
 
-sdlcRouter.get('/policies', asyncHandler(async (_req, res) => {
+// A silent clamp, kept out of `listPolicies()` itself: `evaluateChange` also
+// calls that provider function with no args, and governance evaluation must
+// see EVERY policy — capping it there would silently stop enforcing rules
+// past the cut rather than just shortening a list on a page. The limit lives
+// here, on the read-only listing this route ships, instead.
+function clampPoliciesLimit(raw: unknown): number {
+  const n = parseInt(String(raw ?? ''), 10);
+  return Number.isFinite(n) && n > 0 ? Math.min(n, 1000) : 200;
+}
+
+sdlcRouter.get('/policies', asyncHandler(async (req, res) => {
   // Seed defaults on first read, so a fresh environment is governed rather than
   // wide open the moment this surface is opened.
   await seedDefaultPolicies().catch(() => { /* seeding is best-effort; listing still works */ });
-  res.json({ policies: await listPolicies() });
+  const limit = clampPoliciesLimit(req.query['limit']);
+  res.json({ policies: (await listPolicies()).slice(0, limit) });
 }));
 
 sdlcRouter.post('/policies', asyncHandler(async (req, res) => {

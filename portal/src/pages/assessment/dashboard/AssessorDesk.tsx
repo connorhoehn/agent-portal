@@ -185,6 +185,9 @@ export function AssessorDesk({
             keyField={(t) => t.id}
             onRowClick={(t) => onSelectTeam(t.id)}
             striped
+            // A full-page desk view over every team in the program — 20 is a
+            // scannable screenful without turning this into an infinite list.
+            pageSize={20}
             emptyMessage={teams.length === 0 ? 'No teams in the program yet.' : 'No teams match the current filters.'}
             columns={[
           {

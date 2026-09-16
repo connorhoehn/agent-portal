@@ -272,7 +272,7 @@ function JobHistoryTable({ jobs }: { jobs: IngestionJob[] }) {
     <Table>
       <TableHead>
         <TableRow>
-          <TableTh>Started</TableTh><TableTh>Job</TableTh><TableTh>Status</TableTh>
+          <TableTh>Job</TableTh><TableTh>Started</TableTh><TableTh>Status</TableTh>
           <TableTh>Duration</TableTh>
           <TableTh className="text-right">Indexed</TableTh>
           <TableTh className="text-right">Scanned</TableTh>
@@ -285,11 +285,11 @@ function JobHistoryTable({ jobs }: { jobs: IngestionJob[] }) {
         {jobs.map(j => (
           <Fragment key={j.jobId}>
             <TableRow>
-              <TableTd className="whitespace-nowrap text-[11px] text-text-tertiary">
-                {new Date(j.startedAt).toLocaleString()}
-              </TableTd>
               <TableTd className="font-mono text-[10px] text-text-tertiary">
                 {j.jobId.slice(0, 12)}…
+              </TableTd>
+              <TableTd className="whitespace-nowrap text-[11px] text-text-tertiary">
+                {new Date(j.startedAt).toLocaleString()}
               </TableTd>
               <TableTd>
                 <Chip tone={JOB_STATUS_TONE[j.status] ?? 'neutral'} size="xs">{j.status}</Chip>

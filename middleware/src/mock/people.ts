@@ -1,4 +1,5 @@
 import { asFraction, scoreColumnsFor } from './people-scores.js';
+import { defineFixture } from './core/index.js';
 
 export interface Person {
   id: string;
@@ -338,6 +339,85 @@ export const mockRelationships: Relationship[] = [
   { source: 'p-002', target: 'p-010', type: 'collaborates', strength: 0.74 },
   { source: 'p-032', target: 'p-052', type: 'collaborates', strength: 0.65 },
 ];
+
+// ─── The graph routes' `large` scenario ────────────────────────────────────
+//
+// `providers/aurora.ts`'s `mockFetch{Graph,SkillsGraph,ProjectsGraph}` are the
+// only mock readers that need an inflated cast — every OTHER reader here
+// (scores, decisions, work items, roster) joins to the 56 real seeded ids and
+// must keep doing so, so this does not touch `mockPeople`/`mockRelationships`
+// above. It exists because the real graph route caps at 500 rows
+// (`PEOPLE_GRAPH_LIMIT`, providers/aurora.ts) and reports the true count
+// beside it as `peopleTotal` — a scenario that never grows the cast past 56
+// can never make that cap, or the portal's 200-node canvas cap, actually
+// engage.
+//
+// `LARGE_ROUNDS` clones of the seeded 56 — 56 * 11 = 616, past both caps.
+// Each clone keeps its source person's name/title/department/skills/score (a
+// modulo over the real cast, not an invented one) and only its id changes;
+// the id encodes which round and which seeded person it clones
+// (`p-large-<round>-<index>`), so `largeRelationships` below can translate the
+// seeded collaboration edges into every round by the same index rather than
+// inventing new pairs.
+const LARGE_ROUNDS = 11;
+
+function toLargeId(round: number, index: number): string {
+  return `p-large-${String(round).padStart(2, '0')}-${String(index + 1).padStart(3, '0')}`;
+}
+
+function largePeople(): Person[] {
+  const out: Person[] = [];
+  for (let round = 0; round < LARGE_ROUNDS; round += 1) {
+    seededPeople.forEach((person, index) => {
+      out.push({
+        ...person,
+        id: toLargeId(round, index),
+        // Same score the real person carries — an id the scoring pass has
+        // never seen (people-scores.ts's UNSCORED fallback) would read as an
+        // influence-free cast, which is not what a "busy org" scenario means.
+        influenceScore: asFraction(scoreColumnsFor(person.id).compositeScore),
+      });
+    });
+  }
+  return out;
+}
+
+/**
+ * `mockRelationships`, replayed into every `largePeople` round by the same
+ * seeded index its endpoints held — so the large graph's edges are the
+ * seeded collaboration structure repeated across the cast, never invented.
+ */
+function largeRelationships(): Relationship[] {
+  const indexById = new Map(seededPeople.map((person, index) => [person.id, index]));
+  const out: Relationship[] = [];
+  for (let round = 0; round < LARGE_ROUNDS; round += 1) {
+    for (const rel of mockRelationships) {
+      const sourceIndex = indexById.get(rel.source);
+      const targetIndex = indexById.get(rel.target);
+      if (sourceIndex === undefined || targetIndex === undefined) continue;
+      out.push({ ...rel, source: toLargeId(round, sourceIndex), target: toLargeId(round, targetIndex) });
+    }
+  }
+  return out;
+}
+
+/** The people the graph routes read. `default` is `mockPeople` itself. */
+export const graphPeople = defineFixture<Person>({
+  key: 'graph-people',
+  scenarios: {
+    default: () => mockPeople.slice(),
+    large: largePeople,
+  },
+});
+
+/** The edges the graph routes read, alongside `graphPeople`. */
+export const graphRelationships = defineFixture<Relationship>({
+  key: 'graph-relationships',
+  scenarios: {
+    default: () => mockRelationships.slice(),
+    large: largeRelationships,
+  },
+});
 
 // Distinct schema/seed.sql `teams`, in seed order, with a display color per
 // department for graph rendering.

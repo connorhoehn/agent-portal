@@ -230,8 +230,8 @@ function ApprovalQueuePage() {
           <Table>
             <TableHead>
               <TableRow>
-                <TableTh>Requested</TableTh>
                 <TableTh>Agent</TableTh>
+                <TableTh>Requested</TableTh>
                 <TableTh>Tx</TableTh>
                 <TableTh>Reason</TableTh>
                 <TableTh>Payload</TableTh>
@@ -244,10 +244,10 @@ function ApprovalQueuePage() {
                 return (
                   <Fragment key={a.approvalId}>
                     <TableRow>
+                      <TableTd className="text-[12px] font-medium whitespace-nowrap">{a.agentId}</TableTd>
                       <TableTd className="text-[11px] text-text-tertiary whitespace-nowrap">
                         {new Date(a.requestedAt).toLocaleTimeString()}
                       </TableTd>
-                      <TableTd className="text-[12px] font-medium whitespace-nowrap">{a.agentId}</TableTd>
                       <TableTd className="text-[11px] text-text-tertiary font-mono" title={a.txId}>
                         {a.txId.length > 12 ? `${a.txId.slice(0, 12)}…` : a.txId}
                       </TableTd>

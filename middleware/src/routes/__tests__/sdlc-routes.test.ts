@@ -104,6 +104,21 @@ describe('GET /policies', () => {
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ policies: [] });
   });
+
+  // A scale audit flagged this as an unbounded read. `limit` is optional and
+  // silently clamped rather than 400ing, so the no-params default still ships
+  // everything a normal policy set has.
+  it('clamps `limit`, defaulting to the full policy set', async () => {
+    m(listPolicies).mockResolvedValue([
+      { id: 'p-1', kind: 'require_review', enabled: true },
+      { id: 'p-2', kind: 'max_files', enabled: true },
+      { id: 'p-3', kind: 'protected_paths', enabled: true },
+    ]);
+    const full = await request(buildApp()).get('/api/sdlc/policies');
+    expect(full.body.policies).toHaveLength(3);
+    const capped = await request(buildApp()).get('/api/sdlc/policies?limit=1');
+    expect(capped.body.policies).toHaveLength(1);
+  });
 });
 
 describe('POST /policies', () => {

@@ -116,6 +116,9 @@ export function ScoringLogsDrawer({ open, onClose, teamId, dimensionTitle }: Sco
           data={list.logs}
           keyField={(l) => l.stamp}
           striped
+          // A drawer's list of past scoring runs for one team — 10 keeps it
+          // to the drawer's own height instead of growing past it.
+          pageSize={10}
           columns={[
             {
               key: 'stamp',

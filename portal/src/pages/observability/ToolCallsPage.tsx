@@ -387,8 +387,8 @@ function ToolCallsPage() {
           <Table>
             <TableHead>
               <TableRow>
-                <TableTh>When</TableTh>
                 <TableTh>Agent</TableTh>
+                <TableTh>When</TableTh>
                 <TableTh>Tool</TableTh>
                 <TableTh>Error</TableTh>
                 <TableTh>Invocation</TableTh>
@@ -397,12 +397,15 @@ function ToolCallsPage() {
             <TableBody>
               {visibleErrors.map((e) => (
                 <TableRow key={e.toolCallId}>
+                  <TableTd className="text-[12px] font-mono whitespace-nowrap">{e.agentId || '—'}</TableTd>
                   <TableTd className="text-[11px] text-text-tertiary whitespace-nowrap">
                     {fmtTs(e.ts)}
                   </TableTd>
-                  <TableTd className="text-[12px] font-mono whitespace-nowrap">{e.agentId || '—'}</TableTd>
                   <TableTd className="text-[12px] font-mono whitespace-nowrap">{e.toolName}</TableTd>
-                  <TableTd className="text-[12px] text-text-secondary">
+                  <TableTd
+                    className="text-[12px] text-text-secondary max-w-[360px] truncate"
+                    title={e.errorMessage ?? 'errored with no message'}
+                  >
                     {e.errorMessage ?? 'errored with no message'}
                   </TableTd>
                   <TableTd className="whitespace-nowrap">

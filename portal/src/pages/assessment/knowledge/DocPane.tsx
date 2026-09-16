@@ -766,6 +766,9 @@ export function DocPane({ node, mode, sseEvents, sseConnected, onTreeChanged }: 
             <DataTable<KnowledgeDocVersionSummary>
               data={versionsFetch.data.versions}
               keyField={(v) => v.stamp}
+              // A drawer's version history for one doc — 10 keeps it to the
+              // drawer's own height.
+              pageSize={10}
               columns={[
                 {
                   key: 'revision',
@@ -779,7 +782,7 @@ export function DocPane({ node, mode, sseEvents, sseConnected, onTreeChanged }: 
                 },
                 {
                   key: 'status',
-                  header: 'Status',
+                  header: 'Actions',
                   render: (v) => (confirmRestoreStamp === v.stamp ? (
                     <Inline gap="xs" align="center" wrap>
                       <Chip tone="warning">Restore this version? The current content is snapshotted first.</Chip>

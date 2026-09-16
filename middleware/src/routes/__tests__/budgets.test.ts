@@ -201,4 +201,19 @@ describe('GET /api/budgets/grants', () => {
     const res = await request(buildApp()).get('/api/budgets/grants?orgProjectId=p-observability');
     expect(res.body).toEqual({ grants: [] });
   });
+
+  // A scale audit flagged this as an unbounded read. `limit` clamps the
+  // RESPONSE, never the provider call itself — lib/bot-runner.ts's envelope
+  // brake calls listGrants() unscoped and must see every grant, so the fix
+  // cannot live inside the provider.
+  it('clamps `limit` on the response without touching what listGrants() was called with', async () => {
+    grantsMock.mockResolvedValue([
+      { id: 'bg-1', orgProjectId: 'p-a', granteePersonId: 'p-001', granteeName: 'A', sprintId: 's-1', amountUsd: 10, spentUsd: 0, grantedBy: 'u-1', status: 'active' },
+      { id: 'bg-2', orgProjectId: 'p-b', granteePersonId: 'p-002', granteeName: 'B', sprintId: 's-2', amountUsd: 10, spentUsd: 0, grantedBy: 'u-1', status: 'active' },
+      { id: 'bg-3', orgProjectId: 'p-c', granteePersonId: 'p-003', granteeName: 'C', sprintId: 's-3', amountUsd: 10, spentUsd: 0, grantedBy: 'u-1', status: 'active' },
+    ]);
+    const capped = await request(buildApp()).get('/api/budgets/grants?limit=1');
+    expect(capped.body.grants).toHaveLength(1);
+    expect(grantsMock).toHaveBeenCalledWith(undefined);
+  });
 });

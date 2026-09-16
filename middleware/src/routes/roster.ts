@@ -33,13 +33,27 @@ export interface RosterEntry {
 
 export const rosterRouter = Router();
 
-// GET /api/roster → { people: RosterEntry[] }
-rosterRouter.get('/', asyncHandler(async (_req, res) => {
-  res.json({ people: await listRoster() });
+// A silent clamp, not a 400 — every picker on the portal reads this list
+// unconditionally with no query params of its own, so a caller that never
+// asks for `limit` must keep getting everyone the seed has today (well under
+// the default) while a cluster that outgrows it is bounded rather than an
+// unbounded SELECT with no LIMIT at all.
+const DEFAULT_ROSTER_LIMIT = 500;
+const MAX_ROSTER_LIMIT = 2000;
+
+function clampRosterLimit(raw: unknown): number {
+  const n = parseInt(String(raw ?? ''), 10);
+  return Number.isFinite(n) && n > 0 ? Math.min(n, MAX_ROSTER_LIMIT) : DEFAULT_ROSTER_LIMIT;
+}
+
+// GET /api/roster?limit= → { people: RosterEntry[] }
+rosterRouter.get('/', asyncHandler(async (req, res) => {
+  const limit = clampRosterLimit(req.query['limit']);
+  res.json({ people: await listRoster(limit) });
 }));
 
-async function listRoster(): Promise<RosterEntry[]> {
-  if (config.mock.aurora) return mockRoster();
+async function listRoster(limit: number): Promise<RosterEntry[]> {
+  if (config.mock.aurora) return mockRoster().slice(0, limit);
 
   // BOOL_OR over the LEFT JOIN marks anyone who is an SME on ANY initiative;
   // people with no contributions still appear (is_sme = false).
@@ -49,7 +63,9 @@ async function listRoster(): Promise<RosterEntry[]> {
        FROM people p
        LEFT JOIN project_contributions pc ON pc.person_id = p.id
       GROUP BY p.id, p.name, p.title
-      ORDER BY p.name`,
+      ORDER BY p.name
+      LIMIT :lim`,
+    [{ name: 'lim', value: { longValue: limit } }],
   );
   return rows
     .map<RosterEntry>((r) => ({

@@ -59,6 +59,17 @@ const knowledgeGate = requireAction('ManageKnowledge');
 const runGate = requireAction('RunAssessmentAgent');
 const submissionsGate = requireAction('ManageSubmissions');
 
+// Same silent-clamp convention routes/work-items.ts and routes/harness.ts
+// already use: a non-numeric or missing `limit` falls back to a generous
+// default rather than 400ing, and an oversized one is capped rather than
+// honoured verbatim. `/teams` measured 168 rows under the `large` mock
+// scenario with no query params at all — this exists so a live cluster that
+// outgrows that isn't an unbounded read by default.
+function clampLimit(raw: unknown, def: number, max: number): number {
+  const n = parseInt(String(raw ?? ''), 10);
+  return Number.isFinite(n) && n > 0 ? Math.min(n, max) : def;
+}
+
 function requireTeamId(id: unknown): string {
   const value = typeof id === 'string' ? id : '';
   if (!value || !isValidTeamId(value)) throw new ValidationError('team id must match ^TEAM-[A-Za-z0-9-]+$');
@@ -78,8 +89,10 @@ const VALID_TEAM_STATUSES = new Set(['NEW', 'IN_PROGRESS', 'ASSESSED']);
 
 // ─── Teams ──────────────────────────────────────────────────────────────────
 
-assessmentRouter.get('/teams', viewGate, asyncHandler(async (_req, res) => {
-  res.json(await provider.listTeams());
+assessmentRouter.get('/teams', viewGate, asyncHandler(async (req, res) => {
+  const limit = clampLimit(req.query['limit'], 500, 2000);
+  const teams = await provider.listTeams();
+  res.json(teams.slice(0, limit));
 }));
 
 assessmentRouter.post('/teams', scoreGate, asyncHandler(async (req, res) => {

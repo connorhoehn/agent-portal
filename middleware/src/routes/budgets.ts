@@ -28,11 +28,24 @@ budgetsRouter.get('/', readGate, asyncHandler(async (_req, res) => {
   res.json({ budgets, summary });
 }));
 
+// A silent clamp, applied to the RESPONSE only — never inside listGrants()
+// itself. lib/bot-runner.ts's envelope brake calls listGrants() unscoped
+// (no orgProjectId) to find one person's grants across every initiative, and
+// capping that read would make the brake miss a real grant past the cut. The
+// route is the only caller that ships the whole list to a client, so the
+// bound belongs here.
+function clampGrantsLimit(raw: unknown): number {
+  const n = parseInt(String(raw ?? ''), 10);
+  return Number.isFinite(n) && n > 0 ? Math.min(n, 2000) : 500;
+}
+
 // Sprint envelopes: which SME holds how much, on which sprint. Declared
 // before '/:orgProjectId' so "grants" is never read as an initiative id.
 budgetsRouter.get('/grants', readGate, asyncHandler(async (req, res) => {
   const orgProjectId = String(req.query['orgProjectId'] ?? '').trim();
-  res.json({ grants: await listGrants(orgProjectId || undefined) });
+  const limit = clampGrantsLimit(req.query['limit']);
+  const grants = await listGrants(orgProjectId || undefined);
+  res.json({ grants: grants.slice(0, limit) });
 }));
 
 budgetsRouter.put('/:orgProjectId', manageGate, asyncHandler(async (req, res) => {

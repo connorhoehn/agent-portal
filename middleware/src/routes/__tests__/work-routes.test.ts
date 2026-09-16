@@ -12,11 +12,14 @@
 //     promoting a finding is `DispatchAgentRun`, not `ManageDevbox`, because
 //     it enqueues agent work. `ManageDevbox` 403'd program-owner on a spend
 //     the same role could already authorise elsewhere,
-//   * the summary's counts are DERIVED from the rows they summarise —
-//     `findings.open` counts the findings fetched, `critical` + `warning`
-//     partition by severity, `consults.pending` counts the pending consults.
-//     A hand-written total next to a list it claims to count is the fixture
-//     bug class this repo has shipped before,
+//   * the summary's counts are DERIVED from a real GROUP BY, not a capped
+//     page — `findings.open`/`critical`/`warning` sum `findingStats()`'s
+//     grouped rows (the same query `/findings/stats` uses), never
+//     `listFindings({ limit: 300 }).length`, which silently undercounts the
+//     moment a program crosses 300 open findings. `consults.pending` counts
+//     the pending consults fetched (that list has no cap to hide behind). A
+//     hand-written total next to a list it claims to count is the fixture bug
+//     class this repo has shipped before,
 //   * the attribution contract on `POST /jobs`: `suggestionId` is decoded
 //     SERVER-side (`sg-<workItemId>`) so the id shape stays ours, the item is
 //     looked up before it is stored so a caller cannot assert a link to
@@ -154,12 +157,15 @@ describe('the gate matrix', () => {
 // ── Summary ────────────────────────────────────────────────────────────────
 
 describe('GET /api/work/summary', () => {
-  it('derives every count from the rows it counted', async () => {
+  it('derives every count from the GROUP BY, not a capped list', async () => {
     m(queueStats).mockResolvedValue({ queued: 2, running: 1, failed: 0 });
     m(proposalStats).mockResolvedValue({ pending: 3, approved: 9 });
-    m(listFindings).mockResolvedValue([
-      { id: 'f1', severity: 'critical' }, { id: 'f2', severity: 'warning' },
-      { id: 'f3', severity: 'warning' }, { id: 'f4', severity: 'info' },
+    m(findingStats).mockResolvedValue([
+      { sweep: 'bus_factor', status: 'open', severity: 'critical', n: 1 },
+      { sweep: 'stale_docs', status: 'open', severity: 'warning', n: 2 },
+      { sweep: 'stale_docs', status: 'open', severity: 'info', n: 1 },
+      // Not open — must NOT be counted into `open`.
+      { sweep: 'orphan_decisions', status: 'dismissed', severity: 'critical', n: 5 },
     ]);
     m(listConsults).mockResolvedValue([{ id: 'c1' }, { id: 'c2' }]);
     m(busyBoxes).mockReturnValue(['box-1']);
@@ -174,14 +180,29 @@ describe('GET /api/work/summary', () => {
     // The sweep vocabulary travels with the summary so the page's filter can
     // be built from the server's list rather than a copy.
     expect(res.body.sweeps).toEqual(['bus_factor', 'stale_docs', 'orphan_decisions']);
-    // Only OPEN findings are counted.
-    expect((m(listFindings).mock.calls[0]![0] as { status: string }).status).toBe('open');
+  });
+
+  // The whole point of the fix: `findingStats()` is never capped the way
+  // `listFindings({ limit: 300 })` is, so the summary must report the REAL
+  // open count even when it is well past what a 300-row page could ever
+  // carry. Fails against the old implementation, which read
+  // `listFindings({ limit: 300 }).length` and could never exceed 300.
+  it('reports an open count past what any capped page could carry', async () => {
+    m(queueStats).mockResolvedValue({});
+    m(proposalStats).mockResolvedValue({});
+    m(findingStats).mockResolvedValue([
+      { sweep: 'bus_factor', status: 'open', severity: 'warning', n: 450 },
+    ]);
+    m(listConsults).mockResolvedValue([]);
+    const res = await request(buildApp()).get('/api/work/summary');
+    expect(res.body.findings.open).toBe(450);
+    expect(res.body.findings.warning).toBe(450);
   });
 
   it('reports honest zeroes on an empty program', async () => {
     m(queueStats).mockResolvedValue({});
     m(proposalStats).mockResolvedValue({});
-    m(listFindings).mockResolvedValue([]);
+    m(findingStats).mockResolvedValue([]);
     m(listConsults).mockResolvedValue([]);
     const res = await request(buildApp()).get('/api/work/summary');
     expect(res.body.findings).toEqual({ open: 0, critical: 0, warning: 0 });

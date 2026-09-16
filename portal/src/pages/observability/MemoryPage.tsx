@@ -278,8 +278,8 @@ function MemoryPage() {
           <Table>
             <TableHead>
               <TableRow>
-                <TableTh>When</TableTh>
                 <TableTh>Agent</TableTh>
+                <TableTh>When</TableTh>
                 <TableTh>Kind</TableTh>
                 <TableTh>Query / memory</TableTh>
                 <TableTh>Results</TableTh>
@@ -296,10 +296,10 @@ function MemoryPage() {
                       onClick={() => setExpanded(isOpen ? null : e.memoryEventId)}
                       className="cursor-pointer"
                     >
+                      <TableTd className="text-[12px] font-medium whitespace-nowrap">{e.agentId}</TableTd>
                       <TableTd className="text-[11px] text-text-tertiary whitespace-nowrap">
                         {new Date(e.ts).toLocaleTimeString()}
                       </TableTd>
-                      <TableTd className="text-[12px] font-medium whitespace-nowrap">{e.agentId}</TableTd>
                       <TableTd>
                         <Chip tone={kindTone(e.kind)} size="xs">{e.kind}</Chip>
                       </TableTd>

@@ -31,10 +31,12 @@ import { useFetch } from '../../hooks/useFetch';
 import { relativeTime } from '../../lib/relativeTime';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { useCapabilities } from '../../lib/capabilities';
+import { toastError, toastSuccess } from '../../lib/toastStore';
+import { writeJson } from '../../lib/writeJson';
 import { botStatusChip } from '../../lib/statusTone';
 import { usd } from '../../lib/format';
 import { BotCreateWizard } from './BotCreateWizard';
-import { botListLastRanText, botsRollup, botsSummaryLine, filterBots, type BotStatusFilter } from './botsFormat';
+import { botIsPaused, botListLastRanText, botsRollup, botsSummaryLine, filterBots, type BotStatusFilter } from './botsFormat';
 
 // ─── Types (the /api/bots contract) ──────────────────────────────────────────
 
@@ -140,6 +142,43 @@ export default function BotsPage() {
   const rollup = useMemo(() => botsRollup(bots), [bots]);
   const hasFilters = search.trim() !== '' || status !== 'all';
 
+  // Row actions: the same two operations the detail page exposes (Run now,
+  // Pause/Resume), gated by the same `ManageBots` capability and hitting the
+  // same routes with the same 409/toast handling — just scoped per row
+  // instead of per page. Delete stays detail-only; that's a step deliberately
+  // not offered from a scan of the fleet. Keyed by bot id + which action is
+  // in flight, so one row's request can't disable a different row's buttons.
+  const [rowBusy, setRowBusy] = useState<Record<string, 'run' | 'pause' | 'resume' | null>>({});
+
+  async function runBotNow(bot: Bot) {
+    if (rowBusy[bot.id]) return;
+    setRowBusy((prev) => ({ ...prev, [bot.id]: 'run' }));
+    const res = await writeJson<{ error?: string }>(`/api/bots/${bot.id}/run`, 'POST', {});
+    if (res.status === 409) {
+      toastError(null, 'Not run', res.data?.error ?? 'The bot refused this run (budget or run cap reached).');
+    } else if (!res.ok) {
+      toastError(null, 'Could not start', res.error ?? `HTTP ${res.status}`);
+    } else {
+      toastSuccess(null, 'Run started', `${bot.name} — open it to watch live.`);
+      refresh();
+    }
+    setRowBusy((prev) => ({ ...prev, [bot.id]: null }));
+  }
+
+  async function togglePause(bot: Bot) {
+    if (rowBusy[bot.id]) return;
+    const action = botIsPaused(bot) ? 'resume' : 'pause';
+    setRowBusy((prev) => ({ ...prev, [bot.id]: action }));
+    const res = await writeJson(`/api/bots/${bot.id}/${action}`, 'POST', {});
+    if (!res.ok) {
+      toastError(null, `Could not ${action}`, res.error ?? `HTTP ${res.status}`);
+    } else {
+      toastSuccess(null, action === 'pause' ? 'Paused' : 'Resumed', bot.name);
+      refresh();
+    }
+    setRowBusy((prev) => ({ ...prev, [bot.id]: null }));
+  }
+
   const columns: DataTableColumn<Bot>[] = [
     {
       key: 'name',
@@ -199,7 +238,6 @@ export default function BotsPage() {
         )
       ),
     },
-    { key: 'trigger', header: 'Trigger', render: (bot) => triggerSummary(bot) },
     {
       key: 'lastRunAt',
       header: 'Last ran',
@@ -215,24 +253,17 @@ export default function BotsPage() {
       key: 'today',
       header: 'Today',
       render: (bot) => (
-        <Stack gap="none">
-          {bot.maxRunsPerDay != null && bot.maxRunsPerDay > 0 ? (
-            <DotMeter
-              value={bot.todayRunCount / bot.maxRunsPerDay}
-              segments={bot.maxRunsPerDay}
-              showPercent={false}
-              note="today"
-              tone="surface"
-            />
-          ) : (
-            <MetaLine size="xs" items={[`${bot.todayRunCount} ${bot.todayRunCount === 1 ? 'run' : 'runs'} today`]} />
-          )}
-          <MetaLine
-            size="xs"
-            tone="tertiary"
-            items={[`${usd(bot.todaySpendUsd)}${bot.budgetPerDayUsd != null ? ` of ${usd(bot.budgetPerDayUsd)}` : ' spent'}`]}
+        bot.maxRunsPerDay != null && bot.maxRunsPerDay > 0 ? (
+          <DotMeter
+            value={bot.todayRunCount / bot.maxRunsPerDay}
+            segments={bot.maxRunsPerDay}
+            showPercent={false}
+            note="today"
+            tone="surface"
           />
-        </Stack>
+        ) : (
+          <MetaLine size="xs" items={[`${bot.todayRunCount} ${bot.todayRunCount === 1 ? 'run' : 'runs'} today`]} />
+        )
       ),
     },
     {
@@ -253,6 +284,36 @@ export default function BotsPage() {
         )
       ),
     },
+    ...(canManage ? [{
+      key: 'actions',
+      header: '',
+      render: (bot: Bot) => {
+        const busy = rowBusy[bot.id] ?? null;
+        const paused = botIsPaused(bot);
+        return (
+          <Inline gap="xs" align="center" className="justify-end">
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={busy === 'run'}
+              onClick={(e) => { e.stopPropagation(); void runBotNow(bot); }}
+              aria-label={`Run ${bot.name} now`}
+            >
+              {busy === 'run' ? 'Starting…' : '▶ Run now'}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={busy === 'pause' || busy === 'resume'}
+              onClick={(e) => { e.stopPropagation(); void togglePause(bot); }}
+              aria-label={`${paused ? 'Resume' : 'Pause'} ${bot.name}`}
+            >
+              {busy === 'pause' || busy === 'resume' ? '…' : paused ? 'Resume' : 'Pause'}
+            </Button>
+          </Inline>
+        );
+      },
+    } as DataTableColumn<Bot>] : []),
   ];
 
   return (
@@ -331,7 +392,7 @@ export default function BotsPage() {
             <MetaLine
               size="xs" tone="tertiary"
               className="ml-auto"
-              items={[botsSummaryLine(bots.length, filtered.length), 'every change still passes review + policy gates']}
+              items={[botsSummaryLine(bots.length, filtered.length), 'every bot fires on a cron schedule', 'every change still passes review + policy gates']}
             />
           </Inline>
 

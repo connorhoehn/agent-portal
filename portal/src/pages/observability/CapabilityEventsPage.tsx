@@ -86,9 +86,9 @@ function CapabilityEventsPage() {
           <Table>
             <TableHead>
               <TableRow>
+                <TableTh>Session</TableTh>
                 <TableTh>When</TableTh>
                 <TableTh>Kind</TableTh>
-                <TableTh>Session</TableTh>
                 <TableTh>Detail</TableTh>
                 <TableTh>Duration</TableTh>
                 <TableTh>Status</TableTh>
@@ -99,6 +99,9 @@ function CapabilityEventsPage() {
                 const detailText = formatCapDetail(ev);
                 return (
                   <TableRow key={ev.id}>
+                    <TableTd className="text-[10px] font-mono text-[var(--color-text-tertiary)]">
+                      {ev.sessionId ? ev.sessionId.slice(0, 12) + '…' : '—'}
+                    </TableTd>
                     <TableTd className="text-[11px] text-[var(--color-text-tertiary)] whitespace-nowrap">
                       {new Date(ev.startedAt).toLocaleTimeString()}
                     </TableTd>
@@ -106,9 +109,6 @@ function CapabilityEventsPage() {
                       <Chip tone={ev.kind.startsWith('browser') ? 'neutral' : 'info'} size="xs">
                         {ev.kind.replace('_', ' ')}
                       </Chip>
-                    </TableTd>
-                    <TableTd className="text-[10px] font-mono text-[var(--color-text-tertiary)]">
-                      {ev.sessionId ? ev.sessionId.slice(0, 12) + '…' : '—'}
                     </TableTd>
                     <TableTd
                       className="text-[12px] max-w-[380px] overflow-hidden text-ellipsis whitespace-nowrap"

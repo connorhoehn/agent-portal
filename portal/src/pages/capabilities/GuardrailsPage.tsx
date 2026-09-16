@@ -214,7 +214,6 @@ function GuardrailsPage() {
               <TableHead>
                 <TableRow>
                   <TableTh>Type</TableTh>
-                  <TableTh>Status</TableTh>
                   <TableTh>Action</TableTh>
                   <TableTh>Enabled</TableTh>
                 </TableRow>
@@ -223,14 +222,6 @@ function GuardrailsPage() {
                 {guardrail.piiFilters.map(filter => (
                   <TableRow key={filter.type}>
                     <TableTd className="font-medium">{filter.type}</TableTd>
-                    <TableTd>
-                      <Chip
-                        tone={filter.enabled ? 'success' : 'neutral'}
-                        size="xs"
-                      >
-                        {filter.enabled ? 'on' : 'off'}
-                      </Chip>
-                    </TableTd>
                     <TableTd>
                       {canEdit ? (
                         <Select
@@ -348,7 +339,9 @@ function GuardrailsPage() {
                 {guardrail.deniedTopics.map(topic => (
                   <TableRow key={topic.name} data-testid={`topic-row-${topic.name}`}>
                     <TableTd className="whitespace-nowrap font-medium">{topic.name}</TableTd>
-                    <TableTd className="text-xs text-text-secondary">{topic.definition}</TableTd>
+                    <TableTd className="max-w-[360px] truncate text-xs text-text-secondary" title={topic.definition}>
+                      {topic.definition}
+                    </TableTd>
                     <TableTd>
                       {canEdit ? (
                         <Switch
@@ -376,13 +369,13 @@ function GuardrailsPage() {
                             Edit
                           </IconButton>
                           <IconButton
-                            aria-label={`Remove ${topic.name}`}
+                            aria-label={`Delete ${topic.name}`}
                             variant="danger"
                             size="sm"
                             onClick={() => setConfirmDelete(topic)}
                             data-testid={`topic-delete-${topic.name}`}
                           >
-                            Remove
+                            Delete
                           </IconButton>
                         </Inline>
                       )}
@@ -436,13 +429,13 @@ function GuardrailsPage() {
         open={confirmDelete !== null}
         onConfirm={doDelete}
         onCancel={() => (deleting ? undefined : setConfirmDelete(null))}
-        title="Remove denied topic?"
+        title="Delete denied topic?"
         body={
           confirmDelete
-            ? `"${confirmDelete.name}" will be removed from the live guardrail DRAFT immediately.`
+            ? `"${confirmDelete.name}" will be deleted from the live guardrail DRAFT immediately.`
             : ''
         }
-        confirmLabel={deleting ? 'Removing…' : 'Remove'}
+        confirmLabel={deleting ? 'Deleting…' : 'Delete'}
         cancelLabel="Cancel"
         confirmDisabled={deleting}
         tone="destructive"

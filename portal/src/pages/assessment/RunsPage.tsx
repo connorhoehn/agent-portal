@@ -87,6 +87,9 @@ function RunACommandPanel({ onLaunched }: { onLaunched: () => void }) {
         <DataTable<AgentCommand>
           data={commands}
           keyField={(cmd) => cmd.name}
+          // The command registry is small today but not bounded by contract
+          // — 15 keeps a growing registry a scan, not a scroll.
+          pageSize={15}
           columns={[
             { key: 'name', header: 'Command', render: (cmd) => <strong className="text-sm font-semibold">{cmd.name}</strong> },
             { key: 'summary', header: 'What it does', render: (cmd) => (cmd.summary ? <MetaLine size="xs" items={[cmd.summary]} /> : '—') },
@@ -199,6 +202,9 @@ export default function RunsPage() {
           striped
           onRowClick={(r) => setDetailId(r.id)}
           loading={loading && !runsResp}
+          // The full run ledger accumulates for the life of the program —
+          // 20 is a full-page ledger's screenful.
+          pageSize={20}
           columns={[
             {
               key: 'id',

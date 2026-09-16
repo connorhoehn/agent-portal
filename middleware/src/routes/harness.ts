@@ -444,7 +444,14 @@ harnessRouter.post('/trace', requireTraceAuth, asyncHandler(async (req, res) => 
 harnessRouter.get('/cases', requireAction('ViewObservability'), asyncHandler(async (req, res) => {
   const includeInactive = req.query['includeInactive'] === '1'
     || req.query['includeInactive'] === 'true';
-  if (config.mock.aurora) { res.json({ cases: mockListCases(includeInactive) }); return; }
+  // Same silent-clamp convention /runs uses just below: a suite of a few
+  // hundred cases is normal, an unbounded `SELECT * FROM test_cases` with no
+  // LIMIT at all is not.
+  const rawLimit = parseInt((req.query['limit'] as string) ?? '200', 10);
+  const limit = Number.isFinite(rawLimit) && rawLimit > 0
+    ? Math.min(rawLimit, 1000)
+    : 200;
+  if (config.mock.aurora) { res.json({ cases: mockListCases(includeInactive).slice(0, limit) }); return; }
   const sql = `
     SELECT test_id, agent_id, template_id, prompt, reference_output,
            expected_tags::text AS expected_tags,
@@ -454,8 +461,9 @@ harnessRouter.get('/cases', requireAction('ViewObservability'), asyncHandler(asy
            notes
       FROM observability.test_cases
      ${includeInactive ? '' : 'WHERE active = true'}
-     ORDER BY agent_id ASC, test_id ASC`;
-  const rows = await exec(sql, []);
+     ORDER BY agent_id ASC, test_id ASC
+     LIMIT :lim`;
+  const rows = await exec(sql, [{ name: 'lim', value: { longValue: limit } }]);
   res.json({ cases: rows.map(rowToTestCase) });
 }));
 

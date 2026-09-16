@@ -263,6 +263,9 @@ export default function SubmissionsPage() {
           striped
           searchable
           loading={loading && !data}
+          // Every submission ever ingested, revisions collapsed to one row
+          // each — 20 is a full-page ledger's screenful, same as Runs.
+          pageSize={20}
           columns={[
             ...(canManage
               ? [{
@@ -384,6 +387,9 @@ export default function SubmissionsPage() {
           <DataTable<{ envelope_id: string; ingested_at: string; current: boolean }>
             data={[historyGroup.current, ...historyGroup.superseded].map((rev, i) => ({ ...rev, current: i === 0 }))}
             keyField={(rev) => rev.envelope_id}
+            // One submission's own revision history — short today, but a
+            // drawer list shouldn't grow unbounded either.
+            pageSize={10}
             columns={[
               {
                 key: 'revision',

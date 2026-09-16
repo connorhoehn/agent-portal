@@ -281,6 +281,10 @@ export function CompactionFlowFrame({
           zoomOnDoubleClick={false}
           preventScrolling={false}
           aria-label={ariaLabel}
+          // Culls off-viewport nodes/edges instead of keeping every
+          // compaction tier mounted — the scale-audit fix, applied across
+          // every xyflow canvas in the portal.
+          onlyRenderVisibleElements
         />
       </ReactFlowProvider>
     </div>

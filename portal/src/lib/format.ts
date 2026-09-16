@@ -27,3 +27,24 @@ export function formatTokenCount(n: number | null | undefined, opts?: { compact?
   }
   return n.toLocaleString('en-US');
 }
+
+/**
+ * Honest truncation copy — the scale audit's whole point: a page that shows
+ * fewer rows/nodes than exist must say so, never render a partial view that
+ * looks complete.
+ *
+ * `showingLabel(50, 560, 'people')` → "Showing the first 50 of 560 people"
+ * `showingLabel(50, 50, 'people')`  → "50 people" (nothing was dropped)
+ * `showingLabel(50, null, 'people')` → "Showing the first 50 people" — no
+ * known total (e.g. the server didn't report one): say what we truncated to,
+ * never invent a total.
+ */
+export function showingLabel(shown: number, total: number | null | undefined, noun: string): string {
+  if (total == null) {
+    return shown <= 0 ? `No ${noun}` : `Showing the first ${shown.toLocaleString('en-US')} ${noun}`;
+  }
+  if (shown >= total) {
+    return `${total.toLocaleString('en-US')} ${noun}`;
+  }
+  return `Showing the first ${shown.toLocaleString('en-US')} of ${total.toLocaleString('en-US')} ${noun}`;
+}

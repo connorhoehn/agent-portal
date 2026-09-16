@@ -33,7 +33,7 @@ import { toastError, toastPending, toastSuccess } from '../../lib/toastStore';
 import { writeJson } from '../../lib/writeJson';
 import { filterFindings, sweepLabel, type FindingStatus } from './findingsFilter';
 import {
-  BotOrigin, JobStatusPill, SeverityChip, T,
+  BotOrigin, SeverityChip, T,
   type Finding, type Job,
 } from './workShared';
 
@@ -228,7 +228,6 @@ export default function FindingsPage() {
   }
 
   const dlqColumns: DataTableColumn<Job>[] = [
-    { key: 'status', header: 'Status', render: (j) => <JobStatusPill status={j.status} /> },
     {
       key: 'title', header: 'Job', sortable: true,
       render: (j) => (

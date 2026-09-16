@@ -148,8 +148,8 @@ export function SessionsTab() {
             <Table>
               <TableHead>
                 <TableRow>
-                  <TableTh>Started</TableTh>
                   <TableTh>Agent</TableTh>
+                  <TableTh>Started</TableTh>
                   <TableTh>Last URL</TableTh>
                   <TableTh className="text-right">Requests</TableTh>
                   <TableTh>Status</TableTh>
@@ -158,10 +158,10 @@ export function SessionsTab() {
               <TableBody>
                 {closed.slice(0, MAX_PAST_ROWS).map(s => (
                   <TableRow key={s.sessionId}>
+                    <TableTd className="text-[12px]">{s.agentName}</TableTd>
                     <TableTd className="whitespace-nowrap text-[11px] text-text-tertiary">
                       {new Date(s.startedAt).toLocaleString()}
                     </TableTd>
-                    <TableTd className="text-[12px]">{s.agentName}</TableTd>
                     <TableTd className="max-w-[320px] truncate text-[11px]" title={s.currentUrl}>
                       {isBlankUrl(s.currentUrl) ? <T className="text-text-tertiary">—</T> : s.currentUrl}
                     </TableTd>

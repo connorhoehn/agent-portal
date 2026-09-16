@@ -68,23 +68,7 @@ function RolesPage() {
       title="Roles"
       description="Cedar policies enforced by Verified Permissions on every middleware request."
     >
-      <Inline gap="md" wrap>
-        {data.map(role => (
-          <Card key={role.id} className="w-[280px]">
-            <CardHeader title={role.label} subtitle={role.id} />
-            <Stack gap="sm" className="mt-2">
-              <Stack as="p" gap="none" className="m-0 text-[12px] text-text-secondary">{role.summary}</Stack>
-              <Inline gap="xs" wrap>
-                {role.capabilities.map(c => (
-                  <Chip key={c} size="xs">{c}</Chip>
-                ))}
-              </Inline>
-            </Stack>
-          </Card>
-        ))}
-      </Inline>
-
-      <DetailSection title="Permission matrix">
+      <DetailSection title="Permission matrix" first>
         <Table>
           <TableHead>
             <TableRow>
@@ -108,6 +92,26 @@ function RolesPage() {
           </TableBody>
         </Table>
       </DetailSection>
+
+      {/* Role cards — kept below the matrix (table-density audit, matches
+          KnowledgeHomePage's "right now" strip): the capability chips repeat
+          the matrix's own ✓ marks, but each role's prose summary isn't in the
+          matrix anywhere, so the cards stay rather than being dropped. */}
+      <Inline gap="md" wrap className="mt-4">
+        {data.map(role => (
+          <Card key={role.id} className="w-[280px]">
+            <CardHeader title={role.label} subtitle={role.id} />
+            <Stack gap="sm" className="mt-2">
+              <Stack as="p" gap="none" className="m-0 text-[12px] text-text-secondary">{role.summary}</Stack>
+              <Inline gap="xs" wrap>
+                {role.capabilities.map(c => (
+                  <Chip key={c} size="xs">{c}</Chip>
+                ))}
+              </Inline>
+            </Stack>
+          </Card>
+        ))}
+      </Inline>
     </PageSection>
   );
 }

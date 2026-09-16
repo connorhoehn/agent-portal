@@ -4,9 +4,14 @@
 //
 // What is pinned:
 //   * the snapshot key names each canvas destructures (`nodes`/`edges`/
-//     `departments`, `domains`/`skills`/`people`/`personSkillEdges`,
-//     `projects`/`people`/`personProjectEdges`) — a renamed key here blanks a
+//     `departments`/`peopleTotal`, `domains`/`skills`/`people`/
+//     `personSkillEdges`/`peopleTotal`, `projects`/`people`/
+//     `personProjectEdges`/`peopleTotal`) — a renamed key here blanks a
 //     whole page with no error, the contract.ts bug class 2 failure,
+//   * `peopleTotal` is the TRUE count behind the (possibly capped) people
+//     list, never the length of the list beside it — this router just
+//     forwards what providers/aurora.ts computed, so this suite pins the
+//     forwarding rather than re-deriving the count itself,
 //   * that /help stays SCORE-FREE. This router's gate (ViewOrgChart) is held
 //     by every orgiq role, unlike /api/scores' ViewLeaderboard, so a score
 //     leaking into this payload is a privilege leak, not a cosmetic change.
@@ -59,58 +64,78 @@ beforeEach(() => {
 });
 
 describe('the three snapshot reads', () => {
-  it('GET /entities ships nodes + edges + departments', async () => {
+  it('GET /entities ships nodes + edges + departments + peopleTotal', async () => {
     a['fetchGraph']!.mockResolvedValue({
       nodes: [PERSON],
       edges: [{ sourceId: 'p-004', targetId: 'p-001', kind: 'reports_to', weight: 1 }],
       departments: [{ name: 'Platform', headcount: 1 }],
+      peopleTotal: 1,
     });
     const res = await request(buildApp()).get('/api/graph/entities');
     expect(res.status).toBe(200);
-    expect(Object.keys(res.body).sort()).toEqual(['departments', 'edges', 'nodes']);
+    expect(Object.keys(res.body).sort()).toEqual(['departments', 'edges', 'nodes', 'peopleTotal']);
     expect(res.body.nodes[0].id).toBe('p-004');
   });
 
-  it('GET /skills-graph ships domains + skills + people + personSkillEdges', async () => {
+  // The whole point of the field: a graph bounded by the circuit-breaker
+  // LIMIT ships fewer `nodes` than the true population, and `peopleTotal`
+  // has to carry the REAL number rather than collapsing to `nodes.length`
+  // the instant a cap is hit. Fails against the old shape (no peopleTotal
+  // field at all, or one hand-derived from the capped list).
+  it('reports the TRUE population even when `nodes` is a capped page of it', async () => {
+    a['fetchGraph']!.mockResolvedValue({
+      nodes: [PERSON], // one node shipped...
+      edges: [],
+      departments: [],
+      peopleTotal: 842, // ...of 842 people in the graph.
+    });
+    const res = await request(buildApp()).get('/api/graph/entities');
+    expect(res.body.peopleTotal).toBe(842);
+    expect(res.body.peopleTotal).not.toBe(res.body.nodes.length);
+  });
+
+  it('GET /skills-graph ships domains + skills + people + personSkillEdges + peopleTotal', async () => {
     a['fetchSkillsGraph']!.mockResolvedValue({
       domains: [{ id: 'domain:Infra', name: 'Infra' }],
       skills: [{ id: 'skill:1', name: 'Kubernetes', domain: 'Infra', personCount: 1 }],
       people: [PERSON],
       personSkillEdges: [{ personId: 'p-004', skillId: 'skill:1', weight: 3 }],
+      peopleTotal: 1,
     });
     const res = await request(buildApp()).get('/api/graph/skills-graph');
     expect(res.status).toBe(200);
-    expect(Object.keys(res.body).sort()).toEqual(['domains', 'people', 'personSkillEdges', 'skills']);
+    expect(Object.keys(res.body).sort()).toEqual(['domains', 'people', 'peopleTotal', 'personSkillEdges', 'skills']);
     // Edges must reference nodes the same payload carries, or the canvas
     // silently drops them.
     expect(res.body.personSkillEdges[0].skillId).toBe(res.body.skills[0].id);
   });
 
-  it('GET /projects-graph ships projects + people + personProjectEdges', async () => {
+  it('GET /projects-graph ships projects + people + personProjectEdges + peopleTotal', async () => {
     a['fetchProjectsGraph']!.mockResolvedValue({
       projects: [{ id: 'proj:1', name: 'Observability', status: 'active', contributorCount: 1 }],
       people: [PERSON],
       personProjectEdges: [{ personId: 'p-004', projectId: 'proj:1', weight: 1 }],
+      peopleTotal: 1,
     });
     const res = await request(buildApp()).get('/api/graph/projects-graph');
     expect(res.status).toBe(200);
-    expect(Object.keys(res.body).sort()).toEqual(['people', 'personProjectEdges', 'projects']);
+    expect(Object.keys(res.body).sort()).toEqual(['people', 'peopleTotal', 'personProjectEdges', 'projects']);
     expect(res.body.personProjectEdges[0].projectId).toBe(res.body.projects[0].id);
   });
 
   it('serves an EMPTY graph as empty arrays rather than an error', async () => {
-    a['fetchGraph']!.mockResolvedValue({ nodes: [], edges: [], departments: [] });
+    a['fetchGraph']!.mockResolvedValue({ nodes: [], edges: [], departments: [], peopleTotal: 0 });
     const res = await request(buildApp()).get('/api/graph/entities');
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ nodes: [], edges: [], departments: [] });
+    expect(res.body).toEqual({ nodes: [], edges: [], departments: [], peopleTotal: 0 });
   });
 });
 
 describe('GET /api/graph/help', () => {
   beforeEach(() => {
-    a['fetchGraph']!.mockResolvedValue({ nodes: [PERSON], edges: [], departments: [] });
-    a['fetchSkillsGraph']!.mockResolvedValue({ domains: [], skills: [], people: [], personSkillEdges: [] });
-    a['fetchProjectsGraph']!.mockResolvedValue({ projects: [], people: [], personProjectEdges: [] });
+    a['fetchGraph']!.mockResolvedValue({ nodes: [PERSON], edges: [], departments: [], peopleTotal: 1 });
+    a['fetchSkillsGraph']!.mockResolvedValue({ domains: [], skills: [], people: [], personSkillEdges: [], peopleTotal: 0 });
+    a['fetchProjectsGraph']!.mockResolvedValue({ projects: [], people: [], personProjectEdges: [], peopleTotal: 0 });
   });
 
   it('400s on a missing or whitespace-only q', async () => {

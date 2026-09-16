@@ -35,6 +35,7 @@ export {
   SCENARIO_NAMES,
   isScenarioName,
   describeScenario,
+  declaredScenariosFor,
 } from './fixture.js';
 
 export type { Accessor } from './derive.js';

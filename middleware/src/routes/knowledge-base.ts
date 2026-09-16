@@ -13,6 +13,7 @@ import { Router } from 'express';
 import { asyncHandler, ValidationError } from '../lib/async-handler.js';
 import {
   listIngestedDocs,
+  countIngestedDocs,
   listDataSourcesWithStatus,
   startSync,
 } from '../providers/knowledge-base.js';
@@ -28,8 +29,11 @@ knowledgeBaseRouter.get('/documents', asyncHandler(async (req, res) => {
   const since = typeof req.query['since'] === 'string' ? req.query['since'] : undefined;
   const limit = limitRaw ? Math.min(Math.max(1, parseInt(String(limitRaw), 10) || 50), 500) : 50;
 
-  const docs = await listIngestedDocs({ limit, since });
-  res.json({ documents: docs, total: docs.length });
+  const [docs, total] = await Promise.all([
+    listIngestedDocs({ limit, since }),
+    countIngestedDocs({ since }),
+  ]);
+  res.json({ documents: docs, total });
 }));
 
 // ─── GET /data-sources ────────────────────────────────────────────────────────

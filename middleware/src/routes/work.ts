@@ -51,23 +51,29 @@ const QUEUEABLE_KINDS: readonly string[] = ['devbox:task', ...LOCAL_JOB_KINDS];
 // ─── Summary ─────────────────────────────────────────────────────────────────
 
 workRouter.get('/summary', asyncHandler(async (_req, res) => {
-  const [jobs, proposals, findings, pendingConsults] = await Promise.all([
+  const [jobs, proposals, findingRows, pendingConsults] = await Promise.all([
     queueStats(),
     proposalStats(),
-    listFindings({ status: 'open', limit: 300 }),
+    // The real GROUP BY (`findingStats`, also behind `/findings/stats`), not
+    // `listFindings({ limit: 300 }).length` — that page caps at 300 and the
+    // header would silently under-report the instant a program crosses it.
+    findingStats(),
     // A waiting consult is a blocked AGENT — the most urgent kind of
     // "needs you" the queue has, since a computer is sitting on it.
     listConsults({ status: 'pending' }),
   ]);
+  let open = 0, critical = 0, warning = 0;
+  for (const row of findingRows) {
+    if (row.status !== 'open') continue;
+    open += row.n;
+    if (row.severity === 'critical') critical += row.n;
+    else if (row.severity === 'warning') warning += row.n;
+  }
   res.json({
     jobs,
     proposals,
     consults: { pending: pendingConsults.length },
-    findings: {
-      open: findings.length,
-      critical: findings.filter((f) => f.severity === 'critical').length,
-      warning: findings.filter((f) => f.severity === 'warning').length,
-    },
+    findings: { open, critical, warning },
     busyBoxes: busyBoxes(),
     sweeps: SWEEP_NAMES,
   });

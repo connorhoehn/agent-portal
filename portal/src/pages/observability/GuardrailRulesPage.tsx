@@ -200,8 +200,8 @@ function GuardrailRulesPage() {
             <Table>
               <TableHead>
                 <TableRow>
-                  <TableTh>When</TableTh>
                   <TableTh>Agent</TableTh>
+                  <TableTh>When</TableTh>
                   <TableTh>Rule</TableTh>
                   <TableTh>Matched text</TableTh>
                   <TableTh></TableTh>
@@ -210,10 +210,10 @@ function GuardrailRulesPage() {
               <TableBody>
                 {interventions.map((i) => (
                   <TableRow key={i.interventionId}>
+                    <TableTd className="text-[12px] font-medium whitespace-nowrap">{i.agentId}</TableTd>
                     <TableTd className="text-[11px] text-text-tertiary whitespace-nowrap">
                       {new Date(i.ts).toLocaleString()}
                     </TableTd>
-                    <TableTd className="text-[12px] font-medium whitespace-nowrap">{i.agentId}</TableTd>
                     <TableTd>
                       <GuardrailRuleBadge
                         ruleName={i.ruleName}
@@ -232,10 +232,10 @@ function GuardrailRulesPage() {
                       {i.invocationId ? (
                         <Link
                           to={`/admin/observability/invocations/${i.invocationId}`}
-                          className="px-2 py-0.5 text-[14px] text-primary no-underline"
+                          className="px-2 py-0.5 text-[12px] text-primary no-underline"
                           title="Open invocation detail"
                         >
-                          →
+                          Open
                         </Link>
                       ) : null}
                     </TableTd>

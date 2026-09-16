@@ -52,6 +52,16 @@ describe('GET /api/observability/harness/cases (mock)', () => {
     expect(res.body.cases.length).toBeGreaterThan(0);
     expect(res.body.cases.every((c: { active: boolean }) => c.active)).toBe(true);
   });
+
+  // A scale audit flagged this as an unbounded read with no query params at
+  // all. `limit` is optional and silently clamped, defaulting high enough
+  // that the seeded fixture is unaffected.
+  it('clamps `limit`', async () => {
+    const full = await request(buildApp()).get('/api/observability/harness/cases');
+    const capped = await request(buildApp()).get('/api/observability/harness/cases?limit=1');
+    expect(capped.body.cases).toHaveLength(1);
+    expect(full.body.cases.length).toBeGreaterThan(1);
+  });
 });
 
 describe('GET /api/observability/harness/runs (mock)', () => {

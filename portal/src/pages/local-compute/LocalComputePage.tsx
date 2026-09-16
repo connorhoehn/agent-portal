@@ -655,6 +655,10 @@ export default function LocalComputePage() {
                 keyField={(r) => r.id}
                 columns={runColumns}
                 striped
+                // Full run history for this machine, across every session
+                // it's ever worked — 20 keeps a long-lived machine's ledger
+                // a screenful instead of an ever-growing scroll.
+                pageSize={20}
                 emptyMessage="No runs yet."
               />
             )}
@@ -705,6 +709,13 @@ interface RunLogPayload {
   done: boolean;
 }
 
+// LogStream is a scroll box, not a windowed list — every line it's handed is
+// its own DOM node for the life of the panel. A long-running job polling
+// every 2s would otherwise grow that node count without bound for as long as
+// the drawer stayed open. Keep the most recent lines, since that's what a
+// live tail is for, and say so when older ones are dropped.
+const RUN_LOG_LINE_CAP = 500;
+
 function RunLog({ jobId }: { jobId: string }) {
   // Poll every 2s while the run is non-terminal; once the server reports
   // `done`, stop — the old hand-rolled interval kept hitting this endpoint
@@ -719,7 +730,19 @@ function RunLog({ jobId }: { jobId: string }) {
     if (data?.done) setDone(true);
   }, [data]);
 
-  const lines: LogLine[] = (data?.entries ?? []).map((e) => ({ id: String(e.seq), message: e.text }));
+  // Memoised on the fetch payload, not recomputed on every render this
+  // component happens to take part in (parent state changes elsewhere on
+  // the page) — the old version remapped and re-sliced on every one of
+  // those, not just on an actual new poll result.
+  const { lines, totalLines } = useMemo(() => {
+    const entries = data?.entries ?? [];
+    const capped = entries.length > RUN_LOG_LINE_CAP ? entries.slice(entries.length - RUN_LOG_LINE_CAP) : entries;
+    return {
+      lines: capped.map((e) => ({ id: String(e.seq), message: e.text }) as LogLine),
+      totalLines: entries.length,
+    };
+  }, [data]);
+  const truncated = totalLines > RUN_LOG_LINE_CAP;
 
   return (
     <LogStream
@@ -728,6 +751,14 @@ function RunLog({ jobId }: { jobId: string }) {
       maxHeight="400px"
       tone="surface"
       emptyMessage={done ? 'This run produced no output.' : 'Waiting for output…'}
+      // Overrides LogStream's default "N lines" header only when we've
+      // actually dropped some — otherwise the default count is the honest
+      // count already. `showingLabel` reads as "first N of M", which isn't
+      // true here (we keep the tail, not the head), so this says "most
+      // recent" explicitly rather than reusing that phrasing.
+      headerSlot={truncated ? (
+        <T className="text-text-tertiary">{`Showing the most recent ${lines.length.toLocaleString('en-US')} of ${totalLines.toLocaleString('en-US')} lines`}</T>
+      ) : undefined}
     />
   );
 }

@@ -100,6 +100,9 @@ export default function PreviewStep({ parse, onCommitted, onBack }: PreviewStepP
         keyField={(row) => String(row.row_index)}
         striped
         emptyMessage="No data rows found in this file."
+        // A bulk form export can carry far more rows than a screen — 25
+        // keeps the review step scannable before committing them all.
+        pageSize={25}
         columns={[
           {
             key: 'select',

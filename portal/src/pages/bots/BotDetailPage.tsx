@@ -4,24 +4,22 @@
 // because the interesting decisions (approve, deliver) stay where governance
 // already lives, in the Changes queue.
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import {
   Banner,
   Button,
   Card,
-  CardHeader,
-  CatalogGrid,
   Checkbox,
   Chip,
   ConfirmDialog,
+  DetailSection,
   FormField,
   Inline,
   Input,
   Link as ExternalLink,
   MetaLine,
   PageSection,
-  ProgressBar,
   Select,
   Stack,
   Table,
@@ -30,6 +28,7 @@ import {
   TableRow,
   TableTd,
   TableTh,
+  Tabs,
   Textarea,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
@@ -44,11 +43,14 @@ import { DEVBOX_MODELS } from '../../lib/devboxModels';
 import { parsePgTimestampAsUtc } from '../../lib/pgTimestamp';
 import { relativeTime } from '../../lib/relativeTime';
 import { botStatusChip, runStateChip } from '../../lib/statusTone';
-import { usd } from '../../lib/format';
-import { botRunSummary, inputWiring, lastRanText } from './botsFormat';
+import { usd, showingLabel } from '../../lib/format';
+import { inputWiring, lastRanText } from './botsFormat';
 import { TEMPLATE_TONE, triggerSummary, type Bot, type BotRun } from './BotsPage';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
+
+/** Run-history reveal batch — see the `runsLimit` state below. */
+const BOT_RUNS_PAGE_SIZE = 25;
 
 /** Aurora stamps carry a `+00` offset ISO 8601 does not allow — shared parser. */
 function parseTs(iso: string): number {
@@ -89,6 +91,13 @@ function botEnforceAllocation(b: Bot): boolean {
   return (b as { enforceAllocation?: boolean }).enforceAllocation === true;
 }
 
+/** The four views of one bot — Runs is first, because "what did this bot do
+ *  lately" is the question this page exists to answer; the mission and
+ *  guardrails that shaped those runs follow. "Live activity" only exists as a
+ *  tab while a run is actually in flight (see `liveBoxId` below) — same
+ *  pattern as local-compute's conditional "Assign work" tab. */
+type BotTab = 'runs' | 'mission' | 'guardrails' | 'activity';
+
 // ─── Page ────────────────────────────────────────────────────────────────────
 
 export default function BotDetailPage() {
@@ -119,6 +128,13 @@ export default function BotDetailPage() {
     useFetch<{ runs: BotRun[] }>(id ? `/api/bots/${id}/runs` : null, anyRunning ? 5_000 : 15_000);
   const runsFailure = runsError ?? runsDegraded;
   const runs = [...(runsData?.runs ?? [])].sort((a, b) => parseTs(b.startedAt) - parseTs(a.startedAt));
+  // `/api/bots/:id/runs` returns the whole history with no server-side
+  // limit — a cron bot that's been firing for months hands this hand-rolled
+  // Table (no DataTable, no windowing) hundreds of rows in one unbounded
+  // body. Cap it client-side and reveal more a batch at a time.
+  const [runsLimit, setRunsLimit] = useState(BOT_RUNS_PAGE_SIZE);
+  const visibleRuns = runs.slice(0, runsLimit);
+  const hasMoreRuns = runs.length > runsLimit;
   const running = runs.some((r) => r.status === 'running');
   if (running !== anyRunning) setAnyRunning(running);
 
@@ -147,6 +163,17 @@ export default function BotDetailPage() {
   // Mission edit
   const [editMission, setEditMission] = useState(false);
   const [missionText, setMissionText] = useState('');
+
+  // The one tabbed area below the header — Runs / Mission / Guardrails /
+  // (while live) Live activity, replacing four stacked cards.
+  const [tab, setTab] = useState<BotTab>('runs');
+  // If the run this tab was watching finishes while it's open, the "Live
+  // activity" item drops out of the tab list (it only exists while
+  // `liveBoxId` is set) — fall back to Runs rather than leaving the panel on
+  // a tab that no longer has a trigger to select it.
+  useEffect(() => {
+    if (tab === 'activity' && !liveBoxId) setTab('runs');
+  }, [tab, liveBoxId]);
 
   async function patchBot(patch: Record<string, unknown>, successLabel?: string): Promise<boolean> {
     if (!bot) return false;
@@ -273,12 +300,6 @@ export default function BotDetailPage() {
   }
 
   const paused = !bot.enabled || bot.pausedReason != null;
-  // Derived from the SAME `runs` array the RUNS table below renders, so the
-  // header and the table can never disagree about whether this bot has ever
-  // fired (DEFECTS.md program-owner #9) — `bot.lastRunAt`/`todayRunCount` are
-  // a separate summary that can drift from (or, in dev:mock, never match)
-  // the actual run history.
-  const runSummary = botRunSummary(runs);
   const modelOptions = [
     ...DEVBOX_MODELS.map((m) => ({ value: m.id, label: m.label })),
     ...(!DEVBOX_MODELS.some((m) => m.id === gModel) && gModel ? [{ value: gModel, label: gModel }] : []),
@@ -343,150 +364,163 @@ export default function BotDetailPage() {
         )}
       </Card>
 
-      {/* ── LIVE ACTIVITY — the current run's execution timeline ── */}
-      {liveBoxId && (
-        <Stack gap="none" className="mb-4">
-          <RunTimeline
-            boxId={liveBoxId}
-            title="LIVE ACTIVITY"
-            maxHeightClass="max-h-[420px]"
-            emptyHint="The run just started — Claude Code's tool calls stream here as it works."
-            headerExtra={
-              <Chip size="xs" tone="accent" dot="pulse" className="ml-auto">live</Chip>
-            }
-          />
-        </Stack>
-      )}
+      {/* ── One tabbed area instead of four stacked cards (Live activity,
+          Runs, Mission, Guardrails each used to carry their own heading and
+          rule). These are four views of one bot, not four topics. Nothing
+          here repeats what the roster row above already shows — pause state,
+          last-ran time, today's run count and today's spend all live there
+          now (BotsPage.tsx's Status / Last ran / Today / Budget columns), so
+          the guardrails view keeps only the standing config, not a second
+          rendering of today's usage. ── */}
+      <DetailSection first title="Bot details" hint={triggerSummary(bot)}>
+        <Tabs
+          idPrefix="bot"
+          aria-label={`${bot.name} detail`}
+          value={tab}
+          onValueChange={(id) => setTab(id as BotTab)}
+          items={[
+            { id: 'runs', label: runs.length > 0 ? `Runs · ${runs.length}` : 'Runs' },
+            { id: 'mission', label: 'Mission' },
+            { id: 'guardrails', label: 'Guardrails' },
+            ...(liveBoxId ? [{ id: 'activity', label: 'Live activity' }] : []),
+          ]}
+        />
 
-      {/* ── Runs — first, because "what did this bot do lately" is the
-          question this page exists to answer; the mission and guardrails
-          that shaped those runs follow. ── */}
-      <Card padding="none" className="mb-4 overflow-hidden">
-        <CardHeader inset title="Runs" subtitle="This bot's dispatch history — what it did each time it fired." />
-        <Stack gap="none" className="p-3.5">
-        {runsFailure ? (
-          <UnavailableNotice
-            error={runsFailure}
-            what="this bot's run history"
-            source="Runs are read from Aurora"
-            onRetry={refreshRuns}
+        {/* ── Runs — first, because "what did this bot do lately" is the
+            question this page exists to answer. ── */}
+        <Stack hidden={tab !== 'runs'} gap="sm">
+          <MetaLine
+            size="xs" tone="tertiary"
+            items={[runs.length > 0
+              ? `${showingLabel(visibleRuns.length, runs.length, 'firings')} — what it did each time it fired.`
+              : "This bot's dispatch history — what it did each time it fired."]}
           />
-        ) : runs.length === 0 ? (
-          <MetaLine size="sm" tone="tertiary" items={['This bot has never fired. Use ▶ Run now, or wait for its trigger.']} />
-        ) : (
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableTh>Trigger</TableTh>
-                <TableTh>Status</TableTh>
-                <TableTh>Cost</TableTh>
-                <TableTh>Duration</TableTh>
-                <TableTh>Started</TableTh>
-                <TableTh>Outcome</TableTh>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {runs.map((r) => {
-                const dur = runDuration(r);
-                // What this run left behind. The reason is rendered for every
-                // status, not just skipped: a `done` run whose only record is
-                // "scheduled maintenance" has an outcome, and gating on
-                // status === 'skipped' hid it — the whole column rendered
-                // blank for a bot with a full history of completed runs.
-                const o = r.outcome ?? {};
-                const canLinkRun = r.runId != null && bot.agentProjectId != null;
-                const hasOutcome = Boolean(
-                  o.reason || o.changeId || o.prUrl || o.filesChanged != null || r.jobId || canLinkRun,
-                );
-                return (
-                <TableRow key={r.id}>
-                  <TableTd className="text-[12px] text-text-secondary">{r.trigger}</TableTd>
-                  <TableTd>
-                    <Chip tone={runStateChip(r.status).tone} size="xs" dot={r.status === 'running' ? 'pulse' : undefined}>
-                      {r.status}
-                    </Chip>
-                  </TableTd>
-                  <TableTd className="text-[12px] whitespace-nowrap">
-                    <CostVsEstimate costUsd={r.costUsd} estimate={runEstimate(r)} />
-                  </TableTd>
-                  <TableTd
-                    className="text-[12px] text-text-secondary whitespace-nowrap"
-                    title={dur.title}
-                  >
-                    {dur.text}
-                  </TableTd>
-                  <TableTd className="text-[12px] text-text-tertiary whitespace-nowrap" title={r.startedAt}>
-                    {relativeTime(r.startedAt)}
-                  </TableTd>
-                  <TableTd>
-                    <Inline gap="sm" wrap className="text-[12px]" title={o.summary}>
-                      {o.reason && (
-                        r.status === 'failed'
-                          ? <Chip tone="danger" size="xs">{o.reason}</Chip>
-                          : o.reason
-                      )}
-                      {o.changeId && (
-                        <Link to="/admin/changes" className="text-primary no-underline hover:underline">
-                          change {o.changeId.slice(0, 8)}
-                        </Link>
-                      )}
-                      {o.prUrl && (
-                        <ExternalLink external href={o.prUrl} className="text-primary no-underline hover:underline">
-                          PR ↗
-                        </ExternalLink>
-                      )}
-                      {/* The run row carries no summary — that lives on the job
-                          this firing enqueued. When there is no devbox run to
-                          open, the job is the only place the detail exists, so
-                          link it rather than leaving the cell a dead end. */}
-                      {canLinkRun && (
-                        <Link
-                          to={`/admin/projects?project=${bot.agentProjectId}&run=${r.runId}`}
-                          className="text-text-secondary no-underline hover:text-primary hover:underline font-mono text-[11px]"
-                        >
-                          run {r.runId!.slice(0, 8)}
-                        </Link>
-                      )}
-                      {!canLinkRun && r.jobId && (
-                        <Link
-                          to={`/iq/work/${encodeURIComponent(r.jobId)}`}
-                          title="Open the queued job this firing produced"
-                          className="text-text-secondary no-underline hover:text-primary hover:underline font-mono text-[11px]"
-                        >
-                          job →
-                        </Link>
-                      )}
-                      {o.filesChanged != null && (
-                        <MetaLine size="xs" tone="tertiary" items={[`${o.filesChanged} ${o.filesChanged === 1 ? 'file' : 'files'}`]} />
-                      )}
-                      {!hasOutcome && (
-                        <MetaLine size="xs" tone="tertiary" items={['—']} />
-                      )}
-                    </Inline>
-                  </TableTd>
+          {runsFailure ? (
+            <UnavailableNotice
+              error={runsFailure}
+              what="this bot's run history"
+              source="Runs are read from Aurora"
+              onRetry={refreshRuns}
+            />
+          ) : runs.length === 0 ? (
+            <MetaLine size="sm" tone="tertiary" items={['This bot has never fired. Use ▶ Run now, or wait for its trigger.']} />
+          ) : (
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableTh>Trigger</TableTh>
+                  <TableTh>Status</TableTh>
+                  <TableTh>Cost</TableTh>
+                  <TableTh>Duration</TableTh>
+                  <TableTh>Started</TableTh>
+                  <TableTh>Outcome</TableTh>
                 </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        )}
+              </TableHead>
+              <TableBody>
+                {visibleRuns.map((r) => {
+                  const dur = runDuration(r);
+                  // What this run left behind. The reason is rendered for every
+                  // status, not just skipped: a `done` run whose only record is
+                  // "scheduled maintenance" has an outcome, and gating on
+                  // status === 'skipped' hid it — the whole column rendered
+                  // blank for a bot with a full history of completed runs.
+                  const o = r.outcome ?? {};
+                  const canLinkRun = r.runId != null && bot.agentProjectId != null;
+                  const hasOutcome = Boolean(
+                    o.reason || o.changeId || o.prUrl || o.filesChanged != null || r.jobId || canLinkRun,
+                  );
+                  return (
+                  <TableRow key={r.id}>
+                    <TableTd className="text-[12px] text-text-secondary">{r.trigger}</TableTd>
+                    <TableTd>
+                      <Chip tone={runStateChip(r.status).tone} size="xs" dot={r.status === 'running' ? 'pulse' : undefined}>
+                        {r.status}
+                      </Chip>
+                    </TableTd>
+                    <TableTd className="text-[12px] whitespace-nowrap">
+                      <CostVsEstimate costUsd={r.costUsd} estimate={runEstimate(r)} />
+                    </TableTd>
+                    <TableTd
+                      className="text-[12px] text-text-secondary whitespace-nowrap"
+                      title={dur.title}
+                    >
+                      {dur.text}
+                    </TableTd>
+                    <TableTd className="text-[12px] text-text-tertiary whitespace-nowrap" title={r.startedAt}>
+                      {relativeTime(r.startedAt)}
+                    </TableTd>
+                    <TableTd>
+                      <Inline gap="sm" wrap className="text-[12px]" title={o.summary}>
+                        {o.reason && (
+                          r.status === 'failed'
+                            ? <Chip tone="danger" size="xs">{o.reason}</Chip>
+                            : o.reason
+                        )}
+                        {o.changeId && (
+                          <Link to="/admin/changes" className="text-primary no-underline hover:underline">
+                            change {o.changeId.slice(0, 8)}
+                          </Link>
+                        )}
+                        {o.prUrl && (
+                          <ExternalLink external href={o.prUrl} className="text-primary no-underline hover:underline">
+                            PR ↗
+                          </ExternalLink>
+                        )}
+                        {/* The run row carries no summary — that lives on the job
+                            this firing enqueued. When there is no devbox run to
+                            open, the job is the only place the detail exists, so
+                            link it rather than leaving the cell a dead end. */}
+                        {canLinkRun && (
+                          <Link
+                            to={`/admin/projects?project=${bot.agentProjectId}&run=${r.runId}`}
+                            className="text-text-secondary no-underline hover:text-primary hover:underline font-mono text-[11px]"
+                          >
+                            run {r.runId!.slice(0, 8)}
+                          </Link>
+                        )}
+                        {!canLinkRun && r.jobId && (
+                          <Link
+                            to={`/iq/work/${encodeURIComponent(r.jobId)}`}
+                            title="Open the queued job this firing produced"
+                            className="text-text-secondary no-underline hover:text-primary hover:underline font-mono text-[11px]"
+                          >
+                            job →
+                          </Link>
+                        )}
+                        {o.filesChanged != null && (
+                          <MetaLine size="xs" tone="tertiary" items={[`${o.filesChanged} ${o.filesChanged === 1 ? 'file' : 'files'}`]} />
+                        )}
+                        {!hasOutcome && (
+                          <MetaLine size="xs" tone="tertiary" items={['—']} />
+                        )}
+                      </Inline>
+                    </TableTd>
+                  </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          )}
+          {hasMoreRuns && (
+            <Inline justify="center" className="mt-3">
+              <Button variant="secondary" size="sm" onClick={() => setRunsLimit((l) => l + BOT_RUNS_PAGE_SIZE)}>
+                Show {Math.min(BOT_RUNS_PAGE_SIZE, runs.length - visibleRuns.length)} more
+              </Button>
+            </Inline>
+          )}
         </Stack>
-      </Card>
 
-      <CatalogGrid columns={2} className="mb-4 items-start">
         {/* ── THE MISSION ── */}
-        <Card padding="none" className="overflow-hidden">
-          <CardHeader
-            inset
-            title="The mission"
-            action={canManage && (
+        <Stack hidden={tab !== 'mission'} gap="sm">
+          {canManage && (
+            <Inline justify="end">
               <Button variant="ghost" size="sm" onClick={() => { setMissionText(bot.prompt); setEditMission((v) => !v); }}>
                 {editMission ? 'cancel' : 'edit'}
               </Button>
-            )}
-          />
+            </Inline>
+          )}
           {editMission ? (
-            <Stack gap="xs" className="p-3.5">
+            <Stack gap="xs">
               <Textarea value={missionText} onChange={(e) => setMissionText(e.target.value)} minRows={6} />
               <Inline justify="end">
                 <Button variant="primary" size="sm" disabled={busy === 'mission' || !missionText.trim()} onClick={() => void saveMission()}>
@@ -495,25 +529,26 @@ export default function BotDetailPage() {
               </Inline>
             </Stack>
           ) : (
-            <Stack gap="none" className="px-3.5 py-3 text-[12.5px] text-text-primary leading-relaxed whitespace-pre-wrap">
+            <Stack gap="none" className="text-[12.5px] text-text-primary leading-relaxed whitespace-pre-wrap">
               {bot.prompt}
             </Stack>
           )}
-        </Card>
+        </Stack>
 
-        {/* ── GUARDRAILS ── */}
-        <Card padding="none" className="overflow-hidden">
-          <CardHeader
-            inset
-            title="Guardrails"
-            action={canManage && (
+        {/* ── GUARDRAILS — standing configuration only. Today's run count and
+            spend vs. budget are the roster row's job (Today / Budget
+            columns); repeating them here was the exact duplication caught on
+            local-compute's machine row vs. its connection panel. ── */}
+        <Stack hidden={tab !== 'guardrails'} gap="sm">
+          {canManage && (
+            <Inline justify="end">
               <Button variant="ghost" size="sm" onClick={() => (editGuards ? setEditGuards(false) : beginEditGuards())}>
                 {editGuards ? 'cancel' : 'edit'}
               </Button>
-            )}
-          />
+            </Inline>
+          )}
           {editGuards ? (
-            <Stack gap="sm" className="p-3.5">
+            <Stack gap="sm">
               <FormField label="Model" layout="inline">
                 {(wiring) => (
                   <Select {...inputWiring(wiring)} value={gModel} onChange={(e) => setGModel(e.target.value)} options={modelOptions} />
@@ -555,60 +590,56 @@ export default function BotDetailPage() {
               </Inline>
             </Stack>
           ) : (
-            <Stack gap="none">
-              <Table>
-                <TableBody>
-                  <TableRow>
-                    <TableTd className="text-text-tertiary w-32">Model</TableTd>
-                    <TableTd title={bot.model}>{modelLabel(bot.model)}</TableTd>
-                  </TableRow>
-                  <TableRow>
-                    <TableTd className="text-text-tertiary">Budget / run</TableTd>
-                    <TableTd>{bot.budgetPerRunUsd != null ? usd(bot.budgetPerRunUsd) : 'none (soft cap unset)'}</TableTd>
-                  </TableRow>
-                  <TableRow>
-                    <TableTd className="text-text-tertiary">Budget / day</TableTd>
-                    <TableTd>{bot.budgetPerDayUsd != null ? usd(bot.budgetPerDayUsd) : 'none (hard cap unset)'}</TableTd>
-                  </TableRow>
-                  <TableRow>
-                    <TableTd className="text-text-tertiary">Max runs / day</TableTd>
-                    <TableTd>{bot.maxRunsPerDay}</TableTd>
-                  </TableRow>
-                  <TableRow>
-                    <TableTd className="text-text-tertiary">Requires review</TableTd>
-                    <TableTd>{bot.requiresReview ? 'yes' : 'no'}</TableTd>
-                  </TableRow>
-                  <TableRow>
-                    <TableTd className="text-text-tertiary">Enforce allocation</TableTd>
-                    <TableTd title="When on, a cron fire that would push this initiative past its monthly allocation is skipped and retried next cycle.">
-                      {botEnforceAllocation(bot) ? 'on — cron fires braked by allocation' : 'off (bot spend is the maintenance floor)'}
-                    </TableTd>
-                  </TableRow>
-                </TableBody>
-              </Table>
-              <Stack gap="xs" className="px-3.5 py-2.5">
-                <MetaLine
-                  size="xs" tone="tertiary"
-                  items={[
-                    `today: ${runSummary.todayRunCount}/${bot.maxRunsPerDay} ${runSummary.todayRunCount === 1 ? 'run' : 'runs'}`,
-                    `${usd(bot.todaySpendUsd)}${bot.budgetPerDayUsd != null ? ` of ${usd(bot.budgetPerDayUsd)}` : ' spent'}`,
-                  ]}
-                />
-                {bot.budgetPerDayUsd != null && bot.budgetPerDayUsd > 0 && (
-                  <ProgressBar
-                    value={Math.min(bot.todaySpendUsd, bot.budgetPerDayUsd)}
-                    max={bot.budgetPerDayUsd}
-                    size="sm"
-                    showRatio={false}
-                    color={bot.todaySpendUsd >= bot.budgetPerDayUsd * 0.8 ? 'var(--color-warning)' : undefined}
-                    aria-label="Today's spend vs daily budget"
-                  />
-                )}
-              </Stack>
-            </Stack>
+            <Table>
+              <TableBody>
+                <TableRow>
+                  <TableTd className="text-text-tertiary w-32">Model</TableTd>
+                  <TableTd title={bot.model}>{modelLabel(bot.model)}</TableTd>
+                </TableRow>
+                <TableRow>
+                  <TableTd className="text-text-tertiary">Budget / run</TableTd>
+                  <TableTd>{bot.budgetPerRunUsd != null ? usd(bot.budgetPerRunUsd) : 'none (soft cap unset)'}</TableTd>
+                </TableRow>
+                <TableRow>
+                  <TableTd className="text-text-tertiary">Budget / day</TableTd>
+                  <TableTd>{bot.budgetPerDayUsd != null ? usd(bot.budgetPerDayUsd) : 'none (hard cap unset)'}</TableTd>
+                </TableRow>
+                <TableRow>
+                  <TableTd className="text-text-tertiary">Max runs / day</TableTd>
+                  <TableTd>{bot.maxRunsPerDay}</TableTd>
+                </TableRow>
+                <TableRow>
+                  <TableTd className="text-text-tertiary">Requires review</TableTd>
+                  <TableTd>{bot.requiresReview ? 'yes' : 'no'}</TableTd>
+                </TableRow>
+                <TableRow>
+                  <TableTd className="text-text-tertiary">Enforce allocation</TableTd>
+                  <TableTd title="When on, a cron fire that would push this initiative past its monthly allocation is skipped and retried next cycle.">
+                    {botEnforceAllocation(bot) ? 'on — cron fires braked by allocation' : 'off (bot spend is the maintenance floor)'}
+                  </TableTd>
+                </TableRow>
+              </TableBody>
+            </Table>
           )}
-        </Card>
-      </CatalogGrid>
+        </Stack>
+
+        {/* ── LIVE ACTIVITY — the current run's execution timeline. Only a
+            tab at all while a run is actually in flight; see the effect
+            above that falls back to Runs once it finishes. ── */}
+        {liveBoxId && (
+          <Stack hidden={tab !== 'activity'} gap="none">
+            <RunTimeline
+              boxId={liveBoxId}
+              title="LIVE ACTIVITY"
+              maxHeightClass="max-h-[420px]"
+              emptyHint="The run just started — Claude Code's tool calls stream here as it works."
+              headerExtra={
+                <Chip size="xs" tone="accent" dot="pulse" className="ml-auto">live</Chip>
+              }
+            />
+          </Stack>
+        )}
+      </DetailSection>
 
       <ConfirmDialog
         open={confirmDelete}

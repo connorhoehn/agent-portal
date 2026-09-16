@@ -183,277 +183,277 @@
     {
       "method": "GET",
       "path": "/api/assessment/agent/commands",
-      "source": "src/routes/assessment.ts:374"
+      "source": "src/routes/assessment.ts:387"
     },
     {
       "method": "GET",
       "path": "/api/assessment/configuration",
-      "source": "src/routes/assessment.ts:463"
+      "source": "src/routes/assessment.ts:476"
     },
     {
       "method": "PUT",
       "path": "/api/assessment/configuration",
-      "source": "src/routes/assessment.ts:480"
+      "source": "src/routes/assessment.ts:493"
     },
     {
       "method": "GET",
       "path": "/api/assessment/dimension-index",
-      "source": "src/routes/assessment.ts:296"
+      "source": "src/routes/assessment.ts:309"
     },
     {
       "method": "GET",
       "path": "/api/assessment/events",
-      "source": "src/routes/assessment.ts:763"
+      "source": "src/routes/assessment.ts:776"
     },
     {
       "method": "GET",
       "path": "/api/assessment/feedback",
-      "source": "src/routes/assessment.ts:312"
+      "source": "src/routes/assessment.ts:325"
     },
     {
       "method": "POST",
       "path": "/api/assessment/feedback",
-      "source": "src/routes/assessment.ts:317"
-    },
-    {
-      "method": "GET",
-      "path": "/api/assessment/feedback/:taskId",
-      "source": "src/routes/assessment.ts:324"
-    },
-    {
-      "method": "POST",
-      "path": "/api/assessment/feedback/:taskId/dismiss",
-      "source": "src/routes/assessment.ts:338"
-    },
-    {
-      "method": "POST",
-      "path": "/api/assessment/feedback/:taskId/resolve",
       "source": "src/routes/assessment.ts:330"
     },
     {
       "method": "GET",
+      "path": "/api/assessment/feedback/:taskId",
+      "source": "src/routes/assessment.ts:337"
+    },
+    {
+      "method": "POST",
+      "path": "/api/assessment/feedback/:taskId/dismiss",
+      "source": "src/routes/assessment.ts:351"
+    },
+    {
+      "method": "POST",
+      "path": "/api/assessment/feedback/:taskId/resolve",
+      "source": "src/routes/assessment.ts:343"
+    },
+    {
+      "method": "GET",
       "path": "/api/assessment/knowledge/doc",
-      "source": "src/routes/assessment.ts:653"
+      "source": "src/routes/assessment.ts:666"
     },
     {
       "method": "PUT",
       "path": "/api/assessment/knowledge/doc",
-      "source": "src/routes/assessment.ts:661"
+      "source": "src/routes/assessment.ts:674"
     },
     {
       "method": "POST",
       "path": "/api/assessment/knowledge/doc/comment",
-      "source": "src/routes/assessment.ts:697"
+      "source": "src/routes/assessment.ts:710"
     },
     {
       "method": "POST",
       "path": "/api/assessment/knowledge/doc/publish",
-      "source": "src/routes/assessment.ts:675"
+      "source": "src/routes/assessment.ts:688"
     },
     {
       "method": "POST",
       "path": "/api/assessment/knowledge/doc/restore",
-      "source": "src/routes/assessment.ts:645"
+      "source": "src/routes/assessment.ts:658"
     },
     {
       "method": "GET",
       "path": "/api/assessment/knowledge/doc/version",
-      "source": "src/routes/assessment.ts:636"
+      "source": "src/routes/assessment.ts:649"
     },
     {
       "method": "GET",
       "path": "/api/assessment/knowledge/doc/versions",
-      "source": "src/routes/assessment.ts:628"
+      "source": "src/routes/assessment.ts:641"
     },
     {
       "method": "POST",
       "path": "/api/assessment/knowledge/presence",
-      "source": "src/routes/assessment.ts:720"
+      "source": "src/routes/assessment.ts:733"
     },
     {
       "method": "POST",
       "path": "/api/assessment/knowledge/pull",
-      "source": "src/routes/assessment.ts:686"
+      "source": "src/routes/assessment.ts:699"
     },
     {
       "method": "GET",
       "path": "/api/assessment/knowledge/tree",
-      "source": "src/routes/assessment.ts:619"
+      "source": "src/routes/assessment.ts:632"
     },
     {
       "method": "GET",
       "path": "/api/assessment/recommendations",
-      "source": "src/routes/assessment.ts:300"
+      "source": "src/routes/assessment.ts:313"
     },
     {
       "method": "POST",
       "path": "/api/assessment/reports/publish",
-      "source": "src/routes/assessment.ts:448"
+      "source": "src/routes/assessment.ts:461"
     },
     {
       "method": "GET",
       "path": "/api/assessment/rollup",
-      "source": "src/routes/assessment.ts:305"
+      "source": "src/routes/assessment.ts:318"
     },
     {
       "method": "GET",
       "path": "/api/assessment/runs",
-      "source": "src/routes/assessment.ts:352"
+      "source": "src/routes/assessment.ts:365"
     },
     {
       "method": "POST",
       "path": "/api/assessment/runs",
-      "source": "src/routes/assessment.ts:360"
+      "source": "src/routes/assessment.ts:373"
     },
     {
       "method": "GET",
       "path": "/api/assessment/runs/:runId",
-      "source": "src/routes/assessment.ts:384"
+      "source": "src/routes/assessment.ts:397"
     },
     {
       "method": "POST",
       "path": "/api/assessment/runs/:runId/complete",
-      "source": "src/routes/assessment.ts:413"
+      "source": "src/routes/assessment.ts:426"
     },
     {
       "method": "POST",
       "path": "/api/assessment/runs/:runId/stop",
-      "source": "src/routes/assessment.ts:378"
+      "source": "src/routes/assessment.ts:391"
     },
     {
       "method": "GET",
       "path": "/api/assessment/submissions",
-      "source": "src/routes/assessment.ts:496"
+      "source": "src/routes/assessment.ts:509"
     },
     {
       "method": "DELETE",
       "path": "/api/assessment/submissions/:team/:envelope",
-      "source": "src/routes/assessment.ts:609"
+      "source": "src/routes/assessment.ts:622"
     },
     {
       "method": "GET",
       "path": "/api/assessment/submissions/:team/:envelope",
-      "source": "src/routes/assessment.ts:601"
+      "source": "src/routes/assessment.ts:614"
     },
     {
       "method": "PATCH",
       "path": "/api/assessment/submissions/:team/:envelope/links",
-      "source": "src/routes/assessment.ts:584"
+      "source": "src/routes/assessment.ts:597"
     },
     {
       "method": "POST",
       "path": "/api/assessment/submissions/clear",
-      "source": "src/routes/assessment.ts:570"
+      "source": "src/routes/assessment.ts:583"
     },
     {
       "method": "POST",
       "path": "/api/assessment/submissions/commit",
-      "source": "src/routes/assessment.ts:529"
+      "source": "src/routes/assessment.ts:542"
     },
     {
       "method": "POST",
       "path": "/api/assessment/submissions/parse",
-      "source": "src/routes/assessment.ts:500"
+      "source": "src/routes/assessment.ts:513"
     },
     {
       "method": "GET",
       "path": "/api/assessment/teams",
-      "source": "src/routes/assessment.ts:81"
+      "source": "src/routes/assessment.ts:92"
     },
     {
       "method": "POST",
       "path": "/api/assessment/teams",
-      "source": "src/routes/assessment.ts:85"
+      "source": "src/routes/assessment.ts:98"
     },
     {
       "method": "DELETE",
       "path": "/api/assessment/teams/:id",
-      "source": "src/routes/assessment.ts:284"
+      "source": "src/routes/assessment.ts:297"
     },
     {
       "method": "GET",
       "path": "/api/assessment/teams/:id",
-      "source": "src/routes/assessment.ts:256"
+      "source": "src/routes/assessment.ts:269"
     },
     {
       "method": "PATCH",
       "path": "/api/assessment/teams/:id",
-      "source": "src/routes/assessment.ts:263"
+      "source": "src/routes/assessment.ts:276"
     },
     {
       "method": "GET",
       "path": "/api/assessment/teams/:id/evidence",
-      "source": "src/routes/assessment.ts:119"
+      "source": "src/routes/assessment.ts:132"
     },
     {
       "method": "POST",
       "path": "/api/assessment/teams/:id/evidence",
-      "source": "src/routes/assessment.ts:126"
+      "source": "src/routes/assessment.ts:139"
     },
     {
       "method": "GET",
       "path": "/api/assessment/teams/:id/exceptions",
-      "source": "src/routes/assessment.ts:137"
+      "source": "src/routes/assessment.ts:150"
     },
     {
       "method": "PATCH",
       "path": "/api/assessment/teams/:id/exceptions/:dimensionId",
-      "source": "src/routes/assessment.ts:149"
+      "source": "src/routes/assessment.ts:162"
     },
     {
       "method": "POST",
       "path": "/api/assessment/teams/:id/intake/image",
-      "source": "src/routes/assessment.ts:222"
+      "source": "src/routes/assessment.ts:235"
     },
     {
       "method": "POST",
       "path": "/api/assessment/teams/:id/intake/text",
-      "source": "src/routes/assessment.ts:204"
+      "source": "src/routes/assessment.ts:217"
     },
     {
       "method": "GET",
       "path": "/api/assessment/teams/:id/provenance",
-      "source": "src/routes/assessment.ts:180"
+      "source": "src/routes/assessment.ts:193"
     },
     {
       "method": "GET",
       "path": "/api/assessment/teams/:id/recommendations",
-      "source": "src/routes/assessment.ts:97"
+      "source": "src/routes/assessment.ts:110"
     },
     {
       "method": "POST",
       "path": "/api/assessment/teams/:id/reset-assessment",
-      "source": "src/routes/assessment.ts:249"
+      "source": "src/routes/assessment.ts:262"
     },
     {
       "method": "POST",
       "path": "/api/assessment/teams/:id/scores/apply",
-      "source": "src/routes/assessment.ts:233"
+      "source": "src/routes/assessment.ts:246"
     },
     {
       "method": "GET",
       "path": "/api/assessment/teams/:id/scoring-logs",
-      "source": "src/routes/assessment.ts:187"
+      "source": "src/routes/assessment.ts:200"
     },
     {
       "method": "GET",
       "path": "/api/assessment/teams/:id/scoring-logs/:stamp",
-      "source": "src/routes/assessment.ts:194"
+      "source": "src/routes/assessment.ts:207"
     },
     {
       "method": "GET",
       "path": "/api/assessment/teams/:id/stories",
-      "source": "src/routes/assessment.ts:104"
+      "source": "src/routes/assessment.ts:117"
     },
     {
       "method": "GET",
       "path": "/api/assessment/teams/:id/stories/:file",
-      "source": "src/routes/assessment.ts:111"
+      "source": "src/routes/assessment.ts:124"
     },
     {
       "method": "GET",
       "path": "/api/assessment/workspace",
-      "source": "src/routes/assessment.ts:624"
+      "source": "src/routes/assessment.ts:637"
     },
     {
       "method": "GET",
@@ -563,17 +563,17 @@
     {
       "method": "DELETE",
       "path": "/api/budgets/:orgProjectId",
-      "source": "src/routes/budgets.ts:58"
+      "source": "src/routes/budgets.ts:71"
     },
     {
       "method": "PUT",
       "path": "/api/budgets/:orgProjectId",
-      "source": "src/routes/budgets.ts:38"
+      "source": "src/routes/budgets.ts:51"
     },
     {
       "method": "GET",
       "path": "/api/budgets/grants",
-      "source": "src/routes/budgets.ts:33"
+      "source": "src/routes/budgets.ts:44"
     },
     {
       "method": "GET",
@@ -1018,7 +1018,7 @@
     {
       "method": "GET",
       "path": "/api/graph/people/:personId/work",
-      "source": "src/routes/work-items.ts:238"
+      "source": "src/routes/work-items.ts:242"
     },
     {
       "method": "GET",
@@ -1043,12 +1043,12 @@
     {
       "method": "GET",
       "path": "/api/graph/projects/:id/activity",
-      "source": "src/routes/work-items.ts:187"
+      "source": "src/routes/work-items.ts:189"
     },
     {
       "method": "GET",
       "path": "/api/graph/projects/:id/activity/series",
-      "source": "src/routes/work-items.ts:210"
+      "source": "src/routes/work-items.ts:212"
     },
     {
       "method": "PATCH",
@@ -1058,7 +1058,7 @@
     {
       "method": "GET",
       "path": "/api/graph/projects/:id/decisions",
-      "source": "src/routes/work-items.ts:225"
+      "source": "src/routes/work-items.ts:227"
     },
     {
       "method": "GET",
@@ -1078,12 +1078,12 @@
     {
       "method": "POST",
       "path": "/api/graph/work-items",
-      "source": "src/routes/work-items.ts:254"
+      "source": "src/routes/work-items.ts:258"
     },
     {
       "method": "PATCH",
       "path": "/api/graph/work-items/:id",
-      "source": "src/routes/work-items.ts:334"
+      "source": "src/routes/work-items.ts:338"
     },
     {
       "method": "GET",
@@ -1093,27 +1093,27 @@
     {
       "method": "GET",
       "path": "/api/identity/policies",
-      "source": "src/routes/identity.ts:281"
+      "source": "src/routes/identity.ts:294"
     },
     {
       "method": "POST",
       "path": "/api/identity/policies",
-      "source": "src/routes/identity.ts:300"
+      "source": "src/routes/identity.ts:313"
     },
     {
       "method": "DELETE",
       "path": "/api/identity/policies/:id",
-      "source": "src/routes/identity.ts:342"
+      "source": "src/routes/identity.ts:355"
     },
     {
       "method": "PUT",
       "path": "/api/identity/policies/:id",
-      "source": "src/routes/identity.ts:320"
+      "source": "src/routes/identity.ts:333"
     },
     {
       "method": "POST",
       "path": "/api/identity/policies/test",
-      "source": "src/routes/identity.ts:236"
+      "source": "src/routes/identity.ts:249"
     },
     {
       "method": "GET",
@@ -1123,12 +1123,12 @@
     {
       "method": "GET",
       "path": "/api/identity/schema",
-      "source": "src/routes/identity.ts:353"
+      "source": "src/routes/identity.ts:366"
     },
     {
       "method": "PUT",
       "path": "/api/identity/schema",
-      "source": "src/routes/identity.ts:361"
+      "source": "src/routes/identity.ts:374"
     },
     {
       "method": "GET",
@@ -1143,22 +1143,22 @@
     {
       "method": "GET",
       "path": "/api/identity/users",
-      "source": "src/routes/identity.ts:96"
+      "source": "src/routes/identity.ts:108"
     },
     {
       "method": "POST",
       "path": "/api/identity/users",
-      "source": "src/routes/identity.ts:120"
+      "source": "src/routes/identity.ts:133"
     },
     {
       "method": "PUT",
       "path": "/api/identity/users/:id/grants",
-      "source": "src/routes/identity.ts:141"
+      "source": "src/routes/identity.ts:154"
     },
     {
       "method": "PUT",
       "path": "/api/identity/users/:id/person",
-      "source": "src/routes/identity.ts:184"
+      "source": "src/routes/identity.ts:197"
     },
     {
       "method": "POST",
@@ -1348,17 +1348,17 @@
     {
       "method": "GET",
       "path": "/api/knowledge-base/data-sources",
-      "source": "src/routes/knowledge-base.ts:37"
+      "source": "src/routes/knowledge-base.ts:41"
     },
     {
       "method": "GET",
       "path": "/api/knowledge-base/documents",
-      "source": "src/routes/knowledge-base.ts:26"
+      "source": "src/routes/knowledge-base.ts:27"
     },
     {
       "method": "POST",
       "path": "/api/knowledge-base/sync",
-      "source": "src/routes/knowledge-base.ts:47"
+      "source": "src/routes/knowledge-base.ts:51"
     },
     {
       "method": "GET",
@@ -1808,82 +1808,82 @@
     {
       "method": "POST",
       "path": "/api/observability/harness/cases",
-      "source": "src/routes/harness.ts:505"
+      "source": "src/routes/harness.ts:513"
     },
     {
       "method": "DELETE",
       "path": "/api/observability/harness/cases/:id",
-      "source": "src/routes/harness.ts:662"
+      "source": "src/routes/harness.ts:670"
     },
     {
       "method": "GET",
       "path": "/api/observability/harness/cases/:id",
-      "source": "src/routes/harness.ts:464"
+      "source": "src/routes/harness.ts:472"
     },
     {
       "method": "PATCH",
       "path": "/api/observability/harness/cases/:id",
-      "source": "src/routes/harness.ts:580"
+      "source": "src/routes/harness.ts:588"
     },
     {
       "method": "GET",
       "path": "/api/observability/harness/coverage",
-      "source": "src/routes/harness.ts:1179"
+      "source": "src/routes/harness.ts:1187"
     },
     {
       "method": "POST",
       "path": "/api/observability/harness/promote",
-      "source": "src/routes/harness.ts:1546"
+      "source": "src/routes/harness.ts:1554"
     },
     {
       "method": "GET",
       "path": "/api/observability/harness/promoted-versions",
-      "source": "src/routes/harness.ts:1656"
+      "source": "src/routes/harness.ts:1664"
     },
     {
       "method": "POST",
       "path": "/api/observability/harness/results/:invocationId/rejudge",
-      "source": "src/routes/harness.ts:1126"
+      "source": "src/routes/harness.ts:1134"
     },
     {
       "method": "GET",
       "path": "/api/observability/harness/runs",
-      "source": "src/routes/harness.ts:793"
+      "source": "src/routes/harness.ts:801"
     },
     {
       "method": "POST",
       "path": "/api/observability/harness/runs",
-      "source": "src/routes/harness.ts:692"
+      "source": "src/routes/harness.ts:700"
     },
     {
       "method": "GET",
       "path": "/api/observability/harness/runs/:id",
-      "source": "src/routes/harness.ts:816"
+      "source": "src/routes/harness.ts:824"
     },
     {
       "method": "PATCH",
       "path": "/api/observability/harness/runs/:id",
-      "source": "src/routes/harness.ts:1037"
+      "source": "src/routes/harness.ts:1045"
     },
     {
       "method": "POST",
       "path": "/api/observability/harness/runs/:id/execute",
-      "source": "src/routes/harness.ts:751"
+      "source": "src/routes/harness.ts:759"
     },
     {
       "method": "GET",
       "path": "/api/observability/harness/runs/:id/status",
-      "source": "src/routes/harness.ts:874"
+      "source": "src/routes/harness.ts:882"
     },
     {
       "method": "POST",
       "path": "/api/observability/harness/runs/:runId/results",
-      "source": "src/routes/harness.ts:935"
+      "source": "src/routes/harness.ts:943"
     },
     {
       "method": "GET",
       "path": "/api/observability/harness/runs/:runIdA/compare/:runIdB",
-      "source": "src/routes/harness.ts:1411"
+      "source": "src/routes/harness.ts:1419"
     },
     {
       "method": "POST",
@@ -2073,7 +2073,7 @@
     {
       "method": "GET",
       "path": "/api/roster",
-      "source": "src/routes/roster.ts:37"
+      "source": "src/routes/roster.ts:50"
     },
     {
       "method": "GET",
@@ -2128,47 +2128,47 @@
     {
       "method": "GET",
       "path": "/api/sdlc/changes",
-      "source": "src/routes/sdlc.ts:62"
+      "source": "src/routes/sdlc.ts:73"
     },
     {
       "method": "GET",
       "path": "/api/sdlc/changes/:id",
-      "source": "src/routes/sdlc.ts:70"
+      "source": "src/routes/sdlc.ts:81"
     },
     {
       "method": "POST",
       "path": "/api/sdlc/changes/:id/address",
-      "source": "src/routes/sdlc.ts:122"
+      "source": "src/routes/sdlc.ts:133"
     },
     {
       "method": "POST",
       "path": "/api/sdlc/changes/:id/decide",
-      "source": "src/routes/sdlc.ts:78"
+      "source": "src/routes/sdlc.ts:89"
     },
     {
       "method": "POST",
       "path": "/api/sdlc/changes/:id/deliver",
-      "source": "src/routes/sdlc.ts:156"
+      "source": "src/routes/sdlc.ts:167"
     },
     {
       "method": "POST",
       "path": "/api/sdlc/changes/:id/rereview",
-      "source": "src/routes/sdlc.ts:96"
+      "source": "src/routes/sdlc.ts:107"
     },
     {
       "method": "GET",
       "path": "/api/sdlc/policies",
-      "source": "src/routes/sdlc.ts:26"
+      "source": "src/routes/sdlc.ts:36"
     },
     {
       "method": "POST",
       "path": "/api/sdlc/policies",
-      "source": "src/routes/sdlc.ts:33"
+      "source": "src/routes/sdlc.ts:44"
     },
     {
       "method": "DELETE",
       "path": "/api/sdlc/policies/:id",
-      "source": "src/routes/sdlc.ts:54"
+      "source": "src/routes/sdlc.ts:65"
     },
     {
       "method": "GET",
@@ -2283,97 +2283,97 @@
     {
       "method": "GET",
       "path": "/api/work/ask-suggestions",
-      "source": "src/routes/work.ts:143"
+      "source": "src/routes/work.ts:149"
     },
     {
       "method": "POST",
       "path": "/api/work/dispatch",
-      "source": "src/routes/work.ts:306"
-    },
-    {
-      "method": "GET",
-      "path": "/api/work/events",
       "source": "src/routes/work.ts:312"
     },
     {
       "method": "GET",
+      "path": "/api/work/events",
+      "source": "src/routes/work.ts:318"
+    },
+    {
+      "method": "GET",
       "path": "/api/work/findings",
-      "source": "src/routes/work.ts:321"
+      "source": "src/routes/work.ts:327"
     },
     {
       "method": "POST",
       "path": "/api/work/findings/:id/analyze",
-      "source": "src/routes/work.ts:414"
+      "source": "src/routes/work.ts:420"
     },
     {
       "method": "POST",
       "path": "/api/work/findings/:id/dismiss",
-      "source": "src/routes/work.ts:452"
+      "source": "src/routes/work.ts:458"
     },
     {
       "method": "POST",
       "path": "/api/work/findings/:id/promote",
-      "source": "src/routes/work.ts:376"
+      "source": "src/routes/work.ts:382"
     },
     {
       "method": "POST",
       "path": "/api/work/findings/analyze-batch",
-      "source": "src/routes/work.ts:442"
-    },
-    {
-      "method": "GET",
-      "path": "/api/work/findings/stats",
       "source": "src/routes/work.ts:448"
     },
     {
       "method": "GET",
+      "path": "/api/work/findings/stats",
+      "source": "src/routes/work.ts:454"
+    },
+    {
+      "method": "GET",
       "path": "/api/work/jobs",
-      "source": "src/routes/work.ts:183"
+      "source": "src/routes/work.ts:189"
     },
     {
       "method": "POST",
       "path": "/api/work/jobs",
-      "source": "src/routes/work.ts:226"
+      "source": "src/routes/work.ts:232"
     },
     {
       "method": "DELETE",
       "path": "/api/work/jobs/:id",
-      "source": "src/routes/work.ts:297"
+      "source": "src/routes/work.ts:303"
     },
     {
       "method": "GET",
       "path": "/api/work/jobs/:id",
-      "source": "src/routes/work.ts:190"
+      "source": "src/routes/work.ts:196"
     },
     {
       "method": "POST",
       "path": "/api/work/jobs/:id/requeue",
-      "source": "src/routes/work.ts:284"
+      "source": "src/routes/work.ts:290"
     },
     {
       "method": "POST",
       "path": "/api/work/jobs/:id/review",
-      "source": "src/routes/work.ts:268"
+      "source": "src/routes/work.ts:274"
     },
     {
       "method": "GET",
       "path": "/api/work/proposals",
-      "source": "src/routes/work.ts:460"
+      "source": "src/routes/work.ts:466"
     },
     {
       "method": "POST",
       "path": "/api/work/proposals",
-      "source": "src/routes/work.ts:465"
+      "source": "src/routes/work.ts:471"
     },
     {
       "method": "POST",
       "path": "/api/work/proposals/:id/decide",
-      "source": "src/routes/work.ts:486"
+      "source": "src/routes/work.ts:492"
     },
     {
       "method": "GET",
       "path": "/api/work/suggestions",
-      "source": "src/routes/work.ts:132"
+      "source": "src/routes/work.ts:138"
     },
     {
       "method": "GET",
@@ -2383,7 +2383,7 @@
     {
       "method": "POST",
       "path": "/api/work/sweeps/run",
-      "source": "src/routes/work.ts:337"
+      "source": "src/routes/work.ts:343"
     },
     {
       "method": "GET",

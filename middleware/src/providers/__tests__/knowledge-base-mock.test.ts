@@ -28,6 +28,7 @@ jest.mock('../../config.js', () => ({
 import { fixtureRegistry, sumBy } from '../../mock/core/index.js';
 import { kbDocumentRows, kbIngestionJobRows, kbObjectRows } from '../../mock/knowledge-base.js';
 import {
+  countIngestedDocs,
   countS3Documents,
   getIngestStats,
   getStorageBreakdown,
@@ -50,6 +51,19 @@ describe('the knowledge base in dev:mock', () => {
     expect([...stamps].sort().reverse()).toEqual(stamps);
     // Ids follow schema/synth's naming, so a reader can find the generator.
     expect(docs.some((d) => d.id.startsWith('adr-d-'))).toBe(true);
+  });
+
+  it('countIngestedDocs agrees with a full, unpaged listIngestedDocs — never a stored number', async () => {
+    const all = await listIngestedDocs({ limit: 500 });
+    expect(await countIngestedDocs()).toBe(all.length);
+    // A capped page must not change the true count behind it.
+    const page = await listIngestedDocs({ limit: 2 });
+    expect(page.length).toBeLessThan(all.length);
+    expect(await countIngestedDocs()).toBe(all.length);
+    // The `since` filter narrows both the same way.
+    const cutoff = all[Math.floor(all.length / 2)]!.ingestedAt!;
+    const newer = all.filter((d) => d.ingestedAt != null && d.ingestedAt > cutoff);
+    expect(await countIngestedDocs({ since: cutoff })).toBe(newer.length);
   });
 
   it('names the knowledge base instead of blaming the config for it', async () => {

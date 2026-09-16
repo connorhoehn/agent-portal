@@ -163,6 +163,36 @@ function seedFindings(): Finding[] {
   ];
 }
 
+// `listFindings` (providers/org-sweeps.ts) caps its LIST at 300 rows — a page
+// size, not a count. `findingStats` is the real GROUP BY over every row, and
+// backs `/api/work/summary`'s `findings.open/critical/warning`; before it
+// existed, the summary read `listFindings({limit:300}).length`, which
+// undercounted the instant a program crossed 300 open findings with no error
+// to notice it by. `REPEATS` clones of the seven seeded findings, all kept
+// `open` — the seed already carries one `open` example per sweep type, so the
+// clones don't need the other statuses to prove the count stays right past
+// the cap — 7 * 45 = 315.
+const LARGE_REPEATS = 45;
+
+function largeFindings(): Finding[] {
+  const base = seedFindings();
+  const out: Finding[] = [];
+  for (let round = 0; round < LARGE_REPEATS; round += 1) {
+    for (const f of base) {
+      const n = out.length + 1;
+      out.push({
+        ...f,
+        id: `find-mock-${n}`,
+        status: 'open',
+        fingerprint: `${f.fingerprint}:${n}`,
+        firstSeenAt: clock.hoursAgo(70 + (n % 200)),
+        lastSeenAt: clock.hoursAgo(n % 24),
+      });
+    }
+  }
+  return out;
+}
+
 /**
  * The findings board.
  *
@@ -170,12 +200,15 @@ function seedFindings(): Finding[] {
  *           undeclared scenario falls back to `default`, and "no findings" is
  *           the state the Work page's reassuring empty copy is written for —
  *           the one state a seeded board can never show.
+ * `large` — 315 open findings, so `/api/work/summary`'s GROUP BY and the
+ *           `/api/work/findings` list's 300-row cap can both be exercised.
  */
 export const orgFindings = defineFixture<Finding>({
   key: 'org-findings',
   scenarios: {
     default: seedFindings,
     empty: () => [],
+    large: largeFindings,
   },
 });
 

@@ -72,4 +72,15 @@ describe('identity router gates by capability, not by one router-wide action', (
     expect(hr.status).toBe(200);
     expect(hr.body).toHaveLength(3);
   });
+
+  // A scale audit flagged this as an unbounded read (`SELECT ... FROM
+  // app_users` with no LIMIT). `?limit=` is optional and silently clamped —
+  // never a 400 — so the no-params default keeps shipping the whole roster.
+  it('clamps `limit`, defaulting to the full roster', async () => {
+    const app = appAs({ role: 'hr-admin', tenant: 'orgiq', sub: 'u-hr' });
+    const capped = await request(app).get('/api/identity/users?limit=1');
+    expect(capped.body).toHaveLength(1);
+    const uncapped = await request(app).get('/api/identity/users');
+    expect(uncapped.body).toHaveLength(3);
+  });
 });

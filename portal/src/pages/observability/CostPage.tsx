@@ -1,9 +1,11 @@
 // CostPage — executive surface for "what is eating my Bedrock bill?"
 //
 // Layout:
-//   1. Headline cards row: total spend, A2A overhead, cost-per-good summary
-//   2. Cost-over-time stacked bar chart with deploy-marker overlays
-//   3. Per-agent cost rollup table (with cost-per-good chip)
+//   1. Cost-over-time stacked bar chart with deploy-marker overlays
+//   2. Per-agent cost rollup table (with cost-per-good chip)
+//   3. Headline cards row: total spend, A2A overhead, cost-per-good summary —
+//      kept below the table it mostly restates (table-density audit); see the
+//      comment at that card for which figure earns its keep
 //   4. Top expensive invocations table (linkable to invocation detail)
 //   5. By-model cost breakdown
 //
@@ -383,54 +385,6 @@ function CostPage() {
         />
       )}
 
-      <Card padding="md">
-        {/* Headline cards row. */}
-        <KPIGrid columns={3}>
-          <StatCard
-            label="Total spend"
-            value={fmtUsd(totalCostUsd)}
-            hint={`${fmtInt(invocations)} invocations · ${fmtInt(total?.inputTokens ?? 0)} in / ${fmtInt(total?.outputTokens ?? 0)} out tokens`}
-          />
-          <StatCard
-            label="A2A overhead"
-            value={fmtPct(a2a?.a2aFraction ?? 0)}
-            danger={!!(a2a && a2a.a2aFraction > 0.4)}
-            hint={
-              a2a && a2a.totalCostUsd > 0
-                ? `${fmtUsd(a2a.a2aCostUsd)} of ${fmtUsd(a2a.totalCostUsd)} on multi-agent routing · ${fmtInt(a2a.a2aInvocations)} sub-calls`
-                : 'of total cost is multi-agent routing'
-            }
-          />
-          <StatCard
-            label="Cost per good response"
-            value={
-              valueRatioRanked.best?.costPerGood != null
-                ? fmtUsd(valueRatioRanked.best.costPerGood, 4)
-                : '—'
-            }
-            hint={
-              valueRatioRanked.best && valueRatioRanked.worst &&
-              valueRatioRanked.best.agentId !== valueRatioRanked.worst.agentId ? (
-                <Inline as="span" gap="xs" wrap align="center">
-                  <Chip tone="success" size="xs">
-                    ✓ {valueRatioRanked.best.agentId} {fmtUsd(valueRatioRanked.best.costPerGood, 4)}
-                  </Chip>
-                  <Chip tone="danger" size="xs">
-                    ⚠ {valueRatioRanked.worst.agentId} {fmtUsd(valueRatioRanked.worst.costPerGood, 4)}
-                  </Chip>
-                </Inline>
-              ) : valueRatioRanked.best ? (
-                <Chip tone="success" size="xs">
-                  ✓ {valueRatioRanked.best.agentId}
-                </Chip>
-              ) : (
-                'judge_score ≥ 0.7'
-              )
-            }
-          />
-        </KPIGrid>
-      </Card>
-
       {/* Cost over time. */}
       <Card padding="md">
         <SectionLabel as="div" className="mb-3">
@@ -577,6 +531,58 @@ function CostPage() {
         )}
       </Card>
 
+      {/* Headline cards row — kept below the table it summarizes (matches
+          KnowledgeHomePage's "right now" strip): Total spend and Cost per
+          good response are both derivable from the Per-Agent Breakdown table
+          above, but A2A overhead is not shown anywhere else on this page, so
+          it stays here rather than being dropped. */}
+      <Card padding="md">
+        <KPIGrid columns={3}>
+          <StatCard
+            label="Total spend"
+            value={fmtUsd(totalCostUsd)}
+            hint={`${fmtInt(invocations)} invocations · ${fmtInt(total?.inputTokens ?? 0)} in / ${fmtInt(total?.outputTokens ?? 0)} out tokens`}
+          />
+          <StatCard
+            label="A2A overhead"
+            value={fmtPct(a2a?.a2aFraction ?? 0)}
+            danger={!!(a2a && a2a.a2aFraction > 0.4)}
+            hint={
+              a2a && a2a.totalCostUsd > 0
+                ? `${fmtUsd(a2a.a2aCostUsd)} of ${fmtUsd(a2a.totalCostUsd)} on multi-agent routing · ${fmtInt(a2a.a2aInvocations)} sub-calls`
+                : 'of total cost is multi-agent routing'
+            }
+          />
+          <StatCard
+            label="Cost per good response"
+            value={
+              valueRatioRanked.best?.costPerGood != null
+                ? fmtUsd(valueRatioRanked.best.costPerGood, 4)
+                : '—'
+            }
+            hint={
+              valueRatioRanked.best && valueRatioRanked.worst &&
+              valueRatioRanked.best.agentId !== valueRatioRanked.worst.agentId ? (
+                <Inline as="span" gap="xs" wrap align="center">
+                  <Chip tone="success" size="xs">
+                    ✓ {valueRatioRanked.best.agentId} {fmtUsd(valueRatioRanked.best.costPerGood, 4)}
+                  </Chip>
+                  <Chip tone="danger" size="xs">
+                    ⚠ {valueRatioRanked.worst.agentId} {fmtUsd(valueRatioRanked.worst.costPerGood, 4)}
+                  </Chip>
+                </Inline>
+              ) : valueRatioRanked.best ? (
+                <Chip tone="success" size="xs">
+                  ✓ {valueRatioRanked.best.agentId}
+                </Chip>
+              ) : (
+                'judge_score ≥ 0.7'
+              )
+            }
+          />
+        </KPIGrid>
+      </Card>
+
       {/* Top expensive invocations. */}
       <Card padding="md">
         <SectionLabel as="div" className="mb-3">
@@ -593,8 +599,8 @@ function CostPage() {
           <Table>
             <TableHead>
               <TableRow>
-                <TableTh>When</TableTh>
                 <TableTh>Agent</TableTh>
+                <TableTh>When</TableTh>
                 <TableTh>Prompt ver</TableTh>
                 <TableTh>Prompt</TableTh>
                 <TableTh>Total $</TableTh>
@@ -610,10 +616,10 @@ function CostPage() {
                     navigate(`/admin/observability/invocations/${r.invocationId}`)
                   }
                 >
+                  <TableTd className={agentCellCls}>{r.agentId || '—'}</TableTd>
                   <TableTd className={tsCellCls}>
                     {r.ts ? (parsePgTimestamp(r.ts)?.toLocaleString() ?? r.ts) : '—'}
                   </TableTd>
-                  <TableTd className={agentCellCls}>{r.agentId || '—'}</TableTd>
                   <TableTd className={monoCellCls}>
                     {r.promptVersion ? `p:${r.promptVersion.slice(0, 8)}` : '—'}
                   </TableTd>
@@ -627,8 +633,8 @@ function CostPage() {
                     <CostChip cost={r.totalCostUsd} />
                   </TableTd>
                   <TableTd className="whitespace-nowrap text-right">
-                    <Inline as="span" gap="none" aria-hidden="true" className="text-[12px] text-[var(--color-primary)]">
-                      →
+                    <Inline as="span" gap="none" className="text-[12px] text-[var(--color-primary)]">
+                      Open
                     </Inline>
                   </TableTd>
                 </TableRow>

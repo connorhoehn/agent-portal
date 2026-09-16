@@ -83,6 +83,44 @@ An audit never has to mutate shared state to see an empty table. Note the
 fallback rule: a fixture that does not declare `empty` keeps its default rows
 there, so a fixture whose empty state you want to audit must say `empty: () => []`.
 
+### `large`, and what it actually covers
+
+`large` shipped as a name in `SCENARIOS` for a while with **zero fixtures
+implementing it** — `POST /api/__mock/scenario {"scenario":"large"}` answered
+200 and `GET /api/__mock/state` showed every fixture quietly still on
+`default`. Applying it changed nothing, which is the same silent-fallback trap
+`docs/mock-floor.md`'s fixture-reference test exists to catch elsewhere, one
+level up: an *advertised but unimplemented scenario* rather than an
+unregistered fixture. `src/mock/__tests__/scenario-coverage.test.ts` is the
+guard against it coming back — it fails if any scenario `GET
+/api/__mock/scenarios` advertises has no fixture that DECLARED a branch for it
+(`declaredScenariosFor`, `core/fixture.ts` — a plain fallback to `default`
+does not count).
+
+Fixtures that now declare a real `large` branch, each generated
+deterministically from its own seeded cast (a counter, a modulo over real
+names/ids, never a typed literal count) rather than invented:
+
+| Fixture | `large` size | Proves |
+|---|---|---|
+| `mock/people.ts`'s `graphPeople`/`graphRelationships` | 616 people (56 seeded × 11 rounds), capped to 500 by `providers/aurora.ts`'s `cappedGraphPeople` | `GET /api/graph/entities`'s 500-row `PEOPLE_GRAPH_LIMIT` AND the portal's 200-node canvas cap both fire; `peopleTotal` reports the true, larger count beside the capped `nodes` |
+| `mock/org-findings.ts`'s `orgFindings` | 315 open findings (7 seeded × 45) | `findingStats`'s GROUP BY (behind `/api/work/summary`) stays right past `listFindings`'s 300-row list cap |
+| `mock/work-items.ts`'s `workItems` | ~2,916 items (81 seeded × 36 rounds) | `searchWorkItems`'s 200-row default cap, and `PROJECT_WORK_ITEMS_LIMIT` (500) on the busiest single initiative |
+| `mock/assessment.ts`'s `teamsFixture`/`scoresFixture` | 168 teams (7 seeded × 24) | `/api/assessment/teams`'s 500/2000 `clampLimit` |
+| `mock/bots.ts`'s `botRuns` | every seeded bot's history extended 220+ runs past its own seed | `listBotRuns`/`listBotRunsForBotsResult`'s 200-run-per-bot cap |
+| `mock/invocations.ts`'s `invocationTail` | 5× the default traffic volume | the Invocations page's density and the 50-row `/recent-invocations` window against a busy fleet |
+| `mock/traces.ts`'s `traces` | 12 rounds of the seeded traces (36 total) | the trace list's paging and the waterfall's density |
+| `mock/local-compute.ts`, `mock/distillation.ts` | see each fixture's own header | their own pagination surfaces |
+
+Fixtures that deliberately still fall back to `default` under `large`: every
+other fixture in the registry. Most seed a cast too small to have a
+truncation-relevant cap at all (a handful of decisions, a handful of
+connected sources), and inflating them would just be noise with nothing on
+the other end to prove. If a future client bound needs one of them to grow,
+add a `large` branch there rather than assuming this table is exhaustive —
+`scenario-coverage.test.ts` only guards "at least one fixture implements this
+scenario," not "every fixture that could usefully implement it does."
+
 In tests, take your own registry (`createFixtureRegistry()`) and freeze the
 clock rather than reasoning about wall time:
 

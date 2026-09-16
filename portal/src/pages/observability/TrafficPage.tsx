@@ -403,7 +403,9 @@ function TrafficPage() {
       <Card padding="md">
         <CardHeader
           title="Top Users"
-          subtitle="by invocation count · click to drill into per-user search"
+          // The server call is hard-capped at limit=10 (line 211) — say so
+          // rather than let "Top Users" read as "every user seen".
+          subtitle="top 10 by invocation count · click to drill into per-user search for the rest"
         />
         {topUsers.length === 0 ? (
           <RowEmpty

@@ -23,8 +23,8 @@ import {
   Select,
   Stack,
   StatStrip,
-  StatusPill,
   Textarea,
+  StatusPill,
   type StatusPillState,
 } from '@connorhoehnslalom/ui-components/shared';
 import { Link } from 'react-router';
@@ -41,18 +41,19 @@ import { useTeams } from './dashboard/useTeams';
 import { useDimensionIndex } from './useDimensionIndex';
 import { levelBadgeLabel, type Dimension } from './types';
 
+// Only rendered under the "All statuses" filter — see the column below.
+const STATUS_PILL: Record<HitlStatus, { state: StatusPillState; label: string }> = {
+  OPEN: { state: 'warning', label: 'Open' },
+  RESOLVED: { state: 'success', label: 'Answered' },
+  DISMISSED: { state: 'neutral', label: 'Dismissed' },
+};
+
 const STATUS_OPTIONS: { value: HitlStatus | 'ALL'; label: string }[] = [
   { value: 'OPEN', label: 'Open' },
   { value: 'RESOLVED', label: 'Answered' },
   { value: 'DISMISSED', label: 'Dismissed' },
   { value: 'ALL', label: 'All statuses' },
 ];
-
-const STATUS_PILL: Record<HitlStatus, { state: StatusPillState; label: string }> = {
-  OPEN: { state: 'warning', label: 'Open' },
-  RESOLVED: { state: 'success', label: 'Answered' },
-  DISMISSED: { state: 'neutral', label: 'Dismissed' },
-};
 
 function dimensionLabel(task: FeedbackTask, dim: Dimension | undefined): string {
   if (dim) return dim.title;
@@ -306,6 +307,9 @@ export default function FeedbackPage() {
           onRowClick={(t) => setSelectedId(t.task_id)}
           striped
           loading={loading && !data}
+          // The full question queue across every team — 20 is a full-page
+          // screenful.
+          pageSize={20}
           emptyMessage={tasks.length === 0 ? (status === 'OPEN' ? 'No open questions.' : 'No questions with this status.') : 'No questions match the current filters.'}
           columns={[
             {
@@ -325,7 +329,20 @@ export default function FeedbackPage() {
               render: (t) => <MetaLine size="xs" tone="secondary" items={[t.question.length > 96 ? `${t.question.slice(0, 96)}…` : t.question]} />,
             },
             { key: 'created_at', header: 'Raised', sortable: true, render: (t) => <MetaLine size="xs" tone="tertiary" items={[formatRelativeTime(t.created_at), t.source ?? null].filter((x): x is string => !!x)} /> },
-            { key: 'status', header: 'Status', sortable: true, render: (t) => <StatusPill size="sm" state={STATUS_PILL[t.status].state} label={STATUS_PILL[t.status].label} /> },
+            // Status earns its width only when the rows can disagree. Under
+            // the default OPEN filter every row is open and the column just
+            // restated the filter, so it was removed — but under "All
+            // statuses" the rows genuinely differ and dropping it left no way
+            // to tell an open question from an answered one. Conditional, not
+            // deleted.
+            ...(status === 'ALL'
+              ? [{
+                  key: 'status',
+                  header: 'Status',
+                  sortable: true,
+                  render: (t: FeedbackTask) => <StatusPill size="sm" state={STATUS_PILL[t.status].state} label={STATUS_PILL[t.status].label} />,
+                }]
+              : []),
           ]}
         />
       )}

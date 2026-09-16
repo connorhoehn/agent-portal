@@ -44,8 +44,10 @@ import {
   ToolbarGroup,
   ToolbarLabel,
   Tooltip,
+  MetaLine,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../hooks/useFetch';
+import { showingLabel } from '../lib/format';
 import { nextSearch } from '../lib/useUrlState';
 import { useSession } from '../lib/auth';
 import { parseFocusIds } from '../components/org-graph/graphInsights';
@@ -67,10 +69,24 @@ import { coalesceAssistantMessages } from '../components/chat/coalesceMessages';
 // was ever recorded to Memory.)
 const SEARCH_AGENT_ID = 'orgiq-supervisor';
 
+// The unfiltered graph renders every person `/api/graph/entities` returns in
+// one SVG pass (`OrgGraph`, force-directed) — no windowing, no culling. Past
+// a couple hundred nodes that's the thing that hangs the tab, not a slow
+// network call. Cap the unfiltered canvas and say so; a selection filter
+// (below) already narrows to a small neighborhood and is exempt.
+const GRAPH_NODE_CAP = 200;
+
 interface GraphData {
   nodes: GraphPerson[];
   edges: GraphRelationship[];
   departments: GraphDepartment[];
+  /** True org-wide person count behind a possibly-capped `nodes` array — the
+   *  graph API's own circuit breaker (`PEOPLE_GRAPH_LIMIT` in
+   *  middleware/src/providers/aurora.ts) caps `nodes` and reports the real
+   *  total separately so a capped response still says how big the org
+   *  actually is. Optional: falls back to `nodes.length` against an older
+   *  or mocked response that doesn't send it yet. */
+  peopleTotal?: number;
 }
 
 interface SkillsGraphData {
@@ -330,22 +346,51 @@ function ExplorePage() {
     return data.edges; // 'people' or 'all'
   }, [data, entityFilter]);
 
-  const { visibleNodes, baseEdges } = useMemo(() => {
-    if (!data) return { visibleNodes: [] as GraphPerson[], baseEdges: [] as GraphRelationship[] };
+  // The true org-wide person count — from the API's own circuit breaker when
+  // it sends one, else the best we can say is how many nodes actually came
+  // down the wire. This is the denominator for every "N / M people" reading
+  // below, not `data.nodes.length` alone: the API can already have capped
+  // `nodes` server-side (`PEOPLE_GRAPH_LIMIT`) before this page gets a
+  // chance to cap it again client-side.
+  const trueTotal = data?.peopleTotal ?? data?.nodes.length ?? 0;
+
+  const { visibleNodes, baseEdges, isFiltered, isCapped } = useMemo(() => {
+    if (!data) return { visibleNodes: [] as GraphPerson[], baseEdges: [] as GraphRelationship[], isFiltered: false, isCapped: false };
     const baseNodes = data.nodes;
     const baseEdgeSet = entityFilteredEdges;
-    if (!filterToSelection || selectedIds.size === 0) return { visibleNodes: baseNodes, baseEdges: baseEdgeSet };
-    const neighbors = new Set<string>();
-    for (const e of baseEdgeSet) {
-      if (selectedIds.has(e.source)) neighbors.add(e.target);
-      if (selectedIds.has(e.target)) neighbors.add(e.source);
+    if (filterToSelection && selectedIds.size > 0) {
+      const neighbors = new Set<string>();
+      for (const e of baseEdgeSet) {
+        if (selectedIds.has(e.source)) neighbors.add(e.target);
+        if (selectedIds.has(e.target)) neighbors.add(e.source);
+      }
+      const keep = new Set([...selectedIds, ...neighbors]);
+      return {
+        visibleNodes: baseNodes.filter(n => keep.has(n.id)),
+        baseEdges: baseEdgeSet.filter(e => keep.has(e.source) && keep.has(e.target)),
+        isFiltered: true,
+        isCapped: false,
+      };
     }
-    const keep = new Set([...selectedIds, ...neighbors]);
-    return {
-      visibleNodes: baseNodes.filter(n => keep.has(n.id)),
-      baseEdges: baseEdgeSet.filter(e => keep.has(e.source) && keep.has(e.target)),
-    };
-  }, [data, entityFilteredEdges, filterToSelection, selectedIds]);
+    // No selection narrowing the view: cap the raw canvas rather than hand
+    // the force layout the whole org — on top of whatever cap the API
+    // already applied. Truncation is honest, not silent: the count strip
+    // below says "showing the first N of M" whenever `isCapped` fires,
+    // same contract as the selection-filtered count.
+    if (baseNodes.length > GRAPH_NODE_CAP) {
+      const capped = baseNodes.slice(0, GRAPH_NODE_CAP);
+      const keep = new Set(capped.map(n => n.id));
+      return {
+        visibleNodes: capped,
+        baseEdges: baseEdgeSet.filter(e => keep.has(e.source) && keep.has(e.target)),
+        isFiltered: false,
+        isCapped: true,
+      };
+    }
+    // Under the client-side cap, but the API may still have capped `nodes`
+    // below the true org size — that's still a partial view worth flagging.
+    return { visibleNodes: baseNodes, baseEdges: baseEdgeSet, isFiltered: false, isCapped: baseNodes.length < trueTotal };
+  }, [data, entityFilteredEdges, filterToSelection, selectedIds, trueTotal]);
 
   // When a specific edge type is active (skills/projects/hierarchy), skip the
   // minStrength gate — the user explicitly chose that view so show all of those edges.
@@ -356,7 +401,10 @@ function ExplorePage() {
     [baseEdges, topK, activeMinStrength],
   );
   const isEntityFiltered = data && entityFilter !== 'all' && entityFilter !== 'people' && (!filterToSelection || selectedIds.size === 0);
-  const isFiltered = filterToSelection && selectedIds.size > 0 && data && visibleNodes.length < data.nodes.length;
+  // Any reason the canvas shows fewer people than the org actually has —
+  // selection narrowed it on purpose, or a cap (server, client, or both)
+  // did. All read the same honest way — "N / M people" — in the count strip.
+  const showsPartialGraph = Boolean(data) && visibleNodes.length < trueTotal;
 
   // Connection path: exactly two selected people → BFS shortest path over the
   // FULL edge set (view filters don't constrain "how are they connected?").
@@ -658,13 +706,16 @@ function ExplorePage() {
             setFilterToSelection(true);
           }}
         />
-        <T className="text-text-tertiary">
+        <T
+          className="text-text-tertiary"
+          title={isCapped ? showingLabel(visibleNodes.length, trueTotal, 'people — capped for canvas performance, use search or a selection to narrow it instead') : undefined}
+        >
           {meGraph
             // `T` is a flex row, and a flex container trims the spaces at the
             // edges of a bare text run — "56people · 131edges". Non-breaking
             // spaces survive it.
             ? <><b>{meGraph.nodes.filter(n => n.kind !== 'skill_domain').length}</b>&nbsp;nodes&nbsp;·&nbsp;<b>{meGraph.edges.filter(e => e.type !== 'belongs_to').length}</b>&nbsp;{entityFilter}&nbsp;edges</>
-            : <><b>{visibleNodes.length}</b>{isFiltered ? ` / ${data?.nodes.length ?? 0}` : ''}&nbsp;people&nbsp;·&nbsp;<b>{filteredEdges.length}</b>{isEntityFiltered ? ` ${entityFilter}` : ''}&nbsp;edges</>
+            : <><b>{visibleNodes.length}</b>{showsPartialGraph ? ` / ${trueTotal}` : ''}&nbsp;people{isCapped ? ' (capped)' : ''}&nbsp;·&nbsp;<b>{filteredEdges.length}</b>{isEntityFiltered ? ` ${entityFilter}` : ''}&nbsp;edges</>
           }
         </T>
         {isFiltered && (
@@ -843,14 +894,34 @@ function ExplorePage() {
             const meRefresh = entityFilter === 'skills' ? refreshSkills : refreshProjects;
 
             if (meGraph) {
+              // The same cap the people canvas takes, for the same reason:
+              // this view is custom SVG rather than xyflow, so it has no
+              // viewport culling to fall back on and every node is a painted
+              // element. Capping silently would be worse than the slowness —
+              // the strip below says what is on screen and what is not.
+              const meCapped = meGraph.nodes.length > GRAPH_NODE_CAP;
+              const meNodes = meCapped ? meGraph.nodes.slice(0, GRAPH_NODE_CAP) : meGraph.nodes;
+              const meKept = new Set(meNodes.map((n) => n.id));
+              const meEdges = meCapped
+                ? meGraph.edges.filter((e) => meKept.has(e.source) && meKept.has(e.target))
+                : meGraph.edges;
               return (
+                <Stack gap="xs" className="h-full min-h-0">
+                  {meCapped && (
+                    <MetaLine
+                      size="xs"
+                      tone="tertiary"
+                      items={[showingLabel(meNodes.length, meGraph.nodes.length, entityFilter === 'skills' ? 'skills' : 'projects')]}
+                    />
+                  )}
                 <MultiEntityGraph
-                  nodes={meGraph.nodes}
-                  edges={meGraph.edges}
+                  nodes={meNodes}
+                  edges={meEdges}
                   selectedIds={selectedIds}
                   onToggleSelect={toggleSelect}
                   maxEdgesPerPerson={topK}
                 />
+                </Stack>
               );
             }
 

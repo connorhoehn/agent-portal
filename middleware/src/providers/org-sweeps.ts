@@ -598,9 +598,28 @@ export async function getFinding(id: string): Promise<Finding | null> {
   };
 }
 
-/** Counts by sweep and status — drives the grouped findings UI. */
+/**
+ * Counts by sweep, status and severity — drives the grouped findings UI AND
+ * `/work/summary`'s `findings.open/critical/warning`. A real GROUP BY, not a
+ * `.length` over a page: `listFindings` caps at 300, so counting the fetched
+ * array silently undercounts the moment a program has more than 300 open
+ * findings, with no error to notice it by.
+ */
 export async function findingStats(): Promise<Array<{ sweep: string; status: string; severity: string; n: number }>> {
-  if (config.mock.aurora) return [];
+  if (config.mock.aurora) {
+    // Grouped from the SAME rows the mock findings reads/writes share
+    // (mock/org-findings.ts), never a separately-maintained count — so a
+    // dismiss/promote/reopen in dev:mock is reflected here exactly like the
+    // real GROUP BY would reflect an UPDATE.
+    const groups = new Map<string, { sweep: string; status: string; severity: string; n: number }>();
+    for (const f of mockFindings) {
+      const key = `${f.sweep} ${f.status} ${f.severity}`;
+      const existing = groups.get(key);
+      if (existing) existing.n += 1;
+      else groups.set(key, { sweep: f.sweep, status: f.status, severity: f.severity, n: 1 });
+    }
+    return [...groups.values()];
+  }
   const rows = await exec(
     `SELECT sweep, status, severity, count(*)::int AS n
        FROM agent_findings GROUP BY sweep, status, severity`,

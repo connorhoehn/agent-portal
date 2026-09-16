@@ -121,11 +121,14 @@ export default function QueuePage() {
     }
   }
 
+  // The job's NAME leads, not its status chip. A queue is scanned by "which
+  // job is this" and only then by "what state is it in" — leading with a
+  // five-state chip put a column of near-identical pills where the
+  // identifying text should be, and pushed the one thing that tells rows
+  // apart into second place. Measured against the other list surfaces: Bots,
+  // Library and Promotions all lead with their entity's name; this was the
+  // outlier.
   const jobColumns: DataTableColumn<Job>[] = [
-    {
-      key: 'status', header: 'Status', sortable: true,
-      render: (j) => <JobStatusPill status={j.status} />,
-    },
     {
       key: 'title', header: 'Job', sortable: true,
       render: (j) => (
@@ -149,6 +152,10 @@ export default function QueuePage() {
           )}
         </Stack>
       ),
+    },
+    {
+      key: 'status', header: 'Status', sortable: true,
+      render: (j) => <JobStatusPill status={j.status} />,
     },
     {
       key: 'serves', header: 'Serves',

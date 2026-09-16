@@ -414,6 +414,7 @@ export async function pollOnce(): Promise<{ ingested: number; errors: number }> 
 }
 
 let _intervalHandle: NodeJS.Timeout | null = null;
+let _polling = false;
 
 /**
  * Start the background trace poller. Idempotent — calling twice is a no-op.
@@ -458,7 +459,25 @@ export function startTracePoller(): void {
     );
 
   _intervalHandle = setInterval(() => {
+    // A slow poll must not overlap the next one. `pollOnce` drives Logs
+    // Insights — StartQuery and GetQueryResults are each throttled at 10 TPS
+    // ACCOUNT-WIDE — and a query over a busy log group can easily outrun the
+    // 30s interval, so without this an unlucky minute stacks several polls
+    // that each re-read the same window, double-count what they ingest and
+    // spend the shared quota racing each other. `job-dispatcher.ts` has
+    // carried the same guard since it had the same problem.
+    //
+    // This bounds ONE process. `MiddlewareServiceStack` autoscales 1-4 ECS
+    // replicas and nothing coordinates them, so every replica polls the same
+    // log group on its own schedule; the guard cannot help there. That is a
+    // real gap at more than one replica and it is recorded in
+    // docs/research-scale-limits-2026-09-16.md rather than pretended away —
+    // the fix is a lease (a DynamoDB or Aurora row the pollers take turns
+    // holding), not a bigger flag.
+    if (_polling) return;
+    _polling = true;
     pollOnce()
+      .finally(() => { _polling = false; })
       .then((r) => {
         // Suppress per-poll noise — only log when ingestion actually happened
         // or errors fired. The inner pollOnce already logs match/persist counts

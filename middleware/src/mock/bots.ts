@@ -262,6 +262,34 @@ function seededRunsByBot(): Record<string, BotRun[]> {
   };
 }
 
+// `listBotRuns`/`listBotRunsResult`/`listBotRunsForBotsResult` (providers/
+// bots.ts) all cap at 200 runs PER BOT — every seeded bot has only 6-10, so
+// nothing offline could reach that cap. `largeBotRuns` extends each bot's own
+// history further back using the SAME `genRun` the seed uses, deriving the
+// job-id prefix and per-run cost from that bot's own last seeded run (a real
+// jobId pattern, not an invented one) rather than typing a new corpus.
+const LARGE_EXTRA_RUNS_PER_BOT = 220;
+
+function largeBotRuns(): BotRun[] {
+  const seeded = seededRunsByBot();
+  const out: BotRun[] = [];
+  for (const [botId, runs] of Object.entries(seeded)) {
+    out.push(...runs);
+    const template = runs[runs.length - 1];
+    if (!template) continue;
+    const prefixMatch = /^job-(.+)-\d+$/.exec(template.jobId ?? '');
+    const jobPrefix = prefixMatch ? prefixMatch[1]! : botId;
+    for (let i = 0; i < LARGE_EXTRA_RUNS_PER_BOT; i += 1) {
+      const seq = runs.length + i + 1;
+      // Continue the seed's own cadence further into the past — `daysBack`
+      // rather than `todayAt`, so "today" stays exactly what the seed says it
+      // is and only the OLDER history grows.
+      out.push(genRun(botId, seq, daysBack(31 + i), template.costUsd ?? 0.1, jobPrefix));
+    }
+  }
+  return out;
+}
+
 /**
  * The seeded cron history — one FLAT list, because `bot_runs` is one table.
  *
@@ -270,12 +298,15 @@ function seededRunsByBot(): Record<string, BotRun[]> {
  * `empty`   — a fleet that has never fired. Declared explicitly: an undeclared
  *             scenario falls back to `default`, and this is the state the
  *             "no runs yet" copy on the roster and the detail page is for.
+ * `large`   — every bot's history extended to 220+ runs, past the 200-row
+ *             per-bot cap `listBotRuns` and friends apply.
  */
 export const botRuns = defineFixture<BotRun>({
   key: 'bot-runs',
   scenarios: {
     default: () => Object.values(seededRunsByBot()).flat(),
     empty: () => [],
+    large: largeBotRuns,
   },
 });
 

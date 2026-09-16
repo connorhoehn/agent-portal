@@ -101,6 +101,9 @@ export function ExceptionsModal({ open, onClose, teamId, dimensionTitle }: Excep
           data={data.exceptions}
           keyField={(e) => `${e.dimension_id}:${e.approved_at || 'pending'}`}
           striped
+          // A modal's list of one team's N/A exceptions — 10 keeps the modal
+          // from growing past a comfortable dialog height.
+          pageSize={10}
           rowActions={canDecide ? (e) => (
             e.status === 'requested' ? (
               <Inline gap="xs">

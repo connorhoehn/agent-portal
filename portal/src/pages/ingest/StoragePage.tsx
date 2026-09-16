@@ -16,36 +16,6 @@ function StoragePage() {
       description="Where ingested documents land in S3, and how much of it the knowledge base has chunked."
     >
       <Stack gap="md">
-        {/* Totals row */}
-        <KPIGrid columns={3}>
-          <StatCard label="S3 Bucket" value={storage?.bucket ?? '—'} mono />
-          <StatCard label="Total Objects" value={storage ? storage.totalObjects.toLocaleString() : '—'} />
-          <StatCard label="Total Bytes" value={storage ? formatBytes(storage.totalBytes) : '—'} />
-        </KPIGrid>
-
-        {/* KB indexed docs */}
-        <Card padding="md">
-          <CardHeader title="Knowledge Base" />
-          {!storage ? (
-            <LoadingState label="Loading storage breakdown…" />
-          ) : (
-            <KPIGrid columns={2}>
-              {/* "Indexed" was the wrong noun as well as the wrong number: the
-                  value was the last run's newly-indexed count, which is 0 for a
-                  current index. It is now what the vector store holds, and a
-                  failed count shows a dash rather than a confident zero. */}
-              <StatCard
-                label="KB Documents"
-                value={storage.kb.totalDocuments != null ? storage.kb.totalDocuments.toLocaleString() : '—'}
-              />
-              <StatCard
-                label="Last KB Ingest"
-                value={storage.kb.lastIngestedAt ? new Date(storage.kb.lastIngestedAt).toLocaleString() : '—'}
-              />
-            </KPIGrid>
-          )}
-        </Card>
-
         {/* By extension */}
         <Card padding="md">
           <CardHeader title="By File Type" />
@@ -128,6 +98,41 @@ function StoragePage() {
                 ))}
               </TableBody>
             </Table>
+          )}
+        </Card>
+
+        {/* Totals row — kept below the breakdown tables (table-density audit,
+            matches KnowledgeHomePage's "right now" strip): Total Objects and
+            Total Bytes sum what the two tables above already list per row,
+            but S3 Bucket names the bucket itself, which neither table shows. */}
+        <KPIGrid columns={3}>
+          <StatCard label="S3 Bucket" value={storage?.bucket ?? '—'} mono />
+          <StatCard label="Total Objects" value={storage ? storage.totalObjects.toLocaleString() : '—'} />
+          <StatCard label="Total Bytes" value={storage ? formatBytes(storage.totalBytes) : '—'} />
+        </KPIGrid>
+
+        {/* KB indexed docs — also carries something neither breakdown table
+            shows: what the knowledge base itself holds and when it last
+            ingested, as opposed to what is sitting in S3. */}
+        <Card padding="md">
+          <CardHeader title="Knowledge Base" />
+          {!storage ? (
+            <LoadingState label="Loading storage breakdown…" />
+          ) : (
+            <KPIGrid columns={2}>
+              {/* "Indexed" was the wrong noun as well as the wrong number: the
+                  value was the last run's newly-indexed count, which is 0 for a
+                  current index. It is now what the vector store holds, and a
+                  failed count shows a dash rather than a confident zero. */}
+              <StatCard
+                label="KB Documents"
+                value={storage.kb.totalDocuments != null ? storage.kb.totalDocuments.toLocaleString() : '—'}
+              />
+              <StatCard
+                label="Last KB Ingest"
+                value={storage.kb.lastIngestedAt ? new Date(storage.kb.lastIngestedAt).toLocaleString() : '—'}
+              />
+            </KPIGrid>
           )}
         </Card>
       </Stack>

@@ -199,6 +199,28 @@ describe('collection endpoints under a parent that does not exist', () => {
     expect(res.status).toBe(200);
     expect(res.body).toEqual([]);
   });
+
+  // A scale audit flagged both of these as unbounded per-project reads (no
+  // LIMIT at the SQL layer at all). `limit` is optional, clamped into
+  // 1..500, and defaults to 500 so a normal project's tree/queue is
+  // unaffected.
+  it('threads a clamped `limit` through to getProjectWorkTree', async () => {
+    treeMock.mockResolvedValue([]);
+    const app = buildApp();
+    await request(app).get('/api/graph/projects/p-observability/work');
+    await request(app).get('/api/graph/projects/p-observability/work?limit=10');
+    await request(app).get('/api/graph/projects/p-observability/work?limit=999999');
+    expect(treeMock.mock.calls.map((c) => c[1])).toEqual([500, 10, 500]);
+  });
+
+  it('threads a clamped `limit` through to getProjectDecisions', async () => {
+    decisionsMock.mockResolvedValue([]);
+    const app = buildApp();
+    await request(app).get('/api/graph/projects/p-observability/decisions');
+    await request(app).get('/api/graph/projects/p-observability/decisions?limit=10');
+    await request(app).get('/api/graph/projects/p-observability/decisions?limit=999999');
+    expect(decisionsMock.mock.calls.map((c) => c[1])).toEqual([500, 10, 500]);
+  });
 });
 
 // ── Activity time series ──────────────────────────────────────────────────────

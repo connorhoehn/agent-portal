@@ -202,6 +202,11 @@ export function AgentFlowFrame({ nodes, edges, onPaneClick }: AgentFlowFrameProp
         nodesConnectable={false}
         nodesFocusable
         onPaneClick={onPaneClick}
+        // Culls nodes/edges scrolled out of the viewport instead of keeping
+        // every one mounted — the scale-audit fix applied to every xyflow
+        // canvas in the portal, this fleet map included even though it's
+        // small today.
+        onlyRenderVisibleElements
       >
         <Background color="var(--color-border)" />
         <Controls />

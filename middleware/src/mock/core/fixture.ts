@@ -180,5 +180,35 @@ export function defineFixture<Row>(spec: FixtureSpec<Row>): Fixture<Row> {
     },
   };
 
+  declaredScenarios.set(
+    fixture as unknown as Fixture<never>,
+    new Set(Object.keys(spec.scenarios) as ScenarioName[]),
+  );
+
   return registry ? registry.register(fixture) : fixture;
+}
+
+/**
+ * Which scenarios a fixture actually declared a branch for — as opposed to
+ * one it merely resolves for, by falling back to `default`. A `WeakMap`
+ * keyed on the fixture object rather than a field on `Fixture` itself: the
+ * contract type (`contract.ts`) is what the parity harness and every mock
+ * provider code against, and this is a control-plane/test concern, not
+ * theirs to carry.
+ *
+ * This is how `scenario-coverage.test.ts` tells "nothing implements `large`"
+ * (the actual defect: `GET /api/__mock/scenarios` advertised it while every
+ * fixture silently resolved to `default`) apart from "this fixture happens to
+ * implement `large`" — a black-box comparison of `rows('large')` against
+ * `rows('default')` cannot make that distinction when the two happen to
+ * produce equal content, and must re-materialize every scenario of every
+ * fixture to even try.
+ */
+const declaredScenarios = new WeakMap<Fixture<never>, ReadonlySet<ScenarioName>>();
+
+/** A fixture that predates this map (or was built by hand, not `defineFixture`) reads as declaring only `default`. */
+const DEFAULT_ONLY: ReadonlySet<ScenarioName> = new Set(['default']);
+
+export function declaredScenariosFor(fixture: Fixture<unknown>): ReadonlySet<ScenarioName> {
+  return declaredScenarios.get(fixture as unknown as Fixture<never>) ?? DEFAULT_ONLY;
 }

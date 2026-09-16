@@ -1,8 +1,10 @@
 // Roster route (routes/roster.ts) — the eligible-people pick-list behind the
 // sprint steward + grant grantee selectors (audit RM-5). What is pinned: the
 // real path queries people (not one initiative's contributors), maps the
-// is_sme aggregate to a boolean, drops rows with no id, and that mock mode
-// falls back to the in-memory cast so dev:mock keeps parity.
+// is_sme aggregate to a boolean, drops rows with no id, that mock mode
+// falls back to the in-memory cast so dev:mock keeps parity, and that a
+// scale audit's fix — `limit` reaches the SQL as a real LIMIT, silently
+// clamped rather than left unbounded — didn't change the no-params default.
 
 const mockFlag = { value: false };
 
@@ -53,6 +55,19 @@ describe('GET /api/roster (real path)', () => {
     expect(String(execMock.mock.calls[0]![0])).toMatch(/FROM people/);
   });
 
+  it('defaults the SQL limit to a generous bound and threads a caller-supplied one through, clamped', async () => {
+    execMock.mockResolvedValue([]);
+    const app = buildApp();
+    await request(app).get('/api/roster');
+    await request(app).get('/api/roster?limit=5');
+    await request(app).get('/api/roster?limit=999999');
+    await request(app).get('/api/roster?limit=abc');
+    const lims = execMock.mock.calls.map((c) =>
+      (c[1] as Array<{ name: string; value: Record<string, unknown> }>)
+        .find((p) => p.name === 'lim')!.value['longValue']);
+    expect(lims).toEqual([500, 5, 2000, 500]);
+  });
+
   it('coerces a null title and drops a row with no id', async () => {
     execMock.mockResolvedValue([
       { id: 'p-001', name: 'Alex Chen', title: null, is_sme: false },
@@ -76,5 +91,11 @@ describe('GET /api/roster (mock path)', () => {
     expect(ids).toContain('p-001');
     // Every entry carries the contract shape (isSme present, false in mock).
     expect(res.body.people.every((p: { isSme: boolean }) => p.isSme === false)).toBe(true);
+  });
+
+  it('clamps `limit` in mock mode too', async () => {
+    mockFlag.value = true;
+    const res = await request(buildApp()).get('/api/roster?limit=2');
+    expect(res.body.people).toHaveLength(2);
   });
 });

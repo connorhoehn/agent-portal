@@ -288,8 +288,8 @@ print(f"mean={statistics.mean(nums):.2f}, stdev={statistics.stdev(nums):.2f}")`)
           <Table>
             <TableHead>
               <TableRow>
-                <TableTh>When</TableTh>
                 <TableTh>Session</TableTh>
+                <TableTh>When</TableTh>
                 <TableTh>Language</TableTh>
                 <TableTh>Duration</TableTh>
                 <TableTh>Status</TableTh>
@@ -305,11 +305,11 @@ print(f"mean={statistics.mean(nums):.2f}, stdev={statistics.stdev(nums):.2f}")`)
                 return (
                   <Fragment key={ev.id}>
                     <TableRow>
-                      <TableTd className="whitespace-nowrap text-[11px] text-text-tertiary">
-                        {relativeTime(ev.startedAt)}
-                      </TableTd>
                       <TableTd className="font-mono text-[10px] text-text-tertiary">
                         {ev.sessionId ? (ev.sessionId.length > 18 ? ev.sessionId.slice(0, 14) + '…' : ev.sessionId) : '—'}
+                      </TableTd>
+                      <TableTd className="whitespace-nowrap text-[11px] text-text-tertiary">
+                        {relativeTime(ev.startedAt)}
                       </TableTd>
                       <TableTd className="text-[11px]">{language}</TableTd>
                       <TableTd className="text-[11px] text-text-tertiary">{ev.durationMs}ms</TableTd>
@@ -367,8 +367,8 @@ print(f"mean={statistics.mean(nums):.2f}, stdev={statistics.stdev(nums):.2f}")`)
           <Table>
             <TableHead>
               <TableRow>
-                <TableTh>When</TableTh>
                 <TableTh>Agent</TableTh>
+                <TableTh>When</TableTh>
                 <TableTh>Session</TableTh>
                 <TableTh>Duration</TableTh>
                 <TableTh>Status</TableTh>
@@ -382,10 +382,10 @@ print(f"mean={statistics.mean(nums):.2f}, stdev={statistics.stdev(nums):.2f}")`)
                 return (
                   <Fragment key={key}>
                     <TableRow>
+                      <TableTd className="text-xs">{exec.agentName}</TableTd>
                       <TableTd className="whitespace-nowrap text-[11px] text-text-tertiary">
                         {relativeTime(exec.timestamp)}
                       </TableTd>
-                      <TableTd className="text-xs">{exec.agentName}</TableTd>
                       <TableTd className="font-mono text-[10px] text-text-tertiary">
                         {exec.sessionId ? (exec.sessionId.length > 18 ? exec.sessionId.slice(0, 14) + '…' : exec.sessionId) : '—'}
                       </TableTd>
@@ -450,9 +450,9 @@ print(f"mean={statistics.mean(nums):.2f}, stdev={statistics.stdev(nums):.2f}")`)
           <Table>
             <TableHead>
               <TableRow>
+                <TableTh>Agent</TableTh>
                 <TableTh>Started</TableTh>
                 <TableTh>Session</TableTh>
-                <TableTh>Name</TableTh>
                 <TableTh>Duration</TableTh>
                 <TableTh>Status</TableTh>
               </TableRow>
@@ -462,13 +462,13 @@ print(f"mean={statistics.mean(nums):.2f}, stdev={statistics.stdev(nums):.2f}")`)
                 const dur = new Date(s.lastActivityAt).getTime() - new Date(s.startedAt).getTime();
                 return (
                   <TableRow key={s.sessionId}>
+                    <TableTd className="text-xs">{s.agentName}</TableTd>
                     <TableTd className="whitespace-nowrap text-[11px] text-text-tertiary">
                       {new Date(s.startedAt).toLocaleString()}
                     </TableTd>
                     <TableTd className="font-mono text-[10px] text-text-tertiary">
                       {s.sessionId.length > 22 ? s.sessionId.slice(0, 16) + '…' : s.sessionId}
                     </TableTd>
-                    <TableTd className="text-xs">{s.agentName}</TableTd>
                     <TableTd className="text-[11px] text-text-tertiary">
                       {dur > 0 ? `${(dur / 1000).toFixed(1)}s` : '—'}
                     </TableTd>

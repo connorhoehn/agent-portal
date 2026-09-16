@@ -342,7 +342,10 @@ function InvocationsPage() {
           <SectionLabel as="div">
             Bedrock Invocations{' '}
             <T className="text-[11px] font-normal text-[var(--color-text-tertiary)]">
-              from /orgiq/bedrock-invocations · ~30s lag · full guardrail trace
+              {/* Honest about the server-side cap (?limit=20) — this reads as
+                  "the last hour" without it, when it's really the last 20
+                  calls within that hour. */}
+              from /orgiq/bedrock-invocations · last 20 · ~30s lag · full guardrail trace per entry
             </T>
           </SectionLabel>
           <T className="text-[11px] text-[var(--color-text-tertiary)]">

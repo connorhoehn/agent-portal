@@ -21,6 +21,8 @@ import {
   wouldCreateParentCycle,
   projectExists,
   personExists,
+  getProjectWorkItems,
+  getProjectDecisions,
   type WorkItemStatus,
 } from '../work-items.js';
 
@@ -174,6 +176,43 @@ describe('searchWorkItems filters', () => {
     expect(sql).toContain('LOWER(:team)');
     expect(sql).toContain('wi.status = :status');
     expect(sql).toContain("INTERVAL '7 days'");
+  });
+});
+
+// ── Unbounded per-project reads (scale audit) ─────────────────────────────────
+// Both used to SELECT with no LIMIT at all. Now bounded, with the caller's
+// limit clamped into the query rather than trusted verbatim.
+
+describe('getProjectWorkItems / getProjectDecisions take a real SQL LIMIT', () => {
+  it('getProjectWorkItems binds the default limit and honours a smaller one, clamped', async () => {
+    execMock.mockResolvedValue([ROW]);
+    await getProjectWorkItems('p-observability');
+    expect(sqlOf()).toContain('LIMIT :lim');
+    expect(paramsOf()).toMatchObject({ lim: 500 });
+
+    execMock.mockClear();
+    execMock.mockResolvedValue([ROW]);
+    await getProjectWorkItems('p-observability', 10);
+    expect(paramsOf()).toMatchObject({ lim: 10 });
+
+    // A caller-supplied limit above the circuit-breaker is clamped, not
+    // honoured verbatim.
+    execMock.mockClear();
+    execMock.mockResolvedValue([ROW]);
+    await getProjectWorkItems('p-observability', 999_999);
+    expect(paramsOf()).toMatchObject({ lim: 500 });
+  });
+
+  it('getProjectDecisions binds the default limit and honours a smaller one, clamped', async () => {
+    execMock.mockResolvedValue([]);
+    await getProjectDecisions('p-observability');
+    expect(sqlOf()).toContain('LIMIT :lim');
+    expect(paramsOf()).toMatchObject({ lim: 500 });
+
+    execMock.mockClear();
+    execMock.mockResolvedValue([]);
+    await getProjectDecisions('p-observability', 25);
+    expect(paramsOf()).toMatchObject({ lim: 25 });
   });
 });
 

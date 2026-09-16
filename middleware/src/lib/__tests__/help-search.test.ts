@@ -9,9 +9,9 @@ const person = (id: string, name: string, skills: string[], influenceScore = 90)
 
 function inputs(over: Partial<HelpSearchInputs> = {}): HelpSearchInputs {
   return {
-    graph: { nodes: [], edges: [], departments: [] },
-    skillsGraph: { domains: [], skills: [], people: [], personSkillEdges: [] },
-    projectsGraph: { projects: [], people: [], personProjectEdges: [] },
+    graph: { nodes: [], edges: [], departments: [], peopleTotal: 0 },
+    skillsGraph: { domains: [], skills: [], people: [], personSkillEdges: [], peopleTotal: 0 },
+    projectsGraph: { projects: [], people: [], personProjectEdges: [], peopleTotal: 0 },
     ...over,
   };
 }
@@ -21,7 +21,7 @@ describe('findHelp', () => {
     const out = findHelp('kubernetes', inputs({
       graph: {
         nodes: [person('p-1', 'Ada', ['Kubernetes', 'Go']), person('p-2', 'Bo', ['React'])],
-        edges: [], departments: [],
+        edges: [], departments: [], peopleTotal: 2,
       },
     }));
     expect(out.map((m) => m.id)).toEqual(['p-1']);
@@ -34,7 +34,7 @@ describe('findHelp', () => {
       graph: {
         // Weak-evidence person has the far higher influence score — must lose.
         nodes: [person('p-hi', 'Hi Score', [], 99), person('p-ev', 'Evidence', [], 10)],
-        edges: [], departments: [],
+        edges: [], departments: [], peopleTotal: 2,
       },
       skillsGraph: {
         domains: [{ id: 'domain:infra', name: 'Infrastructure', skillCount: 1 }],
@@ -44,6 +44,7 @@ describe('findHelp', () => {
           { personId: 'p-hi', skillId: 'skill:k8s', weight: 0.2 },
           { personId: 'p-ev', skillId: 'skill:k8s', weight: 0.9 },
         ],
+        peopleTotal: 0,
       },
     }));
     expect(out.map((m) => m.id)).toEqual(['p-ev', 'p-hi']);
@@ -53,12 +54,13 @@ describe('findHelp', () => {
 
   it('a domain-name query surfaces people via every skill under the domain', () => {
     const out = findHelp('infrastructure', inputs({
-      graph: { nodes: [person('p-1', 'Ada', [])], edges: [], departments: [] },
+      graph: { nodes: [person('p-1', 'Ada', [])], edges: [], departments: [], peopleTotal: 1 },
       skillsGraph: {
         domains: [{ id: 'domain:infra', name: 'Infrastructure', skillCount: 1 }],
         skills: [{ id: 'skill:tf', name: 'Terraform', domain: 'Infrastructure', personCount: 1 }],
         people: [],
         personSkillEdges: [{ personId: 'p-1', skillId: 'skill:tf', weight: 0.8 }],
+        peopleTotal: 0,
       },
     }));
     expect(out).toHaveLength(1);
@@ -67,14 +69,14 @@ describe('findHelp', () => {
 
   it('question phrasing is stripped to its domain tokens', () => {
     const out = findHelp('who can help me with kubernetes', inputs({
-      graph: { nodes: [person('p-1', 'Ada', ['Kubernetes'])], edges: [], departments: [] },
+      graph: { nodes: [person('p-1', 'Ada', ['Kubernetes'])], edges: [], departments: [], peopleTotal: 1 },
     }));
     expect(out).toHaveLength(1);
   });
 
   it('attaches project contexts strongest-first and caps at three', () => {
     const out = findHelp('go', inputs({
-      graph: { nodes: [person('p-1', 'Ada', ['Go'])], edges: [], departments: [] },
+      graph: { nodes: [person('p-1', 'Ada', ['Go'])], edges: [], departments: [], peopleTotal: 1 },
       projectsGraph: {
         projects: [
           { id: 'proj:a', name: 'Alpha', status: 'active', contributorCount: 1 },
@@ -89,6 +91,7 @@ describe('findHelp', () => {
           { personId: 'p-1', projectId: 'proj:c', weight: 0.5 },
           { personId: 'p-1', projectId: 'proj:d', weight: 0.3 },
         ],
+        peopleTotal: 0,
       },
     }));
     expect(out[0]!.contexts).toEqual(['Beta', 'Gamma', 'Delta']);
@@ -96,7 +99,7 @@ describe('findHelp', () => {
 
   it('returns nothing for an empty or matchless query', () => {
     const base = inputs({
-      graph: { nodes: [person('p-1', 'Ada', ['Go'])], edges: [], departments: [] },
+      graph: { nodes: [person('p-1', 'Ada', ['Go'])], edges: [], departments: [], peopleTotal: 1 },
     });
     expect(findHelp('', base)).toEqual([]);
     expect(findHelp('quantum basket weaving', base)).toEqual([]);
