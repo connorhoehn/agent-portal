@@ -18,8 +18,9 @@ import { T } from './Text';
 import { ProcessFlow } from './ProcessFlow';
 import {
   LEVEL_HEALTH_ALERT_TONE, PROCEDURE_HEALTH_LABEL, PROCEDURE_HEALTH_TONE, SAMPLING_LABEL,
-  SAMPLING_TONE, liveSessionCountForRepo, pct, procedureRollup, runsLabel, stepsLabel,
-  type RepoPresenceNode,
+  SAMPLING_TONE, liveSessionCountForRepo, pct, procedureRollup, repoActivityLabel, repoPresenceFor,
+  runsLabel, stepsLabel,
+  type RepoPresenceEntry, type RepoPresenceNode,
 } from './distillationFormat';
 import type {
   CompactionsResponse, IngestState, LevelsResponse, ProcedureView, ProceduresResponse, SamplingResponse,
@@ -36,10 +37,9 @@ const PROCEDURE_ROWS = 6;
 const IDLE_POLL_MS = 30_000;
 const RUNNING_POLL_MS = 2_000;
 
-// Presence is scoped to the signed-in person's own paired machines
-// (`GET /api/local-compute/nodes` — "my machines," not fleet-wide; the
-// audit found no honest org-wide repo-presence route yet), so it changes far
-// less often than a running compaction — a flat poll is enough.
+// Presence changes far less often than a running compaction — a flat poll
+// is enough for both the org-wide repo aggregate and the caller's own
+// machines (fetched only for the "N yours" figure alongside it).
 const NODES_POLL_MS = 30_000;
 
 function repoShort(repo: string | null): string | null {
@@ -65,6 +65,12 @@ export default function DistillationOverviewPage() {
   const { data: proceduresData, isLoading: proceduresLoading, error: proceduresError } =
     useFetch<ProceduresResponse>('/api/distillation/procedures', 60_000);
   const { data: nodesData } = useFetch<{ nodes: RepoPresenceNode[] }>('/api/local-compute/nodes', NODES_POLL_MS);
+  // Org-wide, redacted — Slice 5. 403s for a role that is not fleet-wide
+  // (member, sme, program-owner): that role still sees its OWN machines via
+  // `nodesData` above, it just has no org-wide figure to lead with, so the
+  // render below falls back to that rather than treating the 403 as "zero
+  // activity anywhere."
+  const { data: repoPresenceData } = useFetch<{ repos: RepoPresenceEntry[] }>('/api/local-compute/presence/repos', NODES_POLL_MS);
   const navigate = useNavigate();
 
   const levels = levelsData?.levels ?? [];
@@ -126,24 +132,30 @@ export default function DistillationOverviewPage() {
     {
       key: 'repo_activity',
       // A weaker but honest claim than "this procedure is running": whether
-      // someone is live in the same repo right now, and only on the
-      // machines THIS person paired — there is no fleet-wide repo-presence
-      // route yet (see docs/distillation-concept-audit-2026-09-16.md §2).
-      header: <span title="Live sessions on your own paired machines, in this procedure's repo — not fleet-wide.">Repo activity</span>,
+      // someone, anywhere in the fleet, is live in the same repo right now.
+      // Org-wide via Slice 5's redacted `presence/repos` read (counts only —
+      // no node id, label or session detail); the caller's own machines
+      // (`nodesData`, owner-scoped) supply the "N yours" figure alongside it
+      // when that role can't reach the org-wide route (see the fetch above).
+      header: <span title="Live sessions anywhere in the fleet touching this procedure's repo, plus how many are yours.">Repo activity</span>,
       render: (p) => {
-        if (!nodesData) return <T className="text-[11px] text-text-tertiary">—</T>;
+        if (!nodesData && !repoPresenceData) return <T className="text-[11px] text-text-tertiary">—</T>;
         if (!p.repo) return <T className="text-[11px] text-text-tertiary">spans repos</T>;
-        const count = liveSessionCountForRepo(nodesData.nodes, p.repo);
+        const mine = nodesData ? liveSessionCountForRepo(nodesData.nodes, p.repo) : 0;
+        const entry = repoPresenceData ? repoPresenceFor(repoPresenceData.repos, p.repo) : null;
+        // No org-wide access (403 for a non-fleet-wide role): fall back to
+        // the caller's own count rather than a lying "no activity anywhere."
+        const active = repoPresenceData ? (entry?.sessions ?? 0) > 0 : mine > 0;
         return (
           <Inline gap="xs" align="center" wrap={false}>
             <StatusDot
               size="xs"
-              pulse={count > 0}
-              color={count > 0 ? 'var(--color-success)' : 'var(--color-state-idle)'}
-              aria-label={count > 0 ? `${count} live session${count === 1 ? '' : 's'} on your machines` : 'no live session on your machines'}
+              pulse={active}
+              color={active ? 'var(--color-success)' : 'var(--color-state-idle)'}
+              aria-label={repoActivityLabel(entry, mine)}
             />
             <T className="whitespace-nowrap text-[11px] text-text-tertiary">
-              {count > 0 ? `${count} on your machines` : 'none on your machines'}
+              {repoActivityLabel(entry, mine)}
             </T>
           </Inline>
         );

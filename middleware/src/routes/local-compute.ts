@@ -14,6 +14,8 @@
 //   GET    /api/local-compute/jobs/:id/log        read the run log (browser session, owner-scoped)
 //   GET    /api/local-compute/jobs/:id/log/stream tail the run log, as SSE (browser session, owner-scoped)
 //   GET    /api/local-compute/nodes           my machines + live sessions (browser session)
+//   GET    /api/local-compute/nodes/all       fleet-wide, session detail stripped (fleet-wide role)
+//   GET    /api/local-compute/presence/repos  org-wide, per-repo presence counts only (fleet-wide role)
 //   GET    /api/local-compute/stream          same, as SSE (browser session)
 //   GET    /api/local-compute/runs            what my machines have been doing (browser session, owner-scoped)
 //   PATCH  /api/local-compute/nodes/:id       rename / accept-jobs toggle (owner)
@@ -689,6 +691,63 @@ localComputeRouter.get(
     // contributing and how much — never the session detail.
     const nodes = (await listAllNodes()).map(summarize);
     res.json({ nodes });
+  }),
+);
+
+// Slice 5 (docs/distillation-concept-audit-2026-09-16.md §2): the one join
+// key distillation and local-compute genuinely share is `repo` — the two
+// domains mint session/box ids from disjoint spaces, so a row-level join is
+// dishonest and only a repo-level one is real. This is the org-wide read
+// that answers it: same redaction posture as `/nodes/all`'s `summarize()`
+// ("never the session detail") — no nodeId, no label, no sessionId, no
+// intent, no model, not even which machine. Just a repo, how many machines
+// are touching it, how many live sessions, and the most recent heartbeat.
+// Gated the same bespoke way as `/nodes/all` and for the same reason: this
+// is fleet-wide operational visibility, not the personal `ConnectLocalCompute`
+// authority to pair or drive your own machine.
+localComputeRouter.get(
+  '/presence/repos',
+  (req: Request, res: Response, next: NextFunction) => {
+    const session = resolveSession(req);
+    const role = session?.role ?? '';
+    if (session && (role === 'admin' || (FLEET_WIDE_ROLES as readonly string[]).includes(role))) {
+      next();
+      return;
+    }
+    res.status(403).json({ error: 'Forbidden', action: 'ViewLocalComputeFleet' });
+  },
+  browserTenant,
+  asyncHandler(async (_req, res) => {
+    // Presence lives only in memory (lib/local-compute-fleet.ts, backed by
+    // the `local-presence` fixture even outside dev:mock — see that file's
+    // header) regardless of whether `compute_nodes` itself is Aurora or
+    // mocked, so `listAllNodes()` (which DOES branch on Aurora) supplies the
+    // node roster and `presenceOf` supplies the live sessions for each.
+    const nodes = await listAllNodes();
+    const byRepo = new Map<string, { machines: Set<string>; sessions: number; lastSeenAt: string | null }>();
+    for (const node of nodes) {
+      // presenceOf already reports zero sessions for an offline node (see
+      // its own comment: "reporting them would offer presence the machine
+      // can't back"), so everything reachable here is connected or stale.
+      const presence = presenceOf(node.id);
+      for (const sess of presence.sessions) {
+        if (!sess.repo) continue;
+        let agg = byRepo.get(sess.repo);
+        if (!agg) {
+          agg = { machines: new Set(), sessions: 0, lastSeenAt: null };
+          byRepo.set(sess.repo, agg);
+        }
+        agg.machines.add(node.id);
+        agg.sessions += 1;
+        if (!agg.lastSeenAt || Date.parse(sess.lastSeenAt) > Date.parse(agg.lastSeenAt)) {
+          agg.lastSeenAt = sess.lastSeenAt;
+        }
+      }
+    }
+    const repos = [...byRepo.entries()]
+      .map(([repo, agg]) => ({ repo, machines: agg.machines.size, sessions: agg.sessions, lastSeenAt: agg.lastSeenAt }))
+      .sort((a, b) => a.repo.localeCompare(b.repo));
+    res.json({ repos });
   }),
 );
 

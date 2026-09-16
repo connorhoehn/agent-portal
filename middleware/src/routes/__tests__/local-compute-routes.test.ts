@@ -769,6 +769,95 @@ describe('GET /api/local-compute/nodes/all', () => {
   });
 });
 
+// ─── GET /presence/repos — org-wide, redacted to repo counts only ────────────
+
+describe('GET /api/local-compute/presence/repos', () => {
+  it('403s (not 401s) a cookie-less caller, naming the action it wanted', async () => {
+    const res = await request(anon()).get('/api/local-compute/presence/repos');
+    expect(res.status).toBe(403);
+    expect(res.body).toEqual({ error: 'Forbidden', action: 'ViewLocalComputeFleet' });
+  });
+
+  it('403s a role that is not fleet-wide, including one that holds ConnectLocalCompute', async () => {
+    for (const role of ['member', 'sme', 'program-owner'] as Role[]) {
+      const res = await request(as(role)).get('/api/local-compute/presence/repos');
+      expect([role, res.status]).toEqual([role, 403]);
+      expect(res.body).toEqual({ error: 'Forbidden', action: 'ViewLocalComputeFleet' });
+    }
+  });
+
+  it('lets through exactly admin, org-leader and hr-admin', async () => {
+    for (const role of ['admin', 'org-leader', 'hr-admin'] as Role[]) {
+      const res = await request(as(role, 'u-ops')).get('/api/local-compute/presence/repos');
+      expect([role, res.status]).toEqual([role, 200]);
+      expect(res.body).toEqual({ repos: [] });
+    }
+  });
+
+  it('aggregates live sessions by repo, across owners and machines, redacted to counts', async () => {
+    const mine = await pair({ sub: 'u-mia' }, { label: 'mia-mbp' });
+    const theirs = await pair({ sub: 'u-raj' }, { label: 'raj-mbp' });
+    // Two machines, two sessions each, on the same repo — plus one machine
+    // with a session on a second repo, so the aggregation is exercised, not
+    // just a pass-through.
+    await request(anon()).post('/api/local-compute/announce').set(bearer(mine.nodeToken)).send({
+      sessions: [
+        { sessionId: 's-1', repo: 'org/shared-repo', intent: 'refactor the billing ledger', worktree: '/Users/mia/secret' },
+        { sessionId: 's-2', repo: 'org/only-mine' },
+      ],
+    });
+    await request(anon()).post('/api/local-compute/announce').set(bearer(theirs.nodeToken)).send({
+      sessions: [
+        { sessionId: 's-3', repo: 'org/shared-repo', model: 'amazon.nova-pro-v1:0' },
+      ],
+    });
+
+    const res = await request(as('org-leader', 'u-ops')).get('/api/local-compute/presence/repos');
+    expect(res.status).toBe(200);
+    expect(res.body.repos).toEqual(expect.arrayContaining([
+      { repo: 'org/shared-repo', machines: 2, sessions: 2, lastSeenAt: expect.any(String) },
+      { repo: 'org/only-mine', machines: 1, sessions: 1, lastSeenAt: expect.any(String) },
+    ]));
+
+    // Every row is exactly this shape — no room for a stray field to sneak in.
+    for (const row of res.body.repos) {
+      expect(Object.keys(row).sort()).toEqual(['lastSeenAt', 'machines', 'repo', 'sessions']);
+    }
+
+    // Redaction, belt and braces: no node id, label, session id, intent,
+    // worktree or model anywhere in the payload — the whole point of this
+    // route being safe to show org-wide.
+    const wire = JSON.stringify(res.body);
+    expect(wire).not.toContain(mine.nodeId);
+    expect(wire).not.toContain(theirs.nodeId);
+    expect(wire).not.toContain('mia-mbp');
+    expect(wire).not.toContain('raj-mbp');
+    expect(wire).not.toContain('s-1');
+    expect(wire).not.toContain('s-2');
+    expect(wire).not.toContain('s-3');
+    expect(wire).not.toContain('refactor the billing ledger');
+    expect(wire).not.toContain('/Users/mia/secret');
+    expect(wire).not.toContain('amazon.nova-pro-v1:0');
+  });
+
+  it('excludes sessions with no repo, and never counts an offline machine', async () => {
+    const node = await pair({ sub: 'u-mia' }, { label: 'mia-mbp' });
+    await request(anon()).post('/api/local-compute/announce').set(bearer(node.nodeToken)).send({
+      sessions: [{ sessionId: 's-1' }], // no repo
+    });
+    const before = await request(as('admin', 'u-ops')).get('/api/local-compute/presence/repos');
+    expect(before.body).toEqual({ repos: [] });
+
+    await request(anon()).post('/api/local-compute/announce').set(bearer(node.nodeToken)).send({
+      sessions: [{ sessionId: 's-2', repo: 'org/repo' }],
+    });
+    const restore = freezeClock(new Date(Date.now() + 10 * 60_000)); // past the offline horizon
+    const after = await request(as('admin', 'u-ops')).get('/api/local-compute/presence/repos');
+    restore();
+    expect(after.body).toEqual({ repos: [] });
+  });
+});
+
 // ─── GET /stream — SSE, owner-scoped ─────────────────────────────────────────
 
 /**

@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-09-16T02:38:33.186Z",
-  "serverHandlerSha": "9bf5b2e0467e5fdc27c7fc04a97816a98ed5966e96dda8fd446738e0253a71fe",
+  "capturedAt": "2026-09-16T03:19:34.480Z",
+  "serverHandlerSha": "a9465a37596870b4b77fb6c80b3fc2f426d2c8940e24fc1cc9786d436d2881ea",
   "baseUrl": "http://127.0.0.1:3012",
   "personas": [
     "orgiq/admin",
@@ -3893,6 +3893,20 @@
     },
     "GET /api/local-compute/pair/:code": {
       "skipped": "no value found for :code under /api/local-compute/pair (orgiq/admin); no value found for :code under /api/local-compute/pair (assessment/admin); no value found for :code under /api/local-compute/pair (anonymous)"
+    },
+    "GET /api/local-compute/presence/repos": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "repos": "array",
+        "repos[]": "object",
+        "repos[].lastSeenAt": "string",
+        "repos[].machines": "number",
+        "repos[].repo": "string",
+        "repos[].sessions": "number"
+      },
+      "values": {}
     },
     "GET /api/local-compute/runs": {
       "persona": "orgiq/admin",

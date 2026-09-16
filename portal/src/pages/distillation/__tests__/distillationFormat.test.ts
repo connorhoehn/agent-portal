@@ -13,7 +13,7 @@ import {
   latestJobFor, compactionFlowModel,
   ARTIFACT_TYPE_TONE, PROCEDURE_HEALTH_TONE, OUTCOME_SEVERITY,
   stepsLabel, stepsFromLineage, stepTonesForRun, procedureRollup, runsLabel,
-  isRecentlyLanded, liveSessionCountForRepo,
+  isRecentlyLanded, liveSessionCountForRepo, repoActivityLabel, repoPresenceFor,
 } from '../distillationFormat.ts';
 import type {
   CompactionJob, Item, LevelHealth, LevelState, LineageEdge, LineageNode, ProcedureApplication, ProcedureView,
@@ -486,4 +486,34 @@ test('liveSessionCountForRepo counts only sessions matching the repo, across nod
   assert.equal(liveSessionCountForRepo(nodes, 'org/c'), 0);
   assert.equal(liveSessionCountForRepo(nodes, null), 0, 'a procedure spanning repos has none to check');
   assert.equal(liveSessionCountForRepo([], 'org/a'), 0);
+});
+
+// Slice 5: Overview "Repo activity" column — org-wide, redacted presence
+// (GET /api/local-compute/presence/repos) joined by repo, with the caller's
+// own count folded in as a second figure.
+test('repoPresenceFor finds the row for a repo, or null for no match / no repo', () => {
+  const repos = [
+    { repo: 'org/a', machines: 2, sessions: 3, lastSeenAt: '2026-09-15T12:00:00Z' },
+    { repo: 'org/b', machines: 1, sessions: 1, lastSeenAt: '2026-09-15T11:00:00Z' },
+  ];
+  assert.deepEqual(repoPresenceFor(repos, 'org/a'), repos[0]);
+  assert.equal(repoPresenceFor(repos, 'org/c'), null, 'nobody in the fleet is touching this repo');
+  assert.equal(repoPresenceFor(repos, null), null, 'a procedure spanning repos has none to check');
+  assert.equal(repoPresenceFor([], 'org/a'), null);
+});
+
+test('repoActivityLabel reads org-wide activity first, then the caller\'s own count', () => {
+  const row = { repo: 'org/a', machines: 2, sessions: 3, lastSeenAt: '2026-09-15T12:00:00Z' };
+  assert.equal(repoActivityLabel(row, 1), '3 sessions across 2 machines · 1 yours');
+  assert.equal(repoActivityLabel(row, 0), '3 sessions across 2 machines', 'no "0 yours" — it restates nothing');
+  assert.equal(
+    repoActivityLabel({ repo: 'org/b', machines: 1, sessions: 1, lastSeenAt: null }, 0),
+    '1 session on 1 machine',
+  );
+  assert.equal(repoActivityLabel(null, 2), '2 yours', 'no org-wide access, but the caller has their own machines');
+  assert.equal(repoActivityLabel(null, 0), 'no live sessions');
+  assert.equal(
+    repoActivityLabel({ repo: 'org/c', machines: 0, sessions: 0, lastSeenAt: null }, 0),
+    'no live sessions',
+  );
 });

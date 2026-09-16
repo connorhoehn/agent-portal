@@ -100,6 +100,40 @@ export function liveSessionCountForRepo(nodes: RepoPresenceNode[], repo: string 
   return count;
 }
 
+/** Slice 5 (docs/distillation-concept-audit-2026-09-16.md §2): one row per
+ *  repo with a live session touching it right now (connected or stale),
+ *  aggregated org-wide across every unrevoked machine in the fleet — the
+ *  shape `GET /api/local-compute/presence/repos` returns. Deliberately
+ *  redacted to counts: no node id, label, session id, intent or model, same
+ *  posture as `/nodes/all`'s `summarize()`. */
+export interface RepoPresenceEntry {
+  repo: string;
+  machines: number;
+  sessions: number;
+  lastSeenAt: string | null;
+}
+
+/** The aggregated row for one repo, or null when nobody in the fleet is
+ *  touching it right now (or the caller has no single repo to check, per
+ *  `liveSessionCountForRepo`'s null-repo convention). */
+export function repoPresenceFor(repos: RepoPresenceEntry[], repo: string | null): RepoPresenceEntry | null {
+  if (!repo) return null;
+  return repos.find((r) => r.repo === repo) ?? null;
+}
+
+/** "3 sessions across 2 machines · 1 yours" / "1 session on 1 machine" /
+ *  "1 yours" / "no live sessions" — the Overview repo-activity column's
+ *  label. Leads with the org-wide figure, the honest redacted signal, and
+ *  appends the caller's own count only when it is nonzero — restating
+ *  "0 yours" tells a reader nothing. */
+export function repoActivityLabel(entry: RepoPresenceEntry | null, mine: number): string {
+  const minePart = mine > 0 ? ` · ${mine} yours` : '';
+  if (!entry || entry.sessions === 0) return mine > 0 ? `${mine} yours` : 'no live sessions';
+  const sessionsPart = `${entry.sessions} session${entry.sessions === 1 ? '' : 's'}`;
+  const machinesPart = entry.machines === 1 ? ' on 1 machine' : ` across ${entry.machines} machines`;
+  return `${sessionsPart}${machinesPart}${minePart}`;
+}
+
 /** Mirrors the server's dedupeRatio guard: a job that consumed nothing has
  *  no ratio to report, so "—" rather than a misleading 0% or 100%. */
 export function dedupePctLabel(job: Pick<CompactionJob, 'inputItems' | 'dedupedItems'>): string {
