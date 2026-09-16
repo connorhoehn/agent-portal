@@ -16,7 +16,6 @@
 // written by one agent run, so authorship is per-change, not per-line — the
 // rail names the run, the model, and links to what the agent was asked.
 
-import type { ReactNode } from 'react';
 import { useCallback, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import {
@@ -36,8 +35,9 @@ import {
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';
-import { parsePgTimestampAsUtc } from '../../lib/pgTimestamp';
+import { absoluteTime } from '../../lib/relativeTime';
 import { toastPending, toastSuccess, toastError } from '../../lib/toastStore';
+import { KeyValue } from '../../components/KeyValue';
 
 type Verdict = 'approve' | 'request_changes' | 'reject';
 interface Review {
@@ -84,21 +84,6 @@ function severityOf(s: string | undefined): 'critical' | 'warning' | 'info' {
   if (s === 'critical' || s === 'high') return 'critical';
   if (s === 'warning' || s === 'medium') return 'warning';
   return 'info';
-}
-
-function when(iso: string): string {
-  return parsePgTimestampAsUtc(iso)?.toLocaleString() ?? iso;
-}
-
-/** Label:value rail row — `Inline` in `as="span"` mode for both halves, so
- *  the row carries zero raw styled elements. */
-function RailRow({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <Inline gap="sm" align="baseline">
-      <Inline as="span" gap="none" className="w-[72px] shrink-0 text-[12px] text-text-tertiary">{label}</Inline>
-      <Inline as="span" gap="none" className="min-w-0 truncate text-[12px] text-text-primary">{children}</Inline>
-    </Inline>
-  );
 }
 
 export default function ChangeReviewPage() {
@@ -166,9 +151,9 @@ export default function ChangeReviewPage() {
       <Card padding="md">
         <Stack gap="xs">
           <SectionLabel>Authorship</SectionLabel>
-          <RailRow label="Written by">{c.model ?? 'unknown model'}</RailRow>
+          <KeyValue layout="row" labelWidth="w-[72px]" label="Written by" value={c.model ?? 'unknown model'} />
           {c.runId && (
-            <RailRow label="Run">
+            <KeyValue layout="row" labelWidth="w-[72px]" label="Run">
               <Link
                 to={`/admin/projects?project=${c.projectId}&run=${c.runId}`}
                 title="What the agent was asked, and what it did"
@@ -176,19 +161,19 @@ export default function ChangeReviewPage() {
               >
                 {c.runId.slice(0, 8)}
               </Link>
-            </RailRow>
+            </KeyValue>
           )}
           {c.branchName && (
-            <RailRow label="Branch"><Inline as="span" gap="none" className="font-mono">{c.branchName}</Inline></RailRow>
+            <KeyValue layout="row" labelWidth="w-[72px]" label="Branch" value={c.branchName} mono />
           )}
           {c.commitSha && (
-            <RailRow label="Commit"><Inline as="span" gap="none" className="font-mono">{c.commitSha.slice(0, 10)}</Inline></RailRow>
+            <KeyValue layout="row" labelWidth="w-[72px]" label="Commit" value={c.commitSha.slice(0, 10)} mono />
           )}
-          <RailRow label="Captured">{when(c.createdAt)}</RailRow>
+          <KeyValue layout="row" labelWidth="w-[72px]" label="Captured" value={absoluteTime(c.createdAt)} />
           {c.decidedBy && (
             <>
-              <RailRow label="Decided by">{c.decidedBy}</RailRow>
-              {c.decidedAt && <RailRow label="Decided">{when(c.decidedAt)}</RailRow>}
+              <KeyValue layout="row" labelWidth="w-[72px]" label="Decided by" value={c.decidedBy} />
+              {c.decidedAt && <KeyValue layout="row" labelWidth="w-[72px]" label="Decided" value={absoluteTime(c.decidedAt)} />}
               {c.decisionNote && (
                 <Inline as="span" gap="none" className="mt-1 border-l-2 border-border pl-2 text-[11.5px] leading-snug text-text-secondary">
                   {c.decisionNote}

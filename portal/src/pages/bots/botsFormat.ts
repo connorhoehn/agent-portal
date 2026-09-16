@@ -140,8 +140,8 @@ export interface BotRunSummary {
    *  on the page once this is false. */
   hasRun: boolean;
   /** ISO timestamp of the most recent run, or null when `hasRun` is false.
-   *  Callers format it (e.g. with the existing `when()`) — this module stays
-   *  string-in/string-out, no relative-time formatting of its own. */
+   *  Callers format it (e.g. with the shared `relativeTime()`) — this module
+   *  stays string-in/string-out, no relative-time formatting of its own. */
   lastRunAt: string | null;
   /** Count of runs (any status) that started on the SERVER's current day —
    *  the same day boundary `maxRunsPerDay` is enforced against — counted from
@@ -175,9 +175,9 @@ export function botRunSummary(
  *  column and the detail header's meta line render — one function, so the
  *  wording (and the definition of "has this bot run") can never diverge
  *  between the two surfaces (DEFECTS.md org-leader #20 / program-owner #9).
- *  `when` formats a resolved ISO timestamp into relative text (BotsPage's
- *  `when`, passed in rather than reimplemented here — this module stays
- *  framework-free and BotsPage already imports FROM here, not the reverse).
+ *  `when` formats a resolved ISO timestamp into relative text (the shared
+ *  `relativeTime` from `lib/relativeTime`, passed in rather than
+ *  reimplemented here — this module stays framework-free).
  *
  *  Caveat this does NOT fix: `GET /api/bots` (the list) returns only each
  *  bot's own `lastRunAt` field, never a `runs` array — the list cannot

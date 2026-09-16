@@ -186,3 +186,8 @@ Why: the scorecard header now renders the team's repos and contacts from the sam
 Why: five Sonnet fix agents applied the read-only audit's findings; re-observed as u-asha on TEAM-001 (all five scorecard tabs), /assessment/submissions and /assessment/runs.
   RunsPage.tsx changed only in the run-detail drawer (Team / Started / Duration / Progress / Summary / Error are shared KeyValue rows); the launch → ledger → scorecard path this log records is unchanged.
 Console errors: 0.
+
+--- freshness re-observation, 2026-09-16 01:50 (portal/src/pages/assessment changed: three Card lists → DataTable) ---
+Why: the last three open audit findings for this tenant; re-observed as u-asha (/assessment/runs, /assessment/submissions, the wizard) and as u-operator (a knowledge doc's History).
+  RunsPage changed in the Run-a-command panel only (a DataTable with the same launch handler and team gating); the launch → ledger → scorecard path is unchanged.
+Console errors: 0.

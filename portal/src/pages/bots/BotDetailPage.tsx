@@ -41,8 +41,9 @@ import { CostVsEstimate, runEstimate } from '../../components/marketplace/Estima
 import { RunTimeline } from '../../components/runs/RunTimeline';
 import { DEVBOX_MODELS } from '../../lib/devboxModels';
 import { parsePgTimestampAsUtc } from '../../lib/pgTimestamp';
+import { relativeTime } from '../../lib/relativeTime';
 import { botRunSummary, inputWiring, lastRanText } from './botsFormat';
-import { TEMPLATE_TONE, triggerSummary, when, type Bot, type BotRun } from './BotsPage';
+import { TEMPLATE_TONE, triggerSummary, type Bot, type BotRun } from './BotsPage';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -265,12 +266,15 @@ export default function BotDetailPage() {
   if (botError) {
     return (
       <PageSection title="Bot">
-        <Card padding="md">
-          <Stack gap="xs">
-            <Banner variant="error">Failed to load bot: {botError}</Banner>
-            <Link to="/admin/bots" className="text-[12px] text-primary no-underline hover:underline">← Bots</Link>
-          </Stack>
-        </Card>
+        <Stack gap="xs">
+          <UnavailableNotice
+            error={botError}
+            what="this bot"
+            source="Bots are read from Aurora"
+            onRetry={refreshBot}
+          />
+          <Link to="/admin/bots" className="text-[12px] text-primary no-underline hover:underline">← Bots</Link>
+        </Stack>
       </PageSection>
     );
   }
@@ -311,7 +315,7 @@ export default function BotDetailPage() {
               size="xs" tone="tertiary"
               items={[
                 triggerSummary(bot),
-                lastRanText(runs, when),
+                lastRanText(runs, relativeTime),
               ]}
             />
           </Inline>
@@ -427,7 +431,7 @@ export default function BotDetailPage() {
                     {dur.text}
                   </TableTd>
                   <TableTd className="text-[12px] text-text-tertiary whitespace-nowrap" title={r.startedAt}>
-                    {when(r.startedAt)}
+                    {relativeTime(r.startedAt)}
                   </TableTd>
                   <TableTd>
                     <Inline gap="sm" wrap className="text-[12px]" title={o.summary}>

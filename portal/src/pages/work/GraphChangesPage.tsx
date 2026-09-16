@@ -13,10 +13,11 @@
 import { useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import {
-  Button, Card, Chip, EmptyState, FilterChip, Inline, PageSection, Stack, Toolbar, ToolbarGroup,
+  Button, Card, Chip, EmptyState, FilterChip, Inline, MetaLine, PageSection, Stack, Toolbar, ToolbarGroup,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';
+import { absoluteTime } from '../../lib/relativeTime';
 import { toastPending, toastSuccess, toastError } from '../../lib/toastStore';
 import { PROPOSAL_STATUS_CHIP, T } from './workShared';
 
@@ -50,10 +51,6 @@ const KIND_LABELS: Record<string, string> = {
 };
 
 type Filter = 'all' | 'applied' | 'pending' | 'rejected' | 'failed';
-
-function when(iso: string | null): string {
-  return iso ? new Date(iso).toLocaleString() : '—';
-}
 
 /** What actually changed, in the graph's own vocabulary. */
 function describe(p: Proposal): string {
@@ -202,17 +199,19 @@ export default function GraphChangesPage() {
                 </Inline>
               )}
 
-              <Inline gap="md" wrap className="text-[11px] text-text-tertiary">
-                <span>{p.source}</span>
-                {p.confidence != null && <span>confidence {(p.confidence * 100).toFixed(0)}%</span>}
-                <span>{p.reviewer ? `decided by ${p.reviewer}` : 'undecided'}</span>
-                <span>{when(p.decidedAt ?? p.createdAt)}</span>
-                {p.jobId && (
-                  <Link to={`/iq/work/${p.jobId}`} className="text-primary no-underline hover:underline">
-                    from a job →
-                  </Link>
-                )}
-              </Inline>
+              <MetaLine
+                items={[
+                  p.source,
+                  p.confidence != null ? `confidence ${(p.confidence * 100).toFixed(0)}%` : null,
+                  p.reviewer ? `decided by ${p.reviewer}` : 'undecided',
+                  absoluteTime(p.decidedAt ?? p.createdAt),
+                  p.jobId && (
+                    <Link to={`/iq/work/${p.jobId}`} className="text-primary no-underline hover:underline">
+                      from a job →
+                    </Link>
+                  ),
+                ]}
+              />
             </Stack>
           </Inline>
         ))}

@@ -23,11 +23,11 @@ import { readDegraded } from '../../lib/degraded';
 import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';
 import { parsePgTimestampAsUtc } from '../../lib/pgTimestamp';
+import { relativeTime } from '../../lib/relativeTime';
 import { CostVsEstimate, runEstimate } from './EstimateDrawer';
 import {
   TEMPLATE_TONE,
   triggerSummary,
-  when,
   type Bot,
   type BotRun,
 } from '../../pages/bots/BotsPage';
@@ -305,7 +305,7 @@ export function OutcomesRailCard({ activity }: { activity: InitiativeAgentActivi
               <MetaLine
                 size="xs"
                 className="whitespace-nowrap"
-                items={[<span key="w" title={r.startedAt}>{when(r.startedAt)}</span>]}
+                items={[<span key="w" title={r.startedAt}>{relativeTime(r.startedAt)}</span>]}
               />
             </Inline>
             {(r.outcome?.changeId || r.outcome?.prUrl || r.outcome?.boxId) && (

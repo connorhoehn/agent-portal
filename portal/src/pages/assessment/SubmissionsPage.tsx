@@ -11,14 +11,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import {
   Button,
-  Card,
   Checkbox,
   Chip,
   ConfirmDialog,
   DataTable,
   Drawer,
   EmptyState,
-  Inline,
   InlinePlaceholder,
   LoadingState,
   MetaLine,
@@ -395,18 +393,28 @@ export default function SubmissionsPage() {
       />
       <Drawer open={historyGroup !== null} onClose={() => setHistoryGroup(null)} title="Revision history">
         {historyGroup && (
-          <Stack gap="sm">
-            {[historyGroup.current, ...historyGroup.superseded].map((rev, i) => (
-              <Card key={rev.envelope_id} padding="sm" className="bg-surface-secondary text-sm">
-                <Inline justify="between" align="center">
-                  <strong className="font-semibold">{revisionLabel(rev.envelope_id)}</strong>
-                  {i === 0 && <StatusPill state="info" label="Current" size="sm" />}
-                </Inline>
-                <MetaLine size="xs" items={[rev.envelope_id]} className="mt-1" />
-                <MetaLine size="xs" items={[`Ingested ${formatRelativeTime(rev.ingested_at)}`]} className="mt-1" />
-              </Card>
-            ))}
-          </Stack>
+          <DataTable<{ envelope_id: string; ingested_at: string; current: boolean }>
+            data={[historyGroup.current, ...historyGroup.superseded].map((rev, i) => ({ ...rev, current: i === 0 }))}
+            keyField={(rev) => rev.envelope_id}
+            columns={[
+              {
+                key: 'revision',
+                header: 'Revision',
+                render: (rev) => (
+                  <Stack gap="none">
+                    <strong className="font-semibold">{revisionLabel(rev.envelope_id)}</strong>
+                    <MetaLine size="xs" items={[rev.envelope_id]} />
+                  </Stack>
+                ),
+              },
+              {
+                key: 'status',
+                header: 'Status',
+                render: (rev) => (rev.current ? <StatusPill state="info" label="Current" size="sm" /> : <Chip tone="neutral" size="xs">Superseded</Chip>),
+              },
+              { key: 'when', header: 'When', render: (rev) => formatRelativeTime(rev.ingested_at) },
+            ]}
+          />
         )}
       </Drawer>
     </Stack>

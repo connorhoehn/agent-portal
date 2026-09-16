@@ -23,11 +23,12 @@ import {
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';
+import { relativeTime } from '../../lib/relativeTime';
 import { toastError, toastPending, toastSuccess } from '../../lib/toastStore';
 import { AssignJobModal } from './AssignJobModal';
 import {
   BotOrigin, GraphUpdatesLink, JobStatusPill, LIVE_STATUSES, ServesItem,
-  SUGGESTION_LABEL, SUGGESTION_TONE, T, post, relTime, serves,
+  SUGGESTION_LABEL, SUGGESTION_TONE, T, post, serves,
   type Job, type WorkSuggestion,
 } from './workShared';
 
@@ -156,7 +157,7 @@ export default function QueuePage() {
     {
       key: 'createdAt', header: 'Age', sortable: true, align: 'right',
       compare: (a, b) => a.createdAt.localeCompare(b.createdAt),
-      render: (j) => <T className="text-[11px] text-text-tertiary whitespace-nowrap">{relTime(j.createdAt)}</T>,
+      render: (j) => <T className="text-[11px] text-text-tertiary whitespace-nowrap">{relativeTime(j.createdAt)}</T>,
     },
     {
       key: 'action', header: '', align: 'right',

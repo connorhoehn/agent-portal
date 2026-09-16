@@ -60,3 +60,8 @@ One trap worth repeating for anyone driving this from a script: `document.queryS
 ## What is still wrong
 
 Nothing on this proof. The banner's age is now correct within one re-render, the arrival-time silence holds, and the own-save set does not survive a user switch. DEFECTS.md #6 is closed in all four role ledgers with the timings above.
+
+--- freshness re-observation, 2026-09-16 01:50 (portal/src/pages/assessment changed: three Card lists → DataTable) ---
+Why: the last three open audit findings for this tenant; re-observed as u-asha (/assessment/runs, /assessment/submissions, the wizard) and as u-operator (a knowledge doc's History).
+  RunsPage's command panel is a DataTable; the ledger's live event wiring (the SSE-driven progress on running rows) is untouched and was re-observed on 12 ledger rows as Asha.
+Console errors: 0.

@@ -13,6 +13,7 @@ import { Link, useNavigate } from 'react-router';
 import {
   Button,
   Card,
+  CollapsibleSection,
   DataTable,
   EmptyState,
   FilterChip,
@@ -26,10 +27,11 @@ import {
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';
+import { relativeTime } from '../../lib/relativeTime';
 import { toastError, toastPending, toastSuccess } from '../../lib/toastStore';
 import { filterFindings, sweepLabel, type FindingStatus } from './findingsFilter';
 import {
-  BotOrigin, JobStatusPill, SeverityChip, T, post, relTime,
+  BotOrigin, JobStatusPill, SeverityChip, T, post,
   type Finding, type Job,
 } from './workShared';
 
@@ -57,7 +59,6 @@ export default function FindingsPage() {
   const canRequeue = ready && can('ManageDevbox');
 
   const [findingStatus, setFindingStatus] = useState<FindingStatus>('open');
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   const { data: findingsData, refresh: refreshFindings } = useFetch<{ findings: Finding[] }>(
     `/api/work/findings?status=${findingStatus}&limit=200`, 20_000);
@@ -235,7 +236,7 @@ export default function FindingsPage() {
     {
       key: 'createdAt', header: 'Age', align: 'right', sortable: true,
       compare: (a, b) => a.createdAt.localeCompare(b.createdAt),
-      render: (j) => <T className="text-[11px] text-text-tertiary whitespace-nowrap">{relTime(j.createdAt)}</T>,
+      render: (j) => <T className="text-[11px] text-text-tertiary whitespace-nowrap">{relativeTime(j.createdAt)}</T>,
     },
     {
       key: 'action', header: '', align: 'right',
@@ -307,37 +308,26 @@ export default function FindingsPage() {
               : {})}
           />
         ) : grouped.map(([sweep, items]) => {
-          const open = expanded.has(sweep);
           const worst = items.some((f) => f.severity === 'critical') ? 'critical'
             : items.some((f) => f.severity === 'warning') ? 'warning' : 'info';
           return (
-            <Stack key={sweep} gap="none" className="border-b border-border last:border-b-0">
-              <Button
-                variant="ghost"
-                fullWidth
-                className="justify-start rounded-none border-x-0 border-t-0 border-b-0 px-3.5 py-2.5 text-left"
-                onClick={() => setExpanded((prev) => {
-                  const next = new Set(prev);
-                  if (next.has(sweep)) next.delete(sweep); else next.add(sweep);
-                  return next;
-                })}
-              >
-                <Inline align="center" gap="sm" className="w-full">
-                  <T className="text-[10px] text-text-tertiary w-3 shrink-0">{open ? '▾' : '▸'}</T>
-                  <SeverityChip severity={worst} />
+            <CollapsibleSection
+              key={sweep}
+              className="rounded-none border-x-0 border-t-0 last:border-b-0"
+              badge={<SeverityChip severity={worst} />}
+              title={
+                <Inline align="center" gap="sm">
                   <T className="text-[12.5px] font-semibold text-text-primary">{sweepLabel(sweep)}</T>
-                  <T className="text-[11px] text-text-tertiary">
+                  <T className="text-[11px] font-normal text-text-tertiary">
                     {items.length} finding{items.length === 1 ? '' : 's'}
                   </T>
-                  <T className="flex-1" />
-                  <T className="text-[11px] text-text-tertiary">{open ? 'hide' : 'show'}</T>
                 </Inline>
-              </Button>
-
+              }
+            >
               {/* Bounded to ten per press so the cost of a click stays
                   predictable; the toast says how many remain. */}
               {canManageFindings && findingStatus === 'open' && items.some((f) => f.entityType === 'document') && (
-                <Stack gap="none" align="start" className="px-3.5 pb-2.5 pl-10 -mt-1">
+                <Stack gap="none" align="start" className="px-3.5 pt-2.5 pl-10">
                   <Button
                     size="sm"
                     variant="primary"
@@ -348,7 +338,7 @@ export default function FindingsPage() {
                 </Stack>
               )}
 
-              {open && items.map((f) => (
+              {items.map((f) => (
                 <Inline key={f.id} align="center" gap="sm" className="px-3.5 py-2.5 pl-10 border-t border-border min-w-0 bg-surface-hover/30">
                   <SeverityChip severity={f.severity} />
                   <Stack gap="none" className="flex-1 min-w-0">
@@ -386,7 +376,7 @@ export default function FindingsPage() {
                   ) : null}
                 </Inline>
               ))}
-            </Stack>
+            </CollapsibleSection>
           );
         })}
       </Card>

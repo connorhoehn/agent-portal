@@ -9,21 +9,13 @@ import { useState } from 'react';
 import {
   Button, Card, Chip, DetailSection, Divider, Inline, Modal, Stack,
 } from '@connorhoehnslalom/ui-components/shared';
+import { KeyValue } from '../../components/KeyValue';
 import { toastError, toastPending, toastSuccess } from '../../lib/toastStore';
 import { RediscoveryPanel } from './RediscoveryPanel';
 import {
   SUGGESTION_LABEL, SUGGESTION_TONE, T, post, serves,
   type Job, type WorkSuggestion,
 } from './workShared';
-
-function Row({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <Inline gap="md" className="py-1.5 text-[12.5px]">
-      <T className="w-[110px] shrink-0 text-text-tertiary">{label}</T>
-      <T className="min-w-0 flex-1 text-text-primary">{children}</T>
-    </Inline>
-  );
-}
 
 export function AssignJobModal({ suggestion, onClose, onQueued }: {
   suggestion: WorkSuggestion | null;
@@ -76,15 +68,20 @@ export function AssignJobModal({ suggestion, onClose, onQueued }: {
             <Chip tone={SUGGESTION_TONE[s.kind]} size="sm">{SUGGESTION_LABEL[s.kind]}</Chip>
             <T className="text-[13.5px] font-semibold text-text-primary">{s.title}</T>
           </Inline>
-          <Row label="Initiative">{s.initiativeName}</Row>
-          <Row label="Why now">{s.reason}</Row>
-          <Row label="Estimate">
+          <KeyValue layout="row" labelWidth="w-[110px]" label="Initiative" value={s.initiativeName} />
+          <KeyValue layout="row" labelWidth="w-[110px]" label="Why now" value={s.reason} />
+          <KeyValue layout="row" labelWidth="w-[110px]" label="Estimate">
             <T className="tabular-nums">
               {s.storyPoints != null ? `${s.storyPoints} pts` : 'unestimated'}
               {s.estimatedCostUsd != null ? ` · ~$${s.estimatedCostUsd.toFixed(2)}` : ''}
             </T>
-          </Row>
-          <Row label="Runs on">the first idle computer (a microVM with workspace + git), within ~10s</Row>
+          </KeyValue>
+          <KeyValue
+            layout="row"
+            labelWidth="w-[110px]"
+            label="Runs on"
+            value="the first idle computer (a microVM with workspace + git), within ~10s"
+          />
           <Divider spacing="sm" />
           {/* Prior art belongs right next to the number, not on a page nobody
               visits before confirming — this is the one instant a human is

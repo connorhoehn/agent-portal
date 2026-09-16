@@ -56,3 +56,31 @@ export function relativeTimeSeconds(iso: string | null | undefined): string {
   if (secs < 60) return `${secs}s ago`;
   return relativeTime(iso);
 }
+
+/**
+ * The fully-resolved local clock — "9/8/2026, 8:19:23 AM" — for surfaces that
+ * want the actual timestamp rather than an age (a rail's "Captured", a job's
+ * Queued/Claimed/Started/Finished timeline). Returns `'—'` for a
+ * null/undefined/unparseable instant, since there's no raw string worth
+ * echoing back for a value the reader expects to be a clock face.
+ */
+export function absoluteTime(iso: string | null | undefined): string {
+  const then = parsePgTimestamp(iso);
+  return then === null ? '—' : then.toLocaleString();
+}
+
+/**
+ * "140ms" · "1.8s" · "3m 20s" — a task/run duration in human units.
+ *
+ * `AgentProjectsPage` and `JobDetailPage` had each grown their own copy of
+ * this, one rounding to the nearest minute and the other keeping seconds
+ * within the minute — shared here on the more precise of the two. Returns
+ * `'—'` for a missing or non-positive duration (a duration of exactly 0 is
+ * indistinguishable from "never measured").
+ */
+export function durationLabel(ms: number | null | undefined): string {
+  if (typeof ms !== 'number' || ms <= 0) return '—';
+  if (ms < 1000) return `${ms}ms`;
+  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
+  return `${Math.floor(ms / 60_000)}m ${Math.round((ms % 60_000) / 1000)}s`;
+}

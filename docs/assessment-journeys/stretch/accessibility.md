@@ -281,3 +281,8 @@ Addendum 2026-09-15 21:20: one further change to DimensionRow.tsx / assessmentFo
 Why: five Sonnet fix agents applied the read-only audit's findings; re-observed as u-asha on TEAM-001 (all five scorecard tabs), /assessment/submissions and /assessment/runs.
   - the dimension pane header's eyebrow and basis captions are SectionLabels (real text, 10px caps), its claim chip is text ("↑5") with a title that spells the claim out, and the header has no raw wrappers; the Improvement Plan's reveals are CollapsibleSection buttons with aria-expanded (four on TEAM-001) instead of ghost buttons toggling a bare block; the submissions selection bars are the library Toolbar (role=toolbar); the intake's repo "Use" buttons are real buttons that fill the URL field.
 Console errors: 0.
+
+--- freshness re-observation, 2026-09-16 01:50 (portal/src/pages/assessment changed: three Card lists → DataTable) ---
+Why: the last three open audit findings for this tenant; re-observed as u-asha (/assessment/runs, /assessment/submissions, the wizard) and as u-operator (a knowledge doc's History).
+  Three card lists became tables: the wizard's per-envelope link list, the Run-a-command panel and both revision-history drawers are DataTables (real <table>/<th> rows, one action control per row, Restore → confirm/cancel kept in-cell); nothing new enters the tab order beyond those row controls.
+Console errors: 0.

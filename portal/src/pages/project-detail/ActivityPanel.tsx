@@ -18,23 +18,11 @@
 
 import { useMemo, useState } from 'react';
 import { MetricsGraph } from '@connorhoehnslalom/ui-components/observability';
-import { Card, EmptyState, Inline, SectionLabel, SegmentedControl, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { Card, EmptyState, Inline, SectionLabel, SegmentedControl, Stack, StatStrip } from '@connorhoehnslalom/ui-components/shared';
 import type { BotRun } from '../bots/BotsPage';
 import { T } from './Text';
 import { activityBuckets, flattenWorkItems } from './projectFormat';
 import type { WorkItemTree } from './types';
-
-function Total({ label, value, hint }: { label: string; value: string; hint?: string }) {
-  return (
-    <Stack gap="none">
-      <SectionLabel as="div">{label}</SectionLabel>
-      <Inline gap="xs" align="baseline" wrap={false}>
-        <T className="text-[15px] font-bold tabular-nums text-text-primary">{value}</T>
-        {hint && <T className="text-[11px] text-text-tertiary">{hint}</T>}
-      </Inline>
-    </Stack>
-  );
-}
 
 // The window is the reader's to choose. 30 days is the right default for a
 // live initiative, but a quiet one that finished its work last quarter reads
@@ -92,9 +80,14 @@ export function ActivityPanel({
         ) : (
           <>
             <Inline gap={compact ? 'md' : 'lg'} align="center" wrap={compact}>
-              <Total label="Agent spend" value={`$${buckets.totals.spendUsd.toFixed(2)}`} hint={`over ${days}d`} />
-              <Total label="Runs" value={String(buckets.totals.runs)} />
-              <Total label="Completed" value={String(buckets.totals.completed)} hint="items" />
+              <StatStrip
+                frameless
+                items={[
+                  { label: 'Agent spend', value: `$${buckets.totals.spendUsd.toFixed(2)}`, hint: `over ${days}d` },
+                  { label: 'Runs', value: String(buckets.totals.runs) },
+                  { label: 'Completed', value: String(buckets.totals.completed), hint: 'items' },
+                ]}
+              />
               {!compact && (
                 <T className="text-[11px] text-text-tertiary">
                   {buckets.labels[0]} → {buckets.labels[buckets.labels.length - 1]}

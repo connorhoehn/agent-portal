@@ -8,9 +8,8 @@
 // once, over whatever survived.
 
 import { Link } from 'react-router';
-import { Avatar, BoardColumn, Card, CatalogGrid, Chip, EmptyState, Inline, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { Avatar, BoardColumn, Card, CatalogGrid, Chip, EmptyState, Inline, SectionLabel, Stack } from '@connorhoehnslalom/ui-components/shared';
 import type { BotRun } from '../bots/BotsPage';
-import { T } from './Text';
 import { EstimateChip, PrBadge, RunStateChips } from './WorkItemChips';
 import {
   BOARD_STATUSES,
@@ -59,9 +58,9 @@ function BoardCard({
         </Inline>
         {/* With one board across all epics, the card has to say which epic it
             belongs to — that context used to come from the swimlane header. */}
-        <T as="div" className="block truncate text-[10.5px] uppercase tracking-wide text-text-tertiary">
+        <SectionLabel as="div" className="truncate">
           {item.epicTitle}
-        </T>
+        </SectionLabel>
         <Inline gap="xs" justify="between">
           <Inline gap="xs">
             {item.assigneeName && <Avatar name={item.assigneeName} size={18} title={item.assigneeName} />}

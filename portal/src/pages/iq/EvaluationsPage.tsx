@@ -12,7 +12,7 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router';
 import {
-  Button, Chip, IconButton, Inline, ProgressBar, Select, SelectableCard, Stack, StatStrip, Switch,
+  Button, Card, Chip, IconButton, Inline, ProgressBar, Select, SectionLabel, SelectableCard, Stack, StatStrip, Switch,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { useCanaryStream } from '../../components/canary/useCanaryStream.js';
@@ -237,7 +237,7 @@ function ScoreRow({ entry, i }: { entry: JudgeHistoryEntry; i: number }) {
           <Inline gap="sm" wrap className="grid grid-cols-4 gap-2">
             {dimensionCells(entry.scores).map(([k, v]) => (
               <Stack key={k} gap="none">
-                <T className={`text-[9px] font-bold uppercase tracking-wide ${DIM_COLOR_CLASS[k] ?? 'text-text-tertiary'}`}>{k}</T>
+                <SectionLabel className={DIM_COLOR_CLASS[k]}>{k}</SectionLabel>
                 {v === undefined ? (
                   <T
                     className="text-[11px] italic leading-[1.45] text-text-tertiary"
@@ -373,117 +373,127 @@ export default function EvaluationsPage(): React.ReactElement {
 
         {/* Judge identity banner */}
         {judgeArn && (
-          <Stack gap="xs" className="rounded-lg border border-border-emphasis bg-primary-soft px-3.5 py-2.5">
-            <Inline gap="sm" align="center" wrap>
-              <Chip tone="accent" mono size="xs">{judgeVersionLabel}</Chip>
-              <T className="flex-1 truncate font-mono text-[10px] text-primary" title={judgeArn}>{judgeArn}</T>
-            </Inline>
-            <Inline gap="sm">
-              {judgePromptId
-                ? <Link to="/iq/prompts" className="text-[11px] text-primary no-underline hover:underline">Edit in Prompt Studio ↗</Link>
-                : <T className="text-[11px] text-primary">Edit in Prompt Studio ↗</T>}
-              <Link to="/iq/diff" className="text-[11px] text-primary no-underline hover:underline">Compare versions ↗</Link>
-            </Inline>
-          </Stack>
+          <Card padding="sm" className="border-border-emphasis bg-primary-soft">
+            <Stack gap="xs">
+              <Inline gap="sm" align="center" wrap>
+                <Chip tone="accent" mono size="xs">{judgeVersionLabel}</Chip>
+                <T className="flex-1 truncate font-mono text-[10px] text-primary" title={judgeArn}>{judgeArn}</T>
+              </Inline>
+              <Inline gap="sm">
+                {judgePromptId
+                  ? <Link to="/iq/prompts" className="text-[11px] text-primary no-underline hover:underline">Edit in Prompt Studio ↗</Link>
+                  : <T className="text-[11px] text-primary">Edit in Prompt Studio ↗</T>}
+                <Link to="/iq/diff" className="text-[11px] text-primary no-underline hover:underline">Compare versions ↗</Link>
+              </Inline>
+            </Stack>
+          </Card>
         )}
 
         {/* Enable toggle */}
-        <Stack gap="xs" className="rounded-lg border border-border bg-surface px-4.5 py-3.5">
-          <Inline gap="sm" align="center" justify="between">
-            <T className="text-[13px] font-bold text-text-primary">LLM-as-Judge</T>
-            <Inline gap="sm" align="center">
-              <T className={`text-[12px] font-semibold ${cfg.enabled ? 'text-success' : 'text-text-tertiary'}`}>
-                {cfg.enabled ? 'Enabled' : 'Disabled'}
-              </T>
-              <Switch
-                checked={cfg.enabled}
-                onChange={enabled => setCfg(c => ({ ...c, enabled }))}
-                aria-label="Enable LLM-as-Judge"
-              />
+        <Card padding="md">
+          <Stack gap="xs">
+            <Inline gap="sm" align="center" justify="between">
+              <T className="text-[13px] font-bold text-text-primary">LLM-as-Judge</T>
+              <Inline gap="sm" align="center">
+                <T className={`text-[12px] font-semibold ${cfg.enabled ? 'text-success' : 'text-text-tertiary'}`}>
+                  {cfg.enabled ? 'Enabled' : 'Disabled'}
+                </T>
+                <Switch
+                  checked={cfg.enabled}
+                  onChange={enabled => setCfg(c => ({ ...c, enabled }))}
+                  aria-label="Enable LLM-as-Judge"
+                />
+              </Inline>
             </Inline>
-          </Inline>
-          <T className="block text-[11px] leading-relaxed text-text-secondary">
-            When enabled, a sample of canary invocations is automatically evaluated by the
-            judge model. Scores flow live into this page via SSE.
-          </T>
-        </Stack>
+            <T className="block text-[11px] leading-relaxed text-text-secondary">
+              When enabled, a sample of canary invocations is automatically evaluated by the
+              judge model. Scores flow live into this page via SSE.
+            </T>
+          </Stack>
+        </Card>
 
         {/* Judge model */}
-        <Stack gap="xs" className="rounded-lg border border-border bg-surface px-4.5 py-3.5">
-          <T className="block text-[10px] font-bold uppercase tracking-wide text-text-secondary">Judge model</T>
-          <Inline gap="sm" wrap>
-            {JUDGE_MODELS.map(m => (
-              <SelectableCard
-                key={m.id}
-                selected={m.id === cfg.modelId}
-                onSelect={() => setCfg(c => ({ ...c, modelId: m.id }))}
-                padding="sm"
-                className="min-w-[110px] flex-1 text-left"
-              >
-                <Stack gap="none">
-                  <T className="block text-[11px] font-semibold text-text-primary">{m.label}</T>
-                  <T className="block text-[10px] text-text-tertiary">{m.hint}</T>
-                </Stack>
-              </SelectableCard>
-            ))}
-          </Inline>
-          <T className="block text-[11px] leading-relaxed text-text-tertiary">
-            Model ID: <T className="rounded bg-surface-hover px-1 py-px font-mono text-[10px] text-text-secondary">{cfg.modelId}</T>
-          </T>
-        </Stack>
+        <Card padding="md">
+          <Stack gap="xs">
+            <SectionLabel as="div">Judge model</SectionLabel>
+            <Inline gap="sm" wrap>
+              {JUDGE_MODELS.map(m => (
+                <SelectableCard
+                  key={m.id}
+                  selected={m.id === cfg.modelId}
+                  onSelect={() => setCfg(c => ({ ...c, modelId: m.id }))}
+                  padding="sm"
+                  className="min-w-[110px] flex-1 text-left"
+                >
+                  <Stack gap="none">
+                    <T className="block text-[11px] font-semibold text-text-primary">{m.label}</T>
+                    <T className="block text-[10px] text-text-tertiary">{m.hint}</T>
+                  </Stack>
+                </SelectableCard>
+              ))}
+            </Inline>
+            <T className="block text-[11px] leading-relaxed text-text-tertiary">
+              Model ID: <T className="rounded bg-surface-hover px-1 py-px font-mono text-[10px] text-text-secondary">{cfg.modelId}</T>
+            </T>
+          </Stack>
+        </Card>
 
         {/* Rubric weights */}
-        <Stack gap="xs" className="rounded-lg border border-border bg-surface px-4.5 py-3.5">
-          <Inline gap="sm" align="center" justify="between">
-            <T className="text-[10px] font-bold uppercase tracking-wide text-text-secondary">Rubric weights</T>
-            <T className={`text-[11px] font-semibold ${weightOk ? 'text-success' : 'text-danger'}`}>{total}% / 100%</T>
-          </Inline>
-          <T className="block text-[11px] leading-relaxed text-text-tertiary">
-            How each dimension contributes to the overall 0–10 score.
-            {judgeArn && ' Overridden by the active judge prompt when one is configured.'}
-          </T>
-          <Stack gap="sm">
-            {cfg.dimensions.map(dim => (
-              <WeightSlider
-                key={dim.key}
-                dim={dim}
-                onChange={setDimWeight}
-                totalOther={total - dim.weight}
-              />
-            ))}
+        <Card padding="md">
+          <Stack gap="xs">
+            <Inline gap="sm" align="center" justify="between">
+              <SectionLabel>Rubric weights</SectionLabel>
+              <T className={`text-[11px] font-semibold ${weightOk ? 'text-success' : 'text-danger'}`}>{total}% / 100%</T>
+            </Inline>
+            <T className="block text-[11px] leading-relaxed text-text-tertiary">
+              How each dimension contributes to the overall 0–10 score.
+              {judgeArn && ' Overridden by the active judge prompt when one is configured.'}
+            </T>
+            <Stack gap="sm">
+              {cfg.dimensions.map(dim => (
+                <WeightSlider
+                  key={dim.key}
+                  dim={dim}
+                  onChange={setDimWeight}
+                  totalOther={total - dim.weight}
+                />
+              ))}
+            </Stack>
+            {!weightOk && <T className="block text-[11px] font-medium text-danger">Weights must sum to exactly 100%.</T>}
+            <Button variant="ghost" size="sm" onClick={() => setCfg(c => ({ ...c, dimensions: DEFAULT_DIMENSIONS }))}>
+              Reset to defaults
+            </Button>
           </Stack>
-          {!weightOk && <T className="block text-[11px] font-medium text-danger">Weights must sum to exactly 100%.</T>}
-          <Button variant="ghost" size="sm" onClick={() => setCfg(c => ({ ...c, dimensions: DEFAULT_DIMENSIONS }))}>
-            Reset to defaults
-          </Button>
-        </Stack>
+        </Card>
 
         {/* Sampling + thresholds */}
-        <Stack gap="sm" className="rounded-lg border border-border bg-surface px-4.5 py-3.5">
-          <T className="block text-[10px] font-bold uppercase tracking-wide text-text-secondary">Sampling &amp; thresholds</T>
-          <Inline gap="sm" align="center">
-            <T className="w-[90px] shrink-0 text-[11px] font-semibold text-text-secondary">Sample rate</T>
-            <Select
-              value={String(cfg.minSampleRate)}
-              onChange={e => setCfg(c => ({ ...c, minSampleRate: Number(e.target.value) }))}
-              options={SAMPLE_RATES.map(r => ({ value: String(r.value), label: r.label }))}
-              size="sm"
-              className="flex-1"
-              aria-label="Sample rate"
-            />
-          </Inline>
-          <Inline gap="sm" align="center">
-            <T className="w-[90px] shrink-0 text-[11px] font-semibold text-text-secondary">Fail threshold</T>
-            <Select
-              value={String(cfg.failThreshold)}
-              onChange={e => setCfg(c => ({ ...c, failThreshold: Number(e.target.value) }))}
-              options={FAIL_THRESHOLDS.map(t => ({ value: String(t.value), label: t.label }))}
-              size="sm"
-              className="flex-1"
-              aria-label="Fail threshold"
-            />
-          </Inline>
-        </Stack>
+        <Card padding="md">
+          <Stack gap="sm">
+            <SectionLabel as="div">Sampling &amp; thresholds</SectionLabel>
+            <Inline gap="sm" align="center">
+              <T className="w-[90px] shrink-0 text-[11px] font-semibold text-text-secondary">Sample rate</T>
+              <Select
+                value={String(cfg.minSampleRate)}
+                onChange={e => setCfg(c => ({ ...c, minSampleRate: Number(e.target.value) }))}
+                options={SAMPLE_RATES.map(r => ({ value: String(r.value), label: r.label }))}
+                size="sm"
+                className="flex-1"
+                aria-label="Sample rate"
+              />
+            </Inline>
+            <Inline gap="sm" align="center">
+              <T className="w-[90px] shrink-0 text-[11px] font-semibold text-text-secondary">Fail threshold</T>
+              <Select
+                value={String(cfg.failThreshold)}
+                onChange={e => setCfg(c => ({ ...c, failThreshold: Number(e.target.value) }))}
+                options={FAIL_THRESHOLDS.map(t => ({ value: String(t.value), label: t.label }))}
+                size="sm"
+                className="flex-1"
+                aria-label="Fail threshold"
+              />
+            </Inline>
+          </Stack>
+        </Card>
 
         {/* Save — ManageCanary only; without it the config is a read-only view. */}
         {canManage && (
@@ -532,18 +542,20 @@ export default function EvaluationsPage(): React.ReactElement {
         </Inline>
 
         {historyDesc.length === 0 ? (
-          <Stack gap="sm" align="center" className="rounded-lg border border-border bg-surface px-5 py-8">
-            <T className="text-[32px]">📊</T>
-            <T className="max-w-[280px] text-center text-[12px] leading-relaxed text-text-tertiary">
-              No scores yet.{' '}
-              {cfg.enabled
-                ? 'Scores appear here in real-time as the canary evaluates responses.'
-                : 'Enable LLM-as-Judge above to start collecting scores.'}
-            </T>
-            <Button variant="secondary" size="sm" onClick={() => navigate('/iq/canary')}>
-              Open canary dashboard →
-            </Button>
-          </Stack>
+          <Card padding="md">
+            <Stack gap="sm" align="center">
+              <T className="text-[32px]">📊</T>
+              <T className="max-w-[280px] text-center text-[12px] leading-relaxed text-text-tertiary">
+                No scores yet.{' '}
+                {cfg.enabled
+                  ? 'Scores appear here in real-time as the canary evaluates responses.'
+                  : 'Enable LLM-as-Judge above to start collecting scores.'}
+              </T>
+              <Button variant="secondary" size="sm" onClick={() => navigate('/iq/canary')}>
+                Open canary dashboard →
+              </Button>
+            </Stack>
+          </Card>
         ) : (
           <Stack gap="xs" className="max-h-[calc(100vh-420px)] overflow-y-auto">
             {historyDesc.map((entry, i) => (

@@ -1,5 +1,6 @@
 import { Button, Card, Chip, CollapsibleSection, EntityCell, Inline, MetaLine, SectionLabel, Stack } from '@connorhoehnslalom/ui-components/shared';
-import { PersonDetail, formatRelativeTime } from './types';
+import { PersonDetail } from './types';
+import { relativeTime } from '../../lib/relativeTime';
 import { formatScore } from './scoresFormat';
 import { RadarChart, type RadarAxes } from './RadarChart';
 import { TrendLine } from './TrendLine';
@@ -112,7 +113,7 @@ export function PersonDetailCard({ detail, compositeScore, influenceScore, deptC
           ))}
       </Stack>
 
-      <MetaLine size="xs" className="mt-3" items={[`Scored ${formatRelativeTime(detail.scoredAt)}`]} />
+      <MetaLine size="xs" className="mt-3" items={[`Scored ${relativeTime(detail.scoredAt)}`]} />
 
       {/* One control, one surface (see ScoreContributions.tsx): this used to
           be a `▾` disclosure toggle that opened a separate `Drawer` of the

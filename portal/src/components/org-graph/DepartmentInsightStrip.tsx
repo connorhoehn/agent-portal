@@ -45,9 +45,7 @@ export function DepartmentInsightStrip({
 
       {atRisk.length > 0 && (
         <Inline gap="xs" align="center" wrap as="span">
-          <Inline as="span" gap="none" className="whitespace-nowrap text-[10px] font-bold uppercase tracking-wide text-warning">
-            ⚠ rare skills
-          </Inline>
+          <OverlineLabel tone="warning">⚠ rare skills</OverlineLabel>
           {/* A rare skill is only actionable if you can reach the person who
               holds it, so the pill IS the jump to them. It has to be a real
               <button>: these were Chip-shaped before, but Chip renders a span,

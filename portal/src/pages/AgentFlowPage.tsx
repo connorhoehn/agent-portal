@@ -10,6 +10,7 @@ import { Link, useSearchParams } from 'react-router';
 import { Chip, Drawer, Inline, InlineAlert, SectionLabel, SegmentedControl, Stack, StatStrip, StatusDot } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../hooks/useFetch';
 import { UnavailableNotice } from '../components/UnavailableNotice';
+import { KeyValue } from '../components/KeyValue';
 import { AgentFlowFrame, NODE_HEIGHT, NODE_WIDTH, STATUS_COLORS, fmtCount, fmtMs } from './AgentFlowFrame';
 import { T } from './Text';
 
@@ -405,10 +406,10 @@ function AgentDrawerBody({
       </T>
 
       <Stack gap="xs">
-        <DrawerKv label="Status" value={summary?.status ?? 'unknown'} />
-        {summary?.protocol && <DrawerKv label="Protocol" value={summary.protocol.toUpperCase()} />}
-        {summary?.model && <DrawerKv label="Model" value={summary.model} />}
-        <DrawerKv label="Agent ID" value={agentId} mono />
+        <KeyValue layout="row" label="Status" value={summary?.status ?? 'unknown'} />
+        {summary?.protocol && <KeyValue layout="row" label="Protocol" value={summary.protocol.toUpperCase()} />}
+        {summary?.model && <KeyValue layout="row" label="Model" value={summary.model} />}
+        <KeyValue layout="row" label="Agent ID" value={agentId} mono />
       </Stack>
 
       <Stack gap="sm">
@@ -457,16 +458,5 @@ function AgentDrawerBody({
     </Stack>
   );
 }
-
-function DrawerKv({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
-  return (
-    <Inline justify="between" gap="sm" className="py-0.5 text-xs">
-      <T className="shrink-0 text-text-tertiary">{label}</T>
-      <T className={`max-w-[180px] break-all text-right font-medium text-text-primary ${mono ? 'font-mono' : ''}`}>{value}</T>
-    </Inline>
-  );
-}
-
-
 
 export default AgentFlowPage;

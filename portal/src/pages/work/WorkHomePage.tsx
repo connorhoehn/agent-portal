@@ -13,11 +13,12 @@ import {
 import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';
 import { useSession } from '../../lib/auth';
+import { relativeTime } from '../../lib/relativeTime';
 import { toastError, toastPending, toastSuccess } from '../../lib/toastStore';
 import { DEVBOX_ROLES } from './automateNav';
 import { QueuePulse } from './QueuePulse';
 import {
-  BotOrigin, GraphUpdatesLink, PROPOSAL_LABELS, ServesItem, T, money, post, relTime,
+  BotOrigin, GraphUpdatesLink, PROPOSAL_LABELS, ServesItem, T, money, post,
   type Job, type LabConsult, type Proposal, type Summary,
 } from './workShared';
 
@@ -165,7 +166,7 @@ export default function WorkHomePage() {
                 question={c.question}
                 {...(c.context ? { context: c.context } : {})}
                 origin={[c.repo, c.boxId].filter((x): x is string => !!x)}
-                askedAt={`asked ${relTime(c.createdAt)}`}
+                askedAt={`asked ${relativeTime(c.createdAt)}`}
                 status={c.status}
                 busy={answeringId === c.id}
                 {...(canManage ? { onAnswer: (answer: string) => void answerConsult(c.id, answer) } : {})}

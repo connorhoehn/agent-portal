@@ -11,7 +11,7 @@ import {
   Card, Chip, Inline, SectionLabel, Stack, StatStrip, StatusDot, Toolbar,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
-import { parsePgTimestampAsUtc } from '../../lib/pgTimestamp';
+import { relativeTime } from '../../lib/relativeTime';
 import { useSession } from '../../lib/auth';
 import { BOTS_ROLES } from './automateNav';
 import { T } from './workShared';
@@ -34,14 +34,7 @@ interface PulseBot {
 }
 
 function lastRan(iso: string | null): string {
-  if (!iso) return 'never ran';
-  const d = parsePgTimestampAsUtc(iso);
-  if (d === null) return '—';
-  const mins = Math.round((Date.now() - d.getTime()) / 60_000);
-  if (mins < 1) return 'ran just now';
-  if (mins < 60) return `ran ${mins}m ago`;
-  if (mins < 1440) return `ran ${Math.round(mins / 60)}h ago`;
-  return `ran ${Math.round(mins / 1440)}d ago`;
+  return iso ? `ran ${relativeTime(iso)}` : 'never ran';
 }
 
 function cadence(bot: PulseBot): string {

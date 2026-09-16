@@ -33,6 +33,7 @@ import {
 import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';
 import { parsePgTimestampAsUtc } from '../../lib/pgTimestamp';
+import { relativeTime } from '../../lib/relativeTime';
 import { toastPending, toastSuccess, toastError } from '../../lib/toastStore';
 import { PolicyEditor } from '../../components/sdlc/PolicyEditor';
 
@@ -81,16 +82,6 @@ function tsOf(iso: string): number {
 
 /** Terminal states — a real final outcome, never "superseded" even if older. */
 const TERMINAL = new Set(['delivered', 'rejected', 'blocked']);
-
-function when(iso: string): string {
-  const d = parsePgTimestampAsUtc(iso);
-  if (d === null) return '';
-  const mins = Math.round((Date.now() - d.getTime()) / 60000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
-  if (mins < 1440) return `${Math.round(mins / 60)}h ago`;
-  return `${Math.round(mins / 1440)}d ago`;
-}
 
 export default function ChangesPage() {
   const [tab, setTab] = useState<'queue' | 'policies'>('queue');
@@ -297,7 +288,7 @@ function ChangeCard({ change: c, busy, act, superseded }: {
           items={[
             `${c.filesChanged} ${c.filesChanged === 1 ? 'file' : 'files'}`,
             c.model ?? 'unknown model',
-            when(c.createdAt),
+            relativeTime(c.createdAt),
             // The run that wrote this change — jumps to the codebase with that
             // run highlighted, so a reviewer can read what the agent was asked
             // before judging what it did.

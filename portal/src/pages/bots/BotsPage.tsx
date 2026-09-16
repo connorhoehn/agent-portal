@@ -24,7 +24,7 @@ import {
   type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
-import { parsePgTimestampAsUtc } from '../../lib/pgTimestamp';
+import { relativeTime } from '../../lib/relativeTime';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { useCapabilities } from '../../lib/capabilities';
 import { BotCreateWizard } from './BotCreateWizard';
@@ -104,23 +104,6 @@ export function triggerSummary(bot: Pick<Bot, 'trigger' | 'cronExpr'>): string {
   if (bot.trigger === 'cron') return `cron: ${bot.cronExpr ?? '—'}`;
   if (bot.trigger === 'pr_watch') return 'on new PRs';
   return 'manual';
-}
-
-/**
- * Aurora's `timestamptz` arrives as `2026-09-08 08:19:23+00` — no `T`, and an
- * offset ISO 8601 rejects. The old normalisation appended `Z` whenever the `T`
- * was missing, i.e. always, so a zoned stamp became `…+00Z` and this column
- * quietly rendered an em dash instead of "3h ago". Shared parser now.
- */
-export function when(iso: string | null): string {
-  if (!iso) return 'never';
-  const d = parsePgTimestampAsUtc(iso);
-  if (d === null) return '—';
-  const mins = Math.round((Date.now() - d.getTime()) / 60000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
-  if (mins < 1440) return `${Math.round(mins / 60)}h ago`;
-  return `${Math.round(mins / 1440)}d ago`;
 }
 
 const STATUS_OPTIONS: Array<{ value: BotStatusFilter; label: string }> = [
@@ -223,7 +206,7 @@ export default function BotsPage() {
       // definition can't diverge between the two surfaces — see
       // `botListLastRanText`'s doc comment in botsFormat.ts for the
       // data-level gap this does NOT close (DEFECTS.md org-leader #20).
-      render: (bot) => botListLastRanText(bot, when),
+      render: (bot) => botListLastRanText(bot, relativeTime),
     },
     {
       key: 'today',

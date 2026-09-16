@@ -40,7 +40,7 @@ import { useCapabilities } from '../../lib/capabilities';
 import { toastError, toastSuccess, toastPending } from '../../lib/toastStore';
 import { openShell, useCompute, type Computer } from '@connorhoehnslalom/ui-components/compute';
 import { DEVBOX_MODELS, DEFAULT_DEVBOX_MODEL } from '../../lib/devboxModels';
-import { parsePgTimestampAsUtc } from '../../lib/pgTimestamp';
+import { durationLabel, relativeTime } from '../../lib/relativeTime';
 import { ConnectionSetup } from '../../components/codebases/ConnectionSetup';
 import { RepoDiscovery } from '../../components/codebases/RepoDiscovery';
 
@@ -66,23 +66,6 @@ interface RepoRef { fullName: string }
 const STATUS_TONE: Record<Run['status'], 'warning' | 'success' | 'danger'> = {
   running: 'warning', done: 'success', failed: 'danger',
 };
-
-/** Aurora stamps carry a `+00` offset ISO 8601 does not allow — shared parser. */
-function when(iso: string | null): string {
-  if (!iso) return 'never';
-  const d = parsePgTimestampAsUtc(iso);
-  if (d === null) return '—';
-  const mins = Math.round((Date.now() - d.getTime()) / 60000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
-  if (mins < 1440) return `${Math.round(mins / 60)}h ago`;
-  return `${Math.round(mins / 1440)}d ago`;
-}
-
-function dur(ms: number | null): string {
-  if (ms == null) return '—';
-  return ms < 1000 ? `${ms}ms` : ms < 60_000 ? `${(ms / 1000).toFixed(1)}s` : `${Math.round(ms / 60_000)}m`;
-}
 
 // Accept a pasted GitHub URL (HTTPS or SSH) or a bare owner/name and reduce it
 // to "owner/repo". Handles: https://github.com/o/r(.git)(/tree/main…),
@@ -557,9 +540,9 @@ export default function AgentProjectsPage() {
                           <MetaLine
                             size="xs"
                             items={[
-                              when(r.startedAt),
+                              relativeTime(r.startedAt),
                               r.model,
-                              r.durationMs != null ? dur(r.durationMs) : null,
+                              r.durationMs != null ? durationLabel(r.durationMs) : null,
                               r.filesChanged != null ? `${r.filesChanged} ${r.filesChanged === 1 ? 'file' : 'files'} changed` : null,
                               r.costUsd != null ? `$${r.costUsd.toFixed(4)}` : null,
                             ]}

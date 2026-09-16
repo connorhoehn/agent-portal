@@ -22,21 +22,17 @@ import {
   Button,
   Card,
   Chip,
+  DataTable,
   EmptyState,
   Inline,
   Select,
   Stack,
   StatusPill,
   Switch,
-  Table,
-  TableBody,
-  TableHead,
-  TableRow,
-  TableTd,
-  TableTh,
   ThinkingDots,
   Toolbar,
 } from '@connorhoehnslalom/ui-components/shared';
+import type { DataTableColumn } from '@connorhoehnslalom/ui-components/shared';
 import { T } from './Text';
 import { nodeTypes, edgeTypes } from '../components/canary/index.js';
 import { useCanaryStream } from '../components/canary/useCanaryStream.js';
@@ -292,114 +288,104 @@ function ScenarioPanel({ open }: { open: boolean }): React.ReactElement | null {
         />
       ) : (
         <Stack gap="none" className="flex-1 overflow-y-auto overflow-x-hidden">
-          <Table className="w-full border-collapse text-[12px]">
-            <TableHead>
-              <TableRow className="sticky top-0 z-[1]">
-                <TableTh className="w-[180px]">Person</TableTh>
-                <TableTh className="w-[160px]">Topic</TableTh>
-                <TableTh className="w-[52px] text-center">Ver</TableTh>
-                <TableTh className="w-[60px] text-center">Score</TableTh>
-                <TableTh className="w-[220px] text-left">Status</TableTh>
-                <TableTh>Run</TableTh>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {rows.map((row) => {
-                const score = row.requestId ? judgeScores[row.requestId] : undefined;
-                return (
-                  <ScenarioTableRow
-                    key={row.key}
-                    row={row}
-                    score={score}
-                    onRun={() => runRow(row.key)}
-                    onReset={() => resetRow(row.key)}
-                  />
-                );
-              })}
-            </TableBody>
-          </Table>
+          <DataTable<ScenarioRowWithScore>
+            data={rows.map((row) => ({ ...row, score: row.requestId ? judgeScores[row.requestId] : undefined }))}
+            keyField={(row) => row.key}
+            className="text-[12px]"
+            columns={scenarioColumns(runRow, resetRow)}
+          />
         </Stack>
       )}
     </Stack>
   );
 }
 
-function ScenarioTableRow({
-  row,
-  score,
-  onRun,
-  onReset,
-}: {
-  row: ScenarioRow;
+interface ScenarioRowWithScore extends ScenarioRow {
   score: number | undefined;
-  onRun: () => void;
-  onReset: () => void;
-}): React.ReactElement {
-  const rowBg = row.phase === 'running' ? 'bg-primary/5'
-    : row.phase === 'done' ? 'bg-success/5'
-    : row.phase === 'error' ? 'bg-danger/5'
-    : '';
+}
 
-  return (
-    <TableRow className={rowBg}>
-      {/* Person */}
-      <TableTd>
+function scenarioColumns(onRun: (key: string) => void, onReset: (key: string) => void): DataTableColumn<ScenarioRowWithScore>[] {
+  return [
+    {
+      key: 'person',
+      header: 'Person',
+      width: '180px',
+      getFilterText: (row) => row.personName,
+      render: (row) => (
         <Stack gap="none">
           <T className="font-medium leading-[1.3] text-text-primary">{row.personName}</T>
           {row.personMeta && (
             <T className="mt-px text-[10px] text-text-tertiary">{row.personMeta}</T>
           )}
         </Stack>
-      </TableTd>
-      {/* Topic */}
-      <TableTd className="text-text-secondary">
-        {row.topic}
-      </TableTd>
-      {/* Version */}
-      <TableTd className="text-center">
-        {row.version ? (
-          <Chip tone={row.version === 'B' ? 'accent' : 'info'} size="xs">
-            {row.version}
-          </Chip>
-        ) : <T className="text-text-tertiary">—</T>}
-      </TableTd>
-      {/* Score */}
-      <TableTd className="text-center tabular-nums">
-        {score !== undefined ? (
-          <T className={`text-[12px] font-semibold ${score >= 0.7 ? 'text-success' : score >= 0.4 ? 'text-warning' : 'text-danger'}`}>
-            {score.toFixed(2)}
-          </T>
-        ) : row.phase === 'running' ? (
-          <ThinkingDots size="sm" color="var(--color-primary)" />
-        ) : (
-          <T className="text-text-tertiary">—</T>
-        )}
-      </TableTd>
-      {/* Status */}
-      <TableTd className="align-top">
-        <StatusPip phase={row.phase} hasScore={score !== undefined} errorMsg={row.errorMsg} />
-      </TableTd>
-      {/* Run button */}
-      <TableTd>
-        {row.phase === 'idle' && (
-          <Button variant="secondary" size="sm" onClick={onRun}>Run</Button>
-        )}
-        {row.phase === 'running' && (
-          <T className="text-[10px] text-text-tertiary">Running</T>
-        )}
-        {(row.phase === 'done' || row.phase === 'error') && (
-          <Button variant="ghost" size="sm" onClick={onReset}>Reset</Button>
-        )}
-      </TableTd>
-    </TableRow>
-  );
+      ),
+    },
+    {
+      key: 'topic',
+      header: 'Topic',
+      width: '160px',
+      className: 'text-text-secondary',
+      render: (row) => row.topic,
+    },
+    {
+      key: 'version',
+      header: 'Ver',
+      width: '52px',
+      align: 'center',
+      render: (row) => row.version ? (
+        <Chip tone={row.version === 'B' ? 'accent' : 'info'} size="xs">
+          {row.version}
+        </Chip>
+      ) : <T className="text-text-tertiary">—</T>,
+    },
+    {
+      key: 'score',
+      header: 'Score',
+      width: '60px',
+      align: 'center',
+      className: 'tabular-nums',
+      render: (row) => row.score !== undefined ? (
+        <T className={`text-[12px] font-semibold ${row.score >= 0.7 ? 'text-success' : row.score >= 0.4 ? 'text-warning' : 'text-danger'}`}>
+          {row.score.toFixed(2)}
+        </T>
+      ) : row.phase === 'running' ? (
+        <ThinkingDots size="sm" color="var(--color-primary)" />
+      ) : (
+        <T className="text-text-tertiary">—</T>
+      ),
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      width: '220px',
+      className: 'align-top',
+      render: (row) => <ScenarioStatus phase={row.phase} hasScore={row.score !== undefined} errorMsg={row.errorMsg} />,
+    },
+    {
+      key: 'run',
+      header: 'Run',
+      render: (row) => (
+        <>
+          {row.phase === 'idle' && (
+            <Button variant="secondary" size="sm" onClick={() => onRun(row.key)}>Run</Button>
+          )}
+          {row.phase === 'running' && (
+            <T className="text-[10px] text-text-tertiary">Running</T>
+          )}
+          {(row.phase === 'done' || row.phase === 'error') && (
+            <Button variant="ghost" size="sm" onClick={() => onReset(row.key)}>Reset</Button>
+          )}
+        </>
+      ),
+    },
+  ];
 }
 
-function StatusPip({ phase, hasScore, errorMsg }: { phase: RowPhase; hasScore: boolean; errorMsg: string }): React.ReactElement {
-  if (phase === 'idle') return <T className="text-[10px] text-text-tertiary">idle</T>;
+function ScenarioStatus({ phase, hasScore, errorMsg }: { phase: RowPhase; hasScore: boolean; errorMsg: string }): React.ReactElement {
+  if (phase === 'idle') return <StatusPill state="neutral" label="idle" size="sm" />;
   if (phase === 'error') return (
     <Stack gap="none" align="start">
-      <T className="text-[10px] font-semibold text-danger">● error</T>
+      <StatusPill state="error" label="error" size="sm" />
       {errorMsg && (
         <T className="mt-0.5 max-w-[200px] text-[10px] leading-[1.4] text-danger/80" wrap>
           {errorMsg}
@@ -407,10 +393,10 @@ function StatusPip({ phase, hasScore, errorMsg }: { phase: RowPhase; hasScore: b
       )}
     </Stack>
   );
-  if (phase === 'running') return <T className="text-[10px] text-primary">streaming</T>;
+  if (phase === 'running') return <StatusPill state="pending" label="streaming" size="sm" />;
   // done
-  if (!hasScore) return <T className="text-[10px] text-warning">judging…</T>;
-  return <T className="text-[10px] font-semibold text-success">✓ scored</T>;
+  if (!hasScore) return <StatusPill state="warning" label="judging…" size="sm" />;
+  return <StatusPill state="success" label="scored" size="sm" />;
 }
 
 // ── Focus map ─────────────────────────────────────────────────────────────────

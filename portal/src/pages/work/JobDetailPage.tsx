@@ -15,13 +15,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router';
 import {
-  Button, Card, Chip, EmptyState, ErrorState, Inline, PageSection, SectionLabel, Stack, Toolbar,
+  Button, Card, Chip, EmptyState, ErrorState, Inline, MetaLine, PageSection, SectionLabel, Stack, Toolbar,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch';
 import { useCrumbLabel } from '../../lib/crumbLabels';
+import { absoluteTime, durationLabel } from '../../lib/relativeTime';
 import { toastPending, toastSuccess, toastError } from '../../lib/toastStore';
 import { JobStatusPill, LIVE_STATUSES, T, money } from './workShared';
+import { KeyValue } from '../../components/KeyValue';
 import { isNotFoundFetchError } from './jobFetchStatus';
 
 interface ActivityEntry {
@@ -55,15 +57,6 @@ interface Job {
   botId: string | null;
   botName: string | null;
   botTrigger: string | null;
-}
-
-function duration(ms: number | undefined): string {
-  if (typeof ms !== 'number' || ms <= 0) return '—';
-  return ms < 1000 ? `${ms}ms` : ms < 60_000 ? `${(ms / 1000).toFixed(1)}s`
-    : `${Math.floor(ms / 60_000)}m ${Math.round((ms % 60_000) / 1000)}s`;
-}
-function clock(iso: string | null): string {
-  return iso ? new Date(iso).toLocaleString() : '—';
 }
 
 /**
@@ -426,12 +419,16 @@ export default function JobDetailPage() {
               {job.result.summary}
             </T>
           )}
-          <Inline gap="lg" wrap className="px-3.5 py-2.5 text-[11px] text-text-tertiary">
-            <span>{job.result?.turns ?? 0} turns</span>
-            <span>{job.result?.toolCalls ?? 0} tool calls</span>
-            <span>{duration(job.result?.durationMs)}</span>
-            <span>{money(job.result?.costUsd)}</span>
-          </Inline>
+          <MetaLine
+            size="xs"
+            className="px-3.5 py-2.5"
+            items={[
+              `${job.result?.turns ?? 0} turns`,
+              `${job.result?.toolCalls ?? 0} tool calls`,
+              durationLabel(job.result?.durationMs),
+              money(job.result?.costUsd),
+            ]}
+          />
         </Card>
       )}
 
@@ -440,11 +437,11 @@ export default function JobDetailPage() {
         <SectionLabel as="div" className="mb-2">
           Timeline
         </SectionLabel>
-        <Stack as="dl" gap="xs" className="grid gap-x-6 gap-y-1 text-[12px] grid-cols-[auto_1fr] max-w-md">
-          <T as="div" className="text-text-tertiary">Queued</T><T as="div" className="text-text-secondary">{clock(job.createdAt)}</T>
-          <T as="div" className="text-text-tertiary">Claimed</T><T as="div" className="text-text-secondary">{clock(job.claimedAt)}</T>
-          <T as="div" className="text-text-tertiary">Started</T><T as="div" className="text-text-secondary">{clock(job.startedAt)}</T>
-          <T as="div" className="text-text-tertiary">Finished</T><T as="div" className="text-text-secondary">{clock(job.finishedAt)}</T>
+        <Stack gap="xs" className="max-w-md">
+          <KeyValue layout="row" labelWidth="w-20" label="Queued" value={absoluteTime(job.createdAt)} />
+          <KeyValue layout="row" labelWidth="w-20" label="Claimed" value={absoluteTime(job.claimedAt)} />
+          <KeyValue layout="row" labelWidth="w-20" label="Started" value={absoluteTime(job.startedAt)} />
+          <KeyValue layout="row" labelWidth="w-20" label="Finished" value={absoluteTime(job.finishedAt)} />
         </Stack>
       </Card>
     </PageSection>

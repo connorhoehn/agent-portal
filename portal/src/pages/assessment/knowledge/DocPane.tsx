@@ -15,6 +15,7 @@ import {
   Card,
   Chip,
   ConnectionPill,
+  DataTable,
   DetailHeader,
   Drawer,
   ErrorState,
@@ -769,36 +770,38 @@ export function DocPane({ node, mode, sseEvents, sseConnected, onTreeChanged }: 
             <InlinePlaceholder>No earlier versions yet — saved changes will appear here.</InlinePlaceholder>
           )}
           {versionsFetch.data && versionsFetch.data.versions.length > 0 && (
-            <Stack gap="sm">
-              {versionsFetch.data.versions.map((v: KnowledgeDocVersionSummary) => (
-                <Card key={v.stamp} padding="sm">
-                  <Stack gap="xs">
+            <DataTable<KnowledgeDocVersionSummary>
+              data={versionsFetch.data.versions}
+              keyField={(v) => v.stamp}
+              columns={[
+                {
+                  key: 'revision',
+                  header: 'Revision',
+                  render: (v) => (
+                    <Stack gap="none">
+                      {v.label ? <Chip size="xs" tone="info">{v.label}</Chip> : <MetaLine items={['Untitled save']} size="xs" tone="tertiary" />}
+                      <MetaLine items={[v.size < 1024 ? `${v.size} B` : `${(v.size / 1024).toFixed(1)} KB`]} size="xs" tone="tertiary" />
+                    </Stack>
+                  ),
+                },
+                {
+                  key: 'status',
+                  header: 'Status',
+                  render: (v) => (confirmRestoreStamp === v.stamp ? (
                     <Inline gap="xs" align="center" wrap>
-                      <MetaLine
-                        items={[
-                          new Date(v.saved_at).toLocaleString(),
-                          v.size < 1024 ? `${v.size} B` : `${(v.size / 1024).toFixed(1)} KB`,
-                        ]}
-                        size="xs"
-                        tone="tertiary"
-                      />
-                      {v.label && <Chip size="xs" tone="info">{v.label}</Chip>}
+                      <Chip tone="warning">Restore this version? The current content is snapshotted first.</Chip>
+                      <Button size="sm" variant="danger" disabled={restoringStamp === v.stamp} onClick={() => void handleRestore(v.stamp)}>
+                        {restoringStamp === v.stamp ? 'Restoring…' : 'Confirm'}
+                      </Button>
+                      <Button size="sm" variant="secondary" onClick={() => setConfirmRestoreStamp(null)}>Cancel</Button>
                     </Inline>
-                    {confirmRestoreStamp === v.stamp ? (
-                      <Inline gap="xs" align="center" wrap>
-                        <Chip tone="warning">Restore this version? The current content is snapshotted first.</Chip>
-                        <Button size="sm" variant="danger" disabled={restoringStamp === v.stamp} onClick={() => void handleRestore(v.stamp)}>
-                          {restoringStamp === v.stamp ? 'Restoring…' : 'Confirm'}
-                        </Button>
-                        <Button size="sm" variant="secondary" onClick={() => setConfirmRestoreStamp(null)}>Cancel</Button>
-                      </Inline>
-                    ) : (
-                      <Button size="sm" variant="secondary" onClick={() => setConfirmRestoreStamp(v.stamp)}>Restore</Button>
-                    )}
-                  </Stack>
-                </Card>
-              ))}
-            </Stack>
+                  ) : (
+                    <Button size="sm" variant="secondary" onClick={() => setConfirmRestoreStamp(v.stamp)}>Restore</Button>
+                  )),
+                },
+                { key: 'when', header: 'When', render: (v) => new Date(v.saved_at).toLocaleString() },
+              ]}
+            />
           )}
           {restoreError && <Chip tone="danger">{restoreError}</Chip>}
         </Drawer>

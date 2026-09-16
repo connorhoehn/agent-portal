@@ -5,11 +5,14 @@
 
 import { useEffect, useState } from 'react';
 import {
-  Button, Card, Chip, Inline, InlineAlert, InlinePlaceholder, MetaLine, Stack,
+  Button, Card, CardHeader, Chip, DataTable, Inline, InlineAlert, Stack,
 } from '@connorhoehnslalom/ui-components/shared';
 import type { CommitResponse, LinkStatus } from '../secondaryTypes';
 import { linksStepComplete, pendingLinksBanner } from '../secondaryFormat';
 import { useCapabilities } from '../../../lib/capabilities';
+
+type CommitResult = CommitResponse['results'][number];
+type CommitLink = CommitResult['links'][number];
 
 interface FetchLinksStepProps {
   commit: CommitResponse;
@@ -92,65 +95,80 @@ export default function FetchLinksStep({ commit, onContinue, onBack, onCompletio
 
       {commit.results.map((result) => (
         <Card key={result.envelope_id} padding="md">
-          <Inline align="center" gap="sm" className="mb-2">
-            <Chip tone="neutral">{result.team_id}</Chip>
-            <MetaLine size="xs" items={[result.envelope_id]} />
-          </Inline>
-          {result.links.length === 0 ? (
-            <InlinePlaceholder>No evidence links on this submission.</InlinePlaceholder>
-          ) : (
-            <Stack gap="sm">
-              {result.links.map((link) => {
-                const key = `${result.envelope_id}::${link.url}`;
-                const status = statuses.get(key) ?? link.status;
-                const busy = pending.has(key);
-                const err = errors.get(key);
-                return (
-                  <Card key={key} padding="sm" className="bg-surface-secondary">
-                    <Inline justify="between" align="center" wrap gap="sm">
-                      <Inline align="center" gap="sm" wrap>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-accent"
-                          onClick={() => window.open(link.url, '_blank', 'noopener,noreferrer')}
-                        >
-                          {link.label}
-                        </Button>
-                        {link.dimension_id && <Chip tone="neutral" size="xs">Dim {link.dimension_id}</Chip>}
-                      </Inline>
+          <CardHeader title={result.team_id} subtitle={result.envelope_id} />
+          <DataTable<CommitLink>
+            data={result.links}
+            keyField={(link) => `${result.envelope_id}::${link.url}`}
+            emptyMessage="No evidence links on this submission."
+            columns={[
+              {
+                key: 'link',
+                header: 'Link',
+                render: (link) => (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-accent"
+                    onClick={() => window.open(link.url, '_blank', 'noopener,noreferrer')}
+                  >
+                    {link.label}
+                  </Button>
+                ),
+              },
+              {
+                key: 'dimension',
+                header: 'Dimension',
+                render: (link) => (link.dimension_id ? <Chip tone="neutral" size="xs">Dim {link.dimension_id}</Chip> : '—'),
+              },
+              {
+                key: 'status',
+                header: 'Status',
+                render: (link) => {
+                  const key = `${result.envelope_id}::${link.url}`;
+                  const status = statuses.get(key) ?? link.status;
+                  return (
+                    <Chip tone={status === 'fetched' ? 'success' : status === 'skipped' ? 'neutral' : 'warning'} size="xs">
+                      {status}
+                    </Chip>
+                  );
+                },
+              },
+              {
+                key: 'actions',
+                header: '',
+                render: (link) => {
+                  const key = `${result.envelope_id}::${link.url}`;
+                  const status = statuses.get(key) ?? link.status;
+                  const busy = pending.has(key);
+                  const err = errors.get(key);
+                  if (!canManage) return null;
+                  return (
+                    <Stack gap="xs">
                       <Inline align="center" gap="sm">
-                        <Chip tone={status === 'fetched' ? 'success' : status === 'skipped' ? 'neutral' : 'warning'} size="xs">
-                          {status}
-                        </Chip>
-                        {canManage && (
-                          <>
-                            <Button
-                              size="sm"
-                              variant={status === 'fetched' ? 'primary' : 'secondary'}
-                              disabled={busy}
-                              onClick={() => void setStatus(result.team_id, result.envelope_id, link.url, link.dimension_id, status === 'fetched' ? 'pending' : 'fetched')}
-                            >
-                              {status === 'fetched' ? 'Fetched ✓' : 'Mark fetched'}
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              disabled={busy || status === 'fetched'}
-                              onClick={() => void setStatus(result.team_id, result.envelope_id, link.url, link.dimension_id, status === 'skipped' ? 'pending' : 'skipped')}
-                            >
-                              {status === 'skipped' ? 'Skipped ✓' : 'Skip'}
-                            </Button>
-                          </>
-                        )}
+                        <Button
+                          size="sm"
+                          variant={status === 'fetched' ? 'primary' : 'secondary'}
+                          disabled={busy}
+                          onClick={() => void setStatus(result.team_id, result.envelope_id, link.url, link.dimension_id, status === 'fetched' ? 'pending' : 'fetched')}
+                        >
+                          {status === 'fetched' ? 'Fetched ✓' : 'Mark fetched'}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          disabled={busy || status === 'fetched'}
+                          onClick={() => void setStatus(result.team_id, result.envelope_id, link.url, link.dimension_id, status === 'skipped' ? 'pending' : 'skipped')}
+                        >
+                          {status === 'skipped' ? 'Skipped ✓' : 'Skip'}
+                        </Button>
                       </Inline>
-                    </Inline>
-                    {err && <Stack gap="none" className="mt-1 text-xs font-semibold text-danger">{err}</Stack>}
-                  </Card>
-                );
-              })}
-            </Stack>
-          )}
+                      {err && <Stack gap="none" className="text-xs font-semibold text-danger">{err}</Stack>}
+                    </Stack>
+                  );
+                },
+              },
+            ]}
+          />
         </Card>
       ))}
 

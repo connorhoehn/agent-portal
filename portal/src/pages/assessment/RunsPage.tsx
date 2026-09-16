@@ -8,7 +8,6 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   Button,
-  Card,
   Chip,
   ConnectionPill,
   DataTable,
@@ -98,28 +97,34 @@ function RunACommandPanel({ onLaunched }: { onLaunched: () => void }) {
       {commands.length === 0 ? (
         <EmptyState title="No commands available" body="The agent command registry hasn't reported any commands yet." />
       ) : (
-        <Stack gap="sm">
-          {commands.map((cmd) => (
-            <Card key={cmd.name} padding="sm">
-              <Inline justify="between" align="center" wrap gap="sm">
-                <Stack gap="none">
-                  <strong className="text-sm font-semibold">{cmd.name}</strong>
-                  {cmd.summary && <MetaLine size="xs" items={[cmd.summary]} />}
-                </Stack>
-                {canRun && (
-                  <Button size="sm" disabled={!teamId || launching === cmd.name} onClick={() => void launch(cmd.name)}>
-                    {launching === cmd.name ? 'Starting…' : 'Run'}
-                  </Button>
-                )}
-              </Inline>
-              <Inline wrap gap="xs" className="mt-2">
-                {cmd.allowed_tools.map((tool) => (
-                  <Chip key={tool} tone="neutral" size="xs" mono>{tool}</Chip>
-                ))}
-              </Inline>
-            </Card>
-          ))}
-        </Stack>
+        <DataTable<AgentCommand>
+          data={commands}
+          keyField={(cmd) => cmd.name}
+          columns={[
+            { key: 'name', header: 'Command', render: (cmd) => <strong className="text-sm font-semibold">{cmd.name}</strong> },
+            { key: 'summary', header: 'What it does', render: (cmd) => (cmd.summary ? <MetaLine size="xs" items={[cmd.summary]} /> : '—') },
+            {
+              key: 'tools',
+              header: 'Tools',
+              render: (cmd) => (
+                <Inline wrap gap="xs">
+                  {cmd.allowed_tools.map((tool) => (
+                    <Chip key={tool} tone="neutral" size="xs" mono>{tool}</Chip>
+                  ))}
+                </Inline>
+              ),
+            },
+            {
+              key: 'run',
+              header: '',
+              render: (cmd) => (canRun ? (
+                <Button size="sm" disabled={!teamId || launching === cmd.name} onClick={() => void launch(cmd.name)}>
+                  {launching === cmd.name ? 'Starting…' : 'Run'}
+                </Button>
+              ) : null),
+            },
+          ]}
+        />
       )}
     </PageSection>
   );

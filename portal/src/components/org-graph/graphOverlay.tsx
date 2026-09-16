@@ -47,11 +47,28 @@ export function ContextStrip({
 }
 
 /** The small uppercase caption that labels a group inside a strip or panel. */
-export function OverlineLabel({ children }: { children: ReactNode }) {
+export function OverlineLabel({
+  children,
+  tone = 'default',
+  className,
+}: {
+  children: ReactNode;
+  /** `warning` keeps the amber tone a caption like "rare skills" needs. */
+  tone?: 'default' | 'warning';
+  className?: string;
+}) {
   // SectionLabel is exactly this shape — 10px, bold, uppercase, tracked,
   // tertiary — so the caption is the library's, and only the `whitespace-nowrap`
   // (this one sits in a wrapping strip) is local.
-  return <SectionLabel className="whitespace-nowrap">{children}</SectionLabel>;
+  return (
+    <SectionLabel
+      className={['whitespace-nowrap', tone === 'warning' ? 'text-warning' : '', className]
+        .filter(Boolean)
+        .join(' ')}
+    >
+      {children}
+    </SectionLabel>
+  );
 }
 
 /** A clickable list row whose trailing slot is a meter — "this name, this

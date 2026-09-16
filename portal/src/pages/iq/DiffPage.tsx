@@ -7,7 +7,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import {
-  Chip, CodeBlock, EmptyState, Select, Stack, Inline, Tabs,
+  Chip, CodeBlock, EmptyState, Select, SectionLabel, Stack, Inline, Tabs,
 } from '@connorhoehnslalom/ui-components/shared';
 import { usePromptList, usePromptVersions } from '../../components/canary/usePromptLibrary.js';
 import { diffStats, lineDiff } from './diffFormat';
@@ -54,7 +54,7 @@ function PromptVersionPicker({
 
   return (
     <Stack gap="xs" className="min-w-[220px] flex-1">
-      <T className="text-[10px] font-bold uppercase tracking-wide text-text-tertiary">{label}</T>
+      <SectionLabel as="div">{label}</SectionLabel>
       <Select
         value={promptId ?? ''}
         onChange={e => onPromptChange(e.target.value)}
@@ -116,11 +116,11 @@ function SideBySide({ textA, textB, labelA, labelB }: {
   return (
     <Inline gap="none" className="min-h-0 flex-1 overflow-hidden">
       <Stack gap="xs" className="min-w-0 flex-1 overflow-auto border-r border-border p-4">
-        <T className="text-[10px] font-bold uppercase tracking-wide text-text-tertiary">{labelA}</T>
+        <SectionLabel as="div">{labelA}</SectionLabel>
         <CodeBlock code={textA || '(empty)'} language="text" />
       </Stack>
       <Stack gap="xs" className="min-w-0 flex-1 overflow-auto p-4">
-        <T className="text-[10px] font-bold uppercase tracking-wide text-text-tertiary">{labelB}</T>
+        <SectionLabel as="div">{labelB}</SectionLabel>
         <CodeBlock code={textB || '(empty)'} language="text" />
       </Stack>
     </Inline>

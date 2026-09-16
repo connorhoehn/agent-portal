@@ -1,5 +1,5 @@
 import { StatStrip } from '@connorhoehnslalom/ui-components/shared';
-import { formatRelativeTime } from './types';
+import { relativeTime } from '../../lib/relativeTime';
 
 interface Props {
   peopleScored: number;
@@ -24,7 +24,7 @@ export function StatCards({ peopleScored, avgComposite, topScore, departmentCoun
         { label: 'Departments', value: String(departmentCount) },
         {
           label: 'Updated',
-          value: formatRelativeTime(mostRecentScoredAt),
+          value: relativeTime(mostRecentScoredAt),
           hint: mostRecentScoredAt === null ? 'run the scoring agent' : undefined,
         },
       ]}
