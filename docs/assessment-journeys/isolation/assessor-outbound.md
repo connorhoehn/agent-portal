@@ -1,7 +1,7 @@
 role: assessor
 user: u-asha
 pages: portal/src/App.tsx,portal/src/components/shell/Layout.tsx,portal/src/pages/SelectContextPage.tsx
-audited: 2026-09-07 23:44 EDT, Chrome 1552px, middleware dev:mock on :3011, portal :5185 (re-audit after the home-resolution fix for isolation/DEFECTS.md #1)
+audited: 2026-09-15 20:01 local, Chrome window (innerWidth 1692, innerHeight 858), middleware dev:mock (re-verification after the shell gained a SkipLink — portal/src/components/shell/Layout.tsx is in this log's pages: digest; every fact below re-taken, not carried forward)
 orgiq-nav-visible: no              # rail on /assessment/teams: Dashboard, Submissions, Reports, Feedback, Enterprise, Workspace, Prompts, Rules, Activity, Settings (10 anchors) — 0 matching ^/(iq|admin|newsroom)
 orgiq-route-result: redirect       # every orgiq URL now leaves the orgiq URL space and lands on this tenant's own front door, populated. Measured this pass: /iq/projects → /assessment/teams (main 1068 chars, breadcrumb "Assess › Dashboard"); /iq/scores → /assessment/teams (1068); /admin/observability → /assessment/teams (1068); /admin/devbox → /assessment/teams (1068); / → /assessment/teams (1068). A path that matches no route at all still reads as not-found rather than as a redirect: /iq/nope-does-not-exist stays put and renders "Page not found — Nothing lives at /iq/nope-does-not-exist".
 orgiq-api-status: 403              # /api/graph/people?limit=1 → 403, /api/scores/leaderboard → 403, /api/work/queue → 403, /api/local-compute/nodes → 403, POST /api/session/tenant {orgiq} → 403 (the session stayed on assessment afterwards)
@@ -50,4 +50,12 @@ Measured this pass:
     no longer mounts the component outside orgiq at all.
   - layout re-checked while here: `.shell-header` 61px, first data row at 428px,
     scrollWidth 1552 = innerWidth 1552.
+Console errors: 0 across every navigation in this pass.
+
+--- freshness re-observation, 2026-09-15 20:01 (the shell's SkipLink) ---
+Why: Layout.tsx changed (the shell's SkipLink) and is in this log's pages: digest. Signed in from /select → Sign in as → Asha Nair (single grant, lands in Assessment · assessor); /api/session/me = sub u-asha, tenant assessment, role assessor, grants exactly {assessment:[assessor]}.
+  - orgiq-nav-visible: no — 10 anchors in [data-shell-nav] on /assessment/teams (Dashboard, Submissions, Reports, Feedback, Enterprise, Workspace, Prompts, Rules, Activity, Settings), 0 whose href starts with /iq/ or /admin/.
+  - orgiq-route-result: redirect — /iq/projects landed on /assessment/teams, h1 "Assessor's desk" (the rebuilt dashboard, docs/assessment-ux-goal.md), 1554 chars of main, breadcrumb "Assess › Dashboard".
+  - orgiq-api-status: 403 — /api/graph/people?limit=1; with a curl cookie jar as u-asha: /api/scores/leaderboard 403, /api/work/queue 403, /api/local-compute/nodes 403, POST /api/session/tenant {orgiq} 403.
+  - the skip link is the first tab stop here as everywhere; the rail it skips is still this tenant's own.
 Console errors: 0 across every navigation in this pass.

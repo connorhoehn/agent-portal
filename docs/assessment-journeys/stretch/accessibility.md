@@ -206,3 +206,21 @@ em dash the rest of this table uses for an empty. Verified: the seven Lead cells
 read Dana Whitfield, Sam Okafor, —, —, Elena Marsh, Priya Natarajan, Jordan Lee,
 and each one contains 0 focusable controls.
 Console errors: 0 on both surfaces.
+
+--- freshness re-observation, 2026-09-15 20:03 (the assessor's desk, dashboard/AssessorDesk.tsx) ---
+Why: this sweep's `pages:` line is the whole assessment page tree, and the dashboard
+was rebuilt (docs/assessment-ux-goal.md slice 1). Re-probed on /assessment/teams as
+u-asha, Chrome innerWidth 1692:
+  - the motion filter is one `role="group"` named "Assessment motion" (SegmentedControl)
+    whose four buttons carry `aria-pressed` — true on "All motions", false on the other
+    three; pressing one flips the attribute and writes `?cohort=`.
+  - the program strip is `role="group"` named "Program summary" (StatStrip).
+  - every table row has exactly one focusable control, the team-name `<button>` (7 of 7),
+    so a keyboard user opens a team without a mouse; 31 tabbable controls, 31 accept focus.
+  - the page `<h1>` "Assessor's desk" computes to 20px/600, the shared page-title rhythm.
+  - the shell's SkipLink ("Skip to main content") is the document's first tab stop and
+    moves focus to `#main-content` (tabIndex -1 on the content column — the one negative
+    tabindex in `<main>`, by design).
+  - one nit, not a failure: DataTable's `<th>` cells carry no `scope="col"`; queued in
+    docs/ui-components-queue.md rather than patched here.
+Console errors: 0.

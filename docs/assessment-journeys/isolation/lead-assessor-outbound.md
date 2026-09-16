@@ -1,7 +1,7 @@
 role: lead-assessor
 user: u-jonas
 pages: portal/src/App.tsx,portal/src/components/shell/Layout.tsx,portal/src/pages/SelectContextPage.tsx
-audited: 2026-09-07 23:31 EDT, Chrome 1552px, middleware dev:mock on :3011, portal :5185 (re-audit after the home-resolution fix for isolation/DEFECTS.md #1)
+audited: 2026-09-15 20:02 local, Chrome window (innerWidth 1692, innerHeight 858), middleware dev:mock (re-verification after the shell gained a SkipLink — portal/src/components/shell/Layout.tsx is in this log's pages: digest; every fact below re-taken, not carried forward)
 orgiq-nav-visible: no              # rail on /assessment/teams: Dashboard, Submissions, Reports, Feedback, Enterprise, Workspace, Prompts, Rules, Activity, Settings (10 anchors) — 0 matching ^/(iq|admin|newsroom)
 orgiq-route-result: redirect       # measured this pass: /iq/projects → /assessment/teams (main 1068 chars, breadcrumb "Assess › Dashboard"); /iq/scores → /assessment/teams; /admin/observability → /assessment/teams (1068); /admin/devbox → /assessment/teams (1068); / → /assessment/teams (1068). The URL always moves and the landing page is populated.
 orgiq-api-status: 403              # /api/graph/people?limit=1 → 403, /api/scores/leaderboard → 403, /api/work/queue → 403, /api/local-compute/nodes → 403, POST /api/session/tenant {orgiq} → 403 (session stayed on assessment)
@@ -13,3 +13,10 @@ defect #2 (LocalComputeBadge) is closed as observed here: `GET /api/local-comput
 re-verified 2026-09-05 04:18: rail as lead-assessor still has zero `<a href>` matching `^/(iq|admin|newsroom)`; `/iq/projects` redirected to `/select`; `fetch('/api/graph/people?limit=1')` returned 403.
 re-verified 2026-09-05 08:38: rail as lead-assessor still has 0 anchors matching ^/(iq|admin|newsroom); /iq/projects redirected to /select; fetch('/api/graph/people?limit=1') returned 403.
 re-verified 2026-09-07 22:19 (local-compute presence merge, Layout.tsx): the pass that filed DEFECTS #1 — /iq/projects did not redirect, the URL stayed put and the content column was empty under the orgiq breadcrumb "Plan › Initiatives". Kept here as the before-state.
+
+--- freshness re-observation, 2026-09-15 20:02 (the shell's SkipLink) ---
+Why: Layout.tsx changed (the shell's SkipLink) and is in this log's pages: digest. Signed in from /select → Sign in as → Jonas Lindqvist → "Enter Assessment as Lead Assessor" (the chooser click, which sets sessionStorage orgiq.contextChosen = u-jonas — without it resolveHome correctly parks a two-context identity on /select, which this pass first observed and then ruled out as the product's answer); /api/session/me = sub u-jonas, tenant assessment, role lead-assessor, grants {assessment:[lead-assessor, assessor]}.
+  - orgiq-nav-visible: no — 10 anchors in [data-shell-nav] on /assessment/teams, 0 whose href starts with /iq/ or /admin/.
+  - orgiq-route-result: redirect — /iq/projects landed on /assessment/teams, h1 "Assessor's desk", 1554 chars of main.
+  - orgiq-api-status: 403 — /api/graph/people?limit=1; curl cookie jar as u-jonas: /api/scores/leaderboard 403, /api/work/queue 403, /api/local-compute/nodes 403, POST /api/session/tenant {orgiq} 403.
+Console errors: 0 across every navigation in this pass.

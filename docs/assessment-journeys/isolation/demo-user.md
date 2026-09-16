@@ -1,6 +1,6 @@
 role: demo-user (cookie-less fallback identity, dev only)
 user: demo-user
-audited: 2026-09-07 22:22 EDT, Chrome 1552px, middleware dev:mock (re-audit after the local-compute presence merge)
+audited: 2026-09-15 19:59 local, Chrome window (innerWidth 1692, innerHeight 858), middleware dev:mock (re-verification after the shell gained a SkipLink — portal/src/components/shell/Layout.tsx is in this log's pages: digest; every fact below re-taken, not carried forward)
 scenario: the original report — "a sme shouldn't see the assessment pages" — reproduced on the demo path, not a seeded user
 pages: portal/src/App.tsx,portal/src/components/shell/Layout.tsx,portal/src/pages/SelectContextPage.tsx
 picker-before-choice: 2 workspaces / 10 roles offered (permissive demo identity). CHANGED from "3 workspaces / 13 roles" — the newsroom tenant was deleted 2026-09-05, so the picker now reads "2 accounts · 10 roles": Org (orgiq · 6 roles — Admin, HR Admin, Member, Org Leader, Program Owner, SME) and Assessment (assessment · 4 roles — Admin, Assessor, Lead Assessor, Program Lead)
@@ -57,4 +57,13 @@ Measured this pass:
   - api-status: **403** — /api/assessment/teams as the demo SME.
   - direct-route-result: **redirect** — /assessment/teams → /iq/projects, h1
     "Initiatives", 486 chars of main.
+Console errors: 0 across every navigation in this pass.
+
+--- freshness re-observation, 2026-09-15 19:59 (the shell's SkipLink) ---
+Why: Layout.tsx changed (the shell's SkipLink) and is in this log's pages: digest. Reproduced cookie-less: Sign out on /select, then /select again as the dev fallback identity.
+  - picker-before-choice: 2 accounts · 10 roles (Org · 6 roles, Assessment · 4 roles) — /api/session/me = sub demo-user, role member, tenant orgiq, grants {orgiq:[member, sme, program-owner, org-leader, hr-admin, admin], assessment:[assessor, lead-assessor, program-lead, admin]}; the picker's own caption reads "2 accounts · 10 roles". The Assessment tile IS visible here, which is the point of this scenario: it is the permissive demo identity, before a choice.
+  - choice: "Enter Org as SME" → /api/session/me = sub demo-user, role sme, tenant orgiq, grants narrowed to exactly {orgiq:[sme]} (demoScopedGrants); landed on /iq/projects.
+  - api-status: 403 — /api/assessment/teams as the demo SME.
+  - direct-route-result: redirect — /assessment/teams → /iq/projects, h1 "Initiatives"; 0 rail anchors match /assessment.
+  - picker-after-choice: not re-taken this pass (unchanged code path; the Sign-in-as tab still lists 10 personas on the cookie-less picker).
 Console errors: 0 across every navigation in this pass.

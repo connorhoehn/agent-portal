@@ -1,7 +1,7 @@
 role: org-leader
 user: u-vera
 pages: portal/src/App.tsx,portal/src/components/shell/Layout.tsx,portal/src/pages/SelectContextPage.tsx
-audited: 2026-09-07 22:12 EDT, Chrome 1552px, middleware dev:mock (re-audit after the local-compute presence merge)
+audited: 2026-09-15 19:57 local, Chrome window (innerWidth 1692, innerHeight 858), middleware dev:mock (re-verification after the shell gained a SkipLink — portal/src/components/shell/Layout.tsx is in this log's pages: digest; every fact below re-taken, not carried forward)
 assessment-tile-visible: no        # /select Workspaces tab: one tile, Org (orgiq · 2 roles: Member, Org Leader); no "Assessment" in the body text
 assessment-nav-visible: no         # rail on /iq/projects (16 top-level entries incl. Budgets, Knowledge, Health, Architecture, Capabilities, Scores): zero anchors matching /assessment. CHANGED: 16, not the 17 the 2026-09-05 pass counted — Computer Lab is no longer on this role's rail
 direct-route-result: redirect      # /assessment/teams → RequireTenant → "/" → /iq/projects ("Initiatives"). CHANGED: the 2026-09-05 passes landed on /select; home now routes this single-tenant user to the orgiq default surface instead of the picker
@@ -46,4 +46,12 @@ Measured this pass:
     {assessment} 403.
   - the badge: header 61px, no machine chip; /api/local-compute/nodes **200**,
     correct for an orgiq session.
+Console errors: 0 across every navigation in this pass.
+
+--- freshness re-observation, 2026-09-15 19:57 (the shell's SkipLink) ---
+Why: Layout.tsx changed (the shell's SkipLink) and is in this log's pages: digest. Signed in from /select → Sign in as → Vera Green → Enter Org as Org Leader; /api/session/me = sub u-vera, grants {orgiq:[org-leader, member]}, role org-leader after the choice.
+  - assessment-tile-visible: no — the Workspaces tab shows one tile, Org (orgiq · 2 roles: Member, Org Leader); body text has no "assessment".
+  - assessment-nav-visible: no — 31 anchors in [data-shell-nav] on /iq/projects (the platform rail with Operate, plus the nested rail), 0 whose href matches /assessment.
+  - direct-route-result: redirect — /assessment/teams landed on /iq/projects, h1 "Initiatives".
+  - api-status: 403 — /api/assessment/teams; POST /api/session/tenant {assessment} 403 (curl cookie jar as u-vera agrees).
 Console errors: 0 across every navigation in this pass.

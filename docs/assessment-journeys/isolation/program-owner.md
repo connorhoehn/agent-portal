@@ -1,7 +1,7 @@
 role: program-owner
 user: u-mia
 pages: portal/src/App.tsx,portal/src/components/shell/Layout.tsx,portal/src/pages/SelectContextPage.tsx
-audited: 2026-09-07 22:11 EDT, Chrome 1552px, middleware dev:mock (re-audit after the local-compute presence merge)
+audited: 2026-09-15 19:57 local, Chrome window (innerWidth 1692, innerHeight 858), middleware dev:mock (re-verification after the shell gained a SkipLink — portal/src/components/shell/Layout.tsx is in this log's pages: digest; every fact below re-taken, not carried forward)
 assessment-tile-visible: no        # /select Workspaces tab: one tile, Org (orgiq · 2 roles: Member, Program Owner); no "Assessment" in the body text
 assessment-nav-visible: no         # rail on /iq/projects: Initiatives, Budgets, Library, Promotions, Designs, Automate, Distillation, Computer Lab, Session config, Ask, Explore, Settings — zero anchors matching /assessment
 direct-route-result: redirect      # /assessment/teams → RequireTenant → "/" → /iq/projects ("Initiatives"). CHANGED: the 2026-09-05 passes landed on /select (and once on /iq/work); the home route now sends this single-tenant, two-role user straight to the orgiq default surface instead of back to the picker. Still a redirect out of the tenant, which is the fact this log asserts.
@@ -45,4 +45,12 @@ Measured this pass:
     {assessment} 403.
   - the badge: header 61px, no machine chip; /api/local-compute/nodes **200**,
     correct for an orgiq session.
+Console errors: 0 across every navigation in this pass.
+
+--- freshness re-observation, 2026-09-15 19:57 (the shell's SkipLink) ---
+Why: Layout.tsx changed (the shell's SkipLink) and is in this log's pages: digest. Signed in from /select → Sign in as → Mia Singh → Enter Org as Program Owner; /api/session/me = sub u-mia, grants {orgiq:[program-owner, member]}, role program-owner after the choice.
+  - assessment-tile-visible: no — the Workspaces tab shows one tile, Org (orgiq · 2 roles: Member, Program Owner); body text has no "assessment".
+  - assessment-nav-visible: no — 26 anchors in [data-shell-nav] on /iq/projects (top rail plus the Initiatives page's nested rail), 0 whose href matches /assessment.
+  - direct-route-result: redirect — /assessment/teams landed on /iq/projects, h1 "Initiatives".
+  - api-status: 403 — /api/assessment/teams; POST /api/session/tenant {assessment} 403 (curl cookie jar as u-mia agrees).
 Console errors: 0 across every navigation in this pass.

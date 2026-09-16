@@ -1,7 +1,7 @@
 role: hr-admin
 user: u-rachel (Rachel Kowalski — CHANGED from u-hr: that account is not on the /select roster, so it could never have been audited through "Sign in as"; docs/orgiq-journeys/PROTOCOL.md names u-rachel as the hr-admin persona)
 pages: portal/src/App.tsx,portal/src/components/shell/Layout.tsx,portal/src/pages/SelectContextPage.tsx
-audited: 2026-09-07 22:13 EDT, Chrome 1552px, middleware dev:mock (re-audit after the local-compute presence merge)
+audited: 2026-09-15 19:59 local, Chrome window (innerWidth 1692, innerHeight 858), middleware dev:mock (re-verification after the shell gained a SkipLink — portal/src/components/shell/Layout.tsx is in this log's pages: digest; every fact below re-taken, not carried forward)
 assessment-tile-visible: no        # /select Workspaces tab: one tile, Org (orgiq · 2 roles: HR Admin, Org Leader); no "Assessment" in the body text. CHANGED from "1 role: HR Admin" — u-rachel holds both orgiq roles; u-hr, the account the old log named, is not on the picker
 assessment-nav-visible: no         # rail on /iq/projects (19 top-level entries incl. Codebases, Computer Lab, Identity; 24 anchors counting the nested Automate rail): zero anchors matching /assessment
 direct-route-result: redirect      # /assessment/teams → RequireTenant → /iq/projects ("Initiatives")
@@ -46,4 +46,12 @@ Measured this pass:
     {assessment} 403.
   - the badge: header 61px, no machine chip (u-rachel owns none);
     /api/local-compute/nodes **200**, correct for an orgiq session.
+Console errors: 0 across every navigation in this pass.
+
+--- freshness re-observation, 2026-09-15 19:59 (the shell's SkipLink) ---
+Why: Layout.tsx changed (the shell's SkipLink) and is in this log's pages: digest. Signed in from /select → Sign in as → Rachel Kowalski → Enter Org as HR Admin; /api/session/me = sub u-rachel, grants {orgiq:[hr-admin, org-leader]}, role hr-admin after the choice.
+  - assessment-tile-visible: no — the Workspaces tab shows one tile, Org (orgiq · 2 roles: HR Admin, Org Leader); body text has no "assessment".
+  - assessment-nav-visible: no — 34 anchors in [data-shell-nav] on /iq/projects (the widest rail: Codebases, Computer Lab, Identity, plus the nested rail), 0 whose href matches /assessment.
+  - direct-route-result: redirect — /assessment/teams landed on /iq/projects, h1 "Initiatives".
+  - api-status: 403 — /api/assessment/teams; POST /api/session/tenant {assessment} 403 (curl cookie jar as u-rachel agrees).
 Console errors: 0 across every navigation in this pass.

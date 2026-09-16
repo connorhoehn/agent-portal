@@ -539,3 +539,60 @@ export function inputWiring<W extends { labelId: string }>(wiring: W): Omit<W, '
   void _labelId;
   return rest;
 }
+
+// ─── The assessor's desk: what moves each team next ─────────────────────────
+
+export type NextActionKind = 'intake' | 'assess' | 'close_claims' | 'answer' | 'publish' | 'follow_up';
+
+export interface NextAction {
+  kind: NextActionKind;
+  /** Short imperative, e.g. "Close 3 claims". */
+  label: string;
+}
+
+/**
+ * The one thing that moves a team, computed from the same counts the row
+ * shows — never re-derived by an agent, never a level promise
+ * (docs/assessment-tenant.md, "Recommendations are computed"). Order of
+ * precedence: nothing assessed yet → start intake; claims above verification
+ * → close them (evidence asks are the cheapest step); open questions →
+ * answer them; dimensions left → assess them; then the ladder's own step.
+ */
+export function nextActionFor(team: TeamSummary): NextAction {
+  const cert = team.certification;
+  const claims = cert?.claims_open ?? 0;
+  if (!cert || cert.assessed === 0) {
+    return team.dimensions_assessed > 0
+      ? { kind: 'assess', label: `Assess ${team.dimensions_total - team.dimensions_assessed} more` }
+      : { kind: 'intake', label: 'Start intake' };
+  }
+  if (claims > 0) return { kind: 'close_claims', label: `Close ${claims} claim${claims === 1 ? '' : 's'}` };
+  if (team.followups_open > 0) {
+    return { kind: 'answer', label: `Answer ${team.followups_open} question${team.followups_open === 1 ? '' : 's'}` };
+  }
+  const left = team.dimensions_total - team.dimensions_assessed;
+  if (left > 0) return { kind: 'assess', label: `Assess ${left} more` };
+  if (team.workflow_step < 5) return { kind: 'publish', label: 'Review and publish' };
+  if (team.workflow_step === 5) return { kind: 'publish', label: 'Publish' };
+  return { kind: 'follow_up', label: 'Follow up' };
+}
+
+export interface DeskSummary {
+  teams: number;
+  verifiedAtTarget: number;
+  targetLevel: number | null;
+  claimsOpen: number;
+  questionsOpen: number;
+}
+
+/** The four numbers above the desk, summed from the rows it shows. */
+export function deskSummary(teams: TeamSummary[]): DeskSummary {
+  const base = summarizeTeamList(teams);
+  return {
+    teams: base.count,
+    verifiedAtTarget: base.certifiedCount,
+    targetLevel: base.targetLevel,
+    claimsOpen: teams.reduce((sum, t) => sum + (t.certification?.claims_open ?? 0), 0),
+    questionsOpen: base.followupsOpen,
+  };
+}

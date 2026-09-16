@@ -1,7 +1,7 @@
 role: sme
 user: u-nora
 pages: portal/src/App.tsx,portal/src/components/shell/Layout.tsx,portal/src/pages/SelectContextPage.tsx
-audited: 2026-09-07 22:07 EDT, Chrome 1552px, middleware dev:mock (re-audit after the local-compute presence merge)
+audited: 2026-09-15 19:57 local, Chrome window (innerWidth 1692, innerHeight 858), middleware dev:mock (re-verification after the shell gained a SkipLink — portal/src/components/shell/Layout.tsx is in this log's pages: digest; every fact below re-taken, not carried forward)
 assessment-tile-visible: no        # /select Workspaces tab: one tile, Org (orgiq · 1 role, "SME — Dispatch agent runs against a sprint envelope"); no "Assessment" anywhere in the body text
 assessment-nav-visible: no         # rail on /iq/projects: Initiatives, Library, Promotions, Designs, Automate, Distillation, Computer Lab, Session config, Ask, Explore, Settings — zero anchors matching /assessment
 direct-route-result: redirect      # /assessment/teams → RequireTenant → /iq/projects ("Initiatives")
@@ -44,4 +44,12 @@ Measured this pass:
     {assessment} 403.
   - the badge: header 61px, no machine chip (u-nora owns none);
     /api/local-compute/nodes **200**, correct for an orgiq session.
+Console errors: 0 across every navigation in this pass.
+
+--- freshness re-observation, 2026-09-15 19:57 (the shell's SkipLink) ---
+Why: Layout.tsx changed (the shell's SkipLink) and is in this log's pages: digest. Signed in from /select → Sign in as → Nora DaSilva; /api/session/me = sub u-nora, tenant orgiq, role sme, grants {orgiq:[sme]}.
+  - assessment-tile-visible: no — the Workspaces tab shows one tile, Org (orgiq · 1 role, "Enter Org as SME (current workspace)"); body text has no "assessment".
+  - assessment-nav-visible: no — 14 anchors in [data-shell-nav] on /iq/projects (the SME's rail carries Computer Lab and Local compute), 0 whose href matches /assessment.
+  - direct-route-result: redirect — /assessment/teams landed on /iq/projects, h1 "Initiatives", 704 chars of main.
+  - api-status: 403 — /api/assessment/teams; POST /api/session/tenant {assessment} 403 (curl cookie jar as u-nora agrees).
 Console errors: 0 across every navigation in this pass.

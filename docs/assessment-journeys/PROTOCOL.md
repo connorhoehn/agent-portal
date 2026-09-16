@@ -17,7 +17,7 @@ User. Users: assessor = `u-asha`, lead-assessor = `u-jonas`, program-lead =
 
 | surface | url | what "the surface" includes |
 |---|---|---|
-| dashboard | `/assessment/teams` | cohort cards, all-teams table, "View all teams", a cohort card click, browser Back |
+| dashboard | `/assessment/teams` | the assessor's desk: the program StatStrip, the motion SegmentedControl (`?cohort=`), status + search filters, the team DataTable with its two-track certification and next-action columns, a row opened, browser Back |
 | team-scorecard | `/assessment/teams/TEAM-001` | all five tabs (`?tab=`), one dimension selected in the master-detail |
 | submissions | `/assessment/submissions` | list, filters, a row opened |
 | submissions-wizard | `/assessment/submissions` → New submission | all four steps (drop → preview → fetch links → run prompt) |
@@ -59,7 +59,7 @@ User. Users: assessor = `u-asha`, lead-assessor = `u-jonas`, program-lead =
    every interactive control (count them vs. `querySelectorAll('a,button,
    input,select,textarea,[tabindex]')` minus hidden); Enter/Space on a tab
    or row acts; Escape closes any drawer/modal/palette you opened.
-5. Empty / error state: for the dashboard use TEAM-006/TEAM-007 (unassessed);
+5. Empty / error state: for the dashboard use TEAM-006/TEAM-007 (unassessed) and a search that matches nothing;
    for team-scorecard load `/assessment/teams/TEAM-999` (404); for a gated
    control use the role that lacks it (assessor on reports Publish,
    configuration); for the wizard cancel at step 1. Write what rendered.

@@ -1,7 +1,7 @@
 role: member
 user: u-theo
 pages: portal/src/App.tsx,portal/src/components/shell/Layout.tsx,portal/src/pages/SelectContextPage.tsx
-audited: 2026-09-07 22:09 EDT, Chrome 1552px, middleware dev:mock (re-audit after the local-compute presence merge)
+audited: 2026-09-15 19:57 local, Chrome window (innerWidth 1692, innerHeight 858), middleware dev:mock (re-verification after the shell gained a SkipLink — portal/src/components/shell/Layout.tsx is in this log's pages: digest; every fact below re-taken, not carried forward)
 assessment-tile-visible: no        # /select Workspaces tab shows one tile: Org (orgiq · 1 role); body text contains no "Assessment"
 assessment-nav-visible: no         # rail on /iq/projects: Plan/Design/Build/Release/Org/System, zero anchors matching /assessment
 direct-route-result: redirect      # /assessment/teams → RequireTenant → /iq/projects ("Initiatives"), no flash of assessment content
@@ -49,4 +49,13 @@ Measured this pass:
     Theo Chang | Org · Member" — no machine chip, because u-theo owns none.
     /api/local-compute/nodes is **200** here, which is right: the new gate is on
     the *tenant*, and this session is in orgiq. scrollWidth 1552 = innerWidth.
+Console errors: 0 across every navigation in this pass.
+
+--- freshness re-observation, 2026-09-15 19:57 (the shell's SkipLink) ---
+Why: Layout.tsx changed — the library's SkipLink is now the shell's first tab stop (a[href="#main-content"], visible only while focused) — and that file is part of this log's pages: digest. Signed in from /select → Sign in as → Theo Chang; /api/session/me = sub u-theo, tenant orgiq, role member, grants {orgiq:[member]}.
+  - assessment-tile-visible: no — the Workspaces tab shows one tile, Org (orgiq · 1 role, "Enter Org as Member (current workspace)"); document.body.innerText has no "assessment" (case-insensitive).
+  - assessment-nav-visible: no — 12 anchors in [data-shell-nav] on /iq/projects, 0 whose href matches /assessment.
+  - direct-route-result: redirect — /assessment/teams landed on /iq/projects, h1 "Initiatives", 541 chars of main, no flash of assessment content.
+  - api-status: 403 — /api/assessment/teams; POST /api/session/tenant {assessment} 403 (also confirmed with a curl cookie jar via POST /api/session/login {userId:u-theo}).
+  - the skip link is the shell's first tab stop and changes nothing about what the rail lists; .shell-header is 82px tall at this width.
 Console errors: 0 across every navigation in this pass.

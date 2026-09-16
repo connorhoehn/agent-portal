@@ -1,7 +1,7 @@
 role: program-lead
 user: u-farah
 pages: portal/src/App.tsx,portal/src/components/shell/Layout.tsx,portal/src/pages/SelectContextPage.tsx
-audited: 2026-09-07 23:37 EDT, Chrome 1552px, middleware dev:mock on :3011, portal :5185 (re-audit after the home-resolution fix for isolation/DEFECTS.md #1)
+audited: 2026-09-15 20:02 local, Chrome window (innerWidth 1692, innerHeight 858), middleware dev:mock (re-verification after the shell gained a SkipLink — portal/src/components/shell/Layout.tsx is in this log's pages: digest; every fact below re-taken, not carried forward)
 orgiq-nav-visible: no              # rail on /assessment/teams: Dashboard, Submissions, Reports, Feedback, Enterprise, Workspace, Prompts, Rules, Activity, Configuration, Settings (11 anchors — Configuration is this role's extra) — 0 matching ^/(iq|admin|newsroom)
 orgiq-route-result: redirect       # measured this pass: /iq/projects → /assessment/teams (main 1068 chars); /iq/scores → /assessment/teams (1068); /admin/observability → /assessment/teams (1068); /admin/identity/users → /assessment/teams; / → /assessment/teams (1068). The URL always moves and the landing page is populated.
 orgiq-api-status: 403              # /api/graph/people?limit=1 → 403, /api/scores/leaderboard → 403, /api/work/queue → 403, /api/local-compute/nodes → 403, POST /api/session/tenant {orgiq} → 403 (session stayed on assessment)
@@ -45,4 +45,11 @@ Measured this pass:
     /api/session/tenant {orgiq} 403, session still `assessment` afterwards.
   - the badge: no machine chip in the header and 403 on the endpoint, from both
     the per-route server gate and the new shell gate.
+Console errors: 0 across every navigation in this pass.
+
+--- freshness re-observation, 2026-09-15 20:02 (the shell's SkipLink) ---
+Why: Layout.tsx changed (the shell's SkipLink) and is in this log's pages: digest. Signed in from /select → Sign in as → Farah Osei → "Enter Assessment as Program Lead" (sets orgiq.contextChosen = u-farah); /api/session/me = sub u-farah, tenant assessment, role program-lead, grants {assessment:[program-lead, lead-assessor]}.
+  - orgiq-nav-visible: no — 11 anchors in [data-shell-nav] on /assessment/teams (the assessor's ten plus Configuration), 0 whose href starts with /iq/ or /admin/.
+  - orgiq-route-result: redirect — /iq/projects landed on /assessment/teams, h1 "Assessor's desk".
+  - orgiq-api-status: 403 — /api/graph/people?limit=1; curl cookie jar as u-farah: /api/scores/leaderboard 403, /api/work/queue 403, /api/local-compute/nodes 403, POST /api/session/tenant {orgiq} 403.
 Console errors: 0 across every navigation in this pass.
