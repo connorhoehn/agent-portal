@@ -472,8 +472,18 @@ export function App() {
               scoped server-side to their own computers plus the ones shared on
               their initiatives (middleware lib/devbox-visibility.ts), so this
               opens a door rather than handing over a key. */}
+          {/* Matches the /api/devbox mount in middleware/src/index.ts, which
+              serves a READ tier (org-leader, hr-admin, program-owner) on top
+              of ManageDevbox (sme, hr-admin). This gate used to be hr-admin +
+              sme only, which bounced org-leader and program-owner to
+              HomeRedirect before the page could render — including org-leader,
+              which devbox-visibility.ts treats as FLEET_WIDE and shows every
+              computer. DevboxPage was already built for the wider audience
+              (`FLEET_READ_ROLES` + a read-only mode for anyone without the
+              write capability); that fix just sat one layer below a door that
+              never opened. Writes are still refused by the API. */}
           <Route path="devbox" element={
-            <RequireRole roles={['hr-admin', 'sme']} fallback={<HomeRedirect />}>
+            <RequireRole roles={['hr-admin', 'sme', 'org-leader', 'program-owner']} fallback={<HomeRedirect />}>
               <Page element={<DevboxPage />} />
             </RequireRole>
           } />

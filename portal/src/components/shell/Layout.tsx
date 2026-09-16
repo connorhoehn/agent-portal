@@ -130,8 +130,15 @@ const NAV_ITEMS: NavItem[] = [
   { path: '/assessment/prompts',       label: 'Prompts',       tenant: 'assessment', group: 'Informatics' },
   { path: '/assessment/rules',         label: 'Rules',         tenant: 'assessment', group: 'Informatics' },
   { path: '/assessment/runs',          label: 'Activity',      tenant: 'assessment', group: 'System' },
+  // Every assessment role may READ this — `GET /configuration` is gated
+  // `ViewAssessment`, which all three hold, and the page disables every input
+  // and hides Save behind `canManage` (program-lead only). The palette was
+  // widened to all three when that was settled; this rail entry was not, so
+  // an assessor could reach the page by ⌘K or URL and see it render, while
+  // the rail insisted it did not exist. `admin` is listed explicitly because
+  // the tenant-nav filter has no admin bypass (the PLATFORM_ITEMS one does).
   { path: '/assessment/configuration', label: 'Configuration', tenant: 'assessment', group: 'System',
-    requireRoles: ['program-lead', 'admin'] },
+    requireRoles: ['program-lead', 'assessor', 'lead-assessor', 'admin'] },
   { path: '/settings',      label: 'Settings',    tenant: 'universal', group: 'System' },
 ];
 
@@ -161,7 +168,7 @@ const PLATFORM_ITEMS: NavItem[] = [
   // each of them gets is scoped server-side to their own computers plus the
   // ones shared on their initiatives (middleware lib/devbox-visibility.ts), so
   // this is a door, not a key.
-  { path: '/admin/devbox',          label: 'Computer Lab',    tenant: 'admin', requireRoles: ['hr-admin', 'sme'], group: 'Build' }, // mirrors ManageDevbox in Cedar
+  { path: '/admin/devbox',          label: 'Computer Lab',    tenant: 'admin', requireRoles: ['hr-admin', 'sme', 'org-leader', 'program-owner'], group: 'Build' }, // ManageDevbox + the /api/devbox read tier
   // After Computer Lab so the two machine doors (Local compute — your own
   // paired laptop; Computer Lab — the microVM fleet) sit together rather than
   // with the repos wedged between them.

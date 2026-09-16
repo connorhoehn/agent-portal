@@ -62,7 +62,10 @@ const PLATFORM = ['org-leader', 'hr-admin'];
 const BUILD = ['hr-admin'];
 const BUDGETS = ['program-owner', 'org-leader', 'hr-admin'];   // ManageBudgets
 const BOTS = ['sme', 'program-owner', 'org-leader', 'hr-admin']; // ManageBots
-const DEVBOX = ['sme', 'hr-admin'];                              // ManageDevbox
+// ManageDevbox (sme, hr-admin) PLUS the read tier the /api/devbox mount
+// serves without it (org-leader, program-owner). org-leader is fleet-wide in
+// devbox-visibility.ts; program-owner falls through to the scoped view.
+const DEVBOX = ['sme', 'hr-admin', 'org-leader', 'program-owner'];
 const CHANGES = ['program-owner', 'hr-admin'];
 
 // Rail group order per tenant (top → bottom): the org tenant reads along its
