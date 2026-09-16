@@ -18,7 +18,7 @@ import { rankSuggestions, askSuggestionsFrom, seesEveryInitiative } from '../lib
 import { initSSE, writeSSE, endSSE } from '../lib/sse.js';
 import {
   enqueueJob, listJobs, getJob, reviewJob, cancelJob, queueStats,
-  requeueJob,
+  requeueJob, withToolCallList,
 } from '../providers/agent-jobs.js';
 import {
   runSweep, runAllSweeps, listFindings, setFindingStatus, getFinding, findingStats,
@@ -183,13 +183,14 @@ async function servedWorkItem(body: { workItemId?: string; suggestionId?: string
 workRouter.get('/jobs', asyncHandler(async (req, res) => {
   const status = typeof req.query['status'] === 'string' ? req.query['status'] : undefined;
   const limit = parseInt((req.query['limit'] as string) ?? '50', 10);
-  res.json({ jobs: await listJobs({ ...(status ? { status } : {}), limit }) });
+  const jobs = await listJobs({ ...(status ? { status } : {}), limit });
+  res.json({ jobs: jobs.map((j) => withToolCallList(j)) });
 }));
 
 workRouter.get('/jobs/:id', asyncHandler(async (req, res) => {
   const job = await getJob(String(req.params['id'] ?? ''));
   if (!job) { res.status(404).json({ error: 'job not found' }); return; }
-  res.json(job);
+  res.json(withToolCallList(job));
 }));
 
 /**

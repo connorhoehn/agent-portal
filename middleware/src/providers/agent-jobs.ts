@@ -62,6 +62,70 @@ export interface AgentJob {
   botTrigger: string | null;
 }
 
+export interface ToolCallSummary { name: string; done: boolean }
+
+/**
+ * Plausible, deterministic tool-name cycles for the mock-only fallback below
+ * — keyed by job kind because a devbox task and a local repo task don't do
+ * the same shape of work. Order is narrative (look, change, verify, land),
+ * not random, so two reads of the same row agree.
+ */
+const MOCK_TOOL_CYCLE: Record<string, readonly string[]> = {
+  'devbox:task': ['read_file', 'edit_file', 'run_tests', 'git_commit'],
+  'local:task': ['read_file', 'edit_file', 'run_tests', 'git_commit'],
+  'local:distill': ['read_file', 'grep', 'write_file'],
+  'local:consolidate': ['read_file', 'grep', 'edit_file'],
+};
+const DEFAULT_MOCK_TOOL_CYCLE: readonly string[] = ['read_file', 'edit_file', 'run_tests'];
+
+/**
+ * Per-job tool call list for `<ToolCallStrip>` — real signal first, mock
+ * fallback second, never a fabrication of a real run.
+ *
+ * A job that actually ran (mock AgentCore or live) records its own tool calls
+ * in `result.transcript` (`lib/devbox-runner.ts`), so a transcript that
+ * exists is read verbatim rather than guessed at — every call is already
+ * terminal by the time a job is readable here, so `done` is always true.
+ *
+ * Only when no transcript is present — the mock-dispatched run's outcome is
+ * `transcript: []` (`routes/devbox.ts::runDevboxTask`'s mock branch never
+ * populates it) — does this fall back to a deterministic list sized to the
+ * job's own `toolCalls` count and keyed by kind. That fallback is gated to
+ * mock mode on purpose: a real Aurora row with a `toolCalls` count but no
+ * transcript genuinely doesn't know the tool names, and inventing them for a
+ * live run would misrepresent what happened. Undefined there, honestly.
+ */
+export function deriveToolCallList(job: AgentJob): ToolCallSummary[] | undefined {
+  const result = job.result;
+  if (!result) return undefined;
+
+  const transcript = result['transcript'];
+  if (Array.isArray(transcript)) {
+    const calls = transcript
+      .filter((e): e is Record<string, unknown> => !!e && typeof e === 'object' && (e as Record<string, unknown>)['t'] === 'tool')
+      .map((e) => ({ name: typeof e['name'] === 'string' ? e['name'] : 'tool', done: true }));
+    if (calls.length > 0) return calls;
+  }
+
+  if (!config.mock.aurora) return undefined;
+  const count = typeof result['toolCalls'] === 'number' ? result['toolCalls'] : null;
+  if (count == null || count <= 0) return undefined;
+  const cycle = MOCK_TOOL_CYCLE[job.kind] ?? DEFAULT_MOCK_TOOL_CYCLE;
+  return Array.from({ length: Math.min(count, 20) }, (_, i) => ({ name: cycle[i % cycle.length]!, done: true }));
+}
+
+/**
+ * Wire shape for one job: `result.toolCallList` attached on top of whatever
+ * is stored, never persisted — a read-time projection so the derivation can
+ * change without a migration. No-ops a job with no result.
+ */
+export function withToolCallList(job: AgentJob): AgentJob {
+  if (!job.result) return job;
+  const toolCallList = deriveToolCallList(job);
+  if (!toolCallList) return job;
+  return { ...job, result: { ...job.result, toolCallList } };
+}
+
 function strParam(name: string, value: string): SqlParameter {
   return { name, value: { stringValue: value } };
 }

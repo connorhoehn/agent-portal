@@ -16,6 +16,11 @@
 
 import { config } from '../config.js';
 import { rankMatches, avoidedEstimate, type Experience, type Match } from '../lib/rediscovery.js';
+// Reused rather than reimplemented: the SAME day-bucketing (`days` UTC
+// calendar-day keys ending "today", oldest first) the initiative activity
+// graph uses, so two sparklines fed by the same clock never disagree about
+// where a day's boundary falls.
+import { buildDayKeys } from './activity.js';
 
 const DAY = 86_400_000;
 const daysAgo = (n: number) => new Date(Date.now() - n * DAY).toISOString();
@@ -150,19 +155,38 @@ export async function recordOutcome(o: Omit<Outcome, 'at'>): Promise<void> {
  * hidden behind them: a rising dismissal count is the early warning that
  * retrieval is drifting, and burying it would leave only the flattering half
  * of the story on screen.
+ *
+ * `usdAvoidedSeries` is `windowDays` UTC day-buckets of `usdAvoided`, oldest
+ * first, built the same way `getProjectActivitySeries` builds its — every day
+ * represented, a quiet day a real 0 rather than a gap a sparkline would read
+ * as missing data. This provider has no Aurora backing at all yet (OUTCOMES
+ * is an in-memory ledger; `config` above is otherwise unused pending one) — so
+ * unlike the rest of the module's mock/Aurora split, there is only the one
+ * path here for now, and both `usdAvoided` and its series come from it.
  */
 export async function rediscoveryStats(windowDays = 30): Promise<{
   shortCircuits: number; dismissals: number;
   usdAvoided: number; minutesAvoided: number; windowDays: number;
+  usdAvoidedSeries: number[];
 }> {
   const cutoff = Date.now() - windowDays * DAY;
   const inWindow = OUTCOMES.filter((o) => Date.parse(o.at) >= cutoff);
   const used = inWindow.filter((o) => o.action === 'used');
+
+  const dayKeys = buildDayKeys(windowDays);
+  const byDay = new Map<string, number>(dayKeys.map((k) => [k, 0]));
+  for (const o of used) {
+    const day = o.at.slice(0, 10);
+    if (byDay.has(day)) byDay.set(day, (byDay.get(day) ?? 0) + (o.avoidedUsd ?? 0));
+  }
+  const usdAvoidedSeries = dayKeys.map((k) => Math.round((byDay.get(k) ?? 0) * 100) / 100);
+
   return {
     shortCircuits: used.length,
     dismissals: inWindow.filter((o) => o.action === 'dismissed').length,
     usdAvoided: Math.round(used.reduce((n, o) => n + (o.avoidedUsd ?? 0), 0) * 100) / 100,
     minutesAvoided: used.reduce((n, o) => n + (o.avoidedMinutes ?? 0), 0),
     windowDays,
+    usdAvoidedSeries,
   };
 }

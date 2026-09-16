@@ -67,6 +67,8 @@ describe('GET /teams — TeamSummary shape', () => {
     });
     expect(t002.certification).toMatchObject({ target_level: expect.any(Number), headline: expect.any(String) });
     expect(Array.isArray(t002.contributors)).toBe(true);
+    expect(t002.workflow_steps).toHaveLength(6);
+    expect(t002.workflow_steps.find((s: { active: boolean }) => s.active).step).toBe(t002.workflow_step);
   });
 });
 

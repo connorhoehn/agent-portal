@@ -15,14 +15,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router';
 import {
-  Button, Card, Chip, EmptyState, ErrorState, Inline, MetaLine, PageSection, SectionLabel, Stack, Toolbar,
+  Button, Card, Chip, EmptyState, ErrorState, Inline, MetaLine, PageSection, SectionLabel, Stack, ToolCallStrip,
+  Toolbar,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch';
 import { useCrumbLabel } from '../../lib/crumbLabels';
 import { absoluteTime, durationLabel } from '../../lib/relativeTime';
 import { toastPending, toastSuccess, toastError } from '../../lib/toastStore';
-import { JobStatusPill, LIVE_STATUSES, T, money } from './workShared';
+import { JobStatusPill, LIVE_STATUSES, T, money, toToolCallStripItems, type JobToolCall } from './workShared';
 import { KeyValue } from '../../components/KeyValue';
 import { isNotFoundFetchError } from './jobFetchStatus';
 
@@ -47,6 +48,7 @@ interface Job {
   result: {
     summary?: string; turns?: number; costUsd?: number;
     toolCalls?: number; durationMs?: number; transcript?: ActivityEntry[];
+    toolCallList?: JobToolCall[];
   } | null;
   error: string | null;
   createdBy: string | null;
@@ -419,12 +421,17 @@ export default function JobDetailPage() {
               {job.result.summary}
             </T>
           )}
+          {job.result?.toolCallList && job.result.toolCallList.length > 0 && (
+            <ToolCallStrip
+              className="px-3.5 pt-2.5"
+              toolCalls={toToolCallStripItems(job.result.toolCallList)}
+            />
+          )}
           <MetaLine
             size="xs"
             className="px-3.5 py-2.5"
             items={[
               `${job.result?.turns ?? 0} turns`,
-              `${job.result?.toolCalls ?? 0} tool calls`,
               durationLabel(job.result?.durationMs),
               money(job.result?.costUsd),
             ]}

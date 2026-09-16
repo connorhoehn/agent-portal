@@ -260,6 +260,8 @@ export interface TeamSummary {
   assessment_lead: string;
   workflow_step: number;
   workflow_step_label: string;
+  /** Same shape as `TeamDetail`'s six-step ladder, built server-side by the one function both wires share. Optional here (like `certification`/`contributors`) so hand-built test fixtures need not restate it. */
+  workflow_steps?: WorkflowStep[];
   certification?: TeamCertification;
   dimensions_assessed: number;
   dimensions_total: number;

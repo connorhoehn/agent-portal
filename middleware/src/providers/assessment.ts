@@ -94,6 +94,14 @@ export interface TeamSummary {
   assessment_lead: string;
   workflow_step: number;
   workflow_step_label: string;
+  /**
+   * The full six-step ladder, same shape and same labels the detail wire
+   * sends (`TeamDetailResponse.workflow_steps`) — built by the same
+   * `buildWorkflowSteps` below, never a second copy. Added so the desk table
+   * can render `<WorkflowStepper>` per row instead of a bare "n/6 · label"
+   * chip.
+   */
+  workflow_steps: WorkflowStepInfo[];
   certification: TeamCertification;
   dimensions_assessed: number;
   dimensions_total: number;
@@ -191,6 +199,13 @@ export interface TeamDetailResponse {
 }
 
 export const WORKFLOW_STEP_LABELS = ['Intake', 'Classify', 'Score', 'Review', 'Publish', 'Follow-up'] as const;
+
+/** The one place `WORKFLOW_STEP_LABELS` becomes a `WorkflowStepInfo[]` — shared by the summary and detail wires so they cannot disagree. */
+export function buildWorkflowSteps(currentStep: number): WorkflowStepInfo[] {
+  return WORKFLOW_STEP_LABELS.map((label, i) => ({
+    step: i + 1, label, done: i + 1 < currentStep, active: i + 1 === currentStep,
+  }));
+}
 
 // ─── Small runtime helpers ────────────────────────────────────────────────
 
@@ -382,6 +397,7 @@ function teamSummaryFromDims(team: M.MockTeam, dims: Record<string, M.MockDimens
     // not one of the three values formatTeamStatus knows how to render.
     status: M.deriveTeamStatus(dims), assessment_lead: team.assessment_lead, workflow_step: team.workflow_step,
     workflow_step_label: WORKFLOW_STEP_LABELS[team.workflow_step - 1] ?? '',
+    workflow_steps: buildWorkflowSteps(team.workflow_step),
     certification: teamCertification(dimList, targetLevel),
     dimensions_assessed: dimList.filter((d) => !d.is_na && d.current_level !== null).length,
     dimensions_total: M.DIMENSION_IDS.length,
@@ -528,9 +544,7 @@ function assembleTeamDetail(
   const dimensions = M.RUBRIC_DIMENSIONS.map(
     (def) => buildDimensionOut(dims[def.id] ?? emptyScore(def.id), targetLevel, provenance),
   );
-  const workflow_steps: WorkflowStepInfo[] = WORKFLOW_STEP_LABELS.map((label, i) => ({
-    step: i + 1, label, done: i + 1 < team.workflow_step, active: i + 1 === team.workflow_step,
-  }));
+  const workflow_steps = buildWorkflowSteps(team.workflow_step);
   const dimList = Object.values(dims);
   const teamDetail: TeamDetail = {
     id: team.id, name: team.name, cohort: team.cohort, cohort_label: M.COHORT_LABELS[team.cohort],

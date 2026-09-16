@@ -21,6 +21,7 @@ import {
   Select,
   Stack,
   StatStrip,
+  WorkflowStepper,
   type ChipTone,
 } from '@connorhoehnslalom/ui-components/shared';
 import { Can } from '../../../lib/capabilities';
@@ -208,27 +209,41 @@ export function AssessorDesk({
             ),
           },
           {
-            // Kept as a Chip rather than the detail page's `WorkflowStepper`
-            // (TeamScorecard.tsx:207): the six-step list with done/active
-            // flags (`workflow_steps: WorkflowStep[]`) is on the per-team
-            // DETAIL wire only (`GET /api/assessment/teams/:teamId`, via
-            // `useTeamDetail`), built server-side from
-            // `WORKFLOW_STEP_LABELS` in `middleware/src/providers/assessment.ts`
-            // — a constant that lives on the server, not in this portal's
-            // `assessmentFormat.ts`/`types.ts`. The desk's `TeamSummary` rows
-            // carry only the current `workflow_step`/`workflow_step_label`,
-            // not the other five labels, so a stepper here would mean either
-            // an extra per-row detail fetch (defeats the point of a desk
-            // table) or duplicating the label vocabulary client-side with no
-            // shared source of truth to keep it in step. Neither is worth it
-            // for a column that already reads unambiguously as a Chip.
+            // `TeamSummary.workflow_steps` now carries the same six-step
+            // ladder the detail page's `WorkflowStepper` renders
+            // (TeamScorecard.tsx:207) — built server-side by ONE function,
+            // `buildWorkflowSteps` in `middleware/src/providers/assessment.ts`,
+            // shared by both the list and detail wires, so there is no
+            // second label vocabulary to keep in step. At 1692px with nine
+            // columns a full-width six-label stepper would dominate the row —
+            // the table has `table-layout: auto`, so a bare column `width`
+            // is only a hint and the stepper's intrinsic content (six labels)
+            // would still stretch the column and the table past it. This
+            // caps the stepper's own element at a fixed `w-40` (matching the
+            // column's `width`) so IT clips and scrolls internally
+            // (`overflow-x-auto`, built into WorkflowStepper) instead of the
+            // table growing — a reader scans the filled-in dots at a glance
+            // and can scroll the one cell to read the labels. Falls back to
+            // a bare Chip when a caller hands a row without `workflow_steps`
+            // (e.g. a hand-built test fixture), since the field is optional
+            // on the type.
             key: 'workflow_step',
             header: 'Step',
             sortable: true,
+            width: '160px',
             render: (t) => (
-              <Chip size="xs" tone="neutral" title={`Step ${t.workflow_step} of 6`}>
-                {t.workflow_step}/6 · {t.workflow_step_label}
-              </Chip>
+              t.workflow_steps && t.workflow_steps.length > 0 ? (
+                <WorkflowStepper
+                  steps={t.workflow_steps}
+                  size="sm"
+                  className="w-40"
+                  data-testid={`workflow-stepper-${t.id}`}
+                />
+              ) : (
+                <Chip size="xs" tone="neutral" title={`Step ${t.workflow_step} of 6`}>
+                  {t.workflow_step}/6 · {t.workflow_step_label}
+                </Chip>
+              )
             ),
           },
           {

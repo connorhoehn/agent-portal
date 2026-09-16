@@ -291,3 +291,8 @@ Console errors: 0.
 Why: the innovation audit's no-new-field upgrades; re-observed as u-asha on /assessment/teams.
   The desk's Assessed cell is a `role="meter"` DotMeter with aria-valuenow and its "n/17" note as text; the Contributors avatars carry each person's name as their accessible label; nothing enters the tab order that did not before.
 Console errors: 0.
+
+--- freshness re-observation, 2026-09-16 07:30 (portal/src/pages/assessment changed: desk stepper) ---
+Why: the last innovation-audit item for the desk; re-observed as u-asha on /assessment/teams and TEAM-001.
+  The desk's Step cell is the WorkflowStepper (the active step carries aria-current="step", done steps a check glyph with text); the stepper scrolls horizontally inside a 160px cell — a keyboard user reaches the overflow by focusing the cell's scroll container. Nothing else in the tab order changed.
+Console errors: 0.

@@ -62,6 +62,10 @@ jest.mock('../../lib/sse.js', () => ({
 jest.mock('../../providers/agent-jobs.js', () => ({
   enqueueJob: jest.fn(), listJobs: jest.fn(), getJob: jest.fn(), reviewJob: jest.fn(),
   cancelJob: jest.fn(), queueStats: jest.fn(), requeueJob: jest.fn(),
+  // Identity here — real derivation is covered against the real queue in
+  // work-jobs-tool-call-list.test.ts. This suite only needs the route to call
+  // it on every job it reads, which the assertions below check directly.
+  withToolCallList: jest.fn((j: unknown) => j),
 }));
 jest.mock('../../providers/org-sweeps.js', () => ({
   runSweep: jest.fn(), runAllSweeps: jest.fn(), listFindings: jest.fn(),
@@ -93,7 +97,7 @@ import { searchWorkItems, getWorkItem } from '../../providers/work-items.js';
 import { rankSuggestions, askSuggestionsFrom, seesEveryInitiative } from '../../lib/work-suggestions.js';
 import { stewardsInitiative } from '../../lib/initiative-scope.js';
 import {
-  enqueueJob, listJobs, getJob, reviewJob, cancelJob, queueStats, requeueJob,
+  enqueueJob, listJobs, getJob, reviewJob, cancelJob, queueStats, requeueJob, withToolCallList,
 } from '../../providers/agent-jobs.js';
 import {
   runSweep, runAllSweeps, listFindings, setFindingStatus, getFinding, findingStats,
@@ -306,6 +310,34 @@ describe('POST /api/work/jobs — attribution', () => {
     const res = await request(buildApp()).post('/api/work/jobs').send({ title: 't', prompt: 'p' });
     expect(res.status).toBe(503);
     expect(res.body.error).toMatch(/queue unavailable/);
+  });
+});
+
+describe('GET /jobs and GET /jobs/:id project the wire through withToolCallList', () => {
+  it('maps every listed job through withToolCallList', async () => {
+    const jobs = [{ id: 'job-1', status: 'awaiting_review' }, { id: 'job-2', status: 'queued' }];
+    m(listJobs).mockResolvedValue(jobs);
+    const res = await request(buildApp()).get('/api/work/jobs');
+    expect(res.status).toBe(200);
+    expect(res.body.jobs).toEqual(jobs);
+    expect(withToolCallList).toHaveBeenCalledTimes(2);
+    expect(withToolCallList).toHaveBeenNthCalledWith(1, jobs[0]);
+    expect(withToolCallList).toHaveBeenNthCalledWith(2, jobs[1]);
+  });
+
+  it('projects a single job the same way, and 404s an unknown one without touching the projection', async () => {
+    const job = { id: 'job-1', status: 'awaiting_review' };
+    m(getJob).mockResolvedValue(job);
+    const res = await request(buildApp()).get('/api/work/jobs/job-1');
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual(job);
+    expect(withToolCallList).toHaveBeenCalledWith(job);
+
+    m(getJob).mockResolvedValue(null);
+    m(withToolCallList).mockClear();
+    const missing = await request(buildApp()).get('/api/work/jobs/job-x');
+    expect(missing.status).toBe(404);
+    expect(withToolCallList).not.toHaveBeenCalled();
   });
 });
 

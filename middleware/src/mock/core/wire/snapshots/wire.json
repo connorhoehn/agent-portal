@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-09-16T03:19:34.480Z",
-  "serverHandlerSha": "a9465a37596870b4b77fb6c80b3fc2f426d2c8940e24fc1cc9786d436d2881ea",
+  "capturedAt": "2026-09-16T05:30:26.555Z",
+  "serverHandlerSha": "3353f8c63f27c49d96ca2d77ee3ba96c593b955734295a09f8aca017eac1dc24",
   "baseUrl": "http://127.0.0.1:3012",
   "personas": [
     "orgiq/admin",
@@ -1105,7 +1105,13 @@
         "$[].status": "string",
         "$[].updated_at": "string",
         "$[].workflow_step": "number",
-        "$[].workflow_step_label": "string"
+        "$[].workflow_step_label": "string",
+        "$[].workflow_steps": "array",
+        "$[].workflow_steps[]": "object",
+        "$[].workflow_steps[].active": "boolean",
+        "$[].workflow_steps[].done": "boolean",
+        "$[].workflow_steps[].label": "string",
+        "$[].workflow_steps[].step": "number"
       },
       "values": {
         "$[].certification.status": [
@@ -5168,6 +5174,8 @@
         "minutesAvoided": "number",
         "shortCircuits": "number",
         "usdAvoided": "number",
+        "usdAvoidedSeries": "array",
+        "usdAvoidedSeries[]": "number",
         "windowDays": "number"
       },
       "values": {}

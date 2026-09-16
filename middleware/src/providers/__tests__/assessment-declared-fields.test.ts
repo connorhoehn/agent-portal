@@ -74,6 +74,26 @@ describe('TeamCertification: below_target / above_target', () => {
   });
 });
 
+describe('TeamSummary.workflow_steps', () => {
+  it('is sent on every team summary, built by the same function the detail wire uses', async () => {
+    const teams = await provider.listTeams();
+    for (const t of teams) {
+      expect(t.workflow_steps).toHaveLength(6);
+      expect(t.workflow_steps.map((s) => s.label)).toEqual([...provider.WORKFLOW_STEP_LABELS]);
+      expect(t.workflow_steps.filter((s) => s.active)).toHaveLength(1);
+      expect(t.workflow_steps.find((s) => s.active)!.step).toBe(t.workflow_step);
+    }
+  });
+
+  it('matches the detail wire\'s workflow_steps exactly for the same team — one source, not two', async () => {
+    const teams = await provider.listTeams();
+    for (const t of teams) {
+      const detail = await provider.getTeamDetail(t.id);
+      expect(t.workflow_steps).toEqual(detail!.workflow_steps);
+    }
+  });
+});
+
 describe('Dimension.criteria_progress', () => {
   it('is no longer empty for an assessed dimension, and every bullet is verbatim rubric text', async () => {
     const detail = await provider.getTeamDetail('TEAM-001');

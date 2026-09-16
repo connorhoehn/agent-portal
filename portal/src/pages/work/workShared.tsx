@@ -6,13 +6,20 @@
 import { Link } from 'react-router';
 import { Chip, Inline, type ChipTone } from '@connorhoehnslalom/ui-components/shared';
 import type { ReactNode } from 'react';
+import type { JobToolCall } from './toolCallFormat';
+
+export type { JobToolCall, ToolCallStripItem } from './toolCallFormat';
+export { toToolCallStripItems } from './toolCallFormat';
 
 // ─── Wire contracts ──────────────────────────────────────────────────────────
 
 export interface Job {
   id: string; kind: string; title: string; status: string; priority: number;
   boxId: string | null; attempts: number; maxAttempts: number;
-  result: { summary?: string; turns?: number; costUsd?: number; toolCalls?: number; durationMs?: number } | null;
+  result: {
+    summary?: string; turns?: number; costUsd?: number; toolCalls?: number; durationMs?: number;
+    toolCallList?: JobToolCall[];
+  } | null;
   error: string | null; createdAt: string; finishedAt: string | null;
   /** The standing mission that enqueued this, when one did. */
   botId: string | null; botName: string | null; botTrigger: string | null;

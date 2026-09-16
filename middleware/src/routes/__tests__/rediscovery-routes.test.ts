@@ -144,20 +144,25 @@ describe('POST /api/rediscovery/outcome', () => {
 });
 
 describe('GET /api/rediscovery/stats', () => {
-  it('reports dismissals BESIDE the savings, and echoes the window', async () => {
+  it('reports dismissals BESIDE the savings, echoes the window, and passes the day series through', async () => {
+    const usdAvoidedSeries = [0, 0, 4.8, 0, 6.2];
     statsMock.mockResolvedValue({
       shortCircuits: 4, dismissals: 2, usdAvoided: 17.5, minutesAvoided: 320, windowDays: 30,
+      usdAvoidedSeries,
     });
     const res = await request(buildApp()).get('/api/rediscovery/stats');
     expect(res.status).toBe(200);
     expect(Object.keys(res.body).sort())
-      .toEqual(['dismissals', 'minutesAvoided', 'shortCircuits', 'usdAvoided', 'windowDays']);
+      .toEqual(['dismissals', 'minutesAvoided', 'shortCircuits', 'usdAvoided', 'usdAvoidedSeries', 'windowDays']);
     expect(res.body.dismissals).toBe(2);
+    expect(res.body.usdAvoidedSeries).toEqual(usdAvoidedSeries);
     expect(statsMock).toHaveBeenCalledWith(30);
   });
 
   it('defaults a non-numeric window to 30 and forwards a numeric one', async () => {
-    statsMock.mockResolvedValue({ shortCircuits: 0, dismissals: 0, usdAvoided: 0, minutesAvoided: 0, windowDays: 7 });
+    statsMock.mockResolvedValue({
+      shortCircuits: 0, dismissals: 0, usdAvoided: 0, minutesAvoided: 0, windowDays: 7, usdAvoidedSeries: [0, 0, 0, 0, 0, 0, 0],
+    });
     const app = buildApp();
     await request(app).get('/api/rediscovery/stats?windowDays=abc');
     await request(app).get('/api/rediscovery/stats?windowDays=7');

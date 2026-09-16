@@ -8,7 +8,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import {
-  Button, Card, Chip, ConsultCard, Inline, InlineAlert, PageSection, SectionLabel, Stack, StatStrip, Toolbar,
+  Button, Card, Chip, ConsultCard, Inline, InlineAlert, PageSection, SectionLabel, Stack, StatCard, StatStrip,
+  ToolCallStrip, Toolbar,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';
@@ -18,14 +19,17 @@ import { toastError, toastPending, toastSuccess } from '../../lib/toastStore';
 import { DEVBOX_ROLES } from './automateNav';
 import { QueuePulse } from './QueuePulse';
 import {
-  BotOrigin, GraphUpdatesLink, PROPOSAL_LABELS, ServesItem, T, money, post,
+  BotOrigin, GraphUpdatesLink, PROPOSAL_LABELS, ServesItem, T, money, post, toToolCallStripItems,
   type Job, type LabConsult, type Proposal, type Summary,
 } from './workShared';
 
 /** GET /api/rediscovery/stats — the number that justifies the rest of the
- * infrastructure: what the agent didn't have to rediscover. */
+ * infrastructure: what the agent didn't have to rediscover. `usdAvoidedSeries`
+ * is one point per day across `windowDays`, oldest first — see
+ * providers/rediscovery.ts::rediscoveryStats. */
 interface RediscoveryStats {
   shortCircuits: number; dismissals: number; usdAvoided: number; minutesAvoided: number; windowDays: number;
+  usdAvoidedSeries: number[];
 }
 
 export default function WorkHomePage() {
@@ -191,8 +195,11 @@ export default function WorkHomePage() {
                   <BotOrigin job={j} />
                 </Inline>
                 <T className="text-[12px] text-text-secondary leading-snug">{j.result?.summary ?? 'No summary reported.'}</T>
+                {j.result?.toolCallList && j.result.toolCallList.length > 0 && (
+                  <ToolCallStrip toolCalls={toToolCallStripItems(j.result.toolCallList)} />
+                )}
                 <T className="text-[11px] text-text-tertiary">
-                  {j.result?.turns ?? 0} turns · {j.result?.toolCalls ?? 0} tools · {money(j.result?.costUsd)}
+                  {money(j.result?.costUsd)}
                   {' · '}
                   <Link to={`/iq/work/${j.id}`} className="text-primary no-underline hover:underline">
                     read what it did →
@@ -279,8 +286,10 @@ export default function WorkHomePage() {
         degraded={!!summaryError}
       />
 
-      {/* ── The four numbers, each a door to its lane. A single StatStrip
-          row, not a stack of cards — the review lane below is the page. ── */}
+      {/* ── The three door-to-a-lane numbers in one dense StatStrip row —
+          the review lane above is the page, not this. Rediscovery avoided
+          gets its own StatCard below: it is a trend over the window, not a
+          door, and it is the one number here with a shape worth a sparkline. ── */}
       <StatStrip
         aria-label="Automate summary"
         className="mt-3"
@@ -314,14 +323,19 @@ export default function WorkHomePage() {
               ? 'unknown'
               : `${s?.findings.open ?? 0} open finding${(s?.findings.open ?? 0) === 1 ? '' : 's'} · ${failedCount} dead-lettered job${failedCount === 1 ? '' : 's'}`,
           },
-          {
-            label: 'Rediscovery avoided',
-            value: rediscovery ? `$${rediscovery.usdAvoided.toFixed(2)}` : '—',
-            hint: rediscovery
-              ? `${rediscovery.shortCircuits} short-circuits · ${rediscovery.dismissals} dismissed · ${rediscovery.windowDays}d`
-              : 'unknown',
-          },
         ]}
+      />
+
+      <StatCard
+        className="mt-3 max-w-xs"
+        label="Rediscovery avoided"
+        value={rediscovery ? `$${rediscovery.usdAvoided.toFixed(2)}` : '—'}
+        {...(rediscovery && rediscovery.usdAvoidedSeries.some((v) => v > 0)
+          ? { sparklineData: rediscovery.usdAvoidedSeries }
+          : {})}
+        hint={rediscovery
+          ? `${rediscovery.shortCircuits} short-circuits · ${rediscovery.dismissals} dismissed · ${rediscovery.windowDays}d`
+          : 'unknown'}
       />
 
       {/* `T`'s wrap mode is built on the flex-row `Inline` primitive, which
