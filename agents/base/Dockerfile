@@ -18,7 +18,7 @@ RUN pip install --no-cache-dir uv
 # extras set — supervisor needs a2a, all others need ag-ui.
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv pip install --system --no-cache \
-      "strands-agents>=1.39" \
+      "strands-agents>=1.55" \
       "strands-agents-builder>=0.1" \
       "bedrock-agentcore[a2a,ag-ui]>=1.9" \
       "ag-ui-protocol>=0.1.18" \

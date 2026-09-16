@@ -163,6 +163,29 @@ Explicit `lifecycleConfiguration` on all nine `CfnRuntime`s in
 `agentcore-runtime-stack.ts`, tuned down for the non-interactive agents. Pure
 cost hygiene, one file, no dependencies on anything above. Ship whenever.
 
+**2026-09-16 — `strands-agents` floor moved to `>=1.55`.** Per
+`docs/research-versions-spike-2026-09-16.md` (spike b), the pin in
+`agents/base/Dockerfile` and all eight `agents/*/pyproject.toml` files (not
+devbox — it carries no Strands dependency) was raised from `>=1.39`. Grep for
+the two confirmed renames in the 1.39→1.55 range came back clean: zero
+usages of `LocalMemoryStore`/`TestMemoryStore` (renamed at 1.47.0) and zero
+usages of the Strands `bash`-tool import (renamed to `shell` at 1.51.0) — the
+only `bash` hit in any agent's `.py` file is an unrelated comment in
+`agents/devbox/main.py:158` about Claude Code's own bash tool. `ModelRouter`
+and in-process agents-as-tools are likewise unused. All 120 offline agent
+unit tests pass unchanged after the bump (`test_prompt_source` +
+`test_callbacks` = 61, `test_kb_resolver` + `test_sql_guard` = 55,
+`test_kb_retrieve_config` = 4). Not yet verified: the spike flags 1.54.0's
+"cache system prompt in auto mode" as the one item needing a live check —
+quoting it directly, "if 1.54.0's new 'auto' caching mode caches the system
+prompt more aggressively than before, it's worth confirming a rebuilt
+`Agent` object actually busts that cache ... this is exactly the kind of
+interaction a changelog one-liner won't surface — needs a real invoke to
+verify, not just a code read." That needs a smoke test against the
+supervisor's prompt-refresh rebuild (`agents/supervisor/main.py` ~420-436,
+`_agents_for_role`) on the next image roll, once `agents/base/build.sh` +
+`agents/build-all.sh` push a base image with the new floor.
+
 ---
 
 ## Deferred / dropped
