@@ -1180,6 +1180,19 @@ export const realAgentCore: AgentCoreProvider = {
 const _mockCode = (): CodeSession[] => codeSessions.rows();
 const _mockBrowser = (): BrowserSession[] => browserSessions.rows();
 
+
+/** Milliseconds between mock stream chunks. `MOCK_STREAM_PACE_MS` overrides;
+ *  default 12ms in development (a ~100-chunk answer streams for ~1.5s, the
+ *  shape of a real one) and 0 under jest so the suites stay instant. */
+function mockStreamPaceMs(): number {
+  const raw = process.env['MOCK_STREAM_PACE_MS'];
+  if (raw !== undefined && raw !== '') return Math.max(0, Number(raw) || 0);
+  return process.env['NODE_ENV'] === 'test' ? 0 : 12;
+}
+function mockStreamTick(ms: number): Promise<void> {
+  return ms > 0 ? new Promise((r) => setTimeout(r, ms)) : Promise.resolve();
+}
+
 export const mockAgentCore: AgentCoreProvider = {
   /**
    * The offline half of the degraded answer.
@@ -1255,12 +1268,28 @@ export const mockAgentCore: AgentCoreProvider = {
     const m = selectMockResponse(payload.message);
     const msgId = `mock-${Date.now()}`;
     yield { type: 'RUN_STARTED', threadId: payload.sessionId ?? 'mock', runId: msgId };
+    // Deterministic STEP_STARTED/STEP_FINISHED pair around the answer, so
+    // the portal's step strip (useAgentStream `steps`) is reachable under
+    // dev:mock. A real supervisor's AG-UI sequence is RunStarted ->
+    // StepStarted("routing") -> TextMessageContent -> ToolCallStart ->
+    // StepFinished -> RunFinished (CONSTITUTION.md ~146) — this mirrors that
+    // shape rather than inventing a different one.
+    yield { type: 'STEP_STARTED', stepName: 'routing' };
+    // Pace the chunks. Unpaced, the whole run lands in one ~2ms SSE read, React
+    // batches every event into a single render, and no in-flight state — the
+    // step strip, the streaming bubble, the tool-call pills — is ever painted;
+    // a real Nova answer streams for seconds. Jest keeps it instant.
+    const pace = mockStreamPaceMs();
+    await mockStreamTick(pace * 8);
     yield { type: 'TEXT_MESSAGE_START', messageId: msgId, role: 'assistant' };
     const words = m.response.split(/(\s+)/);
     for (let i = 0; i < words.length; i += 3) {
+      await mockStreamTick(pace);
       yield { type: 'TEXT_MESSAGE_CONTENT', messageId: msgId, delta: words.slice(i, i + 3).join('') };
     }
     yield { type: 'TEXT_MESSAGE_END', messageId: msgId };
+    await mockStreamTick(pace * 4);
+    yield { type: 'STEP_FINISHED', stepName: 'routing' };
     yield { type: 'RUN_FINISHED' };
   },
 

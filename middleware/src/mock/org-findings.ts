@@ -49,27 +49,39 @@ const LAB_SWEEP = 'lab-signal';
  */
 function seedFindings(): Finding[] {
   return [
+    // The one skill the mock cast holds at or under the sweep's HAVING
+    // count(person_id) <= 2 (providers/org-sweeps.ts): MLOps, held by Lena
+    // Dubois and Aisha Thompson (mock/people.ts + graph-taxonomy.ts agree).
+    // Title and evidence follow `sweepBusFactor`'s exact shape so the Explore
+    // page's rare-skill strip can join to it by name. Earlier this row named a
+    // prompt-library skill (skill-cold-start-aurora) that no person in the
+    // graph holds — the bus-factor sweep reads person_skills, not the library,
+    // so the graph and the board disagreed under dev:mock and the deep link
+    // from Explore landed on "Nothing here".
     {
       id: 'find-mock-1',
-      sweep: 'bus_factor', severity: 'critical',
-      title: 'Aurora cold-start recovery has a single holder',
-      detail: 'Only Vera Green (p-002) carries skill-cold-start-aurora; the on-call rotation for p-observability depends on it.',
-      entityType: 'skill', entityId: 'skill-cold-start-aurora',
-      evidence: { holders: 1, holderIds: ['p-002'], holderNames: ['Vera Green'], initiatives: ['p-observability'] },
+      sweep: 'bus_factor', severity: 'warning',
+      title: 'MLOps: 2 holders org-wide',
+      detail: 'MLOps is held by just Lena Dubois, Aisha Thompson. One departure leaves a single point of failure.',
+      entityType: 'skill', entityId: 'sk-mlops',
+      evidence: { holders: 2, holderIds: ['p-019', 'p-044'], holderNames: ['Lena Dubois', 'Aisha Thompson'], initiatives: ['p-observability'] },
       status: 'open', jobId: null,
       firstSeenAt: clock.hoursAgo(70), lastSeenAt: clock.hoursAgo(6),
-      fingerprint: 'bus_factor:skill-cold-start-aurora',
+      fingerprint: 'skill:sk-mlops',
     },
+    // An org-wide decision (mock/decisions.ts `projectId: null`) that nothing
+    // cites: no initiative anywhere in its evidence, which is what the promote
+    // route's "unscoped, not denied" branch is exercised with.
     {
       id: 'find-mock-2',
-      sweep: 'bus_factor', severity: 'warning',
-      title: 'Flaky-test triage is held by two people on the same team',
-      detail: 'skill-flaky-test-triage: Theo Chang (p-001) and Nora DaSilva (p-004), both on Platform — one leave request empties it.',
-      entityType: 'skill', entityId: 'skill-flaky-test-triage',
-      evidence: { holders: 2, holderIds: ['p-001', 'p-004'], holderNames: ['Theo Chang', 'Nora DaSilva'] },
+      sweep: 'orphan_decisions', severity: 'warning',
+      title: 'Decision "Migrate to Kubernetes from ECS" links to no initiative',
+      detail: 'd-k8s is an org-wide standard with no owner on the roster and no initiative or work item citing it.',
+      entityType: 'decision', entityId: 'd-k8s',
+      evidence: { ownerId: null, citedBy: 0 },
       status: 'open', jobId: null,
       firstSeenAt: clock.hoursAgo(46), lastSeenAt: clock.hoursAgo(6),
-      fingerprint: 'bus_factor:skill-flaky-test-triage',
+      fingerprint: 'orphan_decisions:d-k8s',
     },
     {
       id: 'find-mock-3',

@@ -14,7 +14,6 @@
 import { useMemo } from 'react';
 import { NavLink, useSearchParams } from 'react-router';
 import {
-  EmptyState,
   LoadingState,
   PageSection,
   Stack,
@@ -23,6 +22,7 @@ import {
   type SubNavItem,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
+import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { useCapabilities } from '../../lib/capabilities';
 import { InitiativesReport } from './InitiativesReport';
 import { SprintsReport } from './SprintsReport';
@@ -52,8 +52,9 @@ export default function BudgetsPage() {
   const [params, setParams] = useSearchParams();
   const report = params.get('report') === 'sprints' ? 'sprints' : 'initiatives';
 
-  const { data, error, refresh } =
+  const { data, error, degraded, refresh } =
     useFetch<{ budgets: BudgetRow[]; summary: BudgetSummary }>('/api/budgets', 30_000);
+  const budgetsFailure = error ?? degraded;
   const { data: grantData, error: grantError } =
     useFetch<{ grants: GrantRow[] }>('/api/budgets/grants', 60_000);
   // The full initiative roster — `/api/budgets` on its own only returns rows
@@ -96,10 +97,15 @@ export default function BudgetsPage() {
     },
   ];
 
-  const body = !data && !error ? (
+  const body = !data && !budgetsFailure ? (
     <LoadingState label="Loading budgets…" />
-  ) : error && budgets.length === 0 ? (
-    <EmptyState title="Could not load budgets" description={error} />
+  ) : budgetsFailure && budgets.length === 0 ? (
+    <UnavailableNotice
+      error={budgetsFailure}
+      what="budgets"
+      source="Budgets are read from Aurora"
+      onRetry={refresh}
+    />
   ) : (
     <PageSection
       title={report === 'sprints' ? 'Sprints' : 'Initiatives'}

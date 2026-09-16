@@ -35,6 +35,7 @@ import {
   Textarea,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
+import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { redactUrlCredentials } from '../../lib/redactCredentials.ts';
 import { useCapabilities } from '../../lib/capabilities';
 import { toastError, toastSuccess, toastPending } from '../../lib/toastStore';
@@ -94,7 +95,9 @@ export function parseRepoInput(raw: string): string | null {
 }
 
 export default function AgentProjectsPage() {
-  const { data, refresh } = useFetch<{ projects: Project[] }>('/api/agent-projects', 15_000);
+  const { data, error: projectsError, degraded: projectsDegraded, refresh } =
+    useFetch<{ projects: Project[] }>('/api/agent-projects', 15_000);
+  const projectsFailure = projectsError ?? projectsDegraded;
   // link/unlink/clone/run-task ride /api/agent-projects + /api/devbox
   // (ManageDevbox); connection add/delete rides /api/connections (ManageIngest).
   const { can, ready } = useCapabilities();
@@ -426,12 +429,22 @@ export default function AgentProjectsPage() {
         </Card>
       )}
 
-      {projects.length === 0 ? (
+      {projectsFailure && (
+        <UnavailableNotice
+          error={projectsFailure}
+          what="the codebase registry"
+          source="Projects are read from /api/agent-projects"
+          onRetry={refresh}
+          className="mb-4"
+        />
+      )}
+
+      {!projectsFailure && projects.length === 0 ? (
         <EmptyState
           title="No projects linked"
           body="Link a repository to clone it into a workspace and run agents against it. Public repositories need no credential."
         />
-      ) : (
+      ) : projectsFailure ? null : (
         <CatalogGrid columns={2}>
           {projects.map((p) => {
             const box = boxes.find((b) => b.sessionId === p.sessionId);

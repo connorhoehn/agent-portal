@@ -8191,6 +8191,12 @@ export const teamsFixture = defineFixture<MockTeam>({
   scenarios: {
     default: seedTeams,
     empty: () => [],
+    // The roster table itself is unreachable — everything keyed off a team
+    // (recommendations, rollup, feedback's virtual tasks) fails the same way,
+    // because in the real provider they all resolve a team through this table.
+    error: () => {
+      throw new Error('assessment_teams unavailable: relation does not exist');
+    },
     // A brand-new tenant: the cast exists, nothing has been assessed. Pair
     // with `assessment-scores`'s own `fresh`, which is empty.
     fresh: () => seedTeams().map((t) => ({
@@ -8233,6 +8239,12 @@ export const scoresFixture = defineFixture<TeamScores>({
   scenarios: {
     default: () => byTeam(seedAssessments(), (team_id, dimensions) => ({ team_id, dimensions })),
     empty: () => [],
+    // Dimension scores unreachable — recommendations and rollup both walk
+    // every team's sheet to build their answer, so pinning this alone fails
+    // them without touching the roster or submissions.
+    error: () => {
+      throw new Error('assessment_dimension_scores unavailable: relation does not exist');
+    },
     // The cast is there, nobody has been scored: every team reads NEW, every
     // certification reads "Not yet assessed".
     fresh: () => seedTeams().map((t) => ({ team_id: t.id, dimensions: blankDimensions() })),
@@ -8311,6 +8323,9 @@ export const submissionsFixture = defineFixture<SubmissionEnvelope>({
   scenarios: {
     default: () => Object.values(seedSubmissions()).flatMap((byEnvelope) => Object.values(byEnvelope)),
     empty: () => [],
+    error: () => {
+      throw new Error('assessment_submissions unavailable: relation does not exist');
+    },
   },
 });
 
@@ -8396,6 +8411,9 @@ export const feedbackFixture = defineFixture<FeedbackTask>({
     // the provider also synthesizes virtual tasks from OPEN follow-ups —
     // pin `assessment-scores` to `empty` too for a genuinely empty queue.
     empty: () => [],
+    error: () => {
+      throw new Error('assessment_feedback_tasks unavailable: relation does not exist');
+    },
   },
 });
 
@@ -8471,6 +8489,9 @@ export const configurationFixture = defineFixture<AssessmentConfiguration>({
   scenarios: {
     default: () => [seedConfiguration()],
     empty: () => [{ target_level: 3, motions: [], updated_at: clock.nowIso() }],
+    error: () => {
+      throw new Error('assessment_configuration unavailable: relation does not exist');
+    },
   },
 });
 

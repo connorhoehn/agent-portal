@@ -7,13 +7,14 @@
 // Before slice 3 of docs/assessment-ux-goal.md this page had no view of the
 // portfolio by dimension: a program lead could see 41 dimensions at target
 // but not which ones, nor which teams' claims run ahead of their evidence.
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import {
   Button,
   Chip,
   DataTable,
   EmptyState,
+  ErrorState,
   Inline,
   LoadingState,
   MetaLine,
@@ -29,7 +30,9 @@ import {
   TableTh,
   type ChipTone,
 } from '@connorhoehnslalom/ui-components/shared';
+import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { useCapabilities } from '../../lib/capabilities';
+import { useFetch } from '../../hooks/useFetch';
 import { toastError, toastSuccess } from '../../lib/toastStore';
 import { RECOMMENDATION_KIND_LABEL, type RecommendationsResponse, type RecommendationTeamGroup, type RollupResponse, type SecondaryRecommendationKind } from './secondaryTypes';
 import { useTeams } from './dashboard/useTeams';
@@ -134,19 +137,20 @@ function MaturityHeatmap({ teams, onSelectTeam }: { teams: TeamSummary[]; onSele
 }
 
 function WhereToStart({ onSelectTeam }: { onSelectTeam: (id: string) => void }) {
-  const [data, setData] = useState<RecommendationsResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  useEffect(() => {
-    fetch('/api/assessment/recommendations', { credentials: 'include' })
-      .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`))))
-      .then((body: RecommendationsResponse) => { setData(body); setError(null); })
-      .catch((err: Error) => setError(err.message))
-      .finally(() => setLoading(false));
-  }, []);
+  const { data, isLoading: loading, error, degraded, refresh } = useFetch<RecommendationsResponse>('/api/assessment/recommendations');
   const groups: RecommendationTeamGroup[] = (data?.teams ?? []).filter((g) => g.top != null);
   if (loading) return <LoadingState label="Reading each team's plan…" />;
-  if (error) return <EmptyState title="Couldn't load recommendations" body={error} />;
+  if (error) return <ErrorState title="Couldn't load recommendations" description={error} actionLabel="Retry" onAction={refresh} />;
+  if (degraded) {
+    return (
+      <UnavailableNotice
+        error={degraded}
+        what="the recommendations"
+        source="Recommendations are built from every team's dimension scores"
+        onRetry={refresh}
+      />
+    );
+  }
   if (groups.length === 0) return <EmptyState title="Nothing open" body="No team has an open recommendation right now." />;
   return (
     <DataTable<RecommendationTeamGroup>
@@ -180,19 +184,9 @@ export default function ReportsPage() {
   const { can, ready } = useCapabilities();
   const canPublish = ready && can('PublishReport');
   const { teams } = useTeams();
-  const [rollup, setRollup] = useState<RollupResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { data: rollup, isLoading: loading, error, degraded, refresh: refreshRollup } = useFetch<RollupResponse>('/api/assessment/rollup');
   const [publishing, setPublishing] = useState(false);
   const openTeam = (id: string) => navigate(`/assessment/teams/${encodeURIComponent(id)}`);
-
-  useEffect(() => {
-    fetch('/api/assessment/rollup', { credentials: 'include' })
-      .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`))))
-      .then((body: RollupResponse) => { setRollup(body); setError(null); })
-      .catch((err: Error) => setError(err.message))
-      .finally(() => setLoading(false));
-  }, []);
 
   async function publish() {
     setPublishing(true);
@@ -220,7 +214,14 @@ export default function ReportsPage() {
       {loading ? (
         <LoadingState label="Loading the portfolio…" />
       ) : error ? (
-        <EmptyState title="Couldn't load the portfolio" body={error} />
+        <ErrorState title="Couldn't load the portfolio" description={error} actionLabel="Retry" onAction={refreshRollup} />
+      ) : degraded ? (
+        <UnavailableNotice
+          error={degraded}
+          what="the portfolio rollup"
+          source="The rollup is computed from every team's dimension scores"
+          onRetry={refreshRollup}
+        />
       ) : rollup ? (
         <>
           <StatStrip

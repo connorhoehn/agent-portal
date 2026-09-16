@@ -17,7 +17,9 @@ import {
   DepartmentChips,
   DepartmentInsightStrip,
   findConnectionPath,
+  indexBusFactorFindings,
   type PathHop,
+  type FindingLike,
 } from '../components/org-graph/ExplorePanels';
 import type { MENode, MEEdge } from '../components/multi-entity-graph/types';
 import {
@@ -239,6 +241,20 @@ function ExplorePage() {
   );
   const { data: projectsData, isLoading: projectsLoading, error: projectsError, refresh: refreshProjects } = useFetch<ProjectsGraphData>(
     entityFilter === 'projects' ? '/api/graph/projects-graph' : null,
+  );
+
+  // The rare-skill strip's server-side opinion: the scheduled bus-factor
+  // sweep's OPEN findings, fetched only while the strip that needs them is
+  // actually on screen. `sweep=bus_factor` is the narrowest filter the route
+  // supports (GET /api/work/findings?status=&sweep=) — status=open on top of
+  // that keeps the read to what a reader would actually act on, not the
+  // full history.
+  const { data: busFactorFindingsData, error: busFactorFindingsError } = useFetch<{ findings: FindingLike[] }>(
+    (activeDepartment || rareSkillsOpen) ? '/api/work/findings?status=open&sweep=bus_factor&limit=200' : null,
+  );
+  const busFactorFindingsIndex = useMemo(
+    () => busFactorFindingsData ? indexBusFactorFindings(busFactorFindingsData.findings) : null,
+    [busFactorFindingsData],
   );
 
   const meGraph = useMemo<{ nodes: MENode[]; edges: MEEdge[]; allStatuses?: string[] } | null>(() => {
@@ -755,6 +771,8 @@ function ExplorePage() {
         <DepartmentInsightStrip
           department={activeDepartment}
           people={data.nodes}
+          busFactorFindings={busFactorFindingsIndex}
+          busFactorFindingsUnavailable={!!busFactorFindingsError}
           onFocusPerson={(id) => {
             setActiveDepartment(null);
             setRareSkillsOpen(false);

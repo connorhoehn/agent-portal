@@ -23,7 +23,9 @@ describe('mock findings seed', () => {
     expect(open.every((f) => f.status === 'open')).toBe(true);
     const bus = await listFindings({ sweep: 'bus_factor' });
     expect(bus.every((f) => f.sweep === 'bus_factor')).toBe(true);
-    expect(bus.length).toBe(2);
+    // One rare skill in the mock cast (MLOps, two holders) — the board files
+    // exactly what the sweep would against mock/people.ts.
+    expect(bus.length).toBe(1);
   });
 
   it('resolves a seeded finding by id and a mock sweep re-observes its rows', async () => {

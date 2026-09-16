@@ -4,6 +4,7 @@
 // moves it next. The motion (cohort) is a filter on this table, not a
 // separate landing page — three cards that each said "2 teams" were a page
 // spent on a number the strip already carries.
+import type React from 'react';
 import { useMemo, useState } from 'react';
 import {
   Button,
@@ -24,6 +25,7 @@ import {
   WorkflowStepper,
   type ChipTone,
 } from '@connorhoehnslalom/ui-components/shared';
+import { UnavailableNotice } from '../../../components/UnavailableNotice';
 import { Can } from '../../../lib/capabilities';
 import {
   contributorAvatars,
@@ -47,6 +49,8 @@ interface AssessorDeskProps {
   teams: TeamSummary[];
   isLoading: boolean;
   isError: boolean;
+  /** The wire's "we could not look" marker (`lib/degraded.ts`), or `null` on a real read. */
+  degraded: string | null;
   /** `?cohort=` — the motion filter lives in the URL so a filtered desk can be shared. */
   cohort: Cohort | 'all';
   onCohortChange: (cohort: Cohort | 'all') => void;
@@ -81,7 +85,7 @@ function CertificationCell({ team }: { team: TeamSummary }) {
 }
 
 export function AssessorDesk({
-  teams, isLoading, isError, cohort, onCohortChange, onSelectTeam, onNewTeam, onRetry,
+  teams, isLoading, isError, degraded, cohort, onCohortChange, onSelectTeam, onNewTeam, onRetry,
 }: AssessorDeskProps) {
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<string>(ALL);
@@ -96,6 +100,14 @@ export function AssessorDesk({
   if (isError) {
     return <ErrorState title="Couldn't load the teams" description="The roster did not answer." actionLabel="Retry" onAction={onRetry} />;
   }
+
+  // A degraded read (SummaryPage's `dash()` pattern): the request succeeded
+  // but the server is telling us not to believe the body. The strip stays on
+  // screen so the page keeps its shape, but every count reads "—" rather than
+  // the zeros a degraded empty roster would otherwise show, and the table
+  // itself gives way to the notice instead of a bare "No teams" emptyMessage
+  // that would read as a genuinely empty program.
+  const dash = (v: React.ReactNode): React.ReactNode => (degraded ? '—' : v);
 
   return (
     <Stack gap="md">
@@ -112,59 +124,68 @@ export function AssessorDesk({
       <StatStrip
         aria-label="Program summary"
         items={[
-          { label: 'Teams', value: summary.teams, hint: cohort === ALL ? 'in the program' : `in ${motionFor(cohort).title}` },
+          { label: 'Teams', value: dash(summary.teams), hint: cohort === ALL ? 'in the program' : `in ${motionFor(cohort).title}` },
           {
             label: summary.targetLevel === null ? 'Verified' : `Verified at L${summary.targetLevel}`,
-            value: summary.targetLevel === null ? '—' : summary.verifiedAtTarget,
+            value: summary.targetLevel === null ? '—' : dash(summary.verifiedAtTarget),
             hint: summary.targetLevel === null ? 'nothing assessed yet' : 'teams with a dimension at target',
           },
-          { label: 'Claims open', value: summary.claimsOpen, tone: summary.claimsOpen > 0 ? 'danger' : 'default', hint: 'claimed above what evidence verifies' },
-          { label: 'Questions open', value: summary.questionsOpen, tone: summary.questionsOpen > 0 ? 'danger' : 'default', hint: 'waiting on a person' },
+          { label: 'Claims open', value: dash(summary.claimsOpen), tone: !degraded && summary.claimsOpen > 0 ? 'danger' : 'default', hint: 'claimed above what evidence verifies' },
+          { label: 'Questions open', value: dash(summary.questionsOpen), tone: !degraded && summary.questionsOpen > 0 ? 'danger' : 'default', hint: 'waiting on a person' },
         ]}
       />
 
-      <Inline wrap align="center" gap="sm">
-        <SegmentedControl
-          size="sm"
-          aria-label="Assessment motion"
-          value={cohort}
-          onChange={(v) => onCohortChange(v as Cohort | 'all')}
-          options={[{ label: 'All motions', value: ALL }, ...MOTIONS.map((m) => ({ label: m.title, value: m.cohort }))]}
+      {degraded ? (
+        <UnavailableNotice
+          error={degraded}
+          what="the team roster"
+          source="Teams are read from the assessment database"
+          onRetry={onRetry}
         />
-        <Select
-          size="sm"
-          className="w-44"
-          value={status}
-          onChange={(e) => setStatus(e.target.value)}
-          options={[{ value: ALL, label: 'All statuses' }, ...statuses.map((s) => ({ value: s, label: formatTeamStatus(s) }))]}
-        />
-        <Input
-          type="text"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by team name or ID…"
-          className="w-[280px]"
-        />
-        {hasFilters && (
-          <Button variant="ghost" size="sm" onClick={() => { setSearch(''); setStatus(ALL); }}>
-            Clear filters
-          </Button>
-        )}
-        <MetaLine
-          size="xs"
-          tone="tertiary"
-          className="ml-auto"
-          items={[`${rows.length} of ${teams.length} team${teams.length === 1 ? '' : 's'}`, 'sorted by fewest dimensions at target']}
-        />
-      </Inline>
+      ) : (
+        <>
+          <Inline wrap align="center" gap="sm">
+            <SegmentedControl
+              size="sm"
+              aria-label="Assessment motion"
+              value={cohort}
+              onChange={(v) => onCohortChange(v as Cohort | 'all')}
+              options={[{ label: 'All motions', value: ALL }, ...MOTIONS.map((m) => ({ label: m.title, value: m.cohort }))]}
+            />
+            <Select
+              size="sm"
+              className="w-44"
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
+              options={[{ value: ALL, label: 'All statuses' }, ...statuses.map((s) => ({ value: s, label: formatTeamStatus(s) }))]}
+            />
+            <Input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by team name or ID…"
+              className="w-[280px]"
+            />
+            {hasFilters && (
+              <Button variant="ghost" size="sm" onClick={() => { setSearch(''); setStatus(ALL); }}>
+                Clear filters
+              </Button>
+            )}
+            <MetaLine
+              size="xs"
+              tone="tertiary"
+              className="ml-auto"
+              items={[`${rows.length} of ${teams.length} team${teams.length === 1 ? '' : 's'}`, 'sorted by fewest dimensions at target']}
+            />
+          </Inline>
 
-      <DataTable<TeamSummary>
-        data={rows}
-        keyField={(t) => t.id}
-        onRowClick={(t) => onSelectTeam(t.id)}
-        striped
-        emptyMessage={teams.length === 0 ? 'No teams in the program yet.' : 'No teams match the current filters.'}
-        columns={[
+          <DataTable<TeamSummary>
+            data={rows}
+            keyField={(t) => t.id}
+            onRowClick={(t) => onSelectTeam(t.id)}
+            striped
+            emptyMessage={teams.length === 0 ? 'No teams in the program yet.' : 'No teams match the current filters.'}
+            columns={[
           {
             key: 'name',
             header: 'Team',
@@ -278,8 +299,10 @@ export function AssessorDesk({
             },
           },
           { key: 'updated_at', header: 'Updated', sortable: true, render: (t) => fmtDate(t.updated_at) },
-        ]}
-      />
+            ]}
+          />
+        </>
+      )}
     </Stack>
   );
 }

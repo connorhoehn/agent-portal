@@ -13,6 +13,7 @@ import {
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { KeyValue } from '../../components/KeyValue';
+import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { relativeTime } from '../../lib/relativeTime';
 import { T } from './Text';
 import { ProcessFlow } from './ProcessFlow';
@@ -57,13 +58,15 @@ export default function DistillationOverviewPage() {
     setPollMs(hasRunning ? RUNNING_POLL_MS : IDLE_POLL_MS);
   }, [jobsData]);
 
-  const { data: levelsData, isLoading: levelsLoading, error: levelsError } =
+  const { data: levelsData, isLoading: levelsLoading, error: levelsError, degraded: levelsDegraded, refresh: refreshLevels } =
     useFetch<LevelsResponse>('/api/distillation/levels', pollMs);
+  const levelsFailure = levelsError ?? levelsDegraded;
   const { data: ingestData } = useFetch<IngestState>('/api/distillation/ingest', 20_000);
   const { data: samplingData } = useFetch<SamplingResponse>('/api/distillation/sampling', 60_000);
 
-  const { data: proceduresData, isLoading: proceduresLoading, error: proceduresError } =
+  const { data: proceduresData, isLoading: proceduresLoading, error: proceduresError, degraded: proceduresDegraded, refresh: refreshProcedures } =
     useFetch<ProceduresResponse>('/api/distillation/procedures', 60_000);
+  const proceduresFailure = proceduresError ?? proceduresDegraded;
   const { data: nodesData } = useFetch<{ nodes: RepoPresenceNode[] }>('/api/local-compute/nodes', NODES_POLL_MS);
   // Org-wide, redacted — Slice 5. 403s for a role that is not fleet-wide
   // (member, sme, program-owner): that role still sees its OWN machines via
@@ -231,8 +234,13 @@ export default function DistillationOverviewPage() {
           {/* Tier health is on the nodes; below the flow only what needs a
               hand — three stacked cards repeating "healthy" were the wasted
               space the reader scrolled past to reach the numbers. */}
-          {levelsError ? (
-            <EmptyState title="Could not load level state" description={levelsError} />
+          {levelsFailure ? (
+            <UnavailableNotice
+              error={levelsFailure}
+              what="level state"
+              source="Tier health is read from the distillation pipeline"
+              onRetry={refreshLevels}
+            />
           ) : levelsLoading && !levelsData ? (
             <LoadingState label="Loading levels…" />
           ) : problemLevels.length === 0 ? (
@@ -260,8 +268,13 @@ export default function DistillationOverviewPage() {
           <Link href="/iq/distillation/artifacts?type=procedure">See all {procedures.length} procedures →</Link>
         ) : undefined}
       >
-        {proceduresError ? (
-          <EmptyState title="Could not load procedures" description={proceduresError} />
+        {proceduresFailure ? (
+          <UnavailableNotice
+            error={proceduresFailure}
+            what="procedures"
+            source="Procedures are read from the distillation pipeline"
+            onRetry={refreshProcedures}
+          />
         ) : proceduresLoading && !proceduresData ? (
           <LoadingState label="Loading procedures…" />
         ) : procedures.length === 0 ? (

@@ -32,6 +32,7 @@ import { DetailSection, Tooltip,
   type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
+import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { useCapabilities } from '../../lib/capabilities';
 import { toastError, toastPending, toastSuccess } from '../../lib/toastStore';
 import {
@@ -209,7 +210,8 @@ export default function PromotionsPage() {
   // Fetched unfiltered and narrowed client-side by `filterPromotions` — a
   // pure, tested predicate the Status row can drive directly, rather than a
   // round trip per click that a stale/aborted fetch could silently swallow.
-  const { data, isLoading, error, refresh } = useFetch<{ candidates: PromotionCandidate[] }>('/api/promotions', 30_000);
+  const { data, isLoading, error, degraded, refresh } = useFetch<{ candidates: PromotionCandidate[] }>('/api/promotions', 30_000);
+  const promotionsFailure = error ?? degraded;
   const candidates = useMemo(() => filterPromotions(data?.candidates ?? [], filter), [data, filter]);
 
   const { data: openData, refresh: refreshOpen } = useFetch<PromotionCandidate>(
@@ -329,8 +331,13 @@ export default function PromotionsPage() {
         </ToolbarGroup>
       </Toolbar>
 
-      {error ? (
-        <EmptyState title="Could not load the promotions inbox" description={error} />
+      {promotionsFailure ? (
+        <UnavailableNotice
+          error={promotionsFailure}
+          what="the promotions inbox"
+          source="Candidates are read from lab_experiences"
+          onRetry={refresh}
+        />
       ) : isLoading && !data ? (
         <LoadingState label="Loading candidates…" />
       ) : candidates.length === 0 ? (
@@ -339,6 +346,13 @@ export default function PromotionsPage() {
           description={filter === 'all'
             ? 'No cluster has crossed the pattern floor yet — three observations across two sessions.'
             : `Nothing ${STATUS_LABEL[filter as keyof typeof STATUS_LABEL]?.toLowerCase() ?? filter} right now.`}
+          {...(filter === 'all' ? {
+            action: (
+              <Link to="/iq/work" className="text-[12px] font-semibold text-primary no-underline hover:underline">
+                Open Automate →
+              </Link>
+            ),
+          } : {})}
         />
       ) : (
         <DataTable<PromotionCandidate>

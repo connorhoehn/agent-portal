@@ -3,7 +3,6 @@ import { useNavigate, useSearchParams } from 'react-router';
 import {
   CatalogGrid,
   EmptyState,
-  ErrorState,
   FilterChip,
   PageSection,
   SearchInput,
@@ -16,6 +15,7 @@ import {
   ToolbarLabel,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../hooks/useFetch';
+import { UnavailableNotice } from '../components/UnavailableNotice';
 import { useSession } from '../lib/auth';
 import { InitiativeCard } from './projects/InitiativeCard';
 import { ProjectTable } from './projects/ProjectTable';
@@ -84,8 +84,9 @@ function ProjectsPage() {
     try { localStorage.setItem('projects-view', mode); } catch { /* ignore */ }
   }
 
-  const { data, isLoading, error } = useFetch<ProjectSummary[]>(
+  const { data, isLoading, error, degraded, refresh } = useFetch<ProjectSummary[]>(
     lens === 'initiatives' ? `/api/graph/projects?limit=100&scope=${scope}` : null, POLL_MS);
+  const projectsFailure = error ?? degraded;
 
   const projects = useMemo(() => data ?? [], [data]);
   const totals = useMemo(() => programTotals(projects), [projects]);
@@ -107,8 +108,15 @@ function ProjectsPage() {
     );
   }
 
-  if (lens === 'initiatives' && error && !data) {
-    return <ErrorState title="Failed to load initiatives" description={error} />;
+  if (lens === 'initiatives' && projectsFailure && !data) {
+    return (
+      <UnavailableNotice
+        error={projectsFailure}
+        what="initiatives"
+        source="Initiatives are read from the org graph"
+        onRetry={refresh}
+      />
+    );
   }
 
   const velocityPct = totals.pointsTotal > 0

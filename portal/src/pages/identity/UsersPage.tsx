@@ -25,6 +25,8 @@ import type { DataTableColumn } from '@connorhoehnslalom/ui-components/shared';
 import { useSession } from '../../lib/auth';
 import { useCapabilities } from '../../lib/capabilities';
 import { toastError } from '../../lib/toastStore';
+import { UnavailableNotice, orUnknown } from '../../components/UnavailableNotice';
+import { firstDegraded } from '../../lib/degraded';
 import {
   grantChipLabels,
   inputWiring,
@@ -67,6 +69,7 @@ function UsersPage() {
   const [roles, setRoles] = useState<RoleInfo[]>([]);
   const [users, setUsers] = useState<UserInfo[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [degraded, setDegraded] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [grantsUser, setGrantsUser] = useState<UserInfo | null>(null); // user with the "Edit grants" drawer open
   const [draftGrants, setDraftGrants] = useState<Record<string, string[]>>({});
@@ -82,8 +85,10 @@ function UsersPage() {
         api<UserInfo[]>('/api/identity/users'),
       ]);
       setTenants(t); setRoles(r); setUsers(u); setError(null);
+      setDegraded(firstDegraded(t, r, u));
     } catch (e) {
       setError((e as Error).message);
+      setDegraded(null);
     } finally {
       setLoading(false);
     }
@@ -197,23 +202,34 @@ function UsersPage() {
         </Inline>
       ) : undefined}
     >
-      {error && <InlineAlert tone="error">{error}</InlineAlert>}
+      {(error ?? degraded) && (
+        <UnavailableNotice
+          error={(error ?? degraded)!}
+          what="users and tenants"
+          source="Identities are read from Aurora"
+          onRetry={() => void load()}
+          className="mb-4"
+        />
+      )}
 
-      {/* Tenants strip */}
-      <StatStrip
-        aria-label="Tenants"
-        items={tenants.map(t => {
-          const userCount = tenantUserCount(t.id, users);
-          const tenantRoles = (rolesForTenant.get(t.id) ?? []).filter(r => r.tenant === t.id);
-          return {
-            label: t.displayName,
-            value: userCount,
-            hint: `${t.id} · ${t.status} · roles: ${tenantRoles.map(r => r.id).join(', ') || '—'}`,
-          };
-        })}
-      />
+      {/* Tenants strip — gated on a good read; a failed read must not draw a
+          zeroed strip that reads as "no users provisioned". */}
+      {!(error ?? degraded) && (
+        <StatStrip
+          aria-label="Tenants"
+          items={tenants.map(t => {
+            const userCount = tenantUserCount(t.id, users);
+            const tenantRoles = (rolesForTenant.get(t.id) ?? []).filter(r => r.tenant === t.id);
+            return {
+              label: t.displayName,
+              value: orUnknown(userCount, Boolean(error ?? degraded)),
+              hint: `${t.id} · ${t.status} · roles: ${tenantRoles.map(r => r.id).join(', ') || '—'}`,
+            };
+          })}
+        />
+      )}
 
-      {loading ? (
+      {(error ?? degraded) ? null : loading ? (
         <LoadingState label="Loading users…" />
       ) : (
         <DataTable

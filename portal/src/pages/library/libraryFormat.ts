@@ -89,6 +89,24 @@ export function facetOptions<T extends string>(
 export const KIND_ORDER: readonly AssetKind[] = ['system', 'prompt', 'evaluator', 'skill', 'insight'];
 export const TIER_ORDER: readonly AssetTier[] = ['sandbox', 'internal', 'endpoint'];
 
+/**
+ * Which empty state a zero-result library read is, so the page never shows a
+ * dead "Clear filters" button when there was nothing to clear.
+ *
+ * `'filtered'` — a search or facet narrowed a real catalog to nothing; the
+ * fix is to loosen the query, so "Clear filters" is a real action.
+ * `'catalog-empty'` — no kind/tier facet and no search text were applied and
+ * the catalog still came back empty: the library itself has no assets yet,
+ * which is a different fact and points to where assets come from
+ * (Distillation › Artifacts) rather than at filters that were never set.
+ */
+export type LibraryEmptyKind = 'filtered' | 'catalog-empty';
+
+export function libraryEmptyKind(filtersApplied: boolean, count: number): LibraryEmptyKind | null {
+  if (count > 0) return null;
+  return filtersApplied ? 'filtered' : 'catalog-empty';
+}
+
 // ─── Release readiness ───────────────────────────────────────────────────────
 
 export interface ReadinessRow { label: string; met: boolean; detail?: string }

@@ -168,10 +168,70 @@ export function orgInsight(people: GraphPerson[]): { atRisk: AtRiskSkill[] } {
 export const RARE_SKILL_SWEEP = 'bus_factor';
 
 /** Where the rare-skill pill sends you: Work → Findings, filtered to the
- *  bus-factor sweep and this skill. `FindingsPage` reads `?sweep=`/`?q=`. */
-export function rareSkillFindingsUrl(skill: string): string {
-  const params = new URLSearchParams({ sweep: RARE_SKILL_SWEEP, q: skill });
+ *  bus-factor sweep and this skill, or (once we know a specific finding
+ *  exists for it) straight to that finding. `FindingsPage` reads
+ *  `?sweep=`/`?q=`/`?finding=`. */
+export function rareSkillFindingsUrl(skill: string, findingId?: string | null): string {
+  const params = findingId
+    ? new URLSearchParams({ sweep: RARE_SKILL_SWEEP, finding: findingId })
+    : new URLSearchParams({ sweep: RARE_SKILL_SWEEP, q: skill });
   return `/iq/work/findings?${params.toString()}`;
+}
+
+// ── Joining Explore's rare-skill read to the server's bus-factor sweep ─────
+//
+// `orgInsight`/`departmentInsight` compute "rare skill" client-side from
+// `/api/graph/entities` — a live, cheap read with no notion of "has a human
+// already been told about this." `GET /api/work/findings` is the server's
+// own opinion: a persisted, promotable/dismissable finding the nightly sweep
+// (`middleware/src/providers/org-sweeps.ts::sweepBusFactor`) filed. The two
+// are independent reads over data that can drift (the sweep runs on a
+// schedule; the graph read is live), so a rare-skill pill and "finding →"
+// can legitimately disagree — the join below is how the strip tells the
+// reader which case it's in instead of linking to "Nothing here."
+//
+// The only thing a `Finding` carries that names the skill at all is its
+// title, and only for the REAL sweep: `sweepBusFactor` writes
+// `${skillName}: N holder(s) org-wide` verbatim. A finding whose title
+// doesn't follow that shape (a hand-written mock fixture, say) can't be
+// matched to a skill and is correctly treated as not about any skill here —
+// that is the disagreement made visible, not a bug in the parse.
+
+export interface FindingLike {
+  id: string;
+  sweep: string;
+  status: string;
+  entityType: string | null;
+  title: string;
+}
+
+function skillNameFromBusFactorTitle(title: string): string | null {
+  const idx = title.indexOf(':');
+  if (idx <= 0) return null;
+  const rest = title.slice(idx + 1).trim().toLowerCase();
+  if (!rest.includes('holder')) return null; // not the sweep's own "N holder(s) org-wide" shape
+  return title.slice(0, idx).trim().toLowerCase();
+}
+
+/** skill name (lowercased) → the bus-factor finding for it. Later findings
+ *  for a name already seen are ignored — `sweepBusFactor` upserts by
+ *  fingerprint, so the caller's list should carry at most one open finding
+ *  per skill; if it ever carries more, the first (most-recently-fetched
+ *  order) wins over silently picking one at random on every render. */
+export function indexBusFactorFindings(findings: FindingLike[]): Map<string, FindingLike> {
+  const m = new Map<string, FindingLike>();
+  for (const f of findings) {
+    if (f.sweep !== RARE_SKILL_SWEEP || f.entityType !== 'skill') continue;
+    const name = skillNameFromBusFactorTitle(f.title);
+    if (!name || m.has(name)) continue;
+    m.set(name, f);
+  }
+  return m;
+}
+
+/** Look up the server's bus-factor finding for a skill name, case-insensitive. */
+export function findingForSkill(index: Map<string, FindingLike>, skill: string): FindingLike | null {
+  return index.get(skill.trim().toLowerCase()) ?? null;
 }
 
 // ── Node sizing ──────────────────────────────────────────────────────────────

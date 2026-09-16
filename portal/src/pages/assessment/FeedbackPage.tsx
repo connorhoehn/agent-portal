@@ -15,6 +15,7 @@ import {
   DetailSection,
   Drawer,
   EmptyState,
+  ErrorState,
   Inline,
   Input,
   LoadingState,
@@ -28,7 +29,9 @@ import {
   type StatusPillState,
 } from '@connorhoehnslalom/ui-components/shared';
 import { Link } from 'react-router';
+import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { useCapabilities } from '../../lib/capabilities';
+import { useFetch } from '../../hooks/useFetch';
 import { toastError, toastSuccess } from '../../lib/toastStore';
 import { feedbackActionPath, formatRelativeTime } from './secondaryFormat';
 import type { FeedbackListResponse, FeedbackTask, HitlStatus } from './secondaryTypes';
@@ -196,22 +199,14 @@ export default function FeedbackPage() {
   const [status, setStatus] = useState<HitlStatus | 'ALL'>('OPEN');
   const [team, setTeam] = useState<string>('all');
   const [search, setSearch] = useState('');
-  const [data, setData] = useState<FeedbackListResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  function load() {
-    setLoading(true);
+  const feedbackUrl = useMemo(() => {
     const params = new URLSearchParams();
     if (status !== 'ALL') params.set('status', status);
-    fetch(`/api/assessment/feedback?${params.toString()}`, { credentials: 'include' })
-      .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`))))
-      .then((body: FeedbackListResponse) => { setData(body); setError(null); })
-      .catch((err: Error) => setError(err.message))
-      .finally(() => setLoading(false));
-  }
-  useEffect(load, [status]);
+    return `/api/assessment/feedback?${params.toString()}`;
+  }, [status]);
+  const { data, isLoading: loading, error, degraded, refresh: load } = useFetch<FeedbackListResponse>(feedbackUrl);
 
   const tasks = useMemo(() => data?.tasks ?? [], [data]);
   const { teams } = useTeams();
@@ -286,7 +281,14 @@ export default function FeedbackPage() {
       {loading && !data ? (
         <LoadingState label="Loading the queue…" />
       ) : error ? (
-        <EmptyState title="Couldn't load the queue" body={error} actionLabel="Retry" onAction={load} />
+        <ErrorState title="Couldn't load the queue" description={error} actionLabel="Retry" onAction={load} />
+      ) : degraded ? (
+        <UnavailableNotice
+          error={degraded}
+          what="the question queue"
+          source="Feedback tasks are read from the assessment database"
+          onRetry={load}
+        />
       ) : (
         <DataTable<FeedbackTask>
           data={rows}

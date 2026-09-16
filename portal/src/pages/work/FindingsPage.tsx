@@ -75,13 +75,18 @@ export default function FindingsPage() {
   // on screen can never disagree with the pressed pill — a fetch that
   // resolves late (a fast click, a slow network) can't flash a stale
   // status's rows under the newly-selected filter.
-  // Deep links from Explore's rare-skill strip arrive as ?sweep=bus_factor&q=<skill>:
-  // the sweep narrows the groups, the text narrows the rows. Both are shown
-  // as removable chips so the reader can see what the URL did to the list.
+  // Deep links from Explore's rare-skill strip arrive as ?sweep=bus_factor&q=<skill>,
+  // or — once the strip has matched the skill to a real finding —
+  // ?sweep=bus_factor&finding=<id>. The sweep/q pair narrows the groups and
+  // rows; `finding` instead names one specific row: it auto-opens its sweep
+  // group and scrolls/highlights it, rather than narrowing the list. All
+  // three are shown as removable chips so the reader can see what the URL
+  // did to the list.
   const [searchParams, setSearchParams] = useSearchParams();
   const sweepParam = searchParams.get('sweep')?.trim() || null;
   const qParam = searchParams.get('q')?.trim() || null;
-  const clearParam = (key: 'sweep' | 'q') => {
+  const findingParam = searchParams.get('finding')?.trim() || null;
+  const clearParam = (key: 'sweep' | 'q' | 'finding') => {
     const next = new URLSearchParams(searchParams);
     next.delete(key);
     setSearchParams(next, { replace: true });
@@ -111,6 +116,15 @@ export default function FindingsPage() {
         : items.some((f) => f.severity === 'warning') ? 1 : 2;
     return [...by.entries()].sort((a, b) => rank(a[1]) - rank(b[1]) || b[1].length - a[1].length);
   }, [findings]);
+
+  // ?finding=<id> deep link: scroll the named row into view once it's on the
+  // page (its group is force-opened below, but the group's own open animation
+  // still needs a tick before the row has a real position).
+  useEffect(() => {
+    if (!findingParam) return;
+    const el = document.getElementById(`finding-${findingParam}`);
+    if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }, [findingParam, findings]);
 
   async function requeue(job: Job) {
     const tid = toastPending('Requeueing job', job.title);
@@ -304,7 +318,7 @@ export default function FindingsPage() {
             </FilterChip>
           ))}
         </ToolbarGroup>
-        {(sweepParam || qParam) && (
+        {(sweepParam || qParam || findingParam) && (
           <ToolbarGroup aria-label="Deep-link filters">
             {sweepParam && (
               <FilterChip active size="sm" onClick={() => clearParam('sweep')}>
@@ -314,6 +328,11 @@ export default function FindingsPage() {
             {qParam && (
               <FilterChip active size="sm" onClick={() => clearParam('q')}>
                 “{qParam}” ×
+              </FilterChip>
+            )}
+            {findingParam && (
+              <FilterChip active size="sm" onClick={() => clearParam('finding')}>
+                Finding highlighted ×
               </FilterChip>
             )}
           </ToolbarGroup>
@@ -342,6 +361,7 @@ export default function FindingsPage() {
             <CollapsibleSection
               key={sweep}
               className="rounded-none border-x-0 border-t-0 last:border-b-0"
+              defaultOpen={items.some((f) => f.id === findingParam)}
               badge={<SeverityChip severity={worst} />}
               title={
                 <Inline align="center" gap="sm">
@@ -367,7 +387,15 @@ export default function FindingsPage() {
               )}
 
               {items.map((f) => (
-                <Inline key={f.id} align="center" gap="sm" className="px-3.5 py-2.5 pl-10 border-t border-border min-w-0 bg-surface-hover/30">
+                <Inline
+                  key={f.id}
+                  id={`finding-${f.id}`}
+                  align="center"
+                  gap="sm"
+                  className={`px-3.5 py-2.5 pl-10 border-t border-border min-w-0 ${
+                    f.id === findingParam ? 'bg-primary/10 ring-1 ring-inset ring-primary' : 'bg-surface-hover/30'
+                  }`}
+                >
                   <SeverityChip severity={f.severity} />
                   <Stack gap="none" className="flex-1 min-w-0">
                     <T className="text-[12.5px] text-text-primary truncate" title={f.title}>{f.title}</T>

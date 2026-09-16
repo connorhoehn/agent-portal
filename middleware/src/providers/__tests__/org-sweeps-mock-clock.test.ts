@@ -71,7 +71,8 @@ describe('the seeded findings board reads its ages off the clock', () => {
     const dismissed = await getFinding('find-mock-7');
     expect(dismissed?.status).toBe('dismissed');
     const result = await runSweep('bus_factor');
-    expect(result.found).toBe(2);
+    // One rare skill in the mock cast (MLOps, two holders) — see org-findings.ts.
+    expect(result.found).toBe(1);
     expect((await getFinding('find-mock-7'))?.lastSeenAt).toBe(hoursBeforeNoon(20));
   });
 });

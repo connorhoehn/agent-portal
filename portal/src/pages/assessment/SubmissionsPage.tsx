@@ -7,7 +7,7 @@
 // this library's DataTable/Drawer/Wizard rather than a hand-rolled table and stepper.
 // See docs/assessment-tenant.md "SubmissionsPage.tsx" for the exact contract.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import {
   Button,
@@ -17,6 +17,7 @@ import {
   DataTable,
   Drawer,
   EmptyState,
+  ErrorState,
   InlinePlaceholder,
   LoadingState,
   MetaLine,
@@ -28,7 +29,9 @@ import {
   ToolbarLabel,
   Wizard,
 } from '@connorhoehnslalom/ui-components/shared';
+import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { useCapabilities } from '../../lib/capabilities';
+import { useFetch } from '../../hooks/useFetch';
 import { toastError, toastSuccess } from '../../lib/toastStore';
 import { useTeams } from './dashboard/useTeams';
 import { envelopesToListItems, formatRelativeTime, groupSubmissions, revisionLabel } from './secondaryFormat';
@@ -115,9 +118,11 @@ export default function SubmissionsPage() {
   const [params, setParams] = useSearchParams();
   const adding = params.get('view') === 'add';
 
-  const [data, setData] = useState<SubmissionsListResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // `null` while the add wizard is open — the list underneath is stale
+  // anyway, and refetching it mid-wizard would just be discarded on return.
+  const { data, isLoading: loading, error, degraded, refresh: load } = useFetch<SubmissionsListResponse>(
+    adding ? null : '/api/assessment/submissions',
+  );
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [confirmingDelete, setConfirmingDelete] = useState<SubmissionRevisionGroup | null>(null);
   const [confirmingClear, setConfirmingClear] = useState(false);
@@ -128,23 +133,6 @@ export default function SubmissionsPage() {
   // render the matched team's real name, not the submitter's own typed text.
   const { teams } = useTeams();
   const teamsById = useMemo(() => new Map(teams.map((t) => [t.id, t.name])), [teams]);
-
-  function load() {
-    setLoading(true);
-    fetch('/api/assessment/submissions', { credentials: 'include' })
-      .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`))))
-      .then((body: SubmissionsListResponse) => {
-        setData(body);
-        setError(null);
-      })
-      .catch((err: Error) => setError(err.message))
-      .finally(() => setLoading(false));
-  }
-
-  useEffect(() => {
-    if (!adding) load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [adding]);
 
   const groups = useMemo(
     () => groupSubmissions(envelopesToListItems(data?.envelopes ?? []), undefined, teamsById),
@@ -263,7 +251,14 @@ export default function SubmissionsPage() {
       {loading ? (
         <LoadingState label="Loading submissions…" />
       ) : error ? (
-        <EmptyState title="Couldn't load submissions" body={error} actionLabel="Retry" onAction={load} />
+        <ErrorState title="Couldn't load submissions" description={error} actionLabel="Retry" onAction={load} />
+      ) : degraded ? (
+        <UnavailableNotice
+          error={degraded}
+          what="the submission ledger"
+          source="Submissions are read from the assessment database"
+          onRetry={load}
+        />
       ) : groups.length === 0 ? (
         <EmptyState
           title="No submissions ingested yet"

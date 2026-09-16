@@ -57,6 +57,14 @@ describe('registration', () => {
     expect(failed.every((r) => r.status !== 'completed')).toBe(true);
   });
 
+  it('`error` on the roster, dimension scores, submissions, feedback and configuration tables fails loudly', () => {
+    expect(() => M.teamsFixture.rows('error')).toThrow(/assessment_teams unavailable/);
+    expect(() => M.scoresFixture.rows('error')).toThrow(/assessment_dimension_scores unavailable/);
+    expect(() => M.submissionsFixture.rows('error')).toThrow(/assessment_submissions unavailable/);
+    expect(() => M.feedbackFixture.rows('error')).toThrow(/assessment_feedback_tasks unavailable/);
+    expect(() => M.configurationFixture.rows('error')).toThrow(/assessment_configuration unavailable/);
+  });
+
   it('`large` gives the team list and the run ledger something to paginate', () => {
     expect(M.teamsFixture.rows('large').length).toBeGreaterThan(100);
     expect(M.runsFixture.rows('large').length).toBeGreaterThan(100);

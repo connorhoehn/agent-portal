@@ -7,10 +7,13 @@ import {
   orgInsight,
   rareSkillFindingsUrl,
   RARE_SKILL_SWEEP,
+  indexBusFactorFindings,
+  findingForSkill,
   nodeRadius,
   degreeMap,
   maxDegree,
   parseFocusIds,
+  type FindingLike,
 } from '../graphInsights.ts';
 import type { GraphPerson } from '../types.ts';
 
@@ -80,6 +83,65 @@ test('rareSkillFindingsUrl encodes a skill name with special characters', () => 
   const url = rareSkillFindingsUrl('C++/CLI');
   const params = new URLSearchParams(url.split('?')[1]);
   assert.equal(params.get('q'), 'C++/CLI');
+});
+
+test('rareSkillFindingsUrl links straight to the finding when one is known', () => {
+  const url = rareSkillFindingsUrl('Kubernetes', 'find-abc');
+  assert.match(url, /^\/iq\/work\/findings\?/);
+  const params = new URLSearchParams(url.split('?')[1]);
+  assert.equal(params.get('sweep'), RARE_SKILL_SWEEP);
+  assert.equal(params.get('finding'), 'find-abc');
+  assert.equal(params.get('q'), null, 'finding and q are mutually exclusive on the URL');
+});
+
+// ── indexBusFactorFindings / findingForSkill ─────────────────────────────────
+//
+// These mirror the exact server shape: `sweepBusFactor`
+// (middleware/src/providers/org-sweeps.ts) writes titles as
+// `${skillName}: N holder(s) org-wide`, and that title is the ONLY place a
+// Finding names its skill — the join has nothing else to go on.
+
+function finding(overrides: Partial<FindingLike>): FindingLike {
+  return {
+    id: 'find-1', sweep: RARE_SKILL_SWEEP, status: 'open', entityType: 'skill',
+    title: 'Kubernetes: 1 holder org-wide',
+    ...overrides,
+  };
+}
+
+test('indexBusFactorFindings matches the server\'s own title format, case-insensitively', () => {
+  const idx = indexBusFactorFindings([finding({ title: 'Zero Trust: 2 holders org-wide' })]);
+  assert.equal(findingForSkill(idx, 'zero trust')?.id, 'find-1');
+  assert.equal(findingForSkill(idx, 'Zero Trust')?.id, 'find-1');
+});
+
+test('indexBusFactorFindings ignores findings from other sweeps', () => {
+  const idx = indexBusFactorFindings([finding({ sweep: 'stale_docs', title: 'Kubernetes: 1 holder org-wide' })]);
+  assert.equal(findingForSkill(idx, 'Kubernetes'), null);
+});
+
+test('indexBusFactorFindings ignores a bus-factor finding whose title carries no colon (a mock/narrative title)', () => {
+  const idx = indexBusFactorFindings([
+    finding({ title: 'Aurora cold-start recovery has a single holder' }),
+  ]);
+  assert.equal(idx.size, 0, 'no skill name can be read off a title with no colon');
+});
+
+test('indexBusFactorFindings ignores a colon that is not the "N holder(s)" shape', () => {
+  // Guards against a title that happens to contain a colon for an unrelated
+  // reason (e.g. a quoted decision name) from being misread as a skill name.
+  const idx = indexBusFactorFindings([finding({ title: 'Note: something else entirely' })]);
+  assert.equal(idx.size, 0);
+});
+
+test('indexBusFactorFindings skips a non-skill entityType even under the bus-factor sweep', () => {
+  const idx = indexBusFactorFindings([finding({ entityType: 'document', title: 'Kubernetes: 1 holder org-wide' })]);
+  assert.equal(idx.size, 0);
+});
+
+test('findingForSkill returns null (checked, absent) for a skill the sweep never flagged', () => {
+  const idx = indexBusFactorFindings([finding({ title: 'Kubernetes: 1 holder org-wide' })]);
+  assert.equal(findingForSkill(idx, 'Rust'), null);
 });
 
 // ── nodeRadius ────────────────────────────────────────────────────────────

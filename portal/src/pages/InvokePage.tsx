@@ -19,6 +19,7 @@ import {
   Stack,
   SuggestionCard,
   ThinkingBlock,
+  WorkflowStepper,
 } from '@connorhoehnslalom/ui-components/shared';
 import { ChatPanel } from '@connorhoehnslalom/ui-components/social';
 import { useFetch } from '../hooks/useFetch';
@@ -214,6 +215,7 @@ function InvokePage() {
     isStreaming,
     streamingText,
     activeToolCalls,
+    steps,
     error,
     sessionId,
     sendMessage,
@@ -779,6 +781,22 @@ function InvokePage() {
               </Stack>
             );
           })}
+          {/* Named run phases (STEP_STARTED/STEP_FINISHED) — transient by
+              design: the hook resets `steps` on every RUN_STARTED, so this
+              strip is only ever shown while the current turn is in flight
+              and simply disappears once the turn finishes rather than
+              lingering on the finished bubble. */}
+          {isStreaming && steps.length > 0 && (
+            <WorkflowStepper
+              size="sm"
+              steps={steps.map((s, i) => ({
+                step: i + 1,
+                label: s.name,
+                done: s.status === 'done',
+                active: s.status === 'running',
+              }))}
+            />
+          )}
           {isStreaming && (
             <MessageBubble
               role="assistant"

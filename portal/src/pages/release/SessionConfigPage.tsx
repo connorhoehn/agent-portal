@@ -16,6 +16,7 @@ import {
 } from '@connorhoehnslalom/ui-components/shared';
 import { Link } from 'react-router';
 import { KeyValue } from '../../components/KeyValue';
+import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';
 import { relativeTime } from '../../lib/relativeTime';
@@ -141,8 +142,9 @@ function PublishAction({ bundle, onPublished }: { bundle: SessionBundleDetail; o
 }
 
 export default function SessionConfigPage() {
-  const { data: live, isLoading: liveLoading, error: liveError, refresh: refreshLive } =
+  const { data: live, isLoading: liveLoading, error: liveError, degraded: liveDegraded, refresh: refreshLive } =
     useFetch<SessionBundleDetail>('/api/session-bundle/live', 30_000);
+  const liveFailure = liveError ?? liveDegraded;
   const { data: list, refresh: refreshList } = useFetch<SessionBundleListResponse>('/api/session-bundle', 30_000);
 
   const pending = list?.bundles.find((b) => b.status === 'pending') ?? null;
@@ -158,8 +160,13 @@ export default function SessionConfigPage() {
       title="Session configuration"
       description="What every Claude Code devbox session is configured with — hooks, bundled skills, and settings — and the drift between what shipped and what the library now holds."
     >
-      {liveError ? (
-        <EmptyState title="Could not load the live bundle" description={liveError} />
+      {liveFailure ? (
+        <UnavailableNotice
+          error={liveFailure}
+          what="the live bundle"
+          source="The live bundle is read from the devbox fleet"
+          onRetry={refreshLive}
+        />
       ) : liveLoading && !live ? (
         <LoadingState label="Loading the live bundle…" />
       ) : !live ? (

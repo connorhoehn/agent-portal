@@ -39,7 +39,8 @@ export default function WorkHomePage() {
   const { session } = useSession();
   const canOpenDevbox = !!session && DEVBOX_ROLES.includes(session.role);
 
-  const { data: summary, error: summaryError, refresh: refreshSummary } = useFetch<Summary>('/api/work/summary', 8_000);
+  const { data: summary, error: summaryError, degraded: summaryDegraded, refresh: refreshSummary } = useFetch<Summary>('/api/work/summary', 8_000);
+  const summaryFailure = summaryError ?? summaryDegraded;
   // Pending consults poll on the same cadence as the summary: each one is a
   // RUNNING agent blocked on a human, which outranks everything else here.
   const { data: consultData, refresh: refreshConsults } =
@@ -283,7 +284,7 @@ export default function WorkHomePage() {
       <QueuePulse
         summary={s ? { jobs: s.jobs, busyBoxes: s.busyBoxes } : null}
         jobs={jobs}
-        degraded={!!summaryError}
+        degraded={!!summaryFailure}
       />
 
       {/* ── The three door-to-a-lane numbers in one dense StatStrip row —

@@ -28,7 +28,7 @@ function DashboardPage() {
   const { teamId } = useParams<{ teamId?: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { teams, isLoading, isError, refresh } = useTeams();
+  const { teams, isLoading, isError, degraded, refresh } = useTeams();
   const [newTeamOpen, setNewTeamOpen] = useState(false);
 
   // ── View 3: scorecard ──────────────────────────────────────────────────
@@ -61,6 +61,7 @@ function DashboardPage() {
         teams={teams}
         isLoading={isLoading}
         isError={isError}
+        degraded={degraded}
         cohort={cohort}
         onCohortChange={(next) => {
           const params = new URLSearchParams(searchParams);

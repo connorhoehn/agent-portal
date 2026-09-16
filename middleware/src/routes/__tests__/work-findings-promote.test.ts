@@ -56,7 +56,7 @@ const releaseManager = { sub: 'u-release', role: 'org-leader', tenant: 'orgiq' }
 // time any code in this test file's module registry touches the findings
 // store, so these are stable within this file.
 const FINDING_OBS_NO_GRANT = 'find-mock-1';   // bus_factor, evidence.initiatives: ['p-observability']
-const FINDING_NO_INITIATIVE = 'find-mock-2';  // bus_factor, no initiative evidence at all
+const FINDING_NO_INITIATIVE = 'find-mock-2';  // orphan_decisions, no initiative evidence at all
 const FINDING_AUTH_CANDIDATE = 'find-mock-5'; // orphan_decisions, evidence.candidateInitiative: 'p-auth-migration'
 
 function promote(session: Record<string, unknown> | null, id: string) {

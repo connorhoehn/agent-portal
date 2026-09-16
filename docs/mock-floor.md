@@ -733,3 +733,13 @@ Say it out loud so nobody over-trusts it.
 - **None of it reads the portal.** The floor makes fixtures agree with the
   server. Where a fixture is right and the page is wrong — or both are wrong
   together in a way no fixture states — only an audit will find it.
+
+## The mock agent stream is paced
+
+`mockAgentCore.invokeAgentStreaming` (`providers/agentcore.ts`) sleeps
+`MOCK_STREAM_PACE_MS` between chunks — default 12ms in development, 0 under
+jest. Unpaced, a whole run landed in one ~2ms SSE read, React batched every
+event into a single render, and no in-flight state (the step strip, the
+streaming bubble, tool-call pills) was ever painted, so Ask looked as if the
+hook dropped `STEP_STARTED`. A real Nova answer streams for seconds; the mock
+now takes about 1.4s. Set `MOCK_STREAM_PACE_MS=0` for a capture server.

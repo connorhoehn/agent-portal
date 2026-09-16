@@ -18,6 +18,7 @@ import {
   type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
+import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { relativeTime } from '../../lib/relativeTime';
 import { STATUS_LABEL, STATUS_TONE, filterDesigns, reviewStateLine } from './designFormat';
 import { T } from './Text';
@@ -37,8 +38,9 @@ export default function DesignsPage() {
   const initiative = searchParams.get('initiative') ?? '';
   const [filter, setFilter] = useState('all');
 
-  const { data, isLoading, error } = useFetch<{ reviews: DesignReview[] }>(
+  const { data, isLoading, error, degraded, refresh } = useFetch<{ reviews: DesignReview[] }>(
     `/api/designs${initiative ? `?initiative=${encodeURIComponent(initiative)}` : ''}`, 30_000);
+  const designsFailure = error ?? degraded;
 
   const reviews = useMemo(() => filterDesigns(data?.reviews ?? [], filter), [data, filter]);
 
@@ -113,8 +115,13 @@ export default function DesignsPage() {
         ) : null}
       </Toolbar>
 
-      {error ? (
-        <EmptyState title="Could not load designs" description={error} />
+      {designsFailure ? (
+        <UnavailableNotice
+          error={designsFailure}
+          what="designs"
+          source="Design reviews are read from Aurora"
+          onRetry={refresh}
+        />
       ) : isLoading && !data ? (
         <LoadingState label="Loading design reviews…" />
       ) : reviews.length === 0 ? (
@@ -123,6 +130,13 @@ export default function DesignsPage() {
           description={filter === 'all'
             ? 'No initiative has opened a design thread yet.'
             : `Nothing ${STATUS_LABEL[filter as DesignStatus]?.toLowerCase() ?? filter} right now.`}
+          {...(filter === 'all' ? {
+            action: (
+              <Link to="/iq/projects" className="text-[12px] font-semibold text-primary no-underline hover:underline">
+                Open Initiatives →
+              </Link>
+            ),
+          } : {})}
         />
       ) : (
         <DataTable<DesignReview>

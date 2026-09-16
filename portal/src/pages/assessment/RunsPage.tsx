@@ -13,6 +13,7 @@ import {
   DataTable,
   Drawer,
   EmptyState,
+  ErrorState,
   Inline,
   LoadingState,
   MetaLine,
@@ -23,6 +24,8 @@ import {
   StatusPill,
 } from '@connorhoehnslalom/ui-components/shared';
 import { KeyValue } from '../../components/KeyValue';
+import { UnavailableNotice } from '../../components/UnavailableNotice';
+import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';
 import { toastError, toastSuccess } from '../../lib/toastStore';
 import { useAssessmentEvents } from './knowledge/useAssessmentEvents';
@@ -134,22 +137,17 @@ export default function RunsPage() {
   const { can, ready } = useCapabilities();
   const canStop = ready && can('RunAssessmentAgent');
 
+  // The ledger read is `useFetch` (so a `degraded` envelope surfaces), but the
+  // rows themselves live in local state: the SSE reducer below folds
+  // run.started/progress/completed/failed onto them between fetches, and a
+  // fresh GET has to be able to replace that local state wholesale on the
+  // next `load()` — same contract the old hand-rolled fetch had.
+  const { data: runsResp, isLoading: loading, error, degraded, refresh: load } = useFetch<RunsListResponse>('/api/assessment/runs');
   const [runs, setRuns] = useState<RunRecord[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  useEffect(() => { if (runsResp) setRuns(runsResp.runs ?? []); }, [runsResp]);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [stopping, setStopping] = useState(false);
   const detail = runs.find((r) => r.id === detailId) ?? null;
-
-  function load() {
-    fetch('/api/assessment/runs', { credentials: 'include' })
-      .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`))))
-      .then((body: RunsListResponse) => { setRuns(body.runs ?? []); setError(null); })
-      .catch((err: Error) => setError(err.message))
-      .finally(() => setLoading(false));
-  }
-
-  useEffect(() => { load(); }, []);
 
   // Reactive to its own launches: the same GET /events stream the Workspace
   // explorer subscribes to (./knowledge/useAssessmentEvents.ts) carries
@@ -196,7 +194,14 @@ export default function RunsPage() {
       {loading ? (
         <LoadingState label="Loading activity…" />
       ) : error ? (
-        <EmptyState title="Couldn't load activity" body={error} actionLabel="Retry" onAction={load} />
+        <ErrorState title="Couldn't load activity" description={error} actionLabel="Retry" onAction={load} />
+      ) : degraded ? (
+        <UnavailableNotice
+          error={degraded}
+          what="the run ledger"
+          source="Runs are read from the assessment database"
+          onRetry={load}
+        />
       ) : runs.length === 0 ? (
         <EmptyState title="No activity yet" />
       ) : (

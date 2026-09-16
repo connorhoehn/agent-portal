@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
-    "@connorhoehnslalom/realtime-modules": "github:connorhoehnslalom/realtime-modules#045a56fdedbbec108ec6f1607823ddcb0f10ab8e",
+    "@connorhoehnslalom/realtime-modules": "github:connorhoehnslalom/realtime-modules#ccf37b6c2b97aa3c5339444c348847c5c5595023",
     "@connorhoehnslalom/ui-components": "github:connorhoehnslalom/ui-components#ad1af461902649e7357ed041fda6f14654180c4b",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",

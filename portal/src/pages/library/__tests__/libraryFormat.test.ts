@@ -3,7 +3,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { contractLine, usageLine, evalLabel, facetOptions, isFenced, KIND_ORDER } from '../libraryFormat.ts';
+import {
+  contractLine, usageLine, evalLabel, facetOptions, isFenced, libraryEmptyKind, KIND_ORDER,
+} from '../libraryFormat.ts';
 import type { LibraryAsset } from '../types.ts';
 
 function asset(over: Partial<LibraryAsset> = {}): LibraryAsset {
@@ -78,4 +80,11 @@ test('an unmet row explains itself rather than just failing', () => {
   } });
   assert.match(rows[0]!.detail!, /rogue would render as untrusted/);
   assert.equal(rows[2]!.detail, 'never evaluated');
+});
+
+test('libraryEmptyKind distinguishes a filtered-to-zero result from a genuinely empty catalog', () => {
+  assert.equal(libraryEmptyKind(false, 3), null);
+  assert.equal(libraryEmptyKind(true, 3), null);
+  assert.equal(libraryEmptyKind(true, 0), 'filtered');
+  assert.equal(libraryEmptyKind(false, 0), 'catalog-empty');
 });

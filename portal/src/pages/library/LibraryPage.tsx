@@ -11,7 +11,7 @@
 // list, not instead of it.
 
 import { useMemo, useState, useEffect } from 'react';
-import { useSearchParams, useParams } from 'react-router';
+import { Link, useSearchParams, useParams } from 'react-router';
 import {
   Button,
   Chip,
@@ -30,6 +30,7 @@ import {
   type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
+import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { useCrumbLabel } from '../../lib/crumbLabels';
 import { relativeTime } from '../../lib/relativeTime';
 import { AssetDrawer } from './AssetDrawer';
@@ -37,7 +38,7 @@ import { T } from './Text';
 import {
   KIND_HINT, KIND_LABEL, KIND_ORDER, KIND_TONE,
   TIER_HINT, TIER_LABEL, TIER_ORDER, TIER_TONE,
-  contractLine, evalLabel, facetOptions, usageLine,
+  contractLine, evalLabel, facetOptions, libraryEmptyKind, usageLine,
 } from './libraryFormat';
 import type { AssetKind, AssetTier, LibraryAsset, LibraryResponse } from './types';
 
@@ -61,9 +62,12 @@ export default function LibraryPage() {
   };
 
   const url = `/api/library?kind=${kind}&tier=${tier}${query ? `&q=${encodeURIComponent(query)}` : ''}`;
-  const { data, isLoading, error } = useFetch<LibraryResponse>(url, 60_000);
+  const { data, isLoading, error, degraded, refresh } = useFetch<LibraryResponse>(url, 60_000);
+  const libraryFailure = error ?? degraded;
 
   const assets = useMemo(() => data?.assets ?? [], [data]);
+  const filtersApplied = kind !== 'all' || tier !== 'all' || query.trim().length > 0;
+  const emptyKind = libraryEmptyKind(filtersApplied, assets.length);
   // /iq/library/:assetId — the trail reads the asset's name once the catalog
   // has it, not the shortened id.
   useCrumbLabel(routeAssetId, assets.find((a) => a.id === routeAssetId)?.name);
@@ -197,16 +201,31 @@ export default function LibraryPage() {
         </T>
       )}
 
-      {error ? (
-        <EmptyState title="Could not load the library" description={error} />
+      {libraryFailure ? (
+        <UnavailableNotice
+          error={libraryFailure}
+          what="the library"
+          source="Assets are read from the library catalog"
+          onRetry={refresh}
+        />
       ) : isLoading && !data ? (
         <LoadingState label="Loading the library…" />
-      ) : assets.length === 0 ? (
+      ) : emptyKind === 'filtered' ? (
         <EmptyState
           title="Nothing matches"
           description="No asset matches these facets. Clear a filter or widen the search."
           actionLabel="Clear filters"
           onAction={() => { setParams(new URLSearchParams(), { replace: true }); setQuery(''); }}
+        />
+      ) : emptyKind === 'catalog-empty' ? (
+        <EmptyState
+          title="The library has no assets yet"
+          description="Assets ship here from Distillation, once a runbook, insight or skill is promoted and published."
+          action={(
+            <Link to="/iq/distillation/artifacts" className="text-[12px] font-semibold text-primary no-underline hover:underline">
+              Open Distillation → Artifacts →
+            </Link>
+          )}
         />
       ) : (
         <DataTable<LibraryAsset>

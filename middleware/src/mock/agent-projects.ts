@@ -81,12 +81,20 @@ function seedRow(s: (typeof SEEDED)[number]): AgentProject {
  *             explicitly: an undeclared scenario falls back to `default`, so an
  *             unwritten `empty` would not be empty — and this is the state the
  *             "link your first repository" copy is for.
+ * `error`   — the registry read fails the way the Aurora path does when the
+ *             `agent_projects` table is unreachable. Declared so the Codebases
+ *             page's failed-read notice can be seen without breaking the
+ *             database: before this branch existed `scenario=error` on this
+ *             fixture was a silent no-op that still served all 14 rows.
  */
 export const agentProjects = defineFixture<AgentProject>({
   key: 'agent-projects',
   scenarios: {
     default: () => SEEDED.map(seedRow),
     empty: () => [],
+    error: () => {
+      throw new Error('agent-projects registry unavailable: agent_projects query failed');
+    },
   },
 });
 

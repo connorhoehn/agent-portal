@@ -24,5 +24,8 @@ export type { DepartmentChipsProps } from './DepartmentChips';
 export { DepartmentInsightStrip } from './DepartmentInsightStrip';
 export type { DepartmentInsightStripProps } from './DepartmentInsightStrip';
 
+export { indexBusFactorFindings } from './graphInsights';
+export type { FindingLike } from './graphInsights';
+
 export { findConnectionPath } from './connectionPath';
 export type { PathHop } from './connectionPath';

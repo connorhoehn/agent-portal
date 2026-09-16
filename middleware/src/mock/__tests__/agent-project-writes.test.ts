@@ -34,6 +34,14 @@ beforeEach(() => {
   agentProjectRuns.reset('default');
 });
 
+describe('the registry has a failed-read branch', () => {
+  it('throws under error — that is how the Codebases page\'s unavailable notice is reachable at all', () => {
+    expect(() => agentProjects.rows('error')).toThrow(/agent-projects registry unavailable/);
+    expect(agentProjects.rows('empty')).toEqual([]);
+    expect(agentProjects.rows('default')).toHaveLength(14);
+  });
+});
+
 describe('linking a repository offline', () => {
   it('adds a row that the list and the detail both then show', async () => {
     const before = (await listAgentProjects()).length;

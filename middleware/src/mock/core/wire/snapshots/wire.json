@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-09-16T05:41:19.069Z",
-  "serverHandlerSha": "434d79b631205eee24f075a8e867fc5c4f8b85b00988f0941d251005b943a567",
+  "capturedAt": "2026-09-16T07:41:14.923Z",
+  "serverHandlerSha": "029dee65c91fbb687d98590acfda9ee2c6a062c229c91c81d67e1120f77e3e9b",
   "baseUrl": "http://127.0.0.1:3012",
   "personas": [
     "orgiq/admin",
@@ -5843,7 +5843,7 @@
         "findings[].evidence.initiatives": "array",
         "findings[].evidence.initiatives[]": "string",
         "findings[].evidence.ownerActive": "boolean",
-        "findings[].evidence.ownerId": "string",
+        "findings[].evidence.ownerId": "null|string",
         "findings[].fingerprint": "string",
         "findings[].firstSeenAt": "string",
         "findings[].id": "string",
@@ -5856,7 +5856,6 @@
       },
       "values": {
         "findings[].severity": [
-          "critical",
           "info",
           "warning"
         ],
@@ -6357,7 +6356,6 @@
     "severity": {
       "open": false,
       "values": [
-        "critical",
         "info",
         "low",
         "medium",
