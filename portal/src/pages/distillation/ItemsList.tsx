@@ -14,14 +14,26 @@
 // matches even while the currently-loaded page shows none, so the button
 // stays keyed off the server cursor, not the filtered count.
 import { useEffect, useMemo, useState } from 'react';
-import { Button, Card, Chip, EmptyState, Inline, LoadingState, Stack } from '@connorhoehnslalom/ui-components/shared';
+import {
+  Button, Card, Chip, DotMeter, EmptyState, Inline, LoadingState, Stack, StatusDot,
+} from '@connorhoehnslalom/ui-components/shared';
 import { relativeTime } from '../../lib/relativeTime';
 import { T } from './Text';
 import {
   ARTIFACT_STATUS_TONE, ARTIFACT_TYPE_LABEL, ARTIFACT_TYPE_TONE, OBSERVATION_KIND_TONE,
-  filterByObservationKind, filtersSummaryLabel, hasActiveFilters, itemsQueryParams,
+  filterByObservationKind, filtersSummaryLabel, hasActiveFilters, isRecentlyLanded, itemsQueryParams,
 } from './distillationFormat';
 import type { Item, ItemsResponse, Level, ObservationKind } from './types';
+
+// Matches the mock's own per-minute ingest tick
+// (docs/distillation-concept-audit-2026-09-16.md §2) — inside this window,
+// an L0 row's "Landed" cell is the ingest simulator's own heartbeat, not a
+// proxy for it.
+const LANDED_WINDOW_MS = 60_000;
+/** How often the "Landed" dot's age is re-checked. No network — this only
+ *  decays a pulse back to a relative-time label once a row ages out of the
+ *  window; the underlying data still refreshes on its own poll/filter cadence. */
+const LANDED_TICK_MS = 5_000;
 
 export interface ItemsListProps {
   level: Level;
@@ -52,6 +64,13 @@ export function ItemsList(props: ItemsListProps) {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Ticks so a "Landed" pulse decays to its relative-time label once an L0
+  // row ages out of the window, without a network refetch.
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNowMs(Date.now()), LANDED_TICK_MS);
+    return () => clearInterval(id);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -123,7 +142,7 @@ export function ItemsList(props: ItemsListProps) {
 
   return (
     <Stack gap="sm">
-      {filteredItems.map((it) => <ItemRow key={it.id} item={it} />)}
+      {filteredItems.map((it) => <ItemRow key={it.id} item={it} nowMs={nowMs} />)}
       {cursor && (
         <Button size="sm" variant="secondary" disabled={loadingMore} onClick={() => void loadMore()}>
           {loadingMore ? 'Loading…' : 'Load more'}
@@ -133,15 +152,28 @@ export function ItemsList(props: ItemsListProps) {
   );
 }
 
-function ItemRow({ item }: { item: Item }) {
+function ItemRow({ item, nowMs }: { item: Item; nowMs: number }) {
   if (item.level === 'L0') {
+    // "Landed" — the ingest simulator's own per-minute heartbeat, shown
+    // live rather than as a static timestamp once it's fresh.
+    const landed = isRecentlyLanded(item.created_at, nowMs, LANDED_WINDOW_MS);
     return (
       <Card padding="sm">
         <Inline gap="sm" wrap={false} align="center">
           <Chip tone={OBSERVATION_KIND_TONE[item.kind]} size="xs">{item.kind}</Chip>
           <T className="min-w-0 flex-1 truncate text-[12.5px] font-medium text-text-primary" title={item.title}>{item.title}</T>
           <T className="shrink-0 font-mono text-[10px] text-text-tertiary">{item.repo}</T>
-          <T className="shrink-0 whitespace-nowrap text-[11px] text-text-tertiary">{relativeTime(item.created_at)}</T>
+          {landed ? (
+            <StatusDot
+              size="xs"
+              pulse
+              color="var(--color-success)"
+              label={<T className="whitespace-nowrap text-[11px] text-text-tertiary">just landed</T>}
+              title="Written by the ingest simulator within the last minute"
+            />
+          ) : (
+            <T className="shrink-0 whitespace-nowrap text-[11px] text-text-tertiary">{relativeTime(item.created_at)}</T>
+          )}
         </Inline>
       </Card>
     );
@@ -153,6 +185,11 @@ function ItemRow({ item }: { item: Item }) {
           <Chip tone={OBSERVATION_KIND_TONE[item.kind]} size="xs">{item.kind}</Chip>
           <T className="min-w-0 flex-1 truncate text-[12.5px] font-medium text-text-primary" title={item.title}>{item.title}</T>
           <T className="shrink-0 text-[11px] text-text-tertiary">{item.member_observation_ids.length} obs</T>
+          {/* warnAbove disabled: DotMeter's warn tone means "spent" for a
+              quota, which is backwards for confidence — higher is better
+              here, so no fraction of this meter should ever read as a
+              warning. */}
+          <DotMeter label="confidence" value={item.confidence} segments={5} warnAbove={1.01} className="shrink-0" />
           <T className="shrink-0 whitespace-nowrap text-[11px] text-text-tertiary">{relativeTime(item.updated_at)}</T>
         </Inline>
       </Card>

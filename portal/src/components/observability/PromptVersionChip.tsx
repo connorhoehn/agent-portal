@@ -11,8 +11,10 @@
 
 import { useEffect, useState } from 'react';
 import {
-  Button, Chip, CodeBlock, Inline, InlineAlert, MetaLine, Modal, SectionLabel, Stack,
+  Button, Chip, CodeBlock, InlineAlert, MetaLine, Modal, SectionLabel, Stack,
 } from '@connorhoehnslalom/ui-components/shared';
+import { KeyValue } from '../KeyValue';
+import { absoluteTime } from '../../lib/relativeTime';
 
 interface PromptVersionDetail {
   promptVersion: string;
@@ -130,23 +132,11 @@ function PromptVersionBody({ promptVersion }: { promptVersion: string }) {
               grid; Inline rows read the same and keep each pair together when
               a long sha wraps. */}
           <Stack gap="xs" className="mb-4">
-            <Inline gap="md" align="baseline" wrap={false}>
-              <SectionLabel className="shrink-0 w-24">Agent</SectionLabel>
-              <MetaLine tone="secondary" className="font-mono" items={[detail.agentId]} />
-            </Inline>
-            <Inline gap="md" align="baseline" wrap={false}>
-              <SectionLabel className="shrink-0 w-24">Registered</SectionLabel>
-              <MetaLine tone="secondary" items={[new Date(detail.registeredAt).toLocaleString()]} />
-            </Inline>
-            <Inline gap="md" align="baseline" wrap={false}>
-              <SectionLabel className="shrink-0 w-24">SHA-256</SectionLabel>
-              <MetaLine tone="secondary" className="font-mono break-all" items={[detail.contentSha256]} />
-            </Inline>
+            <KeyValue layout="row" labelWidth="w-24" label="Agent" value={detail.agentId} mono />
+            <KeyValue layout="row" labelWidth="w-24" label="Registered" value={absoluteTime(detail.registeredAt)} />
+            <KeyValue layout="row" labelWidth="w-24" label="SHA-256" value={detail.contentSha256} mono className="break-all" />
             {detail.notes && (
-              <Inline gap="md" align="baseline" wrap={false}>
-                <SectionLabel className="shrink-0 w-24">Notes</SectionLabel>
-                <MetaLine tone="secondary" items={[detail.notes]} />
-              </Inline>
+              <KeyValue layout="row" labelWidth="w-24" label="Notes" value={detail.notes} />
             )}
           </Stack>
 

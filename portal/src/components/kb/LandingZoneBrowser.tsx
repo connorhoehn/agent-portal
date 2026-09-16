@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  Button, Card, Chip, CodeBlock, Inline, InlineAlert, MetaLine, Spinner, Stack,
-  Table, TableBody, TableHead, TableRow, TableTd, TableTh,
+  Button, Chip, CodeBlock, DataTable, Inline, InlineAlert, MetaLine, Spinner, Stack,
 } from '@connorhoehnslalom/ui-components/shared';
+import type { DataTableColumn } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
+import { relativeTime } from '../../lib/relativeTime';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -32,16 +33,6 @@ function humanSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function relativeTime(iso: string): string {
-  const ms = Date.now() - new Date(iso).getTime();
-  const mins = Math.floor(ms / 60000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  return `${Math.floor(hrs / 24)}d ago`;
 }
 
 function truncateKey(key: string, max = 60): string {
@@ -124,9 +115,36 @@ export function LandingZoneBrowser({ kbId, s3Prefix }: LandingZoneBrowserProps) 
     }
   }
 
-  // ─── Shared table styles ────────────────────────────────────────────────────
+  // ─── Table columns ──────────────────────────────────────────────────────────
 
-
+  const columns: DataTableColumn<LandingZoneFile>[] = [
+    {
+      key: 'key',
+      header: 'Key',
+      render: (f) => (
+        <Inline gap="xs" wrap={false}>
+          <Inline as="span" gap="none" title={f.key} className="font-mono text-[12px]">
+            {truncateKey(f.key)}
+          </Inline>
+          {f.extension && (
+            <Chip tone="neutral" size="xs" uppercase>
+              {f.extension.replace(/^\./, '')}
+            </Chip>
+          )}
+        </Inline>
+      ),
+    },
+    {
+      key: 'size',
+      header: 'Size',
+      render: (f) => <MetaLine className="text-right font-mono" items={[humanSize(f.size)]} />,
+    },
+    {
+      key: 'lastModified',
+      header: 'Modified',
+      render: (f) => <MetaLine className="text-right whitespace-nowrap" items={[relativeTime(f.lastModified)]} />,
+    },
+  ];
 
   // ─── Render ─────────────────────────────────────────────────────────────────
 
@@ -171,60 +189,18 @@ export function LandingZoneBrowser({ kbId, s3Prefix }: LandingZoneBrowserProps) 
       {error && <InlineAlert tone="error">{error}</InlineAlert>}
 
       {/* Table */}
-      <Card padding="none">
-        <Table>
-          <TableHead>
-            <TableRow>
-              <TableTh>Key</TableTh>
-              <TableTh>Size</TableTh>
-              <TableTh>Modified</TableTh>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {loading && files.length === 0 ? (
-              <TableRow>
-                <TableTd colSpan={3}>
-                  <MetaLine className="text-center py-8" items={['Loading…']} />
-                </TableTd>
-              </TableRow>
-            ) : files.length === 0 ? (
-              <TableRow>
-                <TableTd colSpan={3}>
-                  <Stack gap="none" align="center" className="py-8 px-4 text-center">
-                    <MetaLine className="leading-normal" items={['No files in this landing zone yet.']} />
-                    <MetaLine size="xs" items={['Upload a document to get started.']} />
-                  </Stack>
-                </TableTd>
-              </TableRow>
-            ) : (
-              // Zebra striping was a per-row inline background computed from the
-              // index; `even:`/`odd:` is the same thing as a class.
-              files.map((f, i) => (
-                <TableRow key={`${f.key}-${i}`}>
-                  <TableTd>
-                    <Inline gap="xs" wrap={false}>
-                      <Inline as="span" gap="none" title={f.key} className="font-mono text-[12px]">
-                        {truncateKey(f.key)}
-                      </Inline>
-                      {f.extension && (
-                        <Chip tone="neutral" size="xs" uppercase>
-                          {f.extension.replace(/^\./, '')}
-                        </Chip>
-                      )}
-                    </Inline>
-                  </TableTd>
-                  <TableTd>
-                    <MetaLine className="text-right font-mono" items={[humanSize(f.size)]} />
-                  </TableTd>
-                  <TableTd>
-                    <MetaLine className="text-right whitespace-nowrap" items={[relativeTime(f.lastModified)]} />
-                  </TableTd>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </Card>
+      <DataTable
+        data={files}
+        columns={columns}
+        keyField={(f) => f.key}
+        loading={loading && files.length === 0}
+        emptyMessage={(
+          <Stack gap="none" align="center" className="py-8 px-4 text-center">
+            <MetaLine className="leading-normal" items={['No files in this landing zone yet.']} />
+            <MetaLine size="xs" items={['Upload a document to get started.']} />
+          </Stack>
+        )}
+      />
 
       {/* Load More */}
       {nextToken && (

@@ -16,9 +16,15 @@ import { T } from './Text';
 import {
   LEVEL_HEALTH_TONE, LEVEL_MEANING, bytesLabel, hasActiveFilters, itemsShownLabel, lagLabel,
 } from './distillationFormat';
-import type { Level, LevelsResponse, ObservationKind } from './types';
+import type { CompactionsResponse, Level, LevelsResponse, ObservationKind } from './types';
 
 const DOOR_LABEL: Record<Level, string> = { L0: 'Observations', L1: 'Clusters', L2: 'Artifacts' };
+
+// Same adaptive cadence CompactionsPage.tsx established: fast while a merge
+// is actually running (the ladder counts on this page are moving), the
+// normal rate otherwise.
+const IDLE_POLL_MS = 30_000;
+const RUNNING_POLL_MS = 2_000;
 
 // GET /api/distillation/items has no distinct-values facet endpoint, so
 // these are hardcoded from the mock corpus itself
@@ -73,7 +79,14 @@ export default function DistillationTiersPage() {
   useEffect(() => { setSearchText(q); }, [q]);
   useEffect(() => () => { if (searchTimer.current) clearTimeout(searchTimer.current); }, []);
 
-  const { data, isLoading, error } = useFetch<LevelsResponse>('/api/distillation/levels', 20_000);
+  const [pollMs, setPollMs] = useState<number>(IDLE_POLL_MS);
+  const { data: jobsData } = useFetch<CompactionsResponse>('/api/distillation/compactions', pollMs);
+  useEffect(() => {
+    const hasRunning = (jobsData?.jobs ?? []).some((j) => j.status === 'running');
+    setPollMs(hasRunning ? RUNNING_POLL_MS : IDLE_POLL_MS);
+  }, [jobsData]);
+
+  const { data, isLoading, error } = useFetch<LevelsResponse>('/api/distillation/levels', pollMs);
   const levels = data?.levels ?? [];
   const health = data?.health ?? [];
 

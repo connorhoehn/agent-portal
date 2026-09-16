@@ -8,27 +8,11 @@ import {
 } from '@connorhoehnslalom/ui-components/shared';
 import { usePromptList } from '../usePromptLibrary.js';
 import type { PromptLibraryEntry } from '../types.js';
+import { relativeTime } from '../../../lib/relativeTime';
 
 export interface PromptLibraryStepProps {
   onSelect: (entry: PromptLibraryEntry) => void;
   selected: PromptLibraryEntry | null;
-}
-
-function relativeTime(iso: string): string {
-  const now = Date.now();
-  const then = Date.parse(iso);
-  if (Number.isNaN(then)) return iso;
-  const diffMs = now - then;
-  const diffSec = Math.floor(diffMs / 1000);
-  if (diffSec < 60) return 'just now';
-  const diffMin = Math.floor(diffSec / 60);
-  if (diffMin < 60) return `${diffMin} minute${diffMin === 1 ? '' : 's'} ago`;
-  const diffHr = Math.floor(diffMin / 60);
-  if (diffHr < 24) return `${diffHr} hour${diffHr === 1 ? '' : 's'} ago`;
-  const diffDay = Math.floor(diffHr / 24);
-  if (diffDay < 30) return `${diffDay} day${diffDay === 1 ? '' : 's'} ago`;
-  const diffMo = Math.floor(diffDay / 30);
-  return `${diffMo} month${diffMo === 1 ? '' : 's'} ago`;
 }
 
 const is503 = (err: string | null): boolean =>

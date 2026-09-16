@@ -20,9 +20,10 @@ import {
   TableTh,
   Tabs,
 } from '@connorhoehnslalom/ui-components/shared';
-import { PAGE_STATUS_TONE, formatBytes, formatDuration } from './types';
+import { PAGE_STATUS_TONE, formatBytes } from './types';
 import type { CrawlPage } from './types';
 import { Markdown } from '../Markdown';
+import { durationLabel } from '../../lib/relativeTime';
 
 type Tab = 'screenshot' | 'markdown' | 'analysis' | 'links';
 
@@ -117,7 +118,7 @@ export function PageDetailModal({
             items={[
               `screenshot: ${formatBytes(page.screenshotBytes)}`,
               `content: ${formatBytes(page.contentLength)}`,
-              `vision: ${page.visionTokensIn}→${page.visionTokensOut} tok · ${formatDuration(page.visionLatencyMs)}`,
+              `vision: ${page.visionTokensIn}→${page.visionTokensOut} tok · ${durationLabel(page.visionLatencyMs)}`,
               page.kbIngestedAt ? `KB ingested ${new Date(page.kbIngestedAt).toLocaleString()}` : null,
             ]}
           />

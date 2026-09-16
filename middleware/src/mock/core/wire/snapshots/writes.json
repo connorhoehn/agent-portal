@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-09-16T02:21:06.818Z",
-  "serverHandlerSha": "ee21ff1b6b3e0c7fe7c9377526345fcb33f11385ca48ece4cbf023f0673b27dc",
+  "capturedAt": "2026-09-16T02:38:33.905Z",
+  "serverHandlerSha": "9bf5b2e0467e5fdc27c7fc04a97816a98ed5966e96dda8fd446738e0253a71fe",
   "baseUrl": "http://127.0.0.1:3012",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
@@ -1539,6 +1539,45 @@
       "values": {},
       "sent": []
     },
+    "POST /api/distillation/artifacts/:id/publish": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "body_markdown": "string",
+        "classification": "string",
+        "cluster_ids": "array",
+        "cluster_ids[]": "string",
+        "confidence": "number",
+        "created_at": "string",
+        "created_by_compaction_id": "string",
+        "facts": "array",
+        "facts[]": "string",
+        "id": "string",
+        "last_used_at": "null",
+        "library_item_id": "null",
+        "owner": "string",
+        "reviewed_at": "null",
+        "reviewed_by": "null",
+        "status": "string",
+        "summary": "string",
+        "title": "string",
+        "type": "string",
+        "updated_at": "string"
+      },
+      "values": {
+        "classification": [
+          "confidential"
+        ],
+        "status": [
+          "published"
+        ],
+        "type": [
+          "procedure"
+        ]
+      },
+      "sent": []
+    },
     "POST /api/distillation/compact": {
       "refused": {
         "rule": "fires",
@@ -1567,6 +1606,29 @@
       },
       "sent": [
         "outcome"
+      ]
+    },
+    "POST /api/distillation/review": {
+      "persona": "orgiq/admin",
+      "status": 201,
+      "shape": {
+        "$": "object",
+        "id": "string",
+        "note": "string",
+        "reviewer": "null",
+        "sampled_at": "string",
+        "target_id": "string",
+        "target_kind": "string",
+        "verdict": "string"
+      },
+      "values": {
+        "verdict": [
+          "pending"
+        ]
+      },
+      "sent": [
+        "target_id",
+        "target_kind"
       ]
     },
     "POST /api/distillation/review/:id": {

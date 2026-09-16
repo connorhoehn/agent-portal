@@ -228,6 +228,93 @@ describe('GET /api/distillation/artifacts', () => {
     expect(res.body.artifacts.length).toBeGreaterThanOrEqual(3);
     expect(res.body.artifacts.every((a: { type: string }) => a.type === 'procedure')).toBe(true);
   });
+
+  it('carries the enterprise-asset fields: owner, classification, confidence rollup, last_used_at', async () => {
+    const res = await request(buildApp()).get('/api/distillation/artifacts');
+    expect(res.status).toBe(200);
+    const a1 = res.body.artifacts.find((a: { id: string }) => a.id === 'art-001');
+    // art-001: published, linked to skill-flaky-test-triage, two facts —
+    // owned by observability's steward, confidence rolled up from its facts,
+    // and it has actually been "used" (published + linked).
+    expect(a1).toMatchObject({ owner: 'Nora DaSilva', classification: 'internal' });
+    expect(typeof a1.confidence).toBe('number');
+    expect(a1.confidence).toBeGreaterThan(0);
+    expect(typeof a1.last_used_at).toBe('string');
+
+    // art-006: still draft, never published or linked — no usage to report.
+    const a6 = res.body.artifacts.find((a: { id: string }) => a.id === 'art-006');
+    expect(a6.last_used_at).toBeNull();
+  });
+});
+
+describe('POST /api/distillation/artifacts/:id/publish', () => {
+  beforeEach(() => { __resetDistillationMock(); });
+
+  it('403s without ManageBots', async () => {
+    gateOpen.value = false;
+    const res = await request(buildApp()).post('/api/distillation/artifacts/art-006/publish');
+    expect(res.status).toBe(403);
+  });
+
+  it('404s on an unknown artifact id', async () => {
+    const res = await request(buildApp()).post('/api/distillation/artifacts/art-does-not-exist/publish');
+    expect(res.status).toBe(404);
+  });
+
+  it('409s on an already-published artifact', async () => {
+    const res = await request(buildApp()).post('/api/distillation/artifacts/art-001/publish');
+    expect(res.status).toBe(409);
+  });
+
+  it('409s on a retired artifact', async () => {
+    const res = await request(buildApp()).post('/api/distillation/artifacts/art-008/publish');
+    expect(res.status).toBe(409);
+  });
+
+  it('publishes a draft artifact', async () => {
+    const res = await request(buildApp()).post('/api/distillation/artifacts/art-006/publish');
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ id: 'art-006', status: 'published' });
+
+    const after = await request(buildApp()).get('/api/distillation/artifacts?status=published');
+    expect(after.body.artifacts.some((a: { id: string }) => a.id === 'art-006')).toBe(true);
+  });
+});
+
+describe('POST /api/distillation/review (create)', () => {
+  beforeEach(() => { __resetDistillationMock(); });
+
+  it('403s without ManageBots', async () => {
+    gateOpen.value = false;
+    const res = await request(buildApp()).post('/api/distillation/review').send({ target_kind: 'artifact', target_id: 'art-002' });
+    expect(res.status).toBe(403);
+  });
+
+  it('400s on an unknown target_kind', async () => {
+    const res = await request(buildApp()).post('/api/distillation/review').send({ target_kind: 'library_item', target_id: 'art-002' });
+    expect(res.status).toBe(400);
+  });
+
+  it('404s on a well-formed but unknown target id', async () => {
+    const res = await request(buildApp()).post('/api/distillation/review').send({ target_kind: 'artifact', target_id: 'art-does-not-exist' });
+    expect(res.status).toBe(404);
+  });
+
+  it('409s when the target already has a pending sample', async () => {
+    // art-006 already carries a pending sample in the seed corpus.
+    const res = await request(buildApp()).post('/api/distillation/review').send({ target_kind: 'artifact', target_id: 'art-006' });
+    expect(res.status).toBe(409);
+  });
+
+  it('queues a new pending sample for a target with none, then it shows up in the pending list', async () => {
+    const app = buildApp();
+    const res = await request(app).post('/api/distillation/review').send({ target_kind: 'artifact', target_id: 'art-002' });
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({ target_kind: 'artifact', target_id: 'art-002', verdict: 'pending', reviewer: null });
+
+    const pending = await request(app).get('/api/distillation/review?verdict=pending');
+    expect(pending.body.samples.some((s: { id: string }) => s.id === res.body.id)).toBe(true);
+  });
 });
 
 describe('GET /api/distillation/facts/:id/lineage', () => {

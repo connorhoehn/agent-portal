@@ -1,5 +1,5 @@
 import type { KbRegistryEntry } from '../../pages/admin/KBRegistryPage.js';
-import { Inline, SectionLabel, Stack, StatusDot } from '@connorhoehnslalom/ui-components/shared';
+import { Card, Inline, SectionLabel, Stack, StatusDot } from '@connorhoehnslalom/ui-components/shared';
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -11,6 +11,10 @@ export interface KBPipelineChainProps {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+// Composed from Card + SectionLabel rather than KeyValue: KeyValue's stack
+// layout owns its value slot as a single truncating span, and this box needs
+// a trailing StatusDot inline with the value — the two fight for the same
+// space, so the label/value pair stays hand-assembled here.
 function PipelineBox({
   title,
   value,
@@ -23,33 +27,33 @@ function PipelineBox({
   dotActive?: boolean;
 }) {
   return (
-    <Stack gap="none"
-      className="min-w-[120px] p-3 border border-border rounded-md bg-surface flex flex-col gap-1"
-    >
-      <SectionLabel className="text-[11px] font-medium tracking-[0.03em]">{title}</SectionLabel>
+    <Card padding="sm" className="min-w-[120px]">
+      <Stack gap="none" className="gap-1">
+        <SectionLabel className="text-[11px] font-medium tracking-[0.03em]">{title}</SectionLabel>
 
-      <Inline gap="none"
-        className="flex items-center gap-0 flex-nowrap"
-      >
-        <Inline
-          as="span"
-          gap="none"
-          className={`text-[13px] font-medium text-text-primary truncate ${value === '—' ? '' : 'font-mono'}`}
-          title={value}
+        <Inline gap="none"
+          className="flex items-center gap-0 flex-nowrap"
         >
-          {value}
+          <Inline
+            as="span"
+            gap="none"
+            className={`text-[13px] font-medium text-text-primary truncate ${value === '—' ? '' : 'font-mono'}`}
+            title={value}
+          >
+            {value}
+          </Inline>
+          {showDot && (
+            // The library StatusDot, not the local one this file used to define
+            // and which shadowed it by the same name.
+            <StatusDot
+              size="xs"
+              className="ml-1.5 shrink-0"
+              color={dotActive ? 'var(--color-success)' : 'var(--color-warning)'}
+            />
+          )}
         </Inline>
-        {showDot && (
-          // The library StatusDot, not the local one this file used to define
-          // and which shadowed it by the same name.
-          <StatusDot
-            size="xs"
-            className="ml-1.5 shrink-0"
-            color={dotActive ? 'var(--color-success)' : 'var(--color-warning)'}
-          />
-        )}
-      </Inline>
-    </Stack>
+      </Stack>
+    </Card>
   );
 }
 

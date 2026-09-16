@@ -40,17 +40,18 @@ import {
   observations as observationsFx, clusters as clustersFx, artifacts as artifactsFx,
   facts as factsFx, libraryLinks as libraryLinksFx, compactionJobs as compactionJobsFx,
   reviewSamples as reviewSamplesFx, ingestWriters as ingestWritersFx,
-  procedureApplications as procedureApplicationsFx, distillationFixtures,
+  procedureApplications as procedureApplicationsFx, distillationFixtures, OWNER_BY_REPO,
   type Observation, type Cluster, type Artifact, type ArtifactRow, type Fact, type ReviewSample,
   type CompactionJobRow, type IngestWriter, type ProcedureApplication, type ApplicationOutcome,
-  type ObservationKind, type ArtifactStatus, type ArtifactType, type ReviewTargetKind, type ReviewVerdict,
+  type ObservationKind, type ArtifactStatus, type ArtifactType, type ArtifactClassification,
+  type ReviewTargetKind, type ReviewVerdict,
   type Level, type CompactionStatus,
   type Lineage, type LineageNode, type LineageEdge, type LineageRelation,
 } from '../mock/distillation.js';
 
 export type {
   Observation, Cluster, Artifact, ArtifactRow, Fact, ReviewSample,
-  ArtifactStatus, ArtifactType, ReviewTargetKind, ReviewVerdict, Lineage, LineageNode, LineageEdge,
+  ArtifactStatus, ArtifactType, ArtifactClassification, ReviewTargetKind, ReviewVerdict, Lineage, LineageNode, LineageEdge,
   Level, CompactionStatus, CompactionJobRow, IngestWriter, ProcedureApplication, ApplicationOutcome,
 } from '../mock/distillation.js';
 
@@ -391,9 +392,30 @@ function libraryLinkFor(artifactId: string): string | null {
   return libraryLinksFx.rows().find((l) => l.artifact_id === artifactId)?.library_item_id ?? null;
 }
 
-/** The wire artifact: the stored row plus its Library link. */
+/**
+ * A card-level confidence for an artifact that never stored one (module note
+ * above: "no rollup confidence on Artifact itself" is a gap, but a STORED
+ * rollup is exactly the tier-card bug this floor exists to prevent). Mean of
+ * the artifact's own facts' confidence — the claims it actually stands on —
+ * falling back to the mean of its source clusters' confidence for the rare
+ * artifact with no facts yet, and 0 (not 1, not omitted) if neither exists,
+ * so an artifact with nothing behind it reads as exactly that rather than as
+ * "fully confident" by the absence of a denominator.
+ */
+const mean = (values: number[]): number => values.reduce((sum, v) => sum + v, 0) / values.length;
+
+function artifactConfidence(row: ArtifactRow): number {
+  const factConfidences = factRows().filter((f) => f.artifact_id === row.id).map((f) => f.confidence);
+  if (factConfidences.length > 0) return Number(mean(factConfidences).toFixed(2));
+  const clusterConfidences = clusterRows().filter((c) => row.cluster_ids.includes(c.id)).map((c) => c.confidence);
+  if (clusterConfidences.length > 0) return Number(mean(clusterConfidences).toFixed(2));
+  return 0;
+}
+
+/** The wire artifact: the stored row plus its Library link and its computed
+ *  confidence rollup — the two fields `ArtifactRow` deliberately omits. */
 function withLink(row: ArtifactRow): Artifact {
-  return { ...row, library_item_id: libraryLinkFor(row.id) };
+  return { ...row, library_item_id: libraryLinkFor(row.id), confidence: artifactConfidence(row) };
 }
 const artifactsOnWire = (): Artifact[] => artifactRows().map(withLink);
 
@@ -648,6 +670,7 @@ export function __resetDistillationMock(): void {
   artifactSeq = 0;
   factSeq = 0;
   applicationSeq = 0;
+  reviewSeq = 0;
 }
 
 // ─── Provider ────────────────────────────────────────────────────────────────
@@ -708,6 +731,7 @@ let clusterSeq = 0;
 let artifactSeq = 0;
 let factSeq = 0;
 let applicationSeq = 0;
+let reviewSeq = 0;
 
 /** Every observation id already claimed by some cluster — the complement is
  *  the L0 backlog an L1 pass has left to do. */
@@ -937,9 +961,21 @@ function runL2Compaction(jobId: string, startedAt: string): void {
         body_markdown,
         cluster_ids: chunk.map((c) => c.id),
         facts,
+        // A freshly minted draft has no accountable owner assigned by a
+        // human yet — OWNER_BY_REPO is the same steward a hand-seeded row
+        // for this repo would get, not a second mapping that could drift
+        // from it. Classification defaults to the least-permissive labelled
+        // tier below 'confidential': nobody has assessed sensitivity yet, so
+        // 'public' would overclaim and 'confidential' would overclaim the
+        // other way for a chunk that turns out to be routine.
+        owner: OWNER_BY_REPO[first.repo] ?? 'Unassigned',
+        classification: 'internal',
         status: 'draft',
         reviewed_by: null,
         reviewed_at: null,
+        // Nothing has been published or invoked yet — same "absence, not a
+        // stored null" posture as library_item_id above it.
+        last_used_at: null,
         created_by_compaction_id: jobId,
         created_at: startedAt,
         updated_at: startedAt,
@@ -1312,6 +1348,63 @@ export async function decideReview(
   sample.verdict = input.verdict;
   sample.note = input.note ?? null;
   sample.reviewer = by;
+  return sample;
+}
+
+/**
+ * POST /artifacts/:id/publish — draft -> published, the one status move this
+ * domain lets a person make by hand (retiring or drafting-again has no route
+ * yet, same "ship exactly what was asked for" posture as everything else on
+ * this floor). Already-published or retired 409s rather than silently
+ * no-opping or re-stamping `updated_at` — same "don't let a second call
+ * quietly clobber state" posture as `decideReview`.
+ */
+export async function publishArtifact(id: string, _by: string): Promise<Artifact> {
+  const row = artifactRows().find((a) => a.id === id);
+  if (!row) throw new NotFoundError(`artifact ${id} not found`);
+  if (row.status === 'published') {
+    throw new AppError(409, `artifact ${id} is already published`);
+  }
+  if (row.status === 'retired') {
+    throw new AppError(409, `artifact ${id} is retired — publish only applies to a draft`);
+  }
+  row.status = 'published';
+  row.updated_at = clock.nowIso();
+  return withLink(row);
+}
+
+/**
+ * POST /review — add a cluster or artifact to the human sample queue by
+ * hand, rather than waiting for the next compaction pass's own sampling. The
+ * target must actually exist (an artifact or cluster id that resolves), and
+ * a target already carrying a pending sample 409s — same "don't double-queue
+ * a decision that hasn't been made yet" posture as `decideReview` refusing a
+ * second verdict. `by` is who ASKED for the review, recorded in `note`
+ * rather than `reviewer` — `reviewer` means who DECIDED it, and this sample
+ * hasn't been decided yet.
+ */
+export async function sampleForReview(
+  targetKind: ReviewTargetKind, targetId: string, by: string,
+): Promise<ReviewSample> {
+  const exists = targetKind === 'artifact'
+    ? artifactRows().some((a) => a.id === targetId)
+    : clusterRows().some((c) => c.id === targetId);
+  if (!exists) throw new NotFoundError(`${targetKind} ${targetId} not found`);
+  const already = reviewRows().find((r) => r.target_kind === targetKind && r.target_id === targetId && r.verdict === 'pending');
+  if (already) {
+    throw new AppError(409, `${targetKind} ${targetId} already has a pending review sample (${already.id})`);
+  }
+  reviewSeq += 1;
+  const sample: ReviewSample = {
+    id: `rev-9${String(reviewSeq).padStart(3, '0')}`,
+    target_kind: targetKind,
+    target_id: targetId,
+    sampled_at: clock.nowIso(),
+    reviewer: null,
+    verdict: 'pending',
+    note: `Requested by ${by}`,
+  };
+  reviewRows().push(sample);
   return sample;
 }
 

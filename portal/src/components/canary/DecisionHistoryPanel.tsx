@@ -1,30 +1,13 @@
 // DecisionHistoryPanel — right-side rail listing controller decisions newest
 // first. Collapsible when empty (or manually toggled).
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
-  Button, Chip, Inline, MetaLine, SectionLabel, Stack,
+  Chip, Inline, MetaLine, Stack,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useCanaryStore } from './canaryStore.js';
-import type { ControllerAction, Decision } from './types.js';
-
-// A Chip tone per action, replacing a bg/fg colour pair each. SKIPPED_OVERRIDE
-// was a literal indigo with no tone to match; `accent` is the closest the scale
-// offers and it is the one entry that changes shade here.
-const ACTION_TONE: Record<ControllerAction, 'success' | 'danger' | 'warning' | 'accent' | 'neutral'> = {
-  PROMOTE: 'success',
-  ROLLBACK: 'danger',
-  HOLD: 'warning',
-  SKIPPED_OVERRIDE: 'accent',
-  SKIPPED_COOLDOWN: 'neutral',
-  SKIPPED_NO_SAMPLES: 'neutral',
-};
-
-function fmtTime(ts: string): string {
-  const d = new Date(ts);
-  if (Number.isNaN(d.getTime())) return ts;
-  return d.toLocaleTimeString();
-}
+import { DecisionRow } from './DecisionRow.js';
+import type { Decision } from './types.js';
 
 export function DecisionHistoryPanel(): React.ReactElement {
   const decisions = useCanaryStore((s) => s.recentDecisions);
@@ -89,64 +72,11 @@ export function DecisionHistoryPanel(): React.ReactElement {
               />
             </Stack>
           ) : (
-            ordered.map((d, i) => <DecisionRow key={`${d.ts}-${i}`} d={d} index={i} />)
+            ordered.map((d, i) => <DecisionRow key={`${d.ts}-${i}`} decision={d} variant="card" index={i} />)
           )}
         </Stack>
       )}
     </Stack>
-  );
-}
-
-function DecisionRow({ d, index }: { d: Decision; index: number }): React.ReactElement {
-  const [expanded, setExpanded] = useState(index === 0); // newest starts expanded
-  const toggle = useCallback(() => setExpanded(v => !v), []);
-
-  return (
-    <Button
-      variant="ghost"
-      size="sm"
-      fullWidth
-      onClick={toggle}
-      aria-expanded={expanded}
-      className="flex-col items-start gap-1 justify-start text-left px-3.5 py-2 border-b border-border rounded-none"
-    >
-      <Inline gap="sm" justify="between" wrap={false} className="w-full">
-        <Inline as="span" gap="none" className="text-[10.5px] text-text-tertiary tabular-nums">
-          {fmtTime(d.ts)}
-        </Inline>
-        <Chip tone={ACTION_TONE[d.action]} size="xs">{d.action}</Chip>
-        <Inline as="span" gap="none" aria-hidden className="ml-auto text-[10px] text-text-tertiary">
-          {expanded ? '▲' : '▼'}
-        </Inline>
-      </Inline>
-      <Inline gap="xs" wrap={false} className="w-full text-[11px] text-text-secondary tabular-nums">
-        <Inline as="span" gap="none" className="font-medium">B {d.from}%</Inline>
-        <Inline as="span" gap="none" className="text-text-tertiary">→</Inline>
-        <Inline as="span" gap="none" className="font-medium">{d.to}%</Inline>
-        {d.deltaScore !== undefined && (
-          <Inline as="span" gap="none" title="composite_b - composite_a"
-            className="ml-auto text-[10.5px] text-text-tertiary">
-            Δ {d.deltaScore >= 0 ? '+' : ''}{d.deltaScore.toFixed(2)}
-          </Inline>
-        )}
-      </Inline>
-      {expanded && (
-        <Stack gap="xs" className="mt-1 w-full">
-          <Inline as="span" gap="none" className="text-[11.5px] text-text-secondary italic leading-snug">
-            {d.reason}
-          </Inline>
-          {d.deltaScore !== undefined && (
-            <Inline as="span" gap="none" className="text-[10.5px] text-text-tertiary">
-              Score delta (composite_b − composite_a):{' '}
-              <b className="tabular-nums">{d.deltaScore >= 0 ? '+' : ''}{d.deltaScore.toFixed(4)}</b>
-            </Inline>
-          )}
-          <Inline as="span" gap="none" className="text-[10px] text-text-tertiary tabular-nums">
-            {new Date(d.ts).toLocaleString()}
-          </Inline>
-        </Stack>
-      )}
-    </Button>
   );
 }
 

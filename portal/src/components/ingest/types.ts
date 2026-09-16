@@ -128,16 +128,6 @@ export function formatBytes(n: number): string {
   return `${(n / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
 }
 
-export function formatDuration(ms: number): string {
-  if (!Number.isFinite(ms) || ms <= 0) return '—';
-  if (ms < 1000) return `${ms}ms`;
-  const s = ms / 1000;
-  if (s < 60) return `${s.toFixed(1)}s`;
-  const m = Math.floor(s / 60);
-  const rs = Math.round(s - m * 60);
-  return `${m}m ${rs}s`;
-}
-
 export function durationOf(session: { startedAt: string; completedAt: string | null }): number {
   const start = new Date(session.startedAt).getTime();
   const end = session.completedAt ? new Date(session.completedAt).getTime() : Date.now();

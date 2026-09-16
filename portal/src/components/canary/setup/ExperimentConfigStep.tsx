@@ -63,9 +63,9 @@ export function ExperimentConfigStep({
             <Stack gap="none" className="flex-1 min-w-0">
               {/* the A/B accents are literal brand colours, matched to the
                   version picker and the score panels */}
-              <Inline as="div" gap="none" className="text-[11px] font-semibold uppercase tracking-wide mb-1 text-[#3b82f6]">
+              <SectionLabel as="div" className="mb-1 text-[#3b82f6]">
                 Baseline A
-              </Inline>
+              </SectionLabel>
               <Inline as="div" gap="none" className="text-[13px] font-semibold text-text-primary truncate">
                 {promptName}
               </Inline>
@@ -84,9 +84,9 @@ export function ExperimentConfigStep({
 
             {/* Challenger B */}
             <Stack gap="none" className="flex-1 min-w-0">
-              <Inline as="div" gap="none" className="text-[11px] font-semibold uppercase tracking-wide mb-1 text-[#a855f7]">
+              <SectionLabel as="div" className="mb-1 text-[#a855f7]">
                 Challenger B
-              </Inline>
+              </SectionLabel>
               <Inline as="div" gap="none" className="text-[13px] font-semibold text-text-primary truncate">
                 {promptName}
               </Inline>

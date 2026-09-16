@@ -7,22 +7,43 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import {
-  Button, Card, Chip, EmptyState, Inline, LoadingState, PageSection, SearchInput, Stack,
+  Banner, Button, Card, Chip, Drawer, EmptyState, Inline, LoadingState, PageSection, SearchInput, Stack,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { KeyValue } from '../../components/KeyValue';
+import { ArtifactAssetCard } from './ArtifactAssetCard';
+import { ArtifactDrawerBody } from './ArtifactDrawer';
 import { LineageFrame } from './LineageFrame';
 import { T } from './Text';
-import {
-  ARTIFACT_STATUS_TONE, ARTIFACT_TYPE_LABEL, ARTIFACT_TYPE_TONE, LINEAGE_NODE_LABEL,
-} from './distillationFormat';
-import type { ArtifactsResponse, Lineage, LineageNode } from './types';
+import { LINEAGE_NODE_LABEL } from './distillationFormat';
+import type { Artifact, ArtifactsResponse, Lineage, LineageNode, ReviewResponse } from './types';
+
+/** POSTs with the session cookie, same fetch shape RecordRunForm/decideReview
+ *  already use elsewhere in this feature — no shared helper exists for it
+ *  yet, and this is the second and third call site, not the first. */
+async function postJson(path: string, body: unknown): Promise<{ ok: boolean; error: string | null }> {
+  const res = await fetch(path, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (res.ok) return { ok: true, error: null };
+  const parsed = (await res.json().catch(() => ({}))) as { error?: string };
+  return { ok: false, error: parsed.error ?? `HTTP ${res.status}` };
+}
 
 export default function DistillationLineagePage() {
   const [params, setParams] = useSearchParams();
   const focus = params.get('focus');
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<LineageNode | null>(null);
+  // The picker's own "expand" drawer — same ArtifactDrawerBody Artifacts
+  // uses, so a reader sees the identical record whether they opened it from
+  // the table or from here.
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [busy, setBusy] = useState<{ id: string; action: 'publish' | 'review' } | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const lineageUrl = focus
     ? (focus.startsWith('fact-')
@@ -32,8 +53,19 @@ export default function DistillationLineagePage() {
   const { data: lineage, isLoading, error } = useFetch<Lineage>(lineageUrl, 30_000);
 
   const artifactsUrl = !focus ? `/api/distillation/artifacts${query ? `?q=${encodeURIComponent(query)}` : ''}` : null;
-  const { data: artifactsData, isLoading: artifactsLoading, error: artifactsError } =
+  const { data: artifactsData, isLoading: artifactsLoading, error: artifactsError, refresh: refreshArtifacts } =
     useFetch<ArtifactsResponse>(artifactsUrl, 0);
+
+  // Which artifacts already have a pending sample — drives "Request review"
+  // disabling honestly instead of letting the click 409. Fetched once for
+  // the whole picker rather than per card: one list, joined client-side.
+  const { data: reviewData, refresh: refreshReview } =
+    useFetch<ReviewResponse>(!focus ? '/api/distillation/review?verdict=pending' : null, 0);
+  const pendingReviewIds = new Set(
+    (reviewData?.samples ?? []).filter((s) => s.target_kind === 'artifact').map((s) => s.target_id),
+  );
+
+  const open: Artifact | null = artifactsData?.artifacts.find((a) => a.id === openId) ?? null;
 
   useEffect(() => setSelected(null), [focus]);
 
@@ -58,6 +90,24 @@ export default function DistillationLineagePage() {
     setSelected(node);
   }
 
+  async function handlePublish(id: string) {
+    setActionError(null);
+    setBusy({ id, action: 'publish' });
+    const res = await postJson(`/api/distillation/artifacts/${encodeURIComponent(id)}/publish`, {});
+    setBusy(null);
+    if (!res.ok) { setActionError(res.error); return; }
+    refreshArtifacts();
+  }
+
+  async function handleRequestReview(id: string) {
+    setActionError(null);
+    setBusy({ id, action: 'review' });
+    const res = await postJson('/api/distillation/review', { target_kind: 'artifact', target_id: id });
+    setBusy(null);
+    if (!res.ok) { setActionError(res.error); return; }
+    refreshReview();
+  }
+
   if (!focus) {
     return (
       <PageSection
@@ -72,6 +122,7 @@ export default function DistillationLineagePage() {
             aria-label="Search artifacts for lineage"
             className="w-[320px]"
           />
+          {actionError && <Banner variant="error">{actionError}</Banner>}
           {artifactsError ? (
             <EmptyState title="Could not load artifacts" description={artifactsError} />
           ) : artifactsLoading && !artifactsData ? (
@@ -81,20 +132,24 @@ export default function DistillationLineagePage() {
           ) : (
             <Stack gap="xs">
               {artifactsData!.artifacts.map((a) => (
-                <Card key={a.id} padding="sm">
-                  <Inline gap="sm" align="center" justify="between" wrap={false}>
-                    <Inline gap="xs" align="center" wrap={false}>
-                      <Chip tone={ARTIFACT_TYPE_TONE[a.type]} size="xs">{ARTIFACT_TYPE_LABEL[a.type]}</Chip>
-                      <Chip tone={ARTIFACT_STATUS_TONE[a.status]} size="xs">{a.status}</Chip>
-                      <T className="min-w-0 truncate text-[12.5px] font-medium text-text-primary" title={a.title}>{a.title}</T>
-                    </Inline>
-                    <Button size="sm" variant="secondary" onClick={() => focusOn(a.id)}>View lineage</Button>
-                  </Inline>
-                </Card>
+                <ArtifactAssetCard
+                  key={a.id}
+                  artifact={a}
+                  pendingReview={pendingReviewIds.has(a.id)}
+                  busy={busy?.id === a.id ? busy.action : null}
+                  onOpen={setOpenId}
+                  onTraceLineage={focusOn}
+                  onPublish={(id) => { void handlePublish(id); }}
+                  onRequestReview={(id) => { void handleRequestReview(id); }}
+                />
               ))}
             </Stack>
           )}
         </Stack>
+
+        <Drawer open={open != null} onClose={() => setOpenId(null)} aria-label="Artifact detail" width={720}>
+          {open && <ArtifactDrawerBody artifact={open} />}
+        </Drawer>
       </PageSection>
     );
   }

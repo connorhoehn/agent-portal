@@ -9,14 +9,15 @@ import {
   MetaLine,
   SectionLabel,
   Stack,
+  StatStrip,
 } from '@connorhoehnslalom/ui-components/shared';
+import { durationLabel } from '../../lib/relativeTime';
 import {
   CRAWL_STATUS_TONE,
   PAGE_STATUS_TONE,
   durationOf,
   formatBytes,
   formatCost,
-  formatDuration,
 } from './types';
 import type { CrawlPage, CrawlSession } from './types';
 import { useCrawlStream } from './useCrawlStream';
@@ -111,12 +112,15 @@ export function RunDetailDrawer({
                 <Chip tone="neutral" size="xs">{session.mode}</Chip>
               </Inline>
 
-              <Inline gap="md" className="grid grid-cols-4">
-                <Metric label="Pages" value={`${session.pages.length} / ${session.maxPages}`} />
-                <Metric label="Duration" value={formatDuration(durationOf(session))} />
-                <Metric label="Cost" value={formatCost(session.estimatedCostUsd)} mono />
-                <Metric label="Stored" value={formatBytes(session.totalScreenshotBytes + session.totalMarkdownBytes)} />
-              </Inline>
+              <StatStrip
+                frameless
+                items={[
+                  { label: 'Pages', value: `${session.pages.length} / ${session.maxPages}` },
+                  { label: 'Duration', value: durationLabel(durationOf(session)) },
+                  { label: 'Cost', value: formatCost(session.estimatedCostUsd) },
+                  { label: 'Stored', value: formatBytes(session.totalScreenshotBytes + session.totalMarkdownBytes) },
+                ]}
+              />
 
               {session.error && (
                 <InlineAlert tone="error">{session.error}</InlineAlert>
@@ -236,22 +240,5 @@ function TimelineRow({
         </Inline>
       </Inline>
     </Inline>
-  );
-}
-
-function Metric({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
-  return (
-    <div>
-      <Inline gap="none"
-        className="text-[10px] font-semibold text-text-tertiary uppercase tracking-wide"
-      >
-        {label}
-      </Inline>
-      <Inline gap="none"
-        className={`text-[13px] font-semibold mt-0.5 ${mono ? 'font-mono' : ''}`}
-      >
-        {value}
-      </Inline>
-    </div>
   );
 }

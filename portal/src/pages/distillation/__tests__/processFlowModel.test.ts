@@ -15,7 +15,7 @@ const health: LevelHealth[] = [
 ] as unknown as LevelHealth[];
 
 const base = {
-  activeWriters: 12, botRunsToday: 5, sweepFindings: 3, labSignals: 1, reviewed30d: 9,
+  activeWriters: 12, botRunsToday: 5, sweepFindings: 3, labSignals: 1, reviewed30d: 9, queueDepth: 4,
   levels, health, jobs: [] as CompactionJob[], publishedCount: 3, candidates: 2, bundleSkills: 3,
 };
 
@@ -90,6 +90,54 @@ test('a real zero bot count still reads as a fact, with its usual door', () => {
   assert.equal(bots.count, 0);
   assert.equal(bots.ariaLabel, 'Bot runs, 0 runs today');
   assert.equal(bots.navigateTo, '/admin/bots');
+});
+
+// Slice 1: every edge animates only when its own honest field says there
+// is activity — never a flat true/false regardless of input, and never
+// borrowing another edge's signal.
+test('sessions-L0 gets the moving dot (running) iff activeWriters > 0', () => {
+  const busy = processFlowModel({ ...base, activeWriters: 3 });
+  const idle = processFlowModel({ ...base, activeWriters: 0 });
+  const busyEdge = busy.edges.find((e) => e.id === 'sessions-L0')!;
+  const idleEdge = idle.edges.find((e) => e.id === 'sessions-L0')!;
+  assert.equal(busyEdge.running, true);
+  assert.equal(busyEdge.breathing, false);
+  assert.equal(idleEdge.running, false);
+  assert.equal(idleEdge.breathing, false);
+});
+
+test('bots-L0/sweeps-L0/lab-L0 breathe (never run) iff their own count > 0', () => {
+  const on = processFlowModel({ ...base, botRunsToday: 2, sweepFindings: 1, labSignals: 1 });
+  const off = processFlowModel({ ...base, botRunsToday: 0, sweepFindings: 0, labSignals: 0 });
+  for (const id of ['bots-L0', 'sweeps-L0', 'lab-L0']) {
+    const onEdge = on.edges.find((e) => e.id === id)!;
+    const offEdge = off.edges.find((e) => e.id === id)!;
+    assert.equal(onEdge.breathing, true, `${id} should breathe`);
+    assert.equal(onEdge.running, false, `${id} must never get the moving dot`);
+    assert.equal(offEdge.breathing, false, `${id} should be static at zero`);
+  }
+});
+
+test('an unreadable bot count (null) does not breathe — unknown is not activity', () => {
+  const m = processFlowModel({ ...base, botRunsToday: null });
+  assert.equal(m.edges.find((e) => e.id === 'bots-L0')!.breathing, false);
+});
+
+test('review-L1 breathes iff the sampling queue has a real backlog', () => {
+  const backed = processFlowModel({ ...base, queueDepth: 5 });
+  const clear = processFlowModel({ ...base, queueDepth: 0 });
+  assert.equal(backed.edges.find((e) => e.id === 'review-L1')!.breathing, true);
+  assert.equal(clear.edges.find((e) => e.id === 'review-L1')!.breathing, false);
+});
+
+test('L2-library, L2-promotions and library-session stay static and carry a title explaining why', () => {
+  const m = processFlowModel(base);
+  for (const id of ['L2-library', 'L2-promotions', 'library-session']) {
+    const edge = m.edges.find((e) => e.id === id)!;
+    assert.equal(edge.running, false, `${id} must stay static`);
+    assert.equal(edge.breathing, false, `${id} must stay static`);
+    assert.ok(edge.title && edge.title.length > 0, `${id} must explain why it can't animate`);
+  }
 });
 
 test('labels landing on the same point are spread, others left alone', async () => {

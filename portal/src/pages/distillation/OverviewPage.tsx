@@ -4,10 +4,11 @@
 // DO with what it learned and whether that still works; then only what
 // needs attention, how hard the fleet is writing, and whether the human
 // sample dial is calibrated. Drill-ins live on their own routes.
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import {
   Button, Card, Chip, DataTable, DetailSection, Divider, EmptyState, Inline, InlineAlert,
-  Link, LoadingState, MetaLine, ProgressBar, ScoreBarGauge, StatStrip, Stack, TrendSparkline,
+  Link, LoadingState, MetaLine, ProgressBar, ScoreBarGauge, StatStrip, StatusDot, Stack, TrendSparkline,
   type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
@@ -17,13 +18,29 @@ import { T } from './Text';
 import { ProcessFlow } from './ProcessFlow';
 import {
   LEVEL_HEALTH_ALERT_TONE, PROCEDURE_HEALTH_LABEL, PROCEDURE_HEALTH_TONE, SAMPLING_LABEL,
-  SAMPLING_TONE, pct, procedureRollup, runsLabel, stepsLabel,
+  SAMPLING_TONE, liveSessionCountForRepo, pct, procedureRollup, runsLabel, stepsLabel,
+  type RepoPresenceNode,
 } from './distillationFormat';
-import type { IngestState, LevelsResponse, ProcedureView, ProceduresResponse, SamplingResponse } from './types';
+import type {
+  CompactionsResponse, IngestState, LevelsResponse, ProcedureView, ProceduresResponse, SamplingResponse,
+} from './types';
 
 /** Rows on the front door. Six is enough to read the fleet's repertoire at a
  *  glance; past that the reader wants the filtered catalog, which is a link. */
 const PROCEDURE_ROWS = 6;
+
+// Same adaptive cadence CompactionsPage.tsx established: fast while a merge
+// is actually running (the ladder's counts are moving), the normal rate
+// otherwise. Copied as a literal rather than imported — the two pages watch
+// different fetches and shouldn't share mutable poll state.
+const IDLE_POLL_MS = 30_000;
+const RUNNING_POLL_MS = 2_000;
+
+// Presence is scoped to the signed-in person's own paired machines
+// (`GET /api/local-compute/nodes` — "my machines," not fleet-wide; the
+// audit found no honest org-wide repo-presence route yet), so it changes far
+// less often than a running compaction — a flat poll is enough.
+const NODES_POLL_MS = 30_000;
 
 function repoShort(repo: string | null): string | null {
   if (!repo) return null;
@@ -32,13 +49,22 @@ function repoShort(repo: string | null): string | null {
 }
 
 export default function DistillationOverviewPage() {
+  const [pollMs, setPollMs] = useState<number>(IDLE_POLL_MS);
+  const { data: jobsData } = useFetch<CompactionsResponse>('/api/distillation/compactions', pollMs);
+
+  useEffect(() => {
+    const hasRunning = (jobsData?.jobs ?? []).some((j) => j.status === 'running');
+    setPollMs(hasRunning ? RUNNING_POLL_MS : IDLE_POLL_MS);
+  }, [jobsData]);
+
   const { data: levelsData, isLoading: levelsLoading, error: levelsError } =
-    useFetch<LevelsResponse>('/api/distillation/levels', 20_000);
+    useFetch<LevelsResponse>('/api/distillation/levels', pollMs);
   const { data: ingestData } = useFetch<IngestState>('/api/distillation/ingest', 20_000);
   const { data: samplingData } = useFetch<SamplingResponse>('/api/distillation/sampling', 60_000);
 
   const { data: proceduresData, isLoading: proceduresLoading, error: proceduresError } =
     useFetch<ProceduresResponse>('/api/distillation/procedures', 60_000);
+  const { data: nodesData } = useFetch<{ nodes: RepoPresenceNode[] }>('/api/local-compute/nodes', NODES_POLL_MS);
   const navigate = useNavigate();
 
   const levels = levelsData?.levels ?? [];
@@ -96,6 +122,32 @@ export default function DistillationOverviewPage() {
           {p.last_succeeded_at ? relativeTime(p.last_succeeded_at) : 'never'}
         </T>
       ),
+    },
+    {
+      key: 'repo_activity',
+      // A weaker but honest claim than "this procedure is running": whether
+      // someone is live in the same repo right now, and only on the
+      // machines THIS person paired — there is no fleet-wide repo-presence
+      // route yet (see docs/distillation-concept-audit-2026-09-16.md §2).
+      header: <span title="Live sessions on your own paired machines, in this procedure's repo — not fleet-wide.">Repo activity</span>,
+      render: (p) => {
+        if (!nodesData) return <T className="text-[11px] text-text-tertiary">—</T>;
+        if (!p.repo) return <T className="text-[11px] text-text-tertiary">spans repos</T>;
+        const count = liveSessionCountForRepo(nodesData.nodes, p.repo);
+        return (
+          <Inline gap="xs" align="center" wrap={false}>
+            <StatusDot
+              size="xs"
+              pulse={count > 0}
+              color={count > 0 ? 'var(--color-success)' : 'var(--color-state-idle)'}
+              aria-label={count > 0 ? `${count} live session${count === 1 ? '' : 's'} on your machines` : 'no live session on your machines'}
+            />
+            <T className="whitespace-nowrap text-[11px] text-text-tertiary">
+              {count > 0 ? `${count} on your machines` : 'none on your machines'}
+            </T>
+          </Inline>
+        );
+      },
     },
     {
       key: 'runs',

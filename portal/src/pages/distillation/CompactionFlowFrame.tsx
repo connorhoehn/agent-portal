@@ -131,6 +131,11 @@ interface FlowEdgeData {
   breathing: boolean;
   reducedMotion: boolean;
   tone: CompactionFlowEdgeTone;
+  label: string;
+  /** Set only on an edge that stays static on purpose — rendered as a
+   *  native hover tooltip on its label chip, explaining why (a missing
+   *  timestamp on the wire, not an oversight). */
+  title?: string;
 }
 
 function CompactionFlowEdgeComp({
@@ -156,14 +161,21 @@ function CompactionFlowEdgeComp({
           </animateMotion>
         </circle>
       )}
-      {String((data as unknown as { label: string }).label) !== '' && <EdgeLabelRenderer>
+      {d.label !== '' && <EdgeLabelRenderer>
         <div
           className="nodrag nopan"
+          title={d.title}
           // Sit the label above the line, not on it — on the line it hid the
-          // stroke and, with short edges, overlapped the node cards.
-          style={{ position: 'absolute', transform: `translate(-50%, -100%) translate(${labelX}px, ${labelY - 8}px)`, pointerEvents: 'none' }}
+          // stroke and, with short edges, overlapped the node cards. A
+          // static edge with a `title` takes pointer events so the hover
+          // tooltip actually fires; every other edge stays click-through.
+          style={{
+            position: 'absolute',
+            transform: `translate(-50%, -100%) translate(${labelX}px, ${labelY - 8}px)`,
+            pointerEvents: d.title ? 'auto' : 'none',
+          }}
         >
-          <Chip tone="neutral" size="xs" dot={animated ? 'pulse' : undefined}>{String((data as unknown as { label: string }).label)}</Chip>
+          <Chip tone="neutral" size="xs" dot={animated ? 'pulse' : undefined}>{d.label}</Chip>
         </div>
       </EdgeLabelRenderer>}
     </>
@@ -218,7 +230,7 @@ export function CompactionFlowFrame({
     type: 'compactionFlowEdge',
     animated: e.running && !reducedMotion,
     markerEnd: { type: MarkerType.ArrowClosed, color: EDGE_TONE_COLOR[e.tone] },
-    data: { label: e.label, breathing: e.breathing, reducedMotion, tone: e.tone } as unknown as Record<string, unknown>,
+    data: { label: e.label, breathing: e.breathing, reducedMotion, tone: e.tone, title: e.title } as unknown as Record<string, unknown>,
   })), [model, reducedMotion]);
 
   if (error) return <EmptyState title="Could not load the compaction flow" description={error} />;

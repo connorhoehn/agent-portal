@@ -59,3 +59,15 @@ Why: Layout.tsx changed — the library's SkipLink is now the shell's first tab 
   - api-status: 403 — /api/assessment/teams; POST /api/session/tenant {assessment} 403 (also confirmed with a curl cookie jar via POST /api/session/login {userId:u-theo}).
   - the skip link is the shell's first tab stop and changes nothing about what the rail lists; .shell-header is 82px tall at this width.
 Console errors: 0 across every navigation in this pass.
+
+--- re-verification 2026-09-16 03:58 (Layout.tsx changed: shell chrome pass) ---
+Why: `portal/src/components/shell/Layout.tsx` changed — the site header is wrapped in a native
+`<header>` landmark, the ⌘I devbox switcher now runs through the same CommandPalette as ⌘K
+(a "Devbox" group, scoped while ⌘I is open), and the account menu's panel is the library
+InlinePopover (outside-click / Escape / focus return from useDismissableLayer). None of this
+touches tenant gating: the rail items, the palette's page list and the tenant guards are the
+same code paths as before. Re-checked the API floor with fresh sessions: every orgiq persona
+(u-theo, u-nora, u-mia, u-vera, u-rachel) still gets 403 from GET /api/assessment/teams, each
+assessment persona (u-asha, u-jonas, u-farah) still gets 403 from GET /api/graph/people, and
+the cookie-less demo identity gets 403 from /api/assessment/teams. Console errors 0 on the
+shell as Vera Green.

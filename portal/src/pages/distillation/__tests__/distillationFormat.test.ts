@@ -13,6 +13,7 @@ import {
   latestJobFor, compactionFlowModel,
   ARTIFACT_TYPE_TONE, PROCEDURE_HEALTH_TONE, OUTCOME_SEVERITY,
   stepsLabel, stepsFromLineage, stepTonesForRun, procedureRollup, runsLabel,
+  isRecentlyLanded, liveSessionCountForRepo,
 } from '../distillationFormat.ts';
 import type {
   CompactionJob, Item, LevelHealth, LevelState, LineageEdge, LineageNode, ProcedureApplication, ProcedureView,
@@ -459,4 +460,30 @@ test('runsLabel leads with the success count, and says "no runs yet" at zero', (
   assert.equal(runsLabel({ total: 6, succeeded: 4, failed: 1, abandoned: 1 }), '6 runs · 4 succeeded');
   assert.equal(runsLabel({ total: 1, succeeded: 0, failed: 1, abandoned: 0 }), '1 run · 0 succeeded');
   assert.equal(runsLabel({ total: 0, succeeded: 0, failed: 0, abandoned: 0 }), 'no runs yet');
+});
+
+// Slice 2: Tiers "Landed" column — StatusDot pulse iff inside the window.
+test('isRecentlyLanded is true only inside the window, false at/after it and on bad input', () => {
+  const now = Date.parse('2026-09-15T12:00:00Z');
+  assert.equal(isRecentlyLanded('2026-09-15T11:59:30Z', now, 60_000), true, '30s old, 60s window');
+  assert.equal(isRecentlyLanded('2026-09-15T11:59:00Z', now, 60_000), false, 'exactly at the window edge');
+  assert.equal(isRecentlyLanded('2026-09-15T11:58:00Z', now, 60_000), false, '2m old');
+  assert.equal(isRecentlyLanded('2026-09-15T12:00:01Z', now, 60_000), false, 'in the future is not "recent"');
+  assert.equal(isRecentlyLanded(null, now, 60_000), false);
+  assert.equal(isRecentlyLanded('not a date', now, 60_000), false);
+});
+
+// Slice 2: Overview "Repo activity" column — the honest repo-level join
+// (never a fake session-id join) against the owner-scoped node list.
+test('liveSessionCountForRepo counts only sessions matching the repo, across nodes', () => {
+  const nodes = [
+    { presence: { sessions: [{ repo: 'org/a' }, { repo: 'org/b' }] } },
+    { presence: { sessions: [{ repo: 'org/a' }] } },
+    { presence: { sessions: [] } },
+  ];
+  assert.equal(liveSessionCountForRepo(nodes, 'org/a'), 2);
+  assert.equal(liveSessionCountForRepo(nodes, 'org/b'), 1);
+  assert.equal(liveSessionCountForRepo(nodes, 'org/c'), 0);
+  assert.equal(liveSessionCountForRepo(nodes, null), 0, 'a procedure spanning repos has none to check');
+  assert.equal(liveSessionCountForRepo([], 'org/a'), 0);
 });

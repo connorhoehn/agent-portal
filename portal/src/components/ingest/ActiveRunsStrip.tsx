@@ -8,7 +8,8 @@ import {
   Stack,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
-import { CRAWL_STATUS_TONE, durationOf, formatDuration } from './types';
+import { durationLabel } from '../../lib/relativeTime';
+import { CRAWL_STATUS_TONE, durationOf } from './types';
 import type { CrawlSession } from './types';
 import { useCrawlStream } from './useCrawlStream';
 import { Thumbnail } from './Thumbnail';
@@ -88,7 +89,7 @@ function ActiveRunCard({
           <MetaLine
             size="xs"
             className="font-mono"
-            items={[`${session.id.slice(0, 12)}… · started ${formatDuration(durationOf(session))} ago`]}
+            items={[`${session.id.slice(0, 12)}… · started ${durationLabel(durationOf(session))} ago`]}
           />
 
           {/* The bar was two nested divs with a percentage width literal. */}

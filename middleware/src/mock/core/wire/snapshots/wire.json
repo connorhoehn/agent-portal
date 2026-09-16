@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-09-16T02:21:06.184Z",
-  "serverHandlerSha": "ee21ff1b6b3e0c7fe7c9377526345fcb33f11385ca48ece4cbf023f0673b27dc",
+  "capturedAt": "2026-09-16T02:38:33.186Z",
+  "serverHandlerSha": "9bf5b2e0467e5fdc27c7fc04a97816a98ed5966e96dda8fd446738e0253a71fe",
   "baseUrl": "http://127.0.0.1:3012",
   "personas": [
     "orgiq/admin",
@@ -2032,14 +2032,18 @@
         "artifacts": "array",
         "artifacts[]": "object",
         "artifacts[].body_markdown": "string",
+        "artifacts[].classification": "string",
         "artifacts[].cluster_ids": "array",
         "artifacts[].cluster_ids[]": "string",
+        "artifacts[].confidence": "number",
         "artifacts[].created_at": "string",
         "artifacts[].created_by_compaction_id": "string",
         "artifacts[].facts": "array",
         "artifacts[].facts[]": "string",
         "artifacts[].id": "string",
+        "artifacts[].last_used_at": "null|string",
         "artifacts[].library_item_id": "null|string",
+        "artifacts[].owner": "string",
         "artifacts[].reviewed_at": "null|string",
         "artifacts[].reviewed_by": "null|string",
         "artifacts[].status": "string",
@@ -2049,6 +2053,10 @@
         "artifacts[].updated_at": "string"
       },
       "values": {
+        "artifacts[].classification": [
+          "confidential",
+          "internal"
+        ],
         "artifacts[].status": [
           "draft",
           "published",
@@ -2125,6 +2133,7 @@
         "items[].body": "string",
         "items[].body_markdown": "string",
         "items[].box_id": "string",
+        "items[].classification": "string",
         "items[].cluster_ids": "array",
         "items[].cluster_ids[]": "string",
         "items[].confidence": "number",
@@ -2135,10 +2144,12 @@
         "items[].id": "string",
         "items[].initiative_id": "string",
         "items[].kind": "string",
+        "items[].last_used_at": "null|string",
         "items[].level": "string",
         "items[].library_item_id": "null|string",
         "items[].member_observation_ids": "array",
         "items[].member_observation_ids[]": "string",
+        "items[].owner": "string",
         "items[].repo": "string",
         "items[].reviewed_at": "null|string",
         "items[].reviewed_by": "null|string",
@@ -2153,6 +2164,10 @@
         "next_cursor": "string"
       },
       "values": {
+        "items[].classification": [
+          "confidential",
+          "internal"
+        ],
         "items[].kind": [
           "convention",
           "decision",
@@ -2281,14 +2296,18 @@
         "procedures[].applied_per_day[]": "number",
         "procedures[].artifact": "object",
         "procedures[].artifact.body_markdown": "string",
+        "procedures[].artifact.classification": "string",
         "procedures[].artifact.cluster_ids": "array",
         "procedures[].artifact.cluster_ids[]": "string",
+        "procedures[].artifact.confidence": "number",
         "procedures[].artifact.created_at": "string",
         "procedures[].artifact.created_by_compaction_id": "string",
         "procedures[].artifact.facts": "array",
         "procedures[].artifact.facts[]": "string",
         "procedures[].artifact.id": "string",
+        "procedures[].artifact.last_used_at": "null|string",
         "procedures[].artifact.library_item_id": "null|string",
+        "procedures[].artifact.owner": "string",
         "procedures[].artifact.reviewed_at": "null|string",
         "procedures[].artifact.reviewed_by": "null|string",
         "procedures[].artifact.status": "string",
@@ -2314,6 +2333,10 @@
         "procedures[].step_count": "number"
       },
       "values": {
+        "procedures[].artifact.classification": [
+          "confidential",
+          "internal"
+        ],
         "procedures[].artifact.status": [
           "draft",
           "published"
@@ -2337,14 +2360,18 @@
         "applied_per_day[]": "number",
         "artifact": "object",
         "artifact.body_markdown": "string",
+        "artifact.classification": "string",
         "artifact.cluster_ids": "array",
         "artifact.cluster_ids[]": "string",
+        "artifact.confidence": "number",
         "artifact.created_at": "string",
         "artifact.created_by_compaction_id": "string",
         "artifact.facts": "array",
         "artifact.facts[]": "string",
         "artifact.id": "string",
+        "artifact.last_used_at": "null",
         "artifact.library_item_id": "null",
+        "artifact.owner": "string",
         "artifact.reviewed_at": "null",
         "artifact.reviewed_by": "null",
         "artifact.status": "string",
@@ -2370,6 +2397,9 @@
         "step_count": "number"
       },
       "values": {
+        "artifact.classification": [
+          "confidential"
+        ],
         "artifact.status": [
           "draft"
         ],
@@ -6047,6 +6077,7 @@
     "classification": {
       "open": false,
       "values": [
+        "confidential",
         "internal"
       ]
     },

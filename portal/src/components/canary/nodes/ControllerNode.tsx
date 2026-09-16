@@ -7,10 +7,9 @@ import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
 import {
   Card, Chip, EntityCell, Inline, InlineAlert, MetaLine, Stack,
 } from '@connorhoehnslalom/ui-components/shared';
+import { DecisionRow } from '../DecisionRow.js';
 import type {
   ControllerNodeData,
-  ControllerAction,
-  Decision,
 } from '../types.js';
 
 export type ControllerNodeType = Node<
@@ -38,71 +37,6 @@ const STATE_LABEL: Record<ControllerNodeData['state'], string> = {
   promoted: '✓ promoted',
   rolled_back: '✕ rolled back',
 };
-
-// Six actions onto six colours, and there is no Chip tone for
-// SKIPPED_OVERRIDE's `--color-optimize`, so this stays a class map applied to
-// a library element rather than becoming a tone.
-const ACTION_COLOR_CLASS: Record<ControllerAction, string> = {
-  PROMOTE: 'text-success',
-  ROLLBACK: 'text-danger',
-  HOLD: 'text-text-secondary',
-  SKIPPED_OVERRIDE: 'text-[var(--color-optimize)]',
-  SKIPPED_COOLDOWN: 'text-text-tertiary',
-  SKIPPED_NO_SAMPLES: 'text-text-tertiary',
-};
-
-function formatTs(iso: string): string {
-  const t = Date.parse(iso);
-  if (Number.isNaN(t)) return iso.slice(0, 8);
-  const d = new Date(t);
-  const hh = String(d.getHours()).padStart(2, '0');
-  const mm = String(d.getMinutes()).padStart(2, '0');
-  const ss = String(d.getSeconds()).padStart(2, '0');
-  return `${hh}:${mm}:${ss}`;
-}
-
-function DecisionRow({ d }: { d: Decision }) {
-  const arrow =
-    d.from === d.to
-      ? `${d.from}%`
-      : `${d.from}%→${d.to}%`;
-  const deltaClass =
-    d.deltaScore === undefined
-      ? ''
-      : d.deltaScore > 0
-        ? 'text-success'
-        : d.deltaScore < 0
-          ? 'text-danger'
-          : 'text-text-tertiary';
-  return (
-    <Stack gap="none" className="gap-px py-1 border-t border-border">
-      <Inline gap="xs" wrap={false} className="text-[10.5px]">
-        <Inline as="span" gap="none" className="text-text-tertiary font-mono">
-          {formatTs(d.ts)}
-        </Inline>
-        <Inline as="span" gap="none" className={`${ACTION_COLOR_CLASS[d.action]} font-semibold`}>
-          {d.action}
-        </Inline>
-        <Inline as="span" gap="none" className="text-text-secondary font-mono">
-          {arrow}
-        </Inline>
-        {d.deltaScore !== undefined && (
-          <Inline as="span" gap="none" className={`${deltaClass} tabular-nums`}>
-            Δ{d.deltaScore >= 0 ? '+' : ''}{d.deltaScore.toFixed(3)}
-          </Inline>
-        )}
-      </Inline>
-      <Inline
-        as="span"
-        gap="none"
-        title={d.reason}
-        className="text-[10px] text-text-tertiary overflow-hidden text-ellipsis whitespace-nowrap"
-      >
-        {d.reason}
-      </Inline>
-    </Stack>
-  );
-}
 
 function ControllerNodeImpl({ data }: NodeProps<ControllerNodeType>) {
   const recent = data.lastDecisions.slice(0, 3);
@@ -151,7 +85,7 @@ function ControllerNodeImpl({ data }: NodeProps<ControllerNodeType>) {
             ]}
           />
         ) : (
-          recent.map((d, i) => <DecisionRow key={`${d.ts}-${i}`} d={d} />)
+          recent.map((d, i) => <DecisionRow key={`${d.ts}-${i}`} decision={d} variant="node" />)
         )}
       </Stack>
 
@@ -162,7 +96,7 @@ function ControllerNodeImpl({ data }: NodeProps<ControllerNodeType>) {
         type="source"
         position={Position.Left}
         id="feedback"
-        style={{ opacity: 0, width: 4, height: 4, minWidth: 0, minHeight: 0 }}
+        className="opacity-0 !w-1 !h-1 !min-w-0 !min-h-0"
       />
     </Card>
   );

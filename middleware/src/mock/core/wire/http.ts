@@ -215,6 +215,11 @@ export const PARAM_SOURCES: Record<string, string> = {
   'name@/api/capabilities/guardrail/topics': '/api/capabilities/guardrail#deniedTopics[].name',
   'sessionId@/api/local-compute/sessions': '/api/local-compute/nodes#nodes[].presence.sessions[].sessionId',
   'id@/api/distillation/review': '/api/distillation/review?verdict=pending#id',
+  // Unfiltered, the collection's default sort (most-recently-updated first)
+  // hands back a published artifact — publish would then 409. Filtering to
+  // draft the same way `/promotions?status=candidate` does above keeps this
+  // capture on the 200 branch.
+  'id@/api/distillation/artifacts': '/api/distillation/artifacts?status=draft#id',
   'id@/api/observability/calibration/cases': '/api/observability/calibration/cases#calibrationId',
   'id@/api/observability/harness/cases': '/api/observability/harness/cases#testId',
   'id@/api/observability/approvals': '/api/observability/approvals#approvalId',

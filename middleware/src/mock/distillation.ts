@@ -95,7 +95,18 @@ export interface Cluster {
 export type ArtifactType = 'runbook' | 'insight' | 'convention' | 'decision' | 'procedure';
 export type ArtifactStatus = 'draft' | 'published' | 'retired';
 
-export interface Artifact {
+/** Sensitivity, not release-readiness — `LibraryAsset.tier` already covers
+ *  sandbox/candidate/production and answers a different question ("is this
+ *  safe to run"). Classification answers "who is allowed to see this." */
+export type ArtifactClassification = 'internal' | 'confidential' | 'public';
+
+/** The stored half of an artifact — everything a compaction pass or a human
+ *  writes down. `library_item_id` (looked up in the library-links fixture)
+ *  and `confidence` (rolled up from the artifact's own facts at read time)
+ *  are the two DERIVED fields the wire `Artifact` adds on top of this — see
+ *  the module note at the top of this file on why a rollup is computed, not
+ *  stored, in this domain. */
+export interface ArtifactRow {
   id: string;
   type: ArtifactType;
   title: string;
@@ -105,21 +116,34 @@ export interface Artifact {
   /** Fact ids — resolve each via factLineage/getItem, never inlined here, so
    *  a fact has exactly one representation. */
   facts: string[];
-  /** The Library asset this artifact was published as, or null. NOT stored on
-   *  the row: it is looked up in the library-links fixture when the provider
-   *  composes the wire artifact, so "which artifacts are published" is one
-   *  table an auditor can empty rather than a field repeated eight times. */
-  library_item_id: string | null;
+  /** Who is accountable for this artifact as enterprise IP. Distinct from
+   *  `reviewed_by` below, which is who signed off on the L1 sample it was
+   *  distilled from — a reviewer is not an owner. */
+  owner: string;
+  classification: ArtifactClassification;
   status: ArtifactStatus;
   reviewed_by: string | null;
   reviewed_at: string | null;
+  /** Last time this artifact's published Library asset was actually invoked
+   *  — a usage fact, not an edit fact (`updated_at` is the edit fact). Only
+   *  ever set once an artifact has BOTH `status: 'published'` and a
+   *  library-links row: nothing has invoked a draft or a never-linked
+   *  artifact, so this stays null rather than borrowing `updated_at`'s
+   *  meaning. */
+  last_used_at: string | null;
   created_by_compaction_id: string;
   created_at: string;
   updated_at: string;
 }
 
-/** The stored half of an artifact — everything except the Library link. */
-export type ArtifactRow = Omit<Artifact, 'library_item_id'>;
+/** The wire artifact: the stored row plus the two fields the provider derives
+ *  at read time — the Library link (from `libraryLinks`, absent = null, never
+ *  a stored null) and `confidence` (mean of the artifact's own facts, absent
+ *  = 0 — see providers/distillation.ts `withLink`). */
+export interface Artifact extends ArtifactRow {
+  library_item_id: string | null;
+  confidence: number;
+}
 
 /** artifact → Library asset. One row per published artifact, no row for a
  *  draft: `library_item_id: null` on the wire is the ABSENCE of a row here,
@@ -280,6 +304,22 @@ const INITIATIVE = {
   LLM: 'p-llm-platform',
   COST: 'p-cost-opt',
 } as const;
+
+/** Artifact steward per repo — the real `owner_id` on each repo's initiative
+ *  in `schema/seed_program.sql` (p-observability→p-004, p-auth-migration→
+ *  p-002, p-llm-platform→p-047, p-cost-opt→p-008), not an invented name. An
+ *  artifact's `owner` is who is accountable for it as enterprise IP, which
+ *  `reviewed_by` (who signed off on the L1 sample it was distilled from) is
+ *  NOT a stand-in for — the two are deliberately different people on most
+ *  rows below. Exported so the provider's L1→L2 compaction (which mints new
+ *  artifacts at runtime) assigns the same owner a hand-written seed row would
+ *  get, rather than inventing a second mapping that could drift from this one. */
+export const OWNER_BY_REPO: Record<string, string> = {
+  [REPO.OBS]: 'Nora DaSilva',
+  [REPO.AUTH]: 'Vera Green',
+  [REPO.LLM]: 'Nina Rivera',
+  [REPO.COST]: 'Layla Hassan',
+};
 
 /** The 25 seed observation groups, keyed by the cluster each became. The
  *  cluster and fact builders take these groups rather than ids typed a
@@ -949,8 +989,10 @@ function seedArtifacts(): ArtifactRow[] {
         '## Why\nQuarantining without this check has hidden a real regression before (a seed-value bug shipped for a week under a "known flaky" label).',
       cluster_ids: ['cl-019'],
       facts: ['fact-001', 'fact-002'],
+      owner: OWNER_BY_REPO[REPO.OBS]!, classification: 'internal',
       status: 'published',
       reviewed_by: 'Eli Garcia', reviewed_at: clock.hoursAgo(9),
+      last_used_at: clock.hoursAgo(2),
       created_by_compaction_id: 'comp-201',
       created_at: clock.hoursAgo(40), updated_at: clock.hoursAgo(9),
     },
@@ -964,8 +1006,10 @@ function seedArtifacts(): ArtifactRow[] {
         '## Fix\n1. Issue a throwaway `SELECT 1` to warm the endpoint.\n2. Retry the real call up to 6 times with a 3-second backoff, transient errors only.\n3. Let a genuine SQL error (e.g. `already exists`) raise immediately — do not retry it.',
       cluster_ids: ['cl-021'],
       facts: ['fact-003', 'fact-004'],
+      owner: OWNER_BY_REPO[REPO.COST]!, classification: 'internal',
       status: 'published',
       reviewed_by: null, reviewed_at: null,
+      last_used_at: clock.hoursAgo(5),
       created_by_compaction_id: 'comp-201',
       created_at: clock.hoursAgo(40), updated_at: clock.hoursAgo(40),
     },
@@ -978,8 +1022,10 @@ function seedArtifacts(): ArtifactRow[] {
         'The middleware and collector-fleet images are built on Apple Silicon. Fargate defaults task definitions to x86_64 unless `runtimePlatform` explicitly pins ARM64 — the mismatch only surfaces as `exec format error` at container start, and looks like a crash loop rather than an architecture mismatch. ARM64 is also the cheaper Fargate option, so pinning it is free.',
       cluster_ids: ['cl-020'],
       facts: ['fact-005'],
+      owner: OWNER_BY_REPO[REPO.OBS]!, classification: 'internal',
       status: 'published',
       reviewed_by: 'Priya Desai', reviewed_at: clock.hoursAgo(30),
+      last_used_at: clock.hoursAgo(4),
       created_by_compaction_id: 'comp-201',
       created_at: clock.hoursAgo(40), updated_at: clock.hoursAgo(30),
     },
@@ -994,8 +1040,10 @@ function seedArtifacts(): ArtifactRow[] {
         '## Guardrails\n- The diff is passed as fenced, untrusted content — never as an instruction the evaluator follows.\n- The evaluator needed two sign-offs before promotion to endpoint tier, since it can now block a merge.',
       cluster_ids: ['cl-011'],
       facts: ['fact-006', 'fact-007'],
+      owner: OWNER_BY_REPO[REPO.AUTH]!, classification: 'confidential',
       status: 'published',
       reviewed_by: 'Eli Garcia', reviewed_at: clock.hoursAgo(60),
+      last_used_at: clock.hoursAgo(12),
       created_by_compaction_id: 'comp-202',
       created_at: clock.hoursAgo(70), updated_at: clock.hoursAgo(60),
     },
@@ -1008,8 +1056,10 @@ function seedArtifacts(): ArtifactRow[] {
         'Every document heading into the Bedrock Knowledge Base first passes `lib-pii-scan`. Scanning after ingestion was tried and rejected: by then the document was already embedded and indexed. The evaluator runs at internal tier (the ingestion pipeline is its only caller) and only flags — redaction decisions stay with a human reviewer.',
       cluster_ids: ['cl-022'],
       facts: ['fact-008'],
+      owner: OWNER_BY_REPO[REPO.LLM]!, classification: 'confidential',
       status: 'published',
       reviewed_by: 'Mia Singh', reviewed_at: clock.hoursAgo(45),
+      last_used_at: clock.hoursAgo(20),
       created_by_compaction_id: 'comp-202',
       created_at: clock.hoursAgo(70), updated_at: clock.hoursAgo(45),
     },
@@ -1022,8 +1072,10 @@ function seedArtifacts(): ArtifactRow[] {
         '## Steps\n1. Keep the service dual-writing to StatsD and OTel.\n2. Validate the OTel-derived dashboards against the StatsD numbers for at least one sprint.\n3. Re-point every alert that still references the StatsD metric.\n4. Remove the StatsD emitter for that service only.\n\nAwaiting review before this leaves draft — the checklist step is new and hasn’t been exercised on a second service yet.',
       cluster_ids: ['cl-005'],
       facts: ['fact-009'],
+      owner: OWNER_BY_REPO[REPO.OBS]!, classification: 'internal',
       status: 'draft',
       reviewed_by: null, reviewed_at: null,
+      last_used_at: null,
       created_by_compaction_id: 'comp-202',
       created_at: clock.hoursAgo(70), updated_at: clock.hoursAgo(70),
     },
@@ -1036,8 +1088,10 @@ function seedArtifacts(): ArtifactRow[] {
         'Every tenant/role switch and `revoke-others` call bumps `session_epoch` on `app_users`. `sessionMiddleware`’s periodic grants refresh compares the cookie’s epoch against the stored one and drops anything below it. Masquerade is the deliberate exception: it carries the target user’s epoch rather than bumping it, so masquerading into an account doesn’t kick that user out of their own live sessions.\n\nStill draft: needs a second reviewer before it generalizes past the auth-migration initiative.',
       cluster_ids: ['cl-008'],
       facts: ['fact-010'],
+      owner: OWNER_BY_REPO[REPO.AUTH]!, classification: 'confidential',
       status: 'draft',
       reviewed_by: null, reviewed_at: null,
+      last_used_at: null,
       created_by_compaction_id: 'comp-203',
       created_at: clock.hoursAgo(100), updated_at: clock.hoursAgo(100),
     },
@@ -1050,8 +1104,10 @@ function seedArtifacts(): ArtifactRow[] {
         'Retired: superseded by two narrower artifacts (`skill-cold-start-aurora` covers the Aurora cold-start behavior; the OpenSearch floor is now tracked directly in the FinOps dashboard rather than as a standalone insight). Kept for lineage — the original showback case cited this combined artifact before it was split.',
       cluster_ids: ['cl-017', 'cl-018'],
       facts: ['fact-011', 'fact-012'],
+      owner: OWNER_BY_REPO[REPO.COST]!, classification: 'internal',
       status: 'retired',
       reviewed_by: 'Layla Hassan', reviewed_at: clock.hoursAgo(80),
+      last_used_at: null,
       created_by_compaction_id: 'comp-203',
       created_at: clock.hoursAgo(100), updated_at: clock.hoursAgo(80),
     },
@@ -1071,8 +1127,10 @@ function seedArtifacts(): ArtifactRow[] {
         '## Why\n- Cognito rejects a non-localhost http callback before any app code runs, so setting it early takes the whole login path down rather than degrading it.',
       cluster_ids: ['cl-009'],
       facts: ['fact-013', 'fact-014', 'fact-015', 'fact-016', 'fact-017'],
+      owner: OWNER_BY_REPO[REPO.AUTH]!, classification: 'confidential',
       status: 'published',
       reviewed_by: 'Mia Singh', reviewed_at: clock.hoursAgo(8),
+      last_used_at: clock.hoursAgo(1),
       created_by_compaction_id: 'comp-204',
       created_at: clock.hoursAgo(10), updated_at: clock.hoursAgo(8),
     },
@@ -1086,8 +1144,10 @@ function seedArtifacts(): ArtifactRow[] {
         'Still draft: the second run stopped on step 3 (the hosted-UI redirect still resolved to the old domain) and the flip-back step has not been exercised as a rollback of that failure yet.',
       cluster_ids: ['cl-010'],
       facts: ['fact-018', 'fact-019', 'fact-020', 'fact-021'],
+      owner: OWNER_BY_REPO[REPO.AUTH]!, classification: 'confidential',
       status: 'draft',
       reviewed_by: null, reviewed_at: null,
+      last_used_at: null,
       created_by_compaction_id: 'comp-204',
       created_at: clock.hoursAgo(10), updated_at: clock.hoursAgo(10),
     },
@@ -1101,8 +1161,10 @@ function seedArtifacts(): ArtifactRow[] {
         '## Why\n- Nobody signs off on tearing down a cluster from "it’s expensive"; the attributed figure is what got the last one decided in one meeting.',
       cluster_ids: ['cl-016'],
       facts: ['fact-022', 'fact-023', 'fact-024'],
+      owner: OWNER_BY_REPO[REPO.COST]!, classification: 'internal',
       status: 'published',
       reviewed_by: 'Nora DaSilva', reviewed_at: clock.hoursAgo(6),
+      last_used_at: clock.hoursAgo(3),
       created_by_compaction_id: 'comp-204',
       created_at: clock.hoursAgo(10), updated_at: clock.hoursAgo(6),
     },
@@ -1546,6 +1608,7 @@ const LARGE_KINDS: ObservationKind[] = ['worked', 'failed', 'gotcha', 'decision'
 // procedure with zero steps would be a shape the provider never produces.
 const LARGE_TYPES: ArtifactType[] = ['runbook', 'insight', 'convention', 'decision'];
 const LARGE_STATUSES: ArtifactStatus[] = ['published', 'published', 'draft', 'published', 'draft', 'retired'];
+const LARGE_CLASSIFICATIONS: ArtifactClassification[] = ['internal', 'internal', 'confidential', 'internal', 'public'];
 
 const pad = (n: number, width: number): string => String(n).padStart(width, '0');
 const largeRepo = (i: number) => LARGE_REPOS[i % LARGE_REPOS.length]!;
@@ -1618,9 +1681,16 @@ function largeArtifacts(): ArtifactRow[] {
       body_markdown: `## Generated\nOne of the high-volume world's artifacts, distilled from ${clusterIds.join(' and ')}.`,
       cluster_ids: clusterIds,
       facts: Array.from({ length: LARGE.clustersPerArtifact }, (_, f) => `fact-L${pad(i * LARGE.clustersPerArtifact + f + 1, 2)}`),
+      owner: OWNER_BY_REPO[largeRepo(i).repo] ?? 'Unassigned',
+      classification: LARGE_CLASSIFICATIONS[i % LARGE_CLASSIFICATIONS.length]!,
       status: LARGE_STATUSES[i % LARGE_STATUSES.length]!,
       reviewed_by: i % 2 === 0 ? 'Priya Desai' : null,
       reviewed_at: i % 2 === 0 ? clock.hoursAgo(20 + i * 4) : null,
+      // The `large` scenario never seeds a matching library-links row (only
+      // the hand-written art-00x rows are linked), so no generated artifact
+      // resolves `library_item_id` — nothing has actually been invoked
+      // through the Library, so this stays null even for `published` rows.
+      last_used_at: null,
       created_by_compaction_id: largeL2Job(a),
       created_at: at,
       updated_at: at,

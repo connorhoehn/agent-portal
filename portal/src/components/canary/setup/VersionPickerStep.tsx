@@ -4,7 +4,7 @@
 
 import { useState } from 'react';
 import {
-  Button, Divider, Inline, InlineAlert, MetaLine, SkeletonCard, Stack,
+  Button, Divider, Inline, InlineAlert, InlinePlaceholder, MetaLine, SectionLabel, SkeletonCard, Stack,
 } from '@connorhoehnslalom/ui-components/shared';
 import { usePromptVersions } from '../usePromptLibrary.js';
 import type { PromptLibraryEntry } from '../types.js';
@@ -123,11 +123,11 @@ export function VersionPickerStep({
       <Inline gap="none" align="start" wrap={false}>
         {/* Left column — Baseline A */}
         <Stack gap="none" className="flex-1 min-w-0 px-4">
-          <Inline as="div" gap="none" className="text-[12px] font-semibold uppercase tracking-wide mb-2 text-[#3b82f6]">
+          <SectionLabel as="div" className="mb-2 text-[#3b82f6]">
             Baseline (A)
-          </Inline>
+          </SectionLabel>
           {versions.length === 0 ? (
-            <MetaLine className="mt-6 text-center italic" items={['No versions found']} />
+            <InlinePlaceholder align="center" className="mt-6">No versions found</InlinePlaceholder>
           ) : (
             <Stack gap="none" className="border border-border rounded-md overflow-hidden">
               {versions.map((v) => (
@@ -149,11 +149,11 @@ export function VersionPickerStep({
 
         {/* Right column — Challenger B */}
         <Stack gap="none" className="flex-1 min-w-0 px-4">
-          <Inline as="div" gap="none" className="text-[12px] font-semibold uppercase tracking-wide mb-2 text-[#a855f7]">
+          <SectionLabel as="div" className="mb-2 text-[#a855f7]">
             Challenger (B)
-          </Inline>
+          </SectionLabel>
           {versions.length === 0 ? (
-            <MetaLine className="mt-6 text-center italic" items={['No versions found']} />
+            <InlinePlaceholder align="center" className="mt-6">No versions found</InlinePlaceholder>
           ) : (
             <Stack gap="none" className="border border-border rounded-md overflow-hidden">
               {versions.map((v) => (

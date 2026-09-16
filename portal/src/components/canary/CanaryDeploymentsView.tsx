@@ -9,107 +9,12 @@
 //
 // Empty table shown when Aurora has no decisions recorded yet.
 
-import { useState } from 'react';
 import {
-  Button, Card, Chip, EmptyState, EntityCell, Inline, MetaLine, Stack, Table, TableBody, TableHead, TableRow, TableTd, TableTh,
+  Card, EmptyState, EntityCell, Inline, MetaLine, Stack, Table, TableBody, TableHead, TableRow, TableTd, TableTh,
 } from '@connorhoehnslalom/ui-components/shared';
 import { Link } from 'react-router';
 import { useCanaryStore } from './canaryStore.js';
-import type { ControllerAction, Decision } from './types.js';
-
-// ── Action metadata ───────────────────────────────────────────────────────────
-
-const ACTION_META: Record<ControllerAction, { label: string; tone: 'success' | 'danger' | 'warning' | 'info' | 'neutral' }> = {
-  PROMOTE:            { label: 'Promote',        tone: 'success' },
-  ROLLBACK:           { label: 'Rollback',       tone: 'danger' },
-  HOLD:               { label: 'Hold',           tone: 'warning' },
-  // These carried literal light-mode hex (#e0e7ff / #3730a3), which paints
-  // the same in dark mode and read as a bright card on a dark table. A tone
-  // follows the theme.
-  SKIPPED_OVERRIDE:   { label: 'Skip — override', tone: 'info' },
-  SKIPPED_COOLDOWN:   { label: 'Skip — cooldown', tone: 'neutral' },
-  SKIPPED_NO_SAMPLES: { label: 'Skip — no data',  tone: 'neutral' },
-};
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function fmtDate(ts: string): string {
-  const d = new Date(ts);
-  if (Number.isNaN(d.getTime())) return ts;
-  return d.toLocaleString(undefined, {
-    month: 'short', day: 'numeric',
-    hour: '2-digit', minute: '2-digit', second: '2-digit',
-    hour12: false,
-  });
-}
-
-function DeltaCell({ delta }: { delta: number | undefined }): React.ReactElement {
-  if (delta === undefined) return <MetaLine size="xs" items={['—']} />;
-  const cls =
-    delta > 0.005 ? 'text-success' :
-    delta < -0.005 ? 'text-danger' :
-    'text-text-secondary';
-  return (
-    <EntityCell label={`${delta >= 0 ? '+' : ''}${delta.toFixed(3)}`} labelClassName={`tabular-nums ${cls}`} />
-  );
-}
-
-// ── Decision row (collapsible reason) ────────────────────────────────────────
-
-function DecisionRow({ decision, index }: { decision: Decision; index: number }): React.ReactElement {
-  const [expanded, setExpanded] = useState(index === 0 && !!decision.reason);
-  const meta = ACTION_META[decision.action];
-  const hasReason = !!decision.reason;
-
-  const trafficClass =
-    decision.to > decision.from ? 'text-success' :
-    decision.to < decision.from ? 'text-danger' :
-    'text-text-secondary';
-
-  return (
-    <>
-      {/* Hover used to be two imperative handlers assigning
-          `currentTarget.style.background`; the library's row owns that. */}
-      <TableRow aria-expanded={hasReason ? expanded : undefined}>
-        <TableTd><MetaLine size="xs" className="tabular-nums" items={[fmtDate(decision.ts)]} /></TableTd>
-        <TableTd><Chip size="xs" tone={meta.tone}>{meta.label}</Chip></TableTd>
-        <TableTd>
-          <Inline gap="xs" align="center" className="tabular-nums">
-            <MetaLine size="sm" tone="secondary" items={[`${decision.from}%`]} />
-            <MetaLine size="xs" items={['→']} />
-            <EntityCell label={`${decision.to}%`} labelClassName={trafficClass} />
-          </Inline>
-        </TableTd>
-        <TableTd align="center"><DeltaCell delta={decision.deltaScore} /></TableTd>
-        <TableTd className="max-w-0">
-          {hasReason
-            ? <MetaLine size="xs" className="truncate italic" items={[decision.reason]} />
-            : <MetaLine size="xs" items={['—']} />}
-        </TableTd>
-        <TableTd align="center" className="w-7">
-          {hasReason && (
-            <Button
-              variant="ghost"
-              size="sm"
-              aria-expanded={expanded}
-              aria-label={expanded ? 'Collapse reason' : 'Expand reason'}
-              onClick={() => setExpanded(v => !v)}
-            >
-              <span aria-hidden="true">{expanded ? '▲' : '▼'}</span>
-            </Button>
-          )}
-        </TableTd>
-      </TableRow>
-      {expanded && hasReason && (
-        <TableRow>
-          <TableTd colSpan={6}>
-            <MetaLine size="sm" tone="secondary" className="italic leading-relaxed" items={[decision.reason]} />
-          </TableTd>
-        </TableRow>
-      )}
-    </>
-  );
-}
+import { DecisionRow } from './DecisionRow.js';
 
 // ── Empty state ───────────────────────────────────────────────────────────────
 
@@ -178,7 +83,7 @@ export function CanaryDeploymentsView(): React.ReactElement {
             {sorted.length === 0 ? (
               <DecisionsEmpty />
             ) : (
-              sorted.map((d, i) => <DecisionRow key={`${d.ts}-${i}`} decision={d} index={i} />)
+              sorted.map((d, i) => <DecisionRow key={`${d.ts}-${i}`} decision={d} variant="list" index={i} />)
             )}
           </TableBody>
         </Table>

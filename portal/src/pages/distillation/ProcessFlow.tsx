@@ -14,7 +14,7 @@ interface FindingsResponse { findings: Array<{ id: string; sweep?: string }> }
 interface LiveBundleResponse { skills?: unknown[] }
 interface BotsResponse { bots?: Array<{ enabled?: boolean; todayRunCount?: number }> }
 interface PromotionsResponse { candidates?: Array<{ status?: string }> }
-interface SamplingLite { reviewedLast30d?: number }
+interface SamplingLite { reviewedLast30d?: number; queueDepth?: number }
 
 const LAB_SWEEP = 'lab-signal';
 
@@ -61,6 +61,7 @@ export function ProcessFlow({ height = 400 }: { height?: number }) {
     ? promotionsData.candidates.filter((c) => c.status === 'candidate').length
     : 0;
   const reviewed30d = typeof samplingData?.reviewedLast30d === 'number' ? samplingData.reviewedLast30d : 0;
+  const queueDepth = typeof samplingData?.queueDepth === 'number' ? samplingData.queueDepth : 0;
 
   const model = useMemo(() => {
     if (!levelsData) return null;
@@ -70,6 +71,7 @@ export function ProcessFlow({ height = 400 }: { height?: number }) {
       sweepFindings,
       labSignals,
       reviewed30d,
+      queueDepth,
       levels: levelsData.levels,
       health: levelsData.health,
       jobs,
@@ -77,7 +79,7 @@ export function ProcessFlow({ height = 400 }: { height?: number }) {
       candidates,
       bundleSkills,
     });
-  }, [levelsData, ingestData?.activeWriters, botRunsToday, sweepFindings, labSignals, reviewed30d, jobs, publishedCount, candidates, bundleSkills]);
+  }, [levelsData, ingestData?.activeWriters, botRunsToday, sweepFindings, labSignals, reviewed30d, queueDepth, jobs, publishedCount, candidates, bundleSkills]);
 
   return (
     <CompactionFlowFrame

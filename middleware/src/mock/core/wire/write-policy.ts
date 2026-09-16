@@ -1324,6 +1324,23 @@ export const WRITE_SPECS: readonly WriteSpec[] = [
     build: ok({ verdict: 'agree' }),
   },
   {
+    route: 'POST /api/distillation/review',
+    persona: 'orgiq/admin',
+    safe: 'Appends to the registered `distillation` review-samples fixture; reset drops the appended row. No AWS, no model, no timer.',
+    bodyFrom: "routes/distillation.ts: `target_kind` ∈ {'cluster','artifact'}; `target_id` off GET /api/distillation/artifacts?status=published#id. Every seeded pending review sample targets a DRAFT artifact or a cluster (art-006, art-007, art-010, cl-019..022) — none targets a published one — so a published artifact's id never collides with the 409-already-pending branch.",
+    build: async (ctx) => {
+      const id = await ctx.pick('/api/distillation/artifacts?status=published', 'id');
+      if (id === null) return unsynthesisable('GET /api/distillation/artifacts?status=published listed no artifact to queue for review');
+      return { target_kind: 'artifact', target_id: id };
+    },
+  },
+  {
+    route: 'POST /api/distillation/artifacts/:id/publish',
+    persona: 'orgiq/admin',
+    safe: 'Mutates the registered `distillation` artifacts fixture (draft -> published); reset restores the row. No AWS, no model, no timer.',
+    bodyFrom: 'routes/distillation.ts: no body. The :id resolves to a draft artifact via the `id@/api/distillation/artifacts` override in http.ts (`?status=draft`), so the write never targets an already-published or retired row and never hits the 409 branch.',
+  },
+  {
     route: 'POST /api/distillation/procedures/:id/apply',
     persona: 'orgiq/admin',
     safe: 'Appends a run to the registered `distillation-procedure-applications` fixture; reset drops it and the procedure’s counted health goes back to the seed. No AWS, no model, no timer. The `:id` is drawn from GET /api/distillation/procedures, which lists only procedure artifacts, so the 404 branch (a non-procedure id) is never what gets captured.',

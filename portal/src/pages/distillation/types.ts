@@ -140,6 +140,9 @@ export interface Cluster {
  *  and it is the only type with an application history (ProcedureApplication). */
 export type ArtifactType = 'runbook' | 'insight' | 'convention' | 'decision' | 'procedure';
 export type ArtifactStatus = 'draft' | 'published' | 'retired';
+/** Sensitivity, not release-readiness — `LibraryAsset.tier` already answers
+ *  "is this safe to run"; this answers "who is allowed to see this." */
+export type ArtifactClassification = 'internal' | 'confidential' | 'public';
 
 export interface Fact {
   id: string;
@@ -171,9 +174,21 @@ export interface Artifact {
    *  `GET /items/:id/lineage` are the only ways to read a fact's content. */
   facts: string[];
   library_item_id: string | null;
+  /** Who is accountable for this artifact as enterprise IP — distinct from
+   *  `reviewed_by`, which is who signed off on the L1 sample it was
+   *  distilled from. A reviewer is not an owner. */
+  owner: string;
+  classification: ArtifactClassification;
   status: ArtifactStatus;
   reviewed_by: string | null;
   reviewed_at: string | null;
+  /** Last time this artifact's published Library asset was actually
+   *  invoked — null until it has BOTH `status: 'published'` and a Library
+   *  link; never borrows `updated_at`'s meaning (last EDITED). */
+  last_used_at: string | null;
+  /** Server-computed rollup — mean confidence of the artifact's own facts
+   *  (falling back to its source clusters), never stored. */
+  confidence: number;
   created_by_compaction_id: string;
   created_at: string;
   updated_at: string;
@@ -379,6 +394,10 @@ export interface CompactionFlowEdge {
    *  Mutually exclusive with `running` (running always wins). */
   breathing: boolean;
   tone: CompactionFlowEdgeTone;
+  /** Hover explanation for an edge that stays static on purpose — e.g. the
+   *  wire carries no timestamp yet to honestly animate from. Absent for
+   *  every other edge; never set to explain an edge that IS animating. */
+  title?: string;
 }
 
 export interface CompactionFlowModel {

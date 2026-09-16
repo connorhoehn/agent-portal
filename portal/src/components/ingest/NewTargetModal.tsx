@@ -108,7 +108,7 @@ export function NewTargetModal({
 
   return (
     <Modal open={true} onClose={onCancel} maxWidth={560}>
-      <Card padding="md" style={{ width: 'min(560px, 92vw)' }}>
+      <Card padding="md" className="w-[min(560px,92vw)]">
         <SectionLabel as="h3" className="text-sm mb-4">
           {isEdit ? 'Edit Crawl Target' : 'New Crawl Target'}
         </SectionLabel>

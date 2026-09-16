@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router';
 import {
   ChannelHeader,
@@ -10,6 +10,7 @@ import {
   SubNavLayout,
   type SubNavItem,
   SkipLink,
+  type Command,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { useSession } from '../../lib/auth';
@@ -19,7 +20,7 @@ import { GatewayStatusBadge } from './GatewayStatusBadge';
 import { ActiveRunsBadge } from './ActiveRunsBadge';
 import { LocalComputeBadge } from './LocalComputeBadge';
 import { usePortalCommands, usePortalDynamicCommands, groupRank } from './portalCommands';
-import { DevboxQuickSwitch } from './DevboxQuickSwitch';
+import { DevboxQuickSwitch, type PaletteScope } from './DevboxQuickSwitch';
 import { brandMarkUri, gradientStops } from './brandMark';
 import { ToastHost } from './ToastHost';
 import { ComputeDock } from '@connorhoehnslalom/ui-components/compute';
@@ -194,8 +195,31 @@ export function Layout() {
   // <main> (24px) and app.css zeroes only the NESTED section layouts' mains
   // (they inherit the shell's), so this column adds none — the old full-bleed
   // list existed to avoid double-padding nested rails and is not needed.
-  const commands = usePortalCommands();
-  const getDynamicCommands = usePortalDynamicCommands();
+  const rawCommands = usePortalCommands();
+  const rawGetDynamicCommands = usePortalDynamicCommands();
+
+  // The palette has exactly one built-in hotkey (⌘K). DevboxQuickSwitch's
+  // ⌘I command narrows the same dialog to its own "Devbox" group by asking
+  // every OTHER command (static pages + query-derived ones) to hide for as
+  // long as it's scoped — the closest a single-palette API gets to "open
+  // pre-filtered to a group". Devbox's own commands are registered directly
+  // into the palette via useRegisterCommand, so they're untouched by this.
+  const [paletteScope, setPaletteScope] = useState<PaletteScope>('all');
+  const scopeCommand = useCallback(
+    (c: Command): Command => ({
+      ...c,
+      when: () => (paletteScope === 'devbox' ? false : (c.when ? c.when() : true)),
+    }),
+    [paletteScope],
+  );
+  const commands = useMemo(
+    () => rawCommands.map(scopeCommand),
+    [rawCommands, scopeCommand],
+  );
+  const getDynamicCommands = useCallback(
+    (query: string) => rawGetDynamicCommands(query).map(scopeCommand),
+    [rawGetDynamicCommands, scopeCommand],
+  );
 
   const navItems = NAV_ITEMS.filter((item) => {
     if (item.tenant === 'assessment' && !ASSESSMENT_ENABLED) return false;
@@ -300,34 +324,36 @@ export function Layout() {
             user lands on the page content without walking the header, the
             rail and the nested rail first (WCAG 2.4.1, Bypass Blocks). */}
         <SkipLink targetId="main-content" />
-        <ChannelHeader
-          className="shell-header"
-          avatarUrl={brandMark}
-          name={tenantLabel}
-          description={statusLabel}
-          online={mockedSubsystems.length === 0 && !!health && !credsExpired && !dbDown}
-          actions={
-            <Inline gap="md" wrap={false}>
-              <CommandPaletteHint />
-              {/* The user's own machine in the fleet — renders nothing until
-                  a machine is paired, so most sessions never see it.
-                  orgiq only, like DevboxQuickSwitch and ComputeDock below:
-                  unguarded, it put an orgiq machine (and the initiative and
-                  branch it was working on) in the assessment header, with an
-                  "Open Computer Lab" action leading out of the tenant. The
-                  server filters these nodes by OWNER, which is not the same
-                  question as which workspace you are standing in. */}
-              {/* What the fleet is running right now. Not tenant-guarded like
-                  LocalComputeBadge: the runs are the caller's own org work
-                  either way, and losing track of a live run is the failure
-                  this exists to prevent. Renders nothing when nothing runs. */}
-              <ActiveRunsBadge />
-              {session?.tenant === 'orgiq' && <LocalComputeBadge />}
-              <GatewayStatusBadge />
-              <MasqueradeMenu />
-            </Inline>
-          }
-        />
+        <header>
+          <ChannelHeader
+            className="shell-header"
+            avatarUrl={brandMark}
+            name={tenantLabel}
+            description={statusLabel}
+            online={mockedSubsystems.length === 0 && !!health && !credsExpired && !dbDown}
+            actions={
+              <Inline gap="md" wrap={false}>
+                <CommandPaletteHint />
+                {/* The user's own machine in the fleet — renders nothing until
+                    a machine is paired, so most sessions never see it.
+                    orgiq only, like DevboxQuickSwitch and ComputeDock below:
+                    unguarded, it put an orgiq machine (and the initiative and
+                    branch it was working on) in the assessment header, with an
+                    "Open Computer Lab" action leading out of the tenant. The
+                    server filters these nodes by OWNER, which is not the same
+                    question as which workspace you are standing in. */}
+                {/* What the fleet is running right now. Not tenant-guarded like
+                    LocalComputeBadge: the runs are the caller's own org work
+                    either way, and losing track of a live run is the failure
+                    this exists to prevent. Renders nothing when nothing runs. */}
+                <ActiveRunsBadge />
+                {session?.tenant === 'orgiq' && <LocalComputeBadge />}
+                <GatewayStatusBadge />
+                <MasqueradeMenu />
+              </Inline>
+            }
+          />
+        </header>
         <Stack gap="none" className="flex-1 min-h-0" data-shell-nav>
           <SubNavLayout
             title={tenantLabel}
@@ -382,7 +408,7 @@ export function Layout() {
             an assessment session — the tenants are separate products on a
             shared BFF, and a session scoped to one must not see the other's
             chrome. */}
-        {session?.tenant === 'orgiq' && <DevboxQuickSwitch />}
+        {session?.tenant === 'orgiq' && <DevboxQuickSwitch onScopeChange={setPaletteScope} />}
         <ToastHost />
         {session?.tenant === 'orgiq' && <ComputeDock />}
       </Stack>

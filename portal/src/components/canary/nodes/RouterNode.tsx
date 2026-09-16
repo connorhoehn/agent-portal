@@ -35,8 +35,8 @@ function RouterNodeImpl({ data }: NodeProps<RouterNodeType>) {
       </Inline>
 
       <Handle type="target" position={Position.Top} id="in" />
-      <Handle type="source" position={Position.Bottom} id="a" style={{ left: '28%' }} />
-      <Handle type="source" position={Position.Bottom} id="b" style={{ left: '72%' }} />
+      <Handle type="source" position={Position.Bottom} id="a" className="!left-[28%]" />
+      <Handle type="source" position={Position.Bottom} id="b" className="!left-[72%]" />
     </Card>
   );
 }

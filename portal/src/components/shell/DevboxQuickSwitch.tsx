@@ -1,39 +1,48 @@
-// ⌘I — devbox quick-switch overlay, the devbox sibling of the ⌘K palette.
-// Lists the named devboxes (each its own AgentCore runtime session = its own
-// microVM + persistent workspace), jumps to one, or provisions a new one.
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+// ⌘I — devbox quick-switch, registered into the shared CommandPalette (⌘K)
+// under a "Devbox" group. Lists the named devboxes (each its own AgentCore
+// runtime session = its own microVM + persistent workspace), jumps to one,
+// or provisions a new one.
+//
+// This used to be a hand-rolled overlay (window keydown capture, div rows
+// with no option semantics, a Card with no dialog role). The palette now
+// owns rows, fuzzy filtering, arrow-key/Tab focus movement and dismissal —
+// this file only contributes commands via useRegisterCommand.
+//
+// CommandPaletteProvider hardcodes exactly one dialog-opening hotkey (⌘K);
+// a command's own `hotkey` fires that command's `run()` directly but there
+// is no public `open(query)` / `setQuery` an outside caller can use to
+// pre-fill the search box in a second dialog. So ⌘I is wired as a command
+// hotkey whose run() asks Layout (via `onScopeChange`) to hide every other
+// registered command for as long as the palette stays open, then opens the
+// same ⌘K dialog — from the keyboard the effect is a palette that opens
+// showing only the Devbox group, which is the closest a single-palette API
+// gets to "open pre-filtered to a group".
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useCompute, type Computer } from '@connorhoehnslalom/ui-components/compute';
 import {
-  Card, EntityCell, Inline, InlineAlert, MetaLine, SectionLabel, Stack,
+  useCommandPalette, useRegisterCommand, type Command,
 } from '@connorhoehnslalom/ui-components/shared';
 
-const mono = 'font-["Fira_Code","Cascadia_Code","JetBrains_Mono",monospace]';
+export type PaletteScope = 'all' | 'devbox';
 
-export function DevboxQuickSwitch() {
+interface DevboxQuickSwitchProps {
+  /** Lets this component narrow the palette to the Devbox group on ⌘I,
+      and hand it back once the dialog closes. Owned by Layout, which also
+      applies it to the rest of the command list. */
+  onScopeChange: (scope: PaletteScope) => void;
+}
+
+export function DevboxQuickSwitch({ onScopeChange }: DevboxQuickSwitchProps) {
   const navigate = useNavigate();
   // The fleet, and whether this session may add to it, both come from the
   // app-wide ComputeHost — one list, one answer, no localStorage mirror to
   // drift out of step with the dock.
   const { computers: boxes, create, canManage, isLoading, error } = useCompute();
-  const [open, setOpen] = useState(false);
-  const [highlight, setHighlight] = useState(0);
+  const { open, isOpen } = useCommandPalette();
   const [busy, setBusy] = useState(false);
-  const [query, setQuery] = useState('');
-  const overlayRef = useRef<HTMLDivElement>(null);
-
-  const matches = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return boxes;
-    return boxes.filter((b) =>
-      b.label.toLowerCase().includes(q) || b.sessionId.toLowerCase().includes(q));
-  }, [boxes, query]);
-
-  // Rows: matching boxes + the "new devbox" action (ManageDevbox only).
-  const rows = useMemo(() => matches.length + (canManage ? 1 : 0), [matches, canManage]);
 
   const go = useCallback((box: Computer) => {
-    setOpen(false);
     navigate(`/admin/devbox?box=${box.id}`);
   }, [navigate]);
 
@@ -46,151 +55,86 @@ export function DevboxQuickSwitch() {
     } finally {
       setBusy(false);
     }
-  }, [busy, go, create, boxes.length]);
+  }, [busy, create, boxes.length, go]);
 
+  // The devbox scope is only for the dialog it opened into — drop it the
+  // moment the palette closes, however that happened (Escape, outside
+  // click, a selection), so a later ⌘K isn't silently still narrowed.
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'i' && !e.shiftKey && !e.altKey) {
-        e.preventDefault();
-        e.stopPropagation();
-        setHighlight(0);
-        setQuery('');
-        setOpen((v) => !v);
-        return;
-      }
-      if (!open) return;
+    if (!isOpen) onScopeChange('all');
+  }, [isOpen, onScopeChange]);
 
-      if (e.key === 'Escape') { setOpen(false); }
-      else if (e.key === 'ArrowDown') { setHighlight((h) => (h + 1) % rows); }
-      else if (e.key === 'ArrowUp') { setHighlight((h) => (h - 1 + rows) % rows); }
-      else if (e.key === 'Tab') {
-        // Tab and shift-Tab walk the list, because that is what people press
-        // when a thing looks like a switcher.
-        setHighlight((h) => (h + (e.shiftKey ? -1 : 1) + rows) % rows);
-      }
-      else if (e.key === 'Enter') {
-        if (highlight < matches.length) { const b = matches[highlight]; if (b) go(b); }
-        else if (canManage) void provision();
-      }
-      else if (e.key === 'Backspace') { setQuery((q) => q.slice(0, -1)); setHighlight(0); }
-      else if (e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey) {
-        setQuery((q) => q + e.key);
-        setHighlight(0);
-      }
+  useRegisterCommand(useMemo<Command>(() => ({
+    id: 'devbox:quick-switch',
+    label: 'Computers — quick switch',
+    hint: 'Jump to a computer, or create one',
+    group: 'Devbox',
+    shortcut: ['⌘I'],
+    hotkey: 'mod+i',
+    keywords: ['devbox', 'computer', 'microvm', 'quick switch'],
+    run: () => { onScopeChange('devbox'); open(); },
+  }), [onScopeChange, open]));
 
-      // Nothing escapes while the overlay is up.
-      //
-      // This used to listen in bubble phase and only preventDefault the four
-      // keys it handled. xterm's own handler sits on its textarea and runs
-      // first, so every other keystroke was typed into the terminal underneath
-      // — the overlay looked focused and wasn't, and there was no way to
-      // filter or even type without corrupting whatever shell was behind it.
-      e.preventDefault();
-      e.stopPropagation();
-    };
-    // Capture phase: xterm must not see these at all.
-    window.addEventListener('keydown', onKey, true);
-    return () => window.removeEventListener('keydown', onKey, true);
-  }, [open, rows, highlight, matches, go, provision, canManage]);
+  useRegisterCommand(useMemo<Command>(() => ({
+    id: 'devbox:new',
+    label: busy ? '⏳ provisioning…' : '+ New computer',
+    hint: 'fresh microVM workspace',
+    group: 'Devbox',
+    when: () => canManage,
+    run: () => { void provision(); },
+  }), [busy, canManage, provision]));
 
-  // Take DOM focus off the terminal while the overlay is up, so the browser
-  // agrees with what the screen shows.
-  useEffect(() => {
-    if (!open) return;
-    const previous = document.activeElement as HTMLElement | null;
-    overlayRef.current?.focus();
-    return () => previous?.focus?.();
-  }, [open]);
+  // Every state the old overlay explained in prose now explains itself as
+  // one command row instead of leaving ⌘I-while-devbox-scoped open onto an
+  // unhelpful "No results."
+  useRegisterCommand(useMemo<Command>(() => ({
+    id: 'devbox:no-access',
+    label: 'You don’t have access to computers',
+    hint: 'Ask an admin for the ManageDevbox capability (SME or HR admin)',
+    group: 'Devbox',
+    when: () => !canManage,
+    run: () => {},
+  }), [canManage]));
 
-  if (!open) return null;
+  useRegisterCommand(useMemo<Command>(() => ({
+    id: 'devbox:error',
+    label: error ? `Couldn’t load computers: ${error}` : 'Couldn’t load computers',
+    hint: 'try again shortly',
+    group: 'Devbox',
+    when: () => canManage && !!error,
+    run: () => {},
+  }), [canManage, error]));
+
+  useRegisterCommand(useMemo<Command>(() => ({
+    id: 'devbox:empty',
+    label: 'No computers yet — open Computer Lab',
+    hint: 'or use + New computer above',
+    group: 'Devbox',
+    when: () => canManage && !error && !isLoading && boxes.length === 0,
+    run: () => navigate('/admin/devbox'),
+  }), [canManage, error, isLoading, boxes.length, navigate]));
 
   return (
-    <Inline
-      gap="none"
-      align="start"
-      justify="center"
-      wrap={false}
-      className="fixed inset-0 z-[200] bg-black/40 pt-[15vh]"
-      onClick={() => setOpen(false)}
-    >
-      {/* Card takes a ref as of 2.233.0, which is what lets the panel keep
-          taking DOM focus off the terminal underneath. */}
-      <Card
-        ref={overlayRef}
-        tabIndex={-1}
-        className="w-[440px] max-w-[90vw] shadow-xl outline-none"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <Inline gap="sm" wrap={false} className="px-4 py-2.5 border-b border-border">
-          <SectionLabel>Computers</SectionLabel>
-          <MetaLine size="xs" items={['⌘I · ↑↓ / tab · ⏎ · esc']} />
-          <Inline as="span" gap="none" className="flex-1" />
-          {query
-            ? <Inline as="span" gap="none" className={`text-[11px] text-text-primary ${mono}`}>{query}</Inline>
-            : <MetaLine size="xs" items={['type to filter']} />}
-        </Inline>
-        <Stack gap="none" className="max-h-[50vh] overflow-y-auto">
-          {/* The switcher used to open onto nothing for a role without
-              Computer Lab, or while the fleet was still loading, or when the
-              fleet was empty — a blank popover that says "type to filter".
-              Every one of those states now says what is true and what to do. */}
-          {!canManage && (
-            <Stack gap="none" className="px-4 py-3 text-[12px] text-text-secondary">
-              <Inline as="span" gap="none" className="font-semibold text-text-primary">
-                You don’t have access to computers.
-              </Inline>{' '}
-              Computer Lab needs the <Inline as="span" gap="none" className={mono}>ManageDevbox</Inline> capability
-              (SME or HR admin). Ask an administrator, or sign in as a role that has it.
-            </Stack>
-          )}
-          {canManage && error && (
-            <Stack gap="none" className="px-4 py-3">
-              <InlineAlert tone="error">Couldn’t load computers: {error}</InlineAlert>
-            </Stack>
-          )}
-          {canManage && !error && isLoading && boxes.length === 0 && (
-            <MetaLine className="px-4 py-3" items={['Loading computers…']} />
-          )}
-          {canManage && !error && !isLoading && boxes.length === 0 && (
-            <MetaLine tone="secondary" className="px-4 py-3"
-              items={['No computers yet — create one below, or open Computer Lab.']} />
-          )}
-          {canManage && !error && boxes.length > 0 && matches.length === 0 && (
-            <MetaLine className="px-4 py-3" items={[`No computer matches “${query}”.`]} />
-          )}
-          {matches.map((box, i) => (
-            <Inline
-              key={box.id}
-              gap="sm"
-              wrap={false}
-              onClick={() => go(box)}
-              onMouseEnter={() => setHighlight(i)}
-              className={`px-4 py-2.5 cursor-pointer border-b border-border ${highlight === i ? 'bg-surface-hover' : ''}`}
-            >
-              <EntityCell label={box.label} labelClassName="text-[13px] font-semibold" />
-              <Inline as="span" gap="none" className={`text-[11px] text-text-tertiary ${mono}`}>
-                …{box.sessionId.slice(-10)}
-              </Inline>
-              <Inline as="span" gap="none" className="flex-1" />
-              <MetaLine size="xs" items={[new Date(box.createdAt).toLocaleDateString()]} />
-            </Inline>
-          ))}
-          {canManage && (
-            <Inline
-              gap="sm"
-              wrap={false}
-              onClick={() => void provision()}
-              onMouseEnter={() => setHighlight(matches.length)}
-              className={`px-4 py-2.5 cursor-pointer ${highlight === matches.length ? 'bg-surface-hover' : ''}`}
-            >
-              <Inline as="span" gap="none" className="text-[13px] font-semibold text-primary">
-                {busy ? '⏳ provisioning…' : '+ New computer'}
-              </Inline>
-              <MetaLine size="xs" items={['fresh microVM workspace']} />
-            </Inline>
-          )}
-        </Stack>
-      </Card>
-    </Inline>
+    <>
+      {boxes.map((box) => (
+        <DevboxBoxCommand key={box.id} box={box} onGo={go} />
+      ))}
+    </>
   );
+}
+
+// One command per box. A variable-length list can't come from a single
+// useRegisterCommand call (hook count must stay fixed), so each box gets its
+// own instance of this headless component instead — React's keyed
+// reconciliation registers/unregisters as the fleet changes.
+function DevboxBoxCommand({ box, onGo }: { box: Computer; onGo: (box: Computer) => void }) {
+  useRegisterCommand(useMemo<Command>(() => ({
+    id: `devbox:go:${box.id}`,
+    label: box.label,
+    hint: `…${box.sessionId.slice(-10)} · ${new Date(box.createdAt).toLocaleDateString()}`,
+    group: 'Devbox',
+    keywords: [box.sessionId, box.label],
+    run: () => onGo(box),
+  }), [box, onGo]));
+  return null;
 }

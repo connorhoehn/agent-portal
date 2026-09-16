@@ -4,6 +4,7 @@
 // numbers and labels read on screen, not the reasoning behind them.
 
 import { relativeTime } from '../../lib/relativeTime.ts';
+import { pgTimestampMs } from '../../lib/pgTimestamp.ts';
 import type {
   ApplicationOutcome, Artifact, ArtifactStatus, ArtifactType, CompactableLevel, CompactionFlowEdge,
   CompactionFlowEdgeTone, CompactionFlowModel, CompactionFlowNode, CompactionJob, CompactionProduced,
@@ -61,6 +62,42 @@ export function bytesLabel(n: number): string {
   if (n < 1024) return `${n} B`;
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
   return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/** Slice 2: has this timestamp landed inside the given window (ms) as of
+ *  `nowMs`? Backs the Tiers "Landed" column's `StatusDot pulse` — the mock's
+ *  ingest simulator mints L0 observations on a per-minute tick, so a 60s
+ *  window shows that heartbeat directly, with zero new fields. An
+ *  unparseable/missing timestamp reads as "not recent" rather than throwing,
+ *  same failure posture as the rest of this module. */
+export function isRecentlyLanded(iso: string | null | undefined, nowMs: number, windowMs: number): boolean {
+  const ms = pgTimestampMs(iso);
+  if (Number.isNaN(ms)) return false;
+  const age = nowMs - ms;
+  return age >= 0 && age < windowMs;
+}
+
+/** A node presence row shaped just enough to count live sessions per repo —
+ *  the honest join key per the audit (repo, not session id: the two id
+ *  spaces are disjoint). Callers pass whatever `GET /api/local-compute/nodes`
+ *  returns; an offline node already reports zero sessions server-side. */
+export interface RepoPresenceNode {
+  presence: { sessions: Array<{ repo?: string | null }> };
+}
+
+/** How many live sessions (on the CALLER's own paired machines — this route
+ *  is owner-scoped, "my machines," not fleet-wide) are touching `repo` right
+ *  now. Null/no-repo reads as 0 rather than throwing — a procedure whose
+ *  clusters span multiple repos has no single repo to check activity for. */
+export function liveSessionCountForRepo(nodes: RepoPresenceNode[], repo: string | null): number {
+  if (!repo) return 0;
+  let count = 0;
+  for (const node of nodes) {
+    for (const s of node.presence.sessions) {
+      if (s.repo === repo) count += 1;
+    }
+  }
+  return count;
 }
 
 /** Mirrors the server's dedupeRatio guard: a job that consumed nothing has
@@ -654,6 +691,10 @@ export interface ProcessFlowInputs {
   labSignals: number;
   /** Human review verdicts in the last 30 days (sampling.reviewedLast30d). */
   reviewed30d: number;
+  /** Sampled items waiting for a verdict right now (sampling.queueDepth) —
+   *  real backlog pressure on the review step, the same "behind" semantic
+   *  the tier-health breathing already uses. */
+  queueDepth: number;
   levels: LevelState[];
   health: LevelHealth[];
   jobs: CompactionJob[];
@@ -749,20 +790,38 @@ export function processFlowModel(input: ProcessFlowInputs): CompactionFlowModel 
   };
   // Input edges carry no label: four labels converging on L0 overlapped each
   // other and the node — the counts are on the source nodes instead.
-  const plain = (id: string, sourceId: string, target: string, label = ''): CompactionFlowEdge =>
-    ({ id, source: sourceId, target, label, running: false, breathing: false, tone: 'neutral' });
+  const plain = (id: string, sourceId: string, target: string, label = '', title?: string): CompactionFlowEdge =>
+    ({ id, source: sourceId, target, label, running: false, breathing: false, tone: 'neutral', ...(title ? { title } : {}) });
+  // "Something is in flight right now" — the moving-dot class. Only a real
+  // concurrency signal earns this; `sessions-L0` is the one input edge with
+  // one (`activeWriters`), per the audit's per-edge table.
+  const running = (id: string, sourceId: string, target: string, isRunning: boolean): CompactionFlowEdge =>
+    ({ id, source: sourceId, target, label: '', running: isRunning, breathing: false, tone: 'neutral' });
+  // "Real pressure, not necessarily this instant" — a today-total or an
+  // open-count is honest as breathing (a slow pulse) but would overclaim as
+  // a moving dot, since a single run at 3am still reads as a nonzero count.
+  const breathing = (id: string, sourceId: string, target: string, label: string, hasPressure: boolean): CompactionFlowEdge =>
+    ({ id, source: sourceId, target, label, running: false, breathing: hasPressure, tone: 'neutral' });
 
   const edges: CompactionFlowEdge[] = [
-    plain('sessions-L0', 'sessions', 'L0'),
-    plain('bots-L0', 'bots', 'L0'),
-    plain('sweeps-L0', 'sweeps', 'L0'),
-    plain('lab-L0', 'lab', 'L0'),
+    running('sessions-L0', 'sessions', 'L0', input.activeWriters > 0),
+    breathing('bots-L0', 'bots', 'L0', '', (input.botRunsToday ?? 0) > 0),
+    breathing('sweeps-L0', 'sweeps', 'L0', '', input.sweepFindings > 0),
+    breathing('lab-L0', 'lab', 'L0', '', input.labSignals > 0),
     mergeEdge('L0-L1', 'L0', 'L1', l1Job, healthFor('L1')),
     mergeEdge('L1-L2', 'L1', 'L2', l2Job, healthFor('L2')),
-    plain('review-L1', 'review', 'L1', 'calibrates'),
-    plain('L2-library', 'L2', 'library', 'published as'),
-    plain('L2-promotions', 'L2', 'promotions', 'candidate skills'),
-    plain('library-session', 'library', 'session', 'bundled into'),
+    breathing('review-L1', 'review', 'L1', 'calibrates', input.queueDepth > 0),
+    // Static on purpose: `Artifact.updated_at` exists but nothing scans it
+    // for "published within window W" yet (needs a small `hasRecentArtifact`
+    // helper, not a new endpoint) — leave static rather than fake it.
+    plain('L2-library', 'L2', 'library', 'published as', 'Not yet wired to activity — no recent-publish window is computed from Artifact.updated_at.'),
+    // Static: a promotion candidate carries no timestamp on the wire today
+    // (`PromotionsResponse.candidates` has no `created_at`) — needs a field
+    // add to `providers/promotions.ts` before this can honestly breathe.
+    plain('L2-promotions', 'L2', 'promotions', 'candidate skills', 'Cannot animate yet — promotion candidates carry no created_at on the wire.'),
+    // Static: the live session bundle (`session-bundle/live`) exposes only
+    // `skills?: unknown[]`, no timestamp — same gap as above.
+    plain('library-session', 'library', 'session', 'bundled into', 'Cannot animate yet — the live session bundle carries no timestamp.'),
   ];
   return { nodes, edges };
 }

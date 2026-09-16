@@ -1,6 +1,6 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef } from 'react';
 import {
-  Button, Card, Inline, InlineAlert, MetaLine, SectionLabel, Stack, StatusDot,
+  Button, Inline, InlineAlert, InlinePopover, MetaLine, SectionLabel, Stack, StatusDot,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useSession, type SessionRole } from '../../lib/auth';
 
@@ -35,34 +35,9 @@ export function MasqueradeMenu() {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const menuRef = useRef<HTMLDivElement | null>(null);
-  const panelRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
 
-  useEffect(() => {
-    if (!open) return;
-    function onClick(e: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setOpen(false);
-    }
-    document.addEventListener('mousedown', onClick);
-    return () => document.removeEventListener('mousedown', onClick);
-  }, [open]);
-
-  // Move focus into the panel when it opens so keyboard users land inside it.
-  useEffect(() => {
-    if (open) panelRef.current?.focus();
-  }, [open]);
-
-  // Escape closes the panel and returns focus to the trigger. Bound on the
-  // wrapper so it fires wherever focus sits within the disclosure.
-  const closeAndRefocus = () => {
-    setOpen(false);
-    triggerRef.current?.focus();
-  };
-
-  useEffect(() => {
-    if (!open) setError(null);
-  }, [open]);
+  const close = () => { setOpen(false); setError(null); };
 
   if (isLoading || !session) return null;
 
@@ -80,14 +55,7 @@ export function MasqueradeMenu() {
   };
 
   return (
-    <Stack
-      gap="none"
-      ref={menuRef}
-      className="relative"
-      onKeyDown={e => { if (e.key === 'Escape' && open) { e.stopPropagation(); closeAndRefocus(); } }}
-    >
-      {/* Button takes a ref as of 2.242.0 — this trigger stayed a raw
-          <button> until then, because Escape must return focus to it. */}
+    <Stack gap="none" className="relative">
       <Button
         ref={triggerRef}
         variant="secondary"
@@ -110,13 +78,18 @@ export function MasqueradeMenu() {
         </Inline>
       </Button>
 
-      {open && (
-        <Card
-          ref={panelRef}
-          tabIndex={-1}
-          padding="none"
-          className="absolute top-[calc(100%+6px)] right-0 min-w-[280px] max-h-[480px] overflow-y-auto shadow-[0_8px_24px_rgba(0,0,0,0.3)] p-1.5 z-[100] outline-none"
-        >
+      {/* InlinePopover owns outside-click / Escape dismissal and focus
+          capture-on-open + restore-on-close — the hand-rolled versions of
+          all three used to live here. */}
+      <InlinePopover
+        trigger={triggerRef}
+        open={open}
+        onClose={close}
+        placement="bottom-end"
+        aria-label="Account menu"
+        className="min-w-[280px] max-h-[480px] overflow-y-auto"
+      >
+        <>
           {/* Current identity — always visible so "who/what am I now" is unambiguous. */}
           <Stack gap="none" className="px-2.5 pt-2 pb-2.5 border-b border-border mb-1">
             <Inline as="div" gap="none" className="text-[13px] font-semibold">{session.name}</Inline>
@@ -170,7 +143,7 @@ export function MasqueradeMenu() {
                 key={role}
                 active={active}
                 busy={busy}
-                onClick={() => active ? setOpen(false) : void run(() => setRole(role))}
+                onClick={() => active ? close() : void run(() => setRole(role))}
                 title={roleLabel(role)}
                 hint={ROLE_HINTS[role] ?? ''}
                 dotColor={roleColor(role)}
@@ -202,7 +175,7 @@ export function MasqueradeMenu() {
               size="sm"
               fullWidth
               className="justify-start text-left text-primary font-semibold"
-              onClick={() => { setOpen(false); window.location.assign('/select'); }}
+              onClick={() => { close(); window.location.assign('/select'); }}
             >
               Switch workspace…
             </Button>
@@ -223,8 +196,8 @@ export function MasqueradeMenu() {
               <InlineAlert tone="error">{error}</InlineAlert>
             </Stack>
           )}
-        </Card>
-      )}
+        </>
+      </InlinePopover>
     </Stack>
   );
 }

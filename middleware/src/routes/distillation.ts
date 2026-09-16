@@ -16,9 +16,10 @@ import { requireAction, resolveSession } from '../lib/authz.js';
 import {
   compactionHealth, compactNow, ingest, levels, listCompactions, sampling, samplingVerdict,
   listItems, getItem, lineageFor, isLineageRoot, listArtifacts, factLineage, listReview, decideReview, libraryProvenance,
+  publishArtifact, sampleForReview,
   listProcedures, getProcedure, listApplications, applyProcedure,
   type CompactableLevel, type CompactionStatus, type Level,
-  type ArtifactStatus, type ArtifactType, type ReviewVerdict, type ApplicationOutcome,
+  type ArtifactStatus, type ArtifactType, type ReviewVerdict, type ReviewTargetKind, type ApplicationOutcome,
 } from '../providers/distillation.js';
 
 // obs-123, cl-004, art-001, fact-011, papp-001, orgiq-supervisor-system-prompt,
@@ -30,6 +31,7 @@ const LEVELS = ['L0', 'L1', 'L2'] as const;
 const ARTIFACT_STATUSES = ['draft', 'published', 'retired'] as const;
 const ARTIFACT_TYPES = ['runbook', 'insight', 'convention', 'decision', 'procedure'] as const;
 const REVIEW_VERDICTS = ['pending', 'agree', 'disagree'] as const;
+const REVIEW_TARGET_KINDS = ['cluster', 'artifact'] as const;
 const APPLICATION_OUTCOMES = ['succeeded', 'failed', 'abandoned'] as const;
 
 function requireId(raw: string, field = 'id'): string {
@@ -159,6 +161,18 @@ distillationRouter.get('/artifacts', asyncHandler(async (req, res) => {
   res.json({ artifacts });
 }));
 
+// POST /api/distillation/artifacts/:id/publish — draft -> published. The
+// enterprise-asset row card's "Publish" quick action (docs/
+// distillation-concept-audit-2026-09-16.md §3): moves ArtifactStatus, same
+// authority as deciding a review sample (ManageBots) since it changes what
+// every reader of this artifact sees.
+distillationRouter.post('/artifacts/:id/publish', manageGate, asyncHandler(async (req, res) => {
+  const id = requireId(String(req.params['id']));
+  const session = resolveSession(req);
+  const artifact = await publishArtifact(id, session?.name ?? session?.sub ?? 'someone');
+  res.json(artifact);
+}));
+
 // GET /api/distillation/facts/:id/lineage
 distillationRouter.get('/facts/:id/lineage', asyncHandler(async (req, res) => {
   const id = requireId(String(req.params['id']), 'id');
@@ -173,6 +187,20 @@ distillationRouter.get('/review', asyncHandler(async (req, res) => {
   const verdict = enumOrUndefined<ReviewVerdict>(req.query['verdict'], 'verdict', REVIEW_VERDICTS);
   const samples = await listReview({ ...(verdict ? { verdict } : {}) });
   res.json({ samples });
+}));
+
+// POST /api/distillation/review { target_kind: 'cluster'|'artifact', target_id }
+// Adds a target to the human sample queue by hand — the enterprise-asset row
+// card's "Request review" quick action. Same authority as deciding a sample:
+// it moves the queue depth every reader of the sampling dial sees.
+distillationRouter.post('/review', manageGate, asyncHandler(async (req, res) => {
+  const body = req.body as { target_kind?: unknown; target_id?: unknown } | undefined;
+  const targetKind = enumOrUndefined<ReviewTargetKind>(body?.target_kind, 'target_kind', REVIEW_TARGET_KINDS);
+  if (!targetKind) throw new ValidationError(`target_kind must be one of ${REVIEW_TARGET_KINDS.join(', ')}`);
+  const targetId = requireId(String(body?.target_id ?? ''), 'target_id');
+  const session = resolveSession(req);
+  const sample = await sampleForReview(targetKind, targetId, session?.name ?? session?.sub ?? 'someone');
+  res.status(201).json(sample);
 }));
 
 // POST /api/distillation/review/:id { verdict: 'agree'|'disagree', note? }
