@@ -36,6 +36,7 @@ import {
 import {
   isRealFailure,
   mockDriftSummary,
+  mockGuardrailByActor,
   mockGuardrailByRule,
   mockGuardrailInterventions,
   mockInvocationSearch,
@@ -457,5 +458,64 @@ describe('the scenarios an auditor can ask for', () => {
     humanLabels.reset('default');
     expect(traceRows().filter((r) => r.human_label !== null).length).toBe(5);
     inScenario('empty', () => { /* profiles empty here; checked above */ });
+  });
+});
+
+// ── /by-actor ─────────────────────────────────────────────────────────────
+//
+// The selector has to mirror the route's SQL, and the two easy ways to get it
+// wrong offline are both about what the JOIN drops: an intervention whose
+// invocation has no trace, and a trace with no `user_id`. Getting either wrong
+// invents an actor.
+
+describe('mockGuardrailByActor', () => {
+  it('attributes every returned intervention to a real seeded user', () => {
+    const actors = mockGuardrailByActor(24, 50);
+    expect(actors.length).toBeGreaterThan(0);
+    const traced = new Map(traceRows().map((t) => [t.invocation_id, t.user_id]));
+    const known = new Set([...traced.values()].filter(Boolean));
+    for (const a of actors) {
+      expect(known.has(String(a['user_id']))).toBe(true);
+    }
+  });
+
+  it('never buckets an unattributed call under an invented actor', () => {
+    // ~1 row in 12 of the seed carries no user — a schedule, or one agent
+    // calling another. Those must be absent, not grouped under "" or "unknown".
+    const actors = mockGuardrailByActor(24, 50);
+    for (const a of actors) {
+      expect(String(a['user_id']).trim()).not.toBe('');
+      expect(String(a['user_id'])).not.toBe('unknown');
+    }
+  });
+
+  it('blocked + anonymized accounts for the total, per actor', () => {
+    for (const a of mockGuardrailByActor(24, 50)) {
+      expect(Number(a['blocked']) + Number(a['anonymized'])).toBe(Number(a['interventions']));
+    }
+  });
+
+  it('topRule is that actor\'s own most-fired rule, counted from their rows', () => {
+    const actors = mockGuardrailByActor(24, 50);
+    const traced = new Map(traceRows().map((t) => [t.invocation_id, t.user_id]));
+    for (const a of actors.slice(0, 3)) {
+      const mine = interventionRows().filter((i) => traced.get(i.invocation_id ?? '') === a['user_id']);
+      const counts = new Map<string, number>();
+      for (const i of mine) counts.set(i.rule_name, (counts.get(i.rule_name) ?? 0) + 1);
+      const best = Math.max(...counts.values());
+      expect(counts.get(String(a['top_rule']))).toBe(best);
+      expect(Number(a['unique_rules'])).toBe(counts.size);
+    }
+  });
+
+  it('sorts by interventions, and honours the limit', () => {
+    const all = mockGuardrailByActor(24, 50);
+    const counts = all.map((a) => Number(a['interventions']));
+    expect([...counts].sort((x, y) => y - x)).toEqual(counts);
+    expect(mockGuardrailByActor(24, 2).length).toBe(Math.min(2, all.length));
+  });
+
+  it('a one-hour window returns no more than a 24-hour one', () => {
+    expect(mockGuardrailByActor(1, 50).length).toBeLessThanOrEqual(mockGuardrailByActor(24, 50).length);
   });
 });

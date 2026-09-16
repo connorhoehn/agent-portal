@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-09-16T16:24:24.507Z",
-  "serverHandlerSha": "cba3bfec2b5b4485463eb3767a7f5f9c76c3006573793501cd11b5df8a42ba92",
+  "capturedAt": "2026-09-16T17:33:47.524Z",
+  "serverHandlerSha": "91268bd76341151919dd2987580b1e3d04989536f8e65beb13865050b5ef7c35",
   "baseUrl": "http://127.0.0.1:3012",
   "personas": [
     "orgiq/admin",
@@ -4547,6 +4547,29 @@
       },
       "values": {}
     },
+    "GET /api/observability/guardrails-detail/by-actor": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "actors": "array",
+        "actors[]": "object",
+        "actors[].anonymized": "number",
+        "actors[].blocked": "number",
+        "actors[].firstSeenAt": "string",
+        "actors[].highSeverity": "number",
+        "actors[].interventions": "number",
+        "actors[].lastSeenAt": "string",
+        "actors[].topRule": "string",
+        "actors[].topRuleCategory": "string",
+        "actors[].uniqueAgents": "number",
+        "actors[].uniqueRules": "number",
+        "actors[].userId": "string",
+        "actors[].userName": "string",
+        "windowHours": "number"
+      },
+      "values": {}
+    },
     "GET /api/observability/guardrails-detail/by-rule": {
       "persona": "orgiq/admin",
       "status": 200,
@@ -5030,10 +5053,18 @@
         "points": "array",
         "points[]": "object",
         "points[].agentId": "string",
+        "points[].estCostUsd": "number",
         "points[].humanLabel": "null|string",
+        "points[].inputTokens": "number",
         "points[].invocationId": "string",
+        "points[].judgeCostUsd": "null|number",
+        "points[].judgeRationale": "null|string",
         "points[].judgeScore": "null|number",
+        "points[].modelId": "string",
+        "points[].outputTokens": "number",
+        "points[].promptVersion": "null|string",
         "points[].schemaValid": "boolean",
+        "points[].totalCostUsd": "number",
         "points[].ts": "string"
       },
       "values": {}

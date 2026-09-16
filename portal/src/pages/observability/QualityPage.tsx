@@ -45,6 +45,7 @@ import { firstDegraded } from '../../lib/degraded';
 import { toastError } from '../../lib/toastStore';
 import { writeJson } from '../../lib/writeJson';
 import { T } from './Text';
+import { relativeTime } from '../../lib/relativeTime';
 
 interface QualityScore {
   invocationId: string;
@@ -348,8 +349,11 @@ function QualityPage() {
                 const isNoting = noteFor === r.invocationId;
                 return (
                   <TableRow key={r.invocationId}>
-                    <TableTd className="text-[11px] text-[var(--color-text-tertiary)] whitespace-nowrap">
-                      {new Date(r.ts).toLocaleTimeString()}
+                    <TableTd
+                      className="text-[11px] text-[var(--color-text-tertiary)] whitespace-nowrap"
+                      title={new Date(r.ts).toLocaleString()}
+                    >
+                      {relativeTime(r.ts)}
                     </TableTd>
                     <TableTd>
                       <Chip tone={judgeTone(r.judgeScore)} size="xs">

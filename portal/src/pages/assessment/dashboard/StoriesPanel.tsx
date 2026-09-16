@@ -9,6 +9,7 @@ import {
   CardHeader, CodeBlock, Card, Chip, EmptyState, Inline, LoadingState, MetaLine, SectionLabel, Stack,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../../hooks/useFetch';
+import { UnavailableNotice } from '../../../components/UnavailableNotice';
 import { dimensionLabel, needsInputSentence, pushCommandFor, statusMeta, type Story, type StoriesResponse } from '../assessmentFormat';
 import { fmtDate } from '../types';
 
@@ -73,19 +74,26 @@ function StoryCard({ story, teamId }: { story: Story; teamId: string }) {
 }
 
 export function StoriesPanel({ teamId }: { teamId: string }) {
-  const { data, isLoading, error } = useFetch<StoriesResponse>(
+  const { data, isLoading, error, refresh } = useFetch<StoriesResponse>(
     `/api/assessment/teams/${encodeURIComponent(teamId)}/stories`,
   );
 
   if (isLoading) return <LoadingState label="Loading drafted stories…" />;
-  if (error || !data) {
+  // Same failure the improvement plan panel had: a request error rendered as
+  // "this environment doesn't support stories yet", which was true only
+  // before the endpoint shipped — since then it has misreported every
+  // transient failure as a missing feature instead of offering a retry.
+  if (error) {
     return (
-      <EmptyState
-        title="No drafted stories on this environment yet"
-        body="The assessment API here does not list stories yet. The scorecard and improvement plan are unaffected — this panel will fill in once the stories endpoint is available."
+      <UnavailableNotice
+        error={error}
+        what="the drafted stories"
+        source="Stories are read from this team's story files"
+        onRetry={refresh}
       />
     );
   }
+  if (!data) return <EmptyState title="No drafted stories yet" body="This team has not drafted any stories yet." />;
 
   const stories = data.stories ?? [];
 

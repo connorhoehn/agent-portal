@@ -112,10 +112,17 @@ describe('a trace lands, with the numbers it actually earned', () => {
 
   it('honours ON CONFLICT DO NOTHING — a retried bundle leaves the first row', async () => {
     const invocationId = '11111111-1111-4111-8111-111111111111';
-    await processTrace({ agentId: AGENT, invocationId, templateId: 'test:offline', prompt: PROMPT, response: ANSWER });
-    await processTrace({ agentId: AGENT, invocationId, templateId: 'test:offline', prompt: PROMPT, response: 'A different, later answer about Kubernetes.' });
+    const first = await processTrace({ agentId: AGENT, invocationId, templateId: 'test:offline', prompt: PROMPT, response: ANSWER });
+    const second = await processTrace({ agentId: AGENT, invocationId, templateId: 'test:offline', prompt: PROMPT, response: 'A different, later answer about Kubernetes.' });
     expect(sinkTraces.rows()).toHaveLength(1);
     expect(sinkTraceById(invocationId)!.response_snippet).toBe(ANSWER);
+    // The row identity check above is necessary but not sufficient: the
+    // second call must also SAY it lost the race, not report `inserted:
+    // true` for a write that changed nothing. This is what
+    // cw-trace-ingest.ts's "duplicate" counter and the /replay route's
+    // "did not report a row" branch both key off.
+    expect(first.inserted).toBe(true);
+    expect(second.inserted).toBe(false);
   });
 
   it('stores the child rows the bundle carried, capped and validated as live', async () => {

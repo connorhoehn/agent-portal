@@ -27,6 +27,14 @@ jest.mock('../../providers/aurora.js', () => ({ exec: jest.fn() }));
 jest.mock('../../config.js', () => ({
   config: { region: 'us-east-1', mock: { aurora: false } },
 }));
+// `/by-actor` resolves ids to names for display. Stubbed rather than reaching
+// the identity provider: these cases are about the aggregate, and a name that
+// cannot be resolved must not change the row (see the last case).
+jest.mock('../../providers/identity.js', () => ({
+  listUsers: jest.fn(async () => ([
+    { id: 'u-caleb', displayName: 'Caleb Turner' },
+  ])),
+}));
 
 import express from 'express';
 import request from '../../test-support/http.js';
@@ -183,5 +191,94 @@ describe('GET /interventions', () => {
     expect(res.body).toEqual({
       interventions: [], degraded: true, error: 'no such table',
     });
+  });
+});
+
+// ── GET /by-actor ─────────────────────────────────────────────────────────
+//
+// The question `by-rule` cannot answer: one person accounting for every PII
+// block in the window is invisible in a rule rollup. The join was always
+// available — interventions carry the invocation id and traces have carried
+// `user_id` since sprint 2 — and had never been made.
+
+describe('GET /by-actor', () => {
+  const row = {
+    user_id: 'u-caleb',
+    interventions: 6, blocked: 5, anonymized: 1, high_severity: 5,
+    unique_rules: 4, unique_agents: 1,
+    top_rule: 'PROMPT_ATTACK', top_rule_category: 'PROMPT_ATTACK',
+    first_seen_at: '2026-09-15T19:02:59Z', last_seen_at: '2026-09-16T08:45:25Z',
+  };
+
+  it('maps the aggregate onto the wire and resolves the id to a name', async () => {
+    execMock.mockResolvedValue([row]);
+    const res = await request(buildApp()).get('/api/observability/guardrails-detail/by-actor');
+    expect(res.status).toBe(200);
+    expect(Object.keys(res.body).sort()).toEqual(['actors', 'windowHours']);
+    expect(res.body.actors[0]).toEqual({
+      userId: 'u-caleb', userName: 'Caleb Turner',
+      interventions: 6, blocked: 5, anonymized: 1,
+      uniqueRules: 4, uniqueAgents: 1,
+      topRule: 'PROMPT_ATTACK', topRuleCategory: 'PROMPT_ATTACK',
+      highSeverity: 5,
+      firstSeenAt: '2026-09-15T19:02:59Z', lastSeenAt: '2026-09-16T08:45:25Z',
+    });
+  });
+
+  it('keeps blocked and anonymized apart — they are different events', async () => {
+    execMock.mockResolvedValue([row]);
+    const res = await request(buildApp()).get('/api/observability/guardrails-detail/by-actor');
+    const a = res.body.actors[0];
+    // One refused the request; the other served it with the sensitive part
+    // removed. A single summed "interventions" number hides which happened.
+    expect(a.blocked + a.anonymized).toBe(a.interventions);
+    expect(a.blocked).not.toBe(a.interventions);
+  });
+
+  it('never returns matched_text — the roll-up is not where PII gets reprinted', async () => {
+    execMock.mockResolvedValue([{ ...row, matched_text: '555-0123' }]);
+    const res = await request(buildApp()).get('/api/observability/guardrails-detail/by-actor');
+    expect(JSON.stringify(res.body)).not.toContain('555-0123');
+    expect(res.body.actors[0].matchedText).toBeUndefined();
+  });
+
+  it('excludes unattributed rows and test traffic in SQL, not in the client', async () => {
+    execMock.mockResolvedValue([]);
+    await request(buildApp()).get('/api/observability/guardrails-detail/by-actor');
+    const sql = sqlOf(0);
+    // A scheduled or agent-to-agent call has no actor. Bucketing those under
+    // one "unknown" user would make the biggest row on the page a fiction.
+    expect(sql).toMatch(/user_id IS NOT NULL/);
+    expect(sql).toMatch(/template_id NOT LIKE 'test:%'/);
+    expect(sql).toMatch(/JOIN observability\.invocation_traces/);
+  });
+
+  it('clamps the window and the limit, and falls back on garbage', async () => {
+    execMock.mockResolvedValue([]);
+    await request(buildApp()).get('/api/observability/guardrails-detail/by-actor?windowHours=99999&limit=9999');
+    expect(valueOf(0, 'hours')).toBe(24 * 14);
+    expect(valueOf(0, 'lim')).toBe(200);
+
+    execMock.mockClear();
+    await request(buildApp()).get('/api/observability/guardrails-detail/by-actor?windowHours=nope&limit=nope');
+    expect(valueOf(0, 'hours')).toBe(24);
+    expect(valueOf(0, 'lim')).toBe(50);
+  });
+
+  it('degrades to an empty list rather than failing the page', async () => {
+    execMock.mockRejectedValue(new Error('relation does not exist'));
+    const res = await request(buildApp()).get('/api/observability/guardrails-detail/by-actor?windowHours=6');
+    expect(res.status).toBe(200);
+    expect(res.body.actors).toEqual([]);
+    expect(res.body.degraded).toBe(true);
+    // The echoed window survives, so the page can still say what it asked for.
+    expect(res.body.windowHours).toBe(6);
+  });
+
+  it('an id with no known user still returns the row, named null', async () => {
+    execMock.mockResolvedValue([{ ...row, user_id: 'u-not-seeded' }]);
+    const res = await request(buildApp()).get('/api/observability/guardrails-detail/by-actor');
+    expect(res.body.actors[0].userId).toBe('u-not-seeded');
+    expect(res.body.actors[0].userName).toBeNull();
   });
 });

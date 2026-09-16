@@ -39,6 +39,25 @@ interface ScorePoint {
   judgeScore: number | null;
   schemaValid: boolean | null;
   humanLabel: string | null;
+  // The Quality page has always rendered RATIONALE and COST columns and this
+  // route has never returned either, so both were empty on every row of every
+  // deployment — not a mock gap: the SQL did not select them and the mock
+  // selector dropped exactly the same fields, so the two agreed and the wire
+  // check had nothing to disagree with. Every column below exists on
+  // `observability.invocation_traces` (judge_rationale since the original
+  // schema, the rest since observability_sprint1_schema.sql). The page's
+  // "nullable until the migration lands" comment was stale; it landed.
+  //
+  // The rationale is the point of a quality page: a score of 0.73 is a number,
+  // and why the judge gave it is the thing a person can act on.
+  judgeRationale: string | null;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  estCostUsd: number | null;
+  judgeCostUsd: number | null;
+  totalCostUsd: number | null;
+  promptVersion: string | null;
+  modelId: string | null;
 }
 
 qualityRouter.get('/scores', asyncHandler(async (req, res) => {
@@ -91,7 +110,11 @@ qualityRouter.get('/scores', asyncHandler(async (req, res) => {
   const sql = `
     SELECT invocation_id::text AS invocation_id,
            agent_id, ts,
-           judge_score, schema_valid, human_label
+           judge_score, schema_valid, human_label,
+           judge_rationale,
+           input_tokens, output_tokens,
+           est_cost_usd, judge_cost_usd, total_cost_usd,
+           prompt_version, model_id
       FROM observability.invocation_traces
      WHERE ${sinceClause}
        AND (template_id NOT LIKE 'test:%' OR template_id IS NULL)
@@ -110,6 +133,14 @@ qualityRouter.get('/scores', asyncHandler(async (req, res) => {
       judgeScore: r['judge_score'] == null ? null : Number(r['judge_score']),
       schemaValid: r['schema_valid'] == null ? null : Boolean(r['schema_valid']),
       humanLabel: r['human_label'] == null ? null : String(r['human_label']),
+      judgeRationale: r['judge_rationale'] == null ? null : String(r['judge_rationale']),
+      inputTokens: r['input_tokens'] == null ? null : Number(r['input_tokens']),
+      outputTokens: r['output_tokens'] == null ? null : Number(r['output_tokens']),
+      estCostUsd: r['est_cost_usd'] == null ? null : Number(r['est_cost_usd']),
+      judgeCostUsd: r['judge_cost_usd'] == null ? null : Number(r['judge_cost_usd']),
+      totalCostUsd: r['total_cost_usd'] == null ? null : Number(r['total_cost_usd']),
+      promptVersion: r['prompt_version'] == null ? null : String(r['prompt_version']),
+      modelId: r['model_id'] == null ? null : String(r['model_id']),
     }));
     res.json({ points });
   } catch (err) {

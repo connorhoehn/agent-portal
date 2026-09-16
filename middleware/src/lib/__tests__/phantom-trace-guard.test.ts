@@ -67,7 +67,10 @@ beforeEach(() => {
     }
     if (/INSERT INTO observability\.invocation_traces/.test(sql)) {
       inserts++;
-      return [];
+      // RETURNING invocation_id — every case here uses a fresh id, so this
+      // mock always behaves like a genuine insert, matching the real
+      // statement's shape (see docs/research-poller-lease-2026-09-16.md).
+      return [{ invocation_id: 'x' }];
     }
     return [];
   });

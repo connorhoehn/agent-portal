@@ -68,6 +68,10 @@ describe('GET /scores', () => {
       invocation_id: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
       agent_id: 'orgiq-supervisor', ts: '2026-08-20T09:00:00Z',
       judge_score: '0.82', schema_valid: true, human_label: 'good',
+      judge_rationale: 'Grounded, cites its sources.',
+      input_tokens: 540, output_tokens: 200,
+      est_cost_usd: '0.001072', judge_cost_usd: '0.000509', total_cost_usd: '0.001581',
+      prompt_version: 'e29795dd3691', model_id: 'amazon.nova-pro-v1:0',
     }]);
     const res = await request(buildApp()).get('/api/observability/quality/scores');
     expect(res.status).toBe(200);
@@ -76,7 +80,16 @@ describe('GET /scores', () => {
       invocationId: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
       agentId: 'orgiq-supervisor', ts: '2026-08-20T09:00:00Z',
       judgeScore: 0.82, schemaValid: true, humanLabel: 'good',
+      // The Quality page renders RATIONALE and COST columns and this route
+      // returned neither, so both were empty on every row of every deployment.
+      // Every column below exists on the table; the SELECT simply omitted them.
+      judgeRationale: 'Grounded, cites its sources.',
+      inputTokens: 540, outputTokens: 200,
+      estCostUsd: 0.001072, judgeCostUsd: 0.000509, totalCostUsd: 0.001581,
+      promptVersion: 'e29795dd3691', modelId: 'amazon.nova-pro-v1:0',
     });
+    // The Data API returns numerics as strings; cost must land as a number.
+    expect(typeof res.body.points[0].totalCostUsd).toBe('number');
     // The numeric came back as a string from the Data API and must land as a
     // number, not "0.82".
     expect(typeof res.body.points[0].judgeScore).toBe('number');
@@ -91,6 +104,12 @@ describe('GET /scores', () => {
     expect(res.body.points[0].judgeScore).toBeNull();
     expect(res.body.points[0].schemaValid).toBeNull();
     expect(res.body.points[0].humanLabel).toBeNull();
+    // A row written before the cost migration, or by a trace POST that carried
+    // no usage, has no cost. Null, never zero: "$0.0000" is a claim that the
+    // call was free.
+    expect(res.body.points[0].judgeRationale).toBeNull();
+    expect(res.body.points[0].totalCostUsd).toBeNull();
+    expect(res.body.points[0].inputTokens).toBeNull();
   });
 
   it('excludes synthetic test:% traffic from the series', async () => {

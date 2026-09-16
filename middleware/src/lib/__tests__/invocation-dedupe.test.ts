@@ -132,7 +132,7 @@ beforeEach(() => {
     }
     if (/INSERT INTO observability\.invocation_traces/.test(sql)) {
       const iid = String(paramValue(params, 'iid'));
-      if (table.has(iid)) return [];             // ON CONFLICT DO NOTHING
+      if (table.has(iid)) return [];             // ON CONFLICT DO NOTHING — no row RETURNING
       table.set(iid, {
         agent_id: paramValue(params, 'agent_id'),
         agent_name: paramValue(params, 'agent_name'),
@@ -141,7 +141,10 @@ beforeEach(() => {
         input_tokens: paramValue(params, 'input_tokens'),
         response_snippet: paramValue(params, 'response_snippet'),
       });
-      return [];
+      // RETURNING invocation_id: one row on a genuine insert, matching the
+      // real statement's shape — this is what insertTrace() now reads to
+      // decide TraceResult.inserted.
+      return [{ invocation_id: iid }];
     }
     return [];
   });
@@ -226,6 +229,19 @@ describe('one logical invocation → one trace row', () => {
     await agentWrite();
 
     expect(judgeMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports inserted:false for the write that lost the ON CONFLICT race', async () => {
+    // A second processTrace() call for the SAME agent-minted invocation_id —
+    // standing in for a raced second poller replica, or the OrgIQ-
+    // SpanProjector Lambda landing first. The row must stay singular (proven
+    // above) AND the loser must be told it lost, not report success.
+    const first = await agentWrite();
+    const second = await agentWrite();
+
+    expect((first as { inserted: boolean }).inserted).toBe(true);
+    expect((second as { inserted: boolean }).inserted).toBe(false);
+    expect(table.size).toBe(1);
   });
 
   it('reports one agent_name for the agent, not two', async () => {

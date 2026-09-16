@@ -25,6 +25,7 @@ import { useFetch } from '../../../hooks/useFetch';
 import { toastError, toastSuccess } from '../../../lib/toastStore';
 import { sendJson } from '../../../lib/writeJson';
 import { useCapabilities } from '../../../lib/capabilities';
+import { UnavailableNotice } from '../../../components/UnavailableNotice';
 import {
   certificationFor,
   countsSentence,
@@ -224,21 +225,29 @@ function UnassessedGroup({ recs }: { recs: Recommendation[] }) {
 }
 
 export function ImprovementPlan({ teamId }: { teamId: string }) {
-  const { data: apiData, isLoading, error } = useFetch<ApiRecommendationsResponse>(
+  const { data: apiData, isLoading, error, refresh } = useFetch<ApiRecommendationsResponse>(
     `/api/assessment/teams/${encodeURIComponent(teamId)}/recommendations`,
   );
   // The wire shape is the contract; the page model is what the components read.
   const data = useMemo(() => (apiData ? normalizePlan(apiData) : apiData), [apiData]);
 
   if (isLoading) return <LoadingState label="Building the improvement plan…" />;
-  if (error || !data) {
+  // A failed read is not the same fact as "this team has no plan yet" — the
+  // old copy here ("the assessment API here does not serve plans yet") was
+  // written before the endpoint shipped and kept firing on every transient
+  // error afterward, telling an assessor the feature didn't exist in this
+  // environment when the request had simply failed and a retry would work.
+  if (error) {
     return (
-      <EmptyState
-        title="No improvement plan on this environment yet"
-        body="The assessment API here does not serve plans yet. The scorecard is unaffected — this panel will fill in once the plan endpoint is available."
+      <UnavailableNotice
+        error={error}
+        what="the improvement plan"
+        source="Recommendations are computed from this team's dimension scores"
+        onRetry={refresh}
       />
     );
   }
+  if (!data) return <EmptyState title="No improvement plan yet" body="This team has not been assessed yet." />;
 
   const recommendations = orderedRecommendations(data);
   const { actionable, unassessed } = groupPlan(recommendations);

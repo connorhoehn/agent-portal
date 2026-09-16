@@ -155,7 +155,10 @@ export interface TraceResult {
   schemaValid: boolean | null;
   embeddingComputed: boolean;
   sampled: boolean;             // false if the sampling die rolled against us
-  inserted: boolean;            // false if the Aurora INSERT failed
+  inserted: boolean;            // false if the Aurora INSERT failed, or if
+                                 // ON CONFLICT DO NOTHING fired because the
+                                 // invocation_id already had a row (a raced
+                                 // writer or a genuine retry)
   skipped: boolean;             // true if the write-side phantom guard dropped it
                                 // before any embed/judge/INSERT happened
   // M2 — token + cost. Echoed back so the harness runner can populate
@@ -402,13 +405,26 @@ async function insertTrace(args: {
   parentInvocationId: string | null;
   userId: string | null;
   sessionId: string | null;
-}): Promise<void> {
+}): Promise<boolean> {
+  // Returns true only when this call actually created the row. A caller
+  // racing another writer for the same invocation_id (another poller
+  // replica re-scanning an overlapping CW window, the OrgIQ-SpanProjector
+  // Lambda projecting the same agent-minted id from its OTel span, or a
+  // genuine retry) hits ON CONFLICT DO NOTHING and gets false back — the
+  // insert ran, cost nothing extra at the DB layer, and changed nothing.
+  // This used to be silently discarded (the function returned void and
+  // every non-throwing call was treated as a fresh insert), which made
+  // `cw-trace-ingest.ts`'s "duplicate N" counter and this route's own
+  // "the trace insert did not report a row" branch (`routes/invocations.ts`)
+  // dead code — every collision logged and counted as "persisted" instead.
+  //
   // OFFLINE. One row into the `trace-sink-traces` fixture, with the
   // statement's own conflict rule: `insertSinkTrace` refuses a duplicate
   // invocation_id, which is what `ON CONFLICT (invocation_id) DO NOTHING`
-  // means, so a retried bundle leaves the first row standing here too.
+  // means, so a retried bundle leaves the first row standing here too — and
+  // now its boolean return (already correct) is actually read.
   if (config.mock.aurora) {
-    insertSinkTrace({
+    return insertSinkTrace({
       invocation_id: args.invocationId,
       agent_id: args.agentId,
       agent_name: args.agentName,
@@ -439,7 +455,6 @@ async function insertTrace(args: {
       // caller's — so offline it is the mock clock's, never `new Date()`.
       ts: clock.nowIso(),
     });
-    return;
   }
 
   // Embed the vector literal directly into the SQL (it's an internally-
@@ -478,7 +493,8 @@ async function insertTrace(args: {
       :prompt_version, :model_id, :runtime_image_digest,
       ${parentSql}, :user_id, :session_id
     )
-    ON CONFLICT (invocation_id) DO NOTHING`;
+    ON CONFLICT (invocation_id) DO NOTHING
+    RETURNING invocation_id`;
 
   const params: SqlParameter[] = [
     strParam('iid', args.invocationId),
@@ -510,7 +526,11 @@ async function insertTrace(args: {
     params.push(strParam('parent_invocation_id', args.parentInvocationId));
   }
 
-  await exec(sql, params);
+  // RETURNING invocation_id comes back with one row on a fresh insert and
+  // zero rows when ON CONFLICT DO NOTHING fired — that is how a genuine
+  // insert is told apart from a race this call lost.
+  const rows = await exec(sql, params);
+  return rows.length > 0;
 }
 
 // Sprint 2 (M4) — best-effort batch INSERT of per-tool call rows. Capped at 50
@@ -1065,7 +1085,13 @@ export async function processTrace(input: TraceInput): Promise<TraceResult> {
     : null;
 
   try {
-    await insertTrace({
+    // insertTrace's return value is load-bearing, not decorative: false
+    // means ON CONFLICT DO NOTHING fired — another writer (another poller
+    // replica, the SpanProjector Lambda, or a genuine retry) already holds
+    // this invocation_id — and `inserted` must reflect that so callers who
+    // key off it (cw-trace-ingest.ts's "duplicate" counter, the /replay
+    // route's "did not report a row" branch) see the truth.
+    inserted = await insertTrace({
       invocationId,
       agentId,
       agentName,
@@ -1093,7 +1119,6 @@ export async function processTrace(input: TraceInput): Promise<TraceResult> {
       userId,
       sessionId,
     });
-    inserted = true;
   } catch (err) {
     console.warn('[trace-sink] insertTrace failed:',
       (err as Error).message);

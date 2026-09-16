@@ -1792,13 +1792,18 @@
     },
     {
       "method": "GET",
+      "path": "/api/observability/guardrails-detail/by-actor",
+      "source": "src/routes/guardrails-detail.ts:169"
+    },
+    {
+      "method": "GET",
       "path": "/api/observability/guardrails-detail/by-rule",
-      "source": "src/routes/guardrails-detail.ts:91"
+      "source": "src/routes/guardrails-detail.ts:93"
     },
     {
       "method": "GET",
       "path": "/api/observability/guardrails-detail/interventions",
-      "source": "src/routes/guardrails-detail.ts:129"
+      "source": "src/routes/guardrails-detail.ts:237"
     },
     {
       "method": "GET",
@@ -1963,12 +1968,12 @@
     {
       "method": "POST",
       "path": "/api/observability/quality/feedback",
-      "source": "src/routes/quality.ts:127"
+      "source": "src/routes/quality.ts:158"
     },
     {
       "method": "GET",
       "path": "/api/observability/quality/scores",
-      "source": "src/routes/quality.ts:44"
+      "source": "src/routes/quality.ts:63"
     },
     {
       "method": "GET",

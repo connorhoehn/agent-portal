@@ -21,6 +21,7 @@ import {
   type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../../hooks/useFetch';
+import { UnavailableNotice } from '../../../components/UnavailableNotice';
 import { toastError, toastSuccess } from '../../../lib/toastStore';
 import { sendJson } from '../../../lib/writeJson';
 import { useCapabilities } from '../../../lib/capabilities';
@@ -314,18 +315,34 @@ export function EvidenceIntake({ teamId }: EvidenceIntakeProps) {
           subtitle="Every input ingested for this team, with provenance back to its source."
           className="mb-4"
         />
-        <DataTable<LedgerItem>
-          data={items}
-          columns={LEDGER_COLUMNS}
-          keyField={(item) => item.provenance_id}
-          loading={isLoading}
-          emptyMessage={error ? 'Could not load the ledger.' : 'No evidence ingested yet. Add evidence above to start this team’s lineage ledger.'}
-          frameless
-          // A ledger accumulates for as long as the team is assessed — 25
-          // keeps a long history navigable instead of growing the page
-          // without bound.
-          pageSize={25}
-        />
+        {error ? (
+          // A failed read used to fall through to DataTable's own
+          // emptyMessage prop as a one-line swap ("Could not load the
+          // ledger.") — the same row shape, same tone, as the honest "no
+          // evidence yet" message, with no way to tell them apart and no
+          // retry action. Swapping the whole ledger region for
+          // UnavailableNotice on error is the same treatment every other
+          // scorecard tab already uses.
+          <UnavailableNotice
+            error={error}
+            what="the lineage ledger"
+            source="Evidence provenance is read from the assessment database"
+            onRetry={refresh}
+          />
+        ) : (
+          <DataTable<LedgerItem>
+            data={items}
+            columns={LEDGER_COLUMNS}
+            keyField={(item) => item.provenance_id}
+            loading={isLoading}
+            emptyMessage="No evidence ingested yet. Add evidence above to start this team’s lineage ledger."
+            frameless
+            // A ledger accumulates for as long as the team is assessed — 25
+            // keeps a long history navigable instead of growing the page
+            // without bound.
+            pageSize={25}
+          />
+        )}
       </Card>
     </Stack>
   );

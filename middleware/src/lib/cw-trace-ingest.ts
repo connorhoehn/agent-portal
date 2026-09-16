@@ -382,6 +382,18 @@ export async function pollOnce(): Promise<{ ingested: number; errors: number }> 
       // old code counted every call as "persisted", so a 10% sample rate read
       // as "persisted 2" while the table gained nothing — which made the
       // observability pages look broken with no way to tell why.
+      // ⚠️ `inserted=false for a duplicate` was aspirational until
+      // 2026-09-16: insertTrace() discarded whether ON CONFLICT DO NOTHING
+      // actually fired and processTrace() always reported `inserted: true`
+      // on any non-throwing insert — so this branch's `duplicates++` below
+      // was unreachable dead code, every raced writer (another poller
+      // replica, or OrgIQ-SpanProjector racing the same agent-minted id)
+      // logged and counted as "persisted", and the per-invocation tool_call/
+      // memory_event/guardrail_intervention child rows re-inserted on every
+      // collision even though the parent row stayed correctly deduped.
+      // insertTrace() now threads back whether it was a fresh insert (via
+      // `RETURNING invocation_id`), so this counting is finally live —
+      // see docs/research-poller-lease-2026-09-16.md.
       const result = await processTrace(bundle);
       if (result.inserted) ingested++;
       else if (result.sampled === false) sampledOut++;
@@ -463,17 +475,22 @@ export function startTracePoller(): void {
     // Insights — StartQuery and GetQueryResults are each throttled at 10 TPS
     // ACCOUNT-WIDE — and a query over a busy log group can easily outrun the
     // 30s interval, so without this an unlucky minute stacks several polls
-    // that each re-read the same window, double-count what they ingest and
-    // spend the shared quota racing each other. `job-dispatcher.ts` has
-    // carried the same guard since it had the same problem.
+    // that each re-read the same window and spend the shared quota racing
+    // each other. `job-dispatcher.ts` has carried the same guard since it
+    // had the same problem.
     //
     // This bounds ONE process. `MiddlewareServiceStack` autoscales 1-4 ECS
     // replicas and nothing coordinates them, so every replica polls the same
-    // log group on its own schedule; the guard cannot help there. That is a
-    // real gap at more than one replica and it is recorded in
-    // docs/research-scale-limits-2026-09-16.md rather than pretended away —
-    // the fix is a lease (a DynamoDB or Aurora row the pollers take turns
-    // holding), not a bigger flag.
+    // log group on its own schedule — as does the always-on `OrgIQ-
+    // SpanProjector` Lambda, which races the SAME agent-minted invocation_id
+    // into the SAME table via a completely separate pipeline (OTel spans,
+    // not the judge/embed/cost enrichment this file's `processTrace()`
+    // computes). None of this corrupts Aurora — `invocation_id` is a real
+    // PRIMARY KEY and every writer hits `ON CONFLICT (invocation_id) DO
+    // NOTHING` — but it wastes CloudWatch quota and, per trace, Bedrock spend
+    // (Titan embed + Nova Pro judge) on every replica/Lambda race that loses.
+    // Full analysis, including why a bespoke lease is NOT recommended here,
+    // in docs/research-poller-lease-2026-09-16.md.
     if (_polling) return;
     _polling = true;
     pollOnce()

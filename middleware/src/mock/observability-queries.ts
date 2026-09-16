@@ -417,6 +417,19 @@ export function mockQualityScores(
       judge_score: r.judge_score,
       schema_valid: r.schema_valid,
       human_label: r.human_label,
+      // These seven were dropped here and omitted from the real SELECT at the
+      // same time, so the fixture and the query agreed and the wire check had
+      // nothing to disagree with — while the Quality page rendered a RATIONALE
+      // and a COST column that were empty on every row of every deployment.
+      // The fixture has carried all of them all along (MockTraceRow).
+      judge_rationale: r.judge_rationale,
+      input_tokens: r.input_tokens,
+      output_tokens: r.output_tokens,
+      est_cost_usd: r.est_cost_usd,
+      judge_cost_usd: r.judge_cost_usd,
+      total_cost_usd: r.total_cost_usd,
+      prompt_version: r.prompt_version,
+      model_id: r.model_id,
     }));
 }
 
@@ -440,6 +453,58 @@ export function mockGuardrailByRule(windowHours: number, scenario?: ScenarioName
       high_cnt: group_.filter((i) => i.severity === 'HIGH').length,
     }))
     .sort((a, b) => b.cnt - a.cnt);
+}
+
+/**
+ * GET /by-actor — who set the guardrails off, over the window.
+ *
+ * Mirrors the route's SQL exactly, including the two things that are easy to
+ * get wrong offline: the JOIN drops an intervention whose invocation has no
+ * trace, and `user_id IS NOT NULL` drops the ~1-in-12 rows the seed leaves
+ * unattributed (a scheduled or agent-to-agent call). Bucketing those under
+ * one "unknown" actor would make the most prolific row on the page a fiction.
+ */
+export function mockGuardrailByActor(
+  windowHours: number,
+  limit: number,
+  scenario?: ScenarioName,
+): Row[] {
+  const cutoff = nowMs() - windowHours * 3_600_000;
+  const userByInvocation = new Map(
+    traceRows(scenario)
+      .filter((t) => t.user_id && t.user_id.trim())
+      .map((t) => [t.invocation_id, t.user_id as string]),
+  );
+  const rows = interventionRows(scenario)
+    .filter((i) => new Date(i.tsIso).getTime() > cutoff)
+    .filter((i) => i.invocation_id !== null && userByInvocation.has(i.invocation_id));
+
+  return [...group(rows, (i) => userByInvocation.get(i.invocation_id!)!).entries()]
+    .map(([userId, mine]) => {
+      // `mode() WITHIN GROUP` — the most common rule for THIS actor. Ties go
+      // to the lexically first name so the offline answer is deterministic;
+      // PostgreSQL's mode() picks an arbitrary one among ties, and a fixture
+      // that reshuffles between reads is worse than one that commits.
+      const byRule = [...group(mine, (i) => i.rule_name).entries()]
+        .sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]));
+      const top = byRule[0];
+      const times = mine.map((i) => i.tsIso).sort();
+      return {
+        user_id: userId,
+        interventions: mine.length,
+        blocked: mine.filter((i) => i.action === 'BLOCKED').length,
+        anonymized: mine.filter((i) => i.action === 'ANONYMIZED').length,
+        high_severity: mine.filter((i) => i.severity === 'HIGH').length,
+        unique_rules: byRule.length,
+        unique_agents: new Set(mine.map((i) => i.agent_id)).size,
+        top_rule: top ? top[0] : null,
+        top_rule_category: top ? mine.find((i) => i.rule_name === top[0])!.rule_category : null,
+        first_seen_at: pgTimestamp(times[0]!),
+        last_seen_at: pgTimestamp(times[times.length - 1]!),
+      };
+    })
+    .sort((a, b) => b.interventions - a.interventions || b.high_severity - a.high_severity)
+    .slice(0, limit);
 }
 
 /** GET /interventions — the raw feed, newest first. No window; the SQL has none either. */

@@ -72,8 +72,14 @@ export function ScoringLogsDrawer({ open, onClose, teamId, dimensionTitle }: Sco
           <Button variant="ghost" size="sm" onClick={() => setSelectedStamp(null)}>← All runs</Button>
           {logLoading ? (
             <LoadingState label="Loading scoring log…" />
-          ) : logError || !log ? (
-            <EmptyState title="Couldn't load this log" body={logError ?? 'Scoring log not found.'} />
+          ) : logError ? (
+            // A fetch failure is not the same fact as "this run has no log"
+            // — collapsing both into one EmptyState (as this used to) reads
+            // identically whether the request failed or the log never
+            // existed. Matches the sibling listError treatment just below.
+            <InlineAlert tone="error">{logError}</InlineAlert>
+          ) : !log ? (
+            <EmptyState title="Scoring log not found" body="It may have been superseded by a later run." />
           ) : (
             <Stack gap="md">
               <MetaLine
