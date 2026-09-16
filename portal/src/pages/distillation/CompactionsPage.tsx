@@ -11,6 +11,7 @@ import {
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';
+import { KeyValue } from '../../components/KeyValue';
 import { relativeTime } from '../../lib/relativeTime';
 import { toastError, toastPending, toastSuccess } from '../../lib/toastStore';
 import { CompactionFlow } from './CompactionFlow';
@@ -265,15 +266,15 @@ export default function DistillationCompactionsPage() {
 
             <DetailSection first title="What it moved">
               <Stack gap="xs">
-                <Row k="Input items" v={String(openJob.inputItems)} />
-                <Row k="Output items" v={String(openJob.outputItems)} />
-                <Row k="Deduped" v={`${openJob.dedupedItems} (${dedupePctLabel(openJob)})`} />
-                <Row k="Bytes reclaimed" v={bytesLabel(openJob.bytesReclaimed)} />
+                <KeyValue layout="row" labelWidth="w-[150px]" label="Input items" value={String(openJob.inputItems)} />
+                <KeyValue layout="row" labelWidth="w-[150px]" label="Output items" value={String(openJob.outputItems)} />
+                <KeyValue layout="row" labelWidth="w-[150px]" label="Deduped" value={`${openJob.dedupedItems} (${dedupePctLabel(openJob)})`} />
+                <KeyValue layout="row" labelWidth="w-[150px]" label="Bytes reclaimed" value={bytesLabel(openJob.bytesReclaimed)} />
               </Stack>
             </DetailSection>
 
             <DetailSection title="Cost">
-              <Row k="Spend" v={usd(openJob.costUsd)} />
+              <KeyValue layout="row" labelWidth="w-[150px]" label="Spend" value={usd(openJob.costUsd)} />
             </DetailSection>
 
             {openJob.produced && (openJob.produced.cluster_ids.length > 0 || openJob.produced.artifact_ids.length > 0) && (
@@ -302,14 +303,5 @@ export default function DistillationCompactionsPage() {
         )}
       </Drawer>
     </PageSection>
-  );
-}
-
-function Row({ k, v }: { k: string; v: string }) {
-  return (
-    <Inline gap="md" align="baseline">
-      <T className="w-[150px] shrink-0 text-[12px] text-text-tertiary">{k}</T>
-      <T className="min-w-0 flex-1 tabular-nums text-[12px] text-text-primary">{v}</T>
-    </Inline>
   );
 }

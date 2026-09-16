@@ -20,6 +20,7 @@ import {
 } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch';
+import { KeyValue } from '../../components/KeyValue';
 
 interface SchemaResponse {
   schema: {
@@ -141,9 +142,7 @@ function SchemaPage() {
 
       <Card>
         <Stack gap="lg">
-          <Inline gap="xs" className="text-[13px] font-semibold">
-            Namespace: <code>{NS}</code>
-          </Inline>
+          <KeyValue layout="row" labelWidth="w-auto" label="Namespace" value={NS} mono />
 
           <Stack gap="xs">
             <SectionLabel>Entity types</SectionLabel>

@@ -29,6 +29,8 @@ import { useCrumbLabel } from '../../../lib/crumbLabels';
 import { CostChip } from '../../../components/observability/CostChip';
 import { ModeChip } from '../../../components/observability/ModeChip';
 import { T } from '../Text';
+import { RowEmpty } from '../ReadState';
+import { PassChip, SchemaChip, ErrorBlock, RunIdLine } from './harnessShared';
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
@@ -282,7 +284,7 @@ function RunDetailPage() {
       <ErrorBlock
         title="Could not load run"
         detail={error}
-        runId={runId}
+        context={<RunIdLine runId={runId} />}
       />
     );
   }
@@ -302,7 +304,7 @@ function RunDetailPage() {
       <ErrorBlock
         title="Run not found"
         detail={`No run with id "${runId}" yet — the backend may be initialising.`}
-        runId={runId}
+        context={<RunIdLine runId={runId} />}
       />
     );
   }
@@ -465,7 +467,7 @@ function RunDetailPage() {
 
         {matrixIsOpen && (
           sortedResults.length === 0 ? (
-            <EmptyState text="No results yet for this run." />
+            <RowEmpty text="No results yet for this run." />
           ) : (
             <Table>
               <TableHead>
@@ -506,7 +508,7 @@ function RunDetailPage() {
                         </TableTd>
                         <TableTd className="text-[12px] font-medium whitespace-nowrap">{r.agentId ?? '—'}</TableTd>
                         <TableTd>
-                          <PassChip passed={r.passed} />
+                          <PassChip passed={r.passed} labeled />
                         </TableTd>
                         <TableTd>
                           <Chip tone={judgeTone(r.judgeScore)} size="xs">
@@ -570,24 +572,6 @@ function RunDetailPage() {
 }
 
 // ── sub-components ────────────────────────────────────────────────────────────
-
-function PassChip({ passed }: { passed: boolean | null }) {
-  if (passed === null) return <Chip tone="warning" size="xs">—</Chip>;
-  return passed ? (
-    <Chip tone="success" size="xs">✓ pass</Chip>
-  ) : (
-    <Chip tone="danger" size="xs">✗ fail</Chip>
-  );
-}
-
-function SchemaChip({ valid }: { valid: boolean | null }) {
-  if (valid === null) return <Chip tone="warning" size="xs">—</Chip>;
-  return valid ? (
-    <Chip tone="success" size="xs">✓</Chip>
-  ) : (
-    <Chip tone="danger" size="xs">✗</Chip>
-  );
-}
 
 function ResultDetail({ result }: { result: TestResult }) {
   const tagEntries = result.tagHits ? Object.entries(result.tagHits) : [];
@@ -673,41 +657,6 @@ function ResultDetail({ result }: { result: TestResult }) {
         <T>ts: {new Date(result.ts).toLocaleString()}</T>
       </Inline>
     </Stack>
-  );
-}
-
-function ErrorBlock({
-  title,
-  detail,
-  runId,
-}: {
-  title: string;
-  detail: string;
-  runId?: string;
-}) {
-  return (
-    <PageSection
-      title={title}
-      actions={
-        <Link
-          to="/admin/observability/harness"
-          className="text-[12px] text-primary no-underline px-2 py-0.5 rounded hover:underline"
-        >
-          ← Back to harness
-        </Link>
-      }
-    >
-      <Card padding="md">
-        {runId && (
-          <Inline gap="sm" align="center" className="text-[12px] text-text-secondary">
-            <T>run id:</T> <T className="font-mono text-[11.5px]">{runId}</T>
-          </Inline>
-        )}
-        <Inline as="div" gap="xs" wrap className="text-[12px] text-text-secondary items-center">
-          {detail}
-        </Inline>
-      </Card>
-    </PageSection>
   );
 }
 
@@ -846,14 +795,6 @@ function PromoteModal({
         )}
       </Stack>
     </Modal>
-  );
-}
-
-function EmptyState({ text }: { text: string }) {
-  return (
-    <T as="div" className="p-6 text-center text-[12px] text-text-tertiary">
-      {text}
-    </T>
   );
 }
 

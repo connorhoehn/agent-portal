@@ -15,6 +15,7 @@ import {
   type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
 import { Link } from 'react-router';
+import { KeyValue } from '../../components/KeyValue';
 import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';
 import { relativeTime } from '../../lib/relativeTime';
@@ -35,9 +36,9 @@ function HookCard({ hook }: { hook: SessionHook }) {
         <Chip tone={hook.enabled ? 'success' : 'neutral'} size="xs">{hook.enabled ? 'enabled' : 'disabled'}</Chip>
         {isSessionStart && <T className="text-[11px] text-text-tertiary">runs on every session, fleet-wide</T>}
       </Inline>
-      <T as="div" className="mt-2 rounded-md border border-border bg-surface-secondary px-3 py-2 font-mono text-[12px] text-text-primary">
-        {hook.command}
-      </T>
+      <Card padding="sm" className="mt-2">
+        <T as="div" className="font-mono text-[12px] text-text-primary">{hook.command}</T>
+      </Card>
       <T as="div" className="mt-2 mb-0 text-[12px] leading-relaxed text-text-secondary" wrap>{hook.description}</T>
     </Card>
   );
@@ -209,10 +210,7 @@ export default function SessionConfigPage() {
               <Card padding="md">
                 <Stack gap="xs">
                   {Object.entries(live.settings).map(([k, v]) => (
-                    <Inline key={k} gap="sm" wrap={false} justify="between">
-                      <T className="font-mono text-[12px] text-text-primary">{k}</T>
-                      <T className="font-mono text-[12px] text-text-tertiary">{String(v)}</T>
-                    </Inline>
+                    <KeyValue key={k} layout="row" label={k} value={String(v)} labelWidth="w-48" mono />
                   ))}
                 </Stack>
               </Card>

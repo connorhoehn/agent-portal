@@ -15,7 +15,6 @@ import {
   LoadingState,
   PageSection,
   RadioGroup,
-  SectionLabel,
   SegmentedControl,
   Select,
   Stack,
@@ -23,6 +22,7 @@ import {
 } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch';
+import { KeyValue } from '../../components/KeyValue';
 import { parsePolicy, buildPolicy, type Effect, type ParsedPolicy } from '../../lib/cedarPolicy';
 import { effectTone, inputWiring } from './identityFormat';
 
@@ -424,9 +424,23 @@ function PolicySummary({ parsed, statement }: { parsed: ParsedPolicy | null; sta
   return (
     <Stack gap="sm" className="mt-3">
       <Inline gap="lg" wrap align="baseline">
-        <SummaryField label="Effect" value={parsed.effect} tone={effectTone(parsed.effect)} />
-        <SummaryField label="Role" value={parsed.role ?? 'any role'} />
-        <SummaryField label="Actions" value={`${parsed.actions.length} action${parsed.actions.length === 1 ? '' : 's'}`} />
+        <KeyValue
+          layout="row"
+          labelWidth="w-auto"
+          label="Effect"
+          value={(
+            <Inline as="span" className={effectTone(parsed.effect) === 'success' ? 'font-medium text-success' : 'font-medium text-danger'}>
+              {parsed.effect}
+            </Inline>
+          )}
+        />
+        <KeyValue layout="row" labelWidth="w-auto" label="Role" value={parsed.role ?? 'any role'} />
+        <KeyValue
+          layout="row"
+          labelWidth="w-auto"
+          label="Actions"
+          value={`${parsed.actions.length} action${parsed.actions.length === 1 ? '' : 's'}`}
+        />
       </Inline>
       <Inline gap="xs" wrap>
         {parsed.actions.map(a => <Chip key={a} size="xs" mono>{a}</Chip>)}
@@ -438,14 +452,4 @@ function PolicySummary({ parsed, statement }: { parsed: ParsedPolicy | null; sta
   );
 }
 
-function SummaryField({ label, value, tone }: { label: string; value: string; tone?: 'success' | 'danger' }) {
-  return (
-    <Inline as="span" gap="xs" align="baseline">
-      <SectionLabel as="span">{label}</SectionLabel>
-      <Inline as="span" className={tone === 'success' ? 'font-medium text-success' : tone === 'danger' ? 'font-medium text-danger' : 'font-medium text-text-primary'}>
-        {value}
-      </Inline>
-    </Inline>
-  );
-}
 export default PoliciesPage;

@@ -32,6 +32,7 @@ import {
 import { useFetch } from '../../hooks/useFetch';
 import { useSession, type SessionRole } from '../../lib/auth';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
+import { relativeTime } from '../../lib/relativeTime';
 import { T } from './Text';
 
 /** Everything under `/admin/ingest` — including `/admin/ingest/crawl`, which
@@ -133,16 +134,6 @@ const ROLES: Record<CapabilityStatus['key'], {
   guardrailHrAdmin: GUARDRAIL_ROLE('HR admin'),
 };
 
-function when(iso: string | undefined): string {
-  if (!iso) return 'never';
-  const mins = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
-  if (Number.isNaN(mins)) return 'never';
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
-  if (mins < 1440) return `${Math.round(mins / 60)}h ago`;
-  return `${Math.round(mins / 1440)}d ago`;
-}
-
 /** Capability event kinds, mapped to the capability they belong to. */
 const EVENT_KIND_BY_KEY: Record<string, CapabilityStatus['key']> = {
   browser_launch: 'browser',
@@ -209,7 +200,7 @@ export default function CapabilitiesHomePage() {
                 inset
                 title={c.label}
                 meta={<Chip tone={STATE_TONE[c.state]} size="xs">{STATE_LABEL[c.state]}</Chip>}
-                action={used ? <T className="text-[11px] text-text-tertiary">used {when(used)}</T> : undefined}
+                action={used ? <T className="text-[11px] text-text-tertiary">used {relativeTime(used)}</T> : undefined}
               />
 
               <Stack gap="sm" className="px-3.5 py-3">

@@ -34,6 +34,7 @@ import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { firstDegraded } from '../../lib/degraded';
 import { TrafficHeatmapFrame } from './TrafficHeatmapFrame';
 import { T } from './Text';
+import { RowEmpty } from './ReadState';
 import { normalizePgTimestamp, parsePgTimestamp } from '../../lib/pgTimestamp';
 import { WindowPicker } from './WindowPicker';
 
@@ -392,7 +393,7 @@ function TrafficPage() {
           subtitle={`last 7 days · cell = invocations in that hour · peak ${fmtInt(heatmapGrid.max)}`}
         />
         {heatmapGrid.max === 0 ? (
-          <EmptyState text="No traffic recorded over the last 7 days." degraded={trafficDegraded} />
+          <RowEmpty text="No traffic recorded over the last 7 days." degraded={trafficDegraded} />
         ) : (
           <TrafficHeatmapFrame grid={heatmapGrid.grid} max={heatmapGrid.max} />
         )}
@@ -405,7 +406,7 @@ function TrafficPage() {
           subtitle="by invocation count · click to drill into per-user search"
         />
         {topUsers.length === 0 ? (
-          <EmptyState
+          <RowEmpty
             text="No user_id stamped traffic in this window — backfill with infra/scripts/seed_user_ids_on_traces.py."
             degraded={trafficDegraded}
           />
@@ -455,7 +456,7 @@ function TrafficPage() {
           subtitle={`RPS / latency / error rate / low-quality rate / cost · window ${win.label}`}
         />
         {perAgent.length === 0 ? (
-          <EmptyState text="No agents observed in this window." degraded={trafficDegraded} />
+          <RowEmpty text="No agents observed in this window." degraded={trafficDegraded} />
         ) : (
           <Table>
             <TableHead>
@@ -519,24 +520,5 @@ function TrafficPage() {
 
 // ── Sub-components ──────────────────────────────────────────────────────────
 
-
-// A row-level "nothing here" that refuses to say so when it does not know.
-// The page-level notice above already carries the error and the retry; this
-// only has to stop CONTRADICTING it, which a reassuring "No agents observed"
-// under a red banner very much does.
-function EmptyState({ text, degraded }: { text: string; degraded?: string | null }) {
-  if (degraded) {
-    return (
-      <T as="div" className="p-6 text-center text-[12px] text-danger">
-        Unknown — this read failed ({degraded}).
-      </T>
-    );
-  }
-  return (
-    <T as="div" className="p-6 text-center text-[12px] text-text-tertiary">
-      {text}
-    </T>
-  );
-}
 
 export default TrafficPage;

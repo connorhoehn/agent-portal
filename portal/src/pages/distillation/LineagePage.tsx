@@ -10,6 +10,7 @@ import {
   Button, Card, Chip, EmptyState, Inline, LoadingState, PageSection, SearchInput, Stack,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
+import { KeyValue } from '../../components/KeyValue';
 import { LineageFrame } from './LineageFrame';
 import { T } from './Text';
 import {
@@ -135,10 +136,7 @@ function DetailPanel({
         {metaEntries.length > 0 && (
           <Stack gap="xs">
             {metaEntries.map(([k, v]) => (
-              <Inline key={k} gap="md" align="baseline">
-                <T className="w-[120px] shrink-0 text-[11px] text-text-tertiary">{k}</T>
-                <T className="min-w-0 flex-1 text-[12px] text-text-primary">{String(v)}</T>
-              </Inline>
+              <KeyValue key={k} layout="row" labelWidth="w-[120px]" label={k} value={String(v)} />
             ))}
           </Stack>
         )}

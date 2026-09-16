@@ -20,6 +20,7 @@ import { SmartEmptyState } from '../../components/observability/SmartEmptyState'
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { firstDegraded } from '../../lib/degraded';
 import { T } from './Text';
+import { RowEmpty } from './ReadState';
 import { WindowPicker } from './WindowPicker';
 
 // ── Types (mirrored from middleware/src/routes/guardrails-detail.ts) ───────
@@ -194,7 +195,7 @@ function GuardrailRulesPage() {
             }
           />
           {interventions.length === 0 ? (
-            <EmptyState text="No interventions captured for this rule yet." degraded={guardrailsDegraded} />
+            <RowEmpty text="No interventions captured for this rule yet." degraded={guardrailsDegraded} />
           ) : (
             <Table>
               <TableHead>
@@ -258,23 +259,6 @@ function SeverityCell({ n, tone }: { n: number; tone: Tone }) {
         <T className="text-[11px] text-text-tertiary">0</T>
       )}
     </TableTd>
-  );
-}
-
-
-// Row-level "nothing here" that will not say so when it does not know.
-function EmptyState({ text, degraded }: { text: string; degraded?: string | null }) {
-  if (degraded) {
-    return (
-      <T as="div" className="p-6 text-center text-[12px] text-danger">
-        Unknown — this read failed ({degraded}).
-      </T>
-    );
-  }
-  return (
-    <T as="div" className="p-6 text-center text-[12px] text-text-tertiary">
-      {text}
-    </T>
   );
 }
 

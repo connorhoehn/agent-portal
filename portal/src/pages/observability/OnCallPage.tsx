@@ -42,6 +42,7 @@ import {
 import { useFetch } from '../../hooks/useFetch';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { T } from './Text';
+import { RowEmpty } from './ReadState';
 import { parsePgTimestampAsUtc } from '../../lib/pgTimestamp';
 import { WindowPicker } from './WindowPicker';
 
@@ -268,7 +269,7 @@ function OnCallPage() {
           }
         />
         {chartData.length === 0 ? (
-          <EmptyState text="No invocations in this window yet — timeline activates after the first sampled call." />
+          <RowEmpty text="No invocations in this window yet — timeline activates after the first sampled call." />
         ) : (
           <Stack className="w-full h-[320px]">
             <ResponsiveContainer>
@@ -389,7 +390,7 @@ function OnCallPage() {
             {hitl ? (
               <HitlSlaBody hitl={hitl} onViewQueue={() => navigate('/admin/observability/approvals')} />
             ) : (
-              <EmptyState text="Loading approval-queue stats…" />
+              <RowEmpty text="Loading approval-queue stats…" />
             )}
           </Card>
         </Stack>
@@ -401,7 +402,7 @@ function OnCallPage() {
               subtitle={`deploys · alarms · HITL · judge regressions · ${events.length} event${events.length === 1 ? '' : 's'}`}
             />
             {events.length === 0 ? (
-              <EmptyState text="No recent events." />
+              <RowEmpty text="No recent events." />
             ) : (
               <Stack gap="xs" className="max-h-[420px] overflow-y-auto">
                 {events.map((e, i) => (
@@ -564,14 +565,6 @@ function SeverityDot({
   return <StatusDot color={color} size="sm" />;
 }
 
-
-function EmptyState({ text }: { text: string }) {
-  return (
-    <T as="div" className="p-6 text-center text-[12px] text-text-tertiary">
-      {text}
-    </T>
-  );
-}
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 

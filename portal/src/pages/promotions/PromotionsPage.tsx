@@ -11,6 +11,7 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import { DetailSection, Tooltip,
   Button,
+  Card,
   Chip,
   ConfirmDialog,
   DataTable,
@@ -58,7 +59,7 @@ async function post(url: string, body: unknown): Promise<Response> {
 
 function ObservationRow({ o }: { o: PromotionCandidate['observations'][number] }) {
   return (
-    <Stack gap="none" className="rounded-md border border-border px-3 py-2">
+    <Card padding="sm">
       <Inline gap="xs" wrap={false}>
         <Chip tone="neutral" size="xs">{o.kind}</Chip>
         <T className="min-w-0 truncate text-[12px] font-medium text-text-primary" title={o.title}>{o.title}</T>
@@ -67,7 +68,7 @@ function ObservationRow({ o }: { o: PromotionCandidate['observations'][number] }
       <T as="div" className="mt-1 text-[10.5px] text-text-tertiary">
         {o.repo ?? 'no repo'} · session {o.sessionId}
       </T>
-    </Stack>
+    </Card>
   );
 }
 
@@ -105,10 +106,10 @@ function CandidateDrawer({
       </Stack>
 
       {candidate.driftedFrom && (
-        <T as="div" className="rounded-md border border-warning/40 bg-warning-bg/40 px-3 py-2 text-[11.5px] leading-relaxed text-text-secondary" wrap>
+        <InlineAlert tone="warning">
           Drift detection sent this back from the skill <T className="font-mono">{candidate.driftedFrom}</T> —
           its recorded steps no longer matched observed behavior.
-        </T>
+        </InlineAlert>
       )}
 
       <DetailSection first title="Contributing observations">

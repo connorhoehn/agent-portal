@@ -14,7 +14,7 @@
 //                An unexplained similarity list is not actionable.
 
 import {
-  Button, Chip, DetailSection, EmptyState, Inline, LoadingState, MetaLine, ProgressBar, Stack,
+  Button, Card, Chip, DetailSection, EmptyState, Inline, InlinePlaceholder, LoadingState, MetaLine, ProgressBar, Stack,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { AssetEvals } from './AssetEvals';
@@ -60,11 +60,9 @@ export function AssetDrawer({ id, onOpenAsset }: { id: string; onOpenAsset: (id:
         hint={vars.length === 0 ? 'takes no input' : fencedCount > 0 ? `${fencedCount} fenced` : undefined}
       >
         {vars.length === 0 ? (
-          <T className="text-[12px] text-text-tertiary">
-            No variables — the template ships as written.
-          </T>
+          <InlinePlaceholder>No variables — the template ships as written.</InlinePlaceholder>
         ) : (
-          <Stack gap="none" className="overflow-hidden rounded-md border border-border">
+          <Card padding="none">
             {vars.map((v) => (
               <Inline key={v.name} gap="xs" wrap={false} className="items-start gap-2.5 border-b border-border px-3 py-2 last:border-b-0">
                 <T className="font-mono text-[12px] text-text-primary">{v.name}</T>
@@ -76,7 +74,7 @@ export function AssetDrawer({ id, onOpenAsset }: { id: string; onOpenAsset: (id:
                 </Chip>
               </Inline>
             ))}
-          </Stack>
+          </Card>
         )}
         {fencedCount > 0 && (
           <T as="p" className="mt-2 mb-0 text-[11px] leading-relaxed text-text-tertiary">
@@ -96,7 +94,7 @@ export function AssetDrawer({ id, onOpenAsset }: { id: string; onOpenAsset: (id:
         >
           <Stack gap="xs">
             {a.derivedFrom.top.map((t) => (
-              <Stack key={t.id} gap="none" className="rounded-md border border-border px-3 py-2">
+              <Card key={t.id} padding="none" className="px-3 py-2">
                 <Inline gap="xs" wrap={false}>
                   <Chip tone="neutral" size="xs">{t.kind}</Chip>
                   <T className="min-w-0 truncate text-[12px] text-text-secondary" title={t.title}>{t.title}</T>
@@ -104,7 +102,7 @@ export function AssetDrawer({ id, onOpenAsset }: { id: string; onOpenAsset: (id:
                   <T className="text-[10px] tabular-nums text-text-tertiary">{Math.round(t.weight * 100)}%</T>
                 </Inline>
                 {t.repo && <T as="div" className="mt-0.5 font-mono text-[10px] text-text-tertiary">{t.repo}</T>}
-              </Stack>
+              </Card>
             ))}
           </Stack>
         </DetailSection>
@@ -119,7 +117,7 @@ export function AssetDrawer({ id, onOpenAsset }: { id: string; onOpenAsset: (id:
           title="Release readiness"
           hint={readiness.ok ? 'shippable at this tier' : readiness.reason}
         >
-          <Stack gap="none" className="overflow-hidden rounded-md border border-border">
+          <Card padding="none">
             {rows.map((r) => (
               <Inline key={r.label} gap="xs" wrap={false} className="items-center gap-2.5 border-b border-border px-3 py-2 last:border-b-0">
                 <T className={r.met ? 'text-success' : 'text-danger'} aria-hidden>
@@ -129,7 +127,7 @@ export function AssetDrawer({ id, onOpenAsset }: { id: string; onOpenAsset: (id:
                 {r.detail && <T className="text-[11px] text-text-tertiary">{r.detail}</T>}
               </Inline>
             ))}
-          </Stack>
+          </Card>
           {a.designReviewId && (
             <T as="div" className="mt-2 text-[11px] text-text-tertiary">
               Ratified by{' '}
@@ -164,9 +162,7 @@ export function AssetDrawer({ id, onOpenAsset }: { id: string; onOpenAsset: (id:
                 aria-label="Eval pass rate"
               />
             ) : (
-              <T className="text-[11px] text-text-tertiary">
-                Never evaluated — which blocks deploy above the sandbox tier.
-              </T>
+              <InlinePlaceholder>Never evaluated — which blocks deploy above the sandbox tier.</InlinePlaceholder>
             )}
           </div>
           <T as="div" className="text-[12px] text-text-secondary">Used by: {usageLine(a)}</T>

@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import {
   Card,
+  InlinePlaceholder,
   Table,
   TableHead,
   TableBody,
@@ -104,9 +105,9 @@ function AgentMetricsPage() {
     >
       <Card padding="md">
         {rows.length === 0 ? (
-          <T as="div" className="p-6 text-center text-[12px] text-[var(--color-text-tertiary)]">
+          <InlinePlaceholder align="center" className="p-6 text-[12px]">
             No agent activity in the recent window. Invoke an agent to populate this view.
-          </T>
+          </InlinePlaceholder>
         ) : (
           <Table>
             <TableHead>

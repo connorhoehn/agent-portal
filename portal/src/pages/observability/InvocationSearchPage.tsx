@@ -17,6 +17,7 @@ import {
   FormField,
   Inline,
   Input,
+  LoadingState,
   PageSection,
   Select,
   Stack,
@@ -34,6 +35,7 @@ import { SmartEmptyState } from '../../components/observability/SmartEmptyState'
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { readDegraded } from '../../lib/degraded';
 import { T } from './Text';
+import { RowEmpty } from './ReadState';
 
 interface InvocationSearchResult {
   invocationId: string;
@@ -389,16 +391,16 @@ function InvocationSearchPage() {
 
       <Card padding="md">
         {!applied && (
-          <EmptyState text="Use filters above to find invocations. Try widening the time range or removing filters." />
+          <RowEmpty text="Use filters above to find invocations. Try widening the time range or removing filters." />
         )}
         {applied && error && (
-          <EmptyState
+          <RowEmpty
             text={`Search failed: ${error}. The backend may not have the search endpoint yet.`}
           />
         )}
         {applied && !error && rows.length === 0 && (
           isLoading ? (
-            <EmptyState text="Searching…" />
+            <LoadingState label="Searching…" />
           ) : (
             <SmartEmptyState
               title="No invocations match"
@@ -465,14 +467,6 @@ function InvocationSearchPage() {
         )}
       </Card>
     </PageSection>
-  );
-}
-
-function EmptyState({ text }: { text: string }) {
-  return (
-    <T as="div" className="p-6 text-center text-[12px] text-text-tertiary">
-      {text}
-    </T>
   );
 }
 

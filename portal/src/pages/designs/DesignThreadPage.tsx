@@ -27,6 +27,7 @@ import {
   RailLayout,
   RailSection,
   ReviewThread,
+  SectionLabel,
   SignoffPanel,
   Stack,
 } from '@connorhoehnslalom/ui-components/shared';
@@ -138,7 +139,7 @@ export default function DesignThreadPage() {
         ))}
         {participants.length > 0 && (
           <>
-            <T as="div" className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-text-tertiary">In this thread</T>
+            <SectionLabel as="div" className="mt-1">In this thread</SectionLabel>
             {participants.map(([name, kind]) => (
               <Inline key={name} align="center" gap="xs">
                 {kind === 'human' ? <Avatar name={name} size={18} /> : <T role="img" aria-label="agent">🤖</T>}
@@ -153,7 +154,7 @@ export default function DesignThreadPage() {
         <RailSection title="Gates">
           {thread.dependsOn.length > 0 && (
             <Stack gap="xs">
-              <T as="div" className="text-[10px] font-semibold uppercase tracking-wide text-text-tertiary">Gated by</T>
+              <SectionLabel as="div">Gated by</SectionLabel>
               {thread.dependsOn.map((d) => (
                 <Link key={d} to={`/iq/designs/${d}`} className="text-primary no-underline hover:underline">{d}</Link>
               ))}
@@ -161,7 +162,7 @@ export default function DesignThreadPage() {
           )}
           {thread.gates.length > 0 && (
             <Stack gap="xs">
-              <T as="div" className="text-[10px] font-semibold uppercase tracking-wide text-text-tertiary">Unlocks</T>
+              <SectionLabel as="div">Unlocks</SectionLabel>
               {thread.gates.map((g) => (
                 <Link key={g.id} to={`/iq/designs/${g.id}`} className="text-primary no-underline hover:underline">
                   {g.title}
@@ -214,7 +215,7 @@ export default function DesignThreadPage() {
         <Card padding="md">
           <Stack gap="md" className="lg:flex-row">
             <Stack gap="none" className="min-w-0 flex-[2]">
-              <T as="div" className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-text-tertiary">Summary</T>
+              <SectionLabel as="div" className="mb-1.5">Summary</SectionLabel>
               <T as="div" className="m-0 text-[13px] leading-relaxed text-text-secondary" wrap>{thread.summary}</T>
               <Inline align="start" gap="sm" className="mt-2.5">
                 <T className="text-[13px]" role="img" aria-label="next step">👉</T>
@@ -227,9 +228,9 @@ export default function DesignThreadPage() {
               <Divider spacing="sm" />
             </Stack>
             <Stack gap="none" className="min-w-0 flex-1 lg:border-l lg:border-border lg:pl-4">
-              <T as="div" className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-text-tertiary">
+              <SectionLabel as="div" className="mb-1.5">
                 Initiatives affected
-              </T>
+              </SectionLabel>
               <Stack gap="xs">
                 {thread.affected.map((a) => (
                   <Stack gap="none" key={a.orgProjectId} className="min-w-0">

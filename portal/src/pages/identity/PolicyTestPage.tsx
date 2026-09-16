@@ -6,11 +6,11 @@ import {
   Button,
   Card,
   Chip,
+  DetailSection,
   FormField,
   Inline,
   InlineAlert,
   MetaLine,
-  SectionLabel,
   Select,
   Stack,
   TagEditor,
@@ -128,10 +128,7 @@ function PolicyTestPage() {
       </Card>
 
       {history.length > 0 && (
-        <Stack gap="sm">
-          <SectionLabel as="h3" className="text-[14px] normal-case tracking-normal text-text-primary">
-            Recent results
-          </SectionLabel>
+        <DetailSection title="Recent results">
           <Stack gap="sm">
             {history.map((r, i) => (
               <Card key={`${r.ts}-${i}`}>
@@ -171,7 +168,7 @@ function PolicyTestPage() {
               </Card>
             ))}
           </Stack>
-        </Stack>
+        </DetailSection>
       )}
     </PageSection>
   );

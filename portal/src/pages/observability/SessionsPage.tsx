@@ -4,6 +4,7 @@ import {
   Button,
   Card,
   Inline,
+  InlinePlaceholder,
   Input,
   Table,
   TableHead,
@@ -15,6 +16,7 @@ import {
   PageSection,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
+import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { T } from './Text';
 
 interface SessionSummary {
@@ -76,22 +78,23 @@ function SessionsPage() {
     >
       <Card padding="md">
         {filtered.length === 0 ? (
-          <T as="div" className="p-6 text-center text-[12px] text-[var(--color-text-tertiary)]">
-            {unavailable ? (
-              <>
-                <T as="div" className="font-semibold text-[var(--color-text-secondary)]">
-                  Couldn’t load your chat sessions
-                </T>
-                <T as="div" className="mt-1">
-                  {needsAuth
-                    ? 'Your session expired — sign in to see them. Nothing has been deleted.'
-                    : `The session list request failed (${error}).`}
-                </T>
-              </>
-            ) : sessions.length === 0
-              ? 'No chat sessions yet. Start a conversation on the Agent Tools page.'
-              : 'No sessions match the current filter.'}
-          </T>
+          unavailable ? (
+            <UnavailableNotice
+              error={
+                needsAuth
+                  ? 'Your session expired — sign in to see them. Nothing has been deleted.'
+                  : (error ?? 'The session list request failed.')
+              }
+              what="your chat sessions"
+              onRetry={refresh}
+            />
+          ) : (
+            <InlinePlaceholder align="center" className="p-6 text-[12px]">
+              {sessions.length === 0
+                ? 'No chat sessions yet. Start a conversation on the Agent Tools page.'
+                : 'No sessions match the current filter.'}
+            </InlinePlaceholder>
+          )
         ) : (
           <Table>
             <TableHead>

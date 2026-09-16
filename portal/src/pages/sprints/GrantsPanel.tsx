@@ -7,6 +7,7 @@
 import { useEffect, useReducer, useState, type KeyboardEvent } from 'react';
 import {
   Button,
+  Card,
   FormField,
   InlineAlert,
   InlinePlaceholder,
@@ -61,37 +62,39 @@ function AddGrantForm({ sprint, onDone, onCancel, onError }: {
   }
 
   return (
-    <Inline gap="sm" align="end" className="rounded-lg border border-border p-3">
-      <FormField label="Grantee" className="flex-1 basis-[180px]">
-        {({ id }) => (
-          <PeopleSelect
-            id={id} value={grantee} onChange={setGrantee}
-            groups={groups} loading={isLoading} emptyLabel="Select…"
-            // The form mounts fresh every time "+ Grant envelope" opens it
-            // (conditionally rendered, not just hidden) — autoFocus lands
-            // the keyboard here instead of leaving it on `<body>`, which is
-            // what made the form's own Escape handler never see the key.
-            autoFocus
-          />
-        )}
-      </FormField>
-      <FormField label="Amount (USD)" className="grow-0 basis-[140px]">
-        {({ id }) => (
-          <Input id={id} inputMode="decimal" placeholder="0.00"
-            value={amount} onChange={(e) => setAmount(e.target.value)} />
-        )}
-      </FormField>
-      <FormField label="Note" className="flex-1 basis-[180px]">
-        {({ id }) => (
-          <Input id={id} value={note} placeholder="Optional"
-            onChange={(e) => setNote(e.target.value)} />
-        )}
-      </FormField>
-      <Inline gap="xs" className="pb-0.5">
-        <Button size="sm" variant="primary" disabled={busy} onClick={() => void submit()}>Grant</Button>
-        <Button size="sm" variant="ghost" disabled={busy} onClick={onCancel}>Cancel</Button>
+    <Card padding="sm">
+      <Inline gap="sm" align="end">
+        <FormField label="Grantee" className="flex-1 basis-[180px]">
+          {({ id }) => (
+            <PeopleSelect
+              id={id} value={grantee} onChange={setGrantee}
+              groups={groups} loading={isLoading} emptyLabel="Select…"
+              // The form mounts fresh every time "+ Grant envelope" opens it
+              // (conditionally rendered, not just hidden) — autoFocus lands
+              // the keyboard here instead of leaving it on `<body>`, which is
+              // what made the form's own Escape handler never see the key.
+              autoFocus
+            />
+          )}
+        </FormField>
+        <FormField label="Amount (USD)" className="grow-0 basis-[140px]">
+          {({ id }) => (
+            <Input id={id} inputMode="decimal" placeholder="0.00"
+              value={amount} onChange={(e) => setAmount(e.target.value)} />
+          )}
+        </FormField>
+        <FormField label="Note" className="flex-1 basis-[180px]">
+          {({ id }) => (
+            <Input id={id} value={note} placeholder="Optional"
+              onChange={(e) => setNote(e.target.value)} />
+          )}
+        </FormField>
+        <Inline gap="xs" className="pb-0.5">
+          <Button size="sm" variant="primary" disabled={busy} onClick={() => void submit()}>Grant</Button>
+          <Button size="sm" variant="ghost" disabled={busy} onClick={onCancel}>Cancel</Button>
+        </Inline>
       </Inline>
-    </Inline>
+    </Card>
   );
 }
 

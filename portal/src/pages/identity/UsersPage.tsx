@@ -19,6 +19,7 @@ import {
   PageSection,
   SectionLabel,
   Stack,
+  StatStrip,
 } from '@connorhoehnslalom/ui-components/shared';
 import type { DataTableColumn } from '@connorhoehnslalom/ui-components/shared';
 import { useSession } from '../../lib/auth';
@@ -199,23 +200,18 @@ function UsersPage() {
       {error && <InlineAlert tone="error">{error}</InlineAlert>}
 
       {/* Tenants strip */}
-      <Inline gap="md" wrap>
-        {tenants.map(t => {
+      <StatStrip
+        aria-label="Tenants"
+        items={tenants.map(t => {
           const userCount = tenantUserCount(t.id, users);
           const tenantRoles = (rolesForTenant.get(t.id) ?? []).filter(r => r.tenant === t.id);
-          return (
-            <Card key={t.id} padding="sm" className="min-w-[160px]">
-              <Inline gap="xs" align="center">
-                <Inline as="span" className="text-[13px] font-semibold">{t.displayName}</Inline>
-                <Chip tone={t.status === 'ACTIVE' ? 'success' : 'warning'} size="xs">{t.status}</Chip>
-              </Inline>
-              <Inline as="span" className="mt-1 text-[11px] text-text-tertiary">
-                {t.id} · {userCount} user{userCount === 1 ? '' : 's'} · roles: {tenantRoles.map(r => r.id).join(', ') || '—'}
-              </Inline>
-            </Card>
-          );
+          return {
+            label: t.displayName,
+            value: userCount,
+            hint: `${t.id} · ${t.status} · roles: ${tenantRoles.map(r => r.id).join(', ') || '—'}`,
+          };
         })}
-      </Inline>
+      />
 
       {loading ? (
         <LoadingState label="Loading users…" />

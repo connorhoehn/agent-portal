@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
 import {
-  Button, Card, CardHeader, Chip, Inline, InlineAlert, PageSection,
+  Button, Card, CardHeader, Chip, Inline, InlineAlert, InlinePlaceholder, PageSection,
   ProgressBar, Stack, StatStrip, Table, TableBody, TableHead, TableRow,
   TableTd, TableTh,
 } from '@connorhoehnslalom/ui-components/shared';
@@ -229,16 +229,17 @@ function LiveJobMonitor({
   return (
     <Card padding="md" className={streamDone ? 'border-l-[3px] border-l-success bg-success-bg' : 'border-l-[3px] border-l-warning bg-warning-bg'}>
       <Stack gap="sm">
-        <Inline justify="between" align="center">
-          <Inline gap="sm" align="center">
-            <StatusDot pulse={!streamDone} color={barColor} />
-            <T className={`text-[13px] font-semibold ${streamDone ? 'text-success' : 'text-warning'}`}>
-              {streamDone ? 'Sync complete' : 'Sync in progress'}
-            </T>
-            <T className="font-mono text-[11px] text-text-tertiary">{job.jobId.slice(0, 12)}…</T>
-          </Inline>
-          <Chip tone={JOB_STATUS_TONE[job.status] ?? 'neutral'} size="xs">{job.status}</Chip>
-        </Inline>
+        <CardHeader
+          inset
+          title={streamDone ? 'Sync complete' : 'Sync in progress'}
+          meta={(
+            <Inline gap="sm" align="center">
+              <StatusDot pulse={!streamDone} color={barColor} />
+              <T className="font-mono text-[11px] text-text-tertiary">{job.jobId.slice(0, 12)}…</T>
+            </Inline>
+          )}
+          action={<Chip tone={JOB_STATUS_TONE[job.status] ?? 'neutral'} size="xs">{job.status}</Chip>}
+        />
 
         {job.documentsScanned > 0 && (
           <ProgressBar
@@ -327,7 +328,7 @@ function JobHistoryTable({ jobs }: { jobs: IngestionJob[] }) {
                   <Stack gap="xs">
                     <T className="text-[12px] font-semibold text-danger">Failure reasons</T>
                     {(details[j.jobId]?.failureReasons ?? j.failureReasons ?? []).length === 0 ? (
-                      <T className="text-[12px] text-danger">No details returned by Bedrock.</T>
+                      <InlinePlaceholder tone="surface" className="text-danger">No details returned by Bedrock.</InlinePlaceholder>
                     ) : (
                       (details[j.jobId]?.failureReasons ?? j.failureReasons).map((r, i) => (
                         <T key={i} className="text-[12px] text-danger">· {r}</T>

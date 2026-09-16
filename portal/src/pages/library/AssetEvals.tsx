@@ -9,7 +9,7 @@
 
 import { useState } from 'react';
 import {
-  Button, Chip, DetailSection, EmptyState, Inline, LoadingState, ProgressBar, Stack,
+  Button, Card, Chip, DetailSection, EmptyState, Inline, InlinePlaceholder, LoadingState, ProgressBar, Stack,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';
@@ -79,18 +79,16 @@ export function AssetEvals({ assetId, version }: { assetId: string; version: str
         hint={cases.length === 0 ? 'no cases yet' : `${cases.length} case${cases.length === 1 ? '' : 's'}`}
       >
         {cases.length === 0 ? (
-          <T className="text-[12px] text-text-tertiary">
-            No eval set for this asset — nothing here can satisfy the gate above sandbox.
-          </T>
+          <InlinePlaceholder>No eval set for this asset — nothing here can satisfy the gate above sandbox.</InlinePlaceholder>
         ) : (
-          <Stack gap="none" className="overflow-hidden rounded-md border border-border">
+          <Card padding="none">
             {cases.map((c) => (
               <Inline key={c.id} gap="xs" wrap={false} className="items-start gap-2.5 border-b border-border bg-surface px-3 py-2 last:border-b-0">
                 <T className="min-w-0 flex-1 truncate text-[12px] text-text-primary" title={c.name}>{c.name}</T>
                 <Chip tone="neutral" size="xs">{assertionSummary(c.assertions.length)}</Chip>
               </Inline>
             ))}
-          </Stack>
+          </Card>
         )}
       </DetailSection>
 
@@ -112,9 +110,7 @@ export function AssetEvals({ assetId, version }: { assetId: string; version: str
         ) : runsLoading ? (
           <LoadingState label="Loading run history…" />
         ) : !latest ? (
-          <T className="text-[12px] text-text-tertiary">
-            Never evaluated — run the suite to produce the pass rate the release gate reads.
-          </T>
+          <InlinePlaceholder>Never evaluated — run the suite to produce the pass rate the release gate reads.</InlinePlaceholder>
         ) : (
           <Stack gap="sm">
             <div>
@@ -130,7 +126,7 @@ export function AssetEvals({ assetId, version }: { assetId: string; version: str
                 aria-label="Eval pass rate"
               />
             </div>
-            <Stack gap="none" className="overflow-hidden rounded-md border border-border">
+            <Card padding="none">
               {cases.map((c) => {
                 const result = caseResultFor(latest, c.id);
                 return (
@@ -155,7 +151,7 @@ export function AssetEvals({ assetId, version }: { assetId: string; version: str
                   </Stack>
                 );
               })}
-            </Stack>
+            </Card>
           </Stack>
         )}
       </DetailSection>

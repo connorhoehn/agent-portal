@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import {
-  Button, Card, ConfirmDialog, EmptyState, Inline, InlineAlert, PageSection,
+  Button, Card, CardHeader, Chip, ConfirmDialog, EmptyState, Inline, InlineAlert, PageSection,
   Stack,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
@@ -175,11 +175,12 @@ function CrawlTargetsPage() {
         {/* Active Crawls — only when something is running */}
         {activeCrawls.length > 0 && (
           <Card padding="md" className="border-l-[3px] border-l-warning">
-            <Inline gap="sm" align="baseline" className="mb-3">
-              <StatusDot pulse color="var(--color-warning)" />
-              <T className="text-[14px] font-semibold">Active Crawls</T>
-              <T className="text-[11px] font-normal text-text-tertiary">· {activeCrawls.length} running</T>
-            </Inline>
+            <CardHeader
+              className="mb-3"
+              title="Active Crawls"
+              meta={<StatusDot pulse color="var(--color-warning)" />}
+              action={<Chip tone="warning" size="xs">{activeCrawls.length} running</Chip>}
+            />
             <ActiveRunsStrip
               sessions={activeCrawls}
               onCancel={cancelCrawl}

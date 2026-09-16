@@ -3,11 +3,11 @@ import {
   Card,
   CardHeader,
   Chip,
+  DetailSection,
   ErrorState,
   Inline,
   LoadingState,
   PageSection,
-  SectionLabel,
   Stack,
   Table,
   TableBody,
@@ -84,10 +84,7 @@ function RolesPage() {
         ))}
       </Inline>
 
-      <Stack gap="sm">
-        <SectionLabel as="h3" className="text-[14px] normal-case tracking-normal text-text-primary">
-          Permission matrix
-        </SectionLabel>
+      <DetailSection title="Permission matrix">
         <Table>
           <TableHead>
             <TableRow>
@@ -110,7 +107,7 @@ function RolesPage() {
             ))}
           </TableBody>
         </Table>
-      </Stack>
+      </DetailSection>
     </PageSection>
   );
 }

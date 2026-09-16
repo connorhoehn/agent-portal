@@ -66,6 +66,7 @@ import { SmartEmptyState } from '../../components/observability/SmartEmptyState'
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { firstDegraded } from '../../lib/degraded';
 import { T } from './Text';
+import { RowEmpty } from './ReadState';
 import { parsePgTimestamp } from '../../lib/pgTimestamp';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -400,7 +401,7 @@ function CalibrationPage() {
           subtitle={`latest run · diagonal = perfect agreement · above = judge over-rates · below = judge under-rates${latestRun?.run.label ? ` · ${latestRun.run.label}` : ''}`}
         />
         {scatterPoints.length === 0 ? (
-          <EmptyState text="No paired scores in the latest run." degraded={calibrationDegraded} />
+          <RowEmpty text="No paired scores in the latest run." degraded={calibrationDegraded} />
         ) : (
           <Stack className="w-full h-[320px]">
             <ResponsiveContainer>
@@ -460,7 +461,7 @@ function CalibrationPage() {
           subtitle={`top ${worstResults.length} cases by |judge − human| · click to expand response`}
         />
         {worstResults.length === 0 ? (
-          <EmptyState text="No disagreements yet — run a calibration first." degraded={calibrationDegraded} />
+          <RowEmpty text="No disagreements yet — run a calibration first." degraded={calibrationDegraded} />
         ) : (
           <Table>
             <TableHead>
@@ -547,7 +548,7 @@ function CalibrationPage() {
           }
         />
         {cases.length === 0 ? (
-          <EmptyState
+          <RowEmpty
             text="No active calibration cases. Add one above or run infra/scripts/seed_calibration_cases.py."
             degraded={calibrationDegraded}
           />
@@ -852,22 +853,6 @@ function CaseEditor({
         {err && <InlineAlert tone="error">Error: {err}</InlineAlert>}
       </Stack>
     </UIModal>
-  );
-}
-
-// Row-level "nothing here" that will not say so when it does not know.
-function EmptyState({ text, degraded }: { text: string; degraded?: string | null }) {
-  if (degraded) {
-    return (
-      <T as="div" className="p-6 text-center text-[12px] text-danger">
-        Unknown — this read failed ({degraded}).
-      </T>
-    );
-  }
-  return (
-    <T as="div" className="p-6 text-center text-[12px] text-text-tertiary">
-      {text}
-    </T>
   );
 }
 

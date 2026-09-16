@@ -11,6 +11,7 @@ import {
   type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
+import { KeyValue } from '../../components/KeyValue';
 import { relativeTime } from '../../lib/relativeTime';
 import { T } from './Text';
 import { ProcessFlow } from './ProcessFlow';
@@ -221,14 +222,8 @@ export default function DistillationOverviewPage() {
         ) : (
           <Card padding="sm">
             <Stack gap="sm">
-              <Inline gap="md" align="baseline">
-                <T className="w-[150px] shrink-0 text-[12px] text-text-tertiary">Active writers</T>
-                <T className="tabular-nums text-[12px] text-text-primary">{ingestData.activeWriters} sessions</T>
-              </Inline>
-              <Inline gap="md" align="baseline">
-                <T className="w-[150px] shrink-0 text-[12px] text-text-tertiary">Observations / hour</T>
-                <T className="tabular-nums text-[12px] text-text-primary">{ingestData.observationsPerHour}</T>
-              </Inline>
+              <KeyValue layout="row" labelWidth="w-[180px]" label="Active writers" value={`${ingestData.activeWriters} sessions`} />
+              <KeyValue layout="row" labelWidth="w-[180px]" label="Observations / hour" value={String(ingestData.observationsPerHour)} />
               <Divider spacing="sm" label="which repos dominate" />
               <Stack gap="xs">
                 {ingestData.topRepos.map((r) => (

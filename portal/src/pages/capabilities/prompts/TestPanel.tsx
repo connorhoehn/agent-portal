@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { Button, DetailHeader, Inline, InlineAlert, SectionLabel, SkeletonCard, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { Button, Card, DetailHeader, Inline, InlineAlert, SectionLabel, SkeletonCard, Stack } from '@connorhoehnslalom/ui-components/shared';
 import { AssistPanel } from './AssistPanel';
 import { GuardrailBanner, GuardrailSelect } from './GuardrailControls';
 import { VariableInput } from './VariableInput';
@@ -144,7 +144,7 @@ export function TestPanel({
  *  are three different things to debug. */
 function OutputBox({ output, running, error }: { output: string; running: boolean; error: string | null }) {
   return (
-    <Stack gap="none" className="min-h-[140px] overflow-y-auto whitespace-pre-wrap break-words rounded border border-border bg-surface-panel px-4 py-3.5 font-mono text-[13px] leading-[1.7] text-text-primary">
+    <Card padding="sm" className="min-h-[140px] overflow-y-auto whitespace-pre-wrap break-words bg-surface-panel font-mono text-[13px] leading-[1.7] text-text-primary">
       {error && <T className="text-danger">{error}</T>}
       {!error && !output && !running && (
         <T className="italic text-text-tertiary">Response will appear here…</T>
@@ -152,6 +152,6 @@ function OutputBox({ output, running, error }: { output: string; running: boolea
       {!error && running && !output && <T className="text-text-tertiary">Waiting for first token…</T>}
       <T>{output}</T>
       {running && output && <T className="inline-block text-primary">▌</T>}
-    </Stack>
+    </Card>
   );
 }

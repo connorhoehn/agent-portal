@@ -41,6 +41,7 @@ import { CostChip } from '../../../components/observability/CostChip';
 import { ModeChip } from '../../../components/observability/ModeChip';
 import { SmartEmptyState } from '../../../components/observability/SmartEmptyState';
 import { T } from '../Text';
+import { RowEmpty } from '../ReadState';
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
@@ -372,7 +373,7 @@ function HarnessHomePage() {
           </Inline>
         </Inline>
         {sparkData.length === 0 ? (
-          <EmptyState text="No runs yet. Click Run now to replay the test set." />
+          <RowEmpty text="No runs yet. Click Run now to replay the test set." />
         ) : (
           <Stack className="w-full h-[220px]">
             <ResponsiveContainer>
@@ -515,7 +516,7 @@ function HarnessHomePage() {
           </Inline>
         </Inline>
         {coverage.length === 0 ? (
-          <EmptyState text="No coverage data yet." />
+          <RowEmpty text="No coverage data yet." />
         ) : (
           <Stack gap="sm">
             {(() => {
@@ -751,14 +752,6 @@ function Modal({
       >
         {children}
       </Stack>
-    </Inline>
-  );
-}
-
-function EmptyState({ text }: { text: string }) {
-  return (
-    <Inline as="div" justify="center" className="p-6 text-[12px] text-[var(--color-text-tertiary)]">
-      {text}
     </Inline>
   );
 }

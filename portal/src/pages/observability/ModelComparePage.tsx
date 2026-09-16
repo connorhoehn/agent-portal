@@ -22,6 +22,7 @@ import {
   Card,
   CardHeader,
   FormField,
+  LoadingState,
   Table,
   TableHead,
   TableBody,
@@ -38,6 +39,7 @@ import { useFetch } from '../../hooks/useFetch';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { readDegraded } from '../../lib/degraded';
 import { T } from './Text';
+import { RowEmpty } from './ReadState';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -388,19 +390,19 @@ function ModelComparePage() {
       {/* Body */}
       {!runIdA || !runIdB ? (
         <Card padding="md">
-          <EmptyState text="Pick two runs above to compare." />
+          <RowEmpty text="Pick two runs above to compare." />
         </Card>
       ) : runIdA === runIdB ? (
         <Card padding="md">
-          <EmptyState text="Pick two different runs." />
+          <RowEmpty text="Pick two different runs." />
         </Card>
       ) : error ? (
         <Card padding="md">
-          <EmptyState text={`Could not load comparison: ${error}`} />
+          <RowEmpty text={`Could not load comparison: ${error}`} />
         </Card>
       ) : isLoading && !compare ? (
         <Card padding="md">
-          <EmptyState text="Loading comparison…" />
+          <LoadingState label="Loading comparison…" />
         </Card>
       ) : compare && summary ? (
         <>
@@ -506,7 +508,7 @@ function DeltaTable({
     <Card padding="md" className={toneClass}>
       <CardHeader title={title} subtitle={hintText} />
       {results.length === 0 ? (
-        <EmptyState text={emptyText} />
+        <RowEmpty text={emptyText} />
       ) : (
         <Table>
           <TableHead>
@@ -556,14 +558,6 @@ function DeltaTable({
         </Table>
       )}
     </Card>
-  );
-}
-
-function EmptyState({ text }: { text: string }) {
-  return (
-    <T as="div" className="p-6 text-center text-[12px] text-text-tertiary">
-      {text}
-    </T>
   );
 }
 

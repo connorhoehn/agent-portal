@@ -48,6 +48,7 @@ import { SmartEmptyState } from '../../components/observability/SmartEmptyState'
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { firstDegraded } from '../../lib/degraded';
 import { T } from './Text';
+import { RowEmpty } from './ReadState';
 import { parsePgTimestampAsUtc } from '../../lib/pgTimestamp';
 import { WindowPicker } from './WindowPicker';
 
@@ -298,7 +299,7 @@ function DriftPage() {
           </Inline>
         </Inline>
         {chartData.length === 0 ? (
-          <EmptyState text="Not enough samples in this window to plot a series yet." degraded={driftDegraded} />
+          <RowEmpty text="Not enough samples in this window to plot a series yet." degraded={driftDegraded} />
         ) : (
           <Stack className="w-full h-[260px]">
             <ResponsiveContainer>
@@ -343,7 +344,7 @@ function DriftPage() {
           </Inline>
         </Inline>
         {templates.length === 0 ? (
-          <EmptyState text="No template groups have enough samples to compare yet." degraded={driftDegraded} />
+          <RowEmpty text="No template groups have enough samples to compare yet." degraded={driftDegraded} />
         ) : (
           <Table>
             <TableHead>
@@ -418,9 +419,9 @@ function DriftPage() {
         </Inline>
 
         {!selectedAgent ? (
-          <EmptyState text="Pick an agent above to see outliers." />
+          <RowEmpty text="Pick an agent above to see outliers." />
         ) : outlierRows.length === 0 ? (
-          <EmptyState text="No outliers for this agent in the current window." degraded={driftDegraded} />
+          <RowEmpty text="No outliers for this agent in the current window." degraded={driftDegraded} />
         ) : (
           <Table>
             <TableHead>
@@ -630,25 +631,6 @@ function shortTime(iso: string, hours: number): string {
   if (hours <= 48) return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   return d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' +
          d.toLocaleTimeString([], { hour: '2-digit' });
-}
-
-// The row-level "nothing here". When the read is degraded the page-level
-// notice above already carries the error and the retry, so this only has to
-// stop contradicting it — "No outliers for this agent" under a red banner is
-// the exact reassurance the marker exists to kill.
-function EmptyState({ text, degraded }: { text: string; degraded?: string | null }) {
-  if (degraded) {
-    return (
-      <Inline as="div" justify="center" className="p-6 text-[12px] text-danger">
-        Unknown — this read failed ({degraded}).
-      </Inline>
-    );
-  }
-  return (
-    <Inline as="div" justify="center" className="p-6 text-[12px] text-[var(--color-text-tertiary)]">
-      {text}
-    </Inline>
-  );
 }
 
 export default DriftPage;

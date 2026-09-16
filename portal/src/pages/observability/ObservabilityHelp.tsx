@@ -12,6 +12,7 @@ import {
   SectionLabel,
   Stack,
 } from '@connorhoehnslalom/ui-components/shared';
+import { KeyValue } from '../../components/KeyValue';
 import { T } from './Text';
 
 interface HelpEntry {
@@ -90,15 +91,6 @@ const GROUP_BLURB: Record<HelpEntry['group'], string> = {
   Cost: 'What did it cost? Spend, traffic shape, and per-agent burn.',
 };
 
-function HelpRow({ label, text }: { label: string; text: string }) {
-  return (
-    <Inline gap="sm" align="start">
-      <T className="text-[9.5px] font-bold text-text-tertiary uppercase tracking-wide shrink-0 pt-px">{label}</T>
-      <T as="div" className="text-[12px] text-text-secondary leading-snug flex-1 min-w-0">{text}</T>
-    </Inline>
-  );
-}
-
 /**
  * Small "?" button — placed in the rail header. Clicking opens the modal.
  * Renders nothing visible to the rail beyond a 22px circular button.
@@ -140,8 +132,8 @@ export function ObservabilityHelpButton() {
                     <Card key={e.path} padding="sm" className="flex-1 min-w-[280px] bg-bg">
                       <T as="div" className="text-[13px] font-semibold text-text-primary mb-1">{e.label}</T>
                       <Stack gap="xs">
-                        <HelpRow label="When" text={e.when} />
-                        <HelpRow label="Look at" text={e.look} />
+                        <KeyValue layout="row" labelWidth="w-auto" label="When" value={e.when} />
+                        <KeyValue layout="row" labelWidth="w-auto" label="Look at" value={e.look} />
                       </Stack>
                     </Card>
                   ))}

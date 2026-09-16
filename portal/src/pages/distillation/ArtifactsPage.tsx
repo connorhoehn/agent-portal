@@ -6,7 +6,7 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import {
-  Banner, Button, Chip, DataTable, DetailSection, Drawer, EmptyState, EventRow, FilterChip, FormField, Inline,
+  Banner, Button, Card, Chip, DataTable, DetailSection, Drawer, EmptyState, EventRow, FilterChip, FormField, Inline,
   LoadingState, MarkdownView, MetaLine, PageSection, SearchInput, SegmentedControl, Select, Stack, StackDiagram,
   Textarea, Toolbar, ToolbarGroup, ToolbarLabel,
   type DataTableColumn,
@@ -462,13 +462,15 @@ function ArtifactDrawerBody({ artifact: a }: { artifact: Artifact }) {
           <DetailSection title="Facts" hint={`${facts.length} fact${facts.length === 1 ? '' : 's'}`}>
             <Stack gap="xs">
               {facts.map((f) => (
-                <Stack key={f.id} gap="xs" className="rounded-md border border-border px-3 py-2">
-                  <T className="text-[12.5px] text-text-primary">{f.statement}</T>
-                  <Inline gap="xs" align="center">
-                    <Chip tone="neutral" size="xs">{evidenceLabel(f.evidenceCount)}</Chip>
-                    <T className="text-[10px] text-text-tertiary">confidence {Math.round(f.confidence * 100)}%</T>
-                  </Inline>
-                </Stack>
+                <Card key={f.id} padding="sm">
+                  <Stack gap="xs">
+                    <T className="text-[12.5px] text-text-primary">{f.statement}</T>
+                    <Inline gap="xs" align="center">
+                      <Chip tone="neutral" size="xs">{evidenceLabel(f.evidenceCount)}</Chip>
+                      <T className="text-[10px] text-text-tertiary">confidence {Math.round(f.confidence * 100)}%</T>
+                    </Inline>
+                  </Stack>
+                </Card>
               ))}
             </Stack>
           </DetailSection>

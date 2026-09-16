@@ -31,7 +31,7 @@ export function SprintCard({ s, selected, onSelect }: {
             metrics + …" is not a name. The grid keeps rows equal height, so a
             two-line title does not make the tile ragged. */}
         <Inline justify="between" align="baseline" wrap={false} gap="sm">
-          <strong className="text-[14px] min-w-0">{s.name}</strong>
+          <T className="text-[14px] font-semibold min-w-0">{s.name}</T>
           {/* Health outranks status: "active" is table stakes, "off track" is
               the thing a steward opens the page to learn. */}
           {health

@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import {
   Card,
+  InlinePlaceholder,
   Select,
   Table,
   TableHead,
@@ -13,7 +14,6 @@ import {
   PageSection,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
-import { T } from './Text';
 
 type CapabilityKind =
   | 'browser_navigate'
@@ -71,7 +71,7 @@ function CapabilityEventsPage() {
     >
       <Card padding="md">
         {filtered.length === 0 ? (
-          <T as="div" className="p-6 text-center text-[12px] text-[var(--color-text-tertiary)]">
+          <InlinePlaceholder align="center" className="p-6 text-[12px]">
             {events.length === 0 ? (
               <>
                 No browser or code-interpreter activity yet. Trigger some from the{' '}
@@ -80,7 +80,7 @@ function CapabilityEventsPage() {
                 </Link>.
               </>
             ) : 'No events match the current filter.'}
-          </T>
+          </InlinePlaceholder>
         ) : (
           <Table>
             <TableHead>

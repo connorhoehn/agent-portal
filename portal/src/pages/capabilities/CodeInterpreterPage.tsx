@@ -26,6 +26,7 @@ import {
 import { useCapabilities } from '../../lib/capabilities';
 import { UnavailableNotice, orUnknown } from '../../components/UnavailableNotice';
 import { useFetch } from '../../hooks/useFetch';
+import { relativeTime } from '../../lib/relativeTime';
 import { T } from './Text';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -177,7 +178,7 @@ print(f"mean={statistics.mean(nums):.2f}, stdev={statistics.stdev(nums):.2f}")`)
           // how many sessions are active" must not read the same.
           { label: 'Active Sessions', value: orUnknown(active.length, !!sessionsFailure), tone: 'accent' },
           { label: 'Sessions (lifetime)', value: orUnknown(sessions.length, !!sessionsFailure) },
-          { label: 'Last Activity', value: sessionsFailure ? '—' : lastEverActive ? formatAge(lastEverActive.lastActivityAt) : '—' },
+          { label: 'Last Activity', value: sessionsFailure ? '—' : lastEverActive ? relativeTime(lastEverActive.lastActivityAt) : '—' },
         ]}
       />
 
@@ -235,7 +236,7 @@ print(f"mean={statistics.mean(nums):.2f}, stdev={statistics.stdev(nums):.2f}")`)
                       <Chip tone={session.status === 'ACTIVE' ? 'success' : 'neutral'} size="xs">{session.status}</Chip>,
                       <T className="text-[13px] font-medium">{session.agentName}</T>,
                       <T className="font-mono text-[11px] text-text-tertiary">{session.sessionId}</T>,
-                      <T className="text-[11px] text-text-tertiary">Last active {formatAge(session.lastActivityAt)}</T>,
+                      <T className="text-[11px] text-text-tertiary">Last active {relativeTime(session.lastActivityAt)}</T>,
                     ]}
                   />
                 )}
@@ -300,7 +301,7 @@ print(f"mean={statistics.mean(nums):.2f}, stdev={statistics.stdev(nums):.2f}")`)
                   <Fragment key={ev.id}>
                     <TableRow>
                       <TableTd className="whitespace-nowrap text-[11px] text-text-tertiary">
-                        {formatAge(ev.startedAt)}
+                        {relativeTime(ev.startedAt)}
                       </TableTd>
                       <TableTd className="font-mono text-[10px] text-text-tertiary">
                         {ev.sessionId ? (ev.sessionId.length > 18 ? ev.sessionId.slice(0, 14) + '…' : ev.sessionId) : '—'}
@@ -375,7 +376,7 @@ print(f"mean={statistics.mean(nums):.2f}, stdev={statistics.stdev(nums):.2f}")`)
                   <Fragment key={key}>
                     <TableRow>
                       <TableTd className="whitespace-nowrap text-[11px] text-text-tertiary">
-                        {formatAge(exec.timestamp)}
+                        {relativeTime(exec.timestamp)}
                       </TableTd>
                       <TableTd className="text-xs">{exec.agentName}</TableTd>
                       <TableTd className="font-mono text-[10px] text-text-tertiary">
@@ -474,17 +475,6 @@ print(f"mean={statistics.mean(nums):.2f}, stdev={statistics.stdev(nums):.2f}")`)
       </Card>
     </PageSection>
   );
-}
-
-// ─── Local helpers ────────────────────────────────────────────────────────────
-
-function formatAge(iso: string): string {
-  const diffMs = Date.now() - new Date(iso).getTime();
-  const s = Math.floor(diffMs / 1000);
-  if (s < 60) return `${s}s ago`;
-  const m = Math.floor(s / 60);
-  if (m < 60) return `${m}m ago`;
-  return `${Math.floor(m / 60)}h ago`;
 }
 
 export default CodeInterpreterPage;

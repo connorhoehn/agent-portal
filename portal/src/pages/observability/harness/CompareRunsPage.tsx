@@ -21,6 +21,7 @@ import {
   Chip,
   CodeBlock,
   Inline,
+  LoadingState,
   Modal,
   PageSection,
   Stack,
@@ -35,6 +36,8 @@ import { useFetch } from '../../../hooks/useFetch';
 import { CostChip } from '../../../components/observability/CostChip';
 import { ModeChip } from '../../../components/observability/ModeChip';
 import { T } from '../Text';
+import { RowEmpty } from '../ReadState';
+import { PassChip, ErrorBlock, RunIdPairLine } from './harnessShared';
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
@@ -207,8 +210,7 @@ function CompareRunsPage() {
       <ErrorBlock
         title="Could not load comparison"
         detail={error}
-        runIdA={runIdA}
-        runIdB={runIdB}
+        context={<RunIdPairLine runIdA={runIdA} runIdB={runIdB} />}
       />
     );
   }
@@ -230,8 +232,7 @@ function CompareRunsPage() {
       <ErrorBlock
         title="Comparison not available"
         detail="The backend returned no comparison payload — one of the two runs may not exist."
-        runIdA={runIdA}
-        runIdB={runIdB}
+        context={<RunIdPairLine runIdA={runIdA} runIdB={runIdB} />}
       />
     );
   }
@@ -384,7 +385,7 @@ function CompareRunsPage() {
         </Inline>
         {neutralOpen && (
           neutral.length === 0 ? (
-            <EmptyState text="No neutral results." />
+            <RowEmpty text="No neutral results." />
           ) : (
             <ResultsTable
               results={neutral}
@@ -435,7 +436,7 @@ function ResultsSection({
     <Card padding="md" className={toneClass}>
       <CardHeader title={title} subtitle={hint} />
       {results.length === 0 ? (
-        <EmptyState text={emptyText} />
+        <RowEmpty text={emptyText} />
       ) : (
         <ResultsTable
           results={results}
@@ -577,15 +578,6 @@ function ResponseDiff({ result }: { result: ComparedResult }) {
   );
 }
 
-function PassChip({ passed }: { passed: boolean | null }) {
-  if (passed === null) return <Chip tone="warning" size="xs">—</Chip>;
-  return passed ? (
-    <Chip tone="success" size="xs">✓</Chip>
-  ) : (
-    <Chip tone="danger" size="xs">✗</Chip>
-  );
-}
-
 function PromptDiffModal({
   entry,
   onClose,
@@ -632,9 +624,7 @@ function PromptDiffModal({
 
   return (
     <Modal open onClose={onClose} title={title} maxWidth={1200} rawChildren>
-      {loading && (
-        <T as="div" className="p-4 overflow-y-auto text-[12px]">Loading…</T>
-      )}
+      {loading && <LoadingState label="Loading…" />}
 
       {err && (
         <T as="div" className="p-4 overflow-y-auto text-[12px] text-danger">
@@ -661,51 +651,6 @@ function PromptDiffModal({
         </Stack>
       )}
     </Modal>
-  );
-}
-
-function ErrorBlock({
-  title,
-  detail,
-  runIdA,
-  runIdB,
-}: {
-  title: string;
-  detail: string;
-  runIdA?: string;
-  runIdB?: string;
-}) {
-  return (
-    <PageSection
-      title={title}
-      actions={
-        <Link
-          to="/admin/observability/harness"
-          className="text-[12px] text-primary no-underline px-2 py-0.5 rounded hover:underline"
-        >
-          ← Back to harness
-        </Link>
-      }
-    >
-      <Card padding="md">
-        {(runIdA || runIdB) && (
-          <Inline gap="sm" wrap className="text-[12px] text-text-secondary">
-            <T>runIdA:</T> <T className="font-mono text-[11.5px]">{runIdA ?? '—'}</T>
-            <T className="text-text-tertiary">·</T>
-            <T>runIdB:</T> <T className="font-mono text-[11.5px]">{runIdB ?? '—'}</T>
-          </Inline>
-        )}
-        <T as="div" className="text-[12px] text-text-secondary">{detail}</T>
-      </Card>
-    </PageSection>
-  );
-}
-
-function EmptyState({ text }: { text: string }) {
-  return (
-    <T as="div" className="p-6 text-center text-[12px] text-text-tertiary">
-      {text}
-    </T>
   );
 }
 
