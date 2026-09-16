@@ -31,7 +31,7 @@ import { AssignJobModal } from './AssignJobModal';
 import {
   BotOrigin, GraphUpdatesLink, JobStatusPill, LIVE_STATUSES, ServesItem,
   SUGGESTION_LABEL, SUGGESTION_TONE, T, money, serves,
-  type Job, type WorkSuggestion,
+  type Job, type Summary, type WorkSuggestion,
 } from './workShared';
 
 // Filter buckets, in queue order. `running` folds in `claimed` (both are "a
@@ -57,6 +57,12 @@ export default function QueuePage() {
   const { data: jobsData, isLoading: jobsLoading, error: jobsError, degraded: jobsDegraded, refresh: refreshJobs } =
     useFetch<{ jobs: Job[] }>('/api/work/jobs?limit=100', 8_000);
   const jobsFailure = jobsError ?? jobsDegraded;
+  // The filter chips' counts must be the real per-status aggregate
+  // (queueStats(), the same one the Automate overview reads), never
+  // `jobs.filter(...).length` against this page's own capped fetch (100
+  // rows) — once a program crosses 100 jobs, a local count silently
+  // under-reports every bucket while looking like a real total.
+  const { data: summary } = useFetch<Summary>('/api/work/summary', 8_000);
   const { data: suggestionsData, isLoading: suggestionsLoading, error: suggestionsError } =
     useFetch<{ suggestions: WorkSuggestion[] }>(canManage ? '/api/work/suggestions' : null, 60_000);
 
@@ -91,6 +97,12 @@ export default function QueuePage() {
 
   const countFor = (value: string): number => {
     const spec = JOB_FILTERS.find((f) => f.value === value)!;
+    // Real aggregate when it has loaded; the capped local page only as a
+    // fallback before the first /summary response lands.
+    if (summary) {
+      if (value === 'all') return summary.jobs['total'] ?? 0;
+      return spec.statuses.reduce((n, status) => n + (summary.jobs[status] ?? 0), 0);
+    }
     if (spec.statuses.length === 0) return jobs.length;
     return jobs.filter((j) => spec.statuses.includes(j.status)).length;
   };

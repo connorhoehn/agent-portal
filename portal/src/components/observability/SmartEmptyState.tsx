@@ -130,6 +130,7 @@ function ActionRow({ action }: { action: SmartEmptyAction }) {
         // with the cleanup effect that existed only to clear that timer.
         <CodeBlock
           className="ml-3.5"
+          language="bash"
           code={action.code}
           copyButton
           ariaLabel={`Command for ${action.label}`}

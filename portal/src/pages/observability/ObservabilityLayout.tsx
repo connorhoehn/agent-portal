@@ -42,13 +42,23 @@ function ObservabilityLayout() {
   const invocationCount = recent?.invocations.length;
   const errorCount = summary?.totalErrors24h;
 
-  // Three questions, not five categories: is it healthy, what ran, what did it
-  // cost. Everything else is a drill-in on one of those and stays hidden until
-  // asked for — eighteen equal-weight links read as a pile of dashboards.
+  // Four questions, not eighteen links: is it healthy, is it being used
+  // safely, what ran, what did it cost. Everything else is a drill-in on one
+  // of those and stays hidden until asked for — eighteen equal-weight links
+  // read as a pile of dashboards.
+  //
+  // Safety was originally filed under Health, which put an approval queue and
+  // an access log inside a health section and produced the breadcrumb
+  // "Operate › Health › Approval Queue". A fleet can be entirely healthy while
+  // handing someone data they should not have; those are different questions
+  // and the nav now says so.
   // On-Call sits with the primaries: it is the one live-incident surface in
   // the product, and an alarm page should not need a disclosure to reach.
   const primary: SubNavItem[] = [
-    { group: 'Health', path: 'summary',     label: 'Health',   hint: 'Errors, alarms, quality, drift' },
+    // "Overview", not "Health". The section itself is Health, and naming its
+    // first page the same thing printed the word three times down one rail —
+    // once as the parent nav item, once as the group heading, once as the row.
+    { group: 'Health', path: 'summary',     label: 'Overview', hint: 'Errors, alarms, quality, drift' },
     { group: 'Health', path: 'oncall',      label: 'On-Call',  hint: 'Live alarms + incident timeline' },
     { group: 'Runs',   path: 'invocations', label: 'Runs',     hint: 'Every agent call, newest first',
       ...(invocationCount ? { count: invocationCount } : {}) },
@@ -59,9 +69,16 @@ function ObservabilityLayout() {
   const drillIns: SubNavItem[] = [
     { group: 'Health', path: 'quality',         label: 'Quality',         hint: 'Judge scores + feedback' },
     { group: 'Health', path: 'drift',           label: 'Drift',           hint: 'Schema + judge + embedding' },
-    { group: 'Health', path: 'guardrail-rules', label: 'Guardrail Rules', hint: 'Per-rule intervention detail' },
-    { group: 'Health', path: 'approvals',       label: 'Approval Queue',  hint: 'Pending HITL decisions' },
-    { group: 'Health', path: 'authz',           label: 'Authz Log',       hint: 'Live AVP decisions' },
+
+    // Safety is its own question, not a kind of health. A queue of decisions
+    // waiting on a person, a log of who was refused, and what the guardrails
+    // stopped are about whether the fleet is being used safely — a fleet can
+    // be perfectly healthy and still be handing someone data they should not
+    // have. Filing them under Health produced "Operate › Health › Approval
+    // Queue", which reads as a claim that an approval is a health metric.
+    { group: 'Safety', path: 'guardrail-rules', label: 'Guardrails',     hint: 'What was blocked, and who tripped it' },
+    { group: 'Safety', path: 'approvals',       label: 'Approvals',      hint: 'Decisions waiting on a person' },
+    { group: 'Safety', path: 'authz',           label: 'Access log',     hint: 'Who was allowed, who was refused' },
 
     { group: 'Runs', path: 'invocations/search', label: 'Search',            hint: 'Filter by prompt / agent / score' },
     { group: 'Runs', path: 'tools',              label: 'Tool Calls',        hint: 'Per-tool latency + failures' },
@@ -82,7 +99,7 @@ function ObservabilityLayout() {
   // · COST / Cost" was three headings over three identically named rows.
   // The headings earn their place only once the drill-ins sit under them.
   const items: SubNavItem[] = showAll
-    ? (['Health', 'Runs', 'Cost'] as const).flatMap((g) => [
+    ? (['Health', 'Safety', 'Runs', 'Cost'] as const).flatMap((g) => [
         ...primary.filter((i) => i.group === g),
         ...drillIns.filter((i) => i.group === g),
       ])
@@ -108,7 +125,7 @@ function ObservabilityLayout() {
       // "Health", not "Operate": the shell's Operate group also holds
       // Architecture, Knowledge and Capabilities, none of which are here, and
       // the breadcrumb for every page in this rail already reads Operate › Health.
-      title="Health"
+      title="Observability"
       items={items}
       titleAction={<ObservabilityHelpButton />}
       storageKey="obs"

@@ -658,22 +658,38 @@ async function realGetLeaderboard(opts: { department?: string; limit?: number })
 
 async function realGetSkillLeaderboard(opts: { skill: string; limit?: number }): Promise<Leaderboard> {
   const limit = Math.max(1, Math.min(opts.limit ?? 25, 100));
-  const rows = await exec(
-    `SELECT p.id, p.name, p.team,
-            COALESCE(p.pagerank_score, 0) * 100 AS influence,
-            COALESCE(p.expertise_score, 0)       AS expertise,
-            COALESCE(p.composite_score, 0)       AS composite,
-            p.scored_at::text                    AS scored_at,
-            SUM(ps.weight)                       AS skill_strength
-       FROM people p
-       JOIN person_skills ps ON p.id = ps.person_id
-       JOIN skills s         ON ps.skill_id = s.id
-      WHERE LOWER(s.name) = LOWER(:skill)
-      GROUP BY p.id, p.name, p.team, p.pagerank_score, p.expertise_score, p.composite_score, p.scored_at
-      ORDER BY skill_strength DESC NULLS LAST
-      LIMIT :lim`,
-    [strParam('skill', opts.skill), intParam('lim', limit)],
-  );
+  const skillParam = strParam('skill', opts.skill);
+  // Same fix as realGetLeaderboard above, same reason: `entries.length` is the
+  // size of the capped page, not the count of people who hold this skill, and
+  // the two only look equal while a skill happens to have fewer holders than
+  // `limit`. A real COUNT(DISTINCT ...) alongside the page query is the only
+  // way `total` stays honest once a skill outgrows the page.
+  const [rows, countRows] = await Promise.all([
+    exec(
+      `SELECT p.id, p.name, p.team,
+              COALESCE(p.pagerank_score, 0) * 100 AS influence,
+              COALESCE(p.expertise_score, 0)       AS expertise,
+              COALESCE(p.composite_score, 0)       AS composite,
+              p.scored_at::text                    AS scored_at,
+              SUM(ps.weight)                       AS skill_strength
+         FROM people p
+         JOIN person_skills ps ON p.id = ps.person_id
+         JOIN skills s         ON ps.skill_id = s.id
+        WHERE LOWER(s.name) = LOWER(:skill)
+        GROUP BY p.id, p.name, p.team, p.pagerank_score, p.expertise_score, p.composite_score, p.scored_at
+        ORDER BY skill_strength DESC NULLS LAST
+        LIMIT :lim`,
+      [skillParam, intParam('lim', limit)],
+    ),
+    exec(
+      `SELECT count(DISTINCT p.id)::int AS n
+         FROM people p
+         JOIN person_skills ps ON p.id = ps.person_id
+         JOIN skills s         ON ps.skill_id = s.id
+        WHERE LOWER(s.name) = LOWER(:skill)`,
+      [skillParam],
+    ),
+  ]);
   const entries: ScoreEntry[] = rows.map((r) => ({
     personId: toStr(r.id),
     name: toStr(r.name),
@@ -691,7 +707,8 @@ async function realGetSkillLeaderboard(opts: { skill: string; limit?: number }):
   const mostRecentScoredAt = nonNullDates.length > 0
     ? nonNullDates.reduce((a, b) => (a > b ? a : b))
     : null;
-  return { entries, total: entries.length, mostRecentScoredAt };
+  const total = toNumber(countRows[0]?.n, entries.length);
+  return { entries, total, mostRecentScoredAt };
 }
 
 async function realGetTopSkills(limit = 30): Promise<SkillSummary[]> {

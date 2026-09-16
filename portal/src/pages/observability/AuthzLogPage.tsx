@@ -22,6 +22,7 @@ import {
   TableTh,
 } from '@connorhoehnslalom/ui-components/shared';
 import { T } from './Text';
+import { streamStatusLabel } from '../../lib/streamStatus';
 
 interface AuthzEvent {
   decision: 'ALLOW' | 'DENY';
@@ -48,11 +49,13 @@ function AuthzLogPage() {
   const [tenant, setTenant] = useState<typeof TENANT_FILTERS[number]>('');
   const [actionQ, setActionQ] = useState('');
   const [streaming, setStreaming] = useState(false);
+  /** So the first wait is not reported as a reconnect. See lib/streamStatus. */
+  const [connectedOnce, setConnectedOnce] = useState(false);
 
   // Open SSE on mount; reconnect on disconnect via the EventSource browser API.
   useEffect(() => {
     const es = new EventSource('/api/observability/authz/stream', { withCredentials: true });
-    es.onopen = () => setStreaming(true);
+    es.onopen = () => { setStreaming(true); setConnectedOnce(true); };
     es.onerror = () => setStreaming(false);
     es.onmessage = (ev) => {
       try {
@@ -91,7 +94,7 @@ function AuthzLogPage() {
         <Inline gap="sm" align="center" className="text-[11px]">
           <StatusDot
             color={streaming ? 'var(--color-success)' : 'var(--color-text-tertiary)'}
-            label={streaming ? 'live' : 'reconnecting…'}
+            label={streamStatusLabel(streaming, connectedOnce)}
             size="sm"
           />
           <T className="text-text-tertiary">·</T>

@@ -2,7 +2,11 @@ import { StatStrip } from '@connorhoehnslalom/ui-components/shared';
 import { relativeTime } from '../../lib/relativeTime';
 
 interface Props {
-  peopleScored: number;
+  /** Pre-formatted by ScoresPage.tsx's `showingLabel` — "56 people" when
+   *  nothing is hidden, "Showing the first 14 of 56 people" once a filter or
+   *  the page cap narrows what's shown, so this card never claims an
+   *  org-wide count it isn't actually looking at. */
+  peopleScoredLabel: string;
   avgComposite: number;
   topScore: number;
   departmentCount: number;
@@ -13,12 +17,12 @@ interface Props {
 // that used to be two stacked blocks above the table (see DEFECTS.md #3).
 // Freshness folds into the strip as one more item instead of a line of its
 // own.
-export function StatCards({ peopleScored, avgComposite, topScore, departmentCount, mostRecentScoredAt }: Props) {
+export function StatCards({ peopleScoredLabel, avgComposite, topScore, departmentCount, mostRecentScoredAt }: Props) {
   return (
     <StatStrip
       aria-label="Scoring summary"
       items={[
-        { label: 'People Scored', value: String(peopleScored) },
+        { label: 'People Scored', value: peopleScoredLabel },
         { label: 'Avg Composite', value: String(avgComposite) },
         { label: 'Top Score', value: String(topScore) },
         { label: 'Departments', value: String(departmentCount) },

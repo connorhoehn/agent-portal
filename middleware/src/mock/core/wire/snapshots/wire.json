@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-09-16T17:33:47.524Z",
-  "serverHandlerSha": "91268bd76341151919dd2987580b1e3d04989536f8e65beb13865050b5ef7c35",
+  "capturedAt": "2026-09-16T18:49:59.784Z",
+  "serverHandlerSha": "e0ab2b3fe8c98faa51eab44f1811acfaeab8424b11e7e24fe979e0fce4c3f84b",
   "baseUrl": "http://127.0.0.1:3012",
   "personas": [
     "orgiq/admin",
@@ -705,7 +705,7 @@
       "values": {}
     },
     "GET /api/assessment/events": {
-      "skipped": "timed out after 6s — never sent response headers (orgiq/admin); timed out after 6s — never sent response headers (assessment/admin); HTTP 403 (anonymous)"
+      "skipped": "server-sent event stream (orgiq/admin); server-sent event stream (assessment/admin); HTTP 403 (anonymous)"
     },
     "GET /api/assessment/feedback": {
       "persona": "orgiq/admin",
@@ -4020,7 +4020,7 @@
       "skipped": "no value found for :id under /api/observability/approvals (orgiq/admin); no value found for :id under /api/observability/approvals (assessment/admin); no value found for :id under /api/observability/approvals (anonymous)"
     },
     "GET /api/observability/approvals/stream": {
-      "skipped": "timed out after 6s — never sent response headers (orgiq/admin); timed out after 6s — never sent response headers (assessment/admin); timed out after 6s — never sent response headers (anonymous)"
+      "skipped": "server-sent event stream (orgiq/admin); server-sent event stream (assessment/admin); server-sent event stream (anonymous)"
     },
     "GET /api/observability/authz": {
       "persona": "orgiq/admin",
@@ -4132,7 +4132,7 @@
       "skipped": "no value found for :id under /api/observability/calibration/runs (orgiq/admin); no value found for :id under /api/observability/calibration/runs (assessment/admin); no value found for :id under /api/observability/calibration/runs (anonymous)"
     },
     "GET /api/observability/canary/events": {
-      "skipped": "timed out after 6s — never sent response headers (orgiq/admin); timed out after 6s — never sent response headers (assessment/admin); timed out after 6s — never sent response headers (anonymous)"
+      "skipped": "server-sent event stream (orgiq/admin); server-sent event stream (assessment/admin); server-sent event stream (anonymous)"
     },
     "GET /api/observability/canary/library": {
       "persona": "orgiq/admin",
@@ -6069,7 +6069,7 @@
       }
     },
     "GET /api/work/events": {
-      "skipped": "timed out after 6s — never sent response headers (orgiq/admin); timed out after 6s — never sent response headers (assessment/admin); timed out after 6s — never sent response headers (anonymous)"
+      "skipped": "server-sent event stream (orgiq/admin); server-sent event stream (assessment/admin); server-sent event stream (anonymous)"
     },
     "GET /api/work/findings": {
       "persona": "orgiq/admin",

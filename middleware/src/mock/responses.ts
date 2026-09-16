@@ -25,11 +25,51 @@ function seedResponses(): MockResponse[] {
     },
     {
       keywords: ['auth', 'authentication', 'identity', 'login', 'sso'],
+      // `search_knowledge_base`'s result used to be the bare string '4 relevant
+      // documents found' — no URIs, so answerSources.ts's retrieval branch
+      // (documentsFromResult) could extract nothing from it, and the answer's
+      // own "Related Documents" prose named three documents ("Auth Migration
+      // PRD", "Zero Trust Architecture Proposal", "Cognito Integration Guide")
+      // that exist NOWHERE in this corpus — not in mock/knowledge-base.ts's
+      // seeded rows, not on Confluence or a GitHub Wiki this product has no
+      // integration with either. Demo-tested by asking "Who knows auth best?"
+      // as a member: the chat rendered those three fabricated citations
+      // un-linked, directly above a provenance line reading "knowledge base
+      // searched — no documents matched" — the flagship answer to the
+      // product's founding question contradicting its own honesty check.
+      //
+      // Fixed by shaping the result the way agents/search/main.py's real
+      // `query_knowledge_base` actually does ({content, score, source: s3://…}
+      // per result — see agents/search/main.py:116-123) and citing the two
+      // documents mock/knowledge-base.ts actually seeds about the auth
+      // migration project (`postmortem-p-auth-migration`,
+      // `slack-p-auth-migration-00`) via `*Source: …*`, the pattern
+      // answerSources.ts's readProse recognizes. routes/agents.ts's
+      // annotateToolResult resolves each s3:// URI to its real `documents`
+      // title server-side, same as it would for a live retrieval, so the
+      // rendered chips read as "Postmortem: auth token cache invalidation
+      // race (Auth Migration)" / "#proj-auth-migration — weighing two
+      // competing library choices" rather than a filename.
       toolCalls: [
-        { name: 'search_knowledge_base', args: '{"query": "authentication migration decisions"}', result: '4 relevant documents found' },
+        {
+          name: 'search_knowledge_base',
+          args: '{"query": "authentication migration decisions"}',
+          result: JSON.stringify([
+            {
+              content: 'Auth token cache invalidation race during the JWT + refresh-token migration — root cause and remediation.',
+              score: 0.91,
+              source: 's3://orgiq-documents-647757222309-us-east-1/synth/internal/postmortem/postmortem-p-auth-migration.md',
+            },
+            {
+              content: 'Thread weighing two competing auth library choices for the migration off session-based auth.',
+              score: 0.84,
+              source: 's3://orgiq-documents-647757222309-us-east-1/synth/internal/slack/slack-p-auth-migration-00.md',
+            },
+          ]),
+        },
         { name: 'query_graph', args: '{"sql": "SELECT p.name, d.topic, d.summary FROM people p JOIN decision_participants dp ON dp.person_id = p.id JOIN decisions d ON d.id = dp.decision_id WHERE d.topic ILIKE \'%auth%\'"}', result: '2 decisions found with 5 participants' },
       ],
-      response: `I found relevant information about auth across documents and the knowledge graph.\n\n**Key Decisions:**\n\n1. **Auth Middleware Rewrite** (2026-03-15)\n   - Decision: Migrate from session-based to JWT + refresh tokens\n   - Participants: Theo Chang, Sarah Thompson, Sienna Garcia\n   - Status: In progress (Phase 2 of 3)\n\n2. **SSO Provider Selection** (2026-02-01)\n   - Decision: Adopt AWS Cognito with SAML federation\n   - Participants: Sarah Thompson, Sienna Garcia, Tara Chen\n   - Status: Completed\n\n**Subject Matter Experts:**\n- **Sarah Thompson** (Security Engineer) — Led the security assessment\n- **Theo Chang** — Implementing the middleware changes\n- **Sienna Garcia** — Executive sponsor\n\n**Related Documents:**\n- "Auth Migration PRD" (Confluence, last updated 2026-04-28)\n- "Zero Trust Architecture Proposal" (Confluence)\n- "Cognito Integration Guide" (GitHub Wiki)`,
+      response: `I found relevant information about auth across documents and the knowledge graph.\n\n**Key Decisions:**\n\n1. **Auth Middleware Rewrite** (2026-03-15)\n   - Decision: Migrate from session-based to JWT + refresh tokens\n   - Participants: Theo Chang, Sarah Thompson, Sienna Garcia\n   - Status: In progress (Phase 2 of 3)\n\n2. **SSO Provider Selection** (2026-02-01)\n   - Decision: Adopt AWS Cognito with SAML federation\n   - Participants: Sarah Thompson, Sienna Garcia, Tara Chen\n   - Status: Completed\n\n**Subject Matter Experts:**\n- **Sarah Thompson** (Security Engineer) — Led the security assessment\n- **Theo Chang** — Implementing the middleware changes\n- **Sienna Garcia** — Executive sponsor\n\n*Sources: s3://orgiq-documents-647757222309-us-east-1/synth/internal/postmortem/postmortem-p-auth-migration.md, s3://orgiq-documents-647757222309-us-east-1/synth/internal/slack/slack-p-auth-migration-00.md*`,
     },
     {
       keywords: ['team', 'who', 'people', 'expert', 'find'],

@@ -30,6 +30,7 @@ import { useCapabilities } from '../../lib/capabilities';
 import { toastError, toastPending, toastSuccess } from '../../lib/toastStore';
 import { writeJson } from '../../lib/writeJson';
 import { T } from './Text';
+import { streamStatusLabel } from '../../lib/streamStatus';
 
 interface Approval {
   approvalId: string;
@@ -67,6 +68,10 @@ function ApprovalQueuePage() {
   const canApprove = ready && can('ApproveTransaction');
   const [items, setItems] = useState<Approval[]>([]);
   const [streaming, setStreaming] = useState(false);
+  /** Whether the stream has ever been up, so the first wait is not called a
+   *  reconnect. A page that says "reconnecting…" before it has ever connected
+   *  reports a failure that has not happened. */
+  const [connectedOnce, setConnectedOnce] = useState(false);
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [expandedPayload, setExpandedPayload] = useState<Set<string>>(new Set());
   const [denied, setDenied] = useState<Record<string, true>>({});
@@ -102,7 +107,7 @@ function ApprovalQueuePage() {
     const es = new EventSource('/api/observability/approvals/stream', {
       withCredentials: true,
     });
-    es.onopen = () => setStreaming(true);
+    es.onopen = () => { setStreaming(true); setConnectedOnce(true); };
     es.onerror = () => {
       // EventSource fires onerror on every transient reconnect — only treat
       // CLOSED (terminal) as actually disconnected. CONNECTING is the browser
@@ -196,15 +201,15 @@ function ApprovalQueuePage() {
 
   return (
     <PageSection
-      title="Approval Queue"
-      description="Pending HITL approvals. Initial list via REST; live updates over SSE. Decisions are optimistic — denied requests reappear with a danger chip."
+      title="Approvals"
+      description="Actions an agent has paused on until a person decides. Approving lets the run continue; denying stops it and tells the agent why."
       actions={
         <Inline gap="sm" align="center" className="text-[11px] text-text-secondary">
           <StatusDot
             color={streaming ? 'var(--color-success)' : 'var(--color-text-tertiary)'}
             size="sm"
           />
-          <T>{streaming ? 'live' : 'reconnecting…'}</T>
+          <T>{streamStatusLabel(streaming, connectedOnce)}</T>
           <T className="text-text-tertiary">·</T>
           <T><strong>{sorted.length}</strong> pending</T>
           <LiveRegion
@@ -217,11 +222,12 @@ function ApprovalQueuePage() {
       <Card padding="md">
         {sorted.length === 0 ? (
           <SmartEmptyState
-            title="No pending approvals"
-            detail="Approvals arrive when an agent calls its request_approval tool. You can also seed one over HTTP for a smoke test."
+            title="Nothing is waiting on you"
+            detail="An agent lands here when it reaches an action it is not allowed to take alone — spending over its cap, or writing where a person has to sign off. An empty queue means nothing is currently blocked on a decision."
             actions={[
               {
-                label: 'Seed a pending approval via HTTP',
+                label: 'Send a test approval (developer)',
+                detail: 'Files one pending request against the local middleware so the queue and the decision buttons can be exercised without waiting for an agent to reach a gate.',
                 code: 'python3 -c \'import requests; requests.post("http://localhost:3001/api/observability/approvals/request", json={"txId":"tx-001","agentId":"orgiq-ingestion","payload":{"amount":15000},"reason":"smoke test"})\'',
               },
             ]}

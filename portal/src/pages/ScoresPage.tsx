@@ -12,6 +12,7 @@ import { Leaderboard } from '../components/scores/Leaderboard';
 import { PersonDetailCard } from '../components/scores/PersonDetailCard';
 import { LeaderboardAccessNeeded, isLeaderboardForbiddenError } from '../components/scores/LeaderboardAccessNeeded';
 import { T } from './Text';
+import { showingLabel } from '../lib/format';
 
 function ScoresPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -188,6 +189,23 @@ function ScoresPage() {
     ? Math.round(filtered.reduce((s, e) => s + e.composite, 0) / filtered.length)
     : 0;
 
+  // `filtered.length` is what the table actually shows — a department filter
+  // narrows it client-side (never sent server-side, so it's a subset of the
+  // fetched ?limit=100 page, not a re-query), and a skill filter swaps the
+  // fetch entirely. `data.total` is the real denominator behind whichever of
+  // those fetched: the org-wide COUNT(*) when unfiltered or department-only,
+  // or the skill's own holder count when a skill filter is active
+  // (aurora.ts::realGetLeaderboard / realGetSkillLeaderboard — both a real
+  // COUNT alongside the page query, not `entries.length`, which silently
+  // equals the LIMIT the instant the real count outgrows it).
+  //
+  // The stat strip shows both rather than picking one: "56 people" when
+  // nothing is hidden, "Showing the first 14 of 56 people" once a filter (or
+  // the page cap) narrows the view — so "People Scored" never quietly
+  // switches between meaning "org-wide" and "in this view" depending on
+  // filter state. See StatCards.tsx.
+  const peopleScoredLabel = showingLabel(filtered.length, data.total, 'people');
+
   // The selected row's own composite, on the same 0-100 scale the leaderboard
   // just displayed it on — threaded into the detail panel so it can show a
   // Composite figure that agrees with the row instead of only "Influence
@@ -218,7 +236,7 @@ function ScoresPage() {
   return (
     <PageSection title="Scores">
       <StatCards
-        peopleScored={filtered.length}
+        peopleScoredLabel={peopleScoredLabel}
         avgComposite={avg}
         topScore={top}
         departmentCount={departments.length}

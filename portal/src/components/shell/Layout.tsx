@@ -167,7 +167,7 @@ const PLATFORM_ITEMS: NavItem[] = [
   // with the repos wedged between them.
   { path: '/admin/projects',        label: 'Codebases',       tenant: 'admin', requireRoles: ['hr-admin'], group: 'Build' },
   // OPERATE — platform + ops.
-  { path: '/admin/observability',   label: 'Health',          tenant: 'admin', requireRoles: ['org-leader', 'hr-admin'], group: 'Operate' },
+  { path: '/admin/observability',   label: 'Observability',   tenant: 'admin', requireRoles: ['org-leader', 'hr-admin'], group: 'Operate' },
   { path: '/iq/agents',             label: 'Architecture',    tenant: 'admin', requireRoles: ['org-leader', 'hr-admin'], group: 'Operate' }, // matches the route guard in App.tsx
   // One entry, not two: sources, ingestion, storage and knowledge bases are
   // consecutive stages of one pipeline. Operate, not Design: the page is the

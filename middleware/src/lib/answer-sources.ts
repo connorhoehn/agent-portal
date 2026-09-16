@@ -25,6 +25,7 @@
 import { exec } from '../providers/aurora.js';
 import { config } from '../config.js';
 import { type SqlParameter } from '@aws-sdk/client-rds-data';
+import { kbDocumentRows } from '../mock/knowledge-base.js';
 
 const URI_RE = /^(s3:\/\/|https?:\/\/)/i;
 /** Tool names whose results carry retrieved documents. */
@@ -153,17 +154,23 @@ export async function lookupDocumentTitles(uris: string[]): Promise<Map<string, 
       missing.push(uri);
     }
   }
-  if (missing.length === 0 || config.mock.aurora) return found;
+  if (missing.length === 0) return found;
 
-  const params: SqlParameter[] = missing.map((uri, i) => ({
-    name: `u${i}`,
-    value: { stringValue: uri },
-  }));
-  const placeholders = missing.map((_, i) => `:u${i}`).join(', ');
-  const rows = await exec(
-    `SELECT source_uri, title FROM documents WHERE source_uri IN (${placeholders})`,
-    params,
-  );
+  // dev:mock has no Aurora to ask — this used to just `return found` here,
+  // silently answering "no title for anything" on every mocked retrieval, the
+  // "provider with no mock branch" bug class the mock floor exists to catch
+  // (middleware/src/mock/core/contract.ts, class 5). mock/knowledge-base.ts's
+  // `kbDocumentRows` is the same corpus the mocked KB routes already serve, so
+  // read titles from there instead of Aurora when mocked.
+  const wanted = new Set(missing);
+  const rows = config.mock.aurora
+    ? kbDocumentRows.rows()
+      .filter((d): d is typeof d & { sourceUri: string } => !!d.sourceUri && wanted.has(d.sourceUri))
+      .map((d) => ({ source_uri: d.sourceUri, title: d.title ?? '' }))
+    : await exec(
+        `SELECT source_uri, title FROM documents WHERE source_uri IN (${missing.map((_, i) => `:u${i}`).join(', ')})`,
+        missing.map((uri, i): SqlParameter => ({ name: `u${i}`, value: { stringValue: uri } })),
+      );
   for (const row of rows) {
     const uri = typeof row['source_uri'] === 'string' ? row['source_uri'] : '';
     const title = typeof row['title'] === 'string' ? row['title'].trim() : '';

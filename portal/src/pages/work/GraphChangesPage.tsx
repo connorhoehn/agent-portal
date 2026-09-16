@@ -19,6 +19,7 @@ import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';
 import { absoluteTime } from '../../lib/relativeTime';
 import { toastPending, toastSuccess, toastError } from '../../lib/toastStore';
+import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { writeJson } from '../../lib/writeJson';
 import { PROPOSAL_STATUS_CHIP, T } from './workShared';
 
@@ -81,10 +82,14 @@ export default function GraphChangesPage() {
   // for "what did this worker propose?" links from the job detail page.
   const [searchParams, setSearchParams] = useSearchParams();
   const jobFilter = searchParams.get('job');
-  const { data, refresh } = useFetch<{ proposals: Proposal[] }>(
+  // A load that fails (Aurora unreachable, a 500) must not render as "no
+  // agent has proposed a change" — that is the false-empty this page
+  // dropped `error`/`degraded` on the floor to produce.
+  const { data, error, degraded, refresh } = useFetch<{ proposals: Proposal[] }>(
     filter === 'all' ? '/api/work/proposals' : `/api/work/proposals?status=${filter}`,
     15_000,
   );
+  const loadFailure = error ?? degraded;
 
   // A failed apply is actionable, not just history: retry it once its cause is
   // fixed, or reject it off the board. Without this a single bad row sat here
@@ -146,6 +151,17 @@ export default function GraphChangesPage() {
         </ToolbarGroup>
       </Toolbar>
 
+      {loadFailure && (
+        <UnavailableNotice
+          error={loadFailure}
+          what="the graph change history"
+          source="Proposals are read from Aurora"
+          onRetry={refresh}
+          className="mb-4"
+        />
+      )}
+
+      {!loadFailure && (
       <Card padding="none" className="overflow-hidden">
         {proposals.length === 0 ? (
           <EmptyState
@@ -210,6 +226,7 @@ export default function GraphChangesPage() {
           </Inline>
         ))}
       </Card>
+      )}
     </PageSection>
   );
 }

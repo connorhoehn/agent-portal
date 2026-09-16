@@ -18,11 +18,11 @@ export interface Crumb {
 
 const OBS_LABELS: Record<string, string> = {
   oncall: 'On-Call', 'capability-events': 'Capability Events', agents: 'Agent Metrics',
-  sessions: 'Sessions', authz: 'Authz Log', drift: 'Drift', quality: 'Quality',
+  sessions: 'Sessions', authz: 'Access log', drift: 'Drift', quality: 'Quality',
   cost: 'Cost', calibration: 'Calibration', 'model-compare': 'Model Compare',
-  memory: 'Memory', 'guardrail-rules': 'Guardrail Rules', traffic: 'Traffic',
+  memory: 'Memory', 'guardrail-rules': 'Guardrails', traffic: 'Traffic',
   tools: 'Tool Calls',
-  approvals: 'Approval Queue',
+  approvals: 'Approvals',
 };
 const INGEST_LABELS: Record<string, string> = {
   crawl: 'Sources', history: 'Runs', storage: 'Storage', sources: 'KB sync', schedules: 'Schedule',
@@ -133,8 +133,9 @@ export function resolveBreadcrumbs(pathname: string): Crumb[] {
           ...(b && INGEST_LABELS[b] ? [{ label: INGEST_LABELS[b]! }] : []),
         ];
       case 'observability': {
-        if (!b || b === 'summary') return [{ label: 'Operate' }, { label: 'Health' }];
-        const base: Crumb[] = [{ label: 'Operate' }, { label: 'Health', path: '/admin/observability/summary' }];
+        if (!b) return [{ label: 'Operate' }, { label: 'Observability' }];
+        if (b === 'summary') return [{ label: 'Operate' }, { label: 'Observability', path: '/admin/observability/summary' }, { label: 'Overview' }];
+        const base: Crumb[] = [{ label: 'Operate' }, { label: 'Observability', path: '/admin/observability/summary' }];
         if (b === 'invocations') {
           if (!c) return [...base, { label: 'Runs' }];
           if (c === 'search') return [...base, { label: 'Runs', path: '/admin/observability/invocations' }, { label: 'Search' }];

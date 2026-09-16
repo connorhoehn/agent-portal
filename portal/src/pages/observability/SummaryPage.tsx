@@ -226,7 +226,7 @@ function SummaryPage() {
 
   return (
     <PageSection
-      title="Health"
+      title="Overview"
       description="What is deployed, whether it is working, and what needs you next."
     >
       {fleetFailure && (

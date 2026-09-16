@@ -391,10 +391,15 @@ describe('initSSE (finding #9 — a socket error must not crash the process)', (
     const res = new EventEmitter() as EventEmitter & {
       writableEnded: boolean;
       writeHead: (...args: unknown[]) => void;
+      flushHeaders: jest.Mock;
       write: jest.Mock;
     };
     res.writableEnded = false;
     res.writeHead = jest.fn();
+    // Real Express responses extend http.ServerResponse, which always has
+    // this; initSSE calls it so the head reaches the client before the first
+    // body byte (see lib/__tests__/sse-init.test.ts for why that matters).
+    res.flushHeaders = jest.fn();
     res.write = jest.fn(() => true);
     return res;
   }

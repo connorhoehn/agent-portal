@@ -139,13 +139,16 @@ export default function WorkHomePage() {
   return (
     <PageSection title="Automate" actions={<GraphUpdatesLink />}>
       {/* A failed load renders as zeros everywhere below — "0 workers, 0 needs
-          you" reads exactly like a healthy, idle system. Say so plainly. */}
-      {summaryError && (
+          you" reads exactly like a healthy, idle system. Say so plainly.
+          `summaryFailure` (transport error OR the wire's `degraded` marker) —
+          checking only `summaryError` left a degraded-but-200 response
+          rendering this banner as if the read had succeeded. */}
+      {summaryFailure && (
         <Card padding="md" className="mb-4 border-danger/40">
           <Stack gap="xs">
             <T className="text-[13px] font-semibold text-danger">Could not reach the work queue</T>
             <T wrap className="text-[12px] text-text-secondary leading-snug">
-              {summaryError}. The numbers below are not zero — they are unknown.
+              {summaryFailure}. The numbers below are not zero — they are unknown.
             </T>
           </Stack>
         </Card>
@@ -269,7 +272,7 @@ export default function WorkHomePage() {
           when the queue genuinely has nothing for a human, say so explicitly
           instead of leaving blank space that reads as a page that failed to
           render, not a page reporting zero. */}
-      {!summaryError && pendingConsults.length === 0 && needsReview === 0 && pendingProposals === 0 && (
+      {!summaryFailure && pendingConsults.length === 0 && needsReview === 0 && pendingProposals === 0 && (
         <InlineAlert tone="info" className="mb-5">
           Nothing needs your attention right now — agent questions and finished work awaiting review will show up here.
         </InlineAlert>
@@ -292,9 +295,9 @@ export default function WorkHomePage() {
         items={[
           {
             label: 'Needs you',
-            value: summaryError ? '—' : needsYou,
-            tone: !summaryError && needsYou > 0 ? 'danger' : 'default',
-            hint: summaryError
+            value: summaryFailure ? '—' : needsYou,
+            tone: !summaryFailure && needsYou > 0 ? 'danger' : 'default',
+            hint: summaryFailure
               ? 'unknown'
               // Short enough to fit the tile at the shell's narrowest content
               // width — the long form clipped to "0 for review · 0 graph…".
@@ -302,9 +305,9 @@ export default function WorkHomePage() {
           },
           {
             label: 'Workers',
-            value: summaryError ? '—' : active,
+            value: summaryFailure ? '—' : active,
             href: '/iq/work/queue',
-            hint: summaryError
+            hint: summaryFailure
               ? 'unknown'
               : active > 0
                 ? `busy: ${(s?.busyBoxes ?? []).join(', ') || '—'}`
@@ -312,10 +315,10 @@ export default function WorkHomePage() {
           },
           {
             label: 'Findings + failed jobs',
-            value: summaryError ? '—' : (s?.findings.open ?? 0) + failedCount,
-            tone: !summaryError && ((s?.findings.critical ?? 0) > 0 || failedCount > 0) ? 'danger' : 'default',
+            value: summaryFailure ? '—' : (s?.findings.open ?? 0) + failedCount,
+            tone: !summaryFailure && ((s?.findings.critical ?? 0) > 0 || failedCount > 0) ? 'danger' : 'default',
             href: '/iq/work/findings',
-            hint: summaryError
+            hint: summaryFailure
               ? 'unknown'
               : `${s?.findings.open ?? 0} open finding${(s?.findings.open ?? 0) === 1 ? '' : 's'} · ${failedCount} failed job${failedCount === 1 ? '' : 's'}`,
           },

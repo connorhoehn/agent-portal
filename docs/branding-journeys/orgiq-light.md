@@ -59,3 +59,5 @@ opened scoped with ⌘I — no rail item, no nav class, no token, no box.
   and nothing in the layers, contrast, brand or rhythm lines is reachable from
   a dialog's prompt string, so those numbers stand as measured at 08:40.
 Console errors: 0.
+
+Re-audit 2026-09-16 14:51: the theme digest moved, the theme did not. The only edit to either digested file is one line of Layout.tsx renaming the Operate rail item from "Health" to "Observability" — that rail is the parent of eighteen pages and only four are about health, so its name was the middle of every breadcrumb beneath it. portal/src/app.css is byte-identical this pass, so no token, layer or ratio could have moved. Re-measured live in this cell rather than asserted: body rgb(238,241,246), nav panel rgb(244,246,250), header rgb(255,255,255), card rgb(255,255,255), active nav border-left rgb(99,102,241) over fill rgb(238,242,255), --color-brand and --color-primary both #6366f1 — every value identical to the ones recorded above. Console errors 0.
