@@ -109,6 +109,8 @@ function ObservabilityLayout() {
       items={items}
       titleAction={<ObservabilityHelpButton />}
       storageKey="obs"
+      contentAs="section"
+      contentLabel="Health"
       renderNavItem={(item, children) => (
         <NavLink
           to={item.path}

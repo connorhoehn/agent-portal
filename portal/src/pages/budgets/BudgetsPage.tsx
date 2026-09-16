@@ -157,6 +157,8 @@ export default function BudgetsPage() {
       title="Budgets"
       items={items}
       storageKey="budgets-subnav"
+      contentAs="section"
+      contentLabel="Budgets"
       renderNavItem={(item, children) => {
         // Both reports live at the same path and differ only by ?report=, so
         // an exact-path match would light both. Compare the search instead.

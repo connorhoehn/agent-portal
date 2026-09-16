@@ -216,10 +216,13 @@ html[data-theme="dark"] [data-tenant="assessment"] {
 }
 /* One content padding, everywhere: the shell's SubNavLayout <main> pads 24px
    and that is the only padding a route gets. A NESTED section layout
-   (Library, Automate, Budgets, Observability …) pads its own <main> too,
-   which put those titles 24px lower — its main keeps only a left gap from
-   its rail, so nested and plain pages share one title offset. */
-[data-shell-nav] > div > main main {
+   (Library, Automate, Budgets, Observability …) pads its own content pane
+   too, which put those titles 24px lower — its pane keeps only a left gap
+   from its rail, so nested and plain pages share one title offset. Nested
+   layouts pass `contentAs="section"` (one `<main>` landmark per page), so
+   this targets SubNavLayout's content-pane class rather than the `<main>`
+   tag — the class is unique to that pane. */
+[data-shell-nav] > div > main .flex-1.min-w-0.overflow-auto.p-6 {
   padding: 0 0 0 1.5rem;
 }
 .shell-header {

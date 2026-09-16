@@ -28,6 +28,8 @@ function IdentityLayout() {
     <SubNavLayout
       title="Identity Management"
       items={ITEMS}
+      contentAs="section"
+      contentLabel="Identity"
       renderNavItem={(item, children) => (
         <NavLink to={item.path} className={({ isActive }) => navItemClassName(isActive)}>
           {children}

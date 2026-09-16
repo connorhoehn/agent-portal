@@ -324,42 +324,42 @@ export function Layout() {
             user lands on the page content without walking the header, the
             rail and the nested rail first (WCAG 2.4.1, Bypass Blocks). */}
         <SkipLink targetId="main-content" />
-        <header>
-          <ChannelHeader
-            className="shell-header"
-            avatarUrl={brandMark}
-            name={tenantLabel}
-            description={statusLabel}
-            online={mockedSubsystems.length === 0 && !!health && !credsExpired && !dbDown}
-            actions={
-              <Inline gap="md" wrap={false}>
-                <CommandPaletteHint />
-                {/* The user's own machine in the fleet — renders nothing until
-                    a machine is paired, so most sessions never see it.
-                    orgiq only, like DevboxQuickSwitch and ComputeDock below:
-                    unguarded, it put an orgiq machine (and the initiative and
-                    branch it was working on) in the assessment header, with an
-                    "Open Computer Lab" action leading out of the tenant. The
-                    server filters these nodes by OWNER, which is not the same
-                    question as which workspace you are standing in. */}
-                {/* What the fleet is running right now. Not tenant-guarded like
-                    LocalComputeBadge: the runs are the caller's own org work
-                    either way, and losing track of a live run is the failure
-                    this exists to prevent. Renders nothing when nothing runs. */}
-                <ActiveRunsBadge />
-                {session?.tenant === 'orgiq' && <LocalComputeBadge />}
-                <GatewayStatusBadge />
-                <MasqueradeMenu />
-              </Inline>
-            }
-          />
-        </header>
+        <ChannelHeader
+          as="header"
+          className="shell-header"
+          avatarUrl={brandMark}
+          name={tenantLabel}
+          description={statusLabel}
+          online={mockedSubsystems.length === 0 && !!health && !credsExpired && !dbDown}
+          actions={
+            <Inline gap="md" wrap={false}>
+              <CommandPaletteHint />
+              {/* The user's own machine in the fleet — renders nothing until
+                  a machine is paired, so most sessions never see it.
+                  orgiq only, like DevboxQuickSwitch and ComputeDock below:
+                  unguarded, it put an orgiq machine (and the initiative and
+                  branch it was working on) in the assessment header, with an
+                  "Open Computer Lab" action leading out of the tenant. The
+                  server filters these nodes by OWNER, which is not the same
+                  question as which workspace you are standing in. */}
+              {/* What the fleet is running right now. Not tenant-guarded like
+                  LocalComputeBadge: the runs are the caller's own org work
+                  either way, and losing track of a live run is the failure
+                  this exists to prevent. Renders nothing when nothing runs. */}
+              <ActiveRunsBadge />
+              {session?.tenant === 'orgiq' && <LocalComputeBadge />}
+              <GatewayStatusBadge />
+              <MasqueradeMenu />
+            </Inline>
+          }
+        />
         <Stack gap="none" className="flex-1 min-h-0" data-shell-nav>
           <SubNavLayout
             title={tenantLabel}
             items={subNavItems}
             railWidth={200}
             storageKey="orgiq-shell"
+            railLabel={`${tenantLabel} navigation`}
             renderNavItem={(item, children, baseStyle) => (
               <NavLink
                 to={item.path}

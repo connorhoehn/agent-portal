@@ -20,6 +20,8 @@ export default function KnowledgeLayout() {
       title="Knowledge"
       storageKey="knowledge"
       items={items}
+      contentAs="section"
+      contentLabel="Knowledge"
       renderNavItem={(item, children) => (
         <NavLink
           to={item.path}

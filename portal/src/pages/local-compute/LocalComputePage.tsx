@@ -531,6 +531,7 @@ function RunLog({ jobId }: { jobId: string }) {
       lines={lines}
       follow={!done}
       maxHeight="400px"
+      tone="surface"
       emptyMessage={done ? 'This run produced no output.' : 'Waiting for output…'}
     />
   );

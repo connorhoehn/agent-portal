@@ -39,6 +39,8 @@ function IngestLayout() {
       title="Knowledge"
       storageKey="knowledge"
       items={items}
+      contentAs="section"
+      contentLabel="Ingest"
       renderNavItem={(item, children) => (
         <NavLink
           to={item.path}

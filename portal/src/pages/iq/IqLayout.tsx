@@ -27,6 +27,8 @@ function IqLayout() {
       secondaryTitle={spec.secondaryTitle}
       secondaryItems={spec.secondaryItems}
       secondaryStorageKey={spec.secondaryStorageKey}
+      contentAs="section"
+      contentLabel={spec.title}
       renderNavItem={(item, children) => {
         const href = item.path.startsWith('/') ? item.path : `/iq/${item.path}`;
         const [linkPath, linkSearch] = href.split('?');

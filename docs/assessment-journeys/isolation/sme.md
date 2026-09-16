@@ -65,3 +65,11 @@ same code paths as before. Re-checked the API floor with fresh sessions: every o
 assessment persona (u-asha, u-jonas, u-farah) still gets 403 from GET /api/graph/people, and
 the cookie-less demo identity gets 403 from /api/assessment/teams. Console errors 0 on the
 shell as Vera Green.
+
+--- re-verification 2026-09-16 05:05 (Layout.tsx changed: ui-components 2.273.0 adoption) ---
+Why: the shell's ChannelHeader renders as a real `<header>` (as="header") instead of being
+wrapped, and the shell SubNavLayout carries `railLabel` ("Org navigation" / "Assessment
+navigation"). Tenant gating is untouched. Re-checked the API floor with fresh sessions: every
+orgiq persona (u-theo, u-nora, u-mia, u-vera, u-rachel) still gets 403 from GET
+/api/assessment/teams, each assessment persona (u-asha, u-jonas, u-farah) still gets 403 from
+GET /api/graph/people, and the cookie-less demo identity gets 403. Console errors 0.

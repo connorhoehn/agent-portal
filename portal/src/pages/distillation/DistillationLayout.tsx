@@ -45,6 +45,8 @@ function DistillationLayout() {
       title="Distillation"
       items={items}
       storageKey="distillation"
+      contentAs="section"
+      contentLabel="Distillation"
       renderNavItem={(item, children) => (
         <NavLink
           to={item.path}

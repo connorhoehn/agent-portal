@@ -34,6 +34,8 @@ function AdminLayout() {
         title={automate.title}
         items={automate.items}
         storageKey={automate.storageKey}
+        contentAs="section"
+        contentLabel="Automate"
         renderNavItem={(item, children) => {
           // startsWith matching (unlike IqLayout's exact match) so
           // /admin/bots/:id and /admin/changes/:id keep their parent lit —
