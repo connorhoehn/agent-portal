@@ -20,6 +20,10 @@ export function statusTone(status: JobStatus): 'success' | 'warning' | 'danger' 
   }
 }
 
+export function truncate(text: string, max: number): string {
+  return text.length > max ? `${text.slice(0, max)}…` : text;
+}
+
 export function when(iso: string | null | undefined): string {
   if (!iso) return 'never';
   const d = new Date(iso);

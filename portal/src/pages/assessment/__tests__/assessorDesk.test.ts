@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { deskSummary, nextActionFor } from '../assessmentFormat.ts';
+import { contributorAvatars, deskSummary, nextActionFor } from '../assessmentFormat.ts';
 import type { TeamSummary } from '../types.ts';
 
 function team(over: Partial<TeamSummary> = {}): TeamSummary {
@@ -40,4 +40,21 @@ test('the desk strip sums claims and questions over the rows it shows', () => {
   assert.equal(s.claimsOpen, 1);
   assert.equal(s.questionsOpen, 5);
   assert.equal(s.targetLevel, 3);
+});
+
+// ─── contributorAvatars ───────────────────────────────────────────────────────
+
+test('contributorAvatars maps {initials,name} rows onto id+name pairs', () => {
+  const avatars = contributorAvatars([{ initials: 'JL', name: 'Jordan Lee' }, { initials: 'AS', name: 'Asha Nair' }]);
+  assert.deepEqual(avatars, [{ id: 'Jordan Lee-0', name: 'Jordan Lee' }, { id: 'Asha Nair-1', name: 'Asha Nair' }]);
+});
+
+test('contributorAvatars is empty for undefined or empty contributors', () => {
+  assert.deepEqual(contributorAvatars(undefined), []);
+  assert.deepEqual(contributorAvatars([]), []);
+});
+
+test('contributorAvatars keeps two same-named contributors distinct by index', () => {
+  const avatars = contributorAvatars([{ initials: 'JL', name: 'Jordan Lee' }, { initials: 'JL', name: 'Jordan Lee' }]);
+  assert.equal(new Set(avatars.map((a) => a.id)).size, 2);
 });

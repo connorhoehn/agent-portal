@@ -286,3 +286,8 @@ Console errors: 0.
 Why: the last three open audit findings for this tenant; re-observed as u-asha (/assessment/runs, /assessment/submissions, the wizard) and as u-operator (a knowledge doc's History).
   Three card lists became tables: the wizard's per-envelope link list, the Run-a-command panel and both revision-history drawers are DataTables (real <table>/<th> rows, one action control per row, Restore → confirm/cancel kept in-cell); nothing new enters the tab order beyond those row controls.
 Console errors: 0.
+
+--- freshness re-observation, 2026-09-16 06:40 (portal/src/pages/assessment changed: desk density) ---
+Why: the innovation audit's no-new-field upgrades; re-observed as u-asha on /assessment/teams.
+  The desk's Assessed cell is a `role="meter"` DotMeter with aria-valuenow and its "n/17" note as text; the Contributors avatars carry each person's name as their accessible label; nothing enters the tab order that did not before.
+Console errors: 0.

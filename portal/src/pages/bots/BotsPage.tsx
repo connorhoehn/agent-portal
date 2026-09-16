@@ -14,6 +14,7 @@ import {
   Button,
   Chip,
   DataTable,
+  DotMeter,
   EmptyState,
   Inline,
   Input,
@@ -21,6 +22,8 @@ import {
   PageSection,
   ProgressBar,
   Select,
+  Stack,
+  StatStrip,
   type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
@@ -28,7 +31,7 @@ import { relativeTime } from '../../lib/relativeTime';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { useCapabilities } from '../../lib/capabilities';
 import { BotCreateWizard } from './BotCreateWizard';
-import { botListLastRanText, botsSummaryLine, filterBots, type BotStatusFilter } from './botsFormat';
+import { botListLastRanText, botsRollup, botsSummaryLine, filterBots, type BotStatusFilter } from './botsFormat';
 
 // ─── Types (the /api/bots contract) ──────────────────────────────────────────
 
@@ -131,6 +134,7 @@ export default function BotsPage() {
 
   const bots = data?.bots ?? [];
   const filtered = useMemo(() => filterBots(bots, { search, status }), [bots, search, status]);
+  const rollup = useMemo(() => botsRollup(bots), [bots]);
   const hasFilters = search.trim() !== '' || status !== 'all';
 
   const columns: DataTableColumn<Bot>[] = [
@@ -212,13 +216,24 @@ export default function BotsPage() {
       key: 'today',
       header: 'Today',
       render: (bot) => (
-        <MetaLine
-          size="xs"
-          items={[
-            `${bot.todayRunCount}/${bot.maxRunsPerDay} ${bot.todayRunCount === 1 ? 'run' : 'runs'}`,
-            `$${bot.todaySpendUsd.toFixed(2)}${bot.budgetPerDayUsd != null ? ` of $${bot.budgetPerDayUsd.toFixed(2)}` : ' spent'}`,
-          ]}
-        />
+        <Stack gap="none">
+          {bot.maxRunsPerDay != null && bot.maxRunsPerDay > 0 ? (
+            <DotMeter
+              value={bot.todayRunCount / bot.maxRunsPerDay}
+              segments={bot.maxRunsPerDay}
+              showPercent={false}
+              note="today"
+              tone="surface"
+            />
+          ) : (
+            <MetaLine size="xs" items={[`${bot.todayRunCount} ${bot.todayRunCount === 1 ? 'run' : 'runs'} today`]} />
+          )}
+          <MetaLine
+            size="xs"
+            tone="tertiary"
+            items={[`$${bot.todaySpendUsd.toFixed(2)}${bot.budgetPerDayUsd != null ? ` of $${bot.budgetPerDayUsd.toFixed(2)}` : ' spent'}`]}
+          />
+        </Stack>
       ),
     },
     {
@@ -267,6 +282,26 @@ export default function BotsPage() {
         />
       ) : (
         <>
+          <StatStrip
+            aria-label="Bot fleet summary"
+            className="mb-3"
+            items={[
+              { label: 'Enabled', value: rollup.enabled },
+              { label: 'Paused', value: rollup.paused },
+              {
+                label: 'Spend today',
+                value: `$${rollup.spendTodayUsd.toFixed(2)}`,
+                hint: rollup.budgetTodayUsd != null ? `of $${rollup.budgetTodayUsd.toFixed(2)} daily budget` : undefined,
+              },
+              {
+                label: 'Near budget',
+                value: rollup.nearBudgetCount,
+                tone: rollup.nearBudgetCount > 0 ? 'danger' : 'default',
+                hint: '≥80% of daily budget',
+              },
+            ]}
+          />
+
           <Inline wrap align="center" gap="sm" className="mb-3">
             <Input
               type="text"

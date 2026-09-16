@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { statusLabel, statusTone, when } from '../localComputeFormat.ts';
+import { statusLabel, statusTone, truncate, when } from '../localComputeFormat.ts';
 
 test('statusLabel normalizes job statuses', () => {
   assert.equal(statusLabel('queued'), 'queued');
@@ -27,4 +27,10 @@ test('when formats timestamps', () => {
   assert.equal(when(new Date(now - 5 * 60_000).toISOString()), '5m ago');
   assert.equal(when(new Date(now - 90 * 60_000).toISOString()), '2h ago');
   assert.equal(when(new Date(now - 2 * 24 * 60 * 60_000).toISOString()), '2d ago');
+});
+
+test('truncate leaves short text alone and ellipsizes long text', () => {
+  assert.equal(truncate('short', 10), 'short');
+  assert.equal(truncate('exactly ten', 11), 'exactly ten');
+  assert.equal(truncate('this is a long summary line', 10), 'this is a …');
 });

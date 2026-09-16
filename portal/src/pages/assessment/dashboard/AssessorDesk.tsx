@@ -9,12 +9,14 @@ import {
   Button,
   Chip,
   DataTable,
+  DotMeter,
   ErrorState,
   Inline,
   Input,
   LoadingState,
   MetaLine,
   PageHeader,
+  PresenceAvatars,
   SegmentedControl,
   Select,
   Stack,
@@ -23,6 +25,7 @@ import {
 } from '@connorhoehnslalom/ui-components/shared';
 import { Can } from '../../../lib/capabilities';
 import {
+  contributorAvatars,
   deskSummary, filterAndSortTeams, formatTeamStatus, nextActionFor, statusOptions, teamsForCohort,
   type NextActionKind,
 } from '../assessmentFormat';
@@ -194,9 +197,31 @@ export function AssessorDesk({
             header: 'Assessed',
             sortable: true,
             align: 'right',
-            render: (t) => <MetaLine size="xs" items={[`${t.dimensions_assessed}/${t.dimensions_total}`]} />,
+            render: (t) => (
+              <DotMeter
+                value={t.dimensions_total > 0 ? t.dimensions_assessed / t.dimensions_total : 0}
+                segments={10}
+                showPercent={false}
+                note={`${t.dimensions_assessed}/${t.dimensions_total}`}
+                tone="surface"
+              />
+            ),
           },
           {
+            // Kept as a Chip rather than the detail page's `WorkflowStepper`
+            // (TeamScorecard.tsx:207): the six-step list with done/active
+            // flags (`workflow_steps: WorkflowStep[]`) is on the per-team
+            // DETAIL wire only (`GET /api/assessment/teams/:teamId`, via
+            // `useTeamDetail`), built server-side from
+            // `WORKFLOW_STEP_LABELS` in `middleware/src/providers/assessment.ts`
+            // — a constant that lives on the server, not in this portal's
+            // `assessmentFormat.ts`/`types.ts`. The desk's `TeamSummary` rows
+            // carry only the current `workflow_step`/`workflow_step_label`,
+            // not the other five labels, so a stepper here would mean either
+            // an extra per-row detail fetch (defeats the point of a desk
+            // table) or duplicating the label vocabulary client-side with no
+            // shared source of truth to keep it in step. Neither is worth it
+            // for a column that already reads unambiguously as a Chip.
             key: 'workflow_step',
             header: 'Step',
             sortable: true,
@@ -205,6 +230,18 @@ export function AssessorDesk({
                 {t.workflow_step}/6 · {t.workflow_step_label}
               </Chip>
             ),
+          },
+          {
+            key: 'contributors',
+            header: 'Contributors',
+            render: (t) => {
+              const avatars = contributorAvatars(t.contributors);
+              return avatars.length > 0 ? (
+                <PresenceAvatars users={avatars} maxVisible={4} size={22} />
+              ) : (
+                <MetaLine size="xs" tone="tertiary" items={['—']} />
+              );
+            },
           },
           {
             key: 'followups_open',

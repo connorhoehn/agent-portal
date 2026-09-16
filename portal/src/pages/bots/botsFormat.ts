@@ -215,6 +215,44 @@ export function botListLastRanText(
   return lastRanText(bot.lastRunAt ? [{ startedAt: bot.lastRunAt }] : [], when, now);
 }
 
+// ─── List rollup (StatStrip) ─────────────────────────────────────────────────
+
+export interface BotsRollup {
+  enabled: number;
+  paused: number;
+  spendTodayUsd: number;
+  /** Sum of `budgetPerDayUsd` across bots that carry one. `null` when no bot
+   *  in the fetched set has a daily budget set — the "of $N daily budget"
+   *  hint has nothing true to say in that case, rather than claiming a $0
+   *  budget across the fleet. */
+  budgetTodayUsd: number | null;
+  /** Bots at or above 80% of their own `budgetPerDayUsd` — the same
+   *  threshold the per-row `ProgressBar` warns at (see the `budget` column). */
+  nearBudgetCount: number;
+}
+
+/** Client-side aggregate over the fetched `bots[]` for the page's StatStrip.
+ *  Pure and total: an empty roster returns all-zero counts and a null budget,
+ *  never throws on an empty array. */
+export function botsRollup(bots: Bot[]): BotsRollup {
+  let enabled = 0;
+  let paused = 0;
+  let spendTodayUsd = 0;
+  let budgetTodayUsd = 0;
+  let hasBudget = false;
+  let nearBudgetCount = 0;
+  for (const bot of bots) {
+    if (botIsPaused(bot)) paused += 1; else enabled += 1;
+    spendTodayUsd += bot.todaySpendUsd;
+    if (bot.budgetPerDayUsd != null) {
+      hasBudget = true;
+      budgetTodayUsd += bot.budgetPerDayUsd;
+      if (bot.todaySpendUsd >= bot.budgetPerDayUsd * 0.8) nearBudgetCount += 1;
+    }
+  }
+  return { enabled, paused, spendTodayUsd, budgetTodayUsd: hasBudget ? budgetTodayUsd : null, nearBudgetCount };
+}
+
 export function estimateSummaryText(params: {
   loading: boolean;
   error: string | null;

@@ -75,7 +75,7 @@ cd agents/<name> && agentcore dev    # Hot-reload local server at :8080
 The agent unit tests (`agents/_shared/test_*.py`) import `botocore`, which the
 host's `python3`/`python3.12` does not have — run them in the synth venv, which
 does: `cd agents/_shared && ../../.venv-synth/bin/python -m unittest test_prompt_source test_callbacks`
-(37 tests). Never `pip install` to fix this.
+(61 tests). Never `pip install` to fix this.
 
 Requires `~/.aws` credentials. Run `aws-azure-login --mode gui` first — the `default` profile assumes `aws-innovationlabs-washingtondc1-admin` in the **innovation lab account `647757222309`** (us-east-1). ⚠️ Account `264161986065` is a personal account and must NOT be used for this project.
 
@@ -87,7 +87,7 @@ Strands agents pin identically.
 
 | Package | Version | Purpose |
 |---------|---------|---------|
-| `strands-agents` | >=1.39 | Agent framework (@tool, Agent, stream_async) |
+| `strands-agents` | >=1.55 | Agent framework (@tool, Agent, stream_async) |
 | `bedrock-agentcore` | >=1.9 | Runtime, Memory, Identity, AG-UI, A2A |
 | `ag-ui-protocol` | >=0.1.18 | AG-UI event types + SSE encoder |
 | `ag-ui-strands` | >=0.1.8 | Strands → AG-UI adapter (StrandsAgent) |
@@ -214,7 +214,7 @@ python3.11 -m venv .venv-synth && .venv-synth/bin/pip install -r schema/synth/re
 ## Project dependencies
 
 - **ui-components** (`~/projects/ui-components`): `@connorhoehnslalom/ui-components`,
-  installed at **2.273.0** (sha `50cd233c`, 2026-09-16). The portal pins it by **git sha** in `package.json`
+  installed at **2.273.1** (sha `ad1af461`, 2026-09-16). The portal pins it by **git sha** in `package.json`
   (`github:connorhoehnslalom/ui-components#<sha>`) rather than resolving a range
   from GitHub Packages — bump by moving the sha. It resolves over SSH, so no
   `GITHUB_TOKEN` and no registry `.npmrc` are needed; `portal/.npmrc` holds only

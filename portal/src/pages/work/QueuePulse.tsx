@@ -8,7 +8,7 @@
 
 import { Link } from 'react-router';
 import {
-  Card, Chip, Inline, SectionLabel, Stack, StatStrip, StatusDot, Toolbar,
+  Card, Chip, DotMeter, Inline, MetaLine, SectionLabel, Stack, StatStrip, StatusDot, Toolbar,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { relativeTime } from '../../lib/relativeTime';
@@ -155,8 +155,17 @@ export function QueuePulse({ summary, jobs, degraded }: {
                 )}
                 <T className="text-[11px] text-text-tertiary whitespace-nowrap">{cadence(bot)}</T>
                 <T className="text-[11px] text-text-tertiary whitespace-nowrap hidden md:inline">
-                  {lastRan(bot.lastRunAt)} · {bot.todayRunCount}/{bot.maxRunsPerDay} today
+                  {lastRan(bot.lastRunAt)}
                 </T>
+                <DotMeter
+                  label="runs"
+                  value={bot.todayRunCount / bot.maxRunsPerDay}
+                  note={`${bot.todayRunCount}/${bot.maxRunsPerDay} today`}
+                  tone="surface"
+                  className="hidden md:flex"
+                  data-testid={`bot-quota-${bot.id}`}
+                />
+                <MetaLine size="xs" items={[`$${bot.todaySpendUsd.toFixed(2)} today`]} className="hidden md:flex" />
               </Inline>
             );
           })}

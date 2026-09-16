@@ -33,7 +33,7 @@ import { useCapabilities } from '../../lib/capabilities';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { writeJson } from './writeJson';
 import { PairMachineDialog, WORKER_COMMAND } from './PairMachineDialog';
-import { statusLabel, statusTone, when, type JobStatus } from './localComputeFormat';
+import { statusLabel, statusTone, truncate, when, type JobStatus } from './localComputeFormat';
 
 // ─── Wire shapes ─────────────────────────────────────────────────────────────
 
@@ -266,9 +266,14 @@ export default function LocalComputePage() {
       header: 'Run',
       sortable: true,
       render: (r) => (
-        <Button variant="ghost" size="sm" onClick={() => setSelectedRunId(r.id)}>
-          {r.title}
-        </Button>
+        <Stack gap="none">
+          <Button variant="ghost" size="sm" onClick={() => setSelectedRunId(r.id)}>
+            {r.title}
+          </Button>
+          {r.result?.summary && (
+            <MetaLine size="xs" tone="tertiary" items={[truncate(r.result.summary, 80)]} />
+          )}
+        </Stack>
       ),
     },
     {

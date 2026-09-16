@@ -7,6 +7,7 @@ import {
   botIsPaused,
   botListLastRanText,
   botRunSummary,
+  botsRollup,
   botsSummaryLine,
   budgetsSummaryText,
   estimateSummaryText,
@@ -274,4 +275,32 @@ test('todayRunCount uses the UTC day the budget brake is judged against', () => 
     { startedAt: '2026-09-05T09:36:49.383Z' }, // neither
   ];
   assert.equal(botRunSummary(runs, now).todayRunCount, 2);
+});
+
+// ─── botsRollup ───────────────────────────────────────────────────────────────
+
+test('botsRollup counts enabled vs paused and sums spend/budget across bots with a budget', () => {
+  const bots = [
+    { ...baseBot, id: 'b1', enabled: true, todaySpendUsd: 1.5, budgetPerDayUsd: 5 },
+    { ...baseBot, id: 'b2', enabled: false, todaySpendUsd: 0, budgetPerDayUsd: null },
+    { ...baseBot, id: 'b3', enabled: true, pausedReason: 'budget exceeded', todaySpendUsd: 4.5, budgetPerDayUsd: 5 },
+  ];
+  const r = botsRollup(bots);
+  assert.equal(r.enabled, 1);
+  assert.equal(r.paused, 2);
+  assert.equal(r.spendTodayUsd, 6);
+  assert.equal(r.budgetTodayUsd, 10); // only the two bots that carry a budget
+  assert.equal(r.nearBudgetCount, 1); // b3 is at 90% of its own budget
+});
+
+test('botsRollup reports a null budget total when no bot has one set', () => {
+  const bots = [{ ...baseBot, id: 'b1', budgetPerDayUsd: null }, { ...baseBot, id: 'b2', budgetPerDayUsd: null }];
+  const r = botsRollup(bots);
+  assert.equal(r.budgetTodayUsd, null);
+  assert.equal(r.nearBudgetCount, 0);
+});
+
+test('botsRollup is all-zero on an empty roster', () => {
+  const r = botsRollup([]);
+  assert.deepEqual(r, { enabled: 0, paused: 0, spendTodayUsd: 0, budgetTodayUsd: null, nearBudgetCount: 0 });
 });

@@ -1,6 +1,8 @@
 import type React from 'react';
 import { Link } from 'react-router';
-import { Card, Inline, PageSection, SectionLabel, Stack, StatCard, StatStrip } from '@connorhoehnslalom/ui-components/shared';
+import {
+  Card, Inline, KPIGrid, LineChart, NotificationCenter, PageSection, SectionLabel, Stack, StatCard, StatStrip,
+} from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { T } from './Text';
@@ -268,6 +270,24 @@ function SummaryPage() {
         />
       </Inline>
 
+      {/* ── Fleet ──────────────────────────────────────────────────────── */}
+      {!blind && runtimes.length > 0 && (
+        <Card padding="md">
+          <SectionLabel as="div">Fleet</SectionLabel>
+          <KPIGrid columns={4} className="mt-3">
+            {runtimes.map((a) => (
+              <StatCard
+                key={a.id}
+                label={a.name}
+                value={a.invocationsLast24h}
+                danger={a.errorsLast24h > 0}
+                hint={`p50 ${a.latencyP50Ms}ms${a.errorsLast24h > 0 ? ` · ${a.errorsLast24h} errors` : ''}`}
+              />
+            ))}
+          </KPIGrid>
+        </Card>
+      )}
+
       {/* ── What to do next ───────────────────────────────────────────── */}
       <Card padding="md">
         <SectionLabel as="div">What to do next</SectionLabel>
@@ -294,6 +314,29 @@ function SummaryPage() {
           ))}
         </Stack>
       </Card>
+
+      {/* ── Alarms, in full ────────────────────────────────────────────── */}
+      {!blind && (
+        <Card padding="md">
+          <SectionLabel as="div">Alarms</SectionLabel>
+          <Stack gap="none" className="mt-3">
+            <NotificationCenter
+              items={alarms.map((a) => ({
+                id: a.name,
+                title: a.name,
+                body: a.reason,
+                category: a.affectedAgent ?? undefined,
+                // No server-side read/unread state exists for an alarm — the
+                // best honest signal is severity: a resolved ('ok') alarm
+                // reads as read, a firing one as unread, so the badge count
+                // matches the firing count above rather than every alarm ever
+                // evaluated.
+                read: a.severity === 'ok',
+              }))}
+            />
+          </Stack>
+        </Card>
+      )}
 
       {/* ── Raw numbers, below the fold of the decision ───────────────── */}
       <StatStrip
@@ -337,52 +380,29 @@ function SummaryPage() {
             </T>
           </Inline>
         </Inline>
-        <GuardrailSparkline series={guardrail?.series ?? []} />
+        {(guardrail?.series.length ?? 0) === 0 ? (
+          <T as="div" className="p-4 text-center text-xs text-[var(--color-text-tertiary)]">
+            No guardrail activity in the last 6h.
+          </T>
+        ) : (
+          <LineChart
+            height={140}
+            series={[
+              {
+                label: 'Invocations',
+                data: (guardrail?.series ?? []).map((p) => ({ x: p.timestamp, y: p.invocations })),
+              },
+              {
+                label: 'Interventions',
+                data: (guardrail?.series ?? []).map((p) => ({ x: p.timestamp, y: p.interventions })),
+                color: 'var(--color-danger)',
+              },
+            ]}
+            xFormat={(v) => new Date(v).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          />
+        )}
       </Card>
     </PageSection>
-  );
-}
-
-function GuardrailSparkline({
-  series,
-}: {
-  series: Array<{ timestamp: string; invocations: number; interventions: number }>;
-}) {
-  const width = 800;
-  const height = 60;
-  const padding = 2;
-  const maxVal = Math.max(1, ...series.map((p) => Math.max(p.invocations, p.interventions)));
-  const points = (key: 'invocations' | 'interventions') =>
-    series
-      .map((p, i) => {
-        const x = padding + (i / Math.max(series.length - 1, 1)) * (width - padding * 2);
-        const y = height - padding - (p[key] / maxVal) * (height - padding * 2);
-        return `${x.toFixed(1)},${y.toFixed(1)}`;
-      })
-      .join(' ');
-
-  if (series.length === 0) {
-    return (
-      <T as="div" className="p-4 text-center text-xs text-[var(--color-text-tertiary)]">
-        No guardrail activity in the last 6h.
-      </T>
-    );
-  }
-
-  return (
-    <svg
-      viewBox={`0 0 ${width} ${height}`}
-      preserveAspectRatio="none"
-      className="block h-[60px] w-full"
-    >
-      <polyline
-        fill="none"
-        stroke="var(--color-primary)"
-        strokeWidth="1.5"
-        points={points('invocations')}
-      />
-      <polyline fill="none" stroke="var(--color-danger)" strokeWidth="1.5" points={points('interventions')} />
-    </svg>
   );
 }
 
