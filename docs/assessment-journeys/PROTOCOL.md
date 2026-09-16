@@ -21,7 +21,7 @@ User. Users: assessor = `u-asha`, lead-assessor = `u-jonas`, program-lead =
 | team-scorecard | `/assessment/teams/TEAM-001` | all five tabs (`?tab=`), one dimension selected in the master-detail |
 | submissions | `/assessment/submissions` | list, filters, a row opened |
 | submissions-wizard | `/assessment/submissions` → New submission | all four steps (drop → preview → fetch links → run prompt) |
-| feedback | `/assessment/feedback` | queue grouped by team; Record answer / Dismiss for a role that may |
+| feedback | `/assessment/feedback` | the question queue: status + team + search filters, the DataTable (dimension by name), a row opened in its Drawer (two tracks, evidence on file, the answer form); Record answer / Dismiss for a role that may |
 | reports | `/assessment/reports` | rollup, where-to-start, Publish for a role that may |
 | runs | `/assessment/runs` | ledger, launcher, a launched run appearing and completing without refresh |
 | configuration | `/assessment/configuration` | program-lead only; other roles: what they see instead |

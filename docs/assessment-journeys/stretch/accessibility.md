@@ -224,3 +224,18 @@ u-asha, Chrome innerWidth 1692:
   - one nit, not a failure: DataTable's `<th>` cells carry no `scope="col"`; queued in
     docs/ui-components-queue.md rather than patched here.
 Console errors: 0.
+
+--- freshness re-observation, 2026-09-15 20:10 (the question queue, FeedbackPage.tsx + useDimensionIndex.ts) ---
+Why: slice 2 of docs/assessment-ux-goal.md rebuilt the Feedback page. Re-probed on
+/assessment/feedback as u-asha, Chrome innerWidth 1692:
+  - the two filter selects carry accessible names ("Status", "Team") and the search box a
+    placeholder; 45 tabbable controls, 45 accept focus.
+  - every table row has exactly one focusable control, the team-name `<button>` (25 of 25);
+    Enter on it opens the Drawer, a `role="dialog"` named by its visible title (the
+    dimension's name), focus moves inside it, and Escape closes it and returns focus to
+    the same row button.
+  - the status of a question is a StatusPill (text, not colour alone); the two tracks in the
+    drawer are Chips whose text says "claimed L5" / "verified L3".
+  - the queue summary is a `role="group"` named "Queue summary".
+Console errors: 0.
+

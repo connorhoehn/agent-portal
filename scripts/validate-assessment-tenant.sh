@@ -201,6 +201,19 @@ fi
 #     the API — and the reverse for assessment roles on orgiq pages.
 #     "An SME shouldn't see the assessment pages" is a test, not an opinion.
 # ─────────────────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
+# 2b. Assessor cockpit UX (docs/assessment-ux-goal.md). Each slice's definition
+#     of done, as a grep: the shape the page must have, not how it looks.
+# ─────────────────────────────────────────────────────────────────────────────
+section "assessor cockpit UX (docs/assessment-ux-goal.md)"
+if [ -f "$PAGES/dashboard/AssessorDesk.tsx" ] && grep -q "header: 'Next action'" "$PAGES/dashboard/AssessorDesk.tsx" \
+   && [ ! -f "$PAGES/dashboard/CohortLanding.tsx" ] && [ ! -f "$PAGES/dashboard/TeamList.tsx" ]; then
+  ok "slice 1 — the dashboard is the assessor's desk (one DataTable with a Next action column; the cohort landing and per-cohort list are gone)"
+else fail "slice 1 — dashboard/AssessorDesk.tsx must carry a 'Next action' column and CohortLanding.tsx / TeamList.tsx must be gone"; fi
+if grep -q "DataTable" "$PAGES/FeedbackPage.tsx" && grep -q "<Drawer" "$PAGES/FeedbackPage.tsx" && ! grep -q "<Card" "$PAGES/FeedbackPage.tsx"; then
+  ok "slice 2 — feedback is a DataTable + Drawer, no per-question Card"
+else fail "slice 2 — FeedbackPage.tsx must render a DataTable and a Drawer and no <Card"; fi
+
 section "role isolation"
 ISO="$JDIR/isolation"
 OUTSIDE_ROLES=(member sme program-owner org-leader hr-admin)
