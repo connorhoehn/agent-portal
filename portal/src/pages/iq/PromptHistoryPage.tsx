@@ -7,7 +7,8 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
-  Card, Checkbox, Chip, CodeBlock, EmptyState, Select, SelectableCard, Stack, StatStrip, Inline, Tabs,
+  Card, Checkbox, Chip, CodeBlock, EmptyState, InlinePlaceholder, LoadingState, SectionLabel,
+  Select, SelectableCard, Stack, StatStrip, Inline, Tabs,
 } from '@connorhoehnslalom/ui-components/shared';
 import { usePromptList, usePromptVersions } from '../../components/canary/usePromptLibrary.js';
 import { diffStats, lineDiff } from './diffFormat';
@@ -162,7 +163,9 @@ function DiffView({ textA, textB, labelA, labelB }: { textA: string; textB: stri
         <Chip tone="danger" size="xs" mono>−{stats.removed}</Chip>
       </Inline>
       {identical ? (
-        <T className="p-6 text-center text-[13px] text-text-tertiary">✓ Templates are identical.</T>
+        <InlinePlaceholder size="sm" align="center" className="p-6">
+          ✓ Templates are identical.
+        </InlinePlaceholder>
       ) : (
         <Stack gap="none" className="min-h-0 flex-1 overflow-auto">
           <DiffFrame lines={lines} />
@@ -381,10 +384,12 @@ export default function PromptHistoryPage(): React.ReactElement {
               )}
             </Inline>
 
-            {versionsLoading && <T className="block px-3.5 py-3 text-[12px] text-text-tertiary">Loading…</T>}
+            {versionsLoading && <LoadingState label="Loading versions…" />}
             {versionsError && <T className="block px-3.5 py-3 text-[12px] text-danger">{versionsError}</T>}
             {!versionsLoading && !versionsError && versions.length === 0 && (
-              <T className="block px-3.5 py-3 text-[12px] text-text-tertiary">No version history yet.</T>
+              <InlinePlaceholder align="center" className="px-3.5 py-3">
+                No version history yet.
+              </InlinePlaceholder>
             )}
 
             {versions.map(v => {
@@ -420,10 +425,12 @@ export default function PromptHistoryPage(): React.ReactElement {
 
         {tab === 'experiments' && (
           <>
-            {expLoading && <T className="block px-3.5 py-3 text-[12px] text-text-tertiary">Loading…</T>}
+            {expLoading && <LoadingState label="Loading experiments…" />}
             {expError && <T className="block px-3.5 py-3 text-[12px] text-danger">{expError}</T>}
             {!expLoading && !expError && experiments.length === 0 && (
-              <T className="block px-3.5 py-3 text-[12px] text-text-tertiary">No experiments recorded yet.</T>
+              <InlinePlaceholder align="center" className="px-3.5 py-3">
+                No experiments recorded yet.
+              </InlinePlaceholder>
             )}
             {experiments.map(exp => (
               <Stack key={exp.experimentId} gap="none" className="border-b border-border px-3.5 py-2.5">
@@ -507,18 +514,18 @@ export default function PromptHistoryPage(): React.ReactElement {
 
             {/* Template text */}
             <Stack gap="none" className="shrink-0 border-b border-border px-6 py-4">
-              <T className="mb-2.5 block text-[10px] font-bold uppercase tracking-wide text-text-tertiary">Template</T>
+              <SectionLabel as="div" className="mb-2.5">Template</SectionLabel>
               {text0 ? (
                 <CodeBlock code={text0} language="text" />
               ) : (
-                <T className="block text-[12px] italic text-text-tertiary">Template not available.</T>
+                <InlinePlaceholder>Template not available.</InlinePlaceholder>
               )}
             </Stack>
 
             {/* Experiments */}
             {versionDetail.experiments.length > 0 && (
               <Stack gap="sm" className="px-6 py-4">
-                <T className="text-[10px] font-bold uppercase tracking-wide text-text-tertiary">Experiments using this version</T>
+                <SectionLabel>Experiments using this version</SectionLabel>
                 {versionDetail.experiments.map(exp => (
                   <ExperimentCard
                     key={exp.experimentId}
@@ -531,10 +538,10 @@ export default function PromptHistoryPage(): React.ReactElement {
 
             {versionDetail.experiments.length === 0 && (
               <Stack gap="sm" className="px-6 py-4">
-                <T className="text-[10px] font-bold uppercase tracking-wide text-text-tertiary">Experiments</T>
-                <T className="text-[12px] text-text-tertiary">
+                <SectionLabel>Experiments</SectionLabel>
+                <InlinePlaceholder>
                   This version hasn't been used in a canary experiment yet.
-                </T>
+                </InlinePlaceholder>
               </Stack>
             )}
           </Stack>

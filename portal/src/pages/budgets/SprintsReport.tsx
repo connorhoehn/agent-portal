@@ -31,6 +31,7 @@ import { Link, useNavigate } from 'react-router';
 import {
   Button,
   Card,
+  CardHeader,
   Chip,
   EmptyState,
   Inline,
@@ -98,26 +99,23 @@ export function SprintsReport({ grants, error, hasData, canManage }: SprintsRepo
   const shownRest = showAll ? rest : rest.slice(0, CLOSED_PREVIEW);
   const ordered = [...active, ...shownRest];
   const hidden = rest.length - shownRest.length;
+  const countText = ordered.length === grants.length
+    ? `${grants.length} ${grants.length === 1 ? 'envelope' : 'envelopes'} · ${active.length} active`
+    : `showing ${ordered.length} of ${grants.length} · all ${active.length} active`;
 
   return (
     <Card padding="none" className="overflow-x-auto">
-      <Stack gap="none" className="px-3.5 py-3 border-b border-border">
-        <Inline align="baseline" justify="between" gap="sm" wrap>
-          <T className="text-[13px] font-semibold text-text-primary">Sprints</T>
+      <CardHeader
+        inset
+        title="Sprints"
+        subtitle="What each SME was given to see a sprint through. Spend shown is the initiative's within the sprint window, not the individual's."
+        action={
           <Inline align="center" gap="md" wrap={false}>
-            <T className="text-[11px] text-text-tertiary tabular-nums">
-              {ordered.length === grants.length
-                ? `${grants.length} ${grants.length === 1 ? 'envelope' : 'envelopes'} · ${active.length} active`
-                : `showing ${ordered.length} of ${grants.length} · all ${active.length} active`}
-            </T>
+            <T className="text-[11px] text-text-tertiary tabular-nums">{countText}</T>
             {canManage && <GrantEnvelopeLink />}
           </Inline>
-        </Inline>
-        <T className="text-[11.5px] text-text-secondary mt-0.5" wrap>
-          What each SME was given to see a sprint through. Spend shown is the initiative's
-          within the sprint window, not the individual's.
-        </T>
-      </Stack>
+        }
+      />
       <Table>
         <TableHead>
           <TableRow>

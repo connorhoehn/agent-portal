@@ -8,11 +8,13 @@ import { Link } from 'react-router';
 import {
   Button,
   Card,
+  CardHeader,
   CatalogGrid,
   Chip,
   ConfirmDialog,
   EmptyState,
   IconButton,
+  InlinePlaceholder,
   Inline,
   Input,
   ProgressBar,
@@ -64,12 +66,10 @@ function BreakdownCard({ title, rows, emptyLabel }: {
   const max = Math.max(...rows.map((r) => r.spentUsd), 0.000001);
   return (
     <Card padding="none" className="overflow-hidden">
-      <Stack gap="none" className="px-3.5 py-2.5 border-b border-border">
-        <T className="text-xs font-semibold text-text-secondary tracking-wide select-none">{title}</T>
-      </Stack>
+      <CardHeader inset title={title} />
       <Stack gap="sm" className="px-3.5 py-2.5">
         {rows.length === 0 ? (
-          <T className="text-[11px] text-text-tertiary">{emptyLabel ?? 'no spend this period'}</T>
+          <InlinePlaceholder>{emptyLabel ?? 'no spend this period'}</InlinePlaceholder>
         ) : (
           rows.map((r) => (
             <Inline key={r.label} align="center" gap="sm" wrap={false} className="min-w-0">
