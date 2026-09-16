@@ -22,7 +22,7 @@ User. Users: assessor = `u-asha`, lead-assessor = `u-jonas`, program-lead =
 | submissions | `/assessment/submissions` | list, filters, a row opened |
 | submissions-wizard | `/assessment/submissions` → New submission | all four steps (drop → preview → fetch links → run prompt) |
 | feedback | `/assessment/feedback` | the question queue: status + team + search filters, the DataTable (dimension by name), a row opened in its Drawer (two tracks, evidence on file, the answer form); Record answer / Dismiss for a role that may |
-| reports | `/assessment/reports` | rollup, where-to-start, Publish for a role that may |
+| reports | `/assessment/reports` | the portfolio: the rollup strip, the maturity heatmap (teams × 17 dimensions, a column head hovered, a team opened), where-to-start as a table, by cohort, Publish for a role that may |
 | runs | `/assessment/runs` | ledger, launcher, a launched run appearing and completing without refresh |
 | configuration | `/assessment/configuration` | program-lead only; other roles: what they see instead |
 | workspace | `/assessment/workspace` | tree rail, document pane, activity aside, connection pill |

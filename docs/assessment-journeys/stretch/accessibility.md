@@ -239,3 +239,18 @@ Why: slice 2 of docs/assessment-ux-goal.md rebuilt the Feedback page. Re-probed 
   - the queue summary is a `role="group"` named "Queue summary".
 Console errors: 0.
 
+--- freshness re-observation, 2026-09-15 20:16 (the portfolio heatmap, ReportsPage.tsx) ---
+Why: slice 3 of docs/assessment-ux-goal.md rebuilt Reports. Re-probed on /assessment/reports
+as u-asha, Chrome innerWidth 1692:
+  - the heatmap is a real `<table>` (data-testid="maturity-heatmap") with a `<thead>` whose
+    every `<th>` carries `scope="col"`; the seventeen dimension heads read as their numbers
+    and carry the full dimension title in `title` and `abbr`, so a screen reader can expand
+    "07" to "Testing & QE – Performance & Reliability Testing".
+  - each level cell is a Chip whose text says the level ("L3", "N/A", "—"); the claim mark is
+    a second Chip whose text is "↑5" with `title="claimed L5"` — the colour is never the only
+    signal.
+  - every row has one focusable control, the team-name `<button>` (7 of 7); the where-to-start
+    table has one per row too (7); 31 tabbable controls, 31 accept focus. The Publish button
+    is absent from the DOM for this role and present (first in the column) for a role that may.
+Console errors: 0.
+

@@ -213,6 +213,9 @@ else fail "slice 1 — dashboard/AssessorDesk.tsx must carry a 'Next action' col
 if grep -q "DataTable" "$PAGES/FeedbackPage.tsx" && grep -q "<Drawer" "$PAGES/FeedbackPage.tsx" && ! grep -q "<Card" "$PAGES/FeedbackPage.tsx"; then
   ok "slice 2 — feedback is a DataTable + Drawer, no per-question Card"
 else fail "slice 2 — FeedbackPage.tsx must render a DataTable and a Drawer and no <Card"; fi
+if grep -q 'data-testid="maturity-heatmap"' "$PAGES/ReportsPage.tsx" && grep -q 'data-verified=' "$PAGES/ReportsPage.tsx" && grep -q 'data-claimed=' "$PAGES/ReportsPage.tsx"; then
+  ok "slice 3 — reports carries the maturity heatmap (teams × dimensions, cells with data-verified / data-claimed)"
+else fail "slice 3 — ReportsPage.tsx must render data-testid=\"maturity-heatmap\" with data-verified / data-claimed cells"; fi
 
 section "role isolation"
 ISO="$JDIR/isolation"

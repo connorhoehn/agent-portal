@@ -1,33 +1,41 @@
-// Reports — the program rollup, "where to start" and a per-team table. Structure mirrors
-// the source app's Reports.tsx / WhereToStartCard.tsx, trimmed to the numbers the
-// `/rollup` and `/recommendations` mock endpoints actually carry
-// (docs/assessment-tenant.md). The three recommendation kinds — close the claim, advance
-// the practice, answer the question — stay visibly distinct: never folded into one list
-// with no marker, never re-ranked client-side (the server already ordered them).
-
-import { useEffect, useState } from 'react';
+// Reports — the portfolio. The program rollup, a maturity heatmap (every
+// team × every dimension, the verified level in each cell and the team's
+// claim marked where it sits higher), the cohort table, and "where to
+// start" as a table whose kind column keeps the three recommendation kinds
+// visibly distinct — never folded into one list, never re-ranked here.
+//
+// Before slice 3 of docs/assessment-ux-goal.md this page had no view of the
+// portfolio by dimension: a program lead could see 41 dimensions at target
+// but not which ones, nor which teams' claims run ahead of their evidence.
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import {
   Button,
-  Card,
   Chip,
   DataTable,
   EmptyState,
   Inline,
-  InlinePlaceholder,
   LoadingState,
   MetaLine,
   PageHeader,
-  Stack,
   PageSection,
+  Stack,
   StatStrip,
+  Table,
+  TableBody,
+  TableHead,
+  TableRow,
+  TableTd,
+  TableTh,
   type ChipTone,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { toastError, toastSuccess } from '../../lib/toastStore';
 import { RECOMMENDATION_KIND_LABEL, type RecommendationsResponse, type RecommendationTeamGroup, type RollupResponse, type SecondaryRecommendationKind } from './secondaryTypes';
 import { useTeams } from './dashboard/useTeams';
-import type { TeamSummary } from './types';
+import { LevelBadge } from './dashboard/LevelBadge';
+import { useDimensionIndex } from './useDimensionIndex';
+import { highestVerifiedLevel, motionFor, type Dimension, type TeamSummary } from './types';
 
 const KIND_TONE: Record<SecondaryRecommendationKind, ChipTone> = {
   close_claim: 'warning',
@@ -35,11 +43,100 @@ const KIND_TONE: Record<SecondaryRecommendationKind, ChipTone> = {
   answer: 'neutral',
 };
 
-function WhereToStartCard() {
+/** Dimension ids are "1".."17"; the column order is the rubric's. */
+function dimensionColumns(index: ReturnType<typeof useDimensionIndex>['index']): Dimension[] {
+  for (const dims of index.values()) {
+    if (dims.size > 0) return Array.from(dims.values()).sort((a, b) => Number(a.id) - Number(b.id));
+  }
+  return [];
+}
+
+function HeatmapCell({ dim }: { dim: Dimension | undefined }) {
+  if (!dim) return <TableTd className="px-1.5 py-1 text-center" data-verified="" data-claimed="">—</TableTd>;
+  const cert = dim.certification;
+  const verified = cert?.verified_level ?? dim.current_level;
+  const claimed = cert?.claimed_level ?? null;
+  const claimOpen = claimed !== null && verified !== null && claimed > verified;
+  const title = [
+    dim.title,
+    dim.is_na ? 'N/A — approved exception' : verified === null ? 'not assessed' : `verified L${verified}`,
+    claimed !== null ? `claimed L${claimed}` : null,
+    cert?.statement ?? null,
+  ].filter(Boolean).join(' · ');
+  return (
+    <TableTd
+      className="px-1.5 py-1 text-center whitespace-nowrap"
+      title={title}
+      data-verified={dim.is_na ? 'na' : verified ?? ''}
+      data-claimed={claimed ?? ''}
+    >
+      <Inline gap="none" align="center" justify="center" wrap={false}>
+        <LevelBadge level={verified} isNa={dim.is_na} size="xs" />
+        {claimOpen && <Chip size="xs" tone="warning" title={`claimed L${claimed}`}>↑{claimed}</Chip>}
+      </Inline>
+    </TableTd>
+  );
+}
+
+function MaturityHeatmap({ teams, onSelectTeam }: { teams: TeamSummary[]; onSelectTeam: (id: string) => void }) {
+  const ids = useMemo(() => teams.map((t) => t.id), [teams]);
+  const { index, loading } = useDimensionIndex(ids);
+  const columns = useMemo(() => dimensionColumns(index), [index]);
+  if (teams.length === 0) return <EmptyState title="No teams yet" />;
+  if (columns.length === 0) return loading ? <LoadingState label="Reading every team's scorecard…" /> : <EmptyState title="No dimensions scored yet" />;
+  return (
+    <Stack gap="sm">
+      <MetaLine
+        size="xs"
+        tone="tertiary"
+        items={['each cell is the verified level', '↑n marks a claim the evidence has not reached', 'N/A is an approved exception', '— is not assessed', 'hover a column head for the dimension']}
+      />
+      <Table data-testid="maturity-heatmap" className="text-xs">
+        <TableHead>
+          <TableRow>
+            <TableTh scope="col" className="px-3 py-2">Team</TableTh>
+            {columns.map((d) => (
+              <TableTh key={d.id} scope="col" className="px-1.5 py-2 text-center" title={d.title} abbr={d.title}>
+                {d.id.padStart(2, '0')}
+              </TableTh>
+            ))}
+            <TableTh scope="col" className="px-3 py-2 text-right">Verified</TableTh>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {teams.map((t) => {
+            const dims = index.get(t.id);
+            const top = highestVerifiedLevel(t.certification);
+            return (
+              <TableRow key={t.id}>
+                <TableTd className="px-3 py-1 whitespace-nowrap">
+                  <Stack gap="none" align="start">
+                    <Button variant="ghost" size="sm" className="px-0 font-semibold text-text-primary" onClick={() => onSelectTeam(t.id)}>{t.name}</Button>
+                    <MetaLine size="xs" tone="tertiary" items={[t.id, motionFor(t.cohort).title]} />
+                  </Stack>
+                </TableTd>
+                {columns.map((d) => <HeatmapCell key={d.id} dim={dims?.get(d.id)} />)}
+                <TableTd className="px-3 py-1 text-right whitespace-nowrap">
+                  <Inline gap="xs" align="center" justify="end" wrap={false}>
+                    <LevelBadge level={top} size="xs" />
+                    {(t.certification?.claims_open ?? 0) > 0 && (
+                      <MetaLine size="xs" tone="tertiary" items={[`${t.certification!.claims_open} claim${t.certification!.claims_open === 1 ? '' : 's'} open`]} />
+                    )}
+                  </Inline>
+                </TableTd>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
+    </Stack>
+  );
+}
+
+function WhereToStart({ onSelectTeam }: { onSelectTeam: (id: string) => void }) {
   const [data, setData] = useState<RecommendationsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
   useEffect(() => {
     fetch('/api/assessment/recommendations', { credentials: 'include' })
       .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`))))
@@ -47,40 +144,34 @@ function WhereToStartCard() {
       .catch((err: Error) => setError(err.message))
       .finally(() => setLoading(false));
   }, []);
-
   const groups: RecommendationTeamGroup[] = (data?.teams ?? []).filter((g) => g.top != null);
+  if (loading) return <LoadingState label="Reading each team's plan…" />;
+  if (error) return <EmptyState title="Couldn't load recommendations" body={error} />;
+  if (groups.length === 0) return <EmptyState title="Nothing open" body="No team has an open recommendation right now." />;
   return (
-    <PageSection title="Where to start" description="Each team's top-ranked entry, ranked by the server — never re-ordered here. The kind is the point: closing a claim asks for an artifact, advancing a practice is real work, answering a question unblocks assessment.">
-      {loading ? (
-        <LoadingState label="Reading each team's plan…" />
-      ) : error ? (
-        <EmptyState title="Couldn't load recommendations" body={error} />
-      ) : groups.length === 0 ? (
-        <EmptyState title="Nothing open" body="No team has an open recommendation right now." />
-      ) : (
-        <Stack gap="sm">
-          {groups.map((g) => (
-            <Card key={g.id} padding="sm">
-              <Inline justify="between" align="center" wrap gap="sm">
-                <Inline align="center" wrap gap="sm">
-                  <Chip tone={KIND_TONE[g.top!.kind]} size="xs">{RECOMMENDATION_KIND_LABEL[g.top!.kind]}</Chip>
-                  <strong className="text-sm font-semibold text-text-primary">{g.name}</strong>
-                  <Chip size="xs" mono tone="neutral">{g.id}</Chip>
-                  <MetaLine size="xs" items={[`${g.top!.title} (dim ${g.top!.dimension_id})`]} />
-                </Inline>
-                <MetaLine
-                  size="xs"
-                  items={[(['close_claim', 'advance', 'answer'] as const).map((k) => `${g.counts[k] ?? 0} ${RECOMMENDATION_KIND_LABEL[k].toLowerCase()}`).join(' · ')]}
-                />
-              </Inline>
-              {(g.top!.headline ?? g.top!.summary) && (
-                <Stack gap="none" className="mt-1 text-sm text-text-secondary">{g.top!.headline ?? g.top!.summary}</Stack>
-              )}
-            </Card>
-          ))}
-        </Stack>
-      )}
-    </PageSection>
+    <DataTable<RecommendationTeamGroup>
+      data={groups}
+      keyField={(g) => g.id}
+      striped
+      onRowClick={(g) => onSelectTeam(g.id)}
+      columns={[
+        {
+          key: 'name', header: 'Team',
+          render: (g) => (
+            <Stack gap="none" align="start">
+              <Button variant="ghost" size="sm" className="px-0 font-semibold text-text-primary" onClick={(e) => { e.stopPropagation(); onSelectTeam(g.id); }}>{g.name}</Button>
+              <MetaLine size="xs" tone="tertiary" items={[g.id]} />
+            </Stack>
+          ),
+        },
+        { key: 'kind', header: 'Start by', render: (g) => <Chip tone={KIND_TONE[g.top!.kind]} size="xs" dot="static">{RECOMMENDATION_KIND_LABEL[g.top!.kind]}</Chip> },
+        { key: 'dimension', header: 'Dimension', render: (g) => <MetaLine size="xs" tone="secondary" items={[g.top!.title, `dim ${g.top!.dimension_id}`]} /> },
+        { key: 'what', header: 'What it takes', render: (g) => <MetaLine size="xs" tone="secondary" items={[g.top!.headline ?? g.top!.summary ?? '—']} /> },
+        { key: 'close_claim', header: 'Close', align: 'right', render: (g) => g.counts.close_claim ?? 0 },
+        { key: 'advance', header: 'Advance', align: 'right', render: (g) => g.counts.advance ?? 0 },
+        { key: 'answer', header: 'Answer', align: 'right', render: (g) => g.counts.answer ?? 0 },
+      ]}
+    />
   );
 }
 
@@ -88,12 +179,12 @@ export default function ReportsPage() {
   const navigate = useNavigate();
   const { can, ready } = useCapabilities();
   const canPublish = ready && can('PublishReport');
-
   const { teams } = useTeams();
   const [rollup, setRollup] = useState<RollupResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [publishing, setPublishing] = useState(false);
+  const openTeam = (id: string) => navigate(`/assessment/teams/${encodeURIComponent(id)}`);
 
   useEffect(() => {
     fetch('/api/assessment/rollup', { credentials: 'include' })
@@ -122,18 +213,18 @@ export default function ReportsPage() {
   return (
     <Stack gap="lg">
       <PageHeader
-        title="Reports"
-        description="Portfolio-level rollups and cohort analytics across every assessment cohort."
+        title="Portfolio"
+        description="Every team against every dimension: what verification has reached, where the claims run ahead of it, and the one thing each team should start with."
         actions={canPublish ? <Button onClick={() => void publish()} disabled={publishing}>{publishing ? 'Publishing…' : 'Publish report'}</Button> : undefined}
       />
-
       {loading ? (
-        <LoadingState label="Loading portfolio analytics…" />
+        <LoadingState label="Loading the portfolio…" />
       ) : error ? (
-        <EmptyState title="Couldn't load portfolio analytics" body={error} />
+        <EmptyState title="Couldn't load the portfolio" body={error} />
       ) : rollup ? (
         <>
           <StatStrip
+            aria-label="Portfolio summary"
             items={[
               { label: 'Teams', value: rollup.teams_total },
               { label: 'Dimensions assessed', value: `${rollup.dimensions_assessed} / ${rollup.dimensions_applicable}`, hint: 'of applicable' },
@@ -141,6 +232,12 @@ export default function ReportsPage() {
               { label: 'Claims open', value: rollup.claims_open, tone: rollup.claims_open > 0 ? 'danger' : 'default', hint: 'verification below the claim' },
             ]}
           />
+          <PageSection title="Maturity heatmap" description="Rows are teams, columns are the rubric's seventeen dimensions.">
+            <MaturityHeatmap teams={teams} onSelectTeam={openTeam} />
+          </PageSection>
+          <PageSection title="Where to start" description="Each team's top-ranked entry, ranked by the server — never re-ordered here. Closing a claim asks for an artifact, advancing a practice is real work, answering a question unblocks assessment.">
+            <WhereToStart onSelectTeam={openTeam} />
+          </PageSection>
           <PageSection title="By cohort">
             <DataTable<[string, RollupResponse['by_cohort'][string]]>
               data={Object.entries(rollup.by_cohort)}
@@ -154,58 +251,9 @@ export default function ReportsPage() {
               ]}
             />
           </PageSection>
-          <WhereToStartCard />
-          <PageSection title="Teams">
-            {teams.length === 0 ? (
-              <EmptyState title="No teams yet" />
-            ) : (
-              <DataTable<TeamSummary>
-                data={teams}
-                keyField={(t) => t.id}
-                striped
-                onRowClick={(t) => navigate(`/assessment/teams/${encodeURIComponent(t.id)}`)}
-                columns={[
-                  {
-                    key: 'team',
-                    header: 'Team',
-                    // The name is a real Button: DataTable's row-click is a bare
-                    // <tr onClick> with no tabIndex/keydown, so a keyboard user
-                    // had no way to open a team from this table (same defect
-                    // the dashboard's all-teams table had). In-app navigation
-                    // too — the old window.location assignment reloaded the
-                    // whole app and dropped every in-memory state.
-                    render: (t) => (
-                      <Stack gap="none">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="justify-start font-semibold"
-                          onClick={(e) => { e.stopPropagation(); navigate(`/assessment/teams/${encodeURIComponent(t.id)}`); }}
-                        >
-                          {t.name}
-                        </Button>
-                        <Chip size="xs" mono tone="neutral">{t.id}</Chip>
-                      </Stack>
-                    ),
-                  },
-                  { key: 'cohort', header: 'Cohort', render: (t) => t.cohort_label },
-                  {
-                    key: 'verified',
-                    header: 'Verified level',
-                    render: (t) => {
-                      const lvl = t.certification?.max_verified_level ?? t.certification?.highest_verified_level ?? null;
-                      return lvl == null ? <Chip tone="neutral" size="xs">Not yet</Chip> : `Level ${lvl}`;
-                    },
-                  },
-                  { key: 'claims_open', header: 'Open claims', align: 'right', render: (t) => t.certification?.claims_open ?? 0 },
-                  { key: 'follow_ups', header: 'Open follow-ups', align: 'right', render: (t) => t.followups_open },
-                ]}
-              />
-            )}
-          </PageSection>
         </>
       ) : (
-        <Card padding="md"><InlinePlaceholder>No data.</InlinePlaceholder></Card>
+        <EmptyState title="No data" />
       )}
     </Stack>
   );
