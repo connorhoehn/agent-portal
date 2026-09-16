@@ -2,6 +2,7 @@
 // unit-tested without mounting the page.
 import type { ChipTone, LogLevel } from '@connorhoehnslalom/ui-components/shared';
 import { parsePgTimestampAsUtc } from '../../lib/pgTimestamp.ts';
+import { STATUS_TONE } from '../agentFleetRows.ts';
 
 export function ms(n: number | null | undefined): string {
   if (n == null || n === 0) return '—';
@@ -82,9 +83,11 @@ export function toLogLevel(level: string | null): LogLevel | undefined {
   return level ? LOG_LEVEL_MAP[level] : undefined;
 }
 
-export const STATUS_CHIP_TONE: Record<string, ChipTone> = {
-  healthy: 'success',
-  READY: 'success',
-  degraded: 'warning',
-  unhealthy: 'danger',
-};
+// Same canonical map the fleet list uses (agentFleetRows.ts) — the control
+// plane only ever emits healthy/deploying/degraded/offline/unknown
+// (`mapRuntimeStatus` in middleware/src/providers/agentcore.ts). This used to
+// be a locally-invented map with dead `READY`/`unhealthy` keys the server
+// never sends, and no entry for `deploying`/`offline`, which it does: an
+// offline agent fell through to the `?? 'neutral'` default here while the
+// fleet list correctly showed it red.
+export const STATUS_CHIP_TONE: Record<string, ChipTone> = STATUS_TONE;

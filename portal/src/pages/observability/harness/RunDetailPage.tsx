@@ -5,6 +5,7 @@
 //   GET /api/observability/harness/runs/:prevId        → previous results for delta
 
 import { useEffect, useMemo, useState, Fragment } from 'react';
+import { relativeTime } from '../../../lib/relativeTime';
 import { Link, useParams, useNavigate } from 'react-router';
 import {
   Button,
@@ -774,7 +775,7 @@ function PromoteModal({
                   )}
                   {rs.kind === 'done' && (
                     <Chip tone="success" size="xs">
-                      ✓ promoted {new Date(rs.promotedAt).toLocaleTimeString()}
+                      ✓ promoted {relativeTime(rs.promotedAt)}
                     </Chip>
                   )}
                   {rs.kind === 'error' && (

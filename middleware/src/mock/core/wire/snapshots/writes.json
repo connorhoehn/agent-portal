@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-09-16T21:14:02.766Z",
-  "serverHandlerSha": "49c5f281aeb5f553fd332656e183ad22a8d5546b12d85a19783059a43c0d3281",
+  "capturedAt": "2026-09-16T21:55:08.496Z",
+  "serverHandlerSha": "29377da5bd0209ac3c5de95c31ad1eec80a3ca3031e566742fc365ed686b480b",
   "baseUrl": "http://127.0.0.1:3012",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
@@ -2111,7 +2111,35 @@
       "sent": []
     },
     "POST /api/observability/approvals/:id/decision": {
-      "skipped": "no value found for :id under /api/observability/approvals (orgiq/admin)"
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "agentId": "string",
+        "approvalId": "string",
+        "decidedAt": "string",
+        "decidedBy": "string",
+        "decidedNote": "null",
+        "payload": "object",
+        "payload.action": "string",
+        "payload.document": "string",
+        "payload.references": "string",
+        "reason": "string",
+        "requestedAt": "string",
+        "status": "string",
+        "txId": "string"
+      },
+      "values": {
+        "payload.action": [
+          "index"
+        ],
+        "status": [
+          "APPROVED"
+        ]
+      },
+      "sent": [
+        "decision"
+      ]
     },
     "POST /api/observability/approvals/request": {
       "persona": "orgiq/admin",

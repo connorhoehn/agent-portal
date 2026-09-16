@@ -26,6 +26,7 @@ import {
 import { useFetch } from '../../hooks/useFetch';
 import { T } from './Text';
 import { relativeTime } from '../../lib/relativeTime';
+import { UnavailableNotice } from '../../components/UnavailableNotice';
 import {
   applyFiltersToParams,
   firstSentence,
@@ -83,11 +84,19 @@ function InvocationsPage() {
   // Same URL as ObservabilityLayout's nav-badge poll, now on the same 5s
   // cadence (it used to be 10s there) with `share: true` so the two collapse
   // into one request per tick.
-  const { data: recent, isLoading: recentLoading } = useFetch<{ invocations: Invocation[] }>(
+  const {
+    data: recent, isLoading: recentLoading, error: recentError,
+    degraded: recentDegraded, refresh: refreshRecent,
+  } = useFetch<{ invocations: Invocation[] }>(
     '/api/observability/recent-invocations?limit=50',
     5000,
     { share: true },
   );
+  // None of this page's three reads checked whether they had failed, so a dead
+  // Aurora rendered as "No invocations yet. Send a message via the Agent Tools
+  // page and it'll appear here within 5 seconds." — an instruction, addressed
+  // to someone whose fleet is fine and whose database is not.
+  const recentFailure = recentError ?? recentDegraded;
   // First load only (isLoading && !data) — this page polls every 5s, and
   // without the `!data` half every tick would re-trigger the "no
   // invocations yet" branch's loading stand-in over a table that already
@@ -247,7 +256,14 @@ function InvocationsPage() {
         {recentLoadingFirst ? (
           <LoadingState label="Loading invocations…" />
         ) : filtered.length === 0 ? (
-          allInvocations.length === 0 ? (
+          recentFailure ? (
+            <UnavailableNotice
+              error={recentFailure}
+              what="the run feed"
+              source="Runs are read from the middleware's live invocation ring"
+              onRetry={refreshRecent}
+            />
+          ) : allInvocations.length === 0 ? (
             <InlinePlaceholder align="center" size="sm">
               No invocations yet. Send a message via the Agent Tools page and it'll appear here
               within 5 seconds.
@@ -370,8 +386,11 @@ function InvocationsPage() {
             <TableBody>
               {(bedrock?.entries ?? []).map((b) => (
                 <TableRow key={b.requestId}>
-                  <TableTd className="whitespace-nowrap text-[11px] text-[var(--color-text-tertiary)]">
-                    {new Date(b.timestamp).toLocaleTimeString()}
+                  <TableTd
+                    className="whitespace-nowrap text-[11px] text-[var(--color-text-tertiary)]"
+                    title={new Date(b.timestamp).toLocaleString()}
+                  >
+                    {relativeTime(b.timestamp)}
                   </TableTd>
                   <TableTd className="whitespace-nowrap text-[12px] font-medium">{b.agent}</TableTd>
                   <TableTd className="font-mono text-[11px] text-[var(--color-text-tertiary)]">
@@ -447,8 +466,11 @@ function CodeInterpreterTraces({ invocations }: { invocations: Invocation[] }) {
                 title={
                   <MetaLine
                     items={[
-                      <T className="whitespace-nowrap text-[11px] text-[var(--color-text-tertiary)]">
-                        {new Date(inv.startedAt).toLocaleTimeString()}
+                      <T
+                        className="whitespace-nowrap text-[11px] text-[var(--color-text-tertiary)]"
+                        title={new Date(inv.startedAt).toLocaleString()}
+                      >
+                        {relativeTime(inv.startedAt)}
                       </T>,
                       <T className="whitespace-nowrap rounded-full bg-[var(--color-surface-hover)] px-[7px] py-[1px] text-[11px] font-semibold text-[var(--color-primary)]">
                         {inv.agentName.replace('orgiq-', '')}

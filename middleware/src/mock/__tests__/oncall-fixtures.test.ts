@@ -42,9 +42,15 @@ afterEach(() => {
   fixtureRegistry.resetAll('default');
 });
 
-function byId(rows: MockApprovalRow[], id: string): MockApprovalRow {
-  const row = rows.find((r) => r.approval_id === id);
-  if (!row) throw new Error(`no approval row with id ${id}`);
+/** The uuid of the row with this transaction id — so an assertion can name a
+ *  row readably while still comparing the id the selectors actually return. */
+function idOf(txId: string): string {
+  return byId(approvalRequests.rows(), txId).approval_id;
+}
+
+function byId(rows: MockApprovalRow[], txId: string): MockApprovalRow {
+  const row = rows.find((r) => r.tx_id === txId);
+  if (!row) throw new Error(`no approval row with tx ${txId}`);
   return row;
 }
 
@@ -93,7 +99,7 @@ describe('mockOncallHitlAlarmProbe — unwindowed, matches computeAlarms\' SQL',
 
   it('reports the oldest PENDING request\'s age in seconds, from the one clock', () => {
     const [row] = mockOncallHitlAlarmProbe();
-    const pending = byId(approvalRequests.rows(), 'ap-ing-postmortem-03');
+    const pending = byId(approvalRequests.rows(), 'ing-sync-postmortem-03');
     const expectedAgeS = (new Date(AT).getTime() - new Date(pending.requested_at).getTime()) / 1000;
     expect(row!['oldest_age_s']).toBeCloseTo(expectedAgeS, 3);
   });
@@ -154,20 +160,20 @@ describe('mockOncallHitlDecisionEvents — decided (incl. EXPIRED), no status fi
     // Newest-first by decided_at, not requested_at: allhands-recap-22 was
     // REQUESTED after adr-batch-14 but DECIDED (expired) before it was.
     expect(rows.map((r) => r['approval_id'])).toEqual([
-      'ap-ing-allhands-recap-22', 'ap-ing-adr-batch-14', 'ap-ing-perf-reviews-09',
+      idOf('ing-sync-allhands-recap-22'), idOf('ing-sync-adr-batch-14'), idOf('ing-sync-perf-reviews-09'),
     ]);
   });
 
   it('excludes the 30h-old decision once the window no longer reaches it', () => {
     const rows = mockOncallHitlDecisionEvents(24);
-    expect(rows.some((r) => r['approval_id'] === 'ap-ing-legal-updates-01')).toBe(false);
+    expect(rows.some((r) => r['approval_id'] === idOf('ing-sync-legal-updates-01'))).toBe(false);
     // A wide enough window reaches it.
     const wide = mockOncallHitlDecisionEvents(24 * 3);
-    expect(wide.some((r) => r['approval_id'] === 'ap-ing-legal-updates-01')).toBe(true);
+    expect(wide.some((r) => r['approval_id'] === idOf('ing-sync-legal-updates-01'))).toBe(true);
   });
 
   it('carries the real decided_by, in Postgres ::text timestamp form', () => {
-    const row = mockOncallHitlDecisionEvents(24).find((r) => r['approval_id'] === 'ap-ing-adr-batch-14')!;
+    const row = mockOncallHitlDecisionEvents(24).find((r) => r['approval_id'] === idOf('ing-sync-adr-batch-14'))!;
     expect(row['decided_by']).toBe('u-vera');
     expect(row['ts']).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\+00$/);
   });

@@ -1558,27 +1558,27 @@
     {
       "method": "GET",
       "path": "/api/observability/approvals",
-      "source": "src/routes/approvals.ts:339"
+      "source": "src/routes/approvals.ts:390"
     },
     {
       "method": "GET",
       "path": "/api/observability/approvals/:id",
-      "source": "src/routes/approvals.ts:383"
+      "source": "src/routes/approvals.ts:434"
     },
     {
       "method": "POST",
       "path": "/api/observability/approvals/:id/decision",
-      "source": "src/routes/approvals.ts:414"
+      "source": "src/routes/approvals.ts:465"
     },
     {
       "method": "POST",
       "path": "/api/observability/approvals/request",
-      "source": "src/routes/approvals.ts:293"
+      "source": "src/routes/approvals.ts:344"
     },
     {
       "method": "GET",
       "path": "/api/observability/approvals/stream",
-      "source": "src/routes/approvals.ts:346"
+      "source": "src/routes/approvals.ts:397"
     },
     {
       "method": "GET",
@@ -1953,7 +1953,7 @@
     {
       "method": "GET",
       "path": "/api/observability/oncall/recent-events",
-      "source": "src/routes/oncall.ts:616"
+      "source": "src/routes/oncall.ts:625"
     },
     {
       "method": "GET",

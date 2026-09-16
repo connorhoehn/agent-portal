@@ -383,9 +383,25 @@ export function mockSetHumanLabel(invocationId: string, label: string, note: str
  *             same way `agentTelemetryProfiles`'s `error` scenario is.
  */
 export interface MockApprovalRow {
+  /**
+   * A real UUID, because the column is `uuid` and the single-row route
+   * rejects anything that is not one before it queries (so a mistyped id is a
+   * not-found rather than a Postgres cast error). Readable ids here meant the
+   * seeded approvals could be listed and never decided — the offline HITL
+   * loop was visible but not closable.
+   */
   approval_id: string;
   tx_id: string;
   agent_id: string;
+  /**
+   * `observability.approvals.payload` — what the agent is asking to do.
+   *
+   * The SQL behind the queue selects it and the drawer renders it, so a
+   * fixture standing in for that table has to carry it. Without it the
+   * offline queue could only ever show a request with no substance, which is
+   * the one thing a person deciding on it actually reads.
+   */
+  payload: Record<string, unknown>;
   reason: string | null;
   status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'EXPIRED';
   requested_at: string;
@@ -399,7 +415,8 @@ export const approvalRequests = defineFixture<MockApprovalRow>({
   scenarios: {
     default: (): MockApprovalRow[] => [
       {
-        approval_id: 'ap-ing-legal-updates-01',
+        approval_id: '7c1e9a20-0f41-4d8e-9a11-000000000001',
+        payload: { prefix: 'legal/', chunksAffected: 42, action: 'overwrite' },
         tx_id: 'ing-sync-legal-updates-01',
         agent_id: 'orgiq-ingestion',
         reason: 'Re-sync would overwrite 42 existing KB chunks under legal/ with conflicting revision hashes.',
@@ -410,7 +427,8 @@ export const approvalRequests = defineFixture<MockApprovalRow>({
         decided_note: 'Confirmed the source bucket is authoritative — proceed.',
       },
       {
-        approval_id: 'ap-ing-perf-reviews-09',
+        approval_id: '7c1e9a20-0f41-4d8e-9a11-000000000002',
+        payload: { source: 'slack-export', files: 3, flagged: 'possible-pii' },
         tx_id: 'ing-sync-perf-reviews-09',
         agent_id: 'orgiq-ingestion',
         reason: 'New Slack export batch has 3 files flagged as possible PII ahead of re-embedding.',
@@ -421,7 +439,8 @@ export const approvalRequests = defineFixture<MockApprovalRow>({
         decided_note: 'Redact the flagged files first, then resubmit.',
       },
       {
-        approval_id: 'ap-ing-adr-batch-14',
+        approval_id: '7c1e9a20-0f41-4d8e-9a11-000000000003',
+        payload: { prefix: 'adr/', documentsDeleted: 6, action: 'delete' },
         tx_id: 'ing-sync-adr-batch-14',
         agent_id: 'orgiq-ingestion',
         reason: 'Sync would delete 6 ADR documents no longer present in the source bucket.',
@@ -432,7 +451,8 @@ export const approvalRequests = defineFixture<MockApprovalRow>({
         decided_note: 'Confirmed those ADRs were deprecated last sprint — proceed.',
       },
       {
-        approval_id: 'ap-ing-allhands-recap-22',
+        approval_id: '7c1e9a20-0f41-4d8e-9a11-000000000004',
+        payload: { corpus: 'all-hands-recap', action: 're-embed' },
         tx_id: 'ing-sync-allhands-recap-22',
         agent_id: 'orgiq-ingestion',
         reason: 'Re-embedding would replace the current all-hands recap corpus mid-day.',
@@ -443,9 +463,10 @@ export const approvalRequests = defineFixture<MockApprovalRow>({
         decided_note: 'auto-expired after 5min',
       },
       {
-        approval_id: 'ap-ing-postmortem-03',
+        approval_id: '7c1e9a20-0f41-4d8e-9a11-000000000005',
         tx_id: 'ing-sync-postmortem-03',
         agent_id: 'orgiq-ingestion',
+        payload: { document: 'postmortem/2026-09-auth-outage.md', action: 'index', references: 'live-incident' },
         reason: 'Ingesting a postmortem doc that references a live security incident — needs sign-off before indexing.',
         status: 'PENDING',
         requested_at: clock.hoursAgo(3 / 60, { keepWithinToday: true }),

@@ -8,6 +8,7 @@
 //   POST /api/observability/approvals/:id/decision      { decision, note? }
 
 import { Fragment, useEffect, useMemo, useState } from 'react';
+import { relativeTime } from '../../lib/relativeTime';
 import {
   Button,
   Card,
@@ -252,7 +253,7 @@ function ApprovalQueuePage() {
                     <TableRow>
                       <TableTd className="text-[12px] font-medium whitespace-nowrap">{a.agentId}</TableTd>
                       <TableTd className="text-[11px] text-text-tertiary whitespace-nowrap">
-                        {new Date(a.requestedAt).toLocaleTimeString()}
+                        {relativeTime(a.requestedAt)}
                       </TableTd>
                       <TableTd className="text-[11px] text-text-tertiary font-mono" title={a.txId}>
                         {a.txId.length > 12 ? `${a.txId.slice(0, 12)}…` : a.txId}

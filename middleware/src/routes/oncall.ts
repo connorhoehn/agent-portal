@@ -589,10 +589,19 @@ oncallRouter.get('/hitl-sla', asyncHandler(async (req, res) => {
         ? null
         : Number(r['oldest_pending_age_s']),
       decidedInWindow: Number(r['decided'] ?? 0),
-      p50DecisionSeconds: Number(r['p50_s'] ?? 0),
-      p99DecisionSeconds: Number(r['p99_s'] ?? 0),
+      // NULL from PERCENTILE_CONT over an empty set means "no decision had a
+      // latency" — not "every decision took 0ms". Coalescing it to 0 reported
+      // "p50 0.0s · p99 0.0s" for a queue nobody had decided anything in.
+      p50DecisionSeconds: r['p50_s'] == null ? null : Number(r['p50_s']),
+      p99DecisionSeconds: r['p99_s'] == null ? null : Number(r['p99_s']),
       expiredInWindow: Number(r['expired'] ?? 0),
-      slaCompliantFraction: slaTotal > 0 ? withinSla / slaTotal : 1,
+      // Null rather than 1 over an empty sample. `slaTotal > 0 ? ... : 1` put
+      // "SLA 100.0%" in success green on a queue nobody had decided anything
+      // in — a compliance claim nobody earned, on the page someone reads
+      // during an incident. Same convention as the harness compare endpoint
+      // and mock/harness.ts's `withCounts`: a rate with no denominator is
+      // absent, not perfect.
+      slaCompliantFraction: slaTotal > 0 ? withinSla / slaTotal : null,
       slaThresholdSeconds: SLA_THRESHOLD_SECONDS,
     });
   } catch (err) {

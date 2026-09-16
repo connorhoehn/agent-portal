@@ -235,7 +235,18 @@ export default function QueuePage() {
     },
     {
       key: 'initiativeName', header: 'Initiative', sortable: true,
-      render: (s) => <T className="text-[12px] text-text-secondary whitespace-nowrap">{s.initiativeName}</T>,
+      render: (s) => (
+        <T
+          role="link"
+          tabIndex={0}
+          onClick={(e) => { e.stopPropagation(); navigate(`/iq/projects/${s.initiativeId}`); }}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); navigate(`/iq/projects/${s.initiativeId}`); } }}
+          title={`Open ${s.initiativeName}`}
+          className="text-[12px] text-text-secondary whitespace-nowrap cursor-pointer hover:text-primary hover:underline"
+        >
+          {s.initiativeName}
+        </T>
+      ),
     },
     {
       key: 'storyPoints', header: 'Est.', align: 'right', sortable: true,

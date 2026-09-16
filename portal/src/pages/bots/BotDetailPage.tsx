@@ -434,7 +434,7 @@ export default function BotDetailPage() {
                     <TableTd className="text-[12px] text-text-secondary">{r.trigger}</TableTd>
                     <TableTd>
                       <Chip tone={runStateChip(r.status).tone} size="xs" dot={r.status === 'running' ? 'pulse' : undefined}>
-                        {r.status}
+                        {runStateChip(r.status).label}
                       </Chip>
                     </TableTd>
                     <TableTd className="text-[12px] whitespace-nowrap">
@@ -446,7 +446,7 @@ export default function BotDetailPage() {
                     >
                       {dur.text}
                     </TableTd>
-                    <TableTd className="text-[12px] text-text-tertiary whitespace-nowrap" title={r.startedAt}>
+                    <TableTd className="text-[12px] text-text-tertiary whitespace-nowrap" title={new Date(r.startedAt).toLocaleString()}>
                       {relativeTime(r.startedAt)}
                     </TableTd>
                     <TableTd>

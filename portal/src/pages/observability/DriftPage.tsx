@@ -12,6 +12,7 @@
 //   GET /neighbors/:invocationId?limit=
 
 import { Fragment, useEffect, useMemo, useState } from 'react';
+import { relativeTime } from '../../lib/relativeTime';
 import { useNavigate } from 'react-router';
 import {
   Button,
@@ -446,7 +447,7 @@ function DriftPage() {
                         {o.templateId ?? '(none)'}
                       </TableTd>
                       <TableTd className="text-[11px] text-[var(--color-text-tertiary)] whitespace-nowrap">
-                        {new Date(o.ts).toLocaleTimeString()}
+                        {relativeTime(o.ts)}
                       </TableTd>
                       <TableTd
                         className="text-[12px] max-w-[320px] overflow-hidden text-ellipsis whitespace-nowrap cursor-pointer"

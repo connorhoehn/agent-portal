@@ -10,6 +10,7 @@
 // Clicking the JudgeNode in the canary diagram navigates here.
 
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
+import { relativeTime } from '../../lib/relativeTime';
 import { Link, useNavigate } from 'react-router';
 import {
   Button, Card, Chip, CollapsibleSection, IconButton, Inline, ProgressBar, Select, SectionLabel, SelectableCard, Stack, StatStrip, Switch,
@@ -144,7 +145,9 @@ function fmt01(v: number): string {
 }
 
 function fmtTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString();
+  // Recency, not a clock reading: both call sites ask "how stale is this",
+  // and a bare time is ambiguous once the window crosses midnight.
+  return relativeTime(iso);
 }
 
 // ── Sub-components ─────────────────────────────────────────────────────────────

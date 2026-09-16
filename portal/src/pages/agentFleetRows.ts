@@ -15,6 +15,55 @@
 // questions the diagram cannot: what is the whole fleet, and which part of it
 // the diagram is not showing.
 
+/**
+ * Tone for each fleet status. Canonical because the control plane only ever
+ * emits these five values (`mapRuntimeStatus` in
+ * middleware/src/providers/agentcore.ts) — a second, locally-invented map
+ * risks carrying dead keys the server never sends and missing ones it does
+ * (agentDetailFormat.ts's old STATUS_CHIP_TONE had `READY`/`unhealthy`, which
+ * never arrive, and was missing `deploying`/`offline`, which do — so a
+ * genuinely offline agent read as a neutral grey chip on its own detail page
+ * while the fleet list correctly showed it red).
+ */
+export const STATUS_TONE: Record<FleetRow['status'], 'success' | 'warning' | 'danger' | 'neutral' | 'accent'> = {
+  healthy: 'success',
+  deploying: 'accent',
+  degraded: 'warning',
+  offline: 'danger',
+  unknown: 'neutral',
+};
+
+// Both id shapes reach the fleet surfaces: the AgentCore runtime id that
+// observability records (orgiq_supervisor-UO5Xv95jsx, orgiq_graph_builder-…)
+// and the plain agent name the static catalog is keyed by (orgiq-supervisor).
+// Both must collapse to the same key or the metrics land under a key nothing
+// looks up.
+//
+// The anchor is the runtime id's actual shape, not a bare 10-character class:
+// an AgentCore runtime *name* may not contain a hyphen — the fleet spells its
+// names with underscores — so the only hyphen in a runtime id is the one that
+// introduces the generated 10-character suffix. A plain agent name is the
+// mirror image: hyphens, never underscores.
+//
+// The old `-[A-Za-z0-9]{10}$` matched on length alone, and "supervisor" is
+// exactly 10 alphanumerics, so it ate the last segment of the plain name too:
+// orgiq-supervisor → "orgiq". That key matched no node and no edge, so the
+// Supervisor node read calls 0 / err 0 / p95 —, and all of its edges rendered
+// grey "no traffic yet", while the header counted the raw totals and said
+// otherwise.
+//
+// Exported (was private to AgentFlowPage.tsx) so InvokePage's `?agentId=`
+// deep-link resolver can normalise against the same rule instead of a third,
+// looser guess — a link built from the catalog slug or the underscore
+// runtime name used to leave the Invoke picker showing no selection at all,
+// because `/api/agents` only spells ids as the opaque runtime id.
+const RUNTIME_ID = /^([A-Za-z0-9]+(?:_[A-Za-z0-9]+)+)-[A-Za-z0-9]{10}$/;
+
+export function canonicalKey(id: string): string {
+  const base = RUNTIME_ID.exec(id)?.[1] ?? id;
+  return base.replace(/_/g, '-');
+}
+
 export interface FleetRow {
   /** The id as the server spells it — a runtime id keeps its suffix. */
   id: string;

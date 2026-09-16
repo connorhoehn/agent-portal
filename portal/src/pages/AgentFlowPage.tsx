@@ -5,6 +5,7 @@
 // static topology always renders so the graph is meaningful from first load.
 
 import { useEffect, useMemo, useState } from 'react';
+import { relativeTime } from '../lib/relativeTime';
 import { MarkerType, type Node, type Edge } from '@xyflow/react';
 import { Link, useSearchParams } from 'react-router';
 import {
@@ -16,7 +17,7 @@ import { UnavailableNotice } from '../components/UnavailableNotice';
 import { KeyValue } from '../components/KeyValue';
 import { AgentFlowFrame, NODE_HEIGHT, NODE_WIDTH, STATUS_COLORS, fmtCount, fmtMs } from './AgentFlowFrame';
 import { T } from './Text';
-import { fleetRows, filterFleet, offDiagramCount, onlineLabel, type FleetRow } from './agentFleetRows';
+import { canonicalKey, fleetRows, filterFleet, offDiagramCount, onlineLabel, STATUS_TONE, type FleetRow } from './agentFleetRows';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -95,29 +96,9 @@ const WINDOWS: Array<{ label: string; hours: number }> = [
   { label: '7d', hours: 24 * 7 },
 ];
 
-// Both id shapes reach this page: the AgentCore runtime id that observability
-// records (orgiq_supervisor-UO5Xv95jsx, orgiq_graph_builder-…) and the plain
-// agent name the static catalog is keyed by (orgiq-supervisor). Both must
-// collapse to the same key or the metrics land under a key nothing looks up.
-//
-// The anchor is the runtime id's actual shape, not a bare 10-character class:
-// an AgentCore runtime *name* may not contain a hyphen — the fleet spells its
-// names with underscores — so the only hyphen in a runtime id is the one that
-// introduces the generated 10-character suffix. A plain agent name is the
-// mirror image: hyphens, never underscores.
-//
-// The old `-[A-Za-z0-9]{10}$` matched on length alone, and "supervisor" is
-// exactly 10 alphanumerics, so it ate the last segment of the plain name too:
-// orgiq-supervisor → "orgiq". That key matched no node and no edge, so the
-// Supervisor node read calls 0 / err 0 / p95 —, and all of its edges rendered
-// grey "no traffic yet", while the header counted the raw totals and said
-// otherwise.
-const RUNTIME_ID = /^([A-Za-z0-9]+(?:_[A-Za-z0-9]+)+)-[A-Za-z0-9]{10}$/;
-
-function canonicalKey(id: string): string {
-  const base = RUNTIME_ID.exec(id)?.[1] ?? id;
-  return base.replace(/_/g, '-');
-}
+// canonicalKey (id-shape normalizer) now lives in agentFleetRows.ts, exported,
+// so InvokePage's `?agentId=` deep-link resolver can share it instead of
+// guessing at a third spelling of the same agent.
 
 function edgeStroke(errorCount: number, callCount: number): string {
   if (callCount === 0) return 'var(--color-text-tertiary)';
@@ -363,7 +344,7 @@ function AgentFlowPage() {
           />
           {topology?.generatedAt && (
             <T className="text-[10.5px] text-text-tertiary">
-              Refreshed {new Date(topology.generatedAt).toLocaleTimeString()}
+              Refreshed {relativeTime(topology.generatedAt)}
             </T>
           )}
         </Inline>
@@ -437,14 +418,6 @@ function AgentFlowPage() {
 
 
 // ── List view ─────────────────────────────────────────────────────────────────
-
-const STATUS_TONE: Record<FleetRow['status'], 'success' | 'warning' | 'danger' | 'neutral' | 'accent'> = {
-  healthy: 'success',
-  deploying: 'accent',
-  degraded: 'warning',
-  offline: 'danger',
-  unknown: 'neutral',
-};
 
 /**
  * The whole fleet as a table — every runtime the control plane returned,

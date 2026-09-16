@@ -138,7 +138,7 @@ describe('the mock branch answers an honest empty — no marker', () => {
 
       const sla = (await request(app).get(`${BASE}/hitl-sla`).expect(200)).body;
       expect(sla.degraded).toBeUndefined();
-      expect(sla).toMatchObject({ pendingCount: 0, decidedInWindow: 0, slaCompliantFraction: 1 });
+      expect(sla).toMatchObject({ pendingCount: 0, decidedInWindow: 0, slaCompliantFraction: null });
 
       const timeline = (await request(app).get(`${BASE}/timeline`).expect(200)).body;
       expect(timeline.degraded).toBeUndefined();

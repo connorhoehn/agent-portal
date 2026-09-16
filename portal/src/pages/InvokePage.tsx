@@ -26,6 +26,7 @@ import { useFetch } from '../hooks/useFetch';
 import { useUrlState } from '../lib/useUrlState';
 import { Markdown } from '../components/Markdown';
 import { T } from './Text';
+import { canonicalKey } from './agentFleetRows.ts';
 import {
   fetchSessionMessages, rememberSession, recallSession, forgetSession,
   SessionHistoryError,
@@ -178,7 +179,7 @@ function InvokePage() {
   // bare array, so that a failed ListAgentRuntimes can say so instead of
   // arriving as an empty fleet. Here the fleet only fills a selector; the
   // stream's own error surface covers a broken invoke.
-  const { data: agentsResp } = useFetch<{ agents: AgentDef[] }>('/api/agents');
+  const { data: agentsResp, error: agentsError } = useFetch<{ agents: AgentDef[] }>('/api/agents');
   const agents = agentsResp?.agents;
   const { can } = useCapabilities();
 
@@ -321,16 +322,33 @@ function InvokePage() {
   // Architecture graph and the agent detail page. Pre-select that agent for a
   // fresh conversation and strip the param. Without this the links silently
   // opened the default supervisor, so "talk to the search agent" never did.
+  //
+  // Three id spellings reach this link: the catalog slug (orgiq-supervisor),
+  // the underscore runtime name (orgiq_supervisor) and the opaque AgentCore
+  // runtime id with its 10-char suffix — but `/api/agents` (and this page's
+  // <Select>) only ever spells `a.id` the third way. Setting `selectedId`
+  // straight to whatever arrived used to leave the picker matching nothing —
+  // `agents?.find(a => a.id === selectedId)` came back undefined and the
+  // dropdown showed no selection at all, even though the POST still worked
+  // (the server resolves all three spellings). Wait for the fleet list, then
+  // resolve through canonicalKey the same way AgentFlowPage does, so the
+  // picker actually shows what got selected. If the fleet fetch itself is
+  // down, fall back to the raw id rather than hang — asking is still better
+  // than never trying.
   useEffect(() => {
     const aid = searchParams.get('agentId');
     if (!aid) return;
-    setSelectedId(aid);
+    if (!agents && !agentsError) return; // still loading — resolve once the fleet list is in
+    const match = agents?.find(
+      (a) => a.id === aid || a.name === aid || canonicalKey(a.id) === canonicalKey(aid) || canonicalKey(a.name) === canonicalKey(aid),
+    );
+    setSelectedId(match?.id ?? aid);
     forgetSession('invoke'); // agent changed — don't resume a different agent's session
     const next = new URLSearchParams(searchParams);
     next.delete('agentId');
     setSearchParams(next, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams.get('agentId')]);
+  }, [searchParams.get('agentId'), agents, agentsError]);
 
   // The `?prompt=`(+`?focus=`) deep-link is handled further down, once the
   // org-graph fetch (`graph`) it needs to resolve `focus` ids into names is

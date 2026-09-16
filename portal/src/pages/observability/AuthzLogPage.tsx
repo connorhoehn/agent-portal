@@ -178,7 +178,10 @@ function AuthzLogPage() {
             )}
             {filtered.map((e, i) => (
               <TableRow key={i}>
-                <TableTd className="text-text-tertiary font-mono whitespace-nowrap">
+                <TableTd
+                  className="text-text-tertiary font-mono whitespace-nowrap"
+                  title={new Date(e.ts).toLocaleString()}
+                >
                   {new Date(e.ts).toLocaleTimeString()}
                 </TableTd>
                 <TableTd>

@@ -277,7 +277,7 @@ export function OutcomesRailCard({ activity }: { activity: InitiativeAgentActivi
               <MetaLine
                 size="xs"
                 className="whitespace-nowrap"
-                items={[<span key="w" title={r.startedAt}>{relativeTime(r.startedAt)}</span>]}
+                items={[<span key="w" title={new Date(r.startedAt).toLocaleString()}>{relativeTime(r.startedAt)}</span>]}
               />
             </Inline>
             {(r.outcome?.changeId || r.outcome?.prUrl || r.outcome?.boxId) && (

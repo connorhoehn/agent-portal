@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  countTelemetryLines, ms, readable, toLogLevel, visibleLogLines, when,
+  countTelemetryLines, ms, readable, STATUS_CHIP_TONE, toLogLevel, visibleLogLines, when,
 } from '../agentDetailFormat.ts';
 
 test('ms formats sub-second durations in ms and longer ones in seconds', () => {
@@ -78,4 +78,24 @@ test('toLogLevel maps envelope severities onto the LogStream level enum', () => 
 test('when() reads a Postgres `+00` stamp', () => {
   const raw = new Date(Date.now() - 5 * 60_000).toISOString().replace('T', ' ').replace(/\.\d+Z$/, '+00');
   assert.equal(when(raw), '5m ago');
+});
+
+// STATUS_CHIP_TONE used to be a locally-invented map (healthy/READY/degraded/
+// unhealthy) that never matched what the control plane actually sends
+// (`mapRuntimeStatus` in middleware/src/providers/agentcore.ts only ever
+// emits healthy/deploying/degraded/offline/unknown). `READY` and `unhealthy`
+// were dead keys; `deploying` and `offline` were missing, so a genuinely
+// offline agent fell through to the page's `?? 'neutral'` default and read
+// as a calm grey chip on its own detail page while the fleet list correctly
+// showed it red. It's now re-exported from agentFleetRows.ts's canonical
+// STATUS_TONE so the two pages cannot drift apart again.
+test('STATUS_CHIP_TONE covers every status the control plane actually sends', () => {
+  assert.equal(STATUS_CHIP_TONE['healthy'], 'success');
+  assert.equal(STATUS_CHIP_TONE['deploying'], 'accent');
+  assert.equal(STATUS_CHIP_TONE['degraded'], 'warning');
+  assert.equal(STATUS_CHIP_TONE['offline'], 'danger');
+  assert.equal(STATUS_CHIP_TONE['unknown'], 'neutral');
+  // The old dead keys are gone — nothing should still key off of them.
+  assert.equal(STATUS_CHIP_TONE['READY'], undefined);
+  assert.equal(STATUS_CHIP_TONE['unhealthy'], undefined);
 });

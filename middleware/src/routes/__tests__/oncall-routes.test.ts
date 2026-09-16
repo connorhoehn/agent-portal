@@ -308,7 +308,15 @@ describe('GET /hitl-sla', () => {
     expect(res.body.slaThresholdSeconds).toBe(5 * 60);
   });
 
-  it('answers a compliant fraction of 1 — not NaN, not 0 — when nothing was decided', async () => {
+  it('answers NULL — not 1, not 0, not NaN — when nothing was decided', async () => {
+    // This used to assert 1, on the reasoning that 1 beats NaN and beats 0.
+    // Both halves of that are true and the conclusion still was not: the page
+    // rendered it as "SLA 100.0%" in success green over an empty queue, which
+    // is a compliance claim nobody earned, on the surface an operator reads
+    // during an incident. Null is the fourth option — a rate with no
+    // denominator is ABSENT, not perfect — and it is the convention already
+    // used by the harness compare endpoint and mock/harness.ts's `withCounts`.
+    // The page renders null as an em dash and drops the chip entirely.
     routeExec({
       sla: [{
         pending_count: '0', oldest_pending_age_s: null, decided: '0',
@@ -316,8 +324,12 @@ describe('GET /hitl-sla', () => {
       }],
     });
     const res = await request(buildApp()).get('/api/observability/oncall/hitl-sla');
-    expect(res.body.slaCompliantFraction).toBe(1);
+    expect(res.body.slaCompliantFraction).toBeNull();
     expect(res.body.oldestPendingAgeSeconds).toBeNull();
+    // Same reasoning one level down: PERCENTILE_CONT over an empty set is
+    // NULL, and "p50 0.0s" is a latency claim over no latency.
+    expect(res.body.p50DecisionSeconds).toBeNull();
+    expect(res.body.p99DecisionSeconds).toBeNull();
   });
 
   it('degrades to a compliant, empty answer when the table is missing', async () => {

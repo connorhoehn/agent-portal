@@ -16,6 +16,7 @@
 // to EXPIRED on read so a crashed/forgotten poller can never re-emerge.
 
 import { Router } from 'express';
+import { approvalRequests, type MockApprovalRow } from '../mock/observability.js';
 import { randomUUID } from 'node:crypto';
 import {
   RDSDataClient,
@@ -147,13 +148,58 @@ function toApprovalRow(r: Record<string, unknown>): ApprovalRow {
 // ── Mock fallback (used when Aurora isn't wired up — keeps local dev usable) ──
 
 const MOCK_ENABLED = !config.aurora.clusterArn || !config.aurora.secretArn || config.mock.aurora;
-const mockStore = new Map<string, ApprovalRow>();
+
+// One offline store for `observability.approvals`, not two.
+//
+// This router used to keep its own bare `Map`, seeded with nothing and filled
+// only by runtime POSTs, while the On-Call rollup read the registered
+// `approvalRequests` fixture. Same table, two offline representations, and
+// they disagreed on screen: On-Call's HITL card said "PENDING 1" while the
+// Approvals queue two clicks away said "0 pending".
+//
+// It also broke the mock floor's own rule that a write must mutate a
+// REGISTERED fixture so `POST /api/__mock/reset` can undo it — a bare Map is
+// invisible to the registry, so approving something offline was permanent
+// until the process restarted.
+//
+// Both now read and write the one fixture. The row shapes differ only in
+// casing (the fixture mirrors the column names, this router the wire), so the
+// two mappers below are the whole adapter.
+function toMockRow(r: ApprovalRow): MockApprovalRow {
+  return {
+    approval_id: r.approvalId,
+    tx_id: r.txId,
+    agent_id: r.agentId,
+    payload: r.payload,
+    reason: r.reason,
+    status: r.status,
+    requested_at: r.requestedAt,
+    decided_at: r.decidedAt,
+    decided_by: r.decidedBy,
+    decided_note: r.decidedNote,
+  };
+}
+
+function fromMockRow(r: MockApprovalRow): ApprovalRow {
+  return {
+    approvalId: r.approval_id,
+    txId: r.tx_id,
+    agentId: r.agent_id,
+    payload: r.payload,
+    reason: r.reason,
+    status: r.status,
+    requestedAt: r.requested_at,
+    decidedAt: r.decided_at,
+    decidedBy: r.decided_by,
+    decidedNote: r.decided_note,
+  };
+}
 
 function nowIso(): string { return new Date().toISOString(); }
 
 async function insertApproval(row: ApprovalRow): Promise<void> {
   if (MOCK_ENABLED) {
-    mockStore.set(row.approvalId, row);
+    approvalRequests.rows().push(toMockRow(row));
     return;
   }
   await exec(
@@ -182,7 +228,8 @@ async function fetchApproval(approvalId: string): Promise<ApprovalRow | null> {
   // before it has decided whether you are allowed to ask.
   if (!UUID_RE.test(approvalId)) return null;
   if (MOCK_ENABLED) {
-    return mockStore.get(approvalId) ?? null;
+    const hit = approvalRequests.rows().find((r) => r.approval_id === approvalId);
+    return hit ? fromMockRow(hit) : null;
   }
   const rows = await exec(
     `SELECT approval_id, tx_id, agent_id, payload, reason, status,
@@ -196,9 +243,9 @@ async function fetchApproval(approvalId: string): Promise<ApprovalRow | null> {
 
 async function fetchApprovals(status?: string): Promise<ApprovalRow[]> {
   if (MOCK_ENABLED) {
-    const all = Array.from(mockStore.values()).sort((a, b) =>
-      b.requestedAt.localeCompare(a.requestedAt),
-    );
+    const all = approvalRequests.rows()
+      .map(fromMockRow)
+      .sort((a, b) => b.requestedAt.localeCompare(a.requestedAt));
     return status ? all.filter(r => r.status === status) : all;
   }
   if (status) {
@@ -230,7 +277,8 @@ async function applyDecision(
   note: string | null,
 ): Promise<ApprovalRow | null> {
   if (MOCK_ENABLED) {
-    const existing = mockStore.get(approvalId);
+    const existingRow = approvalRequests.rows().find((r) => r.approval_id === approvalId);
+    const existing = existingRow ? fromMockRow(existingRow) : undefined;
     if (!existing) return null;
     const updated: ApprovalRow = {
       ...existing,
@@ -239,7 +287,10 @@ async function applyDecision(
       decidedBy,
       decidedNote: note,
     };
-    mockStore.set(approvalId, updated);
+    // Mutate the row in place so the fixture's identity — and `reset()` —
+    // still owns it.
+    const idx = approvalRequests.rows().findIndex((r) => r.approval_id === approvalId);
+    if (idx >= 0) approvalRequests.rows()[idx] = toMockRow(updated);
     return updated;
   }
 

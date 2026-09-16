@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-09-16T21:14:02.156Z",
-  "serverHandlerSha": "49c5f281aeb5f553fd332656e183ad22a8d5546b12d85a19783059a43c0d3281",
+  "capturedAt": "2026-09-16T21:55:07.902Z",
+  "serverHandlerSha": "29377da5bd0209ac3c5de95c31ad1eec80a3ca3031e566742fc365ed686b480b",
   "baseUrl": "http://127.0.0.1:3012",
   "personas": [
     "orgiq/admin",
@@ -4032,12 +4032,71 @@
       "status": 200,
       "shape": {
         "$": "object",
-        "approvals": "array"
+        "approvals": "array",
+        "approvals[]": "object",
+        "approvals[].agentId": "string",
+        "approvals[].approvalId": "string",
+        "approvals[].decidedAt": "null|string",
+        "approvals[].decidedBy": "null|string",
+        "approvals[].decidedNote": "null|string",
+        "approvals[].payload": "object",
+        "approvals[].payload.action": "string",
+        "approvals[].payload.chunksAffected": "number",
+        "approvals[].payload.corpus": "string",
+        "approvals[].payload.document": "string",
+        "approvals[].payload.documentsDeleted": "number",
+        "approvals[].payload.files": "number",
+        "approvals[].payload.flagged": "string",
+        "approvals[].payload.prefix": "string",
+        "approvals[].payload.references": "string",
+        "approvals[].payload.source": "string",
+        "approvals[].reason": "string",
+        "approvals[].requestedAt": "string",
+        "approvals[].status": "string",
+        "approvals[].txId": "string"
       },
-      "values": {}
+      "values": {
+        "approvals[].payload.action": [
+          "delete",
+          "index",
+          "overwrite",
+          "re-embed"
+        ],
+        "approvals[].status": [
+          "APPROVED",
+          "EXPIRED",
+          "PENDING",
+          "REJECTED"
+        ]
+      }
     },
     "GET /api/observability/approvals/:id": {
-      "skipped": "no value found for :id under /api/observability/approvals (orgiq/admin); no value found for :id under /api/observability/approvals (assessment/admin); no value found for :id under /api/observability/approvals (anonymous)"
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "agentId": "string",
+        "approvalId": "string",
+        "decidedAt": "null",
+        "decidedBy": "null",
+        "decidedNote": "null",
+        "payload": "object",
+        "payload.action": "string",
+        "payload.document": "string",
+        "payload.references": "string",
+        "reason": "string",
+        "requestedAt": "string",
+        "status": "string",
+        "txId": "string"
+      },
+      "values": {
+        "payload.action": [
+          "index"
+        ],
+        "status": [
+          "PENDING"
+        ]
+      }
     },
     "GET /api/observability/approvals/stream": {
       "skipped": "server-sent event stream (orgiq/admin); server-sent event stream (assessment/admin); server-sent event stream (anonymous)"
@@ -6369,6 +6428,10 @@
         "ViewObservability",
         "ViewOrgChart",
         "commented on",
+        "delete",
+        "index",
+        "overwrite",
+        "re-embed",
         "require_approval",
         "updated"
       ]
@@ -6558,16 +6621,20 @@
       "open": false,
       "values": [
         "ACTIVE",
+        "APPROVED",
         "ASSESSED",
         "AVAILABLE",
         "COMPLETE",
         "DISMISSED",
+        "EXPIRED",
         "FAILED",
         "IDLE",
         "IN_PROGRESS",
         "NEW",
         "OPEN",
+        "PENDING",
         "READY",
+        "REJECTED",
         "RESOLVED",
         "SCORED",
         "active",

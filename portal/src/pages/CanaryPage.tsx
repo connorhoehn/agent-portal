@@ -7,6 +7,7 @@
 // Right rail: DecisionHistoryPanel.
 
 import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { relativeTime } from '../lib/relativeTime';
 import { useSearchParams } from 'react-router';
 import {
   ReactFlow,
@@ -662,7 +663,7 @@ function CanaryToolbar({
         <Inline gap="md" align="center">
           <StatusPill state={halted ? 'error' : 'success'} label={halted ? 'Halted' : 'Active'} size="sm" />
           <T className="text-[11px] text-text-tertiary">
-            {lastJudgedAt ? `Last judged ${new Date(lastJudgedAt).toLocaleTimeString()}` : 'Awaiting first judgement…'}
+            {lastJudgedAt ? `Last judged ${relativeTime(lastJudgedAt)}` : 'Awaiting first judgement…'}
           </T>
         </Inline>
       </Toolbar>

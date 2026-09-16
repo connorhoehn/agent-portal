@@ -14,6 +14,7 @@
 // Polling: 15s for the page (operational), 30s for the events feed.
 
 import { useMemo } from 'react';
+import { relativeTime } from '../../lib/relativeTime';
 import { useNavigate } from 'react-router';
 import {
   Button,
@@ -87,10 +88,14 @@ interface HitlSlaResponse {
   pendingCount: number;
   oldestPendingAgeSeconds: number | null;
   decidedInWindow: number;
-  p50DecisionSeconds: number;
-  p99DecisionSeconds: number;
+  // Nullable: PERCENTILE_CONT over an empty set is NULL, and the route stopped
+  // coalescing that to 0 — "p50 0.0s" is a latency claim over no latency.
+  p50DecisionSeconds: number | null;
+  p99DecisionSeconds: number | null;
   expiredInWindow: number;
-  slaCompliantFraction: number;
+  // Null when nothing was decided: a rate with no denominator is absent, not
+  // 100%.
+  slaCompliantFraction: number | null;
   slaThresholdSeconds: number;
 }
 
@@ -469,9 +474,12 @@ function HitlSlaBody({
   const oldestMin = hitl.oldestPendingAgeSeconds == null
     ? null
     : Math.floor(hitl.oldestPendingAgeSeconds / 60);
-  const slaPct = (hitl.slaCompliantFraction * 100).toFixed(1);
-  const slaTone: 'success' | 'warning' | 'danger' =
-    hitl.slaCompliantFraction >= 0.95 ? 'success'
+  const slaPct = hitl.slaCompliantFraction == null
+    ? null
+    : (hitl.slaCompliantFraction * 100).toFixed(1);
+  const slaTone: 'success' | 'warning' | 'danger' | 'neutral' =
+    hitl.slaCompliantFraction == null ? 'neutral'
+      : hitl.slaCompliantFraction >= 0.95 ? 'success'
       : hitl.slaCompliantFraction >= 0.85 ? 'warning'
       : 'danger';
 
@@ -499,10 +507,10 @@ function HitlSlaBody({
       ) : (
         <Inline gap="xs" wrap>
           <Chip tone="neutral" size="xs">
-            p50 {hitl.p50DecisionSeconds.toFixed(1)}s
+            p50 {hitl.p50DecisionSeconds == null ? '—' : `${hitl.p50DecisionSeconds.toFixed(1)}s`}
           </Chip>
           <Chip tone="neutral" size="xs">
-            p99 {hitl.p99DecisionSeconds.toFixed(1)}s
+            p99 {hitl.p99DecisionSeconds == null ? '—' : `${hitl.p99DecisionSeconds.toFixed(1)}s`}
           </Chip>
           <Chip tone={slaTone} size="xs" title={`${hitl.decidedInWindow} decided, threshold ${hitl.slaThresholdSeconds}s`}>
             SLA {slaPct}%
@@ -564,7 +572,7 @@ function EventRow({ event, onClick }: { event: RecentEvent; onClick: () => void 
         {event.detail && <T as="div" className="text-[11px] text-text-tertiary truncate">{event.detail}</T>}
       </Stack>
       <T className="text-[11px] text-text-tertiary font-mono whitespace-nowrap shrink-0">
-        {new Date(event.ts).toLocaleTimeString()}
+        {relativeTime(event.ts)}
       </T>
       {tone === 'danger' && <Chip tone="danger" size="xs">crit</Chip>}
     </Inline>
