@@ -22,8 +22,12 @@
 //   3. THE SCALE. `composite` is 0-100 on this wire; `influence`, `expertise`
 //      and the three unmeasured axes are 0-1. One answer, asserted, because a
 //      silent rescale is how a page starts lying quietly.
-//   4. NO TYPED AGGREGATES. `total` is the length of the list it ships beside
-//      and `mostRecentScoredAt` is a reduction over those rows; the skill
+//   4. NO TYPED AGGREGATES. `total` is counted from the fixture's own rows —
+//      the filtered set BEFORE the page is sliced off it, matching what
+//      realGetLeaderboard's/realGetSkillLeaderboard's paired `count(*)` reports
+//      online — never a typed field and never (as it read until 2026-09-16)
+//      the length of the capped page. `mostRecentScoredAt` is a reduction over
+//      the page's own rows, same as the real query's LIMIT'd result; the skill
 //      mention counts are counted from the person_skills edges, never stored.
 
 const auroraState = { mockAurora: true };
@@ -161,10 +165,21 @@ describe('one scale, stated', () => {
 });
 
 describe('nothing countable is stored', () => {
-  it('reports `total` as the length of the page it ships', async () => {
+  // Until 2026-09-16 this asserted `total === page.entries.length` — true only
+  // because the seed (56 people) happens to be smaller than every limit this
+  // suite tried. `realGetLeaderboard`/`realGetSkillLeaderboard` were fixed the
+  // same day to run a real `count(*)` alongside the capped page (feat(scale):
+  // honest counts) specifically because `entries.length` silently equals the
+  // LIMIT once a filtered set outgrows it — the mock carried the identical bug
+  // and this test pinned it as intentional. `total` now counts the filtered
+  // set before the page is sliced off it, the same fix, so a request that
+  // actually caps below the matching count must report the true count, not
+  // the page size.
+  it('reports `total` as a real count of the filtered set, not the page size', async () => {
     const page = await mockAurora.getLeaderboard({ limit: 12 });
     expect(page.entries).toHaveLength(12);
-    expect(page.total).toBe(page.entries.length);
+    expect(page.total).toBe(seedPeople.size); // 56 people, capped to a 12-row page
+    expect(page.total).not.toBe(page.entries.length);
     const all = await mockAurora.getLeaderboard({ limit: 200 });
     expect(all.total).toBe(seedPeople.size);
   });
@@ -207,8 +222,17 @@ describe('nothing countable is stored', () => {
     const { entries, total } = await mockAurora.getSkillLeaderboard({ skill: 'kubernetes', limit: 100 });
     const expected = mockPeople.filter((p) => p.skills.includes('Kubernetes')).map((p) => p.id);
     expect(entries.map((e) => e.personId).sort()).toEqual([...expected].sort());
-    expect(total).toBe(entries.length);
+    expect(total).toBe(expected.length);
     expect(entries.length).toBeGreaterThan(0);
+  });
+
+  it('keeps `total` the full holder count once the page is capped below it', async () => {
+    const holderCount = mockPeople.filter((p) => p.skills.includes('Kubernetes')).length;
+    expect(holderCount).toBeGreaterThan(1); // otherwise this test can't exercise a cap
+    const capped = await mockAurora.getSkillLeaderboard({ skill: 'kubernetes', limit: 1 });
+    expect(capped.entries).toHaveLength(1);
+    expect(capped.total).toBe(holderCount);
+    expect(capped.total).not.toBe(capped.entries.length);
   });
 
   it('spreads the cohorts over all six departments now the cast is whole', async () => {

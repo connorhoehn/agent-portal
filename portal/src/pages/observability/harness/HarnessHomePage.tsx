@@ -40,6 +40,7 @@ import { useFetch } from '../../../hooks/useFetch';
 import { CostChip } from '../../../components/observability/CostChip';
 import { ModeChip } from '../../../components/observability/ModeChip';
 import { SmartEmptyState } from '../../../components/observability/SmartEmptyState';
+import { UnavailableNotice } from '../../../components/UnavailableNotice';
 import { T } from '../Text';
 import { RowEmpty } from '../ReadState';
 import { statusTone, passRateTone, fmtPct, type RunStatus } from './harnessShared';
@@ -129,7 +130,9 @@ function defaultLabel(): string {
 function HarnessHomePage() {
   const navigate = useNavigate();
 
-  const { data: casesData, refresh: refreshCases } = useFetch<unknown>(
+  const {
+    data: casesData, error: casesError, refresh: refreshCases,
+  } = useFetch<unknown>(
     '/api/observability/harness/cases',
     30_000,
   );
@@ -138,7 +141,9 @@ function HarnessHomePage() {
     return Array.isArray(d) ? d : (d?.cases ?? []);
   }, [casesData]);
 
-  const { data: runsData, refresh: refreshRuns } = useFetch<unknown>(
+  const {
+    data: runsData, error: runsError, refresh: refreshRuns,
+  } = useFetch<unknown>(
     '/api/observability/harness/runs?limit=14',
     30_000,
   );
@@ -151,7 +156,9 @@ function HarnessHomePage() {
     );
   }, [runsData]);
 
-  const { data: coverageData, refresh: refreshCoverage } = useFetch<unknown>(
+  const {
+    data: coverageData, error: coverageError, refresh: refreshCoverage,
+  } = useFetch<unknown>(
     '/api/observability/harness/coverage',
     30_000,
   );
@@ -159,6 +166,17 @@ function HarnessHomePage() {
     const d = coverageData as { byAgent?: CoverageRow[] } | CoverageRow[] | null;
     return Array.isArray(d) ? d : (d?.byAgent ?? []);
   }, [coverageData]);
+
+  // None of /cases, /runs or /coverage answer the `degraded: true` wire
+  // marker on a failed read (they throw straight through asyncHandler, unlike
+  // calibration.ts's routes) — so the only signal a broken read leaves is
+  // useFetch's transport `error`. Before this, none of the three were even
+  // read here: a 500 against a real Aurora outage left `casesData`/`runsData`/
+  // `coverageData` null, the `?? []` fallbacks turned that into empty lists,
+  // and the page rendered "No runs yet. Click Run now…" — indistinguishable
+  // from a fleet that has genuinely never been tested. First failure wins,
+  // same convention `firstDegraded` uses for a page backed by several reads.
+  const readFailure = casesError ?? runsError ?? coverageError ?? null;
 
   const activeCount = useMemo(() => cases.filter((c) => c.active).length, [cases]);
   const lastRun = runs[0] ?? null;
@@ -320,6 +338,16 @@ function HarnessHomePage() {
         </Inline>
       }
     >
+      {readFailure && (
+        <UnavailableNotice
+          error={readFailure}
+          what="the test harness"
+          source="Cases, runs and coverage live in the Aurora observability tables"
+          onRetry={refreshAll}
+          className="mb-4"
+        />
+      )}
+
       {/* Header */}
       <Card padding="md">
         <Inline
@@ -358,7 +386,7 @@ function HarnessHomePage() {
           </Inline>
         </Inline>
         {sparkData.length === 0 ? (
-          <RowEmpty text="No runs yet. Click Run now to replay the test set." />
+          <RowEmpty text="No runs yet. Click Run now to replay the test set." degraded={runsError} />
         ) : (
           <Stack className="w-full h-[220px]">
             <ResponsiveContainer>
@@ -408,6 +436,10 @@ function HarnessHomePage() {
           <SmartEmptyState
             title="No runs yet"
             detail="A run replays the active test set against agents and scores the responses with the LLM-as-judge."
+            degraded={runsError}
+            degradedWhat="the run history"
+            degradedSource="Runs live in the Aurora observability tables"
+            onRetry={refreshRuns}
             actions={[
               {
                 label: 'Run the test harness',
@@ -501,7 +533,7 @@ function HarnessHomePage() {
           </Inline>
         </Inline>
         {coverage.length === 0 ? (
-          <RowEmpty text="No coverage data yet." />
+          <RowEmpty text="No coverage data yet." degraded={coverageError} />
         ) : (
           <Stack gap="sm">
             {(() => {

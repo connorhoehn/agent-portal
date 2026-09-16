@@ -79,15 +79,17 @@ interface PromptVersionDeltaEntry {
 }
 
 interface CompareSummary {
-  passRateA: number;
-  passRateB: number;
-  passRateDelta: number;
+  // null (not 0) when a side has zero completed / zero timed results — see
+  // the backend comment on CompareRunsSummary (routes/harness.ts).
+  passRateA: number | null;
+  passRateB: number | null;
+  passRateDelta: number | null;
   costAUsd: number | null;
   costBUsd: number | null;
   costDeltaUsd: number | null;
-  avgDurationMsA: number;
-  avgDurationMsB: number;
-  durationDeltaMs: number;
+  avgDurationMsA: number | null;
+  avgDurationMsB: number | null;
+  durationDeltaMs: number | null;
   modeA: Mode;
   modeB: Mode;
   judgeModelA: string;
@@ -143,12 +145,14 @@ const fmtSignedDuration = (ms: number | null): string => {
   return `${sign}${(abs / 60_000).toFixed(1)}m`;
 };
 
-const fmtSignedPct = (v: number, digits = 1): string => {
+const fmtSignedPct = (v: number | null, digits = 1): string => {
+  if (v == null || !Number.isFinite(v)) return '—';
   const sign = v >= 0 ? '+' : '-';
   return `${sign}${(Math.abs(v) * 100).toFixed(digits)}%`;
 };
 
-const passRateDeltaTone = (v: number): Tone => {
+const passRateDeltaTone = (v: number | null): Tone => {
+  if (v == null) return 'neutral';
   if (v > 0.01) return 'success';
   if (v < -0.01) return 'danger';
   return 'neutral';
@@ -161,7 +165,8 @@ const costDeltaTone = (v: number | null): Tone => {
   return 'neutral';
 };
 
-const durationDeltaTone = (v: number): Tone => {
+const durationDeltaTone = (v: number | null): Tone => {
+  if (v == null) return 'neutral';
   if (v > 100) return 'danger';   // slower
   if (v < -100) return 'success'; // faster
   return 'neutral';
@@ -261,7 +266,7 @@ function CompareRunsPage() {
               <Chip tone="neutral" size="xs">{fmtPct(summary.passRateB)}</Chip>
               <T className="text-text-tertiary">·</T>
               <Chip tone={passRateDeltaTone(summary.passRateDelta)} size="xs">
-                {summary.passRateDelta >= 0 ? '▲' : '▼'} {fmtSignedPct(summary.passRateDelta)}
+                {summary.passRateDelta == null ? '—' : (summary.passRateDelta >= 0 ? '▲' : '▼')} {fmtSignedPct(summary.passRateDelta)}
               </Chip>
               <T className="text-text-tertiary">·</T>
               <T>cost Δ:</T>

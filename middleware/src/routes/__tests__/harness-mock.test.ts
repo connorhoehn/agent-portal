@@ -121,6 +121,36 @@ describe('GET /api/observability/harness/runs/:a/compare/:b (mock)', () => {
       res.body.regressions.length + res.body.fixes.length + res.body.neutral.length,
     ).toBeGreaterThan(0);
   });
+
+  // Regression for the "0ms / 0% read as a real measurement" class: a run
+  // that has produced no results yet (just created, still 'pending') has no
+  // pass rate and no latency to report on its side of the comparison. Before
+  // this fix, computePassRate/avgDurationMs defaulted to 0 instead of null,
+  // so comparing against a fresh run fabricated "0% passing" / "0ms latency"
+  // for a run that simply had not run — exactly the pattern this sweep was
+  // told to hunt for (see mock/harness.ts::withCounts, which already gets
+  // this right for passRate and is the convention this brings the compare
+  // endpoint in line with).
+  it('reports null, not 0, for pass rate and latency on a run with zero results', async () => {
+    const app = buildApp();
+    const list = await request(app).get('/api/observability/harness/runs?limit=1');
+    const doneRunId = list.body.runs[0].runId;
+
+    const created = await request(app).post('/api/observability/harness/runs').send({
+      label: 'freshly-created-no-results',
+    });
+    expect(created.status).toBe(201);
+    const pendingRunId = created.body.runId as string;
+
+    const res = await request(app).get(
+      `/api/observability/harness/runs/${pendingRunId}/compare/${doneRunId}`,
+    );
+    expect(res.status).toBe(200);
+    expect(res.body.summary.passRateA).toBeNull();
+    expect(res.body.summary.avgDurationMsA).toBeNull();
+    expect(res.body.summary.passRateDelta).toBeNull();
+    expect(res.body.summary.durationDeltaMs).toBeNull();
+  });
 });
 
 describe('POST /api/observability/harness/cases (mock)', () => {

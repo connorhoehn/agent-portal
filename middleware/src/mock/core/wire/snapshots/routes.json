@@ -1853,12 +1853,12 @@
     {
       "method": "POST",
       "path": "/api/observability/harness/promote",
-      "source": "src/routes/harness.ts:1554"
+      "source": "src/routes/harness.ts:1562"
     },
     {
       "method": "GET",
       "path": "/api/observability/harness/promoted-versions",
-      "source": "src/routes/harness.ts:1664"
+      "source": "src/routes/harness.ts:1672"
     },
     {
       "method": "POST",
@@ -1903,7 +1903,7 @@
     {
       "method": "GET",
       "path": "/api/observability/harness/runs/:runIdA/compare/:runIdB",
-      "source": "src/routes/harness.ts:1419"
+      "source": "src/routes/harness.ts:1425"
     },
     {
       "method": "POST",

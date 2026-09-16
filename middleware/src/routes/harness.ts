@@ -1278,15 +1278,21 @@ export interface PromptVersionDeltaEntry {
 }
 
 export interface CompareRunsSummary {
-  passRateA: number;
-  passRateB: number;
-  passRateDelta: number;
+  // null, not 0, when a side has zero completed results / zero timed
+  // results — a run that has not finished (or crashed before its first
+  // verdict) has no pass rate or latency to report, and 0 would read as "0%
+  // passing" / "0ms latency" rather than "not measured yet". Same convention
+  // GET /runs/:id/status and the mock fixtures (mock/harness.ts::withCounts)
+  // already use for passRate; this brings the compare summary in line.
+  passRateA: number | null;
+  passRateB: number | null;
+  passRateDelta: number | null;
   costAUsd: number | null;
   costBUsd: number | null;
   costDeltaUsd: number | null;
-  avgDurationMsA: number;
-  avgDurationMsB: number;
-  durationDeltaMs: number;
+  avgDurationMsA: number | null;
+  avgDurationMsB: number | null;
+  durationDeltaMs: number | null;
   modeA: 'live' | 'sim';
   modeB: 'live' | 'sim';
   judgeModelA: string;
@@ -1373,7 +1379,7 @@ function sumCost(rows: JoinedResultRow[]): number | null {
   return any ? total : null;
 }
 
-function avgDurationMs(rows: JoinedResultRow[]): number {
+function avgDurationMs(rows: JoinedResultRow[]): number | null {
   let n = 0;
   let total = 0;
   for (const r of rows) {
@@ -1382,13 +1388,13 @@ function avgDurationMs(rows: JoinedResultRow[]): number {
       n += 1;
     }
   }
-  return n === 0 ? 0 : total / n;
+  return n === 0 ? null : total / n;
 }
 
-function computePassRate(run: TestRun): number {
+function computePassRate(run: TestRun): number | null {
   if (run.passRate != null && Number.isFinite(run.passRate)) return run.passRate;
   if (run.completed > 0) return run.passed / run.completed;
-  return 0;
+  return null;
 }
 
 function diffPromptVersions(
@@ -1506,13 +1512,15 @@ harnessRouter.get('/runs/:runIdA/compare/:runIdB', requireAction('ViewObservabil
   const summary: CompareRunsSummary = {
     passRateA,
     passRateB,
-    passRateDelta: passRateB - passRateA,
+    passRateDelta: (passRateA != null && passRateB != null) ? (passRateB - passRateA) : null,
     costAUsd,
     costBUsd,
     costDeltaUsd,
     avgDurationMsA,
     avgDurationMsB,
-    durationDeltaMs: avgDurationMsB - avgDurationMsA,
+    durationDeltaMs: (avgDurationMsA != null && avgDurationMsB != null)
+      ? (avgDurationMsB - avgDurationMsA)
+      : null,
     modeA: runA.mode,
     modeB: runB.mode,
     judgeModelA: runA.judgeModelId,

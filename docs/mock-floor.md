@@ -781,3 +781,33 @@ event into a single render, and no in-flight state (the step strip, the
 streaming bubble, tool-call pills) was ever painted, so Ask looked as if the
 hook dropped `STEP_STARTED`. A real Nova answer streams for seconds; the mock
 now takes about 1.4s. Set `MOCK_STREAM_PACE_MS=0` for a capture server.
+
+## The error band, and what it costs
+
+`mock/invocations.ts` ranks every THROWN run into 0.05–8h and every clean run
+into 8–24h, so in newest-first order every error outranks every success.
+`trace-sink-union.test.ts` pins that as a contract, and there is a real defect
+behind it: spread evenly across the day, the day's errors competed for slots
+with clean rows and two fell past `/recent-invocations`' fixed 50-row window,
+so Health linked to a list that could not show the errors Health had just
+counted.
+
+The cost is that the Runs page opens wall-to-wall red. All fourteen of the
+day's errors are inside the fifty most recent rows by construction, so the
+error share of what is on screen is 28% while Overview, reading the same
+corpus, says 4.2%. Two pages, one day of traffic, opposite impressions.
+
+Interleaving the errors through the window instead of ahead of it satisfies
+the underlying requirement — every error still lands inside the tail — and was
+tried on 2026-09-16. It breaks three further behaviours that lean on the
+stronger disjoint-band property rather than on the requirement: the 1-hour
+drift/outlier window is asserted empty *because* it holds only failed runs,
+and a written row is asserted reachable there *because* seeded clean rows
+cannot be. Changing the band means re-deriving all three, which is a larger
+piece of work than it looks and was reverted rather than half-done.
+
+What shipped instead is the page saying what it is showing: Runs reads
+"last 50 invocations, 14 of them errored", so a reader who has just seen 4.2%
+on Overview can see this is a window rather than a contradiction. If the band
+is ever revisited, weaken the test to the requirement — every error inside the
+tail — not to the mechanism.

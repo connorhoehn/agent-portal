@@ -77,15 +77,17 @@ interface ComparedResult {
 }
 
 interface CompareSummary {
-  passRateA: number;
-  passRateB: number;
-  passRateDelta: number;
+  // null (not 0) when a side has zero completed / zero timed results — see
+  // the backend comment on CompareRunsSummary (routes/harness.ts).
+  passRateA: number | null;
+  passRateB: number | null;
+  passRateDelta: number | null;
   costAUsd: number | null;
   costBUsd: number | null;
   costDeltaUsd: number | null;
-  avgDurationMsA: number;
-  avgDurationMsB: number;
-  durationDeltaMs: number;
+  avgDurationMsA: number | null;
+  avgDurationMsB: number | null;
+  durationDeltaMs: number | null;
   modeA: Mode;
   modeB: Mode;
   judgeModelA: string;
@@ -134,7 +136,8 @@ const fmtSignedDuration = (ms: number | null): string => {
   if (abs < 60_000) return `${sign}${(abs / 1000).toFixed(1)}s`;
   return `${sign}${(abs / 60_000).toFixed(1)}m`;
 };
-const fmtSignedPct = (v: number, digits = 1): string => {
+const fmtSignedPct = (v: number | null, digits = 1): string => {
+  if (v == null || !Number.isFinite(v)) return '—';
   const sign = v >= 0 ? '+' : '-';
   return `${sign}${(Math.abs(v) * 100).toFixed(digits)}%`;
 };
@@ -142,16 +145,16 @@ const fmtUsd = (v: number | null | undefined, digits = 3): string => {
   if (v == null || !Number.isFinite(v)) return '—';
   return `$${v.toFixed(digits)}`;
 };
-const passRateDeltaTone = (v: number): Tone =>
-  v > 0.01 ? 'success' : v < -0.01 ? 'danger' : 'neutral';
+const passRateDeltaTone = (v: number | null): Tone =>
+  v == null ? 'neutral' : v > 0.01 ? 'success' : v < -0.01 ? 'danger' : 'neutral';
 const costDeltaTone = (v: number | null): Tone => {
   if (v == null) return 'neutral';
   if (v > 0.001) return 'danger';
   if (v < -0.001) return 'success';
   return 'neutral';
 };
-const durationDeltaTone = (v: number): Tone =>
-  v > 100 ? 'danger' : v < -100 ? 'success' : 'neutral';
+const durationDeltaTone = (v: number | null): Tone =>
+  v == null ? 'neutral' : v > 100 ? 'danger' : v < -100 ? 'success' : 'neutral';
 const judgeTone = (v: number | null): Tone =>
   v == null ? 'warning' : v >= 0.75 ? 'success' : v >= 0.55 ? 'warning' : 'danger';
 
@@ -252,7 +255,7 @@ function ModelComparePage() {
           <T className="text-text-tertiary">→</T>
           <Chip tone="neutral" size="xs">B {fmtPct(summary.passRateB)}</Chip>
           <Chip tone={passRateDeltaTone(summary.passRateDelta)} size="xs">
-            {summary.passRateDelta >= 0 ? '▲' : '▼'} {fmtSignedPct(summary.passRateDelta)}
+            {summary.passRateDelta == null ? '—' : (summary.passRateDelta >= 0 ? '▲' : '▼')} {fmtSignedPct(summary.passRateDelta)}
           </Chip>
         </Inline>
       ),
@@ -287,12 +290,12 @@ function ModelComparePage() {
     },
     {
       label: 'Avg latency',
-      value: fmtSignedDuration(Math.round(summary.avgDurationMsB)),
+      value: fmtSignedDuration(summary.avgDurationMsB == null ? null : Math.round(summary.avgDurationMsB)),
       hint: (
         <Inline gap="xs" align="center" wrap>
-          <Chip tone="neutral" size="xs">A {fmtSignedDuration(Math.round(summary.avgDurationMsA))}</Chip>
+          <Chip tone="neutral" size="xs">A {fmtSignedDuration(summary.avgDurationMsA == null ? null : Math.round(summary.avgDurationMsA))}</Chip>
           <T className="text-text-tertiary">→</T>
-          <Chip tone="neutral" size="xs">B {fmtSignedDuration(Math.round(summary.avgDurationMsB))}</Chip>
+          <Chip tone="neutral" size="xs">B {fmtSignedDuration(summary.avgDurationMsB == null ? null : Math.round(summary.avgDurationMsB))}</Chip>
           <Chip tone={durationDeltaTone(summary.durationDeltaMs)} size="xs">
             {fmtSignedDuration(summary.durationDeltaMs)}
           </Chip>

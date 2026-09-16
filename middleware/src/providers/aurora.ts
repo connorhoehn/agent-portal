@@ -1260,10 +1260,13 @@ function mostRecentOf(entries: ScoreEntry[]): string | null {
 /**
  * `ORDER BY composite_score DESC LIMIT :lim`, over the seeded `people` rows —
  * mock/scores.ts projects them, so this ranks the same cast, in the same
- * order, as the Aurora query it stands in for. `total` counts the rows it
- * ships beside — the page, the way realGetLeaderboard reports it — not the
- * size of the unpaged set, which would make the number disagree with the list
- * under it the moment the cast outgrew the limit.
+ * order, as the Aurora query it stands in for. `total` is a real count of the
+ * filtered set, the way realGetLeaderboard's paired `count(*)` is — counted
+ * from `entries` BEFORE the page is sliced off it, not from the page itself,
+ * so it stays honest once the cast (or a department within it) outgrows the
+ * limit. cappedGraphPeople() below does the same thing for `peopleTotal` —
+ * count the full array in hand, then slice — and this used to be the one
+ * reader that sliced first and counted what was left.
  */
 async function mockGetLeaderboard(opts: { department?: string; limit?: number }): Promise<Leaderboard> {
   const limit = Math.max(1, Math.min(opts.limit ?? 25, 200));
@@ -1273,8 +1276,9 @@ async function mockGetLeaderboard(opts: { department?: string; limit?: number })
     entries = entries.filter((e) => e.department.toLowerCase().includes(needle));
   }
   entries.sort((a, b) => b.composite - a.composite);
+  const total = entries.length;
   const page = entries.slice(0, limit);
-  return { entries: page, total: page.length, mostRecentScoredAt: mostRecentOf(page) };
+  return { entries: page, total, mostRecentScoredAt: mostRecentOf(page) };
 }
 
 async function mockGetScore(personId: string): Promise<ScoreEntry | null> {
@@ -1303,11 +1307,16 @@ async function mockGetSkillLeaderboard(opts: { skill: string; limit?: number }):
     (mockPeople as Person[]).filter((p) => p.skills.some((s) => s.toLowerCase() === needle))
       .map((p) => p.id),
   );
-  const entries = mockScores
+  const matched = mockScores
     .filter((s) => holders.has(s.personId))
-    .sort((a, b) => b.composite - a.composite)
-    .slice(0, limit);
-  return { entries, total: entries.length, mostRecentScoredAt: mostRecentOf(entries) };
+    .sort((a, b) => b.composite - a.composite);
+  // `total` is every holder of the skill, counted before the page is sliced
+  // off — same fix, same reason as mockGetLeaderboard above: realAurora's
+  // paired `count(DISTINCT p.id)` counts every matching person, not the
+  // LIMIT'd page.
+  const total = matched.length;
+  const entries = matched.slice(0, limit);
+  return { entries, total, mostRecentScoredAt: mostRecentOf(entries) };
 }
 
 /**

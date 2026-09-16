@@ -24,9 +24,8 @@ import {
   TableTd,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
-import { CostChip } from '../../components/observability/CostChip';
-import { PromptVersionChip } from '../../components/observability/PromptVersionChip';
 import { T } from './Text';
+import { relativeTime } from '../../lib/relativeTime';
 import {
   applyFiltersToParams,
   firstSentence,
@@ -56,14 +55,6 @@ interface Invocation {
   runtimeSessionId?: string;
   error?: string;
   sandboxExecutions?: SandboxExecution[];
-  // Sprint 1 cost + provenance fields (nullable until Agent A's migration lands).
-  inputTokens?: number | null;
-  outputTokens?: number | null;
-  estCostUsd?: number | null;
-  judgeCostUsd?: number | null;
-  totalCostUsd?: number | null;
-  promptVersion?: string | null;
-  modelId?: string | null;
 }
 
 /** Just enough of GET /api/agents to populate the "All agents" filter from
@@ -208,11 +199,16 @@ function InvocationsPage() {
   }, [setSearchParams]);
 
   const intervenedCount = filtered.filter((i) => i.guardrailIntervened).length;
+  const errorCount = filtered.filter((i) => i.error).length;
 
   return (
     <PageSection
       title="Runs"
-      description="Live · last 50 invocations · 5s refresh"
+      description={
+        errorCount > 0
+          ? `Live · last ${filtered.length} invocations, ${errorCount} of them errored · 5s refresh`
+          : `Live · last ${filtered.length} invocations · 5s refresh`
+      }
       actions={
         <Inline gap="sm" align="center">
           <Link
@@ -267,13 +263,21 @@ function InvocationsPage() {
           <Table>
             <TableHead>
               <TableRow>
+                {/* No "Prompt ver." or "Cost" column here, on purpose.
+                    This feed is the live in-memory ring (lib/invocations.ts
+                    `InvocationRecord`), pushed the moment a call happens.
+                    Neither the prompt version nor the cost is known then —
+                    both arrive later on the TRACE, via the CloudWatch poller,
+                    into observability.invocation_traces. So both columns
+                    rendered an em dash on every row of every deployment: not
+                    a gap in the data, a question this feed cannot answer.
+                    Both are on the invocation's own page, which every row
+                    links to, and on Search, which reads the trace table. */}
                 <TableTh>When</TableTh>
                 <TableTh>Agent</TableTh>
-                <TableTh>Prompt ver.</TableTh>
                 <TableTh>Prompt</TableTh>
                 <TableTh>Response</TableTh>
                 <TableTh>Duration</TableTh>
-                <TableTh>Cost</TableTh>
                 <TableTh>Status</TableTh>
               </TableRow>
             </TableHead>
@@ -283,16 +287,14 @@ function InvocationsPage() {
                   <TableTd className="whitespace-nowrap text-[11px] text-[var(--color-text-tertiary)]">
                     <Link
                       to={`/admin/observability/invocations/${encodeURIComponent(inv.id)}`}
+                      title={new Date(inv.startedAt).toLocaleString()}
                       className="text-[var(--color-text-tertiary)] no-underline hover:text-[var(--color-primary)] hover:underline"
                     >
-                      {new Date(inv.startedAt).toLocaleTimeString()}
+                      {relativeTime(inv.startedAt)}
                     </Link>
                   </TableTd>
                   <TableTd className="whitespace-nowrap text-[12px] font-medium">
                     {registryById.get(resolveAgentKey(inv.agentId, inv.agentName)) ?? inv.agentName}
-                  </TableTd>
-                  <TableTd className="whitespace-nowrap">
-                    <PromptVersionChip promptVersion={inv.promptVersion} />
                   </TableTd>
                   <TableTd className="max-w-[280px] truncate text-[12px]" title={inv.promptSnippet}>
                     {inv.promptSnippet}
@@ -309,9 +311,6 @@ function InvocationsPage() {
                   </TableTd>
                   <TableTd className="text-[11px] text-[var(--color-text-tertiary)]">
                     {(inv.durationMs / 1000).toFixed(1)}s
-                  </TableTd>
-                  <TableTd className="whitespace-nowrap">
-                    <CostChip cost={inv.totalCostUsd} />
                   </TableTd>
                   <TableTd>
                     {inv.error ? (
