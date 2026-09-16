@@ -21,6 +21,7 @@ import {
   Inline,
   Input,
   MetaLine,
+  SectionLabel,
   Modal,
   RadioGroup,
   Select,
@@ -374,9 +375,9 @@ export function BotCreateWizard({ open, onClose }: BotCreateWizardProps) {
                       return (
                         <SelectableCard key={t.id} selected={active} onSelect={() => applyStarter(t)} padding="sm" className="text-left">
                           <Stack gap="xs">
-                            <strong className={active ? 'text-[12px] font-semibold text-primary' : 'text-[12px] font-semibold text-text-primary'}>
+                            <Inline as="span" gap="none" className={active ? 'text-[12px] font-semibold text-primary' : 'text-[12px] font-semibold text-text-primary'}>
                               {t.label}
-                            </strong>
+                            </Inline>
                             <MetaLine size="xs" tone="tertiary" items={[t.blurb]} />
                           </Stack>
                         </SelectableCard>
@@ -421,9 +422,9 @@ export function BotCreateWizard({ open, onClose }: BotCreateWizardProps) {
                           }}
                         >
                           <Stack gap="xs">
-                            <strong className={active ? 'text-[12px] font-semibold text-primary' : 'text-[12px] font-semibold text-text-primary'}>
+                            <Inline as="span" gap="none" className={active ? 'text-[12px] font-semibold text-primary' : 'text-[12px] font-semibold text-text-primary'}>
                               {t.label}
-                            </strong>
+                            </Inline>
                             <MetaLine size="xs" tone="tertiary" items={[t.blurb]} />
                           </Stack>
                         </SelectableCard>
@@ -660,9 +661,7 @@ export function BotCreateWizard({ open, onClose }: BotCreateWizardProps) {
           {step === 5 && (
             <>
               <Card padding="md">
-                <strong className="block text-[11px] font-semibold uppercase tracking-wide text-text-secondary mb-2">
-                  {step1.name.trim() || 'Unnamed bot'}
-                </strong>
+                <SectionLabel as="div" className="mb-2">{step1.name.trim() || 'Unnamed bot'}</SectionLabel>
                 <Table>
                   <TableBody>
                     <TableRow><TableTd className="text-text-tertiary">Template</TableTd><TableTd>{step1.template ?? '—'}</TableTd></TableRow>
@@ -689,9 +688,7 @@ export function BotCreateWizard({ open, onClose }: BotCreateWizardProps) {
 
               {/* Estimate panel — ranges only, basis always stated. */}
               <Card padding="sm">
-                <strong className="block text-[10px] font-semibold uppercase tracking-wide text-text-tertiary mb-1">
-                  What a run costs
-                </strong>
+                <SectionLabel as="div" className="mb-1">What a run costs</SectionLabel>
                 <MetaLine
                   size="sm"
                   items={[estimateSummaryText({ loading: estimateLoading, error: estimateError, estimate: estimate ?? null })]}

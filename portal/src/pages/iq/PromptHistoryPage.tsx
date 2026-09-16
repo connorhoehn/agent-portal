@@ -7,7 +7,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
-  Checkbox, Chip, CodeBlock, EmptyState, Select, SelectableCard, Stack, Inline, Tabs,
+  Card, Checkbox, Chip, CodeBlock, EmptyState, Select, SelectableCard, Stack, StatStrip, Inline, Tabs,
 } from '@connorhoehnslalom/ui-components/shared';
 import { usePromptList, usePromptVersions } from '../../components/canary/usePromptLibrary.js';
 import { diffStats, lineDiff } from './diffFormat';
@@ -123,7 +123,7 @@ function ActionBadge({ action }: { action: string }): React.ReactElement {
 function ExperimentCard({ exp, role }: { exp: ExperimentRef; role: 'a' | 'b' }): React.ReactElement {
   const deltaPositive = (exp.scoreDelta ?? 0) >= 0;
   return (
-    <Stack gap="none" className="rounded-md border border-border bg-surface-panel px-3.5 py-3">
+    <Card padding="sm" className="bg-surface-panel">
       <Inline gap="sm" align="center" wrap>
         <ActionBadge action={exp.finalAction || 'IN_PROGRESS'} />
         <T className="text-[11px] text-text-secondary">
@@ -131,27 +131,21 @@ function ExperimentCard({ exp, role }: { exp: ExperimentRef; role: 'a' | 'b' }):
         </T>
         <T className="ml-auto text-[11px] text-text-tertiary">{fmtDate(exp.startedAt)}</T>
       </Inline>
-      <Inline gap="md" className="mt-2">
-        <Stack gap="none" align="center" className="min-w-[48px]">
-          <T className="text-[9px] font-bold uppercase tracking-wide text-text-tertiary">Score A</T>
-          <T className="font-mono text-[14px] font-semibold text-text-primary">{fmtScore(exp.scoreA)}</T>
-        </Stack>
-        <Stack gap="none" align="center" className="min-w-[48px]">
-          <T className="text-[9px] font-bold uppercase tracking-wide text-text-tertiary">Score B</T>
-          <T className="font-mono text-[14px] font-semibold text-text-primary">{fmtScore(exp.scoreB)}</T>
-        </Stack>
-        <Stack gap="none" align="center" className="min-w-[48px]">
-          <T className="text-[9px] font-bold uppercase tracking-wide text-text-tertiary">Δ</T>
-          <T className={`font-mono text-[14px] font-bold ${deltaPositive ? 'text-success' : 'text-danger'}`}>
-            {fmtDelta(exp.scoreDelta)}
-          </T>
-        </Stack>
-        <Stack gap="none" align="center" className="min-w-[48px]">
-          <T className="text-[9px] font-bold uppercase tracking-wide text-text-tertiary">Decisions</T>
-          <T className="font-mono text-[14px] font-semibold text-text-primary">{exp.decisionCount}</T>
-        </Stack>
-      </Inline>
-    </Stack>
+      {/* The four numbers are a stat strip, not four hand-built tiles: same
+          composite the dashboards use, so an experiment's scores read the
+          way every other score on the app does. */}
+      <StatStrip
+        frameless
+        className="mt-2"
+        aria-label={`Experiment v${exp.versionA} vs v${exp.versionB}`}
+        items={[
+          { label: 'Score A', value: fmtScore(exp.scoreA) },
+          { label: 'Score B', value: fmtScore(exp.scoreB) },
+          { label: 'Δ', value: fmtDelta(exp.scoreDelta), tone: deltaPositive ? 'accent' : 'danger' },
+          { label: 'Decisions', value: exp.decisionCount },
+        ]}
+      />
+    </Card>
   );
 }
 

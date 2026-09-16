@@ -254,10 +254,7 @@ function QualityPage() {
           />
         ) : (
           <Inline as="div" align="start" gap="lg">
-            <Stack
-              gap="none"
-              className="flex-1 border border-[var(--color-border)] rounded-[var(--radius-md)] p-3 bg-[var(--color-surface)]"
-            >
+            <Card padding="sm" className="flex-1 min-w-0">
               <SectionLabel as="div" className="mb-2">Time series</SectionLabel>
               <ResponsiveContainer width="100%" height={220}>
                 <LineChart
@@ -293,11 +290,8 @@ function QualityPage() {
                   />
                 </LineChart>
               </ResponsiveContainer>
-            </Stack>
-            <Stack
-              gap="none"
-              className="flex-1 border border-[var(--color-border)] rounded-[var(--radius-md)] p-3 bg-[var(--color-surface)]"
-            >
+            </Card>
+            <Card padding="sm" className="flex-1 min-w-0">
               <SectionLabel as="div" className="mb-2">Histogram (10 bins)</SectionLabel>
               <ResponsiveContainer width="100%" height={220}>
                 <BarChart
@@ -321,7 +315,7 @@ function QualityPage() {
                   />
                 </BarChart>
               </ResponsiveContainer>
-            </Stack>
+            </Card>
           </Inline>
         )}
       </Card>
