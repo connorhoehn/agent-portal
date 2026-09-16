@@ -127,6 +127,46 @@ export const agentFleet = defineFixture<AgentDefinition>({
         guardrails: ['content-policy'],
         endpoint: `${RUNTIME}/orgiq-graph-builder`,
       },
+      // The three runtimes this fixture used to omit. `ListAgentRuntimes`
+      // does not filter by tenant or by framework — it returns every runtime
+      // in the account — so a fleet of six was a fleet the real control plane
+      // never returns. The Architecture page counted "online / 6" against its
+      // own static diagram and the two assessment agents were invisible on a
+      // page whose whole subject is the fleet.
+      {
+        id: 'orgiq-assessment-scorer',
+        name: 'Assessment Scorer',
+        status: 'healthy',
+        protocol: 'ag-ui',
+        model: 'nova-pro-v1',
+        tools: ['classify_evidence', 'score_dimension'],
+        guardrails: ['content-policy'],
+        endpoint: `${RUNTIME}/orgiq-assessment-scorer`,
+      },
+      {
+        id: 'orgiq-assessment-drafter',
+        name: 'Assessment Drafter',
+        status: 'healthy',
+        protocol: 'ag-ui',
+        model: 'nova-pro-v1',
+        tools: ['check_story_draft', 'validate_facts'],
+        guardrails: ['content-policy'],
+        endpoint: `${RUNTIME}/orgiq-assessment-drafter`,
+      },
+      {
+        // Not a Strands agent — it runs Claude Code in a microVM, which is
+        // why its model is an inference profile rather than a Nova id. It is
+        // still a runtime the control plane lists, so leaving it out made the
+        // fleet page disagree with `agentcore list`.
+        id: 'orgiq-devbox',
+        name: 'Devbox',
+        status: 'healthy',
+        protocol: 'ag-ui',
+        model: 'us.anthropic.claude-haiku-4-5-20251001-v1:0',
+        tools: ['run_command', 'read_file', 'write_file'],
+        guardrails: [],
+        endpoint: `${RUNTIME}/orgiq-devbox`,
+      },
     ],
     empty: () => [],
     error: () => {

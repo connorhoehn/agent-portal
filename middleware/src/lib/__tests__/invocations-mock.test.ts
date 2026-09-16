@@ -45,17 +45,39 @@ describe('getRecentInvocations under MOCK_AGENTCORE', () => {
     expect(getRecentInvocations()).toEqual([]);
   });
 
-  it('backfills a realistic tail across the 6 deployed agents when MOCK_AGENTCORE is on', () => {
+  it('backfills a realistic tail whose agents are all real fleet members', () => {
     mockConfig.mock.agentcore = true;
     const rows = getRecentInvocations(100);
 
     expect(rows.length).toBeGreaterThanOrEqual(25);
 
-    const agentNames = new Set(rows.map((r) => r.agentName));
-    // Every agent Health's summary knows about should be represented, so the
-    // "All agents" filter and the tail agree on who's in the fleet.
-    for (const a of mockAgents) {
-      expect(agentNames.has(a.name)).toBe(true);
+    // This used to assert the converse — that every agent in the fleet appears
+    // in the tail — which was true only while the fleet was exactly the six
+    // agents the corpus writes traffic for. `ListAgentRuntimes` filters by
+    // nothing, so the real fleet also carries the two assessment agents and
+    // devbox, and the honest tail for an agent with no traffic is no rows at
+    // all. Making that assertion pass again would mean manufacturing runs to
+    // satisfy a count, which is the exact sin mock/agent-statuses.ts's header
+    // was written about.
+    //
+    // The drift worth guarding runs the other way: the tail must never name an
+    // agent the fleet does not have, because that is what makes the "All
+    // agents" filter disagree with Health about who exists.
+    const fleetIds = new Set(mockAgents.map((a) => a.id));
+    const fleetNames = new Set(mockAgents.map((a) => a.name));
+    for (const row of rows) {
+      expect(fleetIds.has(row.agentId)).toBe(true);
+      expect(fleetNames.has(row.agentName)).toBe(true);
+    }
+
+    // And the agents the corpus does write traffic for are all represented, so
+    // a corpus that quietly stopped covering one is still caught.
+    const agentIds = new Set(rows.map((r) => r.agentId));
+    for (const id of [
+      'orgiq-supervisor', 'orgiq-search', 'orgiq-scoring',
+      'orgiq-advisor', 'orgiq-ingestion', 'orgiq-graph-builder',
+    ]) {
+      expect(agentIds.has(id)).toBe(true);
     }
 
     const errors = rows.filter((r) => r.error);

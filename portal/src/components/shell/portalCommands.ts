@@ -18,6 +18,7 @@ import { useNavigate } from 'react-router';
 import type { Command } from '@connorhoehnslalom/ui-components/shared';
 import { useSession } from '../../lib/auth';
 import { openShell, useComputeOptional } from '@connorhoehnslalom/ui-components/compute';
+import { commandKeywords } from './commandKeywords';
 
 type PageTenant = 'orgiq' | 'assessment' | 'admin' | 'universal';
 
@@ -332,8 +333,11 @@ export function usePortalCommands(): Command[] {
         hint: p.hint,
         group: p.group,
         // Path stays in the list (paste-a-URL-fragment still matches); the
-        // real fix is the per-page keywords carrying the words people type.
-        keywords: [p.path, ...(p.keywords ?? [])],
+        // per-page keywords carry the words people type; and the hint's own
+        // words are folded in, because the palette RENDERS the hint and used
+        // to find nothing when the reader typed a word off it. See
+        // commandKeywords.ts.
+        keywords: commandKeywords(p.path, p.label, p.keywords, p.hint),
         run: () => { navigate(p.path); },
       }));
 

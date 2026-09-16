@@ -7,12 +7,16 @@
 import { useEffect, useMemo, useState } from 'react';
 import { MarkerType, type Node, type Edge } from '@xyflow/react';
 import { Link, useSearchParams } from 'react-router';
-import { Chip, Drawer, Inline, InlineAlert, SectionLabel, SegmentedControl, Stack, StatStrip, StatusDot } from '@connorhoehnslalom/ui-components/shared';
+import {
+  Chip, DataTable, Drawer, EmptyState, Inline, InlineAlert, Input, SectionLabel,
+  SegmentedControl, Stack, StatStrip, StatusDot, type DataTableColumn,
+} from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../hooks/useFetch';
 import { UnavailableNotice } from '../components/UnavailableNotice';
 import { KeyValue } from '../components/KeyValue';
 import { AgentFlowFrame, NODE_HEIGHT, NODE_WIDTH, STATUS_COLORS, fmtCount, fmtMs } from './AgentFlowFrame';
 import { T } from './Text';
+import { fleetRows, filterFleet, offDiagramCount, onlineLabel, type FleetRow } from './agentFleetRows';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -172,6 +176,20 @@ function AgentFlowPage() {
   // as a filter param in case a second cluster returns.
   const clusterFilter = (searchParams.get('cluster') ?? 'all') as 'all' | 'orgiq';
 
+  // ?view=diagram|list. The diagram is the page's identity and stays the
+  // default; the list is the half that can show an agent the diagram has no
+  // coordinates for. Both live in the URL so a link carries which one you
+  // meant, like every other lens on this app.
+  const view = searchParams.get('view') === 'list' ? 'list' : 'diagram';
+  const setView = (next: string) => {
+    setSearchParams((prev) => {
+      const p = new URLSearchParams(prev);
+      if (next === 'diagram') p.delete('view'); else p.set('view', next);
+      return p;
+    }, { replace: true });
+  };
+  const [fleetQuery, setFleetQuery] = useState('');
+
   // ?window=1h|24h|7d — the URL is the source of truth, so the Architecture
   // sub-nav's window links and the in-page buttons drive the same thing and a
   // window choice survives copy-pasting the URL.
@@ -282,11 +300,21 @@ function AgentFlowPage() {
     });
   }, [liveEdges, maxCalls, visibleAgentIds]);
 
-  // Summary bar totals
-  const onlineCount = useMemo(
-    () => Array.from(summaries.values()).filter(s => s.status === 'healthy' || s.status === 'deploying').length,
-    [summaries],
+  // Summary bar totals.
+  //
+  // The fleet is whatever /api/agents returned (plus anything the topology saw
+  // that it did not), NOT the static diagram catalog. `Object.keys(AGENTS)`
+  // used to be the denominator here, so a fleet of nine runtimes reported
+  // "6/6 online" and the three the diagram cannot place were invisible on the
+  // one page about the fleet. See agentFleetRows.ts.
+  const displayNames = useMemo(
+    () => new Map(Object.entries(AGENTS).map(([id, m]) => [id, m.display])),
+    [],
   );
+  const rows = useMemo(() => fleetRows(summaries, displayNames), [summaries, displayNames]);
+  const visibleRows = useMemo(() => filterFleet(rows, fleetQuery), [rows, fleetQuery]);
+  const offDiagram = offDiagramCount(rows);
+  const online = onlineLabel(rows, Boolean(fleetFailure));
   // Summed over the canonicalized summaries, not the raw node array: the same
   // agent can arrive under both id shapes (and the provider can repeat a row),
   // so the raw sum double-counts and the header disagrees with the chips below
@@ -327,7 +355,7 @@ function AgentFlowPage() {
             frameless
             aria-label="Fleet summary"
             items={[
-              { label: 'Online', value: fleetFailure ? '—' : `${onlineCount}/${Object.keys(AGENTS).length}`, ...(fleetFailure ? { hint: 'unknown' } : {}) },
+              { label: 'Online', value: online ?? '—', ...(online === null ? { hint: 'unknown' } : {}) },
               { label: `Calls (${windowHours < 24 ? windowHours + 'h' : windowHours === 24 ? '24h' : '7d'})`, value: topologyError ? '—' : fmtCount(totalCalls) },
               { label: 'Errors', value: topologyError ? '—' : fmtCount(totalErrors), tone: !topologyError && totalErrors > 0 ? 'danger' : 'default' },
               { label: 'Err rate', value: topologyError ? '—' : errRate, tone: !topologyError && totalErrors > 0 ? 'danger' : 'default' },
@@ -339,7 +367,21 @@ function AgentFlowPage() {
             </T>
           )}
         </Inline>
-        <Inline align="center" gap="xs">
+        <Inline align="center" gap="md">
+          <Inline align="center" gap="xs">
+            <T className="text-[11px] text-text-secondary">View</T>
+            <SegmentedControl
+              size="sm"
+              aria-label="Fleet view"
+              value={view}
+              onChange={setView}
+              options={[
+                { label: 'Diagram', value: 'diagram' },
+                { label: 'List', value: 'list' },
+              ]}
+            />
+          </Inline>
+          <Inline align="center" gap="xs">
           <T className="text-[11px] text-text-secondary">Window</T>
           {/* One setting with three values, not three buttons — and the only
               place it lives now that the Architecture rail is gone. */}
@@ -350,12 +392,29 @@ function AgentFlowPage() {
             onChange={setWindowLabel}
             options={WINDOWS.map((w) => ({ label: w.label, value: w.label }))}
           />
+          </Inline>
         </Inline>
       </Inline>
 
+      {/* The diagram is drawn from fixed coordinates, so it can only show the
+          agents it has coordinates for. Rather than let that omission pass
+          silently — which is how three runtimes went missing — say what is
+          not on it and offer the view that shows everything. */}
+      {view === 'diagram' && offDiagram > 0 && (
+        <InlineAlert tone="info" className="shrink-0 rounded-none border-b py-2 text-[12px]">
+          {offDiagram === 1 ? '1 agent is' : `${offDiagram} agents are`} not on this
+          diagram — it is positioned by hand and has no place for
+          {offDiagram === 1 ? ' it' : ' them'}. Switch to List to see the whole fleet.
+        </InlineAlert>
+      )}
+
       {/* ── Canvas ── */}
       <Stack gap="none" className="relative min-h-0 flex-1">
+        {view === 'list' ? (
+          <FleetList rows={visibleRows} total={rows.length} query={fleetQuery} onQuery={setFleetQuery} />
+        ) : (
         <AgentFlowFrame nodes={rfNodes} edges={rfEdges} onPaneClick={() => setSelectedId(null)} />
+        )}
 
         {selectedMeta && (
           <Drawer
@@ -376,6 +435,169 @@ function AgentFlowPage() {
   );
 }
 
+
+// ── List view ─────────────────────────────────────────────────────────────────
+
+const STATUS_TONE: Record<FleetRow['status'], 'success' | 'warning' | 'danger' | 'neutral' | 'accent'> = {
+  healthy: 'success',
+  deploying: 'accent',
+  degraded: 'warning',
+  offline: 'danger',
+  unknown: 'neutral',
+};
+
+/**
+ * The whole fleet as a table — every runtime the control plane returned,
+ * including the ones the hand-positioned diagram has no coordinates for. Rows
+ * link to the agent's own page rather than opening the diagram's drawer,
+ * because that drawer is keyed on the static catalog and has nothing to say
+ * about an agent outside it.
+ */
+function FleetList({
+  rows,
+  total,
+  query,
+  onQuery,
+}: {
+  rows: FleetRow[];
+  total: number;
+  query: string;
+  onQuery: (q: string) => void;
+}) {
+  const columns: DataTableColumn<FleetRow>[] = [
+    {
+      key: 'name',
+      header: 'Agent',
+      sortable: true,
+      render: (r) => (
+        // The chip sits on the id's line, not the name's. Beside the name it
+        // wrapped for the longer agents ("Assessment Drafter") and landed
+        // between the name and its own id, which read as a third field.
+        <Stack gap="none">
+          <Link
+            to={`/iq/agents/${encodeURIComponent(r.id)}`}
+            className="text-[13px] font-semibold text-text-primary no-underline hover:text-primary hover:underline"
+          >
+            {r.name}
+          </Link>
+          <Inline gap="xs" align="center" wrap>
+            <T className="font-mono text-[10.5px] text-text-tertiary">{r.id}</T>
+            {!r.onDiagram && (
+              <Chip size="xs" tone="neutral" title="This agent has no position on the architecture diagram">
+                not on diagram
+              </Chip>
+            )}
+          </Inline>
+        </Stack>
+      ),
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      sortable: true,
+      render: (r) => <Chip size="xs" dot="static" tone={STATUS_TONE[r.status]}>{r.status}</Chip>,
+    },
+    {
+      key: 'model',
+      header: 'Model',
+      render: (r) => (
+        <T className="font-mono text-[11px] text-text-secondary">{r.model || '—'}</T>
+      ),
+    },
+    {
+      key: 'protocol',
+      header: 'Protocol',
+      render: (r) => (
+        <T className="text-[11px] text-text-secondary">{r.protocol ? r.protocol.toUpperCase() : '—'}</T>
+      ),
+    },
+    {
+      key: 'invocationCount',
+      header: 'Calls',
+      align: 'right',
+      sortable: true,
+      render: (r) => <T className="tabular-nums text-[12px]">{fmtCount(r.invocationCount)}</T>,
+    },
+    {
+      key: 'errorCount',
+      header: 'Errors',
+      align: 'right',
+      sortable: true,
+      render: (r) => (
+        <T className={`tabular-nums text-[12px] ${r.errorCount > 0 ? 'text-danger' : 'text-text-tertiary'}`}>
+          {fmtCount(r.errorCount)}
+        </T>
+      ),
+    },
+    {
+      key: 'p50Ms',
+      header: 'p50',
+      align: 'right',
+      render: (r) => <T className="tabular-nums text-[12px] text-text-secondary">{fmtMs(r.p50Ms)}</T>,
+    },
+    {
+      key: 'p95Ms',
+      header: 'p95',
+      align: 'right',
+      render: (r) => <T className="tabular-nums text-[12px] text-text-secondary">{fmtMs(r.p95Ms)}</T>,
+    },
+    {
+      key: 'tools',
+      header: 'Tools',
+      render: (r) => (
+        r.tools.length === 0
+          ? <T className="text-[11px] text-text-tertiary">—</T>
+          : (
+            <Inline wrap gap="xs">
+              {r.tools.slice(0, 3).map((t) => (
+                <Chip key={t} size="xs" tone="neutral" mono>{t}</Chip>
+              ))}
+              {r.tools.length > 3 && (
+                <T className="text-[10.5px] text-text-tertiary">+{r.tools.length - 3}</T>
+              )}
+            </Inline>
+          )
+      ),
+    },
+  ];
+
+  return (
+    <Stack gap="sm" className="min-h-0 flex-1 overflow-auto px-4 py-3">
+      <Inline align="center" justify="between" gap="sm">
+        <Input
+          size="sm"
+          type="search"
+          aria-label="Filter agents"
+          placeholder="Filter by name, id, model or tool"
+          value={query}
+          onChange={(e) => onQuery(e.currentTarget.value)}
+          className="max-w-[320px]"
+        />
+        <T className="text-[11px] text-text-tertiary">
+          {rows.length === total ? `${total} agents` : `${rows.length} of ${total} agents`}
+        </T>
+      </Inline>
+      {rows.length === 0 ? (
+        <EmptyState
+          title={total === 0 ? 'No agents deployed' : 'No agent matches that filter'}
+          description={
+            total === 0
+              ? 'The control plane returned an empty fleet. Deploy the runtimes, then reload.'
+              : 'Clear the filter to see the whole fleet.'
+          }
+        />
+      ) : (
+        <DataTable<FleetRow>
+          data={rows}
+          keyField={(r) => r.key}
+          striped
+          columns={columns}
+          emptyMessage="No agents."
+        />
+      )}
+    </Stack>
+  );
+}
 
 // ── Drawer body ───────────────────────────────────────────────────────────────
 

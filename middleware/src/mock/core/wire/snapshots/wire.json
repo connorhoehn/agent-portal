@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-09-16T15:06:02.490Z",
-  "serverHandlerSha": "b5554ce150dd1c04ae2df48b17e20181d5e37826020bdec65b15c93d6257ea5e",
+  "capturedAt": "2026-09-16T15:30:17.132Z",
+  "serverHandlerSha": "5c382f517c4bd8e32dc76c04e77fa5b93ab412e5c6bb5c9665ff0d353bb4d602",
   "baseUrl": "http://127.0.0.1:3012",
   "personas": [
     "orgiq/admin",
@@ -6009,8 +6009,8 @@
         "nodes[].agentName": "string",
         "nodes[].errorCount": "number",
         "nodes[].invocationCount": "number",
-        "nodes[].p50Ms": "number",
-        "nodes[].p95Ms": "number",
+        "nodes[].p50Ms": "null|number",
+        "nodes[].p95Ms": "null|number",
         "nodes[].totalCostUsd": "number",
         "windowHours": "number"
       },
