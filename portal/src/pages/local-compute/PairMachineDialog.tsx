@@ -34,6 +34,9 @@ function pairCommand(code: string): string {
   return `node tools/local-compute-plugin/orgiq-presence.mjs pair ${code} --base ${base}`;
 }
 
+/** The worker command, verbatim from tools/local-compute-worker.mjs's header. */
+export const WORKER_COMMAND = 'node tools/local-compute-worker.mjs';
+
 export function PairMachineDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [pairing, setPairing] = useState<Pairing | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -60,7 +63,7 @@ export function PairMachineDialog({ open, onClose }: { open: boolean; onClose: (
       open={open}
       onClose={onClose}
       title="Pair a machine"
-      maxWidth={640}
+      maxWidth={680}
       footer={(
         <Inline gap="sm" className="justify-end">
           <Button variant="secondary" size="sm" onClick={() => { void mint(); }} disabled={minting}>
@@ -81,13 +84,26 @@ export function PairMachineDialog({ open, onClose }: { open: boolean; onClose: (
           <Stack gap="sm">
             <SectionLabel as="div">Pairing code</SectionLabel>
             <CodeBlock code={pairing.code} language="text" copyButton ariaLabel="Pairing code" />
-            <SectionLabel as="div">On the machine</SectionLabel>
+            <SectionLabel as="div">1 · Pair it — on the machine</SectionLabel>
             <CodeBlock code={pairCommand(pairing.code)} language="bash" copyButton ariaLabel="Pairing command" />
             <MetaLine
               size="xs"
               items={[
-                `Code expires in ${minutesLeft(pairing.expiresAt)} min — mint a new one if it lapses`,
+                `Code expires in ${minutesLeft(pairing.expiresAt)} min and is single-use — mint a new one if it lapses`,
                 'The machine appears under Your machines within 15 seconds of claiming',
+              ]}
+            />
+            {/* Pairing registers the machine and nothing more: it shows as
+                offline with no runnable kinds until a worker process on it
+                announces what it can run. A first-time user who stopped after
+                step 1 saw exactly that and read it as a failure. */}
+            <SectionLabel as="div">2 · Start its worker — same machine, same checkout</SectionLabel>
+            <CodeBlock code={WORKER_COMMAND} language="bash" copyButton ariaLabel="Worker command" />
+            <MetaLine
+              size="xs"
+              items={[
+                'The worker reads the token pairing wrote, announces the models and job kinds it can run, and heartbeats — that is what turns the row from offline to connected',
+                'JOB_KINDS and LOCAL_MODELS env vars narrow what it advertises; then switch on “Accepting work” in the row',
               ]}
             />
           </Stack>

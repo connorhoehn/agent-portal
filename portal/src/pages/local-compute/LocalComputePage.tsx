@@ -9,6 +9,7 @@ import {
   Banner,
   Button,
   Chip,
+  CodeBlock,
   DataTable,
   DetailSection,
   EmptyState,
@@ -26,7 +27,7 @@ import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { writeJson } from './writeJson';
-import { PairMachineDialog } from './PairMachineDialog';
+import { PairMachineDialog, WORKER_COMMAND } from './PairMachineDialog';
 import { statusLabel, statusTone, when, type JobStatus } from './localComputeFormat';
 
 // ─── Wire shapes ─────────────────────────────────────────────────────────────
@@ -299,6 +300,18 @@ export default function LocalComputePage() {
                 {!selectedNode.acceptJobs ? (
                   <Banner variant="warning">
                     This machine is paused — switch on “Accepting work” in the row above before handing it work.
+                  </Banner>
+                ) : selectedNode.presence.status === 'offline' && selectedNode.jobKinds.length === 0 ? (
+                  // Paired but never announced: the worker has not run on it
+                  // yet. Say the command here, because "offline" alone read as
+                  // a failed pairing to the first person who hit it.
+                  <Banner variant="warning">
+                    <Stack gap="xs">
+                      <Inline as="span" gap="none" wrap>
+                        This machine is paired but its worker has not run yet, so it is offline and has announced nothing it can run. On that machine, from the repo checkout:
+                      </Inline>
+                      <CodeBlock code={WORKER_COMMAND} language="bash" copyButton ariaLabel="Worker command" />
+                    </Stack>
                   </Banner>
                 ) : selectedNode.presence.status === 'offline' ? (
                   <Banner variant="warning">

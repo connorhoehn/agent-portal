@@ -88,13 +88,36 @@ async function pair(code, baseUrl) {
   });
   if (!res.ok) {
     console.error(`pairing failed: ${res.status} ${await res.text()}`);
+    // The server says the same thing for spent, expired and unknown codes on
+    // purpose (a claim probe must learn nothing). This side knows more: if a
+    // token for this base is already on disk, the code most likely did its job
+    // the first time — a code is single-use — and what is missing is the
+    // worker, not another pairing.
+    if (config.nodeToken && config.baseUrl === baseUrl) {
+      console.error(`this machine is already paired as ${config.label ?? label} (${config.nodeId}) against ${baseUrl};`);
+      console.error('a pairing code is single-use, so a second run is expected to fail.');
+      console.error(`next: ${NEXT_STEP}`);
+    } else if (config.nodeToken) {
+      console.error(`note: a token for ${config.baseUrl} is on disk; mint a new code in the portal to pair against ${baseUrl}.`);
+    } else {
+      console.error('mint a new code from Local compute › Pair a machine — codes expire and are single-use.');
+    }
     process.exit(1);
   }
   const { nodeId, nodeToken } = await res.json();
   writeJson(CONFIG_PATH, { baseUrl, nodeId, nodeToken, label });
   console.log(`paired as ${label} (${nodeId}) against ${baseUrl}`);
   console.log(`token written to ${CONFIG_PATH} (0600) — it is shown nowhere else`);
+  console.log('');
+  console.log('Pairing only registers the machine — the portal shows it offline with no runnable');
+  console.log('kinds until its worker is running. Next:');
+  console.log(`  ${NEXT_STEP}`);
+  console.log('then switch on "Accepting work" for it under Local compute.');
 }
+
+/** The one command every pairing message points at. The worker reads the token
+ *  this step just wrote, announces the machine's models/kinds, and heartbeats. */
+const NEXT_STEP = 'node tools/local-compute-worker.mjs   (from the aws-agentcore checkout; JOB_KINDS/LOCAL_MODELS env optional)';
 
 // ─── hook: maintain the session snapshot, then announce it ───────────────────
 
