@@ -18,7 +18,6 @@ import {
   Chip,
   DetailHeader,
   Divider,
-  EmptyState,
   Inline,
   InlineAlert,
   LoadingState,
@@ -32,6 +31,7 @@ import {
   Stack,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
+import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { useCrumbLabel } from '../../lib/crumbLabels';
 import { useCapabilities } from '../../lib/capabilities';
 import { relativeTime } from '../../lib/relativeTime';
@@ -94,7 +94,7 @@ export default function DesignThreadPage() {
     } finally { setBusy(false); }
   }
 
-  if (error) return <EmptyState title="Could not load this design" description={error} />;
+  if (error) return <UnavailableNotice error={error} what="this design" source="Design reviews are read from Aurora" onRetry={refresh} />;
   if (isLoading || !thread) return <LoadingState label="Loading design review…" />;
 
   const signoffs = latestSignoffs(thread.signoffs);

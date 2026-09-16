@@ -9,9 +9,10 @@
 
 import { useState } from 'react';
 import {
-  Button, Card, Chip, DetailSection, EmptyState, Inline, InlinePlaceholder, LoadingState, ProgressBar, Stack,
+  Button, Card, Chip, DetailSection, Inline, InlinePlaceholder, LoadingState, ProgressBar, Stack,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
+import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { useCapabilities } from '../../lib/capabilities';
 import { toastError, toastPending, toastSuccess } from '../../lib/toastStore';
 import { writeJson } from '../../lib/writeJson';
@@ -31,7 +32,7 @@ export function AssetEvals({ assetId, version }: { assetId: string; version: str
   const { can, ready } = useCapabilities();
   const canRun = ready && can('ManageBots');
 
-  const { data: casesData, isLoading: casesLoading, error: casesError } =
+  const { data: casesData, isLoading: casesLoading, error: casesError, refresh: refreshCases } =
     useFetch<{ cases: EvalCase[] }>(`${base}/cases`, 0);
   const { data: runsData, isLoading: runsLoading, error: runsError, refresh: refreshRuns } =
     useFetch<{ runs: EvalRun[] }>(`${base}/runs`, 0);
@@ -58,7 +59,7 @@ export function AssetEvals({ assetId, version }: { assetId: string; version: str
     setBusy(false);
   }
 
-  if (casesError) return <EmptyState title="Could not load the eval set" description={casesError} />;
+  if (casesError) return <UnavailableNotice error={casesError} what="the eval set" source="Eval cases are read from the library catalog" onRetry={refreshCases} />;
   if (casesLoading || !casesData) return <LoadingState label="Loading eval set…" />;
 
   const cases = casesData.cases;

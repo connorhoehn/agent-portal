@@ -24,6 +24,7 @@ import {
 import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';
 import { relativeTime } from '../../lib/relativeTime';
+import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { toastError, toastPending, toastSuccess } from '../../lib/toastStore';
 import { sendJson, writeJson } from '../../lib/writeJson';
 import { AssignJobModal } from './AssignJobModal';
@@ -53,8 +54,9 @@ export default function QueuePage() {
   const [assigning, setAssigning] = useState<WorkSuggestion | null>(null);
   const [composerBusy, setComposerBusy] = useState(false);
 
-  const { data: jobsData, isLoading: jobsLoading, refresh: refreshJobs } =
+  const { data: jobsData, isLoading: jobsLoading, error: jobsError, degraded: jobsDegraded, refresh: refreshJobs } =
     useFetch<{ jobs: Job[] }>('/api/work/jobs?limit=100', 8_000);
+  const jobsFailure = jobsError ?? jobsDegraded;
   const { data: suggestionsData, isLoading: suggestionsLoading, error: suggestionsError } =
     useFetch<{ suggestions: WorkSuggestion[] }>(canManage ? '/api/work/suggestions' : null, 60_000);
 
@@ -261,7 +263,17 @@ export default function QueuePage() {
         </ToolbarGroup>
       </Toolbar>
 
-      {!jobsLoadingFirst && filtered.length === 0 ? (
+      {jobsFailure && (
+        <UnavailableNotice
+          error={jobsFailure}
+          what="the job queue"
+          source="Jobs are read from Aurora"
+          onRetry={refreshJobs}
+          className="mb-4"
+        />
+      )}
+
+      {!jobsFailure && (!jobsLoadingFirst && filtered.length === 0 ? (
         <EmptyState
           title={filter === 'failed' ? 'Nothing dead-lettered' : 'Nothing here'}
           description={filter !== 'all'
@@ -296,7 +308,7 @@ export default function QueuePage() {
           emptyMessage="No jobs"
           loading={jobsLoadingFirst}
         />
-      )}
+      ))}
 
       {/* ── Ready to assign — the initiatives' open work, short form ── */}
       {canManage && (

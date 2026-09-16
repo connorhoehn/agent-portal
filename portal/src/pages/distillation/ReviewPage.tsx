@@ -15,6 +15,7 @@ import { useUrlState } from '../../lib/useUrlState';
 import { relativeTime } from '../../lib/relativeTime';
 import { toastError, toastSuccess } from '../../lib/toastStore';
 import { sendJson } from '../../lib/writeJson';
+import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { T } from './Text';
 import {
   REVIEW_VERDICT_LABEL, REVIEW_VERDICT_TONE, SAMPLING_LABEL, SAMPLING_TONE, artifactFactCount,
@@ -91,13 +92,15 @@ export default function DistillationReviewPage() {
         />
 
         {error ? (
-          <EmptyState title="Could not load the review queue" description={error} />
+          <UnavailableNotice error={error} what="the review queue" source="Review samples are read from Aurora" onRetry={refresh} className="mb-4" />
         ) : isLoading && !data ? (
           <LoadingState label="Loading review queue…" />
         ) : samples.length === 0 ? (
           <EmptyState
             title={tab === 'pending' ? 'Queue is empty' : 'Nothing decided yet'}
-            description={tab === 'pending' ? 'No samples waiting on a human right now.' : 'No sample has been agreed or disagreed with yet.'}
+            description={tab === 'pending'
+              ? 'A sample is an L1 cluster or L2 artifact the sampler pulled for a human to check against its evidence. None are waiting right now — the queue fills in after the next compaction pass runs.'
+              : 'Decisions land here once a sample from the queue is agreed or disagreed with.'}
           />
         ) : (
           <Stack gap="sm">

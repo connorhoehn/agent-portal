@@ -7,11 +7,12 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import {
-  Chip, DetailSection, EmptyState, Inline, LoadingState, PageSection, SegmentedControl,
+  Chip, DetailSection, Inline, LoadingState, PageSection, SegmentedControl,
   SearchInput, Select, Stack, Toolbar, ToolbarGroup, ToolbarLabel,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { useDebouncedSearch } from '../../hooks/useDebouncedSearch';
+import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { ItemsList } from './ItemsList';
 import { T } from './Text';
 import {
@@ -80,7 +81,7 @@ export default function DistillationTiersPage() {
     setPollMs(hasRunning ? RUNNING_POLL_MS : IDLE_POLL_MS);
   }, [jobsData]);
 
-  const { data, isLoading, error } = useFetch<LevelsResponse>('/api/distillation/levels', pollMs);
+  const { data, isLoading, error, refresh } = useFetch<LevelsResponse>('/api/distillation/levels', pollMs);
   const levels = data?.levels ?? [];
   const health = data?.health ?? [];
 
@@ -110,7 +111,7 @@ export default function DistillationTiersPage() {
       description="L0 raw observations → L1 deduped clusters → L2 stable artifacts. Pick a level to see what is in it."
     >
       {error ? (
-        <EmptyState title="Could not load level state" description={error} />
+        <UnavailableNotice error={error} what="level state" source="Distillation tiers are read from Aurora" onRetry={refresh} className="mb-4" />
       ) : isLoading && !data ? (
         <LoadingState label="Loading levels…" />
       ) : (

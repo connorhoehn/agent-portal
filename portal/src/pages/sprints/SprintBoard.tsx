@@ -19,6 +19,7 @@ import {
   Switch,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
+import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { escapeNestReducer, INITIAL_ESCAPE_NEST_STATE, shouldHostHandleEscape, topEscapeLayer } from './escapeNesting';
 import { T } from './Text';
 import { toastError, toastSuccess } from '../../lib/toastStore';
@@ -202,7 +203,9 @@ export function SprintBoard({ sprintId, orgProjectId, personId, canManageSprints
   ) : null;
 
   if (error) {
-    return <EmptyState title="Could not load this sprint's work" description={error} />;
+    return (
+      <UnavailableNotice error={error} what="this sprint's work" source="Sprint items are read from Aurora" onRetry={refresh} />
+    );
   }
   if (isLoading && !data) {
     return <LoadingState label="Loading work…" />;

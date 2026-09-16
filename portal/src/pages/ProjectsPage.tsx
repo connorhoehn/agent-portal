@@ -276,18 +276,34 @@ function ProjectsPage() {
           {[1, 2, 3, 4, 5, 6].map(i => <SkeletonCard key={i} height={190} />)}
         </CatalogGrid>
       ) : filtered.length === 0 ? (
-        <EmptyState
-          title={scope === 'mine' && projects.length === 0 ? 'Nothing linked to you' : 'No matching initiatives'}
-          description={scope === 'mine' && projects.length === 0
-            ? 'No initiative lists you as owner or contributor — or your sign-in is not linked to a person in the org graph (Identity → Users fixes that).'
-            : 'No initiative matches the current filters.'}
-          actionLabel={scope === 'mine' && projects.length === 0 ? 'Show all initiatives' : 'Clear filters'}
-          onAction={() => {
-            if (scope === 'mine' && projects.length === 0) { setScope('all'); return; }
-            cancelSearchPending();
-            setStatusFilter('all'); setQuery('');
-          }}
-        />
+        (() => {
+          if (scope === 'mine' && projects.length === 0) {
+            return (
+              <EmptyState
+                title="Nothing linked to you"
+                description="No initiative lists you as owner or contributor — or your sign-in is not linked to a person in the org graph (Identity → Users fixes that)."
+                actionLabel="Show all initiatives"
+                onAction={() => setScope('all')}
+              />
+            );
+          }
+          if (scope === 'all' && projects.length === 0) {
+            return (
+              <EmptyState
+                title="No initiatives yet"
+                description="An initiative is a program with an owner, epics, stories and a budget. Nothing creates one by hand: they are built by the graph-builder agent from documents you ingest, so the way to fill this page is to point Ingestion at a source and run it."
+              />
+            );
+          }
+          return (
+            <EmptyState
+              title="No matching initiatives"
+              description="No initiative matches the current filters."
+              actionLabel="Clear filters"
+              onAction={() => { cancelSearchPending(); setStatusFilter('all'); setQuery(''); }}
+            />
+          );
+        })()
       ) : viewMode === 'list' ? (
         <ProjectTable projects={filtered} onOpen={openProject} />
       ) : (

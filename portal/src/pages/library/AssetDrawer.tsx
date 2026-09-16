@@ -14,9 +14,10 @@
 //                An unexplained similarity list is not actionable.
 
 import {
-  Button, Card, Chip, DetailSection, EmptyState, Inline, InlinePlaceholder, LoadingState, MetaLine, ProgressBar, Stack,
+  Button, Card, Chip, DetailSection, Inline, InlinePlaceholder, LoadingState, MetaLine, ProgressBar, Stack,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
+import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { AssetEvals } from './AssetEvals';
 import { DistillationProvenance } from './DistillationProvenance';
 import { relativeTime } from '../../lib/relativeTime';
@@ -29,9 +30,9 @@ import {
 import type { AssetDetail } from './types';
 
 export function AssetDrawer({ id, onOpenAsset }: { id: string; onOpenAsset: (id: string) => void }) {
-  const { data, isLoading, error } = useFetch<AssetDetail>(`/api/library/${encodeURIComponent(id)}`, 0);
+  const { data, isLoading, error, refresh } = useFetch<AssetDetail>(`/api/library/${encodeURIComponent(id)}`, 0);
 
-  if (error) return <EmptyState title="Could not load this asset" description={error} />;
+  if (error) return <UnavailableNotice error={error} what="this asset" source="Assets are read from the library catalog" onRetry={refresh} />;
   if (isLoading || !data) return <LoadingState label="Loading…" />;
 
   const { asset: a, readiness, related } = data;

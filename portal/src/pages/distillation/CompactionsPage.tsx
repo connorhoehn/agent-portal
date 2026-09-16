@@ -13,6 +13,7 @@ import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';
 import { useUrlState } from '../../lib/useUrlState';
 import { KeyValue } from '../../components/KeyValue';
+import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { relativeTime } from '../../lib/relativeTime';
 import { toastError, toastPending, toastSuccess } from '../../lib/toastStore';
 import { CompactionFlow } from './CompactionFlow';
@@ -242,9 +243,14 @@ export default function DistillationCompactionsPage() {
 
       {/* See the shared list-page loading pattern comment in QueuePage.tsx. */}
       {jobsError ? (
-        <EmptyState title="Could not load compaction history" description={jobsError} />
+        <UnavailableNotice error={jobsError} what="compaction history" source="Compaction jobs are read from Aurora" onRetry={refreshJobs} className="mb-4" />
       ) : !(jobsLoading && !jobsData) && filteredJobs.length === 0 ? (
-        <EmptyState title="No compactions" description="No compaction jobs match this filter." />
+        <EmptyState
+          title={levelFilter !== 'all' || statusFilter !== 'all' ? 'No matches' : 'No compactions yet'}
+          description={levelFilter !== 'all' || statusFilter !== 'all'
+            ? 'No compaction jobs match this filter.'
+            : 'A compaction job merges L0 observations into L1 clusters, or promotes L1 clusters into L2 artifacts. Run one from the tier ladder above to see it here.'}
+        />
       ) : (
         <DataTable<CompactionJob>
           data={filteredJobs}

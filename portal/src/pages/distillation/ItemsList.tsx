@@ -17,10 +17,11 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   Button, Card, Chip, DotMeter, EmptyState, Inline, LoadingState, Stack, StatusDot,
 } from '@connorhoehnslalom/ui-components/shared';
+import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { relativeTime } from '../../lib/relativeTime';
 import { T } from './Text';
 import {
-  ARTIFACT_STATUS_TONE, ARTIFACT_TYPE_LABEL, ARTIFACT_TYPE_TONE, OBSERVATION_KIND_TONE,
+  ARTIFACT_STATUS_TONE, ARTIFACT_TYPE_LABEL, ARTIFACT_TYPE_TONE, LEVEL_MEANING, OBSERVATION_KIND_TONE,
   filterByObservationKind, filtersSummaryLabel, hasActiveFilters, isRecentlyLanded, itemsQueryParams,
 } from './distillationFormat';
 import type { Item, ItemsResponse, Level, ObservationKind } from './types';
@@ -64,6 +65,9 @@ export function ItemsList(props: ItemsListProps) {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Bumped by the "Try again" retry so the fetch effect below re-runs
+  // without needing a filter change — see the error branch's UnavailableNotice.
+  const [retryNonce, setRetryNonce] = useState(0);
   // Ticks so a "Landed" pulse decays to its relative-time label once an L0
   // row ages out of the window, without a network refetch.
   const [nowMs, setNowMs] = useState(() => Date.now());
@@ -90,7 +94,7 @@ export function ItemsList(props: ItemsListProps) {
       }
     })();
     return () => { cancelled = true; };
-  }, [level, repo, initiativeId, q]);
+  }, [level, repo, initiativeId, q, retryNonce]);
 
   async function loadMore() {
     if (!cursor || loadingMore) return;
@@ -114,7 +118,16 @@ export function ItemsList(props: ItemsListProps) {
     onVisibleCountChange?.(filteredItems.length);
   }, [filteredItems.length, onVisibleCountChange]);
 
-  if (error) return <EmptyState title="Could not load items" description={error} />;
+  if (error) {
+    return (
+      <UnavailableNotice
+        error={error}
+        what={`${level} items`}
+        source="Distillation items are read from Aurora"
+        onRetry={() => setRetryNonce((n) => n + 1)}
+      />
+    );
+  }
   if (loading) return <LoadingState label={`Loading ${level} items…`} />;
 
   const filters = { repo, initiativeId, kind, q };
@@ -124,10 +137,10 @@ export function ItemsList(props: ItemsListProps) {
     return (
       <Stack gap="sm">
         <EmptyState
-          title="No items"
+          title={filtersActive ? 'No matches' : `No ${level} items yet`}
           description={filtersActive
             ? `No ${level} items match ${filtersSummaryLabel(filters)}.`
-            : `No ${level} items yet.`}
+            : `${LEVEL_MEANING[level]} None have landed yet — this fills in as agent sessions run and write observations up through the tiers.`}
           actionLabel={filtersActive && onClearFilters ? 'Clear filters' : undefined}
           onAction={filtersActive && onClearFilters ? onClearFilters : undefined}
         />

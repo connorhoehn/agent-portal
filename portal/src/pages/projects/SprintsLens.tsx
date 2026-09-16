@@ -24,6 +24,7 @@ import {
   ToolbarLabel,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
+import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { useSession } from '../../lib/auth';
 import { useCapabilities } from '../../lib/capabilities';
 import { EnvelopeDrawer } from '../sprints/EnvelopeDrawer';
@@ -97,16 +98,13 @@ export function SprintsLens({ view }: { view: 'grid' | 'list' }) {
 
   if (error) {
     return (
-      <EmptyState
-        title="Could not load sprints"
-        description={
-          <>
-            {error}
-            {error.startsWith('403')
-              ? ' — the org-wide scope needs budget-administration access; switch back to “Mine”.'
-              : ''}
-          </>
-        }
+      <UnavailableNotice
+        error={error.startsWith('403')
+          ? `${error} — the org-wide scope needs budget-administration access; switch back to "Mine"`
+          : error}
+        what="sprints"
+        source="Sprints are read from Aurora"
+        onRetry={refresh}
       />
     );
   }

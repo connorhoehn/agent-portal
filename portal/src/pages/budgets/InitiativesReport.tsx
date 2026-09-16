@@ -27,6 +27,7 @@ import {
   TableTh,
   TableTd,
 } from '@connorhoehnslalom/ui-components/shared';
+import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { toastError, toastSuccess } from '../../lib/toastStore';
 import { writeJson } from '../../lib/writeJson';
 import { usd, modelLabelFor, ago, rowBudgetStats } from './budgetsFormat';
@@ -283,9 +284,12 @@ export function InitiativesReport({
 
   if (error) {
     return (
-      <Card padding="md">
-        <T className="text-[12px] text-danger">Failed to load budgets: {error}</T>
-      </Card>
+      <UnavailableNotice
+        error={error}
+        what="budgets"
+        source="Budgets are read from Aurora"
+        onRetry={refresh}
+      />
     );
   }
 

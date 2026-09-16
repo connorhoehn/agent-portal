@@ -30,6 +30,7 @@ import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';
 import { relativeTime } from '../../lib/relativeTime';
 import { toastError, toastPending, toastSuccess } from '../../lib/toastStore';
+import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { writeJson } from '../../lib/writeJson';
 import { filterFindings, sweepLabel, type FindingStatus } from './findingsFilter';
 import {
@@ -62,8 +63,11 @@ export default function FindingsPage() {
 
   const [findingStatus, setFindingStatus] = useState<FindingStatus>('open');
 
-  const { data: findingsData, isLoading: findingsLoading, refresh: refreshFindings } = useFetch<{ findings: Finding[] }>(
-    `/api/work/findings?status=${findingStatus}&limit=200`, 20_000);
+  const {
+    data: findingsData, isLoading: findingsLoading, error: findingsError, degraded: findingsDegraded,
+    refresh: refreshFindings,
+  } = useFetch<{ findings: Finding[] }>(`/api/work/findings?status=${findingStatus}&limit=200`, 20_000);
+  const findingsFailure = findingsError ?? findingsDegraded;
   const { data: jobsData, isLoading: jobsLoading, refresh: refreshJobs } = useFetch<{ jobs: Job[] }>('/api/work/jobs?limit=100', 15_000);
   // See the shared list-page loading pattern comment in QueuePage.tsx: only
   // the FIRST fetch for each list counts as "loading" for skeleton purposes,
@@ -333,6 +337,17 @@ export default function FindingsPage() {
         )}
       </Toolbar>
 
+      {findingsFailure && (
+        <UnavailableNotice
+          error={findingsFailure}
+          what="findings"
+          source="Findings are read from Aurora"
+          onRetry={refreshFindings}
+          className="mb-4"
+        />
+      )}
+
+      {!findingsFailure && (
       <Card padding="none" className="overflow-hidden">
         {findingsLoadingFirst ? (
           // Findings render as grouped, custom rows (CollapsibleSection +
@@ -436,6 +451,7 @@ export default function FindingsPage() {
           );
         })}
       </Card>
+      )}
     </PageSection>
   );
 }

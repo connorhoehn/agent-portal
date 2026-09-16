@@ -13,6 +13,7 @@ import {
 import { useFetch } from '../../hooks/useFetch';
 import { useDebouncedSearch } from '../../hooks/useDebouncedSearch';
 import { KeyValue } from '../../components/KeyValue';
+import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { showingLabel } from '../../lib/format';
 import { toastError, toastSuccess } from '../../lib/toastStore';
 import { writeJson } from '../../lib/writeJson';
@@ -143,11 +144,16 @@ export default function DistillationLineagePage() {
           />
           {actionError && <Banner variant="error">{actionError}</Banner>}
           {artifactsError ? (
-            <EmptyState title="Could not load artifacts" description={artifactsError} />
+            <UnavailableNotice error={artifactsError} what="artifacts" source="Artifacts are read from Aurora" onRetry={refreshArtifacts} />
           ) : artifactsLoading && !artifactsData ? (
             <LoadingState label="Loading artifacts…" />
           ) : (artifactsData?.artifacts.length ?? 0) === 0 ? (
-            <EmptyState title="No artifacts" description="No artifact matches this search." />
+            <EmptyState
+              title={searchText.trim() ? 'No matches' : 'No artifacts yet'}
+              description={searchText.trim()
+                ? 'No artifact matches this search.'
+                : 'Lineage traces an L2 artifact back through the clusters and observations it was built from. Compact L1 clusters to publish the first artifact, then trace it here.'}
+            />
           ) : (
             <Stack gap="xs">
               <T className="text-text-tertiary">

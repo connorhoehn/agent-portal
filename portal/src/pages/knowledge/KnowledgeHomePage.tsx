@@ -240,7 +240,13 @@ export default function KnowledgeHomePage() {
         columns={columns}
         keyField={(e) => e.id ?? e.slug ?? e.liveKbId ?? e.name}
         loading={recLoading && entries.length === 0}
-        emptyMessage={entries.length === 0 ? 'No knowledge bases registered yet.' : 'No knowledge bases match the current filters.'}
+        emptyMessage={entries.length === 0 ? (
+          <>
+            No knowledge bases registered yet — this registry tracks Bedrock knowledge bases once the
+            platform provisions one and agents can retrieve from it.
+            {canIngest && <> Check <Link to="/admin/ingest/crawl" className="text-primary no-underline hover:underline">Ingest sources</Link> to see whether the pipeline is set up.</>}
+          </>
+        ) : 'No knowledge bases match the current filters.'}
         rowActions={(e) => {
           // The only automatic repair offered. Creating, deleting or syncing
           // are decisions; repointing a row at a knowledge base that

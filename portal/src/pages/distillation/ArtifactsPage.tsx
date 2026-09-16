@@ -13,6 +13,7 @@ import {
 import { useFetch } from '../../hooks/useFetch';
 import { useDebouncedSearch } from '../../hooks/useDebouncedSearch';
 import { useUrlState } from '../../lib/useUrlState';
+import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { relativeTime } from '../../lib/relativeTime';
 import { ArtifactDrawerBody } from './ArtifactDrawer';
 import { T } from './Text';
@@ -81,7 +82,7 @@ export default function DistillationArtifactsPage() {
   if (type !== 'all') qs.set('type', type);
   if (status !== 'all') qs.set('status', status);
   const url = `/api/distillation/artifacts${qs.size > 0 ? `?${qs.toString()}` : ''}`;
-  const { data, isLoading, error } = useFetch<ArtifactsResponse>(url, 60_000);
+  const { data, isLoading, error, refresh } = useFetch<ArtifactsResponse>(url, 60_000);
 
   const artifacts = useMemo(() => {
     const all = data?.artifacts ?? [];
@@ -200,14 +201,23 @@ export default function DistillationArtifactsPage() {
 
       {/* See the shared list-page loading pattern comment in QueuePage.tsx. */}
       {error ? (
-        <EmptyState title="Could not load artifacts" description={error} />
+        <UnavailableNotice error={error} what="artifacts" source="Artifacts are read from Aurora" onRetry={refresh} className="mb-4" />
       ) : !(isLoading && !data) && artifacts.length === 0 ? (
-        <EmptyState
-          title="No artifacts"
-          description="No artifact matches these filters."
-          actionLabel="Clear filters"
-          onAction={() => { cancelPending(); setParams(new URLSearchParams(), { replace: true }); setQuery(''); }}
-        />
+        (() => {
+          const filtersActive = type !== 'all' || status !== 'all' || query.trim().length > 0;
+          return (
+            <EmptyState
+              title={filtersActive ? 'No matches' : 'No artifacts yet'}
+              description={filtersActive
+                ? 'No artifact matches these filters.'
+                : 'An artifact is an L2 runbook, insight or convention the fleet distilled and published to the Library. Compact L1 clusters to produce the first one.'}
+              actionLabel={filtersActive ? 'Clear filters' : undefined}
+              onAction={filtersActive
+                ? () => { cancelPending(); setParams(new URLSearchParams(), { replace: true }); setQuery(''); }
+                : undefined}
+            />
+          );
+        })()
       ) : (
         <DataTable<Artifact>
           data={artifacts}

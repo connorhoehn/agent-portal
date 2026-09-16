@@ -42,6 +42,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { Card, Chip, EmptyState, LoadingState, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { T } from './Text';
 import {
   LINEAGE_NODE_ACCENT, LINEAGE_NODE_ICON, LINEAGE_NODE_LABEL, LINEAGE_RELATION_LABEL,
@@ -255,7 +256,7 @@ export function LineageFrame({
     });
   }, [lineage, positions]);
 
-  if (error) return <EmptyState title="Could not load lineage" description={error} />;
+  if (error) return <UnavailableNotice error={error} what="lineage" source="Lineage is traced from Aurora" />;
   if (loading) return <LoadingState label="Loading lineage…" />;
   if (!lineage || lineage.nodes.length === 0) {
     return <EmptyState title="No lineage yet" description="Nothing has been traced for this item." />;

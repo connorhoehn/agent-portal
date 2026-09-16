@@ -52,7 +52,7 @@ export default function BudgetsPage() {
   const { data, error, degraded, refresh } =
     useFetch<{ budgets: BudgetRow[]; summary: BudgetSummary }>('/api/budgets', 30_000);
   const budgetsFailure = error ?? degraded;
-  const { data: grantData, error: grantError } =
+  const { data: grantData, error: grantError, refresh: refreshGrants } =
     useFetch<{ grants: GrantRow[] }>('/api/budgets/grants', 60_000);
   // The full initiative roster — `/api/budgets` on its own only returns rows
   // with an allocation or spend (program-owner DEFECTS #7), which left an
@@ -140,7 +140,7 @@ export default function BudgetsPage() {
 
       <Stack gap="none" className="mt-4">
         {report === 'sprints' ? (
-          <SprintsReport grants={grants} error={grantError} hasData={grantData != null} canManage={canManage} />
+          <SprintsReport grants={grants} error={grantError} hasData={grantData != null} canManage={canManage} refresh={refreshGrants} />
         ) : (
           <InitiativesReport
             budgets={budgets}

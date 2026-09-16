@@ -43,6 +43,7 @@ import {
   TableTh,
   TableTd,
 } from '@connorhoehnslalom/ui-components/shared';
+import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { usd } from './budgetsFormat';
 import { T } from './Text';
 import type { GrantRow } from './types';
@@ -55,6 +56,7 @@ export interface SprintsReportProps {
   hasData: boolean;
   /** ManageBudgets — the same gate Initiatives' allocation editor uses. */
   canManage: boolean;
+  refresh?: () => void;
 }
 
 /** Points a ManageBudgets holder at where granting actually happens today.
@@ -72,15 +74,18 @@ function GrantEnvelopeLink() {
   );
 }
 
-export function SprintsReport({ grants, error, hasData, canManage }: SprintsReportProps) {
+export function SprintsReport({ grants, error, hasData, canManage, refresh }: SprintsReportProps) {
   const navigate = useNavigate();
   const [showAll, setShowAll] = useState(false);
 
   if (error) {
     return (
-      <Card padding="md">
-        <T className="text-[12px] text-danger">Failed to load sprint envelopes: {error}</T>
-      </Card>
+      <UnavailableNotice
+        error={error}
+        what="sprint envelopes"
+        source="Grants are read from Aurora"
+        onRetry={refresh}
+      />
     );
   }
 

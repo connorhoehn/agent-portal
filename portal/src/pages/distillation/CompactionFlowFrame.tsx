@@ -34,6 +34,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { Card, Chip, EmptyState, LoadingState, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { T } from './Text';
 import { LEVEL_HEALTH_TONE } from './distillationFormat';
 import type { CompactionFlowEdgeTone, CompactionFlowModel, CompactionFlowNode, CompactionFlowNodeKind } from './types';
@@ -233,7 +234,7 @@ export function CompactionFlowFrame({
     data: { label: e.label, breathing: e.breathing, reducedMotion, tone: e.tone, title: e.title } as unknown as Record<string, unknown>,
   })), [model, reducedMotion]);
 
-  if (error) return <EmptyState title="Could not load the compaction flow" description={error} />;
+  if (error) return <UnavailableNotice error={error} what="the compaction flow" source="Compaction jobs are read from Aurora" />;
   if (loading && !model) return <LoadingState label="Loading compaction flow…" />;
   if (!model || model.nodes.length === 0) {
     return <EmptyState title="No compaction flow yet" description="Nothing has been ingested for this ladder." />;
