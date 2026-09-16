@@ -98,10 +98,15 @@ export function MasqueradeMenu() {
         aria-expanded={open}
         className={session.masquerading ? 'bg-warning-bg border-warning' : undefined}
       >
-        <StatusDot aria-hidden color={roleColor(session.role)} size="sm" />
-        <Inline as="span" gap="none" className="font-medium">{session.name}</Inline>
-        <Inline as="span" gap="none" className="text-text-tertiary text-[11px]">
-          {tenantLabel(session.tenant)} · {roleLabel(session.role)}{session.masquerading ? ' · masquerade' : ''} <span aria-hidden="true">▾</span>
+        {/* One line: the dot, the name, the role, the caret. The tenant, the
+            subject and the masquerade state live in the panel below — the
+            trigger used to stack them as three rows in a 100px-wide button. */}
+        <Inline as="span" gap="xs" align="center" wrap={false} className="whitespace-nowrap">
+          <StatusDot aria-hidden color={roleColor(session.role)} size="sm" />
+          <Inline as="span" gap="none" className="font-medium">{session.name}</Inline>
+          <Inline as="span" gap="none" className="text-text-tertiary text-[11px]">
+            · {roleLabel(session.role)}{session.masquerading ? ' · masquerade' : ''} <span aria-hidden="true">▾</span>
+          </Inline>
         </Inline>
       </Button>
 
