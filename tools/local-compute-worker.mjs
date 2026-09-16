@@ -62,7 +62,7 @@
 // shell — a failed claim, a dead network, or a revoked token all exit non-zero,
 // and the operator decides whether to restart it.
 
-import { readFileSync, writeFileSync, mkdirSync, existsSync, createWriteStream } from 'node:fs';
+import { readFileSync, writeFileSync, appendFileSync, statSync, mkdirSync, existsSync, createWriteStream } from 'node:fs';
 import { execSync, spawn } from 'node:child_process';
 import { join, basename, dirname } from 'node:path';
 import { homedir, hostname, platform, arch, loadavg, cpus, totalmem, freemem, uptime } from 'node:os';
@@ -70,8 +70,10 @@ import { homedir, hostname, platform, arch, loadavg, cpus, totalmem, freemem, up
 const CONFIG_PATH = process.env.ORGIQ_PRESENCE_CONFIG ?? join(homedir(), '.claude-mem', 'orgiq-presence.json');
 const REPOS_DIR = process.env.REPOS_DIR ?? join(homedir(), 'repos-worker');
 // Per-job run logs, tail-able while a job runs (`tail -f`), and the source the
-// worker ships to the middleware for the browser log view. Kept out of the repo
-// checkout so `git clean -fd` in ensureRepo never deletes a live log.
+// worker ships to the middleware for the browser log view. Also holds
+// `worker.log`, the durable mirror of this process's OWN scrollback (see
+// "Operational log" below) — kept out of the repo checkout so `git clean -fd`
+// in ensureRepo never deletes a live log.
 const LOG_DIR = process.env.WORKER_LOG_DIR ?? join(homedir(), '.claude-mem', 'orgiq-worker-logs');
 const POLL_INTERVAL_S = parseInt(process.env.POLL_INTERVAL_S ?? '10', 10) || 10;
 // See the header: loopback iff a base URL is given. Nothing is defaulted to
@@ -126,10 +128,127 @@ function stamp() {
   return `${p2(d.getHours())}:${p2(d.getMinutes())}:${p2(d.getSeconds())}`;
 }
 
+// ─── Operational log: shipped to the middleware, mirrored to disk ───────────
+//
+// Every emit() line below — registered, paired, presence acknowledged, a
+// claim refused, a heartbeat rejected — used to live ONLY in whatever
+// terminal started this process. That is the exact gap the "I paired this
+// machine before I left and now I can't see what it's been doing" report
+// named: presence says CONNECTED, but nothing between jobs was ever visible
+// away from the machine itself. This ring, and the two things that drain it,
+// close that without changing what emit() looks like to call.
+//
+// Bounded on every axis a long-lived worker can grow one:
+//   * NODE_LOG_MAX_PENDING / NODE_LOG_RING_MAX_BYTES — the in-memory ring
+//     (count AND bytes, so a handful of long lines can't outrun the count
+//     cap before the byte cap catches them). Oldest lines drop first: a
+//     machine unreachable for hours costs scrollback, never unbounded memory.
+//   * NODE_LOG_BATCH_MAX — lines per flush POST, matching the server's own
+//     MAX_NODE_LOG_BATCH so a full ring drains in exactly one flush.
+//   * NODE_LOG_FLUSH_MS — how often the ring is drained. Well below the
+//     10s claim-poll interval, so a line is visible in the browser before
+//     the next thing this worker does.
+//   * WORKER_LOG_FILE_MAX_BYTES — the local mirror under LOG_DIR, trimmed to
+//     its tail when it grows past the cap (see trimWorkerLogFileIfNeeded).
+//
+// Both drains are best-effort: a failed ship leaves the ring alone for the
+// next tick (the server dedupes by seq, so a line sent twice after a
+// timed-out-but-actually-delivered POST is a safe no-op), and a failed file
+// write is swallowed — the terminal is still the thing nobody has ever lost.
+const NODE_LOG_MAX_PENDING = 200;
+const NODE_LOG_RING_MAX_BYTES = 64 * 1024;
+const NODE_LOG_MAX_LINE = 2_000;
+const NODE_LOG_BATCH_MAX = 50;
+const NODE_LOG_FLUSH_MS = 5_000;
+const WORKER_LOG_FILE_MAX_BYTES = 2 * 1024 * 1024;
+
+let nodeLogSeq = 0;
+const nodeLogRing = []; // [{ seq, text }], FIFO — oldest first
+let nodeLogRingBytes = 0;
+
+/** Queue one rendered line for the next flush. Called from emit() itself, not
+ *  from call sites — so every log level ships, not just what a caller
+ *  remembers to forward (the job-log path, by contrast, ships the child's raw
+ *  stdout, which is a different stream entirely). */
+function queueNodeLogLine(line) {
+  const text = line.length > NODE_LOG_MAX_LINE ? line.slice(0, NODE_LOG_MAX_LINE) : line;
+  nodeLogRing.push({ seq: nodeLogSeq++, text });
+  nodeLogRingBytes += text.length;
+  while ((nodeLogRing.length > NODE_LOG_MAX_PENDING || nodeLogRingBytes > NODE_LOG_RING_MAX_BYTES) && nodeLogRing.length > 1) {
+    const dropped = nodeLogRing.shift();
+    nodeLogRingBytes -= dropped.text.length;
+  }
+}
+
+let workerLogLinesSinceCheck = 0;
+
+/** Append one line to the durable local mirror, WORKER_LOG_DIR/worker.log.
+ *  Fire-and-forget, same posture as everything else here: a disk error must
+ *  never interrupt the run loop. Size-checked every ~200 lines rather than on
+ *  every write — a stat() per line would make this feature busier than the
+ *  process it logs. */
+function appendWorkerLogFile(line) {
+  try {
+    if (!existsSync(LOG_DIR)) mkdirSync(LOG_DIR, { recursive: true });
+    const path = join(LOG_DIR, 'worker.log');
+    appendFileSync(path, `${line}\n`);
+    workerLogLinesSinceCheck += 1;
+    if (workerLogLinesSinceCheck >= 200) {
+      workerLogLinesSinceCheck = 0;
+      trimWorkerLogFileIfNeeded(path);
+    }
+  } catch { /* the terminal and the ring are still authoritative */ }
+}
+
+/** Keep worker.log from growing without bound over a worker's lifetime
+ *  (weeks, per this file's header). Trims to the TAIL at a newline boundary
+ *  — the most recent history is what "what has this machine been doing"
+ *  needs, and a rewrite that started mid-line would corrupt the first
+ *  surviving line. */
+function trimWorkerLogFileIfNeeded(path) {
+  try {
+    if (statSync(path).size <= WORKER_LOG_FILE_MAX_BYTES) return;
+    const text = readFileSync(path, 'utf8');
+    const keepFrom = Math.floor(text.length / 2);
+    const nl = text.indexOf('\n', keepFrom);
+    writeFileSync(path, nl >= 0 ? text.slice(nl + 1) : text.slice(keepFrom));
+  } catch { /* best-effort trim — a failure here just means the file grows a bit more */ }
+}
+
+/** Drain up to NODE_LOG_BATCH_MAX queued lines to the middleware. Lines are
+ *  removed from the ring only once the POST succeeds — a failed flush is
+ *  retried whole on the next tick rather than losing the batch, and the
+ *  ring's own cap (not this function giving up) is what bounds an
+ *  unreachable middleware. */
+async function shipNodeLog(config) {
+  if (nodeLogRing.length === 0) return;
+  const batch = nodeLogRing.slice(0, NODE_LOG_BATCH_MAX);
+  try {
+    const res = await post(config, '/api/local-compute/log', { lines: batch }, authHeaders(config));
+    if (res.ok) {
+      nodeLogRing.splice(0, batch.length);
+      nodeLogRingBytes -= batch.reduce((n, e) => n + e.text.length, 0);
+    }
+    // Anything else (a 404 against an older middleware with no route yet, a
+    // 401 against a rotated token) is left for the next tick — same
+    // best-effort posture as shipLog() for per-job output.
+  } catch {
+    /* unreachable — the ring and worker.log are still the record */
+  }
+}
+
+/** Starts the periodic flush. Called once config is available (pairing and
+ *  early startup lines still queue; they ship on the first tick). */
+function startNodeLogShipping(config) {
+  setInterval(() => { void shipNodeLog(config); }, NODE_LOG_FLUSH_MS).unref();
+}
+
 /** `indent` is for lines that belong to the job above them. */
 function emit(level, msg, indent = 0) {
   const line = `${stamp()} ${LEVEL_GLYPH[level] ?? '·'} ${'  '.repeat(indent)}${msg}`;
   if (level === 'err' || level === 'warn') console.error(line); else console.log(line);
+  appendWorkerLogFile(line);
+  queueNodeLogLine(line);
 }
 
 const log = {
@@ -805,6 +924,10 @@ if (args.pairCode) {
 }
 
 const config = readConfig();
+// Start shipping this worker's operational log as early as config exists —
+// pairing and early registration lines above are already queued in the ring
+// and go out on the first tick, so nothing before this line is lost to it.
+startNodeLogShipping(config);
 const reg = await register(config);
 
 if (!reg.acceptJobs) {

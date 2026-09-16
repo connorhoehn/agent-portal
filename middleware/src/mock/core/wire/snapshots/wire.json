@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-09-16T18:49:59.784Z",
-  "serverHandlerSha": "e0ab2b3fe8c98faa51eab44f1811acfaeab8424b11e7e24fe979e0fce4c3f84b",
+  "capturedAt": "2026-09-16T19:23:05.191Z",
+  "serverHandlerSha": "fc298c0ae767a8f42a77bbe4a959882cc2360ad4e1e316f30bfdc6bc677f2da8",
   "baseUrl": "http://127.0.0.1:3012",
   "personas": [
     "orgiq/admin",
@@ -3901,6 +3901,7 @@
         "nodes[].jobKinds": "array",
         "nodes[].jobKinds[]": "string",
         "nodes[].label": "string",
+        "nodes[].lastClaimAt": "null|string",
         "nodes[].lastSeenAt": "string",
         "nodes[].localModels": "array",
         "nodes[].localModels[]": "string",
@@ -3944,6 +3945,22 @@
         ]
       }
     },
+    "GET /api/local-compute/nodes/:nodeId/log": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "bytes": "number",
+        "entries": "array",
+        "lastSeq": "number",
+        "nodeId": "string",
+        "updatedAt": "null"
+      },
+      "values": {}
+    },
+    "GET /api/local-compute/nodes/:nodeId/log/stream": {
+      "skipped": "server-sent event stream (orgiq/admin); server-sent event stream (assessment/admin); server-sent event stream (anonymous)"
+    },
     "GET /api/local-compute/nodes/all": {
       "persona": "orgiq/admin",
       "status": 200,
@@ -3957,6 +3974,7 @@
         "nodes[].jobKinds": "array",
         "nodes[].jobKinds[]": "string",
         "nodes[].label": "string",
+        "nodes[].lastClaimAt": "null|string",
         "nodes[].lastSeenAt": "string",
         "nodes[].localModels": "array",
         "nodes[].localModels[]": "string",

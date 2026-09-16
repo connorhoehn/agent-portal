@@ -198,6 +198,8 @@ function seededNodes(): ComputeNodeRow[] {
       // column and the presence row together on every announce/heartbeat, so
       // seeding one without the other would seed a state no code path produces.
       lastSeenAt: minutesAgo(0.5),
+      // Never asked for work: presence only, no worker running.
+      lastClaimAt: null,
       revokedAt: null,
       tokenHash: hashToken(MOCK_NODE_TOKENS[DEMO_NODE_ID]!),
     },
@@ -219,6 +221,14 @@ function seededNodes(): ComputeNodeRow[] {
       // that keeps it inside today at 00:05 UTC.
       createdAt: clock.hoursAgo(5, { keepWithinToday: true }),
       lastSeenAt: minutesAgo(3),
+      // The only seeded machine that ever registered a worker, so the only one
+      // that has ever asked for work. Equal to lastSeenAt on purpose: the
+      // claim route sets both columns in one UPDATE, so a claim can never be
+      // more recent than the last sighting, and this machine's last contact
+      // WAS a claim. Three minutes of silence then reads as what it is —
+      // presence stale, work loop stopped — which is the pair of facts this
+      // column was added to separate.
+      lastClaimAt: minutesAgo(3),
       revokedAt: null,
       tokenHash: hashToken(MOCK_NODE_TOKENS['node-operator-thinkpad']!),
     },
@@ -233,6 +243,8 @@ function seededNodes(): ComputeNodeRow[] {
       maxConcurrency: 1,
       createdAt: clock.daysAgo(96),
       lastSeenAt: minutesAgo(20),
+      // Never asked for work: presence only, no worker running.
+      lastClaimAt: null,
       revokedAt: null,
       tokenHash: hashToken(MOCK_NODE_TOKENS['node-operator-mini']!),
     },
@@ -381,6 +393,8 @@ function largeNodes(): ComputeNodeRow[] {
       maxConcurrency: n % 4 === 0 ? 2 : 1,
       createdAt: clock.daysAgo(LARGE_FLEET - i),
       lastSeenAt: minutesAgo(fleetAgeMinutes(n)),
+      // Never asked for work: presence only, no worker running.
+      lastClaimAt: null,
       revokedAt: null,
       tokenHash: hashToken(`lcn_mock-fleet-${n}`),
     };
@@ -539,6 +553,7 @@ function toNode(row: ComputeNodeRow): ComputeNode {
     maxConcurrency: row.maxConcurrency,
     createdAt: row.createdAt,
     lastSeenAt: row.lastSeenAt,
+    lastClaimAt: row.lastClaimAt ?? null,
     revokedAt: row.revokedAt,
   };
 }
@@ -590,6 +605,15 @@ export function mockGetNode(id: string): ComputeNode | null {
 export function mockTouchNode(id: string): void {
   const row = byId(id);
   if (row) row.lastSeenAt = clock.nowIso();
+}
+
+/** `UPDATE ... SET last_seen_at = NOW(), last_claim_at = NOW()` — the claim
+ *  path bumps both, because asking for work is also being seen. */
+export function mockTouchNodeClaim(id: string): void {
+  const row = byId(id);
+  if (!row) return;
+  row.lastSeenAt = clock.nowIso();
+  row.lastClaimAt = clock.nowIso();
 }
 
 /** `UPDATE ... SET label = :label WHERE id = :id AND owner_id = :owner
@@ -696,6 +720,9 @@ export function mockClaimPairingCode(
     label: node.label,
     platform: node.platform,
     acceptJobs: false,
+    // Freshly paired: it has announced, it has not yet asked for work. The
+    // claim route sets this on the first poll.
+    lastClaimAt: null,
     localModels: [],
     jobKinds: [],
     maxConcurrency: 1,

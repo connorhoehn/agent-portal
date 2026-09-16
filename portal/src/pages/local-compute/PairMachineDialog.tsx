@@ -93,6 +93,22 @@ export function PairMachineDialog({ open, onClose, onPaired }: { open: boolean; 
   // of running two independent 2.5s loops side by side. Stops the instant
   // the dialog closes (the `open` dependency tears the interval down), same
   // as the two loops it replaces.
+  // The callbacks are held in a ref and kept OUT of the dependency array, the
+  // same shape useLocalComputeStream.ts uses for its subscription.
+  //
+  // This is why the dialog "doesn't poll correctly and doesn't auto close".
+  // The call site passes `onClose={() => setPairOpen(false)}` — a new function
+  // identity on every render of the page. With it in the deps, every parent
+  // render (a 15s node poll, an SSE event, a `useNow` tick) tore this effect
+  // down and rebuilt it. Teardown sets `cancelled = true`, and every tick
+  // checks `if (cancelled) return` AFTER its two fetches resolve — so a tick
+  // whose fetches outlive one parent render is discarded before it reaches
+  // the branch that calls `onClose()`. On a page that re-renders faster than
+  // the round trip, that is every tick, forever.
+  const onCloseRef = useRef(onClose);
+  const onPairedRef = useRef(onPaired);
+  useEffect(() => { onCloseRef.current = onClose; onPairedRef.current = onPaired; });
+
   useEffect(() => {
     if (!open || !pairing) return;
     let cancelled = false;
@@ -111,7 +127,7 @@ export function PairMachineDialog({ open, onClose, onPaired }: { open: boolean; 
         if (statusRes?.claimed || fresh) {
           const node = (statusRes?.nodeId ? nodes.find((n) => n.id === statusRes.nodeId) : undefined) ?? fresh ?? null;
           setClaimed({ nodeId: node?.id ?? statusRes?.nodeId ?? null, label: node?.label ?? null, at: Date.now() });
-          onPaired?.();
+          onPairedRef.current?.();
         }
         return;
       }
@@ -126,13 +142,14 @@ export function PairMachineDialog({ open, onClose, onPaired }: { open: boolean; 
         ?? nodes.find((n) => !knownIdsRef.current.has(n.id));
       if (node && node.presence.status === 'connected') {
         toast?.toast(`${node.label} is connected`, { type: 'success' });
-        onClose();
+        onPairedRef.current?.();
+        onCloseRef.current();
       }
     };
     void tick();
     const id = window.setInterval(() => { void tick(); }, WATCH_MS);
     return () => { cancelled = true; window.clearInterval(id); };
-  }, [open, pairing, claimed, onPaired, onClose, toast]);
+  }, [open, pairing, claimed, toast]);
 
   // The wait, counted out loud. A worker announces every 25 seconds, so the
   // gap between claiming a code and the machine reporting in is legitimately

@@ -93,8 +93,10 @@ import { _resetLocalComputeMocks } from '../../providers/local-compute.js';
 import { _resetLocalFleet } from '../../lib/local-compute-fleet.js';
 import { enqueueJob, getJob, _resetMockQueue } from '../../providers/agent-jobs.js';
 import { _resetLocalComputeLogs } from '../../lib/local-compute-logs.js';
+import { _resetLocalComputeNodeLogs } from '../../lib/local-compute-node-logs.js';
 import { exec } from '../../providers/aurora.js';
 import { type Role, type Session } from '../../lib/session.js';
+import { config } from '../../config.js';
 
 const execMock = exec as unknown as jest.Mock;
 
@@ -152,6 +154,7 @@ beforeEach(() => {
   _resetLocalComputeMocks();
   _resetLocalFleet();
   _resetLocalComputeLogs();
+  _resetLocalComputeNodeLogs();
   _resetMockQueue();
   resetRateLimits();
   clearAuthzCache();
@@ -176,6 +179,7 @@ describe('auth floor: machine routes without a token, browser routes without a s
     expect((await request(anon()).post('/api/local-compute/jobs/job-x/heartbeat').send({})).status).toBe(401);
     expect((await request(anon()).post('/api/local-compute/jobs/job-x/complete').send({})).status).toBe(401);
     expect((await request(anon()).post('/api/local-compute/jobs/job-x/log').send({})).status).toBe(401);
+    expect((await request(anon()).post('/api/local-compute/log').send({})).status).toBe(401);
   });
 
   it('rejects every browser route with no session', async () => {
@@ -183,6 +187,8 @@ describe('auth floor: machine routes without a token, browser routes without a s
     expect((await request(anon()).get('/api/local-compute/jobs/job-x/log')).status).toBe(401);
     expect((await request(anon()).get('/api/local-compute/jobs/job-x/log/stream')).status).toBe(401);
     expect((await request(anon()).post('/api/local-compute/nodes/node-x/work').send({ prompt: 'x' })).status).toBe(401);
+    expect((await request(anon()).get('/api/local-compute/nodes/node-x/log')).status).toBe(401);
+    expect((await request(anon()).get('/api/local-compute/nodes/node-x/log/stream')).status).toBe(401);
   });
 });
 
@@ -717,7 +723,7 @@ describe('GET /api/local-compute/nodes', () => {
 
     const row = res.body.nodes.find((n: { id: string }) => n.id === node.nodeId);
     expect(Object.keys(row).sort()).toEqual([
-      'acceptJobs', 'createdAt', 'id', 'jobKinds', 'label', 'lastSeenAt',
+      'acceptJobs', 'createdAt', 'id', 'jobKinds', 'label', 'lastClaimAt', 'lastSeenAt',
       'localModels', 'maxConcurrency', 'metrics', 'ownerId', 'platform', 'presence', 'revokedAt',
     ]);
     // This announce carried no `metrics` — an older-worker announce, byte for
@@ -859,7 +865,7 @@ describe('GET /api/local-compute/nodes/all', () => {
 
     const row = res.body.nodes.find((n: { id: string }) => n.id === mine.nodeId);
     expect(Object.keys(row).sort()).toEqual([
-      'acceptJobs', 'createdAt', 'id', 'jobKinds', 'label', 'lastSeenAt',
+      'acceptJobs', 'createdAt', 'id', 'jobKinds', 'label', 'lastClaimAt', 'lastSeenAt',
       'localModels', 'maxConcurrency', 'ownerId', 'platform', 'presence', 'revokedAt',
     ]);
   });
@@ -1205,7 +1211,7 @@ describe('PATCH /api/local-compute/nodes/:id', () => {
     expect(res.status).toBe(200);
     expect(res.body.label).toBe('N'.repeat(80));
     expect(Object.keys(res.body).sort()).toEqual([
-      'acceptJobs', 'createdAt', 'id', 'jobKinds', 'label', 'lastSeenAt',
+      'acceptJobs', 'createdAt', 'id', 'jobKinds', 'label', 'lastClaimAt', 'lastSeenAt',
       'localModels', 'maxConcurrency', 'ownerId', 'platform', 'presence', 'revokedAt',
     ]);
     expect(res.body.presence).toMatchObject({ nodeId: node.nodeId, status: 'offline', sessions: [] });
@@ -2231,6 +2237,171 @@ describe('the run logs', () => {
       // Give the stream a tick to open and replay before shipping the live chunk.
       await new Promise((r) => setTimeout(r, 100));
       await ship(held, { seq: 1, chunk: 'live\n' });
+
+      const body = await streamed;
+      expect(body).toContain('backlog');
+      expect(body).toContain('live');
+    });
+  });
+});
+
+// ─── The node operational log ────────────────────────────────────────────────
+//
+// What the worker ships BETWEEN jobs — presence checks, "paused, waiting for
+// accept-jobs", claim refusals — as distinct from a single run's stdout
+// above. Ingest is a bare node-token callback (no claim to fence with, since
+// these lines exist outside any claim); the read side is owner-scoped exactly
+// like the run log, for the same reason: this is a person's own machine
+// talking about its own work.
+describe('the node operational log', () => {
+  const shipLines = (nodeToken: string, lines: Array<{ seq: number; text: string }>) =>
+    request(anon()).post(`${BASE}/log`).set(bearer(nodeToken)).send({ lines });
+
+  describe('POST /log (ingest — node token, no claim)', () => {
+    it('401s a browser session and a cookie-less caller — only a node token may ship this', async () => {
+      const node = await pair({ sub: 'u-mia' }, { label: 'mia-mbp' });
+      expect((await request(as('member', 'u-mia')).post(`${BASE}/log`).send({ lines: [{ seq: 0, text: 'hi' }] })).status).toBe(401);
+      expect((await request(anon()).post(`${BASE}/log`).send({ lines: [{ seq: 0, text: 'hi' }] })).status).toBe(401);
+      expect((await shipLines(node.nodeToken, [{ seq: 0, text: 'registered\n' }])).status).toBe(200);
+    });
+
+    it('400s a malformed body: not an array, empty, too many lines, or a bad entry', async () => {
+      const node = await pair({ sub: 'u-mia' }, { label: 'mia-mbp' });
+      for (const lines of [undefined, 'nope', [], Array.from({ length: 51 }, (_, i) => ({ seq: i, text: 'x' }))]) {
+        const res = await request(anon()).post(`${BASE}/log`).set(bearer(node.nodeToken)).send({ lines });
+        expect([lines, res.status]).toEqual([lines, 400]);
+      }
+      for (const bad of [{ seq: -1, text: 'x' }, { seq: 'x', text: 'x' }, { seq: 0, text: '' }, { seq: 0, text: 42 }, {}]) {
+        const res = await shipLines(node.nodeToken, [bad as { seq: number; text: string }]);
+        expect([bad, res.status]).toEqual([bad, 400]);
+      }
+    });
+
+    it('appends every line in one batch, readable back by the owner', async () => {
+      const node = await pair({ sub: 'u-mia' }, { label: 'mia-mbp' });
+      const res = await shipLines(node.nodeToken, [
+        { seq: 0, text: '12:00:00 · registered\n' },
+        { seq: 1, text: '12:00:01 ✓ presence acknowledged\n' },
+      ]);
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({ ok: true, nodeId: node.nodeId, lines: 2 });
+
+      const view = await request(as('member', 'u-mia')).get(`${BASE}/nodes/${node.nodeId}/log`);
+      expect(view.status).toBe(200);
+      expect(view.body.nodeId).toBe(node.nodeId);
+      expect(view.body.lastSeq).toBe(1);
+      expect(view.body.entries.map((e: { seq: number; text: string }) => [e.seq, e.text])).toEqual([
+        [0, '12:00:00 · registered\n'],
+        [1, '12:00:01 ✓ presence acknowledged\n'],
+      ]);
+    });
+
+    it('is idempotent on seq — a re-shipped batch does not duplicate lines', async () => {
+      const node = await pair({ sub: 'u-mia' }, { label: 'mia-mbp' });
+      await shipLines(node.nodeToken, [{ seq: 0, text: 'once\n' }]);
+      await shipLines(node.nodeToken, [{ seq: 0, text: 'once\n' }]);
+      const view = await request(as('member', 'u-mia')).get(`${BASE}/nodes/${node.nodeId}/log`);
+      expect(view.body.entries).toHaveLength(1);
+    });
+
+    it('a claim refusal does not stop the machine from shipping its log — no claim token required', async () => {
+      // Not fenced: unlike jobs/:id/log, there is no active claim between jobs,
+      // and the whole point of this route is to carry lines from exactly that
+      // gap. A node token alone is the complete credential.
+      const node = await pair({ sub: 'u-mia' }, { label: 'mia-mbp' });
+      const res = await shipLines(node.nodeToken, [{ seq: 0, text: 'paused: not accepting jobs\n' }]);
+      expect(res.status).toBe(200);
+    });
+  });
+
+  describe('GET /nodes/:id/log (read — browser, owner-scoped)', () => {
+    it('401s a cookie-less caller and a node token — the read side is a browser floor', async () => {
+      const node = await pair({ sub: 'u-mia' }, { label: 'mia-mbp' });
+      await shipLines(node.nodeToken, [{ seq: 0, text: 'hi\n' }]);
+      expect((await request(anon()).get(`${BASE}/nodes/${node.nodeId}/log`)).status).toBe(401);
+      expect((await request(anon()).get(`${BASE}/nodes/${node.nodeId}/log`).set(bearer(node.nodeToken))).status).toBe(401);
+    });
+
+    it('404s a machine the caller does not own, and says nothing about whose it is', async () => {
+      const mine = await pair({ sub: 'u-mia' }, { label: 'mia-mbp' });
+      const theirs = await pair({ sub: 'u-raj' }, { label: 'raj-mbp' });
+      await shipLines(theirs.nodeToken, [{ seq: 0, text: 'secret\n' }]);
+
+      const res = await request(as('member', 'u-mia')).get(`${BASE}/nodes/${theirs.nodeId}/log`);
+      expect(res.status).toBe(404);
+      expect(res.body).toEqual({ error: 'no such machine log' });
+
+      const missing = await request(as('member', 'u-mia')).get(`${BASE}/nodes/node-nope/log`);
+      expect(missing.status).toBe(404);
+      expect(missing.body).toEqual({ error: 'no such machine log' });
+
+      expect((await request(as('member', 'u-mia')).get(`${BASE}/nodes/${mine.nodeId}/log`)).status).toBe(200);
+    });
+
+    it('returns the empty shape for a paired machine that has shipped nothing yet', async () => {
+      const node = await pair({ sub: 'u-mia' }, { label: 'mia-mbp' });
+      const res = await request(as('member', 'u-mia')).get(`${BASE}/nodes/${node.nodeId}/log`);
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({
+        nodeId: node.nodeId, entries: [], lastSeq: -1, bytes: 0, updatedAt: null,
+      });
+    });
+
+    it('honours ?since to return only lines after a poller cursor', async () => {
+      const node = await pair({ sub: 'u-mia' }, { label: 'mia-mbp' });
+      await shipLines(node.nodeToken, [
+        { seq: 0, text: 'a\n' }, { seq: 1, text: 'b\n' }, { seq: 2, text: 'c\n' },
+      ]);
+      const res = await request(as('member', 'u-mia')).get(`${BASE}/nodes/${node.nodeId}/log`).query({ since: 1 });
+      expect(res.status).toBe(200);
+      expect(res.body.entries.map((e: { seq: number }) => e.seq)).toEqual([2]);
+      expect(res.body.lastSeq).toBe(2);
+    });
+
+    it('answers degraded: true, never a 500, when the owner lookup fails', async () => {
+      const node = await pair({ sub: 'u-mia' }, { label: 'mia-mbp' });
+      // Pairing above ran with the mock provider (config.mock.aurora === true,
+      // the default this whole file mocks it to). Flip it off here so
+      // listNodesByOwner takes the real Aurora path — through the SAME
+      // mocked exec() every other test in this file leaves unconfigured —
+      // and restore it in `finally` so no later test in the file is affected.
+      (config.mock as { aurora: boolean }).aurora = false;
+      execMock.mockRejectedValueOnce(new Error('Data API unavailable'));
+      try {
+        const res = await request(as('member', 'u-mia')).get(`${BASE}/nodes/${node.nodeId}/log`);
+        expect(res.status).toBe(200);
+        expect(res.body).toMatchObject({
+          nodeId: node.nodeId, entries: [], lastSeq: -1, bytes: 0, updatedAt: null,
+          degraded: true, error: 'Data API unavailable',
+        });
+      } finally {
+        (config.mock as { aurora: boolean }).aurora = true;
+      }
+    });
+  });
+
+  describe('GET /nodes/:id/log/stream (tail — browser, owner-scoped)', () => {
+    it('401s a cookie-less caller', async () => {
+      const node = await pair({ sub: 'u-mia' }, { label: 'mia-mbp' });
+      expect((await request(anon()).get(`${BASE}/nodes/${node.nodeId}/log/stream`)).status).toBe(401);
+    });
+
+    it('404s a machine the caller does not own', async () => {
+      const theirs = await pair({ sub: 'u-raj' }, { label: 'raj-mbp' });
+      const res = await request(as('member', 'u-mia')).get(`${BASE}/nodes/${theirs.nodeId}/log/stream`);
+      expect(res.status).toBe(404);
+    });
+
+    it('replays the backlog then pushes a live line over SSE', async () => {
+      const node = await pair({ sub: 'u-mia' }, { label: 'mia-mbp' });
+      await shipLines(node.nodeToken, [{ seq: 0, text: 'backlog\n' }]);
+
+      const streamPath = `${BASE}/nodes/${node.nodeId}/log/stream`;
+      const app = as('member', 'u-mia');
+      const streamed = readStream(app, (buf) => buf.includes('live'), { path: streamPath, timeoutMs: 5000 });
+
+      await new Promise((r) => setTimeout(r, 100));
+      await shipLines(node.nodeToken, [{ seq: 1, text: 'live\n' }]);
 
       const body = await streamed;
       expect(body).toContain('backlog');

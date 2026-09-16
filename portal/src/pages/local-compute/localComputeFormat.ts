@@ -110,3 +110,46 @@ function ordinal(n: number): string {
   const suffix = ['th', 'st', 'nd', 'rd'][n % 10] ?? 'th';
   return `${n}${n % 10 <= 3 ? suffix : 'th'}`;
 }
+
+/**
+ * Whether a machine's WORK LOOP is turning, as distinct from whether the
+ * machine is reachable.
+ *
+ * Presence answers "can we see it": the worker announces every 25 seconds and
+ * keeps announcing whether or not it is asking for work. So a paired laptop
+ * whose worker was switched off — or which is paired but has never had a
+ * worker started — reads as `connected` and looks, from the fleet page,
+ * exactly like one that is pulling work all day. That is the state someone
+ * away from their desk actually wants to tell apart.
+ *
+ * `lastClaimAt` is written only by `POST /claim`, including a refused claim:
+ * a worker being turned away is still a worker whose loop is running.
+ *
+ * The window is deliberately generous. The worker's poll interval is
+ * configurable and a claim can be slow, so a machine polling every 30s must
+ * not flicker to "stopped" between polls. Three minutes is several missed
+ * polls on any sane interval — long enough not to lie in the healthy case,
+ * short enough that a stopped worker is noticed while you are still looking.
+ */
+export const POLL_STALE_MS = 3 * 60_000;
+
+export type PollState = 'pulling' | 'stopped' | 'never';
+
+export function pollState(lastClaimAt: string | null | undefined, nowMs: number): PollState {
+  if (!lastClaimAt) return 'never';
+  const at = pgTimestampMs(lastClaimAt);
+  // `pgTimestampMs` answers NaN for something it cannot read, not null — and
+  // `now - NaN <= window` is false, which reported "not polling": a claim that
+  // started and stopped. That invents a history the value never carried.
+  // Unreadable means we know nothing, and the honest floor is "never".
+  if (!Number.isFinite(at) || at <= 0) return 'never';
+  return nowMs - at <= POLL_STALE_MS ? 'pulling' : 'stopped';
+}
+
+/** What the reader sees. `never` is not a failure — it is a machine that has
+ *  been paired but whose worker has not been started. */
+export function pollLabel(state: PollState): string {
+  if (state === 'pulling') return 'pulling work';
+  if (state === 'stopped') return 'not polling';
+  return 'worker not started';
+}

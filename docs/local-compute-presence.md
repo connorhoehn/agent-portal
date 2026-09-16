@@ -320,6 +320,86 @@ stream and asserts none of it appears in the buffer. `initSSE`'s existing
 `heartbeat` named event is the periodic keepalive; nothing new was needed for
 that.
 
+## The machine's own operational log, and Computer Lab (2026-09-16)
+
+The report this closes: "think that I am somewhere else and I log into this
+system and had registered my computer as a local computer before I left and
+it was pulling work — I should be able to see the logs of the machine, more
+than just assigning it work." Presence said CONNECTED and the fleet routes
+already showed what a machine was running (P1's `runs` list), but the
+machine's own narration of its life *between* jobs — registered, paired,
+"paused: not accepting jobs", a claim refused, a heartbeat rejected, a token
+rotation adopted — existed only in whatever terminal happened to have started
+`tools/local-compute-worker.mjs`. Away from the machine, none of that was
+visible. This closes it with a second log, distinct from the existing
+per-job one:
+
+- **`jobs/:jobId/log`** (already shipped) — one claimed run's stdout, gone
+  once that job's row ages out of view.
+- **The node's operational log** (new) — the worker's `emit()` scrollback,
+  which exists for the machine's whole paired lifetime, independent of any
+  one job.
+
+**The worker** (`tools/local-compute-worker.mjs`) queues every `emit()` line
+into a bounded in-memory ring and flushes it to `POST /api/local-compute/log`
+on a 5s timer, authenticated by the plain node token — not a claim token,
+because these lines are defined by existing *outside* any claim. A failed
+ship leaves the ring alone for the next tick (the server dedupes by `seq`,
+so a line sent twice after a timed-out-but-delivered POST is a safe no-op);
+a failed local write is swallowed the same way. Every axis is bounded
+explicitly, because this runs for a machine's whole paired lifetime (weeks),
+not one job's:
+
+| Bound | Value | Why |
+|---|---|---|
+| Ring size | 200 lines | caps memory when the middleware is unreachable for a while |
+| Ring bytes | 64KB | a handful of unusually long lines must not outrun the count cap first |
+| One shipped line | 2,000 chars | `emit()`'s own lines run well under 200 chars; headroom, not an invitation |
+| Batch size | 50 lines/POST | mirrors the server's own `MAX_NODE_LOG_BATCH`, so a full ring drains in one flush |
+| Flush interval | 5s | well under the 10s claim-poll interval, so a line is visible before the worker's next act |
+| Local file (`WORKER_LOG_DIR/worker.log`) | 2MB | trimmed to its tail at a newline boundary once exceeded |
+
+**The middleware** (`lib/local-compute-node-logs.ts`) is a sibling of the
+existing per-job log store — same in-memory, best-effort, bounded posture —
+keyed by node id instead of job id, with its own bounds (500 lines / 256KB
+per node, 200 nodes held before the least-recently-written is evicted,
+mirroring `local-compute-logs.ts`'s `MAX_JOBS`). New routes:
+
+```
+POST   /api/local-compute/log                  ship operational log lines (machine, node token)
+GET    /api/local-compute/nodes/:id/log         read a machine's operational log (browser, owner-scoped)
+GET    /api/local-compute/nodes/:id/log/stream  tail it, as SSE (browser, owner-scoped)
+```
+
+Ownership is enforced the same way the run log already is: `GET
+/nodes/:id/log` 404s a machine the caller does not own, with the same body a
+machine that never existed gets — a browser cannot probe for a node id it
+has no claim to see. The read routes wrap `listNodesByOwner` in try/catch
+and answer the house `{ …, degraded: true, error }` marker (the convention
+`routes/cost.ts` set) rather than a 500 when the owner lookup itself fails,
+so "we could not check on this machine" renders as a real notice instead of
+a broken page.
+
+**The portal** puts an entry per paired machine in Computer Lab
+(`portal/src/pages/local-compute/LocalMachinesLab.tsx`, mounted from
+`pages/admin/DevboxPage.tsx`), beside the microVM fleet: presence, what it's
+running (from the same `runs` list Local compute already reads), and a "View
+log" action that opens the operational log via `LogStream`. It is
+deliberately **not** folded into `<ComputerLab>` — see P1 below, unchanged:
+`Computer.kind?: 'microvm' | 'local'` is still a queued cross-repo ask, and
+offering it today would risk suggesting shell affordances a laptop cannot
+serve. The section is composed locally from existing shared primitives
+instead, and renders nothing at all when nobody has paired a machine, so a
+fleet with none looks exactly as it did before this shipped. A failed read
+renders `UnavailableNotice`, never an empty `LogStream` — and an *honestly*
+empty log (an older worker, or one that hasn't shipped since a middleware
+restart) says so in its empty-state copy rather than looking like a hang.
+
+`portal/src/pages/local-compute/nodeLogLines.ts` is the plain-text sibling of
+`runLogLines.ts`: the worker's own lines need no frame parsing (they are
+already prose), so this only orders by `seq` and maps the worker's level
+glyph (`✗ ! ✓ → ·`) onto a `LogStream` level.
+
 ## Authorization
 
 - New Cedar action **`ConnectLocalCompute`** — gates pairing-code creation

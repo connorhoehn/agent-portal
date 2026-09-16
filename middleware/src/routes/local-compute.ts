@@ -13,6 +13,10 @@
 //   POST   /api/local-compute/jobs/:id/log        ship a chunk of run output (machine, fenced)
 //   GET    /api/local-compute/jobs/:id/log        read the run log (browser session, owner-scoped)
 //   GET    /api/local-compute/jobs/:id/log/stream tail the run log, as SSE (browser session, owner-scoped)
+//   POST   /api/local-compute/log             ship operational log lines — the worker's own
+//                                              scrollback between jobs (machine, node token)
+//   GET    /api/local-compute/nodes/:id/log         read a machine's operational log (browser session, owner-scoped)
+//   GET    /api/local-compute/nodes/:id/log/stream  tail it, as SSE (browser session, owner-scoped)
 //   GET    /api/local-compute/nodes           my machines + live sessions (browser session)
 //   GET    /api/local-compute/nodes/all       fleet-wide, session detail stripped (fleet-wide role)
 //   GET    /api/local-compute/presence/repos  org-wide, per-repo presence counts only (fleet-wide role)
@@ -52,6 +56,7 @@ import {
   revokeNode,
   setAcceptJobs,
   touchNode,
+  touchNodeClaim,
   type ComputeNode,
 } from '../providers/local-compute.js';
 import {
@@ -75,6 +80,13 @@ import {
   subscribeLog,
   MAX_LOG_CHUNK,
 } from '../lib/local-compute-logs.js';
+import {
+  appendNodeLog,
+  getNodeLog,
+  subscribeNodeLog,
+  MAX_NODE_LOG_LINE,
+  MAX_NODE_LOG_BATCH,
+} from '../lib/local-compute-node-logs.js';
 import {
   getJob,
   enqueueJob,
@@ -466,7 +478,10 @@ localComputeRouter.post('/claim', workLoopLimit, requireNodeToken(async (_req, r
 
   const verdict = decideClaim({ node, liveJobs, pullSideReady });
   if (verdict.kind === 'deny') {
-    await touchNode(node.id);
+    // A refused claim is still a claim: the loop is running, the server said
+    // no. Recording it as a poll is what lets the page distinguish "switched
+    // off" from "switched on and being turned away".
+    await touchNodeClaim(node.id);
     res.status(verdict.status).json({ error: verdict.reason, gate: verdict.gate });
     return;
   }
@@ -482,7 +497,10 @@ localComputeRouter.post('/claim', workLoopLimit, requireNodeToken(async (_req, r
   // never from the request, so a worker cannot claim another machine's work by
   // asking for it.
   const claim = await claimNextJobForWorker({ boxId, sessionId, kinds: verdict.kinds, nodeId: node.id });
-  await touchNode(node.id);
+  // `touchNodeClaim`, not `touchNode`: this is the work loop turning, and
+  // presence alone cannot say whether it is. A paired laptop whose worker is
+  // switched off still announces.
+  await touchNodeClaim(node.id);
 
   if (!claim) {
     // Empty queue is not an error, and it is the common case: a worker polls a
@@ -710,6 +728,122 @@ localComputeRouter.get(
       if (snap.done) writeSSE(res, { type: 'done' });
     }
     const unsubscribe = subscribeLog(owned.jobId, (entry) => {
+      writeSSE(res, { type: 'log', seq: entry.seq, chunk: entry.text });
+    });
+    req.on('close', unsubscribe);
+  }),
+);
+
+// ─── Node operational log ────────────────────────────────────────────────────
+//
+// What the machine ships between jobs — `tools/local-compute-worker.mjs`
+// `emit()` lines: registered, paired, presence acknowledged, warnings, a claim
+// refused. Distinct from `jobs/:jobId/log` above, which carries ONE claimed
+// run's stdout and disappears when that run's row ages out. The gap this
+// closes: a worker paired and left running is otherwise invisible between
+// jobs — the only place its state was ever visible was the terminal it was
+// started in, on the machine, which is exactly the situation "I'm elsewhere
+// and this thing has been pulling work while I was gone" cannot use.
+//
+// Ingest is a node-token callback, not fenced by a claim — these lines exist
+// BETWEEN jobs by construction, so there is no job claim to fence them with.
+// The read side is owner-scoped, same posture as the run log and presence
+// detail: a machine's own scrollback is that person's own work.
+
+/** Lines per POST /log batch, and a single line's clamp — see
+ *  lib/local-compute-node-logs.ts for why these numbers. */
+function parseNodeLogLines(body: unknown): Array<{ seq: number; text: string }> | null {
+  const lines = (body as { lines?: unknown })?.lines;
+  if (!Array.isArray(lines) || lines.length === 0 || lines.length > MAX_NODE_LOG_BATCH) return null;
+  const out: Array<{ seq: number; text: string }> = [];
+  for (const raw of lines) {
+    if (typeof raw !== 'object' || raw === null) return null;
+    const l = raw as Record<string, unknown>;
+    const seq = Number(l['seq']);
+    const text = typeof l['text'] === 'string' ? l['text'] : '';
+    if (!Number.isFinite(seq) || seq < 0 || !text) return null;
+    out.push({ seq: Math.floor(seq), text: text.slice(0, MAX_NODE_LOG_LINE) });
+  }
+  return out;
+}
+
+localComputeRouter.post('/log', workLoopLimit, requireNodeToken(async (req, res, node) => {
+  const lines = parseNodeLogLines(req.body);
+  if (!lines) {
+    res.status(400).json({
+      error: `lines must be a non-empty array of ≤${MAX_NODE_LOG_BATCH} { seq, text } records `
+        + '(seq a non-negative number, text a non-empty string)',
+    });
+    return;
+  }
+  for (const { seq, text } of lines) appendNodeLog(node.id, seq, text);
+  res.json({ ok: true, nodeId: node.id, lines: lines.length });
+}));
+
+/**
+ * The node named by `:nodeId`, if this session owns it — else a flat 404, the
+ * same opacity `ownedLocalJob` gives the run log so a browser cannot probe
+ * for a machine id it has no claim to see.
+ *
+ * Wrapped in try/catch, unlike most reads on this router: `listNodesByOwner`
+ * hits Aurora (or the mock), and this is a route the ask specifically wants
+ * to fail HONESTLY rather than 500 — a person checking on a machine they left
+ * running should see "could not check" (degraded), not a broken page.
+ */
+async function ownedNodeForLog(
+  req: Request, res: Response,
+): Promise<{ nodeId: string } | { degraded: true } | null> {
+  const session = resolveSession(req)!;
+  const nodeId = String(req.params['nodeId'] ?? '');
+  let own: ComputeNode[];
+  try {
+    own = await listNodesByOwner(session.sub);
+  } catch (err) {
+    res.json({
+      nodeId, entries: [], lastSeq: -1, bytes: 0, updatedAt: null,
+      degraded: true,
+      error: (err as Error).message.split('\n')[0]?.slice(0, 160) ?? 'query failed',
+    });
+    return { degraded: true };
+  }
+  if (!own.some((n) => n.id === nodeId)) {
+    res.status(404).json({ error: 'no such machine log' });
+    return null;
+  }
+  return { nodeId };
+}
+
+localComputeRouter.get(
+  '/nodes/:nodeId/log',
+  browserTenant,
+  requireSession('ViewLocalCompute'),
+  asyncHandler(async (req, res) => {
+    const owned = await ownedNodeForLog(req, res);
+    if (!owned || 'degraded' in owned) return; // response already written above
+    const sinceRaw = Number(req.query['since']);
+    const since = Number.isFinite(sinceRaw) ? sinceRaw : -1;
+    // A machine that has never shipped an operational line — an older
+    // worker, or one whose first flush hasn't fired yet — is not an error;
+    // the empty shape lets the panel say so honestly rather than hanging.
+    res.json(getNodeLog(owned.nodeId, since) ?? {
+      nodeId: owned.nodeId, entries: [], lastSeq: -1, bytes: 0, updatedAt: null,
+    });
+  }),
+);
+
+localComputeRouter.get(
+  '/nodes/:nodeId/log/stream',
+  browserTenant,
+  requireSession('ViewLocalCompute'),
+  asyncHandler(async (req, res) => {
+    const owned = await ownedNodeForLog(req, res);
+    if (!owned || 'degraded' in owned) return;
+    initSSE(res);
+    const snap = getNodeLog(owned.nodeId);
+    if (snap) {
+      for (const e of snap.entries) writeSSE(res, { type: 'log', seq: e.seq, chunk: e.text });
+    }
+    const unsubscribe = subscribeNodeLog(owned.nodeId, (entry) => {
       writeSSE(res, { type: 'log', seq: entry.seq, chunk: entry.text });
     });
     req.on('close', unsubscribe);

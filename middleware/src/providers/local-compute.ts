@@ -44,6 +44,7 @@ import {
   mockSetAcceptJobs,
   mockSetCapabilities,
   mockTouchNode,
+  mockTouchNodeClaim,
 } from '../mock/local-compute.js';
 
 function s(name: string, value: string): SqlParameter { return { name, value: { stringValue: value } }; }
@@ -73,6 +74,16 @@ export interface ComputeNode {
   maxConcurrency: number;
   createdAt: string;
   lastSeenAt: string | null;
+  /**
+   * When the worker last asked the queue for work (`POST /claim`).
+   *
+   * Separate from `lastSeenAt`, which presence also bumps: a paired laptop
+   * whose worker is switched off still announces and still reads as alive, so
+   * presence alone cannot answer "is this machine pulling work?" — the
+   * question someone has when they are away from the desk. Null on a cluster
+   * that has not applied the column, and on a node that has never claimed.
+   */
+  lastClaimAt: string | null;
   revokedAt: string | null;
 }
 
@@ -121,6 +132,7 @@ function rowToNode(r: Record<string, unknown>): ComputeNode {
     maxConcurrency: Number(r['max_concurrency'] ?? 1) || 1,
     createdAt: toStr(r['created_at']),
     lastSeenAt: r['last_seen_at'] ? toStr(r['last_seen_at']) : null,
+    lastClaimAt: r['last_claim_at'] ? toStr(r['last_claim_at']) : null,
     revokedAt: r['revoked_at'] ? toStr(r['revoked_at']) : null,
   };
 }
@@ -276,6 +288,24 @@ export async function getNode(id: string): Promise<ComputeNode | null> {
 export async function touchNode(id: string): Promise<void> {
   if (config.mock.aurora) { mockTouchNode(id); return; }
   await exec(`UPDATE compute_nodes SET last_seen_at = NOW() WHERE id = :id`, [s('id', id)]);
+}
+
+/**
+ * Record that this node just asked for work.
+ *
+ * Called only from `POST /claim`, so it means what it says. Tolerates the
+ * column being absent — a cluster that has not applied
+ * `schema/local_compute_worker_schema.sql` keeps claiming work and simply
+ * cannot report the poll loop, which is strictly better than failing a claim
+ * over a display field.
+ */
+export async function touchNodeClaim(id: string): Promise<void> {
+  if (config.mock.aurora) { mockTouchNodeClaim(id); return; }
+  try {
+    await exec(`UPDATE compute_nodes SET last_seen_at = NOW(), last_claim_at = NOW() WHERE id = :id`, [s('id', id)]);
+  } catch {
+    await exec(`UPDATE compute_nodes SET last_seen_at = NOW() WHERE id = :id`, [s('id', id)]);
+  }
 }
 
 /**

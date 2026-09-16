@@ -16,6 +16,7 @@ import { ErrorState, InlineAlert, Stack } from '@connorhoehnslalom/ui-components
 import { ComputerLab } from '@connorhoehnslalom/ui-components/compute';
 import { useCapabilities } from '../../lib/capabilities';
 import { useSession } from '../../lib/auth';
+import { LocalMachinesLab } from '../local-compute/LocalMachinesLab';
 
 /** Roles the server lets read the fleet without ManageDevbox — mirrors the
  *  /api/devbox mount in middleware/src/index.ts. Keep the two in step: a
@@ -73,6 +74,13 @@ export default function DevboxPage() {
           needs computer access, which an SME or a platform operator can grant.
         </InlineAlert>
       )}
+      {/* Paired laptops/workstations — presence, what they're running, and a
+          log — beside the microVM fleet below. See LocalMachinesLab's header
+          comment for why this is a locally-composed section rather than
+          folded into <ComputerLab> itself. Renders nothing when nobody has
+          paired a machine, so a fleet with none looks exactly as it did
+          before this shipped. */}
+      <LocalMachinesLab className="mx-4 mt-3" />
       <Stack gap="none" className="min-h-0 flex-1">
         <ComputerLab
           open

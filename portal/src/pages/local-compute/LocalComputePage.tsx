@@ -43,7 +43,7 @@ import { writeJson } from '../../lib/writeJson';
 import { presenceChip } from '../../lib/statusTone';
 import { usd } from '../../lib/format';
 import { PairMachineDialog, WORKER_COMMAND } from './PairMachineDialog';
-import { statusLabel, statusTone, truncate, when, isLive, elapsedLabel, type JobStatus } from './localComputeFormat';
+import { statusLabel, statusTone, truncate, when, isLive, elapsedLabel, pollState, type JobStatus } from './localComputeFormat';
 import { useNow } from '../../hooks/useNow';
 import { LiveJobCell } from './LiveJobCell';
 import { MachineConnection, type MachineMetrics } from './MachineConnection';
@@ -71,6 +71,16 @@ interface ComputeNode {
   jobKinds: string[];
   maxConcurrency?: number;
   presence: NodePresence;
+  /**
+   * When the worker last asked the queue for work.
+   *
+   * NOT presence. Presence is the 25-second announce, which a paired machine
+   * keeps sending whether or not its work loop is running — so a laptop with
+   * the worker switched off reads `connected` and is indistinguishable from
+   * one pulling work all day. Only this separates them. Null on a machine
+   * that has never claimed, and on a cluster without the column.
+   */
+  lastClaimAt?: string | null;
   /** What the worker last reported about the machine it runs on. Null until a
    *  worker new enough to send it has announced. */
   metrics?: MachineMetrics | null;
@@ -427,7 +437,16 @@ export default function LocalComputePage() {
             {running > 0 && <Chip tone="accent" size="xs" dot="pulse">{running} running</Chip>}
             {queued > 0 && <Chip tone="neutral" size="xs">{queued} queued</Chip>}
             {failed > 0 && <Chip tone="danger" size="xs">{failed} failed</Chip>}
-            {running + queued + failed === 0 && <MetaLine size="xs" tone="tertiary" items={['idle']} />}
+            {running + queued + failed === 0 && (() => {
+              const poll = pollState(n.lastClaimAt, now);
+              if (poll === 'pulling') {
+                return <Chip tone="success" size="xs" dot="pulse" title={`Last asked the queue for work ${when(n.lastClaimAt)}`}>idle · pulling</Chip>;
+              }
+              if (poll === 'stopped') {
+                return <Chip tone="warning" size="xs" dot="static" title={`Last asked for work ${when(n.lastClaimAt)} — the worker looks stopped`}>not polling</Chip>;
+              }
+              return <Chip tone="neutral" size="xs" title="Paired, but no worker has ever asked this queue for work">worker not started</Chip>;
+            })()}
           </Inline>
         );
       },
@@ -789,7 +808,11 @@ export default function LocalComputePage() {
           )}
         </Stack>
       )}
-      <PairMachineDialog open={pairOpen} onClose={() => setPairOpen(false)} />
+      <PairMachineDialog
+        open={pairOpen}
+        onClose={() => setPairOpen(false)}
+        onPaired={() => { refreshNodes(); }}
+      />
       <ConfirmDialog
         open={unpairTarget !== null}
         tone="destructive"

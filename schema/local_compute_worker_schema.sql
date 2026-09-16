@@ -155,6 +155,29 @@ COMMENT ON COLUMN compute_nodes.max_concurrency IS
   'the developer is doing at their keyboard. Over-claiming does not queue '
   'politely — it degrades every in-flight run, including the human''s.';
 
+-- ---------------------------------------------------------------------------
+-- When the worker last ASKED for work
+-- ---------------------------------------------------------------------------
+--
+-- `last_seen_at` is bumped by presence AND by every work-loop call, so it
+-- cannot answer "is this machine pulling work?" — a paired laptop whose worker
+-- has been switched off still announces presence and still looks alive. From
+-- the fleet page that is indistinguishable from a machine turning its poll
+-- loop, which is the question someone actually has when they are away from
+-- their desk and want to know the thing is working.
+--
+-- Separate column, written only by POST /claim. Presence says the machine is
+-- reachable; this says its work loop is running.
+
+ALTER TABLE compute_nodes
+  ADD COLUMN IF NOT EXISTS last_claim_at TIMESTAMPTZ;
+
+COMMENT ON COLUMN compute_nodes.last_claim_at IS
+  'When this node last called POST /claim — i.e. last asked the queue for work. '
+  'Distinct from last_seen_at, which presence also bumps: a machine can be '
+  'reachable and announcing while its work loop is stopped, and only this '
+  'column can tell those apart.';
+
 -- The concurrency check counts a node's live claims; the claim filter reads a
 -- node's advertised kinds. Both are per-request on the claim path.
 CREATE INDEX IF NOT EXISTS agent_jobs_live_box_idx
