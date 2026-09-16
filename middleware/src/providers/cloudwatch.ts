@@ -61,11 +61,13 @@ export const mockCloudWatch: CloudWatchProvider = {
     const totalErrors = fleet.reduce((s, a) => s + a.errorsLast24h, 0);
     const totalTokens = fleet.reduce((s, a) => s + a.tokensLast24h, 0);
     // An empty fleet is a real state now (the `empty` scenario, and a real
-    // account before its first deploy). Dividing by its length produced NaN,
-    // which serialises to `null` and renders as a blank latency tile with no
-    // hint that the fleet, not the metric, is what is missing.
+    // account before its first deploy). Dividing by its length produced NaN;
+    // zero-filling it instead was the other wrong answer, because an average
+    // latency of 0ms is not a measurement of an empty fleet, it is a claim
+    // that the fleet is infinitely fast. `null` is the honest third option,
+    // and the tile already renders it as "—".
     const avgLatency =
-      fleet.length > 0 ? Math.round(fleet.reduce((s, a) => s + a.latencyP50Ms, 0) / fleet.length) : 0;
+      fleet.length > 0 ? Math.round(fleet.reduce((s, a) => s + a.latencyP50Ms, 0) / fleet.length) : null;
     const successRate =
       totalInvocations > 0
         ? (((totalInvocations - totalErrors) / totalInvocations) * 100).toFixed(1)
@@ -136,7 +138,7 @@ const ZERO_SUMMARY: ObservabilitySummary = {
   totalInvocations24h: 0,
   totalErrors24h: 0,
   totalTokens24h: 0,
-  avgLatencyMs: 0,
+  avgLatencyMs: null,
   successRate: '0.0',
   traceCount: 0,
 };
@@ -199,47 +201,6 @@ async function sumMetric(
 const AGGREGATE_DIMS = AGGREGATE_OPERATIONS.map((op) => [
   { Name: 'AggregateOperation', Value: op },
 ]);
-
-/**
- * Sample-weighted mean latency across the aggregate dimensions.
- *
- * Averaging the hourly Averages would weight a quiet 3am hour the same as a
- * busy afternoon one, so this recovers the underlying totals from Sum and
- * SampleCount instead.
- */
-async function avgMetric(
-  namespace: string,
-  metricName: string,
-): Promise<number> {
-  const end = new Date();
-  const start = new Date(end.getTime() - ONE_DAY_MS);
-  const perOp = await Promise.all(
-    AGGREGATE_DIMS.map(async (dims) => {
-      const input: GetMetricStatisticsCommandInput = {
-        Namespace: namespace,
-        MetricName: metricName,
-        Dimensions: dims,
-        StartTime: start,
-        EndTime: end,
-        Period: 3600,
-        Statistics: ['Sum', 'SampleCount'],
-      };
-      try {
-        const out = await cw.send(new GetMetricStatisticsCommand(input));
-        const points = out.Datapoints ?? [];
-        return {
-          sum: points.reduce((s, d) => s + (d.Sum ?? 0), 0),
-          count: points.reduce((s, d) => s + (d.SampleCount ?? 0), 0),
-        };
-      } catch {
-        return { sum: 0, count: 0 };
-      }
-    }),
-  );
-  const sum = perOp.reduce((s, p) => s + p.sum, 0);
-  const count = perOp.reduce((s, p) => s + p.count, 0);
-  return count > 0 ? Math.round(sum / count) : 0;
-}
 
 // Infer span kind from a segment/subsegment name when annotations don't carry it.
 function inferKind(name: string): TraceSpan['kind'] {
@@ -404,7 +365,7 @@ async function computeSummary(): Promise<ObservabilitySummary> {
         (n: number, r: AgentRuntimeSummary) => n + (r.latencyP50Ms ?? 0) * (r.invocationsLast24h ?? 0),
         0,
       );
-      const latencyAvg = invocations > 0 ? Math.round(weighted / invocations) : 0;
+      const latencyAvg = invocations > 0 ? Math.round(weighted / invocations) : null;
 
       if (invocations === 0 && errors === 0 && tokens === 0 && traceCount === 0) {
         return ZERO_SUMMARY;

@@ -457,7 +457,8 @@ export interface ObservabilitySummary {
   totalInvocations24h: number;
   totalErrors24h: number;
   totalTokens24h: number;
-  avgLatencyMs: number;
+  /** null when nothing ran in the window — see cloudwatch.ts. */
+  avgLatencyMs: number | null;
   successRate: string;
   traceCount: number;
 }

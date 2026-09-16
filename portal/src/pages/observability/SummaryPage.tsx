@@ -13,7 +13,7 @@ interface ObsSummary {
   totalInvocations24h: number;
   totalErrors24h: number;
   totalTokens24h: number;
-  avgLatencyMs: number;
+  avgLatencyMs: number | null;
   successRate: string;
   traceCount: number;
 }
@@ -374,7 +374,11 @@ function SummaryPage() {
         aria-label="24h rollup"
         items={[
           { label: 'Invocations (24h)', value: summary?.totalInvocations24h.toLocaleString() ?? '—' },
-          { label: 'Avg Latency', value: summary ? `${(summary.avgLatencyMs / 1000).toFixed(1)}s` : '—' },
+          {
+            label: 'Avg Latency',
+            value:
+              summary?.avgLatencyMs == null ? '—' : `${(summary.avgLatencyMs / 1000).toFixed(1)}s`,
+          },
           { label: 'Tokens (24h, account)', value: summary ? formatTokenCount(summary.totalTokens24h, { compact: true }) : '—' },
           { label: 'Success Rate', value: summary ? `${summary.successRate}%` : '—', tone: 'accent' },
           {

@@ -6,6 +6,7 @@ import type { CrawlSession, CrawlStatus, CrawlTarget } from '../../components/in
 import { RunHistoryTable } from '../../components/ingest/RunHistoryTable';
 import { RunDetailDrawer } from '../../components/ingest/RunDetailDrawer';
 import { EmptyState } from '../../components/ingest/ui';
+import { UnavailableNotice } from '../../components/UnavailableNotice';
 
 function RunHistoryPage() {
   const navigate = useNavigate();
@@ -16,11 +17,17 @@ function RunHistoryPage() {
     30_000,
     { share: true },
   );
-  const { data: crawlsData } = useFetch<{ crawls: CrawlSession[] }>(
+  const {
+    data: crawlsData, error: crawlsError, degraded: crawlsDegraded, refresh: refreshCrawls,
+  } = useFetch<{ crawls: CrawlSession[] }>(
     '/api/ingest/crawls',
     10_000,
     { share: true },
   );
+  // A failed read is not an empty one. Without this the page answered "No
+  // crawl runs yet" to a 500 from /api/ingest/crawls — the most confident
+  // possible claim, made from no data at all.
+  const crawlsFailure = crawlsError ?? crawlsDegraded;
 
   const targets = targetsData?.targets ?? [];
   const crawls = crawlsData?.crawls ?? [];
@@ -46,7 +53,14 @@ function RunHistoryPage() {
       description="What each crawl run actually did — pages fetched, documents produced, and where it stopped. Refreshes every 10s."
     >
       <Card padding="md">
-        {historyCrawls.length === 0 ? (
+        {crawlsFailure && !crawlsData ? (
+          <UnavailableNotice
+            error={crawlsFailure}
+            what="crawl runs"
+            source="Run history is read from the ingest service"
+            onRetry={refreshCrawls}
+          />
+        ) : historyCrawls.length === 0 ? (
           <EmptyState
             title="No crawl runs yet"
             body={targets.length > 0

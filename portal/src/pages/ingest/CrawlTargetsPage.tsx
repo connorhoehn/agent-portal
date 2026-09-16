@@ -10,6 +10,7 @@ import { ConnectedSources } from '../../components/ingest/ConnectedSources';
 import { useFetch } from '../../hooks/useFetch';
 import type { CrawlSession, CrawlTarget } from '../../components/ingest/types';
 import { TargetsTable } from '../../components/ingest/TargetsTable';
+import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { ActiveRunsStrip } from '../../components/ingest/ActiveRunsStrip';
 import { RunDetailDrawer } from '../../components/ingest/RunDetailDrawer';
 import { NewTargetModal } from '../../components/ingest/NewTargetModal';
@@ -24,7 +25,10 @@ function CrawlTargetsPage() {
   // Same URL + interval as IngestLayout's nav-badge poll and RunHistoryPage
   // — `share: true` so the three collapse into one request per tick instead
   // of three.
-  const { data: targetsData, isLoading: targetsLoading, refresh: refreshTargets } = useFetch<{ targets: CrawlTarget[] }>(
+  const {
+    data: targetsData, isLoading: targetsLoading, refresh: refreshTargets,
+    error: targetsError, degraded: targetsDegraded,
+  } = useFetch<{ targets: CrawlTarget[] }>(
     '/api/ingest/crawl-targets',
     30_000,
     { share: true },
@@ -37,6 +41,9 @@ function CrawlTargetsPage() {
 
   const targets = targetsData?.targets ?? [];
   const crawls = crawlsData?.crawls ?? [];
+  // "No crawl targets yet" is a claim about the server's state. Only make it
+  // when the server actually answered.
+  const targetsFailure = targetsError ?? targetsDegraded;
 
   const [targetBusy, setTargetBusy] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<{ tone: 'ok' | 'err'; text: string } | null>(null);
@@ -144,6 +151,13 @@ function CrawlTargetsPage() {
           )}
           {targetsLoading && targets.length === 0 ? (
             <LoadingState label="Loading crawl targets…" />
+          ) : targetsFailure && !targetsData ? (
+            <UnavailableNotice
+              error={targetsFailure}
+              what="crawl targets"
+              source="Targets are read from the ingest service"
+              onRetry={refreshTargets}
+            />
           ) : targets.length === 0 ? (
             <EmptyState title="No crawl targets yet" body="Define a target to start ingesting public web content with vision-LLM extraction." />
           ) : (

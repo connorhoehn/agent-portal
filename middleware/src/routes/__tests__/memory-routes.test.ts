@@ -166,14 +166,20 @@ describe('GET /stats', () => {
     expect(sqlOf(0)).toMatch(/session_id IS NOT NULL/);
   });
 
-  it('answers 0 — not NaN — for an agent with no events at all', async () => {
+  it('answers null — not 0, not NaN — for an agent with no events at all', async () => {
     execMock.mockResolvedValue([{
       agent_id: 'orgiq-idle', retrieves: '0', writes: '0',
       p50_ms: null, p99_ms: null, errors: '0', total: '0', cold_sessions: '0',
     }]);
     const res = await request(buildApp()).get('/api/observability/memory/stats');
+    // errorRate stays 0: a proportion of zero events ships beside its own
+    // denominator (`total`), and 0 is how everyone reads "nothing failed".
     expect(res.body.byAgent[0].errorRate).toBe(0);
-    expect(res.body.byAgent[0].p50RetrieveMs).toBe(0);
+    // The percentiles do NOT. There is no such thing as a 0ms retrieve, so a
+    // zero here read as "instant" and the page painted it a green "<1ms" chip
+    // for an agent that had never touched memory.
+    expect(res.body.byAgent[0].p50RetrieveMs).toBeNull();
+    expect(res.body.byAgent[0].p99RetrieveMs).toBeNull();
   });
 
   it('defaults the window to 24h and caps it at 14 days', async () => {

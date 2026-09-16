@@ -245,3 +245,76 @@ signal I tried — `SmartEmptyState` without `degraded=` — had a real false
 positive in the first file it touched); class 4's stateful-initial-value and
 sample-size-based-alarm sub-shapes (both are semantic/statistical judgments
 with no syntactic signature).
+
+---
+
+## Triaging class 4: the rule that came out of the first sweep (2026-09-16)
+
+The scanner's class 4 ("a measurement where there is none") flagged 19
+candidates. Judged one at a time, they split cleanly, and the line between the
+halves is worth writing down because otherwise every future pass re-argues it.
+
+**A rate over an empty denominator is not a lie. A latency over an empty sample
+is.**
+
+A rate is a *proportion of a population*, and it ships in the same payload as
+its own denominator — `errorRate` next to `invocations`, `goodRate` next to
+`totalResponses`, `a2aFraction` next to `totalCostUsd`. A reader who sees "0%
+errors" next to "0 runs" is not deceived; 0 is also the conventional reading of
+"nothing bad happened". Widening all of them to `number | null` would ripple
+through every consumer and chart to buy approximately nothing.
+
+A latency is a *measurement of an event that occurred*. There is no such thing
+as a 0ms retrieve, so a zero-filled percentile does not read as "no data" — it
+reads as **instant**, which is the opposite of the truth, and the UI agrees:
+`MemoryPage`'s `latencyTone(0)` returned `success` and painted a green "<1ms"
+chip for an agent that had never touched memory in its life.
+
+Three places in the codebase had already reached this conclusion independently
+before the scanner existed — `traffic.ts` passes its `p50`/`p99` through as
+null, `cost.ts` returns `costPerGood: null` over zero responses (two lines above
+a `goodRate: … : 0`), and the HITL SLA percentiles were fixed the same way a
+pass earlier. `fmtMs` already rendered null as "—". The server was the only
+thing manufacturing the zero.
+
+### What was fixed
+
+| Site | Was | Now |
+|---|---|---|
+| `routes/memory.ts` (SQL + mapper + type) | `COALESCE(p50_ms, 0)`, again in JS | null through, `number \| null` |
+| `mock/observability-queries.ts` | `?? 0`, mirroring the old SQL | null, mirroring the new |
+| `providers/cloudwatch.ts` `getSummary` | `avgLatency … : 0` over an empty fleet | null |
+| `providers/cloudwatch.ts` `ZERO_SUMMARY` | `avgLatencyMs: 0` | null |
+| `providers/cloudwatch.ts` live summary | `latencyAvg … : 0` | null |
+| `providers/agentcore.ts` | `avgLatencyMs … : 0` | null |
+| `portal` `MemoryPage`/`SummaryPage` | green `<1ms`; `(null/1000)` → "0.0s" | `neutral` tone; "—" |
+
+`providers/cloudwatch.ts::avgMetric` was deleted outright: it had no caller
+anywhere in the repo, and its `catch` turned a *failed* CloudWatch read into a
+zero-sample average — the failed-read-as-empty-read bug, in dead code.
+
+### Deliberately left
+
+- **All the rates** — `traffic.ts` `errorRate`/`lowQualityRate`, `memory.ts`
+  `errorRate`, `oncall.ts` `errorRate`, `cost.ts` `a2aFraction`/`goodRate`,
+  `distillation.ts` `agreementRatePct`/`l1SampleRatePct`/`share`. Per the rule
+  above.
+- **`traffic.ts` `rps`** — zero calls in a window genuinely is zero per second.
+- **`promotions.ts::jaccard`** — guards `a.size === 0` first; 0 similarity
+  against an empty set is the correct definition for clustering.
+- **`prompt-evals.ts`** — the word count of an empty string really is 0.
+- **`lib/judge-config.ts::weightedComposite`'s final `: 0`** — a genuine false
+  positive: unreachable. Both call sites (`harness-runner.ts`,
+  `canary-judge.ts`) already return `null` before calling it when no dimension
+  could be measured, with comments saying why ("0 is a verdict; 'no dimension
+  could be measured' is not one"). It is a defensive default, never a rendered
+  number.
+
+### Still owed
+
+`AgentRuntimeSummary.latencyP50Ms`/`latencyP99Ms` are `number` across the fleet
+fixture, the architecture graph and two pages. `agentcore.ts` now declines to
+overwrite them with a fabricated value when CloudWatch returns no samples, but
+the construction-time `latencyP50Ms: 0` is still a zero a page will render.
+Widening that pair is one coordinated move, not a drive-by; it stays in the
+class-4 budget as a candidate so the scanner keeps it visible.

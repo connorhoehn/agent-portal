@@ -7,6 +7,7 @@ import {
 import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch';
 import { EmptyState } from '../../components/ingest/ui';
+import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { toastError, toastPending, toastSuccess } from '../../lib/toastStore';
 import { writeJson } from '../../lib/writeJson';
 import { T } from './Text';
@@ -62,7 +63,11 @@ function SchedulesPanel({ sources }: { sources: DataSource[] }) {
   // Schedule CRUD rides /api/ingest/schedules (ManageIngest).
   const { can, ready } = useCapabilities();
   const canManage = ready && can('ManageIngest');
-  const { data, isLoading, refresh } = useFetch<{ schedules: IngestSchedule[] }>('/api/ingest/schedules', 30_000);
+  const { data, isLoading, refresh, error, degraded } =
+    useFetch<{ schedules: IngestSchedule[] }>('/api/ingest/schedules', 30_000);
+  // "Ingestion runs only on manual Sync now" is a statement about what is
+  // configured. A failed read cannot support it.
+  const failure = error ?? degraded;
   const schedules = data?.schedules ?? [];
   const [showForm, setShowForm] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -108,7 +113,14 @@ function SchedulesPanel({ sources }: { sources: DataSource[] }) {
           />
         )}
 
-        {isLoading && schedules.length === 0 && !showForm ? (
+        {failure && !data ? (
+          <UnavailableNotice
+            error={failure}
+            what="schedules"
+            source="Schedules are read from the ingest service"
+            onRetry={refresh}
+          />
+        ) : isLoading && schedules.length === 0 && !showForm ? (
           <LoadingState label="Loading schedules…" />
         ) : schedules.length === 0 && !showForm ? (
           <EmptyState title="No schedules configured" body={'Ingestion runs only on manual "Sync now" trigger.'} />

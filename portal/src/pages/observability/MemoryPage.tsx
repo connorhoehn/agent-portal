@@ -45,8 +45,8 @@ interface MemoryAgentStat {
   agentId: string;
   retrieves: number;
   writes: number;
-  p50RetrieveMs: number;
-  p99RetrieveMs: number;
+  p50RetrieveMs: number | null;
+  p99RetrieveMs: number | null;
   errorRate: number;
   coldSessions: number;
 }
@@ -107,7 +107,10 @@ const errorRateTone = (n: number): Tone => {
   return 'danger';
 };
 
-const latencyTone = (n: number): Tone => {
+const latencyTone = (n: number | null | undefined): Tone => {
+  // No retrieve in the window is not a fast one. `success` on a null read as a
+  // green "<1ms" chip for an agent that had never touched memory at all.
+  if (n == null || !Number.isFinite(n)) return 'neutral';
   if (n <= 200) return 'success';
   if (n <= 1000) return 'warning';
   return 'danger';

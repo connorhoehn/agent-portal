@@ -292,7 +292,8 @@ function cwClient(): CloudWatchClient {
 interface RuntimeMetrics {
   invocations: number;
   errors: number;
-  avgLatencyMs: number;
+  /** null when CloudWatch returned no latency samples for this runtime. */
+  avgLatencyMs: number | null;
 }
 
 // Pull Invocations + Errors + Latency for every runtime ARN in one batched
@@ -376,7 +377,7 @@ async function fetchRuntimeMetrics(arns: string[]): Promise<(RuntimeMetrics | nu
     return {
       invocations: Math.round(sumById.get(`inv_${i}`) ?? 0),
       errors: Math.round(sumById.get(`err_${i}`) ?? 0),
-      avgLatencyMs: latencyCount > 0 ? Math.round(latencySum / latencyCount) : 0,
+      avgLatencyMs: latencyCount > 0 ? Math.round(latencySum / latencyCount) : null,
     };
   });
 }
@@ -622,8 +623,16 @@ export const realAgentCore: AgentCoreProvider = {
         if (!m) continue;
         out[i]!.invocationsLast24h = m.invocations;
         out[i]!.errorsLast24h = m.errors;
-        out[i]!.latencyP50Ms = m.avgLatencyMs;
-        out[i]!.latencyP99Ms = m.avgLatencyMs; // p99 metric not exposed; reuse avg
+        // `avgLatencyMs` is null when CloudWatch returned no latency samples
+        // for this runtime. Don't overwrite with a fabricated number — and
+        // don't widen `AgentRuntimeSummary` here either: its two latency
+        // fields are `number` across the fleet fixture, the architecture graph
+        // and two pages, so the honest null has to reach them in one move
+        // rather than arriving as a surprise. Tracked as a class-4 candidate.
+        if (m.avgLatencyMs != null) {
+          out[i]!.latencyP50Ms = m.avgLatencyMs;
+          out[i]!.latencyP99Ms = m.avgLatencyMs; // p99 metric not exposed; reuse avg
+        }
       }
     } catch (err) {
       console.warn('[agentcore] listRuntimes metric hydration failed:', (err as Error).message);

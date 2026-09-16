@@ -65,8 +65,10 @@ interface MemoryAgentStat {
   agentId: string;
   retrieves: number;
   writes: number;
-  p50RetrieveMs: number;
-  p99RetrieveMs: number;
+  /** null when the agent recorded no retrieve in the window. A latency of 0ms
+   *  is not a thing that happens, so zero-filling read as "instant", green. */
+  p50RetrieveMs: number | null;
+  p99RetrieveMs: number | null;
   errorRate: number;
   coldSessions: number;
 }
@@ -231,8 +233,8 @@ memoryRouter.get('/stats', asyncHandler(async (req, res) => {
     SELECT p.agent_id,
            p.retrieves,
            p.writes,
-           COALESCE(p.p50_ms, 0) AS p50_ms,
-           COALESCE(p.p99_ms, 0) AS p99_ms,
+           p.p50_ms,
+           p.p99_ms,
            p.errors,
            p.total,
            COALESCE(c.cold_sessions, 0) AS cold_sessions
@@ -251,8 +253,8 @@ memoryRouter.get('/stats', asyncHandler(async (req, res) => {
         agentId: String(r['agent_id'] ?? ''),
         retrieves: Number(r['retrieves'] ?? 0),
         writes: Number(r['writes'] ?? 0),
-        p50RetrieveMs: r['p50_ms'] == null ? 0 : Number(r['p50_ms']),
-        p99RetrieveMs: r['p99_ms'] == null ? 0 : Number(r['p99_ms']),
+        p50RetrieveMs: r['p50_ms'] == null ? null : Number(r['p50_ms']),
+        p99RetrieveMs: r['p99_ms'] == null ? null : Number(r['p99_ms']),
         errorRate: total > 0 ? errors / total : 0,
         coldSessions: Number(r['cold_sessions'] ?? 0),
       };

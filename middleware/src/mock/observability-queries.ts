@@ -746,9 +746,10 @@ export function mockMemoryStats(windowHours: number, scenario?: ScenarioName): R
         agent_id: agentId,
         retrieves: group_.filter((e) => e.kind === 'retrieve').length,
         writes: group_.filter((e) => e.kind === 'write').length,
-        // `COALESCE(p50_ms, 0)` — the SQL zero-fills, so the mock does too.
-        p50_ms: percentileCont(retrieveMs, 0.5) ?? 0,
-        p99_ms: percentileCont(retrieveMs, 0.99) ?? 0,
+        // The SQL no longer zero-fills these: a retrieve p50 of 0ms is not a
+        // measurement, it is an agent that never retrieved. Mirror the null.
+        p50_ms: percentileCont(retrieveMs, 0.5),
+        p99_ms: percentileCont(retrieveMs, 0.99),
         errors: group_.filter((e) => e.errored).length,
         total: group_.length,
         cold_sessions: coldByAgent.get(agentId) ?? 0,
