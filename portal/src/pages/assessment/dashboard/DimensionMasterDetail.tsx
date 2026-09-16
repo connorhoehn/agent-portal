@@ -11,6 +11,7 @@
 // "De-hand-roll every page".
 
 import { useEffect, useState } from 'react';
+import { Link as RouterLink } from 'react-router';
 import {
   Card,
   Chip,
@@ -25,6 +26,9 @@ import {
   type TabItem,
 } from '@connorhoehnslalom/ui-components/shared';
 import { isOpenFollowUp } from '../assessmentFormat';
+import { STANDARDS_FOLDER_ID, enterpriseDocPath, standardFor } from '../dimensionStandards';
+import { useFetch } from '../../../hooks/useFetch';
+import type { KnowledgeTreeResponse } from '../knowledge/types';
 import {
   certificationBasisLine,
   certificationBasisMeaning,
@@ -77,6 +81,52 @@ function CertificationStatement({ dimension }: { dimension: Dimension }) {
         </Stack>
       )}
     </Stack>
+  );
+}
+
+/** "Measured against" — the enterprise standard this dimension's rubric
+ *  encodes, named from the knowledge tree and linked into the explorer
+ *  (docs/assessment-ux-goal.md slice 5). The tree is fetched once per
+ *  pane mount; while it loads, or if the mapped document is missing from
+ *  the tree, the link still goes to the folder so the reader lands
+ *  somewhere true. */
+function MeasuredAgainst({ dimension }: { dimension: Dimension }) {
+  const standard = standardFor(dimension.id);
+  const tree = useFetch<KnowledgeTreeResponse>('/api/assessment/knowledge/tree');
+  const nodes = (tree.data?.sections ?? []).flatMap((s) => s.nodes);
+  const doc = standard ? nodes.find((n) => n.id === standard.docId) ?? null : null;
+  const testId = 'dimension-standard';
+
+  if (!standard) {
+    return (
+      <Inline gap="xs" align="center" wrap data-testid={testId} data-standard="">
+        <Chip tone="warning" size="xs">No enterprise standard on file</Chip>
+        <MetaLine
+          size="sm"
+          items={[
+            'This dimension is scored on the rubric alone.',
+            <RouterLink key="folder" to={enterpriseDocPath(STANDARDS_FOLDER_ID)} className="text-primary hover:underline">
+              Add one under Enterprise › standards →
+            </RouterLink>,
+          ]}
+        />
+      </Inline>
+    );
+  }
+  return (
+    <Inline gap="xs" align="center" wrap data-testid={testId} data-standard={standard.docId}>
+      <Chip tone="accent" size="xs">Measured against</Chip>
+      <MetaLine
+        size="sm"
+        items={[
+          <RouterLink key="doc" to={enterpriseDocPath(standard.docId)} className="font-medium text-primary hover:underline">
+            {doc?.title ?? standard.docId.replace(/^ec:/, '')}
+          </RouterLink>,
+          standard.clause,
+          tree.data && !doc ? 'not in the enterprise tree — link opens the folder' : null,
+        ]}
+      />
+    </Inline>
   );
 }
 
@@ -281,6 +331,7 @@ function DetailPane({ dimension, index }: { dimension: Dimension; index: number 
 
       <Stack gap="sm" className="border-b border-border px-5 pb-5">
         <CertificationStatement dimension={dimension} />
+        <MeasuredAgainst dimension={dimension} />
         {dimension.definition && (
           <Stack gap="none" className="text-sm leading-relaxed text-text-secondary">{dimension.definition}</Stack>
         )}

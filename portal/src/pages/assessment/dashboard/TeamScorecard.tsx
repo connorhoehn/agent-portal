@@ -15,7 +15,9 @@ import {
   EmptyState,
   ErrorState,
   Inline,
+  Link,
   LoadingState,
+  MetaLine,
   PageHeader,
   Stack,
   StatStrip,
@@ -25,6 +27,7 @@ import {
 } from '@connorhoehnslalom/ui-components/shared';
 import { Can } from '../../../lib/capabilities';
 import { DimensionMasterDetail } from './DimensionMasterDetail';
+import { EvidenceCoverage } from './EvidenceCoverage';
 import { EvidenceIntake } from './EvidenceIntake';
 import { ExceptionsModal } from './ExceptionsModal';
 import { ImprovementPlan } from './ImprovementPlan';
@@ -135,11 +138,31 @@ export function TeamScorecard({ teamId, tab, onTabChange }: TeamScorecardProps) 
         }
       />
 
-      {/* A name, not a link — this tenant has no org-graph person behind it
-          (see the note on TeamSummary in ../types.ts). */}
-      <Inline gap="xs" align="center" className="text-xs text-text-secondary">
-        Lead: {team.assessment_lead || 'Unassigned'}
-      </Inline>
+      {/* The lead is a name, not a link — this tenant has no org-graph person
+          behind it (see the note on TeamSummary in ../types.ts). The repos ARE
+          links: they are the SDLC surface every dimension is assessed against
+          (docs/assessment-ux-goal.md slice 4), and an assessor opening the
+          pipeline or the branch rules is the "observed" evidence class. */}
+      <MetaLine
+        size="sm"
+        data-testid="team-repos"
+        items={[
+          `Lead: ${team.assessment_lead || 'Unassigned'}`,
+          team.repos.length === 0
+            ? 'No repositories on file'
+            : (
+              <Inline as="span" gap="xs" align="center" wrap>
+                {team.repos.length === 1 ? 'Repo:' : `Repos (${team.repos.length}):`}
+                {team.repos.map((r) => (
+                  <Link key={r.gitlab_url || r.name} href={r.gitlab_url} external className="font-mono text-[12px]">
+                    {r.name}
+                  </Link>
+                ))}
+              </Inline>
+            ),
+          team.contacts.length > 0 ? `Contacts: ${team.contacts.join(', ')}` : null,
+        ]}
+      />
 
       <StatStrip
         frameless
@@ -183,6 +206,7 @@ export function TeamScorecard({ teamId, tab, onTabChange }: TeamScorecardProps) 
         <Card padding="sm" className="overflow-x-auto shadow-sm ring-1 ring-border">
           <WorkflowStepper steps={workflow_steps} size="sm" />
         </Card>
+        <EvidenceCoverage dimensions={dimensions} />
         <DimensionMasterDetail dimensions={dimensions} selectedId={selectedDimId} onSelect={setSelectedDimId} />
       </Stack>
 

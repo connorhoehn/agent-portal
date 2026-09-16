@@ -80,3 +80,27 @@ stale log a failing line.
 - Scorecard rail rows carry `data-claimed` / `data-verified`.
 - Every touched surface's journey logs are fresh for all four roles.
 - Discipline zeros hold; tsc, node tests and the vite build pass.
+
+## Status (2026-09-15 21:05)
+
+All five slices shipped and verified as every role (assessor, lead-assessor,
+program-lead, admin); `scripts/validate-assessment-tenant.sh` carries one
+check per slice under "assessor cockpit UX". What each slice landed:
+
+1. `dashboard/AssessorDesk.tsx` — the desk; `CohortLanding.tsx` / `TeamList.tsx` gone.
+2. `FeedbackPage.tsx` — the question queue (DataTable + Drawer).
+3. `ReportsPage.tsx` — the portfolio heatmap, where-to-start and by-cohort tables.
+4. `dashboard/DimensionRow.tsx` (two tracks + DotMeter, `data-claimed` /
+   `data-verified`), `dashboard/EvidenceCoverage.tsx` (Attested / Documented /
+   Observed per dimension, from the wire `basis`), repos + contacts in the
+   scorecard header.
+5. `dimensionStandards.ts` (dimension → enterprise-context node id + the
+   clause the rubric encodes) and the "Measured against" line in the dimension
+   pane, deep-linking `/assessment/enterprise?doc=<id>`; four dimensions
+   (07, 14, 15, 17) have no standard on file and say so, with a link to the
+   standards folder — a finding for the SDLC owners, not a gap to hide.
+
+Left open, deliberately: the standard table is portal data. If the enterprise
+tree grows a `governs: [dimension ids]` field on its documents, the table
+should be replaced by that field and the mapping becomes editable from the
+Enterprise page.

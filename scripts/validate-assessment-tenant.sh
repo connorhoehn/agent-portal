@@ -216,6 +216,13 @@ else fail "slice 2 — FeedbackPage.tsx must render a DataTable and a Drawer and
 if grep -q 'data-testid="maturity-heatmap"' "$PAGES/ReportsPage.tsx" && grep -q 'data-verified=' "$PAGES/ReportsPage.tsx" && grep -q 'data-claimed=' "$PAGES/ReportsPage.tsx"; then
   ok "slice 3 — reports carries the maturity heatmap (teams × dimensions, cells with data-verified / data-claimed)"
 else fail "slice 3 — ReportsPage.tsx must render data-testid=\"maturity-heatmap\" with data-verified / data-claimed cells"; fi
+if grep -q 'data-claimed=' "$PAGES/dashboard/DimensionRow.tsx" && grep -q 'data-verified=' "$PAGES/dashboard/DimensionRow.tsx" && grep -q 'DotMeter' "$PAGES/dashboard/DimensionRow.tsx" \
+   && grep -q '<EvidenceCoverage' "$PAGES/dashboard/TeamScorecard.tsx" && grep -q 'team.repos' "$PAGES/dashboard/TeamScorecard.tsx"; then
+  ok "slice 4 — scorecard rail rows carry data-claimed / data-verified and a confidence DotMeter; the Certification tab has the evidence coverage strip; the header names the team's repos"
+else fail "slice 4 — DimensionRow.tsx must carry data-claimed= / data-verified= and a DotMeter; TeamScorecard.tsx must render <EvidenceCoverage and team.repos"; fi
+if [ -f "$PAGES/dimensionStandards.ts" ] && grep -q 'data-testid="dimension-standard"\|testId = .dimension-standard' "$PAGES/dashboard/DimensionMasterDetail.tsx" && grep -q 'enterpriseDocPath' "$PAGES/dashboard/DimensionMasterDetail.tsx"; then
+  ok "slice 5 — dimension detail names the enterprise standard it is measured against and links into the explorer"
+else fail "slice 5 — dimensionStandards.ts must exist and DimensionMasterDetail.tsx must render the dimension-standard line with an enterpriseDocPath link"; fi
 
 section "role isolation"
 ISO="$JDIR/isolation"

@@ -9,6 +9,7 @@ import {
   motionFor,
   type Cohort,
   type DimensionCertification,
+  hasOpenClaim,
   type MotionConfig,
   type TeamSummary,
 } from './types.ts';
@@ -596,3 +597,58 @@ export function deskSummary(teams: TeamSummary[]): DeskSummary {
     questionsOpen: base.followupsOpen,
   };
 }
+
+// ─── Evidence coverage + rail tracks (docs/assessment-ux-goal.md slice 4) ───
+
+/** The slice of a Dimension these helpers read — kept narrow so a test can
+ *  hand in a literal. */
+export interface DimensionTrackInput {
+  is_na: boolean;
+  current_level: number | null;
+  confidence?: string;
+  certification?: DimensionCertification | null;
+}
+
+/** The evidence class a dimension's verified level rests on. The server's
+ *  `basis` IS the class in its wire spelling ('self-attested' | 'documented' |
+ *  'verified'); the two extra keys cover a dimension with nothing to class. */
+export type EvidenceClassKey = 'attested' | 'documented' | 'observed' | 'na' | 'unassessed';
+
+export const evidenceClassOf = (dimension: DimensionTrackInput): EvidenceClassKey => {
+  if (dimension.is_na) return 'na';
+  // A pending dimension still arrives with basis 'self-attested' (the
+  // provider's confidence floor) — but nothing has been assessed, so there is
+  // no evidence to class yet. Unassessed, not attested.
+  if (dimension.current_level == null && dimension.certification?.verified_level == null) return 'unassessed';
+  const basis = (dimension.certification?.basis ?? '').trim().toLowerCase();
+  if (basis === 'verified' || basis === 'observed') return 'observed';
+  if (basis === 'documented') return 'documented';
+  if (basis === 'self-attested' || basis === 'attested') return 'attested';
+  return dimension.current_level == null ? 'unassessed' : 'attested';
+};
+
+export const evidenceCoverage = (dimensions: DimensionTrackInput[]): Record<EvidenceClassKey, number> => {
+  const counts: Record<EvidenceClassKey, number> = { attested: 0, documented: 0, observed: 0, na: 0, unassessed: 0 };
+  for (const d of dimensions) counts[evidenceClassOf(d)] += 1;
+  return counts;
+};
+
+/** The scorer's confidence vocabulary (low / moderate / high) as a fraction
+ *  of three dots; anything unrecognised shows as an empty meter rather than a
+ *  guessed one. */
+export const CONFIDENCE_VALUE: Record<string, number> = { low: 1 / 3, moderate: 2 / 3, high: 1 };
+
+export const confidenceValue = (confidence: string): number =>
+  CONFIDENCE_VALUE[confidence.trim().toLowerCase()] ?? 0;
+
+/** What a rail row's data attributes say: 'na' for a not-applicable
+ *  dimension, the level as a string, '' when there is nothing on that track. */
+export const railTracks = (dimension: DimensionTrackInput): { claimed: string; verified: string; claimOpen: boolean } => {
+  const cert = dimension.certification;
+  const verifiedLevel = cert?.verified_level ?? dimension.current_level;
+  return {
+    claimed: cert?.claimed_level == null ? '' : String(cert.claimed_level),
+    verified: dimension.is_na ? 'na' : verifiedLevel == null ? '' : String(verifiedLevel),
+    claimOpen: cert ? hasOpenClaim(cert) : false,
+  };
+};

@@ -18,7 +18,7 @@ User. Users: assessor = `u-asha`, lead-assessor = `u-jonas`, program-lead =
 | surface | url | what "the surface" includes |
 |---|---|---|
 | dashboard | `/assessment/teams` | the assessor's desk: the program StatStrip, the motion SegmentedControl (`?cohort=`), status + search filters, the team DataTable with its two-track certification and next-action columns, a row opened, browser Back |
-| team-scorecard | `/assessment/teams/TEAM-001` | all five tabs (`?tab=`), one dimension selected in the master-detail |
+| team-scorecard | `/assessment/teams/TEAM-001` | all five tabs (`?tab=`), one dimension selected in the master-detail; the rail rows carry `data-verified` / `data-claimed` and a confidence meter, the Certification tab opens with the evidence coverage strip (Attested / Documented / Observed per dimension), the header names the team's repos as links, and the dimension pane says which enterprise standard it is measured against (or that none is on file) with a link into the explorer |
 | submissions | `/assessment/submissions` | list, filters, a row opened |
 | submissions-wizard | `/assessment/submissions` → New submission | all four steps (drop → preview → fetch links → run prompt) |
 | feedback | `/assessment/feedback` | the question queue: status + team + search filters, the DataTable (dimension by name), a row opened in its Drawer (two tracks, evidence on file, the answer form); Record answer / Dismiss for a role that may |

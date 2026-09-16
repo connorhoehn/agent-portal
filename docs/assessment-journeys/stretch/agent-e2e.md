@@ -178,3 +178,6 @@ em dash the rest of this table uses for an empty. Verified: the seven Lead cells
 read Dana Whitfield, Sam Okafor, —, —, Elena Marsh, Priya Natarajan, Jordan Lee,
 and each one contains 0 focusable controls.
 Console errors: 0 on both surfaces.
+
+--- freshness re-observation, 2026-09-15 21:20 (TeamScorecard.tsx changed: slices 4 + 5 of docs/assessment-ux-goal.md) ---
+Why: the scorecard header now renders the team's repos and contacts from the same `GET /teams/:id` payload, and the Certification tab opens with the evidence coverage strip above the master-detail. The run-a-scoring-agent path this log records (Runs page → launch → the scorecard reflecting applied scores) is unchanged: the strip and the rail rows re-derive from the refreshed payload, so an applied score moves a chip from "Unassessed" to its class and a row from badge-only to badge + meter without a reload beyond the one this page already does. Re-opened TEAM-001 and TEAM-003 as u-asha / u-operator after the change: console errors 0.

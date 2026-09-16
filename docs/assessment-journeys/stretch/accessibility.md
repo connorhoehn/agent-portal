@@ -254,3 +254,25 @@ as u-asha, Chrome innerWidth 1692:
     is absent from the DOM for this role and present (first in the column) for a role that may.
 Console errors: 0.
 
+--- freshness re-observation, 2026-09-15 21:05 (portal/src/pages/assessment changed: scorecard slices 4 + 5) ---
+Why: slices 4 and 5 of docs/assessment-ux-goal.md changed DimensionRow.tsx, TeamScorecard.tsx and
+DimensionMasterDetail.tsx and added EvidenceCoverage.tsx + dimensionStandards.ts. Re-observed
+live at 1692px as u-jonas (TEAM-002), u-farah (TEAM-001) and u-operator (TEAM-003):
+  - each rail row's confidence line is the library DotMeter: `role="meter"` with
+    aria-valuenow/min/max and an aria-label that reads the confidence word and, where the
+    team claims higher, the claim ("low: 33%, claims L5") — the three dots are aria-hidden,
+    so the meter is never colour-only.
+  - the claim chip is text ("↑5") with a `title` that spells out "Team claims Level 5;
+    verified to the badge level"; the row wrapper carries data-verified / data-claimed.
+  - the evidence coverage strip is seventeen Chips whose text is the dimension number; each
+    is wrapped in a Tooltip that names the dimension and its class in words ("07 Testing &
+    QE – Performance & Reliability Testing — N/A: not applicable for this team"); the legend
+    is a MetaLine ("Attested 1 · Documented 13 · Observed 1 · N/A 2"). The chips are not
+    controls — selection stays on the listbox rail — so they add nothing to the tab order.
+  - the repo names are real `<a target="_blank" rel="noopener noreferrer">` links; the
+    "Measured against" line is one router link per pane. Document-order `.focus()` walk:
+    36 of 36 reachable (TEAM-002, one repo), 37 of 37 (TEAM-001, two repos).
+  - the MasterDetail listbox patch (role=option, aria-setsize 17, aria-posinset) still holds:
+    the rows re-render with the new children and the MutationObserver re-applies the roles.
+Console errors: 0 on every page.
+Addendum 2026-09-15 21:20: one further change to DimensionRow.tsx / assessmentFormat.ts after the note above — a pending dimension shows no `role="meter"` (nothing rated yet) and counts as "Unassessed" in the coverage strip rather than "Attested"; re-observed on TEAM-003 (rows 09–17 badge-only, strip "Documented 8 · Unassessed 9"), 36 of 36 controls reachable, console errors 0.
