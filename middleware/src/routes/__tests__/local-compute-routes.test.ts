@@ -1605,6 +1605,24 @@ describe('handing a machine work', () => {
       expect((await getJob(asked.body.id))!.payload).toMatchObject({ requiresReview: true });
     });
 
+    it('hands a machine an initiative work item — title, prompt and origin from the item, no typed prompt', async () => {
+      const node = await readyWorker();
+      const res = await hand(as('member', 'u-mia'), node.nodeId, { workItemId: 'wi-auth-e2' });
+      expect(res.status).toBe(201);
+      expect(res.body.kind).toBe('local:task');
+      const row = await getJob(res.body.id);
+      // The helper types a prompt (as the old composer did); the item still
+      // names the row and travels with it so the run can be traced back.
+      expect(row!.title).toBe('Legacy SSO decommission');
+      expect(row!.payload).toMatchObject({ nodeId: node.nodeId, workItemId: 'wi-auth-e2', initiativeId: 'p-auth-migration' });
+    });
+
+    it('404s an unknown work item and refuses a bot to a role without ManageBots', async () => {
+      const node = await readyWorker();
+      expect((await hand(as('member', 'u-mia'), node.nodeId, { workItemId: 'wi-nope' })).status).toBe(404);
+      expect((await hand(as('member', 'u-mia'), node.nodeId, { botId: 'nope' })).status).toBe(404);
+    });
+
     it('titles an untitled job from its prompt rather than leaving a blank row', async () => {
       const node = await readyWorker();
       const res = await hand(as('member', 'u-mia'), node.nodeId, { prompt: 'summarise the ADRs' });

@@ -80,6 +80,11 @@ import {
   completeJob,
   type AgentJob,
 } from '../providers/agent-jobs.js';
+import { getWorkItem } from '../providers/work-items.js';
+import { getBot } from '../providers/bots.js';
+import { getAgentProject } from '../providers/agent-projects.js';
+import { grantScopedDispatchVerdict, preflightWorkItem, renderPrompt } from '../lib/bot-runner.js';
+import { isAllowed } from '../lib/authz.js';
 import {
   decideClaim,
   allowedKinds,
@@ -785,11 +790,54 @@ localComputeRouter.post(
     const body = (req.body ?? {}) as {
       title?: unknown; prompt?: unknown; kind?: unknown; repo?: unknown;
       requiresReview?: unknown; priority?: unknown;
+      workItemId?: unknown; botId?: unknown; instruction?: unknown;
     };
-    const title = typeof body.title === 'string' ? body.title.trim().slice(0, 200) : '';
-    const prompt = typeof body.prompt === 'string' ? body.prompt.trim() : '';
+    let title = typeof body.title === 'string' ? body.title.trim().slice(0, 200) : '';
+    let prompt = typeof body.prompt === 'string' ? body.prompt.trim() : '';
+    let repo = typeof body.repo === 'string' && body.repo.trim() ? body.repo.trim().slice(0, 400) : null;
+    // What the row remembers about where it came from — the pick list on the
+    // Local compute page hands a machine an initiative's work item or a bot's
+    // mission, never a typed prompt. Both keep the governed checks their
+    // fleet-side routes run: a work item is grant-scoped (an SME may only
+    // spend inside an envelope they hold) and a bot needs ManageBots.
+    const origin: Record<string, unknown> = {};
+    const workItemId = typeof body.workItemId === 'string' ? body.workItemId.trim() : '';
+    const botId = typeof body.botId === 'string' ? body.botId.trim() : '';
+    if (workItemId) {
+      const item = await getWorkItem(workItemId);
+      if (!item) { res.status(404).json({ error: 'no such work item' }); return; }
+      const verdict = await grantScopedDispatchVerdict(item.projectId, req.session);
+      if (verdict.kind === 'deny') { res.status(403).json({ error: verdict.reason }); return; }
+      // The codebase that delivers the initiative, if one is registered —
+      // the worker clones it with its own credentials. No codebase is not a
+      // refusal here: the machine can still be asked, it just has nothing to
+      // change, so the run lands in `done` rather than review.
+      const pre = await preflightWorkItem(workItemId, undefined, session.role, item);
+      if (pre.ok && !repo) {
+        const project = await getAgentProject(pre.agentProjectId);
+        if (project?.repoFullName) repo = `https://github.com/${project.repoFullName}`;
+      }
+      title = title || item.title.slice(0, 200);
+      prompt = prompt || [item.title, item.description ?? ''].filter(Boolean).join('\n\n');
+      origin['workItemId'] = item.id;
+      origin['initiativeId'] = item.projectId;
+    } else if (botId) {
+      const bot = await getBot(botId);
+      if (!bot) { res.status(404).json({ error: 'no such bot' }); return; }
+      const allowed = await isAllowed({ sub: session.sub, role: session.role, tenant: session.tenant }, 'ManageBots');
+      if (!allowed) { res.status(403).json({ error: 'running a bot needs ManageBots' }); return; }
+      if (!bot.enabled) { res.status(409).json({ gate: 'bot', error: 'bot is disabled' }); return; }
+      if (bot.pausedReason) { res.status(409).json({ gate: 'bot', error: `bot is paused: ${bot.pausedReason}` }); return; }
+      if (bot.agentProjectId && !repo) {
+        const project = await getAgentProject(bot.agentProjectId);
+        if (project?.repoFullName) repo = `https://github.com/${project.repoFullName}`;
+      }
+      title = title || bot.name.slice(0, 200);
+      prompt = prompt || renderPrompt(bot.prompt, typeof body.instruction === 'string' ? body.instruction : undefined);
+      origin['botId'] = bot.id;
+    }
     if (!prompt) {
-      res.status(400).json({ error: 'prompt is required — it is what the machine will be asked to do' });
+      res.status(400).json({ error: 'prompt is required — it is what the machine will be asked to do (or name a workItemId / botId)' });
       return;
     }
     const kind = typeof body.kind === 'string' && body.kind ? body.kind : 'local:task';
@@ -820,7 +868,6 @@ localComputeRouter.post(
     // (tools/local-compute-worker.mjs `ensureRepo`). No token travels with the
     // job: a node token that leaked would otherwise become a way to read every
     // private repo the service account can reach.
-    const repo = typeof body.repo === 'string' && body.repo.trim() ? body.repo.trim().slice(0, 400) : null;
 
     const job = await enqueueJob({
       kind,
@@ -838,6 +885,7 @@ localComputeRouter.post(
         // it lands in `done`; a caller that wants a look anyway says so.
         requiresReview: typeof body.requiresReview === 'boolean' ? body.requiresReview : Boolean(repo),
         ...(repo ? { repo } : {}),
+        ...origin,
       },
       ...(typeof body.priority === 'number' ? { priority: body.priority } : {}),
       createdBy: session.sub,

@@ -17,6 +17,9 @@ import {
   Inline,
   InlinePlaceholder,
   MetaLine,
+  SectionLabel,
+  SegmentedControl,
+  useToastOptional,
   PageSection,
   Select,
   Stack,
@@ -68,6 +71,31 @@ interface RunRow {
   result: { provider?: string; costUsd?: number; summary?: string } | null;
 }
 
+interface WorkSuggestion {
+  id: string;
+  title: string;
+  reason: string;
+  initiativeId: string;
+  initiativeName: string;
+  workItemId: string;
+  storyPoints: number | null;
+  estimatedCostUsd: number | null;
+}
+
+interface BotRow {
+  id: string;
+  name: string;
+  model: string;
+  cronExpr: string | null;
+  enabled: boolean;
+  pausedReason: string | null;
+  lastRunAt: string | null;
+  repoFullName?: string | null;
+}
+
+/** How many rows the pick list shows — a hand, not a backlog. */
+const PICK_LIMIT = 8;
+
 // ─── Page ────────────────────────────────────────────────────────────────────
 
 export default function LocalComputePage() {
@@ -75,6 +103,15 @@ export default function LocalComputePage() {
   const { data: runsData, error: runsError, degraded: runsDegraded, refresh: refreshRuns } = useFetch<{ runs: RunRow[] }>('/api/local-compute/runs', 15_000);
   const { can, ready } = useCapabilities();
   const canDispatch = ready && can('ConnectLocalCompute');
+  const canRunBots = ready && can('ManageBots');
+  // The pick list: the same ranked work the Automate overview suggests, and
+  // the bots this person may run. Fetched only for someone who may dispatch.
+  const { data: suggestData } = useFetch<{ suggestions: WorkSuggestion[] }>(canDispatch ? '/api/work/suggestions' : null, 60_000);
+  const { data: botsData } = useFetch<{ bots: BotRow[] }>(canDispatch && canRunBots ? '/api/bots' : null, 60_000);
+  const [pick, setPick] = useState<'work' | 'bots'>('work');
+  const [sending, setSending] = useState<string | null>(null);
+  const [sendError, setSendError] = useState<string | null>(null);
+  const toast = useToastOptional();
 
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
@@ -140,6 +177,28 @@ export default function LocalComputePage() {
     return runs.filter((r) => (r.status === 'queued' || r.status === 'claimed' || r.status === 'running')
       && (r.nodeId === selectedNode.id || (r.nodeId === null && selectedNode.jobKinds.includes(r.kind))));
   }, [runs, selectedNode]);
+
+  const pickWork = (suggestData?.suggestions ?? []).slice(0, PICK_LIMIT);
+  const pickBots = (botsData?.bots ?? []).filter((b) => b.enabled && !b.pausedReason).slice(0, PICK_LIMIT);
+
+  // Hand the selected machine a work item or a bot's mission. Same route the
+  // fleet uses for a targeted local job; the server keeps the governed checks
+  // (grant-scoped for a work item, ManageBots for a bot) and the review rule
+  // (a run with a repo is reviewed, one without lands in done).
+  const send = async (origin: { workItemId: string } | { botId: string }, label: string) => {
+    if (!selectedNode) return;
+    const key = 'workItemId' in origin ? origin.workItemId : origin.botId;
+    setSendError(null);
+    setSending(key);
+    const res = await writeJson<{ id: string }>(`/api/local-compute/nodes/${selectedNode.id}/work`, 'POST', origin);
+    setSending(null);
+    if (res.ok) {
+      toast?.toast(`${label} queued for ${selectedNode.label}`, { type: 'success' });
+      refreshRuns();
+    } else {
+      setSendError(res.error ?? `Could not hand ${label} to ${selectedNode.label}`);
+    }
+  };
 
   const nodeColumns: DataTableColumn<ComputeNode>[] = [
     {
@@ -328,13 +387,67 @@ export default function LocalComputePage() {
                     onRowClick={(r) => setSelectedRunId(r.id)}
                   />
                 )}
-                <MetaLine
-                  size="xs"
-                  items={[
-                    <RouterLink key="bots" to="/admin/bots" className="text-primary hover:underline">Schedule work with a bot →</RouterLink>,
-                    <RouterLink key="work" to="/iq/projects" className="text-primary hover:underline">Dispatch from an initiative's work →</RouterLink>,
-                  ]}
-                />
+                {canDispatch && (
+                  <Stack gap="xs" data-testid="pick-list">
+                    <Inline gap="sm" align="center" wrap>
+                      <SectionLabel as="div">Hand it something</SectionLabel>
+                      <SegmentedControl
+                        size="sm"
+                        aria-label="What to pick from"
+                        value={pick}
+                        onChange={(v) => setPick(v as 'work' | 'bots')}
+                        options={[
+                          { label: `Initiative work · ${pickWork.length}`, value: 'work' },
+                          ...(canRunBots ? [{ label: `Bots · ${pickBots.length}`, value: 'bots' }] : []),
+                        ]}
+                      />
+                      <MetaLine
+                        className="ml-auto"
+                        items={[
+                          pick === 'work'
+                            ? <RouterLink key="all" to="/iq/projects" className="text-primary hover:underline">Browse all initiatives →</RouterLink>
+                            : <RouterLink key="all" to="/admin/bots" className="text-primary hover:underline">All bots →</RouterLink>,
+                        ]}
+                      />
+                    </Inline>
+                    {sendError && <Banner variant="error">{sendError}</Banner>}
+                    {pick === 'work' ? (
+                      <DataTable<WorkSuggestion>
+                        columns={[
+                          { key: 'title', header: 'Work item', render: (r) => <EntityCell label={r.title} id={r.workItemId} /> },
+                          { key: 'initiative', header: 'Initiative', render: (r) => r.initiativeName },
+                          { key: 'why', header: 'Why now', render: (r) => <MetaLine items={[r.reason]} /> },
+                          { key: 'size', header: 'Size', render: (r) => [r.storyPoints != null ? `${r.storyPoints} pts` : null, r.estimatedCostUsd != null ? `$${r.estimatedCostUsd.toFixed(2)}` : null].filter(Boolean).join(' · ') || '—' },
+                          { key: 'send', header: '', render: (r) => (
+                            <Button size="sm" variant="secondary" disabled={!selectedNode.acceptJobs || sending === r.workItemId} onClick={(e) => { e.stopPropagation(); void send({ workItemId: r.workItemId }, r.title); }}>
+                              {sending === r.workItemId ? 'Sending…' : `Send to ${selectedNode.label}`}
+                            </Button>
+                          ) },
+                        ]}
+                        data={pickWork}
+                        keyField={(r) => r.workItemId}
+                        emptyMessage="Nothing suggested right now — open work on your initiatives shows up here."
+                      />
+                    ) : (
+                      <DataTable<BotRow>
+                        columns={[
+                          { key: 'name', header: 'Bot', render: (b) => <EntityCell label={b.name} id={b.repoFullName ?? undefined} /> },
+                          { key: 'schedule', header: 'Schedule', render: (b) => b.cronExpr ?? 'manual' },
+                          { key: 'model', header: 'Model', render: (b) => b.model },
+                          { key: 'last', header: 'Last ran', render: (b) => (b.lastRunAt ? when(b.lastRunAt) : 'never') },
+                          { key: 'send', header: '', render: (b) => (
+                            <Button size="sm" variant="secondary" disabled={!selectedNode.acceptJobs || sending === b.id} onClick={(e) => { e.stopPropagation(); void send({ botId: b.id }, b.name); }}>
+                              {sending === b.id ? 'Sending…' : `Run on ${selectedNode.label}`}
+                            </Button>
+                          ) },
+                        ]}
+                        data={pickBots}
+                        keyField={(b) => b.id}
+                        emptyMessage="No enabled bots to run."
+                      />
+                    )}
+                  </Stack>
+                )}
               </Stack>
             </DetailSection>
           )}

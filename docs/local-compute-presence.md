@@ -209,6 +209,21 @@ is now a contract:
   reviewed) and initiative work (`/iq/projects`). `POST
   /api/local-compute/nodes/:id/work` stays for those callers; it is not a
   page affordance.
+- **The pick list, not a prompt.** "Up next on <machine>" carries a
+  top-8 pick list (SegmentedControl: Initiative work · Bots) drawn from the
+  same feeds the rest of the app uses — `GET /api/work/suggestions` (the
+  ranked open work on the person's own initiatives) and `GET /api/bots`
+  (only for a role with ManageBots; parked bots are filtered out). Each row
+  has one action, "Send to <machine>" / "Run on <machine>", which POSTs
+  `{workItemId}` or `{botId}` to `POST /api/local-compute/nodes/:id/work`.
+  The route builds the job from the origin: the item's title and description
+  (or the bot's rendered mission) as the prompt, the codebase that delivers
+  the initiative as `repo` (so the run is reviewed), and `workItemId` /
+  `initiativeId` / `botId` on the payload so the run can be traced back.
+  It keeps the fleet routes' checks — a work item is grant-scoped, a bot
+  needs ManageBots and must be enabled and unpaused. The Initiatives and
+  Bots links remain as browse links; they carry no machine context on
+  purpose — picking happens here, next to the machine.
 - **The log console reads the theme.** ui-components' `LogStream` paints
   `var(--color-surface-subtle, #0b1020)`; the portal now defines that token
   in both themes (light `#f1f5f9`, dark `#0b1020`) so the box is no longer
