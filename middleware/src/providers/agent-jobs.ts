@@ -289,7 +289,17 @@ function seedMockJobsFromBotRuns(): void {
         // is the seeded history, and it says 1.
         maxAttempts: 1,
         result: status === 'done'
-          ? { summary: `${reason} — completed.`, costUsd: run.costUsd ?? undefined, durationMs: durationMs ?? undefined }
+          ? {
+              summary: `${reason} — completed.`,
+              costUsd: run.costUsd ?? undefined,
+              durationMs: durationMs ?? undefined,
+              // Pass the outcome's counts through when the seed recorded them —
+              // the same two numbers a real run's outcome carries — so the
+              // job reads "3 turns · 4 tool calls" and the tool-call strip
+              // derives from a count instead of from nothing.
+              ...(typeof run.outcome['turns'] === 'number' ? { turns: run.outcome['turns'] } : {}),
+              ...(typeof run.outcome['toolCalls'] === 'number' ? { toolCalls: run.outcome['toolCalls'] } : {}),
+            }
           : null,
         error: status === 'failed' ? reason : null,
         // Provenance, not a placeholder. A cron firing was minted by the

@@ -84,7 +84,14 @@ function genRun(botId: string, seq: number, startedAtIso: string, costUsd: numbe
     modelProvider: null,
     startedAt: startedAt.toISOString(),
     finishedAt: finishedAt.toISOString(),
-    outcome: { reason: 'scheduled maintenance' },
+    // What a real run's outcome records beside the reason (lib/devbox-runner.ts
+    // OutcomeSummary): how many turns it took and how many tools it called.
+    // Deterministic from the sequence so the derived tool-call strip on the
+    // Automate pages has rows to draw under dev:mock — a fixture that said
+    // "0 tools" for every finished maintenance run made that strip
+    // unreachable offline. Cost stays as seeded; a $0.20 run of three or
+    // four calls is the shape the cluster's own rows have.
+    outcome: { reason: 'scheduled maintenance', turns: 2 + (seq % 3), toolCalls: 3 + (seq % 4) },
     dispatchedBy: null,
   };
 }
