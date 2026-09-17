@@ -86,10 +86,20 @@ cd ../../infra
 ### Phase 5: Middleware Service (Optional)
 **Requires Docker running**
 
+⚠️ **IMPORTANT:** The stack creates the ECR repo and attempts to deploy the ECS service in one operation. The service will fail with "CannotPullContainerError" if the image doesn't exist yet. Build and push the image BEFORE deploying the stack.
+
 Build middleware image:
 ```bash
 cd middleware
-docker buildx build --platform linux/arm64 -t $(aws ecr describe-repositories --repository-names orgiq-middleware --query 'repositories[0].repositoryUri' --output text):latest --push .
+
+# Get the ECR repository URI (create repo if it doesn't exist)
+aws ecr describe-repositories --repository-names orgiq-middleware 2>/dev/null || \
+  aws ecr create-repository --repository-name orgiq-middleware
+
+# Build and push ARM64 image
+docker buildx build --platform linux/arm64 \
+  -t $(aws ecr describe-repositories --repository-names orgiq-middleware --query 'repositories[0].repositoryUri' --output text):latest \
+  --push .
 ```
 
 Deploy service:
@@ -97,6 +107,12 @@ Deploy service:
 cd ../infra
 ./scripts/deploy.sh OrgIQ-MiddlewareService --context deployMiddlewareService=true
 # Optionally add --context albAllowCidr=<your-ip>/32 to allow traffic
+```
+
+If the service fails to start, check ECS events:
+```bash
+aws ecs describe-services --cluster orgiq-middleware --services orgiq-middleware \
+  --query 'services[0].events[0:5]'
 ```
 
 ### Phase 6: Post-Deployment Configuration
@@ -130,12 +146,32 @@ colima start
 **Fix:** Use `destroy.sh` which pre-drains runtimes before stack deletion
 
 ### Middleware Service Can't Pull Image
-**Error:** `CannotPullContainerError`
+**Error:** `CannotPullContainerError: 647757222309.dkr.ecr.us-east-1.amazonaws.com/orgiq-middleware:latest: not found`
+
+**Cause:** The MiddlewareService stack creates the ECR repo AND deploys the ECS service in one operation. If the image doesn't exist, the service deployment triggers the circuit breaker.
 
 **Fix:** 
-1. Check ECR repo exists: `aws ecr describe-repositories --repository-names orgiq-middleware`
-2. Build and push image (see Phase 5)
+1. Build and push image BEFORE deploying the stack (see Phase 5)
+2. If stack already failed, delete it and redeploy after building image:
+   ```bash
+   aws cloudformation delete-stack --stack-name OrgIQ-MiddlewareService
+   aws cloudformation wait stack-delete-complete --stack-name OrgIQ-MiddlewareService
+   # Then build image and redeploy
+   ```
 3. Verify image exists: `aws ecr list-images --repository-name orgiq-middleware`
+
+### ECS Deployment Circuit Breaker Triggered
+**Error:** `ECS Deployment Circuit Breaker was triggered`
+
+**Cause:** ECS tasks failed to start successfully (usually image pull failure)
+
+**Check:**
+```bash
+aws ecs describe-services --cluster orgiq-middleware --services orgiq-middleware \
+  --query 'services[0].events[0:5]'
+```
+
+Look for `CannotPullContainerError` or task failure reasons.
 
 ## Verification
 
