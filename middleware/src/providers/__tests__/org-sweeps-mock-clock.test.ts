@@ -79,6 +79,13 @@ describe('the seeded findings board reads its ages off the clock', () => {
 
 describe('a lab signal filed offline', () => {
   it('is stamped from the clock and takes an id the seed does not own', async () => {
+    // BEFORE filing: once the signal is filed it is itself in `rows()`, so
+    // reading the high-water mark afterwards would measure the row under test.
+    const seededIds = orgFindings.rows().map((f) => f.id);
+    const highWater = Math.max(
+      ...seededIds.map((id) => Number(/^find-mock-(\d+)$/.exec(id)?.[1] ?? 0)),
+    );
+
     const filed = await fileLabSignal({
       severity: 'critical', title: 'Workspace is at 96% of its 1 GB quota',
       fingerprint: 'lab:workspace-quota:box-mock-9', repo: 'orgiq-portal',
@@ -87,9 +94,13 @@ describe('a lab signal filed offline', () => {
 
     expect(filed.firstSeenAt).toBe(NOON);
     expect(filed.lastSeenAt).toBe(NOON);
-    // find-mock-1 … -7 are seeded; a counter reset with the fixture would have
-    // re-minted one of them.
-    expect(filed.id).toBe('find-mock-8');
+    // The claim is "an id the seed does not own", so derive it from the seed's
+    // own high-water mark rather than hardcoding the next number. This asserted
+    // `find-mock-8` until the board gained an eighth row and the test failed
+    // for a reason that had nothing to do with what it was protecting —
+    // a counter reset with the fixture re-minting an id the seed already holds.
+    expect(filed.id).toBe(`find-mock-${highWater + 1}`);
+    expect(seededIds).not.toContain(filed.id);
     expect(await getFinding('find-mock-1')).not.toBeNull();
   });
 

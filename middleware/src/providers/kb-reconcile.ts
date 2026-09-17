@@ -255,9 +255,32 @@ export async function syncState(kbId: string): Promise<Upstream<SyncState>> {
  * a sentence in `problem`.
  */
 async function documentCounts(): Promise<Upstream<Record<string, number>>> {
-  // Not degraded: offline there is no documents table to read, which is a fact
-  // about this process rather than a failure to report on the page.
-  if (config.mock.aurora) return reached({});
+  // Not degraded: offline there is no `documents` TABLE to read, which is a
+  // fact about this process rather than a failure to report on the page.
+  //
+  // But `reached({})` alone was the wrong fact. The caller does
+  // `docs[slug] ?? 0`, so an empty map made EVERY knowledge base report a
+  // confident `0 docs` — including the default one, which in the same payload
+  // reports `lastSyncStatus: COMPLETE` over `lastSyncScanned: 14`, under a
+  // banner reading "it last indexed 14 of 16 documents". Three numbers on one
+  // screen, one of them counted from nothing.
+  //
+  // The mock does model the documents; they are just not in a SQL table.
+  // mock/knowledge-base.ts's own header is explicit that totals are counted
+  // from its rows rather than stored ("NO STORED TOTALS"), and
+  // `kbDocumentRows` is the list `/api/knowledge-base/documents` already
+  // serves. Counting it is the same answer the live query gives, from the
+  // rows that surface actually shows.
+  //
+  // Only the DEFAULT knowledge base is modelled by those rows, and the other
+  // two seeded registry rows fall through to `?? 0` — which is honest for
+  // them rather than lucky: one has never synced (`lastSyncAt: null`) and the
+  // other points at a knowledge base id that does not exist in the account.
+  // Zero documents is exactly right for both.
+  if (config.mock.aurora) {
+    const defaultSlug = mockKbRegistry.find((k) => k.purpose === 'default')?.slug;
+    return reached(defaultSlug ? { [defaultSlug]: kbDocumentRows.rows().length } : {});
+  }
   try {
     const rows = await exec(
       `SELECT COALESCE(kb_registry_slug, 'default') AS slug, count(*)::int AS n

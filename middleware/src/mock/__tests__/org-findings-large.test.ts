@@ -43,13 +43,29 @@ describe('orgFindings large scenario', () => {
     expect(new Set(large.map((f) => f.fingerprint)).size).toBe(large.length);
   });
 
-  it('reset restores the seeded 7-row board', () => {
+  it('reset restores the seeded 8-row board', () => {
     fixtureRegistry.resetAll('large');
     expect(orgFindings.rows().length).toBeGreaterThan(300);
 
     fixtureRegistry.resetAll('default');
-    expect(orgFindings.rows()).toHaveLength(7);
-    expect(mockFindings).toHaveLength(7);
+    // 8, not 7, since 2026-09-17: the board gained a second `lab-signal` row.
+    // The first was `dismissed`, and the distillation ProcessFlow's "Lab
+    // signals" node counts what the Work page returns by DEFAULT — which
+    // excludes dismissed — so that node read 0 in every demo and its L0 edge
+    // never animated. An open one lights a real path that was dead offline.
+    expect(orgFindings.rows()).toHaveLength(8);
+    expect(mockFindings).toHaveLength(8);
+  });
+
+  it('the lab sweep has an OPEN row, not only the dismissed one', () => {
+    // The regression this guards is subtle: deleting or dismissing the open
+    // lab signal leaves every count and every test green while quietly
+    // switching off one arm of the distillation diagram.
+    fixtureRegistry.resetAll('default');
+    const lab = orgFindings.rows().filter((f) => f.sweep === 'lab-signal');
+    expect(lab.length).toBeGreaterThanOrEqual(2);
+    expect(lab.some((f) => f.status === 'open')).toBe(true);
+    expect(lab.some((f) => f.status === 'dismissed')).toBe(true);
   });
 
   it('nextMockFindingId continues past the large board\'s own high-water mark', () => {

@@ -160,6 +160,39 @@ function seedFindings(): Finding[] {
       firstSeenAt: clock.hoursAgo(20), lastSeenAt: clock.hoursAgo(20),
       fingerprint: 'lab:workspace-bloat:box-mock-3',
     },
+    // A second lab signal, and the reason it is OPEN rather than another
+    // dismissed one.
+    //
+    // The distillation ProcessFlow has a "Lab signals" node feeding L0, and it
+    // counts findings the Work page returns by DEFAULT — which excludes
+    // dismissed. With `find-mock-7` the only lab row, that node read 0 in every
+    // demo and `breathing('lab-L0', …)` (distillationFormat.ts) only animates
+    // the edge when the count is above zero, so an entire path of the flagship
+    // diagram was permanently dead offline: a real feature that looked like it
+    // did nothing.
+    //
+    // The comment at the top of this function already promises "every status
+    // the Work page filters on is represented". That was true of the sweeps as
+    // a whole and quietly false of the lab sweep, which had exactly one row in
+    // the one status that makes it invisible.
+    //
+    // The box id is one the devbox fleet fixture actually seeds
+    // (mock/devbox-fleet.ts) rather than an invented one, so following the
+    // evidence from this finding lands on a computer that exists.
+    {
+      id: 'find-mock-8',
+      sweep: LAB_SWEEP, severity: 'warning',
+      title: 'auth-migration-1 has been on one task for 5 hours with context at 39%',
+      detail: 'The session has not checkpointed or opened a PR. Either the task is larger than it looked and wants splitting, or the box is stuck and should be recycled before its context fills.',
+      entityType: 'repo', entityId: 'orgiq-auth-service',
+      evidence: {
+        sessionId: 'sess-mock-auth-migration-0001-0000-0000-000000000001',
+        boxId: 'box-mock-0001', repo: 'orgiq-auth-service', initiativeId: 'p-auth-migration',
+      },
+      status: 'open', jobId: null,
+      firstSeenAt: clock.hoursAgo(5), lastSeenAt: clock.hoursAgo(0.2),
+      fingerprint: 'lab:long-running-task:box-mock-0001',
+    },
   ];
 }
 
