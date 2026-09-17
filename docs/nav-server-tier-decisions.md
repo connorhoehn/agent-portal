@@ -68,6 +68,46 @@ Still a product call, so it is recorded here rather than taken.
 
 Affects `/admin/projects`.
 
+## Open: `program-lead` has a user-admin API and no surface to reach it from
+
+Not the usual shape. The other two entries are "the portal is gated narrower
+than the API"; this one is "the API was deliberately widened for a role the
+portal structurally cannot show it to", which needs a different answer.
+
+`middleware/src/routes/identity.ts` reads with
+`requireAnyAction(['ViewIdentityAdmin', 'ManageUsers'])` and its user/grant
+writes take `requireAction('ManageUsers')`. `program-lead` holds `ManageUsers`
+(`middleware/seeds/roles/assessment/program-lead.cedar`), and that grant is not
+incidental — `routes/__tests__/identity-program-lead-gate.test.ts` exists
+precisely to pin it, its header recording that "a router-wide
+`requireAction('ViewIdentityAdmin')` locked program-lead (ManageUsers,
+tenant-scoped) out of the user-admin routes built for it."
+
+The portal offers that role nothing. Identity is an orgiq surface twice over:
+`Layout.tsx` computes `platformItems` as `onOrgiq ? … : []`, so a session in the
+assessment tenant sees no `/admin/*` rail item at all, and `App.tsx`'s route
+gate is `RequireRole roles={['hr-admin']}`, which `program-lead` also fails.
+There is no `/assessment/*` users or identity route to fall back to.
+
+So the API path is reachable only by curl. Three honest answers, and the choice
+is a product one:
+
+1. **Give the assessment tenant its own user-admin surface.** Consistent with
+   how these tenants are kept apart — they share the BFF and nothing else, no
+   shared nav or chrome — and it is what the Cedar grant implies was intended.
+   It is also a new surface, i.e. a feature.
+2. **Widen `/admin/identity` to program-lead.** Smallest diff, and wrong: it
+   would put an assessment role inside orgiq's admin rail and break the tenant
+   separation the rest of the product holds to.
+3. **Withdraw `ManageUsers` from program-lead** if nobody intends them to
+   administer users, and delete the test that pins it.
+
+Recorded rather than taken. Note this one is invisible to
+`validate-nav-parity.sh` by construction: the scanner compares a nav item's
+gate against the API it reads, and here there is no nav item to compare.
+
+Affects `/admin/identity/*` and the assessment tenant's rail.
+
 ## Deliberately clean
 
 `/admin/knowledge`, `/admin/budgets`, `/admin/bots` and `/admin/devbox` all

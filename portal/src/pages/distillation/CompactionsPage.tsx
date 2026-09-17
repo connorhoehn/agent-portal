@@ -188,7 +188,14 @@ export default function DistillationCompactionsPage() {
     },
     {
       key: 'costUsd', header: 'Cost', align: 'right', sortable: true,
-      render: (j) => <T className="tabular-nums text-[12px] text-text-secondary">{usd(j.costUsd)}</T>,
+      // 4 decimals, not the formatter's default 2. A compaction pass costs
+      // fractions of a cent — the eleven seeded jobs run $0.0009 to $0.0054,
+      // a six-fold spread — and at 2dp every one of them rendered "$0.00".
+      // A reader scanning this column concluded the ladder is free, and the
+      // column exists precisely to say what it costs. Same fix the work queue
+      // already made (`workShared.tsx`'s `money()`); the shared `usd()` has
+      // taken a `precision` option since then.
+      render: (j) => <T className="tabular-nums text-[12px] text-text-secondary">{usd(j.costUsd, { precision: 4 })}</T>,
     },
     {
       key: 'duration', header: 'Took', align: 'right',
@@ -290,7 +297,7 @@ export default function DistillationCompactionsPage() {
             </DetailSection>
 
             <DetailSection title="Cost">
-              <KeyValue layout="row" labelWidth="w-[150px]" label="Spend" value={usd(openJob.costUsd)} />
+              <KeyValue layout="row" labelWidth="w-[150px]" label="Spend" value={usd(openJob.costUsd, { precision: 4 })} />
             </DetailSection>
 
             {openJob.produced && (openJob.produced.cluster_ids.length > 0 || openJob.produced.artifact_ids.length > 0) && (

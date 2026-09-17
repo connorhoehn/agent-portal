@@ -229,6 +229,22 @@ Two things this pass surfaced and deliberately did not resolve:
   which is exactly the shape that doc exists to adjudicate. Widening it is a
   product call about who Codebases is *for*, so it stays a question.
 
+## Which rail items this matrix does and does not cover
+
+Diffing the orgiq rail (`Layout.tsx`'s `PLATFORM_ITEMS` + `IQ_ITEMS`) against
+`MATRIX.txt`'s url column leaves three items with no row. Two of those are
+covered anyway, and re-deriving that each pass is wasted work, so:
+
+| rail item | matrix row? | actually covered by |
+|---|---|---|
+| `/admin/observability` | no | its `index` redirects to `summary`, which IS a row (`health`); the sub-pages `invocations` and `tool-calls` have rows too |
+| `/iq/distillation` | no | **its own journey system** — `docs/distillation-journeys/{member,org-leader}/{overview,tiers,artifacts,lineage,compactions,review}.md`, 12 logs judged by `validate-distillation.sh`, including its own staleness check |
+| `/admin/identity` | no | **genuinely partial** — the `index` redirects to `roles`, and only `/admin/identity/users` has a row (`identity-users`). The page a person lands on when they click Identity in the rail is unaudited |
+
+So the one real remaining hole in this matrix is the Identity landing. Not
+`/iq/distillation`, which is audited more thoroughly than most rows here, just
+somewhere else.
+
 ## Reading the journey logs
 
 `docs/orgiq-journeys/<role>/<surface>.md` — `verdict`, `console errors`,
