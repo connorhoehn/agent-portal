@@ -38,7 +38,7 @@ function columnsFor(onSelect: (id: string) => void): DataTableColumn<Sprint>[] {
         <Button
           variant="ghost"
           size="sm"
-          className="justify-start px-0 py-0 border-0 h-fit min-w-0 truncate font-semibold"
+          className="justify-start text-left px-0 py-0 border-0 h-fit min-w-0 truncate font-semibold"
           title={s.name}
           onClick={(e) => { e.stopPropagation(); onSelect(s.id); }}
         >

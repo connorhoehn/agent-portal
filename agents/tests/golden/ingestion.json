@@ -1,0 +1,34 @@
+{
+  "agent": "ingestion",
+  "runtime_name": "orgiq-ingestion",
+  "cases": [
+    {
+      "id": "ingestion-lists-available-documents",
+      "prompt": "What documents are available to ingest right now?",
+      "expected_tools": ["list_documents"],
+      "must_not_include": ["as an ai language model"],
+      "notes": "Read path over the orgiq-documents S3 bucket / documents table."
+    },
+    {
+      "id": "ingestion-syncs-knowledge-base",
+      "prompt": "Sync the knowledge base with the latest ingested documents.",
+      "expected_tools": ["sync_knowledge_base"],
+      "must_not_include": ["as an ai language model"],
+      "notes": "This is the write path load_schema.py's sync_knowledge_base and schema/synth's loader both depend on — a corpus run can report success against an empty KB if this silently no-ops (see the CLAUDE.md gotcha on that exact failure)."
+    },
+    {
+      "id": "ingestion-reports-job-status",
+      "prompt": "What's the status of the most recent ingestion job?",
+      "expected_tools": ["check_ingestion_status"],
+      "must_not_include": ["as an ai language model"],
+      "notes": "Status/observability path, distinct from triggering a new sync."
+    },
+    {
+      "id": "ingestion-previews-entity-extraction",
+      "prompt": "Preview what entities would be extracted from a new postmortem document before we ingest it.",
+      "expected_tools": ["extract_entities_preview"],
+      "must_not_include": ["as an ai language model"],
+      "notes": "Dry-run path — should not mutate the graph, only preview."
+    }
+  ]
+}

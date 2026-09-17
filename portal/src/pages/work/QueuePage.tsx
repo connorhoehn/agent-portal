@@ -174,7 +174,7 @@ export default function QueuePage() {
     {
       key: 'serves', header: 'Serves',
       render: (j) => serves(j)
-        ? <ServesItem job={j} onOpenInitiative={(id) => navigate(`/iq/projects/${id}`)} />
+        ? <ServesItem job={j} />
         : <T className="text-[11px] text-text-tertiary">—</T>,
     },
     {
@@ -219,11 +219,19 @@ export default function QueuePage() {
         <Stack gap="none" className="min-w-0">
           {/* A real Button, not just the row's onClick: DataTable's row-click
               is a bare <tr onClick> with no keyboard access, so this is the
-              one focusable, Enter/Space-activatable control in the row. */}
+              one focusable, Enter/Space-activatable control in the row.
+              `text-left` is load-bearing: Button's root is a native button
+              element (UA default `text-align: center`) rendered
+              `display: block`, and
+              the Stack stretches it to the column's full width — so without
+              it the title centred while its `reason` sub-line stayed at the
+              left edge and the two zig-zagged. `justify-start` alone cannot
+              fix that; it is a flex property and Button is not a flex
+              container. Same finding as `promotions/PromotionsPage.tsx`. */}
           <Button
             variant="ghost"
             size="sm"
-            className="justify-start px-0 py-0 border-0 h-fit min-w-0 truncate text-[12.5px] font-medium text-text-primary"
+            className="justify-start text-left px-0 py-0 border-0 h-fit min-w-0 truncate text-[12.5px] font-medium text-text-primary"
             title={s.title}
             onClick={(e) => { e.stopPropagation(); setAssigning(s); }}
           >
@@ -236,16 +244,14 @@ export default function QueuePage() {
     {
       key: 'initiativeName', header: 'Initiative', sortable: true,
       render: (s) => (
-        <T
-          role="link"
-          tabIndex={0}
-          onClick={(e) => { e.stopPropagation(); navigate(`/iq/projects/${s.initiativeId}`); }}
-          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); navigate(`/iq/projects/${s.initiativeId}`); } }}
+        <Link
+          to={`/iq/projects/${s.initiativeId}`}
+          onClick={(e: React.MouseEvent) => e.stopPropagation()}
           title={`Open ${s.initiativeName}`}
-          className="text-[12px] text-text-secondary whitespace-nowrap cursor-pointer hover:text-primary hover:underline"
+          className="text-[12px] text-text-secondary whitespace-nowrap no-underline hover:text-primary hover:underline"
         >
           {s.initiativeName}
-        </T>
+        </Link>
       ),
     },
     {

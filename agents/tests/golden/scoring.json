@@ -1,0 +1,28 @@
+{
+  "agent": "scoring",
+  "runtime_name": "orgiq-scoring",
+  "cases": [
+    {
+      "id": "scoring-recomputes-expertise-scores",
+      "prompt": "Recompute expertise scores for the whole org.",
+      "expected_tools": ["compute_expertise_scores"],
+      "must_not_include": ["as an ai language model"],
+      "notes": "The write path — normalises in-degree centrality onto people.expertise_score. Direct invocation of this agent requires ManageIngest server-side; the golden case documents the intent, not the auth boundary."
+    },
+    {
+      "id": "scoring-returns-leaderboard",
+      "prompt": "Show me the current expertise leaderboard.",
+      "expected_tools": ["get_leaderboard"],
+      "must_not_include": ["as an ai language model"],
+      "notes": "Read path over the DynamoDB orgiq-leaderboards table."
+    },
+    {
+      "id": "scoring-returns-scores-for-a-skill",
+      "prompt": "What are the expertise scores for people who know Kubernetes?",
+      "expected_tools": ["get_scores"],
+      "must_include": ["kubernetes"],
+      "must_not_include": ["as an ai language model"],
+      "notes": "Read path over people.expertise_score / composite_score, filtered by skill."
+    }
+  ]
+}

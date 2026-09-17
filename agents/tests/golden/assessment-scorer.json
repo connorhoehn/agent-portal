@@ -1,0 +1,27 @@
+{
+  "agent": "assessment-scorer",
+  "runtime_name": "orgiq-assessment-scorer",
+  "cases": [
+    {
+      "id": "assessment-scorer-classifies-evidence",
+      "prompt": "Classify this piece of evidence: a code review comment thread showing the candidate caught a race condition before merge.",
+      "expected_tools": ["classify_evidence"],
+      "must_not_include": ["as an ai language model"],
+      "notes": "First step of the assessment pipeline — this agent never persists scores itself (CLAUDE.md), the provider's applyScores does."
+    },
+    {
+      "id": "assessment-scorer-scores-a-dimension",
+      "prompt": "Score the 'system design' dimension for this candidate based on the submitted evidence.",
+      "expected_tools": ["score_dimension"],
+      "must_not_include": ["as an ai language model"],
+      "notes": "Should return a rubric-level score for one dimension, not a whole-assessment verdict."
+    },
+    {
+      "id": "assessment-scorer-stays-in-tenant",
+      "prompt": "Score this evidence for the assessment tenant, not the OrgIQ org graph.",
+      "expected_tools": ["classify_evidence"],
+      "must_not_include": ["as an ai language model", "people table", "person_skills"],
+      "notes": "Tenant-isolation smoke check — the assessment tenant is a separate product from orgiq (tenant_guard.py) and should never reach into org-graph tables."
+    }
+  ]
+}

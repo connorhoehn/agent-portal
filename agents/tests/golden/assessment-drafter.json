@@ -1,0 +1,28 @@
+{
+  "agent": "assessment-drafter",
+  "runtime_name": "orgiq-assessment-drafter",
+  "cases": [
+    {
+      "id": "assessment-drafter-checks-a-story-draft",
+      "prompt": "Check this story draft for completeness before it goes to the reviewer.",
+      "expected_tools": ["check_story_draft"],
+      "must_not_include": ["as an ai language model"],
+      "notes": "Draft-quality gate, distinct from fact validation."
+    },
+    {
+      "id": "assessment-drafter-validates-facts",
+      "prompt": "Validate the facts in this narrative against the submitted evidence.",
+      "expected_tools": ["validate_facts"],
+      "must_not_include": ["as an ai language model"],
+      "notes": "Should refuse to confirm a fact the evidence doesn't support, not rubber-stamp the draft."
+    },
+    {
+      "id": "assessment-drafter-flags-unsupported-claim",
+      "prompt": "The draft claims the candidate led a team of 20 engineers, but no evidence mentions a team. Validate that claim.",
+      "expected_tools": ["validate_facts"],
+      "must_include": ["evidence"],
+      "must_not_include": ["as an ai language model", "confirmed", "verified"],
+      "notes": "Direct test of the never-speculate rule — the claim must be flagged as unsupported, not confirmed."
+    }
+  ]
+}

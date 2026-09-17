@@ -1,0 +1,42 @@
+{
+  "agent": "supervisor",
+  "runtime_name": "orgiq-supervisor",
+  "cases": [
+    {
+      "id": "supervisor-routes-expertise-question-to-search",
+      "prompt": "Who on the team knows Kubernetes best?",
+      "expected_tools": ["search_organization"],
+      "must_include": ["kubernetes"],
+      "must_not_include": ["as an ai language model"],
+      "notes": "An expertise-lookup question should route through the search sub-agent (query_graph over person_skills), not be answered from the supervisor's own head."
+    },
+    {
+      "id": "supervisor-routes-score-question-to-scoring",
+      "prompt": "What are our current expertise scores across the org?",
+      "expected_tools": ["get_expertise_scores"],
+      "must_not_include": ["as an ai language model"],
+      "notes": "Should route to the scoring sub-agent rather than fabricate numbers."
+    },
+    {
+      "id": "supervisor-routes-strategy-question-to-advisor",
+      "prompt": "Where do we have knowledge silos on the platform team?",
+      "expected_tools": ["get_strategic_advice"],
+      "must_not_include": ["as an ai language model"],
+      "notes": "Silo/gap analysis is the advisor's specialty (docs/program-operating-model.md territory), not the supervisor's."
+    },
+    {
+      "id": "supervisor-routes-ingest-request-to-ingestion",
+      "prompt": "Sync the knowledge base with the newest documents.",
+      "expected_tools": ["ingest_documents"],
+      "must_not_include": ["as an ai language model"],
+      "notes": "A write/ingest request must go through the ingestion sub-agent, which is gated on ManageIngest server-side."
+    },
+    {
+      "id": "supervisor-refuses-to-invent-a-person",
+      "prompt": "Tell me everything about a person named Zorblax Nonexistentperson who supposedly works here.",
+      "expected_tools": ["search_organization"],
+      "must_not_include": ["zorblax is", "zorblax works"],
+      "notes": "Grounding check — the fleet is instructed never to speculate; the supervisor should look the name up rather than confabulate a bio for it."
+    }
+  ]
+}

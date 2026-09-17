@@ -4,8 +4,7 @@
 // row means.
 
 import { Link } from 'react-router';
-import { Chip, Inline, type ChipTone } from '@connorhoehnslalom/ui-components/shared';
-import type { ReactNode } from 'react';
+import { Chip, type ChipTone } from '@connorhoehnslalom/ui-components/shared';
 import type { JobToolCall } from './toolCallFormat';
 import { runStateChip, severityTone } from '../../lib/statusTone';
 import { usd } from '../../lib/format';
@@ -140,32 +139,13 @@ export function money(n: number | undefined): string {
 
 // ─── Fragments ───────────────────────────────────────────────────────────────
 
-/** A styled inline text node with zero raw elements — `Inline` in `as="span"`
- *  mode, the same pattern `distillation/Text.tsx` and `DepartmentInsightStrip.tsx`
- *  use elsewhere in the portal. Every Automate page needs the occasional small
- *  styled caption or muted label; a bare styled span/div is what the
- *  validator's component-discipline check forbids, so this goes through a
- *  real composite instead. Forwards the interactive bits (`role`, `tabIndex`,
- *  `onClick`, `onKeyDown`) a chip-shaped click target needs. */
-export function T({
-  as = 'span', className, title, children, wrap = false, ...rest
-}: {
-  as?: 'span' | 'div';
-  className?: string;
-  title?: string;
-  children?: ReactNode;
-  wrap?: boolean;
-  role?: string;
-  tabIndex?: number;
-  onClick?: (e: React.MouseEvent) => void;
-  onKeyDown?: (e: React.KeyboardEvent) => void;
-}) {
-  return (
-    <Inline as={as} gap="none" wrap={wrap} className={className} title={title} {...rest}>
-      {children}
-    </Inline>
-  );
-}
+// The library's Text primitive, re-exported so the Automate pages keep
+// importing `T` from here. This was a local `Inline as="span"` shim; the
+// library now ships the same thing with a wider `as` union, so the copy is
+// gone the way the twelve `pages/*/Text.tsx` shims already went. The extra
+// `tabIndex`/`onKeyDown` this forwarded existed only for a span pretending
+// to be a link — now a real `<Link>` above.
+export { T } from '@connorhoehnslalom/ui-components/shared';
 
 /** Chip naming the bot behind a queued job. Scheduled maintenance and work a
  * person queued this morning read identically without it — and only one of
@@ -186,28 +166,26 @@ export function BotOrigin({ job }: { job: Job }) {
 
 /**
  * Chip naming the work item a job serves, and the initiative it moves.
- * Lives inside the row's own link, so it navigates by hand rather than
- * nesting a second anchor.
+ * A real `<Link>`. This used to be a span carrying `role="link"` +
+ * `tabIndex` + hand-written Enter/Space handling, justified as living inside
+ * the row's own anchor — but neither call site nests it in one: the queue
+ * row is a bare `<tr onClick>` and the Work-home row's title Link is a
+ * sibling. So the hand-rolled version bought nothing and cost what only a
+ * real anchor gives — middle-click, open-in-new-tab, the status-bar target
+ * and a place in the browser's link list.
  */
-export function ServesItem({ job, onOpenInitiative }: { job: Job; onOpenInitiative: (id: string) => void }) {
+export function ServesItem({ job }: { job: Job }) {
   const s = serves(job);
   if (!s) return null;
-  const go = (e: { preventDefault: () => void; stopPropagation: () => void }) => {
-    e.preventDefault();
-    e.stopPropagation();
-    onOpenInitiative(s.initiativeId);
-  };
   return (
-    <T
-      role="link"
-      tabIndex={0}
-      onClick={go}
-      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') go(e); }}
+    <Link
+      to={`/iq/projects/${s.initiativeId}`}
+      onClick={(e: React.MouseEvent) => e.stopPropagation()}
       title={`Serving “${s.itemTitle}” on ${s.initiativeName} — open the initiative`}
-      className="text-[10px] px-1.5 py-0.5 rounded bg-surface-hover text-text-secondary shrink-0 max-w-[220px] truncate cursor-pointer hover:text-primary"
+      className="text-[10px] px-1.5 py-0.5 rounded bg-surface-hover text-text-secondary shrink-0 max-w-[220px] truncate no-underline hover:text-primary"
     >
       ↳ {s.itemTitle} · {s.initiativeName}
-    </T>
+    </Link>
   );
 }
 

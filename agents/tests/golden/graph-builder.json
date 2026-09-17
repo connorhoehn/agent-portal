@@ -1,0 +1,27 @@
+{
+  "agent": "graph-builder",
+  "runtime_name": "orgiq-graph-builder",
+  "cases": [
+    {
+      "id": "graph-builder-merges-a-person",
+      "prompt": "Add a new person named Jordan Lee to the graph, on the Platform team.",
+      "expected_tools": ["merge_person", "merge_team"],
+      "must_not_include": ["as an ai language model"],
+      "notes": "merge_* tools are idempotent upserts (INSERT ... ON CONFLICT DO UPDATE per CLAUDE.md conventions) — this case exercises the person + team-membership path together."
+    },
+    {
+      "id": "graph-builder-merges-a-relationship",
+      "prompt": "Record that Jordan Lee collaborates with the auth-migration initiative's owner.",
+      "expected_tools": ["merge_relationship"],
+      "must_not_include": ["as an ai language model"],
+      "notes": "Edge-table write — collaborations, canonical id ordering per orgiq_schema.sql."
+    },
+    {
+      "id": "graph-builder-extracts-and-builds-from-a-document",
+      "prompt": "Extract entities from this ADR and merge them into the graph.",
+      "expected_tools": ["extract_and_build"],
+      "must_not_include": ["as an ai language model"],
+      "notes": "The end-to-end document-to-graph path the synthetic corpus pipeline drives."
+    }
+  ]
+}

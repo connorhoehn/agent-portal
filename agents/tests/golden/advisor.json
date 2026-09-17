@@ -1,0 +1,29 @@
+{
+  "agent": "advisor",
+  "runtime_name": "orgiq-advisor",
+  "cases": [
+    {
+      "id": "advisor-expertise-gap-analysis",
+      "prompt": "Which teams are missing Kubernetes expertise?",
+      "expected_tools": ["query_graph"],
+      "must_include": ["kubernetes"],
+      "must_not_include": ["as an ai language model"],
+      "notes": "Matches the expertise-gap SQL pattern documented directly in the tool's own docstring (NOT EXISTS over team_memberships/person_skills/skills)."
+    },
+    {
+      "id": "advisor-knowledge-silo-detection",
+      "prompt": "Who are our knowledge silos — experts who aren't well connected to the rest of the org?",
+      "expected_tools": ["query_graph"],
+      "must_not_include": ["as an ai language model"],
+      "notes": "One of the five specialties in the advisor's system prompt (agents/advisor/main.py)."
+    },
+    {
+      "id": "advisor-cites-supporting-documents",
+      "prompt": "What documentation supports our decision to use Aurora over Neptune?",
+      "expected_tools": ["retrieve_context"],
+      "must_include": ["aurora"],
+      "must_not_include": ["as an ai language model"],
+      "notes": "The system prompt requires citing specific source documents, never speculating — this case checks the advisor actually calls retrieve_context rather than answering from the model's own guess."
+    }
+  ]
+}

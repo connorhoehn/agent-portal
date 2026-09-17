@@ -1,0 +1,29 @@
+{
+  "agent": "search",
+  "runtime_name": "orgiq-search",
+  "cases": [
+    {
+      "id": "search-finds-kubernetes-experts-via-graph",
+      "prompt": "Find people who know Kubernetes.",
+      "expected_tools": ["query_graph"],
+      "must_include": ["kubernetes"],
+      "must_not_include": ["as an ai language model"],
+      "notes": "Canonical person_skills lookup — the search agent's core job."
+    },
+    {
+      "id": "search-retrieves-aurora-adr-from-kb",
+      "prompt": "Why did we choose Aurora over Neptune for the org graph?",
+      "expected_tools": ["query_knowledge_base"],
+      "must_include": ["aurora"],
+      "must_not_include": ["apache age", "as an ai language model"],
+      "notes": "Regression target for the KB search-type gotcha in CLAUDE.md — HYBRID must rank adr-d-aurora.md above adr-d-iceberg.md. must_not_include 'apache age' catches the answer citing the (unused) Aurora AGE extension instead of the ADR's real reasoning."
+    },
+    {
+      "id": "search-top-collaborators-query",
+      "prompt": "Who are the top collaborators on the auth migration initiative?",
+      "expected_tools": ["query_graph"],
+      "must_not_include": ["as an ai language model"],
+      "notes": "Exercises the collaborations edge table pattern documented in the tool's own docstring."
+    }
+  ]
+}

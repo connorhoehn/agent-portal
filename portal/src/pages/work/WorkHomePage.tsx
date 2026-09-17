@@ -6,7 +6,7 @@
 // the archive.
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router';
+import { Link } from 'react-router';
 import {
   Button, Card, Chip, ConsultCard, Inline, InlineAlert, PageSection, SectionLabel, Stack, StatCard, StatStrip,
   ToolCallStrip, Toolbar,
@@ -35,7 +35,6 @@ interface RediscoveryStats {
 }
 
 export default function WorkHomePage() {
-  const navigate = useNavigate();
   const { can, ready } = useCapabilities();
   const canManage = ready && can('ManageDevbox');
   const { session } = useSession();
@@ -190,7 +189,7 @@ export default function WorkHomePage() {
                   <Link to={`/iq/work/${j.id}`} className="text-[13px] font-semibold text-text-primary no-underline hover:text-primary truncate">
                     {j.title}
                   </Link>
-                  <ServesItem job={j} onOpenInitiative={(id) => navigate(`/iq/projects/${id}`)} />
+                  <ServesItem job={j} />
                   <BotOrigin job={j} />
                 </Inline>
                 <T className="text-[12px] text-text-secondary leading-snug">{j.result?.summary ?? 'No summary reported.'}</T>
