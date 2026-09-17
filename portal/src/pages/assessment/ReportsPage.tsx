@@ -17,6 +17,7 @@ import {
   ErrorState,
   Inline,
   LoadingState,
+  Card,
   MetaLine,
   PageHeader,
   PageSection,
@@ -93,6 +94,16 @@ function MaturityHeatmap({ teams, onSelectTeam }: { teams: TeamSummary[]; onSele
         tone="tertiary"
         items={['each cell is the verified level', '↑n marks a claim the evidence has not reached', 'N/A is an approved exception', '— is not assessed', 'hover a column head for the dimension']}
       />
+      {/* The 19 columns (Team + seventeen dimensions + Verified) are wider than
+          the content column at any realistic width, and `Table` is a bare
+          <table> with no wrapper of its own — so with nothing containing it the
+          PAGE scrolled sideways instead of the grid. The breadcrumb, the title,
+          the stat strip and the Publish button all slid off to the left and
+          clipped, which is the one thing a horizontal scroll must never do.
+          Same `Card padding="none" overflow-x-auto` this tenant already uses
+          for the equally wide scorecard grid (dashboard/TeamScorecard.tsx) and
+          the budgets report — the heatmap simply never got it. */}
+      <Card padding="none" className="overflow-x-auto">
       <Table data-testid="maturity-heatmap" className="text-xs">
         <TableHead>
           <TableRow>
@@ -131,6 +142,7 @@ function MaturityHeatmap({ teams, onSelectTeam }: { teams: TeamSummary[]; onSele
           })}
         </TableBody>
       </Table>
+      </Card>
     </Stack>
   );
 }
