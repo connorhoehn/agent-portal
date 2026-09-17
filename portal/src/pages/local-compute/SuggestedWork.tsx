@@ -1,0 +1,99 @@
+// What to do with a machine that has nothing queued.
+//
+// "Assign work" used to answer an empty suggestion list with one grey line:
+// "Nothing suggested right now — open work on your initiatives shows up here."
+// True, and useless. It names the pipe the suggestions come down without
+// saying what this machine is for, what it could take right now, or what you
+// could do next. On the page whose whole purpose is routing work to a machine,
+// the empty state is the state you are in most often.
+//
+// So it says three things instead: why the list is empty, what size of job this
+// particular machine is suited to (from the models it announced), and the
+// routes that actually exist from here.
+//
+// Deliberately NOT fabricated work items with Send buttons. Dispatch takes a
+// real `workItemId` or `botId` — there is no free-form prompt route — so a
+// clickable "suggestion" would be a button that cannot work. These are things
+// to go and do, phrased as such.
+
+import { Button, Chip, Stack, T } from '@connorhoehnslalom/ui-components/shared';
+import { Link as RouterLink } from 'react-router';
+import { TIERS, TIER_IDEAS, bestTier } from '../../lib/modelCapability';
+
+
+export interface NoSuggestionsProps {
+  machineLabel: string;
+  models: readonly string[];
+  /** True when the machine is accepting work; false makes the reason different. */
+  accepting: boolean;
+  /** Switches the Source control over to bots. */
+  onTryBots?: () => void;
+}
+
+export function NoSuggestions({
+  machineLabel,
+  models,
+  accepting,
+  onTryBots,
+}: NoSuggestionsProps) {
+  const tier = bestTier(models);
+  const info = tier ? TIERS[tier] : null;
+  const ideas = tier ? TIER_IDEAS[tier] : [];
+
+  return (
+    <Stack gap="md" className="py-6">
+      <Stack gap="xs">
+        <T className="text-[14px] font-semibold text-text-primary">
+          Nothing open on your initiatives right now
+        </T>
+        <T className="text-[13px] text-text-secondary">
+          Suggestions here come from work items on initiatives you own. When one
+          is open and unassigned, it appears in this list ready to send to{' '}
+          {machineLabel}.
+        </T>
+      </Stack>
+
+      {info && (
+        <Stack gap="sm">
+          <div className="flex items-center gap-2">
+            <T className="text-[10px] font-semibold uppercase tracking-wide text-text-tertiary">
+              What {machineLabel} is suited to
+            </T>
+            <Chip tone="info" size="xs">{info.name}</Chip>
+          </div>
+          <T className="text-[13px] text-text-secondary">{info.takesOn}</T>
+          <ul className="m-0 flex list-none flex-col gap-1 p-0">
+            {ideas.map((idea) => (
+              <li key={idea} className="flex gap-2 text-[13px] text-text-primary">
+                <span aria-hidden="true" className="text-text-tertiary">·</span>
+                <span>{idea}</span>
+              </li>
+            ))}
+          </ul>
+        </Stack>
+      )}
+
+      {!accepting && (
+        <T className="text-[13px] text-text-secondary">
+          {machineLabel} is not accepting work at the moment, so nothing would
+          start even if you sent it. The Accepting switch on its row turns that
+          back on.
+        </T>
+      )}
+
+      <div className="flex flex-wrap items-center gap-2">
+        <RouterLink
+          to="/iq/initiatives"
+          className="inline-flex items-center rounded-md border border-border bg-surface px-3 py-1.5 text-[13px] font-medium text-text-primary no-underline hover:bg-surface-panel"
+        >
+          Open initiatives
+        </RouterLink>
+        {onTryBots && (
+          <Button size="sm" variant="ghost" onClick={onTryBots}>
+            Send a bot instead
+          </Button>
+        )}
+      </div>
+    </Stack>
+  );
+}

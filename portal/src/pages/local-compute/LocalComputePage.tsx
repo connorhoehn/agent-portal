@@ -11,6 +11,7 @@ import {
   Chip,
   CodeBlock,
   ConfirmDialog,
+  Card,
   DataTable,
   DetailSection,
   EmptyState,
@@ -35,6 +36,9 @@ import {
 import { LogStream, type LogLine } from '@connorhoehnslalom/ui-components/shared';
 import { Link as RouterLink } from 'react-router';
 import { runLogLines, type RunLogLine } from './runLogLines';
+import { CapabilityBrief, ModelChips } from './ModelCapability';
+import { NoSuggestions } from './SuggestedWork';
+import { HeadroomBar } from './HeadroomBar';
 import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
@@ -358,15 +362,7 @@ export default function LocalComputePage() {
       header: 'Models',
       // Self-registered: the worker announces what it can actually run, so
       // this is the machine telling you, not a setting someone typed.
-      render: (n) => (
-        n.localModels.length === 0
-          ? <MetaLine size="xs" tone="tertiary" items={['none announced']} />
-          : (
-            <Inline gap="xs" wrap>
-              {n.localModels.map((m) => <Chip key={m} tone="neutral" size="xs">{m}</Chip>)}
-            </Inline>
-          )
-      ),
+      render: (n) => <ModelChips models={n.localModels} />,
     },
     {
       key: 'kinds',
@@ -401,10 +397,12 @@ export default function LocalComputePage() {
         if (m?.loadAvg1 == null) return <MetaLine size="xs" tone="tertiary" items={['—']} />;
         const pct = m.cpuCount ? Math.round((m.loadAvg1 / m.cpuCount) * 100) : null;
         return (
-          <Stack gap="none">
-            <T className="text-[13px] tabular-nums">{m.loadAvg1.toFixed(2)}</T>
-            <MetaLine size="xs" tone="tertiary" items={[pct != null ? `${pct}% of ${m.cpuCount}` : 'cores unknown']} />
-          </Stack>
+          <HeadroomBar
+            value={m.loadAvg1.toFixed(2)}
+            pct={pct}
+            detail={pct != null ? `${pct}% of ${m.cpuCount}` : 'cores unknown'}
+            aria-label={`Load ${pct != null ? `${pct} percent` : 'unknown'}`}
+          />
         );
       },
     },
@@ -417,10 +415,12 @@ export default function LocalComputePage() {
         const used = m.memTotalMb - m.memFreeMb;
         const pct = Math.round((used / m.memTotalMb) * 100);
         return (
-          <Stack gap="none">
-            <T className="text-[13px] tabular-nums">{pct}%</T>
-            <MetaLine size="xs" tone="tertiary" items={[`${(used / 1024).toFixed(1)}G of ${(m.memTotalMb / 1024).toFixed(0)}G`]} />
-          </Stack>
+          <HeadroomBar
+            value={`${pct}%`}
+            pct={pct}
+            detail={`${(used / 1024).toFixed(1)}G of ${(m.memTotalMb / 1024).toFixed(0)}G`}
+            aria-label={`Memory ${pct} percent used`}
+          />
         );
       },
     },
@@ -603,14 +603,21 @@ export default function LocalComputePage() {
               {acceptError && (
                 <Banner variant="error">{acceptError}</Banner>
               )}
-              <DataTable
-                data={nodes}
-                keyField={(n) => n.id}
-                columns={nodeColumns}
-                onRowClick={(n) => setSelectedNodeId(n.id)}
-                striped
-                emptyMessage="No machines."
-              />
+              {/* A real surface, not the page ground. Everything on this page
+                  used to sit directly on `bg-bg`, with the table head painting
+                  `bg-surface-panel` a couple of points away from it — four
+                  near-identical greys in one view and nothing reading as a
+                  panel. A card gives the fleet an edge to sit inside. */}
+              <Card>
+                <DataTable
+                  data={nodes}
+                  keyField={(n) => n.id}
+                  columns={nodeColumns}
+                  onRowClick={(n) => setSelectedNodeId(n.id)}
+                  striped
+                  emptyMessage="No machines."
+                />
+              </Card>
             </Stack>
           </DetailSection>
 
@@ -622,6 +629,13 @@ export default function LocalComputePage() {
                   its lane, then the pick list, then history — each with its
                   own heading and rule. These are four views of one machine,
                   not four topics, so they are tabs. */}
+              {/* The tabs and their panels share one surface. They used to sit
+                  straight on the page ground, so a panel's content started
+                  hard against the tab rule with no inset — the Queue message
+                  read as a caption on the tab bar rather than the body of a
+                  pane. */}
+              <Card>
+              <div className="border-b border-border px-4 pt-3">
               <Tabs
                 idPrefix="machine"
                 aria-label={`${selectedNode.label} detail`}
@@ -634,6 +648,8 @@ export default function LocalComputePage() {
                   { id: 'connection', label: 'Details' },
                 ]}
               />
+              </div>
+              <div className="p-4">
 
               <Stack hidden={tab !== 'lane'} gap="sm">
 {/* The offline / paused / never-announced banners that used to
@@ -711,7 +727,14 @@ export default function LocalComputePage() {
                   </Toolbar>
 
                     {sendError && <Banner variant="error">{sendError}</Banner>}
-                    {pick === 'work' ? (
+                    {pick === 'work' && pickWork.length === 0 ? (
+                      <NoSuggestions
+                        machineLabel={selectedNode.label}
+                        models={selectedNode.localModels}
+                        accepting={selectedNode.acceptJobs}
+                        onTryBots={() => setPick('bots')}
+                      />
+                    ) : pick === 'work' ? (
                       <DataTable<WorkSuggestion>
                         columns={[
                           { key: 'title', header: 'Work item', render: (r) => (
@@ -785,7 +808,19 @@ export default function LocalComputePage() {
             )}
               </Stack>
 
-              <Stack hidden={tab !== 'connection'} gap="sm">
+              <Stack hidden={tab !== 'connection'} gap="md">
+                {/* First, because it is the question this tab is usually open
+                    to answer: what size of job can go to this machine. The
+                    Models column says WHICH models; this says what they are
+                    for. */}
+                <Card padding="sm">
+                  <Stack gap="sm">
+                    <T className="text-[10px] font-semibold uppercase tracking-wide text-text-tertiary">
+                      What this machine can take on
+                    </T>
+                    <CapabilityBrief models={selectedNode.localModels} />
+                  </Stack>
+                </Card>
                 <MachineConnection
                   machine={selectedNode}
                   jobs={machineJobs}
@@ -793,6 +828,8 @@ export default function LocalComputePage() {
                   streamLive={streamLive}
                 />
               </Stack>
+              </div>
+              </Card>
             </DetailSection>
           )}
 
