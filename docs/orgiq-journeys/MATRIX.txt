@@ -10,7 +10,7 @@ library | /iq/library | L | member,sme,program-owner,org-leader,hr-admin
 promotions | /iq/promotions | L | member,sme,program-owner,org-leader,hr-admin
 designs | /iq/designs | L | member,sme,program-owner,org-leader,hr-admin
 session-config | /iq/release | - | member,sme,program-owner,org-leader,hr-admin
-computer-lab | /admin/devbox | L | sme,hr-admin
+computer-lab | /admin/devbox | L | sme,hr-admin,org-leader,program-owner
 local-compute | /iq/local-compute | - | member,sme,program-owner,org-leader,hr-admin
 budgets | /admin/budgets | L | program-owner,org-leader,hr-admin
 scores | /iq/scores | L | org-leader,hr-admin
@@ -24,4 +24,5 @@ capabilities | /admin/capabilities | - | org-leader,hr-admin
 prompt-studio | /iq/prompts | L | org-leader,hr-admin
 codebases | /admin/projects | L | hr-admin
 bots | /admin/bots | L | sme,program-owner,org-leader,hr-admin
+settings | /settings | - | member,sme,program-owner,org-leader,hr-admin
 identity-users | /admin/identity/users | L | hr-admin

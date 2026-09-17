@@ -130,10 +130,21 @@ export function SprintDetail({ s, personId, canManageSprints, canManageBudgets, 
                   size="sm"
                 />
               ) : null}
+              {/* `max` is clamped to 1 so the bar's width math cannot divide by
+                  zero — which means the clamp is a GEOMETRY fact, not a fact
+                  about the sprint, and it must not reach the reader.
+                  `showRatio` defaults to true and renders "{value}/{max}"
+                  (checked against the installed dist), so an unpointed sprint
+                  rendered "0/1": a denominator no one estimated, sitting a few
+                  lines from the Money tab's StatCard which correctly reads
+                  "0 / 0" for the same sprint. Same shape as SprintCard.tsx,
+                  which already turns the ratio off and writes the true one into
+                  `label`; the Elapsed bar directly above does too. */}
               <ProgressBar
                 value={s.pointsDone}
                 max={Math.max(s.pointsTotal, 1)}
-                label="Points done"
+                showRatio={false}
+                label={`Points done ${s.pointsDone}/${s.pointsTotal}`}
                 size="sm"
               />
             </>

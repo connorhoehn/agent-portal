@@ -12,7 +12,6 @@ import { useGatewayInfo } from '../hooks/useGatewayInfo';
 import { useSession } from '../lib/auth';
 import { Can } from '../lib/capabilities';
 
-const MASQUERADE_HISTORY_KEY = 'orgiq:masquerade:history';
 
 interface Health {
   status: string;
@@ -27,21 +26,8 @@ const THEME_OPTIONS: { value: Theme; label: string }[] = [
   { value: 'system', label: 'System' },
 ];
 
-function loadMasqueradeHistory(): string[] {
-  try {
-    const raw = localStorage.getItem(MASQUERADE_HISTORY_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return (parsed as unknown[]).filter((x): x is string => typeof x === 'string').slice(0, 5);
-  } catch {
-    return [];
-  }
-}
-
 export function SettingsPage() {
   const [prefs, setPrefs] = useState<Preferences>(() => loadPreferences());
-  const [masqHistory, setMasqHistory] = useState<string[]>([]);
   const { data: health } = useFetch<Health>('/api/health');
   const gateway = useGatewayInfo();
   const { session, revokeOtherSessions } = useSession();
@@ -65,10 +51,6 @@ export function SettingsPage() {
       setRevokeError(/^409/.test(msg) ? 'Stop masquerading first.' : msg);
     }
   }
-
-  useEffect(() => {
-    setMasqHistory(loadMasqueradeHistory());
-  }, []);
 
   function updatePref<K extends keyof Preferences>(key: K, value: Preferences[K]) {
     const next = { ...prefs, [key]: value };
@@ -221,24 +203,27 @@ export function SettingsPage() {
           )}
         </Card>
 
-        {/* 5. Masquerade history */}
-        <Card padding="md">
-          <SectionLabel as="div" className="mb-1">Masquerade history</SectionLabel>
-          <Divider spacing="none" className="mb-1" />
-          {masqHistory.length === 0 ? (
-            <T className="block text-[13px] text-text-tertiary py-2">
-              No masquerade history found. Switch roles via the header menu to populate.
-            </T>
-          ) : (
-            <Stack as="ul" gap="none" className="m-0 pl-5 list-disc">
-              {masqHistory.map((entry, i) => (
-                <Stack as="li" gap="none" key={i} className="text-[13px] text-text-secondary py-[3px]">
-                  {entry}
-                </Stack>
-              ))}
-            </Stack>
-          )}
-        </Card>
+        {/* 5. Masquerade history — REMOVED 2026-09-17, and worth saying why
+            so it is not "restored" as a regression.
+
+            The card read localStorage `orgiq:masquerade:history`. NOTHING in
+            this repo has ever written that key — the only other references are
+            tenantCaches.ts's clear-list and its test — so the card was empty
+            for every role in every deployment, forever. Its empty state then
+            told the reader "Switch roles via the header menu to populate",
+            which is wrong twice: switching roles is not masquerading, and
+            nothing populates it either way.
+
+            It could not have worked even in principle: `masquerade()` is
+            exported from lib/auth.tsx and has no caller anywhere in the portal
+            — there is no UI that STARTS a masquerade, only MasqueradeMenu's
+            "Stop masquerade". So there was no event to record. Building a
+            masquerade-start flow to give this card something to show is a
+            feature, not an audit fix; removing dead UI is.
+
+            The key stays in tenantCaches.ts's clear-list on purpose: a device
+            that ran an older build could still hold bytes under it, and wiping
+            those on a tenant/user switch is exactly right. */}
 
         {/* 6. About */}
         <Card padding="md">

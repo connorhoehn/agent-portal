@@ -116,7 +116,7 @@ records what ⌘I shows.
   primitive, no line-numbered editor) are listed in
   `docs/ui-components-queue.md`; each has exactly one local frame.
 
-## Settings has no journey row — and that is where three bugs were living
+## Settings had no journey row — and that is where four bugs were living (CLOSED 2026-09-17)
 
 `/settings` is in every role's rail and is the one nav item the matrix has
 never covered. Nothing else in this repo judges it either: it is not a list
@@ -141,26 +141,35 @@ ordinary audit pass would, turned up four defects — three shipped in
    now — on the capability rather than a role list, so it tracks what the
    server actually enforces.
 
-**To close the gap**, add `settings | /settings | - | member,sme,program-owner,org-leader,hr-admin`
-to `MATRIX.txt` and write the five logs. Four of the five walks are already
-done and their screenshots are committed at
-`docs/orgiq-journeys/<role>/settings.jpg`; the hr-admin walk is the one
-remaining. Measured on the isolated stack at 1728x876, content column left
+**The gap is closed.** `settings | /settings | - | member,sme,program-owner,org-leader,hr-admin`
+is in `MATRIX.txt` and all five logs are written from live walks, screenshots
+included. Measured on the isolated stack at 1728x876, content column left
 200px, no horizontal scroll (scrollWidth 1728 = innerWidth), exactly one
 `<main>`, breadcrumb "System › Settings", console errors 0 for every role:
 
 | role | tabbable | all focusable | sections |
 |---|---|---|---|
-| member | 27 | yes | Appearance, Keyboard, Security, Masquerade history, About, Gateway |
-| sme | 26 | yes | same six |
-| program-owner | 27 | yes | same six |
-| org-leader | 35 | yes | the six **plus Scores** |
-| hr-admin | — | not yet walked | expected: as org-leader |
+| member | 25 | yes | Appearance, Keyboard, Security, About, Gateway |
+| sme | 26 | yes | same five |
+| program-owner | 27 | yes | same five |
+| org-leader | 35 | yes | the five **plus Scores** |
+| hr-admin | 37 | yes | the five **plus Scores** |
 
-The member/sme/program-owner counts are post-fix — they were higher before,
-by the Scores card's slider and Reset button, which is the defect above.
+A fifth defect surfaced while writing these logs and was removed rather than
+fixed: a **Masquerade history** card read localStorage
+`orgiq:masquerade:history`, which nothing in this repo has ever written — the
+only other references are `tenantCaches.ts`'s clear-list and its test. It could
+not have worked even in principle, because `masquerade()` in `lib/auth.tsx` has
+no caller anywhere in the portal: there is no UI that STARTS a masquerade, only
+`MasqueradeMenu`'s "Stop masquerade". So the card was empty for every role in
+every deployment while telling the reader "Switch roles via the header menu to
+populate" — wrong twice, since switching roles is not masquerading and nothing
+populates it either way. Building a masquerade-start flow to give the card
+something to show would be a feature; removing dead UI is the audit fix. The
+localStorage key stays in the clear-list on purpose — a device that ran an
+older build could still hold bytes under it.
 
-## The computer-lab matrix row understates who sees it
+## The computer-lab matrix row understated who sees it (CLOSED 2026-09-17)
 
 `MATRIX.txt` says `computer-lab | /admin/devbox | L | sme,hr-admin`, and the
 file's own header says a role not listed "must NOT see the surface". That is
@@ -178,9 +187,47 @@ Computers *switcher* as denied for that role. The rail item and the
 quick-switcher are two different affordances and both records are accurate —
 which is exactly why the stale row survived.
 
-The row should read `sme,hr-admin,org-leader,program-owner`. Widening it
-makes the validator require `computer-lab` logs for the two added roles, so
-the row and those two walks have to land together.
+The row reads `sme,hr-admin,org-leader,program-owner` now, and the two added
+roles were walked live rather than assumed. Both confirm the read tier is real:
+`GET /api/devbox/boxes` answers **200** for a role holding no `ManageDevbox` at
+all. org-leader sees all five boxes (fleet-wide per `initiative-scope.ts`);
+program-owner sees zero, correctly — `devbox-visibility.ts` scopes
+non-fleet-wide roles to computers they own or steward, and every seeded box is
+unattributed. One rough edge is queued rather than fixed, because it lives
+inside the library composite: with an empty fleet the lab says "Provision at
+least one computer" to a role that cannot provision, and with a non-empty fleet
+it auto-opens a shell pane that a read-only viewer can never attach (`error ·
+Forbidden`). `PaneKind` has no applicability rule, so a consumer cannot pick a
+pane per VIEWER any more than per COMPUTER.
+
+## Still uncovered, and one product decision that is not mine to take
+
+Two things this pass surfaced and deliberately did not resolve:
+
+- **`portal/src/pages/sprints` is named by no journey log.** The Sprints lens
+  is reached from the Initiatives surface (`/iq/sprints` lands on
+  `/iq/projects?lens=sprints`) rather than from a rail item of its own, so it
+  has no matrix row and its `pages:` directory is covered by nothing — which is
+  how a fabricated denominator lived there. `SprintDetail.tsx`'s "Points done"
+  bar took the library `ProgressBar`'s default `showRatio`, so it rendered
+  `{value}/{max}` where `max` is `Math.max(pointsTotal, 1)` — a clamp that
+  exists only so the bar's width math cannot divide by zero. An unpointed
+  sprint therefore read **"0/1"**, a denominator nobody estimated, a few lines
+  from the Money tab's StatCard reading "0 / 0" for the same sprint. Fixed the
+  way its own sibling `SprintCard.tsx` already does it (ratio off, true ratio
+  in `label`), and verified against a sprint created live with `pointsTotal: 0`:
+  it now reads "Points done 0/0". A matrix row for the lens is the durable fix.
+
+- **Should SMEs and program-owners see Codebases?** Still open, and still
+  recorded in `docs/nav-server-tier-decisions.md` rather than taken. The
+  evidence firmed up this pass: `agent-projects.ts`'s READ gate is
+  `readForRolesElseAction(['org-leader', 'hr-admin'], 'DispatchAgentRun')` and
+  **all five orgiq roles hold `DispatchAgentRun`**, while the nav and the route
+  both gate on `['hr-admin']` alone — and the route's own comment justifies
+  that with "their APIs require ManageDevbox", which is true of the WRITE path
+  and false of the read. So the portal is gated narrower than the API it reads,
+  which is exactly the shape that doc exists to adjudicate. Widening it is a
+  product call about who Codebases is *for*, so it stays a question.
 
 ## Reading the journey logs
 
