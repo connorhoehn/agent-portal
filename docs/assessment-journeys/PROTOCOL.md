@@ -106,3 +106,42 @@ never later. Name FILES, not the tenant directory, and leave shared children
 (the layout, `Text.tsx`, format modules) out — naming them puts every log
 back under a global rule. Find the entries from the route in
 `portal/src/App.tsx` and the page component's imports.
+
+## Measuring a surface from the console — two traps that invent defects
+
+Both of these produced a confident false positive during the 2026-09-17 sweep,
+each costing a near-miss "fix" to code that was already right. Neither is
+obvious from the numbers alone, so check for them before reporting a layout
+defect found by script rather than by eye.
+
+**1. `offsetParent !== null` is not visibility.** An element with
+`visibility: hidden` still has an `offsetParent`, so a naive tabbable-filter
+counts it — and since the browser correctly refuses to focus it, the walk then
+reports controls that "refuse focus". xyflow keeps a hidden node-measurement
+layer, so any graph surface trips this. Walk the ancestors for
+`visibility`/`display` as well:
+
+```js
+function reallyVisible(e) {
+  if (e.offsetParent === null) return false;
+  const cs = getComputedStyle(e);
+  if (cs.visibility !== 'visible' || cs.display === 'none') return false;
+  for (let a = e.parentElement; a; a = a.parentElement) {
+    const ac = getComputedStyle(a);
+    if (ac.visibility === 'hidden' || ac.display === 'none') return false;
+  }
+  return true;
+}
+```
+
+**2. `getBoundingClientRect()` inside an `overflow-x: auto` container reports
+UNCLIPPED positions.** A child scrolled out of view still reports the rect it
+would occupy if the container were infinitely wide, so comparing a child's
+`right` against its cell's `right` "proves" an overlap that the browser is in
+fact clipping. The assessor's desk Step column is the live example: its
+`WorkflowStepper` is a 160px `<ol class="overflow-x-auto">` whose six steps lay
+out to 454px, and the rects for steps 3-6 land on top of the next four columns
+— while the browser clips them and scrolls the one cell, exactly as that call
+site's comment says it does. Before concluding "this overflows onto its
+neighbour", walk up from the element and check whether any ancestor has
+`overflowX` of `auto`/`scroll`; if one does, it is clipping, not colliding.

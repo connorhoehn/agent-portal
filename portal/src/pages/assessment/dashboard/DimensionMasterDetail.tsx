@@ -40,6 +40,7 @@ import {
 import { DimensionCompactRailRow, DimensionRailRow } from './DimensionRow';
 import { DimensionDetailHeader } from './DimensionDetailHeader';
 import { LevelBadge } from './LevelBadge';
+import { useCapabilities } from '../../../lib/capabilities';
 
 const confidenceLabel = (confidence: string) => confidence.replace(/_/g, ' ');
 
@@ -91,6 +92,19 @@ function CertificationStatement({ dimension }: { dimension: Dimension }) {
  *  the tree, the link still goes to the folder so the reader lands
  *  somewhere true. */
 function MeasuredAgainst({ dimension }: { dimension: Dimension }) {
+  /**
+   * "Add one" is only an offer if you can add one.
+   *
+   * Editing a doc under Enterprise › standards needs `ManageKnowledge`, which
+   * the Cedar seeds permit to lead-assessor and program-lead — an `assessor`
+   * does not hold it. This pane is mounted behind `ViewAssessment`, which all
+   * three roles hold, so an assessor was being handed a live link promising an
+   * action that the destination's own `canEdit`/`canPublish` then refuses.
+   * The link stays, because an assessor CAN read the folder and that is worth
+   * reaching; only the verb changes.
+   */
+  const { can, ready } = useCapabilities();
+  const mayAdd = ready && can('ManageKnowledge');
   const standard = standardFor(dimension.id);
   const tree = useFetch<KnowledgeTreeResponse>('/api/assessment/knowledge/tree');
   const nodes = (tree.data?.sections ?? []).flatMap((s) => s.nodes);
@@ -106,7 +120,7 @@ function MeasuredAgainst({ dimension }: { dimension: Dimension }) {
           items={[
             'This dimension is scored on the rubric alone.',
             <RouterLink key="folder" to={enterpriseDocPath(STANDARDS_FOLDER_ID)} className="text-primary hover:underline">
-              Add one under Enterprise › standards →
+              {mayAdd ? 'Add one under Enterprise › standards →' : 'See Enterprise › standards →'}
             </RouterLink>,
           ]}
         />
