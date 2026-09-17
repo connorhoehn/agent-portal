@@ -17,11 +17,7 @@ import { ComputerLab } from '@connorhoehnslalom/ui-components/compute';
 import { useCapabilities } from '../../lib/capabilities';
 import { useSession } from '../../lib/auth';
 import { LocalMachinesLab } from '../local-compute/LocalMachinesLab';
-
-/** Roles the server lets read the fleet without ManageDevbox — mirrors the
- *  /api/devbox mount in middleware/src/index.ts. Keep the two in step: a
- *  wider list here is a door onto a 403, a narrower one hides real access. */
-const FLEET_READ_ROLES = ['org-leader', 'hr-admin', 'program-owner', 'admin'];
+import { canOpenComputerLab } from '../../lib/devboxAccess';
 
 export default function DevboxPage() {
   const { can, ready } = useCapabilities();
@@ -38,7 +34,7 @@ export default function DevboxPage() {
   // fetch, so a leader who can legitimately see the fleet (the server's read
   // tier, and FLEET_WIDE_ROLES in devbox-visibility.ts) was shown a permission
   // wall instead of their computers. Writes are still refused by the API.
-  const canRead = can('ManageDevbox') || FLEET_READ_ROLES.includes(session?.role ?? '');
+  const canRead = canOpenComputerLab(can('ManageDevbox'), session?.role);
   if (ready && !canRead) {
     return (
       <ErrorState

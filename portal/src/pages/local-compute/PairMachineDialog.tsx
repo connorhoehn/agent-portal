@@ -56,6 +56,12 @@ export function PairMachineDialog({ open, onClose, onPaired }: { open: boolean; 
   // Step state: minted → claimed (a machine took the code) → connected (its
   // worker announced), at which point the dialog closes itself.
   const [claimed, setClaimed] = useState<{ nodeId: string | null; label: string | null; at: number } | null>(null);
+  // The presence the matched node is REPORTING while we wait. The dialog was
+  // already reading it to decide whether to close, then throwing it away — so
+  // a machine that had registered but was not announcing looked exactly like
+  // one that had never run the command, and the wait text guessed at the
+  // former when the truth was knowable.
+  const [seenStatus, setSeenStatus] = useState<NodeLite['presence']['status'] | null>(null);
   // Ticks while step 2 is open so the wait is visibly alive. A worker
   // announces every 25s, so the first one can legitimately be twenty-odd
   // seconds after the claim — with a bare spinner that reads as a hang, which
@@ -82,7 +88,7 @@ export function PairMachineDialog({ open, onClose, onPaired }: { open: boolean; 
   // Mint on open, forget on close — a code shown again later may already
   // have expired, and a stale code in a dialog is worse than no dialog.
   useEffect(() => {
-    if (open) { void mint(); } else { setPairing(null); setError(null); setClaimed(null); }
+    if (open) { void mint(); } else { setPairing(null); setError(null); setClaimed(null); setSeenStatus(null); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
@@ -140,6 +146,7 @@ export function PairMachineDialog({ open, onClose, onPaired }: { open: boolean; 
       const node = (claimed.nodeId ? nodes.find((n) => n.id === claimed.nodeId) : undefined)
         ?? (claimed.label ? nodes.find((n) => n.label === claimed.label) : undefined)
         ?? nodes.find((n) => !knownIdsRef.current.has(n.id));
+      setSeenStatus(node ? node.presence.status : null);
       if (node && node.presence.status === 'connected') {
         toast?.toast(`${node.label} is connected`, { type: 'success' });
         onPairedRef.current?.();
@@ -217,16 +224,28 @@ export function PairMachineDialog({ open, onClose, onPaired }: { open: boolean; 
               size="xs"
               items={[
                 'The worker reads the token pairing wrote, announces the models and job kinds it can run, and heartbeats — that is what turns the row from offline to connected',
-                'JOB_KINDS and LOCAL_MODELS env vars narrow what it advertises; switch on “Accepting work” in the row',
-                'This dialog closes itself when the machine reports connected',
+                'It announces as soon as it starts, whether or not “Accepting work” is on — being present and taking jobs are separate',
+                'This dialog closes itself the moment the machine reports in; switch on “Accepting work” in the row afterwards',
+                'JOB_KINDS and LOCAL_MODELS env vars narrow what it advertises',
               ]}
             />
-            <LoadingState label={`Waiting for the worker to announce… ${waitedS}s`} />
+            <LoadingState
+              label={seenStatus && seenStatus !== 'connected'
+                ? `The machine is registered but has not announced yet… ${waitedS}s`
+                : `Waiting for the worker to announce… ${waitedS}s`}
+            />
             {waitedS >= 20 && (
               <Banner variant="warning">
                 <Stack gap="xs">
+                  {/* Two different failures wore one sentence. `seenStatus`
+                      says which: a node in the list has registered — the
+                      command IS running — and the only thing missing is the
+                      announce, which is a different problem with a different
+                      fix from "the command never started". */}
                   <Inline as="span" gap="none" wrap>
-                    Still nothing after {waitedS}s. A worker announces every 25 seconds, so a short wait is normal — but if this keeps counting, check that the command above is running on that machine, in this repo checkout, and that it prints no error. A middleware restart also clears pairings in dev, in which case mint a new code.
+                    {seenStatus && seenStatus !== 'connected'
+                      ? `This machine has registered — so the worker is running and reachable — but it has not announced its presence in ${waitedS}s. Workers built before this was fixed only announced once "Accepting work" was switched on, which could not happen while this dialog covered the switch. Close this, flip the switch in the row, and restart the worker to pick up the fix.`
+                      : `Still nothing after ${waitedS}s. A worker announces every 25 seconds, so a short wait is normal — but if this keeps counting, check that the command above is running on that machine, in this repo checkout, and that it prints no error. A middleware restart also clears pairings in dev, in which case mint a new code.`}
                   </Inline>
                   <Inline gap="sm">
                     <Button variant="secondary" size="sm" onClick={() => { void mint(); }}>New code</Button>

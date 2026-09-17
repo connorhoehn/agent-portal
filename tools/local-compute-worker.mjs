@@ -930,6 +930,29 @@ const config = readConfig();
 startNodeLogShipping(config);
 const reg = await register(config);
 
+// PRESENCE STARTS BEFORE THE PAUSE WAIT, and the order is the whole fix.
+//
+// `/register` records capabilities; only `/announce` moves `lastSeenAt`, which
+// is the sole input to `statusOfNode`. Starting the presence loop after
+// `waitForAcceptJobs` therefore meant a paired-but-not-switched-on worker
+// announced NOTHING: it sat re-registering on a poll tick while the portal
+// read it as `offline`, because from the server's side nothing had ever
+// arrived. That deadlocked the documented first run. The pairing dialog waits
+// for `presence.status === 'connected'` before closing, and it is a MODAL —
+// so it covered the row holding the "Accepting work" switch while telling the
+// user it would close once the machine reported in, and the worker told the
+// user it would pick the switch up on its own. Both sides were waiting for the
+// other, and the one control that could break the tie was underneath the
+// dialog.
+//
+// Being present and accepting work are two different facts — the same split
+// this codebase makes everywhere else between "can we reach it" and "what does
+// it say". A paired, running, reachable machine IS connected; it just is not
+// taking jobs. Announcing while paused is also what the idle case already
+// does (see startPresenceLoop: an idle-but-running worker announces an empty
+// session list), so this makes the paused case consistent rather than special.
+startPresenceLoop(config);
+
 if (!reg.acceptJobs) {
   await waitForAcceptJobs(config, 'this machine is paired but not switched on');
 }
@@ -941,5 +964,5 @@ if (reg.jobKinds.length === 0) {
 
 log.info(`polling for work every ${POLL_INTERVAL_S}s · announcing presence every ${Math.max(5, Math.min(heartbeatIntervalS, 25))}s`);
 log.info('Ctrl-C to stop. Anything claimed is handed back to the fleet if this worker dies mid-run.');
-startPresenceLoop(config);
+// (presence is already running — started above, before the pause wait)
 await loop(config);

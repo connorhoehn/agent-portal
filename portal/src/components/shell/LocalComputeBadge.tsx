@@ -18,6 +18,11 @@ import {
   type MachineSession,
 } from '@connorhoehnslalom/ui-components/compute';
 import { useFetch } from '../../hooks/useFetch';
+import { useCapabilities } from '../../lib/capabilities';
+import { useSession } from '../../lib/auth';
+import {
+  COMPUTER_LAB_PATH, LOCAL_COMPUTE_PATH, canOpenComputerLab,
+} from '../../lib/devboxAccess';
 
 interface WireSession {
   sessionId: string;
@@ -71,6 +76,8 @@ function toMachineNode(node: WireNode): MachineNode {
 
 export function LocalComputeBadge() {
   const navigate = useNavigate();
+  const { can, ready } = useCapabilities();
+  const { session } = useSession();
   // 401/403 (signed out, or a role without the read floor) surfaces as
   // `error` and renders nothing — the header never nags about a feature the
   // session can't reach.
@@ -80,7 +87,21 @@ export function LocalComputeBadge() {
   return (
     <MachinePresenceMenu
       nodes={nodes}
-      onOpenLab={() => navigate('/iq/local-compute')}
+      // The library renders this action as "Open Computer Lab", and it went to
+      // /iq/local-compute — a different page. Standing on Local compute (where
+      // you are when you have just paired a machine) clicking it did nothing
+      // at all, because it navigated to the route already open.
+      //
+      // Computer Lab is where the machine belongs: LocalMachinesLab renders
+      // the paired laptops beside the microVM fleet, with presence, what each
+      // is running, and a tailable log. Fall back to Local compute only for a
+      // session that cannot open the Lab, so the action still goes somewhere
+      // real rather than bouncing off RequireRole onto HomeRedirect.
+      onOpenLab={() => navigate(
+        canOpenComputerLab(ready && can('ManageDevbox'), session?.role)
+          ? COMPUTER_LAB_PATH
+          : LOCAL_COMPUTE_PATH,
+      )}
       data-testid="local-compute-badge"
     />
   );

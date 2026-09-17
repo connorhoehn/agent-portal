@@ -193,6 +193,25 @@ is now a contract:
   `GET /api/local-compute/pair/:code` (owner-scoped; `{claimed, claimedAt,
   nodeId}`) every 2.5s and advances to the worker step the moment a machine
   claims, then closes itself when that machine's presence reads `connected`.
+- **Presence and acceptance are separate facts, and the worker announces
+  regardless of the switch.** `/register` records capabilities; only
+  `/announce` moves `last_seen`, which is the sole input to `statusOfNode`.
+  The worker used to start its presence loop *after* `waitForAcceptJobs(...)`
+  — a loop that does not return until the owner switches "Accepting work" on
+  — so a paired-but-not-switched-on machine announced nothing and the portal
+  read it as `offline`. That deadlocked the documented first run in a way
+  neither side could break out of: the pairing dialog waits for
+  `connected` before closing and is a MODAL, so it covered the row holding the
+  switch while promising to close once the machine reported in, and the worker
+  told the user it would pick that switch up on its own. A paired, running,
+  reachable machine IS connected; it simply is not taking jobs. The presence
+  loop therefore starts before the pause wait, which also makes the paused case
+  consistent with the idle case (an idle-but-running worker already announced
+  an empty session list). Pinned by
+  `middleware/src/routes/__tests__/local-compute-worker-contract.test.ts`,
+  which anchors on the STARTUP call by its message — there is a second
+  `waitForAcceptJobs` in the claim loop, earlier in the file, and a bare
+  `indexOf` measures the wrong one.
 - **Presence is acknowledged, never assumed.** The worker checks every
   announce/heartbeat response: a 401/403 first re-reads the token file (a
   second pairing of the same machine rotates the token under a running
