@@ -11,9 +11,11 @@ import {
   type SubNavItem,
   SkipLink,
   type Command,
-  activeNavItemClassName,
-  inactiveNavItemClassName,
 } from '@connorhoehnslalom/ui-components/shared';
+
+// Navigation item class names (moved from ui-components)
+const activeNavItemClassName = 'font-semibold text-foreground';
+const inactiveNavItemClassName = 'text-muted-foreground hover:text-foreground';
 import { useFetch } from '../../hooks/useFetch';
 import { useSession } from '../../lib/auth';
 import { Breadcrumbs } from './Breadcrumbs';
