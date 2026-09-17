@@ -35,6 +35,7 @@ import {
   type ProjectSortKey,
 } from './projects/projectFormat';
 import type { ProjectSummary } from './projects/types';
+import { useCapabilities } from '../lib/capabilities';
 
 // The program dashboard: every initiative with its people, its live agent
 // activity, its delivery progress and its money — the SAFe-style "one wall for
@@ -58,6 +59,11 @@ const POLL_MS = 15_000;
 const SEARCH_DEBOUNCE_MS = 250;
 
 function ProjectsPage() {
+  // `/iq/projects` carries no requireRoles, so every signed-in role lands here
+  // — but ManageIngest is hr-admin's alone, and the empty state used to tell
+  // all five roles to go point Ingestion at a source and run it.
+  const { can: canDo, ready: capsReady } = useCapabilities();
+  const canIngest = capsReady && canDo('ManageIngest');
   const navigate = useNavigate();
   const { session } = useSession();
   // ?lens= — the page's two zooms on the same program: the initiatives wall
@@ -259,7 +265,15 @@ function ProjectsPage() {
             onChange={onSearchChange}
             placeholder="Name, owner, SME, repo…"
             aria-label="Search initiatives"
-            className="w-[190px]"
+            /* 218, not 190 — same defect Library's box had. The hint names the
+               four things this box searches and ends in the author's own "and
+               more" ellipsis; at 190 the field rendered "Name, owner, SME, rep",
+               eating "repo" AND the ellipsis, so the cut read as a bug and the
+               last searchable field was unreadable. Measured in the page: 148px
+               of text + 32px left padding for the magnifier + 28px right for the
+               clear button + 2px border = 210 needed. The other eight SearchInput
+               call sites were checked the same way and all have headroom. */
+            className="w-[218px]"
             inputClassName="h-7 text-[12px]"
           />
         </ToolbarGroup>
@@ -291,7 +305,9 @@ function ProjectsPage() {
             return (
               <EmptyState
                 title="No initiatives yet"
-                description="An initiative is a program with an owner, epics, stories and a budget. Nothing creates one by hand: they are built by the graph-builder agent from documents you ingest, so the way to fill this page is to point Ingestion at a source and run it."
+                description={canIngest
+                  ? 'An initiative is a program with an owner, epics, stories and a budget. Nothing creates one by hand: they are built by the graph-builder agent from documents you ingest, so the way to fill this page is to point Ingestion at a source and run it.'
+                  : 'An initiative is a program with an owner, epics, stories and a budget. Nothing creates one by hand: they are built by the graph-builder agent from documents someone ingests. Running ingestion needs the ManageIngest capability, which an HR admin holds — this page fills itself once they have pointed it at a source.'}
               />
             );
           }

@@ -1,6 +1,7 @@
 import {
   EmptyState, EntityCell, ErrorState, Inline, MetaLine, Sparkline, Stack,
 } from '@connorhoehnslalom/ui-components/shared';
+import { useCapabilities } from '../../lib/capabilities';
 
 export interface HistorySample {
   ts: string;
@@ -26,6 +27,8 @@ export interface TrendLineProps {
 }
 
 export function TrendLine({ history, degraded }: TrendLineProps) {
+  const { can, ready } = useCapabilities();
+  const canRunScoring = ready && can('ManageIngest');
   if (degraded) {
     return (
       <ErrorState
@@ -40,10 +43,17 @@ export function TrendLine({ history, degraded }: TrendLineProps) {
   }
 
   if (history === null || history.samples.length === 0) {
+    // The props doc above diagnoses this exact trap — "the scoring agent is
+    // ManageIngest-gated, so for most readers it is a chore they cannot even
+    // do" — but only the `degraded` branch was ever fixed for it. This is the
+    // genuinely-empty branch, and it was still handing out the chore. Scores is
+    // visible to org-leader and hr-admin; ManageIngest is hr-admin's alone.
     return (
       <EmptyState
         title="No trend data"
-        description="Run the scoring agent to start tracking scores over time."
+        description={canRunScoring
+          ? 'Run the scoring agent to start tracking scores over time.'
+          : 'Nothing has been scored yet, so there is no history to plot. An HR admin can run the scoring agent to start it.'}
       />
     );
   }
