@@ -12,7 +12,17 @@ const GATEWAY_URL: string =
   (import.meta as unknown as { env?: Record<string, string | undefined> })
     .env?.VITE_GATEWAY_URL ?? 'http://localhost:8080';
 
-const client = new GatewayProxyClient({ gatewayUrl: GATEWAY_URL });
+// The bound `fetch` is load-bearing — see the long note in hooks/useGatewayInfo.
+// The library defaults to `globalThis.fetch`, keeps it as a class field and
+// calls it as `this.fetchImpl(...)`, which re-binds `this` away from `window`.
+// In a browser that throws before the request is sent, so this dot had been
+// painting red on every page of every deployment while nothing was wrong with
+// any gateway. `fetch` is the library's own injection seam; the underlying bug
+// is queued in docs/ui-components-queue.md.
+const client = new GatewayProxyClient({
+  gatewayUrl: GATEWAY_URL,
+  fetch: globalThis.fetch.bind(globalThis),
+});
 
 type HttpStatus = 'unknown' | 'healthy' | 'unhealthy';
 

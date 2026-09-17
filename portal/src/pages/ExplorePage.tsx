@@ -715,7 +715,14 @@ function ExplorePage() {
             // edges of a bare text run — "56people · 131edges". Non-breaking
             // spaces survive it.
             ? <><b>{meGraph.nodes.filter(n => n.kind !== 'skill_domain').length}</b>&nbsp;nodes&nbsp;·&nbsp;<b>{meGraph.edges.filter(e => e.type !== 'belongs_to').length}</b>&nbsp;{entityFilter}&nbsp;edges</>
-            : <><b>{visibleNodes.length}</b>{showsPartialGraph ? ` / ${trueTotal}` : ''}&nbsp;people{isCapped ? ' (capped)' : ''}&nbsp;·&nbsp;<b>{filteredEdges.length}</b>{isEntityFiltered ? ` ${entityFilter}` : ''}&nbsp;edges</>
+            // The three interpolations below carry \u00a0, not a plain space, for
+            // the same reason the literals around them carry &nbsp;: this line
+            // renders inside `T`, which is `Inline as="span"` and therefore
+            // `display:flex`. A text run next to an element child becomes an
+            // anonymous flex item and loses its LEADING whitespace, so the
+            // static text was already spelled with &nbsp; — these conditional
+            // branches were simply missed, and read "8/ 56 people" on screen.
+            : <><b>{visibleNodes.length}</b>{showsPartialGraph ? `\u00a0/ ${trueTotal}` : ''}&nbsp;people{isCapped ? '\u00a0(capped)' : ''}&nbsp;·&nbsp;<b>{filteredEdges.length}</b>{isEntityFiltered ? `\u00a0${entityFilter}` : ''}&nbsp;edges</>
           }
         </T>
         {isFiltered && (

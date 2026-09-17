@@ -259,7 +259,13 @@ export function SettingsPage() {
           />
         </Card>
 
-        {/* 7. Gateway (websocket-gateway via @connorhoehnslalom/realtime-modules) */}
+        {/* 7. Gateway (websocket-gateway via @connorhoehnslalom/realtime-modules)
+
+            Four dashes and a raw exception string is what this panel used to
+            show, in every deployment, forever — see useGatewayInfo for the two
+            reasons stacked behind that. It now says which of three things is
+            true, because they call for different actions: BFF-only (nothing to
+            do), live (here are the numbers), or not answering (go look). */}
         <Card padding="md">
           <SectionLabel as="div" className="mb-1">Gateway</SectionLabel>
           <Divider spacing="none" className="mb-1" />
@@ -269,75 +275,76 @@ export function SettingsPage() {
               <T className="text-[13px] text-text-secondary font-mono">{gateway.gatewayUrl}</T>
             }
           />
-          <Divider spacing="none" />
-          <SettingRow
-            title="Cluster nodes"
-            control={
-              <T className="text-[13px] text-text-secondary font-mono">
-                {gateway.error
-                  ? '—'
-                  : gateway.cluster
-                    ? String(gateway.cluster.totalNodes)
-                    : '…'}
-              </T>
-            }
-          />
-          <Divider spacing="none" />
-          <SettingRow
-            title="Active connections"
-            control={
-              <T className="text-[13px] text-text-secondary font-mono">
-                {gateway.error
-                  ? '—'
-                  : gateway.cluster
-                    ? String(gateway.cluster.totalConnections)
-                    : '…'}
-              </T>
-            }
-          />
-          <Divider spacing="none" />
-          <SettingRow
-            title="Uptime"
-            control={
-              <T className="text-[13px] text-text-secondary font-mono">
-                {gateway.error
-                  ? '—'
-                  : gateway.metrics
-                    ? formatUptime(gateway.metrics.uptime)
-                    : '…'}
-              </T>
-            }
-          />
-          <Divider spacing="none" />
-          <SettingRow
-            title="Redis"
-            control={
-              <T
-                className={`text-[13px] font-mono ${
-                  gateway.metrics
-                    ? gateway.metrics.redis.status === 'connected'
-                      ? 'text-success'
-                      : 'text-warning'
-                    : 'text-text-tertiary'
-                }`}
-              >
-                {gateway.error
-                  ? '—'
-                  : gateway.metrics
-                    ? gateway.metrics.redis.status
-                    : '…'}
-              </T>
-            }
-          />
-          {gateway.error && (
-            <T className="block text-[11px] text-text-tertiary pt-1.5">
-              {gateway.error}
-            </T>
+          {gateway.mode === 'bff-only' ? (
+            <>
+              <Divider spacing="none" />
+              <SettingRow
+                title="Mode"
+                description="No standalone websocket gateway in this deployment — that endpoint is the middleware, which answers but implements no cluster API. Live updates ride server-sent events from it instead, so nothing here is missing."
+                control={
+                  <T className="text-[13px] text-text-secondary font-mono">BFF-only</T>
+                }
+              />
+            </>
+          ) : (
+            <>
+              <Divider spacing="none" />
+              <SettingRow
+                title="Cluster nodes"
+                control={<GatewayValue gateway={gateway} value={gateway.cluster && String(gateway.cluster.totalNodes)} />}
+              />
+              <Divider spacing="none" />
+              <SettingRow
+                title="Active connections"
+                control={<GatewayValue gateway={gateway} value={gateway.cluster && String(gateway.cluster.totalConnections)} />}
+              />
+              <Divider spacing="none" />
+              <SettingRow
+                title="Uptime"
+                control={<GatewayValue gateway={gateway} value={gateway.metrics && formatUptime(gateway.metrics.uptime)} />}
+              />
+              <Divider spacing="none" />
+              <SettingRow
+                title="Redis"
+                control={
+                  <T
+                    className={`text-[13px] font-mono ${
+                      gateway.metrics
+                        ? gateway.metrics.redis.status === 'connected'
+                          ? 'text-success'
+                          : 'text-warning'
+                        : 'text-text-tertiary'
+                    }`}
+                  >
+                    {gateway.error ? '—' : gateway.metrics ? gateway.metrics.redis.status : '…'}
+                  </T>
+                }
+              />
+              {gateway.error && (
+                <T className="block text-[11px] text-text-tertiary pt-1.5">
+                  {gateway.error}
+                </T>
+              )}
+            </>
           )}
         </Card>
 
       </Stack>
     </PageSection>
+  );
+}
+
+/**
+ * One gateway reading. Three states and they are not interchangeable: a value,
+ * an ellipsis while the first probe is still in flight, and a dash once we
+ * know we cannot answer. Drawing "…" forever was the old behaviour's other
+ * half — a panel that looked like it was still loading an hour later.
+ */
+function GatewayValue({ gateway, value }: { gateway: { error: string | null }; value: string | null }) {
+  return (
+    <T className="text-[13px] text-text-secondary font-mono">
+      {gateway.error ? '—' : (value ?? '…')}
+    </T>
   );
 }
 
