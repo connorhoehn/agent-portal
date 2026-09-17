@@ -1,23 +1,23 @@
 // Pure formatting/parsing logic for AgentDetailPage, split out so it can be
 // unit-tested without mounting the page.
 import type { ChipTone, LogLevel } from '@connorhoehnslalom/ui-components/shared';
-import { parsePgTimestampAsUtc } from '../../lib/pgTimestamp.ts';
 import { STATUS_TONE } from '../agentFleetRows.ts';
+import { relativeTime } from '../../lib/relativeTime.ts';
 
 export function ms(n: number | null | undefined): string {
   if (n == null || n === 0) return '—';
   return n < 1000 ? `${Math.round(n)} ms` : `${(n / 1000).toFixed(1)} s`;
 }
 
-export function when(iso: string | null): string {
+export function when(iso: string | null | undefined): string {
+  // Delegates to lib/relativeTime rather than laddering here. Every copy of
+  // this ladder in the portal had drifted differently — round vs floor at the
+  // minute boundary, "just now" under 1 minute vs under 2, and past a week
+  // some counted to "100d ago" forever while the shared one switches to a
+  // date — so one instant read differently depending which page you were on.
+  // The null sentinel below stays because callers here depend on it.
   if (!iso) return '—';
-  const d = parsePgTimestampAsUtc(iso);
-  if (d === null) return iso;
-  const mins = Math.round((Date.now() - d.getTime()) / 60000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
-  if (mins < 1440) return `${Math.round(mins / 60)}h ago`;
-  return d.toLocaleString();
+  return relativeTime(iso);
 }
 
 /**

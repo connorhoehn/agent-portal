@@ -14,7 +14,7 @@ import {
 } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { toastError, toastSuccess, toastPending } from '../../lib/toastStore';
-import { pgTimestampMs } from '../../lib/pgTimestamp.ts';
+import { relativeTime } from '../../lib/relativeTime';
 
 interface OrgRef { login: string; description: string | null }
 interface RepoRef { owner: string; name: string; fullName: string; pushedAt?: string | null }
@@ -36,20 +36,13 @@ interface Props {
 }
 
 function ago(iso: string | null | undefined): string | null {
+  // Delegates to lib/relativeTime rather than laddering here — see the note
+  // in budgetsFormat.ts for why every local copy had drifted apart.
+  // Null stays null: the caller drops the whole line rather than printing a
+  // dash. Past a week this now reads as a date instead of counting to
+  // "800d ago", which is the right shape for a repo's last push.
   if (!iso) return null;
-  // Through lib/pgTimestamp, not a bare `new Date(iso)`. Measured rather than
-  // assumed: V8 accepts the raw wire shape `2026-09-08 08:19:23+00`, so this
-  // was not broken; it is the half-normalised `…T…+00` that is Invalid Date.
-  // Routed through the shared parser anyway for the reason pgTimestamp.ts's
-  // own header gives: "one question answered by two functions is how the two
-  // answers drift apart."
-  const mins = Math.round((Date.now() - pgTimestampMs(iso)) / 60000);
-  if (Number.isNaN(mins)) return null;
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
-  if (mins < 1440) return `${Math.round(mins / 60)}h ago`;
-  const days = Math.round(mins / 1440);
-  return days < 365 ? `${days}d ago` : `${Math.round(days / 365)}y ago`;
+  return relativeTime(iso) || null;
 }
 
 function describeFailure(status: number, body: { error?: string }): string {

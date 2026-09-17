@@ -22,7 +22,7 @@ import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
 import { useNavigate } from 'react-router';
 import { Card, Chip, Inline, ProgressBar, Stack } from '@connorhoehnslalom/ui-components/shared';
 import type { JudgeNodeData } from '../types.js';
-import { pgTimestampMs } from '../../../lib/pgTimestamp.ts';
+import { relativeTimeSeconds } from '../../../lib/relativeTime';
 
 export type JudgeNodeType = Node<JudgeNodeData & Record<string, unknown>, 'judgeNode'>;
 
@@ -96,28 +96,20 @@ const DIMENSIONS: Array<[key: string, color: string]> = [
 ];
 const EXTRA_COLOR = '#64748b';
 
-function formatRelative(iso: string | undefined, now: number): string {
+function formatRelative(iso: string | undefined): string {
+  // relativeTimeSeconds, which is the shared helper written for exactly this:
+  // "where 'just now' is too coarse to show that a poll is live". It reads
+  // Date.now() itself, so the ticking state below still drives the refresh —
+  // it just no longer has to be threaded through as an argument.
   if (!iso) return '—';
-  // Through lib/pgTimestamp, not a bare Date.parse. Measured rather than
-  // assumed: V8 DOES accept the raw wire shape `2026-09-08 08:19:23+00`, so
-  // this was not broken. What it does not accept is the half-normalised
-  // `2026-09-08T08:19:23+00` — a space swapped for a T without also widening
-  // `+00` to `+00:00` — which is Invalid Date. The shared parser handles both
-  // plus `…Z`; a bare parse handles only some, and pgTimestamp.ts's own header
-  // gives the reason to route through it anyway: "one question answered by two
-  // functions is how the two answers drift apart."
-  const t = pgTimestampMs(iso);
-  if (Number.isNaN(t)) return '—';
-  const diff = Math.max(0, Math.floor((now - t) / 1000));
-  if (diff < 1) return 'just now';
-  if (diff < 60) return `${diff}s ago`;
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-  return `${Math.floor(diff / 3600)}h ago`;
+  return relativeTimeSeconds(iso) || '—';
 }
 
 function JudgeNodeImpl({ data }: NodeProps<JudgeNodeType>) {
-  // Ticking 'now' so "Xs ago" stays fresh without re-rendering every event.
-  const [now, setNow] = useState<number>(() => Date.now());
+  // A ticking counter so "Xs ago" stays fresh without re-rendering on every
+  // event. The value itself is unused — re-rendering is the whole point, and
+  // formatRelative reads the clock itself.
+  const [, setNow] = useState<number>(() => Date.now());
   useEffect(() => {
     const id = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(id);
@@ -161,7 +153,7 @@ function JudgeNodeImpl({ data }: NodeProps<JudgeNodeType>) {
           </Inline>
         </Inline>
         <Inline as="span" gap="none" className="text-[10px] text-text-tertiary">
-          {formatRelative(data.lastJudgedAt, now)}
+          {formatRelative(data.lastJudgedAt)}
         </Inline>
       </Inline>
 

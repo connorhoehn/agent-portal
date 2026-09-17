@@ -49,7 +49,6 @@ import { RowEmpty } from './ReadState';
 import { parsePgTimestampAsUtc } from '../../lib/pgTimestamp.ts';
 import { severityTone } from '../../lib/statusTone';
 import { WindowPicker, useWindowUrlState } from './WindowPicker';
-import { pgTimestampMs } from '../../lib/pgTimestamp.ts';
 
 // ── API contracts (mirrors middleware/src/routes/oncall.ts) ────────────────
 
@@ -611,24 +610,9 @@ function shortTime(iso: string, hours: number): string {
 }
 
 function timeAgo(iso: string): string {
-  // Through lib/pgTimestamp, not a bare Date.parse. Measured rather than
-  // assumed: V8 DOES accept the raw wire shape `2026-09-08 08:19:23+00`, so
-  // this was not broken. What it does not accept is the half-normalised
-  // `2026-09-08T08:19:23+00` — a space swapped for a T without also widening
-  // `+00` to `+00:00` — which is Invalid Date. The shared parser handles both
-  // plus `…Z`; a bare parse handles only some, and pgTimestamp.ts's own header
-  // gives the reason to route through it anyway: "one question answered by two
-  // functions is how the two answers drift apart."
-  const t = pgTimestampMs(iso);
-  if (!Number.isFinite(t)) return '—';
-  const dt = Date.now() - t;
-  const min = Math.floor(dt / 60000);
-  if (min < 1) return 'just now';
-  if (min < 60) return `${min}m ago`;
-  const hr = Math.floor(min / 60);
-  if (hr < 24) return `${hr}h ago`;
-  const days = Math.floor(hr / 24);
-  return `${days}d ago`;
+  // Delegates to lib/relativeTime rather than laddering here — see the note
+  // in budgetsFormat.ts for why every local copy had drifted apart.
+  return relativeTime(iso) || '—';
 }
 
 export default OnCallPage;

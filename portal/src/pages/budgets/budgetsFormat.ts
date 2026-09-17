@@ -4,12 +4,12 @@
 // mounting a page.
 
 import { DEVBOX_MODELS } from '../../lib/devboxModels.ts';
-import { parsePgTimestampAsUtc } from '../../lib/pgTimestamp.ts';
 import type { BudgetRow, InitiativeOption } from './types';
 
 // Promoted to lib/format.ts — the app-wide canonical `usd`. Re-exported here
 // so existing `from './budgetsFormat'` imports keep working.
 import { usd } from '../../lib/format.ts';
+import { relativeTime } from '../../lib/relativeTime.ts';
 export { usd };
 
 /** Bedrock inference-profile id → the short label the rest of the app uses. */
@@ -19,14 +19,14 @@ export function modelLabelFor(id: string): string {
 
 /** Aurora stamps carry a `+00` offset ISO 8601 does not allow — shared parser. */
 export function ago(iso: string | null): string {
+  // Delegates to lib/relativeTime rather than laddering here. Every copy of
+  // this ladder in the portal had drifted differently — round vs floor at the
+  // minute boundary, "just now" under 1 minute vs under 2, and past a week
+  // some counted to "100d ago" forever while the shared one switches to a
+  // date — so one instant read differently depending which page you were on.
+  // The null sentinel below stays because callers here depend on it.
   if (!iso) return 'never';
-  const d = parsePgTimestampAsUtc(iso);
-  if (d === null) return '—';
-  const mins = Math.round((Date.now() - d.getTime()) / 60000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
-  if (mins < 1440) return `${Math.round(mins / 60)}h ago`;
-  return `${Math.round(mins / 1440)}d ago`;
+  return relativeTime(iso);
 }
 
 // ─── The maintenance floor ────────────────────────────────────────────────

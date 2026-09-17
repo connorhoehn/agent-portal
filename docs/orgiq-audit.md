@@ -250,7 +250,7 @@ that HAD a row, used `UnavailableNotice` in three places. The audited page got
 the treatment and its unaudited siblings did not, which is the argument for
 coverage stated as plainly as it ever gets.
 
-## Open: six relative-time ladders that disagree with the shared one
+## Six relative-time ladders that disagreed with the shared one (CLOSED 2026-09-17)
 
 Found 2026-09-17 while sweeping timestamps. `portal/src/lib/relativeTime.ts` is
 the canonical "2h ago" formatter, and six surfaces carry their own copy:
@@ -275,11 +275,32 @@ differently depending which page you are on:
 - past a week the shared helper switches to a date ("Jun 9, 2026") while the
   local ones keep counting — "100d ago", indefinitely.
 
-Not fixed in that pass because swapping the wording changes what six surfaces
-render, and a visual check on all six is more than one pass could honestly
-carry. It is a real "two surfaces disagree about one fact" case, not just
-duplication, which is why it is written down rather than left in a commit
-message.
+**Closed.** All six now delegate, each keeping the null sentinel its own
+callers depend on — `'never'` in budgets and knowledge, `'—'` in agent-detail
+and the judge node, `null` in RepoDiscovery (its caller drops the whole line
+rather than print a dash). Two details made this more than a find-and-replace,
+and are why it took a pass of its own:
+
+- `JudgeNode` needed SECOND resolution and threaded a ticking `now` through as
+  an argument. `relativeTimeSeconds` is the shared helper written for exactly
+  that case ("where 'just now' is too coarse to show that a poll is live") and
+  it reads the clock itself, so the ticking state stays as the re-render
+  trigger and the argument goes away.
+- `RepoDiscovery` had a years tier the shared helper lacks. Past a week the
+  shared one switches to a date, which is the better shape for a repo's last
+  push anyway — "Sep 8, 2024" beats "800d ago".
+
+`pages/assessment/secondaryFormat.ts` is deliberately NOT consolidated: its own
+comment records that it mirrors the SOURCE app's helper rather than this
+portal's, and the assessment tenant is a separate product that happens to share
+a BFF. Changing it would make this repo's copy drift from the app it is
+supposed to match.
+
+Verified live rather than assumed — budgets reads "24m ago / 1h ago / 1d ago"
+with `never` intact and readable local-time tooltips, knowledge reads
+"5h ago / 6h ago / 5d ago / never", on-call reads "last incident 1h ago" — and
+no surface renders NaN or undefined. Six now-orphaned `pgTimestamp` imports
+removed; the one real remaining use (OnCallPage's chart bucketing) kept.
 
 ⚠️ And a correction worth keeping, because it nearly shipped as fact: the first
 version of this fix asserted these ladders hit the production-only Invalid-Date
