@@ -373,8 +373,19 @@ export const SURFACE_INVARIANTS: SurfaceInvariant[] = [
           if (p.lastAgentActivityAt !== b.lastAgentActivityAt) {
             out.push(`${b.orgProjectId}: last agent activity ${p.lastAgentActivityAt} (Initiatives) vs ${b.lastAgentActivityAt} (Budgets)`);
           }
-          if (p.lastActivityAt !== b.lastAgentActivityAt) {
+          // Only when there IS activity. Aurora derives the card's
+          // `lastActivityAt` as `lastAgent ?? createdAt`, so an initiative with
+          // no attributed run shows its creation date on the card and null on
+          // the ledger — those are different by design, not a disagreement.
+          // This line used to demand equality unconditionally, which held only
+          // because every fixture row carried a hand-typed `activityHoursAgo`;
+          // once the ledger started COUNTING activity from the runs, an
+          // initiative with none became expressible and this failed on it.
+          if (b.lastAgentActivityAt !== null && p.lastActivityAt !== b.lastAgentActivityAt) {
             out.push(`${b.orgProjectId}: card lastActivityAt ${p.lastActivityAt} disagrees with the ledger's ${b.lastAgentActivityAt}`);
+          }
+          if (b.lastAgentActivityAt === null && p.lastActivityAt !== p.createdAt) {
+            out.push(`${b.orgProjectId}: no attributed run, so the card must fall back to createdAt (${p.createdAt}), not ${p.lastActivityAt}`);
           }
           if (b.spentThisPeriodUsd > 0 && !(p.agentSpendUsd && p.agentSpendUsd > 0)) {
             out.push(`${b.orgProjectId}: ledger shows $${b.spentThisPeriodUsd} but the card claims no agent runs yet`);
@@ -412,7 +423,18 @@ export const SURFACE_INVARIANTS: SurfaceInvariant[] = [
           if (p.lastAgentActivityAt !== null) out.push(`${p.id}: no ledger row, so lastAgentActivityAt must be null`);
         }
         // Per-initiative liveness, not one flat `now - 3h` for every card.
-        if (new Set(budgets.map((b) => b.lastAgentActivityAt)).size !== budgets.length) {
+        //
+        // The REQUIREMENT is that liveness varies per initiative. This used to
+        // assert every row carries a DISTINCT instant, which is a stronger
+        // claim and was only satisfiable because each row had its own
+        // hand-typed `activityHoursAgo`. Now that the instant is MAX(started_at)
+        // over the initiative's real runs, two initiatives whose last run fell
+        // in the same hour legitimately share one — and asserting otherwise
+        // rewards the typed value that caused the bug this check exists near
+        // (a card reading "0 runs this period" beside "last activity 2d ago").
+        // So: not flat, rather than all-distinct.
+        const liveness = new Set(budgets.map((b) => b.lastAgentActivityAt));
+        if (budgets.length > 1 && liveness.size === 1) {
           out.push('every ledger row reports the same last-activity instant — the liveness stub is flat again');
         }
         return out;

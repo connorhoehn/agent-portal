@@ -379,8 +379,17 @@ export async function listProjects(opts: {
         pointsTotal: rollup.pointsTotal,
         // Aurora derives lastActivityAt as `lastAgent ?? createdAt`, so where
         // the ledger has activity the two fields are one timestamp, not two
-        // fixtures a second apart.
-        ...(row?.lastAgentActivityAt ? { lastActivityAt: row.lastAgentActivityAt } : {}),
+        // fixtures a second apart — and where it has NONE, the fallback is
+        // createdAt.
+        //
+        // This used to spread the field in only when the ledger had activity,
+        // leaving the hand-typed `lastActivityAt` on the fixture row in place
+        // otherwise. That was invisible while every ledger row carried a typed
+        // activity stamp; once the ledger began counting activity from real
+        // runs, p-zero-trust and p-data-lake — which have none — kept showing
+        // a card date with no run behind it, which is the same lie one level
+        // over from the one this change set out to fix.
+        lastActivityAt: row?.lastAgentActivityAt ?? p.createdAt,
       };
     });
   }

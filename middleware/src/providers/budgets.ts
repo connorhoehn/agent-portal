@@ -144,7 +144,6 @@ export interface MockBudget {
    *  timestamp as the Initiatives page's liveness — a constant here would make
    *  every card on that page claim the identical last-activity. Mirrors
    *  MOCK_INITIATIVES.activeHoursAgo there; the parity test pins the pair. */
-  activityHoursAgo: number;
   /** Who last moved the allocation and when. Unset on a seeded row (the seed
    *  reads as the release manager, six days ago); set by `upsertAllocation`
    *  so a write reads back attributed to the session that made it — the
@@ -243,6 +242,31 @@ export interface MockInitiativeSpend {
 
 /** This period's spend, run count and cron floor for one initiative, summed
  *  from its own runs. The mock analogue of budgetSelectSql's `period_spend`. */
+/**
+ * The last moment an agent run was attributed to this initiative, or null.
+ *
+ * Mirrors the live query's `(SELECT MAX(br.started_at) FROM bot_runs br WHERE
+ * <attribution>)` in `providers/projects.ts` — note it is deliberately NOT
+ * period-filtered, exactly as that subquery is not. An initiative whose last
+ * run was in August honestly reports an August date beside a zero count for
+ * September; what it can no longer do is report activity no run backs.
+ *
+ * This replaced a hand-typed `activityHoursAgo` on each fixture row, which is
+ * the mock floor's rule 2 — "a fixture exports rows and selectors, never a
+ * number it could have counted from rows it also exports". Because it was
+ * typed rather than counted, it drifted from the runs beside it: two
+ * initiatives rendered "0 runs this period" next to "last activity 2d ago",
+ * with 2d ago inside the period and no run anywhere behind it.
+ */
+export function mockLastAgentActivityAt(orgProjectId: string): string | null {
+  const runs = mockRunsAttributedTo(orgProjectId);
+  if (runs.length === 0) return null;
+  return runs.reduce(
+    (latest, r) => (Date.parse(r.startedAt) > Date.parse(latest) ? r.startedAt : latest),
+    runs[0]!.startedAt,
+  );
+}
+
 export function mockInitiativeSpend(orgProjectId: string): MockInitiativeSpend {
   const start = periodStartMs();
   const runs = costed(mockRunsAttributedTo(orgProjectId))
@@ -323,7 +347,7 @@ export function mockBudgetRow(m: MockBudget): BudgetRow {
     updatedAt: m.allocated == null ? null : (m.updatedAt ?? new Date(clock.now().getTime() - 6 * 86_400_000).toISOString()),
     spentThisPeriodUsd: spend.spentUsd,
     runCountThisPeriod: spend.runCount,
-    lastAgentActivityAt: new Date(clock.now().getTime() - m.activityHoursAgo * 3_600_000).toISOString(),
+    lastAgentActivityAt: mockLastAgentActivityAt(m.id),
     maintenanceUsd: spend.maintenanceUsd,
   };
 }
@@ -532,10 +556,6 @@ export async function upsertAllocation(
         // in that case, which is the honest answer.
         name: mockProjectName(orgProjectId) ?? orgProjectId,
         allocated: allocatedUsd,
-        // A never-before-allocated initiative has no attributed run behind it
-        // yet; 0 hours ago is "as of this write", which is what NOW() would
-        // stamp on the row the INSERT creates.
-        activityHoursAgo: 0,
         updatedBy,
         updatedAt: stamp,
       });

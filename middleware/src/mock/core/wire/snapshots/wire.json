@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-09-17T08:36:57.912Z",
-  "serverHandlerSha": "ab199360c918af274087c2fd4f2c9b107d8a273e4db2a38b16e1ca870a7daa88",
+  "capturedAt": "2026-09-17T10:22:24.877Z",
+  "serverHandlerSha": "35bcab1f245da085c63574e9cf7ace747213b8a6ef5d0fdd848adbc09fe564fa",
   "baseUrl": "http://127.0.0.1:3014",
   "personas": [
     "orgiq/admin",
@@ -1680,7 +1680,7 @@
         "budgets": "array",
         "budgets[]": "object",
         "budgets[].allocatedUsd": "null|number",
-        "budgets[].lastAgentActivityAt": "string",
+        "budgets[].lastAgentActivityAt": "null|string",
         "budgets[].maintenanceUsd": "number",
         "budgets[].orgProjectId": "string",
         "budgets[].orgProjectName": "string",
@@ -3006,7 +3006,7 @@
         "$[].createdAt": "string",
         "$[].id": "string",
         "$[].lastActivityAt": "string",
-        "$[].lastAgentActivityAt": "string",
+        "$[].lastAgentActivityAt": "null|string",
         "$[].name": "string",
         "$[].openBugs": "number",
         "$[].openStories": "number",

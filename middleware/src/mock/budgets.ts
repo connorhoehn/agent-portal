@@ -35,20 +35,20 @@ import type { MockBudget, MockGrantSeed } from '../providers/budgets.js';
 
 function seededAllocations(): MockBudget[] {
   return [
-    { id: 'p-observability',     name: 'Observability Platform',   allocated: 95, activityHoursAgo: 1 },
-    { id: 'p-llm-platform',      name: 'LLM Application Platform', allocated: 85, activityHoursAgo: 2 },
+    { id: 'p-observability',     name: 'Observability Platform',   allocated: 95 },
+    { id: 'p-llm-platform',      name: 'LLM Application Platform', allocated: 85 },
     // Covers Nora DaSilva's (p-004) envelope on spr-auth-s2 alongside p-051's —
     // sme.md defect #1.
-    { id: 'p-auth-migration',    name: 'Auth Migration',           allocated: 75, activityHoursAgo: 3 },
-    { id: 'p-cost-opt',          name: 'Cost Optimization',        allocated: 45, activityHoursAgo: 5 },
+    { id: 'p-auth-migration',    name: 'Auth Migration',           allocated: 75 },
+    { id: 'p-cost-opt',          name: 'Cost Optimization',        allocated: 45 },
     // p-soc2 / p-feature-store / p-mobile-redesign used to derive $0: they hold
     // an allocation, but the mock fleet mirrored only 5 of the seed's 12 bots, so
     // there were no rows to sum. Honest, and useless — an allocation judged
     // against an empty maintenance floor tells a reader nothing. All twelve
     // seeded bots and their run histories are in mock/bots.ts now, so these
     // three derive the seed's own numbers.
-    { id: 'p-soc2',              name: 'SOC2 Compliance',          allocated: 18, activityHoursAgo: 14 },
-    { id: 'p-feature-store',     name: 'ML Feature Store',         allocated: 18, activityHoursAgo: 12 },
+    { id: 'p-soc2',              name: 'SOC2 Compliance',          allocated: 18 },
+    { id: 'p-feature-store',     name: 'ML Feature Store',         allocated: 18 },
     // DELIBERATE DIVERGENCE. schema/seed_program.sql allocates $20/month here;
     // this row carries null so that an initiative SPENDING WITH NO ALLOCATION —
     // the program-manager's blind spot, and the whole reason the ledger unions
@@ -57,24 +57,24 @@ function seededAllocations(): MockBudget[] {
     // real derived spend behind the signal. Declared as knownDrift on the
     // parity entity too; if this ever becomes a plain mirror, that entry and
     // this comment both go.
-    { id: 'p-inference-platform', name: 'Inference Platform',      allocated: null, activityHoursAgo: 7 },
+    { id: 'p-inference-platform', name: 'Inference Platform',      allocated: null },
     // Mia Singh's (p-030, program-owner) own initiative — program-owner.md
     // defect #1. Every dollar here is cron maintenance (the bot is parked
     // awaiting repo provisioning), so it is the floor, not feature spend.
-    { id: 'p-mobile-redesign',   name: 'Mobile App Redesign',      allocated: 15, activityHoursAgo: 24 },
+    { id: 'p-mobile-redesign',   name: 'Mobile App Redesign',      allocated: 15 },
     // The four initiatives that came with the rest of the seed's bot fleet.
     // They are here because they now derive spend, and a ledger that shows an
     // initiative's money must show the allocation that money is judged against:
     // Aurora's `ids` CTE is the UNION of "has an allocation" and "has spend this
     // period", so an initiative spending here and missing from this list would
     // appear on the real ledger and not the mock one.
-    { id: 'p-realtime-analytics', name: 'Real-time Analytics Pipeline', allocated: 20, activityHoursAgo: 9 },
-    { id: 'p-design-v3',         name: 'Design System v3',         allocated: 15, activityHoursAgo: 26 },
-    { id: 'p-design-system-api', name: 'Design System API',        allocated: 15, activityHoursAgo: 30 },
+    { id: 'p-realtime-analytics', name: 'Real-time Analytics Pipeline', allocated: 20 },
+    { id: 'p-design-v3',         name: 'Design System v3',         allocated: 15 },
+    { id: 'p-design-system-api', name: 'Design System API',        allocated: 15 },
     // A COMPLETED initiative that still costs ~$0.10/run to keep indexed — the
     // clearest case docs/program-operating-model.md makes: maintenance is the
     // floor of owning something, not of building it.
-    { id: 'p-rag-search',        name: 'RAG Knowledge Search',     allocated: 5,  activityHoursAgo: 22 },
+    { id: 'p-rag-search',        name: 'RAG Knowledge Search',     allocated: 5 },
     // The last two the mock omitted, and the omission was a defect the parity
     // harness had already written up by id and by dollar
     // (mock/core/parity/entities.ts). Neither has a maintenance bot, which is
@@ -89,8 +89,8 @@ function seededAllocations(): MockBudget[] {
     // with a live sprint on /iq/sprints and no row on the ledger at all.
     // `activityHoursAgo` mirrors providers/projects.ts MOCK_INITIATIVES — the
     // pairing the parity entry pins.
-    { id: 'p-zero-trust',        name: 'Zero Trust Network',       allocated: 10, activityHoursAgo: 48 },
-    { id: 'p-data-lake',         name: 'Data Lake Migration',      allocated: 15, activityHoursAgo: 40 },
+    { id: 'p-zero-trust',        name: 'Zero Trust Network',       allocated: 10 },
+    { id: 'p-data-lake',         name: 'Data Lake Migration',      allocated: 15 },
   ];
 }
 
