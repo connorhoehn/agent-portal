@@ -14,7 +14,9 @@
 //   * an unknown session reading as an EMPTY transcript, not a 404: a brand-new
 //     conversation has no events yet and must not look like an error.
 
-jest.mock('../../providers/memory.js', () => ({ listSessions: jest.fn(), listEvents: jest.fn() }));
+jest.mock('../../providers/memory.js', () => ({
+  listSessions: jest.fn(), listEvents: jest.fn(), memoryConfigured: jest.fn(() => true),
+}));
 jest.mock('../../lib/session-titles.js', () => ({
   getSessionTitle: jest.fn(), beginBackfill: jest.fn(() => false),
   generateTitleReserved: jest.fn(), markUntitleable: jest.fn(), releaseBackfill: jest.fn(),

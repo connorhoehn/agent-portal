@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { asyncHandler } from '../lib/async-handler.js';
-import { listSessions, listEvents } from '../providers/memory.js';
+import { listSessions, listEvents, memoryConfigured } from '../providers/memory.js';
 import {
   getSessionTitle,
   beginBackfill,
@@ -39,7 +39,26 @@ sessionsRouter.get('/', asyncHandler(async (req, res) => {
     }
     return { ...s, title: '' };
   }));
-  res.json({ sessions: enriched });
+  // WHY THE LIST CAN BE EMPTY MATTERS HERE. `listSessions` opens with
+  // `if (!memoryId) return []` — and `memoryId` is never set under the
+  // documented `npm run dev:mock`, because DEV_OFFLINE skips `.env.aws`
+  // entirely. So offline this endpoint answered a confident `[]` and the page
+  // said "No chat sessions yet. Start a conversation on the Agent Tools page"
+  // — an instruction that cannot work, since `recordTurn` short-circuits on
+  // the same check and writes nothing.
+  //
+  // Same shape as the devbox fleet and the ingest crawl surface: a real
+  // feature that looks like it simply has no data. CapabilityEventsPage
+  // already solved the presentation half of this ("the feed is held in
+  // memory... this is not a claim that the capabilities have never run"); the
+  // page could not say anything like that here because nothing told it.
+  const unconfigured = !memoryConfigured();
+  res.json({
+    sessions: enriched,
+    ...(unconfigured
+      ? { memoryUnavailable: 'AgentCore Memory is not configured (MEMORY_ID unset), so no transcript can be read or written' }
+      : {}),
+  });
 }));
 
 // The stored transcript for one conversation.

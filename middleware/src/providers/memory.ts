@@ -55,6 +55,20 @@ function actorScope(req?: { actorId?: string }): string {
   return req?.actorId || 'portal-default';
 }
 
+/**
+ * Whether AgentCore Memory is configured at all.
+ *
+ * Exported so `routes/sessions.ts` can say WHY its list is empty without
+ * importing `config.ts` — that module reaches `import.meta`, which is a hard
+ * TS1343 parse error under this repo's ts-jest CJS transform, and importing it
+ * into a route takes that route's whole test suite down with it (it did).
+ * Every consumer already mocks this provider, so the fact travels with the
+ * thing that owns it.
+ */
+export function memoryConfigured(): boolean {
+  return Boolean(config.agentcore.memoryId);
+}
+
 export async function listSessions(actorId?: string): Promise<MemorySession[]> {
   const memoryId = config.agentcore.memoryId;
   if (!memoryId) return [];

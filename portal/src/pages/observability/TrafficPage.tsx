@@ -455,7 +455,16 @@ function TrafficPage() {
       <Card padding="md">
         <CardHeader
           title="Per-Agent Summary"
-          subtitle={`RPS / latency / error rate / low-quality rate / cost · window ${win.label}`}
+          // Why this says what counts. Overview's ERRORS tile reads 14 of 335
+          // and this table's error rate sums to 34 of the same 335 — both
+          // correct, over one corpus, using the two predicates the platform
+          // actually defines: Overview counts runs that THREW ("system
+          // failures, not answer quality"), this counts those plus guardrail
+          // interventions. Verified against the rows: 14 threw, 20 were
+          // blocked, zero overlap, 34 union. Nothing on either screen said so,
+          // so a reader clicking from one to the other saw the same fleet and
+          // window disagree 2.4x with no way to reconcile it.
+          subtitle={`RPS / latency / error rate (threw or guardrail-blocked — wider than Overview's system-failure count) / low-quality rate / cost · window ${win.label}`}
         />
         {perAgent.length === 0 ? (
           <RowEmpty text="No agents observed in this window." degraded={trafficDegraded} />

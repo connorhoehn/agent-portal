@@ -39,7 +39,8 @@ interface SessionSummary {
 }
 
 function SessionsPage() {
-  const { data, error, refresh } = useFetch<{ sessions: SessionSummary[] }>('/api/sessions', 15000);
+  const { data, error, refresh } = useFetch<{ sessions: SessionSummary[]; memoryUnavailable?: string }>(
+    '/api/sessions', 15000);
   const [query, setQuery] = useState('');
   const [limit, setLimit] = useState(SESSIONS_PAGE_SIZE);
 
@@ -102,8 +103,17 @@ function SessionsPage() {
             />
           ) : (
             <InlinePlaceholder align="center" className="p-6 text-[12px]">
+              {/* "Start a conversation" is only useful advice when a
+                  conversation could actually be recorded. Offline it cannot:
+                  AgentCore Memory is unconfigured under dev:mock, so
+                  `recordTurn` writes nothing and the instruction sends the
+                  reader off to do something that silently no-ops. Name the
+                  cause instead — the treatment CapabilityEventsPage already
+                  gives its own in-memory feed. */}
               {sessions.length === 0
-                ? 'No chat sessions yet. Start a conversation on the Agent Tools page.'
+                ? (data?.memoryUnavailable
+                  ? `${data.memoryUnavailable}. This is not a claim that no one has ever chatted with an agent — nothing can be read here until Memory is configured.`
+                  : 'No chat sessions yet. Start a conversation on the Agent Tools page.')
                 : 'No sessions match the current filter.'}
             </InlinePlaceholder>
           )

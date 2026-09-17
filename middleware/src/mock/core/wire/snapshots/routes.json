@@ -2268,7 +2268,7 @@
     {
       "method": "GET",
       "path": "/api/sessions/:sessionId/events",
-      "source": "src/routes/sessions.ts:52"
+      "source": "src/routes/sessions.ts:71"
     },
     {
       "method": "GET",

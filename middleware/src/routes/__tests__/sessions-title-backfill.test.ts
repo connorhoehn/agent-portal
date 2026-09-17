@@ -19,6 +19,11 @@ const listEvents = jest.fn();
 jest.mock('../../providers/memory.js', () => ({
   listSessions: (...a: unknown[]) => listSessions(...a),
   listEvents: (...a: unknown[]) => listEvents(...a),
+  // The route asks the provider whether Memory is configured at all, so it can
+  // say WHY an empty list is empty rather than telling the reader to go start a
+  // conversation that cannot be recorded. These tests are about title
+  // backfill, so configured is the state they mean.
+  memoryConfigured: () => true,
 }));
 
 // Nova ConverseCommand — returns a fixed title so the titleable path is
