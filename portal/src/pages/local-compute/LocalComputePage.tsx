@@ -635,7 +635,7 @@ export default function LocalComputePage() {
                   read as a caption on the tab bar rather than the body of a
                   pane. */}
               <Card>
-              <div className="border-b border-border px-4 pt-3">
+              <Stack gap="none" className="border-b border-border px-4 pt-3">
               <Tabs
                 idPrefix="machine"
                 aria-label={`${selectedNode.label} detail`}
@@ -648,8 +648,8 @@ export default function LocalComputePage() {
                   { id: 'connection', label: 'Details' },
                 ]}
               />
-              </div>
-              <div className="p-4">
+              </Stack>
+              <Stack gap="none" className="p-4">
 
               <Stack hidden={tab !== 'lane'} gap="sm">
 {/* The offline / paused / never-announced banners that used to
@@ -828,7 +828,7 @@ export default function LocalComputePage() {
                   streamLive={streamLive}
                 />
               </Stack>
-              </div>
+              </Stack>
               </Card>
             </DetailSection>
           )}

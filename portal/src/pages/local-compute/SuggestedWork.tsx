@@ -16,7 +16,7 @@
 // clickable "suggestion" would be a button that cannot work. These are things
 // to go and do, phrased as such.
 
-import { Button, Chip, Stack, T } from '@connorhoehnslalom/ui-components/shared';
+import { Button, Chip, Inline, Stack, T } from '@connorhoehnslalom/ui-components/shared';
 import { Link as RouterLink } from 'react-router';
 import { TIERS, TIER_IDEAS, bestTier } from '../../lib/modelCapability';
 
@@ -55,21 +55,24 @@ export function NoSuggestions({
 
       {info && (
         <Stack gap="sm">
-          <div className="flex items-center gap-2">
+          <Inline gap="sm" align="center">
             <T className="text-[10px] font-semibold uppercase tracking-wide text-text-tertiary">
               What {machineLabel} is suited to
             </T>
             <Chip tone="info" size="xs">{info.name}</Chip>
-          </div>
+          </Inline>
           <T className="text-[13px] text-text-secondary">{info.takesOn}</T>
-          <ul className="m-0 flex list-none flex-col gap-1 p-0">
+          {/* A Stack of Inlines rather than a raw <ul>. The library has no list
+              primitive (queued), and these are short phrases rather than prose,
+              so the bullet is a leading dot per row. */}
+          <Stack gap="xs">
             {ideas.map((idea) => (
-              <li key={idea} className="flex gap-2 text-[13px] text-text-primary">
-                <span aria-hidden="true" className="text-text-tertiary">·</span>
-                <span>{idea}</span>
-              </li>
+              <Inline key={idea} gap="sm" align="start">
+                <T aria-hidden className="text-text-tertiary">·</T>
+                <T className="text-[13px] text-text-primary">{idea}</T>
+              </Inline>
             ))}
-          </ul>
+          </Stack>
         </Stack>
       )}
 
@@ -81,7 +84,7 @@ export function NoSuggestions({
         </T>
       )}
 
-      <div className="flex flex-wrap items-center gap-2">
+      <Inline gap="sm" align="center" wrap>
         <RouterLink
           to="/iq/initiatives"
           className="inline-flex items-center rounded-md border border-border bg-surface px-3 py-1.5 text-[13px] font-medium text-text-primary no-underline hover:bg-surface-panel"
@@ -93,7 +96,7 @@ export function NoSuggestions({
             Send a bot instead
           </Button>
         )}
-      </div>
+      </Inline>
     </Stack>
   );
 }

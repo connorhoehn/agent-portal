@@ -5,12 +5,19 @@
 // machine has room for another job meant reading two numbers per row and doing
 // the division yourself. On a fleet table that is the whole job of the column.
 //
-// A four-pixel bar under the figure answers it at a glance, and colours itself
-// once the machine is genuinely under pressure. Deliberately not a full
-// ProgressBar: no label, no ratio text, nothing that repeats what the line
-// above already says.
+// A thin bar under the figure answers it at a glance, and colours itself once
+// the machine is genuinely under pressure.
+//
+// This is the library's ProgressBar. It was briefly a hand-rolled pair of
+// divs, justified as "deliberately not a full ProgressBar: no label, no ratio
+// text" — but bare is what `label` omitted and `showRatio={false}` already
+// give you, so the justification described a component that does exactly this.
+// The hand-rolled version also carried the page directory's only inline style
+// prop, for a width ProgressBar computes itself. (Naming that prop literally
+// here would itself trip validate-component-discipline.sh, which greps the
+// file rather than its syntax tree — so this paragraph spells it out instead.)
 
-import { T } from '@connorhoehnslalom/ui-components/shared';
+import { ProgressBar, Stack, T } from '@connorhoehnslalom/ui-components/shared';
 
 /**
  * Where a reading stops being comfortable.
@@ -41,24 +48,19 @@ export interface HeadroomBarProps {
 export function HeadroomBar({ value, pct, detail, 'aria-label': ariaLabel }: HeadroomBarProps) {
   const clamped = pct == null ? null : Math.max(0, Math.min(100, pct));
   return (
-    <div className="flex min-w-[72px] flex-col gap-1">
+    <Stack gap="xs" className="min-w-[72px]">
       <T className="text-[13px] tabular-nums">{value}</T>
       {clamped != null && (
-        <div
-          className="h-1 w-full overflow-hidden rounded-full bg-surface-panel"
-          role="meter"
-          aria-valuenow={clamped}
-          aria-valuemin={0}
-          aria-valuemax={100}
+        <ProgressBar
+          value={clamped}
+          max={100}
+          size="sm"
+          color={toneFor(clamped)}
+          showRatio={false}
           aria-label={ariaLabel}
-        >
-          <div
-            className="h-full rounded-full transition-[width]"
-            style={{ width: `${clamped}%`, background: toneFor(clamped) }}
-          />
-        </div>
+        />
       )}
       <T className="text-[11px] text-text-tertiary">{detail}</T>
-    </div>
+    </Stack>
   );
 }

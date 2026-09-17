@@ -90,15 +90,17 @@ export function CapabilityBrief({ models }: CapabilityBriefProps) {
         const info = TIERS[c.tier];
         const models = caps.filter((x) => x.tier === c.tier).map((x) => x.label);
         return (
-          <div key={c.tier} className="flex gap-3">
-            <div className="w-[104px] shrink-0">
+          <Inline key={c.tier} gap="md" align="start" wrap={false}>
+            {/* Fixed-width so the tier chips line up into a column; Inline
+                takes the className, so no raw wrapper is needed for it. */}
+            <Stack gap="none" className="w-[104px] shrink-0">
               <Chip tone={TIER_TONE[c.tier]} size="xs">{info.name}</Chip>
-            </div>
+            </Stack>
             <Stack gap="none" className="min-w-0">
               <T className="text-[13px] text-text-primary">{info.takesOn}</T>
               <T className="font-mono text-[11px] text-text-tertiary">{models.join(', ')}</T>
             </Stack>
-          </div>
+          </Inline>
         );
       })}
     </Stack>
