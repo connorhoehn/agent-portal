@@ -18,8 +18,9 @@ import {
   resolveTeamName,
   revisionLabel,
   revisionNumber,
+  splitOpenFeedback,
 } from '../secondaryFormat.ts';
-import type { RunRecord, SubmissionGroupRef, SubmissionListItem } from '../secondaryTypes.ts';
+import type { FeedbackTask, RunRecord, SubmissionGroupRef, SubmissionListItem } from '../secondaryTypes.ts';
 
 // ─── parseFormsCsv ─────────────────────────────────────────────────────────────
 
@@ -458,4 +459,46 @@ test('applyRunEvent: a knowledge.* event (or any run for an unseen id) is a no-o
   assert.equal(runs, existing);
   const unaffected = applyRunEvent(existing, { type: 'run.progress', run_id: 'run-unknown', command: 'validate-outputs', team_id: null, percent: 10, ts: 't1' });
   assert.deepEqual(unaffected, existing);
+});
+
+// The Question queue counted every open task as an "Open question", which
+// disagreed with the Assessor's-desk tile (25 vs 24) because that tile sums
+// each team's `followups_open` — follow-ups only. These pin the split, not
+// the numbers: the point is that a decision the assessor owes never lands in
+// the count of questions a team owes.
+const task = (over: Partial<FeedbackTask>): FeedbackTask => ({
+  task_id: 't1', team_id: 'TEAM-001', kind: 'follow_up', status: 'OPEN',
+  question: 'q', created_at: '2026-09-17T00:00:00.000Z',
+  ...over,
+} as FeedbackTask);
+
+test('splitOpenFeedback counts follow-ups as questions and everything else as decisions', () => {
+  const { questions, decisions } = splitOpenFeedback([
+    task({ task_id: 'a' }),
+    task({ task_id: 'b' }),
+    task({ task_id: 'c', kind: 'exception_review' }),
+  ]);
+  assert.equal(questions.length, 2);
+  assert.equal(decisions.length, 1);
+  assert.equal(decisions[0]!.task_id, 'c');
+});
+
+test('splitOpenFeedback ignores anything not OPEN, in both buckets', () => {
+  const { questions, decisions } = splitOpenFeedback([
+    task({ task_id: 'a', status: 'RESOLVED' }),
+    task({ task_id: 'b', status: 'DISMISSED', kind: 'exception_review' }),
+    task({ task_id: 'c' }),
+  ]);
+  assert.equal(questions.length, 1);
+  assert.equal(decisions.length, 0);
+});
+
+test('teamsWithOpenQuestions counts teams with QUESTIONS, not teams with any open task', () => {
+  // The regression: a team whose only open item is an exception review used to
+  // inflate the "across N teams" hint beside a count it contributes nothing to.
+  const { teamsWithOpenQuestions } = splitOpenFeedback([
+    task({ task_id: 'a', team_id: 'TEAM-001' }),
+    task({ task_id: 'b', team_id: 'TEAM-002', kind: 'exception_review' }),
+  ]);
+  assert.equal(teamsWithOpenQuestions, 1);
 });

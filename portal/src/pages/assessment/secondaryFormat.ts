@@ -385,3 +385,37 @@ export function applyRunEvent(runs: RunRecord[], event: AssessmentSSEEvent): Run
       return runs;
   }
 }
+
+/**
+ * Split the open feedback queue into what the TEAM owes and what YOU owe.
+ *
+ * A `follow_up` is a question the team still owes the assessment — the thing
+ * the Question queue's title, description and "click a row to answer it" hint
+ * all describe. Anything else (today `exception_review`: approve or deny an
+ * N/A request) runs the other way: a decision the assessor owes, and one you
+ * do not "answer".
+ *
+ * Counting them together under "Open questions" made three things wrong at
+ * once. The number disagreed with the Assessor's-desk tile for what reads as
+ * the same queue — 25 against 24 — because that tile sums each team's
+ * `followups_open`, which is follow-ups only. The label called a decision a
+ * question. And the kind was rendered nowhere, so the one odd row was
+ * indistinguishable from the other twenty-four.
+ *
+ * The queue still LISTS everything; only the headline count is split, so no
+ * work disappears from view.
+ */
+export function splitOpenFeedback(tasks: readonly FeedbackTask[]): {
+  questions: FeedbackTask[];
+  decisions: FeedbackTask[];
+  teamsWithOpenQuestions: number;
+} {
+  const open = tasks.filter((t) => t.status === 'OPEN');
+  const questions = open.filter((t) => t.kind === 'follow_up');
+  return {
+    questions,
+    decisions: open.filter((t) => t.kind !== 'follow_up'),
+    teamsWithOpenQuestions: new Set(questions.map((t) => t.team_id)).size,
+  };
+}
+

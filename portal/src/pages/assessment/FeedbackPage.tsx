@@ -35,7 +35,7 @@ import { useDebouncedSearch } from '../../hooks/useDebouncedSearch';
 import { useUrlState } from '../../lib/useUrlState';
 import { toastError, toastSuccess } from '../../lib/toastStore';
 import { sendJson } from '../../lib/writeJson';
-import { feedbackActionPath, formatRelativeTime } from './secondaryFormat';
+import { feedbackActionPath, formatRelativeTime, splitOpenFeedback } from './secondaryFormat';
 import type { FeedbackListResponse, FeedbackTask, HitlStatus } from './secondaryTypes';
 import { useTeams } from './dashboard/useTeams';
 import { useDimensionIndex } from './useDimensionIndex';
@@ -240,8 +240,20 @@ export default function FeedbackPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tasks, team, search, index, nameById]);
 
-  const openCount = tasks.filter((t) => t.status === 'OPEN').length;
-  const teamsWithOpen = new Set(tasks.filter((t) => t.status === 'OPEN').map((t) => t.team_id)).size;
+  // A `follow_up` is a question the TEAM owes the assessment — the thing this
+  // page's own title, description and "click a row to answer it" hint all
+  // describe. An `exception_review` is the opposite direction: a decision the
+  // ASSESSOR owes, approved or denied rather than answered.
+  //
+  // Counting both as "Open questions" made three things wrong at once. The
+  // number disagreed with the dashboard's own Questions-open tile (25 here
+  // against 24 there, for what reads as the same queue) because that tile
+  // counts follow-ups only; the label called a decision a question; and the
+  // kind was rendered nowhere at all, so the odd row was indistinguishable
+  // from the other twenty-four.
+  const { questions: openQuestions, decisions: openDecisions, teamsWithOpenQuestions: teamsWithOpen } =
+    splitOpenFeedback(tasks);
+  const openCount = openQuestions.length;
   const selected = rows.find((t) => t.task_id === selectedId) ?? tasks.find((t) => t.task_id === selectedId) ?? null;
   const teamOptions = [{ value: 'all', label: 'All teams' }, ...teamIds.map((id) => ({ value: id, label: nameById.get(id) ?? id }))];
 
@@ -255,6 +267,11 @@ export default function FeedbackPage() {
         aria-label="Queue summary"
         items={[
           { label: 'Open questions', value: openCount, tone: openCount > 0 ? 'danger' : 'default', hint: `across ${teamsWithOpen} team${teamsWithOpen === 1 ? '' : 's'}` },
+          // Not folded into the count above and not hidden either: these are
+          // real open work, they are just yours rather than the team's.
+          ...(openDecisions.length > 0
+            ? [{ label: 'Waiting on you', value: openDecisions.length, tone: 'accent' as const, hint: 'exception reviews to approve or deny' }]
+            : []),
           { label: 'Showing', value: rows.length, hint: status === 'ALL' ? 'all statuses' : STATUS_OPTIONS.find((o) => o.value === status)?.label.toLowerCase() ?? '' },
         ]}
       />
@@ -324,6 +341,12 @@ export default function FeedbackPage() {
               ),
             },
             { key: 'dimension_id', header: 'Dimension', sortable: true, render: (t) => dimensionLabel(t, dimOf(t)) },
+            {
+              key: 'kind', header: 'Kind', sortable: true,
+              render: (t) => (t.kind === 'follow_up'
+                ? <Chip size="xs" tone="neutral">question</Chip>
+                : <Chip size="xs" tone="warning">{t.kind.replace(/_/g, ' ')}</Chip>),
+            },
             {
               key: 'question', header: 'Question',
               render: (t) => <MetaLine size="xs" tone="secondary" items={[t.question.length > 96 ? `${t.question.slice(0, 96)}…` : t.question]} />,
