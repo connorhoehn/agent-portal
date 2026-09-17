@@ -11,6 +11,7 @@ import {
   InlinePlaceholder,
   ProgressBar,
   Stack,
+  StatusDot,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import type { BotRun } from '../bots/BotsPage';
@@ -18,7 +19,7 @@ import { ItemRow } from './ItemRow';
 import { NewItemForm, type NewItemDraft } from './NewItemForm';
 import { T } from './Text';
 import { StatusChip } from './WorkItemChips';
-import { PRIORITY_GLYPH, countPoints, countStories, progressColor } from './projectFormat';
+import { PRIORITY_DOT_COLOR, countPoints, countStories, progressColor } from './projectFormat';
 import type { WorkItemStatus, WorkItemTree } from './types';
 
 /** The at-a-glance summary that rides on the epic's disclosure header:
@@ -30,9 +31,17 @@ function EpicSummary({ item }: { item: WorkItemTree }) {
 
   return (
     <Inline gap="sm" align="center" wrap={false}>
-      <T aria-hidden className="shrink-0 text-[11px]" title={`priority: ${item.priority}`}>
-        {PRIORITY_GLYPH[item.priority] ?? PRIORITY_GLYPH.medium}
-      </T>
+      {/* Was an aria-hidden emoji with a `title`. A title on an aria-hidden
+          node is announced by nothing, so priority — the first thing on the
+          row — reached assistive tech not at all. StatusDot carries a real
+          aria-label. */}
+      <StatusDot
+        className="shrink-0"
+        size="sm"
+        color={PRIORITY_DOT_COLOR[item.priority] ?? PRIORITY_DOT_COLOR.medium}
+        title={`priority: ${item.priority}`}
+        aria-label={`priority: ${item.priority}`}
+      />
       {stories.total > 0 && (
         <T className="shrink-0 whitespace-nowrap text-[12px] text-text-secondary tabular-nums">
           {stories.done}/{stories.total} stories

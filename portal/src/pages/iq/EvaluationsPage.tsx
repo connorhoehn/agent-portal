@@ -13,7 +13,7 @@ import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { relativeTime } from '../../lib/relativeTime';
 import { Link, useNavigate } from 'react-router';
 import {
-  Button, Card, Chip, CollapsibleSection, IconButton, Inline, ProgressBar, Select, SectionLabel, SelectableCard, Stack, StatStrip, Switch,
+  Button, Card, Chip, CollapsibleSection, EmptyState, IconButton, Inline, ProgressBar, Select, SectionLabel, SelectableCard, Stack, StatStrip, Switch,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { useCanaryStream } from '../../components/canary/useCanaryStream.js';
@@ -549,20 +549,22 @@ export default function EvaluationsPage(): React.ReactElement {
           <T className="text-[10px] text-text-tertiary">live · SSE feed</T>
         </Inline>
 
+          {/* Was a Card + Stack + a 32px 📊 + text + Button — an EmptyState
+              assembled by hand out of allowed primitives, which is why the
+              component-discipline gate could not see it. The emoji was the
+              tell: a decorative colour glyph that ignores the theme, standing
+              in for an icon the library does not ship. EmptyState wants no
+              icon at all here. */}
         {historyDesc.length === 0 ? (
           <Card padding="md">
-            <Stack gap="sm" align="center">
-              <T className="text-[32px]">📊</T>
-              <T className="max-w-[280px] text-center text-[12px] leading-relaxed text-text-tertiary">
-                No scores yet.{' '}
-                {cfg.enabled
-                  ? 'Scores appear here in real-time as the canary evaluates responses.'
-                  : 'Enable LLM-as-Judge above to start collecting scores.'}
-              </T>
-              <Button variant="secondary" size="sm" onClick={() => navigate('/iq/canary')}>
-                Open canary dashboard →
-              </Button>
-            </Stack>
+            <EmptyState
+              title="No scores yet"
+              body={cfg.enabled
+                ? 'Scores appear here in real-time as the canary evaluates responses.'
+                : 'Enable LLM-as-Judge above to start collecting scores.'}
+              actionLabel="Open canary dashboard"
+              onAction={() => void navigate('/iq/canary')}
+            />
           </Card>
         ) : (
           <Stack gap="xs" className="max-h-[calc(100vh-420px)] overflow-y-auto">

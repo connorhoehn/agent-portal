@@ -54,11 +54,26 @@ export const PRIORITY_BORDER_CLASS: Record<WorkItemPriority, string> = {
   low:      'border-l-text-tertiary',
 };
 
-export const PRIORITY_GLYPH: Record<WorkItemPriority, string> = {
-  critical: '🔴',
-  high:     '🟠',
-  medium:   '🟡',
-  low:      '⚪',
+/**
+ * Priority as a token colour, for a `StatusDot`.
+ *
+ * This used to be four colour emoji — 🔴🟠🟡⚪ — which the library's own rule
+ * calls a missing icon rather than content: "a 👍 you chose is data; a 📞
+ * drawn on a button is a missing icon". Three things were wrong with them.
+ * They ignore the theme (a pale ⚪ on light chrome is invisible, and none of
+ * the four move in dark mode); they render differently on every platform; and
+ * they were a SECOND priority scale — four distinct colours where
+ * PRIORITY_TEXT_CLASS and PRIORITY_BORDER_CLASS, in this same module, have
+ * only three. So the dot and the text beside it disagreed about whether high
+ * and medium were the same urgency.
+ *
+ * These mirror PRIORITY_TEXT_CLASS exactly, so there is one scale.
+ */
+export const PRIORITY_DOT_COLOR: Record<WorkItemPriority, string> = {
+  critical: 'var(--color-danger)',
+  high:     'var(--color-warning)',
+  medium:   'var(--color-warning)',
+  low:      'var(--color-text-tertiary)',
 };
 
 export const PR_TONE: Record<PrStatus, ChipTone> = {

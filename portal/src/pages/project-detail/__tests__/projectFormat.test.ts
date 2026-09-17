@@ -8,6 +8,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  PRIORITY_DOT_COLOR,
+  PRIORITY_TEXT_CLASS,
   countPoints,
   countStories,
   flattenByType,
@@ -384,4 +386,32 @@ test('parseTs accepts a Postgres `+00` stamp, a naive one, and plain ISO', () =>
   assert.equal(parseTs('2026-09-08 08:19:23'), Date.parse('2026-09-08T08:19:23Z'));
   assert.equal(parseTs('2026-09-08T08:19:23Z'), Date.parse('2026-09-08T08:19:23Z'));
   assert.equal(Number.isNaN(parseTs('not a date')), true);
+});
+
+// The priority dot used to be four colour emoji (🔴🟠🟡⚪) while
+// PRIORITY_TEXT_CLASS and PRIORITY_BORDER_CLASS, in the same module, had only
+// three distinct levels — so the dot claimed high and medium were different
+// urgencies and the text beside it said they were the same. These pin the one
+// scale, not the specific colours: if someone splits medium off from high they
+// have to do it in both maps or this fails.
+test('PRIORITY_DOT_COLOR covers exactly the priorities PRIORITY_TEXT_CLASS does', () => {
+  assert.deepEqual(
+    Object.keys(PRIORITY_DOT_COLOR).sort(),
+    Object.keys(PRIORITY_TEXT_CLASS).sort(),
+  );
+});
+
+test('the dot scale and the text scale agree on which priorities are distinct', () => {
+  const group = (m: Record<string, string>) => {
+    const byValue = new Map<string, string[]>();
+    for (const [k, v] of Object.entries(m)) byValue.set(v, [...(byValue.get(v) ?? []), k].sort());
+    return [...byValue.values()].map((ks) => ks.join('+')).sort();
+  };
+  assert.deepEqual(group(PRIORITY_DOT_COLOR), group(PRIORITY_TEXT_CLASS));
+});
+
+test('every priority dot is a theme token, never a literal colour or an emoji', () => {
+  for (const [priority, colour] of Object.entries(PRIORITY_DOT_COLOR)) {
+    assert.match(colour, /^var\(--color-[a-z-]+\)$/, `${priority} must paint from a token`);
+  }
 });
