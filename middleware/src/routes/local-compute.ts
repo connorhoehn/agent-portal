@@ -752,17 +752,24 @@ localComputeRouter.get(
 
 /** Lines per POST /log batch, and a single line's clamp — see
  *  lib/local-compute-node-logs.ts for why these numbers. */
-function parseNodeLogLines(body: unknown): Array<{ seq: number; text: string }> | null {
+function parseNodeLogLines(body: unknown): Array<{ seq: number; text: string; run: string }> | null {
   const lines = (body as { lines?: unknown })?.lines;
   if (!Array.isArray(lines) || lines.length === 0 || lines.length > MAX_NODE_LOG_BATCH) return null;
-  const out: Array<{ seq: number; text: string }> = [];
+  // A batch-level `run` (the worker's boot id) applies to every line in it;
+  // a per-line `run` wins if one is ever sent. OPTIONAL on purpose — a worker
+  // built before this shipped sends none and lands in the '' run, which is
+  // exactly its old behaviour. See appendNodeLog for what run buys.
+  const batchRun = typeof (body as { run?: unknown })?.run === 'string'
+    ? String((body as { run?: unknown }).run).slice(0, 64) : '';
+  const out: Array<{ seq: number; text: string; run: string }> = [];
   for (const raw of lines) {
     if (typeof raw !== 'object' || raw === null) return null;
     const l = raw as Record<string, unknown>;
     const seq = Number(l['seq']);
     const text = typeof l['text'] === 'string' ? l['text'] : '';
     if (!Number.isFinite(seq) || seq < 0 || !text) return null;
-    out.push({ seq: Math.floor(seq), text: text.slice(0, MAX_NODE_LOG_LINE) });
+    const run = typeof l['run'] === 'string' ? l['run'].slice(0, 64) : batchRun;
+    out.push({ seq: Math.floor(seq), text: text.slice(0, MAX_NODE_LOG_LINE), run });
   }
   return out;
 }
@@ -776,7 +783,7 @@ localComputeRouter.post('/log', workLoopLimit, requireNodeToken(async (req, res,
     });
     return;
   }
-  for (const { seq, text } of lines) appendNodeLog(node.id, seq, text);
+  for (const { seq, text, run } of lines) appendNodeLog(node.id, seq, text, run);
   res.json({ ok: true, nodeId: node.id, lines: lines.length });
 }));
 

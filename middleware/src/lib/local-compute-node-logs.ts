@@ -70,10 +70,21 @@ export const MAX_NODE_LOG_LINE = 4_000;
  *  routes/local-compute.ts: small batches, sent often, never one giant one. */
 export const MAX_NODE_LOG_BATCH = 50;
 
+/** What the ring actually stores. `seq` here is the SERVER's own arrival
+ *  counter — see appendNodeLog for why the worker's number cannot be it —
+ *  and `key` is the worker-supplied identity used only to drop a re-shipped
+ *  line. `key` never leaves this module; getNodeLog projects it away. */
+interface StoredEntry extends NodeLogEntry {
+  key: string;
+}
+
 interface NodeLogRow {
-  entries: NodeLogEntry[];
+  entries: StoredEntry[];
   bytes: number;
   updatedAt: string;
+  /** Next server seq to hand out. Monotonic for this node's whole lifetime
+   *  in this process, which is precisely what the `since` cursor needs. */
+  nextSeq: number;
 }
 
 const logs = new Map<string, NodeLogRow>();
@@ -103,43 +114,67 @@ function evictIfNeeded(): void {
 }
 
 /**
- * Append a line the machine shipped. Idempotent on `seq`: the worker's ship
- * is best-effort and may re-send a batch after a failed flush, and a
- * re-sent line is dropped rather than duplicated. Stored in ARRIVAL order,
- * not sorted by seq — same tradeoff as the per-job log: the transport can
- * reorder two in-flight POSTs, and re-sorting a live tail on every append
+ * Append a line the machine shipped.
+ *
+ * ⚠️ The worker's `seq` is a DEDUPE KEY, never this ring's ordering. It used
+ * to be both, and that quietly broke the pane across a worker restart:
+ * `nodeLogSeq` is a module-level `let` in tools/local-compute-worker.mjs, so
+ * every process start counts from 0 again. A restarted worker therefore
+ * re-sent seq 0,1,2… which this function — then deduping on seq alone —
+ * dropped as already-seen, and the Computer Lab went on showing the DEAD
+ * run's "paired / registered / presence acknowledged" lines as though they
+ * were current. Observed live: a worker restarted at 12:40:25 shipped seven
+ * startup lines and the node's log still reported updatedAt 12:39:35.
+ *
+ * Deduping on (run, seq) alone would not have been enough either, because
+ * `getNodeLog` filters `e.seq > since` — a second run's seq 0..4 is below any
+ * cursor a poller already advanced past, so those lines would have been
+ * stored and then never delivered. The ordering has to come from here.
+ *
+ * So: the server assigns `seq` from its own per-node counter (starting at 0,
+ * which is why a first run's numbering is unchanged), and the worker's
+ * `seq`+`run` become an opaque identity that makes a re-shipped batch a
+ * no-op. `run` is optional on the wire: a worker that predates it sends none,
+ * gets the empty-string run, and behaves exactly as it always did within a
+ * single run.
+ *
+ * Stored in ARRIVAL order — same tradeoff as the per-job log: the transport
+ * can reorder two in-flight POSTs, and re-sorting a live tail on every append
  * costs more than the rare out-of-order line is worth.
  */
-export function appendNodeLog(nodeId: string, seq: number, text: string): void {
+export function appendNodeLog(nodeId: string, seq: number, text: string, run = ''): void {
   if (!text) return;
   let row = logs.get(nodeId);
   if (row) {
     logs.delete(nodeId); // re-insert to mark most-recently-written for the LRU
   } else {
-    row = { entries: [], bytes: 0, updatedAt: now() };
+    row = { entries: [], bytes: 0, updatedAt: now(), nextSeq: 0 };
   }
   logs.set(nodeId, row);
 
   const clamped = text.slice(0, MAX_NODE_LOG_LINE);
-  if (row.entries.some((e) => e.seq === seq)) {
-    return; // duplicate seq — no-op, but the re-insert above still refreshed LRU
+  const key = `${run}:${seq}`;
+  if (row.entries.some((e) => e.key === key)) {
+    return; // already shipped — no-op, but the re-insert above still refreshed LRU
   }
 
-  const entry: NodeLogEntry = { seq, text: clamped };
+  const entry: StoredEntry = { seq: row.nextSeq++, text: clamped, key };
   row.entries.push(entry);
   row.bytes += clamped.length;
   row.updatedAt = now();
 
   // Trim oldest entries until under BOTH ceilings. Never drop the one just
   // added, even if it alone exceeds a ceiling — a too-big tail beats an
-  // empty one.
+  // empty one. Trimming also bounds the dedupe window: a re-ship that arrives
+  // after its line has aged out of the ring can duplicate, which is strictly
+  // better than holding every key a long-lived machine has ever sent.
   while ((row.bytes > MAX_BYTES_PER_NODE || row.entries.length > MAX_LINES_PER_NODE) && row.entries.length > 1) {
     const dropped = row.entries.shift();
     if (dropped) row.bytes -= dropped.text.length;
   }
 
   evictIfNeeded();
-  notify(nodeId, entry);
+  notify(nodeId, { seq: entry.seq, text: entry.text });
 }
 
 /** Snapshot, optionally only entries after `since` (a poller's cursor).
@@ -149,7 +184,10 @@ export function appendNodeLog(nodeId: string, seq: number, text: string): void {
 export function getNodeLog(nodeId: string, since = -1): NodeLog | null {
   const row = logs.get(nodeId);
   if (!row) return null;
-  const entries = since >= 0 ? row.entries.filter((e) => e.seq > since) : row.entries.slice();
+  const visible = since >= 0 ? row.entries.filter((e) => e.seq > since) : row.entries;
+  // Project the dedupe key away — it is this module's bookkeeping, not part
+  // of what a poller or the SSE tail is handed.
+  const entries = visible.map((e) => ({ seq: e.seq, text: e.text }));
   const lastSeq = row.entries.reduce((m, e) => Math.max(m, e.seq), -1);
   return {
     nodeId,

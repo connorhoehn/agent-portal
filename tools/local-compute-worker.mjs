@@ -163,6 +163,17 @@ const NODE_LOG_FLUSH_MS = 5_000;
 const WORKER_LOG_FILE_MAX_BYTES = 2 * 1024 * 1024;
 
 let nodeLogSeq = 0;
+/**
+ * This process's boot id, sent with every shipped batch.
+ *
+ * `nodeLogSeq` above restarts at 0 on every worker start, and the middleware
+ * used to dedupe on that number alone — so a restarted worker's whole startup
+ * log was silently discarded as "already seen" and the Computer Lab kept
+ * rendering the previous, dead run. The server now orders the ring itself and
+ * treats (run, seq) as the dedupe identity, which needs exactly one new fact
+ * from here: something that differs between two runs of this worker.
+ */
+const NODE_LOG_RUN_ID = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 const nodeLogRing = []; // [{ seq, text }], FIFO — oldest first
 let nodeLogRingBytes = 0;
 
@@ -192,6 +203,11 @@ let nodeLogRingBytes = 0;
  */
 const LOCAL_ONLY_LOG = [
   /token written to /,
+  // Same category as the token path, and it was still shipping: this reports
+  // what happened to a FILE on the operator's own disk, which is nothing the
+  // fleet can act on and slightly alarming to a reader who owns a different
+  // machine ("replaced ... on this machine" reads like someone took theirs).
+  /this replaced the previous token on this machine/,
   /still waiting for "Accepting work"/,
 ];
 
@@ -250,7 +266,7 @@ async function shipNodeLog(config) {
   if (nodeLogRing.length === 0) return;
   const batch = nodeLogRing.slice(0, NODE_LOG_BATCH_MAX);
   try {
-    const res = await post(config, '/api/local-compute/log', { lines: batch }, authHeaders(config));
+    const res = await post(config, '/api/local-compute/log', { lines: batch, run: NODE_LOG_RUN_ID }, authHeaders(config));
     if (res.ok) {
       nodeLogRing.splice(0, batch.length);
       nodeLogRingBytes -= batch.reduce((n, e) => n + e.text.length, 0);

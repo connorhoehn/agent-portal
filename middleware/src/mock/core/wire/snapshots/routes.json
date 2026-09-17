@@ -1438,7 +1438,7 @@
     {
       "method": "GET",
       "path": "/api/local-compute/events",
-      "source": "src/routes/local-compute.ts:1008"
+      "source": "src/routes/local-compute.ts:1015"
     },
     {
       "method": "POST",
@@ -1478,42 +1478,42 @@
     {
       "method": "POST",
       "path": "/api/local-compute/log",
-      "source": "src/routes/local-compute.ts:770"
+      "source": "src/routes/local-compute.ts:777"
     },
     {
       "method": "GET",
       "path": "/api/local-compute/nodes",
-      "source": "src/routes/local-compute.ts:887"
+      "source": "src/routes/local-compute.ts:894"
     },
     {
       "method": "DELETE",
       "path": "/api/local-compute/nodes/:id",
-      "source": "src/routes/local-compute.ts:1085"
+      "source": "src/routes/local-compute.ts:1092"
     },
     {
       "method": "PATCH",
       "path": "/api/local-compute/nodes/:id",
-      "source": "src/routes/local-compute.ts:1063"
+      "source": "src/routes/local-compute.ts:1070"
     },
     {
       "method": "GET",
       "path": "/api/local-compute/nodes/:nodeId/log",
-      "source": "src/routes/local-compute.ts:816"
+      "source": "src/routes/local-compute.ts:823"
     },
     {
       "method": "GET",
       "path": "/api/local-compute/nodes/:nodeId/log/stream",
-      "source": "src/routes/local-compute.ts:834"
+      "source": "src/routes/local-compute.ts:841"
     },
     {
       "method": "POST",
       "path": "/api/local-compute/nodes/:nodeId/work",
-      "source": "src/routes/local-compute.ts:1130"
+      "source": "src/routes/local-compute.ts:1137"
     },
     {
       "method": "GET",
       "path": "/api/local-compute/nodes/all",
-      "source": "src/routes/local-compute.ts:899"
+      "source": "src/routes/local-compute.ts:906"
     },
     {
       "method": "GET",
@@ -1533,7 +1533,7 @@
     {
       "method": "GET",
       "path": "/api/local-compute/presence/repos",
-      "source": "src/routes/local-compute.ts:934"
+      "source": "src/routes/local-compute.ts:941"
     },
     {
       "method": "POST",
@@ -1543,7 +1543,7 @@
     {
       "method": "GET",
       "path": "/api/local-compute/runs",
-      "source": "src/routes/local-compute.ts:1262"
+      "source": "src/routes/local-compute.ts:1269"
     },
     {
       "method": "POST",
@@ -1553,7 +1553,7 @@
     {
       "method": "GET",
       "path": "/api/local-compute/stream",
-      "source": "src/routes/local-compute.ts:980"
+      "source": "src/routes/local-compute.ts:987"
     },
     {
       "method": "GET",

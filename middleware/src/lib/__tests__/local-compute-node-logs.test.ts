@@ -50,6 +50,56 @@ describe('appendNodeLog / getNodeLog', () => {
     expect(getNodeLog('node-a')!.entries).toHaveLength(1);
   });
 
+  // The regression this whole run-id mechanism exists for. `nodeLogSeq` in
+  // tools/local-compute-worker.mjs is a module-level `let`, so a restarted
+  // worker counts from 0 again. Deduping on seq alone swallowed its entire
+  // startup log and the Computer Lab went on showing the dead run.
+  it('a restarted worker re-using seq 0 is NOT mistaken for a re-ship', () => {
+    appendNodeLog('node-a', 0, 'run one: registered\n', 'runA');
+    appendNodeLog('node-a', 1, 'run one: presence acknowledged\n', 'runA');
+    // Same worker, restarted: its counter is back at 0.
+    appendNodeLog('node-a', 0, 'run two: registered\n', 'runB');
+    appendNodeLog('node-a', 1, 'run two: presence acknowledged\n', 'runB');
+
+    const log = getNodeLog('node-a')!;
+    expect(log.entries.map((e) => e.text)).toEqual([
+      'run one: registered\n',
+      'run one: presence acknowledged\n',
+      'run two: registered\n',
+      'run two: presence acknowledged\n',
+    ]);
+    // …and the server's own ordering kept climbing, which is what makes the
+    // new lines reachable through the `since` cursor at all.
+    expect(log.entries.map((e) => e.seq)).toEqual([0, 1, 2, 3]);
+    expect(log.lastSeq).toBe(3);
+  });
+
+  it('a restarted run is reachable from a cursor the previous run had advanced', () => {
+    appendNodeLog('node-a', 0, 'old\n', 'runA');
+    appendNodeLog('node-a', 1, 'older still\n', 'runA');
+    const cursor = getNodeLog('node-a')!.lastSeq; // a poller is caught up here
+    appendNodeLog('node-a', 0, 'fresh after restart\n', 'runB');
+    // Before the fix this returned [] — the new line carried seq 0, below the
+    // cursor, so even storing it would not have delivered it.
+    expect(getNodeLog('node-a', cursor)!.entries.map((e) => e.text)).toEqual(['fresh after restart\n']);
+  });
+
+  it('a re-ship WITHIN one run is still dropped', () => {
+    appendNodeLog('node-a', 7, 'flushed twice\n', 'runA');
+    appendNodeLog('node-a', 7, 'flushed twice\n', 'runA');
+    expect(getNodeLog('node-a')!.entries).toHaveLength(1);
+  });
+
+  it('never leaks the dedupe key into what a poller or the SSE tail is handed', () => {
+    appendNodeLog('node-a', 0, 'a\n', 'runA');
+    const seen: unknown[] = [];
+    const off = subscribeNodeLog('node-a', (e) => seen.push(e));
+    appendNodeLog('node-a', 1, 'b\n', 'runA');
+    off();
+    expect(Object.keys(getNodeLog('node-a')!.entries[0]!).sort()).toEqual(['seq', 'text']);
+    expect(Object.keys(seen[0] as object).sort()).toEqual(['seq', 'text']);
+  });
+
   it('honours ?since via the since parameter — only entries after a cursor', () => {
     appendNodeLog('node-a', 0, 'a\n');
     appendNodeLog('node-a', 1, 'b\n');

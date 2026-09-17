@@ -29,9 +29,10 @@ import { isLocalMachineId, nodeIdOf } from './localMachines';
  * behaves exactly as before — it is the same kind object with one branch in
  * front of its renderer.
  *
- * When `Computer.kind?: 'microvm' | 'local'` ships (queued in
- * docs/ui-components-queue.md) the registry can pick this itself and the
- * wrapper goes.
+ * When `Computer.kind?: 'microvm' | 'local'` ships the registry can pick this
+ * itself and the wrapper goes. Queued in docs/ui-components-queue.md, in the
+ * same row as the pane CHROME half of the gap — the frame still says `shell`
+ * and `pty` around this log, which no consumer can reach.
  */
 const [defaultKind, ...otherKinds] = DEFAULT_PANE_KINDS;
 
