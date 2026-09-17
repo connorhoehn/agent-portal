@@ -849,3 +849,62 @@ so a label stays attached to the row its note is actually about regardless of
 how the corpus is ordered — and the two entries whose targets never actually
 matched their notes even under the old band (a preexisting mismatch, not
 something this change caused) got pointed at rows that do.
+
+## The fleet that was empty by construction (2026-09-16)
+
+`Computer Lab` is a nav item of its own — the tmux-shaped multiplexer over
+microVM sessions — and in the entire `dev:mock` demo it showed **nothing**.
+`GET /api/devbox/boxes` answered `{"boxes":[]}` while its sibling
+`/api/environments` came back richly seeded.
+
+The cause is one line. `providers/devbox-fleet-store.ts::loadFleet()` opens
+with `if (!usable()) return []`, and `usable()` is false whenever Aurora is
+mocked — so the fleet was empty *by construction*, not by accident, and had
+been for as long as the offline mode existed.
+
+This is contract.ts rule 5, and `mock/lab.ts`'s own header already names it
+about its surface: "THE STORE WAS EMPTY, so `GET` returned `[]` and an unbuilt
+feature and an unseeded one looked identical." The lab is the more expensive
+version, because **its empty state is phrased as an instruction** — "No
+computers to lab · Provision at least one computer". A blank list reads as
+unfinished; an instruction reads as *waiting for you*, and the obvious next
+move offline is to try provisioning against a runtime that is not there.
+
+### What the seed is chosen to exercise
+
+`lib/devbox-visibility.ts` recognises three shapes of computer, so a seed
+carrying only one of them exercises a third of the rule. `mock/devbox-fleet.ts`
+seeds at least one of each — shared (a `projectId`), personal (an `ownerId`
+and no project), and unattributed (neither, the shape the fleet makes for
+itself) — using real `u-*` subs and real `p-*` initiative ids, never invented
+ones. A box charged to an initiative nobody is attached to would be invisible
+to every role and would look like a bug in the filter rather than a seed that
+says nothing.
+
+Measured live, which is the point of choosing the rows that way:
+
+| caller | sees |
+|---|---|
+| `u-rachel` (hr-admin, org-wide) | 5 |
+| `u-nora` (sme, on auth-migration + observability) | 3 |
+| `u-layla` (sme, on observability only) | 1 |
+
+`stopped` is deliberately never seeded: `loadFleet` filters `status <>
+'stopped'` and prunes those rows, so seeding one would be inventing a state the
+real loader guarantees never arrives.
+
+### The in-memory Map is not fixture rows
+
+The boxes live in a `Map` in `lib/devbox-fleet.ts`, hydrated once at boot — so
+`registry.resetAll()` cannot reach them. Left alone, that broke the control
+plane's single promise in both directions: a box renamed during a demo survived
+`POST /api/__mock/reset`, and pinning `devbox-boxes` to `empty` changed the
+fixture while five boxes stayed on screen.
+
+`rehydrateMockFleet()` closes it, and is called from **every** mock-control
+mutation — the full reset, a per-fixture reset, and both scenario routes —
+following the `clearDevPairings()` precedent already in that file, which exists
+for exactly the same reason. It re-reads the fixture rather than caching a
+copy, so it follows a pinned `empty` instead of dragging the default fleet back
+over it.
+

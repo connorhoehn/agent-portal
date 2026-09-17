@@ -19,8 +19,11 @@
 import { type SqlParameter } from '@aws-sdk/client-rds-data';
 import { exec } from './aurora.js';
 import { config } from '../config.js';
-import { setFleetStore, hydrateBoxes, type FleetBox, type FleetStore } from '../lib/devbox-fleet.js';
+import {
+  setFleetStore, hydrateBoxes, _resetFleet, type FleetBox, type FleetStore,
+} from '../lib/devbox-fleet.js';
 import { rowToBox } from '../lib/devbox-fleet-rows.js';
+import { devboxBoxes } from '../mock/devbox-fleet.js';
 
 /**
  * How long a box's moved activity clock may sit unwritten.
@@ -67,6 +70,19 @@ const num = (name: string, value: number | null | undefined): SqlParameter =>
  * work is about, and the reaper can only stop what it can see.
  */
 export async function loadFleet(): Promise<FleetBox[]> {
+  // OFFLINE. `usable()` is false whenever Aurora is mocked, so this used to
+  // return [] and the whole microVM fleet was empty BY CONSTRUCTION in the
+  // dev:mock demo — `GET /api/devbox/boxes` answered `{"boxes":[]}` and
+  // Computer Lab, a nav item of its own, rendered "No computers to lab.
+  // Provision at least one computer" in every demo. That empty state is
+  // phrased as an instruction, so the surface did not read as unseeded, it
+  // read as waiting for you.
+  //
+  // Seeded rows come from the registered `devboxBoxes` fixture, so
+  // `POST /api/__mock/scenario {"scenario":"empty","fixture":"devbox-boxes"}`
+  // still asks for a genuinely empty fleet by name — the one case where that
+  // instruction is the honest screen.
+  if (config.mock.aurora) return devboxBoxes.rows().map((b) => ({ ...b }));
   if (!usable()) return [];
   try {
     const rows = await exec(
@@ -246,4 +262,24 @@ export function _stopFleetPersistence(): void {
   if (flushTimer) { clearInterval(flushTimer); flushTimer = null; }
   pending.clear();
   setFleetStore(null);
+}
+
+/**
+ * Put the offline fleet back to its seed — the `clearDevPairings()` precedent
+ * in routes/mock-control.ts, for the same reason it exists.
+ *
+ * The boxes live in an in-memory Map in lib/devbox-fleet.ts, NOT in the
+ * fixture's rows, so `registry.resetAll()` cannot reach them: without this a
+ * box renamed or stopped during a demo would survive the reset and
+ * `POST /api/__mock/reset` would quietly mean "reset most of it". Re-reads the
+ * fixture rather than caching a copy, so it follows a pinned `empty` scenario
+ * instead of dragging the default fleet back over it.
+ *
+ * No-op when Aurora is real: there the rows are Aurora's and resetting them is
+ * not this plane's business.
+ */
+export function rehydrateMockFleet(): number {
+  if (!config.mock.aurora) return 0;
+  _resetFleet();
+  return hydrateBoxes(devboxBoxes.rows().map((b) => ({ ...b })));
 }

@@ -47,6 +47,7 @@ import { requireServiceAuth, MOCK_CONTROL_SERVICE_AUTH } from '../lib/service-au
 import { join } from 'node:path';
 import { handlerSha, handlerSourceFiles } from '../mock/core/wire/handler-sha.js';
 import { clearDevPairings } from '../mock/dev-pairings.js';
+import { rehydrateMockFleet } from '../providers/devbox-fleet-store.js';
 
 export const mockControlRouter = Router();
 
@@ -307,12 +308,19 @@ mockControlRouter.post('/api/__mock/scenario', ...gate, (req, res) => {
     const fixture = findFixture(registry, body.fixture, res);
     if (!fixture) return;
     pin(fixture, scenario);
+    // See rehydrateMockFleet's doc comment: the microVM fleet lives in an
+    // in-memory Map, not in fixture rows, so pinning `devbox-boxes` to `empty`
+    // changed the fixture and left five boxes on screen — the scenario plane's
+    // one promise ("ask for an empty state by name") silently not kept for
+    // this fixture. Cheap enough to run unconditionally; it no-ops off mock.
+    rehydrateMockFleet();
     res.json({ applied: { scenario, fixture: fixture.key }, ...readState(registry) });
     return;
   }
 
   unpinAll(registry);
   registry.resetAll(scenario);
+  rehydrateMockFleet();
   globalScenario = scenario;
   res.json({ applied: { scenario, fixture: null }, ...readState(registry) });
 });
@@ -335,6 +343,7 @@ mockControlRouter.post('/api/__mock/reset', ...gate, (req, res) => {
     if (!fixture) return;
     unpin(fixture);
     fixture.reset();
+    rehydrateMockFleet();
     res.json({ reset: { fixture: fixture.key, scenario: globalScenario }, ...readState(registry) });
     return;
   }
@@ -345,6 +354,11 @@ mockControlRouter.post('/api/__mock/reset', ...gate, (req, res) => {
   // of it". No-op unless MOCK_PERSIST_PAIRINGS=1 (see mock/dev-pairings.ts).
   clearDevPairings();
   registry.resetAll(DEFAULT_SCENARIO);
+  // Same reason as the line above: the microVM fleet lives in an in-memory Map
+  // in lib/devbox-fleet.ts, not in fixture rows, so `resetAll` cannot reach a
+  // box that was renamed or stopped during a demo. Runs AFTER resetAll so it
+  // re-reads the fixture in the world the reset just established.
+  rehydrateMockFleet();
   globalScenario = DEFAULT_SCENARIO;
   res.json({ reset: { fixture: null, scenario: DEFAULT_SCENARIO }, ...readState(registry) });
 });

@@ -1,7 +1,7 @@
 {
-  "capturedAt": "2026-09-16T22:34:57.154Z",
-  "serverHandlerSha": "91d3c2a87af63eb65b12dd10ac232053ee6a5578de035986a790e83c67a85c08",
-  "baseUrl": "http://127.0.0.1:3024",
+  "capturedAt": "2026-09-17T03:23:21.471Z",
+  "serverHandlerSha": "a72a0bf9ab54e40610b18821c86a8382d290d46365d3a501032056f82dc70d59",
+  "baseUrl": "http://127.0.0.1:3014",
   "personas": [
     "orgiq/admin",
     "assessment/admin",
@@ -66,6 +66,7 @@
           "compute-pairing-codes",
           "connected-sources",
           "design-reviews",
+          "devbox-boxes",
           "devbox-deliveries",
           "devbox-work-products",
           "devbox-workspaces",
@@ -191,6 +192,7 @@
           "compute-pairing-codes",
           "connected-sources",
           "design-reviews",
+          "devbox-boxes",
           "devbox-deliveries",
           "devbox-work-products",
           "devbox-workspaces",
@@ -2045,12 +2047,40 @@
       "status": 200,
       "shape": {
         "$": "object",
-        "boxes": "array"
+        "boxes": "array",
+        "boxes[]": "object",
+        "boxes[].activeModel": "string",
+        "boxes[].contextUsed": "number",
+        "boxes[].createdAt": "string",
+        "boxes[].currentTask": "string",
+        "boxes[].id": "string",
+        "boxes[].idleMsLeft": "number",
+        "boxes[].label": "string",
+        "boxes[].lastActivityAt": "string",
+        "boxes[].lastResult": "object",
+        "boxes[].lastResult.costUsd": "number",
+        "boxes[].lastResult.durationMs": "number",
+        "boxes[].lastResult.subtype": "string",
+        "boxes[].lastResult.turns": "number",
+        "boxes[].lifetimeMsLeft": "number",
+        "boxes[].ownerId": "string",
+        "boxes[].projectId": "string",
+        "boxes[].sessionId": "string",
+        "boxes[].spendUsd": "number",
+        "boxes[].status": "string",
+        "boxes[].stopsInMs": "number",
+        "boxes[].tokensUsed": "number"
       },
-      "values": {}
+      "values": {
+        "boxes[].status": [
+          "idle",
+          "running",
+          "waiting"
+        ]
+      }
     },
     "GET /api/devbox/boxes/:boxId/tail": {
-      "skipped": "no value found for :boxId under /api/devbox/boxes (orgiq/admin); no value found for :boxId under /api/devbox/boxes (assessment/admin); no value found for :boxId under /api/devbox/boxes (anonymous)"
+      "skipped": "server-sent event stream (orgiq/admin); server-sent event stream (assessment/admin); no value found for :boxId under /api/devbox/boxes (anonymous)"
     },
     "GET /api/devbox/status": {
       "persona": "orgiq/admin",
@@ -6678,6 +6708,7 @@
         "failed",
         "healthy",
         "ideating",
+        "idle",
         "in_progress",
         "in_review",
         "live",
@@ -6705,7 +6736,8 @@
         "succeeded",
         "superseded",
         "unproven",
-        "verified"
+        "verified",
+        "waiting"
       ]
     },
     "tenant": {

@@ -1,7 +1,7 @@
 {
-  "capturedAt": "2026-09-16T22:34:58.419Z",
-  "serverHandlerSha": "91d3c2a87af63eb65b12dd10ac232053ee6a5578de035986a790e83c67a85c08",
-  "baseUrl": "http://127.0.0.1:3024",
+  "capturedAt": "2026-09-17T03:23:22.189Z",
+  "serverHandlerSha": "a72a0bf9ab54e40610b18821c86a8382d290d46365d3a501032056f82dc70d59",
+  "baseUrl": "http://127.0.0.1:3014",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
     "agentcore",
@@ -281,7 +281,36 @@
       ]
     },
     "PATCH /api/devbox/boxes/:boxId": {
-      "skipped": "no value found for :boxId under /api/devbox/boxes (orgiq/admin)"
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "activeModel": "string",
+        "contextUsed": "number",
+        "createdAt": "string",
+        "currentTask": "string",
+        "id": "string",
+        "label": "string",
+        "lastActivityAt": "string",
+        "lastResult": "object",
+        "lastResult.costUsd": "number",
+        "lastResult.durationMs": "number",
+        "lastResult.subtype": "string",
+        "lastResult.turns": "number",
+        "ownerId": "string",
+        "sessionId": "string",
+        "spendUsd": "number",
+        "status": "string",
+        "tokensUsed": "number"
+      },
+      "values": {
+        "status": [
+          "idle"
+        ]
+      },
+      "sent": [
+        "label"
+      ]
     },
     "PATCH /api/environments/:id": {
       "persona": "orgiq/admin",
@@ -586,6 +615,7 @@
           "compute-pairing-codes",
           "connected-sources",
           "design-reviews",
+          "devbox-boxes",
           "devbox-deliveries",
           "devbox-work-products",
           "devbox-workspaces",
