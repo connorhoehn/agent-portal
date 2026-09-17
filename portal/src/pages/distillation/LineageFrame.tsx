@@ -3,16 +3,25 @@
 // (@xyflow/react's canvas needs a sized wrapper and connector `Handle`s that
 // have no ui-components equivalent).
 //
-// The node body was meant to be the library's `NodeCard` — it exists, but
-// only from the package ROOT, not `/shared` (see docs/ui-components-queue.md).
-// Importing the root package pulls its whole bundle graph into one chunk,
-// including `TiptapEditor`'s `@tiptap/react` import; that peer dependency
-// isn't installed here (nothing else in the portal uses the root entry point,
-// per CLAUDE.md's "consume as libraries" — `@tiptap/react` is a ui-components
-// PEER dep, not a portal one) and `npm install` is off the table, so
-// `vite build` fails on an unrelated editor nowhere near this feature. So the
-// node body here is `Card` + `Chip` from `/shared` instead — safe, and still
-// exempted as "composed locally" the same as a NodeCard wrapper would be.
+// The node body was meant to be the library's `NodeCard`. The reason recorded
+// here used to be that it shipped only from the package ROOT, so importing it
+// dragged `TiptapEditor`'s uninstalled `@tiptap/react` peer into the chunk and
+// broke `vite build`. THAT REASON IS GONE: at the current pin (2.277.2)
+// `NodeCard` is declared in `shared.d.ts`, present in the `shared.js` runtime
+// barrel, and resolves as a function from `@connorhoehnslalom/ui-components/shared`
+// — all three checked, because this repo has been burned by a `.d.ts` the
+// barrel never re-exported.
+//
+// It still is not adopted, for a SHAPE reason rather than a packaging one.
+// `NodeCardProps` expresses `status`/`statusLabel`, which drive a StatusPill,
+// and exactly one `subtitle`. This node has no status — its chip carries a
+// KIND (observation / cluster / artifact / library item), a taxonomy, and
+// dressing that up as a status to reach the pill would make the markup lie
+// about what the value is. It also needs three stacked lines (label, id, and
+// an optional subtitle) where `NodeCard` offers one plus a generic `body`.
+// So the body stays `Card` + `Chip` from `/shared`, still exempt as "composed
+// locally", and the queue row now records the real blocker instead of the
+// stale one.
 //
 // Typed nodes (colour + icon per LineageNodeKind, from distillationFormat.ts);
 // edges carry the relation as a label; `compact` drops the

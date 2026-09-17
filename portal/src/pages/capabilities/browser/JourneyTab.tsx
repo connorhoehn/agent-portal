@@ -9,6 +9,7 @@ import { SESSIONS_URL, closeSession, journeyUrl, launchSession, navigateSession 
 import { openSessions } from './browserFormat';
 import type { BrowserSession, JourneyStep } from './types';
 import { T } from '../Text';
+import { UnavailableNotice } from '../../../components/UnavailableNotice';
 
 const VIEW_OPTIONS = [
   { value: 'carousel', label: 'Carousel' },
@@ -27,8 +28,8 @@ export function JourneyTab() {
   const { can, ready } = useCapabilities();
   const canManage = ready && can('ManageDevbox');
 
-  const { data: sessionsData, refresh: refreshSessions } =
-    useFetch<{ sessions: BrowserSession[] }>(SESSIONS_URL, 10000);
+  const { data: sessionsData, refresh: refreshSessions, degraded: sessionsDegraded } =
+    useFetch<{ sessions: BrowserSession[]; degraded?: string }>(SESSIONS_URL, 10000);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const { data: journeyData, refresh: refreshJourney } =
     useFetch<{ steps: JourneyStep[] }>(journeyUrl(activeSessionId), 5000);
@@ -127,6 +128,22 @@ export function JourneyTab() {
               </InlinePlaceholder>
             )}
 
+            {/* `/api/capabilities/browser-sessions` answers 200 with `degraded`
+                when ListBrowserSessions fails, and this block used to be gated
+                on `resumable.length > 0` alone — so a failed read and a genuinely
+                empty list produced the same screen: no "resume" affordance and
+                no explanation. That is worse here than on a list page, because
+                the reader's next move is to START a session, and an AgentCore
+                browser is a real resource to spend on the belief that nothing
+                is open. */}
+            {sessionsDegraded && resumable.length === 0 && (
+              <UnavailableNotice
+                error={sessionsDegraded}
+                what="open browser sessions"
+                source="Sessions are listed from AgentCore ListBrowserSessions"
+                onRetry={() => void refreshSessions()}
+              />
+            )}
             {resumable.length > 0 && (
               <Stack gap="sm">
                 <SectionLabel>Or resume an open session</SectionLabel>
