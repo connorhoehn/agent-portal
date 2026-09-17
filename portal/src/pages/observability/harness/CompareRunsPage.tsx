@@ -253,10 +253,10 @@ function CompareRunsPage() {
               <T className="font-mono text-[11.5px]">{shortRunId(runB.runId)}</T>
             </T>
             <Inline gap="sm" align="center" className="text-[12px] text-text-secondary">
-              <T title={`run A: ${runA.runId}`}>A: <strong>{runA.label}</strong></T>
+              <T title={`run A: ${runA.runId}`}>A:&nbsp;<strong>{runA.label}</strong></T>
               <ModeChip mode={summary.modeA} />
               <T className="text-text-tertiary">→</T>
-              <T title={`run B: ${runB.runId}`}>B: <strong>{runB.label}</strong></T>
+              <T title={`run B: ${runB.runId}`}>B:&nbsp;<strong>{runB.label}</strong></T>
               <ModeChip mode={summary.modeB} />
             </Inline>
             <Inline gap="sm" align="center" className="text-[12px] text-text-secondary">
@@ -289,9 +289,9 @@ function CompareRunsPage() {
                 </>
               )}
               <T className="text-text-tertiary">·</T>
-              <T>tests A: <strong>{runA.passed}/{runA.totalCases}</strong></T>
+              <T>tests A:&nbsp;<strong>{runA.passed}/{runA.totalCases}</strong></T>
               <T className="text-text-tertiary">·</T>
-              <T>tests B: <strong>{runB.passed}/{runB.totalCases}</strong></T>
+              <T>tests B:&nbsp;<strong>{runB.passed}/{runB.totalCases}</strong></T>
             </Inline>
           </Stack>
           <Inline gap="sm">

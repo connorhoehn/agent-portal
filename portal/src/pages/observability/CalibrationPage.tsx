@@ -301,7 +301,7 @@ function CalibrationPage() {
       {/* Header */}
       <Card padding="md">
         <Inline gap="sm" align="center" className="text-[12px] text-text-secondary">
-          <T><strong>{cases.length}</strong> active case{cases.length === 1 ? '' : 's'}</T>
+          <T><strong>{cases.length}</strong>&nbsp;active case{cases.length === 1 ? '' : 's'}</T>
           <T className="text-text-tertiary">·</T>
           <T>judge <T className="font-mono text-[11.5px]">{judgeModelId}</T></T>
           <T className="text-text-tertiary">·</T>

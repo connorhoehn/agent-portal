@@ -324,13 +324,13 @@ function RunDetailPage() {
               </Inline>
             </Inline>
             <Inline gap="sm" align="center" className="text-[12px] text-text-secondary">
-              <T>started <strong>{new Date(run.startedAt).toLocaleString()}</strong></T>
+              <T>started&nbsp;<strong>{new Date(run.startedAt).toLocaleString()}</strong></T>
               {run.finishedAt && (
                 <>
                   <T className="text-text-tertiary">·</T>
-                  <T>finished <strong>{new Date(run.finishedAt).toLocaleString()}</strong></T>
+                  <T>finished&nbsp;<strong>{new Date(run.finishedAt).toLocaleString()}</strong></T>
                   <T className="text-text-tertiary">·</T>
-                  <T>duration <strong>{durationStr(run.startedAt, run.finishedAt)}</strong></T>
+                  <T>duration&nbsp;<strong>{durationStr(run.startedAt, run.finishedAt)}</strong></T>
                 </>
               )}
             </Inline>
@@ -615,7 +615,7 @@ function ResultDetail({ result }: { result: TestResult }) {
         </Stack>
       )}
       <Inline gap="sm" align="center" className="text-[11px] text-text-tertiary">
-        <T>reference similarity: <strong>{fmt(result.referenceSimilarity)}</strong></T>
+        <T>reference similarity:&nbsp;<strong>{fmt(result.referenceSimilarity)}</strong></T>
         {(result.inputTokens != null || result.outputTokens != null) && (
           <>
             <T>·</T>

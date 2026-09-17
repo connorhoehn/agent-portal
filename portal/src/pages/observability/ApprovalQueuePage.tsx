@@ -227,7 +227,7 @@ function ApprovalQueuePage() {
           />
           <T>{streamStatusLabel(streaming, connectedOnce)}</T>
           <T className="text-text-tertiary">·</T>
-          <T><strong>{sorted.length}</strong> pending</T>
+          <T><strong>{sorted.length}</strong>&nbsp;pending</T>
           <LiveRegion
             politeness="polite"
             message={`${sorted.length} approval${sorted.length === 1 ? '' : 's'} pending`}

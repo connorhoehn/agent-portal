@@ -234,7 +234,7 @@ function OnCallPage() {
           </T>
           <T className="text-text-tertiary">·</T>
           <T>
-            <strong>{hitl?.pendingCount ?? 0}</strong> pending approval
+            <strong>{hitl?.pendingCount ?? 0}</strong>&nbsp;pending approval
             {hitl?.pendingCount === 1 ? '' : 's'}
           </T>
           <T className="text-text-tertiary">·</T>

@@ -362,7 +362,7 @@ function ModelComparePage() {
         {runA && runB && (
           <Inline gap="sm" wrap align="center" className="text-[12px] text-text-secondary mt-2">
             <Inline as="span" gap="xs" align="center" wrap title={`run A: ${runA.runId}`}>
-              <T>A: <strong>{runA.label}</strong></T>
+              <T>A:&nbsp;<strong>{runA.label}</strong></T>
               <T className="font-mono text-[11.5px]">· judge {runA.judgeModelId}</T>
               {agentModelA && (
                 <>
@@ -375,7 +375,7 @@ function ModelComparePage() {
             </Inline>
             <T className="text-text-tertiary">→</T>
             <Inline as="span" gap="xs" align="center" wrap title={`run B: ${runB.runId}`}>
-              <T>B: <strong>{runB.label}</strong></T>
+              <T>B:&nbsp;<strong>{runB.label}</strong></T>
               <T className="font-mono text-[11.5px]">· judge {runB.judgeModelId}</T>
               {agentModelB && (
                 <>
