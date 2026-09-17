@@ -313,7 +313,7 @@ whole backlog. Most take `--quick` to skip the slow suites (jest, vite build).
 | `distillation.md`, `distillation-goal.md` | `/iq/distillation` — the fleet's shared memory | `validate-distillation.sh` |
 | `route-test-coverage.md` | Route ↔ test parity across every router | `validate-route-coverage.sh` |
 | `research-honesty-checks-2026-09-16.md` | The four "numbers that lie" bug classes, the class-4 triage rule (rates vs latencies), and each scanner's false-positive story | `validate-honest-numbers.sh` |
-| — (rationale lives in the script header) | Nav ↔ route parity: the rail, the palette and `App.tsx` must gate every page the same way, and every palette jump must resolve | `validate-nav-parity.sh` |
+| `nav-server-tier-decisions.md` | Nav ↔ route parity: the rail, the palette and `App.tsx` must gate every page the same way, every palette jump must resolve, and a nav item must not be gated narrower than the API it reads (that last one is ratcheted — the doc is where those get decided) | `validate-nav-parity.sh` |
 | `ui-components-queue.md` | Composites the library is missing — and, since it is the ledger the component-discipline gate reads, the ONLY thing that exempts a file from it. A row must say "Composed locally in `<file>`" to mint an exemption. | `validate-component-discipline.sh` |
 | `agentcore-preview-surface.md` | Verified preview-API research + the machine-callback operator runbook (§6a) | — |
 | `agentcore-preview-plan.md` | The sequenced work plan against that research | — |

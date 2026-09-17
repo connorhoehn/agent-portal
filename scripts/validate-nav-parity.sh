@@ -59,6 +59,70 @@ else
   fi
 fi
 
+# ── The server's read tier ──────────────────────────────────────────────────
+# A nav item gated NARROWER than what the API actually serves. Ratcheted, not a
+# hard zero, because the fix is a PRODUCT decision and not always "widen": the
+# server may simply be more permissive than the product wants to advertise.
+# What is not acceptable is the drift being invisible, which is how Computer
+# Lab hid org-leader — the one role devbox-visibility.ts treats as FLEET_WIDE.
+section "nav gates vs the server's declared read tier"
+node "$REPO/scripts/lib/nav-server-tier.cjs" > "$TMP/tier.jsonl" 2>"$TMP/tier.err"
+trc=$?
+if [ $trc -ne 0 ] || [ -s "$TMP/tier.err" ]; then
+  fail "the server-tier scanner crashed (exit $trc)"
+  sed 's/^/      /' "$TMP/tier.err"
+else
+  nt=$(grep -c . "$TMP/tier.jsonl" 2>/dev/null); nt=${nt:-0}
+  BUDGET_T="$REPO/scripts/nav-server-tier-budget.txt"
+  BUDGET_T_START=6
+  bt=$(tr -d ' \n' < "$BUDGET_T" 2>/dev/null || true)
+  if [ -z "$bt" ]; then fail "$BUDGET_T missing (baseline $BUDGET_T_START)"; bt=$BUDGET_T_START; fi
+  if [ "$bt" -gt "$BUDGET_T_START" ]; then fail "budget $bt was raised above the $BUDGET_T_START baseline — it may only go down"; fi
+  if [ "$nt" -le "$bt" ]; then ok "candidates: $nt ≤ budget $bt"; else
+    fail "candidates: $nt > budget $bt — a nav item was narrowed below what its API serves"
+  fi
+  [ "$nt" -lt "$bt" ] && note "budget is stale: lower $BUDGET_T to $nt"
+  if [ "$nt" -gt 0 ]; then
+    note "open product decisions (see docs/nav-server-tier-decisions.md):"
+    node -e '
+      const fs=require("fs");
+      for (const l of fs.readFileSync(process.argv[1],"utf8").trim().split("\n").filter(Boolean)) {
+        const f=JSON.parse(l);
+        if (f.rule === "nav-narrower-than-server") {
+          console.log(`      ${f.nav} — API serves [${f.serverRead}] via ${f.action}, nav shows [${f.nav_roles}]; hidden from: ${f.missing}`);
+        } else {
+          console.log(`      ${f.nav} — ${f.detail}`);
+        }
+      }
+    ' "$TMP/tier.jsonl"
+  fi
+fi
+
+# Recall for the server-tier rule, from history. a257bf3 widened Computer Lab's
+# three portal gates to match /api/devbox's read tier; its parent must therefore
+# still show /admin/devbox hiding org-leader and program-owner. If this stops
+# firing, the rule has stopped reading either the mount or the Cedar seeds.
+TCAL="$TMP/tcal"
+mkdir -p "$TCAL/portal/src/components/shell" "$TCAL/scripts/lib" "$TCAL/middleware/src"
+if git -C "$REPO" cat-file -e a257bf3^:portal/src/components/shell/portalCommands.ts 2>/dev/null; then
+  git -C "$REPO" show a257bf3^:portal/src/components/shell/portalCommands.ts > "$TCAL/portal/src/components/shell/portalCommands.ts"
+  ln -sfn "$REPO/middleware/node_modules" "$TCAL/middleware/node_modules"
+  ln -sfn "$REPO/middleware/seeds" "$TCAL/middleware/seeds"
+  ln -sfn "$REPO/middleware/src/routes" "$TCAL/middleware/src/routes"
+  cp "$REPO/middleware/src/index.ts" "$TCAL/middleware/src/index.ts"
+  cp "$REPO/scripts/lib/nav-server-tier.cjs" "$TCAL/scripts/lib/"
+  if node "$TCAL/scripts/lib/nav-server-tier.cjs" 2>/dev/null | grep -q '"nav":"/admin/devbox"'; then
+    ok "server-tier recall: catches the pre-a257bf3 Computer Lab drift"
+  else
+    fail "server-tier recall: the pre-a257bf3 Computer Lab drift was NOT flagged — the rule has stopped working"
+  fi
+  if node "$REPO/scripts/lib/nav-server-tier.cjs" 2>/dev/null | grep -q '"nav":"/admin/devbox"'; then
+    fail "server-tier precision: /admin/devbox flagged on main, where its gates were fixed to match the server"
+  else
+    ok "server-tier precision: the fixed Computer Lab gates are correctly NOT flagged"
+  fi
+fi
+
 # ── Calibration ─────────────────────────────────────────────────────────────
 # A parity checker that passes is indistinguishable from one that is broken,
 # so prove it against the commit that FIXED this exact drift. dd95c1b ("the
