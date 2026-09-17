@@ -10,6 +10,7 @@ import type { Theme, Preferences } from '../lib/preferences';
 import { useFetch } from '../hooks/useFetch';
 import { useGatewayInfo } from '../hooks/useGatewayInfo';
 import { useSession } from '../lib/auth';
+import { Can } from '../lib/capabilities';
 
 const MASQUERADE_HISTORY_KEY = 'orgiq:masquerade:history';
 
@@ -107,8 +108,19 @@ export function SettingsPage() {
           />
         </Card>
 
-        {/* 2. Scores — an Org surface; the assessment tenant has no leaderboard. */}
+        {/* 2. Scores — an Org surface; the assessment tenant has no leaderboard.
+
+            Also ViewLeaderboard-gated, which it was not. The rail already
+            hides /iq/scores from everyone but org-leader and hr-admin (its own
+            comment: "an ungated nav item just handed every SME a 403'd
+            leaderboard") and the server answers 403 on the leaderboard read —
+            but this preference, whose entire description is "applied when
+            opening the Scores page", kept offering itself to members and SMEs.
+            A setting for a page you cannot open can never do anything. Gated on
+            the capability rather than a role list so it tracks what the server
+            actually enforces. */}
         {session?.tenant === 'orgiq' && (
+        <Can do="ViewLeaderboard">
         <Card padding="md">
           <SectionLabel as="div" className="mb-1">Scores</SectionLabel>
           <Divider spacing="none" className="mb-1" />
@@ -142,6 +154,7 @@ export function SettingsPage() {
             </Inline>
           </Stack>
         </Card>
+        </Can>
         )}
 
         {/* 3. Keyboard */}

@@ -116,6 +116,72 @@ records what ⌘I shows.
   primitive, no line-numbered editor) are listed in
   `docs/ui-components-queue.md`; each has exactly one local frame.
 
+## Settings has no journey row — and that is where three bugs were living
+
+`/settings` is in every role's rail and is the one nav item the matrix has
+never covered. Nothing else in this repo judges it either: it is not a list
+surface, it has no goal-doc, and no validator reads it. Opening it once, as an
+ordinary audit pass would, turned up four defects — three shipped in
+`3221ed7`, one in the commit that adds this section:
+
+1. `GatewayProxyClient` could not issue a request from a browser at all
+   (`globalThis.fetch` called unbound → "Illegal invocation"). Queued upstream;
+   worked around at both call sites through the library's own `fetch` seam.
+2. The header's gateway health dot was therefore painting **red on every page
+   of every deployment** — a permanent false alarm nobody had reported,
+   because "the gateway is unhealthy" is a plausible thing for a dot to say.
+3. The panel could not tell "this host is not a gateway" (BFF-only, the normal
+   state here) from "the gateway is down", and printed the raw exception.
+4. The **Scores** preference card was offered to every role. Its own
+   description is "applied when opening the Scores page", but `/iq/scores` is
+   hidden from the rail for everyone but org-leader and hr-admin and the
+   server answers 403 on the leaderboard read (`ViewLeaderboard: false` for
+   member, sme and program-owner, confirmed live). A setting for a page you
+   cannot open can never do anything. It is `Can do="ViewLeaderboard"`-gated
+   now — on the capability rather than a role list, so it tracks what the
+   server actually enforces.
+
+**To close the gap**, add `settings | /settings | - | member,sme,program-owner,org-leader,hr-admin`
+to `MATRIX.txt` and write the five logs. Four of the five walks are already
+done and their screenshots are committed at
+`docs/orgiq-journeys/<role>/settings.jpg`; the hr-admin walk is the one
+remaining. Measured on the isolated stack at 1728x876, content column left
+200px, no horizontal scroll (scrollWidth 1728 = innerWidth), exactly one
+`<main>`, breadcrumb "System › Settings", console errors 0 for every role:
+
+| role | tabbable | all focusable | sections |
+|---|---|---|---|
+| member | 27 | yes | Appearance, Keyboard, Security, Masquerade history, About, Gateway |
+| sme | 26 | yes | same six |
+| program-owner | 27 | yes | same six |
+| org-leader | 35 | yes | the six **plus Scores** |
+| hr-admin | — | not yet walked | expected: as org-leader |
+
+The member/sme/program-owner counts are post-fix — they were higher before,
+by the Scores card's slider and Reset button, which is the defect above.
+
+## The computer-lab matrix row understates who sees it
+
+`MATRIX.txt` says `computer-lab | /admin/devbox | L | sme,hr-admin`, and the
+file's own header says a role not listed "must NOT see the surface". That is
+no longer true. `Layout.tsx:171` gates the rail item on **four** roles —
+`['hr-admin', 'sme', 'org-leader', 'program-owner']`, commented "ManageDevbox
++ the /api/devbox read tier" — and a program-owner rail observed live does
+carry Computer Lab. The read tier was widened after the row was written and
+the row never followed; what a role without `ManageDevbox` gets is the
+read-only fleet ("You can see the fleet but not drive it. Opening a shell or
+dispatching work needs computer access, which an SME or a platform operator
+can grant"), which is the correct read/write split, not a leak.
+
+Note this does NOT contradict `program-owner/RAIL.md`, which records the ⌘I
+Computers *switcher* as denied for that role. The rail item and the
+quick-switcher are two different affordances and both records are accurate —
+which is exactly why the stale row survived.
+
+The row should read `sme,hr-admin,org-leader,program-owner`. Widening it
+makes the validator require `computer-lab` logs for the two added roles, so
+the row and those two walks have to land together.
+
 ## Reading the journey logs
 
 `docs/orgiq-journeys/<role>/<surface>.md` — `verdict`, `console errors`,
