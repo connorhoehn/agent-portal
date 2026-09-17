@@ -16,7 +16,6 @@ import { ErrorState, InlineAlert, Stack } from '@connorhoehnslalom/ui-components
 import { ComputerLab } from '@connorhoehnslalom/ui-components/compute';
 import { useCapabilities } from '../../lib/capabilities';
 import { useSession } from '../../lib/auth';
-import { LocalMachinesLab } from '../local-compute/LocalMachinesLab';
 import { canOpenComputerLab } from '../../lib/devboxAccess';
 
 export default function DevboxPage() {
@@ -70,13 +69,13 @@ export default function DevboxPage() {
           needs computer access, which an SME or a platform operator can grant.
         </InlineAlert>
       )}
-      {/* Paired laptops/workstations — presence, what they're running, and a
-          log — beside the microVM fleet below. See LocalMachinesLab's header
-          comment for why this is a locally-composed section rather than
-          folded into <ComputerLab> itself. Renders nothing when nobody has
-          paired a machine, so a fleet with none looks exactly as it did
-          before this shipped. */}
-      <LocalMachinesLab className="mx-4 mt-3" />
+      {/* Paired machines are IN the lab now, not stacked above it. They used
+          to render as their own band here while <ComputerLab> reported "0
+          computers · nothing here" and told you to provision one — two
+          machines on screen and the surface whose job is to show your machines
+          claiming it had none. The band also squeezed the lab's rail until its
+          section headings overlapped. They reach the lab through the fleet the
+          ComputeProvider serves; see components/compute/localMachines.tsx. */}
       <Stack gap="none" className="min-h-0 flex-1">
         <ComputerLab
           open

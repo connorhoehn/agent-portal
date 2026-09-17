@@ -170,7 +170,33 @@ let nodeLogRingBytes = 0;
  *  from call sites — so every log level ships, not just what a caller
  *  remembers to forward (the job-log path, by contrast, ships the child's raw
  *  stdout, which is a different stream entirely). */
+/**
+ * Lines that stay LOCAL — written to the terminal and the on-disk mirror, but
+ * never shipped to the server for the Computer Lab pane to render.
+ *
+ * The pane is "what is this machine doing", and it was showing the worker's
+ * startup paperwork instead: where the token file lives, and one
+ * `still waiting for "Accepting work"` tick per minute for as long as the
+ * machine sat paused — nine of them in a ten-minute window, crowding out
+ * everything that matters.
+ *
+ * The token path is the sharper of the two. It is deliberately printed on the
+ * operator's own terminal ("it is shown nowhere else"), and shipping it put an
+ * absolute path to a 0600 credential file into a log that every viewer of the
+ * fleet can read. Local-only is where it belonged all along.
+ *
+ * Heartbeats are dropped rather than rate-limited: the machine's presence
+ * already says it is alive, so a log line repeating it adds nothing the row
+ * does not show. The transitions around them — paused, switched on, claiming —
+ * all still ship.
+ */
+const LOCAL_ONLY_LOG = [
+  /token written to /,
+  /still waiting for "Accepting work"/,
+];
+
 function queueNodeLogLine(line) {
+  if (LOCAL_ONLY_LOG.some((re) => re.test(line))) return;
   const text = line.length > NODE_LOG_MAX_LINE ? line.slice(0, NODE_LOG_MAX_LINE) : line;
   nodeLogRing.push({ seq: nodeLogSeq++, text });
   nodeLogRingBytes += text.length;

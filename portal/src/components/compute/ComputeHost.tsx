@@ -12,10 +12,14 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
-  ComputeProvider, installMockShellSocket,
+  ComputeProvider, installMockShellSocket, createComputeClient,
   type ComputeNotice, type ComputeProject,
 } from '@connorhoehnslalom/ui-components/compute';
+import { withLocalMachines } from './localMachines';
+import { labPaneKinds } from './localMachines.tsx';
 import { useCapabilities } from '../../lib/capabilities';
+import { useSession } from '../../lib/auth';
+import { canOpenComputerLab } from '../../lib/devboxAccess';
 import { useFetch } from '../../hooks/useFetch';
 import { isDocumentHidden } from '../../hooks/pollSchedule';
 import { DEVBOX_MODELS } from '../../lib/devboxModels';
@@ -76,12 +80,24 @@ function notify(notice: ComputeNotice): void {
 
 export function ComputeHost({ children }: { children: ReactNode }) {
   const { can, ready } = useCapabilities();
+  const { session } = useSession();
   const canManage = ready && can('ManageDevbox');
+  // READING the fleet and DRIVING it are different rights, and this file used
+  // to conflate them. `/api/devbox` mounts
+  // `readForRolesElseAction(['org-leader','hr-admin','program-owner'],
+  // 'ManageDevbox')` — a deliberate read tier on top of the write capability —
+  // so the "it would be a 403 every poll" premise below is true only of roles
+  // outside BOTH. Gating the poll on the write capability meant the lab
+  // rendered "0 computers · Provision at least one" for precisely the roles the
+  // server was willing to serve, including org-leader, which
+  // devbox-visibility.ts treats as FLEET_WIDE and shows every computer.
+  // Same conflation, one layer down, as the nav gate fixed in a257bf3.
+  const canReadFleet = ready && canOpenComputerLab(canManage, session?.role);
   const visible = useIsDocumentVisible();
   // A backgrounded tab has no dock to glance at, so pause the fleet poll
   // there too — same reasoning as `enabled={canManage}` below, just gated on
   // a different reason to skip fetching.
-  const pollEnabled = canManage && visible;
+  const pollEnabled = canReadFleet && visible;
 
   // `clientOptions` MUST be a stable reference. The library memoizes its
   // client on this prop's identity (`useMemo(() => client ?? createClient(
@@ -162,9 +178,22 @@ export function ComputeHost({ children }: { children: ReactNode }) {
     [orgProjects, budgetsById],
   );
 
+  // One transport for both kinds of computer. `client` overrides
+  // `clientOptions`, so the reference client is built here and wrapped — see
+  // localMachines.tsx for why the machines ride the same list rather than a
+  // second poller. Memoized on `clientOptions`' identity for exactly the
+  // reason spelled out above it: a new client per render is read as "the
+  // transport changed" and re-fires every poll.
+  const client = useMemo(() => withLocalMachines(createComputeClient(clientOptions)), [clientOptions]);
+
+  // The library's own kinds, with the DEFAULT one taught to tell a laptop from
+  // a microVM — see localMachines.tsx for why this cannot be a second kind.
+  const paneKinds = labPaneKinds;
+
   return (
     <ComputeProvider
-      clientOptions={clientOptions}
+      client={client}
+      paneKinds={paneKinds}
       canManage={canManage}
       // This provider polls on a timer for every user on every page, and every
       // route under it is ManageDevbox-gated — without this it would be a 403
