@@ -250,6 +250,46 @@ that HAD a row, used `UnavailableNotice` in three places. The audited page got
 the treatment and its unaudited siblings did not, which is the argument for
 coverage stated as plainly as it ever gets.
 
+## Open: six relative-time ladders that disagree with the shared one
+
+Found 2026-09-17 while sweeping timestamps. `portal/src/lib/relativeTime.ts` is
+the canonical "2h ago" formatter, and six surfaces carry their own copy:
+
+| file | local helper |
+|---|---|
+| `pages/observability/OnCallPage.tsx` | `timeAgo` — in a file that already imports and correctly uses `relativeTime` a few dozen lines away |
+| `pages/budgets/budgetsFormat.ts` | `ago` |
+| `pages/iq/agentDetailFormat.ts` | `when` |
+| `pages/knowledge/knowledgeFormat.ts` | `when` |
+| `components/canary/nodes/JudgeNode.tsx` | `formatRelative` |
+| `components/codebases/RepoDiscovery.tsx` | `ago` |
+| `pages/assessment/secondaryFormat.ts` | `formatRelativeTime` — its comment says it deliberately mirrors the SOURCE app's helper, so this one may be intentional |
+
+They all now parse through `lib/pgTimestamp` (done 2026-09-17), so the parsing
+is consistent. What still differs is the WORDING, and the same instant reads
+differently depending which page you are on:
+
+- the shared helper floors, most local ones round — 45m40s is "45m ago" here
+  and "46m ago" there;
+- the shared helper says "just now" under 2 minutes, most local ones under 1;
+- past a week the shared helper switches to a date ("Jun 9, 2026") while the
+  local ones keep counting — "100d ago", indefinitely.
+
+Not fixed in that pass because swapping the wording changes what six surfaces
+render, and a visual check on all six is more than one pass could honestly
+carry. It is a real "two surfaces disagree about one fact" case, not just
+duplication, which is why it is written down rather than left in a commit
+message.
+
+⚠️ And a correction worth keeping, because it nearly shipped as fact: the first
+version of this fix asserted these ladders hit the production-only Invalid-Date
+bug `lib/pgTimestamp.ts` documents. Measured, they do not. V8 accepts the RAW
+wire shape `2026-09-08 08:19:23+00`; what it rejects is the half-normalised
+`2026-09-08T08:19:23+00`, which you only get by swapping the space for a `T`
+without also widening `+00` to `+00:00`. The comment in that file is accurate
+about the form it names — it is the inference to "therefore every bare parse is
+broken" that was wrong.
+
 ## Reading the journey logs
 
 `docs/orgiq-journeys/<role>/<surface>.md` — `verdict`, `console errors`,

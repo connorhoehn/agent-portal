@@ -233,7 +233,15 @@ export default function KnowledgeHomePage() {
           value={search}
           onChange={setSearch}
           placeholder="Search by name, slug or id…"
-          className="max-w-xs"
+          /* `w-full max-w-xs`, not `max-w-xs` alone. A max with no base width
+             leaves this `inline-flex` wrapper sizing to its intrinsic content
+             — 218px measured — so it never reached the 320px cap, and the hint
+             "Search by name, slug or id…" needs 245. It rendered cut off, and
+             the last thing you can search by (id) was the part that vanished.
+             `w-full` lets it take the room the toolbar already has (911px)
+             and stop at the cap. Adaptive, so a copy edit cannot re-break it
+             the way a hard pixel width can. */
+          className="w-full max-w-xs"
         />
         <SegmentedControl options={STATUS_OPTIONS} value={statusFilter} onChange={(v) => setStatusFilter(v as EntryStatusFilter)} size="sm" />
       </Toolbar>
