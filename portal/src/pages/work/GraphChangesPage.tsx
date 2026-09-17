@@ -130,7 +130,7 @@ export default function GraphChangesPage() {
       {jobFilter && (
         <Inline align="center" gap="sm" className="mb-3 text-[12px] text-text-secondary">
           <T>
-            Showing proposals from job{' '}
+            Showing proposals from job&nbsp;
             <Link to={`/iq/work/${jobFilter}`} className="text-primary no-underline hover:underline font-mono">
               {jobFilter.slice(0, 8)}
             </Link>

@@ -88,7 +88,7 @@ export function ContributorModal({
 
           {showAnalytics && person.influenceScore != null && (
             <T className="text-[13px] text-text-secondary">
-              Influence score{' '}
+              Influence score&nbsp;
               <strong className="text-text-primary tabular-nums">{person.influenceScore}</strong>
             </T>
           )}

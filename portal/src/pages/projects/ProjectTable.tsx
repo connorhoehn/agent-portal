@@ -131,7 +131,7 @@ export function ProjectTable({
           >
             {usd(spend)}
             {p.allocatedUsd != null && (
-              <T className="font-normal text-text-tertiary"> / {usd(p.allocatedUsd)}</T>
+              <T className="font-normal text-text-tertiary">&nbsp;/ {usd(p.allocatedUsd)}</T>
             )}
           </T>
         ) : (

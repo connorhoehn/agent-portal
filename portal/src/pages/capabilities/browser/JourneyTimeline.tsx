@@ -39,7 +39,7 @@ export function JourneyTimeline({
               <MetaLine items={[new Date(step.startedAt).toLocaleTimeString()]} />
               {step.question && (
                 <T className="mt-1.5 line-clamp-2 text-[11px] text-text-secondary" wrap>
-                  <b>Q:</b> {step.question}
+                  <b>Q:</b>&nbsp;{step.question}
                 </T>
               )}
             </Stack>

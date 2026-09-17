@@ -81,7 +81,7 @@ export function InitiativeCard({ project, onClick }: { project: ProjectSummary; 
           <AvatarGroup names={[project.ownerName, ...smes]} size={22} maxVisible={4} />
           <T className="truncate text-[12px] text-text-secondary">
             <T className="font-semibold">{project.ownerName}</T>
-            {smes.length > 0 && <T className="text-text-tertiary"> +{smes.length} SME{smes.length === 1 ? '' : 's'}</T>}
+            {smes.length > 0 && <T className="text-text-tertiary">&nbsp;+{smes.length} SME{smes.length === 1 ? '' : 's'}</T>}
           </T>
         </Inline>
       ) : (

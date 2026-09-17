@@ -131,7 +131,7 @@ export function AssetDrawer({ id, onOpenAsset }: { id: string; onOpenAsset: (id:
           </Card>
           {a.designReviewId && (
             <T as="div" className="mt-2 text-[11px] text-text-tertiary">
-              Ratified by{' '}
+              Ratified by&nbsp;
               <Link to={`/iq/designs/${a.designReviewId}`} className="text-primary no-underline hover:underline">
                 {a.designReviewId}
               </Link>

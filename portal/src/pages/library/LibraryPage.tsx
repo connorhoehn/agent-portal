@@ -216,7 +216,7 @@ export default function LibraryPage() {
           that kind MEANS rather than assuming the word carries it. */}
       {kind !== 'all' && (
         <T as="div" wrap className="mb-2 text-[11px] text-text-tertiary">
-          <T className="font-semibold text-text-secondary">{KIND_LABEL[kind]}</T> — {KIND_HINT[kind]}
+          <T className="font-semibold text-text-secondary">{KIND_LABEL[kind]}</T>&nbsp;— {KIND_HINT[kind]}
         </T>
       )}
 

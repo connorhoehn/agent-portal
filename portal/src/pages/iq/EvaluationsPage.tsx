@@ -441,7 +441,7 @@ export default function EvaluationsPage(): React.ReactElement {
               ))}
             </Inline>
             <T className="block text-[11px] leading-relaxed text-text-tertiary">
-              Model ID: <T className="rounded bg-surface-hover px-1 py-px font-mono text-[10px] text-text-secondary">{cfg.modelId}</T>
+              Model ID:&nbsp;<T className="rounded bg-surface-hover px-1 py-px font-mono text-[10px] text-text-secondary">{cfg.modelId}</T>
             </T>
           </Stack>
         </Card>
