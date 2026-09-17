@@ -44,6 +44,29 @@ const hoursAgo = (n: number): string => clock.hoursAgo(n);
 const daysAgo = (n: number): string => clock.daysAgo(n);
 const minutesAgo = (n: number): string => clock.hoursAgo(n / 60);
 
+/**
+ * The compact run-id stamp, derived from the run's own `started_at`.
+ *
+ * A run id looks like `run-20260828T090211Z-score-dimensions-9c02de11aa3f`,
+ * and that middle field is a TIMESTAMP — which means the mock floor's rule
+ * applies to it ("every timestamp comes from mock/core/clock.ts"). It used to
+ * be a literal baked into the string while `started_at` beside it came from
+ * the clock, so the two drifted apart by however long it had been since
+ * someone last hand-edited the seed: on 2026-09-17 the Activity page showed
+ * `run-20260828…` labelled "7d ago", thirteen days out, and the gap grew by a
+ * day every day. Same for the `files_written` paths, which embed the same
+ * stamp.
+ *
+ * Deriving it means the id and the time can never disagree again, whenever
+ * the demo runs.
+ */
+const runStamp = (startedAtIso: string): string =>
+  `${startedAtIso.slice(0, 19).replace(/[-:]/g, '')}Z`;
+
+/** `run-<stamp>-<command>-<suffix>`; the suffix is the seed's own random tail. */
+const runId = (startedAtIso: string, command: string, suffix: string): string =>
+  `run-${runStamp(startedAtIso)}-${command}-${suffix}`;
+
 // ─── Rubric ─────────────────────────────────────────────────────────────────
 
 export type Cohort = 'white_glove' | 'self_service' | 'general';
@@ -6491,7 +6514,7 @@ export interface MockRun {
 // running -> completed after ~8s.
 const seedRuns = (): MockRun[] => [
  {
-  "id": "run-20260828T090211Z-classify-transcript-4f21ab5c9d10",
+  "id": runId(daysAgo(7), "classify-transcript", "4f21ab5c9d10"),
   "command": "classify-transcript",
   "team_id": "TEAM-003",
   "args": {},
@@ -6502,11 +6525,11 @@ const seedRuns = (): MockRun[] => [
   "summary": "Classified 1 interview transcript into 8 dimension-tagged excerpts.",
   "error": null,
   "files_written": [
-   "workspace/teams/TEAM-003/lineage/classify_20260828T090211Z.json"
+   `workspace/teams/TEAM-003/lineage/classify_${runStamp(daysAgo(7))}.json`
   ]
  },
  {
-  "id": "run-20260828T093310Z-score-dimensions-9c02de11aa3f",
+  "id": runId(daysAgo(7), "score-dimensions", "9c02de11aa3f"),
   "command": "score-dimensions",
   "team_id": "TEAM-003",
   "args": {},
@@ -6517,11 +6540,11 @@ const seedRuns = (): MockRun[] => [
   "summary": "Scored 8 dimensions from classified transcript evidence.",
   "error": null,
   "files_written": [
-   "workspace/teams/TEAM-003/reports/scoring_log_20260828T093310Z.json"
+   `workspace/teams/TEAM-003/reports/scoring_log_${runStamp(daysAgo(7))}.json`
   ]
  },
  {
-  "id": "run-20260830T114502Z-process-self-assessment-1a77f0c3",
+  "id": runId(daysAgo(5), "process-self-assessment", "1a77f0c3"),
   "command": "process-self-assessment",
   "team_id": "TEAM-002",
   "args": {
@@ -6534,11 +6557,11 @@ const seedRuns = (): MockRun[] => [
   "summary": "Scored revision r3 of the Forms submission across 17 dimensions; self-rating-only cap applied everywhere.",
   "error": null,
   "files_written": [
-   "workspace/teams/TEAM-002/reports/scoring_log_20260830T114502Z.json"
+   `workspace/teams/TEAM-002/reports/scoring_log_${runStamp(daysAgo(5))}.json`
   ]
  },
  {
-  "id": "run-20260831T080015Z-score-dimensions-6b41cdaa02e7",
+  "id": runId(daysAgo(4), "score-dimensions", "6b41cdaa02e7"),
   "command": "score-dimensions",
   "team_id": "TEAM-001",
   "args": {},
@@ -6549,11 +6572,11 @@ const seedRuns = (): MockRun[] => [
   "summary": "Re-scored 15 dimensions after the governance review minutes were uploaded.",
   "error": null,
   "files_written": [
-   "workspace/teams/TEAM-001/reports/scoring_log_20260831T080015Z.json"
+   `workspace/teams/TEAM-001/reports/scoring_log_${runStamp(daysAgo(4))}.json`
   ]
  },
  {
-  "id": "run-20260901T101233Z-extract-enterprise-context-e30a9188",
+  "id": runId(daysAgo(3), "extract-enterprise-context", "e30a9188"),
   "command": "extract-enterprise-context",
   "team_id": null,
   "args": {},
@@ -6568,7 +6591,7 @@ const seedRuns = (): MockRun[] => [
   ]
  },
  {
-  "id": "run-20260902T133340Z-develop-jira-story-77bdf2aa11cc",
+  "id": runId(daysAgo(2), "develop-jira-story", "77bdf2aa11cc"),
   "command": "develop-jira-story",
   "team_id": "TEAM-001",
   "args": {
@@ -6585,7 +6608,7 @@ const seedRuns = (): MockRun[] => [
   ]
  },
  {
-  "id": "run-20260902T140102Z-draft-confluence-page-0c9a4eff33aa",
+  "id": runId(daysAgo(2), "draft-confluence-page", "0c9a4eff33aa"),
   "command": "draft-confluence-page",
   "team_id": "TEAM-002",
   "args": {},
@@ -6600,7 +6623,7 @@ const seedRuns = (): MockRun[] => [
   ]
  },
  {
-  "id": "run-20260903T091500Z-suggest-confluence-content-55e6aa21bb",
+  "id": runId(daysAgo(1), "suggest-confluence-content", "55e6aa21bb"),
   "command": "suggest-confluence-content",
   "team_id": "TEAM-004",
   "args": {
@@ -6615,7 +6638,7 @@ const seedRuns = (): MockRun[] => [
   "files_written": []
  },
  {
-  "id": "run-20260903T150213Z-validate-outputs-3d88f1cc09ee",
+  "id": runId(hoursAgo(20), "validate-outputs", "3d88f1cc09ee"),
   "command": "validate-outputs",
   "team_id": "TEAM-002",
   "args": {},
@@ -6626,11 +6649,11 @@ const seedRuns = (): MockRun[] => [
   "summary": "Validated scoring_log_20260830T114502Z.json against the rubric schema — no violations.",
   "error": null,
   "files_written": [
-   "workspace/teams/TEAM-002/reports/validation_20260903T150213Z.json"
+   `workspace/teams/TEAM-002/reports/validation_${runStamp(hoursAgo(20))}.json`
   ]
  },
  {
-  "id": "run-20260903T160500Z-draw-diagram-a204be009911",
+  "id": runId(hoursAgo(15), "draw-diagram", "a204be009911"),
   "command": "draw-diagram",
   "team_id": "TEAM-001",
   "args": {},
@@ -6645,7 +6668,7 @@ const seedRuns = (): MockRun[] => [
   ]
  },
  {
-  "id": "run-20260904T070211Z-process-self-assessment-9be301aa44",
+  "id": runId(hoursAgo(9), "process-self-assessment", "9be301aa44"),
   "command": "process-self-assessment",
   "team_id": "TEAM-005",
   "args": {
@@ -6660,7 +6683,7 @@ const seedRuns = (): MockRun[] => [
   "files_written": []
  },
  {
-  "id": "run-20260904T091140Z-score-dimensions-cc10aa77ff02",
+  "id": runId(minutesAgo(6), "score-dimensions", "cc10aa77ff02"),
   "command": "score-dimensions",
   "team_id": "TEAM-003",
   "args": {},

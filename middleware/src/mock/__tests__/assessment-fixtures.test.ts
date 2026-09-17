@@ -198,3 +198,57 @@ describe('mutation and reset', () => {
     expect(M.provenanceFixture.rows()).toHaveLength(before);
   });
 });
+
+// A run id's middle field is a TIMESTAMP — `run-20260828T090211Z-…` — so the
+// mock floor's rule about clock-derived timestamps applies to it just as much
+// as to `started_at`. It used to be a literal baked into the string while
+// `started_at` beside it came from the clock, so the two drifted by however
+// long it had been since someone hand-edited the seed: on 2026-09-17 the
+// Activity page showed `run-20260828…` labelled "7d ago" — thirteen days out,
+// widening by a day every day. The `files_written` paths embed the same stamp.
+describe('run ids carry the run\'s own time, not a baked one', () => {
+  const stampOf = (id: string): string | null => /^run-(\d{8}T\d{6}Z)-/.exec(id)?.[1] ?? null;
+  const isoToStamp = (iso: string): string => `${iso.slice(0, 19).replace(/[-:]/g, '')}Z`;
+
+  it('every run id\'s stamp equals its own started_at', () => {
+    const restore = freezeClock('2026-09-17T12:00:00.000Z');
+    try {
+      const runs = M.runs();
+      expect(runs.length).toBeGreaterThan(0);
+      for (const r of runs) {
+        const stamp = stampOf(r.id);
+        expect(stamp).not.toBeNull();
+        expect(stamp).toBe(isoToStamp(r.started_at));
+      }
+    } finally { restore(); }
+  });
+
+  it('the stamps move with the clock — a literal would not', () => {
+    // The actual regression: re-freeze a day later and the ids must follow.
+    // A hardcoded id passes the test above on any single day and fails this.
+    const first = (() => {
+      const restore = freezeClock('2026-09-17T12:00:00.000Z');
+      try { fixtureRegistry.resetAll('default'); return M.runs().map((r) => r.id); }
+      finally { restore(); }
+    })();
+    const second = (() => {
+      const restore = freezeClock('2026-09-18T12:00:00.000Z');
+      try { fixtureRegistry.resetAll('default'); return M.runs().map((r) => r.id); }
+      finally { restore(); }
+    })();
+    expect(second).not.toEqual(first);
+    expect(second).toHaveLength(first.length);
+  });
+
+  it('a files_written path that carries a stamp carries the run\'s stamp', () => {
+    const restore = freezeClock('2026-09-17T12:00:00.000Z');
+    try {
+      for (const r of M.runs()) {
+        for (const f of r.files_written ?? []) {
+          const m = /_(\d{8}T\d{6}Z)\./.exec(f);
+          if (m) expect(m[1]).toBe(isoToStamp(r.started_at));
+        }
+      }
+    } finally { restore(); }
+  });
+});

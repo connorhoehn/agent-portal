@@ -43,7 +43,6 @@ import {
   docSavedNoticeText,
   docSyncStatus,
   externalDocSave,
-  gatewayOfflineHint,
   isGatewayReady,
   liveConnectionState,
   mergeComments,
@@ -463,7 +462,6 @@ export function DocPane({ node, mode, sseEvents, sseConnected, sseGapped, onTree
   );
   const presenceUsers = useMemo(() => mergePresenceForDisplay(sseViewers, channelPeers), [sseViewers, channelPeers]);
 
-  const gatewayHint = gatewayOfflineHint(gatewayReady);
   useCommentComposerLabel(commentsOpen);
 
   if (docFetch.isLoading) return <LoadingState label="Loading document…" />;
@@ -635,7 +633,15 @@ export function DocPane({ node, mode, sseEvents, sseConnected, sseGapped, onTree
                 <Inline gap="xs" align="center">
                   <Chip size="xs" tone="info" uppercase>{CLASSIFICATION_LABEL[doc.classification] ?? doc.classification}</Chip>
                   <ConnectionPill state={liveConnectionState(sseConnected)} labels={{ connected: 'Live' }} compact />
-                  {gatewayHint && <Chip size="xs" tone="warning">{gatewayHint}</Chip>}
+                  {/* No gateway chip here. KnowledgeExplorer — this component's
+                      ONLY consumer — renders the identical sentence from the
+                      same `gatewayOfflineHint()` in its own header, about a
+                      hundred pixels above this one, so the warning appeared
+                      twice on every document. The connection is a property of
+                      the surface, not of the document you happen to have open,
+                      so it belongs in the surface's status line. The compact
+                      pill stays: a dot beside the title reads as "this doc is
+                      live" without restating a full sentence. */}
                 </Inline>
               }
               meta={
