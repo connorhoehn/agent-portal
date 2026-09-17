@@ -33,6 +33,7 @@ import { writeJson } from '../../lib/writeJson';
 import { usd, modelLabelFor, ago, rowBudgetStats } from './budgetsFormat';
 import { T } from './Text';
 import type { BudgetRow, BudgetSummary, InitiativeOption } from './types';
+import { absoluteTime } from '../../lib/relativeTime';
 
 async function putAllocation(orgProjectId: string, allocatedUsd: number): Promise<boolean> {
   const res = await writeJson(`/api/budgets/${encodeURIComponent(orgProjectId)}`, 'PUT', { allocatedUsd });
@@ -398,7 +399,11 @@ export function InitiativesReport({
                     <T className="tabular-nums">{row.runCountThisPeriod}</T>
                   </TableTd>
                   <TableTd>
-                    <T className="text-text-tertiary whitespace-nowrap" title={row.lastAgentActivityAt ?? undefined}>
+                    {/* A readable local time, not the raw wire string. The tooltip
+                        exists so someone can read the PRECISE moment, which is
+                        exactly what a Postgres/ISO stamp makes harder — the same
+                        defect the bots run table was fixed for. */}
+                    <T className="text-text-tertiary whitespace-nowrap" title={absoluteTime(row.lastAgentActivityAt)}>
                       {ago(row.lastAgentActivityAt)}
                     </T>
                   </TableTd>

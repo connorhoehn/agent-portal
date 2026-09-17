@@ -235,7 +235,16 @@ export default function SessionConfigPage() {
               <Card padding="md">
                 <Stack gap="xs">
                   {Object.entries(live.settings).map(([k, v]) => (
-                    <KeyValue key={k} layout="row" label={k} value={String(v)} labelWidth="w-48" mono />
+                    /* w-52, not w-48. These labels are env var names and the
+                       longest one the fleet ships, ANTHROPIC_SMALL_FAST_MODEL,
+                       measures 196px against w-48's 192 — so that one row's
+                       label ran into its own value and the column stopped
+                       lining up. The overflow is `visible` rather than
+                       clipped, so nothing was unreadable; it just looked
+                       broken on exactly one line. 208px clears today's longest
+                       key by 12, and a longer one degrades the same gentle way
+                       rather than being cut off. */
+                    <KeyValue key={k} layout="row" label={k} value={String(v)} labelWidth="w-52" mono />
                   ))}
                 </Stack>
               </Card>

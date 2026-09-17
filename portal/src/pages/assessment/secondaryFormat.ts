@@ -9,6 +9,7 @@ import type {
   ApiSubmissionEnvelope, FeedbackTask, LinkStatus, RowStatus, RunRecord, RunStatus, SubmissionGroupRef, SubmissionListItem, SubmissionRevisionGroup } from './secondaryTypes';
 import type { AssessmentSSEEvent } from './knowledge/types';
 import type { ChipTone } from '@connorhoehnslalom/ui-components/shared';
+import { pgTimestampMs } from '../../lib/pgTimestamp.ts';
 
 // ─── Agent-run status → StatusPill state ────────────────────────────────────
 //
@@ -82,7 +83,15 @@ export function parseFormsCsv(text: string): { headers: string[]; records: Recor
 /** "just now" / "12m ago" / "3h ago" / "2d ago". Returns "—" for an unparsable timestamp. */
 export function formatRelativeTime(iso: string | null | undefined): string {
   if (!iso) return '—';
-  const then = Date.parse(iso);
+  // Through lib/pgTimestamp, not a bare Date.parse. Measured rather than
+  // assumed: V8 DOES accept the raw wire shape `2026-09-08 08:19:23+00`, so
+  // this was not broken. What it does not accept is the half-normalised
+  // `2026-09-08T08:19:23+00` — a space swapped for a T without also widening
+  // `+00` to `+00:00` — which is Invalid Date. The shared parser handles both
+  // plus `…Z`; a bare parse handles only some, and pgTimestamp.ts's own header
+  // gives the reason to route through it anyway: "one question answered by two
+  // functions is how the two answers drift apart."
+  const then = pgTimestampMs(iso);
   if (Number.isNaN(then)) return '—';
   const elapsedSeconds = Math.max(0, Math.floor((Date.now() - then) / 1000));
   if (elapsedSeconds < 60) return 'just now';

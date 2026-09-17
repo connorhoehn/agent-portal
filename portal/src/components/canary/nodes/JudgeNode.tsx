@@ -22,6 +22,7 @@ import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
 import { useNavigate } from 'react-router';
 import { Card, Chip, Inline, ProgressBar, Stack } from '@connorhoehnslalom/ui-components/shared';
 import type { JudgeNodeData } from '../types.js';
+import { pgTimestampMs } from '../../../lib/pgTimestamp.ts';
 
 export type JudgeNodeType = Node<JudgeNodeData & Record<string, unknown>, 'judgeNode'>;
 
@@ -97,7 +98,15 @@ const EXTRA_COLOR = '#64748b';
 
 function formatRelative(iso: string | undefined, now: number): string {
   if (!iso) return '—';
-  const t = Date.parse(iso);
+  // Through lib/pgTimestamp, not a bare Date.parse. Measured rather than
+  // assumed: V8 DOES accept the raw wire shape `2026-09-08 08:19:23+00`, so
+  // this was not broken. What it does not accept is the half-normalised
+  // `2026-09-08T08:19:23+00` — a space swapped for a T without also widening
+  // `+00` to `+00:00` — which is Invalid Date. The shared parser handles both
+  // plus `…Z`; a bare parse handles only some, and pgTimestamp.ts's own header
+  // gives the reason to route through it anyway: "one question answered by two
+  // functions is how the two answers drift apart."
+  const t = pgTimestampMs(iso);
   if (Number.isNaN(t)) return '—';
   const diff = Math.max(0, Math.floor((now - t) / 1000));
   if (diff < 1) return 'just now';

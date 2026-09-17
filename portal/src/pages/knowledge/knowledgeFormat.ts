@@ -3,6 +3,7 @@
 // search/status filter. Nothing here is React — see `__tests__/knowledgeFormat.test.ts`.
 
 import type { ChipTone } from '@connorhoehnslalom/ui-components/shared';
+import { parsePgTimestamp } from '../../lib/pgTimestamp.ts';
 
 export type DriftKind = 'missing' | 'unregistered' | 'unprovisioned' | 'status-drift' | 'ok';
 
@@ -52,7 +53,16 @@ export function bytes(n: number | undefined | null): string {
 
 export function when(iso: string | null | undefined): string {
   if (!iso) return 'never';
-  const d = new Date(iso);
+  // Through lib/pgTimestamp, not a bare Date.parse. Measured rather than
+  // assumed: V8 DOES accept the raw wire shape `2026-09-08 08:19:23+00`, so
+  // this was not broken. What it does not accept is the half-normalised
+  // `2026-09-08T08:19:23+00` — a space swapped for a T without also widening
+  // `+00` to `+00:00` — which is Invalid Date. The shared parser handles both
+  // plus `…Z`; a bare parse handles only some, and pgTimestamp.ts's own header
+  // gives the reason to route through it anyway: "one question answered by two
+  // functions is how the two answers drift apart."
+  const d = parsePgTimestamp(iso);
+  if (d === null) return iso;
   const mins = Math.round((Date.now() - d.getTime()) / 60000);
   if (mins < 1) return 'just now';
   if (mins < 60) return `${mins}m ago`;

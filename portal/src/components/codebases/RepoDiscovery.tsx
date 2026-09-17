@@ -14,6 +14,7 @@ import {
 } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { toastError, toastSuccess, toastPending } from '../../lib/toastStore';
+import { pgTimestampMs } from '../../lib/pgTimestamp.ts';
 
 interface OrgRef { login: string; description: string | null }
 interface RepoRef { owner: string; name: string; fullName: string; pushedAt?: string | null }
@@ -36,7 +37,13 @@ interface Props {
 
 function ago(iso: string | null | undefined): string | null {
   if (!iso) return null;
-  const mins = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+  // Through lib/pgTimestamp, not a bare `new Date(iso)`. Measured rather than
+  // assumed: V8 accepts the raw wire shape `2026-09-08 08:19:23+00`, so this
+  // was not broken; it is the half-normalised `…T…+00` that is Invalid Date.
+  // Routed through the shared parser anyway for the reason pgTimestamp.ts's
+  // own header gives: "one question answered by two functions is how the two
+  // answers drift apart."
+  const mins = Math.round((Date.now() - pgTimestampMs(iso)) / 60000);
   if (Number.isNaN(mins)) return null;
   if (mins < 1) return 'just now';
   if (mins < 60) return `${mins}m ago`;

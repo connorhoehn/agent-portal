@@ -8,7 +8,7 @@
 //   POST /api/observability/approvals/:id/decision      { decision, note? }
 
 import { Fragment, useEffect, useMemo, useState } from 'react';
-import { relativeTime } from '../../lib/relativeTime';
+import { relativeTime, absoluteTime } from '../../lib/relativeTime';
 import {
   Button,
   Card,
@@ -270,7 +270,10 @@ function ApprovalQueuePage() {
                   <Fragment key={a.approvalId}>
                     <TableRow>
                       <TableTd className="text-[12px] font-medium whitespace-nowrap">{a.agentId}</TableTd>
-                      <TableTd className="text-[11px] text-text-tertiary whitespace-nowrap">
+                      {/* title=, because this is the approvals queue: adjudicating
+                          "requested 2h ago" needs the real clock time, and there was
+                          nowhere else on the row to read it. */}
+                      <TableTd className="text-[11px] text-text-tertiary whitespace-nowrap" title={absoluteTime(a.requestedAt)}>
                         {relativeTime(a.requestedAt)}
                       </TableTd>
                       <TableTd className="text-[11px] text-text-tertiary font-mono" title={a.txId}>
