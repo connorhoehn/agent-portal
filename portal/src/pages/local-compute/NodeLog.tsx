@@ -9,7 +9,7 @@
 // what its pane renders.
 
 import { useMemo } from 'react';
-import { LogStream, type LogLine } from '@connorhoehnslalom/ui-components/shared';
+import { LogStream, T, type LogLine } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { nodeLogLines, type NodeLogEntry, type NodeLogLine } from './nodeLogLines';
@@ -72,7 +72,7 @@ export function NodeLog({ nodeId }: { nodeId: string }) {
       tone="surface"
       emptyMessage="No operational log yet — either this worker predates the feature (older workers only ship per-job output), or it hasn't shipped a line since the middleware last restarted."
       headerSlot={truncated ? (
-        <span className="text-text-tertiary">{`Showing the most recent ${lines.length.toLocaleString('en-US')} of ${totalLines.toLocaleString('en-US')} lines`}</span>
+        <T className="text-text-tertiary">{`Showing the most recent ${lines.length.toLocaleString('en-US')} of ${totalLines.toLocaleString('en-US')} lines`}</T>
       ) : undefined}
     />
   );

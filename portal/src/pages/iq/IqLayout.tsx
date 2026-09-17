@@ -1,14 +1,12 @@
 import { Link, Outlet, useLocation } from 'react-router';
-import { SubNavLayout } from '@connorhoehnslalom/ui-components/shared';
+import { SubNavLayout, activeNavItemClassName, inactiveNavItemClassName } from '@connorhoehnslalom/ui-components/shared';
 import { useIqSubNav } from './iqSubNavCatalog';
 
 // Reproduces SubNavLayout's own default active/inactive nav-item look (see
 // the library's `renderNavItem` doc comment, and its `activeNavItemStyle`
 // export) as Tailwind classes instead of a computed `style` object.
 
-// Navigation item class names (moved from ui-components)
-const activeNavItemClassName = 'font-semibold text-foreground';
-const inactiveNavItemClassName = 'text-muted-foreground hover:text-foreground';
+// See Layout.tsx for why these come from the library rather than local copies.
 
 function IqLayout() {
   const { pathname, search } = useLocation();

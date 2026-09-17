@@ -11,11 +11,24 @@ import {
   type SubNavItem,
   SkipLink,
   type Command,
+  activeNavItemClassName,
+  inactiveNavItemClassName,
 } from '@connorhoehnslalom/ui-components/shared';
 
-// Navigation item class names (moved from ui-components)
-const activeNavItemClassName = 'font-semibold text-foreground';
-const inactiveNavItemClassName = 'text-muted-foreground hover:text-foreground';
+// activeNavItemClassName / inactiveNavItemClassName come from the library, not
+// from local copies. They were briefly replaced with local strings on the
+// premise that "ui-components 2.276.0 removed some exports" — checked against
+// the installed dist and that is not so: the pin is 2.277.2 and both names
+// resolve from `/shared`. The local copies were also not equivalent. The real
+// active class is
+// `block px-[14px] py-2 border-l-[3px] border-primary bg-surface-hover text-text-primary …`;
+// the substitute was `font-semibold text-foreground`, which drops the left
+// accent bar, the highlight and ALL the padding, and names tokens this app does
+// not define (`text-foreground` appears in 2 files here, `text-text-primary` in
+// 101). Measured on the shell rail with the substitute in place: borderLeft 0px,
+// background transparent, padding 0px — every rail item flush to the edge with
+// no active state. Seven other layouts never stopped importing these, so the
+// rails had also stopped agreeing with each other.
 import { useFetch } from '../../hooks/useFetch';
 import { useSession } from '../../lib/auth';
 import { Breadcrumbs } from './Breadcrumbs';
