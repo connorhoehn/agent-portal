@@ -13,6 +13,7 @@ import { agentcore } from '../providers/index.js';
 import { appendJourneyStep, recordCapabilityEvent } from './invocations.js';
 import { config } from '../config.js';
 import { extractFromScreenshot } from './vision-extractor.js';
+import { crawlSessionRows } from '../mock/ingest-crawls.js';
 import type {
   CrawlEvent,
   CrawlMode,
@@ -42,6 +43,44 @@ const _sessions = new Map<string, CrawlSession>();
 const _subscribers = new Map<string, Set<Subscriber>>();
 const _cancelFlags = new Set<string>();
 
+// ── Mock seeding ──────────────────────────────────────────────────────────
+//
+// Unlike `crawl-targets.ts`/`ingest-scheduler.ts`, this module has no
+// `init*()` entry point called from `index.ts` — `_sessions` is populated
+// purely as a side effect of `startCrawl()`. So under mock the seed is
+// applied lazily, on first read, rather than at boot: cheap to check on every
+// call (`mockSeeded` is a flag, not a re-scan) and it needs no wiring into
+// `index.ts`, which this fix does not own.
+let mockSeeded = false;
+
+function ensureMockSeeded(): void {
+  if (!config.mock.aurora || mockSeeded) return;
+  mockSeeded = true;
+  for (const row of crawlSessionRows.rows()) {
+    // Deep-ish copy: `pages` is the array callers push into during a live
+    // run, and the fixture's own array must stay untouched so a reset can
+    // rebuild from it.
+    _sessions.set(row.id, { ...row, pages: row.pages.map((p) => ({ ...p })) });
+  }
+}
+
+/**
+ * Put the offline crawl-run history back to its seed.
+ *
+ * `_sessions` is a plain Map populated from a copy of the fixture's rows
+ * (see `ensureMockSeeded`), so `registry.resetAll()` cannot reach it — the
+ * same trap `rehydrateMockFleet` (`providers/devbox-fleet-store.ts`) closes
+ * for the devbox fleet. Called from `routes/mock-control.ts`'s full reset,
+ * per-fixture reset, and both scenario routes. No-op when Aurora is real.
+ */
+export function rehydrateMockCrawls(): number {
+  if (!config.mock.aurora) return 0;
+  _sessions.clear();
+  mockSeeded = false;
+  ensureMockSeeded();
+  return _sessions.size;
+}
+
 function emit(crawlId: string, ev: CrawlEvent): void {
   const subs = _subscribers.get(crawlId);
   if (!subs) return;
@@ -61,16 +100,19 @@ export function subscribeCrawl(crawlId: string, fn: Subscriber): () => void {
 }
 
 export function getCrawl(crawlId: string): CrawlSession | null {
+  ensureMockSeeded();
   return _sessions.get(crawlId) ?? null;
 }
 
 export function listCrawls(limit = 20): CrawlSession[] {
+  ensureMockSeeded();
   return Array.from(_sessions.values())
     .sort((a, b) => b.startedAt.localeCompare(a.startedAt))
     .slice(0, limit);
 }
 
 export function cancelCrawl(crawlId: string): boolean {
+  ensureMockSeeded();
   if (!_sessions.has(crawlId)) return false;
   _cancelFlags.add(crawlId);
   return true;

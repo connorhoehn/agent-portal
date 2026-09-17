@@ -48,8 +48,25 @@ import { join } from 'node:path';
 import { handlerSha, handlerSourceFiles } from '../mock/core/wire/handler-sha.js';
 import { clearDevPairings } from '../mock/dev-pairings.js';
 import { rehydrateMockFleet } from '../providers/devbox-fleet-store.js';
+import { rehydrateMockCrawlTargets } from '../lib/crawl-targets.js';
+import { rehydrateMockCrawls } from '../lib/crawler.js';
+import { rehydrateMockSchedules } from '../lib/ingest-scheduler.js';
 
 export const mockControlRouter = Router();
+
+/**
+ * The ingest pipeline's three in-memory stores (crawl targets, crawl history,
+ * ingestion schedules) have the exact same shape of trap as the devbox fleet:
+ * each is a plain Map/array hydrated from a COPY of its fixture's rows, so
+ * `registry.resetAll()` cannot reach any of them. Bundled into one call
+ * alongside every `rehydrateMockFleet()` call below, following that
+ * precedent. Each rehydrate is individually a no-op when Aurora is real.
+ */
+function rehydrateIngestMocks(): void {
+  rehydrateMockCrawlTargets();
+  rehydrateMockCrawls();
+  rehydrateMockSchedules();
+}
 
 // Registered FIRST so the header below reaches every response, this plane's
 // own included — a router layer added after a matching route never runs.
@@ -314,6 +331,8 @@ mockControlRouter.post('/api/__mock/scenario', ...gate, (req, res) => {
     // one promise ("ask for an empty state by name") silently not kept for
     // this fixture. Cheap enough to run unconditionally; it no-ops off mock.
     rehydrateMockFleet();
+    // Same promise, same trap, for the ingest pipeline's three stores.
+    rehydrateIngestMocks();
     res.json({ applied: { scenario, fixture: fixture.key }, ...readState(registry) });
     return;
   }
@@ -321,6 +340,7 @@ mockControlRouter.post('/api/__mock/scenario', ...gate, (req, res) => {
   unpinAll(registry);
   registry.resetAll(scenario);
   rehydrateMockFleet();
+  rehydrateIngestMocks();
   globalScenario = scenario;
   res.json({ applied: { scenario, fixture: null }, ...readState(registry) });
 });
@@ -344,6 +364,7 @@ mockControlRouter.post('/api/__mock/reset', ...gate, (req, res) => {
     unpin(fixture);
     fixture.reset();
     rehydrateMockFleet();
+    rehydrateIngestMocks();
     res.json({ reset: { fixture: fixture.key, scenario: globalScenario }, ...readState(registry) });
     return;
   }
@@ -359,6 +380,7 @@ mockControlRouter.post('/api/__mock/reset', ...gate, (req, res) => {
   // box that was renamed or stopped during a demo. Runs AFTER resetAll so it
   // re-reads the fixture in the world the reset just established.
   rehydrateMockFleet();
+  rehydrateIngestMocks();
   globalScenario = DEFAULT_SCENARIO;
   res.json({ reset: { fixture: null, scenario: DEFAULT_SCENARIO }, ...readState(registry) });
 });

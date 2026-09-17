@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-09-17T03:23:22.189Z",
-  "serverHandlerSha": "a72a0bf9ab54e40610b18821c86a8382d290d46365d3a501032056f82dc70d59",
+  "capturedAt": "2026-09-17T04:30:06.919Z",
+  "serverHandlerSha": "c586606aab58704f920b9d17c3a4cc558e699e8850da235fd3563450e1bb6dc5",
   "baseUrl": "http://127.0.0.1:3014",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
@@ -641,6 +641,9 @@
           "harness-cases",
           "harness-results",
           "harness-runs",
+          "ingest-crawl-targets",
+          "ingest-crawls",
+          "ingest-schedules",
           "initiative-budgets",
           "invocation-tail",
           "judge-config",
@@ -1361,7 +1364,14 @@
       }
     },
     "POST /api/capabilities/browser/crawl/:crawlId/cancel": {
-      "skipped": "no value found for :crawlId under /api/capabilities/browser/crawl (orgiq/admin)"
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "ok": "boolean"
+      },
+      "values": {},
+      "sent": []
     },
     "POST /api/capabilities/browser/web-qa": {
       "refused": {
@@ -1828,7 +1838,8 @@
       }
     },
     "POST /api/ingest/crawl/:id/sync": {
-      "skipped": "no value found for :id under /api/ingest/crawl (orgiq/admin)"
+      "skipped": "HTTP 409: No knowledge base is configured (KNOWLEDGE_BASE_ID is unset), so a crawl cannot be synced into one. (orgiq/admin)",
+      "sent": []
     },
     "POST /api/ingest/schedules": {
       "refused": {

@@ -5,20 +5,33 @@
 // `startCrawl({ ..., targetId, scheduleId })` and record the run on the target.
 
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
-import { resolve, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import cron from 'node-cron';
 import type { CrawlTarget, CrawlSession } from './crawler-types.js';
 import { startCrawl } from './crawler.js';
+import { config } from '../config.js';
+import { crawlTargetRows } from '../mock/ingest-crawl-targets.js';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const TARGETS_FILE = resolve(__dirname, '../../crawl-targets.json');
+// `process.cwd()`, NOT `import.meta.url` — the same trap and the same fix as
+// `routes/mock-control.ts::bootHandlerSha`: this module is compiled by the
+// CJS ts-jest config for tests, where `import.meta` is a hard TS1343 error
+// that takes the whole suite down before a single test runs. The process is
+// always started from `middleware/` (`npm run dev`/`start`, or the
+// container's `WORKDIR /app`), so `process.cwd()` resolves to the same place
+// `dirname(fileURLToPath(import.meta.url))` two levels up from `src/lib` (or
+// `dist/lib`) did.
+const TARGETS_FILE = resolve(process.cwd(), 'crawl-targets.json');
 
 const tasks = new Map<string, cron.ScheduledTask>();
 let targets: CrawlTarget[] = [];
 
 function persist(): void {
+  // Mutations still land on the in-memory `targets` array under mock (a
+  // demo's add/edit/delete has to show up in the next GET) — they just never
+  // touch disk, so `dev:mock` never creates a `crawl-targets.json` a real
+  // run would then pick up.
+  if (config.mock.aurora) return;
   try {
     writeFileSync(TARGETS_FILE, JSON.stringify(targets, null, 2), 'utf8');
   } catch (err) {
@@ -35,6 +48,17 @@ function unregisterTask(id: string): void {
 }
 
 function registerTask(t: CrawlTarget): void {
+  // THE SAFETY POINT (see ingest-crawl-targets.ts's header for the full
+  // reasoning): under mock, no target — seeded or created live during a demo
+  // — is ever allowed to register a real cron. `crawler.ts::runFetchMode`
+  // does an unconditional `fetch(url)` with no mock gate at all, so a live
+  // tick against ANY `mode: 'fetch'` target reaches the real internet
+  // regardless of `MOCK_AGENTCORE`. Seeding only `enabled: false` rows would
+  // not close that: a demo user can flip `enabled` back on, or add a new
+  // fetch-mode target with a cron, through the same API a real deployment
+  // uses. Gating the whole function is the only branch that is actually
+  // safe.
+  if (config.mock.aurora) return;
   unregisterTask(t.id);
   if (!t.enabled || !t.cronExpr || !cron.validate(t.cronExpr)) return;
   const task = cron.schedule(t.cronExpr, async () => {
@@ -63,6 +87,19 @@ function registerTask(t: CrawlTarget): void {
 }
 
 export function initCrawlTargets(): void {
+  if (config.mock.aurora) {
+    // Copy, not the fixture's own array — mutations (add/update/remove) must
+    // never write back into the registered fixture, or a demo edit would
+    // survive a `POST /api/__mock/reset`. See `rehydrateMockCrawlTargets`
+    // below for how the copy gets rebuilt on reset.
+    targets = crawlTargetRows.rows().map((t) => ({ ...t }));
+    console.log(`[crawl-targets] loaded ${targets.length} mock target(s)`);
+    // registerTask is a no-op under mock (see its own guard), so this loop
+    // is inert — kept so the code path matches the real one rather than
+    // branching around it.
+    for (const t of targets) registerTask(t);
+    return;
+  }
   if (existsSync(TARGETS_FILE)) {
     try {
       const parsed = JSON.parse(readFileSync(TARGETS_FILE, 'utf8')) as CrawlTarget[];
@@ -145,4 +182,27 @@ export function recordTargetRun(
   t.lastRunAt = new Date().toISOString();
   t.lastStatus = status;
   persist();
+}
+
+/**
+ * Put the offline crawl-target list back to its seed.
+ *
+ * `targets` is a plain module array hydrated from a COPY of the fixture's
+ * rows (see `initCrawlTargets`), so `registry.resetAll()` cannot reach it —
+ * exactly the trap `rehydrateMockFleet` (`providers/devbox-fleet-store.ts`)
+ * closes for the devbox fleet. Without this, a target renamed or deleted
+ * during a demo would survive `POST /api/__mock/reset`, and pinning
+ * `ingest-crawl-targets` to `empty` would change the fixture while the old
+ * rows stayed on screen. Called from `routes/mock-control.ts`'s full reset,
+ * per-fixture reset, and both scenario routes.
+ *
+ * Re-reads the fixture rather than caching a copy, so a pinned scenario is
+ * honoured. No-op when Aurora is real — these rows are not this plane's
+ * business there.
+ */
+export function rehydrateMockCrawlTargets(): number {
+  if (!config.mock.aurora) return 0;
+  for (const id of [...tasks.keys()]) unregisterTask(id);
+  targets = crawlTargetRows.rows().map((t) => ({ ...t }));
+  return targets.length;
 }

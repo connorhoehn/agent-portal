@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-09-17T03:23:21.471Z",
-  "serverHandlerSha": "a72a0bf9ab54e40610b18821c86a8382d290d46365d3a501032056f82dc70d59",
+  "capturedAt": "2026-09-17T04:30:06.187Z",
+  "serverHandlerSha": "c586606aab58704f920b9d17c3a4cc558e699e8850da235fd3563450e1bb6dc5",
   "baseUrl": "http://127.0.0.1:3014",
   "personas": [
     "orgiq/admin",
@@ -92,6 +92,9 @@
           "harness-cases",
           "harness-results",
           "harness-runs",
+          "ingest-crawl-targets",
+          "ingest-crawls",
+          "ingest-schedules",
           "initiative-budgets",
           "invocation-tail",
           "judge-config",
@@ -218,6 +221,9 @@
           "harness-cases",
           "harness-results",
           "harness-runs",
+          "ingest-crawl-targets",
+          "ingest-crawls",
+          "ingest-schedules",
           "initiative-budgets",
           "invocation-tail",
           "judge-config",
@@ -1762,15 +1768,136 @@
       "status": 200,
       "shape": {
         "$": "object",
-        "crawls": "array"
+        "crawls": "array",
+        "crawls[]": "object",
+        "crawls[].completedAt": "null|string",
+        "crawls[].error": "null|string",
+        "crawls[].estimatedCostUsd": "number",
+        "crawls[].id": "string",
+        "crawls[].includePattern": "null|string",
+        "crawls[].maxPages": "number",
+        "crawls[].mode": "string",
+        "crawls[].pages": "array",
+        "crawls[].pages[]": "object",
+        "crawls[].pages[].contentLength": "number",
+        "crawls[].pages[].crawledAt": "string",
+        "crawls[].pages[].depth": "number",
+        "crawls[].pages[].discoveredLinks": "array",
+        "crawls[].pages[].discoveredLinks[]": "object",
+        "crawls[].pages[].discoveredLinks[].clickX": "number",
+        "crawls[].pages[].discoveredLinks[].clickY": "number",
+        "crawls[].pages[].discoveredLinks[].isSpaLink": "boolean",
+        "crawls[].pages[].discoveredLinks[].label": "string",
+        "crawls[].pages[].discoveredLinks[].targetUrl": "null|string",
+        "crawls[].pages[].error": "null|string",
+        "crawls[].pages[].kbIngestedAt": "null",
+        "crawls[].pages[].mainText": "string",
+        "crawls[].pages[].parentUrl": "null|string",
+        "crawls[].pages[].s3AnalysisKey": "null|string",
+        "crawls[].pages[].s3MarkdownKey": "null|string",
+        "crawls[].pages[].s3ScreenshotKey": "null|string",
+        "crawls[].pages[].screenshotBytes": "number",
+        "crawls[].pages[].status": "string",
+        "crawls[].pages[].summary": "string",
+        "crawls[].pages[].title": "string",
+        "crawls[].pages[].url": "string",
+        "crawls[].pages[].visionLatencyMs": "number",
+        "crawls[].pages[].visionTokensIn": "number",
+        "crawls[].pages[].visionTokensOut": "number",
+        "crawls[].queued": "number",
+        "crawls[].s3Prefix": "string",
+        "crawls[].sameOriginOnly": "boolean",
+        "crawls[].scheduleId": "null|string",
+        "crawls[].sessionId": "string",
+        "crawls[].startUrl": "string",
+        "crawls[].startedAt": "string",
+        "crawls[].status": "string",
+        "crawls[].targetId": "null|string",
+        "crawls[].totalMarkdownBytes": "number",
+        "crawls[].totalScreenshotBytes": "number"
       },
-      "values": {}
+      "values": {
+        "crawls[].mode": [
+          "browser",
+          "browser_spa",
+          "fetch"
+        ],
+        "crawls[].pages[].status": [
+          "done",
+          "failed"
+        ],
+        "crawls[].status": [
+          "cancelled",
+          "completed",
+          "failed",
+          "running"
+        ]
+      }
     },
     "GET /api/capabilities/browser/crawl/:crawlId": {
-      "skipped": "no value found for :crawlId under /api/capabilities/browser/crawl (orgiq/admin); no value found for :crawlId under /api/capabilities/browser/crawl (assessment/admin); no value found for :crawlId under /api/capabilities/browser/crawl (anonymous)"
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "crawl": "object",
+        "crawl.completedAt": "null",
+        "crawl.error": "null",
+        "crawl.estimatedCostUsd": "number",
+        "crawl.id": "string",
+        "crawl.includePattern": "string",
+        "crawl.maxPages": "number",
+        "crawl.mode": "string",
+        "crawl.pages": "array",
+        "crawl.pages[]": "object",
+        "crawl.pages[].contentLength": "number",
+        "crawl.pages[].crawledAt": "string",
+        "crawl.pages[].depth": "number",
+        "crawl.pages[].discoveredLinks": "array",
+        "crawl.pages[].discoveredLinks[]": "object",
+        "crawl.pages[].discoveredLinks[].isSpaLink": "boolean",
+        "crawl.pages[].discoveredLinks[].label": "string",
+        "crawl.pages[].discoveredLinks[].targetUrl": "string",
+        "crawl.pages[].error": "null",
+        "crawl.pages[].kbIngestedAt": "null",
+        "crawl.pages[].mainText": "string",
+        "crawl.pages[].parentUrl": "null",
+        "crawl.pages[].s3AnalysisKey": "string",
+        "crawl.pages[].s3MarkdownKey": "string",
+        "crawl.pages[].s3ScreenshotKey": "string",
+        "crawl.pages[].screenshotBytes": "number",
+        "crawl.pages[].status": "string",
+        "crawl.pages[].summary": "string",
+        "crawl.pages[].title": "string",
+        "crawl.pages[].url": "string",
+        "crawl.pages[].visionLatencyMs": "number",
+        "crawl.pages[].visionTokensIn": "number",
+        "crawl.pages[].visionTokensOut": "number",
+        "crawl.queued": "number",
+        "crawl.s3Prefix": "string",
+        "crawl.sameOriginOnly": "boolean",
+        "crawl.scheduleId": "string",
+        "crawl.sessionId": "string",
+        "crawl.startUrl": "string",
+        "crawl.startedAt": "string",
+        "crawl.status": "string",
+        "crawl.targetId": "string",
+        "crawl.totalMarkdownBytes": "number",
+        "crawl.totalScreenshotBytes": "number"
+      },
+      "values": {
+        "crawl.mode": [
+          "browser"
+        ],
+        "crawl.pages[].status": [
+          "done"
+        ],
+        "crawl.status": [
+          "running"
+        ]
+      }
     },
     "GET /api/capabilities/browser/crawl/:crawlId/stream": {
-      "skipped": "no value found for :crawlId under /api/capabilities/browser/crawl (orgiq/admin); no value found for :crawlId under /api/capabilities/browser/crawl (assessment/admin); no value found for :crawlId under /api/capabilities/browser/crawl (anonymous)"
+      "skipped": "server-sent event stream (orgiq/admin); server-sent event stream (assessment/admin); server-sent event stream (anonymous)"
     },
     "GET /api/capabilities/code-sessions": {
       "persona": "orgiq/admin",
@@ -3318,33 +3445,197 @@
       "status": 200,
       "shape": {
         "$": "object",
-        "targets": "array"
+        "targets": "array",
+        "targets[]": "object",
+        "targets[].createdAt": "string",
+        "targets[].cronExpr": "null|string",
+        "targets[].enabled": "boolean",
+        "targets[].id": "string",
+        "targets[].includePattern": "null|string",
+        "targets[].label": "string",
+        "targets[].lastRunAt": "string",
+        "targets[].lastRunId": "string",
+        "targets[].lastStatus": "string",
+        "targets[].maxPages": "number",
+        "targets[].mode": "string",
+        "targets[].nextRunAt": "null",
+        "targets[].sameOriginOnly": "boolean",
+        "targets[].startUrl": "string"
       },
-      "values": {}
+      "values": {
+        "targets[].mode": [
+          "browser",
+          "browser_spa",
+          "fetch"
+        ]
+      }
     },
     "GET /api/ingest/crawl/:id": {
-      "skipped": "no value found for :id under /api/ingest/crawl (orgiq/admin); no value found for :id under /api/ingest/crawl (assessment/admin); no value found for :id under /api/ingest/crawl (anonymous)"
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "session": "object",
+        "session.completedAt": "null",
+        "session.error": "null",
+        "session.estimatedCostUsd": "number",
+        "session.id": "string",
+        "session.includePattern": "string",
+        "session.maxPages": "number",
+        "session.mode": "string",
+        "session.pages": "array",
+        "session.pages[]": "object",
+        "session.pages[].contentLength": "number",
+        "session.pages[].crawledAt": "string",
+        "session.pages[].depth": "number",
+        "session.pages[].discoveredLinks": "array",
+        "session.pages[].discoveredLinks[]": "object",
+        "session.pages[].discoveredLinks[].isSpaLink": "boolean",
+        "session.pages[].discoveredLinks[].label": "string",
+        "session.pages[].discoveredLinks[].targetUrl": "string",
+        "session.pages[].error": "null",
+        "session.pages[].kbIngestedAt": "null",
+        "session.pages[].mainText": "string",
+        "session.pages[].parentUrl": "null",
+        "session.pages[].s3AnalysisKey": "string",
+        "session.pages[].s3MarkdownKey": "string",
+        "session.pages[].s3ScreenshotKey": "string",
+        "session.pages[].screenshotBytes": "number",
+        "session.pages[].status": "string",
+        "session.pages[].summary": "string",
+        "session.pages[].title": "string",
+        "session.pages[].url": "string",
+        "session.pages[].visionLatencyMs": "number",
+        "session.pages[].visionTokensIn": "number",
+        "session.pages[].visionTokensOut": "number",
+        "session.queued": "number",
+        "session.s3Prefix": "string",
+        "session.sameOriginOnly": "boolean",
+        "session.scheduleId": "string",
+        "session.sessionId": "string",
+        "session.startUrl": "string",
+        "session.startedAt": "string",
+        "session.status": "string",
+        "session.targetId": "string",
+        "session.totalMarkdownBytes": "number",
+        "session.totalScreenshotBytes": "number"
+      },
+      "values": {
+        "session.mode": [
+          "browser"
+        ],
+        "session.pages[].status": [
+          "done"
+        ],
+        "session.status": [
+          "running"
+        ]
+      }
     },
     "GET /api/ingest/crawl/:id/manifest": {
-      "skipped": "no value found for :id under /api/ingest/crawl (orgiq/admin); no value found for :id under /api/ingest/crawl (assessment/admin); no value found for :id under /api/ingest/crawl (anonymous)"
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "bucket": "string",
+        "crawlId": "string",
+        "entries": "array",
+        "entries[]": "object",
+        "entries[].analysisKey": "string",
+        "entries[].idx": "number",
+        "entries[].markdownKey": "string",
+        "entries[].screenshotKey": "string",
+        "entries[].status": "string",
+        "entries[].title": "string",
+        "entries[].url": "string",
+        "pageCount": "number",
+        "prefix": "string"
+      },
+      "values": {
+        "entries[].status": [
+          "done"
+        ]
+      }
     },
     "GET /api/ingest/crawl/:id/page/:idx": {
-      "skipped": "no value found for :id under /api/ingest/crawl (orgiq/admin); no value found for :id under /api/ingest/crawl (assessment/admin); no value found for :id under /api/ingest/crawl (anonymous)"
+      "skipped": "no value found for :idx under /api/ingest/crawl/crawl-mock-0004/page (orgiq/admin); no value found for :idx under /api/ingest/crawl/crawl-mock-0004/page (assessment/admin); no value found for :id under /api/ingest/crawl (anonymous)"
     },
     "GET /api/ingest/crawl/:id/page/:idx/screenshot": {
-      "skipped": "no value found for :id under /api/ingest/crawl (orgiq/admin); no value found for :id under /api/ingest/crawl (assessment/admin); no value found for :id under /api/ingest/crawl (anonymous)"
+      "skipped": "no value found for :idx under /api/ingest/crawl/crawl-mock-0004/page (orgiq/admin); no value found for :idx under /api/ingest/crawl/crawl-mock-0004/page (assessment/admin); no value found for :id under /api/ingest/crawl (anonymous)"
     },
     "GET /api/ingest/crawl/:id/stream": {
-      "skipped": "no value found for :id under /api/ingest/crawl (orgiq/admin); no value found for :id under /api/ingest/crawl (assessment/admin); no value found for :id under /api/ingest/crawl (anonymous)"
+      "skipped": "server-sent event stream (orgiq/admin); server-sent event stream (assessment/admin); no value found for :id under /api/ingest/crawl (anonymous)"
     },
     "GET /api/ingest/crawls": {
       "persona": "orgiq/admin",
       "status": 200,
       "shape": {
         "$": "object",
-        "crawls": "array"
+        "crawls": "array",
+        "crawls[]": "object",
+        "crawls[].completedAt": "null|string",
+        "crawls[].error": "null|string",
+        "crawls[].estimatedCostUsd": "number",
+        "crawls[].id": "string",
+        "crawls[].includePattern": "null|string",
+        "crawls[].maxPages": "number",
+        "crawls[].mode": "string",
+        "crawls[].pages": "array",
+        "crawls[].pages[]": "object",
+        "crawls[].pages[].contentLength": "number",
+        "crawls[].pages[].crawledAt": "string",
+        "crawls[].pages[].depth": "number",
+        "crawls[].pages[].discoveredLinks": "array",
+        "crawls[].pages[].discoveredLinks[]": "object",
+        "crawls[].pages[].discoveredLinks[].clickX": "number",
+        "crawls[].pages[].discoveredLinks[].clickY": "number",
+        "crawls[].pages[].discoveredLinks[].isSpaLink": "boolean",
+        "crawls[].pages[].discoveredLinks[].label": "string",
+        "crawls[].pages[].discoveredLinks[].targetUrl": "null|string",
+        "crawls[].pages[].error": "null|string",
+        "crawls[].pages[].kbIngestedAt": "null",
+        "crawls[].pages[].mainText": "string",
+        "crawls[].pages[].parentUrl": "null|string",
+        "crawls[].pages[].s3AnalysisKey": "null|string",
+        "crawls[].pages[].s3MarkdownKey": "null|string",
+        "crawls[].pages[].s3ScreenshotKey": "null|string",
+        "crawls[].pages[].screenshotBytes": "number",
+        "crawls[].pages[].status": "string",
+        "crawls[].pages[].summary": "string",
+        "crawls[].pages[].title": "string",
+        "crawls[].pages[].url": "string",
+        "crawls[].pages[].visionLatencyMs": "number",
+        "crawls[].pages[].visionTokensIn": "number",
+        "crawls[].pages[].visionTokensOut": "number",
+        "crawls[].queued": "number",
+        "crawls[].s3Prefix": "string",
+        "crawls[].sameOriginOnly": "boolean",
+        "crawls[].scheduleId": "null|string",
+        "crawls[].sessionId": "string",
+        "crawls[].startUrl": "string",
+        "crawls[].startedAt": "string",
+        "crawls[].status": "string",
+        "crawls[].targetId": "null|string",
+        "crawls[].totalMarkdownBytes": "number",
+        "crawls[].totalScreenshotBytes": "number"
       },
-      "values": {}
+      "values": {
+        "crawls[].mode": [
+          "browser",
+          "browser_spa",
+          "fetch"
+        ],
+        "crawls[].pages[].status": [
+          "done",
+          "failed"
+        ],
+        "crawls[].status": [
+          "cancelled",
+          "completed",
+          "failed",
+          "running"
+        ]
+      }
     },
     "GET /api/ingest/data-sources": {
       "persona": "orgiq/admin",
@@ -3434,7 +3725,18 @@
       "status": 200,
       "shape": {
         "$": "object",
-        "schedules": "array"
+        "schedules": "array",
+        "schedules[]": "object",
+        "schedules[].createdAt": "string",
+        "schedules[].cronExpr": "string",
+        "schedules[].dataSourceId": "string",
+        "schedules[].dataSourceName": "string",
+        "schedules[].enabled": "boolean",
+        "schedules[].id": "string",
+        "schedules[].label": "string",
+        "schedules[].lastJobId": "null|string",
+        "schedules[].lastRunAt": "string",
+        "schedules[].lastStatus": "string"
       },
       "values": {}
     },
@@ -6223,6 +6525,7 @@
         "findings[].entityType": "string",
         "findings[].evidence": "object",
         "findings[].evidence.ageDays": "number",
+        "findings[].evidence.boxId": "string",
         "findings[].evidence.candidateInitiative": "string",
         "findings[].evidence.citedBy": "number",
         "findings[].evidence.holderIds": "array",
@@ -6231,10 +6534,13 @@
         "findings[].evidence.holderNames[]": "string",
         "findings[].evidence.holders": "number",
         "findings[].evidence.initiative": "string",
+        "findings[].evidence.initiativeId": "string",
         "findings[].evidence.initiatives": "array",
         "findings[].evidence.initiatives[]": "string",
         "findings[].evidence.ownerActive": "boolean",
         "findings[].evidence.ownerId": "null|string",
+        "findings[].evidence.repo": "string",
+        "findings[].evidence.sessionId": "string",
         "findings[].fingerprint": "string",
         "findings[].firstSeenAt": "string",
         "findings[].id": "string",
@@ -6604,6 +6910,9 @@
     "mode": {
       "open": false,
       "values": [
+        "browser",
+        "browser_spa",
+        "fetch",
         "sim",
         "synced"
       ]
@@ -6689,6 +6998,7 @@
         "approved",
         "awaiting_input",
         "behind",
+        "cancelled",
         "candidate",
         "changes_requested",
         "claim_open",
