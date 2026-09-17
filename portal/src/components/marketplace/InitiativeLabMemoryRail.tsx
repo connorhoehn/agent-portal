@@ -52,10 +52,15 @@ export function LabMemoryRailCard({ initiativeId }: { initiativeId: string | und
             <Chip tone={KIND_TONE[e.kind] ?? 'neutral'} size="xs">{e.kind}</Chip>
             <EntityCell label={e.title} className="min-w-0" />
             {e.repo && (
+              /* Wrapped in a titled span the way the body MetaLine below
+                 already is: 110px of mono holds about 18 characters and a
+                 real `org/repo-name` routinely runs past that, so without
+                 the hover the reader cannot tell which repo the entry is
+                 about. */
               <MetaLine
                 size="xs"
                 className="ml-auto font-mono truncate max-w-[110px]"
-                items={[e.repo]}
+                items={[<span key="r" title={e.repo}>{e.repo}</span>]}
               />
             )}
           </Inline>

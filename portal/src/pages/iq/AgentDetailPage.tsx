@@ -230,9 +230,13 @@ export default function AgentDetailPage() {
                     <T className="font-mono text-text-tertiary">{iv.promptVersion?.slice(0, 12) ?? '—'}</T>
                   ),
                 },
+                // title=, matching every other promptSnippet cell in the portal
+                // (InvocationsPage, InvocationSearchPage). Without it the question
+                // that was actually asked is unrecoverable, and this page offers
+                // nowhere else to read it.
                 {
                   key: 'promptSnippet', header: 'Ask', render: (iv) => (
-                    <T className="block max-w-[280px] truncate text-text-tertiary">{iv.promptSnippet ?? '—'}</T>
+                    <T className="block max-w-[280px] truncate text-text-tertiary" title={iv.promptSnippet ?? undefined}>{iv.promptSnippet ?? '—'}</T>
                   ),
                 },
               ]}

@@ -1,5 +1,6 @@
 import { StatStrip } from '@connorhoehnslalom/ui-components/shared';
 import { relativeTime } from '../../lib/relativeTime';
+import { useCapabilities } from '../../lib/capabilities';
 
 interface Props {
   /** Pre-formatted by ScoresPage.tsx's `showingLabel` — "56 people" when
@@ -18,6 +19,23 @@ interface Props {
 // Freshness folds into the strip as one more item instead of a line of its
 // own.
 export function StatCards({ peopleScoredLabel, avgComposite, topScore, departmentCount, mostRecentScoredAt }: Props) {
+  const { can, ready } = useCapabilities();
+  /**
+   * "run the scoring agent" is only an instruction if you can run it.
+   *
+   * Scores is visible to org-leader AND hr-admin, but `ManageIngest` — which
+   * `POST /api/agents/:id/invoke` requires for the scoring agent — is held by
+   * hr-admin alone. So half this surface's audience was being handed a chore
+   * it cannot do, with no hint of who can. `TrendLine.tsx` already names this
+   * exact trap in its own props doc ("the scoring agent is ManageIngest-gated,
+   * so for most readers it is a chore they cannot even do") and handles it;
+   * this sibling never got the same treatment.
+   */
+  const staleHint = !ready
+    ? undefined
+    : can('ManageIngest')
+      ? 'run the scoring agent'
+      : 'no scoring run yet — an HR admin can start one';
   return (
     <StatStrip
       aria-label="Scoring summary"
@@ -29,7 +47,7 @@ export function StatCards({ peopleScoredLabel, avgComposite, topScore, departmen
         {
           label: 'Updated',
           value: relativeTime(mostRecentScoredAt),
-          hint: mostRecentScoredAt === null ? 'run the scoring agent' : undefined,
+          hint: mostRecentScoredAt === null ? staleHint : undefined,
         },
       ]}
     />

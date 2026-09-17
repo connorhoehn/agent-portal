@@ -206,7 +206,17 @@ export default function LibraryPage() {
             onChange={onSearchChange}
             placeholder="Name, description, tag, owner…"
             aria-label="Search the library"
-            className="w-[220px]"
+            /* 248, not 220. The placeholder names the four fields this box
+               actually searches, and at 220 the field clipped it to
+               "Name, description, tag, own" — eating both the word "owner" and
+               the author's own trailing ellipsis, so the last searchable field
+               was unreadable and the cut looked like a bug rather than an
+               "and more" signal. Measured rather than guessed: the string is
+               179px at this font, plus 32px left padding for the magnifier,
+               28px right for the clear button and 2px of border = 241px. 248
+               leaves a little room for a copy edit; the toolbar row has ~280px
+               of slack at this width, so nothing else moves. */
+            className="w-[248px]"
             inputClassName="h-7 text-[12px]"
           />
         </ToolbarGroup>

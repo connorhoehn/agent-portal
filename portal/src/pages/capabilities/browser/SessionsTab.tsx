@@ -99,7 +99,10 @@ export function SessionsTab() {
                     <TableTd>
                       <Chip tone={sessionTone(session.status)} size="xs">{session.status}</Chip>
                     </TableTd>
-                    <TableTd className="max-w-[260px] truncate text-[11px]">
+                    {/* title=, like the other sessions table in this file does
+                        at the `s.currentUrl` cell below. A truncated URL with no
+                        hover is a link whose destination cannot be read at all. */}
+                    <TableTd className="max-w-[260px] truncate text-[11px]" title={session.currentUrl}>
                       {isBlankUrl(session.currentUrl) ? (
                         <T className="text-text-tertiary">—</T>
                       ) : (
