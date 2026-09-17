@@ -344,7 +344,7 @@ export function KnowledgeExplorer({ mode }: KnowledgeExplorerProps) {
         ) : selectedNode.viewable === false ? (
           <EmptyState title={selectedNode.title} body="This file isn't viewable here." description={selectedNode.id} />
         ) : (
-          <DocPane node={selectedNode} mode={mode} sseEvents={sse.events} sseConnected={sse.connected} onTreeChanged={treeFetch.refresh} />
+          <DocPane node={selectedNode} mode={mode} sseEvents={sse.events} sseConnected={sse.connected} sseGapped={sse.gapped} onTreeChanged={treeFetch.refresh} />
         )
       )}
     </ExplorerFrame>

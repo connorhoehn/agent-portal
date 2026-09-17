@@ -300,9 +300,25 @@ call it and the role that may not.
   `GATEWAY_SERVICE_AUTH_SECRET`, so every sessionless callback runs
   dev-open in ECS; also make those guards refuse when `NODE_ENV=production`
   and the secret is unset (see REVIEW-2026-09-05.md post-fix note).
-- The SSE replay buffer is one tenant-wide ring; a `stream.gap` event now
+- ~~The SSE replay buffer is one tenant-wide ring; a `stream.gap` event now
   tells a reconnecting client when its seq predates the buffer, but the
-  DocPane notice for it is not wired yet (hook exposes `gapped`).
+  DocPane notice for it is not wired yet (hook exposes `gapped`).~~
+  **Wired 2026-09-16.** `useAssessmentEvents`' `gapped` now reaches both
+  consumers. `DocPane` takes an `sseGapped` prop and says what a gap does and
+  does not mean: the document BODY is a CRDT on its own channel and is
+  unaffected, but everything ABOUT the document — comments, publishes,
+  presence — rides the SSE feed and may be incomplete. `RunsPage` gets the
+  louder notice, because it is the worse case: it does not re-read the ledger
+  per event, it FOLDS `run.started/progress/completed/failed` onto it with
+  `applyRunEvent`, so a dropped transition leaves a finished run rendering as
+  "running" indefinitely. That notice carries a "Refresh the ledger" action —
+  `load()` re-reads the server state the missed events were describing, and
+  `applyRunEvent` is idempotent so already-folded events do no harm on top.
+  Deliberately NOT folded into the `ConnectionPill`: the pill describes the
+  socket, and a gapped stream is genuinely open — "reconnecting" would be
+  false, and "Live" alone is the half-truth `stream.gap` exists to correct.
+  The server half already had full coverage
+  (`routes/__tests__/assessment-events-gap.test.ts`); only the UI was missing.
 
 ## Rules that do not bend
 

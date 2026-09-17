@@ -211,12 +211,24 @@ export interface DocPaneProps {
   /** The SSE stream's CURRENT open/closed state (useAssessmentEvents'
    *  `connected`) — drives the honest half of the connection pill. */
   sseConnected: boolean;
+  /**
+   * `useAssessmentEvents`' `gapped` — the server's replay ring could not reach
+   * back far enough to cover everything this tab missed, so some events are
+   * gone for good rather than merely late.
+   *
+   * Deliberately NOT folded into the connection pill. The pill describes the
+   * SOCKET, and a gapped stream is genuinely open — saying "reconnecting"
+   * would be false, and saying "Live" alone is the half-truth the broker
+   * started sending `stream.gap` to correct. Coverage is a second fact and
+   * gets a second signal.
+   */
+  sseGapped: boolean;
   /** Refetches the knowledge tree — called once a publish lands, so the
    *  synced section picks up the new page node without a manual reload. */
   onTreeChanged: () => void;
 }
 
-export function DocPane({ node, mode, sseEvents, sseConnected, onTreeChanged }: DocPaneProps) {
+export function DocPane({ node, mode, sseEvents, sseConnected, sseGapped, onTreeChanged }: DocPaneProps) {
   const { can, ready } = useCapabilities();
   const { session } = useSession();
   const gateway = useGateway();
@@ -682,6 +694,22 @@ export function DocPane({ node, mode, sseEvents, sseConnected, onTreeChanged }: 
               maxLength={60}
               className="font-mono text-xs"
             />
+          )}
+
+          {/* What a gap does and does not mean, because the distinction decides
+              what we tell the reader to do. The document BODY is a CRDT synced
+              over its own channel, so it is not affected. What rides the SSE
+              feed is everything ABOUT the document — publishes, comments,
+              presence, the Publish button's pending state — so those are what
+              can be silently missing, and a reload is the only way back. */}
+          {sseGapped && (
+            <InlineAlert tone="warning">
+              This tab was disconnected for longer than the live feed keeps its
+              history, so some activity was missed and cannot be replayed. The
+              document text itself is still in sync — it syncs separately — but
+              comments, publishes and presence may be incomplete. Reload the page
+              to catch up.
+            </InlineAlert>
           )}
 
           {editing && editSource === 'crdt' && crdt.hasConflict && (

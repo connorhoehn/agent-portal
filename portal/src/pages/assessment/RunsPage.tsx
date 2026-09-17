@@ -15,6 +15,7 @@ import {
   EmptyState,
   ErrorState,
   Inline,
+  InlineAlert,
   MetaLine,
   PageHeader,
   Stack,
@@ -144,7 +145,7 @@ export default function RunsPage() {
   // refresh (docs/assessment-goal.md §6 "Runs page reactivity"). Only the
   // events since the last render are applied — replaying the whole buffer
   // every render would be idempotent but wasteful.
-  const { events, connected } = useAssessmentEvents();
+  const { events, connected, gapped } = useAssessmentEvents();
   const appliedCountRef = useRef(0);
   useEffect(() => {
     if (events.length <= appliedCountRef.current) return;
@@ -177,6 +178,29 @@ export default function RunsPage() {
         description="Every command run recorded in the assessment ledger, across every team and cohort."
         badge={<ConnectionPill state={connected ? 'connected' : 'connecting'} compact />}
       />
+
+      {/* A gap matters more here than anywhere else in the tenant. This page
+          does not re-read the ledger per event — it FOLDS run.started /
+          progress / completed / failed onto it with applyRunEvent — so an
+          event the replay ring could not reach is a transition that never
+          arrives, and a run that finished ten minutes ago goes on rendering
+          as "running" with nothing to say otherwise. Unlike the Workspace's
+          notice, this one can actually fix it: `load()` re-reads the ledger
+          from the server, which is the state the missed events were
+          describing. applyRunEvent is idempotent, so the events already
+          folded in do no harm on top of a fresh read. */}
+      {gapped && (
+        <InlineAlert tone="warning">
+          <Inline gap="sm" align="center" wrap>
+            <T>
+              This tab was disconnected for longer than the live feed keeps its
+              history, so some run updates were missed and cannot be replayed —
+              a run shown as still going may already have finished.
+            </T>
+            <Button variant="secondary" size="sm" onClick={load}>Refresh the ledger</Button>
+          </Inline>
+        </InlineAlert>
+      )}
 
       {/* See the shared list-page loading pattern comment in QueuePage.tsx:
           `load()` re-fires on every live run event (above), which set
