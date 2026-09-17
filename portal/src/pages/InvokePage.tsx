@@ -45,6 +45,7 @@ import { coalesceAssistantMessages } from '../components/chat/coalesceMessages';
 import { collapseFailedTurn } from '../components/chat/collapseFailedTurn';
 import { FeedbackControl } from '../components/chat/FeedbackControl';
 import { describeTurnError } from '../components/chat/turnError';
+import { UnavailableNotice } from '../components/UnavailableNotice';
 
 // Feature flag: set VITE_ORGIQ_CHAT_ENABLED=true to show the session chat sidebar.
 // We avoid import.meta.env typing concerns (no vite-env.d.ts in this repo) by
@@ -179,8 +180,21 @@ function InvokePage() {
   // bare array, so that a failed ListAgentRuntimes can say so instead of
   // arriving as an empty fleet. Here the fleet only fills a selector; the
   // stream's own error surface covers a broken invoke.
-  const { data: agentsResp, error: agentsError } = useFetch<{ agents: AgentDef[] }>('/api/agents');
+  const { data: agentsResp, error: agentsError, refresh: refreshAgents } =
+    useFetch<{ agents: AgentDef[]; degraded?: string }>('/api/agents');
   const agents = agentsResp?.agents;
+  /**
+   * The roster read failing at all — transport error OR the wire's own
+   * `degraded` marker, which `routes/agents.ts` sets from `degradedFields()`
+   * when ListAgentRuntimes comes back partial or not at all.
+   *
+   * The comment above is right that a BROKEN INVOKE surfaces in the stream's
+   * own error. It does not cover a roster that arrives EMPTY: the selector is
+   * gated on `visibleAgents.length > 1`, so it simply disappears, and
+   * `agentsError` was never rendered anywhere on this page — leaving an
+   * invitation to "Ask Agent" with nothing to ask and no reason given.
+   */
+  const rosterFailure = agentsError ?? agentsResp?.degraded ?? null;
   const { can } = useCapabilities();
 
   // Hide the write agents from the selector unless the caller holds
@@ -291,7 +305,7 @@ function InvokePage() {
     data: sessionList,
     error: sessionListError,
     refresh: refreshSessions,
-  } = useFetch<{ sessions: SessionSummary[] }>('/api/sessions', 15000);
+  } = useFetch<{ sessions: SessionSummary[]; memoryUnavailable?: string }>('/api/sessions', 15000);
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
 
@@ -652,9 +666,19 @@ function InvokePage() {
               </Button>
             </Stack>
           )}
+          {/* `memoryUnavailable` is the difference between "you have not chatted
+              yet" and "no transcript can be read or written at all", and this
+              rail used to spell both the same way. Under dev:mock MEMORY_ID is
+              unset, so `recordTurn` writes nothing — which made the old copy's
+              instruction ("send a message to start one") send the reader off to
+              do something that silently no-ops. observability/SessionsPage.tsx
+              already reads this field and says so; this is the same treatment,
+              and the server has always put the sentence on the wire. */}
           {!sessionsUnavailable && sessions.length === 0 && (
             <T className="block px-4 py-3 text-[11px] text-text-tertiary">
-              No sessions yet — send a message to start one.
+              {sessionList?.memoryUnavailable
+                ? `${sessionList.memoryUnavailable}. This is not a claim that you have never chatted — nothing can be read or started here until Memory is configured.`
+                : 'No sessions yet — send a message to start one.'}
             </T>
           )}
           {sessions.map(s => {
@@ -723,10 +747,21 @@ function InvokePage() {
           )}
           {(!sessionId || emptyTranscriptSessionId !== sessionId) && messages.length === 0 && !isStreaming && !historyError && (
             <Stack gap="md" className="p-10 text-text-tertiary items-center text-center">
-              <T className="text-[18px]">Ask {selectedAgent?.name ?? 'Agent'}</T>
-              <T className="text-[13px]">
-                Ask the org anything — who can help, who knows what, what's been decided.
-              </T>
+              {rosterFailure && !selectedAgent ? (
+                <UnavailableNotice
+                  error={rosterFailure}
+                  what="the agent fleet"
+                  source="Agents are listed from AgentCore ListAgentRuntimes"
+                  onRetry={() => void refreshAgents()}
+                />
+              ) : (
+                <>
+                  <T className="text-[18px]">Ask {selectedAgent?.name ?? 'Agent'}</T>
+                  <T className="text-[13px]">
+                    Ask the org anything — who can help, who knows what, what's been decided.
+                  </T>
+                </>
+              )}
               {/* The caller's own board, re-voiced as questions. Clicking sends
                   immediately — this is chat, and a suggested question you still
                   have to re-submit is a form pretending to be a conversation. */}

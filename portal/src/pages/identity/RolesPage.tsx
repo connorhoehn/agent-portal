@@ -4,7 +4,6 @@ import {
   CardHeader,
   Chip,
   DetailSection,
-  ErrorState,
   Inline,
   LoadingState,
   PageSection,
@@ -18,6 +17,7 @@ import {
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { matrixActions } from './identityFormat';
+import { UnavailableNotice } from '../../components/UnavailableNotice';
 
 interface RoleInfo {
   id: string;
@@ -36,7 +36,7 @@ interface SchemaResponse {
 }
 
 function RolesPage() {
-  const { data, isLoading, error } = useFetch<RoleInfo[]>('/api/identity/roles');
+  const { data, isLoading, error, refresh } = useFetch<RoleInfo[]>('/api/identity/roles');
   // The matrix rows come from the SAME live schema the Schema tab edits — a
   // hardcoded action list here silently drifted from it the first time anyone
   // added an action.
@@ -57,7 +57,12 @@ function RolesPage() {
   if (error) {
     return (
       <PageSection title="Roles">
-        <ErrorState title="Could not load roles" body={error} />
+        <UnavailableNotice
+          error={error}
+          what="roles"
+          source="Roles and their capabilities come from the role registry"
+          onRetry={() => void refresh()}
+        />
       </PageSection>
     );
   }

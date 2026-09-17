@@ -7,7 +7,6 @@ import {
   CodeEditor,
   CollapsibleSection,
   ConfirmDialog,
-  ErrorState,
   FormField,
   Inline,
   InlineAlert,
@@ -27,6 +26,7 @@ import { parsePolicy, buildPolicy, type Effect, type ParsedPolicy } from '../../
 import { effectTone, inputWiring } from './identityFormat';
 import { toastError } from '../../lib/toastStore';
 import { writeJson } from '../../lib/writeJson';
+import { UnavailableNotice } from '../../components/UnavailableNotice';
 
 interface PolicyEntry {
   policyId: string;
@@ -118,7 +118,12 @@ function PoliciesPage() {
   if (error) {
     return (
       <PageSection title="Cedar Policies">
-        <ErrorState title="Could not load policies" body={error} />
+        <UnavailableNotice
+          error={error}
+          what="policies"
+          source="Cedar policies are read from Verified Permissions"
+          onRetry={() => void refresh()}
+        />
       </PageSection>
     );
   }

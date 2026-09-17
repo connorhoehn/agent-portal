@@ -222,7 +222,8 @@ Two things this pass surfaced and deliberately did not resolve:
   recorded in `docs/nav-server-tier-decisions.md` rather than taken. The
   evidence firmed up this pass: `agent-projects.ts`'s READ gate is
   `readForRolesElseAction(['org-leader', 'hr-admin'], 'DispatchAgentRun')` and
-  **all five orgiq roles hold `DispatchAgentRun`**, while the nav and the route
+  **four of the five orgiq roles hold `DispatchAgentRun`** (sme, program-owner,
+  org-leader, hr-admin — member does not), while the nav and the route
   both gate on `['hr-admin']` alone — and the route's own comment justifies
   that with "their APIs require ManageDevbox", which is true of the WRITE path
   and false of the read. So the portal is gated narrower than the API it reads,
@@ -239,11 +240,15 @@ covered anyway, and re-deriving that each pass is wasted work, so:
 |---|---|---|
 | `/admin/observability` | no | its `index` redirects to `summary`, which IS a row (`health`); the sub-pages `invocations` and `tool-calls` have rows too |
 | `/iq/distillation` | no | **its own journey system** — `docs/distillation-journeys/{member,org-leader}/{overview,tiers,artifacts,lineage,compactions,review}.md`, 12 logs judged by `validate-distillation.sh`, including its own staleness check |
-| `/admin/identity` | no | **genuinely partial** — the `index` redirects to `roles`, and only `/admin/identity/users` has a row (`identity-users`). The page a person lands on when they click Identity in the rail is unaudited |
+| `/admin/identity` | no | the `index` redirects to `roles`, which HAS a row now (`identity-roles`, added 2026-09-17) alongside `identity-users` |
 
-So the one real remaining hole in this matrix is the Identity landing. Not
-`/iq/distillation`, which is audited more thoroughly than most rows here, just
-somewhere else.
+Every rail item is now covered, here or in its own system. Closing the last
+hole — the Identity landing — was worth the trip: the three identity pages
+with no journey row (Roles, Policies, Schema) were all still rendering a failed
+read through the library's `ErrorState`, while `UsersPage`, the one page there
+that HAD a row, used `UnavailableNotice` in three places. The audited page got
+the treatment and its unaudited siblings did not, which is the argument for
+coverage stated as plainly as it ever gets.
 
 ## Reading the journey logs
 

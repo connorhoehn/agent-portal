@@ -25,4 +25,5 @@ prompt-studio | /iq/prompts | L | org-leader,hr-admin
 codebases | /admin/projects | L | hr-admin
 bots | /admin/bots | L | sme,program-owner,org-leader,hr-admin
 settings | /settings | - | member,sme,program-owner,org-leader,hr-admin
+identity-roles | /admin/identity/roles | L | hr-admin
 identity-users | /admin/identity/users | L | hr-admin

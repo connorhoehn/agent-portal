@@ -10,7 +10,6 @@ import {
   Chip,
   CollapsibleSection,
   ConfirmDialog,
-  ErrorState,
   Inline,
   InlineAlert,
   LoadingState,
@@ -23,6 +22,7 @@ import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch';
 import { KeyValue } from '../../components/KeyValue';
 import { writeJson } from '../../lib/writeJson';
+import { UnavailableNotice } from '../../components/UnavailableNotice';
 
 interface SchemaResponse {
   schema: {
@@ -70,7 +70,12 @@ function SchemaPage() {
   if (error) {
     return (
       <PageSection title="Schema">
-        <ErrorState title="Could not load schema" body={error} />
+        <UnavailableNotice
+          error={error}
+          what="the schema"
+          source="The entity and action schema is read from Verified Permissions"
+          onRetry={() => void refresh()}
+        />
       </PageSection>
     );
   }
