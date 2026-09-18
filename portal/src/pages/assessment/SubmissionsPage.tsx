@@ -323,7 +323,23 @@ export default function SubmissionsPage() {
             // getFilterText dropped: the render already returns the same string
             // DataTable's rendered-text search fallback would extract.
             { key: 'submitter', header: 'Submitter', render: (g) => g.current.submitter_name || '—' },
-            { key: 'received', header: 'Received', render: (g) => formatRelativeTime(g.current.submitted_at) },
+            {
+              key: 'received',
+              header: 'Received',
+              // Rendered VERBATIM, not parsed. `submitted_at` is the export's
+              // own "Completion time" string carried through untouched — the
+              // source project declares it `submitted_at: str = ""  # from the
+              // export's Completion time` and prints it as-is. Running it
+              // through the Postgres timestamp parser produced NaN on every
+              // row, so this column showed "—" for every submission while the
+              // value sat in the payload.
+              //
+              // Not parsed here either, deliberately: "8/28/2026 10:15" is
+              // ambiguous between M/D and D/M, and guessing a locale to render
+              // a nicer "3w ago" would invent precision the field does not
+              // have. Empty stays an em dash — that IS unknown.
+              render: (g) => g.current.submitted_at?.trim() || '—',
+            },
             {
               key: 'status',
               header: 'Status',
@@ -352,7 +368,20 @@ export default function SubmissionsPage() {
                   key: 'actions',
                   header: '',
                   render: (g: SubmissionRevisionGroup) => (
-                    <Button size="sm" variant="secondary" onClick={() => setConfirmingDelete(g)}>
+                    // Revealed on the row's hover / focus-within rather than
+                    // sitting on every row at rest. A destructive control
+                    // repeated down a table reads as part of the furniture,
+                    // which is the opposite of what a delete should read as —
+                    // and it was the loudest thing on a page whose job is to
+                    // show what arrived. The confirm dialog behind it is
+                    // unchanged; this is about what the table looks like
+                    // before you have decided to do anything.
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      className="row-reveal"
+                      onClick={() => setConfirmingDelete(g)}
+                    >
                       Delete
                     </Button>
                   ),

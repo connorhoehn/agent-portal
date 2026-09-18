@@ -27,7 +27,6 @@ import {
   Breadcrumbs,
   Button,
   Chip,
-  ConnectionPill,
   EmptyState,
   ErrorState,
   Inline,
@@ -57,11 +56,8 @@ import {
   findNode,
   firstViewableLeaf,
   flatNodes,
-  gatewayOfflineHint,
   isFolderNode,
-  isGatewayReady,
   isPageNode,
-  liveConnectionState,
   nodePath,
   parseActivityRuns,
   pulledEventsForSection,
@@ -409,7 +405,6 @@ export function KnowledgeExplorer({ mode }: KnowledgeExplorerProps) {
   const activitySection = view.kind === 'activity' ? sections.find((s) => s.key === view.sectionKey) : undefined;
   const isPage = isPageNode(selectedNode);
   const selectedSectionKey = selectedNode ? sectionForNode(sections, selectedNode.id)?.key ?? null : null;
-  const gatewayHint = gatewayOfflineHint(isGatewayReady(gateway.connectionState, gateway.clientId));
 
   // Hand-rolled in place of ReconnectingShim/RealtimeCapabilityProvider —
   // see the top-of-file note: both live in the Tiptap-tainted integrations
