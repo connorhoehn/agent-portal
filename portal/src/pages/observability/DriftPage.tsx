@@ -46,7 +46,7 @@ import { PromptVersionChip } from '../../components/observability/PromptVersionC
 import { SaveAsTestCaseModal } from '../../components/observability/SaveAsTestCaseModal';
 import { SmartEmptyState } from '../../components/observability/SmartEmptyState';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
-import { firstDegraded } from '../../lib/degraded';
+import { firstDegraded, readDegraded } from '../../lib/degraded';
 import { T } from './Text';
 import { RowEmpty } from './ReadState';
 import { parsePgTimestampAsUtc } from '../../lib/pgTimestamp';
@@ -191,6 +191,11 @@ function DriftPage() {
 
   // Four reads over the same sampled-trace tables; one sentence when they go.
   const driftDegraded = firstDegraded(summary, tsData, tplData, outliersData);
+  // The agent count in the description is rolled up from `summary` alone, so
+  // it answers to that read. A failed rollup counted zero agents, which reads
+  // as "no agent is drifting" — the reassuring half of a question nobody could
+  // answer.
+  const rollupBlind = summaryError ?? readDegraded(summary);
 
   const [expanded, setExpanded] = useState<string | null>(null);
 
@@ -219,18 +224,18 @@ function DriftPage() {
   return (
     <PageSection
       title="Drift"
-      description={`Per-agent · ${rows.length} agent${rows.length === 1 ? '' : 's'} · 30s refresh`}
+      description={
+        rollupBlind
+          ? 'Per-agent · rollup could not be read · 30s refresh'
+          : `Per-agent · ${rows.length} agent${rows.length === 1 ? '' : 's'} · 30s refresh`
+      }
       actions={<WindowPicker options={WINDOW_OPTIONS} value={windowIdx} onChange={setWindowIdx} />}
     >
-      {(summaryError || driftDegraded) && (
-        <UnavailableNotice
-          error={summaryError ?? driftDegraded ?? 'the drift query failed'}
-          what="drift data"
-          source="Drift is computed from node_embeddings and the sampled traces in Aurora"
-          onRetry={refreshSummary}
-          className="mb-4"
-        />
-      )}
+      {/* No page-level banner. Every panel below carries its own scoped
+          notice, and the rollup's SmartEmptyState says the same sentence ~200px
+          lower — which is the stacked-banner problem `firstDegraded` exists to
+          avoid. The description line carries the page-level half by refusing
+          to quote an agent count it could not read. */}
 
       <Card padding="md">
         {rows.length === 0 ? (

@@ -33,7 +33,7 @@ import {
 import { useFetch } from '../../hooks/useFetch';
 import { SmartEmptyState } from '../../components/observability/SmartEmptyState';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
-import { firstDegraded } from '../../lib/degraded';
+import { firstDegraded, readDegraded } from '../../lib/degraded';
 import { T } from './Text';
 import { KeyValue } from '../../components/KeyValue';
 import { WindowPicker, useWindowUrlState } from './WindowPicker';
@@ -168,13 +168,22 @@ function MemoryPage() {
   // answer 200 with `{ byAgent: [] }` / `{ events: [] }`, which draws as an
   // agent fleet that has simply never touched memory.
   const memoryDegraded = firstDegraded(statsData, eventsData);
+  // Both counts in the description come from `statsData`. A failed stats read
+  // counted "0 events · 0 cold sessions", which reads as a fleet that never
+  // touched memory — the body below already says the read failed, so the
+  // header was contradicting it.
+  const statsBlind = readDegraded(statsData);
 
   const [expanded, setExpanded] = useState<string | null>(null);
 
   return (
     <PageSection
       title="Memory"
-      description={`${totalEvents} event${totalEvents === 1 ? '' : 's'} in last ${win.label} · ${totalColdSessions} cold session${totalColdSessions === 1 ? '' : 's'}`}
+      description={
+        statsBlind
+          ? `Memory activity in last ${win.label} could not be read`
+          : `${totalEvents} event${totalEvents === 1 ? '' : 's'} in last ${win.label} · ${totalColdSessions} cold session${totalColdSessions === 1 ? '' : 's'}`
+      }
       actions={<WindowPicker options={WINDOW_OPTIONS} value={windowIdx} onChange={setWindowIdx} />}
     >
       {(statsError || memoryDegraded) && (

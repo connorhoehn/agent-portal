@@ -41,7 +41,7 @@ import { useFetch } from '../../hooks/useFetch';
 import { CostChip } from '../../components/observability/CostChip';
 import { SmartEmptyState } from '../../components/observability/SmartEmptyState';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
-import { firstDegraded } from '../../lib/degraded';
+import { firstDegraded, readDegraded } from '../../lib/degraded';
 import { toastError } from '../../lib/toastStore';
 import { writeJson } from '../../lib/writeJson';
 import { T } from './Text';
@@ -125,6 +125,13 @@ function QualityPage() {
   } = useFetch<{ points?: QualityScore[] } | QualityScore[]>(scoresUrl, 30_000);
   // Either read can fail: the picker's agent list, or this agent's scores.
   const qualityDegraded = firstDegraded(agentsSummary, scoresData);
+  // Two separate reads behind two separate claims: the sample count comes from
+  // the scores query, and the picker's option list from the drift rollup. The
+  // comment above records that a broken drift query left the picker reading
+  // "(no agents)" — capturing the marker fixed the fetch, but the label was
+  // still hardcoded to that phrase, so the bug survived its own fix.
+  const scoresBlind = scoresError ?? readDegraded(scoresData);
+  const agentsBlind = readDegraded(agentsSummary);
   const scores = useMemo<QualityScore[]>(
     () => Array.isArray(scoresData) ? scoresData : (scoresData?.points ?? []),
     [scoresData],
@@ -205,7 +212,11 @@ function QualityPage() {
   return (
     <PageSection
       title="Quality"
-      description={`Last 24h · 30s refresh · ${scores.length} sample${scores.length === 1 ? '' : 's'}`}
+      description={
+        scoresBlind
+          ? 'Last 24h · 30s refresh · sample count could not be read'
+          : `Last 24h · 30s refresh · ${scores.length} sample${scores.length === 1 ? '' : 's'}`
+      }
       actions={
         <Select
           aria-label="Filter by agent"
@@ -214,7 +225,7 @@ function QualityPage() {
           disabled={agentOptions.length === 0}
           options={
             agentOptions.length === 0
-              ? [{ value: '', label: '(no agents)' }]
+              ? [{ value: '', label: agentsBlind ? '(agent list unavailable)' : '(no agents)' }]
               : agentOptions.map((a) => ({ value: a, label: a }))
           }
         />

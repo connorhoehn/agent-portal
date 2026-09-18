@@ -31,7 +31,7 @@ import {
 import { useFetch } from '../../hooks/useFetch';
 import { SmartEmptyState } from '../../components/observability/SmartEmptyState';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
-import { firstDegraded } from '../../lib/degraded';
+import { firstDegraded, readDegraded } from '../../lib/degraded';
 import { TrafficHeatmapFrame } from './TrafficHeatmapFrame';
 import { T } from './Text';
 import { RowEmpty } from './ReadState';
@@ -221,6 +221,16 @@ function TrafficPage() {
   // perfectly quiet system — so say it once, at the top, with the reason.
   const trafficDegraded = firstDegraded(rpsData, heatmapData, topUsersData, perAgentData);
 
+  // The totals strip and the description line are rolled up from the
+  // per-agent summary and the top-user list, so they answer to THOSE two
+  // reads, not to the page-wide marker. Summing an empty array yields 0, and
+  // "0 invocations · 0 RPS avg" next to "Spend $0.0000" is a report that the
+  // fleet was idle — a claim this page cannot make when its query failed.
+  const totalsBlind = readDegraded(perAgentData);
+  // `peak 0` is the heatmap's own claim, from its own read.
+  const heatmapBlind = readDegraded(heatmapData);
+  const usersBlind = readDegraded(topUsersData);
+
   const rpsPoints = useMemo(() => rpsData?.points ?? [], [rpsData]);
   const heatmapCells = useMemo(() => heatmapData?.cells ?? [], [heatmapData]);
   const topUsers = useMemo(() => topUsersData?.users ?? [], [topUsersData]);
@@ -278,10 +288,13 @@ function TrafficPage() {
     return { grid, max };
   }, [heatmapCells]);
 
-  const headerSubline =
-    `${fmtInt(totals.inv)} invocation${totals.inv === 1 ? '' : 's'} in last ${win.label} · ` +
-    `${fmtRps(totals.avgRps)} RPS avg · ` +
-    `${fmtInt(totals.uniqueUsers)} unique user${totals.uniqueUsers === 1 ? '' : 's'}`;
+  const headerSubline = totalsBlind
+    ? `Traffic in last ${win.label} could not be read`
+    : `${fmtInt(totals.inv)} invocation${totals.inv === 1 ? '' : 's'} in last ${win.label} · ` +
+      `${fmtRps(totals.avgRps)} RPS avg · ` +
+      (usersBlind
+        ? 'unique users unavailable'
+        : `${fmtInt(totals.uniqueUsers)} unique user${totals.uniqueUsers === 1 ? '' : 's'}`);
 
   return (
     <PageSection
@@ -305,18 +318,24 @@ function TrafficPage() {
           items={[
             {
               label: 'Total invocations',
-              value: fmtInt(totals.inv),
-              hint: `across ${perAgent.length} agent${perAgent.length === 1 ? '' : 's'} in ${win.label}`,
+              value: totalsBlind ? '—' : fmtInt(totals.inv),
+              hint: totalsBlind
+                ? 'could not be read — not a count of zero'
+                : `across ${perAgent.length} agent${perAgent.length === 1 ? '' : 's'} in ${win.label}`,
             },
             {
               label: 'Average RPS',
-              value: fmtRps(totals.avgRps),
-              hint: `smoothed over the full ${win.label} window`,
+              value: totalsBlind ? '—' : fmtRps(totals.avgRps),
+              hint: totalsBlind
+                ? 'rate unknown for this window'
+                : `smoothed over the full ${win.label} window`,
             },
             {
               label: 'Spend',
-              value: fmtUsd(totals.cost),
-              hint: 'Bedrock + judge for this window',
+              value: totalsBlind ? '—' : fmtUsd(totals.cost),
+              hint: totalsBlind
+                ? 'spend could not be read — this is not $0'
+                : 'Bedrock + judge for this window',
             },
           ]}
         />
@@ -390,7 +409,11 @@ function TrafficPage() {
       <Card padding="md">
         <CardHeader
           title="Hour-of-Week Heatmap"
-          subtitle={`last 7 days · cell = invocations in that hour · peak ${fmtInt(heatmapGrid.max)}`}
+          subtitle={
+            heatmapBlind
+              ? 'last 7 days · cell = invocations in that hour · peak unavailable'
+              : `last 7 days · cell = invocations in that hour · peak ${fmtInt(heatmapGrid.max)}`
+          }
         />
         {heatmapGrid.max === 0 ? (
           <RowEmpty text="No traffic recorded over the last 7 days." degraded={trafficDegraded} />

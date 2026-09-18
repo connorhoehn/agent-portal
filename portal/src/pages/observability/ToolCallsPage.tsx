@@ -236,7 +236,9 @@ function ToolCallsPage() {
             Failing only
           </FilterChip>
           <T className="text-[11px] text-text-tertiary">
-            {`${fmtInt(visibleRows.length)} of ${fmtInt(rows.length)} tools`}
+            {tableBlind
+              ? 'tool count unavailable'
+              : `${fmtInt(visibleRows.length)} of ${fmtInt(rows.length)} tools`}
           </T>
         </Inline>
 

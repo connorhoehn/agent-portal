@@ -30,7 +30,7 @@ import { useFetch } from '../../hooks/useFetch';
 import { GuardrailRuleBadge } from '../../components/observability/GuardrailRuleBadge';
 import { SmartEmptyState } from '../../components/observability/SmartEmptyState';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
-import { firstDegraded } from '../../lib/degraded';
+import { firstDegraded, readDegraded } from '../../lib/degraded';
 import { T } from './Text';
 import { RowEmpty } from './ReadState';
 import { WindowPicker, useWindowUrlState } from './WindowPicker';
@@ -159,6 +159,9 @@ function GuardrailRulesPage() {
   // are quiet. That makes it exactly the wrong thing to render when the query
   // that would have found them failed.
   const guardrailsDegraded = firstDegraded(data, intData, actorData);
+  // The row count belongs to the interventions read alone — "0 rows" under
+  // a rule that failed to load reads as a rule that never fired.
+  const intBlind = readDegraded(intData);
 
   const actorColumns: DataTableColumn<ByActorEntry>[] = [
     {
@@ -375,7 +378,11 @@ function GuardrailRulesPage() {
         <Card padding="md">
           <CardHeader
             title={`Interventions for ${selectedRule}`}
-            subtitle={`${interventions.length} row${interventions.length === 1 ? '' : 's'} · newest first`}
+            subtitle={
+              intBlind
+                ? 'row count unavailable · newest first'
+                : `${interventions.length} row${interventions.length === 1 ? '' : 's'} · newest first`
+            }
             action={
               <Button
                 variant="secondary"

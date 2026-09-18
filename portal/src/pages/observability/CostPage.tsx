@@ -34,7 +34,7 @@ import {
   ReferenceLine,
 } from 'recharts';
 import { useFetch } from '../../hooks/useFetch';
-import { firstDegraded } from '../../lib/degraded';
+import { firstDegraded, readDegraded } from '../../lib/degraded';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { CostChip } from '../../components/observability/CostChip';
 import { SmartEmptyState } from '../../components/observability/SmartEmptyState';
@@ -273,6 +273,19 @@ function CostPage() {
   const costDegraded = firstDegraded(
     total, a2a, valueRatio, perAgent, timeseries, top, byModel, deployMarkers,
   );
+  // Per-SECTION blindness. /summary runs its eight queries with
+  // Promise.allSettled and marks each failure individually, so "the cost page
+  // is degraded" is too coarse a question: on a partial failure the sections
+  // that DID read are real data and must still render. What must never happen
+  // is the reverse — a section that failed rendering its `empty` shape, which
+  // for money is the number 0. `?? 0` below is exactly that hazard, so every
+  // consumer of these is gated on its own marker.
+  const totalBlind = summaryError ?? readDegraded(total);
+  const a2aBlind = summaryError ?? readDegraded(a2a);
+  const perAgentBlind = summaryError ?? readDegraded(perAgent);
+  const topBlind = summaryError ?? readDegraded(top);
+  const byModelBlind = summaryError ?? readDegraded(byModel);
+
   const totalCostUsd = total?.totalCostUsd ?? 0;
   const invocations = total?.invocations ?? 0;
 
@@ -361,7 +374,14 @@ function CostPage() {
   }, [chartData, markers]);
 
   const windowLabel = win.label;
-  const headerSubline = `Bedrock + tool spend · ${windowLabel} · ${fmtUsd(totalCostUsd)} total across ${fmtInt(invocations)} invocation${invocations === 1 ? '' : 's'}`;
+  // The description line carries the page-level half of the report by
+  // REFUSING to quote totals it could not read — the same contract
+  // ToolCallsPage states. "$0.0000 total across 0 invocations" on a failed
+  // read is the most consequential lie this app can tell: it is the sentence
+  // someone checks to decide the fleet is idle.
+  const headerSubline = totalBlind
+    ? `Bedrock + tool spend · ${windowLabel} · spend could not be read`
+    : `Bedrock + tool spend · ${windowLabel} · ${fmtUsd(totalCostUsd)} total across ${fmtInt(invocations)} invocation${invocations === 1 ? '' : 's'}`;
 
   return (
     <PageSection
@@ -483,12 +503,14 @@ function CostPage() {
         <SectionLabel as="div" className="mb-3">
           Per-Agent Breakdown{' '}
           <T className="text-[11px] font-normal text-[var(--color-text-tertiary)]">
-            sorted by total cost · {perAgentRows.length} agent{perAgentRows.length === 1 ? '' : 's'}
+            sorted by total cost · {perAgentBlind ? 'count unavailable' : `${perAgentRows.length} agent${perAgentRows.length === 1 ? '' : 's'}`}
           </T>
         </SectionLabel>
         {perAgentRows.length === 0 ? (
           <InlinePlaceholder align="center" size="sm">
-            No invocations with cost data in this window.
+            {perAgentBlind
+              ? 'Per-agent spend could not be read — this window is unknown, not free.'
+              : 'No invocations with cost data in this window.'}
           </InlinePlaceholder>
         ) : (
           <Table>
@@ -540,15 +562,21 @@ function CostPage() {
         <KPIGrid columns={3}>
           <StatCard
             label="Total spend"
-            value={fmtUsd(totalCostUsd)}
-            hint={`${fmtInt(invocations)} invocations · ${fmtInt(total?.inputTokens ?? 0)} in / ${fmtInt(total?.outputTokens ?? 0)} out tokens`}
+            value={totalBlind ? '—' : fmtUsd(totalCostUsd)}
+            hint={
+              totalBlind
+                ? 'spend could not be read — this is not $0'
+                : `${fmtInt(invocations)} invocations · ${fmtInt(total?.inputTokens ?? 0)} in / ${fmtInt(total?.outputTokens ?? 0)} out tokens`
+            }
           />
           <StatCard
             label="A2A overhead"
-            value={fmtPct(a2a?.a2aFraction ?? 0)}
-            danger={!!(a2a && a2a.a2aFraction > 0.4)}
+            value={a2aBlind ? '—' : fmtPct(a2a?.a2aFraction ?? 0)}
+            danger={!a2aBlind && !!(a2a && a2a.a2aFraction > 0.4)}
             hint={
-              a2a && a2a.totalCostUsd > 0
+              a2aBlind
+                ? 'routing share could not be read'
+                : a2a && a2a.totalCostUsd > 0
                 ? `${fmtUsd(a2a.a2aCostUsd)} of ${fmtUsd(a2a.totalCostUsd)} on multi-agent routing · ${fmtInt(a2a.a2aInvocations)} sub-calls`
                 : 'of total cost is multi-agent routing'
             }
@@ -593,7 +621,9 @@ function CostPage() {
         </SectionLabel>
         {topRows.length === 0 ? (
           <InlinePlaceholder align="center" size="sm">
-            No expensive invocations recorded in this window.
+            {topBlind
+              ? 'The most expensive calls could not be read — none are ruled out.'
+              : 'No expensive invocations recorded in this window.'}
           </InlinePlaceholder>
         ) : (
           <Table>
@@ -649,12 +679,14 @@ function CostPage() {
         <SectionLabel as="div" className="mb-3">
           By Model{' '}
           <T className="text-[11px] font-normal text-[var(--color-text-tertiary)]">
-            spend per foundation model · {byModelRows.length} model{byModelRows.length === 1 ? '' : 's'}
+            spend per foundation model · {byModelBlind ? 'count unavailable' : `${byModelRows.length} model${byModelRows.length === 1 ? '' : 's'}`}
           </T>
         </SectionLabel>
         {byModelRows.length === 0 ? (
           <InlinePlaceholder align="center" size="sm">
-            No model attribution yet — older rows may pre-date model_id capture.
+            {byModelBlind
+              ? 'Spend per model could not be read.'
+              : 'No model attribution yet — older rows may pre-date model_id capture.'}
           </InlinePlaceholder>
         ) : (
           <Table>
