@@ -447,6 +447,15 @@ export const computeNodes = defineFixture<ComputeNodeRow>({
     empty: () => [],
     fresh: () => seededNodes().map((n) => ({ ...n, lastSeenAt: null })),
     large: () => largeNodes(),
+    // This is the fixture whose MISSING error branch exposed the control
+    // plane's own defect on 2026-09-18: `GET /api/__mock/scenarios` advertised
+    // `error` for it anyway, the pin was accepted, and the rows came back
+    // `default`. The plane is honest now, which made this a real gap rather
+    // than a hidden one — "no machines paired" and "we could not reach the
+    // fleet table" are opposite answers on a page about your own machines.
+    error: () => {
+      throw new Error('compute_nodes unavailable: relation does not exist');
+    },
   },
 });
 

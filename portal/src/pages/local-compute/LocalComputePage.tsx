@@ -582,7 +582,15 @@ export default function LocalComputePage() {
         />
       )}
 
-      {!nodesFailure && nodes.length === 0 ? (
+      {/* Three states, not two. The `EmptyState` below was already guarded on
+          `!nodesFailure`, but the ELSE branch still rendered the machines
+          table, whose `emptyMessage` is "No machines." — so a failed read
+          printed the UnavailableNotice ("unknown rather than empty") and,
+          directly beneath it, the sentence that contradicts it. Measured with
+          `compute-nodes` pinned to `error`: both on screen at once. On failure
+          the notice IS the answer; there is nothing to tabulate and no machine
+          to select, so the table and the detail tabs below it go too. */}
+      {nodesFailure ? null : nodes.length === 0 ? (
         <EmptyState
           title="No paired machines"
           description={canDispatch

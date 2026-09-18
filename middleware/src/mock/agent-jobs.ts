@@ -140,6 +140,14 @@ export const agentJobs = defineFixture<AgentJob>({
   scenarios: {
     default: seedAgentJobs,
     empty: () => [],
+    // The queue is the Automate surface's whole subject, and "no jobs" and
+    // "we could not read the jobs" are opposite facts a reader must be able
+    // to tell apart — an empty queue means the fleet is idle, a failed read
+    // means you do not know what the fleet is doing. Without this branch the
+    // second state could not be reached on purpose.
+    error: () => {
+      throw new Error('agent_jobs unavailable: relation does not exist');
+    },
   },
 });
 

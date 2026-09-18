@@ -8464,6 +8464,16 @@ export const knowledgeDocsFixture = defineFixture<KnowledgeDoc>({
   scenarios: {
     default: () => Object.values(seedKnowledgeDocs()),
     empty: () => [],
+    // The SECTIONS fixture beside this one has had an `error` branch all
+    // along, so a failed tree read was auditable while a failed DOCUMENT read
+    // was not — the rail could say it was broken and the pane it opens into
+    // could not. `DocPane` has an ErrorState for exactly this ("Couldn't load
+    // this document"); without a branch here there was no way to reach it on
+    // purpose, and no way to tell that state apart from a document that is
+    // genuinely empty.
+    error: () => {
+      throw new Error('assessment_knowledge_docs unavailable: relation does not exist');
+    },
   },
 });
 

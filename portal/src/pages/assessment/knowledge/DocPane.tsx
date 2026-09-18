@@ -467,7 +467,19 @@ export function DocPane({ node, mode, sseEvents, sseConnected, sseGapped, onTree
 
   if (docFetch.isLoading) return <LoadingState label="Loading document…" />;
   if (docFetch.error || !docFetch.data) {
-    return <ErrorState title={node.title} body="Couldn't load this document." description={node.id} />;
+    // `body` and `description` are ALIASES for one slot on ErrorState, so
+    // passing both silently drops one — this used to pass both and the id won,
+    // leaving a reader with the document's name in red, a warning triangle and
+    // no sentence saying what had happened. The title also has to be the
+    // failure, not the document: every other error state in the app reads
+    // "Could not load the X", and a red document NAME reads as "this document
+    // is an error" rather than "we could not fetch it".
+    return (
+      <ErrorState
+        title="Couldn't load this document"
+        body={`${node.title} — ${node.id}`}
+      />
+    );
   }
   const doc = docFetch.data;
   // Prompts render read-only regardless of `doc.editable` — the nine agentic
