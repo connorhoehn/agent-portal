@@ -348,3 +348,64 @@ describe('X-Mock-Scenario header', () => {
     expect(res.headers['x-mock-scenario']).toBeUndefined();
   });
 });
+
+// ── The plane may only advertise and accept what a fixture implements ───────
+//
+// Both halves of one lie, found 2026-09-18 auditing error states. `compute-nodes`
+// declares default/empty/fresh/large and NOT error, yet:
+//   - GET /scenarios listed `error` for it, describing it as "Providers fail,
+//     so a surface has to render an error state rather than a blank panel";
+//   - POST /scenario {fixture:'compute-nodes',scenario:'error'} returned 200,
+//     GET /state then reported it pinned to `error`, and the rows came back
+//     `default` with HTTP 200.
+// An auditor doing exactly what docs/mock-floor.md says — "to see an empty or
+// error state, ask for it" — got a healthy page and would have concluded the
+// surface handles a failed read.
+describe('scenarios are per-fixture, not the global catalogue', () => {
+  function partialFixture(registry: ReturnType<typeof createFixtureRegistry>, key: string) {
+    // default + empty only: no `error`, no `large`, no `fresh`.
+    return defineFixture<Row>({ key, registry, scenarios: { default: rowsOf(key, 'default'), empty: rowsOf(key, 'empty') } });
+  }
+
+  it('GET /scenarios lists only what the fixture declares', async () => {
+    const registry = createFixtureRegistry();
+    partialFixture(registry, 'partial');
+    defineTestFixture(registry, 'full');
+    setFixtureRegistry(registry);
+
+    const res = await request(buildApp()).get('/api/__mock/scenarios').expect(200);
+    const partial = res.body.fixtures.find((f: { key: string }) => f.key === 'partial');
+    const full = res.body.fixtures.find((f: { key: string }) => f.key === 'full');
+    expect(partial.scenarios.map((s: { name: string }) => s.name).sort()).toEqual(['default', 'empty']);
+    expect(full.scenarios.map((s: { name: string }) => s.name)).toContain('error');
+  });
+
+  it('POST /scenario refuses a scenario the fixture has no branch for', async () => {
+    const registry = createFixtureRegistry();
+    partialFixture(registry, 'partial');
+    setFixtureRegistry(registry);
+
+    const res = await request(buildApp())
+      .post('/api/__mock/scenario')
+      .send({ fixture: 'partial', scenario: 'error' })
+      .expect(409);
+    expect(res.body.error).toMatch(/does not implement/i);
+    expect(res.body.declares.sort()).toEqual(['default', 'empty']);
+
+    // and it did NOT record a pin it cannot honour
+    const state = await request(buildApp()).get('/api/__mock/state').expect(200);
+    const row = state.body.fixtures.find((f: { key: string }) => f.key === 'partial');
+    expect(row.pinned).toBe(false);
+    expect(row.scenario).toBe('default');
+  });
+
+  it('a scenario the fixture DOES declare still pins', async () => {
+    const registry = createFixtureRegistry();
+    partialFixture(registry, 'partial');
+    setFixtureRegistry(registry);
+    await request(buildApp()).post('/api/__mock/scenario').send({ fixture: 'partial', scenario: 'empty' }).expect(200);
+    const state = await request(buildApp()).get('/api/__mock/state').expect(200);
+    const row = state.body.fixtures.find((f: { key: string }) => f.key === 'partial');
+    expect(row.scenario).toBe('empty');
+  });
+});

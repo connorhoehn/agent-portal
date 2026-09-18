@@ -376,6 +376,27 @@ have found it. A human audit did.
 | `http.ts` | The personas, cookie jar and `:id` resolution both sweeps share, so a write signs in exactly the way the GET sweep does. |
 | `snapshots/routes.json`<br>`snapshots/wire.json`<br>`snapshots/writes.json` | The committed truth. Sorted, so a diff reads as added and removed lines. |
 
+### Not every fixture implements every scenario — the plane now says so
+
+`GET /api/__mock/scenarios` reports what each fixture ACTUALLY has a branch
+for, and `POST /api/__mock/scenario` answers **409** for one it does not,
+naming what it does declare. Of the 108 fixtures, **31 implement `error`** and
+95 implement `empty`.
+
+It used to report the global catalogue — all five, for all 108. So
+`compute-nodes`, which declares `default/empty/fresh/large`, advertised
+`error` with the sentence "Providers fail, so a surface has to render an error
+state rather than a blank panel"; the pin was accepted with 200, `GET /state`
+reported the fixture pinned to `error`, and the rows came back `default` with
+HTTP 200. Someone following the instruction two sections above — "to see an
+empty or error state, ask for it" — got a healthy page and would have
+concluded the surface handles a failed read.
+
+So when a surface needs auditing under failure and its fixture does not
+implement `error`, that is now a visible 409 rather than a silent pass: either
+add the branch to the fixture, or audit a different one. Tests:
+`routes/__tests__/mock-control.test.ts` § "scenarios are per-fixture".
+
 ### Regenerating the snapshots
 
 **Do this whenever a route is added or a response shape changes.** The snapshot

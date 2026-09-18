@@ -3,22 +3,22 @@
     {
       "method": "POST",
       "path": "/api/__mock/reset",
-      "source": "src/routes/mock-control.ts:357"
+      "source": "src/routes/mock-control.ts:387"
     },
     {
       "method": "POST",
       "path": "/api/__mock/scenario",
-      "source": "src/routes/mock-control.ts:315"
+      "source": "src/routes/mock-control.ts:329"
     },
     {
       "method": "GET",
       "path": "/api/__mock/scenarios",
-      "source": "src/routes/mock-control.ts:293"
+      "source": "src/routes/mock-control.ts:307"
     },
     {
       "method": "GET",
       "path": "/api/__mock/state",
-      "source": "src/routes/mock-control.ts:392"
+      "source": "src/routes/mock-control.ts:422"
     },
     {
       "method": "GET",

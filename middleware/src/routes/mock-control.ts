@@ -35,6 +35,7 @@ import { config } from '../config.js';
 
 import {
   fixtureRegistry,
+  declaredScenariosFor,
   describeScenario,
   isScenarioName,
   SCENARIO_NAMES,
@@ -105,7 +106,20 @@ function describeFixture(fixture: Fixture<unknown>): Scenario[] {
       }
     }
   }
-  return SCENARIOS.map((s) => byName.get(s.name) ?? s);
+  // Only what this fixture actually has a branch for. This listing used to
+  // return all five for EVERY fixture — the global catalogue, not the
+  // fixture's own — so `compute-nodes` advertised `error` ("Providers fail,
+  // so a surface has to render an error state rather than a blank panel")
+  // while declaring only default/empty/fresh/large. An auditor following
+  // docs/mock-floor.md exactly — "to see an empty or error state, ask for
+  // it" — pinned it, got a healthy 200 and a normal page, and would have
+  // concluded the surface handles a failed read. It does not; the scenario
+  // simply fell through to `default`. `declaredScenariosFor` is the same
+  // accessor scenario-coverage.test.ts uses to tell "implements it" from
+  // "resolves for it", which is exactly the distinction this endpoint owes
+  // its caller.
+  const has = declaredScenariosFor(fixture);
+  return SCENARIOS.filter((s) => has.has(s.name)).map((s) => byName.get(s.name) ?? s);
 }
 
 // ── Gating ─────────────────────────────────────────────────────────────────
@@ -324,6 +338,22 @@ mockControlRouter.post('/api/__mock/scenario', ...gate, (req, res) => {
   if (body.fixture !== undefined) {
     const fixture = findFixture(registry, body.fixture, res);
     if (!fixture) return;
+    // Refuse a scenario this fixture has no branch for, rather than pinning a
+    // no-op. Accepting it was the other half of the same lie: the pin was
+    // stored, `GET /state` reported the fixture as `error`, and the rows came
+    // back `default` — so the plane confirmed a world it was not serving.
+    // 409, not 400: the request is well-formed and the scenario name is real,
+    // it is this fixture that cannot honour it.
+    const declared = declaredScenariosFor(fixture);
+    if (!declared.has(scenario)) {
+      res.status(409).json({
+        error: 'fixture does not implement this scenario',
+        fixture: fixture.key,
+        requested: scenario,
+        declares: SCENARIO_NAMES.filter((n) => declared.has(n)),
+      });
+      return;
+    }
     pin(fixture, scenario);
     // See rehydrateMockFleet's doc comment: the microVM fleet lives in an
     // in-memory Map, not in fixture rows, so pinning `devbox-boxes` to `empty`
