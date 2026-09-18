@@ -750,6 +750,27 @@ assessmentRouter.get('/knowledge/doc/comments', viewGate, asyncHandler(async (re
   res.json({ comments });
 }));
 
+// Edit / remove one comment. Authorship comes from the SESSION, never the
+// body, so a caller cannot change someone else's words by naming them. Delete
+// is soft: the row keeps its place and the panel renders a tombstone, because
+// a hard delete leaves a hole in a thread other people are reading.
+assessmentRouter.patch('/knowledge/doc/comment', viewGate, asyncHandler(async (req, res) => {
+  const body = req.body as { commentId?: string; body?: string };
+  if (!body.commentId) throw new ValidationError('commentId is required');
+  if (typeof body.body !== 'string') throw new ValidationError('body is required');
+  const result = await provider.editKnowledgeComment(body.commentId, body.body, req.session?.sub ?? 'unknown');
+  if (!result.ok) { res.status(result.status).json({ error: result.reason }); return; }
+  res.json(result);
+}));
+
+assessmentRouter.delete('/knowledge/doc/comment', viewGate, asyncHandler(async (req, res) => {
+  const body = req.body as { commentId?: string };
+  if (!body.commentId) throw new ValidationError('commentId is required');
+  const result = await provider.deleteKnowledgeComment(body.commentId, req.session?.sub ?? 'unknown');
+  if (!result.ok) { res.status(result.status).json({ error: result.reason }); return; }
+  res.json(result);
+}));
+
 assessmentRouter.post('/knowledge/doc/comment', viewGate, asyncHandler(async (req, res) => {
   const body = req.body as { id?: string; body?: string };
   if (!body.id || !body.body || typeof body.body !== 'string') throw new ValidationError('id and body are required');

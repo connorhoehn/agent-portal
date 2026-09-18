@@ -301,6 +301,14 @@ CREATE TABLE IF NOT EXISTS assessment_knowledge_comments (
 );
 CREATE INDEX IF NOT EXISTS idx_assessment_knowledge_comments_doc ON assessment_knowledge_comments(doc_id, created_at);
 
+-- Edit and soft-delete, added when the comment thread grew them. Both are
+-- timestamps rather than flags because the UI renders WHEN: the library's
+-- ChatMessage takes `editedAt` (shown as "(edited)") and `deletedAt` (the row
+-- keeps its place and says it was removed). A hard DELETE would take the
+-- tombstone with it and leave a gap in a conversation people are reading.
+ALTER TABLE assessment_knowledge_comments ADD COLUMN IF NOT EXISTS edited_at  TIMESTAMPTZ;
+ALTER TABLE assessment_knowledge_comments ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+
 -- ---------------------------------------------------------------------------
 -- Programme configuration: the certification target and the three motions.
 -- A single row keyed 'default' — PUT /configuration replaces it wholesale.

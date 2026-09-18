@@ -380,6 +380,10 @@ export const SHAPE_ENTITIES: Array<ShapeEntity<any>> = [
     table: 'assessment_knowledge_comments',
     mockRows: async () => (await assessment()).knowledgeCommentsFixture.rows('default'),
     mockId: (c: { id: string }) => c.id,
+    unmodelledColumns: {
+      deleted_at:
+        'A soft delete, set by DELETE /knowledge/doc/comment. Deliberately not seeded: a tombstone in the seed is a comment nobody ever wrote, and the state is one POST plus one DELETE away for anyone who wants to see how the panel renders it.',
+    },
   },
   {
     name: 'assessment_knowledge_doc_versions',

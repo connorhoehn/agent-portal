@@ -452,6 +452,8 @@ interface StoredCommentWire {
   body: string;
   author: string;
   created_at: string;
+  edited_at?: string | null;
+  deleted_at?: string | null;
 }
 
 // ─── Comments: SSE-authoritative, gateway chat merged in when live ──────
@@ -475,7 +477,10 @@ interface StoredCommentWire {
   );
   const storedComments = useMemo<KnowledgeCommentItem[]>(
     () => (storedFetch.data?.comments ?? []).map((c) => ({
-      id: c.id, clientId: c.author, content: c.body, timestamp: c.created_at, displayName: c.author,
+      id: c.id, clientId: c.author, userId: c.author, content: c.body,
+      timestamp: c.created_at, displayName: c.author,
+      ...(c.edited_at ? { editedAt: c.edited_at } : {}),
+      ...(c.deleted_at ? { deletedAt: c.deleted_at } : {}),
     })),
     [storedFetch.data],
   );
@@ -661,6 +666,26 @@ interface StoredCommentWire {
       setCommentError(err instanceof Error ? err.message : 'Failed to send comment.');
     });
   };
+
+  async function handleEditComment(message: { id?: string }, text: string) {
+    if (!message.id) return;
+    try {
+      await sendJson('/api/assessment/knowledge/doc/comment', 'PATCH', { commentId: message.id, body: text });
+      storedFetch.refresh();
+    } catch (err) {
+      setCommentError(err instanceof Error ? err.message : 'That edit could not be saved.');
+    }
+  }
+
+  async function handleDeleteComment(message: { id?: string }) {
+    if (!message.id) return;
+    try {
+      await sendJson('/api/assessment/knowledge/doc/comment', 'DELETE', { commentId: message.id });
+      storedFetch.refresh();
+    } catch (err) {
+      setCommentError(err instanceof Error ? err.message : 'That comment could not be removed.');
+    }
+  }
 
   const displayMarkdown = defuseJsonFences(stripTitleHeading(stripFrontmatter(doc.markdown), doc.title));
   const reactionSummaries = summarizeReactions(reactions?.reactions ?? [], node.id, gateway.clientId);
@@ -932,9 +957,20 @@ interface StoredCommentWire {
             )}
             <ChatPanel
               messages={mergedComments.map((c) => ({
-                id: c.id, clientId: c.clientId, content: c.content, timestamp: c.timestamp, displayName: c.displayName,
+                id: c.id, clientId: c.clientId, userId: c.userId, content: c.content,
+                timestamp: c.timestamp, displayName: c.displayName,
+                ...(c.editedAt ? { editedAt: c.editedAt } : {}),
+                ...(c.deletedAt ? { deletedAt: c.deletedAt } : {}),
               }))}
               onSend={handleSendComment}
+              /* Edit and delete are ChatPanel's own affordances — it renders
+                 the action bar, the inline editor and the tombstone. They
+                 needed somewhere to write to, which is what the PATCH and
+                 DELETE are. The panel only offers them on the viewer's own
+                 messages, and the server checks authorship again from the
+                 session rather than trusting that. */
+              onEditMessage={handleEditComment}
+              onDeleteMessage={handleDeleteComment}
               /* `currentUserId` is the identity prop; `currentActor` is a
                  legacy DISPLAY-NAME fallback, and its own doc comment says so
                  — "a display name is not an identity, and deciding ownership

@@ -9336,6 +9336,14 @@ export interface KnowledgeComment {
   body: string;
   author: string;
   created_at: string;
+  /** ISO when the author changed the text; the panel renders "(edited)". */
+  edited_at?: string | null;
+  /**
+   * ISO when the author removed it. A SOFT delete: the row keeps its place in
+   * the thread and says it was removed, because a hard delete leaves a gap in
+   * a conversation other people are mid-way through reading.
+   */
+  deleted_at?: string | null;
 }
 
 /**
@@ -9371,6 +9379,12 @@ export const knowledgeCommentsFixture = defineFixture<KnowledgeComment>({
         body: 'Agreed — and the strictness is deliberate, since relevant_dimension_ids is what '
           + 'decides which dimensions a later /score-dimensions pass touches at all.',
         created_at: daysAgo(4),
+        // One seeded comment carries an edit so the panel's "(edited)" marker
+        // is reachable without an auditor having to write and rewrite a
+        // comment first. `deleted_at` is deliberately NOT seeded: a tombstone
+        // in the seed is a comment nobody ever wrote, and the state is one
+        // POST + one DELETE away for anyone who wants to see it.
+        edited_at: daysAgo(3),
       },
       {
         id: 'kc-evidence-01', doc_id: 'rule:what-counts-as-evidence.md',

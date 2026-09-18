@@ -615,9 +615,25 @@ export function docSavedNoticeText(by: string, ts: string): string {
 export interface KnowledgeCommentItem {
   id: string;
   clientId: string;
+  /**
+   * The authenticated author. Distinct from `clientId`, which identifies a
+   * CONNECTION — ChatPanel's own doc is explicit that "is this mine" keys on
+   * `userId` and never on `clientId`, "otherwise your own messages stop being
+   * yours partway up the thread". Without it the panel cannot tell which
+   * comments are the viewer's, so it offers edit and delete on none of them.
+   */
+  userId?: string;
   content: string;
   timestamp: string;
   displayName?: string;
+  /** ISO — the author changed the text. ChatPanel renders "(edited)". */
+  editedAt?: string;
+  /**
+   * ISO — the author removed it. ChatPanel keeps the row in place and says so,
+   * which is why this is a soft delete: a hole in a thread other people are
+   * part-way through reading is worse than a tombstone.
+   */
+  deletedAt?: string;
 }
 
 /** One doc's `knowledge.comment.created` events, in arrival order — the
@@ -630,7 +646,7 @@ export function commentsForDoc(events: AssessmentSSEEvent[], docId: string): Kno
   return events
     .filter((e): e is Extract<AssessmentSSEEvent, { type: 'knowledge.comment.created' }> =>
       e.type === 'knowledge.comment.created' && e.doc_id === docId)
-    .map((e) => ({ id: e.id, clientId: e.by, content: e.body, timestamp: e.ts, displayName: e.by }));
+    .map((e) => ({ id: e.id, clientId: e.by, userId: e.by, content: e.body, timestamp: e.ts, displayName: e.by }));
 }
 
 // A send goes out over BOTH paths at once (the POST for the durable SSE

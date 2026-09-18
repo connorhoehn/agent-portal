@@ -119,3 +119,88 @@ describe('GET /knowledge/doc/comments', () => {
     expect((await post({ id: DOC, body: '' })).status).toBe(400);
   });
 });
+
+// ── Edit and soft-delete ────────────────────────────────────────────────────
+//
+// `ChatPanel` renders the action bar, the inline editor, the "(edited)" marker
+// and the tombstone itself — it needed somewhere to write to, which is what
+// PATCH and DELETE are. Two decisions are pinned here:
+//
+//   * authorship is read from the SESSION, never the body, so naming someone
+//     else does not let you rewrite their words;
+//   * delete is SOFT. The row keeps its place and carries `deleted_at`,
+//     because removing it outright leaves a hole in a thread other people are
+//     part-way through reading, and the panel is built to render the stub.
+describe('PATCH / DELETE /knowledge/doc/comment', () => {
+  const patch = (body: unknown, session?: Partial<Session>) =>
+    request(buildApp(session)).patch('/api/assessment/knowledge/doc/comment').send(body as object);
+  const del = (body: unknown, session?: Partial<Session>) =>
+    request(buildApp(session)).delete('/api/assessment/knowledge/doc/comment').send(body as object);
+
+  const mine = async () => {
+    await post({ id: DOC, body: 'Mine.' });
+    const all = (await list()).body.comments;
+    return all[all.length - 1] as { id: string; author: string };
+  };
+
+  it('the author can edit their own comment, and it is stamped', async () => {
+    const c = await mine();
+    const res = await patch({ commentId: c.id, body: 'Rewritten.' });
+    expect(res.status).toBe(200);
+    expect(res.body.edited_at).toEqual(expect.any(String));
+    const after = (await list()).body.comments.find((x: { id: string }) => x.id === c.id);
+    expect(after.body).toBe('Rewritten.');
+    expect(after.edited_at).toEqual(expect.any(String));
+  });
+
+  it('403s an edit of someone else\'s comment', async () => {
+    // kc-classify-01 is u-asha's; this session is u-test.
+    const res = await patch({ commentId: 'kc-classify-01', body: 'hijack' });
+    expect(res.status).toBe(403);
+    const after = (await list()).body.comments.find((x: { id: string }) => x.id === 'kc-classify-01');
+    expect(after.body).not.toBe('hijack');
+  });
+
+  it('a soft delete keeps the row and stamps it', async () => {
+    const before = (await list()).body.comments.length;
+    const c = await mine();
+    const res = await del({ commentId: c.id });
+    expect(res.status).toBe(200);
+    const all = (await list()).body.comments;
+    // The row is still there — that is the point of a soft delete.
+    expect(all.length).toBe(before + 1);
+    expect(all.find((x: { id: string }) => x.id === c.id).deleted_at).toEqual(expect.any(String));
+  });
+
+  it('deleting twice is idempotent rather than an error', async () => {
+    const c = await mine();
+    const first = await del({ commentId: c.id });
+    const second = await del({ commentId: c.id });
+    expect(second.status).toBe(200);
+    expect(second.body.deleted_at).toBe(first.body.deleted_at);
+  });
+
+  it('refuses to edit a deleted comment', async () => {
+    const c = await mine();
+    await del({ commentId: c.id });
+    expect((await patch({ commentId: c.id, body: 'zombie' })).status).toBe(400);
+  });
+
+  it('403s a delete of someone else\'s comment', async () => {
+    expect((await del({ commentId: 'kc-classify-01' })).status).toBe(403);
+  });
+
+  it('404s an unknown comment, and 400s a malformed body', async () => {
+    expect((await patch({ commentId: 'nope', body: 'x' })).status).toBe(404);
+    expect((await del({ commentId: 'nope' })).status).toBe(404);
+    expect((await patch({ body: 'x' })).status).toBe(400);
+    expect((await del({})).status).toBe(400);
+  });
+
+  it('refuses an empty edit rather than blanking the comment', async () => {
+    const c = await mine();
+    expect((await patch({ commentId: c.id, body: '   ' })).status).toBe(400);
+    const after = (await list()).body.comments.find((x: { id: string }) => x.id === c.id);
+    expect(after.body).toBe('Mine.');
+  });
+});

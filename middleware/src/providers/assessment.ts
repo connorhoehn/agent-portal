@@ -3358,6 +3358,67 @@ export async function publishKnowledgeDoc(id: string, actor = 'unknown'): Promis
  * thread from live echoes alone. Reload and the thread was gone, under a
  * drawer saying "No comments on this document yet".
  */
+export type CommentWriteResult =
+  | { ok: true; id: string; body: string; edited_at?: string | null; deleted_at?: string | null }
+  | { ok: false; status: 400 | 403 | 404; reason: string };
+
+/**
+ * Edit or soft-delete one comment.
+ *
+ * Authorship is decided from the SESSION, never the body — the same rule the
+ * presence route states — so a caller cannot edit someone else's comment by
+ * naming them. A moderator path would be a different capability check, and
+ * there isn't one yet: right now the author is the only person who can change
+ * their own words, which is the conservative half of the decision.
+ *
+ * Delete is soft. `deleted_at` is a timestamp rather than a flag because the
+ * panel renders WHEN, and the row keeps its place in the thread: removing it
+ * outright leaves a hole in a conversation other people are part-way through.
+ */
+export async function editKnowledgeComment(
+  commentId: string, rawBody: string, actor: string,
+): Promise<CommentWriteResult> {
+  const body = String(rawBody ?? '').trim();
+  if (!body) return { ok: false, status: 400, reason: 'a comment body is required' };
+  const found = await findComment(commentId);
+  if (!found) return { ok: false, status: 404, reason: `comment "${commentId}" not found` };
+  if (found.author !== actor) return { ok: false, status: 403, reason: 'only the author can edit a comment' };
+  if (found.deleted_at) return { ok: false, status: 400, reason: 'that comment was deleted' };
+
+  const now = new Date().toISOString();
+  if (!config.mock.aurora) await A.updateKnowledgeComment(commentId, body, now);
+  else { found.body = body; found.edited_at = now; }
+
+  assessmentBroker.publish({
+    type: 'knowledge.comment.edited', id: commentId, doc_id: found.doc_id, by: actor, body, ts: now,
+  });
+  return { ok: true, id: commentId, body, edited_at: now };
+}
+
+export async function deleteKnowledgeComment(
+  commentId: string, actor: string,
+): Promise<CommentWriteResult> {
+  const found = await findComment(commentId);
+  if (!found) return { ok: false, status: 404, reason: `comment "${commentId}" not found` };
+  if (found.author !== actor) return { ok: false, status: 403, reason: 'only the author can delete a comment' };
+  if (found.deleted_at) return { ok: true, id: commentId, body: found.body, deleted_at: found.deleted_at };
+
+  const now = new Date().toISOString();
+  if (!config.mock.aurora) await A.softDeleteKnowledgeComment(commentId, now);
+  else found.deleted_at = now;
+
+  assessmentBroker.publish({
+    type: 'knowledge.comment.deleted', id: commentId, doc_id: found.doc_id, by: actor, ts: now,
+  });
+  return { ok: true, id: commentId, body: found.body, deleted_at: now };
+}
+
+/** The row itself, so both writers share one lookup and one 404. */
+async function findComment(commentId: string): Promise<M.KnowledgeComment | null> {
+  if (!config.mock.aurora) return A.fetchKnowledgeComment(commentId);
+  return M.knowledgeCommentsFixture.rows().find((c) => c.id === commentId) ?? null;
+}
+
 export async function listKnowledgeComments(id: string): Promise<M.KnowledgeComment[] | null> {
   if (!config.mock.aurora) {
     if (!(await A.fetchKnowledgeDoc(id))) return null;

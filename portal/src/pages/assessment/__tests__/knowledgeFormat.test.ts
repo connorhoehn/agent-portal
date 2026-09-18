@@ -567,9 +567,14 @@ test('commentsForDoc filters knowledge.comment.created to one doc, in arrival or
     { type: 'knowledge.comment.created', id: 'c2', doc_id: 'rule:other', by: 'u-amina', body: 'nope', ts: 't2' },
     { type: 'knowledge.comment.created', id: 'c3', doc_id: 'rule:a', by: 'u-amina', body: 'second', ts: 't3' },
   ];
+  // `userId` is the AUTHENTICATED author and is not decoration: ChatPanel's own
+  // doc says "is this mine" keys on it and never on `clientId`, so without it
+  // the panel offers edit and delete on none of the viewer's own comments. The
+  // event's `by` is that author, so both fields carry it — `clientId` for the
+  // connection-shaped slot the panel still wants, `userId` for identity.
   assert.deepEqual(commentsForDoc(events, 'rule:a'), [
-    { id: 'c1', clientId: 'u-jonas', content: 'first', timestamp: 't1', displayName: 'u-jonas' },
-    { id: 'c3', clientId: 'u-amina', content: 'second', timestamp: 't3', displayName: 'u-amina' },
+    { id: 'c1', clientId: 'u-jonas', userId: 'u-jonas', content: 'first', timestamp: 't1', displayName: 'u-jonas' },
+    { id: 'c3', clientId: 'u-amina', userId: 'u-amina', content: 'second', timestamp: 't3', displayName: 'u-amina' },
   ]);
 });
 
