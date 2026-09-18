@@ -212,6 +212,11 @@ cd middleware && npm test && npm run typecheck
 # Agent unit tests — in the synth venv, which has botocore
 cd agents/_shared && ../../.venv-synth/bin/python -m unittest test_prompt_source test_callbacks
 
+# Golden-set eval harness — structural mode (free, offline, no AWS); see docs/agent-eval-goal.md
+cd agents/tests && ../../.venv-synth/bin/python golden_runner.py
+# Live grading against a deployed runtime or `agentcore dev` — real Bedrock $, needs credentials
+cd agents/tests && ../../.venv-synth/bin/python golden_runner.py advisor --mode live
+
 # Generate the synthetic demo corpus (personas, ADRs, postmortems, perf reviews,
 # Slack threads, all-hands recaps).
 # Requires Aurora + KB deployed and schema/seed.py applied first.
@@ -317,6 +322,7 @@ whole backlog. Most take `--quick` to skip the slow suites (jest, vite build).
 | `research-honesty-checks-2026-09-16.md` | The four "numbers that lie" bug classes, the class-4 triage rule (rates vs latencies), and each scanner's false-positive story | `validate-honest-numbers.sh` |
 | `nav-server-tier-decisions.md` | Nav ↔ route parity: the rail, the palette and `App.tsx` must gate every page the same way, every palette jump must resolve, and a nav item must not be gated narrower than the API it reads (that last one is ratcheted — the doc is where those get decided) | `validate-nav-parity.sh` |
 | `ui-components-queue.md` | Composites the library is missing — and, since it is the ledger the component-discipline gate reads, the ONLY thing that exempts a file from it. A row must say "Composed locally in `<file>`" to mint an exemption. | `validate-component-discipline.sh` |
+| `agent-eval-goal.md` | Per-agent golden sets (`agents/tests/golden/*.json`) + `agents/tests/golden_runner.py` — a `--mode structural` offline regression suite the validator runs, and a `--mode live` operator workflow (real Bedrock $, needs a deployed runtime or `agentcore dev`) it deliberately does not | `validate-agent-eval.sh` |
 | `agentcore-preview-surface.md` | Verified preview-API research + the machine-callback operator runbook (§6a) | — |
 | `agentcore-preview-plan.md` | The sequenced work plan against that research | — |
 | `bots-and-work-marketplace.md` | Bots, the work marketplace, authorize → review → gate | — |
@@ -331,7 +337,7 @@ whole backlog. Most take `--quick` to skip the slow suites (jest, vite build).
 the removal of a retired tenant, and it deliberately asserts that the removed
 tenant's name appears **nowhere** in `CLAUDE.md`, so it cannot be listed here by
 name without failing its own check. `ls docs/*-goal.md scripts/validate-*.sh`
-(10 validators) is always the authoritative list.
+(11 validators) is always the authoritative list.
 
 ---
 

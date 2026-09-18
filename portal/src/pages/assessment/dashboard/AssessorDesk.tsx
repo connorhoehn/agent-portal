@@ -19,13 +19,14 @@ import {
   PageHeader,
   PresenceAvatars,
   SegmentedControl,
+  Tooltip,
   Select,
   Stack,
   StatStrip,
   T,
-  WorkflowStepper,
   type ChipTone,
 } from '@connorhoehnslalom/ui-components/shared';
+import { WorkflowTimeline } from './WorkflowTimeline';
 import { UnavailableNotice } from '../../../components/UnavailableNotice';
 import { Can } from '../../../lib/capabilities';
 import {
@@ -161,6 +162,7 @@ export function AssessorDesk({
               options={[{ value: ALL, label: 'All statuses' }, ...statuses.map((s) => ({ value: s, label: formatTeamStatus(s) }))]}
             />
             <Input
+              size="sm"
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -227,35 +229,39 @@ export function AssessorDesk({
           },
           {
             // `TeamSummary.workflow_steps` now carries the same six-step
-            // ladder the detail page's `WorkflowStepper` renders
-            // (TeamScorecard.tsx:207) — built server-side by ONE function,
-            // `buildWorkflowSteps` in `middleware/src/providers/assessment.ts`,
-            // shared by both the list and detail wires, so there is no
-            // second label vocabulary to keep in step. At 1692px with nine
-            // columns a full-width six-label stepper would dominate the row —
-            // the table has `table-layout: auto`, so a bare column `width`
-            // is only a hint and the stepper's intrinsic content (six labels)
-            // would still stretch the column and the table past it. This
-            // caps the stepper's own element at a fixed `w-40` (matching the
-            // column's `width`) so IT clips and scrolls internally
-            // (`overflow-x-auto`, built into WorkflowStepper) instead of the
-            // table growing — a reader scans the filled-in dots at a glance
-            // and can scroll the one cell to read the labels. Falls back to
-            // a bare Chip when a caller hands a row without `workflow_steps`
-            // (e.g. a hand-built test fixture), since the field is optional
-            // on the type.
+             // The workflow ladder, compact enough that the cell never
+            // scrolls.
+            //
+            // It used to render `WorkflowStepper` capped at `w-40`, which put
+            // six labels into a 160px cell and let the cell scroll
+            // horizontally to reach them. That trades one problem for a worse
+            // one: a horizontal scrollbar inside a table cell is close to
+            // undiscoverable, the labels past the cap were unreachable
+            // without finding it, and half the rows showed a stepper
+            // mid-scroll ("Publish", "Follow-up") with no indication that
+            // earlier steps existed to its left.
+            //
+            // So the six labels collapse to the one that answers the
+            // column — the step the team is on — and the ladder becomes a
+            // connected timeline of dots beneath it: done filled with a
+            // check, current a ring, ahead an empty outline. ~134px, so the
+            // cell cannot scroll at any table width. Each dot keeps its own
+            // label on hover and as its accessible name. See
+            // `WorkflowTimeline.tsx`.
+            //
+            // Labels still come from `buildWorkflowSteps` in
+            // `middleware/src/providers/assessment.ts`, the same function the
+            // detail page's stepper reads, so there is no second label
+            // vocabulary. Falls back to a bare Chip when a caller hands a row
+            // without `workflow_steps` (a hand-built test fixture), since the
+            // field is optional on the type.
             key: 'workflow_step',
             header: 'Step',
             sortable: true,
-            width: '160px',
+            width: '150px',
             render: (t) => (
               t.workflow_steps && t.workflow_steps.length > 0 ? (
-                <WorkflowStepper
-                  steps={t.workflow_steps}
-                  size="sm"
-                  className="w-40"
-                  data-testid={`workflow-stepper-${t.id}`}
-                />
+                <WorkflowTimeline steps={t.workflow_steps} testId={`workflow-stepper-${t.id}`} />
               ) : (
                 <Chip size="xs" tone="neutral" title={`Step ${t.workflow_step} of 6`}>
                   {t.workflow_step}/6 · {t.workflow_step_label}
