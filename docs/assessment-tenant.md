@@ -491,6 +491,28 @@ none exists (InlinePopover exists; a hover tooltip does not).
   plain `social`/`shared` primitives with the wrappers' adapter logic
   reproduced as tested pure functions in `knowledgeFormat.ts`.
 
+## Document comments — what is wired, and what the wire cannot carry
+
+`DocPane`'s comments drawer is the library's `ChatPanel` (from `social`, NOT
+the `doc-editor` subpath that is unbuildable here — see the Tiptap note in
+docs/ui-components-queue.md). Wired as of 2026-09-18: the message list,
+sending, `currentUserId` for ownership, and an `emptyState` that names the
+document instead of the library's bare "No messages yet".
+
+`ChatPanel` also offers `onReply` (threading), `reactionsFor` /
+`onToggleReaction`, `onEditMessage` and `onDeleteMessage` — each documented as
+"presence of this enables the control". None are wired, and NOT because the
+component is missing them: `POST /api/assessment/knowledge/doc/comment` takes
+`{ id, body }` and nothing else. There is no `parentId`, so a reply has
+nowhere to point; no reaction table; no comment id to address for an edit or a
+delete. Wiring any of those controls today would put an affordance on screen
+that the API cannot honour.
+
+So the order is backend first — a comment needs an id, a parent and a
+mutation route — and the panel's props then light the controls up with no new
+component work. That is the cheap half; it is worth not faking it in the
+meantime.
+
 ## Build order
 
 1. Tenant plumbing (session, Cedar, schema, registry, identity, features,

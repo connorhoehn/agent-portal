@@ -27,6 +27,7 @@ import {
   MetaLine,
   PresenceAvatars,
   Stack,
+  T,
   Textarea,
 } from '@connorhoehnslalom/ui-components/shared';
 import { ChatPanel, ReactionsBar } from '@connorhoehnslalom/ui-components/social';
@@ -878,7 +879,28 @@ export function DocPane({ node, mode, sseEvents, sseConnected, sseGapped, onTree
                 id: c.id, clientId: c.clientId, content: c.content, timestamp: c.timestamp, displayName: c.displayName,
               }))}
               onSend={handleSendComment}
-              currentActor={session?.sub ?? gateway.clientId ?? undefined}
+              /* `currentUserId` is the identity prop; `currentActor` is a
+                 legacy DISPLAY-NAME fallback, and its own doc comment says so
+                 — "a display name is not an identity, and deciding ownership
+                 from it gave two participants named Alex a cancel button on
+                 each other's uploads". This passed the session `sub` into the
+                 display-name slot and nothing into the identity one, so the
+                 panel could not answer "is this mine" about any comment. */
+              currentUserId={session?.sub ?? gateway.clientId ?? undefined}
+              currentActor={session?.name ?? undefined}
+              /* ChatPanel's default empty line is the bare "No messages yet",
+                 which its own prop doc calls out as the thing `emptyState`
+                 exists to replace. On a document, "no messages" is also the
+                 wrong noun: this is a comment thread about a specific page,
+                 not a chat room. */
+              emptyState={
+                <Stack gap="xs">
+                  <T className="text-[13px] font-medium text-text-primary">No comments on this document yet</T>
+                  <T className="text-[12px] text-text-secondary leading-snug">
+                    {`Comments are attached to ${doc.title} and everyone with access to it sees them. Ask a question about a specific claim, or leave the reasoning behind a change so the next reader does not have to reconstruct it.`}
+                  </T>
+                </Stack>
+              }
               showHeader={false}
               fill
             />
