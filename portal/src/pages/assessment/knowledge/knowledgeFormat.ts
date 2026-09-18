@@ -448,6 +448,39 @@ export function sectionForNode(sections: KnowledgeSection[], nodeId: string): Kn
  * (a document). `mine` is true when the current viewer (by clientId) is
  * one of the reactors, driving ReactionsBar's toggle-off affordance.
  */
+/** One durable reaction row, as GET /knowledge/doc/reactions sends it. */
+export interface StoredReaction {
+  target_id: string;
+  emoji: string;
+  actor: string;
+  created_at: string;
+}
+
+/**
+ * The same {emoji,count,mine} shape, from the DURABLE rows rather than the
+ * gateway's per-click stream.
+ *
+ * Two differences from `summarizeReactions` below, both load-bearing. Identity
+ * is the session `sub`, not a gateway clientId — a clientId identifies a
+ * CONNECTION and changes on reconnect, so "mine" computed from it stops being
+ * mine, and offline there is no clientId at all. And the store holds one row
+ * per (target, emoji, actor), so a count is a count of PEOPLE; the gateway
+ * stream is per click and has to be de-duplicated to mean the same thing.
+ */
+export function summarizeStoredReactions(
+  rows: StoredReaction[], targetId: string, mySub: string | null,
+): ReactionSummary[] {
+  const byEmoji = new Map<string, { count: number; mine: boolean }>();
+  for (const r of rows) {
+    if (r.target_id !== targetId) continue;
+    const entry = byEmoji.get(r.emoji) ?? { count: 0, mine: false };
+    entry.count += 1;
+    if (mySub !== null && r.actor === mySub) entry.mine = true;
+    byEmoji.set(r.emoji, entry);
+  }
+  return [...byEmoji.entries()].map(([emoji, { count, mine }]) => ({ emoji, count, mine }));
+}
+
 export function summarizeReactions(reactions: Reaction[], targetId: string, currentClientId: string | null): ReactionSummary[] {
   const byEmoji = new Map<string, { count: number; mine: boolean }>();
   for (const r of reactions) {

@@ -309,6 +309,25 @@ CREATE INDEX IF NOT EXISTS idx_assessment_knowledge_comments_doc ON assessment_k
 ALTER TABLE assessment_knowledge_comments ADD COLUMN IF NOT EXISTS edited_at  TIMESTAMPTZ;
 ALTER TABLE assessment_knowledge_comments ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
 
+-- Reactions on a document OR on one of its comments. `target_id` is whichever
+-- of the two, un-foreign-keyed on purpose: it points into two tables, and a
+-- reaction outliving a hard-deleted parent is harmless (nothing reads it) while
+-- a constraint that cannot express "one of two" would force either a second
+-- table or a nullable pair of keys for no gain.
+--
+-- One row per (target, emoji, actor): the primary key IS the toggle. Reacting
+-- twice with the same emoji is an insert then a delete, never a count of two,
+-- which is the rule the UI's `mine` flag depends on.
+CREATE TABLE IF NOT EXISTS assessment_knowledge_reactions (
+  target_id   TEXT NOT NULL,
+  emoji       TEXT NOT NULL,
+  actor       TEXT NOT NULL,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (target_id, emoji, actor)
+);
+CREATE INDEX IF NOT EXISTS idx_assessment_knowledge_reactions_target
+  ON assessment_knowledge_reactions(target_id);
+
 -- ---------------------------------------------------------------------------
 -- Programme configuration: the certification target and the three motions.
 -- A single row keyed 'default' — PUT /configuration replaces it wholesale.

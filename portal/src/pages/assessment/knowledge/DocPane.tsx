@@ -56,6 +56,8 @@ import {
   withStoredComments,
   stripTitleHeading,
   summarizeReactions,
+  summarizeStoredReactions,
+  type StoredReaction,
   type KnowledgeCommentItem,
 } from './knowledgeFormat';
 import type {
@@ -491,6 +493,38 @@ interface StoredCommentWire {
     () => withStoredComments(storedComments, liveComments), [storedComments, liveComments],
   );
 
+  // Durable reactions, from the BFF. These hooks live UP HERE, above the
+  // `if (docFetch.isLoading) return` below, because a hook after an early
+  // return runs on some renders and not others — React counts them and says
+  // so ("Rendered more hooks than during the previous render"). The comment
+  // fetch beside them is up here for the same reason.
+  //
+  // The gateway's own reaction feature has no The gateway's own reaction feature has no
+  // endpoint and no persistence behind it, so before this a reaction could not
+  // survive a reload and — with the gateway down, which is this environment's
+  // state — could not be made at all.
+  const reactionsFetch = useFetch<{ reactions: StoredReaction[] }>(
+    `/api/assessment/knowledge/doc/reactions?id=${encodeURIComponent(node.id)}`,
+  );
+  const storedReactions = useMemo(
+    () => reactionsFetch.data?.reactions ?? [], [reactionsFetch.data],
+  );
+  const mySub = session?.sub ?? null;
+  const reactionSummaries = useMemo(
+    () => summarizeStoredReactions(storedReactions, node.id, mySub),
+    [storedReactions, node.id, mySub],
+  );
+
+  async function toggleReaction(targetId: string, emoji: string) {
+    try {
+      await sendJson('/api/assessment/knowledge/doc/reaction', 'POST',
+        { id: node.id, targetId, emoji });
+      reactionsFetch.refresh();
+    } catch (err) {
+      setCommentError(err instanceof Error ? err.message : 'That reaction could not be saved.');
+    }
+  }
+
   // ─── Presence: SSE-authoritative, gateway peers folded in by `sub` ──────
   const sseViewers = useMemo(() => latestPresenceForDoc(sseEvents, node.id), [sseEvents, node.id]);
   const channelPeers = useMemo(
@@ -688,7 +722,6 @@ interface StoredCommentWire {
   }
 
   const displayMarkdown = defuseJsonFences(stripTitleHeading(stripFrontmatter(doc.markdown), doc.title));
-  const reactionSummaries = summarizeReactions(reactions?.reactions ?? [], node.id, gateway.clientId);
 
   return (
     <>
@@ -796,24 +829,19 @@ interface StoredCommentWire {
               column of text and the eye had nothing to stop on. */}
           <Divider spacing="none" />
 
-          {/* Gated on gatewayREADY, not on the socket merely being connected.
-              The two are different and this file already knows it — line ~248
-              computes `gatewayReady`, and lib's own test says readiness needs
-              BOTH connectionState 'connected' AND a handshake clientId. In the
-              window between them the control was live: a react() went out with
-              no identity behind it, and `summarizeReactions` keys `mine` on
-              `gateway.clientId`, so the viewer's own reaction could never come
-              back marked as theirs. Reactions are a GATEWAY-only feature —
-              there is no BFF endpoint and no broker event for them — so when
-              the gateway is not ready the control cannot work at all, and the
-              page's own "Gateway offline" banner is already saying why. */}
-          {reactions && (
-            <ReactionsBar
-              reactions={reactionSummaries}
-              onReact={(emoji) => reactions.react(emoji, { targetId: node.id })}
-              disabled={!gatewayReady}
-            />
-          )}
+          {/* No longer gateway-gated, because reactions are no longer a
+              gateway-only feature. They were: no endpoint, no broker event, no
+              persistence — so the control had to be disabled whenever the
+              gateway was not ready, which offline is always. Now the BFF owns
+              them (one row per target+emoji+actor, so a count is a count of
+              people), they survive a reload, and the bar works with the
+              gateway down. Identity is the session `sub` rather than a gateway
+              clientId: a clientId identifies a CONNECTION and changes on
+              reconnect, so "mine" computed from it stops being mine. */}
+          <ReactionsBar
+            reactions={reactionSummaries}
+            onReact={(emoji) => void toggleReaction(node.id, emoji)}
+          />
 
           {editing && (
             <Textarea
@@ -982,6 +1010,21 @@ interface StoredCommentWire {
                  session rather than trusting that. */
               onEditMessage={handleEditComment}
               onDeleteMessage={handleDeleteComment}
+              /* Per-comment reactions, off the same store as the document's
+                 own bar. ChatPanel renders the summaries and the picker; the
+                 library's note is that `reactionsFor` omitted means no
+                 reaction UI at all, and `onToggleReaction` present is what
+                 enables the controls.
+
+                 Note the two contracts differ: `ReactionsBar` above takes
+                 AGGREGATED {emoji,count,mine} summaries, while ChatPanel wants
+                 the RAW per-reactor rows and aggregates them itself — which is
+                 how it can name who reacted. Our store is one row per actor,
+                 so it feeds both without a second source of truth. */
+              reactionsFor={(messageId) => storedReactions
+                .filter((r) => r.target_id === messageId)
+                .map((r) => ({ emoji: r.emoji, userId: r.actor, displayName: r.actor }))}
+              onToggleReaction={(messageId, emoji) => void toggleReaction(messageId, emoji)}
               /* `currentUserId` is the identity prop; `currentActor` is a
                  legacy DISPLAY-NAME fallback, and its own doc comment says so
                  — "a display name is not an identity, and deciding ownership

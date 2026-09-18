@@ -1185,6 +1185,43 @@ export async function fetchKnowledgeComments(docId: string): Promise<M.Knowledge
   }));
 }
 
+export async function fetchKnowledgeReactions(targetIds: string[]): Promise<M.KnowledgeReaction[]> {
+  if (targetIds.length === 0) return [];
+  // One round trip for the document AND every comment on it — the pane asks
+  // for the whole page's reactions at once, and N+1 here would be one query
+  // per comment on a thread that can be long.
+  const names = targetIds.map((_, i) => `:t${i}`).join(', ');
+  const rows = await exec(
+    `SELECT target_id, emoji, actor, created_at::text AS created_at
+       FROM assessment_knowledge_reactions
+      WHERE target_id IN (${names})`,
+    targetIds.map((t, i) => s(`t${i}`, t)),
+  );
+  return rows.map((r) => ({
+    target_id: toStr(r['target_id']), emoji: toStr(r['emoji']),
+    actor: toStr(r['actor']), created_at: toStr(r['created_at']),
+  }));
+}
+
+/** Returns true when the row landed, false when it was removed — the toggle. */
+export async function toggleKnowledgeReaction(
+  targetId: string, emoji: string, actor: string, at: string,
+): Promise<boolean> {
+  const gone = await exec(
+    `DELETE FROM assessment_knowledge_reactions
+      WHERE target_id = :t AND emoji = :e AND actor = :a RETURNING actor`,
+    [s('t', targetId), s('e', emoji), s('a', actor)],
+  );
+  if (gone.length > 0) return false;
+  await exec(
+    `INSERT INTO assessment_knowledge_reactions (target_id, emoji, actor, created_at)
+     VALUES (:t, :e, :a, :at::timestamptz)
+     ON CONFLICT (target_id, emoji, actor) DO NOTHING`,
+    [s('t', targetId), s('e', emoji), s('a', actor), s('at', at)],
+  );
+  return true;
+}
+
 export async function fetchKnowledgeComment(id: string): Promise<M.KnowledgeComment | null> {
   const rows = await exec(
     `SELECT id, doc_id, body, author, created_at::text AS created_at,

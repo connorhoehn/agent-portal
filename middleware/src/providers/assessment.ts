@@ -3419,6 +3419,64 @@ async function findComment(commentId: string): Promise<M.KnowledgeComment | null
   return M.knowledgeCommentsFixture.rows().find((c) => c.id === commentId) ?? null;
 }
 
+/**
+ * Every reaction on a document and on its comments, in one read.
+ *
+ * The pane needs the doc's own bar plus one bar per comment, so it asks for the
+ * page rather than the row — the alternative is a request per comment on a
+ * thread that can be long.
+ */
+export async function listKnowledgeReactions(docId: string): Promise<M.KnowledgeReaction[] | null> {
+  const comments = await listKnowledgeComments(docId);
+  if (comments === null) return null;
+  const targets = [docId, ...comments.map((c) => c.id)];
+  if (!config.mock.aurora) return A.fetchKnowledgeReactions(targets);
+  const wanted = new Set(targets);
+  return M.knowledgeReactionsFixture.rows().filter((r) => wanted.has(r.target_id));
+}
+
+export type ReactionToggleResult =
+  | { ok: true; target_id: string; emoji: string; reacted: boolean }
+  | { ok: false; status: 400 | 404; reason: string };
+
+/**
+ * Adds or removes the caller's reaction. The (target, emoji, actor) key IS the
+ * toggle, so reacting twice is an add then a remove and never a count of two —
+ * which is what `mine` on the summary depends on.
+ *
+ * The target may be the document or one of its comments; both are checked so a
+ * reaction cannot attach to something that does not exist.
+ */
+export async function toggleKnowledgeReaction(
+  docId: string, targetId: string, emoji: string, actor: string,
+): Promise<ReactionToggleResult> {
+  const trimmed = String(emoji ?? '').trim();
+  if (!trimmed) return { ok: false, status: 400, reason: 'an emoji is required' };
+  if (trimmed.length > 16) return { ok: false, status: 400, reason: 'that is not an emoji' };
+
+  const comments = await listKnowledgeComments(docId);
+  if (comments === null) return { ok: false, status: 404, reason: `document "${docId}" not found` };
+  const valid = targetId === docId || comments.some((c) => c.id === targetId);
+  if (!valid) return { ok: false, status: 404, reason: `"${targetId}" is not this document or one of its comments` };
+
+  const now = new Date().toISOString();
+  let reacted: boolean;
+  if (!config.mock.aurora) {
+    reacted = await A.toggleKnowledgeReaction(targetId, trimmed, actor, now);
+  } else {
+    const rows = M.knowledgeReactionsFixture.rows();
+    const at = rows.findIndex((r) => r.target_id === targetId && r.emoji === trimmed && r.actor === actor);
+    if (at >= 0) { rows.splice(at, 1); reacted = false; }
+    else { rows.push({ target_id: targetId, emoji: trimmed, actor, created_at: now }); reacted = true; }
+  }
+
+  assessmentBroker.publish({
+    type: 'knowledge.reaction.toggled',
+    doc_id: docId, target_id: targetId, emoji: trimmed, by: actor, reacted, ts: now,
+  });
+  return { ok: true, target_id: targetId, emoji: trimmed, reacted };
+}
+
 export async function listKnowledgeComments(id: string): Promise<M.KnowledgeComment[] | null> {
   if (!config.mock.aurora) {
     if (!(await A.fetchKnowledgeDoc(id))) return null;

@@ -750,6 +750,29 @@ assessmentRouter.get('/knowledge/doc/comments', viewGate, asyncHandler(async (re
   res.json({ comments });
 }));
 
+// Reactions on a document and on its comments. Durable, unlike the realtime
+// gateway's own reaction feature, which has no endpoint and no persistence —
+// so with the gateway down a reaction could not reach anything at all.
+assessmentRouter.get('/knowledge/doc/reactions', viewGate, asyncHandler(async (req, res) => {
+  const id = String(req.query['id'] ?? '');
+  if (!id) throw new ValidationError('id is required');
+  const reactions = await provider.listKnowledgeReactions(id);
+  if (!reactions) throw new NotFoundError('document not found');
+  res.json({ reactions });
+}));
+
+assessmentRouter.post('/knowledge/doc/reaction', viewGate, asyncHandler(async (req, res) => {
+  const body = req.body as { id?: string; targetId?: string; emoji?: string };
+  if (!body.id) throw new ValidationError('id is required');
+  if (!body.targetId) throw new ValidationError('targetId is required');
+  if (typeof body.emoji !== 'string') throw new ValidationError('emoji is required');
+  const result = await provider.toggleKnowledgeReaction(
+    body.id, body.targetId, body.emoji, req.session?.sub ?? 'unknown',
+  );
+  if (!result.ok) { res.status(result.status).json({ error: result.reason }); return; }
+  res.json(result);
+}));
+
 // Edit / remove one comment. Authorship comes from the SESSION, never the
 // body, so a caller cannot change someone else's words by naming them. Delete
 // is soft: the row keeps its place and the panel renders a tombstone, because

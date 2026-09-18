@@ -33,7 +33,7 @@ import request from '../../test-support/http.js';
 import { assessmentRouter } from '../assessment.js';
 import { errorHandler } from '../../lib/async-handler.js';
 import { type Session } from '../../lib/session.js';
-import { knowledgeCommentsFixture } from '../../mock/assessment.js';
+import { knowledgeCommentsFixture, knowledgeReactionsFixture } from '../../mock/assessment.js';
 
 function buildApp(session: Partial<Session> = {}) {
   const app = express();
@@ -202,5 +202,83 @@ describe('PATCH / DELETE /knowledge/doc/comment', () => {
     expect((await patch({ commentId: c.id, body: '   ' })).status).toBe(400);
     const after = (await list()).body.comments.find((x: { id: string }) => x.id === c.id);
     expect(after.body).toBe('Mine.');
+  });
+});
+
+// ── Reactions ───────────────────────────────────────────────────────────────
+//
+// Reactions used to exist only over the realtime gateway: no endpoint, no
+// broker event, no persistence. With the gateway down — this environment's
+// state — the control could not reach anything, and even with it up a reaction
+// did not survive a restart. These pin the durable replacement.
+//
+// The key IS the toggle: one row per (target, emoji, actor), so reacting twice
+// is an add then a remove and never a count of two. That is what the `mine`
+// flag on the summary depends on.
+describe('reactions on a document and its comments', () => {
+  const reactions = (id = DOC) =>
+    request(buildApp()).get(`/api/assessment/knowledge/doc/reactions?id=${encodeURIComponent(id)}`);
+  const toggle = (body: unknown, session?: Partial<Session>) =>
+    request(buildApp(session)).post('/api/assessment/knowledge/doc/reaction').send(body as object);
+
+  afterEach(() => { knowledgeReactionsFixture.reset(); });
+
+  it('returns the reactions for the document AND its comments in one read', async () => {
+    const res = await reactions();
+    expect(res.status).toBe(200);
+    const targets = new Set(res.body.reactions.map((r: { target_id: string }) => r.target_id));
+    expect(targets.has(DOC)).toBe(true);
+    // A comment on this document, not just the document itself.
+    expect([...targets].some((t) => String(t).startsWith('kc-'))).toBe(true);
+  });
+
+  it('toggles on and back off rather than counting twice', async () => {
+    const count = async () => (await reactions()).body.reactions
+      .filter((r: { target_id: string; emoji: string }) => r.target_id === DOC && r.emoji === '🎯').length;
+    const before = await count();
+    expect((await toggle({ id: DOC, targetId: DOC, emoji: '🎯' })).body.reacted).toBe(true);
+    expect(await count()).toBe(before + 1);
+    expect((await toggle({ id: DOC, targetId: DOC, emoji: '🎯' })).body.reacted).toBe(false);
+    expect(await count()).toBe(before);
+  });
+
+  it('two people reacting with the same emoji is a count of two', async () => {
+    const mine = await toggle({ id: DOC, targetId: DOC, emoji: '🚀' }, { sub: 'u-one' });
+    const theirs = await toggle({ id: DOC, targetId: DOC, emoji: '🚀' }, { sub: 'u-two' });
+    expect(mine.body.reacted).toBe(true);
+    expect(theirs.body.reacted).toBe(true);
+    const rows = (await reactions()).body.reactions
+      .filter((r: { emoji: string }) => r.emoji === '🚀');
+    expect(rows.length).toBe(2);
+    expect(new Set(rows.map((r: { actor: string }) => r.actor))).toEqual(new Set(['u-one', 'u-two']));
+  });
+
+  it('reacts on a comment of that document', async () => {
+    const res = await toggle({ id: DOC, targetId: 'kc-classify-02', emoji: '👍' });
+    expect(res.status).toBe(200);
+    expect((await reactions()).body.reactions
+      .some((r: { target_id: string }) => r.target_id === 'kc-classify-02')).toBe(true);
+  });
+
+  it('404s a target that is neither this document nor one of its comments', async () => {
+    // kc-evidence-01 is a real comment — on a DIFFERENT document.
+    const res = await toggle({ id: DOC, targetId: 'kc-evidence-01', emoji: '👍' });
+    expect(res.status).toBe(404);
+    expect(res.body.error).toMatch(/not this document/);
+  });
+
+  it('404s an unknown document and 400s a missing or empty emoji', async () => {
+    expect((await toggle({ id: 'prompt:nope.md', targetId: 'prompt:nope.md', emoji: '👍' })).status).toBe(404);
+    expect((await toggle({ id: DOC, targetId: DOC, emoji: '   ' })).status).toBe(400);
+    expect((await toggle({ id: DOC, targetId: DOC })).status).toBe(400);
+    expect((await toggle({ id: DOC, emoji: '👍' })).status).toBe(400);
+  });
+
+  it('reset undoes a reaction', async () => {
+    const before = (await reactions()).body.reactions.length;
+    await toggle({ id: DOC, targetId: DOC, emoji: '🎉' });
+    expect((await reactions()).body.reactions.length).toBe(before + 1);
+    knowledgeReactionsFixture.reset();
+    expect((await reactions()).body.reactions.length).toBe(before);
   });
 });

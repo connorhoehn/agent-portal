@@ -45,6 +45,7 @@ import {
   stripFrontmatter,
   stripTitleHeading,
   summarizeReactions,
+  summarizeStoredReactions,
   toActivityFeedItems,
   treeDepth,
   treeParentId,
@@ -738,30 +739,48 @@ test('decideDocSaveGate allows a save when synced but genuinely empty — a deli
   assert.deepEqual(decideDocSaveGate({ status: 'synced', hasSeed: false }), { allowed: true });
 });
 
-// ── The reaction bar gates on READINESS, not on the socket ──────────────────
+// ── The reaction bar is no longer gateway-gated, and why that changed ───────
 //
-// `isGatewayReady` exists because "connected" is not enough: the tests above
-// pin that readiness needs BOTH connectionState 'connected' AND a handshake
-// clientId. The reaction bar was gated on the weaker half — `connectionState
-// !== 'connected'` — so in the window after the socket opens and before the
-// handshake yields an id, the control was live. A react() went out with no
-// identity behind it, and `summarizeReactions` keys `mine` on that same
-// clientId, so the viewer's own reaction could never come back marked as
-// theirs. Reactions are gateway-only (there is no BFF endpoint and no broker
-// event for them), so with the gateway down the control cannot work at all.
+// One pass ago this asserted `disabled={!gatewayReady}`. That was the right
+// assertion for the world as it was: reactions were a GATEWAY-only feature —
+// no endpoint, no broker event, no persistence — so with the gateway down the
+// control could not reach anything, and the bar had to say so. The previous
+// gate (`connectionState !== 'connected'`) was weaker still and let a react()
+// go out in the window before the handshake yielded a clientId, with no
+// identity behind it.
 //
-// Asserted against the source because the gate is inline JSX with no seam to
-// call — the same approach assessment-callback-exemption.test.ts takes to the
-// route module it guards. A behavioural test would need a DOM this suite has
-// no renderer for.
-test('DocPane gates the reaction bar on gatewayReady, never on connectionState alone', () => {
+// Reactions are now durable: the BFF owns them, one row per
+// (target, emoji, actor), keyed on the session `sub` rather than a gateway
+// clientId — a clientId identifies a CONNECTION and changes on reconnect, so
+// "mine" computed from it stops being mine. The bar therefore works with the
+// gateway down, and disabling it would now be the wrong answer.
+//
+// What is still worth pinning is that it does not regress to the gateway:
+// nothing in the bar may key on connectionState or clientId again.
+test('the reaction bar does not gate on the gateway — reactions are durable now', () => {
   const src = readFileSync(
     join(import.meta.dirname, '..', 'knowledge', 'DocPane.tsx'), 'utf8',
   );
   const bar = src.slice(src.indexOf('<ReactionsBar'), src.indexOf('/>', src.indexOf('<ReactionsBar')));
   assert.ok(bar.length > 0, 'ReactionsBar is no longer rendered — re-read this test');
-  assert.match(bar, /disabled=\{!gatewayReady\}/,
-    'the reaction bar must disable on !gatewayReady');
-  assert.doesNotMatch(bar, /connectionState/,
-    "the bar must not gate on connectionState — 'connected' is not 'ready'");
+  assert.doesNotMatch(bar, /connectionState|gatewayReady|clientId/,
+    'the reaction bar must not depend on the gateway: the BFF owns reactions');
+  assert.match(bar, /reactions=\{reactionSummaries\}/,
+    'the bar renders the summaries derived from the durable rows');
+});
+
+test('summarizeStoredReactions counts PEOPLE and marks the viewer\'s own', () => {
+  const rows = [
+    { target_id: 'doc:a', emoji: '👍', actor: 'u-asha', created_at: 't1' },
+    { target_id: 'doc:a', emoji: '👍', actor: 'u-jonas', created_at: 't2' },
+    { target_id: 'doc:a', emoji: '🎯', actor: 'u-farah', created_at: 't3' },
+    { target_id: 'doc:OTHER', emoji: '👍', actor: 'u-asha', created_at: 't4' },
+  ];
+  assert.deepEqual(summarizeStoredReactions(rows, 'doc:a', 'u-farah'), [
+    { emoji: '👍', count: 2, mine: false },
+    { emoji: '🎯', count: 1, mine: true },
+  ]);
+  // No session: nothing is "mine" — not everything, which is what keying on a
+  // null clientId used to risk.
+  assert.deepEqual(summarizeStoredReactions(rows, 'doc:a', null).map((r) => r.mine), [false, false]);
 });

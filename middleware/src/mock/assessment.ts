@@ -9361,6 +9361,44 @@ export interface KnowledgeComment {
  * REGISTERED so `POST /api/__mock/reset` undoes anything a session adds, which
  * is what the mock floor asks of a write.
  */
+export interface KnowledgeReaction {
+  target_id: string;
+  emoji: string;
+  actor: string;
+  created_at: string;
+}
+
+/**
+ * Reactions on a document or on one of its comments.
+ *
+ * Reactions used to exist ONLY over the realtime gateway — no endpoint, no
+ * broker event, no persistence — so with the gateway down the control could
+ * not reach anything, and even with it up a reaction did not survive a
+ * restart. This is the durable half, the same move the comment thread got.
+ *
+ * `target_id` is a doc id or a comment id; the two namespaces do not collide
+ * (`prompt:…` / `rule:…` / `ec:…` versus `kc-…` / `comment-…`). One row per
+ * (target, emoji, actor) — the key IS the toggle, so reacting twice is an add
+ * then a remove rather than a count of two.
+ */
+export const knowledgeReactionsFixture = defineFixture<KnowledgeReaction>({
+  key: 'assessment-knowledge-reactions',
+  scenarios: {
+    default: () => [
+      { target_id: 'prompt:classify-transcript.md', emoji: '👍', actor: 'u-asha', created_at: daysAgo(3) },
+      { target_id: 'prompt:classify-transcript.md', emoji: '👍', actor: 'u-jonas', created_at: daysAgo(3) },
+      { target_id: 'kc-classify-01', emoji: '🎯', actor: 'u-farah', created_at: daysAgo(3) },
+    ],
+    empty: () => [],
+    // A document whose reactions cannot be read is not a document nobody
+    // reacted to; the bar has to be able to tell those apart.
+    error: () => { throw new Error('assessment_knowledge_reactions unavailable: relation does not exist'); },
+  },
+});
+
+export const knowledgeReactions = (targetId: string): KnowledgeReaction[] =>
+  knowledgeReactionsFixture.rows().filter((r) => r.target_id === targetId);
+
 export const knowledgeCommentsFixture = defineFixture<KnowledgeComment>({
   key: 'assessment-knowledge-comments',
   scenarios: {

@@ -386,6 +386,15 @@ export const SHAPE_ENTITIES: Array<ShapeEntity<any>> = [
     },
   },
   {
+    name: 'assessment_knowledge_reactions',
+    fixture: 'assessment-knowledge-reactions',
+    describes: 'Reactions on a document or on one of its comments — one row per (target, emoji, actor), so the key itself is the toggle.',
+    sqlFile: 'assessment_schema.sql',
+    table: 'assessment_knowledge_reactions',
+    mockRows: async () => (await assessment()).knowledgeReactionsFixture.rows('default'),
+    mockId: (r: { target_id: string; emoji: string; actor: string }) => `${r.target_id}|${r.emoji}|${r.actor}`,
+  },
+  {
     name: 'assessment_knowledge_doc_versions',
     fixture: 'assessment-knowledge-versions',
     describes: 'The snapshot taken before every save — the version list a doc\'s history panel renders.',

@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-09-18T13:23:17.129Z",
-  "serverHandlerSha": "705084969d2397a4d46e60a943be65fc739dd20ac5de225870f70879eb7eece0",
+  "capturedAt": "2026-09-18T14:20:03.796Z",
+  "serverHandlerSha": "5889cacb545fd916eccc8b9c3323d7c42c75b0e1ebef34644b3e525cef04f6ae",
   "baseUrl": "http://127.0.0.1:3012",
   "personas": [
     "orgiq/admin",
@@ -38,6 +38,7 @@
           "assessment-feedback",
           "assessment-knowledge-comments",
           "assessment-knowledge-docs",
+          "assessment-knowledge-reactions",
           "assessment-knowledge-sections",
           "assessment-knowledge-versions",
           "assessment-motions",
@@ -168,6 +169,7 @@
           "assessment-feedback",
           "assessment-knowledge-comments",
           "assessment-knowledge-docs",
+          "assessment-knowledge-reactions",
           "assessment-knowledge-sections",
           "assessment-knowledge-versions",
           "assessment-motions",
@@ -801,6 +803,15 @@
       "shape": {
         "$": "object",
         "comments": "array"
+      },
+      "values": {}
+    },
+    "GET /api/assessment/knowledge/doc/reactions": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "reactions": "array"
       },
       "values": {}
     },

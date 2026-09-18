@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-09-18T13:23:19.346Z",
-  "serverHandlerSha": "705084969d2397a4d46e60a943be65fc739dd20ac5de225870f70879eb7eece0",
+  "capturedAt": "2026-09-18T14:20:08.638Z",
+  "serverHandlerSha": "5889cacb545fd916eccc8b9c3323d7c42c75b0e1ebef34644b3e525cef04f6ae",
   "baseUrl": "http://127.0.0.1:3012",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
@@ -599,6 +599,7 @@
           "assessment-feedback",
           "assessment-knowledge-comments",
           "assessment-knowledge-docs",
+          "assessment-knowledge-reactions",
           "assessment-knowledge-sections",
           "assessment-knowledge-versions",
           "assessment-motions",
@@ -940,6 +941,12 @@
       "sent": [
         "id"
       ]
+    },
+    "POST /api/assessment/knowledge/doc/reaction": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
     },
     "POST /api/assessment/knowledge/doc/rename": {
       "persona": "assessment/admin",

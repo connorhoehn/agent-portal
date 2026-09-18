@@ -32,6 +32,7 @@ export type AssessmentEvent =
   | { type: 'knowledge.comment.created'; id: string; doc_id: string; by: string; body: string; ts: string }
   | { type: 'knowledge.comment.edited'; id: string; doc_id: string; by: string; body: string; ts: string }
   | { type: 'knowledge.comment.deleted'; id: string; doc_id: string; by: string; ts: string }
+  | { type: 'knowledge.reaction.toggled'; doc_id: string; target_id: string; emoji: string; by: string; reacted: boolean; ts: string }
   | { type: 'knowledge.presence'; doc_id: string; viewers: PresenceViewer[]; ts: string }
   | { type: 'run.started'; run_id: string; command: string; team_id: string | null; ts: string }
   | { type: 'run.progress'; run_id: string; command: string; team_id: string | null; percent: number; ts: string }
@@ -150,6 +151,7 @@ export function partitionKeyFor(event: AssessmentEvent): string {
     case 'knowledge.comment.created': return `doc:${event.doc_id}`;
     case 'knowledge.comment.edited': return `doc:${event.doc_id}`;
     case 'knowledge.comment.deleted': return `doc:${event.doc_id}`;
+    case 'knowledge.reaction.toggled': return `doc:${event.doc_id}`;
     case 'knowledge.pulled': return `pull:${event.section}`;
     case 'run.progress': return `run-progress:${event.run_id}`;
     case 'run.started':
