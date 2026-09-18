@@ -158,5 +158,24 @@ export const devboxBoxes = defineFixture<FleetBox>({
   scenarios: {
     default: seedBoxes,
     empty: () => [],
+    // NO `error` scenario, deliberately, and this is the interesting part.
+    //
+    // These rows are not read through on every request: they hydrate the
+    // in-memory Map in lib/devbox-fleet.ts once, and `/api/devbox/boxes`
+    // answers from that Map. So a throwing fixture cannot reach the route.
+    // Measured 2026-09-18 with a branch temporarily added here:
+    // `rehydrateMockFleet` cleared the Map, the rows() call threw, and
+    // `/api/devbox/boxes` answered **200 with 0 boxes** — an empty fleet, not
+    // a failure. Worse, the throw surfaced inside the scenario plane's own
+    // POST handler, so pinning it answered 500 (fixed separately: the plane
+    // now guards its rehydrate step).
+    //
+    // Declaring `error` here would therefore promise a world this fixture
+    // cannot serve — exactly the defect the plane was fixed to stop on
+    // 2026-09-18, where every fixture advertised all five scenarios and
+    // silently resolved to `default`. A surface whose failure mode is
+    // genuinely "empty" should say so; making the devbox fleet report an
+    // unreadable store as unreadable is a read-through change in
+    // providers/devbox-fleet-store.ts, not a fixture branch.
   },
 });

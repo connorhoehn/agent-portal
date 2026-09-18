@@ -224,6 +224,9 @@ export const kbSummaryRows = defineFixture<KbSummary>({
     // No knowledge base at this id — the "deleted upstream" diagnosis, which
     // is a different operator action from "never configured".
     empty: () => [],
+    // "No knowledge base registered" invites provisioning one. A failed read
+    // must not, because one may already exist and be serving the fleet.
+    error: () => { throw new Error('knowledge_bases unavailable: relation does not exist'); },
   },
 });
 

@@ -146,6 +146,9 @@ export const scores = defineFixture<ScoreEntry>({
   scenarios: {
     default: () => mockPeople.map(toScoreEntry),
     empty: () => [],
+    // A leaderboard with no rows reads as "nobody has been scored"; a failed
+    // read means the ranking you are about to act on is simply unknown.
+    error: () => { throw new Error('scores unavailable: relation does not exist'); },
   },
 });
 

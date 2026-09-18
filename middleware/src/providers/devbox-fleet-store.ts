@@ -281,5 +281,19 @@ export function _stopFleetPersistence(): void {
 export function rehydrateMockFleet(): number {
   if (!config.mock.aurora) return 0;
   _resetFleet();
-  return hydrateBoxes(devboxBoxes.rows().map((b) => ({ ...b })));
+  // `rows()` THROWS when the fixture is pinned to `error` — that is what an
+  // error scenario is. This runs from the scenario plane's own POST handler,
+  // so without the catch, pinning `devbox-boxes` to `error` made the pin
+  // request itself answer 500 (measured: the throw surfaced from here, not
+  // from any devbox route) and the plane could not serve a world it
+  // advertises. The fleet is left EMPTY on a failed read, which is correct:
+  // the in-memory Map is a mirror of rows nobody could read, and the devbox
+  // routes surface the failure on their own reads. Swallowing it here hides
+  // nothing — it only stops one fixture's error scenario from taking the
+  // control plane down with it.
+  try {
+    return hydrateBoxes(devboxBoxes.rows().map((b) => ({ ...b })));
+  } catch {
+    return 0;
+  }
 }

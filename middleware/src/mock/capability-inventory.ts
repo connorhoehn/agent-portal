@@ -80,5 +80,9 @@ export const capabilityInventoryRows = defineFixture<CapabilityResourceRow>({
     // resources are gone. Every configured row reads `missing`, and the detail
     // says the account has none of these at all rather than naming a live id.
     empty: () => [],
+    // The inventory IS the reconciliation between what is configured and what
+    // exists. Unreadable means the comparison cannot be made at all, which is
+    // not the same as "nothing is provisioned".
+    error: () => { throw new Error('capability inventory unavailable: control plane unreachable'); },
   },
 });

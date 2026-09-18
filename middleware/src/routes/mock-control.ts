@@ -69,6 +69,26 @@ function rehydrateIngestMocks(): void {
   rehydrateMockSchedules();
 }
 
+/**
+ * Every rehydrate above reads its fixture's `rows()`, and `rows()` THROWS when
+ * that fixture is pinned to `error` — that is what an error scenario is. These
+ * run from this plane's own POST handlers, so an erroring fixture took the PIN
+ * REQUEST down with it: measured 2026-09-18, `POST /scenario
+ * {fixture:'devbox-boxes',scenario:'error'}` answered **500** from inside
+ * `rehydrateMockFleet`, and the plane could not serve a world it advertises.
+ *
+ * Caught per rehydrate so one failing fixture cannot prevent the others from
+ * re-hydrating. Nothing is hidden by this: the fixture stays pinned to `error`
+ * and every route that reads it still fails, which is the whole point of the
+ * scenario. The only thing suppressed is the mirror-refresh of an in-memory
+ * copy of rows nobody could read.
+ */
+function rehydrateAll(): void {
+  for (const step of [rehydrateMockFleet, rehydrateIngestMocks]) {
+    try { step(); } catch { /* the fixture is pinned to `error`; its routes report it */ }
+  }
+}
+
 // Registered FIRST so the header below reaches every response, this plane's
 // own included — a router layer added after a matching route never runs.
 mockControlRouter.use(stampScenarioHeader);
@@ -360,17 +380,14 @@ mockControlRouter.post('/api/__mock/scenario', ...gate, (req, res) => {
     // changed the fixture and left five boxes on screen — the scenario plane's
     // one promise ("ask for an empty state by name") silently not kept for
     // this fixture. Cheap enough to run unconditionally; it no-ops off mock.
-    rehydrateMockFleet();
-    // Same promise, same trap, for the ingest pipeline's three stores.
-    rehydrateIngestMocks();
+    rehydrateAll();
     res.json({ applied: { scenario, fixture: fixture.key }, ...readState(registry) });
     return;
   }
 
   unpinAll(registry);
   registry.resetAll(scenario);
-  rehydrateMockFleet();
-  rehydrateIngestMocks();
+  rehydrateAll();
   globalScenario = scenario;
   res.json({ applied: { scenario, fixture: null }, ...readState(registry) });
 });
@@ -393,8 +410,7 @@ mockControlRouter.post('/api/__mock/reset', ...gate, (req, res) => {
     if (!fixture) return;
     unpin(fixture);
     fixture.reset();
-    rehydrateMockFleet();
-    rehydrateIngestMocks();
+    rehydrateAll();
     res.json({ reset: { fixture: fixture.key, scenario: globalScenario }, ...readState(registry) });
     return;
   }
@@ -409,8 +425,7 @@ mockControlRouter.post('/api/__mock/reset', ...gate, (req, res) => {
   // in lib/devbox-fleet.ts, not in fixture rows, so `resetAll` cannot reach a
   // box that was renamed or stopped during a demo. Runs AFTER resetAll so it
   // re-reads the fixture in the world the reset just established.
-  rehydrateMockFleet();
-  rehydrateIngestMocks();
+  rehydrateAll();
   globalScenario = DEFAULT_SCENARIO;
   res.json({ reset: { fixture: null, scenario: DEFAULT_SCENARIO }, ...readState(registry) });
 });
