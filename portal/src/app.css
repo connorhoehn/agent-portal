@@ -424,6 +424,29 @@ html[data-theme="dark"] [data-tenant="assessment"] {
   padding-right: 3.5rem;
 }
 
+/* The rename control on a knowledge-tree row is hidden until the row is
+   hovered or something inside it has focus. A pencil on all ten rows at once
+   read as decoration and made the rail busier than the documents in it.
+
+   `opacity` rather than `display`, so the button keeps its box and rows do not
+   reflow as the pointer travels down the tree. `:focus-within` keeps it
+   reachable by keyboard while invisible at rest, and `:focus-visible` on the
+   button itself covers the case where focus arrives without hover.
+
+   Keyed on the row's ARIA role and our own class rather than the library's
+   generated utility strings, so it survives a library restyle. TreeView gives
+   its rows no `group` class, which is why this is CSS and not a Tailwind
+   group-hover. */
+[role="treeitem"] .doc-tree-rename {
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+[role="treeitem"]:hover .doc-tree-rename,
+[role="treeitem"]:focus-within .doc-tree-rename,
+.doc-tree-rename:focus-visible {
+  opacity: 1;
+}
+
 /* ── Shell ─────────────────────────────────────────────────────────────
    The library's SubNavLayout and ChannelHeader take no colour props, so the
    shell marks its regions and the layers land here. */

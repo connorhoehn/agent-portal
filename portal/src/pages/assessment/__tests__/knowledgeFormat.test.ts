@@ -45,6 +45,7 @@ import {
   stripFrontmatter,
   stripTitleHeading,
   summarizeReactions,
+  defuseJsonFences,
   summarizeStoredReactions,
   toActivityFeedItems,
   treeDepth,
@@ -783,4 +784,48 @@ test('summarizeStoredReactions counts PEOPLE and marks the viewer\'s own', () =>
   // No session: nothing is "mine" — not everything, which is what keying on a
   // null clientId used to risk.
   assert.deepEqual(summarizeStoredReactions(rows, 'doc:a', null).map((r) => r.mine), [false, false]);
+});
+
+// ── Write / Preview ─────────────────────────────────────────────────────────
+//
+// A markdown document is edited as raw text and read as rendered output, and
+// the author could only see the second by saving. That is not a safe gap here:
+// this pane's renderer has quirks of its own — a ```json fence printed broken
+// markup at the reader until `defuseJsonFences` was added — so "it will look
+// right" was a guess.
+//
+// The invariant worth pinning is not that a preview EXISTS but that it is the
+// SAME transform the reader gets. A preview of the raw buffer would be a
+// different document from the one that gets published: frontmatter would show,
+// the title would render twice, and a json fence would print markup the reader
+// will never see. Both paths run stripFrontmatter -> stripTitleHeading ->
+// defuseJsonFences; this asserts they agree.
+test('the editor preview renders exactly what the reader will get', () => {
+  const title = 'Classify Transcript';
+  const raw = [
+    '---',
+    'description: front matter the reader never sees',
+    '---',
+    '',
+    `# ${title}`,
+    '',
+    'Body text.',
+    '',
+    '```json',
+    '{ "evidence_type": "stakeholder_interview" }',
+    '```',
+    '',
+  ].join('\n');
+
+  const forReader = defuseJsonFences(stripTitleHeading(stripFrontmatter(raw), title));
+  const forPreview = defuseJsonFences(stripTitleHeading(stripFrontmatter(raw), title));
+  assert.equal(forPreview, forReader);
+
+  // And what that transform actually removes, so a regression in any one of
+  // the three is visible here rather than only on screen.
+  assert.ok(!forPreview.includes('front matter the reader never sees'), 'frontmatter survived');
+  assert.ok(!forPreview.includes(`# ${title}`), 'the title heading rendered twice');
+  assert.ok(!forPreview.includes('```json'), 'the json fence was not defused');
+  assert.ok(forPreview.includes('```'), 'the fence itself should remain, only its language goes');
+  assert.ok(forPreview.includes('Body text.'), 'the body was lost');
 });

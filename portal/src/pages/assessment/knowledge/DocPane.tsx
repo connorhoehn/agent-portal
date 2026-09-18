@@ -28,6 +28,8 @@ import {
   MetaLine,
   PresenceAvatars,
   Stack,
+  TabPanel,
+  Tabs,
   T,
   Textarea,
 } from '@connorhoehnslalom/ui-components/shared';
@@ -233,6 +235,9 @@ export interface DocPaneProps {
    *  synced section picks up the new page node without a manual reload. */
   onTreeChanged: () => void;
 }
+
+/** Shared by <Tabs> and its <TabPanel>s — the library wires aria off this. */
+const EDITOR_TABS_ID = 'doc-editor-view';
 
 export function DocPane({ node, mode, sseEvents, sseConnected, sseGapped, onTreeChanged }: DocPaneProps) {
   const { can, ready } = useCapabilities();
@@ -510,6 +515,12 @@ interface StoredCommentWire {
     () => reactionsFetch.data?.reactions ?? [], [reactionsFetch.data],
   );
   const mySub = session?.sub ?? null;
+  // Write / Preview while editing. A markdown document is edited as raw text
+  // and read as rendered output, and until now the author could only see the
+  // second by saving — which this session proved is not a safe assumption:
+  // the renderer has quirks of its own (a ```json fence printed broken markup
+  // at the reader until it was defused). Seeing it before saving is the point.
+  const [editorTab, setEditorTab] = useState<'write' | 'preview'>('write');
   const reactionSummaries = useMemo(
     () => summarizeStoredReactions(storedReactions, node.id, mySub),
     [storedReactions, node.id, mySub],
@@ -722,6 +733,11 @@ interface StoredCommentWire {
   }
 
   const displayMarkdown = defuseJsonFences(stripTitleHeading(stripFrontmatter(doc.markdown), doc.title));
+  // The preview reads the LIVE buffer, through the same transform the reader
+  // gets — otherwise it would be a preview of the last save, which is the one
+  // thing an author does not need to see.
+  const editorBuffer = editSource === 'fallback' ? (fallbackContent ?? '') : crdt.content;
+  const previewMarkdown = defuseJsonFences(stripTitleHeading(stripFrontmatter(editorBuffer), doc.title));
 
   return (
     <>
@@ -762,7 +778,11 @@ interface StoredCommentWire {
                 >
                   {CLASSIFICATION_LABEL[doc.classification] ?? doc.classification}
                 </Chip>
-                  <ConnectionPill state={liveConnectionState(sseConnected)} labels={{ connected: 'Live' }} compact />
+                  {/* The compact "Live" dot goes with the explorer's pill:
+                      it was on every document, always green, and said nothing
+                      a reader acts on. Liveness now surfaces only when it
+                      changes something — the offline-copy notice while
+                      editing. */}
                   {/* No gateway chip here. KnowledgeExplorer — this component's
                       ONLY consumer — renders the identical sentence from the
                       same `gatewayOfflineHint()` in its own header, about a
@@ -927,17 +947,44 @@ interface StoredCommentWire {
           {publishError && <Chip tone="danger">{publishError}</Chip>}
 
           {editing ? (
-            <Textarea
-              value={editSource === 'fallback' ? (fallbackContent ?? '') : crdt.content}
-              onChange={(e) => {
-                if (editSource === 'fallback') setFallbackContent(e.target.value);
-                else crdt.applyLocalEdit(e.target.value);
-              }}
-              rows={24}
-              spellCheck={false}
-              aria-label={`${doc.title} — document body`}
-              className="font-mono text-xs"
-            />
+            <>
+              {/* Two views of one document, switched rather than tiled: there
+                  is no split-pane primitive in the library, and a hand-rolled
+                  flex container is the thing the component gate exists to
+                  stop. `Tabs` is what the library ships for "two views of the
+                  same thing", and it carries the aria wiring to `TabPanel`
+                  with it.
+
+                  Preview renders the SAME transform the reader gets —
+                  frontmatter and the title heading stripped, json fences
+                  defused — rather than the raw buffer, so what the author
+                  checks is what will actually be published. */}
+              <Tabs
+                items={[{ id: 'write', label: 'Write' }, { id: 'preview', label: 'Preview' }]}
+                value={editorTab}
+                onValueChange={(id) => setEditorTab(id === 'preview' ? 'preview' : 'write')}
+                variant="underline"
+                size="sm"
+                idPrefix={EDITOR_TABS_ID}
+                aria-label="Document editor view"
+              />
+              <TabPanel id="write" when={editorTab} idPrefix={EDITOR_TABS_ID}>
+                <Textarea
+                  value={editSource === 'fallback' ? (fallbackContent ?? '') : crdt.content}
+                  onChange={(e) => {
+                    if (editSource === 'fallback') setFallbackContent(e.target.value);
+                    else crdt.applyLocalEdit(e.target.value);
+                  }}
+                  rows={24}
+                  spellCheck={false}
+                  aria-label={`${doc.title} — document body`}
+                  className="font-mono text-xs"
+                />
+              </TabPanel>
+              <TabPanel id="preview" when={editorTab} idPrefix={EDITOR_TABS_ID}>
+                <MarkdownView markdown={previewMarkdown} className="doc-markdown" />
+              </TabPanel>
+            </>
           ) : (
             <MarkdownView markdown={displayMarkdown} className="doc-markdown" />
           )}

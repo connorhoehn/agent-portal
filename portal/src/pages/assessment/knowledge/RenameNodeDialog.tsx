@@ -127,6 +127,21 @@ export function RowActionsMenu({ title, onRename }: { title: string; onRename: (
       variant="ghost"
       size="sm"
       tabIndex={-1}
+      // Hidden until the row is hovered or something inside it takes focus —
+      // a pencil on all 10 rows at once read as decoration and made the rail
+      // busier than the documents in it. `opacity` rather than `display` on
+      // purpose: the button keeps its box, so rows do not reflow as the
+      // pointer moves down the tree, and `focus-within` keeps it reachable by
+      // keyboard even though it is invisible at rest.
+      //
+      // The paired affordance is double-click on the row itself (wired in
+      // KnowledgeExplorer), which is what a file tree conventionally does and
+      // what does not require finding a 12px target at all.
+      // The reveal itself is CSS in app.css, keyed on this class plus the
+      // row's :hover / :focus-within — TreeView gives its rows no `group`
+      // class to hang a Tailwind group-hover off, and the row markup is the
+      // library's, not ours.
+      className="doc-tree-rename"
       onClick={(e) => { e.stopPropagation(); onRename(); }}
     />
   );

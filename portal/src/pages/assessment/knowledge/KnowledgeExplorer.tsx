@@ -372,6 +372,12 @@ export function KnowledgeExplorer({ mode }: KnowledgeExplorerProps) {
                   {...(section.kind === 'local' && canDo('ManageKnowledge')
                     ? {
                         onReorder: handleReorder,
+                        // Double-click the row. Same gate as the pencil beside
+                        // it, so a viewer who cannot rename gets neither.
+                        onRenameNode: (nodeId: string) => {
+                          const target = section.nodes.find((n) => n.id === nodeId);
+                          if (target) setRenaming({ id: target.id, title: target.title });
+                        },
                         // Same gate as the drag: a synced row's rename would
                         // 409, so it is not offered one.
                         renderTrailing: (n: UiTreeNode) =>
@@ -456,8 +462,17 @@ export function KnowledgeExplorer({ mode }: KnowledgeExplorerProps) {
               — middleware's /ws stub accepts every socket and would report
               'connected' forever with nothing behind it. See
               docs/assessment-journeys/stretch/realtime.md. */}
-          <ConnectionPill state={liveConnectionState(sse.connected)} labels={{ connected: 'Live', connecting: 'Connecting…' }} />
-          {gatewayHint && <Chip size="xs" tone="warning">{gatewayHint}</Chip>}
+          {/* No "Live" pill and no gateway sentence.
+              Both were permanent furniture on every document: the pill said
+              "Live" whenever the SSE stream was up, which is almost always, and
+              the chip restated "Gateway offline — presence and co-editing via
+              the BFF" on a surface where that is the NORMAL configuration, not
+              an incident. A warning that is present every time you open a page
+              stops being read as a warning and just crowds the header.
+              Everything it was protecting against now says so at the point of
+              use instead: the editor shows "Editing an offline copy" on the
+              document being edited, and the reaction bar no longer depends on
+              the gateway at all. */}
         </Inline>
       </Inline>
 
