@@ -39,9 +39,23 @@ Assessment is teal — a session in one tenant is visibly not the other.
 
 The **shell** applies the layers: the nav rail paints `surface-panel` with
 the brand active item; the header paints `surface` under a brand-gradient
-hairline; the content column paints `bg`; cards lift off it with
-`shadow-sm`. Pages do not choose colours — they use the tokens' utilities
-(`bg-surface`, `bg-surface-panel`, `text-brand`, …) on composites.
+hairline; the content column paints `bg`. Pages do not choose colours — they use the
+tokens' utilities (`bg-surface`, `bg-surface-panel`, `text-brand`, …) on
+composites.
+
+⚠️ This paragraph used to end "cards lift off it with `shadow-sm`". That was
+never true and is worth stating plainly, because it is why the app reads
+flat: the library's `Card` renders `border border-border rounded-lg
+bg-surface overflow-hidden` and **no shadow at all**, and `CardProps` has no
+elevation or variant prop to ask for one. Measured 2026-09-17 — on
+`/assessment/prompts` not one element in `<main>` painted a box-shadow. A
+card separates itself with a hairline, not with lift. The whole portal uses
+a shadow utility 12 times and `ring-*` 6 times. `Card` extends
+`HTMLAttributes`, so a consumer CAN pass `className="shadow-sm"`, but doing
+that per call site is the wrong shape — an elevation option on `Card` is
+queued in docs/ui-components-queue.md. The `--shadow-*` tokens themselves are
+real, two-layer, and theme-aware (see `app.css`); nothing is stopping the
+lift except `Card`.
 
 ## Definition of done (what the validator checks)
 

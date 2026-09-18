@@ -9,7 +9,31 @@ names the log that carries the measurement.
 
 ## Open
 
-None. Every item below was re-observed closed on 2026-09-06 08:16–08:22
+### 1. `PageHeader` breaks the vertical rhythm by 6px — Reports is the only surface using it
+
+Measured 2026-09-17 23:05 at 1600px, in BOTH themes (which is what rules out a
+theme cause): the breadcrumb-to-title gap is **16px on every surface in both
+tenants except `/assessment/reports`, which is 22px**. The branding contract
+allows a 2px spread; this is 6px.
+
+Cause, from the live DOM: Reports is the only page in either tenant that
+composes its title with the library's `PageHeader`. Everything else uses
+`PageSection`. `PageHeader` lays its title row out as
+`items-center justify-between gap-4`, so the 25px `h1` is vertically centred
+against the 36px "Publish report" actions block and its top drops ~5.5px.
+`PageSection` does not centre, which is why every other surface with an action
+— the Assessor's desk with "+ New team", for instance — still measures 16px.
+
+Not fixable from here: `className` reaches `PageHeader`'s root, not that inner
+flex row, and the repo does not edit ui-components. Queued in
+docs/ui-components-queue.md. The in-repo alternative is to move ReportsPage
+onto `PageSection`, which is a structural change (PageSection takes `children`
+and Reports currently renders its body as siblings) and is not worth doing
+before the library decides which of its two title components is the standard.
+
+Excluded from the `rhythm:` line in all four journey logs, named in each one.
+
+ Every item below was re-observed closed on 2026-09-06 08:16–08:22
 EDT; the four logs carry `verdict: pass`.
 
 ## Closed

@@ -61,9 +61,24 @@
   --radius-lg: 8px;
   --radius-xl: 12px;
 
-  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.12);
-  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.18);
+  /* Two layers each, on purpose: a tight CONTACT shadow that seats the edge
+     on the surface below, plus a wider AMBIENT one that gives it depth. A
+     single blur can do one or the other and reads flat doing both — which is
+     what these were. Same technique the inspiration project uses, and the
+     reason its cards look richer than ours did while using the same radii.
+     The ink is our slate (15,23,42), not black, so the shade stays in the
+     palette instead of greying the hue underneath it.
+
+     The INDIRECTION is load-bearing. Tailwind v4 inlines an `@theme` value
+     straight into the utility it generates, so `.shadow-sm` compiles to the
+     literal box-shadow and never reads `var(--shadow-sm)` at paint time —
+     which means redefining `--shadow-sm` under `html[data-theme=dark]` is
+     dead code (measured: the swap changed nothing). Pointing the theme token
+     at `--elev-*` makes the utility emit `box-shadow: var(--elev-sm)`, which
+     the cascade CAN reach, so the night block below actually lands. */
+  --shadow-sm: var(--elev-sm);
+  --shadow-md: var(--elev-md);
+  --shadow-lg: var(--elev-lg);
 
   /* Relocated from :root so Tailwind v4 GENERATES UTILITIES for them.
      Only tokens declared in @theme produce classes; a token in :root gives you
@@ -103,6 +118,14 @@ body {
   background: var(--color-bg);
   color: var(--color-text-primary);
   margin: 0;
+}
+
+/* Elevation values the `@theme` tokens above point at. They live here, not in
+   `@theme`, precisely so `html[data-theme="dark"]` can restate them. */
+:root {
+  --elev-sm: 0 1px 1px rgba(15, 23, 42, 0.05), 0 2px 6px rgba(15, 23, 42, 0.05);
+  --elev-md: 0 1px 2px rgba(15, 23, 42, 0.07), 0 8px 20px rgba(15, 23, 42, 0.09);
+  --elev-lg: 0 2px 4px rgba(15, 23, 42, 0.08), 0 18px 44px rgba(15, 23, 42, 0.14);
 }
 
 /* ── Dark ──────────────────────────────────────────────────────────────
@@ -157,6 +180,14 @@ html[data-theme="dark"] {
   --color-info-border: #1d4ed8;
   --color-optimize: #a78bfa;
   --color-optimize-hover: #c4b5fd;
+  /* Elevation has to be re-stated for night. The day tokens shade with
+     rgba(15,23,42,~.06) — slate ink at low alpha — which is all but invisible
+     against a dark ground, so every card in dark mode sat perfectly flat with
+     only its border to separate it. These are near-black and carry more alpha,
+     which is what a shadow has to be to read on a dark surface. */
+  --elev-sm: 0 1px 1px rgba(0, 0, 0, 0.40), 0 2px 6px rgba(0, 0, 0, 0.32);
+  --elev-md: 0 1px 2px rgba(0, 0, 0, 0.45), 0 8px 20px rgba(0, 0, 0, 0.40);
+  --elev-lg: 0 2px 4px rgba(0, 0, 0, 0.50), 0 18px 44px rgba(0, 0, 0, 0.52);
 }
 
 /* ── Tenants ───────────────────────────────────────────────────────────
