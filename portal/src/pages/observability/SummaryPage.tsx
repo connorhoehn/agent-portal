@@ -384,7 +384,12 @@ function SummaryPage() {
           {
             label: 'Errors (24h)',
             value: blind ? '—' : String(summary?.totalErrors24h ?? 0),
-            hint: 'System errors, not answer quality',
+            // Sized to the tile (175px needed in 150px cut it at "…answe").
+            // Still the distinction that matters: this counts real failures —
+            // guardrail interventions and non-conforming output — and NOT a
+            // weak answer to a request that otherwise succeeded, which is
+            // reported separately as lowQualityRate.
+            hint: 'Failures, not weak answers',
             ...(!blind && !!summary && summary.totalErrors24h > 0 ? { tone: 'danger' as const } : {}),
           },
         ]}

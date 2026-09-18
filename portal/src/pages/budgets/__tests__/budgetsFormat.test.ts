@@ -64,7 +64,7 @@ test('maintenanceStats: zero spend reads as "scheduled bots", not a percent', ()
 test('maintenanceStats: a floor that IS all spend says so in words, not "100%"', () => {
   const stats = maintenanceStats(10, 10);
   assert.equal(stats.floorIsAllSpend, true);
-  assert.equal(stats.hint, 'all spend so far · no new work funded');
+  assert.equal(stats.hint, 'all spent · no new work funded');
 });
 
 test('maintenanceStats: partial floor shows the percent', () => {

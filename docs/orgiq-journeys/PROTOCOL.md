@@ -6,6 +6,40 @@ with its screenshot beside it, for every cell of `MATRIX.txt`; plus one
 names and values below are what it greps for. The words TODO, unverified
 and placeholder anywhere in a log make it not count.
 
+## The clipped-text sweep (run it before eyeballing anything)
+
+Most "padding looks off / this is cut" reports are one defect: a fixed-width
+box cutting its own text mid-word, usually a `StatStripItem` `hint` — that
+shape has no `title`, so the rest is unreachable (see the StatStrip and
+Button rows in docs/ui-components-queue.md). Measuring beats looking, and
+this finds every instance on a page at once. Paste into the console on each
+route:
+
+```js
+(()=>{const m=document.querySelector('main');if(!m)return'no-main';
+let c=0,s=[],mo=0,t=0;
+m.querySelectorAll('*').forEach(e=>{if(e.children.length)return;
+ const x=(e.textContent||'').trim();if(!x)return;t++;
+ if(/mono/i.test(getComputedStyle(e).fontFamily))mo++;
+ if(e.scrollWidth>e.clientWidth+1&&e.clientWidth>0){c++;
+  if(s.length<3)s.push({t:x.slice(0,30),avail:e.clientWidth,needs:e.scrollWidth,title:!!e.getAttribute('title')})}});
+const f=[];if(c)f.push('clipped:'+c+JSON.stringify(s));
+if(document.documentElement.scrollWidth>innerWidth+1)f.push('h-scroll');
+if(!m.querySelector('h1'))f.push('no-h1');
+if(t>6&&mo/t>.5)f.push('mono:'+Math.round(100*mo/t)+'%');
+return location.pathname+' => '+(f.join(' ; ')||'clean')})()
+```
+
+**A clip is only a defect when `title` is false.** A long identifier cut with
+its full value on hover is deliberate and working — `/admin/budgets` shows
+`us.amazon.nova-lite-v1:0` that way and it is correct. A sentence cut
+mid-word with no `title` is the bug: the reader cannot get the rest.
+
+Size the replacement copy from the measurement, not by eye —
+`avail / needs x length` is roughly how many characters fit. Found this way on
+2026-09-17: budgets (196px into 165px), the Automate queue pulse (221 into
+209), the observability summary (175 into 150).
+
 ## Persona
 
 An experienced engineer who is new to this org and opens each page to get

@@ -109,7 +109,10 @@ export function QueuePulse({ summary, jobs, degraded }: {
               ? `roster unreadable — ${botsDegraded}`
               : error
                 ? 'roster not visible to this role'
-                : `${pausedBotCount(roster)} paused · every run passes review gates`,
+                // Sized to the tile: `StatStripItem` has no `title`, so an
+                // overrunning hint is cut mid-word with no way to read the
+                // rest — measured 221px needed in 209px, losing "…gates".
+                : `${pausedBotCount(roster)} paused · all runs pass review`,
           },
         ]}
       />

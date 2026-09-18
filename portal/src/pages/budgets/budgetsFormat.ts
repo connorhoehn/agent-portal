@@ -51,7 +51,12 @@ export function maintenanceStats(totalSpent: number, totalMaintenance: number): 
   const hint = totalSpent === 0
     ? 'scheduled bots'
     : floorIsAllSpend
-      ? 'all spend so far · no new work funded'
+      // 30 chars. `StatStripItem` has no `title`, so a hint that overruns
+      // its tile is simply cut mid-word with no way to reach the rest —
+      // measured at 196px needed in a 165px box, losing "…w work funded".
+      // The full sentence lives in `maintenanceTitle` below, which the tile
+      // does surface; this line only has to survive the width.
+      ? 'all spent · no new work funded'
       : `${floorPct}% of spend · scheduled bots`;
   return { floorIsAllSpend, floorPct, hint };
 }
