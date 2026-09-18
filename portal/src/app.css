@@ -208,6 +208,7 @@ html[data-theme="dark"] {
   --color-primary-hover: #4f46e5;
   --color-primary-soft: #eef2ff;
 }
+html[data-theme="dark"][data-tenant="orgiq"],
 html[data-theme="dark"] [data-tenant="orgiq"] {
   --color-brand: #8b91ff;
   --color-brand-hover: #a5aaff;
@@ -227,6 +228,20 @@ html[data-theme="dark"] [data-tenant="orgiq"] {
    the library's primary Button is `bg-primary text-white` with the foreground
    hardcoded, and white on the old #0d9488 measured 3.74:1 at 12px — under the
    4.5 WCAG AA needs for normal text. White on #0B6666 is 6.76:1. */
+/* The assessment tenant is the SDLC product, and it is teal all the way down
+   rather than orgiq wearing a teal button. Values are the semantic tokens of
+   ~/Projects/agentic-assessment-accelerator (ui/src/styles/global.css),
+   converted from its HSL to hex: its `--background: 156 18% 96%` is the warm
+   paper this whole product sits on, `--foreground: 180 27% 14%` is its deep
+   teal ink (its own --sdlc-ink), `--muted-foreground: 180 12% 40%` its slate,
+   `--border: 156 12% 85%` its teal-tinted rule, `--muted/--secondary:
+   156 18% 92%` its panel fill.
+
+   Grounding a tenant only became POSSIBLE when `data-tenant` moved onto
+   <html> (components/shell/Layout.tsx). Before that the marker sat on a
+   grandchild of <body>, so `body { background: var(--color-bg) }` resolved
+   from :root and no tenant could reach it — which is why every previous pass
+   at this could only ever change accents. */
 [data-tenant="assessment"] {
   --color-brand: #0B6666;            /* sdlc deep teal */
   --color-brand-hover: #084F4F;
@@ -236,7 +251,27 @@ html[data-theme="dark"] [data-tenant="orgiq"] {
   --color-primary: #0B6666;
   --color-primary-hover: #084F4F;
   --color-primary-soft: #DCEDEA;
+
+  /* The ground. */
+  --color-bg: #F1F6F5;               /* sdlc paper */
+  --color-surface: #FFFFFF;          /* sdlc card */
+  --color-surface-raised: #FFFFFF;
+  --color-surface-panel: #E7EEEB;
+  --color-surface-inset: #F7FAF9;
+  --color-surface-hover: #E2ECE8;
+  --color-surface-subtle: #EDF4F2;
+  --color-border: #D4DDDA;
+  --color-border-emphasis: #B7C9C4;
+
+  --color-text-primary: #1A2D2D;     /* sdlc ink */
+  --color-text-secondary: #5A7272;   /* sdlc slate */
+  --color-text-tertiary: #8CA3A3;
+  --color-text-disabled: #B4C6C2;
 }
+/* Dark is the source project's own `.dark` block, same conversion: its
+   `--background: 180 71% 14%` and `--card: 180 71% 17%` are a deep teal
+   night, not orgiq's navy. */
+html[data-theme="dark"][data-tenant="assessment"],
 html[data-theme="dark"] [data-tenant="assessment"] {
   --color-brand: #2dd4bf;
   --color-brand-hover: #5eead4;
@@ -245,6 +280,21 @@ html[data-theme="dark"] [data-tenant="assessment"] {
   --color-primary: #2dd4bf;
   --color-primary-hover: #5eead4;
   --color-primary-soft: #134e4a;
+
+  --color-bg: #0A3D3D;
+  --color-surface: #0D4A4A;
+  --color-surface-raised: #0D4A4A;
+  --color-surface-panel: #0A4242;
+  --color-surface-inset: #0C4646;
+  --color-surface-hover: #224F4F;
+  --color-surface-subtle: #0C4545;
+  --color-border: #224F4F;
+  --color-border-emphasis: #2E6565;
+
+  --color-text-primary: #F3F7F5;
+  --color-text-secondary: #8DA5A5;
+  --color-text-tertiary: #6E8A8A;
+  --color-text-disabled: #476363;
 }
 
 /* ── Shell ─────────────────────────────────────────────────────────────

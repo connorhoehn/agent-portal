@@ -338,6 +338,22 @@ export function Layout() {
   // which would otherwise hash the label into a colour unrelated to the brand.
   const shellRef = useRef<HTMLDivElement>(null);
   const [brandMark, setBrandMark] = useState<string | undefined>(undefined);
+
+  // The tenant marker ALSO goes on <html>, mirroring how `data-theme` is set
+  // (lib/preferences.ts). It has to: custom properties inherit downward only,
+  // and the shell <Stack> below is a grandchild of <body> — so
+  // `body { background: var(--color-bg) }` resolves the token from :root and
+  // can never see the tenant's value. The practical effect was that a tenant
+  // could restyle anything INSIDE the app div (buttons, chips, the nav tint)
+  // but structurally could not change the page ground, which is why every
+  // tenant has so far read as orgiq wearing a different accent. Two files
+  // already carry workarounds for the same root cause (ChatSessionPicker,
+  // graphOverlay) — they read the token from the tenant element because the
+  // ambient one is wrong there.
+  const tenantAttr = session?.tenant ?? 'orgiq';
+  useEffect(() => {
+    document.documentElement.setAttribute('data-tenant', tenantAttr);
+  }, [tenantAttr]);
   useEffect(() => {
     const el = shellRef.current;
     if (!el) return;
@@ -350,7 +366,7 @@ export function Layout() {
 
   return (
     <CommandPaletteProvider commands={commands} getDynamicCommands={getDynamicCommands}>
-      <Stack ref={shellRef} gap="none" data-tenant={session?.tenant ?? 'orgiq'} className="h-screen">
+      <Stack ref={shellRef} gap="none" data-tenant={tenantAttr} className="h-screen">
         {/* First in the tab order, visible only while focused: a keyboard
             user lands on the page content without walking the header, the
             rail and the nested rail first (WCAG 2.4.1, Bypass Blocks). */}
