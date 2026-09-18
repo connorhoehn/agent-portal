@@ -174,7 +174,7 @@ export function MasqueradeMenu() {
               variant="ghost"
               size="sm"
               fullWidth
-              className="justify-start text-left text-primary font-semibold"
+              className="border-0 justify-start text-left text-primary font-semibold"
               onClick={() => { close(); window.location.assign('/select'); }}
             >
               Switch workspace…
@@ -184,7 +184,7 @@ export function MasqueradeMenu() {
               size="sm"
               fullWidth
               disabled={busy}
-              className="justify-start text-left text-text-secondary"
+              className="border-0 justify-start text-left text-text-secondary"
               onClick={() => void run(logout)}
             >
               Sign out
@@ -221,7 +221,14 @@ function MenuItem({ active, busy, onClick, title, hint, dotColor }: {
       disabled={busy}
       onClick={onClick}
       className={[
-        'flex-col items-start gap-0.5 justify-start text-left px-2.5 py-2',
+        // `border-0` is load-bearing. The library's `ghost` variant is
+        // `bg-transparent … border border-border` — the SAME border treatment
+        // as `secondary`, differing only in fill — so a ghost Button is not
+        // chromeless. In a popover every row then draws its own 1px box and
+        // the menu reads as a stack of outlined generic buttons rather than a
+        // list. Queued for a genuinely borderless variant; until then a menu
+        // row has to say so. Same for the two footer actions below.
+        'border-0 flex-col items-start gap-0.5 justify-start text-left px-2.5 py-2',
         active ? 'bg-surface-hover' : '',
       ].join(' ')}
     >

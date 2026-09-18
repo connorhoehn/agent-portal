@@ -409,7 +409,15 @@ export default function SelectContextPage() {
                           aria-label={`Enter ${tenantLabel(tenant)} as ${roleLabel(role)}${isCurrent ? ' (current workspace)' : ''}`}
                           onClick={() => void choose(tenant, role)}
                           className={[
-                            'group block w-full rounded-none justify-start border-t border-[var(--color-border)] px-4 py-2.5 text-left',
+                            // Only a TOP rule is wanted, to separate stacked
+                            // role rows. `border-t` alone does not achieve
+                            // that: the library's `ghost` variant already
+                            // sets `border border-border` on all four sides
+                            // (it is `secondary` with a transparent fill, not
+                            // a chromeless button), so the row drew a full
+                            // box. The other three sides have to be turned
+                            // off explicitly. Queued for a borderless variant.
+                            'group block w-full rounded-none justify-start border-x-0 border-b-0 border-t border-[var(--color-border)] px-4 py-2.5 text-left',
                             'transition-colors hover:bg-[var(--color-surface-hover)]',
                             isCurrent ? 'bg-[var(--color-primary-soft)]' : '',
                           ].join(' ')}
