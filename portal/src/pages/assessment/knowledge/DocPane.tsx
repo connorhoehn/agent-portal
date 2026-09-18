@@ -796,11 +796,22 @@ interface StoredCommentWire {
               column of text and the eye had nothing to stop on. */}
           <Divider spacing="none" />
 
+          {/* Gated on gatewayREADY, not on the socket merely being connected.
+              The two are different and this file already knows it — line ~248
+              computes `gatewayReady`, and lib's own test says readiness needs
+              BOTH connectionState 'connected' AND a handshake clientId. In the
+              window between them the control was live: a react() went out with
+              no identity behind it, and `summarizeReactions` keys `mine` on
+              `gateway.clientId`, so the viewer's own reaction could never come
+              back marked as theirs. Reactions are a GATEWAY-only feature —
+              there is no BFF endpoint and no broker event for them — so when
+              the gateway is not ready the control cannot work at all, and the
+              page's own "Gateway offline" banner is already saying why. */}
           {reactions && (
             <ReactionsBar
               reactions={reactionSummaries}
               onReact={(emoji) => reactions.react(emoji, { targetId: node.id })}
-              disabled={gateway.connectionState !== 'connected'}
+              disabled={!gatewayReady}
             />
           )}
 

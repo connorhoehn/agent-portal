@@ -6,6 +6,8 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 import {
   activityEventToFeedItem,
@@ -734,4 +736,32 @@ test('decideDocSaveGate allows a save when synced but genuinely empty — a deli
   // status 'synced' is itself the "this really did load" signal; hasSeed is
   // irrelevant once synced, including for a document the user just cleared.
   assert.deepEqual(decideDocSaveGate({ status: 'synced', hasSeed: false }), { allowed: true });
+});
+
+// ── The reaction bar gates on READINESS, not on the socket ──────────────────
+//
+// `isGatewayReady` exists because "connected" is not enough: the tests above
+// pin that readiness needs BOTH connectionState 'connected' AND a handshake
+// clientId. The reaction bar was gated on the weaker half — `connectionState
+// !== 'connected'` — so in the window after the socket opens and before the
+// handshake yields an id, the control was live. A react() went out with no
+// identity behind it, and `summarizeReactions` keys `mine` on that same
+// clientId, so the viewer's own reaction could never come back marked as
+// theirs. Reactions are gateway-only (there is no BFF endpoint and no broker
+// event for them), so with the gateway down the control cannot work at all.
+//
+// Asserted against the source because the gate is inline JSX with no seam to
+// call — the same approach assessment-callback-exemption.test.ts takes to the
+// route module it guards. A behavioural test would need a DOM this suite has
+// no renderer for.
+test('DocPane gates the reaction bar on gatewayReady, never on connectionState alone', () => {
+  const src = readFileSync(
+    join(import.meta.dirname, '..', 'knowledge', 'DocPane.tsx'), 'utf8',
+  );
+  const bar = src.slice(src.indexOf('<ReactionsBar'), src.indexOf('/>', src.indexOf('<ReactionsBar')));
+  assert.ok(bar.length > 0, 'ReactionsBar is no longer rendered — re-read this test');
+  assert.match(bar, /disabled=\{!gatewayReady\}/,
+    'the reaction bar must disable on !gatewayReady');
+  assert.doesNotMatch(bar, /connectionState/,
+    "the bar must not gate on connectionState — 'connected' is not 'ready'");
 });
