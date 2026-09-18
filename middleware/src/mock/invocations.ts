@@ -341,6 +341,15 @@ export const invocationTail = defineFixture<MockInvocation>({
     default: () => corpus({ rows: 1, errors: 1 }),
     empty: () => [],
     large: () => corpus({ rows: 5, errors: 2 }),
+    // This fixture stands in for `observability.invocation_traces`, which is
+    // the table the entire observability family reads — on-call, traffic,
+    // cost, drift, memory, tool-calls. Each of those routes already has a
+    // `degraded()` branch that answers 200 with a body it tells you not to
+    // believe, and without this scenario not one of them was reachable
+    // offline: the branch existed, and no auditor could ever see what it
+    // renders. That matters most on /admin/observability/oncall, where an
+    // unbelieved empty answer is an all-clear.
+    error: () => { throw new Error('invocation_traces unavailable: relation does not exist'); },
   },
 });
 

@@ -52,9 +52,19 @@ export function UnavailableNotice({
       <div className="text-[12px] text-text-secondary mt-1 leading-snug">
         {/* Server error lines sometimes end in a period of their own
             ("…request is invalid."), and appending ours produced "invalid.. Score
-            history lives in Aurora". Trim one before joining. */}
+            history lives in Aurora". Trim one before joining.
+
+            An ELLIPSIS is different and must survive: lib/upstream.ts's
+            `reasonLine` ends a truncated database error with "…" to say there
+            was more, and stripping that would turn a cut-off sentence back
+            into one that looks complete. So trim a period, keep the ellipsis,
+            and drop our own separator period when one is already there —
+            otherwise the banner reads "alarms: could not…. Alarms and
+            incidents are computed from…". */}
         {error.replace(/\.\s*$/, '')}
-        {source ? `. ${source}, so this is unknown rather than empty.` : '.'}
+        {source
+          ? `${/…\s*$/.test(error) ? ' ' : '. '}${source}, so this is unknown rather than empty.`
+          : /…\s*$/.test(error) ? '' : '.'}
       </div>
       {onRetry && (
         <div className="mt-3">

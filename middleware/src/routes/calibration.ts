@@ -42,6 +42,7 @@ import {
 } from '../mock/calibration.js';
 import { judgeResponse, NOVA_PRO_MODEL_ID } from '../lib/judge.js';
 
+import { reasonLine } from '../lib/upstream.js';
 /**
  * Marks a response whose query failed — the wrapper from routes/cost.ts, kept
  * local so each router owns its own copy.
@@ -54,7 +55,7 @@ import { judgeResponse, NOVA_PRO_MODEL_ID } from '../lib/judge.js';
  * carries `degraded` + the first line of the error.
  */
 function degraded<T extends object>(body: T, err: unknown): T & { degraded: true; error: string } {
-  return { ...body, degraded: true, error: (err as Error).message.split('\n')[0]?.slice(0, 160) ?? 'query failed' };
+  return { ...body, degraded: true, error: reasonLine(err) };
 }
 
 export const calibrationRouter = Router();

@@ -122,6 +122,28 @@ export function degradedFields<T>(
 }
 
 /**
+ * The first line of a failure, short enough to print in a banner.
+ *
+ * Ten route files carried this expression verbatim as
+ * `message.split('\n')[0]?.slice(0, 160)`, and a hard slice cuts mid-word: the
+ * on-call banner read "alarms: could not evaluat.", which a reader takes for a
+ * typo in the product rather than a truncated database error. Cutting at the
+ * last word boundary and marking the cut with an ellipsis says the same thing
+ * and admits there is more. Kept at 160 so no existing body grows.
+ */
+export function reasonLine(err: unknown, fallback = 'query failed'): string {
+  const first = (err as Error | undefined)?.message?.split('\n')[0]?.trim();
+  if (!first) return fallback;
+  if (first.length <= 160) return first;
+  const cut = first.slice(0, 160);
+  const sp = cut.lastIndexOf(' ');
+  // A 160-char run with no space is one long token (a URL, an ARN); slicing it
+  // anywhere is equally arbitrary, so keep the full width rather than losing
+  // most of it to a word boundary that isn't there.
+  return `${(sp > 120 ? cut.slice(0, sp) : cut).replace(/[.,;:]$/, '')}…`;
+}
+
+/**
  * Join several degradation reasons into the one `problem` sentence a surface
  * that already has such a field (providers/kb-reconcile.ts) reports. Returns
  * undefined when nothing was degraded, so it can be spread conditionally.

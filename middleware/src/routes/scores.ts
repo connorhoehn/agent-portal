@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { aurora } from '../providers/index.js';
 import { getPersonHistory } from '../providers/scores-history.js';
 import { asyncHandler } from '../lib/async-handler.js';
+import { reasonLine } from '../lib/upstream.js';
 import { analyzeScores } from '../lib/score-analysis.js';
 
 /**
@@ -16,7 +17,7 @@ import { analyzeScores } from '../lib/score-analysis.js';
  * carries `degraded` + the first line of the error.
  */
 function degraded<T extends object>(body: T, err: unknown): T & { degraded: true; error: string } {
-  return { ...body, degraded: true, error: (err as Error).message.split('\n')[0]?.slice(0, 160) ?? 'query failed' };
+  return { ...body, degraded: true, error: reasonLine(err) };
 }
 
 export const scoresRouter = Router();

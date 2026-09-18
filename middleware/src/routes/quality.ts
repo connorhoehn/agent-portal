@@ -15,6 +15,7 @@ import { mockQualityScores } from '../mock/observability-queries.js';
 import { clock } from '../mock/core/clock.js';
 import { mockSetHumanLabel } from '../mock/observability.js';
 
+import { reasonLine } from '../lib/upstream.js';
 /**
  * Marks a response whose query failed — the wrapper from routes/cost.ts, kept
  * local so each router owns its own copy.
@@ -27,7 +28,7 @@ import { mockSetHumanLabel } from '../mock/observability.js';
  * carries `degraded` + the first line of the error.
  */
 function degraded<T extends object>(body: T, err: unknown): T & { degraded: true; error: string } {
-  return { ...body, degraded: true, error: (err as Error).message.split('\n')[0]?.slice(0, 160) ?? 'query failed' };
+  return { ...body, degraded: true, error: reasonLine(err) };
 }
 
 export const qualityRouter = Router();

@@ -9,7 +9,7 @@
 // sets — so that is asserted here, at the source, rather than N times over.
 
 import {
-  attempt, degradedFields, firstLine, problemFrom, reached, unreachable,
+  attempt, degradedFields, firstLine, problemFrom, reached, reasonLine, unreachable,
 } from '../upstream.js';
 
 describe('the healthy answer is the plain answer', () => {
@@ -99,5 +99,51 @@ describe('problemFrom', () => {
 
   it('joins what did degrade', () => {
     expect(problemFrom(undefined, 'a failed', undefined, 'b failed')).toBe('a failed; b failed');
+  });
+});
+
+
+// `reasonLine` — the banner text every degraded route now shares.
+//
+// It replaced ten verbatim copies of `message.split('\n')[0]?.slice(0, 160)`.
+// The hard slice cut mid-word, so /admin/observability/oncall rendered
+// "alarms: could not evaluat." — which a reader takes for a typo in the
+// product rather than a truncated database error. These pin the two things
+// that made it worth consolidating: WHERE it cuts, and that it says it cut.
+describe('reasonLine', () => {
+  it('keeps a short message verbatim, so existing banners do not change', () => {
+    expect(reasonLine(new Error('relation does not exist'))).toBe('relation does not exist');
+  });
+
+  it('takes only the first line', () => {
+    expect(reasonLine(new Error('first line\n  at stack (file.ts:1)'))).toBe('first line');
+  });
+
+  it('falls back when there is no message at all', () => {
+    expect(reasonLine(undefined)).toBe('query failed');
+    expect(reasonLine(new Error(''))).toBe('query failed');
+    expect(reasonLine({}, 'nothing to say')).toBe('nothing to say');
+  });
+
+  it('cuts a long message at a word boundary and marks the cut', () => {
+    const out = reasonLine(new Error(`${'word '.repeat(60)}end`));
+    expect(out.endsWith('…')).toBe(true);
+    // The whole point: no half-word before the ellipsis.
+    expect(out.slice(0, -1).endsWith(' ')).toBe(false);
+    expect(out).not.toMatch(/wor…$/);
+    expect(out.length).toBeLessThanOrEqual(161);
+  });
+
+  it('does not strand most of the width on a long unbroken token', () => {
+    // An ARN or URL has no space to cut at; a word-boundary rule would throw
+    // away everything after the last early space, which is worse than a hard
+    // cut. Such a value keeps the full 160.
+    const out = reasonLine(new Error('x'.repeat(400)));
+    expect(out).toBe(`${'x'.repeat(160)}…`);
+  });
+
+  it('does not leave a dangling separator before the ellipsis', () => {
+    const out = reasonLine(new Error(`${'alpha beta, '.repeat(20)}tail`));
+    expect(out).not.toMatch(/[.,;:]…$/);
   });
 });

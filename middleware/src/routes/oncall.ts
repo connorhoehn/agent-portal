@@ -27,6 +27,7 @@
 import { Router } from 'express';
 import type { SqlParameter } from '@aws-sdk/client-rds-data';
 import { asyncHandler } from '../lib/async-handler.js';
+import { reasonLine } from '../lib/upstream.js';
 import { exec } from '../providers/aurora.js';
 import { config } from '../config.js';
 import {
@@ -52,7 +53,7 @@ export const oncallRouter = Router();
  * no `degraded` key at all, exactly like the sibling routers.
  */
 function degraded<T extends object>(body: T, err: unknown): T & { degraded: true; error: string } {
-  return { ...body, degraded: true, error: (err as Error).message.split('\n')[0]?.slice(0, 160) ?? 'query failed' };
+  return { ...body, degraded: true, error: reasonLine(err) };
 }
 
 // ── Shared types (mirrored by the portal) ──────────────────────────────────

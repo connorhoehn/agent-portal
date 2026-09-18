@@ -33,6 +33,7 @@ import {
   ListAgentRuntimesCommand,
 } from '@aws-sdk/client-bedrock-agentcore-control';
 import { asyncHandler } from '../lib/async-handler.js';
+import { reasonLine } from '../lib/upstream.js';
 import { exec } from '../providers/aurora.js';
 import { agentcore as agentCoreProvider } from '../providers/index.js';
 import { mockRuntimeArn } from '../lib/devbox-arn.js';
@@ -59,7 +60,7 @@ import {
  * carries `degraded` + the first line of the error.
  */
 function degraded<T extends object>(body: T, err: unknown): T & { degraded: true; error: string } {
-  return { ...body, degraded: true, error: (err as Error).message.split('\n')[0]?.slice(0, 160) ?? 'query failed' };
+  return { ...body, degraded: true, error: reasonLine(err) };
 }
 
 export const invocationsRouter = Router();

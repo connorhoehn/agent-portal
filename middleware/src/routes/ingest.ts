@@ -44,6 +44,7 @@ import {
 import type { CrawlTarget, CrawlMode } from '../lib/crawler-types.js';
 import { startSurvey, getSurvey, listSurveys } from '../lib/site-survey.js';
 
+import { reasonLine } from '../lib/upstream.js';
 /**
  * Marks a response whose upstream call failed — same convention as
  * routes/kb-admin.ts (which is where the marker was worth catching first for
@@ -54,7 +55,7 @@ import { startSurvey, getSurvey, listSurveys } from '../lib/site-survey.js';
  * defines this.
  */
 function degraded<T extends object>(body: T, err: unknown): T & { degraded: true; error: string } {
-  return { ...body, degraded: true, error: (err as Error).message.split('\n')[0]?.slice(0, 160) ?? 'query failed' };
+  return { ...body, degraded: true, error: reasonLine(err) };
 }
 
 export const ingestRouter = Router();

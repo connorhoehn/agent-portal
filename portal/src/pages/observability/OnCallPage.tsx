@@ -44,6 +44,7 @@ import {
 } from 'recharts';
 import { useFetch } from '../../hooks/useFetch';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
+import { firstDegraded } from '../../lib/degraded';
 import { T } from './Text';
 import { RowEmpty } from './ReadState';
 import { parsePgTimestampAsUtc } from '../../lib/pgTimestamp.ts';
@@ -139,10 +140,24 @@ function OnCallPage() {
   );
 
   // Unified event feed.
-  const { data: eventsData } = useFetch<{ events: RecentEvent[] }>(
+  const { data: eventsData, error: eventsError } = useFetch<{ events: RecentEvent[] }>(
     `/api/observability/oncall/recent-events?limit=50`,
     30_000,
   );
+
+  // Two ways to be blind about the same thing. `timelineError` is a request
+  // that failed; a degraded 200 is a well-formed body the server is telling us
+  // not to believe — and on THIS page an unbelieved body is an all-clear. The
+  // notice below already said an empty timeline "would read as nothing is
+  // wrong"; it only ever guarded the first of the two.
+  const timelineBlind = timelineError ?? firstDegraded(timeline);
+  // The HITL count is a SEPARATE read: a working timeline over a broken
+  // approvals query is exactly the case where "0 pending" would be believed.
+  const hitlBlind = firstDegraded(hitl);
+  // And so is the event feed — /recent-events degrades on its own (its judge
+  // half reads the same table the timeline does, but the two can fail apart).
+  // "No recent events." is the quietest possible lie on an on-call page.
+  const eventsBlind = eventsError ?? firstDegraded(eventsData);
 
   const buckets = useMemo(() => timeline?.buckets ?? [], [timeline]);
   const deployMarkers = useMemo(() => timeline?.deployMarkers ?? [], [timeline]);
@@ -213,9 +228,9 @@ function OnCallPage() {
     >
       {/* Alarms and the incident timeline both come from here. An empty
           timeline during an outage would read as "nothing is wrong". */}
-      {timelineError && (
+      {timelineBlind && (
         <UnavailableNotice
-          error={timelineError}
+          error={timelineBlind}
           what="the on-call timeline"
           source="Alarms and incidents are computed from Aurora and CloudWatch"
           onRetry={refreshTimeline}
@@ -226,20 +241,29 @@ function OnCallPage() {
       {/* Status strip */}
       <Card padding="md">
         <Inline gap="sm" align="center" wrap className="text-[12px] text-text-secondary">
-          <SeverityDot severity={criticalCount > 0 ? 'critical' : warningCount > 0 ? 'warning' : 'ok'} />
+          <SeverityDot
+            severity={
+              timelineBlind ? 'unknown'
+                : criticalCount > 0 ? 'critical'
+                : warningCount > 0 ? 'warning'
+                : 'ok'
+            }
+          />
           <T>
-            {activeAlarms.length === 0
+            {timelineBlind
+              ? 'alarm state unknown'
+              : activeAlarms.length === 0
               ? 'no active alarms'
               : `${activeAlarms.length} active alarm${activeAlarms.length === 1 ? '' : 's'}`}
           </T>
           <T className="text-text-tertiary">·</T>
           <T>
-            <strong>{hitl?.pendingCount ?? 0}</strong>&nbsp;pending approval
-            {hitl?.pendingCount === 1 ? '' : 's'}
+            <strong>{hitlBlind ? '—' : hitl?.pendingCount ?? 0}</strong>&nbsp;pending approval
+            {!hitlBlind && hitl?.pendingCount === 1 ? '' : 's'}
           </T>
           <T className="text-text-tertiary">·</T>
           <T>
-            last incident {lastIncident ? timeAgo(lastIncident) : '—'}
+            last incident {timelineBlind || eventsBlind ? 'unknown' : lastIncident ? timeAgo(lastIncident) : '—'}
           </T>
         </Inline>
       </Card>
@@ -247,7 +271,14 @@ function OnCallPage() {
       {/* Active alarms */}
       <Card padding="md">
         <CardHeader title="Active Alarms" subtitle="computed from last 1h of signals · 15s refresh" />
-        {activeAlarms.length === 0 ? (
+        {timelineBlind ? (
+          <Inline gap="sm" align="center" className="py-1.5 px-1">
+            <SeverityDot severity="unknown" />
+            <T className="text-[12px] text-text-secondary">
+              Alarm state could not be read · this is not an all-clear
+            </T>
+          </Inline>
+        ) : activeAlarms.length === 0 ? (
           <Inline gap="sm" align="center" className="py-1.5 px-1">
             <SeverityDot severity="ok" />
             <T className="text-[12px] text-text-secondary">
@@ -276,7 +307,9 @@ function OnCallPage() {
             ) : undefined
           }
         />
-        {chartData.length === 0 ? (
+        {timelineBlind && chartData.length === 0 ? (
+          <RowEmpty text="Timeline could not be read — this window is unknown, not idle." />
+        ) : chartData.length === 0 ? (
           <RowEmpty text="No invocations in this window yet — timeline activates after the first sampled call." />
         ) : (
           <Stack className="w-full h-[320px]">
@@ -407,9 +440,15 @@ function OnCallPage() {
           <Card padding="md">
             <CardHeader
               title="Recent Events"
-              subtitle={`deploys · alarms · HITL · judge regressions · ${events.length} event${events.length === 1 ? '' : 's'}`}
+              subtitle={
+                eventsBlind
+                  ? 'deploys · alarms · HITL · judge regressions · count unavailable'
+                  : `deploys · alarms · HITL · judge regressions · ${events.length} event${events.length === 1 ? '' : 's'}`
+              }
             />
-            {events.length === 0 ? (
+            {eventsBlind ? (
+              <RowEmpty text="Event feed could not be read — this is not the same as a quiet window." />
+            ) : events.length === 0 ? (
               <RowEmpty text="No recent events." />
             ) : (
               <Stack gap="xs" className="max-h-[420px] overflow-y-auto">

@@ -131,5 +131,10 @@ export const designReviewDocs = defineFixture<DesignReviewDoc>({
     // An initiative with no design thread opened yet — the state every
     // initiative starts in, and the one /iq/designs has to render on its own.
     empty: () => [],
+    // "No design threads yet" is the state a new initiative is genuinely in.
+    // A failed read is not that: the ADRs exist and the decisions they carry
+    // are load-bearing, and the page must not invite you to open a thread on a
+    // question that was already decided in one it could not show you.
+    error: () => { throw new Error('design_reviews unavailable: relation does not exist'); },
   },
 });

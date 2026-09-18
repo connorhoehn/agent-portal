@@ -420,6 +420,24 @@ cd middleware && PORT=3012 SWEEP_INTERVAL_MIN=0 \
   npx tsx src/index.ts
 ```
 
+⚠️ **Use that env exactly — every `MOCK_*` flag, not just the two obvious ones.**
+`MOCK_GUARDRAILS` and `MOCK_CLOUDWATCH` are separate flags from `MOCK_AURORA` /
+`MOCK_AGENTCORE` (`middleware/src/config.ts`), and a capture server missing one
+does not fail: the routes behind it fall through to a real AWS call, answer
+`500 UnrecognizedClientException` with expired credentials, and get recorded as
+`{"skipped": "HTTP 500 …"}`. Rule 4 then reads that snapshot and reports the
+route as having **no mock branch** — an accusation against the product for what
+is really an artifact of the capture shell. `GET /api/capabilities/guardrail`
+did exactly this on 2026-09-18: it has had a `mockGuardrails` provider all
+along, and the committed snapshot recorded a healthy 200 for it.
+
+The tell is that the diff *removes* a captured shape and replaces it with a
+skip. Before trusting a rule-4 failure, check whether the route's entry in
+`git diff` went from `status: 200` to `skipped`, and whether the fixture it
+would read from is listed in `GET /api/__mock/state` — if it is, suspect the
+capture env before the code. Recapturing costs ~4 minutes; chasing a phantom
+missing branch costs considerably more.
+
 `capture.ts`'s `main()` runs the GET sweep first, against a clean world, then
 the write sweep — so the one command produces all three snapshots.
 

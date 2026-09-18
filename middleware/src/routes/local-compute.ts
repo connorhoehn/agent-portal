@@ -39,6 +39,7 @@ import { randomUUID } from 'node:crypto';
 import { Router } from 'express';
 import type { Request, Response, NextFunction } from 'express';
 import { asyncHandler } from '../lib/async-handler.js';
+import { reasonLine } from '../lib/upstream.js';
 import { initSSE, writeSSE, endSSE } from '../lib/sse.js';
 import { rateLimit } from '../lib/rate-limit.js';
 import { requireAction, requireSession, requireTenant, resolveSession } from '../lib/authz.js';
@@ -809,7 +810,7 @@ async function ownedNodeForLog(
     res.json({
       nodeId, entries: [], lastSeq: -1, bytes: 0, updatedAt: null,
       degraded: true,
-      error: (err as Error).message.split('\n')[0]?.slice(0, 160) ?? 'query failed',
+      error: reasonLine(err),
     });
     return { degraded: true };
   }

@@ -47,6 +47,7 @@ import {
 } from '../providers/upload-links.js';
 import { listLandingZoneFiles, uploadToLandingZone } from '../providers/landing-zones.js';
 
+import { reasonLine } from '../lib/upstream.js';
 /**
  * Marks a response whose query failed — the wrapper from routes/cost.ts, kept
  * local so each router owns its own copy.
@@ -59,7 +60,7 @@ import { listLandingZoneFiles, uploadToLandingZone } from '../providers/landing-
  * carries `degraded` + the first line of the error.
  */
 function degraded<T extends object>(body: T, err: unknown): T & { degraded: true; error: string } {
-  return { ...body, degraded: true, error: (err as Error).message.split('\n')[0]?.slice(0, 160) ?? 'query failed' };
+  return { ...body, degraded: true, error: reasonLine(err) };
 }
 
 export const kbAdminRouter = Router();
