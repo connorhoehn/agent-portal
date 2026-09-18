@@ -9330,6 +9330,68 @@ export const knowledgeSectionsFixture = defineFixture<KnowledgeSection>({
 
 export const knowledgeSections = (): KnowledgeSection[] => knowledgeSectionsFixture.rows();
 
+export interface KnowledgeComment {
+  id: string;
+  doc_id: string;
+  body: string;
+  author: string;
+  created_at: string;
+}
+
+/**
+ * Comments on a document.
+ *
+ * These did not exist here at all, and the consequence was visible rather than
+ * theoretical: `POST /knowledge/doc/comment` had an INSERT and no SELECT
+ * anywhere, so a comment was write-only. The pane assembled its thread from
+ * this session's SSE echoes plus the realtime gateway's channel, which means
+ * that with the gateway offline a comment vanished on reload and the drawer
+ * then said "No comments on this document yet" — a sentence that was false,
+ * about a comment the reader had just written.
+ *
+ * Seeded so the surface shows a real thread rather than an empty box, and
+ * REGISTERED so `POST /api/__mock/reset` undoes anything a session adds, which
+ * is what the mock floor asks of a write.
+ */
+export const knowledgeCommentsFixture = defineFixture<KnowledgeComment>({
+  key: 'assessment-knowledge-comments',
+  scenarios: {
+    default: () => [
+      {
+        id: 'kc-classify-01', doc_id: 'prompt:classify-transcript.md',
+        author: 'u-asha',
+        body: 'Worth flagging: the dimension ids here are plain numbers ("1".."17"). '
+          + 'We had a run last month that emitted "DIM-01" and apply-classification rejected '
+          + 'every envelope until someone read the verb output.',
+        created_at: daysAgo(4),
+      },
+      {
+        id: 'kc-classify-02', doc_id: 'prompt:classify-transcript.md',
+        author: 'u-farah',
+        body: 'Agreed — and the strictness is deliberate, since relevant_dimension_ids is what '
+          + 'decides which dimensions a later /score-dimensions pass touches at all.',
+        created_at: daysAgo(4),
+      },
+      {
+        id: 'kc-evidence-01', doc_id: 'rule:what-counts-as-evidence.md',
+        author: 'u-jonas',
+        body: 'The "verbal confirmation" line is the one teams push back on most. '
+          + 'It is not a judgement about the team, it is about what a later reader can check.',
+        created_at: daysAgo(2),
+      },
+    ],
+    empty: () => [],
+    // A thread that cannot be read is not a thread with nothing in it. The
+    // drawer has to say which of the two it is looking at.
+    error: () => { throw new Error('assessment_knowledge_comments unavailable: relation does not exist'); },
+  },
+});
+
+export const knowledgeComments = (docId: string): KnowledgeComment[] =>
+  knowledgeCommentsFixture.rows()
+    .filter((c) => c.doc_id === docId)
+    .sort((a, b) => a.created_at.localeCompare(b.created_at));
+
 export const knowledgeDocsFixture = defineFixture<KnowledgeDoc>({
   key: 'assessment-knowledge-docs',
   scenarios: {

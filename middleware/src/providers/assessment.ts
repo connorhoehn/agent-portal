@@ -3350,6 +3350,23 @@ export async function publishKnowledgeDoc(id: string, actor = 'unknown'): Promis
  * dashboard activity bar, another tab) still sees "a comment happened"
  * through GET /events.
  */
+/**
+ * The thread on one document, oldest first.
+ *
+ * This read did not exist: `createKnowledgeComment` had an INSERT and nothing
+ * anywhere had a SELECT, so a comment was write-only and the pane rebuilt its
+ * thread from live echoes alone. Reload and the thread was gone, under a
+ * drawer saying "No comments on this document yet".
+ */
+export async function listKnowledgeComments(id: string): Promise<M.KnowledgeComment[] | null> {
+  if (!config.mock.aurora) {
+    if (!(await A.fetchKnowledgeDoc(id))) return null;
+    return A.fetchKnowledgeComments(id);
+  }
+  if (!M.findKnowledgeDoc(id)) return null;
+  return M.knowledgeComments(id);
+}
+
 export async function createKnowledgeComment(
   id: string, body: string, actor = 'unknown',
 ): Promise<{ ok: boolean } | null> {
@@ -3365,13 +3382,22 @@ export async function createKnowledgeComment(
     return { ok: true };
   }
   if (!M.findKnowledgeDoc(id)) return null;
+  // Persist into the REGISTERED fixture, not just onto the event bus. The echo
+  // alone is what made a comment write-only: it reached whoever was connected
+  // at that instant and nothing afterwards. Registered means
+  // `POST /api/__mock/reset` still undoes it.
+  const commentId = `comment-${stampNow()}-${hex(6)}`;
+  const now = new Date().toISOString();
+  M.knowledgeCommentsFixture.rows().push({
+    id: commentId, doc_id: id, body, author: actor, created_at: now,
+  });
   assessmentBroker.publish({
     type: 'knowledge.comment.created',
-    id: `comment-${stampNow()}-${hex(6)}`,
+    id: commentId,
     doc_id: id,
     by: actor,
     body,
-    ts: new Date().toISOString(),
+    ts: now,
   });
   return { ok: true };
 }

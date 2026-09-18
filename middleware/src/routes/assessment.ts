@@ -738,6 +738,18 @@ assessmentRouter.post('/knowledge/pull', knowledgeGate, asyncHandler(async (req,
 // Per-document comment. The thread itself lives in the realtime gateway's
 // chat store (assessment:doc:<id> channel) — this is the server-side echo
 // so GET /events carries it to viewers not currently on that channel.
+// The thread on one document. There was an INSERT and no SELECT, so a comment
+// was write-only: the pane rebuilt its thread from live echoes and the gateway
+// channel, and with the gateway offline a reload lost it under a drawer saying
+// "No comments on this document yet".
+assessmentRouter.get('/knowledge/doc/comments', viewGate, asyncHandler(async (req, res) => {
+  const id = String(req.query['id'] ?? '');
+  if (!id) throw new ValidationError('id is required');
+  const comments = await provider.listKnowledgeComments(id);
+  if (!comments) throw new NotFoundError('document not found');
+  res.json({ comments });
+}));
+
 assessmentRouter.post('/knowledge/doc/comment', viewGate, asyncHandler(async (req, res) => {
   const body = req.body as { id?: string; body?: string };
   if (!body.id || !body.body || typeof body.body !== 'string') throw new ValidationError('id and body are required');

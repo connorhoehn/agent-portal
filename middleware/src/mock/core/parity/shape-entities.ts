@@ -373,6 +373,15 @@ export const SHAPE_ENTITIES: Array<ShapeEntity<any>> = [
     mockId: (d: { id: string }) => d.id,
   },
   {
+    name: 'assessment_knowledge_comments',
+    fixture: 'assessment-knowledge-comments',
+    describes: "The comment thread on a document — the rows GET /knowledge/doc/comments returns.",
+    sqlFile: 'assessment_schema.sql',
+    table: 'assessment_knowledge_comments',
+    mockRows: async () => (await assessment()).knowledgeCommentsFixture.rows('default'),
+    mockId: (c: { id: string }) => c.id,
+  },
+  {
     name: 'assessment_knowledge_doc_versions',
     fixture: 'assessment-knowledge-versions',
     describes: 'The snapshot taken before every save — the version list a doc\'s history panel renders.',

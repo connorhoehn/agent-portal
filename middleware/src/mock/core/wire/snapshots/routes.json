@@ -203,7 +203,7 @@
     {
       "method": "GET",
       "path": "/api/assessment/events",
-      "source": "src/routes/assessment.ts:807"
+      "source": "src/routes/assessment.ts:819"
     },
     {
       "method": "GET",
@@ -243,7 +243,12 @@
     {
       "method": "POST",
       "path": "/api/assessment/knowledge/doc/comment",
-      "source": "src/routes/assessment.ts:741"
+      "source": "src/routes/assessment.ts:753"
+    },
+    {
+      "method": "GET",
+      "path": "/api/assessment/knowledge/doc/comments",
+      "source": "src/routes/assessment.ts:745"
     },
     {
       "method": "POST",
@@ -278,7 +283,7 @@
     {
       "method": "POST",
       "path": "/api/assessment/knowledge/presence",
-      "source": "src/routes/assessment.ts:764"
+      "source": "src/routes/assessment.ts:776"
     },
     {
       "method": "POST",

@@ -53,6 +53,7 @@ import {
   latestPresenceForDoc,
   defuseJsonFences,
   stripFrontmatter,
+  withStoredComments,
   stripTitleHeading,
   summarizeReactions,
   type KnowledgeCommentItem,
@@ -444,7 +445,16 @@ export function DocPane({ node, mode, sseEvents, sseConnected, sseGapped, onTree
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editing, editSource, syncStatus]);
 
-  // ─── Comments: SSE-authoritative, gateway chat merged in when live ──────
+  /** `GET /knowledge/doc/comments` — the durable row, as the server sends it. */
+interface StoredCommentWire {
+  id: string;
+  doc_id: string;
+  body: string;
+  author: string;
+  created_at: string;
+}
+
+// ─── Comments: SSE-authoritative, gateway chat merged in when live ──────
   const sseComments = useMemo(() => commentsForDoc(sseEvents, node.id), [sseEvents, node.id]);
   const channelComments = useMemo<KnowledgeCommentItem[]>(
     () => (chat?.messages ?? []).map((m) => ({
@@ -456,7 +466,25 @@ export function DocPane({ node, mode, sseEvents, sseConnected, sseGapped, onTree
     })),
     [chat?.messages],
   );
-  const mergedComments = useMemo(() => mergeComments(sseComments, channelComments), [sseComments, channelComments]);
+  // The durable thread. Without this the pane only ever showed comments that
+  // arrived while this tab was open, so a reload emptied it and the drawer
+  // then said "No comments on this document yet" about a comment the reader
+  // had just written.
+  const storedFetch = useFetch<{ comments: StoredCommentWire[] }>(
+    `/api/assessment/knowledge/doc/comments?id=${encodeURIComponent(node.id)}`,
+  );
+  const storedComments = useMemo<KnowledgeCommentItem[]>(
+    () => (storedFetch.data?.comments ?? []).map((c) => ({
+      id: c.id, clientId: c.author, content: c.body, timestamp: c.created_at, displayName: c.author,
+    })),
+    [storedFetch.data],
+  );
+  const liveComments = useMemo(
+    () => mergeComments(sseComments, channelComments), [sseComments, channelComments],
+  );
+  const mergedComments = useMemo(
+    () => withStoredComments(storedComments, liveComments), [storedComments, liveComments],
+  );
 
   // ─── Presence: SSE-authoritative, gateway peers folded in by `sub` ──────
   const sseViewers = useMemo(() => latestPresenceForDoc(sseEvents, node.id), [sseEvents, node.id]);

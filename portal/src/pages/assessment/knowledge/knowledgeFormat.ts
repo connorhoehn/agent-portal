@@ -655,6 +655,30 @@ const COMMENT_DEDUPE_WINDOW_MS = 15_000;
  * the channel carries that SSE never heard about (a peer on the channel
  * this app's own comment box never touched) still comes through.
  */
+/**
+ * Fold the DURABLE thread in under the live ones.
+ *
+ * `GET /knowledge/doc/comments` is the authoritative list — it survives a
+ * reload, which neither the SSE echoes (this session only) nor the gateway
+ * channel (offline here) do. It goes first so a reader sees the real thread,
+ * and the live sources are merged on top for anything that has arrived since
+ * the fetch.
+ *
+ * Dedupe is by ID and exact, unlike `mergeComments`'s content+time window: a
+ * stored comment and its own SSE echo now carry the SAME id, because the
+ * provider mints one and uses it for both the row and the event. The window
+ * heuristic is still needed for the CHANNEL, whose ids come from a different
+ * namespace entirely.
+ */
+export function withStoredComments(
+  stored: KnowledgeCommentItem[], live: KnowledgeCommentItem[],
+): KnowledgeCommentItem[] {
+  const seen = new Set(stored.map((c) => c.id));
+  const merged = [...stored, ...live.filter((c) => !seen.has(c.id))];
+  merged.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+  return merged;
+}
+
 export function mergeComments(
   sseComments: KnowledgeCommentItem[], channelMessages: KnowledgeCommentItem[],
 ): KnowledgeCommentItem[] {

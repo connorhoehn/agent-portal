@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-09-18T12:18:42.833Z",
-  "serverHandlerSha": "dbf1da42e87d414dafbe546960bb171ccd5b462acd1ae82b396c5416e4494ff1",
+  "capturedAt": "2026-09-18T12:48:42.858Z",
+  "serverHandlerSha": "3d0707cf3e3e412c35a2fdd13469c62fb89c95291e649d3727b8714d2daddd75",
   "baseUrl": "http://127.0.0.1:3012",
   "personas": [
     "orgiq/admin",
@@ -36,6 +36,7 @@
           "assessment-configuration",
           "assessment-evidence-log",
           "assessment-feedback",
+          "assessment-knowledge-comments",
           "assessment-knowledge-docs",
           "assessment-knowledge-sections",
           "assessment-knowledge-versions",
@@ -165,6 +166,7 @@
           "assessment-configuration",
           "assessment-evidence-log",
           "assessment-feedback",
+          "assessment-knowledge-comments",
           "assessment-knowledge-docs",
           "assessment-knowledge-sections",
           "assessment-knowledge-versions",
@@ -792,6 +794,15 @@
           "internal"
         ]
       }
+    },
+    "GET /api/assessment/knowledge/doc/comments": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "comments": "array"
+      },
+      "values": {}
     },
     "GET /api/assessment/knowledge/doc/version": {
       "skipped": "HTTP 400 (orgiq/admin); HTTP 400 (assessment/admin); HTTP 403 (anonymous)"

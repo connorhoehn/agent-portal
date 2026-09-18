@@ -1168,6 +1168,21 @@ export async function renameKnowledgeNodeRow(id: string, title: string): Promise
   );
 }
 
+/** Oldest first — a thread reads top-down, and the pane does not re-sort. */
+export async function fetchKnowledgeComments(docId: string): Promise<M.KnowledgeComment[]> {
+  const rows = await exec(
+    `SELECT id, doc_id, body, author, created_at::text AS created_at
+       FROM assessment_knowledge_comments
+      WHERE doc_id = :doc
+      ORDER BY created_at ASC, id ASC`,
+    [s('doc', docId)],
+  );
+  return rows.map((r) => ({
+    id: toStr(r['id']), doc_id: toStr(r['doc_id']), body: toStr(r['body']),
+    author: toStr(r['author']), created_at: toStr(r['created_at']),
+  }));
+}
+
 export async function insertKnowledgeComment(id: string, docId: string, body: string, author: string, createdAt: string): Promise<void> {
   await exec(
     `INSERT INTO assessment_knowledge_comments (id, doc_id, body, author, created_at)
