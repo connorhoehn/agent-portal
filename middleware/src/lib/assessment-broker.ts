@@ -27,6 +27,7 @@ export type AssessmentEvent =
   | { type: 'knowledge.pulled'; section: string; pages: number; files_pulled: number; ts: string }
   | { type: 'knowledge.published'; id: string; page_id: string; version: number; ts: string }
   | { type: 'knowledge.doc.saved'; id: string; stamp: string; by: string; ts: string }
+  | { type: 'knowledge.moved'; id: string; parent_id: string | null; position: number; by: string; ts: string }
   | { type: 'knowledge.comment.created'; id: string; doc_id: string; by: string; body: string; ts: string }
   | { type: 'knowledge.presence'; doc_id: string; viewers: PresenceViewer[]; ts: string }
   | { type: 'run.started'; run_id: string; command: string; team_id: string | null; ts: string }
@@ -63,6 +64,7 @@ export interface BufferedAssessmentEvent {
 //   knowledge.presence          -> presence:<doc_id>
 //   knowledge.doc.saved         -> doc:<id>
 //   knowledge.published         -> doc:<id>
+//   knowledge.moved             -> doc:<id>
 //   knowledge.comment.created   -> doc:<doc_id>
 //   knowledge.pulled            -> pull:<section>
 //   run.progress                -> run-progress:<run_id>
@@ -137,6 +139,7 @@ export function partitionKeyFor(event: AssessmentEvent): string {
     case 'knowledge.presence': return `presence:${event.doc_id}`;
     case 'knowledge.doc.saved': return `doc:${event.id}`;
     case 'knowledge.published': return `doc:${event.id}`;
+    case 'knowledge.moved': return `doc:${event.id}`;
     case 'knowledge.comment.created': return `doc:${event.doc_id}`;
     case 'knowledge.pulled': return `pull:${event.section}`;
     case 'run.progress': return `run-progress:${event.run_id}`;

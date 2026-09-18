@@ -995,6 +995,42 @@ export const WRITE_SPECS: readonly WriteSpec[] = [
     },
   },
   {
+    route: 'POST /api/assessment/knowledge/doc/move',
+    persona: 'assessment/admin',
+    safe:
+      'A NO-OP move: it sends the node’s own current parent and its own current ' +
+      'index among that parent’s children, so the registered sections fixture ends ' +
+      'byte-identical while the whole reparent path — validation, splice, reinsert, ' +
+      'event — actually runs. Choosing any other target would reorder the tree and ' +
+      'leave the next capture reading a different seed.',
+    bodyFrom:
+      'routes/assessment.ts: `id`, `parentId` and `position`. All three are read off ' +
+      'GET /api/assessment/knowledge/tree — the id and parent from the node itself, the ' +
+      'position by counting its siblings in the section’s own array order, which is ' +
+      'exactly how the provider derives sibling order.',
+    build: async (ctx) => {
+      const tree = await ctx.get('/api/assessment/knowledge/tree');
+      const sections = objectsWith(tree, 'sections')[0]?.['sections'];
+      if (!Array.isArray(sections)) return unsynthesisable('GET /api/assessment/knowledge/tree returned no sections');
+      for (const section of sections as Array<Record<string, unknown>>) {
+        // Only a local section accepts a move at all; a synced one 409s by design.
+        if (section['kind'] !== 'local') continue;
+        const nodes = section['nodes'];
+        if (!Array.isArray(nodes) || nodes.length === 0) continue;
+        const node = (nodes as Array<Record<string, unknown>>).find((n) => n['is_dir'] !== true);
+        if (!node) continue;
+        const parentId = (node['parent_id'] ?? null) as string | null;
+        const siblings = (nodes as Array<Record<string, unknown>>)
+          .filter((n) => (n['parent_id'] ?? null) === parentId);
+        const position = siblings.findIndex((n) => n['id'] === node['id']);
+        const id = node['id'];
+        if (position < 0 || typeof id !== 'string') continue;
+        return { id, parentId, position };
+      }
+      return unsynthesisable('GET /api/assessment/knowledge/tree listed no movable node in a local section');
+    },
+  },
+  {
     route: 'POST /api/assessment/knowledge/doc/restore',
     persona: 'assessment/admin',
     safe: 'Restores a document to a version the server itself lists, inside the registered docs/versions fixtures.',

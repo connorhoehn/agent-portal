@@ -94,9 +94,16 @@ interface UiTreeNode {
   badge?: ReactNode;
 }
 
-function sectionTreeNodes(section: KnowledgeSection, activityCount: number, view: MainView): UiTreeNode[] {
+function sectionTreeNodes(
+  section: KnowledgeSection, activityCount: number, view: MainView,
+  moveStatus: Record<string, 'pending' | 'moved'> = {},
+): UiTreeNode[] {
   const base: UiTreeNode[] = section.nodes.map((n) => ({
     id: n.id, title: n.title, parentId: n.parent_id, isDir: n.is_dir,
+    // TreeView draws `pending` translucent + aria-busy and flashes `moved`
+    // when it lands. The library is explicit that it cannot know when a server
+    // answered, so the host owns both edges of that window.
+    ...(moveStatus[n.id] ? { status: moveStatus[n.id] } : {}),
   }));
   if (section.kind !== 'synced') return base;
   const activityActive = view.kind === 'activity' && view.sectionKey === section.key;
@@ -180,6 +187,40 @@ export function KnowledgeExplorer({ mode }: KnowledgeExplorerProps) {
   const sse = useAssessmentEvents();
 
   const treeFetch = useFetch<KnowledgeTreeResponse>('/api/assessment/knowledge/tree');
+  const { can: canDo } = useCapabilities();
+
+  // Drag-and-drop reparenting. `TreeView` has carried `onReorder` all along —
+  // passing it is what turns the drag handlers on — and until
+  // POST /knowledge/doc/move existed there was nowhere to put the result, so
+  // no handler was passed and the tree was inert.
+  //
+  // Only LOCAL sections get the handler. A synced section mirrors Confluence
+  // and the server refuses those with a 409, but an affordance that always
+  // fails is worse than no affordance: the drop target should not light up for
+  // a move that cannot happen.
+  const [moveStatus, setMoveStatus] = useState<Record<string, 'pending' | 'moved'>>({});
+  const [moveError, setMoveError] = useState<string | null>(null);
+
+  async function handleReorder(id: string, targetParentId: string | null, position: number) {
+    setMoveError(null);
+    setMoveStatus((m) => ({ ...m, [id]: 'pending' }));
+    try {
+      await sendJson('/api/assessment/knowledge/doc/move', 'POST', { id, parentId: targetParentId, position });
+      await treeFetch.refresh();
+      setMoveStatus((m) => ({ ...m, [id]: 'moved' }));
+      // Long enough to read as a landing, short enough not to linger as state.
+      window.setTimeout(() => {
+        setMoveStatus((m) => { const next = { ...m }; delete next[id]; return next; });
+      }, 1200);
+    } catch (err) {
+      // The refusals are the interesting half and each names a reason —
+      // "mirrors confluence", "publish it instead", "is not a folder". Show
+      // the server's sentence rather than "move failed", and drop the pending
+      // paint so the row stops looking like it is still going somewhere.
+      setMoveStatus((m) => { const next = { ...m }; delete next[id]; return next; });
+      setMoveError(err instanceof Error ? err.message : 'the move could not be saved');
+    }
+  }
   // Activity does: GET /runs is a real, contracted endpoint. Only fetched in
   // Workspace mode, the only mode with a synced section to show it for.
   const runsFetch = useFetch<unknown>(mode === 'workspace' ? '/api/assessment/runs?limit=20' : null);
@@ -229,6 +270,18 @@ export function KnowledgeExplorer({ mode }: KnowledgeExplorerProps) {
 
   const rail = (
     <>
+      {/* Why a move was refused, in the server's own words. Each refusal names
+          something the reader can act on — which remote owns that subtree, or
+          that publish is the way a doc leaves local — so a generic "move
+          failed" would throw away the whole value of the check. Dismisses on
+          the next drag. */}
+      {moveError && (
+        <ErrorState
+          title="That move was not allowed"
+          body={moveError}
+          action={<Button size="sm" variant="ghost" onClick={() => setMoveError(null)}>Dismiss</Button>}
+        />
+      )}
       {treeFetch.isLoading && <LoadingState label="Loading…" />}
       {treeFetch.error && <ErrorState title="Couldn't load the document library" body={treeFetch.error} />}
       {!treeFetch.isLoading && !treeFetch.error && sections.length === 0 && (
@@ -255,9 +308,12 @@ export function KnowledgeExplorer({ mode }: KnowledgeExplorerProps) {
               ) : (
                 <KeyboardTreeView
                   data-testid={`section-tree-${section.key}`}
-                  nodes={sectionTreeNodes(section, activityCount, view)}
+                  nodes={sectionTreeNodes(section, activityCount, view, moveStatus)}
                   selectedId={selectedTreeIdFor(section, selectedId, view)}
                   onSelect={(id: string) => handleTreeSelect(section, id)}
+                  {...(section.kind === 'local' && canDo('ManageKnowledge')
+                    ? { onReorder: handleReorder }
+                    : {})}
                 />
               )}
             </Stack>

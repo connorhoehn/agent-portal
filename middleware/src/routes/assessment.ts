@@ -681,6 +681,25 @@ assessmentRouter.put('/knowledge/doc', knowledgeGate, asyncHandler(async (req, r
   res.json(result);
 }));
 
+// Reparents / reorders one node. This is what `TreeView`'s `onReorder` needs
+// to exist for — the library has shipped drag-and-drop the whole time and had
+// nowhere to put the result. Refuses a move inside a synced section, across
+// sections, onto a leaf, or into the node's own subtree; each of those would
+// leave the tree saying something untrue (see the provider for which).
+assessmentRouter.post('/knowledge/doc/move', knowledgeGate, asyncHandler(async (req, res) => {
+  const body = req.body as { id?: string; parentId?: string | null; position?: number };
+  if (!body.id) throw new ValidationError('id is required');
+  if (body.parentId !== null && typeof body.parentId !== 'string') {
+    throw new ValidationError('parentId is required (null for the section root)');
+  }
+  if (typeof body.position !== 'number') throw new ValidationError('position is required');
+  const result = await provider.moveKnowledgeNode(
+    body.id, body.parentId, body.position, req.session?.sub ?? 'unknown',
+  );
+  if (!result.ok) { res.status(result.status).json({ error: result.reason }); return; }
+  res.json(result);
+}));
+
 // Pushes one local doc up into the synced section — "publish" is always
 // explicit, never implied by a save (docs/assessment-tenant.md "Workspace
 // page"). Fires knowledge.published; the tree refetches once the portal sees

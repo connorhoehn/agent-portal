@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-09-18T08:03:03.608Z",
-  "serverHandlerSha": "6ef348d50e9e35d13300073b87dbb9231a5c2620b95850a19f8b3523e5086486",
+  "capturedAt": "2026-09-18T09:52:20.157Z",
+  "serverHandlerSha": "ff4576dfac96d4f889326e7a7836d7e6b9c3ca17ce997b1740a464327ee2d27b",
   "baseUrl": "http://127.0.0.1:3012",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
@@ -890,6 +890,28 @@
       "sent": [
         "body",
         "id"
+      ]
+    },
+    "POST /api/assessment/knowledge/doc/move": {
+      "persona": "assessment/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "id": "string",
+        "ok": "boolean",
+        "parent_id": "string",
+        "position": "number",
+        "section": "string"
+      },
+      "values": {
+        "section": [
+          "enterprise_context"
+        ]
+      },
+      "sent": [
+        "id",
+        "parentId",
+        "position"
       ]
     },
     "POST /api/assessment/knowledge/doc/publish": {

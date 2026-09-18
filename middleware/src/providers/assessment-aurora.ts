@@ -1124,6 +1124,42 @@ export async function upsertPublishedPageNode(
   return toNum(rows[0]?.['version'], 1);
 }
 
+/**
+ * Moves one node and renumbers the destination's children so `position` stays
+ * dense. Two statements rather than one because the row being moved may be
+ * leaving the same parent it is joining (a pure reorder), and renumbering
+ * after the update keeps that case from needing its own branch. Returns the
+ * position the row actually landed on, which is the clamp of what was asked.
+ */
+export async function moveKnowledgeNodeRow(
+  id: string, parentId: string | null, position: number,
+): Promise<number> {
+  await exec(
+    `UPDATE assessment_knowledge_nodes
+        SET parent_id = :parent, position = :pos, version = version + 1
+      WHERE id = :id`,
+    [s('id', id), parentId === null ? nul('parent') : s('parent', parentId), int('pos', position)],
+  );
+  const rows = await exec(
+    `WITH ordered AS (
+       SELECT id, ROW_NUMBER() OVER (
+                ORDER BY position, CASE WHEN id = :id THEN 0 ELSE 1 END, id
+              ) - 1 AS rn
+         FROM assessment_knowledge_nodes
+        WHERE section_key = (SELECT section_key FROM assessment_knowledge_nodes WHERE id = :id)
+          AND parent_id IS NOT DISTINCT FROM (SELECT parent_id FROM assessment_knowledge_nodes WHERE id = :id)
+     )
+     UPDATE assessment_knowledge_nodes t
+        SET position = o.rn
+       FROM ordered o
+      WHERE t.id = o.id
+     RETURNING t.id, t.position`,
+    [s('id', id)],
+  );
+  const landed = rows.find((r) => toStr(r['id']) === id);
+  return toNum(landed?.['position'], position);
+}
+
 export async function insertKnowledgeComment(id: string, docId: string, body: string, author: string, createdAt: string): Promise<void> {
   await exec(
     `INSERT INTO assessment_knowledge_comments (id, doc_id, body, author, created_at)

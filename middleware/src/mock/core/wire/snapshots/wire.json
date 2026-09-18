@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-09-18T08:03:02.881Z",
-  "serverHandlerSha": "6ef348d50e9e35d13300073b87dbb9231a5c2620b95850a19f8b3523e5086486",
+  "capturedAt": "2026-09-18T09:48:10.414Z",
+  "serverHandlerSha": "ff4576dfac96d4f889326e7a7836d7e6b9c3ca17ce997b1740a464327ee2d27b",
   "baseUrl": "http://127.0.0.1:3012",
   "personas": [
     "orgiq/admin",
@@ -4450,8 +4450,28 @@
       },
       "values": {
         "events[].action": [
+          "ApproveException",
+          "ApproveTransaction",
+          "ConnectLocalCompute",
+          "DispatchAgentRun",
+          "EditGuardrail",
+          "LabelFeedback",
           "Login",
+          "ManageAssessmentConfig",
+          "ManageBots",
+          "ManageBudgets",
+          "ManageCanary",
+          "ManageDevbox",
+          "ManageEnvironments",
           "ManageIngest",
+          "ManageKB",
+          "ManageKnowledge",
+          "ManageSprints",
+          "ManageSubmissions",
+          "ManageUsers",
+          "PublishReport",
+          "RunAssessmentAgent",
+          "ScoreAssessment",
           "ViewAssessment",
           "ViewIdentityAdmin",
           "ViewLeaderboard",
@@ -4465,6 +4485,7 @@
           "admin"
         ],
         "events[].tenant": [
+          "assessment",
           "orgiq"
         ]
       }
@@ -4636,9 +4657,31 @@
       "status": 200,
       "shape": {
         "$": "object",
-        "events": "array"
+        "events": "array",
+        "events[]": "object",
+        "events[].detail": "object",
+        "events[].detail.agentName": "string",
+        "events[].detail.bytes": "number",
+        "events[].detail.codeSnippet": "string",
+        "events[].detail.language": "string",
+        "events[].detail.outputSnippet": "string",
+        "events[].detail.pageTitle": "string",
+        "events[].detail.url": "string",
+        "events[].durationMs": "number",
+        "events[].id": "string",
+        "events[].kind": "string",
+        "events[].ok": "boolean",
+        "events[].sessionId": "string",
+        "events[].startedAt": "string"
       },
-      "values": {}
+      "values": {
+        "events[].kind": [
+          "browser_launch",
+          "browser_navigate",
+          "browser_screenshot",
+          "code_execute"
+        ]
+      }
     },
     "GET /api/observability/cost/a2a-overhead": {
       "persona": "orgiq/admin",
@@ -4937,7 +4980,7 @@
         "points[].bucketStart": "string",
         "points[].count": "number",
         "points[].driftP95": "number",
-        "points[].judgeP50": "null|number",
+        "points[].judgeP50": "number",
         "windowHours": "number"
       },
       "values": {}
@@ -6774,9 +6817,29 @@
       "open": false,
       "values": [
         "ANONYMIZE",
+        "ApproveException",
+        "ApproveTransaction",
         "BLOCK",
+        "ConnectLocalCompute",
+        "DispatchAgentRun",
+        "EditGuardrail",
+        "LabelFeedback",
         "Login",
+        "ManageAssessmentConfig",
+        "ManageBots",
+        "ManageBudgets",
+        "ManageCanary",
+        "ManageDevbox",
+        "ManageEnvironments",
         "ManageIngest",
+        "ManageKB",
+        "ManageKnowledge",
+        "ManageSprints",
+        "ManageSubmissions",
+        "ManageUsers",
+        "PublishReport",
+        "RunAssessmentAgent",
+        "ScoreAssessment",
         "ViewAssessment",
         "ViewIdentityAdmin",
         "ViewLeaderboard",
@@ -6854,8 +6917,12 @@
         "answer",
         "artifact",
         "blocked",
+        "browser_launch",
+        "browser_navigate",
+        "browser_screenshot",
         "clarification",
         "close_claim",
+        "code_execute",
         "comment",
         "confluence",
         "convention",

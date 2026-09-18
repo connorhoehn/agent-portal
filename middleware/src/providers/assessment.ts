@@ -3074,6 +3074,118 @@ export async function pullKnowledgeSection(sectionKey: string): Promise<PullSect
 
 export type PublishDocResult = { ok: true; page_id: string; version: number } | { ok: false; status: 404; reason: string };
 
+export type MoveNodeResult =
+  | { ok: true; id: string; parent_id: string | null; position: number; section: string }
+  | { ok: false; status: 400 | 404 | 409; reason: string };
+
+/**
+ * Reparents / reorders one node in the knowledge tree.
+ *
+ * The library's `TreeView` has shipped HTML5 drag-and-drop the whole time —
+ * passing `onReorder` turns it on, and `TreeNode.status` ('pending' | 'moved')
+ * exists so a host can draw the optimistic state while the server answers.
+ * What was missing was somewhere to put the move, which is this.
+ *
+ * Four things are refused rather than quietly allowed, because each one would
+ * make the tree tell a lie:
+ *
+ *  - a SYNCED section is a read-only mirror of Confluence. Dragging a page
+ *    inside it would move something here and nowhere else, and the next pull
+ *    would silently undo it. The user asked for this "assuming there is a
+ *    remote source of course" — there is, and it owns that subtree.
+ *  - crossing sections, for the same reason in reverse: `publish` is the one
+ *    sanctioned way a doc leaves local, and it mints a page rather than
+ *    relocating a file.
+ *  - dropping a node onto its own descendant, which detaches the subtree from
+ *    the root and makes it unreachable.
+ *  - dropping into a leaf: only a directory can be a parent.
+ *
+ * Sibling order is the section array's own order filtered by parent, so a move
+ * is a splice rather than a `position` column to keep in step; the Aurora path
+ * does carry a real `position` and renumbers the destination's children.
+ */
+export async function moveKnowledgeNode(
+  id: string, targetParentId: string | null, position: number, actor = 'unknown',
+): Promise<MoveNodeResult> {
+  if (!Number.isInteger(position) || position < 0) {
+    return { ok: false, status: 400, reason: 'position must be a non-negative integer' };
+  }
+  if (id === targetParentId) return { ok: false, status: 409, reason: 'a node cannot be its own parent' };
+
+  if (!config.mock.aurora) {
+    const node = await A.fetchKnowledgeNode(id);
+    if (!node) return { ok: false, status: 404, reason: `node "${id}" not found` };
+    const sections = await A.fetchKnowledgeTree();
+    const verdict = checkMove(sections, id, targetParentId);
+    if (!verdict.ok) return verdict;
+    const at = await A.moveKnowledgeNodeRow(id, targetParentId, position);
+    assessmentBroker.publish({
+      type: 'knowledge.moved', id, parent_id: targetParentId, position: at, by: actor,
+      ts: new Date().toISOString(),
+    });
+    return { ok: true, id, parent_id: targetParentId, position: at, section: verdict.section };
+  }
+
+  const sections = M.knowledgeSections();
+  const verdict = checkMove(sections, id, targetParentId);
+  if (!verdict.ok) return verdict;
+  const section = sections.find((sec) => sec.key === verdict.section)!;
+
+  const nodes = section.nodes;
+  const from = nodes.findIndex((n) => n.id === id);
+  const [moved] = nodes.splice(from, 1);
+  moved!.parent_id = targetParentId;
+
+  // Where the `position`-th child of the new parent starts in the flat array.
+  const siblings = nodes.filter((n) => n.parent_id === targetParentId);
+  const clamped = Math.min(position, siblings.length);
+  const insertAt = clamped === siblings.length
+    ? (siblings.length === 0
+        // First child of this parent: sit directly after the parent row, or at
+        // the head of the section when the parent is the section root.
+        ? (targetParentId === null ? 0 : nodes.findIndex((n) => n.id === targetParentId) + 1)
+        : nodes.indexOf(siblings[siblings.length - 1]!) + 1)
+    : nodes.indexOf(siblings[clamped]!);
+  nodes.splice(insertAt, 0, moved!);
+
+  assessmentBroker.publish({
+    type: 'knowledge.moved', id, parent_id: targetParentId, position: clamped, by: actor,
+    ts: new Date().toISOString(),
+  });
+  return { ok: true, id, parent_id: targetParentId, position: clamped, section: section.key };
+}
+
+/** The rules, shared by both paths so they cannot drift apart. */
+function checkMove(
+  sections: M.KnowledgeSection[], id: string, targetParentId: string | null,
+): { ok: true; section: string } | { ok: false; status: 400 | 404 | 409; reason: string } {
+  const section = sections.find((sec) => sec.nodes.some((n) => n.id === id));
+  if (!section) return { ok: false, status: 404, reason: `node "${id}" not found` };
+  if (section.kind !== 'local') {
+    return {
+      ok: false, status: 409,
+      reason: `"${section.title}" mirrors ${section.provider ?? 'a remote source'}; move it there, not here`,
+    };
+  }
+  if (targetParentId !== null) {
+    const parent = section.nodes.find((n) => n.id === targetParentId);
+    if (!parent) {
+      const elsewhere = sections.some((sec) => sec.nodes.some((n) => n.id === targetParentId));
+      return elsewhere
+        ? { ok: false, status: 409, reason: 'a node cannot move between sections — publish it instead' }
+        : { ok: false, status: 404, reason: `parent "${targetParentId}" not found` };
+    }
+    if (!parent.is_dir) return { ok: false, status: 409, reason: `"${parent.title}" is not a folder` };
+    // Walk up from the target: meeting the moved node means the drop is inside
+    // its own subtree, which would orphan everything under it.
+    for (let p: string | null = targetParentId; p !== null; ) {
+      if (p === id) return { ok: false, status: 409, reason: 'a node cannot move inside itself' };
+      p = section.nodes.find((n) => n.id === p)?.parent_id ?? null;
+    }
+  }
+  return { ok: true, section: section.key };
+}
+
 /**
  * Publishes one editable local doc up into the synced section as a page —
  * the "draft-confluence-page, then a human publishes it" flow
