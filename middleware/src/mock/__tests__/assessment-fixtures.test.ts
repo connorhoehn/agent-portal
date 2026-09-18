@@ -404,3 +404,55 @@ describe('rubric: the dimensions carry the whole rubric', () => {
     }
   });
 });
+
+// ── The evidence policy an assessor works by ────────────────────────────────
+//
+// The rubric's `general_guidance` — 17 concrete evidence types and the rule
+// that verbal confirmation alone cannot carry a dimension above Level 1 — was
+// carried nowhere in this app. An assessor had no surface that said what an
+// artifact has to BE to count, only how much weight a class of evidence gets
+// once accepted (rule:evidence-classification.md, which is a different
+// question and stays).
+//
+// The source YAML has a data bug this doc has to survive: a missing list
+// separator welds the standalone rule onto the last evidence type, so
+// `evidence_types[16]` reads "Post-incident review actions Verbal confirmation
+// alone should not be considered sufficient evidence above Level 1." The same
+// sentence is also `notes[1]`, correctly. The port splits them and renders the
+// rule once, as a rule. These pin that: the list ends with a real evidence
+// type, and the sentence appears exactly once.
+describe('rules: what counts as evidence', () => {
+  const doc = () => M.knowledgeDocs().find((d) => d.id === 'rule:what-counts-as-evidence.md');
+  const RULE = 'Verbal confirmation alone should not be considered sufficient evidence above Level 1.';
+
+  it('exists in the rules section and in the tree', () => {
+    expect(doc()).toBeDefined();
+    const inTree = M.knowledgeSections()
+      .find((s) => s.key === 'rules')?.nodes
+      .some((n) => n.id === 'rule:what-counts-as-evidence.md');
+    expect(inTree).toBe(true);
+  });
+
+  it('carries all seventeen evidence types', () => {
+    const md = doc()!.markdown;
+    const bullets = md.split('\n').filter((l) => l.startsWith('- '));
+    expect(bullets.length).toBe(17);
+    // A few spot anchors from across the list, so a truncated port is caught.
+    expect(md).toContain('- GitLab repository links');
+    expect(md).toContain('- SBOMs');
+    expect(md).toContain('- Architecture Decision Records (ADRs)');
+  });
+
+  it('does not weld the rule onto the last evidence type', () => {
+    const md = doc()!.markdown;
+    const bullets = md.split('\n').filter((l) => l.startsWith('- '));
+    expect(bullets[bullets.length - 1]).toBe('- Post-incident review actions');
+    for (const b of bullets) expect(b).not.toContain('Verbal confirmation');
+  });
+
+  it('states the rule exactly once, and as a rule rather than a list item', () => {
+    const md = doc()!.markdown;
+    expect(md.split(RULE).length - 1).toBe(1);
+    expect(md).toContain(`**${RULE}**`);
+  });
+});

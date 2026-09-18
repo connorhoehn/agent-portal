@@ -8493,6 +8493,16 @@ const seedKnowledgeSections = (): KnowledgeSection[] => [
     "updated_at": hoursAgo(6)
    },
    {
+    "id": "rule:what-counts-as-evidence.md",
+    "title": "What Counts as Evidence",
+    "parent_id": null,
+    "is_dir": false,
+    "classification": "internal",
+    "editable": true,
+    "viewable": true,
+    "updated_at": daysAgo(30)
+   },
+   {
     "id": "rule:evidence-classification.md",
     "title": "Evidence Classification",
     "parent_id": null,
@@ -8745,6 +8755,15 @@ const seedKnowledgeDocs = (): Record<string, KnowledgeDoc> => ({
   "editable": true,
   "path": "rules/scoring-guardrails.md",
   "updated_at": hoursAgo(6)
+ },
+  "rule:what-counts-as-evidence.md": {
+  "id": "rule:what-counts-as-evidence.md",
+  "title": "What Counts as Evidence",
+  "classification": "internal",
+  "markdown": "# What Counts as Evidence\n\nFor all dimensions, evidence should be concrete and reviewable. Acceptable evidence may include:\n\n- GitLab repository links\n- README files\n- Merge requests\n- Pipeline run history\n- Ansible playbooks\n- PowerShell scripts\n- Terraform modules\n- Confluence pages\n- SharePoint documentation\n- ServiceNow records\n- Splunk, CloudWatch, Dynatrace, or Grafana dashboards\n- Security scan results\n- SBOMs\n- Runbooks\n- Architecture Decision Records (ADRs)\n- Operational checklists\n- Post-incident review actions\n\n**Verbal confirmation alone should not be considered sufficient evidence above Level 1.**\n",
+  "editable": true,
+  "path": "rules/what-counts-as-evidence.md",
+  "updated_at": daysAgo(30)
  },
  "rule:evidence-classification.md": {
   "id": "rule:evidence-classification.md",
