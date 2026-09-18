@@ -35,9 +35,11 @@ import {
   LoadingState,
   RailSection,
   Stack,
+  T,
   VisuallyHidden,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useGateway, usePresence } from '@connorhoehnslalom/realtime-modules/client';
+import { relativeTime } from '../../../lib/relativeTime';
 import { useFetch } from '../../../hooks/useFetch';
 import { useCapabilities } from '../../../lib/capabilities';
 import { sendJson } from '../../../lib/writeJson';
@@ -134,12 +136,28 @@ function SectionPresenceBadge({ sectionKey }: { sectionKey: string }) {
   return <Chip size="xs" tone="neutral">{roster.length} viewing</Chip>;
 }
 
-function SectionPullControl({ sectionKey, sseEvents, onTreeChanged }: {
+/**
+ * How long to keep saying "Pulling…" before admitting we have not heard back.
+ *
+ * The route answers 202 and the real work lands later as a `knowledge.pulled`
+ * event, so the only thing that ends the spinner is an event arriving. If one
+ * never does — the gateway is down, the event was dropped, or the server's own
+ * deferred touch returned without publishing (the Aurora path bails on
+ * `if (!updated) return`) — the button stayed disabled and said "Pulling…"
+ * forever, which is a claim that work is in progress that nobody can support.
+ * After the deadline it stops claiming that and says what is actually known:
+ * the pull was accepted, the result never came back.
+ */
+const PULL_DEADLINE_MS = 30_000;
+
+function SectionPullControl({ sectionKey, sseEvents, onTreeChanged, section }: {
   sectionKey: string; sseEvents: AssessmentSSEEvent[]; onTreeChanged: () => void;
+  section: KnowledgeSection;
 }) {
   const { can, ready } = useCapabilities();
   const [pulling, setPulling] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [silent, setSilent] = useState(false);
   const requestedAtRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -151,10 +169,23 @@ function SectionPullControl({ sectionKey, sseEvents, onTreeChanged }: {
     }
   }, [sseEvents, pulling, sectionKey, onTreeChanged]);
 
+  // The deadline. Refetch once on the way out: the pull may well have landed
+  // and only its event gone missing, in which case the tree is the evidence.
+  useEffect(() => {
+    if (!pulling) return;
+    const id = window.setTimeout(() => {
+      setPulling(false);
+      setSilent(true);
+      onTreeChanged();
+    }, PULL_DEADLINE_MS);
+    return () => window.clearTimeout(id);
+  }, [pulling, onTreeChanged]);
+
   if (!ready || !can('ManageKnowledge')) return null;
 
   const handlePull = async () => {
     setError(null);
+    setSilent(false);
     requestedAtRef.current = new Date().toISOString();
     setPulling(true);
     try {
@@ -166,11 +197,23 @@ function SectionPullControl({ sectionKey, sseEvents, onTreeChanged }: {
   };
 
   return (
-    <Inline gap="xs" align="center">
+    <Inline gap="xs" align="center" wrap>
+      {/* What this section actually is, which the rail never said: which remote
+          owns it and when it last moved. `last_pulled_at` is derived from the
+          newest node, so it cannot claim a sync that touched nothing. */}
+      <T className="text-[11px] text-text-tertiary">
+        {section.provider ? `${section.provider} · ` : ''}
+        {section.last_pulled_at ? `pulled ${relativeTime(section.last_pulled_at)}` : 'never pulled'}
+      </T>
       <Button variant="ghost" size="sm" disabled={pulling} onClick={() => void handlePull()}>
         {pulling ? 'Pulling…' : 'Pull'}
       </Button>
-      {error && <Chip size="xs" tone="danger">{error}</Chip>}
+      {error && <T role="alert" className="text-[11px] text-danger">{error}</T>}
+      {silent && !error && (
+        <T role="status" className="text-[11px] text-warning">
+          accepted, but no result came back — the tree may not have changed
+        </T>
+      )}
     </Inline>
   );
 }
@@ -315,7 +358,7 @@ export function KnowledgeExplorer({ mode }: KnowledgeExplorerProps) {
               <Inline justify="between" align="center">
                 <SectionPresenceBadge sectionKey={section.key} />
                 {section.kind === 'synced' && (
-                  <SectionPullControl sectionKey={section.key} sseEvents={sse.events} onTreeChanged={treeFetch.refresh} />
+                  <SectionPullControl section={section} sectionKey={section.key} sseEvents={sse.events} onTreeChanged={treeFetch.refresh} />
                 )}
               </Inline>
               {section.nodes.length === 0 ? (

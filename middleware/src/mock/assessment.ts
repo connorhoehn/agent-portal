@@ -8372,6 +8372,16 @@ export interface KnowledgeSection {
   title: string;
   kind: KnowledgeSectionKind;
   provider?: string;
+  /**
+   * When this section last pulled from its remote, for a SYNCED section only.
+   *
+   * Derived, not stored: a pull touches every node's `updated_at`
+   * (`touchSyncedSectionNodes`), so the newest one IS the pull. That keeps the
+   * claim honest — it cannot say "synced 4m ago" unless rows actually moved —
+   * and needs no column the schema does not have. Absent when the section is
+   * local, or when a synced section has no dated node yet.
+   */
+  last_pulled_at?: string;
   nodes: KnowledgeNode[];
 }
 

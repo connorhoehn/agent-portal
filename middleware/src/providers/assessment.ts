@@ -2887,9 +2887,29 @@ export async function clearSubmissions(
 
 // ─── Knowledge ──────────────────────────────────────────────────────────────
 
+/**
+ * Stamps each SYNCED section with when it last pulled.
+ *
+ * A pull touches every node in the section, so the newest `updated_at` is the
+ * pull. Deriving it here rather than storing it means the rail cannot claim a
+ * sync that did not move any rows — and the alternative, a column, would have
+ * to be written by the same code path that already does the touching.
+ */
+function withSyncStamp(sections: M.KnowledgeSection[]): M.KnowledgeSection[] {
+  return sections.map((sec) => {
+    if (sec.kind !== 'synced') return sec;
+    let newest: string | undefined;
+    for (const n of sec.nodes) {
+      const at = n.updated_at;
+      if (at && (newest === undefined || at > newest)) newest = at;
+    }
+    return newest === undefined ? sec : { ...sec, last_pulled_at: newest };
+  });
+}
+
 export async function getKnowledgeTree(): Promise<{ sections: M.KnowledgeSection[] }> {
-  if (!config.mock.aurora) return { sections: await A.fetchKnowledgeTree() };
-  return { sections: M.knowledgeSections() };
+  if (!config.mock.aurora) return { sections: withSyncStamp(await A.fetchKnowledgeTree()) };
+  return { sections: withSyncStamp(M.knowledgeSections()) };
 }
 
 // Synced Confluence pages are read-only mirrors. In the source app they come

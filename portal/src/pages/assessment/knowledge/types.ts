@@ -39,6 +39,8 @@ export interface KnowledgeSection {
   title: string;
   kind: KnowledgeSectionKind;
   provider?: string;
+  /** When this synced section last pulled; absent for a local section. */
+  last_pulled_at?: string;
   nodes: KnowledgeNode[];
 }
 

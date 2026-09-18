@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-09-18T11:24:14.646Z",
-  "serverHandlerSha": "82315b56da1152e1f1371c5849278ca57eea4f1af87c85adcb1f6789f5cfd114",
+  "capturedAt": "2026-09-18T11:48:56.730Z",
+  "serverHandlerSha": "438999e2ba16f5c2c5af81658931b43261fcf95fc411b8f8c08a1bad098af8d5",
   "baseUrl": "http://127.0.0.1:3012",
   "personas": [
     "orgiq/admin",
@@ -820,6 +820,7 @@
         "sections[]": "object",
         "sections[].key": "string",
         "sections[].kind": "string",
+        "sections[].last_pulled_at": "string",
         "sections[].nodes": "array",
         "sections[].nodes[]": "object",
         "sections[].nodes[].classification": "string",
@@ -1512,6 +1513,7 @@
         "sections[]": "object",
         "sections[].key": "string",
         "sections[].kind": "string",
+        "sections[].last_pulled_at": "string",
         "sections[].nodes": "array",
         "sections[].nodes[]": "object",
         "sections[].nodes[].classification": "string",
