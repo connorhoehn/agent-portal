@@ -1160,6 +1160,14 @@ export async function moveKnowledgeNodeRow(
   return toNum(landed?.['position'], position);
 }
 
+/** Title only — the id is a path other rows and URLs reference, so it stays. */
+export async function renameKnowledgeNodeRow(id: string, title: string): Promise<void> {
+  await exec(
+    `UPDATE assessment_knowledge_nodes SET title = :title, version = version + 1 WHERE id = :id`,
+    [s('id', id), s('title', title)],
+  );
+}
+
 export async function insertKnowledgeComment(id: string, docId: string, body: string, author: string, createdAt: string): Promise<void> {
   await exec(
     `INSERT INTO assessment_knowledge_comments (id, doc_id, body, author, created_at)

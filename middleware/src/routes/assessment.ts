@@ -700,6 +700,18 @@ assessmentRouter.post('/knowledge/doc/move', knowledgeGate, asyncHandler(async (
   res.json(result);
 }));
 
+// Renames one node's display title. The id is a path that the doc, its
+// versions, its comment channel and any shared URL all reference, so a rename
+// deliberately does not touch it — see the provider.
+assessmentRouter.post('/knowledge/doc/rename', knowledgeGate, asyncHandler(async (req, res) => {
+  const body = req.body as { id?: string; title?: string };
+  if (!body.id) throw new ValidationError('id is required');
+  if (typeof body.title !== 'string') throw new ValidationError('title is required');
+  const result = await provider.renameKnowledgeNode(body.id, body.title, req.session?.sub ?? 'unknown');
+  if (!result.ok) { res.status(result.status).json({ error: result.reason }); return; }
+  res.json(result);
+}));
+
 // Pushes one local doc up into the synced section — "publish" is always
 // explicit, never implied by a save (docs/assessment-tenant.md "Workspace
 // page"). Fires knowledge.published; the tree refetches once the portal sees

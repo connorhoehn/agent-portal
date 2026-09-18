@@ -3155,6 +3155,68 @@ export async function moveKnowledgeNode(
   return { ok: true, id, parent_id: targetParentId, position: clamped, section: section.key };
 }
 
+export type RenameNodeResult =
+  | { ok: true; id: string; title: string; section: string }
+  | { ok: false; status: 400 | 404 | 409; reason: string };
+
+/**
+ * Renames one node's display title.
+ *
+ * `TreeViewProps` has no `onRename` — unlike `onReorder`, this one really is
+ * absent from the library — so the affordance is a per-row `renderTrailing`
+ * menu rather than an inline edit. That is the library's own slot, not a
+ * hand-rolled row.
+ *
+ * The id is deliberately NOT derived from the title. Ids here look like paths
+ * (`ec:standards/ci-cd-standards.md`) and they are referenced by the doc
+ * fixture, the versions, the comments channel and any URL someone has already
+ * shared — renaming the display title must not break a bookmark. So a rename
+ * is a title change and nothing else, which also means two siblings COULD end
+ * up sharing a title without colliding. It is still refused: a rail with two
+ * identically-named rows is unreadable even when it is unambiguous underneath.
+ */
+export async function renameKnowledgeNode(
+  id: string, rawTitle: string, actor = 'unknown',
+): Promise<RenameNodeResult> {
+  const title = String(rawTitle ?? '').trim();
+  if (!title) return { ok: false, status: 400, reason: 'a title is required' };
+  if (title.length > 120) return { ok: false, status: 400, reason: 'a title must be 120 characters or fewer' };
+  // A newline would break the single-line row it renders in, and the tab is
+  // here because pasting from a spreadsheet is the usual way one arrives.
+  if (/[\n\r\t]/.test(title)) return { ok: false, status: 400, reason: 'a title must be a single line' };
+
+  const sections = !config.mock.aurora
+    ? await A.fetchKnowledgeTree()
+    : M.knowledgeSections();
+
+  const section = sections.find((sec) => sec.nodes.some((n) => n.id === id));
+  if (!section) return { ok: false, status: 404, reason: `node "${id}" not found` };
+  if (section.kind !== 'local') {
+    return {
+      ok: false, status: 409,
+      reason: `"${section.title}" mirrors ${section.provider ?? 'a remote source'}; rename it there, not here`,
+    };
+  }
+  const node = section.nodes.find((n) => n.id === id)!;
+  if (node.title === title) return { ok: true, id, title, section: section.key };
+
+  const clash = section.nodes.some(
+    (n) => n.id !== id && (n.parent_id ?? null) === (node.parent_id ?? null) && n.title === title,
+  );
+  if (clash) return { ok: false, status: 409, reason: `a sibling is already called "${title}"` };
+
+  if (!config.mock.aurora) {
+    await A.renameKnowledgeNodeRow(id, title);
+  } else {
+    node.title = title;
+  }
+
+  assessmentBroker.publish({
+    type: 'knowledge.renamed', id, title, by: actor, ts: new Date().toISOString(),
+  });
+  return { ok: true, id, title, section: section.key };
+}
+
 /** The rules, shared by both paths so they cannot drift apart. */
 function checkMove(
   sections: M.KnowledgeSection[], id: string, targetParentId: string | null,

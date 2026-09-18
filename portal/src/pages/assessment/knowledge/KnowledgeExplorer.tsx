@@ -45,6 +45,7 @@ import { DocPane, FolderPane } from './DocPane';
 import { ActivityBar } from './ActivityBar';
 import { ExplorerFrame } from './ExplorerFrame';
 import { KeyboardTreeView } from './KeyboardTreeView';
+import { RenameNodeDialog, RowActionsMenu } from './RenameNodeDialog';
 import { useAssessmentEvents } from './useAssessmentEvents';
 import {
   MODE_LABEL,
@@ -200,6 +201,15 @@ export function KnowledgeExplorer({ mode }: KnowledgeExplorerProps) {
   // a move that cannot happen.
   const [moveStatus, setMoveStatus] = useState<Record<string, 'pending' | 'moved'>>({});
   const [moveError, setMoveError] = useState<string | null>(null);
+  const [renaming, setRenaming] = useState<{ id: string; title: string } | null>(null);
+
+  // Rename goes through the row's trailing menu because `TreeViewProps` has no
+  // `onRename` — see RenameNodeDialog.tsx. The dialog surfaces the refusal
+  // itself, so this only has to refetch on success.
+  async function handleRename(id: string, title: string) {
+    await sendJson('/api/assessment/knowledge/doc/rename', 'POST', { id, title });
+    await treeFetch.refresh();
+  }
 
   async function handleReorder(id: string, targetParentId: string | null, position: number) {
     setMoveError(null);
@@ -270,6 +280,11 @@ export function KnowledgeExplorer({ mode }: KnowledgeExplorerProps) {
 
   const rail = (
     <>
+      <RenameNodeDialog
+        node={renaming}
+        onClose={() => setRenaming(null)}
+        onSubmit={handleRename}
+      />
       {/* Why a move was refused, in the server's own words. Each refusal names
           something the reader can act on — which remote owns that subtree, or
           that publish is the way a doc leaves local — so a generic "move
@@ -312,7 +327,15 @@ export function KnowledgeExplorer({ mode }: KnowledgeExplorerProps) {
                   selectedId={selectedTreeIdFor(section, selectedId, view)}
                   onSelect={(id: string) => handleTreeSelect(section, id)}
                   {...(section.kind === 'local' && canDo('ManageKnowledge')
-                    ? { onReorder: handleReorder }
+                    ? {
+                        onReorder: handleReorder,
+                        // Same gate as the drag: a synced row's rename would
+                        // 409, so it is not offered one.
+                        renderTrailing: (n: UiTreeNode) =>
+                          n.id === ACTIVITY_ID(section.key) ? null : (
+                            <RowActionsMenu title={n.title} onRename={() => setRenaming({ id: n.id, title: n.title })} />
+                          ),
+                      }
                     : {})}
                 />
               )}

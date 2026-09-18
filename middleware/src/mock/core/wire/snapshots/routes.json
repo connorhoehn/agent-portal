@@ -203,7 +203,7 @@
     {
       "method": "GET",
       "path": "/api/assessment/events",
-      "source": "src/routes/assessment.ts:795"
+      "source": "src/routes/assessment.ts:807"
     },
     {
       "method": "GET",
@@ -243,7 +243,7 @@
     {
       "method": "POST",
       "path": "/api/assessment/knowledge/doc/comment",
-      "source": "src/routes/assessment.ts:729"
+      "source": "src/routes/assessment.ts:741"
     },
     {
       "method": "POST",
@@ -253,7 +253,12 @@
     {
       "method": "POST",
       "path": "/api/assessment/knowledge/doc/publish",
-      "source": "src/routes/assessment.ts:707"
+      "source": "src/routes/assessment.ts:719"
+    },
+    {
+      "method": "POST",
+      "path": "/api/assessment/knowledge/doc/rename",
+      "source": "src/routes/assessment.ts:706"
     },
     {
       "method": "POST",
@@ -273,12 +278,12 @@
     {
       "method": "POST",
       "path": "/api/assessment/knowledge/presence",
-      "source": "src/routes/assessment.ts:752"
+      "source": "src/routes/assessment.ts:764"
     },
     {
       "method": "POST",
       "path": "/api/assessment/knowledge/pull",
-      "source": "src/routes/assessment.ts:718"
+      "source": "src/routes/assessment.ts:730"
     },
     {
       "method": "GET",

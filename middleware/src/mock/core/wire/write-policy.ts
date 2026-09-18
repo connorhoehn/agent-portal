@@ -995,6 +995,38 @@ export const WRITE_SPECS: readonly WriteSpec[] = [
     },
   },
   {
+    route: 'POST /api/assessment/knowledge/doc/rename',
+    persona: 'assessment/admin',
+    safe:
+      'Sends the node its OWN current title, which the provider short-circuits ' +
+      'as a no-op before the sibling-clash check and before any write — so the ' +
+      'registered sections fixture ends byte-identical while the validation path ' +
+      'and the response shape are both real. Any other title would rename a seed ' +
+      'row and the next capture would read a different tree.',
+    bodyFrom:
+      'routes/assessment.ts: `id` and `title`, both read off ' +
+      'GET /api/assessment/knowledge/tree — the title is the node’s own.',
+    build: async (ctx) => {
+      const tree = await ctx.get('/api/assessment/knowledge/tree');
+      const sections = objectsWith(tree, 'sections')[0]?.['sections'];
+      if (!Array.isArray(sections)) return unsynthesisable('GET /api/assessment/knowledge/tree returned no sections');
+      for (const section of sections as Array<Record<string, unknown>>) {
+        // A synced section refuses a rename by design.
+        if (section['kind'] !== 'local') continue;
+        const nodes = section['nodes'];
+        if (!Array.isArray(nodes)) continue;
+        for (const node of nodes as Array<Record<string, unknown>>) {
+          const id = node['id'];
+          const title = node['title'];
+          if (typeof id === 'string' && typeof title === 'string' && title.trim()) {
+            return { id, title };
+          }
+        }
+      }
+      return unsynthesisable('GET /api/assessment/knowledge/tree listed no renameable node in a local section');
+    },
+  },
+  {
     route: 'POST /api/assessment/knowledge/doc/move',
     persona: 'assessment/admin',
     safe:

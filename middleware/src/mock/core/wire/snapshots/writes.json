@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-09-18T09:52:20.157Z",
-  "serverHandlerSha": "ff4576dfac96d4f889326e7a7836d7e6b9c3ca17ce997b1740a464327ee2d27b",
+  "capturedAt": "2026-09-18T10:18:45.396Z",
+  "serverHandlerSha": "18c4d85f9f9ab1f82fd4d949d9f19121ea08d0220d060c694c8641929c39a088",
   "baseUrl": "http://127.0.0.1:3012",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
@@ -926,6 +926,26 @@
       "values": {},
       "sent": [
         "id"
+      ]
+    },
+    "POST /api/assessment/knowledge/doc/rename": {
+      "persona": "assessment/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "id": "string",
+        "ok": "boolean",
+        "section": "string",
+        "title": "string"
+      },
+      "values": {
+        "section": [
+          "enterprise_context"
+        ]
+      },
+      "sent": [
+        "id",
+        "title"
       ]
     },
     "POST /api/assessment/knowledge/doc/restore": {

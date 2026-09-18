@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-09-18T09:48:10.414Z",
-  "serverHandlerSha": "ff4576dfac96d4f889326e7a7836d7e6b9c3ca17ce997b1740a464327ee2d27b",
+  "capturedAt": "2026-09-18T10:18:44.641Z",
+  "serverHandlerSha": "18c4d85f9f9ab1f82fd4d949d9f19121ea08d0220d060c694c8641929c39a088",
   "baseUrl": "http://127.0.0.1:3012",
   "personas": [
     "orgiq/admin",
@@ -4450,7 +4450,6 @@
       },
       "values": {
         "events[].action": [
-          "ApproveException",
           "ApproveTransaction",
           "ConnectLocalCompute",
           "DispatchAgentRun",
@@ -6817,7 +6816,6 @@
       "open": false,
       "values": [
         "ANONYMIZE",
-        "ApproveException",
         "ApproveTransaction",
         "BLOCK",
         "ConnectLocalCompute",
