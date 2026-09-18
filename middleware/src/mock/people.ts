@@ -407,6 +407,10 @@ export const graphPeople = defineFixture<Person>({
   scenarios: {
     default: () => mockPeople.slice(),
     large: largePeople,
+    // The org graph's node table. Explore renders a graph from it, and a
+    // graph with no nodes reads as "this org has nobody" rather than "the
+    // read failed" unless the surface is told which it is.
+    error: () => { throw new Error('graph_people unavailable: relation does not exist'); },
   },
 });
 

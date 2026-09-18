@@ -395,6 +395,10 @@ export const workItems = defineFixture<WorkItem>({
     default: () => MOCK_WORK_ITEM_SEEDS.map((seed) => normalizeSeed(seed)),
     empty: () => [],
     large: largeWorkItems,
+    // An initiative with no work and an initiative whose work could not be
+    // read look identical without this — and the second is the one where the
+    // progress and spend figures above the table are computed from nothing.
+    error: () => { throw new Error('work_items unavailable: relation does not exist'); },
   },
 });
 

@@ -494,6 +494,10 @@ export const bots = defineFixture<Bot>({
   scenarios: {
     default: () => seededBots(),
     empty: () => [],
+    // The roster that feeds the queue. An unreadable roster is not an empty
+    // one: scheduled maintenance may still be firing while the page shows no
+    // bots at all.
+    error: () => { throw new Error('bots unavailable: relation does not exist'); },
   },
 });
 

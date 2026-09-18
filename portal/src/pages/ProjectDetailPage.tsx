@@ -152,8 +152,14 @@ function ProjectDetailPage() {
   const { data: project, isLoading: projLoading, error: projError } =
     useFetch<ProjectDetail>(id ? `/api/graph/projects/${encodeURIComponent(id)}` : '');
 
-  const { data: rawTree, isLoading: workLoading } =
+  // `error`/`degraded` were discarded here, which is where the Work tab's
+  // worst state came from: with the work_items read failing, the tab rendered
+  // "No work yet — create an epic…" plus a New epic button on a live,
+  // in-progress initiative. Nothing on the page said a read had failed, so the
+  // invitation to start creating work was the only thing on offer.
+  const { data: rawTree, isLoading: workLoading, error: workError, degraded: workDegraded } =
     useFetch<WorkItemTree[]>(id ? `/api/graph/projects/${encodeURIComponent(id)}/work` : '');
+  const workFailure = workError ?? workDegraded;
 
   const { data: decisions } =
     useFetch<ProjectDecision[]>(id ? `/api/graph/projects/${encodeURIComponent(id)}/decisions` : '');
@@ -420,6 +426,7 @@ function ProjectDetailPage() {
               <WorkPanel
                 workTree={workTree}
                 workLoading={workLoading}
+                workFailure={workFailure}
                 canDispatch={canDispatch}
                 showGrantCue={showGrantCue}
                 marketRuns={marketRuns}

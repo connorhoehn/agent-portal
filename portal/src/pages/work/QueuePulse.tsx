@@ -107,8 +107,15 @@ export function QueuePulse({ summary, jobs, degraded }: {
             value: botsFailure ? '—' : roster.length,
             hint: botsDegraded
               ? `roster unreadable — ${botsDegraded}`
+              // Only a 403 means the ROLE cannot see it. Any other failure is
+              // the read itself, and saying "not visible to this role" then
+              // sends someone to ask for access they already hold — measured
+              // with the bots fixture pinned to `error`: /api/bots answered
+              // 500 and an org-leader, who can see the roster, was told she
+              // could not. `useFetch`'s error string leads with the status
+              // (`failureText`), so the two are distinguishable.
               : error
-                ? 'roster not visible to this role'
+                ? (/^403\b/.test(error) ? 'roster not visible to this role' : 'roster could not be read')
                 // Sized to the tile: `StatStripItem` has no `title`, so an
                 // overrunning hint is cut mid-word with no way to read the
                 // rest — measured 221px needed in 209px, losing "…gates".

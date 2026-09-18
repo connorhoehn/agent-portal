@@ -187,6 +187,10 @@ export const sprints = defineFixture<MockSprint>({
   scenarios: {
     default: () => seededSprints(),
     empty: () => [],
+    // "No sprints yet" is a real state for a new initiative; "we could not
+    // read the sprints" is not the same answer, and an SME deciding whether
+    // their envelope is active needs to tell them apart.
+    error: () => { throw new Error('sprints unavailable: relation does not exist'); },
   },
 });
 

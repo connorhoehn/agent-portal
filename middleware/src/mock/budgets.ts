@@ -107,6 +107,10 @@ export const initiativeBudgets = defineFixture<MockBudget>({
   scenarios: {
     default: () => seededAllocations(),
     empty: () => [],
+    // Allocations are money. "Nothing allocated" and "we could not read the
+    // allocations" must never render the same, because the first invites
+    // spending and the second means you do not know what is left.
+    error: () => { throw new Error('initiative_budgets unavailable: relation does not exist'); },
   },
 });
 

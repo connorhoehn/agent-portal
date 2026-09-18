@@ -41,6 +41,7 @@ import {
   ToolbarGroup,
 } from '@connorhoehnslalom/ui-components/shared';
 import type { BotRun } from '../bots/BotsPage';
+import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { BoardView } from './BoardView';
 import { EpicCard } from './EpicCard';
 import { NewItemForm, type NewItemDraft } from './NewItemForm';
@@ -80,6 +81,7 @@ const TYPE_FILTERS: Array<{ value: string; label: string }> = [
 export function WorkPanel({
   workTree,
   workLoading,
+  workFailure,
   canDispatch,
   showGrantCue,
   marketRuns,
@@ -90,6 +92,11 @@ export function WorkPanel({
 }: {
   workTree: WorkItemTree[];
   workLoading: boolean;
+  /** The work read failed. An empty list then means "unknown", not "none" —
+   *  the difference between an initiative with no work and one whose work
+   *  could not be read, which is the difference between "create an epic" and
+   *  "do not start typing, you may be duplicating what is already there". */
+  workFailure: string | null;
   canDispatch: boolean;
   /** sme-only pre-dispatch warning: no active sprint grant on this initiative. */
   showGrantCue: boolean;
@@ -264,6 +271,21 @@ export function WorkPanel({
       ),
     },
   ], [marketRuns, onEstimate, itemHref]);
+
+  // A failed read is not an empty backlog. Everything below — the filters, the
+  // table with its "No work yet — create an epic" message, the board, the
+  // epics pane and its New-epic affordance — is built from `items`, which is
+  // empty either way. Rendering any of it here would invite someone to create
+  // work that may already exist and simply could not be read.
+  if (workFailure) {
+    return (
+      <UnavailableNotice
+        error={workFailure}
+        what="this initiative's work"
+        source="Work items are read from Aurora"
+      />
+    );
+  }
 
   return (
     <Stack gap="md">
