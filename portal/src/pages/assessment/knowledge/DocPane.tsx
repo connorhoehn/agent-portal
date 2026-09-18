@@ -17,6 +17,7 @@ import {
   ConnectionPill,
   DataTable,
   DetailHeader,
+  Divider,
   Drawer,
   ErrorState,
   Inline,
@@ -648,13 +649,32 @@ export function DocPane({ node, mode, sseEvents, sseConnected, sseGapped, onTree
           per-call-site decision; this is the one surface it was reported on. */}
       <Card padding="md" className="shadow-sm">
         <Stack gap="md">
+          {/* A document is a sheet, and its header reads top-down: what kind
+              of thing this is, then what it is called, then where it lives.
+              The classification used to sit INLINE after the title as a
+              generic blue chip, which put a label and a name on one line and
+              made neither the first thing you read. It is a kicker now — its
+              own line, above the title, tinted with the tenant's own accent
+              rather than a stock info blue. Same shape the SDLC accelerator's
+              DocView uses for the surface this one mirrors, built from Chip's
+              `uppercase` + `tone="accent"` rather than a hand-rolled pill. */}
           <Inline justify="between" align="start" wrap>
-            <DetailHeader
-              as="h2"
-              title={doc.title}
-              badge={
-                <Inline gap="xs" align="center">
-                  <Chip size="xs" tone="info" uppercase>{CLASSIFICATION_LABEL[doc.classification] ?? doc.classification}</Chip>
+            <Stack gap="xs" className="min-w-0">
+              <Inline gap="xs" align="center">
+                {/* Tinted with the TENANT's brand, not a stock tone. `ChipTone`
+                    has no `brand` member — neutral/success/warning/danger/info/
+                    caution/accent/purple — and `accent` renders violet, which
+                    in a teal tenant is simply another product's colour. The
+                    brand tokens are theme-aware and swap per tenant and per
+                    theme, so this is the one pill on the page that says whose
+                    product you are in. Queued: Chip wants a `brand` tone. */}
+                <Chip
+                  size="xs"
+                  uppercase
+                  className="bg-brand-soft text-brand-ink"
+                >
+                  {CLASSIFICATION_LABEL[doc.classification] ?? doc.classification}
+                </Chip>
                   <ConnectionPill state={liveConnectionState(sseConnected)} labels={{ connected: 'Live' }} compact />
                   {/* No gateway chip here. KnowledgeExplorer — this component's
                       ONLY consumer — renders the identical sentence from the
@@ -665,26 +685,27 @@ export function DocPane({ node, mode, sseEvents, sseConnected, sseGapped, onTree
                       so it belongs in the surface's status line. The compact
                       pill stays: a dot beside the title reads as "this doc is
                       live" without restating a full sentence. */}
-                </Inline>
-              }
-              meta={
-                /* `updated_at` came down on every doc read and was used only to
-                   confirm this tab's own save — never shown. "When did this
-                   last change?" is the second question anyone asks of a
-                   document, and the answer was already in hand. Relative, and
-                   the exact stamp on hover, the same pairing the rest of the
-                   app uses. */
-                <MetaLine
-                  items={[
-                    doc.path,
-                    doc.argument_hint && `Arguments: ${doc.argument_hint}`,
-                    doc.updated_at ? `Updated ${relativeTime(doc.updated_at)}` : null,
-                  ]}
-                  size="xs"
-                  tone="tertiary"
-                />
-              }
-            />
+              </Inline>
+              <DetailHeader
+                as="h2"
+                title={doc.title}
+                meta={
+                  /* `updated_at` came down on every doc read and was used only
+                     to confirm this tab's own save — never shown. "When did
+                     this last change?" is the second question anyone asks of a
+                     document, and the answer was already in hand. */
+                  <MetaLine
+                    items={[
+                      doc.path,
+                      doc.argument_hint && `Arguments: ${doc.argument_hint}`,
+                      doc.updated_at ? `Updated ${relativeTime(doc.updated_at)}` : null,
+                    ]}
+                    size="xs"
+                    tone="tertiary"
+                  />
+                }
+              />
+            </Stack>
             <Inline gap="sm" align="start" wrap>
               {presenceUsers.length > 0 && (
                 <PresenceAvatars users={presenceUsers.map((u) => ({ id: u.id, name: u.name, online: true, detail: u.detail }))} size={28} />
@@ -714,6 +735,12 @@ export function DocPane({ node, mode, sseEvents, sseConnected, sseGapped, onTree
               </Inline>
             </Inline>
           </Inline>
+
+          {/* A rule under the header block. The reference DocView separates
+              "what this is" from "what it says" with one; without it the
+              title, the path and the first paragraph ran together as a single
+              column of text and the eye had nothing to stop on. */}
+          <Divider spacing="none" />
 
           {reactions && (
             <ReactionsBar
