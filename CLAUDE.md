@@ -425,6 +425,7 @@ name without failing its own check. `ls docs/*-goal.md scripts/validate-*.sh`
 
 ## Facts that bite
 
+- **Scanning JSX open tags with `<Tag[^>]*>` undercounts, because `=>` contains a `>`.** Any element carrying an inline arrow handler — `onClick={(e) => ...}` — is truncated at that arrow, so anything spelled later in the tag (a `className`, a `border-0`, a raw element) is invisible to the scan. This has bitten twice: `b47bdff` fixed it in the raw-element gate ("the raw-element counter could not see past an arrow function"), and on 2026-09-17 the same shape produced a wrong ghost-Button audit (88/12 reported, 78/22 true) that reached a commit message before being caught. Walk the tag brace-aware — count `{`/`}` and stop at the first `>` seen at depth 0 — rather than reaching for a character class. `scripts/validate-component-discipline.sh` is the worked example.
 - Aurora does NOT support Apache AGE — the graph is modeled as relational tables, not Cypher. Schema in `schema/orgiq_schema.sql`.
 - AG-UI uses POST for SSE (not GET EventSource). Frontend must use fetch + ReadableStream.
 - Titan Embeddings V2 dimension must be specified at embedding time AND match the `vector(1024)` column type.

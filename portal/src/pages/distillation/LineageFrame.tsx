@@ -260,7 +260,10 @@ export function LineageFrame({
         type: 'lineageEdge',
         data: { relationLabel: LINEAGE_RELATION_LABEL[e.relation], labelX, labelY } as unknown as Record<string, unknown>,
         markerEnd: { type: MarkerType.ArrowClosed },
-        style: { stroke: 'var(--color-border)' },
+        // Not `--color-border`: that is the hairline separator token and an
+        // edge drawn in it is invisible against this canvas. See the tone map
+        // in CompactionFlowFrame.tsx for the same fix.
+        style: { stroke: 'var(--color-text-tertiary)' },
       };
     });
   }, [lineage, positions]);

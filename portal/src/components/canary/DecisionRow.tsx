@@ -182,7 +182,11 @@ function CardDecisionRow({ decision: d, index }: { decision: Decision; index: nu
       fullWidth
       onClick={() => setExpanded(v => !v)}
       aria-expanded={expanded}
-      className="flex-col items-start gap-1 justify-start text-left px-3.5 py-2 border-b border-border rounded-none"
+      // Only a BOTTOM rule is wanted, separating stacked rail rows. The
+      // library's `ghost` variant already sets `border border-border` on all
+      // four sides, so `border-b` alone left the row drawing a full box
+      // inside the rail. See the Button entry in docs/ui-components-queue.md.
+      className="flex-col items-start gap-1 justify-start text-left px-3.5 py-2 border-x-0 border-t-0 border-b border-border rounded-none"
     >
       <Inline gap="sm" justify="between" wrap={false} className="w-full">
         <Inline as="span" gap="none" className="text-[10.5px] text-text-tertiary tabular-nums">

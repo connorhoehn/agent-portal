@@ -147,7 +147,12 @@ function EnvironmentRow({ env }: { env: Environment }) {
         variant="ghost"
         fullWidth
         aria-expanded={open}
-        className="!justify-start text-left px-3 py-2"
+        // `border-0`: the Stack above owns this row's separator
+        // (`border-b border-border last:border-b-0`), and the library's
+        // `ghost` variant carries `border border-border` on all four sides —
+        // so without this the disclosure row draws its own box inside the
+        // rail's rule. See the Button entry in docs/ui-components-queue.md.
+        className="border-0 !justify-start text-left px-3 py-2"
         onClick={() => setOpen((v) => !v)}
       >
         <Inline gap="xs" align="center" className="w-full min-w-0">

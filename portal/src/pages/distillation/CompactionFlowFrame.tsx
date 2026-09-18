@@ -41,11 +41,20 @@ import type { CompactionFlowEdgeTone, CompactionFlowModel, CompactionFlowNode, C
 
 const NODE_WIDTH = 168;
 
+// `neutral` is NOT `--color-border`. That token is the hairline used for
+// table rules and card edges, about 1.2:1 against this canvas — so
+// every edge carrying no health verdict (the four inputs into L0, L2 →
+// Library, L2 → Promotions, Library → Session config) was drawn but could
+// not be seen, and the flow read as disconnected boxes with two coloured
+// arrows floating between them. An edge is content, not a separator, so it
+// takes a text token: `--color-text-tertiary` is the de-emphasis colour, ~2.5x
+// the contrast of the border token, and still recedes behind the
+// green/amber/red an edge uses when it DOES have a verdict to report.
 const EDGE_TONE_COLOR: Record<CompactionFlowEdgeTone, string> = {
   healthy: 'var(--color-success)',
   behind: 'var(--color-warning)',
   stalled: 'var(--color-danger)',
-  neutral: 'var(--color-border)',
+  neutral: 'var(--color-text-tertiary)',
 };
 
 function usePrefersReducedMotion(): boolean {
