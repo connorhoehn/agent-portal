@@ -633,7 +633,13 @@ export default function LocalComputePage() {
                   straight on the page ground, so a panel's content started
                   hard against the tab rule with no inset — the Queue message
                   read as a caption on the tab bar rather than the body of a
-                  pane. */}
+                  pane.
+                  Every table in this Card is `striped`, and so is the fleet
+                  table above it. Three of the four panels were not, so moving
+                  between Queue and History — the same machine, one tab apart —
+                  changed how a row was banded, and the page read as several
+                  tables borrowed from different screens rather than one
+                  machine seen four ways. */}
               <Card>
               <Stack gap="none" className="border-b border-border px-4 pt-3">
               <Tabs
@@ -675,6 +681,7 @@ export default function LocalComputePage() {
                     data={upNext}
                     keyField={(r) => r.id}
                     onRowClick={(r) => setSelectedRunId(r.id)}
+                    striped
                   />
                 )}
               </Stack>
@@ -753,6 +760,7 @@ export default function LocalComputePage() {
                         ]}
                         data={pickWork}
                         keyField={(r) => r.workItemId}
+                        striped
                         emptyMessage="Nothing suggested right now — open work on your initiatives shows up here."
                       />
                     ) : (
@@ -772,6 +780,7 @@ export default function LocalComputePage() {
                         ]}
                         data={pickBots}
                         keyField={(b) => b.id}
+                        striped
                         emptyMessage="No enabled bots to run."
                       />
                     )}
