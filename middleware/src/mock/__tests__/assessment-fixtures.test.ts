@@ -252,3 +252,40 @@ describe('run ids carry the run\'s own time, not a baked one', () => {
     } finally { restore(); }
   });
 });
+
+// ── Prompt docs say what their command actually does ────────────────────────
+//
+// All nine shipped with the SAME 216-byte body — only the `# /name` heading
+// differed — and that shared body asserted "Never persists a score directly",
+// which is not a property seven of them have: they do not score at all. Nine
+// copies of one sentence, wrong on most of them, on the surface whose whole
+// job is to show what the accelerator's agents do. These three properties are
+// what stops it drifting back.
+describe('knowledge: the prompt docs are nine documents, not one', () => {
+  const promptDocs = () => M.knowledgeDocs().filter((d) => d.id.startsWith('prompt:'));
+
+  it('every prompt body is distinct', () => {
+    const docs = promptDocs();
+    expect(docs.length).toBeGreaterThanOrEqual(9);
+    const bodies = new Set(docs.map((d) => d.markdown));
+    expect(bodies.size).toBe(docs.length);
+  });
+
+  it("each body's heading names its own command", () => {
+    for (const d of promptDocs()) {
+      const command = d.id.replace(/^prompt:/, '').replace(/\.md$/, '');
+      expect(d.markdown.startsWith(`# /${command}\n`)).toBe(true);
+    }
+  });
+
+  // The claim that made the old shared body false. Only these two carry an
+  // apply-scores handoff verb in providers/assessment.ts AGENT_COMMANDS, so
+  // only these two may talk about persisting a score.
+  it('only the two scoring commands mention applying scores', () => {
+    const scoring = new Set(['prompt:score-dimensions.md', 'prompt:process-self-assessment.md']);
+    for (const d of promptDocs()) {
+      const claimsScoring = /apply-scores/.test(d.markdown);
+      expect(claimsScoring).toBe(scoring.has(d.id));
+    }
+  });
+});

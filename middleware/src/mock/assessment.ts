@@ -7916,7 +7916,7 @@ const seedKnowledgeDocs = (): Record<string, KnowledgeDoc> => ({
   "id": "prompt:classify-transcript.md",
   "title": "Classify Transcript",
   "classification": "internal",
-  "markdown": "# /classify-transcript\n\nSlash-command prompt. Read-only tool floor, writes only to the team's temp/, no web fetch, no subagents. Never persists a score directly — output is validated by the deterministic apply step.\n",
+  "markdown": "# /classify-transcript\n\nClassify a transcript or document as evidence: what type it is, how much weight it carries, and which rubric dimensions it actually speaks to.\n\n**Tools** \u2014 `Read`, `Glob`, `Grep`, `Write`, and one handoff verb \u2014 `assess apply-classification`.\n\n**What it persists** \u2014 nothing by itself. The classification reaches the database only through `apply-classification`, which validates the envelope first. The command's own `Write` is scoped to the team's `temp/`.\n",
   "editable": true,
   "path": "prompts/classify-transcript.md",
   "updated_at": daysAgo(35)
@@ -7925,7 +7925,7 @@ const seedKnowledgeDocs = (): Record<string, KnowledgeDoc> => ({
   "id": "prompt:score-dimensions.md",
   "title": "Score Dimensions",
   "classification": "internal",
-  "markdown": "# /score-dimensions\n\nSlash-command prompt. Read-only tool floor, writes only to the team's temp/, no web fetch, no subagents. Never persists a score directly — output is validated by the deterministic apply step.\n",
+  "markdown": "# /score-dimensions\n\nScore only the dimensions that classification flagged, against the rubric \u2014 not the whole rubric every time.\n\n**Tools** \u2014 `Read`, `Glob`, `Grep`, `Write`, and one handoff verb \u2014 `assess apply-scores`.\n\n**What it persists** \u2014 no score directly. `apply-scores` is deterministic and validates the envelope before anything lands; a score this command asserts but cannot justify is dropped there, not here.\n",
   "editable": true,
   "path": "prompts/score-dimensions.md",
   "updated_at": daysAgo(35)
@@ -7934,7 +7934,7 @@ const seedKnowledgeDocs = (): Record<string, KnowledgeDoc> => ({
   "id": "prompt:extract-enterprise-context.md",
   "title": "Extract Enterprise Context",
   "classification": "internal",
-  "markdown": "# /extract-enterprise-context\n\nSlash-command prompt. Read-only tool floor, writes only to the team's temp/, no web fetch, no subagents. Never persists a score directly — output is validated by the deterministic apply step.\n",
+  "markdown": "# /extract-enterprise-context\n\nExtract org-wide governance knowledge \u2014 standards, policies, the things true of every team \u2014 into the shared enterprise context.\n\n**Tools** \u2014 `Read`, `Glob`, `Grep`, `Write`, and one handoff verb \u2014 `assess apply-enterprise-context`.\n\n**What it persists** \u2014 nothing directly. Shared context is org-wide, so it lands only through `apply-enterprise-context`.\n",
   "editable": true,
   "path": "prompts/extract-enterprise-context.md",
   "updated_at": daysAgo(35)
@@ -7943,7 +7943,7 @@ const seedKnowledgeDocs = (): Record<string, KnowledgeDoc> => ({
   "id": "prompt:validate-outputs.md",
   "title": "Validate Outputs",
   "classification": "internal",
-  "markdown": "# /validate-outputs\n\nSlash-command prompt. Read-only tool floor, writes only to the team's temp/, no web fetch, no subagents. Never persists a score directly — output is validated by the deterministic apply step.\n",
+  "markdown": "# /validate-outputs\n\nQuality check over work already produced: traceability, fabrication, and placement.\n\n**Tools** \u2014 `Read`, `Glob`, `Grep` only \u2014 no `Write`, no handoff verb.\n\n**What it persists** \u2014 nothing at all. This one reads and reports; it is the check, so it deliberately cannot alter what it is checking.\n",
   "editable": true,
   "path": "prompts/validate-outputs.md",
   "updated_at": daysAgo(35)
@@ -7952,7 +7952,7 @@ const seedKnowledgeDocs = (): Record<string, KnowledgeDoc> => ({
   "id": "prompt:process-self-assessment.md",
   "title": "Process Self-Assessment",
   "classification": "internal",
-  "markdown": "# /process-self-assessment\n\nSlash-command prompt. Read-only tool floor, writes only to the team's temp/, no web fetch, no subagents. Never persists a score directly — output is validated by the deterministic apply step.\n",
+  "markdown": "# /process-self-assessment\n\nScore a self-certified Forms submission envelope against the rubric \u2014 the intake path for a team that assessed itself.\n\n**Tools** \u2014 `Read`, `Glob`, `Grep`, `Write`, and two handoff verbs \u2014 `submissions ingest-evidence` and `assess apply-scores`.\n\n**What it persists** \u2014 no score directly. Evidence enters through `ingest-evidence` and scores through `apply-scores`, both validated. A self-certified claim is still only a claim until evidence verifies it.\n",
   "editable": true,
   "path": "prompts/process-self-assessment.md",
   "updated_at": daysAgo(35)
@@ -7961,7 +7961,7 @@ const seedKnowledgeDocs = (): Record<string, KnowledgeDoc> => ({
   "id": "prompt:develop-jira-story.md",
   "title": "Develop Jira Story",
   "classification": "internal",
-  "markdown": "# /develop-jira-story\n\nSlash-command prompt. Read-only tool floor, writes only to the team's temp/, no web fetch, no subagents. Never persists a score directly — output is validated by the deterministic apply step.\n",
+  "markdown": "# /develop-jira-story\n\nDraft a Jira story for a team's top maturity gap.\n\n**Tools** \u2014 `Read`, `Glob`, `Grep` and `Write`.\n\n**What it persists** \u2014 a local markdown draft, nothing more. It has no Jira tool: pushing the story is a human decision, taken after reading the draft.\n",
   "editable": true,
   "path": "prompts/develop-jira-story.md",
   "updated_at": daysAgo(35)
@@ -7970,7 +7970,7 @@ const seedKnowledgeDocs = (): Record<string, KnowledgeDoc> => ({
   "id": "prompt:draft-confluence-page.md",
   "title": "Draft Confluence Page",
   "classification": "internal",
-  "markdown": "# /draft-confluence-page\n\nSlash-command prompt. Read-only tool floor, writes only to the team's temp/, no web fetch, no subagents. Never persists a score directly — output is validated by the deterministic apply step.\n",
+  "markdown": "# /draft-confluence-page\n\nDraft a new Confluence page as local markdown, ready for review and publish.\n\n**Tools** \u2014 `Read`, `Glob`, `Grep` and `Write`.\n\n**What it persists** \u2014 a local file. Publishing to the space is a separate, human step \u2014 the command cannot reach Confluence.\n",
   "editable": true,
   "path": "prompts/draft-confluence-page.md",
   "updated_at": daysAgo(35)
@@ -7979,7 +7979,7 @@ const seedKnowledgeDocs = (): Record<string, KnowledgeDoc> => ({
   "id": "prompt:suggest-confluence-content.md",
   "title": "Suggest Confluence Content",
   "classification": "internal",
-  "markdown": "# /suggest-confluence-content\n\nSlash-command prompt. Read-only tool floor, writes only to the team's temp/, no web fetch, no subagents. Never persists a score directly — output is validated by the deterministic apply step.\n",
+  "markdown": "# /suggest-confluence-content\n\nSuggest content edits and new pages from the space context and its comment history.\n\n**Tools** \u2014 `Read`, `Glob`, `Grep` only.\n\n**What it persists** \u2014 nothing. It proposes; a person decides. With no `Write` it cannot even leave a draft behind.\n",
   "editable": true,
   "path": "prompts/suggest-confluence-content.md",
   "updated_at": daysAgo(35)
@@ -7988,7 +7988,7 @@ const seedKnowledgeDocs = (): Record<string, KnowledgeDoc> => ({
   "id": "prompt:draw-diagram.md",
   "title": "Draw Diagram",
   "classification": "internal",
-  "markdown": "# /draw-diagram\n\nSlash-command prompt. Read-only tool floor, writes only to the team's temp/, no web fetch, no subagents. Never persists a score directly — output is validated by the deterministic apply step.\n",
+  "markdown": "# /draw-diagram\n\nGenerate a draw.io diagram and embed it in a page's local markdown.\n\n**Tools** \u2014 `Read`, `Glob`, `Grep`, `Write` and `Edit` \u2014 `Edit` because embedding means changing an existing page file.\n\n**What it persists** \u2014 the diagram and the edited markdown, both local. Nothing reaches the space without a human publishing it.\n",
   "editable": true,
   "path": "prompts/draw-diagram.md",
   "updated_at": daysAgo(35)
