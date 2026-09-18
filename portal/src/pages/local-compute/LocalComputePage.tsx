@@ -468,18 +468,23 @@ export default function LocalComputePage() {
       header: '',
       render: (n) => (
         <Inline gap="xs" align="center" className="justify-end">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={(e) => { e.stopPropagation(); void refreshNodes(); void refreshRuns(); }}
-            aria-label={`Refresh ${n.label}`}
-          >
-            Refresh
-          </Button>
+          {/* The per-row "Refresh" is gone. It promised a per-machine action —
+              its own aria-label said `Refresh ${label}` — and called
+              refreshNodes()+refreshRuns(), i.e. refetched the whole table. So
+              it was one global action rendered once per row, N copies of the
+              same button. And it was redundant on top of that: this table
+              already polls on a 15s interval (useFetch above), so the data it
+              fetched was arriving anyway.
+
+              Unpair stays — it is the one thing here only a person can decide —
+              but it is revealed on the row's hover / focus-within rather than
+              sitting on every row at rest, the same treatment the other
+              destructive row controls got. Its confirm dialog is unchanged. */}
           {canDispatch && (
             <Button
               variant="ghost"
               size="sm"
+              className="row-reveal"
               disabled={unpairBusy === n.id}
               onClick={(e) => { e.stopPropagation(); setUnpairTarget(n); }}
               aria-label={`Unpair ${n.label}`}
