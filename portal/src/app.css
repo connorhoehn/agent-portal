@@ -267,6 +267,75 @@ html[data-theme="dark"] [data-tenant="orgiq"] {
   --color-text-secondary: #5A7272;   /* sdlc slate */
   --color-text-tertiary: #8CA3A3;
   --color-text-disabled: #B4C6C2;
+
+  /* State and status, from the same palette. Without these the step dots and
+     the "in progress" chips paint orgiq's #2563eb blue on a teal page, which
+     is the one thing left that still read as another product's component
+     dropped in. Sources: --sdlc-turquoise for in-flight, --sdlc-green for
+     done, --sdlc-orange for waiting-on-a-person, --sdlc-sky for queued,
+     --sdlc-teal-400 for idle.
+
+     Two deliberate departures from the source project. (1) Its
+     `--destructive` is the orange (22 84% 56%); here orange already means
+     "waiting on a person", and a failed run must not read as a nudge, so
+     danger stays red. (2) The text-weight oranges and greens are the
+     palette's DARKER tones, because the worst case for these is a CHIP,
+     which puts them on their own tint rather than on white. Every value was
+     solved in-page by stepping the source colour toward black until it
+     cleared its target against white, the ground and its own tint together —
+     4.5:1 for anything carrying text, 3:1 for `pending`, which is only ever a
+     dot. The source palette's own tones missed: --sdlc-orange-300 #C55B11
+     reads 3.68 on its tint and --sdlc-turquoise #007FA3 reads 3.90, so both
+     are a few steps darker here. Measured, not estimated; the resulting
+     ratios are recorded in docs/branding-journeys/assessment-light.md. */
+  --color-state-idle: #AFC4C4;
+  --color-state-pending: #3998B1;    /* sdlc sky, darkened to clear 3:1 as a dot */
+  --color-state-running: #007397;    /* sdlc turquoise, darkened */
+  --color-state-awaiting: #B54B01;   /* sdlc orange-300, darkened */
+  --color-state-completed: #217354;  /* sdlc green, darkened for text use */
+  --color-state-failed: #B91C1C;
+
+  --color-success: #217354;
+  --color-success-bg: #DCEFE6;
+  --color-success-border: #97E0C5;   /* sdlc green-100 */
+  --color-warning: #B54B01;          /* sdlc orange-300, darkened */
+  --color-warning-bg: #FBEAE0;
+  --color-warning-border: #F1A977;   /* sdlc orange-200 */
+  --color-info: #007397;             /* sdlc turquoise, darkened */
+  --color-info-bg: #DFEFF5;
+  --color-info-border: #A4C3D6;      /* sdlc slate-100 */
+  --color-danger: #B91C1C;
+  --color-danger-bg: #FDECEC;
+  --color-danger-border: #F0A9A9;
+
+  /* Chip's tones, which are a DIFFERENT token set from the four above.
+     `Chip` renders `bg-info-bg text-info-fg` (read from the installed dist,
+     Chip-BENLwTlq.js), and the library ships its own `--color-info-fg:
+     #2563eb`. This app never defined the `*-fg` half at all, so every chip in
+     both tenants has been painting the library's fixed palette rather than the
+     app's semantic colours — invisible until now only because the app's
+     `--color-info` happened to be the same blue. Defining the pair here is
+     what makes a chip follow the tenant.
+
+     `accent` is the third CATEGORY colour (the motions are accent / info /
+     neutral), so it takes --sdlc-blue rather than the brand teal: three
+     categories have to stay apart from each other, and turquoise beside teal
+     does not. That is also why accent is not folded into success. */
+  --color-info-fg: #007397;
+  --color-info-bg: #DFEFF5;
+  --color-success-fg: #217354;
+  --color-success-bg: #DCEFE6;
+  --color-warning-fg: #B54B01;
+  --color-warning-bg: #FBEAE0;
+  --color-caution-fg: #B54B01;
+  --color-caution-bg: #FBEAE0;
+  --color-danger-fg: #B91C1C;
+  --color-accent-fg: #37617A;        /* sdlc blue */
+  --color-accent-bg: #E3EBEF;
+  --color-neutral-fg: #3E5757;
+  --color-neutral-bg: #E7EEEB;       /* the panel tone, so a quiet chip sits in
+                                        the same family as the surface behind it
+                                        rather than in Tailwind's cool slate */
 }
 /* Dark is the source project's own `.dark` block, same conversion: its
    `--background: 180 71% 14%` and `--card: 180 71% 17%` are a deep teal
@@ -295,6 +364,42 @@ html[data-theme="dark"] [data-tenant="assessment"] {
   --color-text-secondary: #8DA5A5;
   --color-text-tertiary: #6E8A8A;
   --color-text-disabled: #476363;
+
+  /* On the teal night these are read as foreground against #0A3D3D/#0D4A4A,
+     so each is the palette's LIGHT tone rather than its core one. */
+  --color-state-idle: #476363;
+  --color-state-pending: #74E1FE;    /* sdlc sky-100 */
+  --color-state-running: #2FD0FD;    /* sdlc sky-200 */
+  --color-state-awaiting: #F1A977;   /* sdlc orange-200 */
+  --color-state-completed: #63D0A8;  /* sdlc green-200 */
+  --color-state-failed: #FCA5A5;
+
+  --color-success: #63D0A8;
+  --color-success-bg: #123F31;
+  --color-success-border: #2C6B55;
+  --color-warning: #F1A977;
+  --color-warning-bg: #40260F;
+  --color-warning-border: #7A4A22;
+  --color-info: #2FD0FD;
+  --color-info-bg: #0C3D4A;
+  --color-info-border: #2A6577;
+  --color-danger: #FCA5A5;
+  --color-danger-bg: #3F1A1A;
+  --color-danger-border: #7A3535;
+
+  --color-info-fg: #2FD0FD;
+  --color-info-bg: #0C3D4A;
+  --color-success-fg: #63D0A8;
+  --color-success-bg: #123F31;
+  --color-warning-fg: #F1A977;
+  --color-warning-bg: #40260F;
+  --color-caution-fg: #F1A977;
+  --color-caution-bg: #40260F;
+  --color-danger-fg: #FCA5A5;
+  --color-accent-fg: #A4C3D6;        /* sdlc slate-100 */
+  --color-accent-bg: #22323D;
+  --color-neutral-fg: #B9CFCF;
+  --color-neutral-bg: #123F3F;
 }
 
 /* ── Shell ─────────────────────────────────────────────────────────────
