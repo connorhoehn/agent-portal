@@ -35,6 +35,7 @@ import { useFetch } from '../../../hooks/useFetch';
 import { useCapabilities } from '../../../lib/capabilities';
 import { useSession } from '../../../lib/auth';
 import { sendJson } from '../../../lib/writeJson';
+import { relativeTime } from '../../../lib/relativeTime';
 import {
   CLASSIFICATION_LABEL,
   channelForDoc,
@@ -623,7 +624,16 @@ export function DocPane({ node, mode, sseEvents, sseConnected, sseGapped, onTree
 
   return (
     <>
-      <Card padding="md">
+      {/* `shadow-sm` is deliberate and, for now, local. The library's `Card`
+          paints no shadow and exposes no elevation prop, so a document here
+          sat as a hairline rectangle on the page ground with nothing marking
+          it as the thing you came to read — measured, this pane was the only
+          content on screen and used 43% of the available height. A document
+          is a sheet; it should lift off the desk. `Card` extends
+          HTMLAttributes so the class lands on its root. An `elevation` prop is
+          queued (docs/ui-components-queue.md) precisely so this stops being a
+          per-call-site decision; this is the one surface it was reported on. */}
+      <Card padding="md" className="shadow-sm">
         <Stack gap="md">
           <Inline justify="between" align="start" wrap>
             <DetailHeader
@@ -645,8 +655,18 @@ export function DocPane({ node, mode, sseEvents, sseConnected, sseGapped, onTree
                 </Inline>
               }
               meta={
+                /* `updated_at` came down on every doc read and was used only to
+                   confirm this tab's own save — never shown. "When did this
+                   last change?" is the second question anyone asks of a
+                   document, and the answer was already in hand. Relative, and
+                   the exact stamp on hover, the same pairing the rest of the
+                   app uses. */
                 <MetaLine
-                  items={[doc.path, doc.argument_hint && `Arguments: ${doc.argument_hint}`]}
+                  items={[
+                    doc.path,
+                    doc.argument_hint && `Arguments: ${doc.argument_hint}`,
+                    doc.updated_at ? `Updated ${relativeTime(doc.updated_at)}` : null,
+                  ]}
                   size="xs"
                   tone="tertiary"
                 />
