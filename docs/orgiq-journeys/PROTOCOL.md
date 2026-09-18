@@ -10,22 +10,20 @@ and placeholder anywhere in a log make it not count.
 
 Most "padding looks off / this is cut" reports are one defect: a fixed-width
 box cutting its own text mid-word, usually a `StatStripItem` `hint` — that
-shape has no `title`, so the rest is unreachable (see the StatStrip and
-Button rows in docs/ui-components-queue.md). Measuring beats looking, and
-this finds every instance on a page at once. Paste into the console on each
-route:
+shape has no `title`, so the rest is unreachable (see the StatStrip row in
+docs/ui-components-queue.md). Measuring beats looking. Paste into the console
+on each route:
 
 ```js
 (()=>{const m=document.querySelector('main');if(!m)return'no-main';
 let c=0,s=[],mo=0,t=0;
 m.querySelectorAll('*').forEach(e=>{if(e.children.length)return;
  const x=(e.textContent||'').trim();if(!x)return;t++;
- const cs=getComputedStyle(e);
+ const cs=getComputedStyle(e),r=e.getBoundingClientRect();
  if(/mono/i.test(cs.fontFamily))mo++;
- // ONLY a clip when the overflow is actually hidden. With `overflow:visible`
- // the text spills outside its box and stays fully readable.
- const hides=/hidden|clip|auto|scroll/.test(cs.overflowX);
- if(hides&&e.scrollWidth>e.clientWidth+1&&e.clientWidth>0){c++;
+ if(r.width<=1||r.height<=1)return;                     // (3) sr-only label
+ if(!/hidden|clip|auto|scroll/.test(cs.overflowX))return; // (1) overflow shows
+ if(e.scrollWidth>e.clientWidth+1&&e.clientWidth>0){c++;
   if(s.length<3)s.push({t:x.slice(0,30),avail:e.clientWidth,needs:e.scrollWidth,title:!!e.getAttribute('title')})}});
 const f=[];if(c)f.push('clipped:'+c+JSON.stringify(s));
 if(document.documentElement.scrollWidth>innerWidth+1)f.push('h-scroll');
@@ -34,23 +32,26 @@ if(t>6&&mo/t>.5)f.push('mono:'+Math.round(100*mo/t)+'%');
 return location.pathname+' => '+(f.join(' ; ')||'clean')})()
 ```
 
-**Two filters, both needed, or the sweep cries wolf.**
+**Three filters. Drop any one and the sweep cries wolf** — each of these was
+a real false positive caught on 2026-09-17 before it became a "fix":
 
-1. **`overflow` must actually hide.** `scrollWidth > clientWidth` on its own
-   proves nothing: with `overflow: visible` the text simply paints outside its
-   box and every character is readable. Measured on `/iq/agents`, the
-   "Calls (24h)" StatStrip *label* reports 68px needed in a 43px box and is
-   fully legible on screen — a false positive. The *hints* on the same
-   component are `overflow: hidden` + `text-overflow: ellipsis` and really are
-   cut. Same component, two different answers, so check the property.
+1. **`overflow` must actually hide.** `scrollWidth > clientWidth` alone proves
+   nothing: with `overflow: visible` the text paints outside its box and every
+   character is readable. Architecture's "Calls (24h)" StatStrip *label*
+   reports 68px needed in 43px and is perfectly legible. The *hints* on that
+   same component are `overflow: hidden` + ellipsis and really are cut — same
+   component, opposite answers, so read the property.
 2. **`title` must be absent.** A long identifier cut with its full value on
    hover is deliberate and working — `/admin/budgets` shows
    `us.amazon.nova-lite-v1:0` that way and it is correct.
+3. **Skip visually-hidden text.** An `sr-only` label is 1x1 with
+   `overflow: hidden` and trips every other test. `/assessment/prompts` has an
+   "Add reaction" label exactly like that, and it is doing its job.
 
-Size the replacement copy from the measurement, not by eye —
-`avail / needs x length` is roughly how many characters fit. Found this way on
-2026-09-17, all three genuinely hidden: budgets (196px into 165px), the
-Automate queue pulse (221 into 209), the observability summary (175 into 150).
+Size replacement copy from the measurement, not by eye — `avail / needs x
+length` is roughly how many characters fit. Found this way, all genuinely
+hidden: budgets (196px into 165px), the Automate queue pulse (221 into 209),
+the observability summary (175 into 150).
 
 ## Persona
 

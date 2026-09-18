@@ -35,6 +35,7 @@ import {
   LoadingState,
   RailSection,
   Stack,
+  VisuallyHidden,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useGateway, usePresence } from '@connorhoehnslalom/realtime-modules/client';
 import { useFetch } from '../../../hooks/useFetch';
@@ -317,6 +318,14 @@ export function KnowledgeExplorer({ mode }: KnowledgeExplorerProps) {
         ? <ActivityBar node={selectedNode} sectionKey={selectedSectionKey} sseEvents={sse.events} />
         : undefined}
     >
+      {/* All four Informatics routes — Enterprise, Workspace, Prompts, Rules —
+          are this one component with a different `mode`, and none of them had
+          an `h1`: the explorer draws its own in-pane Breadcrumbs instead of a
+          PageSection title block, so the document outline was empty on every
+          one of them. `Breadcrumbs` is a nav landmark, not a heading. The
+          name already exists as `modeLabel`; this puts it in the outline
+          without adding chrome the explorer does not want. */}
+      <VisuallyHidden as="h1">{modeLabel}</VisuallyHidden>
       <Inline justify="between" align="center" className="mb-4">
         <Breadcrumbs items={crumbs} />
         <Inline gap="xs" align="center">
