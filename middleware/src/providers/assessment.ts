@@ -696,6 +696,17 @@ export interface Recommendation {
   rationale: string;
   story_command: string;
   certification: DimensionCertification;
+  /**
+   * The rubric's own bullets for the level immediately above what is verified
+   * — `criteriaToReach`, the same lookup the dimension detail uses.
+   *
+   * The improvement plan has always had a "What Level N asks for" section and
+   * this response never carried the data for it, so the section could not
+   * render for any team, on any dimension. Left empty when there is nothing
+   * above this dimension to reach (N/A, nothing verified yet, already at the
+   * target), which is the same condition that empties `to_verify_higher`.
+   */
+  next_level_criteria: string[];
   existing_stories: M.StoryDraft[];
 }
 
@@ -734,6 +745,20 @@ function rationaleFor(kind: RecommendationKind, def: M.RubricDimensionDef, score
 // those inputs came from the mock fixtures or Aurora rows.
 // Shared by buildTeamPlan (mock) and getTeamRecommendations's Aurora branch,
 // same pattern as computeScoreEntry for applyScores.
+/**
+ * The bullets for the level a dimension is actually working toward: one above
+ * what verification has established, and only while that is still under the
+ * target. Mirrors `dimensionCertification`'s own "is there anything above this
+ * to reach" test so the plan card and the certification line cannot disagree.
+ */
+function nextLevelCriteria(
+  def: M.RubricDimensionDef, score: M.MockDimensionScore, target: number,
+): string[] {
+  const verified = score.current_level;
+  if (score.is_na || verified == null || verified >= target) return [];
+  return criteriaToReach(def, verified + 1);
+}
+
 function computeTeamPlan(
   teamId: string, dims: Record<string, M.MockDimensionScore>, target: number, stories: M.StoryDraft[],
 ): TeamPlan {
@@ -751,6 +776,7 @@ function computeTeamPlan(
       rationale: rationaleFor(kind, def, score, target),
       story_command: `/develop-jira-story team: ${teamId} dimension: ${dimId}`,
       certification: dimensionCertification(score, target),
+      next_level_criteria: nextLevelCriteria(def, score, target),
       existing_stories: stories.filter((s) => s.dimension_id === dimId),
     });
   }

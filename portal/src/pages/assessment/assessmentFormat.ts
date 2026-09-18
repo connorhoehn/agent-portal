@@ -238,6 +238,8 @@ export interface ApiRecommendation {
   // field nobody was sending.
   certification?: DimensionCertification | null;
   existing_stories?: Array<{ filename: string; title?: string; jira_key?: string | null; status?: StoryStatus | null }>;
+  /** Rubric bullets for the level above what is verified; [] when there is none. */
+  next_level_criteria?: string[];
 }
 
 export interface ApiRecommendationsResponse {
@@ -286,7 +288,11 @@ export function normalizeRecommendation(r: ApiRecommendation, targetLevel: numbe
     // confirm it", so the prefix would read twice. Same strip as
     // DimensionMasterDetail's, which renders the ask into its own sentence.
     what_would_help: verificationAsk(cert),
-    level_up_criteria: [],
+    // The rubric's own bullets for the level this dimension is working toward.
+    // This was hardcoded `[]`, so the card's "What Level N asks for" section
+    // could never render for anyone — the server did not send them either, and
+    // both halves are fixed together.
+    level_up_criteria: r.next_level_criteria ?? [],
     open_questions: [],
     team_flagged_priority: false,
     rank: typeof r.rank === 'number' ? r.rank : Number.parseInt(String(r.rank), 10) || 0,

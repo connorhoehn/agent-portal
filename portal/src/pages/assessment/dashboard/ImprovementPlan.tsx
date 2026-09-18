@@ -132,10 +132,17 @@ function RecommendationCard({ rec, teamId }: { rec: Recommendation; teamId: stri
         badge={rec.existing_stories.length > 0 ? <Chip size="xs" mono>{rec.existing_stories.length}</Chip> : undefined}
       >
         <Stack gap="sm" className="px-4 py-3">
-          <Stack gap="none">
-            <SectionLabel>Why this is on the list</SectionLabel>
-            {rec.why && <Stack gap="none" className="mt-1 text-sm text-text-primary">{rec.why}</Stack>}
-          </Stack>
+          {/* The label was rendered unconditionally while its body was gated,
+              so a recommendation with no `why` — which is every close_claim,
+              since assessmentFormat sets it to '' — printed a heading with
+              nothing under it. The mapper's own comment says "the card hides
+              an empty why"; it now does, like every sibling block here. */}
+          {rec.why && (
+            <Stack gap="none">
+              <SectionLabel>Why this is on the list</SectionLabel>
+              <Stack gap="none" className="mt-1 text-sm text-text-primary">{rec.why}</Stack>
+            </Stack>
+          )}
           {rec.what_would_help.length > 0 && (
             <Stack gap="none">
               <SectionLabel>

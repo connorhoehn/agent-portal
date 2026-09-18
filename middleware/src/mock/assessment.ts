@@ -135,13 +135,19 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
      "None. Team operates without a standardized Continuous Integration capability."
     ],
     "level_up_criteria": [
-     "Implement at least one CI pipeline capable of building source code or validating deployable…",
-     "Store CI pipeline definitions in version control."
+     "Implement at least one CI pipeline capable of building source code or validating deployable artifacts.",
+     "Store CI pipeline definitions in version control.",
+     "Demonstrate that the pipeline has executed successfully within the assessment period.",
+     "Establish ownership for CI pipeline maintenance.",
+     "Use the pipeline for at least a subset of application changes."
     ],
     "evidence_examples": [
      "GitLab CI YAML",
      "GitHub Actions workflow",
-     "Jenkinsfile"
+     "Jenkinsfile",
+     "Azure DevOps pipeline",
+     "Build execution history",
+     "Repository containing pipeline definitions ---"
     ]
    },
    {
@@ -154,13 +160,19 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
      "Multiple, inconsistent CI setups exist across teams or services (tool fragmentation)."
     ],
     "level_up_criteria": [
-     "Configure CI to automatically trigger on commit, push, merge request, pull request, or equivalent…",
-     "Ensure the majority of active development work executes through CI rather than manual builds."
+     "Configure CI to automatically trigger on commit, push, merge request, pull request, or equivalent source control event.",
+     "Ensure the majority of active development work executes through CI rather than manual builds.",
+     "Publish build and test results to developers.",
+     "Implement automated validation beyond simple compilation, such as unit tests, linting, static analysis, or equivalent checks.",
+     "Demonstrate CI usage across at least one production-supported repository."
     ],
     "evidence_examples": [
      "Auto-trigger configuration",
      "Automated pipeline execution history",
-     "Build notifications"
+     "Build notifications",
+     "Status checks",
+     "Repository settings showing CI integration",
+     "Pull request or merge request history showing CI results ---"
     ]
    },
    {
@@ -170,16 +182,24 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "CI triggers automatically on push/PR for at least some repositories.",
      "Failing pipelines do not block merges.",
-     "Build and test results are visible to the team."
+     "Build and test results are visible to the team.",
+     "CI coverage across repositories remains inconsistent."
     ],
     "level_up_criteria": [
      "Require successful CI execution before code changes are merged.",
-     "Implement branch protection or equivalent controls that prevent direct merges bypassing CI."
+     "Implement branch protection or equivalent controls that prevent direct merges bypassing CI.",
+     "Standardize CI implementation across all qualifying repositories owned by the team.",
+     "Maintain CI pipeline definitions using approved organizational templates or standards.",
+     "Require automated testing within the CI workflow.",
+     "Document CI expectations and team operating procedures."
     ],
     "evidence_examples": [
      "Protected branch settings",
      "Mandatory status checks",
-     "Standard pipeline templates"
+     "Standard pipeline templates",
+     "Team engineering standards",
+     "CI/CD operating procedures",
+     "Repository settings enforcing merge controls ---"
     ]
    },
    {
@@ -193,12 +213,21 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     ],
     "level_up_criteria": [
      "Establish and monitor CI performance metrics.",
-     "Measure build success rate, pipeline duration, failure rate, and pipeline reliability."
+     "Measure build success rate, pipeline duration, failure rate, and pipeline reliability.",
+     "Track recurring CI failures or flaky pipeline behavior.",
+     "Demonstrate remediation activities for failing or unreliable CI runs.",
+     "Review CI performance data on a recurring cadence.",
+     "Establish targets or thresholds for CI effectiveness.",
+     "Use CI metrics to drive engineering improvements."
     ],
     "evidence_examples": [
      "CI dashboards",
      "Pipeline health reports",
-     "Build success trends"
+     "Build success trends",
+     "Build failure trends",
+     "Flaky test or flaky pipeline tracking",
+     "Improvement backlog items",
+     "Engineering reviews referencing CI performance ---"
     ]
    },
    {
@@ -212,12 +241,20 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     ],
     "level_up_criteria": [
      "Eliminate routine CI bypass mechanisms.",
-     "Demonstrate automated optimization of pipeline execution efficiency."
+     "Demonstrate automated optimization of pipeline execution efficiency.",
+     "Leverage CI telemetry to improve broader software delivery outcomes.",
+     "Continuously evaluate and reduce feedback cycle times.",
+     "Demonstrate that CI improvements are proactively identified rather than reactively addressed.",
+     "Use CI performance data to inform broader engineering effectiveness or delivery reporting."
     ],
     "evidence_examples": [
      "Dynamic test selection",
      "Intelligent caching",
-     "Parallelized execution"
+     "Parallelized execution",
+     "Automated pipeline optimization",
+     "DORA metric integration",
+     "Organization-level CI reporting",
+     "Proactive CI improvement initiatives ---"
     ]
    },
    {
@@ -227,7 +264,8 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "Merging without a passing CI run is architecturally impossible.",
      "CI pipelines self-optimize through capabilities such as test selection, parallelization, or caching.",
-     "CI telemetry contributes to broader delivery and engineering performance reporting."
+     "CI telemetry contributes to broader delivery and engineering performance reporting.",
+     "Quality validation remains fast while preserving confidence and coverage."
     ],
     "level_up_criteria": [],
     "evidence_examples": []
@@ -245,35 +283,49 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "name": "Below Baseline",
     "description": "No defined promotion path, packaging standard, approval process, or rollback method; releases are entirely manual and ad hoc.",
     "key_characteristics": [
-     "None. Releases are managed through manual effort without established standards, controls, or repeatable…"
+     "None. Releases are managed through manual effort without established standards, controls, or repeatable deployment processes."
     ],
     "level_up_criteria": [
      "Document a repeatable release process, deployment checklist, runbook, or release procedure.",
-     "Define deployment responsibilities and required release participants."
+     "Define deployment responsibilities and required release participants.",
+     "Establish a documented promotion path between environments.",
+     "Define a basic rollback approach.",
+     "Demonstrate that releases are performed using the documented process rather than tribal knowledge."
     ],
     "evidence_examples": [
      "Release runbook",
      "Deployment checklist",
-     "Change management documentation"
+     "Change management documentation",
+     "Release readiness checklist",
+     "Team operational procedures ---"
     ]
    },
    {
     "level": 1,
     "name": "Initial",
-    "description": "Release plans and practices are documented, even though execution is manual and packaging or promotion still require hands-on coordination for each…",
+    "description": "Release plans and practices are documented, even though execution is manual and packaging or promotion still require hands-on coordination for each release.",
     "key_characteristics": [
      "A documented release plan, runbook, or checklist exists and is followed for each deployment.",
      "Packaging is assembled manually but follows a known, documented process.",
-     "Promotion steps are documented, though movement between environments still requires manual coordination."
+     "Promotion steps are documented, though movement between environments still requires manual coordination.",
+     "Release planning is maintained as a formal artifact rather than relying solely on communication or tribal knowledge.",
+     "Rollback and approval rigor remain immature or inconsistent."
     ],
     "level_up_criteria": [
      "Standardize portions of packaging or deployment activities.",
-     "Define release approval requirements and readiness criteria."
+     "Define release approval requirements and readiness criteria.",
+     "Maintain versioned release artifacts.",
+     "Document rollback conditions, triggers, and responsibilities.",
+     "Demonstrate that releases follow a repeatable process.",
+     "Use automation for selected deployment or packaging activities."
     ],
     "evidence_examples": [
      "Standard release package structure",
      "Approval workflow records",
-     "Artifact repository"
+     "Artifact repository",
+     "Deployment scripts",
+     "Rollback documentation",
+     "Change records ---"
     ]
    },
    {
@@ -283,16 +335,25 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "Packaging is partially standardized, but formats and metadata may vary.",
      "Approval processes exist, though criteria and evidence requirements are inconsistent.",
-     "Rollback procedures are documented but not routinely validated."
+     "Rollback procedures are documented but not routinely validated.",
+     "Release practices differ between environments or deployment types.",
+     "Automation exists but is not consistently applied."
     ],
     "level_up_criteria": [
      "Use automated deployment pipelines for qualifying releases.",
-     "Standardize packaging, versioning, and release artifact requirements."
+     "Standardize packaging, versioning, and release artifact requirements.",
+     "Enforce approval gates through tooling or workflow controls.",
+     "Require release evidence before promotion.",
+     "Define rollback procedures before production deployment.",
+     "Ensure deployment paths are consistent across environments."
     ],
     "evidence_examples": [
-     "GitLab, GitHub, Azure DevOps, or equivalent deployment…",
+     "GitLab, GitHub, Azure DevOps, or equivalent deployment pipelines",
      "Release promotion workflows",
-     "Signed release artifacts"
+     "Signed release artifacts",
+     "Automated approval gates",
+     "Standard release templates",
+     "Release readiness documentation ---"
     ]
    },
    {
@@ -302,16 +363,25 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "Packaging is standardized, including versioning structure and release metadata.",
      "Release artifacts, release notes, test evidence, and supporting documentation are consistently maintained.",
-     "Deployment occurs through automated pipelines and predictable promotion paths."
+     "Deployment occurs through automated pipelines and predictable promotion paths.",
+     "Approval gates are enforced and tied to documented readiness criteria.",
+     "Rollback plans are defined prior to deployment and integrated into release preparation."
     ],
     "level_up_criteria": [
      "Track deployment performance metrics.",
-     "Measure deployment success rate, change failure rate, rollback frequency, and deployment throughput."
+     "Measure deployment success rate, change failure rate, rollback frequency, and deployment throughput.",
+     "Validate rollback procedures through testing.",
+     "Implement automated deployment verification checks.",
+     "Use release metrics to identify and address bottlenecks.",
+     "Review release performance on a recurring cadence."
     ],
     "evidence_examples": [
      "Deployment dashboards",
      "Release scorecards",
-     "Rollback testing results"
+     "Rollback testing results",
+     "Deployment verification reports",
+     "Change failure tracking",
+     "Engineering governance reviews ---"
     ]
    },
    {
@@ -321,16 +391,25 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "Release metrics are actively tracked and reviewed.",
      "Rollback readiness is validated through testing rather than assumed.",
-     "Deployment success and change-failure trends are measured over time."
+     "Deployment success and change-failure trends are measured over time.",
+     "Safe deployment approaches such as canary, phased rollout, or blue/green strategies are used.",
+     "Release data informs engineering and release process improvements."
     ],
     "level_up_criteria": [
      "Implement policy-driven release orchestration.",
-     "Dynamically adjust approvals based on risk, evidence, or change type."
+     "Dynamically adjust approvals based on risk, evidence, or change type.",
+     "Demonstrate automated rollback capabilities.",
+     "Support progressive delivery strategies where applicable.",
+     "Continuously optimize deployment safety, speed, and reliability.",
+     "Demonstrate proactive release process improvements."
     ],
     "evidence_examples": [
      "Automated rollback execution",
      "Risk-based approvals",
-     "Feature flag management"
+     "Feature flag management",
+     "Progressive delivery capabilities",
+     "DORA-aligned deployment reporting",
+     "Deployment optimization initiatives ---"
     ]
    },
    {
@@ -340,7 +419,9 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "Approvals are policy-based and adapt to risk and evidence.",
      "Rollback is automated and can be executed rapidly with minimal manual effort.",
-     "Progressive delivery techniques are used where appropriate."
+     "Progressive delivery techniques are used where appropriate.",
+     "The delivery process continually improves through operational feedback and measurable outcomes.",
+     "Qualifying deployments cannot routinely bypass approved deployment workflows."
     ],
     "level_up_criteria": [],
     "evidence_examples": []
@@ -361,13 +442,19 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
      "None. Infrastructure, configuration, and operational activities depend entirely on manual execution."
     ],
     "level_up_criteria": [
-     "Implement at least one repeatable automation capability for infrastructure, configuration, or…",
-     "Use automation tooling for at least a subset of work."
+     "Implement at least one repeatable automation capability for infrastructure, configuration, or operational tasks.",
+     "Use automation tooling for at least a subset of work.",
+     "Maintain automation artifacts in a reusable form rather than one-time execution.",
+     "Establish ownership for automation assets.",
+     "Demonstrate automation has been successfully executed within the assessment period."
     ],
     "evidence_examples": [
      "Terraform configurations",
      "PowerShell scripts",
-     "Bash scripts"
+     "Bash scripts",
+     "Ansible playbooks",
+     "Infrastructure deployment templates",
+     "Scheduled automation jobs ---"
     ]
    },
    {
@@ -377,16 +464,24 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "Some Infrastructure-as-Code (IaC) exists, but most changes are applied manually with elevated access.",
      "Secrets and credentials are often stored in scripts or configuration files.",
-     "Centralized secrets management is not consistently used."
+     "Centralized secrets management is not consistently used.",
+     "Deployment and change processes rely on tribal knowledge or individual expertise.",
+     "Manual execution remains the default operating model."
     ],
     "level_up_criteria": [
      "Automate selected repeatable infrastructure or configuration activities.",
-     "Store automation artifacts in version control."
+     "Store automation artifacts in version control.",
+     "Reduce dependence on manual execution for recurring tasks.",
+     "Begin documenting automation procedures and ownership.",
+     "Demonstrate that automation is used beyond isolated or experimental scenarios.",
+     "Track which activities are automated versus manual."
     ],
     "evidence_examples": [
      "Source-controlled automation repositories",
      "Automated provisioning scripts",
-     "Configuration management artifacts"
+     "Configuration management artifacts",
+     "Infrastructure deployment templates",
+     "Operational runbooks referencing automation ---"
     ]
    },
    {
@@ -396,16 +491,26 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "Infrastructure-as-Code or automation scripts exist and are used for some changes.",
      "Execution is inconsistent and often triggered manually.",
-     "Automation adoption is not measured."
+     "Automation adoption is not measured.",
+     "Success and failure rates are not routinely tracked.",
+     "Automation operates outside version control in some cases, reducing traceability.",
+     "Automation usage varies across teams, systems, or environments."
     ],
     "level_up_criteria": [
      "Require automation for qualifying infrastructure and configuration changes.",
-     "Standardize automation patterns, modules, templates, or reusable components."
+     "Standardize automation patterns, modules, templates, or reusable components.",
+     "Use version-controlled infrastructure definitions as the source of truth.",
+     "Implement centralized secrets management.",
+     "Establish ownership and lifecycle management for automation assets.",
+     "Demonstrate consistent use of automation across environments."
     ],
     "evidence_examples": [
      "Approved Terraform modules",
      "Infrastructure-as-Code repositories",
-     "Secret-management integrations"
+     "Secret-management integrations",
+     "Standard automation templates",
+     "Configuration baselines",
+     "Repository governance standards ---"
     ]
    },
    {
@@ -415,16 +520,26 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "Infrastructure-as-Code and automation assets are version-controlled.",
      "Defined patterns, modules, and templates are used consistently.",
-     "Qualifying infrastructure and configuration changes are applied through automation rather than manual…"
+     "Qualifying infrastructure and configuration changes are applied through automation rather than manual execution.",
+     "Secrets are managed through centralized platforms with auditable access controls.",
+     "Approved reusable modules are adopted to reduce custom implementation patterns.",
+     "Ownership and maintenance responsibilities are clearly established."
     ],
     "level_up_criteria": [
      "Measure automation coverage across infrastructure and operational activities.",
-     "Track automation success rates, failures, and reliability metrics."
+     "Track automation success rates, failures, and reliability metrics.",
+     "Monitor manual changes as documented exceptions.",
+     "Review automation metrics on a recurring cadence.",
+     "Use automation performance data to identify improvement opportunities.",
+     "Demonstrate active management of automation quality and effectiveness."
     ],
     "evidence_examples": [
      "Automation coverage dashboards",
      "Infrastructure deployment metrics",
-     "Coverage reports"
+     "Coverage reports",
+     "Exception logs",
+     "Automation reliability trend reporting",
+     "Engineering reviews focused on automation performance ---"
     ]
    },
    {
@@ -434,16 +549,26 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "Automation coverage is measured as a percentage of qualifying changes.",
      "Manual changes are tracked as exceptions rather than routine practice.",
-     "Secrets rotation policies are defined, enforced, and monitored."
+     "Secrets rotation policies are defined, enforced, and monitored.",
+     "Automated detection and remediation may exist for secrets found in code.",
+     "Automation reliability metrics are captured and analyzed.",
+     "Failure patterns inform improvement efforts."
     ],
     "level_up_criteria": [
      "Implement technical controls that prevent or significantly restrict manual infrastructure changes.",
-     "Continuously detect and remediate infrastructure drift."
+     "Continuously detect and remediate infrastructure drift.",
+     "Use automation telemetry to identify optimization opportunities.",
+     "Automate remediation of recurring operational issues where appropriate.",
+     "Ensure qualifying infrastructure changes flow through approved automated processes.",
+     "Demonstrate that automation drives consistency and continuous operational improvement."
     ],
     "evidence_examples": [
      "Drift detection tooling",
      "Policy-as-Code controls",
-     "Automated remediation workflows"
+     "Automated remediation workflows",
+     "Infrastructure compliance reporting",
+     "Automated guardrail enforcement",
+     "Infrastructure health telemetry ---"
     ]
    },
    {
@@ -453,7 +578,10 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "Guardrails prevent manual or out-of-band infrastructure changes for qualifying systems.",
      "Automation continuously improves through telemetry-driven optimization.",
-     "Infrastructure drift is automatically detected and corrected."
+     "Infrastructure drift is automatically detected and corrected.",
+     "Automated processes govern infrastructure and configuration lifecycle management.",
+     "Manual intervention becomes the exception and requires governance oversight.",
+     "Infrastructure operations are highly repeatable, auditable, and resilient."
     ],
     "level_up_criteria": [],
     "evidence_examples": []
@@ -464,23 +592,28 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
   "id": "4",
   "title": "Source Control & Traceability",
   "definition": "The maturity of standardized version control, Infrastructure-as-Code, Configuration-as-Code, and bidirectional traceability linking requirements to code, tests, and release artifacts.",
-  "na_description": "Not applicable if the team does not create or modify source code, configuration, scripts, or Infrastructure-as-Code artifacts and is therefore not expected to maintain version…",
+  "na_description": "Not applicable if the team does not create or modify source code, configuration, scripts, or Infrastructure-as-Code artifacts and is therefore not expected to maintain version control or traceability.",
   "levels": [
    {
     "level": 0,
     "name": "Below Baseline",
-    "description": "Version control is not used. Code, configuration, or infrastructure changes cannot be traced to work items or releases. Branching strategies are not…",
+    "description": "Version control is not used. Code, configuration, or infrastructure changes cannot be traced to work items or releases. Branching strategies are not used.",
     "key_characteristics": [
-     "None. Source artifacts, configuration, or infrastructure changes cannot be reliably tracked, audited, or…"
+     "None. Source artifacts, configuration, or infrastructure changes cannot be reliably tracked, audited, or connected to business outcomes."
     ],
     "level_up_criteria": [
-     "Store at least some source code, scripts, configuration files, or Infrastructure-as-Code assets in…",
-     "Establish a repository structure for active development work."
+     "Store at least some source code, scripts, configuration files, or Infrastructure-as-Code assets in an approved version control platform.",
+     "Establish a repository structure for active development work.",
+     "Maintain basic commit history identifying who made changes.",
+     "Define a basic branch and merge process.",
+     "Demonstrate the ability to retrieve prior versions of managed assets."
     ],
     "evidence_examples": [
      "Git repositories",
      "Commit history",
-     "Repository ownership documentation"
+     "Repository ownership documentation",
+     "Branching guidance",
+     "Source control platform usage reports ---"
     ]
    },
    {
@@ -490,35 +623,54 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "Version control usage varies, with some code, scripts, or configuration stored outside approved repositories.",
      "Configuration updates are handled manually, creating drift and limited visibility into change history.",
-     "Infrastructure changes are not consistently tracked and often occur outside Infrastructure-as-Code practices."
+     "Infrastructure changes are not consistently tracked and often occur outside Infrastructure-as-Code practices.",
+     "Traceability relies on manual naming conventions, spreadsheets, documentation, or personal notes.",
+     "Branch and merge practices are inconsistent and lack agreed workflows or review expectations."
     ],
     "level_up_criteria": [
      "Store the majority of source artifacts in approved repositories.",
-     "Expand version control beyond application code to include scripts, configuration files, and…"
+     "Expand version control beyond application code to include scripts, configuration files, and Infrastructure-as-Code where applicable.",
+     "Establish repeatable branching and merge practices.",
+     "Introduce pull requests, merge requests, or peer review processes.",
+     "Begin linking work items to source control activities.",
+     "Reduce reliance on manual tracking of change history."
     ],
     "evidence_examples": [
      "Pull request workflows",
      "Branching standards",
-     "Infrastructure-as-Code repositories"
+     "Infrastructure-as-Code repositories",
+     "Work item references in commits",
+     "Repository review history",
+     "Source control governance documentation ---"
     ]
    },
    {
     "level": 2,
     "name": "Developing",
-    "description": "Version control is used for some assets, but branching, Infrastructure-as-Code, and traceability practices differ across work types and are applied…",
+    "description": "Version control is used for some assets, but branching, Infrastructure-as-Code, and traceability practices differ across work types and are applied inconsistently.",
     "key_characteristics": [
-     "Most code changes are stored in version control, but scripts, configuration files, and infrastructure…",
+     "Most code changes are stored in version control, but scripts, configuration files, and infrastructure definitions may be managed separately.",
      "Branching and merge practices vary across repositories.",
-     "Protection controls and review requirements are inconsistently enforced."
+     "Protection controls and review requirements are inconsistently enforced.",
+     "Configuration-as-Code is emerging, but portions of configuration remain manual.",
+     "Infrastructure-as-Code adoption is partial and inconsistent.",
+     "Traceability is improving, but linking requirements, code, tests, and releases still requires manual effort."
     ],
     "level_up_criteria": [
      "Use approved repositories consistently across qualifying assets.",
-     "Standardize branching, merge, and review practices."
+     "Standardize branching, merge, and review practices.",
+     "Implement repository protection controls.",
+     "Require peer review before merging qualifying changes.",
+     "Adopt Configuration-as-Code and Infrastructure-as-Code practices where applicable.",
+     "Establish documented traceability connecting requirements, code changes, testing activities, and release artifacts."
     ],
     "evidence_examples": [
      "Protected branch settings",
      "Merge approval requirements",
-     "Repository governance standards"
+     "Repository governance standards",
+     "Configuration-as-Code repositories",
+     "Traceability documentation",
+     "Repository access controls ---"
     ]
    },
    {
@@ -528,16 +680,27 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "Approved repositories are used consistently.",
      "Structured branching, merge review processes, and access controls are established.",
-     "Multi-factor authentication and repository administration practices are defined."
+     "Multi-factor authentication and repository administration practices are defined.",
+     "Repository security controls govern permissions and visibility changes.",
+     "Configuration-as-Code has been adopted.",
+     "Infrastructure-as-Code follows standardized patterns, modules, and folder structures.",
+     "Traceability is documented and links work items to code changes, tests, and release artifacts."
     ],
     "level_up_criteria": [
      "Maintain end-to-end traceability from work item through deployment.",
-     "Measure traceability completeness and metadata quality."
+     "Measure traceability completeness and metadata quality.",
+     "Monitor adherence to branching, review, and repository standards.",
+     "Track repository governance metrics and exceptions.",
+     "Maintain artifact provenance information.",
+     "Use traceability information during audits, reviews, incident investigations, and release validation activities."
     ],
     "evidence_examples": [
      "Traceability dashboards",
      "Audit reports",
-     "Release lineage reports"
+     "Release lineage reports",
+     "Repository compliance reviews",
+     "Provenance tracking records",
+     "Software Bill of Materials (SBOM) records ---"
     ]
    },
    {
@@ -545,18 +708,28 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "name": "Measured",
     "description": "Traceability is monitored and used to improve consistency, security, and release reliability.",
     "key_characteristics": [
-     "End-to-end traceability connects requirements, commits, builds, deployments, releases, and supporting…",
+     "End-to-end traceability connects requirements, commits, builds, deployments, releases, and supporting artifacts.",
      "Configuration and infrastructure changes are governed through version-controlled workflows.",
-     "Metadata quality is measured and monitored."
+     "Metadata quality is measured and monitored.",
+     "Commit history, merge history, and release information consistently reflect business context.",
+     "Artifact provenance is tracked and visible.",
+     "Compliance signals such as review history, SBOM generation, and dependency scanning can be observed and reported."
     ],
     "level_up_criteria": [
      "Automate traceability across the software delivery lifecycle.",
-     "Eliminate manual reconciliation between requirements, code, testing, approvals, and releases."
+     "Eliminate manual reconciliation between requirements, code, testing, approvals, and releases.",
+     "Enforce repository governance through automated controls.",
+     "Automatically collect and maintain lineage data.",
+     "Use traceability data to identify quality, security, delivery, and platform improvement opportunities.",
+     "Demonstrate that traceability information informs engineering decisions."
     ],
     "evidence_examples": [
      "Automated work item linking",
      "Automated release lineage generation",
-     "Policy-as-Code governance controls"
+     "Policy-as-Code governance controls",
+     "Automated dependency tracking",
+     "Delivery intelligence dashboards",
+     "Platform analytics using traceability data ---"
     ]
    },
    {
@@ -566,7 +739,10 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "Automated traceability connects code, Infrastructure-as-Code, configuration, tests, approvals, and releases.",
      "Configuration and infrastructure are fully expressed as code.",
-     "Real-time drift detection supports operational integrity."
+     "Real-time drift detection supports operational integrity.",
+     "Governance controls prevent untracked or unreviewed changes.",
+     "Historical lineage is visible across repositories, modules, deployments, and releases.",
+     "Traceability insights actively inform quality improvement, security decisions, architecture modernization, refactoring opportunities, and platform investment decisions."
     ],
     "level_up_criteria": [],
     "evidence_examples": []
@@ -577,7 +753,7 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
   "id": "5",
   "title": "Testing & QE – Automated Testing",
   "definition": "Coverage, reliability, and integration of automated unit, integration, end-to-end (E2E), and regression tests into delivery workflows.",
-  "na_description": "Not applicable if the team does not write, maintain, or execute application or platform code (including scripts). Teams only deploy vendor products, operate COTS systems without…",
+  "na_description": "Not applicable if the team does not write, maintain, or execute application or platform code (including scripts). Teams only deploy vendor products, operate COTS systems without custom code, or perform operations-only responsibilities.",
   "levels": [
    {
     "level": 0,
@@ -587,13 +763,18 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
      "None. Validation depends entirely on manual testing, user reports, or post-release issue discovery."
     ],
     "level_up_criteria": [
-     "Implement at least one form of automated testing (unit, integration, API, UI, regression, or…",
-     "Execute automated tests for at least a subset of application functionality."
+     "Implement at least one form of automated testing (unit, integration, API, UI, regression, or equivalent).",
+     "Execute automated tests for at least a subset of application functionality.",
+     "Store test assets in a managed repository.",
+     "Establish ownership for automated test maintenance.",
+     "Demonstrate successful execution of automated tests during the assessment period."
     ],
     "evidence_examples": [
      "Unit test frameworks",
      "Automated test scripts",
-     "Test repositories"
+     "Test repositories",
+     "Build logs showing test execution",
+     "Quality engineering procedures ---"
     ]
    },
    {
@@ -603,16 +784,25 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "Automated testing is minimal, with validation primarily manual or ad hoc after deployment.",
      "Coverage expectations are undefined.",
-     "Critical application paths lack unit, integration, or end-to-end coverage."
+     "Critical application paths lack unit, integration, or end-to-end coverage.",
+     "Automated tests are often executed locally rather than systematically.",
+     "Testing is not embedded into delivery workflows."
     ],
     "level_up_criteria": [
      "Expand automated testing beyond isolated components.",
-     "Establish documented expectations for automated testing practices."
+     "Establish documented expectations for automated testing practices.",
+     "Execute automated tests on a recurring basis.",
+     "Incorporate automated testing into portions of the development lifecycle.",
+     "Identify critical workflows requiring automated validation.",
+     "Track which system areas have automated coverage versus manual-only validation."
     ],
     "evidence_examples": [
      "Test coverage inventories",
      "Automated regression suites",
-     "Integration test suites"
+     "Integration test suites",
+     "Testing standards",
+     "Test execution reports",
+     "Coverage assessments ---"
     ]
    },
    {
@@ -622,16 +812,26 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "Coverage is limited and focused on selected components or services.",
      "Automated testing is isolated to specific code paths.",
-     "Test execution is irregular and may require manual triggering."
+     "Test execution is irregular and may require manual triggering.",
+     "Pipeline integration is inconsistent.",
+     "Test reliability is not measured.",
+     "Flaky or unstable tests persist without active remediation."
     ],
     "level_up_criteria": [
      "Define testing scope across unit, integration, end-to-end, and regression testing as applicable.",
-     "Automatically execute qualifying tests through delivery workflows."
+     "Automatically execute qualifying tests through delivery workflows.",
+     "Integrate automated testing with CI/CD pipelines, merge requests, or deployment processes.",
+     "Make test results visible to engineers and delivery teams.",
+     "Establish a process for reviewing and remediating failing tests.",
+     "Maintain managed test data, mocks, stubs, or test environments supporting reliable execution."
     ],
     "evidence_examples": [
      "Pipeline-integrated test execution",
      "CI/CD quality gates",
-     "Merge request validation"
+     "Merge request validation",
+     "Test result dashboards",
+     "Regression testing standards",
+     "Test environment management procedures ---"
     ]
    },
    {
@@ -641,16 +841,27 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "Unit, integration, end-to-end, and regression testing scopes are documented.",
      "Execution is automated and integrated into standard delivery workflows.",
-     "Automated tests run through CI/CD pipelines, merge requests, or promotion workflows."
+     "Automated tests run through CI/CD pipelines, merge requests, or promotion workflows.",
+     "Results are visible to the team.",
+     "Test failures are routinely reviewed and categorized.",
+     "Test data and mock services are managed to ensure reliable execution.",
+     "Environment dependencies are controlled to support repeatable outcomes."
     ],
     "level_up_criteria": [
      "Measure automated testing coverage, execution reliability, and quality trends.",
-     "Track test failure rates, flaky tests, execution times, and stability metrics."
+     "Track test failure rates, flaky tests, execution times, and stability metrics.",
+     "Use automated test outcomes as release readiness indicators.",
+     "Review testing metrics on a recurring cadence.",
+     "Demonstrate active maintenance of automated testing assets.",
+     "Use testing data to identify quality risks and improvement opportunities."
     ],
     "evidence_examples": [
      "Coverage dashboards",
      "Test stability reports",
-     "Flaky test remediation backlog"
+     "Flaky test remediation backlog",
+     "Release readiness reports",
+     "Quality trend reporting",
+     "QE review sessions ---"
     ]
    },
    {
@@ -660,16 +871,27 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "Automated test suites are instrumented and monitored.",
      "Coverage, stability, execution performance, and failure trends are tracked.",
-     "Test results serve as release confidence indicators."
+     "Test results serve as release confidence indicators.",
+     "Maintenance is proactive.",
+     "Critical paths remain well-covered.",
+     "Low-value tests are identified and retired when appropriate.",
+     "Testing metrics influence engineering decisions."
     ],
     "level_up_criteria": [
      "Use risk-based or impact-based testing strategies.",
-     "Continuously tune automated suites to maximize risk coverage while minimizing execution time."
+     "Continuously tune automated suites to maximize risk coverage while minimizing execution time.",
+     "Implement automated identification and remediation of test instability where feasible.",
+     "Use testing intelligence to guide release decisions.",
+     "Demonstrate adaptive execution based on change scope, risk profile, or impacted functionality.",
+     "Continuously evaluate and improve testing effectiveness."
     ],
     "evidence_examples": [
      "Test impact analysis",
      "Risk-based test selection",
-     "Adaptive execution strategies"
+     "Adaptive execution strategies",
+     "Automated test maintenance capabilities",
+     "Quality engineering analytics",
+     "Intelligent regression testing approaches ---"
     ]
    },
    {
@@ -679,7 +901,10 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "Coverage is risk-informed and continuously aligned to protect critical business and technical workflows.",
      "Test execution adapts to code changes and impacted areas.",
-     "Test selection is optimized to maximize confidence and speed."
+     "Test selection is optimized to maximize confidence and speed.",
+     "Suites maintain low flakiness and efficient runtime.",
+     "Test data and dependency management are automated.",
+     "Quality signals are continuously improved based on operational outcomes and engineering needs."
     ],
     "level_up_criteria": [],
     "evidence_examples": []
@@ -690,23 +915,28 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
   "id": "6",
   "title": "Testing & QE – Security Testing",
   "definition": "Security testing practices that identify, validate, and remediate vulnerabilities through automated and manual security testing activities integrated into the software delivery lifecycle.",
-  "na_description": "Not applicable if the team does not develop, modify, deploy, or maintain code, scripts, applications, APIs, Infrastructure-as-Code, or configuration that requires security…",
+  "na_description": "Not applicable if the team does not develop, modify, deploy, or maintain code, scripts, applications, APIs, Infrastructure-as-Code, or configuration that requires security validation. 【1-af0e1e】",
   "levels": [
    {
     "level": 0,
     "name": "Below Baseline",
     "description": "No security testing is performed prior to deployment or release.",
     "key_characteristics": [
-     "None. Security vulnerabilities are discovered only through production incidents, external assessments,…"
+     "None. Security vulnerabilities are discovered only through production incidents, external assessments, audits, or user reports."
     ],
     "level_up_criteria": [
      "Perform at least one form of security validation prior to release or deployment.",
-     "Document basic security testing expectations."
+     "Document basic security testing expectations.",
+     "Identify ownership for application security testing activities.",
+     "Review security findings when discovered.",
+     "Demonstrate security testing has occurred for at least one application, release, or platform component."
     ],
     "evidence_examples": [
      "Vulnerability scan reports",
      "Security review checklists",
-     "Security testing plans"
+     "Security testing plans",
+     "Application security assessments",
+     "Security findings logs ---"
     ]
    },
    {
@@ -716,16 +946,26 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "Security reviews occur sporadically.",
      "Vulnerability identification is largely reactive.",
-     "Security validation is often performed late in the development lifecycle."
+     "Security validation is often performed late in the development lifecycle.",
+     "Security findings may not be tracked consistently.",
+     "Security testing expectations vary across applications and teams.",
+     "Security activities are not integrated into normal delivery workflows."
     ],
     "level_up_criteria": [
      "Establish repeatable security testing activities for qualifying applications or services.",
-     "Incorporate automated or semi-automated security testing into parts of the development lifecycle."
+     "Incorporate automated or semi-automated security testing into parts of the development lifecycle.",
+     "Define minimum security testing requirements based on application risk.",
+     "Track identified vulnerabilities and remediation status.",
+     "Apply security testing consistently across major releases.",
+     "Integrate security findings into engineering workflows."
     ],
     "evidence_examples": [
      "SAST scan results",
      "Dependency scanning reports",
-     "Vulnerability management tickets"
+     "Vulnerability management tickets",
+     "Security testing procedures",
+     "Security assessment records",
+     "Risk-based testing requirements ---"
     ]
    },
    {
@@ -735,16 +975,26 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "Security testing is performed on selected applications or release types.",
      "Automated scanning exists but is inconsistently applied.",
-     "Security testing coverage differs across systems and repositories."
+     "Security testing coverage differs across systems and repositories.",
+     "Vulnerability remediation practices vary.",
+     "Security requirements are not consistently tied to delivery readiness.",
+     "Testing depth depends on individual team practices."
     ],
     "level_up_criteria": [
      "Integrate security testing into standard development and delivery workflows.",
-     "Establish documented requirements for security testing activities based on system risk and…"
+     "Establish documented requirements for security testing activities based on system risk and classification.",
+     "Perform security testing prior to production promotion.",
+     "Ensure security findings are reviewed, triaged, and assigned.",
+     "Define severity classifications and remediation expectations.",
+     "Maintain evidence that security controls are evaluated consistently."
     ],
     "evidence_examples": [
      "Pipeline-integrated security scans",
      "Security quality gates",
-     "Threat modeling outputs"
+     "Threat modeling outputs",
+     "Secure release readiness reviews",
+     "Security testing standards",
+     "Remediation workflows ---"
     ]
    },
    {
@@ -754,16 +1004,26 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "Security testing occurs as part of normal software delivery activities.",
      "Security requirements are documented and consistently applied.",
-     "Security testing is tied to application risk."
+     "Security testing is tied to application risk.",
+     "Vulnerabilities are reviewed, triaged, and assigned for remediation.",
+     "Security findings influence promotion and readiness decisions.",
+     "Security validation requirements are known and repeatable."
     ],
     "level_up_criteria": [
      "Measure security testing effectiveness and vulnerability management performance.",
-     "Track vulnerability trends, remediation timelines, and recurring security issues."
+     "Track vulnerability trends, remediation timelines, and recurring security issues.",
+     "Monitor compliance with security testing requirements.",
+     "Review security metrics on a recurring cadence.",
+     "Use testing results to improve secure development practices.",
+     "Demonstrate that security findings influence release and risk decisions."
     ],
     "evidence_examples": [
      "Vulnerability dashboards",
      "Risk trend reporting",
-     "Security metrics reviews"
+     "Security metrics reviews",
+     "Remediation SLA reporting",
+     "Security compliance reviews",
+     "Release risk assessments ---"
     ]
    },
    {
@@ -773,16 +1033,26 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "Security testing coverage and effectiveness are monitored.",
      "Vulnerability trends are tracked over time.",
-     "Resolution performance is measured and managed."
+     "Resolution performance is measured and managed.",
+     "Security findings influence engineering priorities.",
+     "Compliance with security expectations is visible.",
+     "Security metrics support governance and risk management decisions."
     ],
     "level_up_criteria": [
      "Continuously adapt security testing based on evolving threats and risk exposure.",
-     "Automate security validation wherever technically feasible."
+     "Automate security validation wherever technically feasible.",
+     "Use security telemetry and historical findings to improve prevention and detection capabilities.",
+     "Prioritize testing efforts using risk-informed approaches.",
+     "Demonstrate continuous improvement in security posture and vulnerability reduction.",
+     "Ensure security validation is embedded throughout the software delivery lifecycle."
     ],
     "evidence_examples": [
      "Risk-based security testing strategies",
      "Continuous security validation",
-     "Automated policy enforcement"
+     "Automated policy enforcement",
+     "Security analytics platforms",
+     "Threat-informed testing practices",
+     "Security engineering roadmaps ---"
     ]
    },
    {
@@ -792,7 +1062,10 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "Security testing evolves alongside emerging threats.",
      "Automated validation is extensively integrated throughout delivery workflows.",
-     "Security controls adapt based on risk and context."
+     "Security controls adapt based on risk and context.",
+     "Vulnerability reduction trends demonstrate continuous improvement.",
+     "Security insights influence architecture, engineering, and operational decisions.",
+     "Security is treated as a continuous engineering capability rather than a periodic validation exercise."
     ],
     "level_up_criteria": [],
     "evidence_examples": []
@@ -803,7 +1076,7 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
   "id": "7",
   "title": "Testing & QE – Performance & Reliability Testing",
   "definition": "Load, scalability, and resilience testing that validates system behavior against defined SLOs and SLIs under stress and failure conditions to support predictable performance.",
-  "na_description": "Not applicable if the team does not own software services, APIs, or workload-bearing systems. This includes teams that operate internal platforms without service-level traffic,…",
+  "na_description": "Not applicable if the team does not own software services, APIs, or workload-bearing systems. This includes teams that operate internal platforms without service-level traffic, hardware-only groups, or teams without defined SLOs, SLIs, or user-facing behaviors.",
   "levels": [
    {
     "level": 0,
@@ -814,12 +1087,17 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     ],
     "level_up_criteria": [
      "Identify critical services, APIs, or user-facing workloads requiring performance validation.",
-     "Execute at least one performance or reliability test against a production-relevant workload."
+     "Execute at least one performance or reliability test against a production-relevant workload.",
+     "Establish ownership for performance and reliability testing activities.",
+     "Document basic performance expectations, even if targets are preliminary.",
+     "Demonstrate testing has occurred within the assessment period."
     ],
     "evidence_examples": [
      "Load test reports",
      "Performance test plans",
-     "Initial capacity assessments"
+     "Initial capacity assessments",
+     "Reliability testing documentation",
+     "Operational readiness reviews ---"
     ]
    },
    {
@@ -829,16 +1107,26 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "SLOs and SLIs are undefined.",
      "No targets exist for latency, throughput, availability, or error rates.",
-     "Testing occurs infrequently and often only after incidents."
+     "Testing occurs infrequently and often only after incidents.",
+     "Resilience behavior is largely untested.",
+     "Recovery expectations have not been validated.",
+     "Teams have limited understanding of degraded-mode operations."
     ],
     "level_up_criteria": [
      "Establish repeatable performance or reliability testing activities.",
-     "Define basic performance scenarios aligned to expected usage patterns."
+     "Define basic performance scenarios aligned to expected usage patterns.",
+     "Execute load, stress, or resilience testing on a recurring basis.",
+     "Document findings and remediation actions resulting from testing.",
+     "Begin evaluating performance risks before major releases.",
+     "Track performance issues discovered through testing."
     ],
     "evidence_examples": [
      "Load testing scripts",
      "Reliability test suites",
-     "Capacity planning documentation"
+     "Capacity planning documentation",
+     "Performance issue backlogs",
+     "Test execution records",
+     "Baseline performance reports ---"
     ]
    },
    {
@@ -848,16 +1136,27 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "Testing scenarios are shallow and limited to basic load or smoke testing.",
      "Testing execution is largely manual.",
-     "Workloads do not consistently reflect production traffic patterns."
+     "Workloads do not consistently reflect production traffic patterns.",
+     "Results are not consistently actionable.",
+     "Bottlenecks may be identified but are not systematically remediated.",
+     "Failover and recovery testing occur inconsistently.",
+     "Release readiness decisions are not influenced by testing results."
     ],
     "level_up_criteria": [
      "Define and document SLOs and SLIs for key services.",
-     "Establish performance thresholds supporting release readiness decisions."
+     "Establish performance thresholds supporting release readiness decisions.",
+     "Conduct standardized performance testing scenarios, including load, spike, and soak testing where appropriate.",
+     "Document expected service degradation and recovery behaviors.",
+     "Execute testing before production promotion for qualifying releases.",
+     "Ensure performance results are reviewed during release decision-making."
     ],
     "evidence_examples": [
      "SLO and SLI documentation",
      "Performance testing standards",
-     "Release readiness criteria"
+     "Release readiness criteria",
+     "Performance test reports",
+     "Reliability requirements documentation",
+     "Capacity assessments ---"
     ]
    },
    {
@@ -867,16 +1166,27 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "SLOs and SLIs are defined for critical services.",
      "Metrics such as p95 latency, p99 latency, throughput, availability, and error rates are documented.",
-     "Standardized load, spike, and soak tests are executed."
+     "Standardized load, spike, and soak tests are executed.",
+     "Testing scenarios align to expected production usage.",
+     "Test outcomes influence release readiness decisions.",
+     "Go/no-go thresholds are defined and tied to performance expectations.",
+     "Resilience behaviors and degradation expectations are documented."
     ],
     "level_up_criteria": [
      "Track performance and reliability trends across releases.",
-     "Measure system behavior relative to established SLOs and SLIs."
+     "Measure system behavior relative to established SLOs and SLIs.",
+     "Maintain performance baselines and monitor regressions.",
+     "Integrate performance and reliability validation into delivery workflows.",
+     "Delay or block promotions when critical performance criteria are not met.",
+     "Conduct resilience exercises validating recovery behavior under failure conditions."
     ],
     "evidence_examples": [
      "Performance dashboards",
      "Release-over-release trend reporting",
-     "Capacity forecasting reports"
+     "Capacity forecasting reports",
+     "Reliability scorecards",
+     "Fault simulation results",
+     "Promotion gate documentation ---"
     ]
    },
    {
@@ -886,16 +1196,27 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "Trends are monitored across releases and environments.",
      "Performance regressions can be identified and measured.",
-     "Execution is integrated into delivery workflows."
+     "Execution is integrated into delivery workflows.",
+     "Test failures can prevent promotion until mitigations are implemented.",
+     "Performance baselines are maintained.",
+     "Capacity planning is informed by observed testing data.",
+     "Resilience exercises include dependency failure simulation and controlled fault scenarios."
     ],
     "level_up_criteria": [
      "Continuously validate performance and resilience using production-informed testing strategies.",
-     "Conduct routine resilience engineering activities, including fault injection or chaos…"
+     "Conduct routine resilience engineering activities, including fault injection or chaos experimentation where appropriate.",
+     "Use error budgets and reliability objectives to guide release decisions.",
+     "Continuously optimize scalability, recovery, and user experience based on observed results.",
+     "Automatically identify emerging performance risks.",
+     "Demonstrate that testing evolves as architecture, usage patterns, and operational risks change."
     ],
     "evidence_examples": [
      "Chaos engineering exercises",
      "Fault injection testing",
-     "Error budget reviews"
+     "Error budget reviews",
+     "Reliability engineering metrics",
+     "Production traffic modeling",
+     "Continuous performance validation capabilities ---"
     ]
    },
    {
@@ -905,7 +1226,11 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "Traffic patterns used in testing resemble real production conditions.",
      "Testing includes concurrency, peak demand, and downstream dependency variation.",
-     "Chaos or fault-injection testing validates resiliency mechanisms."
+     "Chaos or fault-injection testing validates resiliency mechanisms.",
+     "Circuit breakers, retry logic, timeouts, and backpressure controls are routinely validated.",
+     "Error budgets influence release pacing and prioritization decisions.",
+     "Continuous performance tuning improves scalability, resiliency, and user experience.",
+     "Reliability engineering is proactive rather than reactive."
     ],
     "level_up_criteria": [],
     "evidence_examples": []
@@ -923,16 +1248,21 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "name": "Below Baseline",
     "description": "Security checks and code reviews are not performed, and changes proceed without structured review or secure SDLC activities.",
     "key_characteristics": [
-     "None. Changes can be introduced into systems without peer validation, security assessment, or secure…"
+     "None. Changes can be introduced into systems without peer validation, security assessment, or secure engineering controls."
     ],
     "level_up_criteria": [
-     "Establish a basic peer review process for code, configuration, scripts, or Infrastructure-as-Code…",
-     "Identify individuals authorized to review and approve changes."
+     "Establish a basic peer review process for code, configuration, scripts, or Infrastructure-as-Code changes.",
+     "Identify individuals authorized to review and approve changes.",
+     "Document basic security expectations for code changes.",
+     "Perform reviews on at least some changes prior to deployment.",
+     "Demonstrate evidence that review activities are occurring."
     ],
     "evidence_examples": [
      "Pull request reviews",
      "Merge request approvals",
-     "Review checklists"
+     "Review checklists",
+     "Engineering standards",
+     "Change approval records ---"
     ]
    },
    {
@@ -942,16 +1272,27 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "Reviews occur inconsistently without defined expectations regarding scope, depth, or evidence.",
      "Threat modeling is informal and performed only when initiated by individuals.",
-     "Secure design considerations are ad hoc."
+     "Secure design considerations are ad hoc.",
+     "Security checks are largely manual.",
+     "Findings may not be documented or triaged.",
+     "Protected branches are not consistently enforced.",
+     "Changes can bypass structured review activities."
     ],
     "level_up_criteria": [
      "Define minimum review expectations across repositories and development teams.",
-     "Require peer review for most changes prior to merge."
+     "Require peer review for most changes prior to merge.",
+     "Implement at least some security validation activities as part of the review process.",
+     "Capture review evidence through comments, approvals, or documented decisions.",
+     "Establish guidance for identifying security-sensitive or higher-risk changes.",
+     "Document exceptions when review processes are bypassed."
     ],
     "evidence_examples": [
      "Peer review standards",
      "Security review checklists",
-     "Repository review policies"
+     "Repository review policies",
+     "Approval records",
+     "Review exception logs",
+     "Security governance documentation ---"
     ]
    },
    {
@@ -961,16 +1302,26 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "Peer review occurs, but review quality and consistency vary.",
      "Security checks exist for some changes, including SAST or dependency scanning.",
-     "Threat modeling guidance is available but not consistently applied."
+     "Threat modeling guidance is available but not consistently applied.",
+     "Review evidence varies in quality and depth.",
+     "Review controls are only partially enforced.",
+     "Security validation is inconsistent between teams and repositories."
     ],
     "level_up_criteria": [
      "Document formal code review standards and reviewer expectations.",
-     "Establish required security checkpoints for applicable changes."
+     "Establish required security checkpoints for applicable changes.",
+     "Implement protected branches or equivalent controls.",
+     "Apply structured threat modeling to qualifying architectural, data flow, or design changes.",
+     "Require auditable evidence of review and approval activities.",
+     "Define secure SDLC requirements and integrate them into delivery processes."
     ],
     "evidence_examples": [
      "Secure SDLC standards",
      "Threat modeling documentation",
-     "Protected branch configuration"
+     "Protected branch configuration",
+     "Repository governance policies",
+     "Review approval records",
+     "Security scanning requirements ---"
     ]
    },
    {
@@ -980,16 +1331,27 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "Review standards are documented.",
      "Expectations for security considerations, quality checks, and required reviewers are established.",
-     "Threat modeling is applied predictably using structured methods."
+     "Threat modeling is applied predictably using structured methods.",
+     "Security checkpoints include capabilities such as SAST, SCA, secrets scanning, and Infrastructure-as-Code scanning where applicable.",
+     "Protected branches are required.",
+     "Review evidence is recorded and auditable.",
+     "Review workflows are consistently enforced."
     ],
     "level_up_criteria": [
      "Measure adherence to review and secure SDLC practices.",
-     "Track security findings identified through reviews and security controls."
+     "Track security findings identified through reviews and security controls.",
+     "Monitor review effectiveness using defined performance indicators.",
+     "Define remediation timelines and verification requirements.",
+     "Measure completion of required security checkpoints.",
+     "Review metrics and trends on a recurring cadence."
     ],
     "evidence_examples": [
      "Review quality dashboards",
      "Security findings reporting",
-     "Review cycle-time metrics"
+     "Review cycle-time metrics",
+     "Threat model inventories",
+     "Compliance reporting",
+     "Remediation tracking dashboards ---"
     ]
    },
    {
@@ -999,16 +1361,27 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "Review quality is monitored through measurable indicators.",
      "Comment quality, defect discovery, and review cycle times are observed.",
-     "Security findings are tracked and analyzed."
+     "Security findings are tracked and analyzed.",
+     "Remediation expectations are defined and governed.",
+     "Threat modeling outcomes are recorded and linked to risk mitigation activities.",
+     "Adherence to review controls is visible and measurable.",
+     "Security review effectiveness influences engineering decisions."
     ],
     "level_up_criteria": [
      "Automatically enforce review and security control requirements through tooling.",
-     "Prevent qualifying changes from being merged when required reviews or security validations are…"
+     "Prevent qualifying changes from being merged when required reviews or security validations are incomplete.",
+     "Trigger additional security analysis based on change risk profile.",
+     "Continuously improve review processes using observed findings, defects, and security trends.",
+     "Integrate threat modeling into ongoing engineering and architectural decision making.",
+     "Demonstrate that secure design and code review practices proactively reduce organizational risk."
     ],
     "evidence_examples": [
      "Automated merge protection controls",
      "Policy-as-Code enforcement",
-     "Risk-based security workflows"
+     "Risk-based security workflows",
+     "Automated secure SDLC gates",
+     "Security governance reporting",
+     "Engineering effectiveness reviews ---"
     ]
    },
    {
@@ -1018,7 +1391,10 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "Automated guardrails prevent merges when required reviews or security checks have not completed.",
      "Threat modeling is proactive and continuously revisited as systems evolve.",
-     "Review practices continuously improve based on observed defects, vulnerabilities, and outcomes."
+     "Review practices continuously improve based on observed defects, vulnerabilities, and outcomes.",
+     "Security validation activities adapt based on risk context.",
+     "Secure SDLC insights influence design patterns, frameworks, reusable components, and platform improvements.",
+     "Security is embedded into engineering culture rather than treated as a supplemental activity."
     ],
     "level_up_criteria": [],
     "evidence_examples": []
@@ -1028,7 +1404,7 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
  {
   "id": "9",
   "title": "Engineering Governance",
-  "definition": "Clear decision rights, guardrails, and oversight mechanisms that ensure predictable engineering outcomes through formal gates, risk controls, funding alignment, and governance forums that enforce consistency and…",
+  "definition": "Clear decision rights, guardrails, and oversight mechanisms that ensure predictable engineering outcomes through formal gates, risk controls, funding alignment, and governance forums that enforce consistency and accountability.",
   "na_description": "Not applicable if the team does not make engineering or technical decisions requiring documented standards, approval gates, or governance participation.",
   "levels": [
    {
@@ -1036,16 +1412,21 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "name": "Below Baseline",
     "description": "Engineering decisions occur informally without documented standards, gate criteria, or defined decision rights.",
     "key_characteristics": [
-     "None. Engineering decisions are made without documented governance structures, approval requirements,…"
+     "None. Engineering decisions are made without documented governance structures, approval requirements, accountability mechanisms, or formal oversight."
     ],
     "level_up_criteria": [
      "Identify individuals or groups responsible for engineering decision-making.",
-     "Define at least one governance forum, approval mechanism, or escalation path."
+     "Define at least one governance forum, approval mechanism, or escalation path.",
+     "Document basic expectations for engineering reviews or approvals.",
+     "Capture records of significant engineering decisions.",
+     "Demonstrate governance participation on at least some engineering initiatives."
     ],
     "evidence_examples": [
      "Architecture review meetings",
      "Approval records",
-     "Engineering leadership forums"
+     "Engineering leadership forums",
+     "Decision logs",
+     "Team operating procedures ---"
     ]
    },
    {
@@ -1053,18 +1434,28 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "name": "Initial",
     "description": "Engineering decisions are inconsistent and dependent on informal escalation or individual judgment.",
     "key_characteristics": [
-     "Decision rights are unclear, creating ambiguity around who approves design, security, platform, or delivery…",
+     "Decision rights are unclear, creating ambiguity around who approves design, security, platform, or delivery changes.",
      "Guardrails are limited and poorly documented.",
-     "Escalation paths rely heavily on personal networks and relationships."
+     "Escalation paths rely heavily on personal networks and relationships.",
+     "Approval evidence is inconsistent.",
+     "Engineering decisions may vary significantly between teams.",
+     "Funding priorities and technical priorities shift reactively rather than through defined governance criteria."
     ],
     "level_up_criteria": [
      "Document governance processes for common engineering decisions.",
-     "Define which engineering changes require review, approval, or escalation."
+     "Define which engineering changes require review, approval, or escalation.",
+     "Establish governance forums with recurring participation.",
+     "Begin documenting standards, policies, or engineering expectations.",
+     "Identify engineering risks as part of governance discussions.",
+     "Track major decisions and exceptions in a repeatable manner."
     ],
     "evidence_examples": [
      "Governance charters",
      "Engineering standards documentation",
-     "Approval workflows"
+     "Approval workflows",
+     "Risk review artifacts",
+     "Exception tracking records",
+     "Engineering council participation records ---"
     ]
    },
    {
@@ -1074,16 +1465,26 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "Standards are partially documented, but adoption varies across teams and work types.",
      "Governance forums exist, but engagement is inconsistent.",
-     "Governance activities are not always tied to delivery outcomes."
+     "Governance activities are not always tied to delivery outcomes.",
+     "Approval paths exist but remain loosely enforced.",
+     "Risk considerations are inconsistently applied.",
+     "Dependency management and exception handling vary significantly across teams."
     ],
     "level_up_criteria": [
      "Define clear decision rights and approval authorities.",
-     "Establish documented governance standards covering engineering, security, release, and operational…"
+     "Establish documented governance standards covering engineering, security, release, and operational decisions.",
+     "Define required evidence for governance approvals.",
+     "Document escalation paths for elevated-risk decisions.",
+     "Apply governance expectations consistently across qualifying work.",
+     "Demonstrate governance alignment across participating delivery teams."
     ],
     "evidence_examples": [
      "RACI or decision-rights matrix",
      "Architecture review standards",
-     "Release governance requirements"
+     "Release governance requirements",
+     "Risk management procedures",
+     "Approval criteria documentation",
+     "Engineering governance playbooks ---"
     ]
    },
    {
@@ -1093,16 +1494,27 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "Decision rights are established and communicated.",
      "Governance processes define which decisions require approval, review, or escalation.",
-     "Risk controls establish minimum safeguards for code, configuration, Infrastructure-as-Code, and environment…"
+     "Risk controls establish minimum safeguards for code, configuration, Infrastructure-as-Code, and environment changes.",
+     "Standards are consistently applied.",
+     "Approval requirements include documented evidence expectations.",
+     "Escalation paths are well understood and consistently used.",
+     "Governance structures support predictable engineering outcomes."
     ],
     "level_up_criteria": [
      "Measure governance effectiveness using defined indicators.",
-     "Track governance exceptions and their outcomes."
+     "Track governance exceptions and their outcomes.",
+     "Measure approval cycle times and decision latency.",
+     "Review governance bottlenecks and improvement opportunities.",
+     "Monitor adherence to governance standards.",
+     "Demonstrate that governance outcomes influence delivery, risk, or operational decisions."
     ],
     "evidence_examples": [
      "Governance dashboards",
      "Approval cycle reporting",
-     "Exception trend analysis"
+     "Exception trend analysis",
+     "Risk reduction metrics",
+     "Governance reviews",
+     "Delivery effectiveness reporting ---"
     ]
    },
    {
@@ -1112,16 +1524,27 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "Decision quality is reviewed and evaluated.",
      "Governance evidence is assessed for completeness and usefulness.",
-     "Exceptions are tracked and analyzed."
+     "Exceptions are tracked and analyzed.",
+     "Approval cycle times are measured and optimized.",
+     "Governance controls are evaluated for effectiveness.",
+     "Risk reduction outcomes are reviewed.",
+     "Dependencies are surfaced and managed across organizational boundaries."
     ],
     "level_up_criteria": [
      "Automate governance controls wherever feasible.",
-     "Enforce engineering standards through tooling and delivery workflows."
+     "Enforce engineering standards through tooling and delivery workflows.",
+     "Allow teams to operate autonomously within established guardrails.",
+     "Continuously refine governance processes using operational, quality, and delivery outcomes.",
+     "Use governance data to identify systemic improvement opportunities.",
+     "Demonstrate that governance accelerates delivery while maintaining appropriate risk controls."
     ],
     "evidence_examples": [
      "Policy-as-Code controls",
      "Automated approval gates",
-     "Governance quality metrics"
+     "Governance quality metrics",
+     "Delivery flow analytics",
+     "Automated compliance reporting",
+     "Engineering effectiveness reviews ---"
     ]
    },
    {
@@ -1131,7 +1554,10 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "Guardrails are automated and embedded into tooling.",
      "Policy logic enforces governance expectations through workflows and controls.",
-     "Teams are empowered to make local decisions when readiness signals and evidence requirements are satisfied."
+     "Teams are empowered to make local decisions when readiness signals and evidence requirements are satisfied.",
+     "Governance forums focus on organizational learning and standards evolution rather than case-by-case supervision.",
+     "Continuous improvement is built into governance processes.",
+     "Accountability is lightweight but highly visible through traceable approvals, ownership structures, and delivery evidence."
     ],
     "level_up_criteria": [],
     "evidence_examples": []
@@ -1142,7 +1568,7 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
   "id": "10",
   "title": "Monitoring, Observability & Runtime Security",
   "definition": "Collection and use of metrics, logs, traces, and security signals to detect issues early, respond quickly, and continuously improve reliability. 【1-58c0fd】",
-  "na_description": "Not applicable if the team does not own or operate software services, platforms, or infrastructure requiring system health monitoring, observability, or runtime security signals.…",
+  "na_description": "Not applicable if the team does not own or operate software services, platforms, or infrastructure requiring system health monitoring, observability, or runtime security signals. This includes teams whose responsibilities are limited to business process operations, intake triage, or non-technical coordination. 【1-58c0fd】",
   "levels": [
    {
     "level": 0,
@@ -1153,12 +1579,17 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     ],
     "level_up_criteria": [
      "Establish basic monitoring for at least one critical service, application, or platform component.",
-     "Collect at least one operational signal (metrics, logs, or alerts)."
+     "Collect at least one operational signal (metrics, logs, or alerts).",
+     "Identify ownership for monitoring and incident response activities.",
+     "Define basic operational health indicators.",
+     "Demonstrate the ability to detect and investigate a service issue using collected telemetry."
     ],
     "evidence_examples": [
      "Monitoring dashboards",
      "Alert configurations",
-     "Log aggregation tools"
+     "Log aggregation tools",
+     "Service ownership documentation",
+     "Incident investigation records ---"
     ]
    },
    {
@@ -1168,16 +1599,27 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "Little health visibility exists.",
      "Issues are detected through user reports or manual checks rather than proactive monitoring.",
-     "SLOs and SLIs are not defined."
+     "SLOs and SLIs are not defined.",
+     "Alerts are absent, unreliable, or overly noisy.",
+     "Troubleshooting depends on ad hoc log analysis.",
+     "Monitoring data is fragmented across tools.",
+     "Runtime security signals are not integrated into operational processes."
     ],
     "level_up_criteria": [
      "Implement monitoring across multiple critical services or environments.",
-     "Define alerting thresholds for key operational conditions."
+     "Define alerting thresholds for key operational conditions.",
+     "Establish recurring reviews of monitoring and alert effectiveness.",
+     "Track operational issues identified through monitoring.",
+     "Begin centralizing operational data sources.",
+     "Document response expectations for common operational events."
     ],
     "evidence_examples": [
      "Alert policies",
      "Dashboard inventories",
-     "Operational runbooks"
+     "Operational runbooks",
+     "Monitoring standards",
+     "Incident records",
+     "Platform health reports ---"
     ]
    },
    {
@@ -1187,16 +1629,28 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "Monitoring exists for selected systems but coverage is inconsistent.",
      "Metrics, logs, and traces are only partially implemented.",
-     "Alerting reliability varies."
+     "Alerting reliability varies.",
+     "Teams still depend on manual log review for diagnosis.",
+     "Multiple monitoring tools exist without a unified operational view.",
+     "Incident response is still largely manual.",
+     "Runtime security events are captured inconsistently.",
+     "Visibility gaps exist across environments or cloud accounts."
     ],
     "level_up_criteria": [
      "Define SLIs and SLOs for qualifying systems.",
-     "Collect and retain required metrics, logs, and traces."
+     "Collect and retain required metrics, logs, and traces.",
+     "Standardize monitoring expectations across critical services.",
+     "Implement actionable alerting tied to service health objectives.",
+     "Establish documented operational runbooks.",
+     "Integrate observability requirements into operational readiness expectations."
     ],
     "evidence_examples": [
      "SLO and SLI documentation",
      "Standard observability requirements",
-     "Runbooks"
+     "Runbooks",
+     "Alerting standards",
+     "Central observability dashboards",
+     "Operational readiness reviews ---"
     ]
    },
    {
@@ -1206,16 +1660,28 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "SLOs and SLIs are established for critical services.",
      "Metrics, logs, and traces are consistently collected.",
-     "Operational signals are routed into approved observability platforms."
+     "Operational signals are routed into approved observability platforms.",
+     "Monitoring expectations are documented and standardized.",
+     "Alert thresholds are aligned with service health goals.",
+     "Runbooks support diagnosis and recovery.",
+     "Runtime security events begin to be correlated with operational activity.",
+     "Sensitive data handling requirements are incorporated into telemetry practices."
     ],
     "level_up_criteria": [
      "Measure operational performance using defined reliability indicators.",
-     "Track MTTD, MTTR, incident trends, service reliability, and alert effectiveness."
+     "Track MTTD, MTTR, incident trends, service reliability, and alert effectiveness.",
+     "Correlate metrics, logs, traces, and security events.",
+     "Review operational trends on a recurring cadence.",
+     "Automate ticket creation, escalation, or operational workflows where appropriate.",
+     "Use observability data to influence release, architecture, and operational decisions."
     ],
     "evidence_examples": [
      "Reliability dashboards",
      "Incident trend reporting",
-     "ServiceNow integrations"
+     "ServiceNow integrations",
+     "Alert quality reports",
+     "Post-incident reviews",
+     "Error budget reporting ---"
     ]
    },
    {
@@ -1225,16 +1691,28 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "Reliability indicators are monitored over time.",
      "Incident trends are visible and actionable.",
-     "Alerts create tickets and operational actions automatically."
+     "Alerts create tickets and operational actions automatically.",
+     "Operational and runtime security signals are correlated.",
+     "Post-incident learning is embedded into operational workflows.",
+     "Alert tuning is actively managed.",
+     "Error budgets and reliability objectives influence engineering decisions.",
+     "Operational data informs release readiness."
     ],
     "level_up_criteria": [
      "Implement predictive detection and anomaly identification capabilities.",
-     "Automate correlation of operational, performance, and security signals."
+     "Automate correlation of operational, performance, and security signals.",
+     "Automate selected incident response and recovery activities.",
+     "Use observability data to proactively prevent customer or business impact.",
+     "Demonstrate that reliability objectives influence engineering prioritization.",
+     "Continuously refine monitoring, observability, and runtime security practices."
     ],
     "evidence_examples": [
      "Anomaly detection capabilities",
      "Automated remediation workflows",
-     "Runtime security monitoring"
+     "Runtime security monitoring",
+     "Predictive operational analytics",
+     "Error budget governance",
+     "Reliability engineering programs ---"
     ]
    },
    {
@@ -1244,7 +1722,12 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "Predictive detection surfaces anomalies before customer impact occurs.",
      "Automated response actions reduce operational risk.",
-     "Runtime security is integrated into operational workflows."
+     "Runtime security is integrated into operational workflows.",
+     "Operational, security, and reliability signals share a unified view.",
+     "Dashboards aggregate cloud, platform, and infrastructure telemetry.",
+     "Continuous learning loops improve alert quality, reliability, and incident prevention.",
+     "Error budgets guide release pacing and engineering priorities.",
+     "Reliability engineering becomes a proactive discipline."
     ],
     "level_up_criteria": [],
     "evidence_examples": []
@@ -1266,12 +1749,18 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     ],
     "level_up_criteria": [
      "Identify and document all environments used by the team.",
-     "Establish ownership and support responsibilities for each environment."
+     "Establish ownership and support responsibilities for each environment.",
+     "Document how environments are provisioned, accessed, and maintained.",
+     "Define a basic promotion process between environments.",
+     "Define a basic rollback approach for major deployments.",
+     "Demonstrate repeatable environment setup procedures."
     ],
     "evidence_examples": [
      "Environment inventory",
      "Environment ownership documentation",
-     "Provisioning procedures"
+     "Provisioning procedures",
+     "Deployment procedures",
+     "Rollback documentation ---"
     ]
    },
    {
@@ -1281,16 +1770,25 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "Environments are configured manually and rely on individual knowledge rather than documented standards.",
      "Development environments may require CRQs or production-level approvals for routine work.",
-     "Environment drift occurs between non-production and production environments."
+     "Environment drift occurs between non-production and production environments.",
+     "Teams are often forced to test in customer-facing environments.",
+     "Promotion occurs through ad hoc coordination.",
+     "Rollback depends on manual recovery procedures."
     ],
     "level_up_criteria": [
      "Establish baseline standards for environment configuration and management.",
-     "Document environment promotion workflows."
+     "Document environment promotion workflows.",
+     "Reduce dependency on individual knowledge for environment setup and maintenance.",
+     "Establish isolated development environments when possible.",
+     "Identify environment inconsistencies and remediation activities.",
+     "Begin standardizing provisioning activities."
     ],
     "evidence_examples": [
      "Environment standards",
      "Environment architecture documentation",
-     "Promotion workflow documentation"
+     "Promotion workflow documentation",
+     "Development environment standards",
+     "Environment remediation plans ---"
     ]
    },
    {
@@ -1300,35 +1798,57 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "Partial environment standards are present.",
      "Environment setup differs across cloud, co-location, and on-prem environments.",
-     "Development environments may still rely on production-style controls and approvals."
+     "Development environments may still rely on production-style controls and approvals.",
+     "Provisioning is partially automated.",
+     "Refresh activities are manual and resource intensive.",
+     "Environment drift remains common.",
+     "Undocumented exceptions frequently occur."
     ],
     "level_up_criteria": [
      "Define a standard promotion path across environments.",
-     "Establish readiness criteria for environment promotion."
+     "Establish readiness criteria for environment promotion.",
+     "Demonstrate meaningful separation between development and customer-facing workloads.",
+     "Define environment ownership and access management processes.",
+     "Standardize environment provisioning procedures.",
+     "Reduce environment variability through documented standards."
     ],
     "evidence_examples": [
      "Promotion path documentation",
      "Environment readiness checklists",
-     "Environment lifecycle standards"
+     "Environment lifecycle standards",
+     "Access management controls",
+     "Cloud landing zone standards",
+     "Environment governance documentation ---"
     ]
    },
    {
     "level": 3,
     "name": "Defined",
-    "description": "Environment management is documented and repeatable, with clear promotion paths and meaningful separation of development and customer-facing…",
+    "description": "Environment management is documented and repeatable, with clear promotion paths and meaningful separation of development and customer-facing workloads.",
     "key_characteristics": [
      "Promotion paths are clearly defined.",
      "Standard progression exists across environments.",
-     "Ownership and access management are documented."
+     "Ownership and access management are documented.",
+     "Development environments are isolated from production workloads.",
+     "Provisioning processes are repeatable and consistent.",
+     "Cloud landing zones or equivalent capabilities support environment creation.",
+     "Readiness criteria are defined and enforced."
     ],
     "level_up_criteria": [
      "Automate provisioning and configuration management where appropriate.",
-     "Monitor environment health, availability, and configuration consistency."
+     "Monitor environment health, availability, and configuration consistency.",
+     "Track environment drift and remediation activities.",
+     "Instrument promotion workflows with observable readiness indicators.",
+     "Validate rollback approaches through testing or rehearsal.",
+     "Demonstrate operational visibility across managed environments."
     ],
     "evidence_examples": [
      "Automated provisioning workflows",
      "Environment health dashboards",
-     "Drift reports"
+     "Drift reports",
+     "Promotion tracking",
+     "Rollback testing records",
+     "Environment observability metrics ---"
     ]
    },
    {
@@ -1338,16 +1858,27 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "Provisioning and configuration activities are automated.",
      "Environment setup variation is reduced.",
-     "Environment drift is measured and monitored."
+     "Environment drift is measured and monitored.",
+     "Health indicators are tracked across environments.",
+     "Promotion workflows provide visibility into validation activities.",
+     "Rollback approaches are tested and rehearsed.",
+     "Environment reliability supports predictable delivery."
     ],
     "level_up_criteria": [
      "Manage environments through Configuration-as-Code practices.",
-     "Implement automated drift detection and remediation."
+     "Implement automated drift detection and remediation.",
+     "Support self-service provisioning capabilities.",
+     "Automate lifecycle activities such as environment refresh and cleanup.",
+     "Automate rollback and recovery workflows where feasible.",
+     "Demonstrate continuous optimization of environment management practices."
     ],
     "evidence_examples": [
      "Infrastructure-as-Code repositories",
      "Configuration-as-Code standards",
-     "Automated drift remediation"
+     "Automated drift remediation",
+     "Self-service environment provisioning",
+     "Automated refresh workflows",
+     "Environment lifecycle automation ---"
     ]
    },
    {
@@ -1357,7 +1888,11 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "Configuration-as-Code governs environment definitions.",
      "Environment consistency is enforced through automation.",
-     "Drift is automatically detected and remediated."
+     "Drift is automatically detected and remediated.",
+     "Self-service provisioning supports rapid environment creation.",
+     "Environment lifecycle management is automated.",
+     "Cleanup, refresh, promotion, and rollback workflows are automated.",
+     "Environment management scales without significant operational overhead."
     ],
     "level_up_criteria": [],
     "evidence_examples": []
@@ -1367,7 +1902,7 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
  {
   "id": "12",
   "title": "Release Management & Operational Reliability",
-  "definition": "Documented, automated, and tested operational processes—including runbooks, rollback procedures, readiness checks, incident learnings, and reliability engineering—to ensure predictable, resilient, production-safe…",
+  "definition": "Documented, automated, and tested operational processes—including runbooks, rollback procedures, readiness checks, incident learnings, and reliability engineering—to ensure predictable, resilient, production-safe delivery.",
   "na_description": "This dimension does not apply if the team does not operate services or participate in production-related support, readiness, rollback, or operational processes.",
   "levels": [
    {
@@ -1375,16 +1910,23 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "name": "Below Baseline",
     "description": "Operational delivery is manual, undocumented, and reactive, with no established runbooks, readiness checks, or rollback procedures.",
     "key_characteristics": [
-     "None. Production readiness, recovery, and operational support are largely improvised and dependent on…"
+     "None. Production readiness, recovery, and operational support are largely improvised and dependent on individual response."
     ],
     "level_up_criteria": [
      "Document basic operational support procedures.",
-     "Identify ownership for operational readiness, support, and recovery activities."
+     "Identify ownership for operational readiness, support, and recovery activities.",
+     "Create an initial runbook for a critical service or workflow.",
+     "Define a basic rollback approach.",
+     "Establish a basic production readiness checklist.",
+     "Begin documenting incident learnings when failures occur."
     ],
     "evidence_examples": [
      "Operational procedures",
      "Production support documentation",
-     "Initial runbooks"
+     "Initial runbooks",
+     "Rollback instructions",
+     "Incident notes",
+     "Readiness checklists ---"
     ]
    },
    {
@@ -1394,16 +1936,26 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "Runbooks are limited, informal, or not maintained.",
      "Readiness checks occur through individual judgment.",
-     "Rollback approaches are unclear and performed ad hoc."
+     "Rollback approaches are unclear and performed ad hoc.",
+     "Incident learning is informal and largely undocumented.",
+     "Troubleshooting depends heavily on individual expertise.",
+     "Operational activities are highly manual."
     ],
     "level_up_criteria": [
      "Create runbooks for recurring operational activities.",
-     "Establish standard readiness checklists before production changes."
+     "Establish standard readiness checklists before production changes.",
+     "Document rollback procedures for critical services.",
+     "Begin capturing incident learnings consistently.",
+     "Standardize execution of common operational activities.",
+     "Establish expectations for production communication and coordination."
     ],
     "evidence_examples": [
      "Runbooks",
      "Readiness checklists",
-     "Rollback documentation"
+     "Rollback documentation",
+     "Incident review logs",
+     "Operational procedures",
+     "Production communication templates ---"
     ]
    },
    {
@@ -1413,16 +1965,26 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "Runbooks exist but may be outdated or inconsistently used.",
      "Readiness checklists are available but do not consistently govern production readiness decisions.",
-     "Rollback procedures are documented but rarely rehearsed."
+     "Rollback procedures are documented but rarely rehearsed.",
+     "Incident learnings are captured but often fail to drive long-term improvements.",
+     "Operational processes vary between individuals and teams.",
+     "Environment drift and documentation drift create inconsistencies."
     ],
     "level_up_criteria": [
      "Establish maintained runbooks with clear ownership.",
-     "Define readiness criteria covering environment health, service validation, and deployment readiness."
+     "Define readiness criteria covering environment health, service validation, and deployment readiness.",
+     "Validate rollback procedures within non-production environments.",
+     "Standardize operational workflows and escalation paths.",
+     "Establish formal post-incident learning activities.",
+     "Define required communication activities for significant operational events and production changes."
     ],
     "evidence_examples": [
      "Maintained runbooks",
      "Readiness standards",
-     "Rollback validation records"
+     "Rollback validation records",
+     "Escalation procedures",
+     "Post-incident review documents",
+     "Customer communication procedures ---"
     ]
    },
    {
@@ -1432,16 +1994,27 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "Runbooks are maintained and include clear execution criteria.",
      "Readiness criteria cover environment health, configuration baselines, and service validation.",
-     "Rollback procedures are validated in non-production environments."
+     "Rollback procedures are validated in non-production environments.",
+     "Incident learning includes ownership and corrective actions.",
+     "Operational processes are standardized.",
+     "Handoffs are clear and less dependent on individual expertise.",
+     "Communication expectations are incorporated into operational practices."
     ],
     "level_up_criteria": [
      "Validate runbook execution through exercises, simulations, or automation.",
-     "Measure readiness effectiveness and rollback effectiveness."
+     "Measure readiness effectiveness and rollback effectiveness.",
+     "Track operational reliability indicators.",
+     "Analyze operational trends and recurring issues.",
+     "Reduce repetitive operational activities through automation.",
+     "Use operational metrics to drive service reliability improvements."
     ],
     "evidence_examples": [
      "Operational simulations",
      "Runbook execution testing",
-     "Reliability dashboards"
+     "Reliability dashboards",
+     "Readiness outcome reports",
+     "Rollback effectiveness reporting",
+     "Operational automation workflows ---"
     ]
    },
    {
@@ -1451,16 +2024,27 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "Runbook execution is validated through exercises, simulations, or automation.",
      "Readiness effectiveness is measured.",
-     "Rollback effectiveness is monitored."
+     "Rollback effectiveness is monitored.",
+     "Incident trends are analyzed.",
+     "Alert fatigue and operational noise are actively addressed.",
+     "Operational reliability metrics are tracked.",
+     "Automation reduces repetitive or error-prone work."
     ],
     "level_up_criteria": [
      "Use telemetry and operational insights to continuously improve operational procedures.",
-     "Automate rollback where appropriate."
+     "Automate rollback where appropriate.",
+     "Automate readiness validation activities.",
+     "Implement resilience engineering practices that prevent recurring failures.",
+     "Continuously improve operational communication effectiveness.",
+     "Demonstrate operational processes that proactively reduce production risk."
     ],
     "evidence_examples": [
      "Telemetry-driven runbook improvements",
      "Automated rollback capabilities",
-     "Automated readiness validations"
+     "Automated readiness validations",
+     "Reliability engineering programs",
+     "Resilience improvement initiatives",
+     "Communication effectiveness metrics ---"
     ]
    },
    {
@@ -1470,7 +2054,11 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "Runbooks evolve using telemetry, incident learnings, and operational feedback.",
      "Rollback capabilities are automated and predictable.",
-     "Readiness checks proactively identify issues before production impact."
+     "Readiness checks proactively identify issues before production impact.",
+     "Incident learning continuously improves resilience.",
+     "Reliability engineering principles are integrated into delivery processes.",
+     "Operational practices align with observability, environment management, and resilience objectives.",
+     "Production risk is reduced through preventive controls rather than reactive response."
     ],
     "level_up_criteria": [],
     "evidence_examples": []
@@ -1492,12 +2080,17 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     ],
     "level_up_criteria": [
      "Identify common engineering activities that could benefit from reuse.",
-     "Establish at least one reusable asset, template, or shared component."
+     "Establish at least one reusable asset, template, or shared component.",
+     "Document the purpose and intended usage of reusable assets.",
+     "Make reusable assets available to more than one team or project.",
+     "Assign ownership for maintaining reusable assets."
     ],
     "evidence_examples": [
      "Shared templates",
      "Reusable scripts",
-     "Common component libraries"
+     "Common component libraries",
+     "Published repository assets",
+     "Platform ownership documentation ---"
     ]
    },
    {
@@ -1507,16 +2100,25 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "Reusable assets are scarce.",
      "Published templates, components, and golden paths are limited or unavailable.",
-     "Discovery is difficult and relies on tribal knowledge."
+     "Discovery is difficult and relies on tribal knowledge.",
+     "Guidance is fragmented across repositories, wikis, and documentation.",
+     "Teams frequently implement similar solutions independently.",
+     "Refactoring toward reusable solutions is deprioritized in favor of immediate delivery."
     ],
     "level_up_criteria": [
      "Publish reusable assets in a common location.",
-     "Introduce starter templates or shared engineering components."
+     "Introduce starter templates or shared engineering components.",
+     "Document intended usage and applicability.",
+     "Encourage reuse across multiple teams or services.",
+     "Establish basic versioning and maintenance practices.",
+     "Reduce duplication in selected engineering workflows."
     ],
     "evidence_examples": [
      "Shared repositories",
      "Internal templates",
-     "Common engineering patterns"
+     "Common engineering patterns",
+     "Reusable infrastructure modules",
+     "Internal developer documentation ---"
     ]
    },
    {
@@ -1526,16 +2128,27 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "Starter templates are available.",
      "Adoption depends on awareness and individual initiative.",
-     "Teams frequently fork or customize reusable assets."
+     "Teams frequently fork or customize reusable assets.",
+     "Documentation is inconsistent or incomplete.",
+     "Applicability and prerequisites are unclear.",
+     "Versioning and lifecycle management are weak.",
+     "Compatibility issues emerge as assets diverge."
     ],
     "level_up_criteria": [
      "Publish documented golden paths.",
-     "Establish clear guidance on when and how reusable assets should be used."
+     "Establish clear guidance on when and how reusable assets should be used.",
+     "Curate reusable assets through centralized repositories or catalogs.",
+     "Implement versioning and maintenance standards.",
+     "Define customization boundaries.",
+     "Align reusable assets to engineering standards and delivery practices."
     ],
     "evidence_examples": [
      "Golden path documentation",
      "Component catalogs",
-     "Versioned platform templates"
+     "Versioned platform templates",
+     "Decision trees",
+     "Platform standards",
+     "Reuse guidance documentation ---"
     ]
    },
    {
@@ -1545,16 +2158,27 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "Golden paths are published and maintained.",
      "Prerequisites and usage guidance are clearly documented.",
-     "Reusable assets are discoverable through centralized indexes or catalogs."
+     "Reusable assets are discoverable through centralized indexes or catalogs.",
+     "Templates and shared components are versioned.",
+     "Engineering standards are reflected in reusable patterns.",
+     "Guidance clearly explains customization and extension boundaries.",
+     "Reuse contributes to consistency across engineering teams."
     ],
     "level_up_criteria": [
      "Measure adoption of reusable assets.",
-     "Track platform usage and variance from preferred patterns."
+     "Track platform usage and variance from preferred patterns.",
+     "Establish feedback loops for improving reusable assets.",
+     "Implement contribution and governance processes.",
+     "Monitor duplication and identify opportunities for consolidation.",
+     "Demonstrate measurable benefits from reuse."
     ],
     "evidence_examples": [
      "Adoption dashboards",
      "Usage analytics",
-     "Governance workflows"
+     "Governance workflows",
+     "Contribution standards",
+     "Pattern improvement backlog",
+     "Duplication analysis ---"
     ]
    },
    {
@@ -1564,16 +2188,26 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "Adoption of templates, patterns, and components is measured.",
      "Real-world usage data informs improvement priorities.",
-     "Feedback loops refine documentation and implementation patterns."
+     "Feedback loops refine documentation and implementation patterns.",
+     "Governance processes define approval, contribution, and deprecation activities.",
+     "Duplication is reduced through preferred patterns.",
+     "Platform investments are informed by measurable demand."
     ],
     "level_up_criteria": [
      "Enable self-service consumption of platform capabilities.",
-     "Implement telemetry-driven evolution of reusable assets."
+     "Implement telemetry-driven evolution of reusable assets.",
+     "Support scalable contribution and maintenance workflows.",
+     "Continuously improve onboarding experiences.",
+     "Automate compatibility and policy validation where appropriate.",
+     "Demonstrate measurable improvements in speed, consistency, and engineering productivity."
     ],
     "evidence_examples": [
      "Self-service onboarding experiences",
      "Usage telemetry",
-     "Platform analytics"
+     "Platform analytics",
+     "Automated compatibility checks",
+     "Contribution automation",
+     "Platform effectiveness reporting ---"
     ]
    },
    {
@@ -1583,7 +2217,11 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "Self-service consumption is the default experience.",
      "Discovery and onboarding are streamlined.",
-     "Patterns evolve based on telemetry and operational feedback."
+     "Patterns evolve based on telemetry and operational feedback.",
+     "Contribution models support safe extension without fragmentation.",
+     "Compatibility is managed proactively.",
+     "Golden paths accelerate delivery and improve consistency.",
+     "Platform capabilities continuously evolve to meet engineering demand."
     ],
     "level_up_criteria": [],
     "evidence_examples": []
@@ -1594,7 +2232,7 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
   "id": "14",
   "title": "Software Development Mindset & Automation Culture",
   "definition": "Adoption of modern engineering principles, automation-first thinking, and developer enablement behaviors across the team.",
-  "na_description": "This dimension is not applicable if the team does not build, configure, modify, or deliver technical solutions that require engineering discipline, automation, or consistent…",
+  "na_description": "This dimension is not applicable if the team does not build, configure, modify, or deliver technical solutions that require engineering discipline, automation, or consistent development practices.",
   "levels": [
    {
     "level": 0,
@@ -1605,12 +2243,18 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     ],
     "level_up_criteria": [
      "Establish basic engineering expectations and development standards.",
-     "Identify repetitive manual activities suitable for automation."
+     "Identify repetitive manual activities suitable for automation.",
+     "Begin documenting engineering practices and workflows.",
+     "Introduce version control and repeatable engineering processes where applicable.",
+     "Promote awareness of modern SDLC and automation concepts.",
+     "Demonstrate at least one example of engineering work treated as reusable rather than one-off."
     ],
     "evidence_examples": [
      "Engineering standards",
      "Team operating agreements",
-     "Version-controlled assets"
+     "Version-controlled assets",
+     "Process documentation",
+     "Automation opportunities backlog ---"
     ]
    },
    {
@@ -1618,18 +2262,27 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "name": "Initial",
     "description": "Work relies on manual effort and individual expertise, with limited evidence of modern engineering or automation-first behaviors.",
     "key_characteristics": [
-     "Engineering mindset varies, with work frequently approached as one-off tasks rather than reusable, iterative…",
+     "Engineering mindset varies, with work frequently approached as one-off tasks rather than reusable, iterative improvements.",
      "Automation is limited, with manual execution common and ClickOps patterns still present.",
-     "Standards are applied inconsistently."
+     "Standards are applied inconsistently.",
+     "Developer enablement is minimal.",
+     "Knowledge is siloed.",
+     "Improvement efforts are largely reactive."
     ],
     "level_up_criteria": [
      "Adopt basic engineering principles across a majority of team members.",
-     "Establish knowledge-sharing practices."
+     "Establish knowledge-sharing practices.",
+     "Begin reducing manual effort using repeatable tools or automation.",
+     "Encourage consistent use of shared platforms and tooling.",
+     "Introduce shift-left behaviors such as earlier testing, validation, or security activities.",
+     "Document common engineering practices and expectations."
     ],
     "evidence_examples": [
      "Shared engineering documentation",
      "Team onboarding materials",
-     "Knowledge-sharing sessions"
+     "Knowledge-sharing sessions",
+     "Automation initiatives",
+     "Common tooling standards ---"
     ]
    },
    {
@@ -1639,16 +2292,26 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "Automation exists in pockets.",
      "Manual work remains common.",
-     "Engineering principles are referenced but inconsistently applied."
+     "Engineering principles are referenced but inconsistently applied.",
+     "Shared tooling adoption varies.",
+     "Documentation remains fragmented.",
+     "Shift-left behaviors occur inconsistently.",
+     "Engineering maturity differs significantly across contributors."
     ],
     "level_up_criteria": [
      "Establish automation-first expectations.",
-     "Define engineering work as code where appropriate (configuration, scripting, infrastructure,…"
+     "Define engineering work as code where appropriate (configuration, scripting, infrastructure, pipelines).",
+     "Standardize adoption of shared tooling and engineering platforms.",
+     "Publish discoverable documentation and team standards.",
+     "Incorporate continuous improvement activities into planning and retrospectives.",
+     "Reduce reliance on ad hoc manual execution patterns."
     ],
     "evidence_examples": [
      "Team engineering playbook",
      "Shared automation standards",
-     "Platform usage guidance"
+     "Platform usage guidance",
+     "Retrospective improvement backlog",
+     "Developer onboarding content ---"
     ]
    },
    {
@@ -1658,16 +2321,25 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "Automation-first behaviors reduce manual work.",
      "Shared expectations exist that engineering work should be treated as code where applicable.",
-     "Reusable practices are maintained and encouraged."
+     "Reusable practices are maintained and encouraged.",
+     "Documentation is predictable and discoverable.",
+     "Continuous improvement is part of normal team operations.",
+     "Engineering identity is shared across the team rather than isolated to specific contributors."
     ],
     "level_up_criteria": [
      "Establish metrics related to automation adoption and engineering effectiveness.",
-     "Track manual intervention frequency and recurring friction points."
+     "Track manual intervention frequency and recurring friction points.",
+     "Provide coaching and structured enablement opportunities.",
+     "Use retrospectives, telemetry, and operational signals to identify improvement opportunities.",
+     "Measure adoption of engineering practices.",
+     "Demonstrate improvements based on observed team behavior."
     ],
     "evidence_examples": [
      "Engineering health metrics",
      "Coaching programs",
-     "Platform adoption reports"
+     "Platform adoption reports",
+     "Retrospective improvement tracking",
+     "Team capability assessments ---"
     ]
    },
    {
@@ -1677,16 +2349,26 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "Data guides engineering improvements.",
      "Coaching supports adoption of engineering practices.",
-     "Manual work is systematically identified and targeted."
+     "Manual work is systematically identified and targeted.",
+     "Friction is surfaced and addressed.",
+     "Developer enablement is intentional and structured.",
+     "Engineering culture improvements are measurable."
     ],
     "level_up_criteria": [
      "Proactively identify and automate manual activities.",
-     "Contribute reusable patterns, templates, or platform assets."
+     "Contribute reusable patterns, templates, or platform assets.",
+     "Establish mentorship programs supporting engineering growth.",
+     "Use operational, delivery, and quality signals to evolve engineering practices.",
+     "Demonstrate continuous improvement in engineering maturity.",
+     "Embed automation and engineering excellence into team culture."
     ],
     "evidence_examples": [
      "Automation adoption programs",
      "Golden path contributions",
-     "Mentorship frameworks"
+     "Mentorship frameworks",
+     "Engineering maturity assessments",
+     "Platform contribution records",
+     "Continuous improvement metrics ---"
     ]
    },
    {
@@ -1696,7 +2378,11 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "Automation is proactive rather than reactive.",
      "Teams continuously convert manual activities into repeatable workflows.",
-     "Engineering patterns are codified and shared."
+     "Engineering patterns are codified and shared.",
+     "Mentorship reinforces engineering practices.",
+     "Continuous improvement is a cultural norm.",
+     "Automation-first behaviors span development, infrastructure, configuration, and operations work.",
+     "Modern engineering principles are sustained through coaching, standards, and platform enablement."
     ],
     "level_up_criteria": [],
     "evidence_examples": []
@@ -1714,35 +2400,51 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "name": "Below Baseline",
     "description": "Work is unstructured and reactive, and the team does not maintain a backlog, defined intake, or consistent prioritization practices.",
     "key_characteristics": [
-     "None. Work enters the system unpredictably and execution relies primarily on ad hoc requests, interruptions,…"
+     "None. Work enters the system unpredictably and execution relies primarily on ad hoc requests, interruptions, and informal coordination."
     ],
     "level_up_criteria": [
      "Establish a single location to track work.",
-     "Define a basic intake process for new requests."
+     "Define a basic intake process for new requests.",
+     "Document ownership for planning and prioritization activities.",
+     "Begin maintaining a backlog of planned and active work.",
+     "Differentiate between planned work and operational interruptions.",
+     "Create visibility into current priorities."
     ],
     "evidence_examples": [
      "Backlog tool",
      "Intake process",
-     "Team work board"
+     "Team work board",
+     "Prioritization list",
+     "Work tracking repository ---"
     ]
    },
    {
     "level": 1,
     "name": "Initial",
-    "description": "Work is reactive and intake is informal, with limited visibility into priorities or differentiation between planned work and operational…",
+    "description": "Work is reactive and intake is informal, with limited visibility into priorities or differentiation between planned work and operational interruptions.",
     "key_characteristics": [
      "Work is tracked inconsistently.",
      "Requests arrive through chat, email, meetings, and other informal channels.",
-     "Backlog visibility is limited."
+     "Backlog visibility is limited.",
+     "Priorities frequently shift.",
+     "Operational interrupts compete with planned work.",
+     "Refinement activities are inconsistent.",
+     "Little shared understanding of future work exists."
     ],
     "level_up_criteria": [
      "Establish and maintain a structured backlog.",
-     "Define basic work item standards."
+     "Define basic work item standards.",
+     "Conduct regular backlog refinement sessions.",
+     "Document prioritization criteria.",
+     "Improve visibility into active and upcoming work.",
+     "Introduce repeatable planning routines."
     ],
     "evidence_examples": [
      "Product backlog",
      "Refinement sessions",
-     "Prioritization framework"
+     "Prioritization framework",
+     "Sprint planning artifacts",
+     "Kanban board ---"
     ]
    },
    {
@@ -1752,16 +2454,27 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "A backlog exists but quality varies.",
      "Work items may lack acceptance criteria or clear outcomes.",
-     "Refinement occurs but inconsistently."
+     "Refinement occurs but inconsistently.",
+     "Prioritization often responds to near-term pressures.",
+     "Sprint and Kanban practices vary by team or initiative.",
+     "Documentation remains fragmented.",
+     "Visibility continues to improve but remains incomplete."
     ],
     "level_up_criteria": [
      "Define backlog standards and readiness expectations.",
-     "Establish predictable refinement and planning cadences."
+     "Establish predictable refinement and planning cadences.",
+     "Create consistent prioritization norms.",
+     "Standardize execution workflows.",
+     "Define work-in-progress expectations.",
+     "Maintain clear visibility into commitments and delivery plans."
     ],
     "evidence_examples": [
      "Definition of Ready",
      "Backlog standards",
-     "Refinement cadence"
+     "Refinement cadence",
+     "Sprint planning artifacts",
+     "WIP policies",
+     "Delivery commitments ---"
     ]
    },
    {
@@ -1771,16 +2484,28 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "The backlog is structured and actively maintained.",
      "Work items contain clear definitions, acceptance criteria, and outcomes.",
-     "Refinement is predictable and recurring."
+     "Refinement is predictable and recurring.",
+     "Prioritization follows agreed decision frameworks.",
+     "Sprint or flow-based execution practices are stable.",
+     "Stakeholders can understand commitments and priorities.",
+     "Planned and interrupt-driven work are visible."
     ],
     "level_up_criteria": [
      "Measure planning effectiveness and delivery predictability.",
-     "Track flow-based metrics such as cycle time, lead time, throughput, and WIP."
+     "Track flow-based metrics such as cycle time, lead time, throughput, and WIP.",
+     "Monitor planned versus delivered work.",
+     "Identify and manage dependencies.",
+     "Use delivery data to improve planning decisions.",
+     "Create action-oriented retrospectives that improve backlog and planning practices."
     ],
     "evidence_examples": [
      "Velocity metrics",
      "Burndown charts",
-     "Cycle time reporting"
+     "Cycle time reporting",
+     "Lead time reporting",
+     "Throughput dashboards",
+     "Dependency tracking",
+     "Retrospective action tracking ---"
     ]
    },
    {
@@ -1790,16 +2515,27 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "Flow metrics are actively used.",
      "Predictability is measured and discussed.",
-     "Capacity balance is monitored."
+     "Capacity balance is monitored.",
+     "Interrupt load is visible.",
+     "Dependencies influence planning decisions.",
+     "Blocked work and aging items are tracked.",
+     "Retrospectives drive measurable improvements."
     ],
     "level_up_criteria": [
      "Use objective prioritization methods to optimize value delivery.",
-     "Continuously improve flow using operational and delivery telemetry."
+     "Continuously improve flow using operational and delivery telemetry.",
+     "Adjust planning dynamically using real-time insights.",
+     "Balance operational work against strategic investment.",
+     "Connect planning decisions to organizational outcomes.",
+     "Demonstrate continuous value management rather than periodic planning."
     ],
     "evidence_examples": [
      "Value prioritization framework",
      "Flow optimization initiatives",
-     "Dependency analytics"
+     "Dependency analytics",
+     "Outcome tracking",
+     "Strategic alignment reporting",
+     "Delivery effectiveness dashboards ---"
     ]
    },
    {
@@ -1809,7 +2545,11 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "Prioritization is data-driven.",
      "Impact, risk, effort, operational load, and dependencies influence sequencing decisions.",
-     "Teams continuously optimize flow."
+     "Teams continuously optimize flow.",
+     "Scope and commitments adapt using current information.",
+     "Strategic outcomes are visible in backlog decisions.",
+     "Continuous value management is part of team culture.",
+     "Delivery decisions balance short-term execution and long-term value."
     ],
     "level_up_criteria": [],
     "evidence_examples": []
@@ -1820,7 +2560,7 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
   "id": "16",
   "title": "Design Standards & Technical Decision Process",
   "definition": "Use of architecture patterns, decision frameworks such as Architectural Decision Records (ADRs), and design reviews to ensure scalable, secure, and well-reasoned technical choices.",
-  "na_description": "This dimension does not apply if the team does not make technical or architectural decisions (e.g., purely operational support without design, development, or configuration…",
+  "na_description": "This dimension does not apply if the team does not make technical or architectural decisions (e.g., purely operational support without design, development, or configuration authority).",
   "levels": [
    {
     "level": 0,
@@ -1831,12 +2571,18 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     ],
     "level_up_criteria": [
      "Establish basic design review expectations.",
-     "Define who can make and approve technical decisions."
+     "Define who can make and approve technical decisions.",
+     "Document major technical decisions in a repeatable manner.",
+     "Create baseline architecture and solution standards.",
+     "Capture rationale for significant technology choices.",
+     "Establish a shared location for technical guidance."
     ],
     "evidence_examples": [
      "Architecture standards",
      "Solution design documentation",
-     "Technical decision logs"
+     "Technical decision logs",
+     "Architecture review meeting notes",
+     "Engineering guidance repositories ---"
     ]
    },
    {
@@ -1846,16 +2592,26 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "Standards are minimally documented.",
      "Decisions are often driven by individual preference, experience, or familiarity.",
-     "Decision rationale is rarely captured."
+     "Decision rationale is rarely captured.",
+     "Review expectations are unclear.",
+     "Architecture and security reviews occur inconsistently.",
+     "Patterns vary significantly between services and teams.",
+     "Evidence is fragmented across tools and repositories."
     ],
     "level_up_criteria": [
      "Establish reference architecture patterns.",
-     "Begin capturing Architectural Decision Records (ADRs) or equivalent documentation."
+     "Begin capturing Architectural Decision Records (ADRs) or equivalent documentation.",
+     "Define minimum review expectations.",
+     "Incorporate architecture and security perspectives into design discussions.",
+     "Improve consistency of decision documentation.",
+     "Document dependencies between systems and services."
     ],
     "evidence_examples": [
      "Reference architectures",
      "ADR templates",
-     "Design review records"
+     "Design review records",
+     "Architecture principles",
+     "Dependency inventories ---"
     ]
    },
    {
@@ -1865,16 +2621,26 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "Reference patterns are available but not consistently applied.",
      "ADR adoption is partial.",
-     "Design reviews occur inconsistently."
+     "Design reviews occur inconsistently.",
+     "Security reviews are often reactive.",
+     "Dependency relationships remain unclear.",
+     "Decision artifacts vary in quality and completeness.",
+     "Design governance differs across teams and initiatives."
     ],
     "level_up_criteria": [
      "Define architecture and design standards.",
-     "Standardize use of ADRs or equivalent decision frameworks."
+     "Standardize use of ADRs or equivalent decision frameworks.",
+     "Establish formal design review processes.",
+     "Define review entry and exit criteria.",
+     "Require documentation of alternatives, constraints, risks, and rationale.",
+     "Ensure decisions are traceable to requirements and business needs."
     ],
     "evidence_examples": [
      "Architecture standards",
      "Design review procedures",
-     "ADR repositories"
+     "ADR repositories",
+     "Review criteria documentation",
+     "Requirement traceability artifacts ---"
     ]
    },
    {
@@ -1884,16 +2650,27 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "Standards exist for architecture, APIs, data models, configuration, and Infrastructure-as-Code.",
      "ADRs capture rationale, alternatives, tradeoffs, risks, and approvals.",
-     "Architecture and design reviews occur predictably."
+     "Architecture and design reviews occur predictably.",
+     "Security and platform stakeholders participate appropriately.",
+     "Shared patterns are reused.",
+     "Decision traceability is maintained.",
+     "Design guidance improves consistency across engineering efforts."
     ],
     "level_up_criteria": [
      "Measure compliance with design standards.",
-     "Evaluate the quality and consistency of decision records."
+     "Evaluate the quality and consistency of decision records.",
+     "Monitor deviations from approved patterns.",
+     "Incorporate threat modeling and risk evaluation earlier in the lifecycle.",
+     "Assess design decisions against implementation and operational outcomes.",
+     "Establish feedback loops for standards and review processes."
     ],
     "evidence_examples": [
      "Architecture governance metrics",
      "ADR quality reviews",
-     "Standards compliance reporting"
+     "Standards compliance reporting",
+     "Threat modeling artifacts",
+     "Design review scorecards",
+     "Pattern adoption metrics ---"
     ]
    },
    {
@@ -1903,16 +2680,27 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "Decision quality is evaluated.",
      "Architecture consistency is measurable.",
-     "Pattern adoption is monitored."
+     "Pattern adoption is monitored.",
+     "Security input is integrated early.",
+     "Design decisions are connected to operational outcomes.",
+     "Standards evolve through measurable feedback.",
+     "Governance activities focus on reducing risk and increasing consistency."
     ],
     "level_up_criteria": [
      "Continuously evolve standards based on operational outcomes and telemetry.",
-     "Use prior decision history to inform future architectural decisions."
+     "Use prior decision history to inform future architectural decisions.",
+     "Embed governance controls into engineering workflows.",
+     "Scale architectural guidance through reusable patterns and golden paths.",
+     "Reduce unnecessary review overhead through automated guardrails.",
+     "Demonstrate improved outcomes resulting from design governance practices."
     ],
     "evidence_examples": [
      "Architectural analytics",
      "Design telemetry",
-     "Golden path libraries"
+     "Golden path libraries",
+     "Governance automation",
+     "Outcome-based design metrics",
+     "Engineering effectiveness reporting ---"
     ]
    },
    {
@@ -1922,7 +2710,11 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "Patterns are curated and continuously refined.",
      "Decision intelligence leverages prior ADRs and outcomes.",
-     "Governance guardrails are embedded in platforms and delivery workflows."
+     "Governance guardrails are embedded in platforms and delivery workflows.",
+     "Teams retain autonomy within approved boundaries.",
+     "Architecture guidance is highly discoverable.",
+     "Decision traceability is streamlined and accessible.",
+     "Engineering outcomes continuously improve through design learning."
     ],
     "level_up_criteria": [],
     "evidence_examples": []
@@ -1944,12 +2736,18 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     ],
     "level_up_criteria": [
      "Identify a small set of engineering or delivery metrics.",
-     "Establish a recurring review cadence."
+     "Establish a recurring review cadence.",
+     "Create visibility into team performance data.",
+     "Define metric ownership.",
+     "Begin collecting baseline measurements.",
+     "Demonstrate use of metrics in at least one team discussion or decision."
     ],
     "evidence_examples": [
      "Team dashboards",
      "Metrics reports",
-     "Engineering scorecards"
+     "Engineering scorecards",
+     "Management reviews",
+     "Baseline metric collection ---"
     ]
    },
    {
@@ -1959,16 +2757,25 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "Metrics are collected sporadically.",
      "Different teams track different measures.",
-     "Data quality is inconsistent."
+     "Data quality is inconsistent.",
+     "Reviews occur only when issues arise.",
+     "Metrics are often reported but not acted upon.",
+     "Improvement activities remain largely reactive."
     ],
     "level_up_criteria": [
      "Define standard engineering metrics.",
-     "Establish recurring metric reviews."
+     "Establish recurring metric reviews.",
+     "Improve data quality and consistency.",
+     "Align metrics to team objectives.",
+     "Track engineering outcomes over time.",
+     "Begin using metrics during planning and retrospectives."
     ],
     "evidence_examples": [
      "Standard metric catalog",
      "Team scorecards",
-     "Weekly or sprint reviews"
+     "Weekly or sprint reviews",
+     "Trend reporting",
+     "Retrospective artifacts ---"
     ]
    },
    {
@@ -1978,16 +2785,25 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "Standard metrics exist but are interpreted inconsistently.",
      "Trends are visible but not always actionable.",
-     "Engineering decisions are only partially data driven."
+     "Engineering decisions are only partially data driven.",
+     "Dashboards may exist without clear ownership.",
+     "Metrics focus on reporting rather than improvement.",
+     "Teams struggle to connect metrics to desired outcomes."
     ],
     "level_up_criteria": [
      "Define engineering metrics that align with delivery goals.",
-     "Establish ownership for metric review and actions."
+     "Establish ownership for metric review and actions.",
+     "Create dashboards that support engineering decisions.",
+     "Connect metrics to continuous improvement activities.",
+     "Use metrics during retrospectives and planning.",
+     "Document actions resulting from observed trends."
     ],
     "evidence_examples": [
      "Engineering dashboards",
      "Trend analysis",
-     "Improvement backlogs"
+     "Improvement backlogs",
+     "Metric-to-goal mappings",
+     "Operational reviews ---"
     ]
    },
    {
@@ -1997,16 +2813,27 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "Teams understand their metrics.",
      "Dashboards provide actionable visibility.",
-     "Trends drive improvement discussions."
+     "Trends drive improvement discussions.",
+     "Improvement actions are documented.",
+     "Metrics are reviewed regularly.",
+     "Engineering goals are linked to measurable outcomes.",
+     "Decision making increasingly uses evidence rather than intuition."
     ],
     "level_up_criteria": [
      "Measure improvement effectiveness over time.",
-     "Track engineering health, quality, reliability, and delivery performance."
+     "Track engineering health, quality, reliability, and delivery performance.",
+     "Monitor leading and lagging indicators.",
+     "Evaluate achievement of improvement goals.",
+     "Use metrics to identify systemic constraints and bottlenecks.",
+     "Demonstrate measurable improvements resulting from data-driven actions."
     ],
     "evidence_examples": [
      "DORA metrics",
      "Reliability metrics",
-     "Engineering health reports"
+     "Engineering health reports",
+     "Improvement tracking",
+     "Trend dashboards",
+     "KPI reviews ---"
     ]
    },
    {
@@ -2016,16 +2843,27 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "Teams track performance trends over time.",
      "Improvement efforts are measurable.",
-     "Metrics influence prioritization and planning."
+     "Metrics influence prioritization and planning.",
+     "Quality, reliability, throughput, and delivery health are visible.",
+     "Data helps identify bottlenecks and risks.",
+     "Engineering leaders use metrics to guide investments and improvements.",
+     "Continuous improvement activities become measurable and predictable."
     ],
     "level_up_criteria": [
      "Use predictive indicators to identify future risks or opportunities.",
-     "Integrate delivery, quality, operational, and engineering metrics into a unified view."
+     "Integrate delivery, quality, operational, and engineering metrics into a unified view.",
+     "Continuously optimize workflows using telemetry and trend analysis.",
+     "Establish organization-wide learning from metrics.",
+     "Demonstrate sustained improvement across multiple metric categories.",
+     "Connect engineering outcomes directly to business and mission outcomes."
     ],
     "evidence_examples": [
      "Predictive analytics",
      "Engineering effectiveness platforms",
-     "Portfolio health dashboards"
+     "Portfolio health dashboards",
+     "Value-stream analytics",
+     "Reliability forecasts",
+     "Outcome-based reporting ---"
     ]
    },
    {
@@ -2035,7 +2873,11 @@ const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
     "key_characteristics": [
      "Metrics are deeply integrated into engineering culture.",
      "Teams proactively identify improvement opportunities.",
-     "Leading indicators help prevent future problems."
+     "Leading indicators help prevent future problems.",
+     "Engineering effectiveness is continuously optimized.",
+     "Teams balance quality, reliability, speed, and sustainability using shared data.",
+     "Metrics drive strategic as well as team-level decisions.",
+     "Continuous improvement is evidence-based and highly visible."
     ],
     "level_up_criteria": [],
     "evidence_examples": []

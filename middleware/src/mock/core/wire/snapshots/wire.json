@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-09-18T10:47:55.121Z",
-  "serverHandlerSha": "dea185462367b28f59e37c933175c5f8bba75820727e55b54887009ee8028d0c",
+  "capturedAt": "2026-09-18T11:24:14.646Z",
+  "serverHandlerSha": "82315b56da1152e1f1371c5849278ca57eea4f1af87c85adcb1f6789f5cfd114",
   "baseUrl": "http://127.0.0.1:3012",
   "personas": [
     "orgiq/admin",
@@ -891,6 +891,8 @@
         "teams[].top.existing_stories[].team_id": "string",
         "teams[].top.existing_stories[].title": "string",
         "teams[].top.kind": "string",
+        "teams[].top.next_level_criteria": "array",
+        "teams[].top.next_level_criteria[]": "string",
         "teams[].top.rank": "number",
         "teams[].top.rationale": "string",
         "teams[].top.story_command": "string",
@@ -1415,6 +1417,8 @@
         "recommendations[].existing_stories[].team_id": "string",
         "recommendations[].existing_stories[].title": "string",
         "recommendations[].kind": "string",
+        "recommendations[].next_level_criteria": "array",
+        "recommendations[].next_level_criteria[]": "string",
         "recommendations[].rank": "number",
         "recommendations[].rationale": "string",
         "recommendations[].story_command": "string",

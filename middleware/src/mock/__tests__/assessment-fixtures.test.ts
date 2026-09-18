@@ -333,3 +333,74 @@ describe('knowledge: the prompt docs are nine documents, not one', () => {
     }
   });
 });
+
+// ── The rubric is the rubric, not an abridgement of it ──────────────────────
+//
+// The 17 dimensions arrived as a TRUNCATED copy of
+// ~/Projects/agentic-assessment-accelerator/sdlcd/assessment/dimensions/rubric.yaml:
+// 14 strings had been cut mid-sentence and closed with an ellipsis ("…packaging
+// or promotion still require hands-on coordination for each…"), and 280 of 552
+// key_characteristics entries had simply been dropped — 82 of the 102 lists were
+// short. On the surface an assessor scores from, that means reading three of a
+// level's four characteristics and a definition that stops mid-clause, where the
+// missing line is often the qualifier that decides the level ("CI coverage
+// across repositories remains inconsistent").
+//
+// The source file lives in another repo, so these assert INTRINSIC properties
+// rather than diffing against it — a shape that cannot be satisfied by an
+// abridgement. Re-port from the YAML rather than hand-patching if they fail.
+describe('rubric: the dimensions carry the whole rubric', () => {
+  const dims = () => M.RUBRIC_DIMENSIONS;
+
+  it('has all 17 dimensions, each with the six levels', () => {
+    const all = dims();
+    expect(all.length).toBe(17);
+    expect(all.map((d) => d.id).sort((a, b) => Number(a) - Number(b)))
+      .toEqual(Array.from({ length: 17 }, (_, i) => String(i + 1)));
+    for (const d of all) {
+      expect(d.levels.map((l) => l.level)).toEqual([0, 1, 2, 3, 4, 5]);
+    }
+  });
+
+  it('no string was cut short — nothing ends in an ellipsis', () => {
+    const cut: string[] = [];
+    for (const d of dims()) {
+      for (const [field, value] of [['definition', d.definition], ['na_description', d.na_description]] as const) {
+        if (value.trimEnd().endsWith('\u2026')) cut.push(`${d.id}.${field}`);
+      }
+      for (const l of d.levels) {
+        if (l.description.trimEnd().endsWith('\u2026')) cut.push(`${d.id}.L${l.level}.description`);
+        for (const f of ['key_characteristics', 'level_up_criteria', 'evidence_examples'] as const) {
+          for (const [i, entry] of l[f].entries()) {
+            if (entry.trimEnd().endsWith('\u2026')) cut.push(`${d.id}.L${l.level}.${f}[${i}]`);
+          }
+        }
+      }
+    }
+    expect(cut).toEqual([]);
+  });
+
+  it('carries the full body of list content, not a first item or two', () => {
+    // 1,539 entries across the three list fields when whole; it was 272 when
+    // abridged. A floor well above the abridged count catches a regression
+    // without pinning an exact number the rubric may legitimately move.
+    const total = dims().reduce((n, d) => n + d.levels.reduce(
+      (m, l) => m + l.key_characteristics.length + l.level_up_criteria.length + l.evidence_examples.length, 0), 0);
+    expect(total).toBeGreaterThan(1200);
+  });
+
+  it('every level above Below Baseline says what it takes and what proves it', () => {
+    // Level 0 legitimately has no level_up_criteria in some dimensions; every
+    // other level must say how to reach the next one and what evidence counts,
+    // because that is what the scoring pane reads.
+    for (const d of dims()) {
+      for (const l of d.levels) {
+        expect(l.key_characteristics.length).toBeGreaterThan(0);
+        if (l.level > 0 && l.level < 5) {
+          expect(l.level_up_criteria.length).toBeGreaterThan(0);
+          expect(l.evidence_examples.length).toBeGreaterThan(0);
+        }
+      }
+    }
+  });
+});
