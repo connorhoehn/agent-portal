@@ -333,7 +333,7 @@ export default function FeedbackPage() {
               key: 'team_id', header: 'Team', sortable: true,
               render: (t) => (
                 <Stack gap="none" align="start">
-                  <Button variant="ghost" size="sm" className="px-0 font-semibold text-text-primary" onClick={(e) => { e.stopPropagation(); setSelectedId(t.task_id); }}>
+                  <Button variant="ghost" size="sm" className="border-0 px-0 font-semibold text-text-primary" onClick={(e) => { e.stopPropagation(); setSelectedId(t.task_id); }}>
                     {teamNameOf(t)}
                   </Button>
                   {t.team_id && <MetaLine size="xs" tone="tertiary" items={[t.team_id]} />}

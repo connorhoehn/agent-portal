@@ -124,7 +124,7 @@ function MaturityHeatmap({ teams, onSelectTeam }: { teams: TeamSummary[]; onSele
               <TableRow key={t.id}>
                 <TableTd className="px-3 py-1 whitespace-nowrap">
                   <Stack gap="none" align="start">
-                    <Button variant="ghost" size="sm" className="px-0 font-semibold text-text-primary" onClick={() => onSelectTeam(t.id)}>{t.name}</Button>
+                    <Button variant="ghost" size="sm" className="border-0 px-0 font-semibold text-text-primary" onClick={() => onSelectTeam(t.id)}>{t.name}</Button>
                     <MetaLine size="xs" tone="tertiary" items={[t.id, motionFor(t.cohort).title]} />
                   </Stack>
                 </TableTd>
@@ -179,7 +179,7 @@ function WhereToStart({ onSelectTeam, teamId }: { onSelectTeam: (id: string) => 
           key: 'name', header: 'Team',
           render: (g) => (
             <Stack gap="none" align="start">
-              <Button variant="ghost" size="sm" className="px-0 font-semibold text-text-primary" onClick={(e) => { e.stopPropagation(); onSelectTeam(g.id); }}>{g.name}</Button>
+              <Button variant="ghost" size="sm" className="border-0 px-0 font-semibold text-text-primary" onClick={(e) => { e.stopPropagation(); onSelectTeam(g.id); }}>{g.name}</Button>
               <MetaLine size="xs" tone="tertiary" items={[g.id]} />
             </Stack>
           ),

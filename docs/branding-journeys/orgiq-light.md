@@ -2,7 +2,7 @@ tenant: orgiq
 theme: light
 user: u-theo
 url: /iq/projects
-audited: 2026-09-18 15:0x local, Chrome 1512px, middleware dev:mock on 127.0.0.1:3013 behind a Vite proxy pinned to it
+audited: 2026-09-18 16:0x local, Chrome 1512px, middleware dev:mock on 127.0.0.1:3013 behind a Vite proxy pinned to it
 screenshot: orgiq-light.jpg
 verdict: pass
 console errors: 0
@@ -83,3 +83,4 @@ A measurement caveat found while doing it, worth writing down because it would q
 re-observed 2026-09-18 (chrome removed, hover-revealed row control): app.css is in the digest for a layout rule only — `[role="treeitem"] .doc-tree-rename` hides the tree's rename control until the row is hovered or something in it has focus. No colour token moved; the palette and every ratio recorded above are unchanged, re-read on a live assessment page.
 The reason is worth writing down because it is a branding judgement, not a bug fix: a pencil on all ten rows at once read as decoration and made the rail busier than the documents in it, and the header carried a permanent "Live" pill plus a "Gateway offline — presence and co-editing via the BFF" chip on EVERY document. A warning that is present every time you open a page stops being read as a warning. Both are gone; what they protected against now speaks at the point of use instead — the editor still says "Editing an offline copy" on the document being edited, and the reaction bar no longer depends on the gateway at all. `opacity` rather than `display` on the pencil so rows do not reflow under the pointer, and `:focus-within` keeps it keyboard-reachable while invisible at rest.
 re-observed 2026-09-18 (row-level controls stop being furniture): app.css gained a second reveal rule beside the tree's — `tbody tr .row-reveal`, hiding a row's action until the row is hovered or something in it has focus. Layout only; no colour token moved and every ratio recorded above still holds. The case that prompted it was the Submissions table, where a DESTRUCTIVE "Delete" sat on every row at rest: a button repeated down a table stops reading as an action and starts reading as decoration, which is worst for the one action you want someone to pause before taking. The confirm dialog behind it is unchanged.
+re-observed 2026-09-18 (ghost-Button borders off three row labels): no token moved and every ratio above still holds. Three call sites dropped the ghost `Button` variant's 1px border from a row's identifying LABEL (ReportsPage twice, FeedbackPage once) — the border turned each table's first column into a column of controls beside flat data chips. Same queued library gap as the four row-shaped Buttons fixed earlier; same `border-0` workaround.

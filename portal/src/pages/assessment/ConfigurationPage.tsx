@@ -1,4 +1,8 @@
 // Configuration — cohort motions (title/tag/accent) and the certification target level.
+//
+// `isHexColour` guards the swatch: the field is free text (it round-trips to
+// the server as a string), so a half-typed "#14" must not paint a wrong colour
+// confidently — it paints nothing until the value is a complete hex.
 // Read-only for everyone except program-lead, who holds ManageAssessmentConfig
 // (docs/assessment-tenant.md "Roles (Cedar)" — changing the rubric target level is
 // program-lead only; separation of duties from the assessor/lead-assessor roles that can
@@ -17,6 +21,7 @@ import {
   Stack,
   PageSection,
   Select,
+  StatusDot,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';
@@ -25,6 +30,11 @@ import { sendJson } from '../../lib/writeJson';
 import type { AssessmentConfiguration, SecondaryMotionConfig } from './secondaryTypes';
 
 const LEVEL_OPTIONS = [1, 2, 3, 4, 5].map((n) => ({ value: String(n), label: `Level ${n}` }));
+
+/** A complete 3- or 6-digit hex colour — anything else paints no swatch. */
+function isHexColour(v: string): boolean {
+  return /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(v.trim());
+}
 
 export default function ConfigurationPage() {
   const { can, ready } = useCapabilities();
@@ -114,7 +124,39 @@ export default function ConfigurationPage() {
                   </FormField>
                   <FormField label="Accent">
                     {(wiring) => (
-                      <Input {...wiring} value={motion.accent} onChange={(e) => updateMotion(i, { accent: e.target.value })} disabled={!canManage} />
+                      // A swatch in the input's prefix, the way the source
+                      // project's own Configuration renders this field
+                      // (ui/src/components/configuration/Configuration.tsx
+                      // paints `backgroundColor: cohort.accent`). Without it
+                      // the field was the bare hex string, which nobody
+                      // can decode into a colour — and this is the one field
+                      // on the page whose entire content IS a colour.
+                      //
+                      // The value is carried for the source system: this app's
+                      // cohort chips take their colour from the tenant's
+                      // semantic tones (see MOTIONS' `accent: ChipTone`), which
+                      // are theme-aware in a way a stored hex cannot be. So the
+                      // swatch shows what is stored, not a preview of the chip.
+                      <Input
+                        {...wiring}
+                        value={motion.accent}
+                        onChange={(e) => updateMotion(i, { accent: e.target.value })}
+                        disabled={!canManage}
+                        mono
+                        prefix={
+                          // `StatusDot` takes a `color`, so the swatch is a
+                          // library component rather than a hand-rolled span
+                          // with an inline style — which the component gate
+                          // bans in pages outright, and rightly: a rule you can
+                          // evade by hoisting the object to a const is not a
+                          // rule (scripts/validate-component-discipline.sh).
+                          <StatusDot
+                            color={isHexColour(motion.accent) ? motion.accent : 'var(--color-text-tertiary)'}
+                            size="sm"
+                            aria-label={isHexColour(motion.accent) ? `Accent ${motion.accent}` : 'No colour set'}
+                          />
+                        }
+                      />
                     )}
                   </FormField>
                 </FormRow>
