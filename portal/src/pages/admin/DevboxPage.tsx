@@ -12,7 +12,7 @@
 // consumer of the fleet reads the same list.
 
 import { useSearchParams } from 'react-router';
-import { ErrorState, InlineAlert, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { ErrorState, InlineAlert, Stack, VisuallyHidden } from '@connorhoehnslalom/ui-components/shared';
 import { ComputerLab } from '@connorhoehnslalom/ui-components/compute';
 import { useCapabilities } from '../../lib/capabilities';
 import { useSession } from '../../lib/auth';
@@ -63,8 +63,14 @@ export default function DevboxPage() {
 
   return (
     <Stack gap="none" className="h-full min-h-0">
+      {/* The lab fills the viewport and owns its own chrome, so there is no
+          PageSection title block here. That left this route (with
+          Architecture) as the only one whose document outline had no `h1`:
+          the breadcrumb is a nav landmark, not a heading. Hidden rather than
+          drawn — the lab does not want a title bar above it. */}
+      <VisuallyHidden as="h1">Computer Lab</VisuallyHidden>
       {readOnly && (
-        <InlineAlert tone="info" className="mx-4 mt-3">
+        <InlineAlert tone="info" className="mx-4 mt-3 mb-3">
           You can see the fleet but not drive it. Opening a shell or dispatching work
           needs computer access, which an SME or a platform operator can grant.
         </InlineAlert>

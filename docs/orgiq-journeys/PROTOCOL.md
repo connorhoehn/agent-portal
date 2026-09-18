@@ -20,8 +20,12 @@ route:
 let c=0,s=[],mo=0,t=0;
 m.querySelectorAll('*').forEach(e=>{if(e.children.length)return;
  const x=(e.textContent||'').trim();if(!x)return;t++;
- if(/mono/i.test(getComputedStyle(e).fontFamily))mo++;
- if(e.scrollWidth>e.clientWidth+1&&e.clientWidth>0){c++;
+ const cs=getComputedStyle(e);
+ if(/mono/i.test(cs.fontFamily))mo++;
+ // ONLY a clip when the overflow is actually hidden. With `overflow:visible`
+ // the text spills outside its box and stays fully readable.
+ const hides=/hidden|clip|auto|scroll/.test(cs.overflowX);
+ if(hides&&e.scrollWidth>e.clientWidth+1&&e.clientWidth>0){c++;
   if(s.length<3)s.push({t:x.slice(0,30),avail:e.clientWidth,needs:e.scrollWidth,title:!!e.getAttribute('title')})}});
 const f=[];if(c)f.push('clipped:'+c+JSON.stringify(s));
 if(document.documentElement.scrollWidth>innerWidth+1)f.push('h-scroll');
@@ -30,15 +34,23 @@ if(t>6&&mo/t>.5)f.push('mono:'+Math.round(100*mo/t)+'%');
 return location.pathname+' => '+(f.join(' ; ')||'clean')})()
 ```
 
-**A clip is only a defect when `title` is false.** A long identifier cut with
-its full value on hover is deliberate and working — `/admin/budgets` shows
-`us.amazon.nova-lite-v1:0` that way and it is correct. A sentence cut
-mid-word with no `title` is the bug: the reader cannot get the rest.
+**Two filters, both needed, or the sweep cries wolf.**
+
+1. **`overflow` must actually hide.** `scrollWidth > clientWidth` on its own
+   proves nothing: with `overflow: visible` the text simply paints outside its
+   box and every character is readable. Measured on `/iq/agents`, the
+   "Calls (24h)" StatStrip *label* reports 68px needed in a 43px box and is
+   fully legible on screen — a false positive. The *hints* on the same
+   component are `overflow: hidden` + `text-overflow: ellipsis` and really are
+   cut. Same component, two different answers, so check the property.
+2. **`title` must be absent.** A long identifier cut with its full value on
+   hover is deliberate and working — `/admin/budgets` shows
+   `us.amazon.nova-lite-v1:0` that way and it is correct.
 
 Size the replacement copy from the measurement, not by eye —
 `avail / needs x length` is roughly how many characters fit. Found this way on
-2026-09-17: budgets (196px into 165px), the Automate queue pulse (221 into
-209), the observability summary (175 into 150).
+2026-09-17, all three genuinely hidden: budgets (196px into 165px), the
+Automate queue pulse (221 into 209), the observability summary (175 into 150).
 
 ## Persona
 

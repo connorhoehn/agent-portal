@@ -10,7 +10,7 @@ import { MarkerType, type Node, type Edge } from '@xyflow/react';
 import { Link, useSearchParams } from 'react-router';
 import {
   Chip, DataTable, Drawer, EmptyState, Inline, InlineAlert, Input, SectionLabel,
-  SegmentedControl, Stack, StatStrip, StatusDot, type DataTableColumn,
+  SegmentedControl, Stack, StatStrip, StatusDot, VisuallyHidden, type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../hooks/useFetch';
 import { UnavailableNotice } from '../components/UnavailableNotice';
@@ -309,6 +309,14 @@ function AgentFlowPage() {
 
   return (
     <Stack gap="none" className="h-full w-full">
+      {/* This page is a full-bleed canvas — the summary bar IS its frame, so
+          there is no PageSection title block like every other surface has.
+          That left it as the only route (with Computer Lab) whose document
+          outline had no `h1` at all: the breadcrumb is a nav landmark, not a
+          heading, so a screen reader arriving here was told the page's name
+          by nothing. A visually-hidden heading restores the outline without
+          adding chrome the diagram does not want. */}
+      <VisuallyHidden as="h1">Architecture</VisuallyHidden>
       {fleetFailure && (
         // The page is full-bleed with no content column, so the shared notice
         // is squared off into the same strip the topology alert uses. Same
