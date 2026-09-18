@@ -402,6 +402,28 @@ html[data-theme="dark"] [data-tenant="assessment"] {
   --color-neutral-bg: #123F3F;
 }
 
+/* A code block's Copy button is absolutely positioned inside the block and
+   reserves no room for itself, so any line long enough to reach the right edge
+   runs underneath it. Measured on /assessment/prompts, the
+   `uv run -m sdlcd.main assess apply-classification …` line: scrollWidth 924
+   against clientWidth 896, and the button's box genuinely intersects the
+   text's. The block DOES scroll (overflow-x: auto), so nothing is unreachable
+   — it just reads as clipped, which is worse than it is.
+
+   Reserving the gutter as trailing padding lets the last characters scroll
+   clear of the button instead of stopping under it. Scoped to this pane's own
+   class rather than the library's generated utility strings, so it does not
+   break when those change. Queued in docs/ui-components-queue.md. */
+.doc-markdown pre > code {
+  /* On the PRE this does nothing: padding on a scroll container is not added
+     to its scrollWidth, so the text still stopped under the button (measured —
+     scrollWidth stayed 924 against clientWidth 896). On the inline-block inner
+     `code` it is part of the scrollable content and the width grows (924 ->
+     980), which is what actually frees the tail. */
+  display: inline-block;
+  padding-right: 3.5rem;
+}
+
 /* ── Shell ─────────────────────────────────────────────────────────────
    The library's SubNavLayout and ChannelHeader take no colour props, so the
    shell marks its regions and the layers land here. */

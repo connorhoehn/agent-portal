@@ -255,12 +255,20 @@ describe('run ids carry the run\'s own time, not a baked one', () => {
 
 // ── Prompt docs say what their command actually does ────────────────────────
 //
-// All nine shipped with the SAME 216-byte body — only the `# /name` heading
-// differed — and that shared body asserted "Never persists a score directly",
-// which is not a property seven of them have: they do not score at all. Nine
-// copies of one sentence, wrong on most of them, on the surface whose whole
-// job is to show what the accelerator's agents do. These three properties are
-// what stops it drifting back.
+// All nine once shipped with the SAME 216-byte body — only the `# /name`
+// heading differed — and that shared body asserted "Never persists a score
+// directly", which is not a property seven of them have: they do not score at
+// all. Nine copies of one sentence, wrong on most of them, on the surface
+// whose whole job is to show what the accelerator's agents do.
+//
+// They were then replaced by nine hand-written summaries, one per command,
+// which fixed the falsehood but were still a PARAGRAPH ABOUT the document
+// rather than the document. The bodies are now the real command files from
+// ~/Projects/agentic-assessment-accelerator/.claude/commands — the operator's
+// actual working text, with its `## Input` contract, its output schema and the
+// verb it hands off to. That is what makes the third property below worth
+// something: "only the two scoring commands mention apply-scores" is now a
+// statement about the real documents, not about a summary someone wrote.
 describe('knowledge: the prompt docs are nine documents, not one', () => {
   const promptDocs = () => M.knowledgeDocs().filter((d) => d.id.startsWith('prompt:'));
 
@@ -272,10 +280,46 @@ describe('knowledge: the prompt docs are nine documents, not one', () => {
   });
 
   it("each body's heading names its own command", () => {
+    // The real command files lead with YAML frontmatter and a title-case H1
+    // ("# Classify Transcript"), not the `# /classify-transcript` the
+    // hand-written stubs used. The invariant that matters is unchanged — a
+    // body identifies the command it belongs to — so it is asserted against
+    // the shape the documents actually have rather than the one the stubs did.
     for (const d of promptDocs()) {
       const command = d.id.replace(/^prompt:/, '').replace(/\.md$/, '');
-      expect(d.markdown.startsWith(`# /${command}\n`)).toBe(true);
+      const heading = /^#\s+(.+)$/m.exec(d.markdown)?.[1]?.trim();
+      expect(heading).toBeDefined();
+      const slug = heading!.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+      expect(slug).toBe(command);
     }
+  });
+
+  it('every body carries the frontmatter the command files ship with', () => {
+    // `description` is what the source project's own tooling reads to list a
+    // command; losing it in transit is the tell that a body was retyped rather
+    // than carried across.
+    for (const d of promptDocs()) {
+      expect(d.markdown.startsWith('---\n')).toBe(true);
+      expect(/^description:\s*\S/m.test(d.markdown)).toBe(true);
+    }
+  });
+
+  it('bodies are the real documents, not a paragraph about them', () => {
+    // The summaries they replaced were 274-483 bytes. The shortest real
+    // command file is validate-outputs at ~2KB, so a floor of 1200 separates
+    // the two without pinning anyone's exact length.
+    //
+    // NOT asserted: that every body carries a fenced block. Seven do; two —
+    // draw-diagram and validate-outputs — are entirely prose, and an earlier
+    // draft of this test claimed otherwise and failed against the real files.
+    // The lesson is the point of the whole change: assert what the documents
+    // are, not what a summary of them would have been.
+    for (const d of promptDocs()) {
+      expect(d.markdown.length).toBeGreaterThan(1200);
+    }
+    // Collectively they do carry copyable blocks — that is what a reader comes
+    // to a command reference for — so the property holds in the aggregate.
+    expect(promptDocs().filter((d) => d.markdown.includes('```')).length).toBeGreaterThanOrEqual(7);
   });
 
   // The claim that made the old shared body false. Only these two carry an

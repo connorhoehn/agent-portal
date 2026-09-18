@@ -303,6 +303,41 @@ export function toActivityFeedItems(runs: ActivityRun[]): KnowledgeActivityItem[
  * renderer turns the first key line into a giant setext heading, which reads
  * as broken output on every prompt/rule file.
  */
+/**
+ * Drops the language off ```json fences so the library's highlighter does not
+ * run on them.
+ *
+ * `MarkdownView`'s JSON highlighter corrupts its own output. It makes two
+ * sequential regex passes over the raw source (read from the installed dist,
+ * 2.277.2, `shared-CSjbhJoV.js`):
+ *
+ *   pass 1  /("...")(\s*:)/  ->  <span style="color:PROPERTY">$1</span>$2
+ *   pass 2  /("...")/         ->  <span style="color:STRING">$1</span>
+ *
+ * Pass 2's "quoted run" pattern matches the quoted ATTRIBUTE VALUE that pass 1
+ * just wrote — the `"color:…"` it emitted is itself a quoted run — and wraps
+ * it again. The result is nested, broken markup that renders at the reader as
+ * the literal text `"color:…">"evidence_type"`. It fires on any JSON object
+ * with a property, which is every JSON object, so this is not an edge case.
+ * (The real colour values are in the library bundle and in the queue row; they
+ * are spelled out here only as PROPERTY/STRING because a hex literal in a page
+ * file fails the branding gate, whose budget is zero.)
+ *
+ * Losing the colour is much better than printing markup at the reader. The
+ * same flaw is latent in the bash and comment-first highlighters (a `#`
+ * comment's span has a quoted attribute too), but none of the documents here
+ * carry a bash comment and those blocks render correctly, so this defuses
+ * ONLY what is demonstrably broken rather than flattening every fence.
+ *
+ * Queued in docs/ui-components-queue.md; delete this the moment the
+ * highlighter tokenises instead of chaining replaces.
+ */
+export function defuseJsonFences(markdown: string): string {
+  // Only an opening fence at the start of a line, so a ```json appearing
+  // inside an indented block or in prose is left alone.
+  return markdown.replace(/^(\s*)```json\b/gm, '$1```');
+}
+
 export function stripFrontmatter(markdown: string): string {
   const match = /^---\r?\n[\s\S]*?\r?\n---\r?\n?/.exec(markdown);
   return match ? markdown.slice(match[0].length).replace(/^\s+/, '') : markdown;

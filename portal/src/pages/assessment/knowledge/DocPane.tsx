@@ -51,6 +51,7 @@ import {
   mergeComments,
   mergePresenceForDisplay,
   latestPresenceForDoc,
+  defuseJsonFences,
   stripFrontmatter,
   stripTitleHeading,
   summarizeReactions,
@@ -633,7 +634,7 @@ export function DocPane({ node, mode, sseEvents, sseConnected, sseGapped, onTree
     });
   };
 
-  const displayMarkdown = stripTitleHeading(stripFrontmatter(doc.markdown), doc.title);
+  const displayMarkdown = defuseJsonFences(stripTitleHeading(stripFrontmatter(doc.markdown), doc.title));
   const reactionSummaries = summarizeReactions(reactions?.reactions ?? [], node.id, gateway.clientId);
 
   return (
@@ -846,7 +847,7 @@ export function DocPane({ node, mode, sseEvents, sseConnected, sseGapped, onTree
               className="font-mono text-xs"
             />
           ) : (
-            <MarkdownView markdown={displayMarkdown} />
+            <MarkdownView markdown={displayMarkdown} className="doc-markdown" />
           )}
         </Stack>
 
