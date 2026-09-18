@@ -217,15 +217,25 @@ html[data-theme="dark"] [data-tenant="orgiq"] {
   --color-primary-hover: #a5aaff;
   --color-primary-soft: #1e1b4b;
 }
+/* The SDLC brand, adopted from the accelerator this tenant is a portal for
+   (~/Projects/agentic-assessment-accelerator, ui/src/styles/global.css) rather
+   than invented here: deep teal, turquoise and sky are its own tokens
+   (--sdlc-deep-teal #0B6666, --sdlc-turquoise #007FA3, --sdlc-sky #4FAEC7,
+   --sdlc-deep-base #0B3A3A). What was here was stock Tailwind teal-600/700/900,
+   which belonged to no brand.
+   It is also the accessible choice, which is why it is a fix and not a repaint:
+   the library's primary Button is `bg-primary text-white` with the foreground
+   hardcoded, and white on the old #0d9488 measured 3.74:1 at 12px — under the
+   4.5 WCAG AA needs for normal text. White on #0B6666 is 6.76:1. */
 [data-tenant="assessment"] {
-  --color-brand: #0d9488;            /* teal */
-  --color-brand-hover: #0f766e;
-  --color-brand-ink: #134e4a;
-  --color-brand-soft: #ccfbf1;
-  --background-image-brand-gradient: linear-gradient(90deg, #0d9488 0%, #06b6d4 55%, #3b82f6 100%);
-  --color-primary: #0d9488;
-  --color-primary-hover: #0f766e;
-  --color-primary-soft: #ccfbf1;
+  --color-brand: #0B6666;            /* sdlc deep teal */
+  --color-brand-hover: #084F4F;
+  --color-brand-ink: #0B3A3A;        /* sdlc deep base */
+  --color-brand-soft: #DCEDEA;
+  --background-image-brand-gradient: linear-gradient(90deg, #0B6666 0%, #007FA3 55%, #4FAEC7 100%);
+  --color-primary: #0B6666;
+  --color-primary-hover: #084F4F;
+  --color-primary-soft: #DCEDEA;
 }
 html[data-theme="dark"] [data-tenant="assessment"] {
   --color-brand: #2dd4bf;

@@ -9,6 +9,38 @@ names the log that carries the measurement.
 
 ## Open
 
+### 2. Primary buttons fail WCAG AA in three of four tenant x theme cells
+
+Measured 2026-09-18 on live primary buttons at 12px/400, where AA requires
+4.5:1 for normal text:
+
+| tenant | theme | brand | white on brand |
+|---|---|---|---|
+| orgiq | light | `#6366f1` | 4.47 |
+| orgiq | dark | `#8b91ff` | **2.77** |
+| assessment | light | `#0d9488` | 3.74 → **fixed, now 6.76** |
+| assessment | dark | `#2dd4bf` | **1.86** |
+
+Cause: the library's `Button` primary variant is `bg-primary text-white` with
+the foreground hardcoded. A dark theme lightens its brand so the colour still
+reads as an accent on a dark ground, which makes white-on-brand worse rather
+than better — which is why both dark cells are the worst two numbers here.
+
+**Fixed:** assessment light. It now carries the SDLC brand `#0B6666` from the
+accelerator this tenant is a portal for, which is 6.76:1 and was the right
+brand regardless — what was there was stock Tailwind teal-600.
+
+**Open, and NOT fixable consumer-side:** the two dark cells.
+`--color-primary` is one token doing two jobs — the button fill (wants dark,
+for white text) and the nav's active edge (wants light, to read on the dark
+ground). Darkening it to rescue the button costs the accent, and there is no
+prop to give the button a dark foreground. Queued in
+docs/ui-components-queue.md.
+
+**Open, deliberately not touched:** orgiq light at 4.47 misses by 0.03. Real,
+but fixing it means restyling a brand nobody asked to change; it belongs with
+the library fix rather than as a unilateral repaint.
+
 ### 1. `PageHeader` breaks the vertical rhythm by 6px — Reports is the only surface using it
 
 Measured 2026-09-17 23:05 at 1600px, in BOTH themes (which is what rules out a
