@@ -1,11 +1,10 @@
 // Verified Permissions enforcement middleware. One IsAuthorized call per
-// (tenant, role, action) is cached for 60 seconds — Cedar policies aren't
+// (user, tenant, role, action, resource attributes) is cached for 60 seconds — Cedar policies aren't
 // expected to change per-request, and AVP charges per evaluation.
 //
 // The principal sent to Cedar is the *user* (entityId = session.sub) carrying
-// role + tenant as attributes; policies condition on the attributes
-// (`principal.role == "..." && principal.tenant == "..."`), so decisions are
-// cacheable across users holding the same (tenant, role) pair.
+// role + tenant as attributes. Policies may also name a specific principal,
+// so decisions must never be shared between users who happen to hold a role.
 
 import type { Request, Response, NextFunction } from 'express';
 import {
@@ -124,7 +123,7 @@ export interface ResourceAttrs {
  * instead of the singleton. Until then (a) buys nothing and costs a sync loop.
  *
  * A second, quieter reason (b) fits: the AVP decision cache keys on
- * tenant|role|action|attrs. These attributes are low-cardinality (a handful of
+ * user|tenant|role|action|attrs. These attributes are low-cardinality (a handful of
  * tiers and kinds), so caching still works. Passing the environment ID would
  * make every row its own cache entry and every check a fresh billed
  * evaluation — which is also the honest signal that per-ID rules belong in (a),
@@ -230,10 +229,10 @@ async function evaluate(principal: PrincipalRef, action: string, resourceAttrs?:
   // entries) — a plain key would collide across different resources, but
   // skipping the cache entirely made every capabilities probe re-hit AVP.
   const hasAttrs = !!resourceAttrs && Object.keys(resourceAttrs).length > 0;
-  const attrsKey = hasAttrs
-    ? '|' + JSON.stringify(Object.fromEntries(Object.entries(resourceAttrs).sort(([a], [b]) => a.localeCompare(b))))
-    : '';
-  const key = `${principal.tenant}|${principal.role}|${action}${attrsKey}`;
+  const key = JSON.stringify([
+    principal.sub, principal.tenant, principal.role, action,
+    hasAttrs ? Object.fromEntries(Object.entries(resourceAttrs).sort(([a], [b]) => a.localeCompare(b))) : null,
+  ]);
   {
     const cached = cache.get(key);
     if (cached && cached.expiresAt > Date.now()) return cached.decision;

@@ -12,6 +12,7 @@ import {
   type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
+import { useSession } from '../../lib/auth';
 import { KeyValue } from '../../components/KeyValue';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { relativeTime } from '../../lib/relativeTime';
@@ -50,6 +51,9 @@ function repoShort(repo: string | null): string | null {
 }
 
 export default function DistillationOverviewPage() {
+  const { session } = useSession();
+  // /presence/repos is fleet-wide visibility, distinct from personal machine access.
+  const mayReadFleetPresence = ['org-leader', 'hr-admin', 'admin'].includes(session?.role ?? '');
   const [pollMs, setPollMs] = useState<number>(IDLE_POLL_MS);
   const { data: jobsData } = useFetch<CompactionsResponse>('/api/distillation/compactions', pollMs);
 
@@ -73,7 +77,7 @@ export default function DistillationOverviewPage() {
   // `nodesData` above, it just has no org-wide figure to lead with, so the
   // render below falls back to that rather than treating the 403 as "zero
   // activity anywhere."
-  const { data: repoPresenceData } = useFetch<{ repos: RepoPresenceEntry[] }>('/api/local-compute/presence/repos', NODES_POLL_MS);
+  const { data: repoPresenceData } = useFetch<{ repos: RepoPresenceEntry[] }>(mayReadFleetPresence ? '/api/local-compute/presence/repos' : null, NODES_POLL_MS);
   const navigate = useNavigate();
 
   const levels = levelsData?.levels ?? [];

@@ -247,6 +247,7 @@ const agentCoreGateway = new AgentCoreGatewayStack(app, 'OrgIQ-AgentCoreGateway'
   prefix,
   auroraClusterArn: aurora.clusterArn,
   auroraCredentialsSecretArn: aurora.credentialsSecretArn,
+  auroraReadOnlySecretArn: aurora.readOnlySecretArn,
   knowledgeBaseId: knowledgeBase.knowledgeBaseId,
   policyEngineArn: agentCorePolicy.policyEngineArn,
   policyEngineId: agentCorePolicy.policyEngineId,
@@ -417,6 +418,8 @@ const middlewareService = new MiddlewareServiceStack(app, 'OrgIQ-MiddlewareServi
   auroraCredentialsSecretArn: cdk.Fn.importValue(`${prefix}-aurora-secret-arn`),
 
   // AgentCore identifiers (from AgentCoreMemoryStack + KnowledgeBaseStack)
+  browserId: agentCoreCapabilities.browserId,
+  browserArn: agentCoreCapabilities.browserArn,
   memoryId: cdk.Fn.importValue(`${prefix}-memory-id`),
   // `--context kbId=<id>` overrides the CFN import. The KnowledgeBase stack's
   // exports are imported by four other stacks, so a knowledge base deleted

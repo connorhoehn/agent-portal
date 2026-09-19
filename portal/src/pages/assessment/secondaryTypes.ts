@@ -28,6 +28,7 @@ export interface TeamOption {
 export type RowStatus = 'new' | 'seen' | 'unknown_team';
 
 export interface ParsedRow {
+  seen_team_ids?: string[];
   row_index: number;
   form_id: string;
   status: RowStatus;

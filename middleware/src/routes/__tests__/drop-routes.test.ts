@@ -42,6 +42,7 @@ const VIEW = {
 
 function buildApp() {
   const app = express();
+  app.set('trust proxy', 1);
   app.use(express.json());
   app.use('/api/drop', dropRouter);
   app.use(errorHandler);
@@ -49,7 +50,7 @@ function buildApp() {
 }
 
 // Each test uses its own client ip so the in-process throttle (60/min, keyed
-// on the first XFF hop) never bleeds between cases.
+// on the proxy-verified client address) never bleeds between cases.
 let ipCounter = 0;
 const nextIp = () => `10.0.0.${(ipCounter += 1) % 250}`;
 

@@ -13,6 +13,7 @@ import {
 import { useFetch } from '../../hooks/useFetch';
 import { relativeTime } from '../../lib/relativeTime';
 import { useSession } from '../../lib/auth';
+import { useCapabilities } from '../../lib/capabilities';
 import { botStatusChip } from '../../lib/statusTone';
 import { usd } from '../../lib/format';
 import { BOTS_ROLES } from './automateNav';
@@ -56,7 +57,9 @@ export function QueuePulse({ summary, jobs, degraded }: {
   // is a THIRD state next to "no bots" and "we could not read the roster" —
   // the route marks the last one `degraded`, and the hint below names which
   // of the three the reader is looking at.
-  const { data, error, degraded: botsDegraded } = useFetch<{ bots: PulseBot[] }>('/api/bots', 15_000);
+  const { can, ready } = useCapabilities();
+  const mayReadBots = ready && can('ManageBots');
+  const { data, error, degraded: botsDegraded } = useFetch<{ bots: PulseBot[] }>(mayReadBots ? '/api/bots' : null, 15_000);
   const botsFailure = error ?? botsDegraded;
   const bots = botsFailure ? [] : data?.bots ?? [];
 
@@ -104,8 +107,10 @@ export function QueuePulse({ summary, jobs, degraded }: {
           },
           {
             label: 'Bots on this queue',
-            value: botsFailure ? '—' : roster.length,
-            hint: botsDegraded
+            value: !mayReadBots || botsFailure ? '—' : roster.length,
+            hint: !ready ? 'checking roster access'
+              : !mayReadBots ? 'roster not visible to this role'
+              : botsDegraded
               ? `roster unreadable — ${botsDegraded}`
               // Only a 403 means the ROLE cannot see it. Any other failure is
               // the read itself, and saying "not visible to this role" then

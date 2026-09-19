@@ -231,7 +231,7 @@ describe('rateLimit', () => {
 
   it('buckets by client, not globally', () => {
     const limiter = rateLimit('test2', 1, 60_000);
-    const other = { headers: { 'x-forwarded-for': '203.0.113.9' }, socket: { remoteAddress: '10.0.0.1' } } as unknown as Request;
+    const other = { ip: '203.0.113.9', headers: {}, socket: { remoteAddress: '10.0.0.1' } } as unknown as Request;
     const next = jest.fn();
     limiter(req, fakeRes(), next);
     limiter(other, fakeRes(), next);

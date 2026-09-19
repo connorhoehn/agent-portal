@@ -8,16 +8,19 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import {
-  Breadcrumbs as InlineBreadcrumbs,
   Button,
   Card,
+  CollapsibleSection,
   Chip,
   EmptyState,
+  DropdownMenu,
+  Drawer,
+  T,
   ErrorState,
   Inline,
   Link,
   LoadingState,
-  MetaLine,
+  DetailSection,
   PageHeader,
   Stack,
   StatStrip,
@@ -57,6 +60,7 @@ export function TeamScorecard({ teamId, tab, onTabChange }: TeamScorecardProps) 
   const navigate = useNavigate();
   const { data, isLoading, isError, notFound, refresh } = useTeamDetail(teamId);
   const [selectedDimId, setSelectedDimId] = useState<string | null>(null);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const [exceptionsOpen, setExceptionsOpen] = useState(false);
   const [scoringLogsOpen, setScoringLogsOpen] = useState(false);
   // Certification ('scorecard') is always mounted; the other four panes mount
@@ -104,37 +108,22 @@ export function TeamScorecard({ teamId, tab, onTabChange }: TeamScorecardProps) 
     team.certification?.max_verified_level ?? team.certification?.highest_verified_level ?? null;
   const certSubline = teamCertificationSubline(team.certification, team.dimensions_total);
   const activeStep = workflow_steps.find((s) => s.active);
-  const selectedDimension = tab === 'scorecard' ? dimensions.find((d) => d.id === selectedDimId) ?? null : null;
   const dimensionTitle = (dimensionId: string) => dimensions.find((d) => d.id === dimensionId)?.title ?? dimensionId;
 
   return (
     <Stack gap="lg">
-      {/* No `back` here — the shell's breadcrumbs already render
-          Assessment › Teams › <team>, and the dimension crumb below extends
-          it live, so a second "← Teams" would be two doors to the same
-          place stacked on top of each other. */}
       <PageHeader
         title={team.name}
         badge={<Chip tone="accent" uppercase size="xs">{team.cohort_label}</Chip>}
         description={`${team.status} · Updated ${fmtDate(team.updated_at)}`}
         actions={
           <Inline gap="sm" align="center">
-            <Button variant="secondary" size="sm" onClick={() => setExceptionsOpen(true)}>
-              Exceptions
-            </Button>
-            <Button variant="secondary" size="sm" onClick={() => setScoringLogsOpen(true)}>
-              How it was assessed
-            </Button>
-            {/* Opens in a new tab: the report is a printable, self-contained
-                page and the scorecard should still be here when it closes. */}
-            <Button
-              variant="secondary"
-              size="sm"
-              title="Printable full report — save as PDF from the print dialog"
-              onClick={() => window.open(`/assessment/reports?team=${encodeURIComponent(team.id)}`, '_blank', 'noopener,noreferrer')}
-            >
-              Report
-            </Button>
+            <Button variant="secondary" size="sm" onClick={() => setDetailsOpen(true)}>Team details</Button>
+            <DropdownMenu trigger="Review" triggerClassName="text-xs px-2.5 py-1" triggerLabel="Assessment review actions" align="end" sections={[{ items: [
+              { label: 'Exceptions', onSelect: () => setExceptionsOpen(true) },
+              { label: 'How it was assessed', onSelect: () => setScoringLogsOpen(true) },
+              { label: 'Printable report', onSelect: () => { window.open(`/assessment/reports?team=${encodeURIComponent(team.id)}`, '_blank', 'noopener,noreferrer'); } },
+            ] }]} />
             <Can do="ScoreAssessment">
               <Button variant="primary" size="sm" onClick={() => onTabChange('evidence')}>
                 + Add evidence
@@ -151,45 +140,13 @@ export function TeamScorecard({ teamId, tab, onTabChange }: TeamScorecardProps) 
         }
       />
 
-      {/* The lead is a name, not a link — this tenant has no org-graph person
-          behind it (see the note on TeamSummary in ../types.ts). The repos ARE
-          links: they are the SDLC surface every dimension is assessed against
-          (docs/assessment-ux-goal.md slice 4), and an assessor opening the
-          pipeline or the branch rules is the "observed" evidence class. */}
-      <MetaLine
-        size="sm"
-        data-testid="team-repos"
-        items={[
-          `Lead: ${team.assessment_lead || 'Unassigned'}`,
-          team.repos.length === 0
-            ? 'No repositories on file'
-            : (
-              <Inline as="span" gap="xs" align="center" wrap>
-                {team.repos.length === 1 ? 'Repo:' : `Repos (${team.repos.length}):`}
-                {team.repos.map((r) => (
-                  <Link key={r.gitlab_url || r.name} href={r.gitlab_url} external className="font-mono text-[12px]">
-                    {r.name}
-                  </Link>
-                ))}
-              </Inline>
-            ),
-          team.contacts.length > 0 ? `Contacts: ${team.contacts.join(', ')}` : null,
-        ]}
-      />
-
       <StatStrip
-        frameless
         items={[
-          // A stat strip value is a NUMBER-sized thing. The full headline
-          // ("Verified to Level 3 on 17 of 17 dimensions") wrapped to three
-          // lines in a 200px cell, so the level is the value and the sentence
-          // is the hint — the strip stays one row tall and the sentence is
-          // still there for anyone who reads past the number.
           {
-            label: 'Certification',
+            label: 'Highest verified',
             value: verifiedLevel != null ? `L${verifiedLevel}` : 'Not yet assessed',
             tone: verifiedLevel != null ? 'accent' : 'default',
-            hint: certSubline ? `${certHeadline} · ${certSubline}` : certHeadline,
+            hint: 'Across assessed dimensions',
           },
           { label: 'Assessed', value: `${team.dimensions_assessed}/${team.dimensions_total}` },
           { label: 'Open follow-ups', value: team.followups_open, tone: team.followups_open > 0 ? 'danger' : 'default' },
@@ -197,29 +154,24 @@ export function TeamScorecard({ teamId, tab, onTabChange }: TeamScorecardProps) 
         ]}
       />
 
-      {/* Trailing DIMENSION crumb — the shell breadcrumb (Assessment › Teams ›
-          TEAM-002) is derived purely from the URL and stops there; this page
-          owns the live extension for the dimension currently selected in the
-          master-detail below. Clicking it collapses the selection, mirroring
-          the source's imperative "collapse" crumb. */}
-      {selectedDimension && (
-        <InlineBreadcrumbs
-          items={[
-            { label: 'Certification', onClick: () => setSelectedDimId(null) },
-            { label: selectedDimension.title },
-          ]}
-        />
-      )}
+      <Stack gap="xs" className="px-1">
+        <T className="text-sm text-text-primary">{certHeadline}</T>
+        {certSubline && <T className="text-xs text-text-secondary">{certSubline}</T>}
+      </Stack>
 
       <Tabs idPrefix="scorecard" aria-label="Team scorecard" items={TABS} value={tab} onValueChange={(id) => onTabChange(id as ScorecardTab)} />
 
       {/* All five panes stay mounted — toggled with `hidden`, not unmounted —
           so selection/form state in each survives switching tabs. */}
       <Stack hidden={tab !== 'scorecard'} gap="lg">
-        <Card padding="sm" className="overflow-x-auto shadow-sm ring-1 ring-border">
-          <WorkflowStepper steps={workflow_steps} size="sm" />
-        </Card>
-        <EvidenceCoverage dimensions={dimensions} />
+        <CollapsibleSection title="Assessment progress & evidence coverage" defaultOpen={false} storageKey="assessment.scorecard.overview">
+          <Stack gap="md">
+            <Card padding="sm" className="overflow-x-auto">
+              <WorkflowStepper steps={workflow_steps} size="sm" />
+            </Card>
+            <EvidenceCoverage dimensions={dimensions} />
+          </Stack>
+        </CollapsibleSection>
         <DimensionMasterDetail dimensions={dimensions} selectedId={selectedDimId} onSelect={setSelectedDimId} />
       </Stack>
 
@@ -245,9 +197,31 @@ export function TeamScorecard({ teamId, tab, onTabChange }: TeamScorecardProps) 
         <EmptyState
           title="Documents live in Workspace"
           body="This team's documents are in the Informatics › Workspace explorer, alongside the shared enterprise context."
+          actionLabel="Open Workspace"
+          onAction={() => navigate('/assessment/workspace')}
         />
       </Stack>
 
+      <Drawer open={detailsOpen} onClose={() => setDetailsOpen(false)} title="Team details" width={420}>
+        <Stack gap="md" className="p-4">
+          <T className="text-sm text-text-primary">{team.name}</T>
+          <DetailSection title="Assessment lead">
+            <T>{team.assessment_lead || 'Unassigned'}</T>
+          </DetailSection>
+          <DetailSection title={`Repositories (${team.repos.length})`}>
+            <Stack gap="sm" data-testid="team-repos">
+              {team.repos.length === 0 && <T>No repositories on file</T>}
+              {team.repos.map((repo) => <Link key={repo.gitlab_url || repo.name} href={repo.gitlab_url} external className="break-all text-sm">{repo.name}</Link>)}
+            </Stack>
+          </DetailSection>
+          <DetailSection title="Contacts">
+            <Stack gap="sm">
+              {team.contacts.length === 0 && <T>No contacts on file</T>}
+              {team.contacts.map((contact) => <T key={contact} className="break-all text-sm">{contact}</T>)}
+            </Stack>
+          </DetailSection>
+        </Stack>
+      </Drawer>
       <ExceptionsModal
         open={exceptionsOpen}
         onClose={() => setExceptionsOpen(false)}

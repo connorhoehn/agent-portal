@@ -40,7 +40,7 @@ import { config } from '../../config.js';
 import { sessionRouter } from '../session.js';
 import { authRouter, resolveRedirect } from '../auth.js';
 import { resetRateLimits } from '../../lib/rate-limit.js';
-import { listUsers } from '../../providers/identity.js';
+import { getUser, listUsers } from '../../providers/identity.js';
 
 /** Flip the mocked Cognito config on/off — the routes read it live. */
 function setCognito(on: boolean) {
@@ -239,5 +239,46 @@ describe('POST /api/session/logout', () => {
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ ok: true });
     expect(sessionCookies(res).every(isClearing)).toBe(true);
+  });
+});
+
+
+describe('production picker boundary', () => {
+  const priorEnv = process.env['NODE_ENV'];
+  const priorDemo = process.env['AUTH_DEMO_MODE'];
+  beforeEach(() => {
+    process.env['NODE_ENV'] = 'production';
+    delete process.env['AUTH_DEMO_MODE'];
+    jest.clearAllMocks();
+  });
+  afterEach(() => {
+    if (priorEnv === undefined) delete process.env['NODE_ENV'];
+    else process.env['NODE_ENV'] = priorEnv;
+    if (priorDemo === undefined) delete process.env['AUTH_DEMO_MODE'];
+    else process.env['AUTH_DEMO_MODE'] = priorDemo;
+  });
+
+  it.each([false, true])('refuses passwordless login with SSO configured=%s', async (sso) => {
+    setCognito(sso);
+    const res = await request(buildApp()).post('/api/session/login').send({ userId: 'u-alice' });
+    expect(res.status).toBe(403);
+    expect(res.body.ssoEnabled).toBe(sso);
+    expect(sessionCookies(res)).toHaveLength(0);
+    expect(getUser).not.toHaveBeenCalled();
+  });
+
+  it.each([false, true])('does not expose the picker directory with SSO configured=%s', async (sso) => {
+    setCognito(sso);
+    const res = await request(buildApp()).get('/api/session/users');
+    expect(res.status).toBe(403);
+    expect(listUsers).not.toHaveBeenCalled();
+  });
+
+  it('keeps an explicitly enabled production demo usable', async () => {
+    process.env['AUTH_DEMO_MODE'] = 'true';
+    const res = await request(buildApp()).post('/api/session/login').send({ userId: 'u-alice' });
+    expect(res.status).toBe(200);
+    expect(res.body.sub).toBe('u-alice');
+    expect((await request(buildApp()).get('/api/session/users')).status).toBe(200);
   });
 });

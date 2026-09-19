@@ -18,14 +18,14 @@ User. Users: assessor = `u-asha`, lead-assessor = `u-jonas`, program-lead =
 | surface | url | what "the surface" includes |
 |---|---|---|
 | dashboard | `/assessment/teams` | the assessor's desk: the program StatStrip, the motion SegmentedControl (`?cohort=`), status + search filters, the team DataTable with its two-track certification and next-action columns, a row opened, browser Back |
-| team-scorecard | `/assessment/teams/TEAM-001` | all five tabs (`?tab=`), one dimension selected in the master-detail; the rail rows carry `data-verified` / `data-claimed` and a confidence meter, the Certification tab opens with the evidence coverage strip (Attested / Documented / Observed per dimension), the header names the team's repos as links, and the dimension pane says which enterprise standard it is measured against (or that none is on file) with a link into the explorer |
+| team-scorecard | `/assessment/teams/TEAM-001` | all five tabs (`?tab=`), one dimension selected in the master-detail; the rail rows carry `data-verified` / `data-claimed` and a confidence meter, the Certification tab opens with the evidence coverage strip (Attested / Documented / Observed per dimension), the Team details drawer names the team's repos as links, and the dimension pane says which enterprise standard it is measured against (or that none is on file) with a link into the explorer |
 | submissions | `/assessment/submissions` | list, filters, a row opened |
 | submissions-wizard | `/assessment/submissions` → New submission | all four steps (drop → preview → fetch links → run prompt) |
 | feedback | `/assessment/feedback` | the question queue: status + team + search filters, the DataTable (dimension by name), a row opened in its Drawer (two tracks, evidence on file, the answer form); Record answer / Dismiss for a role that may |
 | reports | `/assessment/reports` | the portfolio: the rollup strip, the maturity heatmap (teams × 17 dimensions, a column head hovered, a team opened), where-to-start as a table, by cohort, Publish for a role that may |
 | runs | `/assessment/runs` | ledger, launcher, a launched run appearing and completing without refresh |
 | configuration | `/assessment/configuration` | program-lead only; other roles: what they see instead |
-| workspace | `/assessment/workspace` | tree rail, document pane, activity aside, connection pill |
+| workspace | `/assessment/workspace` | searchable tree rail, document pane, collapsible activity context, outline and reading-width controls |
 | enterprise | `/assessment/enterprise` | same frame |
 | rules | `/assessment/rules` | same frame |
 | prompts | `/assessment/prompts` | same frame |
@@ -145,3 +145,10 @@ out to 454px, and the rects for steps 3-6 land on top of the next four columns
 site's comment says it does. Before concluding "this overflows onto its
 neighbour", walk up from the element and check whether any ancestor has
 `overflowX` of `auto`/`scroll`; if one does, it is clipping, not colliding.
+
+## Historical isolation archives
+
+`isolation/archived-newsroom/` contains evidence for a removed tenant. It is
+retained as history and excluded from current-source freshness checks because
+its source paths no longer exist. Current role×surface and isolation records
+remain mandatory and must reference existing source files.

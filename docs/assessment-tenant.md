@@ -237,17 +237,37 @@ fleet pipeline. Map the commands that matter onto agents:
 | `develop-jira-story` | `orgiq-assessment-drafter` | turns ONE recommendation into a story draft | `RunAssessmentAgent`; push is human |
 | `extract-enterprise-context` | `orgiq-assessment-drafter`, `mode=context` | governance facts → knowledge docs | `ManageKnowledge` |
 
-Non-negotiables carried over from the source's `registry.py`: read-only tool
-floor; `Write` only to the team's `temp/`; no web fetch; no subagents; the
-agent **never** persists scores — the provider's deterministic apply step
-validates dimension ids, evidence vocabulary and confidence bands first. Run
-records are the truth of completion (exit + result envelope), never
-self-report. Duplicate-run guard per (command, team); concurrency cap 3.
+The deployed Strands agents expose `classify_evidence`/`score_dimension`
+or `check_story_draft`/`validate_facts`. The registry lists those actual
+capabilities, not the source CLI's Read/Bash tool names. Agents never persist
+scores; the BFF validates and applies their returned envelope. All nine
+commands now have execution paths. Document commands consume explicit source
+material and return unpublished drafts in the run ledger. The safe diagram
+format is uncompressed draw.io XML without external resources or HTML labels.
 
-`POST /api/assessment/runs` returns `202 {run_id}`; the portal polls
-`GET /runs/:id`. Under mock, a run advances `running → completed` on a timer
-and writes a plausible scoring log so the UI's "How it was assessed" tab has
-content — clearly labelled as mock.
+`POST /api/assessment/runs` returns `202 {run_id}` after atomically reserving
+one of three ledger slots and persisting the exact input snapshot. Duplicate
+(command, team) checks and the cap share a database table lock. The worker
+claims queued records atomically, invokes the appropriate AgentCore runtime
+with structured evidence/mode/tenant fields, and completes through the same
+deterministic provider seam as callbacks. Inputs survive a BFF restart;
+interrupted claims fail after twenty minutes rather than replay score writes.
+Invocations have a fifteen-minute transport deadline. A stopped run cannot
+later apply scores; this does not promise immediate remote model cancellation.
+
+Completion and stop serialize on the run row. Scoring logs, score/evidence
+writes and the terminal status share one transaction. Score application also locks
+the team before child inserts, serializing human edits and different commands for
+the same team; unique log stamps preserve concurrent run provenance. SSE publishes after
+commit. The selected submission is fixed at launch, never chosen again at
+callback time. Apply `schema/assessment_schema.sql` before deploying this
+worker: it adds private `dispatch_payload` and `dispatch_claimed_at` columns.
+Live dispatch refuses mixed real-Aurora/mock-AgentCore or offline settings.
+Missing required source material returns 400 before a slot is reserved.
+
+Under mock, timers advance the fixture and write clearly labelled synthetic
+results. The Runs launcher collects source text, a committed submission or an
+existing recommendation as required by the chosen command.
 
 ## Tenants are separate products on a shared BFF
 
@@ -377,11 +397,11 @@ this SQL has run against a live cluster yet — no database is reachable from
 the offline dev loop; correctness rests on `tsc`, the stubbed-Data-API tests
 (`providers/__tests__/assessment-aurora.test.ts`) and mirroring the
 conventions of `providers/aurora.ts` / `providers/budgets.ts`. First live
-run: `python3 schema/load_schema.py`, then `MOCK_AURORA=false` and watch the
-`launchRun` duplicate guard — it is two round trips on Aurora where the mock
-is one synchronous pass, so a partial unique index on
-`assessment_runs(command, team_id) WHERE status = 'running'` is the honest
-fix if two launches ever race.
+run: apply `schema/load_schema.py`, deploy the matching assessment agent
+images, then exercise the ledger through actual Aurora and AgentCore. Admission
+and completion transaction tests use a stubbed Data API and do not establish
+live database/agent behavior. The old separate duplicate-check/insert race is
+closed by the transaction and lock described above.
 
 ## Realtime: what needs the gateway and what the BFF does alone
 
@@ -398,13 +418,28 @@ other tab, comments render from `knowledge.comment.created`, and viewers are
 tracked by `POST /knowledge/presence` heartbeats with a 45s TTL — with the
 gateway's channel merged in when it is actually connected (dedupe: comments
 by content+time window, presence by `metadata.sub`; two tabs of one user
-collapse to one avatar "×2"), and a pill driven by the SSE stream's real
-open/closed state plus a "Gateway offline — presence and co-editing via the
-BFF" hint gated on the gateway's `clientId` (only a real handshake sets it —
-the stub never does). The `/ws` stub stays: realtime-modules' `useWebSocket`
-ignores close codes and retries without bound, so closing the stub's socket
-would create reconnect spam rather than prevent it. Full CRDT co-editing
-still needs the gateway; that is a deployment choice, not a page defect.
+collapse to one avatar "×2"), and durable comments/reactions stored by the BFF. The middleware no longer
+accepts a dummy `/ws` connection: upgrades receive HTTP 404, because accepting
+an unauthenticated socket without implementing collaboration falsely reported
+connectivity. Full CRDT co-editing still needs the external gateway. Its
+identity and channel-membership enforcement must be configured at that gateway;
+this BFF cannot vouch for an unauthenticated external socket. The library's
+provider currently has no disabled option and retries unavailable endpoints;
+that integration gap is recorded in `ui-components-queue.md`.
+
+
+The external gateway source inspected during the 2026-09-19 audit rejects
+missing JWTs before upgrading (`realtime-examples/src/server.ts`,
+`src/middleware/auth-middleware.ts`) and authorizes private channels from
+verified `channels` / `orgId` claims (`authz-middleware.ts`). That source is
+read-only context, not evidence of a deployed configuration. This portal does
+not pass a gateway token: its BFF deliberately keeps Cognito tokens out of the
+browser and issues a different signed cookie keyed to the local user id.
+Consequently secure external gateways refuse this integration until an identity
+exchange is implemented. `SKIP_AUTH=true` in the external gateway's local
+example assigns admin access and must not be used to enable production
+collaboration. A session cookie or a shared service secret is not a substitute
+for the missing user-and-channel authorization contract.
 
 Two restart lessons from the two-tab proofs, both fixed: (1) SSE frame ids
 were a bare per-process counter, so a tab that lived through a middleware

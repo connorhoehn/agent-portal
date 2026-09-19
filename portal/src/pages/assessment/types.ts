@@ -208,7 +208,7 @@ export const teamCertificationHeadline = (
 /** "Claims above verification on 12 dimensions — evidence requested" (+ coverage). */
 export const teamCertificationSubline = (
   cert: TeamCertification | null | undefined,
-  dimensionsTotal?: number,
+  _dimensionsTotal?: number,
 ): string | null => {
   if (!cert) return null;
   if (cert.subline) return cert.subline;
@@ -217,7 +217,7 @@ export const teamCertificationSubline = (
   if (open > 0) {
     parts.push(`Claims above verification on ${open} dimension${open === 1 ? '' : 's'} — evidence requested`);
   }
-  const total = dimensionsTotal ?? cert.applicable;
+  const total = cert.applicable;
   if (cert.assessed < total) parts.push(`${cert.assessed} of ${total} dimensions assessed`);
   return parts.length > 0 ? parts.join(' · ') : null;
 };

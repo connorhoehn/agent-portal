@@ -305,8 +305,9 @@ describe('agent commands + stop', () => {
     const commands = res.body.commands as Array<{ name: string; allowed_tools: string[] }>;
     expect(commands.map((c) => c.name)).toHaveLength(9);
     expect(commands.map((c) => c.name)).toContain('score-dimensions');
-    // Read-only tools are the floor for every command.
-    for (const c of commands) expect(c.allowed_tools).toEqual(expect.arrayContaining(['Read', 'Glob', 'Grep']));
+    // Registry lists deployed Strands tools, never fictional filesystem/Bash permissions.
+    expect(commands.find(c => c.name === 'score-dimensions')?.allowed_tools).toEqual(['classify_evidence', 'score_dimension']);
+    for (const c of commands) expect(c.allowed_tools.some(t => t.startsWith('Bash'))).toBe(false);
     // develop-jira-story drafts only — the push verb is deliberately withheld.
     const story = commands.find((c) => c.name === 'develop-jira-story')!;
     expect(story.allowed_tools.some((t) => t.includes('jira push-story'))).toBe(false);

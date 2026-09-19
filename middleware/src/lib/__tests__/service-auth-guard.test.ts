@@ -1,7 +1,7 @@
 // lib/service-auth.ts — the two guard shapes for sessionless machine callers.
 //
 // The distinction these tests exist to pin: `requireServiceAuth` is OPEN when
-// its secret is unset (correct for a write-only callback nothing human reads),
+// its secret is unset in development, but fails closed in production,
 // while `serviceAuthOr` is NEVER open — an unset secret leaves the human gate
 // running exactly as before. Getting that backwards on GET /approvals/:id would
 // have turned a Cedar-gated read into an anonymous one, which is the failure
@@ -35,6 +35,21 @@ function appWith(handler: express.RequestHandler) {
 afterEach(() => { delete process.env[SPEC.envVar]; });
 
 describe('requireServiceAuth — write-only machine callback', () => {
+  it.each([undefined, '', '   '])('fails closed in production with secret=%s', async (secret) => {
+    const priorEnv = process.env['NODE_ENV'];
+    process.env['NODE_ENV'] = 'production';
+    if (secret === undefined) delete process.env[SPEC.envVar];
+    else process.env[SPEC.envVar] = secret;
+    try {
+      const res = await request(appWith(requireServiceAuth(SPEC))).get('/thing').set(SPEC.header, 'anything');
+      expect(res.status).toBe(503);
+      expect(res.body).toEqual({ error: 'service authentication is not configured' });
+    } finally {
+      if (priorEnv === undefined) delete process.env['NODE_ENV'];
+      else process.env['NODE_ENV'] = priorEnv;
+    }
+  });
+
   it('is open when the secret is unset (the dev default)', async () => {
     const res = await request(appWith(requireServiceAuth(SPEC))).get('/thing');
     expect(res.status).toBe(200);

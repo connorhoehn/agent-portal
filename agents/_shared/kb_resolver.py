@@ -31,7 +31,7 @@ import logging
 import threading
 from typing import Optional
 
-from _shared.db_credentials import read_secret_arn
+from _shared.db_credentials import read_only_secret_arn, admin_secret_arn
 
 logger = logging.getLogger(__name__)
 
@@ -118,7 +118,8 @@ def _query_registry(sql: str, parameters: list) -> Optional[str]:
     the env fallback exists precisely so a cold or missing Aurora degrades to
     "use the id the runtime was deployed with" rather than to a crash loop.
     """
-    secret_arn = read_secret_arn() or _SECRET_ARN
+    # Registry SQL is fixed here, not model-authored; writer agents also use it.
+    secret_arn = read_only_secret_arn() or admin_secret_arn() or _SECRET_ARN
     if not (_CLUSTER_ARN and secret_arn):
         return None
     try:

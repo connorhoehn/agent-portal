@@ -298,6 +298,8 @@ export const SHAPE_ENTITIES: Array<ShapeEntity<any>> = [
     mockRows: async () => (await assessment()).runsFixture.rows('default'),
     mockId: (r: { id: string }) => r.id,
     unmodelledColumns: {
+      dispatch_payload: 'Private durable worker input snapshot. Seeded mock runs use fixture timers, never AWS dispatch; this column is not part of the run API response.',
+      dispatch_claimed_at: 'Database worker lease acquisition timestamp. Mock timers have no worker claim, and the public run ledger does not expose execution leases.',
       launched_by:
         'The session sub, and the DDL comment says "never the body" — it is attribution the server stamps from the cookie at launch. A seeded run has no session behind it, so a fixture value here would be a fabricated actor on an audit column.',
     },

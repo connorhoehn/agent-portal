@@ -12,13 +12,17 @@
 jest.mock('../../config.js', () => ({ config: { mock: { aurora: false }, auth: {} } }));
 jest.mock('../aurora.js', () => ({ exec: jest.fn(), withTransaction: jest.fn() }));
 
-import { exec } from '../aurora.js';
+import { exec, withTransaction } from '../aurora.js';
 import * as provider from '../assessment.js';
 import type * as M from '../../mock/assessment.js';
 
 const execMock = exec as unknown as jest.Mock;
 
-beforeEach(() => execMock.mockReset());
+beforeEach(() => {
+  execMock.mockReset();
+  (withTransaction as jest.Mock).mockImplementation(async work => work((sql: string, params: unknown) =>
+    sql.endsWith('FOR UPDATE') ? Promise.resolve([]) : execMock(sql, params)));
+});
 
 const RUN_ROW = {
   id: 'run-20260905T000000Z-score-dimensions-abc123', command: 'score-dimensions', team_id: 'TEAM-002',

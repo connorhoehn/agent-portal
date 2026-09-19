@@ -50,10 +50,9 @@ function throttled(key: string): boolean {
   return slot.count > MAX_REQUESTS_PER_WINDOW;
 }
 
-/** Client identity for throttling. Behind the ALB, the first XFF hop. */
-function clientKey(req: { ip?: string; get(h: string): string | undefined }): string {
-  const fwd = req.get('x-forwarded-for');
-  return (fwd?.split(',')[0]?.trim() || req.ip || 'unknown');
+/** Express resolves the client through the configured trust-proxy boundary. */
+function clientKey(req: express.Request): string {
+  return req.ip || req.socket.remoteAddress || 'unknown';
 }
 
 /**

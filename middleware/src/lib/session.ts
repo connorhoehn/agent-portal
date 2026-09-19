@@ -492,6 +492,12 @@ export function sessionMiddleware() {
               next();
               return;
             }
+            // The identity still exists but has lost its last grant. This is
+            // a revocation, not an outage: never fall back to the old cookie.
+            clearSessionCookie(res);
+            if (demoFallbackAllowed()) req.session = demoSession();
+            next();
+            return;
           } catch {
             // Identity store unreachable — keep the cookie's grants rather
             // than logging the user out on a transient failure.

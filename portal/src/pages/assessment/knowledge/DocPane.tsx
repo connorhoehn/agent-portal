@@ -1,3 +1,5 @@
+import { DocumentReader } from './DocumentReader';
+import { nextPresenceSequence } from './presenceSequence';
 // The document viewer/editor pane — one document's realtime surface. Owns
 // its channel (assessment:doc:<id>: chat + presence + reactions) and the
 // CRDT-backed markdown editor. The per-page Activity aside is a sibling
@@ -18,6 +20,7 @@ import {
   DetailHeader,
   Divider,
   Drawer,
+  DropdownMenu,
   ErrorState,
   Inline,
   InlineAlert,
@@ -38,6 +41,7 @@ import { useFetch } from '../../../hooks/useFetch';
 import { useCapabilities } from '../../../lib/capabilities';
 import { useSession } from '../../../lib/auth';
 import { sendJson } from '../../../lib/writeJson';
+import { toastError, toastSuccess } from '../../../lib/toastStore';
 import { relativeTime } from '../../../lib/relativeTime';
 import {
   CLASSIFICATION_LABEL,
@@ -123,7 +127,7 @@ function persistOwnSaveTimestamps(timestamps: ReadonlySet<string>): void {
 }
 
 function sendPresence(docId: string, tabId: string, action: 'enter' | 'heartbeat' | 'leave'): void {
-  const body = JSON.stringify({ doc_id: docId, tab_id: tabId, action });
+  const body = JSON.stringify({ doc_id: docId, tab_id: tabId, action, sequence: nextPresenceSequence() });
   if (action === 'leave' && typeof navigator !== 'undefined' && navigator.sendBeacon) {
     // The page may already be tearing down (close/navigate-away) — a plain
     // fetch can get cancelled mid-flight there; sendBeacon is guaranteed to
@@ -194,13 +198,17 @@ export function FolderPane({ node, children, onSelectChild }: { node: KnowledgeN
         {children.length === 0 ? (
           <InlinePlaceholder size="sm">This folder is empty.</InlinePlaceholder>
         ) : (
-          <Stack gap="xs">
-            {children.map((child) => (
-              <Button key={child.id} variant="ghost" size="sm" onClick={() => onSelectChild(child.id)}>
-                {child.title}
-              </Button>
-            ))}
-          </Stack>
+          <DataTable<KnowledgeNode>
+            data={children}
+            keyField={(child) => child.id}
+            pageSize={20}
+            columns={[
+              { key: 'title', header: 'Name', sortable: true, render: (child) =>
+                <Button variant="ghost" size="sm" className="border-0 px-0 text-left" onClick={() => onSelectChild(child.id)}>{child.title}</Button> },
+              { key: 'classification', header: 'Type', render: (child) => child.is_dir ? 'Folder' : (child.classification ? CLASSIFICATION_LABEL[child.classification] ?? child.classification : 'Document') },
+              { key: 'updated_at', header: 'Updated', render: (child) => child.updated_at ? relativeTime(child.updated_at) : '—' },
+            ]}
+          />
         )}
       </Stack>
     </Card>
@@ -739,36 +747,11 @@ interface StoredCommentWire {
 
   return (
     <>
-      {/* `shadow-sm` is deliberate and, for now, local. The library's `Card`
-          paints no shadow and exposes no elevation prop, so a document here
-          sat as a hairline rectangle on the page ground with nothing marking
-          it as the thing you came to read — measured, this pane was the only
-          content on screen and used 43% of the available height. A document
-          is a sheet; it should lift off the desk. `Card` extends
-          HTMLAttributes so the class lands on its root. An `elevation` prop is
-          queued (docs/ui-components-queue.md) precisely so this stops being a
-          per-call-site decision; this is the one surface it was reported on. */}
       <Card padding="md" className="shadow-sm">
         <Stack gap="md">
-          {/* A document is a sheet, and its header reads top-down: what kind
-              of thing this is, then what it is called, then where it lives.
-              The classification used to sit INLINE after the title as a
-              generic blue chip, which put a label and a name on one line and
-              made neither the first thing you read. It is a kicker now — its
-              own line, above the title, tinted with the tenant's own accent
-              rather than a stock info blue. Same shape the SDLC accelerator's
-              DocView uses for the surface this one mirrors, built from Chip's
-              `uppercase` + `tone="accent"` rather than a hand-rolled pill. */}
           <Inline justify="between" align="start" wrap>
             <Stack gap="xs" className="min-w-0">
               <Inline gap="xs" align="center">
-                {/* Tinted with the TENANT's brand, not a stock tone. `ChipTone`
-                    has no `brand` member — neutral/success/warning/danger/info/
-                    caution/accent/purple — and `accent` renders violet, which
-                    in a teal tenant is simply another product's colour. The
-                    brand tokens are theme-aware and swap per tenant and per
-                    theme, so this is the one pill on the page that says whose
-                    product you are in. Queued: Chip wants a `brand` tone. */}
                 <Chip
                   size="xs"
                   uppercase
@@ -776,20 +759,6 @@ interface StoredCommentWire {
                 >
                   {CLASSIFICATION_LABEL[doc.classification] ?? doc.classification}
                 </Chip>
-                  {/* The compact "Live" dot goes with the explorer's pill:
-                      it was on every document, always green, and said nothing
-                      a reader acts on. Liveness now surfaces only when it
-                      changes something — the offline-copy notice while
-                      editing. */}
-                  {/* No gateway chip here. KnowledgeExplorer — this component's
-                      ONLY consumer — renders the identical sentence from the
-                      same `gatewayOfflineHint()` in its own header, about a
-                      hundred pixels above this one, so the warning appeared
-                      twice on every document. The connection is a property of
-                      the surface, not of the document you happen to have open,
-                      so it belongs in the surface's status line. The compact
-                      pill stays: a dot beside the title reads as "this doc is
-                      live" without restating a full sentence. */}
               </Inline>
               <DetailHeader
                 as="h2"
@@ -819,7 +788,23 @@ interface StoredCommentWire {
                 <Button variant="secondary" size="sm" onClick={() => setCommentsOpen(true)}>
                   Comments{mergedComments.length > 0 ? ` (${mergedComments.length})` : ''}
                 </Button>
-                {canEdit && <Button variant="secondary" size="sm" onClick={() => setHistoryOpen(true)}>History</Button>}
+                <DropdownMenu trigger="More" triggerClassName="text-xs px-2.5 py-1" triggerLabel="Document actions" align="end" sections={[{ items: [
+                  ...(canEdit ? [{ label: 'Version history', onSelect: () => setHistoryOpen(true) }] : []),
+                  { label: 'Copy document link', onSelect: () => {
+                    void (navigator.clipboard ? navigator.clipboard.writeText(window.location.href) : Promise.reject(new Error('Clipboard unavailable'))).then(
+                      () => toastSuccess(null, 'Document link copied'),
+                      () => toastError(null, 'Could not copy link', 'Copy the address from your browser.'),
+                    );
+                  } },
+                  { label: 'Download Markdown', onSelect: () => {
+                    const url = URL.createObjectURL(new Blob([doc.markdown], { type: 'text/markdown;charset=utf-8' }));
+                    const anchor = document.createElement('a');
+                    anchor.href = url;
+                    anchor.download = `${doc.title.replace(/[^a-z0-9 ._-]/gi, '_') || 'document'}.md`;
+                    anchor.click();
+                    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+                  } },
+                ] }]} />
                 {canPublish && (
                   <Button variant="secondary" size="sm" disabled={publishing} onClick={() => void handlePublish()}>
                     {publishing ? 'Publishing…' : 'Publish'}
@@ -834,7 +819,7 @@ interface StoredCommentWire {
                       </Button>
                     </>
                   ) : (
-                    <Button variant="secondary" size="sm" onClick={startEditing}>Edit</Button>
+                    <Button variant="primary" size="sm" onClick={startEditing}>Edit document</Button>
                   )
                 )}
               </Inline>
@@ -846,20 +831,6 @@ interface StoredCommentWire {
               title, the path and the first paragraph ran together as a single
               column of text and the eye had nothing to stop on. */}
           <Divider spacing="none" />
-
-          {/* No longer gateway-gated, because reactions are no longer a
-              gateway-only feature. They were: no endpoint, no broker event, no
-              persistence — so the control had to be disabled whenever the
-              gateway was not ready, which offline is always. Now the BFF owns
-              them (one row per target+emoji+actor, so a count is a count of
-              people), they survive a reload, and the bar works with the
-              gateway down. Identity is the session `sub` rather than a gateway
-              clientId: a clientId identifies a CONNECTION and changes on
-              reconnect, so "mine" computed from it stops being mine. */}
-          <ReactionsBar
-            reactions={reactionSummaries}
-            onReact={(emoji) => void toggleReaction(node.id, emoji)}
-          />
 
           {editing && (
             <Textarea
@@ -984,7 +955,9 @@ interface StoredCommentWire {
               </TabPanel>
             </>
           ) : (
-            <MarkdownView markdown={displayMarkdown} className="doc-markdown" />
+            <DocumentReader markdown={displayMarkdown} reactions={
+              <ReactionsBar reactions={reactionSummaries} onReact={(emoji) => void toggleReaction(node.id, emoji)} />
+            } />
           )}
         </Stack>
 

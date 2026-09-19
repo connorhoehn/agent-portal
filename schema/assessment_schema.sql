@@ -294,11 +294,15 @@ ALTER TABLE assessment_knowledge_nodes ADD COLUMN IF NOT EXISTS version INTEGER 
 -- broker's in-memory event history.
 CREATE TABLE IF NOT EXISTS assessment_knowledge_comments (
   id          TEXT PRIMARY KEY,
-  doc_id      TEXT NOT NULL REFERENCES assessment_knowledge_docs(id) ON DELETE CASCADE,
+  doc_id      TEXT NOT NULL REFERENCES assessment_knowledge_nodes(id) ON DELETE CASCADE,
   body        TEXT NOT NULL,
   author      TEXT NOT NULL DEFAULT 'unknown',
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+-- Comments attach to local docs and synced pages, both represented by nodes.
+ALTER TABLE assessment_knowledge_comments DROP CONSTRAINT IF EXISTS assessment_knowledge_comments_doc_id_fkey;
+ALTER TABLE assessment_knowledge_comments ADD CONSTRAINT assessment_knowledge_comments_doc_id_fkey
+  FOREIGN KEY (doc_id) REFERENCES assessment_knowledge_nodes(id) ON DELETE CASCADE;
 CREATE INDEX IF NOT EXISTS idx_assessment_knowledge_comments_doc ON assessment_knowledge_comments(doc_id, created_at);
 
 -- Edit and soft-delete, added when the comment thread grew them. Both are
@@ -374,3 +378,9 @@ FROM assessment_teams t
 LEFT JOIN assessment_dimension_scores s ON s.team_id = t.id
 LEFT JOIN assessment_follow_up_questions q ON q.team_id = t.id AND q.status = 'OPEN'
 GROUP BY t.id, t.name, t.cohort, t.updated_at;
+
+-- Durable assessment dispatch: admission and payload persist in one transaction.
+-- Claims prevent two middleware replicas invoking the same run. Interrupted
+-- claims expire as failed, never silently retry non-idempotent score application.
+ALTER TABLE assessment_runs ADD COLUMN IF NOT EXISTS dispatch_payload JSONB;
+ALTER TABLE assessment_runs ADD COLUMN IF NOT EXISTS dispatch_claimed_at TIMESTAMPTZ;

@@ -274,19 +274,17 @@ class TheAgentsUseTheReadOnlyCredential(unittest.TestCase):
                 _, fake, _ = self._query(agent, {"AURORA_READONLY_SECRET_ARN": READONLY_ARN})
                 self.assertEqual(fake.calls[-1]["secretArn"], READONLY_ARN)
 
-    def test_admin_secret_is_used_when_the_role_is_not_deployed(self):
-        """The fallback. An environment mid-runbook must keep working."""
+    def test_admin_secret_requires_explicit_development_fallback(self):
         for agent in ("search", "advisor"):
             with self.subTest(agent=agent):
-                _, fake, _ = self._query(agent, {})
+                _, fake, _ = self._query(agent, {"AURORA_READONLY_SECRET_ARN": "",
+                    "APP_ENV": "development", "ALLOW_UNSAFE_SQL_ADMIN_FALLBACK": "true"})
                 self.assertEqual(fake.calls[-1]["secretArn"], ADMIN_ARN)
 
-    def test_an_empty_read_only_arn_falls_back_rather_than_sending_blank(self):
-        """An unset CDK context lands as '' in some paths, not as absent."""
+    def test_empty_reader_fails_before_agent_can_query(self):
         for agent in ("search", "advisor"):
-            with self.subTest(agent=agent):
-                _, fake, _ = self._query(agent, {"AURORA_READONLY_SECRET_ARN": "  "})
-                self.assertEqual(fake.calls[-1]["secretArn"], ADMIN_ARN)
+            with self.subTest(agent=agent), self.assertRaises(RuntimeError):
+                self._query(agent, {"AURORA_READONLY_SECRET_ARN": "  ", "APP_ENV": "production"})
 
     def test_a_permission_error_is_not_retried_on_the_admin_secret(self):
         """Fail closed.
@@ -348,10 +346,16 @@ class TheCredentialSelector(unittest.TestCase):
             self.assertEqual(self.mod.read_secret_arn(), READONLY_ARN)
             self.assertTrue(self.mod.read_only_enforced())
 
-    def test_falls_back_to_admin(self):
-        with self._with_env(AURORA_SECRET_ARN=ADMIN_ARN):
+    def test_explicit_development_fallback(self):
+        with self._with_env(AURORA_SECRET_ARN=ADMIN_ARN, APP_ENV="development", ALLOW_UNSAFE_SQL_ADMIN_FALLBACK="true"):
             self.assertEqual(self.mod.read_secret_arn(), ADMIN_ARN)
             self.assertFalse(self.mod.read_only_enforced())
+
+    def test_missing_reader_fails_closed_even_with_production_fallback_flag(self):
+        for env in ({}, {"APP_ENV": "production", "ALLOW_UNSAFE_SQL_ADMIN_FALLBACK": "true"}):
+            with self.subTest(env=env), self._with_env(AURORA_SECRET_ARN=ADMIN_ARN, **env):
+                with self.assertRaises(RuntimeError):
+                    self.mod.read_secret_arn()
 
     def test_diagnosis_says_which_boundary_is_live(self):
         """Two states that look identical from outside must not read identically."""
@@ -403,9 +407,9 @@ class TheCdkWiring(unittest.TestCase):
             self.RUNTIME,
         )
 
-    def test_the_role_is_opt_in_and_says_so_when_it_is_off(self):
-        self.assertIn("readOnlyGraphRole", self.RUNTIME)
-        self.assertIn("addWarning", self.RUNTIME)
+    def test_readonly_cannot_be_disabled_in_a_deployed_runtime(self):
+        self.assertIn("readOnlyGraphRole cannot be disabled", self.RUNTIME)
+        self.assertIn("APP_ENV: 'production'", self.RUNTIME)
 
 
 if __name__ == "__main__":  # pragma: no cover

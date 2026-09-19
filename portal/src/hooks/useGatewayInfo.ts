@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { GatewayProxyClient } from '@connorhoehnslalom/realtime-modules/proxy-client';
+import { createGatewayClient, gatewayEndpoints } from '../lib/gatewayEndpoint.ts';
 import { classifyGatewayError } from './gatewayMode.ts';
 export type { GatewayMode } from './gatewayMode.ts';
 import type { GatewayMode } from './gatewayMode.ts';
@@ -12,9 +12,10 @@ import type {
 // Mirror the lookup used by GatewayStatusBadge so the URL is sourced once
 // and the badge + Settings panel stay in lockstep on which gateway they
 // describe.
-const GATEWAY_URL: string =
+const CONFIGURED_GATEWAY_URL =
   (import.meta as unknown as { env?: Record<string, string | undefined> })
-    .env?.VITE_GATEWAY_URL ?? 'http://localhost:8080';
+    .env?.VITE_GATEWAY_URL;
+const GATEWAY_URL = gatewayEndpoints(CONFIGURED_GATEWAY_URL)?.http;
 
 interface UseGatewayInfoReturn {
   cluster: GatewayClusterInfo | null;
@@ -45,20 +46,18 @@ interface UseGatewayInfoReturn {
  */
 export function useGatewayInfo(pollIntervalMs = 30_000): UseGatewayInfoReturn {
   const client = useMemo(
-    () => new GatewayProxyClient({
-      gatewayUrl: GATEWAY_URL,
-      fetch: globalThis.fetch.bind(globalThis),
-    }),
+    () => createGatewayClient(CONFIGURED_GATEWAY_URL),
     [],
   );
 
   const [cluster, setCluster] = useState<GatewayClusterInfo | null>(null);
   const [metrics, setMetrics] = useState<GatewayMetricsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [mode, setMode] = useState<GatewayMode>('loading');
-  const [isLoading, setIsLoading] = useState(true);
+  const [mode, setMode] = useState<GatewayMode>(client ? 'loading' : 'bff-only');
+  const [isLoading, setIsLoading] = useState(Boolean(client));
 
   useEffect(() => {
+    if (!client) return;
     let cancelled = false;
 
     const tick = async () => {
@@ -90,5 +89,5 @@ export function useGatewayInfo(pollIntervalMs = 30_000): UseGatewayInfoReturn {
     };
   }, [client, pollIntervalMs]);
 
-  return { cluster, metrics, error, isLoading, gatewayUrl: GATEWAY_URL, mode };
+  return { cluster, metrics, error, isLoading, gatewayUrl: GATEWAY_URL ?? 'Not configured', mode };
 }

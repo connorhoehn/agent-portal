@@ -12,7 +12,7 @@ spec:
       name: http
   env:
     - name: VITE_GATEWAY_URL
-      value: 'ws://gateway.platform.svc.cluster.local/ws'
+      value: 'http://gateway.platform.svc.cluster.local'  # base URL; portal derives /ws
     - name: VITE_API_URL
       value: 'http://orgiq-middleware.orgiq.svc.cluster.local:3001'
     - name: VITE_ORGIQ_CHAT_ENABLED

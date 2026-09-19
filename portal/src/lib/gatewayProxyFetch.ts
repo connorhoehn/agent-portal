@@ -1,6 +1,6 @@
 // Thin fetch wrapper for the middleware gateway-proxy routes.
 // Calls /api/gateway/* (relative — goes through Vite proxy → middleware → gateway).
-// No auth headers needed from the browser; middleware adds HMAC signing.
+// Legacy endpoints now return 410; retained callers must surface failure.
 
 const BASE = '/api/gateway';
 
@@ -40,12 +40,13 @@ export async function publishToChannel(
   channel: string,
   payload: Record<string, unknown>,
 ): Promise<void> {
-  await fetch(`${BASE}/channels/${encodeURIComponent(channel)}/messages`, {
+  const res = await fetch(`${BASE}/channels/${encodeURIComponent(channel)}/messages`, {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
+  if (!res.ok) throw new Error(`publishToChannel failed: ${res.status}`);
 }
 
 export interface ActivityEntry {

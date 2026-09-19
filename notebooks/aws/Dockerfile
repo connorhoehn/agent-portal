@@ -22,11 +22,11 @@ RUN ARCH=$(dpkg --print-architecture) && \
     ./aws/install && \
     rm -rf aws awscliv2.zip
 
-# Node 20 + the AgentCore CLI. Powers the devbox interactive-terminal mode
+# Node 22 + the AgentCore CLI. Powers the devbox interactive-terminal mode
 # (notebook 20): `agentcore exec --it` is a bidirectional PTY stream that
 # botocore can't speak, so it runs from JupyterLab's Terminal tab instead of a
 # notebook cell — which requires the CLI inside this image.
-RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/* \
     && npm install -g @aws/agentcore \

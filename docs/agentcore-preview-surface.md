@@ -516,10 +516,13 @@ env you hand it in step 4.
   note; its run stays `running` and holds a `RUN_CONCURRENCY_CAP` slot until
   it is re-reported or `/stop`ped.
 
-**Rollback** is the reverse and is safe in either order: unset the middleware
-secrets (guards reopen) and/or redeploy the runtimes without the contexts (no
-header sent). A runtime holding a stale secret against a reopened middleware
-is also fine — an open guard ignores the header entirely.
+**Production rollback must retain callback authentication.** Restore the last
+matching secret values on middleware and runtimes. Since the September 19
+security audit, missing or blank callback secrets return 503 in production;
+unsetting them no longer reopens a callback. Development retains the open
+unset-secret behavior for offline fixtures. The historical rollout sequence
+above describes migration from the previous implementation, not permission
+to run a production callback without a credential.
 
 **Rotation** is one secret at a time (that is why they are three resources):
 put the new value in Secrets Manager, redeploy `OrgIQ-MiddlewareService`, then

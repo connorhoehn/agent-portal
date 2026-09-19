@@ -89,7 +89,9 @@ export function useInitiativeAgentActivity(
   );
   // A degraded roster is exactly as blinding as a 403 or a dead socket, and
   // the card below already knows how to say "unknown, not empty".
-  const botsError = error ?? degraded;
+  const botsError = ready && !mayReadBots
+    ? '403: bot roster not visible to this role'
+    : error ?? degraded;
 
   const codebaseIds = new Set(codebases.map((c) => c.id));
   const bots = orgProjectId
@@ -121,7 +123,7 @@ export function useInitiativeAgentActivity(
   }, [marketplaceRuns, botRuns]);
   const spendUsd = runs.reduce((sum, r) => sum + (r.costUsd ?? 0), 0);
 
-  return { bots, botsLoading: isLoading, botsError, runs, runsError, spendUsd };
+  return { bots, botsLoading: !ready || isLoading, botsError, runs, runsError, spendUsd };
 }
 
 // ─── AGENTS rail card ────────────────────────────────────────────────────────

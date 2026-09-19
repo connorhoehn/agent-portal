@@ -139,10 +139,23 @@ export function isSameOriginFetch(argText: string): boolean {
 
 /** Does this node contain a `fetch()` to somewhere that is not our own origin? */
 export function hasOutboundFetch(node: ts.Node, sf: ts.SourceFile): boolean {
+  // The hardened transport still leaves this process. Track its imported
+  // identifier (including aliases), so replacing fetch cannot hide an offline gap.
+  const fetchNames = new Set(['fetch']);
+  for (const statement of sf.statements) {
+    if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier) ||
+        !/\/public-web-fetch(?:\.[jt]s)?$/.test(statement.moduleSpecifier.text)) continue;
+    const bindings = statement.importClause?.namedBindings;
+    if (bindings && ts.isNamedImports(bindings)) {
+      for (const item of bindings.elements) {
+        if ((item.propertyName ?? item.name).text === 'publicWebFetch') fetchNames.add(item.name.text);
+      }
+    }
+  }
   let found = false;
   const visit = (n: ts.Node): void => {
     if (found) return;
-    if (ts.isCallExpression(n) && ts.isIdentifier(n.expression) && n.expression.text === 'fetch') {
+    if (ts.isCallExpression(n) && ts.isIdentifier(n.expression) && fetchNames.has(n.expression.text)) {
       const arg = n.arguments[0];
       if (!arg || !isSameOriginFetch(arg.getText(sf))) { found = true; return; }
     }

@@ -219,18 +219,16 @@ describe('live system prompts reach the deployed fleet', () => {
   }
 });
 
-describe('the read-only graph role is opt-in, and an EXCLUSIVE swap when on', () => {
-  test('off by default: search/advisor keep the admin credential and get no readonly ARN', () => {
+describe('the read-only graph role is mandatory and an EXCLUSIVE credential swap', () => {
+  test('search/advisor always receive readonly credentials and production mode', () => {
     for (const agent of ['search', 'advisor']) {
-      assert.equal(envOf(phaseTwo, agent).AURORA_READONLY_SECRET_ARN, undefined);
+      assert.match(envOf(phaseTwo, agent).AURORA_READONLY_SECRET_ARN ?? '', /readonly/);
+      assert.equal(envOf(phaseTwo, agent).APP_ENV, 'production');
     }
   });
 
-  test('deploying runtimes without it WARNS that model-authored SQL runs as admin', () => {
-    Annotations.fromStack(phaseTwoBuild.runtime).hasWarning(
-      '*',
-      Match.stringLikeRegexp('sql_guard'),
-    );
+  test('admin fallback cannot be enabled through the old deployment context', () => {
+    assert.throws(() => runtimeStack({ deployRuntimes: 'true', readOnlyGraphRole: 'false' }), /cannot be disabled/);
   });
 
   test('on: search/advisor lose GetSecretValue on the admin secret entirely', () => {

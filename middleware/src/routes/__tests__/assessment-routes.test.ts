@@ -697,13 +697,13 @@ describe('POST /submissions/parse — Forms CSV records', () => {
     expect(res.body.rows).toEqual([
       {
         row_index: 0, form_id: '5', status: 'seen', team_id: 'TEAM-002', team_name_raw: 'Kubernetes Operator',
-        classification: 'seen', submitter_name: 'Jamie Lee', submitter_email: 'jamie.lee@example.com',
+        classification: 'seen', seen_team_ids: ['TEAM-002'], submitter_name: 'Jamie Lee', submitter_email: 'jamie.lee@example.com',
         submitted_at: '8/20/2026 09:00', self_certified: true, dimensions_informed: 1,
         links: [{ url: 'https://github.com/example/k8s-operator/actions', label: 'Evidence / Additional Context for Dimension 1', dimension_id: '1' }],
       },
       {
         row_index: 1, form_id: '99', status: 'unknown_team', team_id: null, team_name_raw: 'Ghost Team',
-        classification: 'unknown', submitter_name: 'Taylor Fox', submitter_email: 'taylor@example.com',
+        classification: 'unknown', seen_team_ids: [], submitter_name: 'Taylor Fox', submitter_email: 'taylor@example.com',
         submitted_at: '8/21/2026 10:00', self_certified: false, dimensions_informed: 0, links: [],
       },
     ]);

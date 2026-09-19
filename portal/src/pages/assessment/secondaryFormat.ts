@@ -215,7 +215,8 @@ export interface RowStatusDisplay {
  * `unknown_team` over into a distinct "Matched" state without touching
  * `new`/`seen`, which were never wrong.
  */
-export function resolveRowStatusDisplay(status: RowStatus, hasTeamId: boolean): RowStatusDisplay {
+export function resolveRowStatusDisplay(status: RowStatus, hasTeamId: boolean, seenForAssignedTeam = false): RowStatusDisplay {
+  if (seenForAssignedTeam) return { label: 'Seen', tone: 'neutral' };
   if (status === 'unknown_team' && hasTeamId) return { label: 'Matched', tone: 'success' };
   if (status === 'new') return { label: 'New', tone: 'success' };
   if (status === 'seen') return { label: 'Seen', tone: 'neutral' };

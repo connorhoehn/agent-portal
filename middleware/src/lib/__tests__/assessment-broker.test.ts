@@ -565,3 +565,18 @@ describe('replay partitioning — the memory bound', () => {
     expect(assessmentBroker.catchUp(victim.seq - 1).gapped).toBe(true);
   });
 });
+
+it('a delayed leave cannot remove a newer remount even after its grace timer would expire', () => {
+  jest.useFakeTimers();
+  try {
+    const doc = 'sequence-delayed-leave';
+    assessmentBroker.touch(doc, 'tab', 'user', 'User', Date.now(), 1);
+    assessmentBroker.touch(doc, 'tab', 'user', 'User', Date.now(), 3);
+    assessmentBroker.leave(doc, 'tab', Date.now(), 2);
+    jest.advanceTimersByTime(2_100);
+    expect(assessmentBroker.viewersFor(doc)).toHaveLength(1);
+    assessmentBroker.leave(doc, 'tab', Date.now(), 4);
+    jest.advanceTimersByTime(2_100);
+    expect(assessmentBroker.viewersFor(doc)).toHaveLength(0);
+  } finally { jest.useRealTimers(); }
+});

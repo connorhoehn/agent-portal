@@ -502,3 +502,7 @@ test('teamsWithOpenQuestions counts teams with QUESTIONS, not teams with any ope
   ]);
   assert.equal(teamsWithOpenQuestions, 1);
 });
+
+test('a manually assigned team already holding this form reads Seen', () => {
+  assert.deepEqual(resolveRowStatusDisplay('unknown_team', true, true), { label: 'Seen', tone: 'neutral' });
+});

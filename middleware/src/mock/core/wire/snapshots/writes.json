@@ -1,7 +1,7 @@
 {
-  "capturedAt": "2026-09-18T14:20:08.638Z",
-  "serverHandlerSha": "5889cacb545fd916eccc8b9c3323d7c42c75b0e1ebef34644b3e525cef04f6ae",
-  "baseUrl": "http://127.0.0.1:3012",
+  "capturedAt": "2026-09-19T20:36:08.129Z",
+  "serverHandlerSha": "c22ee6bb3ea445c98d6f1a5066341ef27fb4b39716fb10dc195b3fad3b25fd14",
+  "baseUrl": "http://127.0.0.1:3017",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
     "agentcore",
@@ -1018,27 +1018,7 @@
       }
     },
     "POST /api/assessment/runs/:runId/complete": {
-      "persona": "assessment/admin",
-      "status": 200,
-      "shape": {
-        "$": "object",
-        "args": "object",
-        "command": "string",
-        "error": "null",
-        "files_written": "array",
-        "finished_at": "string",
-        "id": "string",
-        "source": "string",
-        "started_at": "string",
-        "status": "string",
-        "summary": "string",
-        "team_id": "string"
-      },
-      "values": {
-        "status": [
-          "completed"
-        ]
-      },
+      "skipped": "HTTP 400: A scoring run requires a non-empty scoring_log to complete (assessment/admin)",
       "sent": [
         "status"
       ]
@@ -1775,7 +1755,7 @@
     "POST /api/gateway/channels/:id/messages": {
       "refused": {
         "rule": "spends",
-        "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: signs and POSTs to the real MCP gateway when a gateway URL is set."
+        "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: retired generic signing bridge; returns 410 without an upstream call."
       }
     },
     "POST /api/grants": {

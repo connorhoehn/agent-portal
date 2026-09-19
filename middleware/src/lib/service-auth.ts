@@ -7,7 +7,7 @@
 // deliberately *optional* so the middleware and the fleet can deploy in either
 // order:
 //
-//   env var unset  → the guard is open (today's demo/dev default)
+//   env var unset  → open in development; unavailable in production
 //   env var set    → the header must match, byte for byte
 //
 //   route                                          env var                        header
@@ -20,7 +20,7 @@
 // TWO GUARD SHAPES, and the difference matters:
 //
 //   requireServiceAuth()  — for a WRITE-ONLY machine endpoint that no human
-//     surface reads. Open when the secret is unset. This is the existing
+//     surface reads. Open in development when the secret is unset. This is the existing
 //     precedent (approvals /request, harness /trace, assessment /complete).
 //
 //   serviceAuthOr(...human) — for an endpoint that BOTH a machine and a human
@@ -143,8 +143,9 @@ export function hasServiceAuth(req: Request, spec: ServiceAuthSpec): boolean {
 }
 
 /**
- * Write-only machine endpoint: open when unconfigured, constant-time compare
- * when configured. 401 on mismatch.
+ * Write-only machine endpoint: open in development when unconfigured,
+ * unavailable in production, constant-time compare when configured.
+ * 401 on mismatch.
  */
 export function requireServiceAuth(
   spec: ServiceAuthSpec,
@@ -152,7 +153,14 @@ export function requireServiceAuth(
   message = 'service authentication required',
 ): RequestHandler {
   return (req: Request, res: Response, next: NextFunction): void => {
-    if (!serviceAuthConfigured(spec)) { next(); return; } // open when unconfigured
+    if (!serviceAuthConfigured(spec)) {
+      if (process.env['NODE_ENV'] === 'production') {
+        res.status(503).json({ error: 'service authentication is not configured' });
+        return;
+      }
+      next();
+      return;
+    }
     if (hasServiceAuth(req, spec)) { next(); return; }
     res.status(401).json({ error: message });
   };

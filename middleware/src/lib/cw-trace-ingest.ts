@@ -123,6 +123,12 @@ function legacyPollerRequested(): boolean {
   return !LEGACY_POLLER_DISABLE_VALUES.has(flag);
 }
 
+function traceIngestionMocked(): boolean {
+  return process.env['DEV_OFFLINE'] === 'true' || !!(
+    config.mock?.cloudwatch || config.mock?.agentcore || config.mock?.aurora
+  );
+}
+
 /**
  * True when SOME out-of-band pipeline is expected to persist agent-emitted
  * trace bundles into observability.invocation_traces — either this poller or
@@ -134,6 +140,7 @@ function legacyPollerRequested(): boolean {
  * "nothing is ingesting" are the explicit kill switch and a missing region.
  */
 export function isAgentTraceIngestionActive(): boolean {
+  if (traceIngestionMocked()) return false;
   // Explicit kill switch — unit tests and offline/stub-account dev. Nothing
   // is reading agent stdout, so nothing will write the agent's row.
   if (process.env['OBS_TRACE_POLLER_DISABLED'] === '1') return false;
@@ -245,6 +252,7 @@ async function discoverLogGroups(): Promise<string[]> {
 const INGEST_LAG_S = 60;
 
 export async function pollOnce(): Promise<{ ingested: number; errors: number }> {
+  if (!isAgentTraceIngestionActive()) return { ingested: 0, errors: 0 };
   const startTs = _lastPollTs;
   const endTs = Math.floor(Date.now() / 1000) - INGEST_LAG_S;
   // Defensive: if endTs <= startTs we'd have a zero-width query that some
@@ -436,6 +444,10 @@ let _polling = false;
  */
 export function startTracePoller(): void {
   if (_intervalHandle) return;
+  if (traceIngestionMocked()) {
+    console.log('[cw-ingest] offline or mocked trace pipeline — skipping start');
+    return;
+  }
   if (process.env['OBS_TRACE_POLLER_DISABLED'] === '1') {
     console.log('[cw-ingest] OBS_TRACE_POLLER_DISABLED=1 — skipping start');
     return;

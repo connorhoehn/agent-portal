@@ -5,6 +5,7 @@ Multi-agent system built on Amazon Bedrock AgentCore that ingests organizational
 ## Quick Start
 
 ```bash
+node scripts/docker/prepare-libraries.mjs
 docker-compose up --build
 ```
 
@@ -15,6 +16,8 @@ This starts three services:
 | Jupyter | http://localhost:8888 | SDK exploration notebooks |
 | Middleware | http://localhost:3001 | Express API + AG-UI SSE proxy |
 | Portal | http://localhost:5183 | React frontend |
+
+Local ports bind to `127.0.0.1`. Jupyter uses its generated login token; find the login URL with `docker compose logs jupyter` (or `jupyter-gcp`).
 
 Requires AWS credentials — run `aws-azure-login --mode gui` first. The `default` profile targets the innovation lab account `647757222309` (us-east-1).
 
@@ -90,3 +93,19 @@ Progressive walkthrough of every AgentCore capability:
 - **Amazon CloudWatch + ADOT** — Dashboards, OpenInference traces, budget alarms
 - **Amazon Titan Embeddings V2** — 1024-dimension vector embeddings
 - **AWS IAM** — Fine-grained roles for agents and services
+
+### Locked local Docker libraries
+
+Before `docker compose build`, run `node scripts/docker/prepare-libraries.mjs`.
+The script reads the exact Git commits in the package locks from the sibling
+`ui-components`, `realtime-modules`, and `distributed-core` repositories. It
+packages their committed files without running lifecycle scripts; sibling
+working-tree changes and rebuilt outputs cannot enter the image. If a commit
+is missing locally, fetch that repository's remote before preparing artifacts.
+`./scripts/build.sh` performs preparation automatically.
+
+Docker installs the existing public-package lock graph with `npm ci`; only
+internal Git locators are translated to those verified local tarballs. The
+prepared artifacts live in ignored `.docker-libraries/` and include integrity
+hashes checked during the build. Environment files are excluded from build
+contexts. No SSH key, registry token or cloud credentials are copied into images.

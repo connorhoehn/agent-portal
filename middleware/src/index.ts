@@ -1,7 +1,8 @@
+import { startAssessmentDispatcher } from './lib/assessment-dispatcher.js';
 import express from 'express';
-import cors from 'cors';
+import { browserOrigin } from './lib/browser-origin.js';
 import cookieParser from 'cookie-parser';
-import { WebSocketServer } from 'ws';
+import { rejectUnsupportedUpgrades } from './lib/unsupported-upgrades.js';
 import { config } from './config.js';
 import { errorHandler } from './lib/async-handler.js';
 import { sessionMiddleware, setGrantsResolver } from './lib/session.js';
@@ -81,25 +82,15 @@ import { startPrWatchPoller } from './lib/pr-watch-poller.js';
 import { startRetentionSweep } from './lib/retention-sweep.js';
 import { startLocalController } from './lib/canary-local-controller.js';
 
+import { trustedProxyHops } from './lib/trusted-proxy.js';
+
 const app = express();
 
-// One proxy hop — the ALB in front of the ECS service (OrgIQ-MiddlewareService).
-//
-// Load-bearing for two things that both failed silently without it:
-//  1. `req.secure`, which `lib/session.ts::cookieSecure` reads to decide whether
-//     the session cookie is `Secure`. With no trust setting Express reports the
-//     scheme of the proxy→app hop and ignores `X-Forwarded-Proto`.
-//  2. `req.ip`, which express-rate-limit keys on. Behind an untrusted proxy
-//     every request carries the ALB's address, so per-client login limits were
-//     really one shared global bucket — strict for everyone, no protection at
-//     all against one caller.
-//
-// `1`, not `true`: trust exactly the immediate peer. `true` trusts the whole
-// chain, which lets a client spoof `X-Forwarded-For`/`-Proto` and pick its own
-// rate-limit bucket. There is one proxy here, so one hop is the honest number.
-app.set('trust proxy', 1);
+// ECS declares its enforced ALB hop; direct/local servers ignore forwarding
+// headers by default so callers cannot choose their own rate-limit bucket.
+app.set('trust proxy', trustedProxyHops());
 
-app.use(cors({ origin: true, credentials: true }));
+app.use(browserOrigin);
 app.use(express.json());
 app.use(cookieParser());
 setGrantsResolver(async (id) => {
@@ -365,11 +356,7 @@ app.use('/api/local-compute', localComputeRouter);
 // Reads are open so the overview renders for any role; mutations are gated
 // per-route with ManageDevbox.
 app.use('/api/work', requireTenant('orgiq'), requireSession('ViewWork'), workRouter);
-// Gateway proxy — signs + forwards Wave 6 service-auth-gated endpoints so
-// the browser doesn't need to hold the HMAC secret. Reads GATEWAY_URL +
-// GATEWAY_SERVICE_AUTH_SECRET from env. No session required: the signing
-// is the auth mechanism; individual portal routes can add requireAction()
-// guards if per-user authz is needed in future.
+// Retired generic gateway bridge: the BFF has no channel membership contract.
 app.use('/api/gateway', requireTenant('orgiq'), requireSession('ViewGateway'), gatewayProxyRouter);
 
 app.use(errorHandler);
@@ -424,6 +411,7 @@ startLocalController();
 // SWEEP_INTERVAL_MIN=0 disables scheduled sweeps (they remain runnable
 // on demand from the Work surface).
 startJobDispatcher();
+startAssessmentDispatcher();
 // Offline only: gives the Computer Lab's tail pane and activity list something
 // real to show without a deployed runtime. No-op unless MOCK_AGENTCORE.
 startMockBotRunner();
@@ -457,10 +445,6 @@ const server = app.listen(config.port, '0.0.0.0', () => {
   console.log(`orgiq-middleware listening on :${config.port} (${mockSuffix})`);
 });
 
-// Minimal WebSocket server at /ws — accepts portal connections from
-// useGatewaySocket so the browser doesn't log a connection error.
-// Full gateway functionality lives in the websocket-gateway service.
-const wss = new WebSocketServer({ server, path: '/ws' });
-wss.on('connection', (ws) => {
-  ws.on('error', () => { /* swallow client disconnects */ });
-});
+// This BFF serves SSE, not the gateway protocol. Never acknowledge a socket
+// that cannot authenticate a user or deliver the advertised collaboration.
+rejectUnsupportedUpgrades(server);

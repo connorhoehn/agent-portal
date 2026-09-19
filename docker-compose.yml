@@ -3,7 +3,7 @@ services:
     build: ./notebooks/aws
     container_name: orgiq-jupyter
     ports:
-      - "${JUPYTER_PORT:-8888}:8888"
+      - "127.0.0.1:${JUPYTER_PORT:-8888}:8888"
     volumes:
       - ./notebooks:/workspace
       - ~/.aws:/root/.aws:ro
@@ -24,7 +24,7 @@ services:
     build: ./notebooks/gcp
     container_name: orgiq-jupyter-gcp
     ports:
-      - "${JUPYTER_GCP_PORT:-8889}:8888"
+      - "127.0.0.1:${JUPYTER_GCP_PORT:-8889}:8888"
     volumes:
       - ./notebooks:/workspace
       # Read-write so `gcloud` subcommands can update their log + cache files
@@ -46,10 +46,10 @@ services:
       context: ./middleware
       target: development
       additional_contexts:
-        realtime_modules: ../realtime-modules
+        locked_libraries: ./.docker-libraries
     container_name: orgiq-middleware
     ports:
-      - "3001:3001"
+      - "127.0.0.1:3001:3001"
     volumes:
       - ./middleware/src:/app/src
       - ./middleware/seeds:/app/seeds
@@ -69,11 +69,10 @@ services:
       context: ./portal
       target: development
       additional_contexts:
-        ui_components: ../ui-components
-        realtime_modules: ../realtime-modules
+        locked_libraries: ./.docker-libraries
     container_name: orgiq-portal
     ports:
-      - "5183:5183"
+      - "127.0.0.1:5183:5183"
     volumes:
       - ./portal:/app
       - /app/node_modules

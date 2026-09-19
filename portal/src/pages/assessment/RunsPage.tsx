@@ -1,8 +1,7 @@
 // Runs / Activity — the run ledger. A DataTable of every recorded run, a detail Drawer
 // with the progress/result envelope and a Stop action, and a "Run a command" panel that
-// lists every launchable agent command with its tool allowlist shown in full — that
-// allowlist IS the security boundary, so it is never hidden (docs/assessment-tenant.md
-// "Agentic support"). Launch responses are mapped per docs/agent-runs.md §1: 202 toasts
+// lists the deployed Strands tools and collects each command
+// source before reserving a run (docs/assessment-tenant.md "Agentic support"). Launch responses are mapped per docs/agent-runs.md §1: 202 toasts
 // and adds the row, 400/403/409/429 each get their own explanation.
 
 import { useEffect, useRef, useState } from 'react';
@@ -17,6 +16,9 @@ import {
   Inline,
   InlineAlert,
   MetaLine,
+  Modal,
+  FormField,
+  Textarea,
   PageHeader,
   Stack,
   PageSection,
@@ -32,7 +34,7 @@ import { toastError, toastSuccess } from '../../lib/toastStore';
 import { useTeams } from './dashboard/useTeams';
 import { useAssessmentEvents } from './knowledge/useAssessmentEvents';
 import { applyRunEvent, formatDuration, formatRelativeTime, launchResponseMessage, RUN_STATUS_PILL_STATE } from './secondaryFormat';
-import type { AgentCommand, AgentCommandsResponse, RunRecord, RunsListResponse } from './secondaryTypes';
+import type { AgentCommand, AgentCommandsResponse, RunRecord, RunsListResponse, SubmissionsListResponse } from './secondaryTypes';
 
 function RunACommandPanel({ onLaunched }: { onLaunched: () => void }) {
   const { can, ready } = useCapabilities();
@@ -45,21 +47,40 @@ function RunACommandPanel({ onLaunched }: { onLaunched: () => void }) {
   const { teams } = useTeams();
   const [teamId, setTeamId] = useState('');
   const [launching, setLaunching] = useState<string | null>(null);
+  const [preparing, setPreparing] = useState<string | null>(null);
+  const [sourceText, setSourceText] = useState('');
+  const [submissionId, setSubmissionId] = useState('');
+  const [recommendationId, setRecommendationId] = useState('');
+  type Recommendation = { dimension_id: string; kind: string; title: string; rationale: string };
+  const recommendations = useFetch<{ recommendations: Recommendation[] }>(
+    preparing === 'develop-jira-story' && teamId ? `/api/assessment/teams/${encodeURIComponent(teamId)}/recommendations` : null);
+  const submissions = useFetch<SubmissionsListResponse>(preparing === 'process-self-assessment' ? '/api/assessment/submissions' : null);
+  const needsSource = preparing !== null && !['score-dimensions', 'process-self-assessment', 'develop-jira-story'].includes(preparing);
+  const recommendation = recommendations.data?.recommendations.find(r => r.dimension_id === recommendationId);
+  const validInput = needsSource ? sourceText.trim().length > 0
+    : preparing === 'process-self-assessment' ? !!submissionId
+    : preparing === 'develop-jira-story' ? !!recommendation : true;
+
 
   async function launch(command: string) {
-    if (!canRun || !teamId) return;
+    if (!canRun || !teamId || !validInput) return;
     setLaunching(command);
     try {
       const res = await fetch('/api/assessment/runs', {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ command, args: { team: teamId }, team_id: teamId }),
+        body: JSON.stringify({ command, args: { team: teamId,
+          ...(needsSource ? { document: { text: sourceText } } : {}),
+          ...(command === 'process-self-assessment' ? { submission: submissionId } : {}),
+          ...(command === 'develop-jira-story' ? { recommendation } : {}),
+        }, team_id: teamId }),
       });
       const body = (await res.json().catch(() => ({}))) as { error?: string };
       const outcome = launchResponseMessage(res.status, body.error);
       if (outcome.ok) {
         toastSuccess(null, 'Run started', `${command} for ${teamId}.`);
+        setPreparing(null);
         onLaunched();
       } else {
         toastError(null, 'Run not started', outcome.message);
@@ -72,9 +93,10 @@ function RunACommandPanel({ onLaunched }: { onLaunched: () => void }) {
   }
 
   return (
-    <PageSection title="Run a command" description="Every command runs under a read-only tool floor — the allowlist below is the whole security boundary.">
+    <PageSection title="Run a command" description="Choose a command and its source. Draft results stay in the run ledger for review; publishing is a separate action.">
       <Inline align="center" gap="sm" className="mb-3">
         <Select
+          aria-label="Assessment team"
           size="sm"
           placeholder="Choose a team…"
           value={teamId}
@@ -109,7 +131,7 @@ function RunACommandPanel({ onLaunched }: { onLaunched: () => void }) {
               key: 'run',
               header: '',
               render: (cmd) => (canRun ? (
-                <Button size="sm" disabled={!teamId || launching === cmd.name} onClick={() => void launch(cmd.name)}>
+                <Button size="sm" aria-label={`Prepare ${cmd.name}`} disabled={!teamId || launching === cmd.name} onClick={() => { setPreparing(cmd.name); setSourceText(''); setSubmissionId(''); setRecommendationId(''); }}>
                   {launching === cmd.name ? 'Starting…' : 'Run'}
                 </Button>
               ) : null),
@@ -117,6 +139,32 @@ function RunACommandPanel({ onLaunched }: { onLaunched: () => void }) {
           ]}
         />
       )}
+      <Modal open={preparing !== null} onClose={() => setPreparing(null)} title={preparing ?? 'Prepare command'}
+        footer={<Inline gap="sm" justify="end">
+          <Button variant="ghost" onClick={() => setPreparing(null)} disabled={launching !== null}>Cancel</Button>
+          <Button variant="primary" disabled={!validInput || launching !== null} onClick={() => preparing && void launch(preparing)}>
+            {launching ? 'Starting…' : 'Start run'}
+          </Button>
+        </Inline>}>
+        <Stack gap="md">
+          {needsSource && <FormField label="Source material" hint="Paste the document, transcript, or existing draft this command should use.">
+            {({ id }) => <Textarea id={id} rows={10} value={sourceText} onChange={e => setSourceText(e.target.value)} />}
+          </FormField>}
+          {preparing === 'score-dimensions' && <T>Scores the team's saved evidence against the assessment rubric.</T>}
+          {preparing === 'process-self-assessment' && <FormField label="Submission">
+            {({ id }) => <Select id={id} value={submissionId} placeholder="Choose a committed submission…"
+              onChange={e => setSubmissionId(e.target.value)} options={(submissions.data?.envelopes ?? [])
+                .filter(e => e.team_id === teamId && e.status === 'committed')
+                .map(e => ({ value: e.envelope_id, label: `${e.submitted_at} · ${e.envelope_id}` }))} />}
+          </FormField>}
+          {preparing === 'develop-jira-story' && <FormField label="Recommendation">
+            {({ id }) => <Select id={id} value={recommendationId} placeholder="Choose an improvement…"
+              onChange={e => setRecommendationId(e.target.value)} options={(recommendations.data?.recommendations ?? [])
+                .map(r => ({ value: r.dimension_id, label: r.title }))} />}
+          </FormField>}
+          {(recommendations.error || submissions.error) && <InlineAlert tone="error">{recommendations.error ?? submissions.error}</InlineAlert>}
+        </Stack>
+      </Modal>
     </PageSection>
   );
 }

@@ -1,3 +1,4 @@
+jest.mock('../public-web-fetch.js', () => ({ publicWebFetch: (...args: Parameters<typeof fetch>) => globalThis.fetch(...args) }));
 // Three silent fallbacks in src/lib, and what they now say instead.
 //
 // None of these sit in a route, so nothing in

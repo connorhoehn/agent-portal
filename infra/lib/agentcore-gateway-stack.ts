@@ -2,12 +2,14 @@ import * as cdk from 'aws-cdk-lib';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as bedrockagentcore from 'aws-cdk-lib/aws-bedrockagentcore';
+import { gatewayToolCode } from './gateway-tool-code';
 import type { Construct } from 'constructs';
 
 export interface AgentCoreGatewayStackProps extends cdk.StackProps {
   readonly prefix?: string;
   readonly auroraClusterArn: string;
   readonly auroraCredentialsSecretArn: string;
+  readonly auroraReadOnlySecretArn: string;
   readonly knowledgeBaseId: string;
   readonly policyEngineArn: string;
   readonly policyEngineId: string;
@@ -81,7 +83,7 @@ export class AgentCoreGatewayStack extends cdk.Stack {
       description: 'MCP tool: Query the OrgIQ Knowledge Base',
       runtime: lambda.Runtime.PYTHON_3_12,
       handler: 'kb_query.handler',
-      code: lambda.Code.fromAsset('lambda/gateway-tools'),
+      code: gatewayToolCode(),
       role: toolsLambdaRole,
       timeout: cdk.Duration.seconds(30),
       memorySize: 256,
@@ -92,19 +94,29 @@ export class AgentCoreGatewayStack extends cdk.Stack {
       },
     });
 
+    const graphReadRole = new iam.Role(this, 'GraphTraversalRole', {
+      assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
+      managedPolicies: [iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSLambdaBasicExecutionRole')],
+    });
+    graphReadRole.addToPolicy(new iam.PolicyStatement({
+      actions: ['rds-data:ExecuteStatement'], resources: [props.auroraClusterArn],
+    }));
+    graphReadRole.addToPolicy(new iam.PolicyStatement({
+      actions: ['secretsmanager:GetSecretValue'], resources: [props.auroraReadOnlySecretArn],
+    }));
     const graphTraversalLambda = new lambda.Function(this, 'GraphTraversalLambda', {
       functionName: `${prefix}-gateway-graph-traversal`,
       description: 'MCP tool: Execute read-only SQL graph queries against Aurora relational schema',
       runtime: lambda.Runtime.PYTHON_3_12,
       handler: 'graph_traversal.handler',
-      code: lambda.Code.fromAsset('lambda/gateway-tools'),
-      role: toolsLambdaRole,
+      code: gatewayToolCode(),
+      role: graphReadRole,
       timeout: cdk.Duration.seconds(30),
       memorySize: 256,
       tracing: lambda.Tracing.ACTIVE,
       environment: {
         AURORA_CLUSTER_ARN: props.auroraClusterArn,
-        AURORA_SECRET_ARN: props.auroraCredentialsSecretArn,
+        AURORA_SECRET_ARN: props.auroraReadOnlySecretArn,
         PROJECT_PREFIX: prefix,
         REGION: this.region,
       },
@@ -115,14 +127,14 @@ export class AgentCoreGatewayStack extends cdk.Stack {
       description: 'MCP tool: Compute PageRank scores over the Aurora relational org-graph edges',
       runtime: lambda.Runtime.PYTHON_3_12,
       handler: 'compute_pagerank.handler',
-      code: lambda.Code.fromAsset('lambda/gateway-tools'),
-      role: toolsLambdaRole,
+      code: gatewayToolCode(),
+      role: graphReadRole,
       timeout: cdk.Duration.seconds(60),
       memorySize: 512,
       tracing: lambda.Tracing.ACTIVE,
       environment: {
         AURORA_CLUSTER_ARN: props.auroraClusterArn,
-        AURORA_SECRET_ARN: props.auroraCredentialsSecretArn,
+        AURORA_SECRET_ARN: props.auroraReadOnlySecretArn,
         PROJECT_PREFIX: prefix,
         REGION: this.region,
       },

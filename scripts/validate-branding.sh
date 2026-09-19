@@ -129,8 +129,8 @@ for cell in orgiq-light orgiq-dark assessment-light assessment-dark; do
   fi
   shot=$(grep -iE '^screenshot:' "$f" | head -1 | sed -E 's/^screenshot: *//'); { [ -n "$shot" ] && [ -f "$J/$shot" ]; } || bad="$bad screenshot"
   cur_sha=$(theme_sha)
-  { [ "$f" -nt "$CSS" ] && [ "$f" -nt "$L" ]; } || [ "$(sha_recorded "$f")" = "$cur_sha" ] || bad="$bad stale"
-  { [ -n "$bad" ] && [ "$SEAL" != 1 ]; } || sha_record "$f" "$cur_sha"
+  [ "$(sha_recorded "$f")" = "$cur_sha" ] || bad="$bad stale(content-digest)"
+  [ "$SEAL" = 1 ] && sha_record "$f" "$cur_sha"
   grep -qiE 'TODO|unverified|placeholder' "$f" && bad="$bad TODO"
   [ -z "$bad" ] && ok "$cell" || fail "$cell:$bad"
 done

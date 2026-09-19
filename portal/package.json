@@ -13,16 +13,25 @@
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
     "@connorhoehnslalom/realtime-modules": "github:connorhoehnslalom/realtime-modules#ccf37b6c2b97aa3c5339444c348847c5c5595023",
     "@connorhoehnslalom/ui-components": "github:connorhoehnslalom/ui-components#81dca942d3bd55cc897e8c58576ab2af893238b5",
+    "@tiptap/core": "^3.31.3",
+    "@tiptap/extension-collaboration": "^3.31.3",
+    "@tiptap/extension-placeholder": "^3.31.3",
+    "@tiptap/extension-task-item": "^3.31.3",
+    "@tiptap/extension-task-list": "^3.31.3",
+    "@tiptap/pm": "^3.31.3",
+    "@tiptap/react": "^3.31.3",
+    "@tiptap/starter-kit": "^3.31.3",
+    "@tiptap/y-tiptap": "^3.0.9",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
     "@xyflow/react": "^12.10.0",
-    "amazon-cognito-identity-js": "^6.3.16",
+    "amazon-cognito-identity-js": "^6.3.20",
     "d3-force": "^3.0.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-is": "^19.0.0",
     "react-markdown": "^10.1.0",
-    "react-router": "^7.14.0",
+    "react-router": "^7.18.4",
     "recharts": "^3.8.0",
     "remark-gfm": "^4.0.1",
     "tailwind-merge": "^3.5.0",
@@ -38,6 +47,13 @@
     "@vitejs/plugin-react": "^5.1.0",
     "tailwindcss": "^4.2.0",
     "typescript": "5.9",
-    "vite": "^7.3.0"
+    "vite": "^7.3.6"
+  },
+  "overrides": {
+    "distributed-core": {
+      "@opentelemetry/auto-instrumentations-node": "0.78.0",
+      "@opentelemetry/sdk-node": "0.220.0",
+      "@opentelemetry/exporter-trace-otlp-http": "0.220.0"
+    }
   }
 }

@@ -1,7 +1,7 @@
 {
-  "capturedAt": "2026-09-18T14:20:03.796Z",
-  "serverHandlerSha": "5889cacb545fd916eccc8b9c3323d7c42c75b0e1ebef34644b3e525cef04f6ae",
-  "baseUrl": "http://127.0.0.1:3012",
+  "capturedAt": "2026-09-19T20:36:07.117Z",
+  "serverHandlerSha": "c22ee6bb3ea445c98d6f1a5066341ef27fb4b39716fb10dc195b3fad3b25fd14",
+  "baseUrl": "http://127.0.0.1:3017",
   "personas": [
     "orgiq/admin",
     "assessment/admin",
@@ -1074,13 +1074,11 @@
         ],
         "envelopes[].status": [
           "committed",
-          "processed",
           "staged",
           "superseded"
         ],
         "groups[].status": [
           "committed",
-          "processed",
           "staged"
         ]
       }
@@ -4490,9 +4488,15 @@
           "ALLOW"
         ],
         "events[].role": [
-          "admin"
+          "admin",
+          "assessor",
+          "hr-admin",
+          "lead-assessor",
+          "member",
+          "sme"
         ],
         "events[].tenant": [
+          "assessment",
           "orgiq"
         ]
       }
@@ -6958,8 +6962,12 @@
       "open": false,
       "values": [
         "admin",
+        "assessor",
         "contributor",
         "decider",
+        "hr-admin",
+        "lead-assessor",
+        "member",
         "org-leader",
         "owner",
         "sme"
@@ -7058,7 +7066,6 @@
         "open",
         "pending",
         "planning",
-        "processed",
         "promoted",
         "proven",
         "provisioning",

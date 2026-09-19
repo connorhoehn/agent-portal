@@ -699,6 +699,7 @@ export const realAgentCore: AgentCoreProvider = {
     }
 
     const body = JSON.stringify({
+      ...payload.structuredInput,
       message: payload.message,
       prompt: payload.message,
       input_text: payload.message,
@@ -715,6 +716,7 @@ export const realAgentCore: AgentCoreProvider = {
         payload: new TextEncoder().encode(body),
         ...(payload.sessionId ? { runtimeSessionId: payload.sessionId } : {}),
       }),
+      payload.timeoutMs ? { abortSignal: AbortSignal.timeout(payload.timeoutMs) } : undefined,
     );
 
     const text = await streamToString(resp.response);

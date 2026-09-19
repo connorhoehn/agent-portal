@@ -1,3 +1,5 @@
+import { requirePublicBrowser } from './public-browser.js';
+import { publicWebFetch, assertPublicWebTarget } from './public-web-fetch.js';
 // Site survey — look before you crawl.
 //
 // Adding a crawl target was blind. You typed a URL and a page limit, and found
@@ -93,6 +95,8 @@ export interface Survey {
   browserRescued: number;
   /** Pages that needed the browser after the rescue budget ran out. */
   browserSkipped: number;
+  /** Browser fallback could not establish a public-only session. */
+  browserProblem?: string;
   /** Links skipped because robots.txt asks crawlers not to fetch them. */
   robotsExcluded: number;
   /** Set when classification could not run; the tree is still valid. */
@@ -204,7 +208,7 @@ interface RawPage { title: string; text: string; links: string[] }
  */
 export async function disallowedPrefixes(origin: string): Promise<Upstream<string[]>> {
   try {
-    const res = await fetch(`${origin}/robots.txt`, {
+    const res = await publicWebFetch(`${origin}/robots.txt`, {
       headers: { 'User-Agent': 'OrgIQ-Survey/1.0' },
       signal: AbortSignal.timeout(8000),
     });
@@ -244,7 +248,7 @@ function isDisallowed(url: string, prefixes: string[]): boolean {
 
 async function readOverHttp(url: string): Promise<RawPage | { error: string }> {
   try {
-    const res = await fetch(url, {
+    const res = await publicWebFetch(url, {
       headers: { 'User-Agent': 'OrgIQ-Survey/1.0 (+site reconnaissance)' },
       signal: AbortSignal.timeout(12_000),
       redirect: 'follow',
@@ -298,6 +302,7 @@ function looksLikeJsShell(p: RawPage): boolean {
  */
 async function readOverBrowser(sessionId: string, url: string): Promise<RawPage | { error: string }> {
   try {
+    await assertPublicWebTarget(url);
     await agentcore.navigateBrowser(sessionId, url);
     const shot = await agentcore.screenshotBrowser(sessionId);
     if (!shot?.imageDataUrl) return { error: 'no screenshot' };
@@ -551,15 +556,19 @@ async function runSurvey(
   // from the moment it exists.
   let browserSessionId: string | null = null;
   const ensureBrowser = async (): Promise<string | null> => {
-    if (!opts.useBrowserFallback) return null;
+    if (!opts.useBrowserFallback || survey.browserProblem) return null;
     if (browserSessionId) return browserSessionId;
     try {
+      await requirePublicBrowser();
+      await assertPublicWebTarget(survey.startUrl);
       const s = await agentcore.createBrowserSession({
         agentName: 'site-survey', url: survey.startUrl,
       });
       browserSessionId = s.sessionId;
       return browserSessionId;
-    } catch {
+    } catch (err) {
+      survey.browserProblem = `Browser fallback unavailable: ${(err as Error).message}`;
+      console.warn(`[site-survey] ${survey.browserProblem}`);
       return null;
     }
   };
@@ -617,7 +626,7 @@ async function runSurvey(
         if (visited.has(link)) continue;
         // Same origin only. A survey that wanders off-site stops describing the
         // thing you asked about.
-        if (!link.startsWith(survey.origin)) continue;
+        if (new URL(link).origin !== survey.origin) continue;
         visited.add(link);
         if (isDisallowed(link, disallowed)) { survey.robotsExcluded++; continue; }
         queue.push({ url: link, depth: job.depth + 1 });

@@ -10,6 +10,7 @@
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router';
 import { useFetch } from '../../hooks/useFetch';
+import { useCapabilities } from '../../lib/capabilities';
 import { CompactionFlowFrame } from './CompactionFlowFrame';
 import { processFlowModel } from './distillationFormat';
 import type { ArtifactsResponse, CompactionsResponse, IngestState, LevelsResponse } from './types';
@@ -40,6 +41,8 @@ export function ProcessFlow({
   height = 400, levelsData, levelsLoading, levelsError, ingestData, jobsData, samplingData,
 }: ProcessFlowProps) {
   const navigate = useNavigate();
+  const { can, ready } = useCapabilities();
+  const mayReadBots = ready && can('ManageBots');
   const { data: artifactsData } = useFetch<ArtifactsResponse>('/api/distillation/artifacts?status=published', 60_000);
   const { data: findingsData } = useFetch<FindingsResponse>('/api/work/findings?status=open', 60_000);
   const { data: bundle } = useFetch<LiveBundleResponse>('/api/session-bundle/live', 60_000);
@@ -49,7 +52,7 @@ export function ProcessFlow({
   // zero for a number nobody managed to read.
   const {
     data: botsData, error: botsTransportError, degraded: botsDegraded,
-  } = useFetch<BotsResponse>('/api/bots', 60_000);
+  } = useFetch<BotsResponse>(mayReadBots ? '/api/bots' : null, 60_000);
   const botsError = botsTransportError ?? botsDegraded;
   const { data: promotionsData } = useFetch<PromotionsResponse>('/api/promotions', 60_000);
 
@@ -69,7 +72,7 @@ export function ProcessFlow({
   // because a later poll can fail while `botsData` still holds a prior
   // successful response — that stale array must not paper over a fetch that
   // just started failing.
-  const botRunsToday = botsError || !Array.isArray(botsData?.bots)
+  const botRunsToday = !mayReadBots || botsError || !Array.isArray(botsData?.bots)
     ? null
     : botsData.bots.reduce((n, b) => n + (typeof b.todayRunCount === 'number' ? b.todayRunCount : 0), 0);
   const candidates = Array.isArray(promotionsData?.candidates)

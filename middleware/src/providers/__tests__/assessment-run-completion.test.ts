@@ -3,8 +3,7 @@
 // (`agentcore dev`) must be able to drive the SAME completion via the new
 // completeRun() seam (POST /runs/:runId/complete) without double-applying —
 // whichever finishes the run first wins, the other gets a clean 409. The
-// Aurora-path fix itself (this callback is the ONLY way a real run ever
-// leaves status:'running') is covered in
+// Aurora callback and worker completion persistence are covered in
 // assessment-run-completion-aurora.test.ts, since it needs a different
 // config.js mock (`mock.aurora: false`) than this file.
 
@@ -55,6 +54,14 @@ describe('completeRun — mock path', () => {
     expect(M.scoringLogsFor('TEAM-002').some((l) => l.run_id === run.id)).toBe(true);
   });
 
+  it('does not accept success without scoring output', async () => {
+    const run = freshRun();
+    M.runs().unshift(run);
+    const result = await provider.completeRun(run.id, { status: 'completed' });
+    expect(result).toEqual({ ok: false, status: 400, reason: expect.stringContaining('scoring_log') });
+    expect(run.status).toBe('running');
+  });
+
   it('409s a run that is not (or no longer) running — never double-applies', async () => {
     const run = freshRun({ status: 'completed', finished_at: new Date().toISOString() });
     M.runs().unshift(run);
@@ -93,4 +100,40 @@ describe('completeRun — mock path', () => {
     expect(oks).toBe(1);
     expect(conflicts).toBe(1);
   });
+});
+
+it('attributes completion to the launch-time submission, never whichever arrived latest', async () => {
+  const selected = M.submissionsFor('TEAM-002')[0]!;
+  const run = freshRun({ args: { submission: selected.envelope_id } });
+  M.runs().unshift(run);
+  const result = await provider.completeRun(run.id, { status: 'completed', scoring_log: [scoringLogEntry(selected.dimension_hints[0]!.dimension_id)] });
+  expect(result.ok).toBe(true);
+  expect(M.scoringLogsFor('TEAM-002').find(log => log.run_id === run.id)?.envelope_id).toBe(selected.envelope_id);
+  const unscoped = freshRun({ args: {} });
+  M.runs().unshift(unscoped);
+  await provider.completeRun(unscoped.id, { status: 'completed', scoring_log: [scoringLogEntry(TEST_DIMENSION)] });
+  expect(M.scoringLogsFor('TEAM-002').find(log => log.run_id === unscoped.id)?.envelope_id).toBeNull();
+});
+
+it('rejects scores outside the selected submission before completing the run', async () => {
+  const selected = M.submissionsFor('TEAM-002')[0]!;
+  const outside = M.DIMENSION_IDS.find(id => !selected.dimension_hints.some(h => h.dimension_id === id))!;
+  expect(outside).toBeDefined();
+  const run = freshRun({ args: { submission: selected.envelope_id } });
+  M.runs().unshift(run);
+  const result = await provider.completeRun(run.id, { status: 'completed', scoring_log: [scoringLogEntry(outside)] });
+  expect(result).toEqual({ ok: false, status: 400, reason: expect.any(String) });
+  expect(run.status).toBe('running');
+  expect(M.scoringLogsFor('TEAM-002').some(log => log.run_id === run.id)).toBe(false);
+});
+
+it('preserves a scorer N/A claim as a pending exception without granting exemption', async () => {
+  const run = freshRun({ team_id: 'TEAM-003' });
+  M.runs().unshift(run);
+  const entry = { ...scoringLogEntry('6'), is_na: false, na_claimed: true, suggested_level: null };
+  const result = await provider.completeRun(run.id, { status: 'completed', scoring_log: [entry] });
+  expect(result.ok).toBe(true);
+  const team = M.teams().find(t => t.id === 'TEAM-003')!;
+  expect(team.exceptions).toContainEqual(expect.objectContaining({ dimension_id: '6', status: 'requested' }));
+  expect(M.scoresFor(team.id)!['6']!.is_na).toBe(false);
 });

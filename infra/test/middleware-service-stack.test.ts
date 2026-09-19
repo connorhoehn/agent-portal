@@ -404,3 +404,20 @@ describe('the KB surface has the grants and the config it needs', () => {
     );
   });
 });
+
+
+test('browser network inspection and session operations are scoped to the configured browser', () => {
+  const browserArn = 'arn:aws:bedrock-agentcore:us-east-1:111111111111:browser-custom/orgiq_browser-abcdefghij';
+  const template = Template.fromStack(middlewareServiceStack({}, { browserArn, browserId: 'orgiq_browser-abcdefghij' }));
+  template.hasResourceProperties('AWS::IAM::Policy', {
+    PolicyDocument: { Statement: Match.arrayWith([
+      Match.objectLike({ Sid: 'PublicBrowserCrawl', Resource: browserArn,
+        Action: Match.arrayWith(['bedrock-agentcore:GetBrowser', 'bedrock-agentcore:StartBrowserSession']) }),
+    ]) },
+  });
+  const env = containerDefinition(template).Environment;
+  assert.ok(env.some((v: any) => v.Name === 'BROWSER_ID' && v.Value === 'orgiq_browser-abcdefghij'));
+  const statements = Object.values<any>(template.findResources('AWS::IAM::Policy')).flatMap(p => p.Properties.PolicyDocument.Statement);
+  const browserPolicy = statements.find((s: any) => s.Sid === 'PublicBrowserCrawl');
+  assert.ok(!browserPolicy.Action.includes('bedrock-agentcore:UpdateBrowser'));
+});

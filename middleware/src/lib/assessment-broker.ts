@@ -389,6 +389,7 @@ interface PresenceEntry {
   /** Set while a `leave` is staged and not yet finalized. The entry stays in
    *  `presence` (and therefore in `viewersFor`'s output) the whole time — a
    *  viewer in grace must not flicker out of anyone's roster. */
+  sequence?: number;
   leaving?: boolean;
   leaveTimer?: ReturnType<typeof setTimeout>;
 }
@@ -538,10 +539,11 @@ class AssessmentBroker {
     return changed;
   }
 
-  touch(docId: string, tabId: string, sub: string, name: string, nowMs = Date.now()): void {
+  touch(docId: string, tabId: string, sub: string, name: string, nowMs = Date.now(), sequence?: number): void {
     const purged = this.purgeStale(docId, nowMs);
     const doc = this.presence.get(docId) ?? new Map<string, PresenceEntry>();
     const existing = doc.get(tabId);
+    if (existing?.sequence !== undefined && (sequence === undefined || sequence <= existing.sequence)) return;
     const isNewTab = !existing;
     // Cancel a pending grace-period delete for this tab — this `touch` IS
     // the remount's `enter`/heartbeat that proves the tab never really left.
@@ -551,7 +553,7 @@ class AssessmentBroker {
     doc.set(tabId, {
       sub, name, tabId,
       since: existing?.since ?? new Date(nowMs).toISOString(),
-      lastSeenMs: nowMs,
+      lastSeenMs: nowMs, sequence,
     });
     this.presence.set(docId, doc);
     // Cancelling a pending leave is not itself a roster change (the viewer
@@ -560,16 +562,18 @@ class AssessmentBroker {
     if (isNewTab || purged) this.publishPresence(docId, nowMs);
   }
 
-  leave(docId: string, tabId: string, nowMs = Date.now()): void {
+  leave(docId: string, tabId: string, nowMs = Date.now(), sequence?: number): void {
     const purged = this.purgeStale(docId, nowMs);
     const doc = this.presence.get(docId);
     const entry = doc?.get(tabId);
+    if (entry?.sequence !== undefined && (sequence === undefined || sequence <= entry.sequence)) return;
     if (!entry || entry.leaving) {
       // No such tab, or a leave already staged (duplicate sendBeacon) — the
       // roster itself doesn't change here either way.
       if (purged) this.publishPresence(docId, nowMs);
       return;
     }
+    entry.sequence = sequence;
     entry.leaving = true;
     entry.leaveTimer = setTimeout(() => this.finalizeLeave(docId, tabId), PRESENCE_LEAVE_GRACE_MS);
     entry.leaveTimer.unref?.();

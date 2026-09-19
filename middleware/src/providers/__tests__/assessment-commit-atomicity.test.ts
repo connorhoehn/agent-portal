@@ -59,7 +59,7 @@ describe('commitSubmissionEnvelope — atomic supersede + conflict-safe insert (
     expect(execMock).toHaveBeenCalledTimes(2);
     expect(execMock.mock.calls[0]![0] as string).toMatch(/UPDATE assessment_submissions[\s\S]*status = 'superseded'/);
     expect(execMock.mock.calls[1]![0] as string).toMatch(/INSERT INTO assessment_submissions/);
-    expect(execMock.mock.calls[1]![0] as string).toMatch(/ON CONFLICT \(envelope_id\) DO NOTHING/);
+    expect(execMock.mock.calls[1]![0] as string).toMatch(/ON CONFLICT DO NOTHING/);
   });
 
   it('skips the supersede call entirely when there is no prior envelope', async () => {
@@ -134,4 +134,14 @@ describe('scoring logs carry run_id end to end (finding 10)', () => {
     const logs = await A.fetchScoringLogs('TEAM-002');
     expect(logs[0]!.run_id).toBeUndefined();
   });
+});
+
+it('throws the lost insert conflict through the transaction so supersede is rolled back', async () => {
+  execMock.mockResolvedValue([]);
+  let rolledBack = false;
+  withTransactionMock.mockImplementationOnce(async (fn: (tx: typeof exec) => Promise<unknown>) => {
+    try { return await fn(exec); } catch (error) { rolledBack = true; throw error; }
+  });
+  expect(await A.commitSubmissionEnvelope(ENVELOPE, '2026-08-10T09:15:00.000Z', null, 'prior')).toBe(false);
+  expect(rolledBack).toBe(true);
 });

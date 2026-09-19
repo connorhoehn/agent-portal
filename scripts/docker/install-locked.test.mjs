@@ -1,0 +1,50 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtempSync, writeFileSync, readFileSync, rmSync, mkdirSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { createHash } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
+
+const installer = fileURLToPath(new URL('./install-locked.mjs', import.meta.url));
+function fixture() {
+  const dir = mkdtempSync(resolve(tmpdir(), 'orgiq-lock-test-'));
+  const vendor = resolve(dir, 'vendor'); mkdirSync(vendor);
+  const commit = 'a'.repeat(40);
+  const spec = `github:connorhoehnslalom/example#${commit}`;
+  const resolved = `git+ssh://git@github.com/connorhoehnslalom/example.git#${commit}`;
+  const data = Buffer.from('committed package bytes');
+  const integrity = 'sha512-' + createHash('sha512').update(data).digest('base64');
+  const manifest = { example: { commit, resolved, file: 'example.tgz', integrity } };
+  const pkg = { dependencies: { example: spec, public: '^1.0.0' } };
+  const lock = { lockfileVersion: 3, packages: { '': structuredClone(pkg), 'node_modules/example': { version: '1.0.0', resolved }, 'node_modules/public': { version: '1.2.3', resolved: 'https://registry.npmjs.org/public/-/public-1.2.3.tgz', integrity: 'sha512-pinned' } } };
+  writeFileSync(resolve(vendor, 'example.tgz'), data);
+  writeFileSync(resolve(vendor, 'manifest.json'), JSON.stringify(manifest));
+  writeFileSync(resolve(dir, 'package.json'), JSON.stringify(pkg));
+  writeFileSync(resolve(dir, 'package-lock.json'), JSON.stringify(lock));
+  return { dir, vendor, lock, manifest, run: () => execFileSync(process.execPath, [installer, vendor], { cwd: dir, stdio: 'pipe' }) };
+}
+
+test('registry pins survive the Git-to-local artifact conversion unchanged', () => {
+  const f = fixture(); try {
+    f.run();
+    const result = JSON.parse(readFileSync(resolve(f.dir, 'package-lock.json')));
+    assert.deepEqual(result.packages['node_modules/public'], f.lock.packages['node_modules/public']);
+    assert.equal(result.packages[''].dependencies.example, `file:${f.vendor}/example.tgz`);
+    assert.equal(result.packages['node_modules/example'].integrity, f.manifest.example.integrity);
+  } finally { rmSync(f.dir, { recursive: true, force: true }); }
+});
+
+for (const corruption of ['artifact bytes', 'commit']) test(`rejects stale ${corruption} without rewriting the manifest`, () => {
+  const f = fixture(); try {
+    const original = readFileSync(resolve(f.dir, 'package.json'), 'utf8');
+    if (corruption === 'artifact bytes') writeFileSync(resolve(f.vendor, 'example.tgz'), 'tampered');
+    else {
+      f.manifest.example.resolved = f.manifest.example.resolved.replace(/a{40}$/, 'b'.repeat(40));
+      writeFileSync(resolve(f.vendor, 'manifest.json'), JSON.stringify(f.manifest));
+    }
+    assert.throws(f.run);
+    assert.equal(readFileSync(resolve(f.dir, 'package.json'), 'utf8'), original);
+  } finally { rmSync(f.dir, { recursive: true, force: true }); }
+});

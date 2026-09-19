@@ -140,13 +140,15 @@ total=$(( ${#ROLES[@]} * ${#SURFACES[@]} ))
 # audit — but a global "newest page edit" rule stales all 63 logs for a
 # one-line fix on one page, which is how this check spent a day red without
 # telling anyone WHICH audit was actually out of date. A log is judged
-# against the newest .tsx among the files/dirs its own `pages:` line names
-# (see PROTOCOL.md); a log with no `pages:` line falls back to the global
-# rule, so omitting the line makes a log stale sooner, never later.
+# against the recorded content digest of the files/dirs its own `pages:` line
+# names (see PROTOCOL.md); a log with no `pages:` line falls back to hashing
+# the full assessment source set. Normal validation never records evidence.
 # Only audit logs are held to freshness: the role×surface logs and the
 # isolation logs. PROTOCOL.md, DEFECTS.md and fixtures are not audits.
+# Retired-tenant isolation archives document deleted code, not the current
+# product. The active role matrix above and active isolation checks below
+# remain mandatory; archived source paths cannot acquire a fresh digest.
 if [ -d "$JDIR" ]; then
-  newest_global=$(ls -t $(find portal/src/pages/assessment -name '*.tsx') 2>/dev/null | head -1)
 
 # ── Freshness is about CONTENT, not mtime ────────────────────────────────
 # See docs/orgiq-journeys/PROTOCOL.md § "Freshness is about content": on
@@ -159,9 +161,12 @@ pages_sha() {
   local out="" ; IFS=',' read -ra items <<< "$1"
   for d in "${items[@]}"; do d=$(echo "$d" | tr -d ' '); [ -n "$d" ] || continue
     if [ -f "$d" ]; then out="$out$(shasum -a 256 "$d" 2>/dev/null)"; continue; fi
-    [ -d "$d" ] || continue
-    out="$out$(find "$d" -name '*.tsx' 2>/dev/null | sort | xargs shasum -a 256 2>/dev/null)"
+    [ -d "$d" ] || { echo "Missing audit source: $d" >&2; return 1; }
+    local files; files=$(find "$d" -name '*.tsx' 2>/dev/null | sort)
+    [ -n "$files" ] || { echo "No audit source files in $d" >&2; return 1; }
+    out="$out$(printf '%s\n' "$files" | xargs shasum -a 256 2>/dev/null)"
   done
+  [ -n "$out" ] || { echo "No audit source files found" >&2; return 1; }
   printf '%s' "$out" | shasum -a 256 | cut -d' ' -f1
 }
 sha_recorded() { grep -F "$1 " "$SHA_CACHE" 2>/dev/null | tail -1 | cut -d' ' -f2; }
@@ -171,28 +176,16 @@ sha_record() {
   printf '%s %s\n' "$1" "$2" >> "$SHA_CACHE.tmp"
   sort -o "$SHA_CACHE" "$SHA_CACHE.tmp" && rm -f "$SHA_CACHE.tmp"
 }
-  newest_in() { # newest .tsx among comma-separated files/dirs
-    local newest=""; IFS=',' read -ra items <<< "$1"
-    for d in "${items[@]}"; do d=$(echo "$d" | tr -d ' '); [ -n "$d" ] || continue
-      if [ -f "$d" ]; then { [ -z "$newest" ] || [ "$d" -nt "$newest" ]; } && newest="$d"; continue; fi
-      [ -d "$d" ] || continue
-      f=$(ls -t $(find "$d" -name '*.tsx' 2>/dev/null) 2>/dev/null | head -1)
-      [ -n "$f" ] && { [ -z "$newest" ] || [ "$f" -nt "$newest" ]; } && newest="$f"
-    done; echo "$newest"
-  }
   stale=0; stale_names=""
-  for f in $(find "$JDIR" -name '*.md' ! -name 'PROTOCOL.md' ! -name 'DEFECTS.md' ! -path '*/fixtures/*' 2>/dev/null); do
+  for f in $(find "$JDIR" -name '*.md' ! -name 'PROTOCOL.md' ! -name 'DEFECTS.md' ! -path '*/fixtures/*' ! -path '*/isolation/archived-*/*' 2>/dev/null); do
     pages=$(grep -iE '^pages: *' "$f" | head -1 | sed -E 's/^pages: *//')
-    ref=$([ -n "$pages" ] && newest_in "$pages" || echo "$newest_global")
-    cur_sha=$(pages_sha "${pages:-$PAGES_FALLBACK}")
-    if [ -n "$ref" ] && [ "$ref" -nt "$f" ] && [ "$(sha_recorded "$f")" != "$cur_sha" ]; then
-      stale=$((stale+1)); stale_names="$stale_names ${f#$JDIR/}(${ref##*/})"
-    else
-      sha_record "$f" "$cur_sha"
+    cur_sha=$(pages_sha "${pages:-$PAGES_FALLBACK}") || { stale=$((stale+1)); stale_names="$stale_names ${f#$JDIR/}(invalid-pages)"; continue; }
+    if [ "$(sha_recorded "$f")" != "$cur_sha" ]; then
+      stale=$((stale+1)); stale_names="$stale_names ${f#$JDIR/}(content-digest)"
     fi
     [ "$SEAL" = 1 ] && sha_record "$f" "$cur_sha"
   done
-  [ "$stale" = 0 ] && ok "journey logs are newer than the pages their surface renders from" || fail "$stale journey logs predate a page they render from — re-audit them:$stale_names"
+  [ "$stale" = 0 ] && ok "journey logs match their recorded source content" || fail "$stale journey logs have missing or different source digests — re-audit them:$stale_names"
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -62,38 +62,40 @@ password; `schema/apply_all_seed.py` reads that secret and issues the single
 authenticate at all — the failure mode is "reads stop", never "reads succeed as
 someone who can write".
 
-## How the fallback behaves
+## MCP Gateway graph traversal
 
-`agents/_shared/db_credentials.py` decides which secret a read uses:
+The gateway's `graph-traversal` Lambda always uses this reader secret and has
+its own execution role. Its IAM policy cannot fetch the admin secret. Deploy
+`OrgIQ-Aurora` and apply the role/password steps below before updating
+`OrgIQ-AgentCoreGateway`; otherwise gateway graph reads fail closed until the
+reader is ready. The gateway has no admin fallback. Its PageRank tool also uses the reader
+credential; the hidden `writeBack` flag is rejected, and the scoring agent
+owns persisted score changes.
 
-```
-AURORA_READONLY_SECRET_ARN set   → read as orgiq_graph_reader
-AURORA_READONLY_SECRET_ARN unset → read as the cluster admin user (today's behaviour)
-```
+The Lambda asset includes the canonical `agents/_shared/sql_guard.py` through
+CDK's local asset bundler. Changes to that helper change the asset hash. The
+same regression suite now covers both agent queries and the deployed handler.
+EXPLAIN is supported only as a boolean option around a validated SELECT/WITH;
+raw EXPLAIN ANALYZE statements are rejected because they can execute writes.
 
-So an environment that has not applied the grant — a fresh cluster, a local
-`agentcore dev`, a rebuild half-way through this runbook — behaves exactly as
-it did before the role existed. Nothing breaks, and `sql_guard.py` is once
-again the whole boundary there. The agent logs which state it is in at start
-(`orgiq.db: query_graph reads as …`), because "the role is enforced" and "the
-role is not enforced" are otherwise indistinguishable from outside.
+## Missing credentials fail closed
 
-The fallback is on **absence only, never on error**. Once the read-only ARN is
-set, a `permission denied for table people` means the grant is missing, and the
-query fails. Retrying it on the admin credential would hand an attacker the
-writable path by way of a failure they can provoke on purpose.
+`agents/_shared/db_credentials.py` requires `AURORA_READONLY_SECRET_ARN` for
+model-authored graph queries. Missing or blank credentials stop read-agent
+startup. The CDK runtime stack now always grants search/advisor the reader
+secret instead of the administrator secret and sets `APP_ENV=production`.
+The old `readOnlyGraphRole=false` deployment option is rejected.
 
-On the IAM side the swap is exclusive, not additive: with
-`--context readOnlyGraphRole=true`, the `search` and `advisor` execution roles
-get `secretsmanager:GetSecretValue` on the read-only secret **instead of** the
-admin secret. A read agent that can still fetch the admin credential has no
-boundary. Every other agent — ingestion, graph-builder, scoring, supervisor,
-the two assessment agents — keeps the admin secret unchanged.
+A local experiment may explicitly opt into the unsafe legacy behavior with
+both `APP_ENV=development` and `ALLOW_UNSAFE_SQL_ADMIN_FALLBACK=true`.
+Production ignores that fallback flag. Permission errors never retry using
+another credential. Static registry lookups used by writer agents retain
+their own fixed-SQL credential path; they do not accept model-authored SQL.
 
 ## Deploy runbook — in this order
 
-Steps 1–3 are safe on a running fleet and change nothing about how the agents
-behave. Step 4 is the switch.
+Complete steps 1–3 before deploying the updated read-agent runtimes or MCP
+Gateway. Both now require the reader role; step 4 activates the new images.
 
 **1. Deploy `OrgIQ-Aurora`** — mints the secret and the CFN export
 `orgiq-aurora-readonly-secret-arn`.
@@ -189,14 +191,12 @@ actually live:
 orgiq.db: query_graph reads as orgiq_graph_reader — writes are refused by the database, not only by sql_guard
 ```
 
-## Rolling back
+## Recovery
 
-Redeploy step 4 without `--context readOnlyGraphRole=true`. The env var goes
-away, `db_credentials.read_secret_arn()` falls back to the admin secret, and
-the fleet is exactly where it was. The database role can stay — it costs
-nothing and holds no privileges anyone else uses. In an incident where the role
-itself is the problem, `ALTER ROLE orgiq_graph_reader NOLOGIN` is the kill
-switch (and makes both read agents fail closed rather than fail open).
+If reader provisioning fails, repair the role/password using steps 1–3 and
+retry the deployment. Removing the reader configuration no longer restores
+administrator access. In an incident, `ALTER ROLE orgiq_graph_reader NOLOGIN`
+disables both read agents and the gateway read tools until the role is repaired.
 
 ## Adding a table to the allow-list
 

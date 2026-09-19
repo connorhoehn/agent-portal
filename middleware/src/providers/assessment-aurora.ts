@@ -18,7 +18,41 @@
 // jest tests that assert on the SQL text and row-mapping, but the only real
 // verification will be the first live call.
 
-import { exec, withTransaction, type TxExec } from './aurora.js';
+import { exec as rawExec, withTransaction, type TxExec } from './aurora.js';
+import { AsyncLocalStorage } from 'node:async_hooks';
+
+// A completion owns one transaction across all assessment persistence helpers.
+// Async-local context isolates concurrent requests without a global executor.
+const transactionContext = new AsyncLocalStorage<TxExec>();
+const exec: TxExec = (sql, params) => (transactionContext.getStore() ?? rawExec)(sql, params);
+
+async function withAssessmentTransaction<T>(work: () => Promise<T>): Promise<T> {
+  if (transactionContext.getStore()) return work();
+  return withTransaction(async tx => {
+    // Data API rejects overlapping statements on one transaction.
+    let pending: Promise<unknown> = Promise.resolve();
+    const serial: TxExec = (sql, params) => {
+      const result = pending.then(() => tx(sql, params));
+      pending = result;
+      return result;
+    };
+    return transactionContext.run(serial, work);
+  });
+}
+
+export async function withRunTransaction<T>(runId: string, work: () => Promise<T>): Promise<T> {
+  return withAssessmentTransaction(async () => {
+    await exec('SELECT id FROM assessment_runs WHERE id = :id FOR UPDATE', [{ name: 'id', value: { stringValue: runId } }]);
+    return work();
+  });
+}
+
+export async function withTeamTransaction<T>(teamId: string, work: () => Promise<T>): Promise<T> {
+  return withAssessmentTransaction(async () => {
+    await exec('SELECT id FROM assessment_teams WHERE id = :id FOR UPDATE', [{ name: 'id', value: { stringValue: teamId } }]);
+    return work();
+  });
+}
 import { type SqlParameter } from '@aws-sdk/client-rds-data';
 import * as M from '../mock/assessment.js';
 import type { ApplyScoreInput, AppliedScore, ApplyScoresPayload } from './assessment.js';
@@ -550,6 +584,11 @@ function rowToScoringLog(r: Record<string, unknown>): M.ScoringLog {
   };
 }
 
+export async function fetchAllScoringLogs(): Promise<M.ScoringLog[]> {
+  const rows = await exec(`SELECT team_id, stamp, envelope_id, source, run_id, scores FROM assessment_scoring_logs ORDER BY created_at DESC`);
+  return rows.map(rowToScoringLog);
+}
+
 export async function fetchScoringLogs(teamId: string): Promise<M.ScoringLog[]> {
   const rows = await exec(
     `SELECT team_id, stamp, envelope_id, source, run_id, scores FROM assessment_scoring_logs WHERE team_id = :tid ORDER BY created_at DESC`,
@@ -619,8 +658,8 @@ export async function fetchRun(id: string): Promise<M.MockRun | null> {
   return rows.length ? rowToRun(rows[0]!) : null;
 }
 
-export async function insertRun(rec: M.MockRun, launchedBy: string | null = null): Promise<void> {
-  await exec(
+export async function insertRun(rec: M.MockRun, launchedBy: string | null = null, execute: TxExec = exec): Promise<void> {
+  await execute(
     `INSERT INTO assessment_runs (id, command, team_id, args, status, source, started_at, finished_at, summary, error, files_written, launched_by)
      VALUES (:id, :command, :team, :args::jsonb, :status, :source, :started::timestamptz, :finished, :summary, :error, :files, :launched_by)`,
     [
@@ -631,6 +670,44 @@ export async function insertRun(rec: M.MockRun, launchedBy: string | null = null
       arrp('files', rec.files_written), maybe('launched_by', launchedBy),
     ],
   );
+}
+
+/** Serialize admission globally across BFF replicas, including the cap. */
+export async function reserveRun(
+  rec: M.MockRun, launchedBy: string | null, dispatch: import('../lib/assessment-run-input.js').AssessmentDispatchInput,
+  cap: number,
+): Promise<'reserved' | 'duplicate' | 'capacity'> {
+  return withTransaction(async tx => {
+    await tx('LOCK TABLE assessment_runs IN SHARE ROW EXCLUSIVE MODE');
+    const counts = await tx(`SELECT COUNT(*) AS total,
+      COUNT(*) FILTER (WHERE command = :command AND team_id IS NOT DISTINCT FROM :team) AS duplicate
+      FROM assessment_runs WHERE status = 'running'`, [s('command', rec.command), maybe('team', rec.team_id)]);
+    if (toNum(counts[0]?.['duplicate']) > 0) return 'duplicate';
+    if (toNum(counts[0]?.['total']) >= cap) return 'capacity';
+    await insertRun(rec, launchedBy, tx);
+    await tx('UPDATE assessment_runs SET dispatch_payload = :payload::jsonb WHERE id = :id',
+      [jsonp('payload', dispatch), s('id', rec.id)]);
+    return 'reserved';
+  });
+}
+
+export async function claimAssessmentRun(): Promise<{ run: M.MockRun; dispatch: import('../lib/assessment-run-input.js').AssessmentDispatchInput } | null> {
+  const rows = await exec(`UPDATE assessment_runs SET dispatch_claimed_at = NOW()
+    WHERE id = (SELECT id FROM assessment_runs WHERE status = 'running'
+      AND dispatch_payload IS NOT NULL AND dispatch_claimed_at IS NULL
+      ORDER BY started_at FOR UPDATE SKIP LOCKED LIMIT 1)
+    RETURNING ${RUN_COLS}, dispatch_payload`);
+  if (!rows.length) return null;
+  return { run: rowToRun(rows[0]!), dispatch: parseJson(rows[0]!['dispatch_payload'], null)! };
+}
+
+export async function expireAssessmentClaims(): Promise<M.MockRun[]> {
+  const rows = await exec(`UPDATE assessment_runs SET status = 'failed', finished_at = NOW(),
+    error = 'Assessment worker lease expired; start a new run', summary = 'Worker interrupted before completion'
+    WHERE status = 'running' AND COALESCE(dispatch_claimed_at,
+      CASE WHEN dispatch_payload IS NULL THEN started_at END) < NOW() - INTERVAL '20 minutes'
+    RETURNING ${RUN_COLS}`);
+  return rows.map(rowToRun);
 }
 
 export async function countRunningDuplicates(command: string, teamId: string | null): Promise<number> {
@@ -909,7 +986,7 @@ export async function insertSubmission(
     `INSERT INTO assessment_submissions
        (envelope_id, team_id, status, revision, supersedes, form_submission_id, submitted_at, ingested_at, assessment_date, self_certified, submitter, envelope)
      VALUES (:eid, :tid, :status, :rev, :supersedes, :formid, :submitted::timestamptz, :ingested::timestamptz, :adate::date, :selfcert, :submitter::jsonb, :envelope::jsonb)
-     ON CONFLICT (envelope_id) DO NOTHING
+     ON CONFLICT DO NOTHING
      RETURNING envelope_id`,
     [
       s('eid', envelope.envelope_id), s('tid', envelope.team_id), s('status', envelope.status),
@@ -941,10 +1018,19 @@ export async function commitSubmissionEnvelope(
   envelope: M.SubmissionEnvelope, submittedAtIso: string, assessmentDateIso: string | null,
   priorEnvelopeId: string | null,
 ): Promise<boolean> {
-  return withTransaction(async (tx) => {
-    if (priorEnvelopeId) await markSubmissionSuperseded(envelope.team_id, priorEnvelopeId, tx);
-    return insertSubmission(envelope, submittedAtIso, assessmentDateIso, tx);
-  });
+  const conflict = new Error('submission conflict');
+  try {
+    return await withTransaction(async (tx) => {
+      if (priorEnvelopeId) await markSubmissionSuperseded(envelope.team_id, priorEnvelopeId, tx);
+      if (!(await insertSubmission(envelope, submittedAtIso, assessmentDateIso, tx))) throw conflict;
+      return true;
+    });
+  } catch (err) {
+    // Returning false inside the callback would COMMIT the supersede. Throw
+    // through withTransaction first, so its rollback restores the old row.
+    if (err === conflict) return false;
+    throw err;
+  }
 }
 
 /**

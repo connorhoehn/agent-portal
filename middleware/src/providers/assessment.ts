@@ -20,6 +20,7 @@ import * as M from '../mock/assessment.js';
 import { assessmentBroker } from '../lib/assessment-broker.js';
 import { NotFoundError } from '../lib/async-handler.js';
 import * as A from './assessment-aurora.js';
+import { assessmentRunInput } from '../lib/assessment-run-input.js';
 
 // ─── Wire types (mirrors the source's ui/src/components/assessment/types.ts) ─
 
@@ -1386,7 +1387,7 @@ function computeScoreEntry(
 export async function applyScores(
   teamId: string, payload: ApplyScoresPayload, requestedBy?: string,
 ): Promise<ApplyScoresResult | null> {
-  if (!config.mock.aurora) return A.auroraApplyScores(teamId, payload, computeScoreEntry, requestedBy);
+  if (!config.mock.aurora) return A.withTeamTransaction(teamId, () => A.auroraApplyScores(teamId, payload, computeScoreEntry, requestedBy));
 
   const dims = M.scoresFor(teamId);
   const team = M.teams().find((t) => t.id === teamId);
@@ -1723,7 +1724,7 @@ export function buildScoringLogForTeam(
   return {
     team_id: team.id,
     envelope_id: committed[0]?.envelope_id ?? null,
-    stamp: stampNow(),
+    stamp: `${stampNow()}-${hex(12)}`,
     source: 'mock',
     scores,
     run_id: runId,
@@ -1781,7 +1782,7 @@ function scoringLogToApplyPayload(log: M.ScoringLog, runId: string): ApplyScores
   return {
     relevant_dimension_ids: [...M.DIMENSION_IDS],
     scores: log.scores.map((s) => ({
-      dimension_id: s.dimension_id, is_na: s.is_na, suggested_level: s.suggested_level,
+      dimension_id: s.dimension_id, is_na: s.is_na || s.na_claimed, suggested_level: s.suggested_level,
       confidence: s.confidence, rationale: s.rationale, evidence_excerpts: s.evidence_excerpts,
       follow_up_questions: s.follow_up_questions, self_claimed_level: s.self_claimed_level,
       evidence_class: s.evidence_class,
@@ -1832,24 +1833,15 @@ const SCORE_APPLYING_COMMANDS = new Set(['score-dimensions', 'process-self-asses
 
 export type LaunchRunResult =
   | { ok: true; run_id: string; started_at: string }
-  | { ok: false; status: 409 | 429; reason: string };
+  | { ok: false; status: 400 | 409 | 429 | 503; reason: string };
 
 /**
  * Launch an assessment-agent run. Duplicate-guarded per (command, team_id)
  * and capped at RUN_CONCURRENCY_CAP concurrently running records.
  *
- * Under mock, both checks are against the live in-memory runs fixture in
- * one synchronous pass, so they're atomic under concurrent callers for free
- * (JS has no preemption between the check and the push). Under Aurora the
- * check and the insert are two separate awaited round trips, so two
- * concurrent launchRun calls for the same (command, team_id) can both pass
- * the duplicate check before either commits its insert — a real, if narrow,
- * race this port does not close (would need a partial unique index on
- * assessment_runs, which is a bigger schema change than the "additive fixes
- * only" scope of this task allows). A live agent run also doesn't get the
- * mock's fake progress-tick/auto-complete timer — those only make sense
- * against an in-memory fixture; the real run is expected to report back
- * through whatever calls updateRunStatus (out of scope here).
+ * Aurora admission and durable dispatch payload commit under one table lock,
+ * so duplicate/cap checks are atomic across middleware replicas. A background
+ * worker claims persisted runs and records real agent output or failure.
  */
 export async function launchRun(
   command: string, args: Record<string, unknown>, teamId: string | null,
@@ -1858,14 +1850,30 @@ export async function launchRun(
   // the in-memory fixture has no column for it.
   launchedBy: string | null = null,
 ): Promise<LaunchRunResult> {
+  if (!args || typeof args !== 'object' || Array.isArray(args)) return { ok: false, status: 400, reason: 'args must be an object' };
+  // Pin the exact submission once, before dispatch. Callback time must not
+  // select a different envelope that arrived while the agent was working.
+  const submissionId = args['submission'];
+  if (submissionId != null && typeof submissionId !== 'string') {
+    return { ok: false, status: 400, reason: 'submission must be an envelope id' };
+  }
+  const submissions = teamId ? (config.mock.aurora ? M.submissionsFor(teamId) : await A.fetchSubmissionsForTeam(teamId)) : [];
+  const selected = typeof submissionId === 'string' ? submissions.find(e => e.envelope_id === submissionId && e.status === 'committed') : undefined;
+  if (submissionId && !selected) return { ok: false, status: 400, reason: 'submission must be committed and belong to this team' };
+  args = { ...args, submission: selected?.envelope_id ?? null };
   if (!config.mock.aurora) {
-    const duplicates = await A.countRunningDuplicates(command, teamId);
-    if (duplicates > 0) {
-      return { ok: false, status: 409, reason: `a "${command}" run is already in progress for ${teamId ?? 'this scope'}` };
+    if (config.mock.agentcore || process.env['DEV_OFFLINE'] === 'true') {
+      return { ok: false, status: 503, reason: 'Live assessment dispatch is unavailable while AgentCore is mocked or offline' };
     }
-    const runningTotal = await A.countRunningTotal();
-    if (runningTotal >= RUN_CONCURRENCY_CAP) {
-      return { ok: false, status: 429, reason: `maximum of ${RUN_CONCURRENCY_CAP} concurrent runs already in progress` };
+    const team = teamId ? await A.fetchTeam(teamId) : null;
+    if (teamId && !team) return { ok: false, status: 400, reason: 'team not found' };
+    let dispatch: ReturnType<typeof assessmentRunInput>;
+    try {
+      dispatch = assessmentRunInput(command, args, teamId,
+        teamId ? await A.fetchEvidenceLog(teamId) : [], selected,
+        M.rubricDimensions(team?.rubric_version ?? M.DEFAULT_RUBRIC_VERSION));
+    } catch (error) {
+      return { ok: false, status: 400, reason: error instanceof Error ? error.message : 'Invalid run input' };
     }
     const startedAt = new Date().toISOString();
     const id = `run-${stampNow()}-${command}-${hex(12)}`;
@@ -1873,7 +1881,10 @@ export async function launchRun(
       id, command, team_id: teamId, args, status: 'running', source: 'agent',
       started_at: startedAt, finished_at: null, summary: '', error: null, files_written: [],
     };
-    await A.insertRun(rec, launchedBy);
+    dispatch.payload['auth'] = { tenant: 'assessment', sub: launchedBy };
+    const admitted = await A.reserveRun(rec, launchedBy, dispatch, RUN_CONCURRENCY_CAP);
+    if (admitted === 'duplicate') return { ok: false, status: 409, reason: `a "${command}" run is already in progress for ${teamId ?? 'this scope'}` };
+    if (admitted === 'capacity') return { ok: false, status: 429, reason: `maximum of ${RUN_CONCURRENCY_CAP} concurrent runs already in progress` };
     assessmentBroker.publish({ type: 'run.started', run_id: id, command, team_id: teamId, ts: startedAt });
     return { ok: true, run_id: id, started_at: startedAt };
   }
@@ -1920,14 +1931,18 @@ export async function launchRun(
 
       const team = teamId ? M.teams().find((t) => t.id === teamId) : undefined;
       if (teamId && team && SCORE_APPLYING_COMMANDS.has(command) && M.scoresFor(teamId)) {
-        const envelopes = M.submissionsFor(teamId);
+        const envelopes = M.submissionsFor(teamId).filter(e => e.envelope_id === r.args.submission);
         const log = buildScoringLogForTeam(team, M.scoresFor(teamId), M.evidenceLogFor(teamId), envelopes, id);
+        if (r.args.submission && envelopes[0]) {
+          const dimensions = new Set(envelopes[0].dimension_hints.map(h => h.dimension_id));
+          log.scores = log.scores.filter(score => dimensions.has(score.dimension_id));
+        }
         M.addScoringLog(log);
         r.files_written = [`workspace/teams/${teamId}/reports/scoring_log_${log.stamp}.json`];
 
         // Same seam a real agent's output goes through — no separate mock
         // mutation path for current_level/history/follow-ups/exceptions.
-        await applyScores(teamId, scoringLogToApplyPayload(log, id));
+        await applyScores(teamId, scoringLogToApplyPayload(log, id), `agent:${command}`);
         if (team.workflow_step < 3) team.workflow_step = 3; // "Score"
 
         const { fromEvidence, noEvidence, followUpsOpened } = summarizeScoringLog(log);
@@ -1944,12 +1959,8 @@ export async function launchRun(
 
 // ─── Command registry + stop ────────────────────────────────────────────────
 //
-// Mirrors the source app's `sdlcd/workflows/agent_runs/registry.py`. The
-// allowlist IS the security boundary there — a headless run is granted the
-// minimum tools its command body needs and nothing more — so the portal shows
-// it beside each command rather than hiding it. Read-only tools are the floor;
-// Write only where a command creates a file; Bash only for the deterministic
-// handoff verbs, and then scoped to that exact verb.
+// The command names mirror the source registry; tools below describe the
+// actual Strands implementation. Draft output stays in the run ledger.
 
 export interface AgentCommandInfo {
   name: string;
@@ -1957,22 +1968,20 @@ export interface AgentCommandInfo {
   allowed_tools: string[];
 }
 
-const READ_ONLY = ['Read', 'Glob', 'Grep'];
-const APPLY_SCORES = 'Bash(uv run -m sdlcd.main assess apply-scores:*)';
-const APPLY_CLASSIFICATION = 'Bash(uv run -m sdlcd.main assess apply-classification:*)';
-const APPLY_ENTERPRISE_CONTEXT = 'Bash(uv run -m sdlcd.main assess apply-enterprise-context:*)';
-const INGEST_EVIDENCE = 'Bash(uv run -m sdlcd.main submissions ingest-evidence:*)';
-
+// These are the deployed Strands tools, not the source application's
+// filesystem/Bash allowlist. The BFF alone persists score results.
+const SCORER_TOOLS = ['classify_evidence', 'score_dimension'];
+const DRAFTER_TOOLS = ['check_story_draft', 'validate_facts'];
 export const AGENT_COMMANDS: AgentCommandInfo[] = [
-  { name: 'classify-transcript', summary: 'Classify a transcript/document as evidence (type, weight, relevant dimensions).', allowed_tools: [...READ_ONLY, 'Write', APPLY_CLASSIFICATION] },
-  { name: 'score-dimensions', summary: 'Score only the dimensions classification flagged, against the rubric.', allowed_tools: [...READ_ONLY, 'Write', APPLY_SCORES] },
-  { name: 'extract-enterprise-context', summary: 'Extract org-wide governance knowledge into the shared context.', allowed_tools: [...READ_ONLY, 'Write', APPLY_ENTERPRISE_CONTEXT] },
-  { name: 'validate-outputs', summary: 'Quality check: traceability, fabrication, placement.', allowed_tools: [...READ_ONLY] },
-  { name: 'process-self-assessment', summary: 'Score a self-certified Forms submission envelope against the rubric.', allowed_tools: [...READ_ONLY, 'Write', INGEST_EVIDENCE, APPLY_SCORES] },
-  { name: 'develop-jira-story', summary: "Draft a Jira story for a team's top maturity gap. Pushing is a human decision.", allowed_tools: [...READ_ONLY, 'Write'] },
-  { name: 'draft-confluence-page', summary: 'Draft a new Confluence page as local markdown, ready for review and publish.', allowed_tools: [...READ_ONLY, 'Write'] },
-  { name: 'suggest-confluence-content', summary: 'Suggest content edits/new pages from space context and comment history.', allowed_tools: [...READ_ONLY] },
-  { name: 'draw-diagram', summary: "Generate a draw.io diagram and embed it in a page's local markdown.", allowed_tools: [...READ_ONLY, 'Write', 'Edit'] },
+  { name: 'classify-transcript', summary: 'Classify source material into evidence types and relevant dimensions.', allowed_tools: SCORER_TOOLS },
+  { name: 'score-dimensions', summary: 'Score saved team evidence against the rubric.', allowed_tools: SCORER_TOOLS },
+  { name: 'process-self-assessment', summary: 'Score one selected committed submission.', allowed_tools: SCORER_TOOLS },
+  { name: 'develop-jira-story', summary: 'Draft a story from one recommendation for human review.', allowed_tools: DRAFTER_TOOLS },
+  { name: 'extract-enterprise-context', summary: 'Extract source-backed governance facts for review.', allowed_tools: DRAFTER_TOOLS },
+  { name: 'validate-outputs', summary: 'Review supplied content for traceability and unsupported claims.', allowed_tools: DRAFTER_TOOLS },
+  { name: 'draft-confluence-page', summary: 'Draft a Markdown page in the run ledger; publishing is separate.', allowed_tools: DRAFTER_TOOLS },
+  { name: 'suggest-confluence-content', summary: 'Suggest content edits from supplied source material.', allowed_tools: DRAFTER_TOOLS },
+  { name: 'draw-diagram', summary: 'Draft a safe draw.io XML diagram in the run ledger.', allowed_tools: DRAFTER_TOOLS },
 ];
 
 export async function listCommands(): Promise<AgentCommandInfo[]> {
@@ -1988,6 +1997,7 @@ export type StopRunResult = { ok: true; run: M.MockRun } | { ok: false; status: 
  */
 export async function stopRun(runId: string): Promise<StopRunResult> {
   if (!config.mock.aurora) {
+    const result = await A.withRunTransaction<StopRunResult>(runId, async () => {
     const run = await A.fetchRun(runId);
     if (!run) return { ok: false, status: 404, reason: 'run not found' };
     if (run.status !== 'running') return { ok: false, status: 409, reason: `run is already ${run.status}` };
@@ -1995,8 +2005,11 @@ export async function stopRun(runId: string): Promise<StopRunResult> {
     const reason = 'stopped by operator';
     const summary = `Stopped by operator before ${run.command} finished.`;
     await A.updateRunStatus(runId, { status: 'failed', finished_at: finishedAt, summary, error: reason });
-    assessmentBroker.publish({ type: 'run.failed', run_id: run.id, command: run.command, team_id: run.team_id, reason, ts: finishedAt });
     return { ok: true, run: { ...run, status: 'failed', finished_at: finishedAt, error: reason, summary } };
+    });
+    if (result.ok) assessmentBroker.publish({ type: 'run.failed', run_id: runId, command: result.run.command,
+      team_id: result.run.team_id, reason: result.run.error!, ts: result.run.finished_at! });
+    return result;
   }
   const run = M.runs().find((r) => r.id === runId);
   if (!run) return { ok: false, status: 404, reason: 'run not found' };
@@ -2011,7 +2024,7 @@ export async function stopRun(runId: string): Promise<StopRunResult> {
   return { ok: true, run };
 }
 
-export type CompleteRunResult = { ok: true; run: M.MockRun } | { ok: false; status: 404 | 409; reason: string };
+export type CompleteRunResult = { ok: true; run: M.MockRun } | { ok: false; status: 400 | 404 | 409; reason: string };
 
 /**
  * The run-completion callback (POST /runs/:runId/complete) — the ONLY way a
@@ -2038,9 +2051,13 @@ export async function completeRun(
   },
 ): Promise<CompleteRunResult> {
   if (!config.mock.aurora) {
+    const result = await A.withRunTransaction<CompleteRunResult>(runId, async () => {
     const run = await A.fetchRun(runId);
     if (!run) return { ok: false, status: 404, reason: 'run not found' };
     if (run.status !== 'running') return { ok: false, status: 409, reason: `run is already ${run.status}` };
+    if (patch.status === 'completed' && SCORE_APPLYING_COMMANDS.has(run.command) && !patch.scoring_log?.length) {
+      return { ok: false, status: 400, reason: 'A scoring run requires a non-empty scoring_log to complete' };
+    }
 
     const finishedAt = new Date().toISOString();
     let summary = patch.summary ?? (patch.status === 'completed'
@@ -2051,11 +2068,17 @@ export async function completeRun(
     let filesWritten = patch.files_written ?? run.files_written;
 
     if (patch.status === 'completed' && run.team_id && SCORE_APPLYING_COMMANDS.has(run.command) && patch.scoring_log?.length) {
+      // Acquire the team lock before child inserts acquire FK key-share locks.
+      // The nested scope reuses this run transaction and retains its lock until commit.
+      await A.withTeamTransaction(run.team_id, async () => undefined);
       const envelopes = await A.fetchSubmissionsForTeam(run.team_id);
-      const committed = envelopes.filter((e) => e.status === 'committed').sort((a, b) => b.submitted_at.localeCompare(a.submitted_at));
+      const target = envelopes.find(e => e.envelope_id === run.args.submission);
+      if (run.args.submission && (!target || patch.scoring_log.some(score => !target.dimension_hints.some(h => h.dimension_id === score.dimension_id)))) {
+        return { ok: false, status: 400, reason: 'Scoring output must match the selected submission dimensions' };
+      }
       const log: M.ScoringLog = {
-        team_id: run.team_id, envelope_id: committed[0]?.envelope_id ?? null,
-        stamp: stampNow(), source: 'agent', scores: patch.scoring_log, run_id: runId,
+        team_id: run.team_id, envelope_id: target?.envelope_id ?? null,
+        stamp: `${stampNow()}-${hex(12)}`, source: 'agent', scores: patch.scoring_log, run_id: runId,
       };
       await A.insertScoringLog(log);
       const applied = await applyScores(run.team_id, scoringLogToApplyPayload(log, runId), `agent:${run.command}`);
@@ -2067,11 +2090,17 @@ export async function completeRun(
     }
 
     await A.updateRunStatus(runId, { status, finished_at: finishedAt, summary, error: errorText, files_written: filesWritten });
-    assessmentBroker.publish(status === 'completed'
-      ? { type: 'run.completed', run_id: runId, command: run.command, team_id: run.team_id, summary, ts: finishedAt }
-      : { type: 'run.failed', run_id: runId, command: run.command, team_id: run.team_id, reason: errorText ?? 'agent reported failure', ts: finishedAt });
+
 
     return { ok: true, run: { ...run, status, finished_at: finishedAt, summary, error: errorText, files_written: filesWritten } };
+    });
+    if (result.ok) {
+      const run = result.run;
+      assessmentBroker.publish(run.status === 'completed'
+        ? { type: 'run.completed', run_id: runId, command: run.command, team_id: run.team_id, summary: run.summary, ts: run.finished_at! }
+        : { type: 'run.failed', run_id: runId, command: run.command, team_id: run.team_id, reason: run.error ?? 'agent reported failure', ts: run.finished_at! });
+    }
+    return result;
   }
 
   // Mock path: accept the same callback (a local agent driving `agentcore
@@ -2082,7 +2111,16 @@ export async function completeRun(
   const run = M.runs().find((r) => r.id === runId);
   if (!run) return { ok: false, status: 404, reason: 'run not found' };
   if (run.status !== 'running') return { ok: false, status: 409, reason: `run is already ${run.status}` };
+    if (patch.status === 'completed' && SCORE_APPLYING_COMMANDS.has(run.command) && !patch.scoring_log?.length) {
+      return { ok: false, status: 400, reason: 'A scoring run requires a non-empty scoring_log to complete' };
+    }
 
+  if (patch.status === 'completed' && SCORE_APPLYING_COMMANDS.has(run.command) && run.args.submission && patch.scoring_log?.length) {
+    const target = run.team_id ? M.submissionsFor(run.team_id).find(e => e.envelope_id === run.args.submission) : undefined;
+    if (!target || patch.scoring_log.some(score => !target.dimension_hints.some(h => h.dimension_id === score.dimension_id))) {
+      return { ok: false, status: 400, reason: 'Scoring output must match the selected submission dimensions' };
+    }
+  }
   const finishedAt = new Date().toISOString();
   run.status = patch.status;
   run.finished_at = finishedAt;
@@ -2096,10 +2134,11 @@ export async function completeRun(
   if (patch.status === 'completed' && run.team_id && team && SCORE_APPLYING_COMMANDS.has(run.command)
     && patch.scoring_log?.length && M.scoresFor(run.team_id)) {
     const envelopes = M.submissionsFor(run.team_id);
-    const committed = envelopes.filter((e) => e.status === 'committed').sort((a, b) => b.submitted_at.localeCompare(a.submitted_at));
+    const target = envelopes.find(e => e.envelope_id === run.args.submission);
+
     const log: M.ScoringLog = {
-      team_id: run.team_id, envelope_id: committed[0]?.envelope_id ?? null,
-      stamp: stampNow(), source: 'agent', scores: patch.scoring_log, run_id: runId,
+      team_id: run.team_id, envelope_id: target?.envelope_id ?? null,
+      stamp: `${stampNow()}-${hex(12)}`, source: 'agent', scores: patch.scoring_log, run_id: runId,
     };
     M.addScoringLog(log);
     run.files_written = patch.files_written ?? [`workspace/teams/${run.team_id}/reports/scoring_log_${log.stamp}.json`];
@@ -2204,17 +2243,18 @@ export interface SubmissionListing {
   groups: Array<{ base_id: string; team_id: string; revisions: number; latest_envelope_id: string; status: M.SubmissionStatus }>;
 }
 
-// The wire's view of an envelope's status: 'processed' once every dimension
-// it hinted at has been scored (M.isSubmissionProcessed), else the real
+// The wire's view: 'processed' requires this envelope's run to have applied
+// every hinted dimension (M.isSubmissionProcessed), else the real
 // persisted value. Never written back — schema/assessment_schema.sql's CHECK
 // on assessment_submissions.status only allows staged/committed/superseded,
 // so the DB row (mock or Aurora) always keeps the real value; this is purely
 // a read-time projection for the "Processed" pill/filter.
 function wireSubmissionStatus(
-  env: Pick<M.SubmissionEnvelope, 'status' | 'dimension_hints' | 'ingested_at'>,
+  env: Pick<M.SubmissionEnvelope, 'envelope_id' | 'status' | 'dimension_hints' | 'ingested_at'>,
   dims: Record<string, M.MockDimensionScore>,
+  logs: M.ScoringLog[],
 ): M.SubmissionStatus {
-  return M.isSubmissionProcessed(env, dims) ? 'processed' : env.status;
+  return M.isSubmissionProcessed(env, dims, logs) ? 'processed' : env.status;
 }
 
 // Pure: groups a flat envelope list into the wire's {envelopes, groups}
@@ -2245,12 +2285,12 @@ function buildSubmissionListing(envelopes: SubmissionListing['envelopes']): Subm
 
 export async function listSubmissions(): Promise<SubmissionListing> {
   if (!config.mock.aurora) {
-    const [envelopes, dimsByTeam] = await Promise.all([A.fetchAllSubmissions(), A.fetchAllDimensionScores()]);
-    const withStatus = envelopes.map((e) => ({ ...e, status: wireSubmissionStatus(e, dimsByTeam.get(e.team_id) ?? {}) }));
+    const [envelopes, dimsByTeam, logs] = await Promise.all([A.fetchAllSubmissions(), A.fetchAllDimensionScores(), A.fetchAllScoringLogs()]);
+    const withStatus = envelopes.map((e) => ({ ...e, status: wireSubmissionStatus(e, dimsByTeam.get(e.team_id) ?? {}, logs.filter(log => log.team_id === e.team_id)) }));
     return buildSubmissionListing(withStatus);
   }
   const envelopes: SubmissionListing['envelopes'] = M.submissions().map((env) => ({
-    ...env, status: wireSubmissionStatus(env, M.scoresFor(env.team_id) ?? {}),
+    ...env, status: wireSubmissionStatus(env, M.scoresFor(env.team_id) ?? {}, M.scoringLogsFor(env.team_id)),
   }));
   return buildSubmissionListing(envelopes);
 }
@@ -2259,13 +2299,13 @@ export async function getSubmissionDetail(teamId: string, envelopeId: string): P
   if (!config.mock.aurora) {
     const env = await A.fetchSubmission(teamId, envelopeId);
     if (!env) return null;
-    const dims = await A.fetchDimensionScores(teamId);
-    return { ...env, status: wireSubmissionStatus(env, dims) };
+    const [dims, logs] = await Promise.all([A.fetchDimensionScores(teamId), A.fetchScoringLogs(teamId)]);
+    return { ...env, status: wireSubmissionStatus(env, dims, logs) };
   }
   const env = M.findSubmission(teamId, envelopeId);
   if (!env) return null;
   const dims = M.scoresFor(teamId) ?? {};
-  return { ...env, status: wireSubmissionStatus(env, dims) };
+  return { ...env, status: wireSubmissionStatus(env, dims, M.scoringLogsFor(teamId)) };
 }
 
 export async function deleteSubmission(teamId: string, envelopeId: string): Promise<boolean> {
@@ -2502,6 +2542,8 @@ function mockHasCommittedEnvelopeForForm(teamId: string, formId: string): boolea
 }
 
 export interface ParsedFormsRow {
+  /** Committed matches, including teams the parser could not resolve by name. */
+  seen_team_ids: string[];
   row_index: number;
   form_id: string;
   status: 'new' | 'seen' | 'unknown_team';
@@ -2590,6 +2632,7 @@ function parseFormsRecords(
       : hasCommittedEnvelopeForForm(teamId, formId) ? 'seen' : 'new';
 
     rows.push({
+      seen_team_ids: teams.filter(t => hasCommittedEnvelopeForForm(t.id, formId)).map(t => t.id),
       row_index: index,
       form_id: formId,
       status,
@@ -3478,19 +3521,18 @@ export async function toggleKnowledgeReaction(
 }
 
 export async function listKnowledgeComments(id: string): Promise<M.KnowledgeComment[] | null> {
+  if (!(await getKnowledgeDoc(id))) return null;
   if (!config.mock.aurora) {
-    if (!(await A.fetchKnowledgeDoc(id))) return null;
     return A.fetchKnowledgeComments(id);
   }
-  if (!M.findKnowledgeDoc(id)) return null;
   return M.knowledgeComments(id);
 }
 
 export async function createKnowledgeComment(
   id: string, body: string, actor = 'unknown',
 ): Promise<{ ok: boolean } | null> {
+  if (!(await getKnowledgeDoc(id))) return null;
   if (!config.mock.aurora) {
-    if (!(await A.fetchKnowledgeDoc(id))) return null;
     const commentId = `comment-${stampNow()}-${hex(6)}`;
     const now = new Date().toISOString();
     // Durable, unlike the mock path — see schema/assessment_schema.sql's
@@ -3500,7 +3542,6 @@ export async function createKnowledgeComment(
     assessmentBroker.publish({ type: 'knowledge.comment.created', id: commentId, doc_id: id, by: actor, body, ts: now });
     return { ok: true };
   }
-  if (!M.findKnowledgeDoc(id)) return null;
   // Persist into the REGISTERED fixture, not just onto the event bus. The echo
   // alone is what made a comment write-only: it reached whoever was connected
   // at that instant and nothing afterwards. Registered means

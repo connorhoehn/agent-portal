@@ -86,6 +86,7 @@ describe('applyScores advances the submission and team status it actually change
     M.teams().push(makeTeam(TEAM_ID));
     seedEmptyDims(TEAM_ID, INGESTED_AT);
     M.upsertSubmission(makeCommittedEnvelope(TEAM_ID, ENVELOPE_ID, ['1', '2', '3'], INGESTED_AT));
+    M.addScoringLog({ team_id: TEAM_ID, envelope_id: ENVELOPE_ID, run_id: 'run-attributed-submission', stamp: 'test', source: 'agent', scores: [] });
   });
 
   afterEach(() => {
@@ -99,7 +100,7 @@ describe('applyScores advances the submission and team status it actually change
     const result = await provider.applyScores(TEAM_ID, {
       relevant_dimension_ids: ['1', '2', '3'],
       scores: ['1', '2', '3'].map((dimension_id) => ({
-        dimension_id, suggested_level: 2, confidence: 'moderate' as const, rationale: 'Scored via test.',
+        dimension_id, suggested_level: 2, confidence: 'moderate' as const, source_meeting: 'run-attributed-submission', rationale: 'Scored via test.',
       })),
     });
     expect(result?.applied).toHaveLength(3);
@@ -118,8 +119,8 @@ describe('applyScores advances the submission and team status it actually change
     await provider.applyScores(TEAM_ID, {
       relevant_dimension_ids: ['1', '2'],
       scores: [
-        { dimension_id: '1', suggested_level: 2, confidence: 'moderate' as const, rationale: 'Scored via test.' },
-        { dimension_id: '2', suggested_level: 2, confidence: 'moderate' as const, rationale: 'Scored via test.' },
+        { dimension_id: '1', suggested_level: 2, confidence: 'moderate' as const, source_meeting: 'run-attributed-submission', rationale: 'Scored via test.' },
+        { dimension_id: '2', suggested_level: 2, confidence: 'moderate' as const, source_meeting: 'run-attributed-submission', rationale: 'Scored via test.' },
       ],
     });
 
@@ -138,7 +139,7 @@ describe('applyScores advances the submission and team status it actually change
       relevant_dimension_ids: ['1', '2', '3'],
       scores: ['1', '2', '3'].map((dimension_id) => ({
         dimension_id, suggested_level: null, confidence: 'moderate' as const,
-        rationale: 'Not enough evidence to set a level yet.',
+        source_meeting: 'run-attributed-submission', rationale: 'Not enough evidence to set a level yet.',
       })),
     });
     expect(result?.applied).toHaveLength(3);
@@ -175,8 +176,8 @@ describe('applyScores advances the submission and team status it actually change
     await provider.applyScores(TEAM_ID, {
       relevant_dimension_ids: ['1', '2'],
       scores: [
-        { dimension_id: '1', suggested_level: 2, confidence: 'moderate' as const, rationale: 'Scored via test.' },
-        { dimension_id: '2', suggested_level: 2, confidence: 'moderate' as const, rationale: 'Scored via test.' },
+        { dimension_id: '1', suggested_level: 2, confidence: 'moderate' as const, source_meeting: 'run-attributed-submission', rationale: 'Scored via test.' },
+        { dimension_id: '2', suggested_level: 2, confidence: 'moderate' as const, source_meeting: 'run-attributed-submission', rationale: 'Scored via test.' },
       ],
     });
 
@@ -189,7 +190,7 @@ describe('applyScores advances the submission and team status it actually change
     await provider.applyScores(TEAM_ID, {
       relevant_dimension_ids: [...M.DIMENSION_IDS],
       scores: M.DIMENSION_IDS.map((dimension_id) => ({
-        dimension_id, suggested_level: 3, confidence: 'moderate' as const, rationale: 'Scored via test.',
+        dimension_id, suggested_level: 3, confidence: 'moderate' as const, source_meeting: 'run-attributed-submission', rationale: 'Scored via test.',
       })),
     });
     expect(M.teamStatus(TEAM_ID)).toBe('ASSESSED');
@@ -249,8 +250,8 @@ describe('applyScores derives team.status from dimension scores (never a hand-se
 // The tests above build their own teams, so none of them says anything about the
 // world a developer running `dev:mock` actually opens. That world decided one of
 // these statuses by a coin flip.
-describe('the seeded submissions cover both settled statuses, and not by a race', () => {
-  it('shows one committed envelope awaiting scoring and one already processed', async () => {
+describe('seeded submission status requires provenance rather than guessing', () => {
+  it('keeps legacy envelopes committed when history has no attributable run', async () => {
     const listing = await provider.listSubmissions();
     const statuses = new Set(listing.envelopes.map((e) => e.status));
 
@@ -267,17 +268,17 @@ describe('the seeded submissions cover both settled statuses, and not by a race'
     expect(Date.parse(awaiting!.ingested_at))
       .toBeGreaterThan(Date.parse(M.scoresFor('TEAM-002')!['1']!.history.at(-1)!.changed_at));
 
-    // And TEAM-005's, scored a day after it landed, is the processed case — so
-    // both states have a fixture and neither depends on the other.
+    // TEAM-005 has later team scores, but no envelope-linked run. Those scores
+    // must not fabricate proof that this particular submission was processed.
     const done = listing.envelopes.find(
       (e) => e.envelope_id === 'sub-20260819T134500Z-form9-dana-whitfield',
     );
-    expect(done?.status).toBe('processed');
+    expect(done?.status).toBe('committed');
 
-    // The filter pills on /assessment/submissions are only reachable if the
-    // vocabulary is actually present offline.
+    // A processed fixture needs explicit provenance; tests above provide it.
+    // The historical seed must not acquire it from timestamp coincidence.
     expect(statuses).toContain('committed');
-    expect(statuses).toContain('processed');
+    expect(statuses).not.toContain('processed');
     expect(statuses).toContain('staged');
     expect(statuses).toContain('superseded');
   });

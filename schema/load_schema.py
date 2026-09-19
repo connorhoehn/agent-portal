@@ -5,6 +5,9 @@ import re
 import time
 import boto3
 import sys
+from pathlib import Path
+
+SCHEMA_DIR = Path(__file__).resolve().parent
 
 # --- The cold-cluster scale-up race ---------------------------------------
 # A freshly created Aurora Serverless v2 cluster sits cold at its 0.5-ACU
@@ -272,9 +275,11 @@ def main():
     failures = []  # list of (filename, index, total, error)
 
     for filename in schema_files:
-        path = f'schema/{filename}'
-        if not os.path.exists(path):
-            print(f"⊘ {filename} not found, skipping")
+        path = SCHEMA_DIR / filename
+        if not path.is_file():
+            error = FileNotFoundError(f'Required schema file is missing: {path}')
+            print(f"  ✗ {error}")
+            failures.append((filename, 0, 0, error))
             continue
 
         print(f"Loading {filename}...")

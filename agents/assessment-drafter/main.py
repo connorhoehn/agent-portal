@@ -1,4 +1,5 @@
 import json
+from document_commands import DOCUMENT_MODES, DOCUMENT_PROMPT, validate_document_output
 import logging
 import os
 import sys
@@ -226,6 +227,8 @@ OUTPUT (context mode) — return exactly one JSON object and nothing else:
 {"facts": [ <validated facts> ]}
 """
 
+SYSTEM_PROMPT += DOCUMENT_PROMPT
+
 _model = BedrockModel(**_model_kwargs())
 # System prompt is resolved from Bedrock Prompt Management at run time
 # (falls back to the SYSTEM_PROMPT literal above). Editing the managed
@@ -245,8 +248,8 @@ _agent = LiveAgent(
 def _validate_payload(payload: dict) -> str | None:
     """None if payload is well-formed for its mode; else an error string."""
     mode = payload.get("mode")
-    if mode not in ("story", "context"):
-        return "mode must be 'story' or 'context'"
+    if mode not in ("story", "context") and mode not in DOCUMENT_MODES:
+        return "mode must be story, context, or a supported document command"
     if mode == "story":
         rec = payload.get("recommendation")
         if not isinstance(rec, dict) or not rec.get("dimension_id") or not rec.get("kind"):
@@ -312,7 +315,7 @@ async def _handle_sync(payload: dict) -> dict:
     token = _current_ctx.set(ctx)
     shared_token = set_active_ctx(ctx)
 
-    input_text = json.dumps(payload, ensure_ascii=False, default=str)
+    input_text = (DOCUMENT_PROMPT + "\n" if mode in DOCUMENT_MODES else "") + json.dumps(payload, ensure_ascii=False, default=str)
 
     log.info(
         "AssessmentDrafter handling (invocation=%s, parent=%s, team=%s, mode=%s)",
@@ -339,6 +342,11 @@ async def _handle_sync(payload: dict) -> dict:
                 violations,
             )
             response_text = scrubbed
+    elif mode in DOCUMENT_MODES:
+        try:
+            response_text = validate_document_output(mode, response_text, payload["document"]["text"])
+        except (ValueError, TypeError, KeyError) as exc:
+            return {"agent": "assessment-drafter", "error": f"Invalid document draft: {exc}"}
     else:  # context
         document_text = (payload.get("document") or {}).get("text", "")
         try:

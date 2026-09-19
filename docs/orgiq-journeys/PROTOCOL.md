@@ -119,8 +119,8 @@ org-leader = `u-vera`, hr-admin = `u-rachel` (Rachel Kowalski — the
    the root page's *file* for a root-level page (ProjectsPage, InvokePage,
    ExplorePage, ScoresPage, AgentFlowPage, SettingsPage …) — a bare
    `portal/src/pages` entry means every root page file and goes stale on
-   any of them. Freshness is per surface: the validator compares the log's
-   mtime with the newest `.tsx` among those entries. Find them with the
+   any of them. Freshness is per surface: the validator compares the recorded
+   content digest with the current `.tsx` content among those entries. Find them with the
    route in `portal/src/App.tsx` and the imports of that page.
 8. Write the log. Wrong things → `verdict: fail — <what>` and a numbered
    entry under `## Open` in `docs/orgiq-journeys/<role>/DEFECTS.md` (file
@@ -172,7 +172,15 @@ So the validator hashes the files each `pages:` line names and keeps the
 digest in `docs/orgiq-journeys/.pages-sha`. A later mtime bump carrying the
 same digest is not a change; a digest that moves is, whatever the mtimes say.
 
+Normal validation is read-only. A newer log timestamp must never overwrite a
+mismatched digest: editing or checking out a log does not prove its pages were
+re-audited. Missing or different digests fail even when the log is newer than
+the source. The explicit `--seal` maintenance mode remains separate; never use
+it simply to clear failures without the supporting audit evidence.
+
+
 `--seal` re-records every digest using the validator's own hash function.
-It is for an mtime-corruption event like the one above, and using it means
-asserting the logs describe the current code — so say why, in writing, when
-you do. Never reach for it to clear a genuine re-audit.
+Use it only after the affected records contain fresh observations of the
+current source, or after verifying a metadata-only recovery against unchanged
+source content. Record the reason in the logs. Missing source paths are errors,
+not empty content that can be sealed.

@@ -122,7 +122,7 @@ export default function PreviewStep({ parse, onCommitted, onBack }: PreviewStepP
             key: 'status',
             header: 'Status',
             render: (row) => {
-              const { label, tone } = resolveRowStatusDisplay(row.status, isReady(row));
+              const { label, tone } = resolveRowStatusDisplay(row.status, isReady(row), (row.seen_team_ids ?? []).includes(teamIdFor(row) ?? ''));
               return <Chip tone={tone}>{label}</Chip>;
             },
           },
@@ -137,7 +137,13 @@ export default function PreviewStep({ parse, onCommitted, onBack }: PreviewStepP
                   size="sm"
                   placeholder="Match a team…"
                   value={assignments[row.row_index] ?? ''}
-                  onChange={(e) => setAssignments((prev) => ({ ...prev, [row.row_index]: e.target.value }))}
+                  onChange={(e) => {
+                    const teamId = e.target.value;
+                    setAssignments((prev) => ({ ...prev, [row.row_index]: teamId }));
+                    if ((row.seen_team_ids ?? []).includes(teamId)) {
+                      setSelected((prev) => { const next = new Set(prev); next.delete(row.row_index); return next; });
+                    }
+                  }}
                   options={teamOptions.map((t) => ({ value: t.id, label: `${t.name} (${t.id})` }))}
                   disabled={!canManage}
                 />

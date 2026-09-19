@@ -22,11 +22,9 @@ const sweeper = setInterval(() => {
 sweeper.unref?.();
 
 function clientKey(req: Request): string {
-  // Behind the ALB, X-Forwarded-For's first hop is the client. Locally it's
-  // just the socket address.
-  const xff = req.headers['x-forwarded-for'];
-  const first = Array.isArray(xff) ? xff[0] : xff?.split(',')[0]?.trim();
-  return first || req.socket.remoteAddress || 'unknown';
+  // Express applies the app's trust-proxy boundary. The first raw XFF entry
+  // can be supplied by the caller even when an ALB appends the real address.
+  return req.ip || req.socket.remoteAddress || 'unknown';
 }
 
 /**

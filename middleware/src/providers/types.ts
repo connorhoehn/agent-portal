@@ -349,6 +349,9 @@ export interface AgentCoreProvider {
   getRuntimeMetrics(agentId: string): Promise<AgentMetrics | null>;
   invokeAgent(agentId: string, payload: {
     message: string;
+    /** Trusted server-side fields for structured agent entrypoints. */
+    structuredInput?: Record<string, unknown>;
+    timeoutMs?: number;
     sessionId?: string;
     userId?: string;
     auth?: { sub: string; role: string };

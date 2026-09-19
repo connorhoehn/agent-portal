@@ -278,7 +278,7 @@ export function SettingsPage() {
               <Divider spacing="none" />
               <SettingRow
                 title="Mode"
-                description="No standalone websocket gateway in this deployment — that endpoint is the middleware, which answers but implements no cluster API. Live updates ride server-sent events from it instead, so nothing here is missing."
+                description="No standalone WebSocket gateway is configured or available at this endpoint. Live updates use server-sent events from the middleware."
                 control={
                   <T className="text-[13px] text-text-secondary font-mono">BFF-only</T>
                 }

@@ -17,7 +17,7 @@ import {
 
 function fnNode(src: string): { node: ts.Node; sf: ts.SourceFile } {
   const sf = ts.createSourceFile('probe.ts', src, ts.ScriptTarget.ES2022, true);
-  const node = sf.statements[0];
+  const node = sf.statements.find(ts.isFunctionDeclaration) ?? sf.statements[0];
   if (!node) throw new Error('probe source declared nothing');
   return { node, sf };
 }
@@ -55,6 +55,12 @@ describe('what counts as an outbound fetch', () => {
     expect(outbound('async function f() { await fetch(`/api/runs/${id}/stop`, { method: "POST" }); }')).toBe(false);
     expect(outbound("async function f() { await fetch('http://localhost:3001/api/health'); }")).toBe(false);
     expect(outbound("async function f() { await fetch(`http://127.0.0.1:${port}/api/health`); }")).toBe(false);
+  });
+
+  it('still sees hardened outbound requests, including an imported alias', () => {
+    expect(outbound("import { publicWebFetch } from './public-web-fetch.js'; async function f() { await publicWebFetch(url); }")).toBe(true);
+    expect(outbound("import { publicWebFetch as safeFetch } from './public-web-fetch.js'; async function f() { await safeFetch(url); }")).toBe(true);
+    expect(outbound("import { publicWebFetch } from './local-only.js'; async function f() { await publicWebFetch(url); }")).toBe(false);
   });
 
   it('does NOT count a function with no fetch at all', () => {

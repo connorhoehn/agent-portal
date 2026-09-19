@@ -203,7 +203,7 @@
     {
       "method": "GET",
       "path": "/api/assessment/events",
-      "source": "src/routes/assessment.ts:863"
+      "source": "src/routes/assessment.ts:864"
     },
     {
       "method": "GET",
@@ -933,12 +933,12 @@
     {
       "method": "GET",
       "path": "/api/drop/:token",
-      "source": "src/routes/drop.ts:89"
+      "source": "src/routes/drop.ts:88"
     },
     {
       "method": "POST",
       "path": "/api/drop/:token/upload",
-      "source": "src/routes/drop.ts:101"
+      "source": "src/routes/drop.ts:100"
     },
     {
       "method": "GET",
@@ -983,22 +983,22 @@
     {
       "method": "GET",
       "path": "/api/gateway/activity/:channel/history",
-      "source": "src/routes/gateway-proxy.ts:156"
+      "source": "src/routes/gateway-proxy.ts:15"
     },
     {
       "method": "POST",
       "path": "/api/gateway/channels/:id/messages",
-      "source": "src/routes/gateway-proxy.ts:96"
+      "source": "src/routes/gateway-proxy.ts:12"
     },
     {
       "method": "GET",
       "path": "/api/gateway/chat/:channel/history",
-      "source": "src/routes/gateway-proxy.ts:134"
+      "source": "src/routes/gateway-proxy.ts:14"
     },
     {
       "method": "GET",
       "path": "/api/gateway/presence/:channel",
-      "source": "src/routes/gateway-proxy.ts:115"
+      "source": "src/routes/gateway-proxy.ts:13"
     },
     {
       "method": "GET",
@@ -1123,7 +1123,7 @@
     {
       "method": "GET",
       "path": "/api/health",
-      "source": "src/index.ts:137"
+      "source": "src/index.ts:128"
     },
     {
       "method": "GET",
@@ -2253,22 +2253,22 @@
     {
       "method": "POST",
       "path": "/api/session/login",
-      "source": "src/routes/session.ts:149"
+      "source": "src/routes/session.ts:160"
     },
     {
       "method": "POST",
       "path": "/api/session/logout",
-      "source": "src/routes/session.ts:310"
+      "source": "src/routes/session.ts:315"
     },
     {
       "method": "POST",
       "path": "/api/session/masquerade",
-      "source": "src/routes/session.ts:245"
+      "source": "src/routes/session.ts:250"
     },
     {
       "method": "POST",
       "path": "/api/session/masquerade/stop",
-      "source": "src/routes/session.ts:293"
+      "source": "src/routes/session.ts:298"
     },
     {
       "method": "GET",
@@ -2278,22 +2278,22 @@
     {
       "method": "POST",
       "path": "/api/session/revoke-others",
-      "source": "src/routes/session.ts:230"
+      "source": "src/routes/session.ts:235"
     },
     {
       "method": "POST",
       "path": "/api/session/role",
-      "source": "src/routes/session.ts:172"
+      "source": "src/routes/session.ts:177"
     },
     {
       "method": "POST",
       "path": "/api/session/tenant",
-      "source": "src/routes/session.ts:195"
+      "source": "src/routes/session.ts:200"
     },
     {
       "method": "GET",
       "path": "/api/session/users",
-      "source": "src/routes/session.ts:139"
+      "source": "src/routes/session.ts:149"
     },
     {
       "method": "GET",
@@ -2443,7 +2443,7 @@
     {
       "method": "GET",
       "path": "/health",
-      "source": "src/index.ts:136"
+      "source": "src/index.ts:127"
     }
   ],
   "unresolved": []

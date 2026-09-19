@@ -496,3 +496,23 @@ tbody tr:focus-within .row-reveal,
   background-image: var(--background-image-brand-gradient);
 }
 
+
+/* Card has no elevation prop; match its installed class signature until the
+   queued library API lands. Keep defaults in the components layer so explicit
+   shadow and ring utilities (including floating cards) retain precedence.
+   cardElevation.test.ts guards the library signature across upgrades. */
+@layer components {
+  .rounded-lg.border-border.bg-surface {
+    box-shadow: var(--elev-sm);
+  }
+
+  /* Nested cards are sections of their parent unless explicitly elevated. */
+  .rounded-lg.border-border.bg-surface .rounded-lg.border-border.bg-surface {
+    box-shadow: none;
+  }
+}
+
+/* The explorer desk uses the tenant ground; the document remains a surface. */
+[data-testid="knowledge-explorer-pane"] {
+  background-color: var(--color-bg);
+}

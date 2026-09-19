@@ -153,6 +153,18 @@ class RejectsWrites(unittest.TestCase):
     def test_pg_sleep_denial_of_service(self):
         self.assertFalse(allowed("SELECT pg_sleep(300)"))
 
+    def test_quoted_functions_do_not_bypass_the_guard(self):
+        for sql in (
+            'SELECT "pg_sleep"(300)',
+            "SELECT \"pg_catalog\".\"pg_read_file\"('/etc/passwd')",
+            "SELECT \"setval\"('people_seq', 1)",
+            "SELECT set_config('transaction_read_only', 'off', false)",
+            'SELECT pg_advisory_lock(1)',
+            r'SELECT U&"pg\005fsleep"(300)',
+        ):
+            with self.subTest(sql=sql):
+                self.assertFalse(allowed(sql))
+
     def test_file_read_via_pg_read_file(self):
         self.assertFalse(allowed("SELECT pg_read_file('/etc/passwd')"))
 

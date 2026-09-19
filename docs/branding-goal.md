@@ -94,8 +94,9 @@ lift except `Card`.
    `contrast:` (text-primary on `bg` and on `surface` ≥ 4.5:1, computed),
    `brand:` (the tenant's accent hex observed on the active nav item),
    `rhythm:` (see 6),
-   `console errors: 0`, `verdict: pass`, newer than `app.css` and
-   `Layout.tsx`.
+   `console errors: 0`, `verdict: pass`, with a recorded content digest
+   matching `app.css` and `Layout.tsx`. Ordinary validation is read-only; file
+   timestamps cannot renew an audit.
 9. **Docs**: `docs/branding.md` — the palette, the layers, how a page
    uses them, how to add a tenant.
 

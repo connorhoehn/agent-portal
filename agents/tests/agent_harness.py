@@ -180,7 +180,7 @@ def load_agent(agent_dir: str, *, env: dict | None = None):
     path = agent_path / "main.py"
     mod_name = f"orgiq_agent_{agent_dir.replace('-', '_')}"
 
-    env = {"AWS_REGION": "us-east-1", **(env or {})}
+    env = {"AWS_REGION": "us-east-1", "AURORA_READONLY_SECRET_ARN": "arn:test:readonly", **(env or {})}
     # The assessment agents keep their deterministic logic in a sibling
     # module (`scoring_logic` / `drafting_logic`) and import it by bare name,
     # so the agent's own directory has to be importable for the duration of

@@ -134,9 +134,20 @@ sessionRouter.get('/capabilities', asyncHandler(async (req, res) => {
   });
 }));
 
-// Login-able users for the picker. Deliberately open: this is the demo login
-// surface, equivalent to the username list on a shared dev box.
+// The passwordless picker and its directory exist only in demo mode. Missing
+// or incomplete SSO configuration must not open either endpoint in production.
+function requireDemoPicker(res: import('express').Response): boolean {
+  if (demoModeEnabled()) return true;
+  const ssoEnabled = cognitoEnabled();
+  res.status(403).json({
+    error: ssoEnabled ? 'Picker login is disabled; sign in with SSO' : 'Picker login is disabled',
+    ssoEnabled,
+  });
+  return false;
+}
+
 sessionRouter.get('/users', asyncHandler(async (_req, res) => {
+  if (!requireDemoPicker(res)) return;
   const users = await listUsers();
   res.json(users.map(u => ({
     id: u.id,
@@ -147,13 +158,7 @@ sessionRouter.get('/users', asyncHandler(async (_req, res) => {
 }));
 
 sessionRouter.post('/login', loginLimit, asyncHandler(async (req, res) => {
-  // When SSO is configured, the picker is a dev-only convenience: disable it in
-  // production (unless AUTH_DEMO_MODE explicitly re-opens it) so the only real
-  // login path is the authenticated Cognito flow.
-  if (cognitoEnabled() && !demoModeEnabled()) {
-    res.status(403).json({ error: 'Picker login is disabled; sign in with SSO', ssoEnabled: true });
-    return;
-  }
+  if (!requireDemoPicker(res)) return;
   const { userId } = req.body as { userId?: string };
   if (!userId) { res.status(400).json({ error: 'userId is required' }); return; }
   const user = await getUser(userId);

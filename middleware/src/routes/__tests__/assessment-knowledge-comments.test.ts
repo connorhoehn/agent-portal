@@ -282,3 +282,13 @@ describe('reactions on a document and its comments', () => {
     expect((await reactions()).body.reactions.length).toBe(before);
   });
 });
+
+it('synced workspace pages accept durable comments and expose document/comment reactions', async () => {
+  const doc = 'page:100002';
+  expect((await list(doc)).status).toBe(200);
+  expect((await post({ id: doc, body: 'Review this synced page' })).status).toBe(201);
+  const thread = await list(doc);
+  expect(thread.body.comments.some((c: { body: string }) => c.body === 'Review this synced page')).toBe(true);
+  const reactions = await request(buildApp()).get(`/api/assessment/knowledge/doc/reactions?id=${encodeURIComponent(doc)}`);
+  expect(reactions.status).toBe(200);
+});

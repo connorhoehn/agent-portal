@@ -9,7 +9,7 @@ for a in "$@"; do case "$a" in
   # Record the current digest for every log, using THIS script's own hash
   # function — never a second implementation, which is how the first attempt
   # at this baseline produced digests that disagreed with the checker's.
-  # Only for an mtime-corruption event, and only with the reason written down.
+  # Only after fresh observations are recorded, with the reason written down.
   --seal) SEAL=1;;
 esac; done
 FAILS=()
@@ -82,7 +82,7 @@ jmissing=0; jbad=0; jtotal=0
 # 54 logs "went stale" against edits that never happened.
 #
 # So the rule now reads a hash. `.pages-sha` records the digest of each
-# surface's own pages at the moment its log was last judged fresh by mtime.
+# surface's own pages after its observations were explicitly sealed.
 # A later mtime bump with the same digest is not a change and does not stale
 # anything; a digest that moves does, whatever the mtimes say.
 SHA_CACHE="$JDIR/.pages-sha"
@@ -90,10 +90,13 @@ pages_sha() { # digest of every .tsx the `pages:` line names, in path order
   local out="" ; IFS=',' read -ra items <<< "$1"
   for d in "${items[@]}"; do d=$(echo "$d" | tr -d ' '); [ -n "$d" ] || continue
     if [ -f "$d" ]; then out="$out$(shasum -a 256 "$d" 2>/dev/null)"; continue; fi
-    [ -d "$d" ] || continue
+    [ -d "$d" ] || { echo "Missing audit source: $d" >&2; return 1; }
     local depth=""; [ "${d%/}" = "portal/src/pages" ] && depth="-maxdepth 1"
-    out="$out$(find "$d" $depth -name '*.tsx' 2>/dev/null | sort | xargs shasum -a 256 2>/dev/null)"
+    local files; files=$(find "$d" $depth -name '*.tsx' 2>/dev/null | sort)
+    [ -n "$files" ] || { echo "No audit source files in $d" >&2; return 1; }
+    out="$out$(printf '%s\n' "$files" | xargs shasum -a 256 2>/dev/null)"
   done
+  [ -n "$out" ] || { echo "No audit source files found" >&2; return 1; }
   printf '%s' "$out" | shasum -a 256 | cut -d' ' -f1
 }
 sha_recorded() { grep -F "$1 " "$SHA_CACHE" 2>/dev/null | tail -1 | cut -d' ' -f2; }
@@ -104,17 +107,6 @@ sha_record() { # keep one line per log
   sort -o "$SHA_CACHE" "$SHA_CACHE.tmp" && rm -f "$SHA_CACHE.tmp"
 }
 
-newest_in_dirs() { # newest .tsx mtime among the dirs listed (comma-separated)
-  local newest=""; IFS=',' read -ra dirs <<< "$1"
-  for d in "${dirs[@]}"; do d=$(echo "$d" | tr -d ' ')
-    if [ -f "$d" ]; then { [ -z "$newest" ] || [ "$d" -nt "$newest" ]; } && newest="$d"; continue; fi
-    [ -d "$d" ] || continue
-    # The root page dir names only its own files (ProjectsPage.tsx, …); every
-    # subdirectory is a separate surface and is listed on its own when used.
-    depth=""; [ "${d%/}" = "portal/src/pages" ] && depth="-maxdepth 1"
-    f=$(ls -t $(find "$d" $depth -name '*.tsx' 2>/dev/null) 2>/dev/null | head -1); [ -n "$f" ] && { [ -z "$newest" ] || [ "$f" -nt "$newest" ]; } && newest="$f"
-  done; echo "$newest"
-}
 while IFS='|' read -r surface url listflag roles; do
   surface=$(echo "$surface" | tr -d ' '); [ -z "$surface" ] && continue; case "$surface" in \#*) continue;; esac
   listflag=$(echo "$listflag" | tr -d ' '); roles=$(echo "$roles" | tr -d ' ')
@@ -137,19 +129,11 @@ while IFS='|' read -r surface url listflag roles; do
     { [ -n "$shot" ] && [ -f "$JDIR/$r/$shot" ]; } || bad="$bad screenshot"
     pages=$(grep -iE '^pages: *' "$f" | head -1 | sed -E 's/^pages: *//')
     if [ -z "$pages" ]; then bad="$bad pages-line"; else
-      newest=$(newest_in_dirs "$pages")
-      cur_sha=$(pages_sha "$pages")
-      if [ -n "$newest" ] && [ "$newest" -nt "$f" ]; then
-        # mtime says stale — believe it only if the content actually moved.
-        if [ "$(sha_recorded "$f")" = "$cur_sha" ]; then
-          : # same bytes the log was judged against; an mtime bump is not an edit
-        else
-          bad="$bad stale(${newest#portal/src/pages/})"
-        fi
-      else
-        sha_record "$f" "$cur_sha"
+      cur_sha=$(pages_sha "$pages") || bad="$bad invalid-pages"
+      if [ "$(sha_recorded "$f")" != "$cur_sha" ]; then
+        bad="$bad stale(content-digest)"
       fi
-      [ "$SEAL" = 1 ] && sha_record "$f" "$cur_sha"
+      [ "$SEAL" = 1 ] && [ -n "$cur_sha" ] && sha_record "$f" "$cur_sha"
     fi
     grep -qiE 'TODO|unverified|placeholder' "$f" && bad="$bad contains-TODO/unverified"
     [ -n "$bad" ] && { jbad=$((jbad+1)); printf '      %s/%s:%s\n' "$r" "$surface" "$bad"; }

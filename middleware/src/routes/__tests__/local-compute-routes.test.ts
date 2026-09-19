@@ -110,6 +110,7 @@ const BASE = '/api/local-compute';
  */
 function buildApp(session: Partial<Session> | null) {
   const app = express();
+  app.set('trust proxy', 1);
   app.use(express.json());
   if (session) {
     app.use((req, _res, next) => {

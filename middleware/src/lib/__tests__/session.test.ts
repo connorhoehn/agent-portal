@@ -180,6 +180,19 @@ describe('session_epoch', () => {
       expect(req.session?.sub).toBe('demo-user');
     });
 
+    it('drops a session when its last grant has been revoked', async () => {
+      setGrantsResolver(async () => ({ displayName: 'E', grants: {}, epoch: 2 }));
+      const cookie = await signSession({
+        sub: 'u-e', role: 'member', tenant: 'orgiq',
+        grants: { orgiq: ['member'] }, iat: staleIat(), epoch: 2,
+      });
+      const { req, res } = fakeReqRes(cookie);
+      await sessionMiddleware()(req, res, () => {});
+      expect(res.clearCookie).toHaveBeenCalled();
+      expect(req.session?.sub).not.toBe('u-e');
+      expect(res.cookie).not.toHaveBeenCalled();
+    });
+
     it('ACCEPTS a cookie whose epoch matches, re-minting at the current epoch', async () => {
       setGrantsResolver(async () => ({ displayName: 'E', grants: { orgiq: ['member'] }, epoch: 2 }));
       const cookie = await signSession({

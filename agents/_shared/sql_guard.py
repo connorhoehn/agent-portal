@@ -52,9 +52,9 @@ Runbook: ``docs/readonly-graph-role.md``.
 This module stays exactly as it is, and is still the first line, for three
 reasons:
 
-*   An environment that has not applied the grant yet — a fresh cluster, a
-    local ``agentcore dev``, a rebuild mid-runbook — falls back to the admin
-    credential, and there this check is once again the whole boundary.
+*   Production requires the reader credential. An explicitly enabled unsafe
+    development fallback can still use admin, where this check is the only
+    boundary. It is never a substitute for database permissions.
 *   It rejects at the door, before a statement reaches Aurora, so a probing
     injection costs no round trip and no ACU.
 *   It returns a reason the *model* can act on. ``permission denied for table
@@ -93,7 +93,9 @@ _FORBIDDEN = (
     "nextval", "setval", "dblink", "lo_import", "lo_export",
     "pg_read_file", "pg_read_binary_file", "pg_ls_dir", "pg_sleep",
     "pg_terminate_backend", "pg_cancel_backend", "pg_reload_conf",
-    "pg_logical_emit_message",
+    "pg_logical_emit_message", "set_config", "pg_advisory_lock",
+    "pg_advisory_xact_lock", "pg_advisory_lock_shared",
+    "pg_advisory_xact_lock_shared", "pg_sleep_for", "pg_sleep_until",
 )
 _FORBIDDEN_RE = re.compile(
     r"\b(" + "|".join(re.escape(word) for word in _FORBIDDEN) + r")\b",
@@ -162,11 +164,20 @@ def strip_literals_and_comments(sql: str) -> str:
                 i = stop
                 continue
 
+        # PostgreSQL's E/U& quote syntax has different escaping rules. Reject
+        # it rather than treating it as a standard literal/identifier and
+        # potentially hiding executable text from this conservative guard.
+        if (ch in "eE" and i + 1 < n and sql[i + 1] == "'") or (
+            sql[i:i + 2].lower() == "u&" and i + 2 < n and sql[i + 2] in ("'", '"')
+        ):
+            raise _Unterminated("escape and Unicode quoted SQL is not supported")
+
         # '...' string literal (doubled '' is an escaped quote) and "..."
         # quoted identifier — both can hide keywords, neither may contribute
         # one, so both are blanked.
         if ch in ("'", '"'):
             quote = ch
+            start = i
             out.append(" ")
             i += 1
             closed = False
@@ -187,6 +198,13 @@ def strip_literals_and_comments(sql: str) -> str:
                 i += 1
             if not closed:
                 raise _Unterminated(f"unterminated {quote} quoted string")
+            # Quoting a function does not make it data: "pg_sleep"(300) and
+            # "pg_catalog"."pg_read_file"(...) execute the named function.
+            # Retain decoded identifiers for the forbidden-token scan.
+            if quote == '"':
+                identifier = sql[start + 1:i - 1].replace('""', '"')
+                if _FORBIDDEN_RE.search(identifier):
+                    raise _Unterminated("disallowed quoted identifier in read-only query")
             continue
 
         out.append(ch)

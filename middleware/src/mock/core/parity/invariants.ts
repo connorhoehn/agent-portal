@@ -581,20 +581,27 @@ export const SURFACE_INVARIANTS: SurfaceInvariant[] = [
     async check() {
       const M = await import('../../assessment.js');
       const scoredAt = '2026-08-01T00:00:00.000Z';
+      const runId = 'run-provenance-check';
       const dims: Record<string, unknown> = {
-        '1': { dimension_id: '1', history: [{ changed_at: scoredAt }] },
-        '2': { dimension_id: '2', history: [{ changed_at: scoredAt }] },
+        '1': { dimension_id: '1', history: [{ changed_at: scoredAt, source_meeting: runId }] },
+        '2': { dimension_id: '2', history: [{ changed_at: scoredAt, source_meeting: runId }] },
       };
       const hints = ['1', '2'].map((dimension_id) => ({ dimension_id }));
       const out: string[] = [];
-      // Ingested BEFORE the scoring pass — genuinely processed.
-      const older = { status: 'committed', dimension_hints: hints, ingested_at: '2026-07-01T00:00:00.000Z' };
-      if (!M.isSubmissionProcessed(older as never, dims as never)) {
-        out.push('an envelope scored after it arrived does not read as processed — the "Processed" filter is unreachable again');
+      // Only the envelope explicitly linked to the applied run is processed.
+      const older = { envelope_id: 'scored-envelope', status: 'committed', dimension_hints: hints, ingested_at: '2026-07-01T00:00:00.000Z' };
+      const logs = [{ envelope_id: older.envelope_id, run_id: runId }];
+      if (!M.isSubmissionProcessed(older as never, dims as never, logs as never)) {
+        out.push('an envelope explicitly linked to its applied scoring run does not read as processed');
       }
-      // Ingested AFTER it — a resubmission nobody has looked at yet.
-      const fresh = { status: 'committed', dimension_hints: hints, ingested_at: '2026-09-01T00:00:00.000Z' };
-      if (M.isSubmissionProcessed(fresh as never, dims as never)) {
+      const unrelated = { ...older, envelope_id: 'unscored-envelope' };
+      if (M.isSubmissionProcessed(unrelated as never, dims as never, logs as never)) {
+        out.push('an unrelated envelope reads as processed merely because its team has later scores');
+      }
+      // Even a claimed link cannot make histories before ingestion process a revision.
+      const fresh = { ...older, envelope_id: 'fresh-envelope', ingested_at: '2026-09-01T00:00:00.000Z' };
+      const freshLogs = [{ envelope_id: fresh.envelope_id, run_id: runId }];
+      if (M.isSubmissionProcessed(fresh as never, dims as never, freshLogs as never)) {
         out.push('a resubmission that arrived after the last scoring pass reads as processed — recency is not being compared');
       }
       return out;

@@ -63,6 +63,8 @@ export interface MiddlewareServiceStackProps extends cdk.StackProps {
 
   // ── AgentCore (optional — middleware can run with MOCK_AGENTCORE=true) ─────
   readonly memoryId?: string;
+  readonly browserId?: string;
+  readonly browserArn?: string;
   readonly knowledgeBaseId?: string;
   readonly gatewayId?: string;
   readonly gatewayUrl?: string;
@@ -238,10 +240,9 @@ export class MiddlewareServiceStack extends cdk.Stack {
     // Secrets Manager — machine-callback auth for the three sessionless
     // agent-facing routes (routes/approvals.ts requireServiceAuth,
     // routes/harness.ts requireTraceAuth, routes/assessment.ts
-    // requireRunCompleteAuth). Each guard is OPEN when its env var is unset
-    // and does a constant-time header check when it's set — today none of
-    // these vars are set anywhere, so all three callbacks are open on this
-    // internet-facing service.
+    // requireRunCompleteAuth). Each guard requires its secret in production
+    // (503 if missing) and checks the caller's header in constant time.
+    // Development alone retains the open-when-unset path for offline fixtures.
     //
     // Three separate secrets rather than one JSON secret: CDK's
     // `generateSecretString` only auto-generates a single random field per
@@ -286,10 +287,9 @@ export class MiddlewareServiceStack extends cdk.Stack {
     // WHY IT WAS MISSING. `service-auth.ts` has always declared this spec and
     // `routes/lab.ts` has always guarded on it, but nothing minted it — so of
     // the five specs the module defines, this was the one whose guard could
-    // never close in a deployed environment. `requireServiceAuth` is OPEN when
-    // its env var is unset, which is the correct default for a laptop and the
-    // wrong one for a deployed middleware: `POST /api/lab/consults` and the
-    // reads beside it were reachable by anyone who could route to the service.
+    // never close in a deployed environment under the previous guard behavior.
+    // Missing secrets now fail closed in production as an additional safeguard;
+    // the minted secret here is still required for the lab callbacks to work.
     //
     // SAFE TO MINT, unlike the three agent-callback secrets above. Their agent
     // halves had to ship first because a pre-`callbacks.py` image sends no
@@ -474,6 +474,29 @@ export class MiddlewareServiceStack extends cdk.Stack {
       resources: ['*'],
     }));
 
+    // Crawl/survey verify PUBLIC network mode before opening a browser session.
+    // No update/create permissions: a request cannot turn this resource into a
+    // VPC-connected browser. Session operations use this one configured ARN.
+    if (props.browserArn) {
+      taskRole.addToPolicy(new iam.PolicyStatement({
+        sid: 'PublicBrowserCrawl',
+        actions: [
+          'bedrock-agentcore:GetBrowser',
+          'bedrock-agentcore:StartBrowserSession',
+          'bedrock-agentcore:GetBrowserSession',
+          'bedrock-agentcore:StopBrowserSession',
+          'bedrock-agentcore:InvokeBrowser',
+        ],
+        resources: [props.browserArn],
+      }));
+      // ListBrowserSessions has no resource-level grant in the IAM reference.
+      taskRole.addToPolicy(new iam.PolicyStatement({
+        sid: 'BrowserSessionInventory',
+        actions: ['bedrock-agentcore:ListBrowserSessions'],
+        resources: ['*'],
+      }));
+    }
+
     // Devbox routes (/api/devbox) — command-mode shell + session stop, scoped
     // to the devbox runtime only. InvokeAgentRuntime for devbox task mode is
     // already covered by AgentCoreInvoke above; these two are the additional
@@ -640,11 +663,13 @@ export class MiddlewareServiceStack extends cdk.Stack {
       // in the ECS task if you want to scale a backing service to zero.
       MOCK_AURORA: 'false',
       MOCK_AGENTCORE: 'false',
+      TRUST_PROXY_HOPS: '1',
       MOCK_GUARDRAILS: 'false',
       MOCK_CLOUDWATCH: 'false',
 
       // AgentCore identifiers
       ...(props.memoryId && { MEMORY_ID: props.memoryId }),
+      ...(props.browserId && { BROWSER_ID: props.browserId }),
       ...(props.knowledgeBaseId && { KNOWLEDGE_BASE_ID: props.knowledgeBaseId }),
       ...(props.gatewayId && { GATEWAY_ID: props.gatewayId }),
       ...(props.gatewayUrl && { GATEWAY_URL: props.gatewayUrl }),

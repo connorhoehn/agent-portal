@@ -824,18 +824,19 @@ assessmentRouter.post('/knowledge/presence', viewGate, express.text({ type: 'tex
     try { parsed = JSON.parse(raw); } catch { throw new ValidationError('presence body must be JSON'); }
   }
   if (!isRecord(parsed)) throw new ValidationError('presence body must be a JSON object');
-  const body = parsed as { doc_id?: string; tab_id?: string; action?: string };
+  const body = parsed as { doc_id?: string; tab_id?: string; action?: string; sequence?: number };
   if (!body.doc_id || typeof body.doc_id !== 'string') throw new ValidationError('doc_id is required');
   if (!body.tab_id || typeof body.tab_id !== 'string') throw new ValidationError('tab_id is required');
   if (!body.action || !PRESENCE_ACTIONS.has(body.action)) {
     throw new ValidationError(`action must be one of ${[...PRESENCE_ACTIONS].join(', ')}`);
   }
+  if (body.sequence !== undefined && (!Number.isSafeInteger(body.sequence) || body.sequence < 0)) throw new ValidationError('sequence must be a nonnegative safe integer');
   const sub = req.session?.sub ?? 'unknown';
   const name = req.session?.name ?? sub;
   if (body.action === 'leave') {
-    assessmentBroker.leave(body.doc_id, body.tab_id);
+    assessmentBroker.leave(body.doc_id, body.tab_id, Date.now(), body.sequence);
   } else {
-    assessmentBroker.touch(body.doc_id, body.tab_id, sub, name);
+    assessmentBroker.touch(body.doc_id, body.tab_id, sub, name, Date.now(), body.sequence);
   }
   res.status(204).end();
 }));

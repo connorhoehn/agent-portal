@@ -18,6 +18,9 @@ import {
   DetailSection,
   Inline,
   InlinePlaceholder,
+  Input,
+  Button,
+  Toolbar,
   MasterDetail,
   MetaLine,
   SectionLabel,
@@ -435,25 +438,35 @@ interface DimensionMasterDetailProps {
 }
 
 export function DimensionMasterDetail({ dimensions, selectedId, onSelect }: DimensionMasterDetailProps) {
-  const fallbackId = dimensions.length > 0 ? dimensions[0].id : null;
-  const effectiveId = selectedId ?? fallbackId;
-  useDimensionListboxSemantics(DIMENSION_RAIL_TEST_ID, dimensions.length);
+  const [query, setQuery] = useState('');
+  const [onlyClaims, setOnlyClaims] = useState(false);
+  const filtered = dimensions.filter((dimension) =>
+    `${dimension.id} ${dimension.title}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()) &&
+    (!onlyClaims || (dimension.certification != null && hasOpenClaim(dimension.certification))));
+  const fallbackId = filtered.length > 0 ? filtered[0].id : null;
+  const effectiveId = filtered.some((dimension) => dimension.id === selectedId) ? selectedId : fallbackId;
+  useDimensionListboxSemantics(DIMENSION_RAIL_TEST_ID, filtered.length);
 
   return (
-    <MasterDetail<Dimension>
-      items={dimensions}
-      keyOf={(d: Dimension) => d.id}
-      selectedKey={effectiveId}
-      onSelect={onSelect}
-      railTitle={`${dimensions.length} Dimensions`}
-      railWidth={340}
-      compactWidth={72}
-      storageKey="assessment-dimension-rail-mode"
-      data-testid={DIMENSION_RAIL_TEST_ID}
-      renderRow={(d: Dimension, i: number) => <DimensionRailRow dimension={d} index={i} />}
-      renderCompactRow={(d: Dimension, i: number) => <DimensionCompactRailRow dimension={d} index={i} />}
-      renderDetail={(d: Dimension, i: number) => <DetailPane dimension={d} index={i} />}
-      emptyDetail={<InlinePlaceholder size="sm" align="center" className="p-5">No dimensions available.</InlinePlaceholder>}
-    />
+    <Stack gap="none">
+      <Toolbar aria-label="Dimension filters" wrap end={<Button size="sm" variant={onlyClaims ? 'primary' : 'secondary'} aria-pressed={onlyClaims} onClick={() => setOnlyClaims((value) => !value)}>Open claims</Button>}>
+        <Input aria-label="Find a dimension" placeholder="Find a dimension…" value={query} onChange={(event) => setQuery(event.target.value)} />
+      </Toolbar>
+      <MasterDetail<Dimension>
+        items={filtered}
+        keyOf={(d: Dimension) => d.id}
+        selectedKey={effectiveId}
+        onSelect={onSelect}
+        railTitle={`${filtered.length} of ${dimensions.length} dimensions`}
+        railWidth={340}
+        compactWidth={72}
+        storageKey="assessment-dimension-rail-mode"
+        data-testid={DIMENSION_RAIL_TEST_ID}
+        renderRow={(d: Dimension) => <DimensionRailRow dimension={d} index={dimensions.findIndex((item) => item.id === d.id)} />}
+        renderCompactRow={(d: Dimension) => <DimensionCompactRailRow dimension={d} index={dimensions.findIndex((item) => item.id === d.id)} />}
+        renderDetail={(d: Dimension) => <DetailPane dimension={d} index={dimensions.findIndex((item) => item.id === d.id)} />}
+        emptyDetail={<InlinePlaceholder size="sm" align="center" className="p-5">No dimensions match these filters.</InlinePlaceholder>}
+      />
+    </Stack>
   );
 }

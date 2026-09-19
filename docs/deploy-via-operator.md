@@ -33,6 +33,12 @@ Deploys OrgIQ portal + middleware to a Kubernetes cluster using the
 
 ---
 
+The generic BFF gateway signing routes were retired on 2026-09-19 and now
+return 410. `WEBSOCKET_GATEWAY_URL` and the legacy service-auth secret above
+no longer enable that bridge; they may be removed from existing deployments.
+An external gateway must authenticate users and enforce channel membership
+itself. Pointing the portal at it is not proof of authorization.
+
 ## Step 1 — Build + push images
 
 Use `scripts/build.sh` from the project root. Sibling repos

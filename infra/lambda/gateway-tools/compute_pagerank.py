@@ -2,8 +2,8 @@
 MCP Gateway Lambda tool: Compute PageRank against the Aurora relational graph.
 
 Reads node and edge data from the orgiq_schema tables (see schema/orgiq_schema.sql)
-via RDS Data API, runs an iterative PageRank in-memory, and optionally writes
-the normalized score back to people.pagerank_score.
+via RDS Data API and runs an iterative PageRank in-memory. The scoring agent
+owns durable score updates; this gateway tool never writes.
 """
 
 import json
@@ -66,7 +66,8 @@ def handler(event: dict, context) -> dict:
 
     damping_factor = float(body.get('dampingFactor', 0.85))
     max_iterations = int(body.get('maxIterations', 20))
-    write_back = bool(body.get('writeBack', False))
+    if body.get('writeBack'):
+        return {'statusCode': 403, 'body': json.dumps({'error': 'This tool is read-only; use the scoring agent to persist scores.'})}
 
     # Nodes = all people (PageRank is scored on people; other tables are targets only)
     nodes = _rows(_exec('SELECT id, name FROM people'))
@@ -120,22 +121,12 @@ def handler(event: dict, context) -> dict:
         reverse=True,
     )
 
-    if write_back:
-        for item in results:
-            _exec(
-                'UPDATE people SET pagerank_score = :score, scored_at = NOW() WHERE id = :id',
-                parameters=[
-                    {'name': 'score', 'value': {'doubleValue': float(item['pageRank'])}},
-                    {'name': 'id', 'value': {'stringValue': item['nodeId']}},
-                ],
-            )
-
     return {
         'statusCode': 200,
         'body': json.dumps({
             'dampingFactor': damping_factor,
             'iterations': max_iterations,
-            'writtenBack': write_back,
+            'writtenBack': False,
             'nodeCount': len(results),
             'scores': results[:50],
         }),

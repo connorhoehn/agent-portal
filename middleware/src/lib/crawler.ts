@@ -1,3 +1,5 @@
+import { requirePublicBrowser } from './public-browser.js';
+import { publicWebFetch, assertPublicWebTarget } from './public-web-fetch.js';
 // Vision-LLM crawler. Drives the AgentCore Browser to load a starting URL,
 // captures a screenshot, asks Nova Pro to extract a structured summary
 // + discovered links, and uploads three artifacts per page (PNG screenshot,
@@ -177,10 +179,12 @@ export async function startCrawl(input: StartCrawlInput): Promise<CrawlSession> 
   const includePattern = input.includePattern?.trim() || null;
   const sameOriginOnly = input.sameOriginOnly !== false;
 
-  // 'fetch' mode doesn't actually need a browser session, but we still start
-  // one so callers can poke the live session id during the run if they want.
-  // For all three modes we close the session in the finally of runLoop.
-  const browser = await agentcore.createBrowserSession({
+  await assertPublicWebTarget(input.startUrl);
+  if (mode !== 'fetch') await requirePublicBrowser();
+
+  // HTTP crawls never create an unused browser session. Browser sessions
+  // are closed in runLoop's finally block.
+  const browser = mode === 'fetch' ? { sessionId: `fetch-${randomUUID()}` } : await agentcore.createBrowserSession({
     agentName: input.label ?? 'doc-crawler',
     url: input.startUrl,
   });
@@ -294,7 +298,7 @@ async function runLoop(crawl: CrawlSession): Promise<void> {
     crawl.completedAt = new Date().toISOString();
     emit(crawl.id, { type: 'failed', session: crawl, error: crawl.error });
   } finally {
-    try { await agentcore.closeBrowserSession(crawl.sessionId); } catch { /* best effort */ }
+    try { if (crawl.mode !== 'fetch') await agentcore.closeBrowserSession(crawl.sessionId); } catch { /* best effort */ }
   }
 }
 
@@ -385,7 +389,7 @@ async function runFetchMode(page: CrawlPage, url: string): Promise<void> {
   page.status = 'navigating';
   let html = '';
   try {
-    const res = await fetch(url, {
+    const res = await publicWebFetch(url, {
       headers: { 'User-Agent': 'OrgIQ-Crawler/1.0' },
       signal: AbortSignal.timeout(10000),
     });
@@ -450,6 +454,7 @@ async function runBrowserMode(
   seenHashes: Set<string>,
 ): Promise<void> {
   setStatus(crawl, page, 'navigating');
+  await assertPublicWebTarget(url);
   const nav = await agentcore.navigateBrowser(crawl.sessionId, url);
   if (!nav) {
     page.error = 'navigate failed';

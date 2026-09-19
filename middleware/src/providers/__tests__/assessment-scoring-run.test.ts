@@ -69,7 +69,9 @@ describe('buildScoringLogForTeam (pure)', () => {
     const log2 = provider.buildScoringLogForTeam(team, undefined, [], [], 'run-b');
     // run_id differs by design (it's carried through from the caller), but the
     // per-dimension scores — the deterministic, seeded part — must be identical.
+    // Distinct passes in one clock second must retain both provenance records.
     expect(log2.scores).toEqual(log1.scores);
+    expect(log2.stamp).not.toBe(log1.stamp);
   });
 
   it('a dimension with no evidence at all gets a low-confidence entry with a suggested_level in 0..2 and a named follow-up', () => {

@@ -412,3 +412,22 @@ class DrafterEntrypoint(_EntrypointBase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DocumentCommandEntrypoints(unittest.TestCase):
+    def test_document_mode_executes_and_validates_actual_model_response(self):
+        source = "The team runs checks."
+        response = json.dumps({"summary": "A review draft", "content": "# Checks", "format": "markdown", "source_spans": [source]})
+        with mock.patch.object(drafter, "_agent", return_value=response), mock.patch.object(drafter, "post_trace"):
+            result = asyncio.run(drafter.handle({"auth": {"tenant": "assessment"},
+                "mode": "draft-confluence-page", "document": {"text": source}}))
+        self.assertNotIn("error", result)
+        parsed = json.loads(result["response"])
+        self.assertEqual(parsed["content"], "# Checks")
+        self.assertIs(parsed["published"], False)
+
+    def test_invalid_document_output_returns_error_envelope(self):
+        with mock.patch.object(drafter, "_agent", return_value="not JSON"), mock.patch.object(drafter, "post_trace"):
+            result = asyncio.run(drafter.handle({"auth": {"tenant": "assessment"},
+                "mode": "draw-diagram", "document": {"text": "A to B"}}))
+        self.assertIn("Invalid document draft", result["error"])

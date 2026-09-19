@@ -441,7 +441,7 @@ const SPENDS: Family[] = [
   // `connectionName: null` so the branch is not taken at all — it is on the
   // allowlist now.
   { pattern: 'POST /api/drop/*', what: 'reaches the RDS Data API unguarded, then S3' },
-  { pattern: 'POST /api/gateway/channels/*', what: 'signs and POSTs to the real MCP gateway when a gateway URL is set' },
+  { pattern: 'POST /api/gateway/channels/*', what: 'retired generic signing bridge; returns 410 without an upstream call' },
 
   // Ingest: enumerated, not wildcarded — `POST /api/ingest/start` next door IS
   // mock-branched and is on the allowlist, so a wildcard here would be wrong.

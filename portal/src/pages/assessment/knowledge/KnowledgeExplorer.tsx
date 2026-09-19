@@ -1,24 +1,6 @@
-// The reusable three-pane document explorer behind Workspace, Enterprise,
-// Rules and Prompts (docs/assessment-tenant.md "The two layouts worth keeping
-// -> Workspace page"). Ported from agentic-assessment-accelerator's
-// knowledge/DocumentsExplorer.tsx: a 300px section rail (KnowledgeTree +, for
-// synced sections, a Views block's Activity row) -> a main pane (breadcrumb +
-// DocView) -> an xl-only realtime activity bar for synced pages.
-//
-// `mode` picks which GET /api/assessment/knowledge/tree sections render —
-// see knowledgeFormat.sectionsForMode. State (fetching, the Views toggle)
-// lives here; every derivation it calls is pure and lives in
-// ./knowledgeFormat so it can be tested without React. Document-scoped state
-// (editing, presence, chat, reactions) lives in ./DocPane, which owns its own
-// realtime channel.
-//
-// Realtime wiring (docs/assessment-tenant.md's Workspace realtime plan):
-// one GET /api/assessment/events SSE connection for the whole page
-// (./useAssessmentEvents), a hand-rolled reconnect gate around the gateway
-// connection (see the note above the disconnected early-return below — the
-// library's ReconnectingShim/RealtimeCapabilityProvider are off the table),
-// a presence headcount per section, and a Pull control on synced sections
-// that stays pending until its knowledge.pulled event arrives over SSE.
+// Shared document explorer for Workspace, Enterprise, Rules and Prompts.
+// The library owns pane layout; the BFF owns durable content, comments and
+// reactions. The optional gateway augments presence and live editing.
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useSearchParams } from 'react-router';
@@ -31,13 +13,14 @@ import {
   ErrorState,
   Inline,
   InlinePlaceholder,
+  Input,
   LoadingState,
   RailSection,
   Stack,
   T,
   VisuallyHidden,
 } from '@connorhoehnslalom/ui-components/shared';
-import { useGateway, usePresence } from '@connorhoehnslalom/realtime-modules/client';
+import { usePresence } from '@connorhoehnslalom/realtime-modules/client';
 import { relativeTime } from '../../../lib/relativeTime';
 import { useFetch } from '../../../hooks/useFetch';
 import { useCapabilities } from '../../../lib/capabilities';
@@ -223,7 +206,7 @@ export interface KnowledgeExplorerProps {
 export function KnowledgeExplorer({ mode }: KnowledgeExplorerProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [view, setView] = useState<MainView>({ kind: 'node' });
-  const gateway = useGateway();
+  const [query, setQuery] = useState('');
   const sse = useAssessmentEvents();
 
   const treeFetch = useFetch<KnowledgeTreeResponse>('/api/assessment/knowledge/tree');
@@ -311,14 +294,21 @@ export function KnowledgeExplorer({ mode }: KnowledgeExplorerProps) {
 
   const modeLabel = MODE_LABEL[mode];
   const ancestors = view.kind === 'node' ? nodePath(nodes, selectedId) : [];
-  const crumbs: { label: string; href?: string }[] = [
-    { label: 'Home', href: '/assessment/teams' },
-    { label: modeLabel },
-    ...(view.kind === 'activity' ? [{ label: 'Activity' }] : ancestors.map((n) => ({ label: n.title }))),
+  const crumbs: { label: string; onClick?: () => void }[] = [
+    ...(view.kind === 'activity' ? [{ label: 'Activity' }] : ancestors.map((n, index) => ({ label: n.title, ...(index < ancestors.length - 1 ? { onClick: () => handleSelectNode(n.id) } : {}) }))),
   ];
+
+  const matches = nodes.filter((node) => node.title.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
 
   const rail = (
     <>
+      <Stack gap="sm" className="p-3">
+        <Input aria-label="Find a document" placeholder="Find a document…" value={query} onChange={(event) => setQuery(event.target.value)} />
+        {query.trim() && <Stack gap="xs">
+          <T className="text-xs text-text-secondary">{matches.length} results</T>
+          {matches.map((node) => <Button key={node.id} variant="ghost" size="sm" className="justify-start border-0" onClick={() => { handleSelectNode(node.id); setQuery(''); }}>{node.title}</Button>)}
+        </Stack>}
+      </Stack>
       <RenameNodeDialog
         node={renaming}
         onClose={() => setRenaming(null)}
@@ -343,7 +333,7 @@ export function KnowledgeExplorer({ mode }: KnowledgeExplorerProps) {
           <InlinePlaceholder>Nothing here yet.</InlinePlaceholder>
         </RailSection>
       )}
-      {!treeFetch.isLoading && !treeFetch.error && sections.map((section) => {
+      {!query.trim() && !treeFetch.isLoading && !treeFetch.error && sections.map((section) => {
         const activityCount = activityForSection(section, activityRuns).length + pulledEventsForSection(sse.events, section.key).length;
         return (
           <RailSection
@@ -406,20 +396,6 @@ export function KnowledgeExplorer({ mode }: KnowledgeExplorerProps) {
   const isPage = isPageNode(selectedNode);
   const selectedSectionKey = selectedNode ? sectionForNode(sections, selectedNode.id)?.key ?? null : null;
 
-  // Hand-rolled in place of ReconnectingShim/RealtimeCapabilityProvider —
-  // see the top-of-file note: both live in the Tiptap-tainted integrations
-  // subpath, which cannot be imported at all without breaking `vite build`.
-  //
-  // NOT gated on gateway.connectionState any more. Doc sync, comments and
-  // presence all run over GET /api/assessment/events now (see DocPane) —
-  // "the gateway is disconnected" is a normal, expected state (the /ws
-  // stub, or a real gateway that's briefly down), not a reason to hide the
-  // whole explorer behind a blocking retry screen. Only reactions and live
-  // CRDT co-editing still need the gateway; those degrade individually
-  // (empty reactions bar, last-write-wins Save) rather than blocking
-  // everything else that works fine without it. The pill + "Gateway
-  // offline" hint above already say so honestly.
-
   const activityPane = view.kind === 'activity' && (() => {
     const runItems = activitySection ? toActivityFeedItems(activityForSection(activitySection, activityRuns)) : [];
     const pulledItems = activitySection
@@ -437,6 +413,7 @@ export function KnowledgeExplorer({ mode }: KnowledgeExplorerProps) {
   return (
     <ExplorerFrame
       rail={rail}
+      title={modeLabel}
       aside={view.kind === 'node' && isPage && selectedNode
         ? <ActivityBar node={selectedNode} sectionKey={selectedSectionKey} sseEvents={sse.events} />
         : undefined}
@@ -449,27 +426,7 @@ export function KnowledgeExplorer({ mode }: KnowledgeExplorerProps) {
           name already exists as `modeLabel`; this puts it in the outline
           without adding chrome the explorer does not want. */}
       <VisuallyHidden as="h1">{modeLabel}</VisuallyHidden>
-      <Inline justify="between" align="center" className="mb-4">
-        <Breadcrumbs items={crumbs} />
-        <Inline gap="xs" align="center">
-          {/* Driven by the SSE stream (the substrate that actually carries
-              doc-saved/comment/presence updates), not gateway.connectionState
-              — middleware's /ws stub accepts every socket and would report
-              'connected' forever with nothing behind it. See
-              docs/assessment-journeys/stretch/realtime.md. */}
-          {/* No "Live" pill and no gateway sentence.
-              Both were permanent furniture on every document: the pill said
-              "Live" whenever the SSE stream was up, which is almost always, and
-              the chip restated "Gateway offline — presence and co-editing via
-              the BFF" on a surface where that is the NORMAL configuration, not
-              an incident. A warning that is present every time you open a page
-              stops being read as a warning and just crowds the header.
-              Everything it was protecting against now says so at the point of
-              use instead: the editor shows "Editing an offline copy" on the
-              document being edited, and the reaction bar no longer depends on
-              the gateway at all. */}
-        </Inline>
-      </Inline>
+      <Stack className="mb-4"><Breadcrumbs items={crumbs} /></Stack>
 
       {view.kind === 'activity' && activityPane}
 

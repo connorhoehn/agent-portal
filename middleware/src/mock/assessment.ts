@@ -6948,46 +6948,22 @@ export interface SubmissionEnvelope {
   revision: number;
 }
 
-/**
- * True once every dimension this submission's self-assessment hinted at has
- * actually been WORKED — a scoring pass recorded against it — SINCE this
- * envelope was ingested, regardless of what that pass concluded. "Worked"
- * means `MockDimensionScore.history` carries an entry timestamped at or
- * after this envelope's `ingested_at`: `applyScores` always appends one,
- * whether the outcome is a verified level, an approved N/A, or "documented /
- * pending" (moderate confidence, no level set — not enough evidence yet,
- * but the dimension was reviewed). That last outcome is done being worked,
- * not still queued, so it must count: checking `current_level`/`is_na`
- * instead conflated "no verified level" with "never looked at" and made a
- * fully-processed submission with an inconclusive dimension read as
- * "Unprocessed" forever — and attaching more evidence without changing the
- * level couldn't fix it either. A dimension with no history at all (never
- * touched, or reset by `resetAssessment`, which clears history rather than
- * appending to it) still fails this check, exactly as it should.
- *
- * The recency check matters for a different reason: dimension scores are
- * team-scoped, so a team that was fully assessed before a NEW revision came
- * in (a resubmission) must not have that fresh, not-yet-processed revision
- * read as "processed" just because the team's older scoring history happens
- * to cover the same dimension ids. Only a `committed` envelope can ever
- * become processed: a `staged` one hasn't been ingested yet, and a
- * `superseded` one no longer represents the team's live answers. An
- * envelope with no hints at all (never happens via the commit path, but
- * true of some hand-authored fixtures) can never be "processed" either —
- * there's nothing to check off.
+/** A submission is processed only when its exact scoring run applied every hinted dimension.
+ * Manual team scoring and another envelope's run cannot satisfy this projection.
+ * Legacy history without attributable run provenance stays committed until reprocessed.
  */
 export function isSubmissionProcessed(
-  env: Pick<SubmissionEnvelope, 'status' | 'dimension_hints' | 'ingested_at'>,
+  env: Pick<SubmissionEnvelope, 'envelope_id' | 'status' | 'dimension_hints' | 'ingested_at'>,
   dims: Record<string, MockDimensionScore>,
+  logs: ScoringLog[] = [],
 ): boolean {
-  if (env.status !== 'committed') return false;
-  const hints = env.dimension_hints ?? [];
-  if (hints.length === 0) return false;
-  return hints.every((h) => {
-    const score = dims[h.dimension_id];
-    if (score == null) return false;
-    return score.history.some((entry) => entry.changed_at >= env.ingested_at);
-  });
+  if (env.status !== 'committed' || !env.dimension_hints?.length) return false;
+  // A later team score is not evidence that THIS submission was processed.
+  // Require an explicit envelope -> run -> applied dimension history chain.
+  const runs = new Set(logs.filter(log => log.envelope_id === env.envelope_id && log.run_id).map(log => log.run_id));
+  return env.dimension_hints.every(h => dims[h.dimension_id]?.history.some(entry =>
+    runs.has(entry.source_meeting) && entry.changed_at >= env.ingested_at));
+
 }
 
 // team_id -> envelope_id -> envelope. Mutated by parse/commit/clear.

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { GatewayProxyClient } from '@connorhoehnslalom/realtime-modules/proxy-client';
+import { createGatewayClient, gatewayEndpoints } from '../../lib/gatewayEndpoint.ts';
 import type { ConnectionState } from '@connorhoehnslalom/realtime-modules/client/ws';
 import { useGateway } from '@connorhoehnslalom/realtime-modules/client/ws';
 import { Inline, StatusDot } from '@connorhoehnslalom/ui-components/shared';
@@ -7,10 +7,11 @@ import { nextPollDelay, isDocumentHidden } from '../../hooks/pollSchedule';
 
 // VITE_GATEWAY_URL is exposed to the browser bundle by Vite at build time.
 // We avoid `import.meta.env` typing concerns (no vite-env.d.ts in this repo)
-// by reading via a typed-safe lookup with a sensible local-dev default.
-const GATEWAY_URL: string =
+// by reading via a typed-safe lookup. Missing configuration makes no requests.
+const CONFIGURED_GATEWAY_URL =
   (import.meta as unknown as { env?: Record<string, string | undefined> })
-    .env?.VITE_GATEWAY_URL ?? 'http://localhost:8080';
+    .env?.VITE_GATEWAY_URL;
+const GATEWAY_URL = gatewayEndpoints(CONFIGURED_GATEWAY_URL)?.http;
 
 // The bound `fetch` is load-bearing — see the long note in hooks/useGatewayInfo.
 // The library defaults to `globalThis.fetch`, keeps it as a class field and
@@ -19,10 +20,7 @@ const GATEWAY_URL: string =
 // painting red on every page of every deployment while nothing was wrong with
 // any gateway. `fetch` is the library's own injection seam; the underlying bug
 // is queued in docs/ui-components-queue.md.
-const client = new GatewayProxyClient({
-  gatewayUrl: GATEWAY_URL,
-  fetch: globalThis.fetch.bind(globalThis),
-});
+const client = createGatewayClient(CONFIGURED_GATEWAY_URL);
 
 type HttpStatus = 'unknown' | 'healthy' | 'unhealthy';
 
@@ -54,7 +52,7 @@ const POLL_MS = 30_000;
  * The HTTP poll and WS connection are independent; both are kept so structured
  * health data (uptime, node count) remains available without a live WS.
  *
- * Gateway base URL: `VITE_GATEWAY_URL` (default `http://localhost:8080`).
+ * Gateway base URL: `VITE_GATEWAY_URL`; no indicator or polling when unconfigured.
  *
  * Not `useFetch`: the gateway is a separate origin from the portal's `/api`
  * and this client's `request()` sends no `credentials`, so routing it
@@ -69,6 +67,8 @@ export function GatewayStatusBadge() {
   const { connectionState } = useGateway();
 
   useEffect(() => {
+    if (!client) return;
+    const gatewayClient = client;
     let cancelled = false;
     let failures = 0;
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
@@ -80,7 +80,7 @@ export function GatewayStatusBadge() {
 
     const check = async () => {
       try {
-        await client.getHealth();
+        await gatewayClient.getHealth();
         if (!cancelled) { setHttpStatus('healthy'); failures = 0; }
       } catch {
         if (!cancelled) { setHttpStatus('unhealthy'); failures += 1; }
@@ -107,6 +107,8 @@ export function GatewayStatusBadge() {
       document.removeEventListener('visibilitychange', onVisibilityChange);
     };
   }, []);
+
+  if (!client) return null;
 
   return (
     <Inline as="span" gap="none" className="inline-flex items-center gap-[3px]">

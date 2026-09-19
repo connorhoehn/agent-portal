@@ -6,7 +6,7 @@ import { RouteErrorBoundary } from './components/shell/RouteErrorBoundary';
 import { useSession } from './lib/auth';
 import { ASSESSMENT_ENABLED } from './lib/features';
 import { resolveHome } from './lib/tenantHome';
-import { GatewaySocketProvider } from '@connorhoehnslalom/realtime-modules/client/ws';
+import { OptionalGatewayProvider } from './components/OptionalGatewayProvider';
 import { ComputeHost } from './components/compute/ComputeHost';
 import { LoadingState } from '@connorhoehnslalom/ui-components/shared';
 
@@ -121,17 +121,12 @@ const ObservabilityHarnessRunDetailPage = lazy(() => import('./pages/observabili
 const ObservabilityHarnessCompareRunsPage = lazy(() => import('./pages/observability/harness/CompareRunsPage'));
 
 // ---------------------------------------------------------------------------
-// Gateway WS URL — http(s)://host → ws(s)://host/ws
+// An absent gateway is an offline deployment, not a localhost socket endpoint.
 // ---------------------------------------------------------------------------
 
-const _RAW_GATEWAY_URL: string =
+const GATEWAY_URL =
   (import.meta as unknown as { env?: Record<string, string | undefined> })
-    .env?.VITE_GATEWAY_URL ?? 'http://localhost:8080';
-
-const GATEWAY_WS_URL = _RAW_GATEWAY_URL
-  .replace(/^https:\/\//i, 'wss://')
-  .replace(/^http:\/\//i, 'ws://')
-  .replace(/\/$/, '') + '/ws';
+    .env?.VITE_GATEWAY_URL;
 
 // ---------------------------------------------------------------------------
 
@@ -177,7 +172,7 @@ function HomeRedirect() {
 
 export function App() {
   return (
-    <GatewaySocketProvider url={GATEWAY_WS_URL}>
+    <OptionalGatewayProvider url={GATEWAY_URL}>
     {/* One fleet for the whole app. Above the router because a shell must
         survive navigation, and because the Computers page, the ⌘K palette, the
         ⌘I switcher and Codebases all have to agree about which computers
@@ -579,6 +574,6 @@ export function App() {
       </Route>
     </Routes>
     </ComputeHost>
-    </GatewaySocketProvider>
+    </OptionalGatewayProvider>
   );
 }

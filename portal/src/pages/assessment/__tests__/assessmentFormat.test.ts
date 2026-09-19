@@ -526,3 +526,8 @@ test('validateNewTeamForm trims and includes a non-empty lead', () => {
   const result = validateNewTeamForm({ name: 'Checkout', cohort: 'general', assessment_lead: '  Dana Ko  ' });
   assert.deepEqual(result, { ok: true, value: { name: 'Checkout', cohort: 'general', assessment_lead: 'Dana Ko' } });
 });
+
+test('certification coverage excludes approved N/A dimensions in fallback text', () => {
+  assert.equal(teamCertificationSubline(cert({ assessed: 15, applicable: 15, subline: null }), 17), null);
+  assert.equal(teamCertificationSubline(cert({ assessed: 14, applicable: 15, subline: null }), 17), '14 of 15 dimensions assessed');
+});

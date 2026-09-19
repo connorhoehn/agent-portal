@@ -21,20 +21,10 @@ catches the attempt at the door. But a regex over SQL someone else wrote is an
 argument about parsing, and the attacker gets to pick the argument. A role that
 cannot write is a fact PostgreSQL enforces. This module picks that role.
 
-Fallback, and why it is a *fallback* and not a *fail-open*
-----------------------------------------------------------
-``read_secret_arn()`` prefers the read-only ARN and falls back to the admin ARN
-only when the read-only one is **unset** — an environment where
-``schema/graph_readonly_role.sql`` and the ``OrgIQ-Aurora`` redeploy have not
-happened yet. That environment behaves exactly as it did before this module
-existed: the guard is the boundary, nothing breaks, nothing regresses.
-
-What it deliberately does NOT do is fall back on *error*. Once the read-only
-ARN is set, a ``permission denied for table people`` means the grant is
-missing, and retrying that query on the admin credential would hand an
-attacker the writable path by way of a failure they can cause on purpose. The
-query fails, loudly, and ``credential_diagnosis()`` names the runbook step that
-was skipped.
+Missing read-only credentials fail closed. Local experiments may explicitly set
+``APP_ENV=development`` and ``ALLOW_UNSAFE_SQL_ADMIN_FALLBACK=true`` to use the
+admin credential; deployed runtimes set ``APP_ENV=production`` and cannot
+activate this fallback. Permission errors never trigger another credential.
 
 Stdlib only, no boto3 — so it can be unit tested anywhere.
 """
@@ -72,12 +62,18 @@ def read_only_enforced() -> bool:
 
 
 def read_secret_arn() -> str:
-    """The secret ARN a *read* should use.
+    """Credential for model-authored graph queries; missing reader fails closed."""
+    reader = read_only_secret_arn()
+    if reader:
+        return reader
+    if _unsafe_development_fallback():
+        return admin_secret_arn()
+    raise RuntimeError(f"{READONLY_SECRET_ENV} is required for graph queries; see {RUNBOOK}")
 
-    The read-only credential when it is configured; otherwise the admin
-    credential, which is what every environment used before the role existed.
-    """
-    return read_only_secret_arn() or admin_secret_arn()
+
+def _unsafe_development_fallback() -> bool:
+    return (os.environ.get("APP_ENV") == "development"
+            and os.environ.get("ALLOW_UNSAFE_SQL_ADMIN_FALLBACK") == "true")
 
 
 def credential_diagnosis() -> str:
@@ -92,7 +88,6 @@ def credential_diagnosis() -> str:
             f"query_graph reads as {READONLY_ROLE} — writes are refused by the "
             "database, not only by sql_guard"
         )
-    return (
-        f"query_graph reads as the cluster admin user: {READONLY_SECRET_ENV} is "
-        f"unset, so sql_guard.py is the only thing refusing a write. See {RUNBOOK}."
-    )
+    if _unsafe_development_fallback():
+        return f"Explicit unsafe development fallback: sql_guard is the only write guard. See {RUNBOOK}."
+    return f"query_graph is disabled: {READONLY_SECRET_ENV} is required; sql_guard alone is insufficient. See {RUNBOOK}."

@@ -8,9 +8,10 @@ Cypher-based tool — the calling agent now writes SQL JOINs instead of MATCH.
 
 import json
 import os
-import re
 
 import boto3
+
+from sql_guard import read_only_error
 
 AURORA_CLUSTER_ARN = os.environ['AURORA_CLUSTER_ARN']
 AURORA_SECRET_ARN = os.environ['AURORA_SECRET_ARN']
@@ -19,7 +20,6 @@ REGION = os.environ.get('REGION', 'us-east-1')
 
 _rds = boto3.client('rds-data', region_name=REGION)
 
-_READONLY_RE = re.compile(r'^\s*(WITH|SELECT|EXPLAIN)\b', re.IGNORECASE)
 
 
 def _records_to_dicts(resp: dict) -> list:
@@ -40,21 +40,19 @@ def handler(event: dict, context) -> dict:
     parameters = body.get('parameters', {})
     explain = body.get('explain', False)
 
-    if not _READONLY_RE.match(sql) or ';' in sql.strip().rstrip(';'):
-        return {
-            'statusCode': 403,
-            'body': json.dumps({
-                'error': 'Only single read-only SELECT/WITH/EXPLAIN statements are allowed via this MCP tool. Use graph-builder agent for writes.',
-            }),
-        }
+    # EXPLAIN is a boolean option over an already validated SELECT/WITH.
+    # Accepting arbitrary EXPLAIN SQL also accepts EXPLAIN ANALYZE DELETE.
+    error = read_only_error(sql)
+    if error:
+        return {'statusCode': 403, 'body': json.dumps({'error': error})}
 
-    statement = f'EXPLAIN {sql}' if explain and not sql.upper().startswith('EXPLAIN') else sql
+    statement = f'EXPLAIN {sql}' if explain else sql
 
     rds_params = [
         {'name': k, 'value': {'stringValue': str(v)} if not isinstance(v, (int, float, bool)) else (
+            {'booleanValue': v} if isinstance(v, bool) else
             {'longValue': v} if isinstance(v, int) else
-            {'doubleValue': v} if isinstance(v, float) else
-            {'booleanValue': v}
+            {'doubleValue': v}
         )}
         for k, v in parameters.items()
     ]

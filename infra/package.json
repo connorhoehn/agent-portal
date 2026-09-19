@@ -11,7 +11,7 @@
     "test:watch": "node --require ts-node/register --test --watch \"test/**/*.test.ts\""
   },
   "dependencies": {
-    "aws-cdk-lib": "^2.253.1",
+    "aws-cdk-lib": "^2.270.0",
     "constructs": "^10.4.0"
   },
   "devDependencies": {

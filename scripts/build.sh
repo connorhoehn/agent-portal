@@ -21,8 +21,8 @@
 #   ./scripts/build.sh portal
 #
 # Sibling repos required at build time:
-#   ../ui-components          — injected into portal build via --build-context ui_components
-#   ../realtime-modules       — injected into both builds via --build-context realtime_modules
+#   ../ui-components and ../realtime-modules — committed objects at the package
+#   pins must exist locally. Uncommitted sibling output is never packaged.
 #
 # Run this from the project root (aws-agentcore/).
 
@@ -50,21 +50,7 @@ done
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-REALTIME_MODULES_DIR="${PROJECT_ROOT}/../realtime-modules"
-UI_COMPONENTS_DIR="${PROJECT_ROOT}/../ui-components"
-
-verify_sibling() {
-  local name=$1
-  local path="${PROJECT_ROOT}/../${name}"
-  if [ ! -d "$path" ]; then
-    echo "ERROR: Sibling repo not found at $path" >&2
-    echo "  Clone https://github.com/connorhoehn/$name beside aws-agentcore" >&2
-    exit 1
-  fi
-}
-
-verify_sibling realtime-modules
-verify_sibling ui-components
+node "${PROJECT_ROOT}/scripts/docker/prepare-libraries.mjs"
 
 build_middleware() {
   local image="${REGISTRY}/orgiq-middleware:${TAG}"
@@ -73,7 +59,7 @@ build_middleware() {
 
   docker build \
     --target production \
-    --build-context "realtime_modules=${REALTIME_MODULES_DIR}" \
+    --build-context "locked_libraries=${PROJECT_ROOT}/.docker-libraries" \
     -t "${image}" \
     -f "${PROJECT_ROOT}/middleware/Dockerfile" \
     "${PROJECT_ROOT}/middleware/"
@@ -91,8 +77,7 @@ build_portal() {
 
   docker build \
     --target production \
-    --build-context "ui_components=${UI_COMPONENTS_DIR}" \
-    --build-context "realtime_modules=${REALTIME_MODULES_DIR}" \
+    --build-context "locked_libraries=${PROJECT_ROOT}/.docker-libraries" \
     -t "${image}" \
     -f "${PROJECT_ROOT}/portal/Dockerfile" \
     "${PROJECT_ROOT}/portal/"
