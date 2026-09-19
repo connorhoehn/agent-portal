@@ -91,3 +91,10 @@ describe('mapCloudCompute', () => {
     });
   });
 });
+
+it('keeps same-millisecond box lifecycle transitions distinct while deduplicating replay', () => {
+  const running = eventOf(mapFleetBox(box, context));
+  const stopped = eventOf(mapFleetBox({ ...box, status: 'stopped' }, context));
+  expect(stopped.idempotencyKey).not.toBe(running.idempotencyKey);
+  expect(eventOf(mapFleetBox(box, context)).idempotencyKey).toBe(running.idempotencyKey);
+});

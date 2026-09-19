@@ -17,10 +17,10 @@ the claim is a bug in this file.
 
 ## Current checkpoint
 
-Implementation was paused on 2026-09-19 for transfer to another session. Read
-[the handoff](docs/handoff-2026-09-19.md) before continuing the assessment UI or
-repository audit. It separates completed fixes/tests from unfinished browser
-verification; do not treat the checkpoint as full acceptance.
+The 2026-09-19 checkpoint was pushed as `f837bd68`; the user subsequently
+resumed work. Read [the handoff](docs/handoff-2026-09-19.md) for the checkpoint's
+completed fixes/tests and unfinished browser verification. Its pause is
+historical; do not treat the checkpoint as full acceptance.
 
 # Orientation
 

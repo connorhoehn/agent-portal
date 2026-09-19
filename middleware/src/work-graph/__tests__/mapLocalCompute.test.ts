@@ -108,3 +108,15 @@ describe('mapLocalCompute', () => {
     });
   });
 });
+
+it.each([Number.MAX_VALUE, Number.NaN, Number.POSITIVE_INFINITY, 'not-a-date'])('rejects invalid session start %s without throwing', startedAt => {
+  expect(mapLocalSessionAnnounce(machine, { ...session, startedAt }, context)).toMatchObject({
+    supported: false, reason: 'invalid-session-time',
+  });
+});
+it('maps epoch-second session starts and rejects invalid explicit session ends', () => {
+  expect(eventOf(mapLocalSessionAnnounce(machine, { ...session, startedAt: 0 }, context)).occurredAt).toBe('1970-01-01T00:00:00.000Z');
+  expect(mapLocalSessionEnd(machine, session.sessionId, 'not-a-date', context)).toMatchObject({
+    supported: false, reason: 'invalid-session-time',
+  });
+});

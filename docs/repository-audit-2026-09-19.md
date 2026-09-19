@@ -1,6 +1,6 @@
 # Repository audit — September 19, 2026
 
-Status: implementation paused; checkpoint prepared for handoff. See
+Status: resumed after publishing checkpoint `f837bd68` to main. See
 [the continuation handoff](handoff-2026-09-19.md). This is an evidence ledger, not a
 certification that every feature or deployment path is correct. Counts below
 identify specific checkpoints; the clean final middleware/portal runs are recorded below; browser acceptance
@@ -44,6 +44,18 @@ a file has a recent modification time.
 | Presentation | Global resting-card shadow overrode explicit floating shadows. Defaults now live in the components layer. The document explorer now has persistent rail collapse and adjustable context width, search, folder table, ancestry, actual-heading outline, reading width, rendered word count, copy link and Markdown download. Team pages expose metadata/review, full certification text, explicit progress/evidence disclosure and searchable dimension navigation. | Portal tests/build and recorded browser observations; current redesign still needs final verification |
 
 ## Verification checkpoints
+
+### Resumed checkpoint
+
+After resumption, fetching origin left local main four commits ahead, including
+the `codex/active-now-integration` merge. Its five new work-graph files are
+structural cloud/local compute mappers; they do not yet wire a live projection.
+Review found and repaired same-millisecond box status event-ID collisions and
+invalid session timestamps that could throw during conversion. The two mapper
+suites pass all 28 tests, and middleware typecheck passes. These focused checks
+cover the new addition; the full-suite counts below describe the earlier
+checkpoint. The resumed assessment quick validator still reports 40 stale
+journey records, with its other checks passing.
 
 Working logs are in `/tmp/aws-agentcore-audit/`; those temporary files may be
 removed by the OS. These are checkpoint results, not a claim that every test

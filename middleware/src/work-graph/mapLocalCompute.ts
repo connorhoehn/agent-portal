@@ -121,7 +121,8 @@ export type LocalComputeMapResult =
       | 'machine-does-not-match-job'
       | 'invalid-attempt'
       | 'missing-session-id'
-      | 'invalid-heartbeat';
+      | 'invalid-heartbeat'
+      | 'invalid-session-time';
   };
 
 export type LocalComputeHeartbeatFreshness = 'fresh' | 'delayed' | 'disconnected';
@@ -153,10 +154,13 @@ function authorizeMachine(
   return null;
 }
 
-function isoFromStartedAt(value: string | number | undefined, fallback: string): string {
-  if (typeof value === 'string' && value.trim().length > 0) return value;
-  if (typeof value === 'number' && Number.isFinite(value)) return new Date(value * 1_000).toISOString();
-  return fallback;
+function isoFromStartedAt(value: string | number | undefined, fallback: string): string | null {
+  if (typeof value === 'number') {
+    const date = new Date(value * 1_000);
+    return Number.isFinite(date.getTime()) ? date.toISOString() : null;
+  }
+  const candidate = typeof value === 'string' && value.trim().length > 0 ? value : fallback;
+  return Number.isFinite(Date.parse(candidate)) ? candidate : null;
 }
 
 function explicitPayloadProject(payload: Record<string, unknown>): string | undefined {
@@ -241,6 +245,7 @@ export function mapLocalSessionAnnounce(
   if (!machine) return unsupported('missing-machine');
   if (!isNonEmptyString(session.sessionId)) return unsupported('missing-session-id');
   const occurredAt = isoFromStartedAt(session.startedAt, session.lastSeenAt ?? context.receivedAt);
+  if (!occurredAt) return unsupported('invalid-session-time');
   return eventFor(context, {
     eventId: `local-compute:session:${machine.id}:${session.sessionId}:started:${occurredAt}`,
     sourceSequence: `session-started:${occurredAt}`,
@@ -265,6 +270,7 @@ export function mapLocalSessionEnd(
   if (denied) return denied;
   if (!machine) return unsupported('missing-machine');
   if (!isNonEmptyString(sessionId)) return unsupported('missing-session-id');
+  if (!Number.isFinite(Date.parse(endedAt))) return unsupported('invalid-session-time');
   return eventFor(context, {
     eventId: `local-compute:session:${machine.id}:${sessionId}:ended:${endedAt}`,
     sourceSequence: `session-ended:${endedAt}`,

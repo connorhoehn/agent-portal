@@ -233,7 +233,7 @@ export function mapFleetBox(box: FleetBoxRecord, context: AuthenticatedCloudComp
   const denied = authorizeBox(box, context);
   if (denied) return denied;
   return eventFor(context, {
-    eventId: `cloud-compute:box:${box.id}:${box.lastActivityAt}`,
+    eventId: `cloud-compute:box:${box.id}:${box.status}:${box.lastActivityAt}`,
     sourceSequence: box.lastActivityAt,
     occurredAt: box.lastActivityAt,
     boxId: box.id,
