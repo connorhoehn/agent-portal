@@ -86,6 +86,12 @@ inspected. The assessment quick validator now reports 38 stale records, down
 from 40; its other checks pass. The OrgIQ, branding and distillation freshness
 gates remain failing (24, four and two records respectively).
 
+The wizard's pending duplicate-rematch check could not be completed in this
+pass: its previous draft state was gone, and CUA lost the native window during
+the fresh-import attempt (`cgWindowNotFound`). No new Parse/commit or rematch
+result is claimed, and its digest remains unchanged. Browser work stopped;
+the isolated preview servers remain available on API 3018 / Vite 5198.
+
 Working logs are in `/tmp/aws-agentcore-audit/`; those temporary files may be
 removed by the OS. These are checkpoint results, not a claim that every test
 below ran against the eventual final tree. Overlapping targeted suites must not
