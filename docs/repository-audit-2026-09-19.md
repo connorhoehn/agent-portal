@@ -57,6 +57,17 @@ cover the new addition; the full-suite counts below describe the earlier
 checkpoint. The resumed assessment quick validator still reports 40 stale
 journey records, with its other checks passing.
 
+Deployment review found two further gaps: the comment FK replacement could
+commit its DROP before a failed ADD, and reader credential setup could return
+success when its secret was unavailable. The FK replacement is now atomic;
+reader setup fails closed and offers `--readonly-role-only` to avoid replaying
+demo data. All 68 relevant local tests pass. An isolated PostgreSQL 16 check
+executed the actual migration, proved failure preserves the old FK and rows,
+then proved successful reconciliation, synced comments, cascade and rerun.
+The container had no network/ports/host mounts and was removed. This does not
+establish live Aurora/Data API behavior. See the
+[upgrade runbook](deployment-upgrade-2026-09-19.md).
+
 Working logs are in `/tmp/aws-agentcore-audit/`; those temporary files may be
 removed by the OS. These are checkpoint results, not a claim that every test
 below ran against the eventual final tree. Overlapping targeted suites must not

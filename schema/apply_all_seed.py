@@ -8,11 +8,14 @@ die mid-file. This driver retries those (and throttles) with backoff.
 
 Run from repo root:  python3 schema/apply_all_seed.py
 """
+import argparse
 import os
+from pathlib import Path
 import sys
 import time
 
-sys.path.insert(0, 'schema')
+REPO_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPO_ROOT / 'schema'))
 from load_schema import split_sql, get_cluster_info  # noqa: E402
 import boto3  # noqa: E402
 
@@ -71,11 +74,8 @@ _PASSWORD_FORBIDDEN = set("'\"\\`$;\n\r")
 def _load_readonly_password(region: str) -> str | None:
     """Fetch the read-only role's password from Secrets Manager, or None.
 
-    Returns None — quietly, and without failing the run — when the secret does
-    not exist. That is the pre-`OrgIQ-Aurora`-redeploy state: the grants still
-    apply, the role still exists, it simply cannot log in yet, and the agents
-    keep using the admin secret via their documented fallback. A seed run must
-    not start failing because a stack has not been redeployed.
+    Missing, unreadable or malformed credentials return None. The caller counts
+    this as failure: production read agents no longer fall back to admin.
     """
     import boto3
     sm = boto3.client('secretsmanager', region_name=region)
@@ -92,10 +92,11 @@ def _load_readonly_password(region: str) -> str | None:
 
     import json
     try:
-        password = json.loads(raw).get('password')
+        payload = json.loads(raw)
+        password = payload.get('password') if isinstance(payload, dict) else None
     except ValueError:
         password = None
-    if not password:
+    if not isinstance(password, str) or not password:
         print(f'  ✗ {name} has no "password" field')
         return None
     if set(password) & _PASSWORD_FORBIDDEN:
@@ -115,7 +116,7 @@ def set_readonly_password(rds, arn: str, sec: str, db: str, region: str) -> int:
     print(f'{READONLY_SECRET_NAME}: setting {READONLY_ROLE} password')
     password = _load_readonly_password(region)
     if password is None:
-        return 0  # not configured yet — see the docstring above
+        return 1  # production requires an authenticating reader credential
 
     sql = f"ALTER ROLE {READONLY_ROLE} WITH LOGIN PASSWORD '{password}'"
     for attempt in range(6):
@@ -181,13 +182,18 @@ def verify_readonly_role(rds, arn: str, sec: str, db: str) -> int:
     return 0
 
 
-def main() -> int:
+def main(argv=None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--readonly-role-only', action='store_true',
+                        help='Apply reader grants/password only; do not replay demo seed data')
+    options = parser.parse_args(argv)
+    files = ['schema/graph_readonly_role.sql'] if options.readonly_role_only else FILES
     arn, sec, db = get_cluster_info()
     rds = boto3.client('rds-data', region_name=os.environ.get('AWS_REGION', 'us-east-1'))
     total_fail = 0
 
-    for path in FILES:
-        stmts = split_sql(open(path, encoding='utf-8').read())
+    for path in files:
+        stmts = split_sql((REPO_ROOT / path).read_text(encoding='utf-8'))
         ok = skipped = failed = 0
         for st in stmts:
             for attempt in range(6):

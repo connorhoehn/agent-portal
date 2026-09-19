@@ -262,6 +262,10 @@ the same team; unique log stamps preserve concurrent run provenance. SSE publish
 commit. The selected submission is fixed at launch, never chosen again at
 callback time. Apply `schema/assessment_schema.sql` before deploying this
 worker: it adds private `dispatch_payload` and `dispatch_claimed_at` columns.
+The same schema atomically retargets comment ownership to knowledge nodes;
+legacy comments without a matching node require explicit operator reconciliation.
+See [checkpoint deployment prerequisites](deployment-upgrade-2026-09-19.md) for
+ordering, preflight queries and verification limits.
 Live dispatch refuses mixed real-Aurora/mock-AgentCore or offline settings.
 Missing required source material returns 400 before a slot is reserved.
 

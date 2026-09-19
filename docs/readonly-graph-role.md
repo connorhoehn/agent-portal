@@ -114,12 +114,15 @@ allow-list, then reads the secret and sets the password. Idempotent; safe to
 re-run.
 
 ```bash
-python3 schema/apply_all_seed.py
+python3 schema/apply_all_seed.py --readonly-role-only
 ```
 
-`graph_readonly_role.sql` is **last** in that file's `FILES` list and has to
-be: it grants on tables every earlier file creates. Run `schema/load_schema.py`
-first on a fresh cluster, as usual.
+The targeted option applies only `graph_readonly_role.sql`, sets its password
+from Secrets Manager and checks privileges. It does not replay demo seed rows.
+Missing, unreadable or malformed credentials now fail the command; the former
+admin fallback no longer exists. Run `schema/load_schema.py` first on a fresh
+cluster. The ordinary seed command still applies this role last, after its
+tables; use that command only when intentionally loading demo data.
 
 Expected tail of the output:
 
@@ -202,7 +205,7 @@ disables both read agents and the gateway read tools until the role is repaired.
 
 Add it to the `READABLE` array in `schema/graph_readonly_role.sql`, add it to
 `EXPECTED` in `agents/tests/test_readonly_role.py`, re-run
-`python3 schema/apply_all_seed.py`. Two edits on purpose: the test is the
+`python3 schema/apply_all_seed.py --readonly-role-only`. Two edits on purpose: the test is the
 review step. Do not reach for `ALTER DEFAULT PRIVILEGES`.
 
 ## What is tested, and what a test cannot tell you

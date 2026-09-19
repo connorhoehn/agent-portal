@@ -300,9 +300,16 @@ CREATE TABLE IF NOT EXISTS assessment_knowledge_comments (
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 -- Comments attach to local docs and synced pages, both represented by nodes.
-ALTER TABLE assessment_knowledge_comments DROP CONSTRAINT IF EXISTS assessment_knowledge_comments_doc_id_fkey;
-ALTER TABLE assessment_knowledge_comments ADD CONSTRAINT assessment_knowledge_comments_doc_id_fkey
-  FOREIGN KEY (doc_id) REFERENCES assessment_knowledge_nodes(id) ON DELETE CASCADE;
+-- One statement is atomic through the Data API loader. If a legacy comment
+-- has no matching node, validation fails and the previous FK stays intact.
+-- Reconcile the missing node explicitly; never delete comments to force this.
+DO $COMMENT_TARGET$
+BEGIN
+  ALTER TABLE assessment_knowledge_comments DROP CONSTRAINT IF EXISTS assessment_knowledge_comments_doc_id_fkey;
+  ALTER TABLE assessment_knowledge_comments ADD CONSTRAINT assessment_knowledge_comments_doc_id_fkey
+    FOREIGN KEY (doc_id) REFERENCES assessment_knowledge_nodes(id) ON DELETE CASCADE;
+END
+$COMMENT_TARGET$;
 CREATE INDEX IF NOT EXISTS idx_assessment_knowledge_comments_doc ON assessment_knowledge_comments(doc_id, created_at);
 
 -- Edit and soft-delete, added when the comment thread grew them. Both are
