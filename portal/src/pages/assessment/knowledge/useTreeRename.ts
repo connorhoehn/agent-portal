@@ -1,9 +1,8 @@
 // Double-click a knowledge-tree row to rename it.
 //
 // `TreeViewProps` has `onSelect`, `onToggle` and `onReorder` but nothing for a
-// double-click, and the row markup is the library's — so, like
-// useKeyboardTree.ts beside this, the behaviour is bolted onto the rendered
-// DOM rather than shadowed in a second copy of the tree's state. Same source of
+// double-click, and the row markup is the library's — so the behaviour uses
+// the rendered DOM rather than a second copy of the tree's state. Same source of
 // truth, same `data-testid` pairing: TreeView renders each row as
 // `${treeTestId}-row-${nodeId}`, which is what maps a click target back to a
 // node.

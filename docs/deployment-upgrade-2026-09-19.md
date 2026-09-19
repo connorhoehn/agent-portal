@@ -36,6 +36,10 @@ Use the repository's existing AWS account/profile instructions in `CLAUDE.md`.
    External callback senders need that secret; the internal dispatcher calls
    completion directly and does not send an HTTP callback. Production callbacks
    fail with 503 if unconfigured and reject an incorrect configured secret.
+   For the full fleet, follow the existing [machine-callback rollout runbook](agentcore-preview-surface.md#6a-machine-callback-auth-secrets--operator-runbook):
+   agent images must support the headers before enforcing secrets, and runtime
+   environment values must match the middleware's secrets. This upgrade order
+   does not remove that coordinated rollout or its documented blackout window.
 
 ## Assessment preflight and migration behavior
 

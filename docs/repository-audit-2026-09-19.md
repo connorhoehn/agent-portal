@@ -68,6 +68,24 @@ The container had no network/ports/host mounts and was removed. This does not
 establish live Aurora/Data API behavior. See the
 [upgrade runbook](deployment-upgrade-2026-09-19.md).
 
+The resumed explorer audit reproduced a duplicate keyboard-handler defect:
+the installed library already implements tree navigation, while a retained
+local shim also handled the same keys. Right Arrow on a leaf moved to a
+sibling. The shim and its unused helpers were removed; the wrapper retains
+double-click rename. Portal tests now pass 914 cases (seven retired shim tests
+removed), with typecheck/production build and component discipline passing.
+The assessor team-scorecard protocol was fully repeated; its individual record
+now includes all tabs, native keyboard traversal, dialogs and missing-team
+behavior. Other role records do not inherit this acceptance.
+
+The assessor workspace protocol also passes after the fix: Tab reaches the
+tree, leaf Right Arrow stays put, row movement and expansion occur once,
+outline selection focuses the real heading, search and persistent collapse
+work, and the page has no viewport overflow. Its current screenshot was
+inspected. The assessment quick validator now reports 38 stale records, down
+from 40; its other checks pass. The OrgIQ, branding and distillation freshness
+gates remain failing (24, four and two records respectively).
+
 Working logs are in `/tmp/aws-agentcore-audit/`; those temporary files may be
 removed by the OS. These are checkpoint results, not a claim that every test
 below ran against the eventual final tree. Overlapping targeted suites must not

@@ -34,7 +34,6 @@ import {
   mergeFeeds,
   mergePresenceForDisplay,
   mergeSsePresence,
-  nextTreeFocus,
   nodePath,
   parseActivityRuns,
   pulledEventsForSection,
@@ -48,8 +47,6 @@ import {
   defuseJsonFences,
   summarizeStoredReactions,
   toActivityFeedItems,
-  treeDepth,
-  treeParentId,
   viewCounts,
 } from '../knowledge/knowledgeFormat.ts';
 import type { ActivityRun, AssessmentSSEEvent, CommentListItem, KnowledgeNode, KnowledgeSection, PresenceViewer } from '../knowledge/types.ts';
@@ -391,71 +388,6 @@ test('activityEventToFeedItem labels known event types and falls back to the raw
 
   const custom: ActivityEvent = { eventType: 'presence:joined', detail: {}, timestamp: 't2', userId: 'u1', displayName: 'u1' };
   assert.equal(activityEventToFeedItem(custom).action, 'presence:joined');
-});
-
-// ─── Keyboard tree navigation (useKeyboardTree.ts's pure half) ─────────────
-
-test('nextTreeFocus moves within the visible list without wrapping', () => {
-  const ids = ['a', 'b', 'c'];
-  assert.equal(nextTreeFocus(ids, 'a', 'ArrowDown'), 'b');
-  assert.equal(nextTreeFocus(ids, 'b', 'ArrowDown'), 'c');
-  // Clamped at the end, not wrapped.
-  assert.equal(nextTreeFocus(ids, 'c', 'ArrowDown'), 'c');
-  assert.equal(nextTreeFocus(ids, 'c', 'ArrowUp'), 'b');
-  assert.equal(nextTreeFocus(ids, 'a', 'ArrowUp'), 'a');
-});
-
-test('nextTreeFocus Home/End jump to the first/last visible row regardless of position', () => {
-  const ids = ['a', 'b', 'c'];
-  assert.equal(nextTreeFocus(ids, 'b', 'Home'), 'a');
-  assert.equal(nextTreeFocus(ids, 'b', 'End'), 'c');
-});
-
-test('nextTreeFocus treats an unknown/absent currentId as "nothing focused yet"', () => {
-  const ids = ['a', 'b', 'c'];
-  // ArrowDown/Home from nowhere lands on the first row...
-  assert.equal(nextTreeFocus(ids, null, 'ArrowDown'), 'a');
-  assert.equal(nextTreeFocus(ids, 'not-visible', 'ArrowDown'), 'a');
-  assert.equal(nextTreeFocus(ids, null, 'Home'), 'a');
-  // ...ArrowUp/End from nowhere lands on the last, mirroring it.
-  assert.equal(nextTreeFocus(ids, null, 'ArrowUp'), 'c');
-  assert.equal(nextTreeFocus(ids, 'not-visible', 'ArrowUp'), 'c');
-  assert.equal(nextTreeFocus(ids, null, 'End'), 'c');
-});
-
-test('nextTreeFocus on an empty tree returns null for every key', () => {
-  assert.equal(nextTreeFocus([], null, 'ArrowDown'), null);
-  assert.equal(nextTreeFocus([], 'x', 'Home'), null);
-});
-
-test('treeParentId reads the parent id, or null at the root / for an unknown id', () => {
-  const nodes = [
-    { id: 'root', parentId: null },
-    { id: 'child', parentId: 'root' },
-  ];
-  assert.equal(treeParentId(nodes, 'child'), 'root');
-  assert.equal(treeParentId(nodes, 'root'), null);
-  assert.equal(treeParentId(nodes, 'missing'), null);
-});
-
-test('treeDepth counts ancestors from the root (0-based)', () => {
-  const nodes = [
-    { id: 'root', parentId: null },
-    { id: 'mid', parentId: 'root' },
-    { id: 'leaf', parentId: 'mid' },
-  ];
-  assert.equal(treeDepth(nodes, 'root'), 0);
-  assert.equal(treeDepth(nodes, 'mid'), 1);
-  assert.equal(treeDepth(nodes, 'leaf'), 2);
-});
-
-test('treeDepth is cycle-guarded', () => {
-  // Malformed input (a parent loop) terminates instead of looping forever.
-  const nodes = [
-    { id: 'a', parentId: 'b' },
-    { id: 'b', parentId: 'a' },
-  ];
-  assert.doesNotThrow(() => treeDepth(nodes, 'a'));
 });
 
 // ─── externalDocSave / docSavedNoticeText ───────────────────────────────────

@@ -380,8 +380,7 @@ function DetailPane({ dimension, index }: { dimension: Dimension; index: number 
 // `renderCompactRow` only supply a row's CHILDREN — the wrapping div (role,
 // tabIndex, aria-current, the click/keydown handlers) is the library's own
 // and isn't reachable through any prop (see docs/ui-components-queue.md).
-// This repo cannot edit the library (CLAUDE.md), so — same technique as
-// useKeyboardTree.ts uses for TreeView — this patches the rendered DOM
+// This repo cannot edit the library (CLAUDE.md), so this patches the rendered DOM
 // directly via the stable `data-testid`s MasterDetail already emits
 // (`${testId}-rail`, `${testId}-row-<key>`): `role="listbox"` + a fixed
 // `aria-label` on the rail, `role="option"` + `aria-selected`/
