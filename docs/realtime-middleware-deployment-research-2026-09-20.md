@@ -6,6 +6,62 @@ supporting Docker containers, with fixes made in the owning repositories.
 Editor work is deferred. This document supersedes the deployment-choice section
 of [the earlier document integration map](document-backend-integration-2026-09-19.md).
 
+## Application bootstrap and document follow-up
+
+The next wave is implemented upstream:
+
+- **platform-api `1ee19a2`** uses the committed lockfile in both container
+  stages and fails its build on TypeScript errors. The clean Linux image builds.
+- **realtime-examples `f90bdf30`** does the same for the gateway's separate
+  `src/package.json`/lockfile, declaring compile-time dependencies instead of
+  installing an untracked second dependency graph. Strict container compilation
+  now passes; the previous `--noCheck` bypass is removed.
+- **realtime-examples `76d67cdd`** consolidates the 51-table shell bootstrap
+  into the schema JSON and a bounded, schema-checking SDK initializer. The
+  JSON had only 25 tables and several stale GSI definitions. Tilt's wrapper and
+  Compose now share the initializer; existing keys/indexes are checked, missing
+  GSIs added, and database errors propagate. No tables are deleted or replaced.
+  The init job gates service startup with `service_completed_successfully`.
+- The optional application profile starts the existing gateway and platform API.
+  It initializes twice, creates a team with owner membership and General channel,
+  replaces API/database, and reads the team/channel back. A WebSocket document
+  create/update/named-save also survives gateway/database replacement after its
+  Redis snapshot key is explicitly removed. This exercises the real library and
+  deployment adapters, rather than alternate document code.
+- **realtime-modules `58ac165` / 0.69.1** closes the reproduced direct-update
+  channel-policy bypass and rejects failed snapshot writes. Snapshot commits
+  serialize per channel, concurrent edits retain dirty state, and named saves
+  return the actual stored version key. All 1,336 library tests passed; the full
+  run retained handles after completion, while the eight added regressions
+  exited cleanly with handle detection. Built exports and the original isolated
+  probe verify the new behavior. Gateway adoption is verified in the application container gate (`f1eb248f`).
+
+[Application container evidence](research-evidence/middleware-application-2026-09-20.json)
+records the tested application images, including realtime-modules 0.69.1 adoption.
+[Updated library probe](research-evidence/document-toolkit-fixed-2026-09-20.json)
+records the policy/failed-save corrections. Seven initializer tests cover fresh
+and repeated bootstrap, missing/wrong indexes, wrong primary key, denied access
+and bounded outage. Production identity, ACLs, library collection/history policy,
+cold-store read-error handling and reusable CDK composition are still pending.
+
+**Operational follow-up:** MQ `160d0c0` now probes durable table availability
+for readiness and drains through service-runtime on SIGTERM/SIGINT. Container
+acceptance verifies readiness 503 while storage is down, liveness 200, readiness
+recovery, successful shutdown hooks and accepted-message recovery after a
+graceful restart. Its 40 focused tests passed. The full run passed 1,472 tests
+and skipped 42; one HTTP quota test returned an unexpected 400, then its entire
+11-test suite passed on rerun. This is not a claim of an all-green full run.
+
+Examples `f1eb248f` pins the library in both gateway manifests and bounds the
+shared DynamoDB client (two attempts, 1.5s connection/3s request deadlines).
+A real socket-stall test verifies rejection, alongside seven factory tests.
+The container gate additionally verifies failed named-save error propagation
+and retrieval using the actual acknowledged version timestamp. An initial
+outage probe tried to subscribe after the outage and never exercised Save;
+it now subscribes first, then interrupts the store. The resulting test exposed
+the unbounded client request, which is corrected in the factory.
+The old default standalone MNS result remains valid. The foundation uses Raft.
+
 ## Durable foundation: verified follow-up
 
 The ordinary queue persistence/acknowledgement milestone is now implemented
@@ -62,9 +118,10 @@ single all-green full run.
 
 **Still required before production composition:**
 
-1. Application table/GSI initialization and clean gateway/platform-api builds.
-2. Identity/service authentication, durable ACL bootstrap and dependency-aware
-   readiness/drain behavior; this isolated profile intentionally disables auth.
+1. Application table/GSI initialization and clean gateway/platform-api builds:
+   completed in the application follow-up above; retain these gates for releases.
+2. Identity/service authentication, durable ACL bootstrap and remaining dependency-aware
+   readiness/drain behavior (MQ now covered); this isolated profile intentionally disables auth.
 3. Remaining queue semantics: restart hydration currently exposes pending bodies
    before old visibility timeouts expire; delayed/dedup/group paths include
    in-memory state. No multi-process message fencing has been established.
@@ -149,7 +206,7 @@ implement its server. The source and runtime checks take precedence.
 | MNS default image cannot start as non-root | Disposable cached image exits EACCES creating `/app/data/backups` | Image defaults now point at writable `/var/lib/ddb`; rebuilt image starts |
 | MNS health checks always fail | `GET /` and `/health` both return 404 | Image and examples local probe now exercise bounded `ListTables` |
 | Successful MNS write does not survive default-mode restart | Isolated rebuilt image: Put/Get succeeds, restart, Get has no Item | Default mode remains volatile; follow-up verifies the separate single-voter Raft path |
-| Local stack lacks application schema initialization | Compose has no init job; Tilt separately runs setup script | Remaining; unify definitions and gate startup on successful initialization |
+| Local stack lacked application schema initialization | JSON and shell definitions diverged | Completed: shared 51-table contract and bounded initializer gate Compose startup |
 | Existing CDK is incomplete for current stack | Gateway task lacks MQ/platform URLs; snapshot table imported by fixed name; demo shared infra creates its own identity/VPC | Remaining; extend reusable deployment wiring rather than inventing service logic |
 
 The MNS probe used a disposable container with `--network none`, no mounted

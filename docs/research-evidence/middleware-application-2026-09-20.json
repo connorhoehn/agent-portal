@@ -1,0 +1,27 @@
+{
+  "images": {
+    "MNS_IMAGE": "sha256:ff95a7272e0f82d7aa573b0a2e41436706426536da42b341c30688416ae3217c",
+    "MQ_IMAGE": "sha256:dc0974ac45ca4df2f5a559891b6abb510d36281624dc0e73db66fac036fe693a",
+    "REDIS_IMAGE": "sha256:7aec734b2bb298a1d769fd8729f13b8514a41bf90fcdd1f38ec52267fbaa8ee6",
+    "PLATFORM_API_IMAGE": "sha256:5663b3dccf55d1e72e45c007f26d8eb16cd06fa9fc65ca334d17d4530895944d",
+    "GATEWAY_IMAGE": "sha256:662b9a03a9076fb41deb807cc641f8467b8c59cd9a742f86cdfdc54bc6f61fa7"
+  },
+  "teamAndChannelSurvivedReplacement": true,
+  "documentRecoveredWithoutHotCache": true,
+  "documentSaveOutageRejected": true,
+  "namedSnapshotKeyRetrievable": true,
+  "publishSurvivedReplacement": true,
+  "recoveredReceiptDeletedBody": true,
+  "deleteSurvivedReplacement": true,
+  "storeOutageRejectedAck": true,
+  "mqReadinessTracksStorage": true,
+  "mqGracefulShutdownCompleted": true,
+  "publishSurvivedGracefulStop": true,
+  "sameReceiptRetriedAfterOutage": true,
+  "applicationSchemaInitializedTwice": true,
+  "initializedTables": 51,
+  "mqReplicas": 1,
+  "storeVoters": 1,
+  "hostPorts": false,
+  "externalNetwork": false
+}
