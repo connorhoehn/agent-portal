@@ -1,3 +1,5 @@
+jest.mock('@connorhoehnslalom/realtime-modules/server', () => ({ createCanvasSeed: jest.fn(() => ({snapshot:'baseline'})), exportCanvasProjection: jest.fn(() => ({markdown:'base normalized'})) }));
+jest.mock('../../lib/document-canvas-schema.js', () => ({ documentCanvasSchema:{} }));
 jest.mock('../../lib/authz.js', () => ({ isAllowed: jest.fn(async () => true) }));
 jest.mock('../document-canvas.js', () => ({ readDocumentCanvasProjection: jest.fn() }));
 jest.mock('../document-mapping.js', () => ({ documentSourceRevision: (s:string) => require('node:crypto').createHash('sha256').update(s).digest('hex'), advanceDocumentSourceRevision: jest.fn(async () => true) }));
@@ -61,5 +63,12 @@ it('preserves source conflicts without automatically retrying publication',async
   global.fetch=jest.fn(async()=>new Response(JSON.stringify({detail:'Remote source version changed'}),{status:409}));
   await expect(publishSourcePage(source,session)).rejects.toMatchObject({status:409});
   expect(fetch).toHaveBeenCalledTimes(1);
+  expect(advanceDocumentSourceRevision).not.toHaveBeenCalled();
+});
+
+it('permits a pull when only the canonical schema normalized source formatting',async()=>{
+  jest.mocked(readDocumentCanvasProjection).mockResolvedValue({markdown:'base normalized',sourceRevision:hash('base'),documentId:'uuid',version:'42'});
+  global.fetch=jest.fn(async()=>new Response(JSON.stringify({ok:true,source_revision:hash('changed source')}),{status:200}));
+  expect(await pullSourcePage(source,session)).toMatchObject({ok:true,canvas_reconciliation_required:true});
   expect(advanceDocumentSourceRevision).not.toHaveBeenCalled();
 });

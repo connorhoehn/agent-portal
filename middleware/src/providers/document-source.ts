@@ -1,3 +1,5 @@
+import { createCanvasSeed, exportCanvasProjection } from '@connorhoehnslalom/realtime-modules/server';
+import { documentCanvasSchema } from '../lib/document-canvas-schema.js';
 import type { Session } from '../lib/session.js';
 import { isAllowed } from '../lib/authz.js';
 import { readDocumentCanvasProjection } from './document-canvas.js';
@@ -85,7 +87,15 @@ export async function pullSourcePage(source:CanvasSource,session:Session):Promis
   const saved=await projection(source,session);
   // Pull cannot silently replace collaborative edits. Return new source as a
   // review candidate; applying it to the binary requires a separate explicit merge.
-  if(documentSourceRevision(saved.markdown)!==saved.sourceRevision) throw new DocumentSourceError(409,'Document has collaborative edits; publish or review them before pulling');
+  if(documentSourceRevision(saved.markdown)!==saved.sourceRevision) {
+    // Schema conversion can normalize harmless Markdown whitespace. Compare to
+    // the same canvas projection of the exact imported source before declaring
+    // a conflict; never compare to a newer upstream body as the baseline.
+    if(documentSourceRevision(source.markdown)!==saved.sourceRevision) throw new DocumentSourceError(409,'Source baseline changed; review before pulling');
+    const baselineSeed=createCanvasSeed(sourceMarkdownForCanvas(source.id,source.markdown),{schema:documentCanvasSchema});
+    const baseline=canvasMarkdownForSource(source.id,exportCanvasProjection(baselineSeed.snapshot).markdown);
+    if(saved.markdown!==baseline) throw new DocumentSourceError(409,'Document has collaborative edits; publish or review them before pulling');
+  }
   const result=await request({action:'pull',actor:session.sub,page_id:pageId(source.id),expected_revision:saved.sourceRevision});
   return {...result,canvas_reconciliation_required:result.source_revision!==saved.sourceRevision};
 }
