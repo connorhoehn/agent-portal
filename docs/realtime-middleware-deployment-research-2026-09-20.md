@@ -6,6 +6,79 @@ supporting Docker containers, with fixes made in the owning repositories.
 Editor work is deferred. This document supersedes the deployment-choice section
 of [the earlier document integration map](document-backend-integration-2026-09-19.md).
 
+## Durable foundation: verified follow-up
+
+The ordinary queue persistence/acknowledgement milestone is now implemented
+and tested across owning repositories. This supersedes the initial finding
+that no MNS durable mode had been verified; default standalone mode still loses
+items. No new queue, realtime service or UI was built.
+
+| Owner | Shipped change | Commit |
+| --- | --- | --- |
+| managed-nosql-store | Start Raft before accessing its state machine; clean Linux dependency build; isolated durability gate | `48bf834` |
+| distributed-core | Persist deletion before releasing queue lease; block expiry/removal races; recovered-pending removal | `18ebf5f4` / v0.46.0 |
+| distributed-core | Repair published ESM shared-chunk loading and verify actual imports; guard retention race | `ad0cec61` / v0.46.1 |
+| message-queue | Adopt v0.46.1, check completion failures, retain failed receipts, remove recovered bodies before acknowledging | `1f1ef3e` |
+| realtime-examples | Isolated MNS + MQ + Redis Compose foundation, crash/outage acceptance script, runbook and image evidence | `bcf23613` |
+
+**Root causes.** MNS's existing Raft path was usable after a startup-order fix:
+its backup registry requested the state machine before `server.start()` had
+created it. The default standalone path is a different store. MQ completed
+in-memory leases before attempting durable deletion, caught storage errors,
+and still returned success. Its restart receipt path removed only the receipt,
+leaving the body to replay. Those are now corrected through DC's additive
+persistence hook, rather than another queue implementation in an adopter.
+
+Consumer installation also exposed a DC packaging defect hidden by source tests:
+esbuild's shared `__require` helper had no lexical Node `require` binding.
+The per-entrypoint shim did not fix imported chunks. v0.46.1 repairs the build
+and makes `verify:dist` import the actual ESM root/queue exports in a fresh process.
+
+**Container evidence.** Clean-built MNS passed acknowledged Put/Get across
+SIGKILL, conditional-write rejection, conditional update across container
+replacement, Query recovery and durable deletion. The examples gate then used
+real MQ HTTP calls and DDB adapters: publish survived killing/replacing both
+services; a receipt issued before MQ replacement deleted the recovered body;
+acknowledged deletion survived a second replacement; killing the store made
+acknowledgement return HTTP 500, and the same receipt succeeded after recovery.
+All test resources were UUID-owned and removed; no host ports or external
+network were used. Redis ran for fanout but its document-state recovery was not
+tested. Exact image IDs are recorded in
+[MNS evidence](research-evidence/mns-raft-durability-2026-09-20.json) and
+[MQ/MNS evidence](research-evidence/mq-mns-foundation-2026-09-20.json).
+
+Reproduce with the committed
+[foundation runbook](https://github.com/connorhoehn/realtime-examples/blob/bcf23613/examples/middleware-foundation/README.md).
+No registry image release or AWS deployment was performed.
+
+**Validation limits.** DC's earlier full suite passed 9,595 tests (6 skipped);
+the final queue regression suite passed 43 tests, and build/export/import checks
+passed. MNS's Raft server suite passed 9 tests. MQ's 21 focused durability tests
+and TypeScript/container builds passed. Its full run passed 1,467 tests, skipped
+42, and failed two: one stale mock returned no completion result; one HTTP test
+had a socket hang-up. After correcting the mock, both complete affected suites
+passed all 46 tests. This records the rerun accurately rather than claiming a
+single all-green full run.
+
+**Still required before production composition:**
+
+1. Application table/GSI initialization and clean gateway/platform-api builds.
+2. Identity/service authentication, durable ACL bootstrap and dependency-aware
+   readiness/drain behavior; this isolated profile intentionally disables auth.
+3. Remaining queue semantics: restart hydration currently exposes pending bodies
+   before old visibility timeouts expire; delayed/dedup/group paths include
+   in-memory state. No multi-process message fencing has been established.
+4. Realtime library policy and snapshot persistence seams described below.
+5. CDK resource injection and assertions, followed by authenticated full-stack
+   acceptance. Keep the existing gateway binary and adapters.
+
+For CDK, **one desired MQ task is not enough**: rolling replacement can overlap
+old/new tasks. Until ownership fencing exists, deployments must prevent overlap
+and explicitly accept the stop-before-start availability cost. This conclusion
+combines MQ's local ownership model with
+[ECS deployment semantics](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/deployment-type-ecs.html).
+A single-voter store proves process recovery, not host power-loss tolerance or HA.
+
 ## Recommendation
 
 Adopt the existing gateway, platform-api, MQ, event-catalog and supporting stores
@@ -75,7 +148,7 @@ implement its server. The source and runtime checks take precedence.
 | Misspelled MQ storage mode silently loses durability | Every unrecognized mode returned memory | Upstream now rejects unknown values; unset/blank still retains compatible memory default |
 | MNS default image cannot start as non-root | Disposable cached image exits EACCES creating `/app/data/backups` | Image defaults now point at writable `/var/lib/ddb`; rebuilt image starts |
 | MNS health checks always fail | `GET /` and `/health` both return 404 | Image and examples local probe now exercise bounded `ListTables` |
-| Successful MNS write does not survive default-mode restart | Isolated rebuilt image: Put/Get succeeds, restart, Get has no Item | Proven remaining blocker; no claim that paths or a volume solve item durability |
+| Successful MNS write does not survive default-mode restart | Isolated rebuilt image: Put/Get succeeds, restart, Get has no Item | Default mode remains volatile; follow-up verifies the separate single-voter Raft path |
 | Local stack lacks application schema initialization | Compose has no init job; Tilt separately runs setup script | Remaining; unify definitions and gate startup on successful initialization |
 | Existing CDK is incomplete for current stack | Gateway task lacks MQ/platform URLs; snapshot table imported by fixed name; demo shared infra creates its own identity/VPC | Remaining; extend reusable deployment wiring rather than inventing service logic |
 
@@ -89,7 +162,7 @@ Reproduce the observation:
 
 ```sh
 # In managed-nosql-store (builds its current Dockerfile):
-docker build -t managed-nosql-store:codex-container-audit .
+docker build --ssh default -t managed-nosql-store:codex-container-audit .
 # In aws-agentcore (only touches its own disposable container):
 python3 scripts/research/container-store-probe.py managed-nosql-store:codex-container-audit
 ```
@@ -106,8 +179,9 @@ Maintain an exact service-image/package inventory. Gateway Docker builds consume
 `src/package.json`, while local tooling also has a root manifest; both currently
 pin realtime-modules 0.69.0, but aws-agentcore consumes 0.51.0. Verify installed
 bytes, not just source exports or version labels. Gateway/platform builds still
-resolve dependency graphs without lockfile enforcement; MNS copies host
-`node_modules`, and the gateway frontend build rewrites some sibling dependencies.
+resolve dependency graphs without lockfile enforcement, and the gateway frontend
+build rewrites some sibling dependencies. MNS now installs clean Linux dependencies
+from its lockfile (see the verified follow-up above).
 These are explicit reproducibility gaps, including native-module architecture.
 
 Build backend images from clean Linux dependency installs, preserve exact Git
@@ -216,7 +290,7 @@ CRDT history: [Yjs updates](https://docs.yjs.dev/api/document-updates),
 These sources explain the model; replacing the user's realtime server is not
 recommended here.
 
-## Validation and source checkpoint
+## Initial validation and source checkpoint (before durable follow-up)
 
 - MQ: 21 focused tests, 1,466 full-suite tests passed; 42 tests skipped across
   seven suites. TypeScript build passed. DDB-gated skipped tests do not prove
@@ -252,6 +326,7 @@ Source SHAs before this pass's fixes (moving sibling worktrees were not reset):
 - [realtime-examples 909b5c52](https://github.com/connorhoehn/realtime-examples/commit/909b5c52): Compose entrypoints, build credentials, service URLs, MNS configuration/probe and deployment runbook.
 
 These are source commits, not published container releases or AWS deployment.
-The next concrete milestone is an isolated backend profile with reproducible
-images, reliable table initialization and verified restart persistence. No UI
+The verified follow-up above delivers the isolated ordinary-queue foundation.
+The next milestone extends acceptance through application schema initialization,
+gateway/platform-api persistence and authentication, then CDK composition. No UI
 implementation is needed for that milestone.

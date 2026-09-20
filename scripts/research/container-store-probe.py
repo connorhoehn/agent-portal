@@ -12,12 +12,14 @@ import time
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('image', help='Locally built managed-nosql-store image')
+parser.add_argument('--raft', action='store_true', help='Exercise the existing single-voter Raft mode')
 args = parser.parse_args()
 image_id = subprocess.check_output(
     ['docker', 'image', 'inspect', '--format', '{{.Id}}', args.image], text=True
 ).strip()
 container = subprocess.check_output(
-    ['docker', 'run', '-d', '--network', 'none', args.image], text=True
+    ['docker', 'run', '-d', '--network', 'none',
+     *(['-e', 'NODE_ID=probe', '-e', 'CLUSTER_NODES=', '-e', 'ANNOUNCE_ADDRESS=127.0.0.1'] if args.raft else []), args.image], text=True
 ).strip()
 
 
@@ -39,6 +41,11 @@ def ready():
     for _ in range(30):
         try:
             if request('ListTables', {})['status'] == 200:
+                if args.raft:
+                    role = subprocess.check_output(['docker', 'exec', container, 'node', '-e', "fetch('http://127.0.0.1:8000/cluster/status').then(r=>r.json()).then(s=>console.log(s.role))"], text=True).strip()
+                    if role != 'leader':
+                        time.sleep(0.3)
+                        continue
                 return
         except (subprocess.CalledProcessError, json.JSONDecodeError):
             pass
@@ -70,7 +77,7 @@ try:
     ready()
     after = request('GetItem', {'TableName': table, 'Key': key})
     print(json.dumps({
-        'image': args.image, 'imageId': image_id,
+        'image': args.image, 'imageId': image_id, 'raft': args.raft,
         'isolation': 'network none; no volumes or published ports',
         'imageHealthcheckExitCode': health,
         'beforeRestart': before, 'afterRestart': after,

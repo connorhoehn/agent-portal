@@ -1,0 +1,16 @@
+{
+  "images": {
+    "MNS_IMAGE": "sha256:ff95a7272e0f82d7aa573b0a2e41436706426536da42b341c30688416ae3217c",
+    "MQ_IMAGE": "sha256:64bd047c29cb1a031f1b0e6e1f5f848fc4e446101f0c938a754c39e3029f1013",
+    "REDIS_IMAGE": "sha256:7aec734b2bb298a1d769fd8729f13b8514a41bf90fcdd1f38ec52267fbaa8ee6"
+  },
+  "publishSurvivedReplacement": true,
+  "recoveredReceiptDeletedBody": true,
+  "deleteSurvivedReplacement": true,
+  "storeOutageRejectedAck": true,
+  "sameReceiptRetriedAfterOutage": true,
+  "mqReplicas": 1,
+  "storeVoters": 1,
+  "hostPorts": false,
+  "externalNetwork": false
+}
