@@ -19,6 +19,8 @@ export interface DocumentWorkspaceConfig {
   grantKeyId: string;
   /** Optional known source steward, recorded on newly imported mappings only. */
   sourceOwnerSub?: string;
+  /** Separately deployed, authenticated accelerator source adapter. */
+  source?: { url: string; secretArn: string };
   /** Existing matching Ed25519 PEM keys; CDK never generates or reads key bytes. */
   grantPrivateKeySecretArn: string;
   grantPublicKeySecretArn: string;
@@ -46,6 +48,12 @@ export function attachDocumentWorkspace(scope: cdk.Stack, props: {
     if (!image?.repositoryName || !/^sha256:[a-f0-9]{64}$/.test(image.digest)) throw new Error(`Document ${name} image requires a repository and immutable digest`);
   }
   if (!config.grantPrivateKeySecretArn || !config.grantPublicKeySecretArn) throw new Error('Matching document signing key secret ARNs are required');
+  if (config.source) {
+    const sourceUrl = new URL(config.source.url);
+    if (sourceUrl.protocol !== 'https:' || sourceUrl.username || sourceUrl.password || sourceUrl.search || sourceUrl.hash || !config.source.secretArn) {
+      throw new Error('Assessment source requires an HTTPS URL and existing secret ARN');
+    }
+  }
   if (config.grantPrivateKeySecretArn === config.grantPublicKeySecretArn) throw new Error('Document public and private key secrets must be separate');
   const namespace = new discovery.PrivateDnsNamespace(scope, 'DocumentNamespace', { vpc, name: `${prefix}-documents.local` });
   middleware.service.enableCloudMap({ cloudMapNamespace: namespace, name: 'bff' });
@@ -101,6 +109,11 @@ export function attachDocumentWorkspace(scope: cdk.Stack, props: {
   container.addEnvironment('DOCUMENT_GRANT_ISSUER', config.grantIssuer);
   container.addEnvironment('DOCUMENT_GRANT_KEY_ID', config.grantKeyId);
   if (config.sourceOwnerSub) container.addEnvironment('DOCUMENT_SOURCE_OWNER_SUB', config.sourceOwnerSub);
+  if (config.source) {
+    container.addEnvironment('ASSESSMENT_SOURCE_URL', config.source.url);
+    const sourceSecret = secretsmanager.Secret.fromSecretCompleteArn(scope, 'AssessmentSourceSecret', config.source.secretArn);
+    container.addSecret('ASSESSMENT_SOURCE_SECRET', ecs.Secret.fromSecretsManager(sourceSecret));
+  }
   container.addSecret('DOCUMENT_GRANT_PRIVATE_KEY', ecs.Secret.fromSecretsManager(privateKey));
   container.addSecret('DOCUMENT_POLICY_SECRET', ecs.Secret.fromSecretsManager(policySecret));
   workspace.gateway.connections.allowFrom(middleware.service, ec2.Port.tcp(8080), 'BFF scoped document transport');

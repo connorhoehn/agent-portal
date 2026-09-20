@@ -9,6 +9,7 @@ const config: DocumentWorkspaceConfig = {
   grantPrivateKeySecretArn: 'arn:aws:secretsmanager:us-east-1:111111111111:secret:document-private-abcdef',
   grantPublicKeySecretArn: 'arn:aws:secretsmanager:us-east-1:111111111111:secret:document-public-abcdef',
   architecture: 'ARM64', sourceOwnerSub: 'assessment-steward',
+  source: { url: 'https://accelerator.example.test', secretArn: 'arn:aws:secretsmanager:us-east-1:111111111111:secret:accelerator-source-abcdef' },
   images: Object.fromEntries(['gateway', 'platform', 'catalog', 'mq', 'redis'].map(name => [name, { repositoryName: `documents-${name}`, digest: 'sha256:' + 'a'.repeat(64) }])) as DocumentWorkspaceConfig['images'],
 };
 const context = { deployMiddlewareService: true, deployDocumentWorkspace: true };
@@ -22,12 +23,14 @@ test('opt-in document workspace uses the exported backend composition with scope
   const tasks = Object.values<any>(template.findResources('AWS::ECS::TaskDefinition'));
   const containers = tasks.flatMap(task => task.Properties.ContainerDefinitions);
   const bff = containers.find(c => c.Name === 'middleware');
+  assert.ok(bff.Secrets.some((s: any) => s.Name === 'ASSESSMENT_SOURCE_SECRET' && s.ValueFrom === config.source!.secretArn));
+  assert.ok(bff.Environment.some((e: any) => e.Name === 'ASSESSMENT_SOURCE_URL' && e.Value === config.source!.url));
   assert.ok(bff.Secrets.some((s: any) => s.Name === 'DOCUMENT_GRANT_PRIVATE_KEY' && s.ValueFrom === config.grantPrivateKeySecretArn));
   assert.ok(bff.Environment.some((e: any) => e.Name === 'DOCUMENT_GATEWAY_PUBLIC_URL' && e.Value === 'wss://assessment.example.test/document-realtime'));
   assert.ok(bff.Environment.some((e: any) => e.Name === 'DOCUMENT_SOURCE_OWNER_SUB' && e.Value === 'assessment-steward'));
   assert.ok(bff.Environment.some((e: any) => e.Name === 'DOCUMENT_PLATFORM_INTERNAL_URL' && String(e.Value).startsWith('http://workspace-platform.')));
   for (const container of containers.filter(c => c.Name !== 'middleware')) {
-    assert.ok(!container.Secrets?.some((s: any) => s.Name === 'DOCUMENT_GRANT_PRIVATE_KEY'));
+    assert.ok(!container.Secrets?.some((s: any) => ['DOCUMENT_GRANT_PRIVATE_KEY', 'ASSESSMENT_SOURCE_SECRET'].includes(s.Name)));
     assert.ok(JSON.stringify(container.Image).includes('@sha256:'), `unpinned ${container.Name}`);
   }
   const workflows = containers.filter(c => ['gateway', 'platform'].includes(c.Name));
@@ -65,4 +68,11 @@ test('requires BFF service, HTTPS, normal identity and concrete configuration', 
 test('rejects mutable image references and non-origin public URLs', () => {
   assert.throws(() => middlewareServiceStack(context, { ...props, documentWorkspace: { ...config, images: { ...config.images, gateway: { ...config.images.gateway, digest: 'latest' } } } }), /immutable digest/);
   assert.throws(() => middlewareServiceStack(context, { ...props, documentWorkspace: { ...config, publicBaseUrl: 'http://localhost:8080' } }), /HTTPS origin/);
+});
+
+
+test('local-only document deployment does not require an accelerator source', () => {
+  const template = Template.fromStack(middlewareServiceStack(context, { ...props, documentWorkspace: { ...config, source: undefined } }));
+  assert.ok(!JSON.stringify(template.findResources('AWS::ECS::TaskDefinition')).includes('ASSESSMENT_SOURCE_SECRET'));
+  assert.throws(() => middlewareServiceStack(context, { ...props, documentWorkspace: { ...config, source: { url: 'http://accelerator.example.test', secretArn: config.source!.secretArn } } }), /HTTPS URL/);
 });

@@ -62,3 +62,18 @@ for newly imported source mappings. It is passed only to the BFF as
 `DOCUMENT_SOURCE_OWNER_SUB`. Omitting it leaves ownership unestablished; a viewer
 is never promoted to owner by opening a document. Changing this setting does not
 rewrite existing mapping ownership or automatically claim platform lifecycle rows.
+
+## Optional accelerator source
+
+`documentWorkspace.source` accepts `{url, secretArn}` for an existing accelerator
+source adapter. The URL must use HTTPS; the secret is imported from Secrets Manager
+and injected as `ASSESSMENT_SOURCE_SECRET` only into the BFF. The gateway, platform,
+Redis and catalog never receive this source credential. The BFF receives the URL as
+`ASSESSMENT_SOURCE_URL`. The URL must be reachable from the middleware task subnet;
+private network routing and ingress are owned by the source deployment.
+
+The accelerator remains a separately deployed external dependency. This construct
+does not deploy its Python application or claim that untested runtime is packaged.
+Omit the source configuration to run local canonical documents without it. The
+local document launcher forwards explicitly configured source environment values;
+its private settings file never embeds source credentials in committed artifacts.
