@@ -267,9 +267,15 @@ python3.11 -m venv .venv-synth && .venv-synth/bin/pip install -r schema/synth/re
   `docs/document-backend-integration-2026-09-19.md`. Do not confuse that REST
   backend with the package's typed-documents subscription service.
 
-**Do NOT modify ui-components or realtime-modules from this repo.** Consume as
-libraries; queue gaps in `docs/ui-components-queue.md` rather than cross-repo
-editing.
+**Realtime integration task exception (user-authorized 2026-09-19):** the user
+explicitly requested fixes in the owning sibling repos while making the MQ/DC/
+realtime middleware and supporting Docker containers reusable and deployable
+through CDK. For this work, read each repo's instructions, fix shared contracts
+upstream, and record commits and consumer verification. Preserve unrelated
+in-flight edits. Do not rebuild UI that those projects already provide.
+See [the middleware deployment research](docs/realtime-middleware-deployment-research-2026-09-20.md).
+Outside that task, consume libraries and queue UI gaps in
+`docs/ui-components-queue.md`.
 
 ## Synthetic corpus pipeline (`schema/synth/`)
 

@@ -1,0 +1,12 @@
+{
+  "packageName": "@connorhoehnslalom/realtime-modules",
+  "version": "0.51.0",
+  "subscribePolicyCalls": 1,
+  "updatePolicyCalls": 0,
+  "updateAppliedAfterDeniedSubscribe": true,
+  "snapshotMetadataFields": [
+    "timestamp",
+    "versionName"
+  ],
+  "snapshotStoreFailureRejects": false
+}

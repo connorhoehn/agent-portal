@@ -1,5 +1,10 @@
 # Reuse the existing document backend
 
+Follow-up: the user clarified that reusable middleware and Docker/CDK deployment
+are the priority, and authorized cross-repo fixes. See the
+[deployment research and evidence](realtime-middleware-deployment-research-2026-09-20.md).
+The deployment-choice question below is historical; editor work is deferred.
+
 Source inspection: realtime-modules sibling checkout, realtime-examples at
 `510049ab12242dcf5230a73966fb338e3c8de20a`, and platform-api routes. Sibling
 working trees contain ongoing work; these findings do not certify their entire
