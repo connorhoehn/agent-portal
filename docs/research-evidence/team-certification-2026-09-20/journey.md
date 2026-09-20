@@ -5,8 +5,8 @@ url: /assessment/teams/TEAM-001
 pages: portal/src/pages/assessment/dashboard/TeamScorecard.tsx,portal/src/pages/assessment/dashboard/DimensionMasterDetail.tsx,portal/src/pages/assessment/dashboard/DimensionDetailHeader.tsx,portal/src/components/shell/Layout.tsx,portal/src/app.css
 audited: 2026-09-20, isolated Playwright Chromium context, portal 127.0.0.1:5183 and existing middleware 3001
 screenshot: after/desktop.png
-verdict: partial — responsive layout and interactions pass; the shell's existing gateway connection still logs HTTP 404 handshake failures
-console errors: 7 in the final run — six shell ws://localhost:3001/ws handshake failures, one expected HTTP 404 for TEAM-999; zero JavaScript exceptions
+verdict: pass — responsive layout and tested interactions pass
+console errors: 0 on TEAM-001 and its interactions; one expected HTTP 404 after requesting TEAM-999; zero JavaScript exceptions
 layout: pass — desktop 1500px: content left 224px, width 1252px, rail 340px, detail 910px; tablet 768px: content 520px, stacked rail/detail 518px inside borders; phone 390px: content left 24px, width 342px, detail 340px; document scrollWidth equals viewport at all three widths
 keyboard: pass — 47/47 visible enabled controls reached through actual Tab presses on desktop; Enter and ArrowDown select dimensions; Escape closes Team details and mobile navigation; Enter activates the phone Documents tab
 empty-state: pass — unmatched dimension filter explains no matching dimensions; TEAM-999 shows "No team TEAM-999" and "Back to the dashboard"
@@ -40,9 +40,13 @@ Documents was focused and activated by Enter successfully.
 The audit did not change assessment data, score a team, publish anything,
 restart a service, or reuse personal browser cookies. The isolated operator
 session was created through the existing picker and workspace selector.
-Console failures are preserved verbatim in after/observations.json rather
-than excluded from the count. The expected missing-team HTTP 404 is identified
-separately from the unresolved shell gateway configuration.
+Console observations are preserved verbatim in after/observations.json. The
+first audit recorded the shell attempting ws://localhost:3001/ws and receiving
+404. The coordinator subsequently restarted the portal with the launcher
+overriding the stale global gateway setting, then this entire probe was rerun
+in a new browser context. The final run contains only the expected missing-team
+HTTP 404; TEAM-001 and its interactions produced no console errors. No service
+restart was performed by this audit probe.
 
 Validation: portal production build passed; all 931 portal tests passed;
 component discipline and navigation parity checks passed. The repeatable
