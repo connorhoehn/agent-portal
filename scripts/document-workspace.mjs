@@ -5,9 +5,10 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
+import { buildDocumentWorkspace, defaultImages, prepareDocumentCompose } from './docker/document-workspace-build.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const examples = resolve(root, '../realtime-examples');
+const action = process.argv[2] || 'help';
 const state = resolve(root, '.scratch/document-workspace');
 mkdirSync(state, { recursive: true, mode: 0o700 });
 const settingsFile = resolve(state, 'settings.json');
@@ -25,12 +26,7 @@ if (!existsSync(settingsFile)) {
 }
 const saved = JSON.parse(readFileSync(settingsFile, 'utf8'));
 const env = { ...process.env, ...saved,
-  MNS_IMAGE: process.env.MNS_IMAGE || 'managed-nosql-store:codex-durable-clean',
-  MQ_IMAGE: process.env.MQ_IMAGE || 'message-queue:codex-auth',
-  REDIS_IMAGE: process.env.REDIS_IMAGE || 'redis:7-alpine',
-  CATALOG_IMAGE: process.env.CATALOG_IMAGE || 'event-catalog:document-workspace',
-  PLATFORM_API_IMAGE: process.env.PLATFORM_API_IMAGE || 'platform-api:document-workspace',
-  GATEWAY_IMAGE: process.env.GATEWAY_IMAGE || 'realtime-examples:document-workspace',
+  ...Object.fromEntries(Object.entries(defaultImages()).map(([name, value]) => [name, process.env[name] || value])),
   COGNITO_REGION: 'us-east-1', COGNITO_USER_POOL_ID: 'us-east-1_localdev000',
   DOCUMENT_SESSION_EPOCH_URL: 'http://host.docker.internal:3001/internal/document-grants/session',
   DOCUMENT_GATEWAY_INTERNAL_URL: 'ws://127.0.0.1:18081',
@@ -43,19 +39,19 @@ writeFileSync(overlay, JSON.stringify({ services: {
     environment: { PUBLIC_URL: 'http://127.0.0.1:18081' } },
   'platform-api': { ports: ['127.0.0.1:13002:3001'], extra_hosts: ['host.docker.internal:host-gateway'] },
 }, networks: { default: { internal: false } } }, null, 2));
+const needsCompose = ['up', 'foundation', 'down', 'status', 'check'].includes(action);
+const composeSource = needsCompose ? prepareDocumentCompose(state) : state;
 const compose = ['compose', '-p', 'assessment-document-workspace',
-  '-f', resolve(examples, 'examples/middleware-foundation/compose.yml'),
-  '-f', resolve(examples, 'examples/middleware-foundation/compose.document-grants.yml'),
+  '-f', resolve(composeSource, 'compose.yml'),
+  '-f', resolve(composeSource, 'compose.document-grants.yml'),
   '-f', overlay, '--profile', 'application'];
 function run(command, args, cwd = root, environment = env) {
   const result = spawnSync(command, args, { cwd, env: environment, stdio: 'inherit' });
   if (result.error) throw result.error;
   if (result.status !== 0) process.exit(result.status ?? 1);
 }
-const action = process.argv[2] || 'help';
-if (action === 'build') {
-  run('docker', ['build', '--ssh', 'default', '--target', 'server-runtime', '-t', env.GATEWAY_IMAGE, '.'], examples);
-  run('docker', ['build', '--ssh', 'default', '-f', resolve(root, '../platform-api/Dockerfile'), '-t', env.PLATFORM_API_IMAGE, '..']);
+if (action === 'build' || action === 'build-plan') {
+  buildDocumentWorkspace({ state, images: env, planOnly: action === 'build-plan' });
 } else if (action === 'up') {
   run('docker', [...compose, 'up', '-d', '--wait', '--wait-timeout', '180']);
 } else if (action === 'foundation') {
@@ -69,7 +65,8 @@ if (action === 'build') {
 } else if (action === 'middleware') {
   run('npm', ['run', 'dev:mock'], resolve(root, 'middleware'), { ...env, PORT: '3001' });
 } else {
-  console.log('Usage: node scripts/document-workspace.mjs build|foundation|up|middleware|status|check|down');
+  console.log('Usage: node scripts/document-workspace.mjs build|build-plan|foundation|up|middleware|status|check|down');
+  console.log('Build archives pinned owning repositories for all five services and the catalog UI dependency; no sibling dirty files are copied.');
   console.log('Uses gateway :18081 and API :13002. Run the portal normally on :5183.');
   console.log('Private local keys remain in .scratch/document-workspace/settings.json. Down retains data.');
 }

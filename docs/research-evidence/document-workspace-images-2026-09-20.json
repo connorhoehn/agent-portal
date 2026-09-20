@@ -1,0 +1,91 @@
+{
+  "schemaVersion": 1,
+  "builtAt": "2026-09-20T15:56:11.989Z",
+  "sources": {
+    "managed-nosql-store": {
+      "url": "git@github.com:connorhoehn/managed-nosql-store.git",
+      "commit": "48bf83451ee58421da2a707a16bf56020faa4f89"
+    },
+    "message-queue": {
+      "url": "git@github.com:connorhoehnslalom/message-queue.git",
+      "commit": "46fd5e01915d6c736717431fca6b79523073eaf8"
+    },
+    "event-catalog": {
+      "url": "git@github.com:connorhoehnslalom/event-catalog.git",
+      "commit": "b0bff824021a97945be331225519845b0fadf918"
+    },
+    "ui-components": {
+      "url": "git@github.com:connorhoehnslalom/ui-components.git",
+      "commit": "79bdd2bae303d6a4b0bb9a8287d4b7be1eddc3c7"
+    },
+    "platform-api": {
+      "url": "git@github.com:connorhoehnslalom/platform-api.git",
+      "commit": "9c0c96f428d982ce88e4011ec37a3ca573b0b29e"
+    },
+    "realtime-examples": {
+      "url": "git@github.com:connorhoehn/realtime-examples.git",
+      "commit": "907991255b1426f3051d943dda853dc42313609b"
+    }
+  },
+  "images": [
+    {
+      "image": "managed-nosql-store:document-48bf83451ee5",
+      "id": "sha256:77f69f337af746515908a66f784be9185a2ebcd1640d2a0379b8dd9f447e41e3",
+      "architecture": "arm64",
+      "os": "linux",
+      "repoDigests": [
+        "managed-nosql-store@sha256:77f69f337af746515908a66f784be9185a2ebcd1640d2a0379b8dd9f447e41e3"
+      ],
+      "sourceCommit": "48bf83451ee58421da2a707a16bf56020faa4f89"
+    },
+    {
+      "image": "message-queue:document-46fd5e01915d",
+      "id": "sha256:755831eac4e678558ed05e4e6cf4832c3e2165ee548e1edae981a5b5f434dd56",
+      "architecture": "arm64",
+      "os": "linux",
+      "repoDigests": [
+        "message-queue@sha256:755831eac4e678558ed05e4e6cf4832c3e2165ee548e1edae981a5b5f434dd56"
+      ],
+      "sourceCommit": "46fd5e01915d6c736717431fca6b79523073eaf8"
+    },
+    {
+      "image": "event-catalog:document-b0bff824021a",
+      "id": "sha256:e447f1fcdc1c2deec57e86791a2d45d516f774c7d40d478f3bc547c767654637",
+      "architecture": "arm64",
+      "os": "linux",
+      "repoDigests": [
+        "event-catalog@sha256:e447f1fcdc1c2deec57e86791a2d45d516f774c7d40d478f3bc547c767654637"
+      ],
+      "sourceCommit": "b0bff824021a97945be331225519845b0fadf918"
+    },
+    {
+      "image": "platform-api:document-9c0c96f428d9",
+      "id": "sha256:eb03ff270c07af253829855fba744cca92369a1b5bd4751cf9e269c321dd39c6",
+      "architecture": "arm64",
+      "os": "linux",
+      "repoDigests": [
+        "platform-api@sha256:eb03ff270c07af253829855fba744cca92369a1b5bd4751cf9e269c321dd39c6"
+      ],
+      "sourceCommit": "9c0c96f428d982ce88e4011ec37a3ca573b0b29e"
+    },
+    {
+      "image": "realtime-examples:document-907991255b14",
+      "id": "sha256:f650139fd8ed9ac43165f1448b8b03a17efb59ad1af1ab13b27d3527d5bb37cf",
+      "architecture": "arm64",
+      "os": "linux",
+      "repoDigests": [
+        "realtime-examples@sha256:f650139fd8ed9ac43165f1448b8b03a17efb59ad1af1ab13b27d3527d5bb37cf"
+      ],
+      "sourceCommit": "907991255b1426f3051d943dda853dc42313609b"
+    },
+    {
+      "image": "redis@sha256:7aec734b2bb298a1d769fd8729f13b8514a41bf90fcdd1f38ec52267fbaa8ee6",
+      "id": "sha256:7aec734b2bb298a1d769fd8729f13b8514a41bf90fcdd1f38ec52267fbaa8ee6",
+      "architecture": "arm64",
+      "os": "linux",
+      "repoDigests": [
+        "redis@sha256:7aec734b2bb298a1d769fd8729f13b8514a41bf90fcdd1f38ec52267fbaa8ee6"
+      ]
+    }
+  ]
+}
