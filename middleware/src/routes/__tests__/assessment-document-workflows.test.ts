@@ -1,3 +1,4 @@
+jest.mock('../../providers/document-versions.js', () => ({ changeDocumentVersion: jest.fn() }));
 jest.mock('../../config.js', () => ({ config: { mock: { aurora: true }, auth: {} } }));
 jest.mock('../../providers/document-workflows.js', () => ({ ...jest.requireActual('../../providers/document-workflows.js'), performDocumentWorkflow: jest.fn() }));
 jest.mock('../../providers/assessment.js', () => ({}));
@@ -6,6 +7,7 @@ jest.mock('../../lib/role-registry.js', () => ({ roleRegistry: () => [{ id: 'ass
 import express from 'express';
 import request from '../../test-support/http.js';
 import { assessmentDocumentWorkflowsRouter } from '../assessment-document-workflows.js';
+import { changeDocumentVersion } from '../../providers/document-versions.js';
 import { performDocumentWorkflow } from '../../providers/document-workflows.js';
 import type { Session } from '../../lib/session.js';
 const session: Session = { sub: 'alice', role: 'assessor', tenant: 'assessment', iat: 0, grants: { assessment: ['assessor'] } };
@@ -31,3 +33,15 @@ it('delegates assigned reviewer verdicts', async () => {
   expect(performDocumentWorkflow).toHaveBeenCalledWith('page:100002', session, { kind: 'update-review', method: 'PATCH', requestKey: 'document#alice', body: { state: 'approved', comment: 'Reviewed' } });
 });
 it('has no arbitrary platform path route', async () => { expect((await request(app()).get(`${url}/users?id=page:100002`)).status).toBe(404); expect(performDocumentWorkflow).not.toHaveBeenCalled(); });
+
+it('rejects fabricated restore actor and invalid timestamps', async () => {
+  expect((await request(app()).post(`${url}/versions/restore?id=page:1`).send({ timestamp: 123, actor: 'owner' })).status).toBe(400);
+  expect((await request(app()).post(`${url}/versions/restore?id=page:1`).send({ timestamp: '../other' })).status).toBe(400);
+  expect(changeDocumentVersion).not.toHaveBeenCalled();
+});
+it('returns only the server acknowledged saved version', async () => {
+  jest.mocked(changeDocumentVersion).mockResolvedValueOnce({ timestamp: 123, name: 'Saved' });
+  const result = await request(app()).post(`${url}/versions?id=page:1`).send({ name: 'Saved' });
+  expect(result.status).toBe(200); expect(result.body).toEqual({ timestamp: 123, name: 'Saved' });
+  expect(changeDocumentVersion).toHaveBeenCalledWith('page:1', session, { action: 'save', name: 'Saved' });
+});

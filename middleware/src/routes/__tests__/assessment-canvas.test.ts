@@ -22,7 +22,7 @@ beforeEach(() => {
   jest.mocked(getKnowledgeDoc).mockResolvedValue({ id: 'page:100002', title: 'Rubric', classification: 'synced', markdown: '# Rubric',
     path: 'confluence/100002', editable: false, updated_at: '2026-09-20T10:00:00Z' });
   jest.mocked(connectDocumentCanvas).mockResolvedValue({ documentId: 'canonical', sourceId: 'page:100002', title: 'Rubric', classification: 'synced',
-    canEdit: false, gatewayUrl: 'ws://localhost:18081', token: 'grant', expiresAt: Date.now() + 120000, sourceRevision: 'revision' });
+    canEdit: false, canManageWorkflow: false, gatewayUrl: 'ws://localhost:18081', token: 'grant', expiresAt: Date.now() + 120000, sourceRevision: 'revision' });
 });
 it('never accepts browser-supplied identity or editing authority', async () => {
   const response = await request(app()).post('/api/assessment/knowledge/canvas').send({ id: 'page:100002', canEdit: true, sub: 'admin' });

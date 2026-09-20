@@ -99,3 +99,17 @@ it('rewrites source attachments only at seed time', async () => {
   await connectDocumentCanvas({ ...source, markdown: '![Diagram](attachment:diagram.png)' }, session, false);
   expect(createCanvasSeed).toHaveBeenCalledWith('![Diagram](/api/assessment/knowledge/source/asset?id=page%3A100002&name=diagram.png)', { schema: {} });
 });
+it('reports explicit source-manager capability without putting manage in a browser grant', async () => {
+  jest.mocked(ensureDocumentMapping).mockResolvedValueOnce({ tenant_id: 'assessment', source_namespace: 'knowledge', source_id: source.id,
+    document_id: '00000000-0000-4000-a000-000000000001', source_revision: 'source-revision', schema_version: 2, migration_state: 'ready', owner_sub: session.sub, published_revision: null });
+  const result = await connectDocumentCanvas(source, session, true);
+  expect(result.canManageWorkflow).toBe(true);
+  expect(jest.mocked(createDocumentGrant).mock.calls[0]![0].operations).toEqual(['read', 'comment', 'edit']);
+});
+it('does not grant workflow management to another source owner even when requested by the server', async () => {
+  jest.mocked(ensureDocumentMapping).mockResolvedValueOnce({ tenant_id: 'assessment', source_namespace: 'knowledge', source_id: source.id,
+    document_id: '00000000-0000-4000-a000-000000000001', source_revision: 'source-revision', schema_version: 2, migration_state: 'ready', owner_sub: 'another-owner', published_revision: null });
+  const result = await connectDocumentCanvas(source, session, true, { workflowManage: true });
+  expect(result.canManageWorkflow).toBe(false);
+  expect(jest.mocked(createDocumentGrant).mock.calls[0]![0].operations).not.toContain('manage');
+});

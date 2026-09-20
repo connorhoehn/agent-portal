@@ -35,3 +35,36 @@ Ownership is not claimed on a read or automatically after a refusal. A manage gr
 requires the source mapping's explicit `owner_sub` to match the signed session and
 `ManageKnowledge`. Ordinary browser canvas grants never carry manage. Source
 publication remains a distinct action handled by the source adapter.
+
+The lifecycle GET additionally returns `canManageWorkflow` (both explicit source
+manager and platform owner) and `canClaimOwnership` (explicit source manager with
+no platform owner). Neither changes ownership or widens browser transport grants.
+`GET /reviewers` returns `{reviewers:[{id,displayName}]}` only to a workflow manager,
+using current assessment identities with ViewAssessment. Review assignment checks
+the selected identity authoritatively before contacting platform.
+
+`POST /versions` accepts `{name?:string}` and returns the acknowledged binary
+snapshot `{timestamp,name}`. `POST /versions/restore` accepts `{timestamp:number}`
+and returns `{timestamp,restored:true}` only after the gateway acknowledgement.
+Save requires ManageKnowledge and writable content; restore also requires the
+platform owner and the existing source-manager grant. The caller must flush its
+pending CRDT writes before saving a named version. The BFF hydrates the canonical
+channel before either operation, never reconstructs Markdown, never accepts actor
+identity, and never exposes its manage grant. Gateway authority rechecks lifecycle
+locks and live session revocation when the operation runs.
+
+## Running service verification (2026-09-20)
+
+Validated against the isolated `assessment-document-workspace` Compose project,
+using a newly seeded document and fixture identities, without touching the user's
+reference stack. Platform image source was `9c0c96f428d982ce88e4011ec37a3ca573b0b29e`;
+gateway source was `907991255b1426f3051d943dda853dc42313609b`.
+
+The document received an acknowledged CRDT write, a named binary version through
+the BFF transport, and an acknowledged restore of that version. Its explicit owner
+requested a review from a second verified identity; the reviewer approved it. The
+already connected editor was then denied further edits and restore, an upload URL
+issued before approval rejected its HTTP PUT with 403, and a REST section mutation
+returned 409. Snapshot reads continued. Finalization succeeded and reopening the
+finalized document returned 409. Live session epoch checks were exercised on every
+hop. Unit tests additionally cover unavailable policy and revoked sessions.

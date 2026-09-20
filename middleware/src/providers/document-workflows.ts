@@ -3,7 +3,7 @@ import { getKnowledgeDoc } from './assessment.js';
 import { documentWorkflowAccess } from './document-canvas.js';
 
 export type WorkflowOperation =
-  | { kind: 'lifecycle' | 'review-requests' | 'reviews'; method: 'GET' }
+  | { kind: 'lifecycle' | 'write-policy' | 'review-requests' | 'reviews'; method: 'GET' }
   | { kind: 'transition' | 'ownership' | 'request-review'; method: 'POST'; body: Record<string, unknown> }
   | { kind: 'update-review'; method: 'PATCH'; requestKey: string; body: Record<string, unknown> }
   | { kind: 'items'; method: 'GET'; sectionId: string }
@@ -25,6 +25,7 @@ function segment(value: string): string {
 function route(operation: WorkflowOperation): string {
   switch (operation.kind) {
     case 'lifecycle': return '/lifecycle';
+    case 'write-policy': return '/lifecycle/write-policy';
     case 'reviews': return '/reviews';
     case 'review-requests': case 'request-review': return '/review-requests';
     case 'transition': return '/lifecycle/transitions';
@@ -51,6 +52,14 @@ export async function performDocumentWorkflow(sourceId: string, session: Session
   if (!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(access.documentId)) {
     throw new DocumentWorkflowError(503, 'Document mapping is unavailable');
   }
+  if (operation.kind === 'request-review') {
+    if (!access.canManageWorkflow) throw new DocumentWorkflowError(403, 'Document management permission required');
+    const reviewerId = operation.body.reviewerId;
+    if (typeof reviewerId !== 'string' || !reviewerId) throw new DocumentWorkflowError(400, 'Reviewer required');
+    const { getUser } = await import('./identity.js');
+    const reviewer = await getUser(reviewerId, { authoritative: true });
+    if (!reviewer || !await eligibleAssessmentReviewer(reviewer)) throw new DocumentWorkflowError(400, 'Reviewer must have current assessment access');
+  }
   const response = await fetch(new URL(`/api/documents/${access.documentId}${suffix}`, base), {
     method: operation.method, redirect: 'error', signal: AbortSignal.timeout(8000),
     headers: { Authorization: `Bearer ${access.token}`, 'Content-Type': 'application/json' },
@@ -62,5 +71,30 @@ export async function performDocumentWorkflow(sourceId: string, session: Session
   if (!body || typeof body !== 'object' || Array.isArray(body)) throw new DocumentWorkflowError(503, 'Invalid document workflow response');
   // Keep platform owner/reviewer, state-machine and CAS errors intact. A failed
   // transition is never retried as an ownership claim or with broader grants.
-  return { status: response.status, body: { ...body, ...(response.ok ? { documentId: access.documentId } : {}) } };
+  const lifecycle = (body as { lifecycle?: { ownerId?: unknown } }).lifecycle;
+  const capabilities = operation.kind === 'lifecycle' && response.ok ? {
+    canManageWorkflow: access.canManageWorkflow === true && lifecycle?.ownerId === session.sub,
+    canClaimOwnership: access.canManageWorkflow === true && lifecycle?.ownerId === null,
+  } : {};
+  return { status: response.status, body: { ...body, ...capabilities, ...(response.ok ? { documentId: access.documentId } : {}) } };
+}
+
+
+async function eligibleAssessmentReviewer(user: import('./identity.js').UserInfo): Promise<boolean> {
+  const { isAllowed } = await import('../lib/authz.js');
+  for (const role of user.grants['assessment'] ?? []) {
+    if (await isAllowed({ sub: user.id, tenant: 'assessment', role }, 'ViewAssessment')) return true;
+  }
+  return false;
+}
+
+/** Eligible real identities for an owner-created review assignment. */
+export async function listDocumentReviewers(sourceId: string, session: Session) {
+  const workflow = await performDocumentWorkflow(sourceId, session, { kind: 'lifecycle', method: 'GET' });
+  if (workflow.status !== 200) throw new DocumentWorkflowError(workflow.status, 'Document ownership is unavailable');
+  if (workflow.body.canManageWorkflow !== true) throw new DocumentWorkflowError(403, 'Document ownership required to request reviews');
+  const { listUsers } = await import('./identity.js');
+  const users = await listUsers();
+  const eligible = await Promise.all(users.map(async user => await eligibleAssessmentReviewer(user) ? { id: user.id, displayName: user.displayName } : null));
+  return { reviewers: eligible.filter((user): user is { id: string; displayName: string } => user !== null) };
 }

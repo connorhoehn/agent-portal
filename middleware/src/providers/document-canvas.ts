@@ -71,12 +71,14 @@ export async function connectDocumentCanvas(source: CanvasSource, session: Sessi
     if (!await markDocumentMappingReady(mapping.document_id, mapping.source_revision)) throw new Error('Document import acknowledgement could not be recorded');
   }
   const operations: DocumentOperation[] = canEdit ? ['read', 'comment', 'edit'] : ['read', 'comment'];
-  if (options.workflowManage && canEdit && mapping.owner_sub === session.sub) {
+  let canManageWorkflow = false;
+  if (canEdit && mapping.owner_sub === session.sub) {
     const { isAllowed } = await import('../lib/authz.js');
-    if (await isAllowed(session, 'ManageKnowledge')) operations.push('manage');
+    canManageWorkflow = await isAllowed(session, 'ManageKnowledge');
+    if (options.workflowManage && canManageWorkflow) operations.push('manage');
   }
   return { documentId: mapping.document_id, sourceId: source.id, title: source.title, classification: source.classification,
-    canEdit, gatewayUrl: settings.gatewayUrl, token: issue(operations),
+    canEdit, canManageWorkflow, gatewayUrl: settings.gatewayUrl, token: issue(operations),
     expiresAt: Date.now() + 120_000, sourceRevision: mapping.published_revision ?? mapping.source_revision };
 }
 
