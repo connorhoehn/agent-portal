@@ -69,7 +69,7 @@ export interface AuthenticatedCloudComputeContext {
     sourceSubject: string;
   };
   producer: {
-    serviceId: string;
+    serviceId: 'aws-agentcore';
     organizationId: string;
     credentialId: string;
   };
@@ -77,7 +77,7 @@ export interface AuthenticatedCloudComputeContext {
 }
 
 export type CloudComputeLifecycle =
-  | 'created' | 'started' | 'waiting' | 'completed' | 'stopped' | 'failed';
+  | 'created' | 'started' | 'waiting' | 'completed' | 'stopped' | 'failed' | 'deleted';
 
 /** Structural equivalent of the C0 cloud-compute event, pending coordinator wiring. */
 export interface CloudComputeWorkEvent {
@@ -242,6 +242,26 @@ export function mapFleetBox(box: FleetBoxRecord, context: AuthenticatedCloudComp
     resourceVersion: box.lastActivityAt,
     // Fleet labels are the only producer-declared safe label; currentTask is not.
     ...(isNonEmptyString(box.label) ? { safeLabel: box.label } : {}),
+    ...(isNonEmptyString(box.projectId) ? { projectId: box.projectId } : {}),
+  });
+}
+
+/**
+ * Maps a removed FleetBox before the registry discards its durable owner
+ * attribution.  The session id and task transcript remain intentionally
+ * absent: deletion is a lifecycle fact, not permission to disclose a shell.
+ */
+export function mapFleetBoxDeleted(box: FleetBoxRecord, context: AuthenticatedCloudComputeContext): CloudComputeMapResult {
+  const denied = authorizeBox(box, context);
+  if (denied) return denied;
+  return eventFor(context, {
+    eventId: `cloud-compute:box:${box.id}:deleted:${box.lastActivityAt}`,
+    sourceSequence: `deleted:${box.lastActivityAt}`,
+    occurredAt: box.lastActivityAt,
+    boxId: box.id,
+    lifecycle: 'deleted',
+    resourceId: `box:${box.id}`,
+    resourceVersion: `deleted:${box.lastActivityAt}`,
     ...(isNonEmptyString(box.projectId) ? { projectId: box.projectId } : {}),
   });
 }

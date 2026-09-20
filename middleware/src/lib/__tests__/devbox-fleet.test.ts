@@ -11,6 +11,7 @@ import {
   replayEvents,
   subscribe,
   appendEvent,
+  subscribeLifecycle,
   setFleetStore,
   hydrateBoxes,
   _resetFleet,
@@ -22,6 +23,24 @@ const SID = 'a'.repeat(40);
 beforeEach(() => _resetFleet());
 
 describe('registry', () => {
+  it('publishes trusted lifecycle transitions before removal drops owner attribution', () => {
+    const seen: Array<{ kind: string; status: string; ownerId?: string }> = [];
+    const stop = subscribeLifecycle((event) => seen.push({
+      kind: event.kind, status: event.box.status, ownerId: event.box.ownerId,
+    }));
+    const box = registerBox({ sessionId: SID, ownerId: 'owner-1' });
+    appendEvent(box.id, { type: 'task_started' });
+    markStopped(box.id);
+    removeBox(box.id);
+    stop();
+    expect(seen).toEqual([
+      { kind: 'created', status: 'idle', ownerId: 'owner-1' },
+      { kind: 'updated', status: 'running', ownerId: 'owner-1' },
+      { kind: 'updated', status: 'stopped', ownerId: 'owner-1' },
+      { kind: 'removed', status: 'stopped', ownerId: 'owner-1' },
+    ]);
+  });
+
   it('registers and lists boxes, id defaults to session tail', () => {
     const box = registerBox({ sessionId: SID, label: 'worker-1' });
     expect(box.id).toBe(SID.slice(-8));

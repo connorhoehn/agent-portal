@@ -70,7 +70,7 @@ export interface AuthenticatedLocalComputeContext {
     sourceSubject: string;
   };
   producer: {
-    serviceId: string;
+    serviceId: 'aws-agentcore';
     organizationId: string;
     credentialId: string;
   };

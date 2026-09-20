@@ -124,6 +124,25 @@ const boxes = new Map<string, BoxState>();
 const bySession = new Map<string, string>(); // sessionId → boxId
 
 /**
+ * Source-owned lifecycle feed. It deliberately carries the full server-side
+ * box only to trusted in-process producers; browser/SSE consumers continue to
+ * receive the narrow fleet event stream below.
+ */
+export type FleetLifecycleEvent = { kind: 'created' | 'updated' | 'removed'; box: FleetBox };
+const lifecycleSubscribers = new Set<(event: FleetLifecycleEvent) => void>();
+
+function emitLifecycle(kind: FleetLifecycleEvent['kind'], box: FleetBox): void {
+  for (const callback of lifecycleSubscribers) {
+    try { callback({ kind, box: { ...box } }); } catch { /* producer faults cannot break fleet truth */ }
+  }
+}
+
+export function subscribeLifecycle(callback: (event: FleetLifecycleEvent) => void): () => void {
+  lifecycleSubscribers.add(callback);
+  return () => lifecycleSubscribers.delete(callback);
+}
+
+/**
  * Optional durable mirror of the registry.
  *
  * The maps above are the running process's source of truth and stay
@@ -188,6 +207,10 @@ export function hydrateBoxes(rows: readonly FleetBox[]): number {
       contextTokens: 0,
     });
     bySession.set(box.sessionId, box.id);
+    // A persisted box did not pass through registerBox in this process. Let
+    // trusted lifecycle consumers reconcile its deterministic source event
+    // after hydration; browser subscribers remain unchanged.
+    emitLifecycle('created', box);
     loaded++;
   }
   return loaded;
@@ -248,6 +271,7 @@ export function registerBox(opts: {
   boxes.set(id, { box, events: [], subscribers: new Set(), lastResultText: '', contextTokens: 0 });
   bySession.set(opts.sessionId, id);
   store?.upsert(box);
+  emitLifecycle('created', box);
   return box;
 }
 
@@ -279,6 +303,7 @@ export function markStopped(id: string): void {
   s.box.status = 'stopped';
   s.box.lastActivityAt = now();
   store?.upsert(s.box);
+  emitLifecycle('updated', s.box);
 }
 
 /**
@@ -305,6 +330,9 @@ export function removeBox(id: string): boolean {
     try { cb({ type: 'box_removed', boxId: id, ts: now() }); } catch { /* one bad subscriber must not block the rest */ }
   }
   s.subscribers.clear();
+  // Emit before removing it: this is the last point at which the server has
+  // the durable owner/project join needed to make a safe deletion event.
+  emitLifecycle('removed', s.box);
   bySession.delete(s.box.sessionId);
   boxes.delete(id);
   store?.remove(id);
@@ -398,6 +426,8 @@ export function appendEvent(id: string, ev: FleetEvent): void {
   const s = boxes.get(id);
   if (!s) return;
 
+  const priorStatus = s.box.status;
+
   s.events.push(ev);
   if (s.events.length > EVENT_BUFFER_CAP) s.events.shift();
   s.box.lastActivityAt = now();
@@ -474,6 +504,8 @@ export function appendEvent(id: string, ev: FleetEvent): void {
     s.box.status = 'error';
   }
 
+  if (s.box.status !== priorStatus) emitLifecycle('updated', s.box);
+
   for (const cb of s.subscribers) {
     try { cb(ev); } catch { /* one bad subscriber must not break the fan-out */ }
   }
@@ -484,4 +516,5 @@ export function _resetFleet(): void {
   boxes.clear();
   bySession.clear();
   store = null;
+  lifecycleSubscribers.clear();
 }

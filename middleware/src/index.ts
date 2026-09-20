@@ -81,6 +81,7 @@ import { startCanaryDecisionsPoller } from './lib/canary-decisions-poller.js';
 import { startPrWatchPoller } from './lib/pr-watch-poller.js';
 import { startRetentionSweep } from './lib/retention-sweep.js';
 import { startLocalController } from './lib/canary-local-controller.js';
+import { startComputeWorkGraphProducer } from './work-graph/compute-emitter.js';
 
 import { trustedProxyHops } from './lib/trusted-proxy.js';
 
@@ -379,6 +380,10 @@ initCrawlTargets();
 // load lands first in practice — and an Aurora that is slow, mocked, or
 // missing the table must not delay the listen() below or fail the boot.
 void initFleetPersistence();
+// Cloud boxes/jobs and paired local-machine sessions now emit only through the
+// authenticated platform ingestion boundary. The producer stays inert unless
+// its server-owned org/credential configuration is complete.
+startComputeWorkGraphProducer();
 // Cron bots + the bot-run reconciler. Aurora-backed, so it awaits nothing at
 // boot — a missing bots table logs and stands down.
 void initBotScheduler();

@@ -14,7 +14,7 @@ import {
 
 const context: AuthenticatedLocalComputeContext = {
   actor: { actorId: 'person-42', organizationId: 'org-1', sourceSubject: 'user-subject-42' },
-  producer: { serviceId: 'orgiq-middleware', organizationId: 'org-1', credentialId: 'node-token-credential-7' },
+  producer: { serviceId: 'aws-agentcore', organizationId: 'org-1', credentialId: 'node-token-credential-7' },
   receivedAt: '2026-09-19T12:00:05.000Z',
 };
 

@@ -73,13 +73,10 @@ export interface AgentJob {
  * untouched by this. One emitter here, in the provider, rather than each
  * write site inventing its own shape.
  *
- * Only instrumented on the transitions a paired workstation's job actually
- * goes through — `enqueueJob`, `claimNextJobForWorker`, the FENCED branch of
- * `markRunning`/`completeJob` (pull-side; the unfenced branch is
- * job-dispatcher.ts's own in-process path, already served by
- * `dispatcherEvents`), `cancelJob`, `reviewJob`. In `config.mock.aurora` every
- * branch is the same shared code path, so mock-mode jobs of any kind emit —
- * harmless, since a listener filters by node ownership regardless.
+ * Every durable claim, running, terminal, cancellation, and review transition
+ * emits here for both paired machines and cloud dispatch. `dispatcherEvents`
+ * remains a UI-oriented compatibility feed; it is not an authenticated source
+ * lifecycle and cannot replace this provider-level hook.
  */
 export const jobEvents = new EventEmitter();
 jobEvents.setMaxListeners(256);
@@ -489,6 +486,7 @@ export async function claimNextJob(boxId: string, sessionId: string): Promise<Ag
     next.sessionId = sessionId;
     next.claimedAt = clock.nowIso();
     next.attempts += 1;
+    emitJobChange(next);
     return { ...next };
   }
   // No array parameter in the RDS Data API, so the exclusion list is expanded
@@ -509,7 +507,9 @@ export async function claimNextJob(boxId: string, sessionId: string): Promise<Ag
       RETURNING ${COLUMNS}`,
     [strParam('box', boxId), strParam('session', sessionId), ...kindParams],
   );
-  return rows[0] ? rowToJob(rows[0]) : null;
+  const job = rows[0] ? rowToJob(rows[0]) : null;
+  if (job) emitJobChange(job);
+  return job;
 }
 
 /**
@@ -533,6 +533,7 @@ export async function claimJob(id: string, boxId: string, sessionId: string): Pr
     job.sessionId = sessionId;
     job.claimedAt = clock.nowIso();
     job.attempts += 1;
+    emitJobChange(job);
     return { ...job };
   }
   const rows = await exec(
@@ -543,7 +544,9 @@ export async function claimJob(id: string, boxId: string, sessionId: string): Pr
       RETURNING ${COLUMNS}`,
     [strParam('id', id), strParam('box', boxId), strParam('session', sessionId)],
   );
-  return rows[0] ? rowToJob(rows[0]) : null;
+  const job = rows[0] ? rowToJob(rows[0]) : null;
+  if (job) emitJobChange(job);
+  return job;
 }
 
 // ─── Pull-side claims (local compute) ────────────────────────────────────────
@@ -764,11 +767,21 @@ export async function markRunning(id: string, claimToken?: string): Promise<bool
   // it is not running. The fenced path is unreachable there, because the route
   // checks hasPullSideColumns() first.
   if (claimToken === undefined) {
-    await exec(
-      `UPDATE agent_jobs SET status='running', started_at=NOW(), updated_at=NOW() WHERE id=:id`,
+    const rows = await exec(
+      `UPDATE agent_jobs SET status='running', started_at=NOW(), updated_at=NOW()
+        WHERE id=:id RETURNING id, box_id, title, payload::text AS payload`,
       [strParam('id', id)],
     );
-    return true;
+    if (rows[0]) {
+      emitJobChange({
+        id: toStr(rows[0]['id']),
+        boxId: rows[0]['box_id'] ? toStr(rows[0]['box_id']) : null,
+        status: 'running',
+        title: toStr(rows[0]['title']),
+        payload: toJson(rows[0]['payload']) ?? {},
+      });
+    }
+    return rows.length > 0;
   }
   const rows = await exec(
     `UPDATE agent_jobs SET status='running', started_at=NOW(), heartbeat_at=NOW(), updated_at=NOW()
@@ -838,16 +851,25 @@ export async function completeJob(id: string, opts: {
   // fenced path is unreachable there, because the route checks
   // hasPullSideColumns() before handing out a claim.
   if (opts.claimToken === undefined) {
-    await exec(
+    const rows = await exec(
       `UPDATE agent_jobs
           SET status = :status,
               result = COALESCE(:result::jsonb, result),
               error = NULLIF(:error, ''),
               finished_at = NOW(), updated_at = NOW()
-        WHERE id = :id`,
+        WHERE id = :id RETURNING id, box_id, title, payload::text AS payload`,
       params,
     );
-    return true;
+    if (rows[0]) {
+      emitJobChange({
+        id: toStr(rows[0]['id']),
+        boxId: rows[0]['box_id'] ? toStr(rows[0]['box_id']) : null,
+        status: opts.status,
+        title: toStr(rows[0]['title']),
+        payload: toJson(rows[0]['payload']) ?? {},
+      });
+    }
+    return rows.length > 0;
   }
   // Fenced callers must also still hold a LIVE claim: a job the reaper already
   // failed for good is terminal, and re-opening it from a straggler's POST would

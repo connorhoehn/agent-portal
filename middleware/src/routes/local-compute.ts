@@ -118,6 +118,11 @@ import {
 import { STALE_MINUTES } from '../lib/job-dispatcher.js';
 import { parseReportedCost, resolveRunCost } from '../lib/run-cost.js';
 import { DEMO_NODE_ID, demoPresenceSessions, demoMetrics } from '../mock/local-compute.js';
+import {
+  emitLocalAnnounce,
+  emitLocalHeartbeat,
+  emitLocalSessionEnd,
+} from '../work-graph/compute-emitter.js';
 
 export const localComputeRouter = Router();
 
@@ -353,18 +358,27 @@ localComputeRouter.post('/announce', requireNodeToken(async (req, res, node) => 
   }
   const presence = recordAnnounce(node.id, sessions, metrics);
   await touchNode(node.id);
+  // The paired node and its owner were resolved before the request body was
+  // parsed. Emit only the mapper's safe session lifecycle to the signed,
+  // durable platform boundary; repo/worktree/intent never leave this route.
+  await emitLocalAnnounce(node, presence.sessions);
   res.json({ ok: true, nodeId: node.id, sessions: presence.sessions.length });
 }));
 
 localComputeRouter.post('/heartbeat', requireNodeToken(async (_req, res, node) => {
   recordHeartbeat(node.id);
   await touchNode(node.id);
+  const heartbeatAt = presenceOf(node.id).lastSeenAt;
+  if (heartbeatAt) await emitLocalHeartbeat(node, heartbeatAt);
   res.json({ ok: true });
 }));
 
 localComputeRouter.post('/sessions/:sessionId/end', requireNodeToken(async (req, res, node) => {
-  const removed = endSession(node.id, String(req.params['sessionId']));
+  const sessionId = String(req.params['sessionId']);
+  const removed = endSession(node.id, sessionId);
   await touchNode(node.id);
+  const endedAt = presenceOf(node.id).lastSeenAt;
+  if (removed && endedAt) await emitLocalSessionEnd(node, sessionId, endedAt);
   res.json({ ok: true, removed });
 }));
 

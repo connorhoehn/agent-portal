@@ -2,6 +2,7 @@ import {
   mapAgentJob,
   mapDispatcherJobEvent,
   mapFleetBox,
+  mapFleetBoxDeleted,
   mapJobChange,
   type AgentJobRecord,
   type AuthenticatedCloudComputeContext,
@@ -10,7 +11,7 @@ import {
 
 const context: AuthenticatedCloudComputeContext = {
   actor: { actorId: 'person-42', organizationId: 'org-1', sourceSubject: 'session-subject-42' },
-  producer: { serviceId: 'orgiq-middleware', organizationId: 'org-1', credentialId: 'service-key-7' },
+  producer: { serviceId: 'aws-agentcore', organizationId: 'org-1', credentialId: 'service-key-7' },
   receivedAt: '2026-09-19T12:00:05.000Z',
 };
 
@@ -97,4 +98,11 @@ it('keeps same-millisecond box lifecycle transitions distinct while deduplicatin
   const stopped = eventOf(mapFleetBox({ ...box, status: 'stopped' }, context));
   expect(stopped.idempotencyKey).not.toBe(running.idempotencyKey);
   expect(eventOf(mapFleetBox(box, context)).idempotencyKey).toBe(running.idempotencyKey);
+});
+
+it('maps removal from the retained server-side box record, not a client-provided owner', () => {
+  const removed = eventOf(mapFleetBoxDeleted(box, context));
+  expect(removed.payload.lifecycle).toBe('deleted');
+  expect(removed.resource.resourceVersion).toBe('deleted:2026-09-19T12:00:00.000Z');
+  expect(JSON.stringify(removed)).not.toContain('private-session-id');
 });
