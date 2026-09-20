@@ -6,7 +6,73 @@ supporting Docker containers, with fixes made in the owning repositories.
 Editor work is deferred. This document supersedes the deployment-choice section
 of [the earlier document integration map](document-backend-integration-2026-09-19.md).
 
-## Latest verified checkpoint: cold loads, catalog and CDK tables
+## Latest checkpoint: authenticated middleware and snapshot ownership
+
+The middleware authentication work is pushed across its owners:
+
+| Owner | Change | Commit / release |
+| --- | --- | --- |
+| service-runtime | Request-bound HTTP HMAC built on existing envelope signing | `7a0e338` / 0.4.0 |
+| message-queue | Production secret + caller allowlist required; signed HTTP and WebSocket admission; CLI signing | `46fd5e0` |
+| event-catalog | Per-request MQ signing, including retries and acknowledgements | `21a2cc2` / 0.7.0 |
+| event-catalog server | Production registry mutations require configured authentication; clean locked image builds | `63495a4` / 0.7.1 |
+| platform-api | Adopt exact library commits and sign MQ requests | `c74ffcd` |
+| realtime-examples | Adopt signing in catalog and pipeline consumers; authenticated container gate; scoped MQ task construct | `70a2bbb0` |
+
+The complete authenticated container gate passes with the snapshot-ownership
+follow-up **examples `4f694a55`**, followed by test maintenance `e8868269`.
+It checks unsigned HTTP/WS rejection, signed admission, refusal to start
+production MQ/catalog without credentials, registry mutation auth, and all
+previous crash/replacement/outage recovery assertions. The final run exited 0
+and removed its UUID project. [Evidence with all six rebuilt image IDs](research-evidence/middleware-application-2026-09-20.json).
+
+Authentication is a backend trust boundary, not end-user authorization. The
+receiver-specific MQ secret is shared by allowlisted services; a holder can
+assert those service IDs. Signatures bind audience, method, exact path/query,
+body and expiry, but are replayable within their lifetime. Mutation idempotency
+and TLS/private networking remain necessary. Catalog reads/metrics still need
+private ingress policy. Application user identities in the gate remain dev-only.
+
+The optional **MessageQueueTask** CDK construct injects an existing table, ECR
+image digest, architecture and Secrets Manager references; grants scoped task
+IAM; retains logs; configures bounded stop and explicit ECS liveness. Ten CDK
+assertion tests cover tables and task definitions. It deliberately creates no
+scheduler/service until exclusive ownership is established. No AWS apply ran.
+
+Snapshot review found that the gateway ownership decorator could silently skip
+a durable write while the library acknowledged Save and cleared dirty state.
+It also treated lookup exceptions as permission to write. The follow-up rejects
+these cases, including unknown ownership and failed bootstrap in actual gateway
+wiring. Regressions use the installed SnapshotManager and verify dirty-state
+retention and retry after ownership resolves. This is admission checking, not
+storage fencing: a write already in flight can still finish after a handoff.
+
+The single-gateway Compose profile explicitly disables ownership routing.
+Ordinary document subscription does not currently claim rooms; clustered room
+admission and owner-directed saves need integration before enabling that mode.
+This is a newly documented deployment gap, not a claim of safe multi-node saves.
+
+Full library suites passed: service-runtime 351, event-catalog 3,101, MQ 1,488
+(42 skipped); API's 57 relevant consumer tests passed (one skipped). Gateway
+strict build passes, and its full suite exits 0: **3,704 passed, 6 skipped,
+1 todo**, 269 passing suites. This required updating a stale corruption test,
+declaring the existing HTTP fixture's missing Express dev dependency, and
+closing router timers in an error-path suite. The opt-in real HTTP privacy
+integration remains skipped; it is not counted as verified user authorization.
+
+A second image rebuild exposed recursive Git dependency prepare installs in the
+catalog Docker stages. They now use locked `npm ci --ignore-scripts` against
+tracked library dist, while retaining strict TypeScript compilation. Builds run
+serially. Several unused local image tags disappeared between runs; the follow-up
+retained created, network-free image-reference containers until its gate finished.
+Only this audit's UUID project and holders were removed. No user containers or
+Docker/VM services were restarted.
+
+Remaining deployment work: exclusive MQ ownership/fencing, full document and
+user policy, ECS service/network/identity composition, production release pins,
+and media validation. Earlier pending service-auth statements below are historical.
+
+## Previous checkpoint: cold loads, catalog and CDK tables
 
 - **realtime-modules `cb16b02` / 0.69.2** now distinguishes missing snapshots
   from failed/corrupt durable reads. Concurrent hydration is shared and updates
