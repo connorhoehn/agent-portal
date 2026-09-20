@@ -3,8 +3,7 @@ import { requireAction, requireTenant } from '../lib/authz.js';
 import { DocumentWorkflowError, performDocumentWorkflow, type WorkflowOperation } from '../providers/document-workflows.js';
 
 export const assessmentDocumentWorkflowsRouter = Router();
-const router = Router();
-assessmentDocumentWorkflowsRouter.use('/doc/workflows', requireTenant('assessment'), requireAction('ViewAssessment'), router);
+assessmentDocumentWorkflowsRouter.use('/doc/workflows', requireTenant('assessment'), requireAction('ViewAssessment'));
 
 function parameter(req: Request, key: string): string {
   const value = req.params[key];
@@ -32,13 +31,13 @@ function handle(makeOperation: (req: Request) => WorkflowOperation) {
     }
   };
 }
-router.get('/', handle(() => ({ kind: 'lifecycle', method: 'GET' })));
-router.post('/transitions', handle(req => ({ kind: 'transition', method: 'POST', body: body(req, ['action', 'reason']) })));
-router.post('/ownership', handle(req => ({ kind: 'ownership', method: 'POST', body: body(req, []) })));
-router.get('/review-requests', handle(() => ({ kind: 'review-requests', method: 'GET' })));
-router.post('/review-requests', handle(req => ({ kind: 'request-review', method: 'POST', body: body(req, ['reviewerId', 'sectionId', 'dueDate', 'note', 'required']) })));
-router.patch('/review-requests/:requestKey', handle(req => ({ kind: 'update-review', method: 'PATCH', requestKey: parameter(req, 'requestKey'), body: body(req, ['state', 'comment', 'dueDate']) })));
-router.get('/reviews', handle(() => ({ kind: 'reviews', method: 'GET' })));
-router.get('/sections/:sectionId/items', handle(req => ({ kind: 'items', method: 'GET', sectionId: parameter(req, 'sectionId') })));
-router.post('/sections/:sectionId/items/:itemId/ack', handle(req => ({ kind: 'item-ack', method: 'POST', sectionId: parameter(req, 'sectionId'), itemId: parameter(req, 'itemId'), body: body(req, []) })));
-router.post('/sections/:sectionId/items/:itemId/answer', handle(req => ({ kind: 'item-answer', method: 'POST', sectionId: parameter(req, 'sectionId'), itemId: parameter(req, 'itemId'), body: body(req, ['answer']) })));
+assessmentDocumentWorkflowsRouter.get('/doc/workflows', handle(() => ({ kind: 'lifecycle', method: 'GET' })));
+assessmentDocumentWorkflowsRouter.post('/doc/workflows/transitions', handle(req => ({ kind: 'transition', method: 'POST', body: body(req, ['action', 'reason']) })));
+assessmentDocumentWorkflowsRouter.post('/doc/workflows/ownership', handle(req => ({ kind: 'ownership', method: 'POST', body: body(req, []) })));
+assessmentDocumentWorkflowsRouter.get('/doc/workflows/review-requests', handle(() => ({ kind: 'review-requests', method: 'GET' })));
+assessmentDocumentWorkflowsRouter.post('/doc/workflows/review-requests', handle(req => ({ kind: 'request-review', method: 'POST', body: body(req, ['reviewerId', 'sectionId', 'dueDate', 'note', 'required']) })));
+assessmentDocumentWorkflowsRouter.patch('/doc/workflows/review-requests/:requestKey', handle(req => ({ kind: 'update-review', method: 'PATCH', requestKey: parameter(req, 'requestKey'), body: body(req, ['state', 'comment', 'dueDate']) })));
+assessmentDocumentWorkflowsRouter.get('/doc/workflows/reviews', handle(() => ({ kind: 'reviews', method: 'GET' })));
+assessmentDocumentWorkflowsRouter.get('/doc/workflows/sections/:sectionId/items', handle(req => ({ kind: 'items', method: 'GET', sectionId: parameter(req, 'sectionId') })));
+assessmentDocumentWorkflowsRouter.post('/doc/workflows/sections/:sectionId/items/:itemId/ack', handle(req => ({ kind: 'item-ack', method: 'POST', sectionId: parameter(req, 'sectionId'), itemId: parameter(req, 'itemId'), body: body(req, []) })));
+assessmentDocumentWorkflowsRouter.post('/doc/workflows/sections/:sectionId/items/:itemId/answer', handle(req => ({ kind: 'item-answer', method: 'POST', sectionId: parameter(req, 'sectionId'), itemId: parameter(req, 'itemId'), body: body(req, ['answer']) })));

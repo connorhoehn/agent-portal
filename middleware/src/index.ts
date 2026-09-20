@@ -83,6 +83,10 @@ import { startRetentionSweep } from './lib/retention-sweep.js';
 import { startLocalController } from './lib/canary-local-controller.js';
 import { startComputeWorkGraphProducer } from './work-graph/compute-emitter.js';
 import { internalWorkGraphComputeRouter } from './routes/internal-work-graph-compute.js';
+import { internalDocumentGrantsRouter } from './routes/internal-document-grants.js';
+import { assessmentCanvasRouter } from './routes/assessment-canvas.js';
+import { assessmentDocumentWorkflowsRouter } from './routes/assessment-document-workflows.js';
+import { assessmentDocumentSourceRouter } from './routes/assessment-document-source.js';
 
 import { trustedProxyHops } from './lib/trusted-proxy.js';
 
@@ -99,6 +103,7 @@ app.use(cookieParser());
 // sessions. Mount before browser/session routes so it never inherits a user
 // session as an alternate authorization path.
 app.use('/internal/work-graph/compute-capabilities', internalWorkGraphComputeRouter);
+app.use('/internal/document-grants', internalDocumentGrantsRouter);
 setGrantsResolver(async (id) => {
   const u = await getIdentityUser(id);
   return u ? { displayName: u.displayName, grants: u.grants, epoch: u.epoch } : null;
@@ -139,6 +144,9 @@ app.get('/api/health', healthHandler);
 app.use(mockControlRouter);
 
 app.use('/api/session', sessionRouter);
+app.use('/api/assessment/knowledge', assessmentCanvasRouter);
+app.use('/api/assessment/knowledge', assessmentDocumentWorkflowsRouter);
+app.use('/api/assessment/knowledge', assessmentDocumentSourceRouter);
 // Enterprise SSO (Cognito OIDC). Inert unless COGNITO_* are configured.
 app.use('/api/auth', authRouter);
 app.use('/api/identity', identityRouter);

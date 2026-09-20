@@ -60,6 +60,11 @@ export interface ServiceAuthSpec {
   header: string;
 }
 
+export const DOCUMENT_POLICY_SERVICE_AUTH: ServiceAuthSpec = {
+  envVar: 'DOCUMENT_POLICY_SECRET',
+  header: 'x-document-policy-key',
+};
+
 export const APPROVALS_SERVICE_AUTH: ServiceAuthSpec = {
   envVar: 'APPROVALS_REQUEST_SECRET',
   header: 'x-approvals-auth',

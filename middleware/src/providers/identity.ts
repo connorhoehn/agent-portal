@@ -166,13 +166,19 @@ export async function listUsers(): Promise<UserInfo[]> {
   }
 }
 
-export async function getUser(userId: string): Promise<UserInfo | null> {
-  if (!auroraConfigured()) return FALLBACK_USERS.find(u => u.id === userId) ?? null;
+export async function getUser(userId: string, options: { authoritative?: boolean } = {}): Promise<UserInfo | null> {
+  // Realtime grants must not revive a deleted/revoked seed identity during a
+  // database outage. Only an explicitly mocked deployment may use fixtures.
+  if (options.authoritative && config.mock?.aurora) return FALLBACK_USERS.find(u => u.id === userId) ?? null;
+  if (!auroraConfigured()) {
+    if (options.authoritative && !config.mock?.aurora) throw new Error('identity store unavailable');
+    return FALLBACK_USERS.find(u => u.id === userId) ?? null;
+  }
   try {
     const rows = await exec(
       `SELECT id, display_name, email, person_id, session_epoch FROM app_users WHERE id = :id`,
       [str('id', userId)]);
-    if (rows.length === 0) return FALLBACK_USERS.find(u => u.id === userId) ?? null;
+    if (rows.length === 0) return options.authoritative ? null : FALLBACK_USERS.find(u => u.id === userId) ?? null;
     const [id, displayName, email, personId, epoch] = rows[0]!;
     const grantRows = await exec(
       `SELECT user_id, tenant_id, role FROM user_tenant_roles WHERE user_id = :id ORDER BY granted_at, tenant_id, role`,
@@ -185,7 +191,8 @@ export async function getUser(userId: string): Promise<UserInfo | null> {
       grants: groupGrants(grantRows).get(id as string) ?? {},
       epoch: (epoch as number | null) ?? 0,
     };
-  } catch {
+  } catch (error) {
+    if (options.authoritative) throw error;
     return FALLBACK_USERS.find(u => u.id === userId) ?? null;
   }
 }
