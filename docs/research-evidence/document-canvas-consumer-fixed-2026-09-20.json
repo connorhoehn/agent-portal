@@ -1,0 +1,86 @@
+{
+  "consumer": "aws-agentcore/portal",
+  "runtimeVersion": "0.69.4",
+  "peers": {
+    "@tiptap/extension-text-style": true,
+    "@tiptap/extension-table": true,
+    "@tiptap/extension-image": true
+  },
+  "results": [
+    {
+      "name": "assessment",
+      "inputBlockTypes": [
+        "heading",
+        "paragraph",
+        "heading",
+        "list"
+      ],
+      "pmTypes": [
+        "heading",
+        "paragraph",
+        "heading",
+        "bulletList"
+      ],
+      "unsupported": [],
+      "exportedMarkdown": "# Rubric Overview\n\nEvery team is assessed against **17 dimensions**.\n\n## Two tracks\n\n- **Claimed level** — what the team reports.\n- **Verified level** — what evidence establishes.\n"
+    },
+    {
+      "name": "frontmatter",
+      "inputBlockTypes": [
+        "heading",
+        "paragraph"
+      ],
+      "pmTypes": [
+        "heading",
+        "paragraph"
+      ],
+      "unsupported": [],
+      "exportedMarkdown": "---\nowner: assessment\ntitle: Runbook\n---\n\n# Runbook\n\n[Evidence](https://example.com/evidence) and `code`.\n"
+    },
+    {
+      "name": "table",
+      "inputBlockTypes": [
+        "table"
+      ],
+      "pmTypes": [
+        "table"
+      ],
+      "unsupported": [],
+      "exportedMarkdown": "| Dimension | Level |\n| --------- | ----- |\n| CI        | 3     |\n"
+    },
+    {
+      "name": "image",
+      "inputBlockTypes": [
+        "paragraph"
+      ],
+      "pmTypes": [
+        "image"
+      ],
+      "unsupported": [],
+      "exportedMarkdown": "![Architecture](https://example.com/architecture.png)\n"
+    },
+    {
+      "name": "tasks",
+      "inputBlockTypes": [
+        "list"
+      ],
+      "pmTypes": [
+        "taskList"
+      ],
+      "unsupported": [],
+      "exportedMarkdown": "- [ ] Validate evidence\n- [x] Read the rubric\n"
+    },
+    {
+      "name": "code",
+      "inputBlockTypes": [
+        "code"
+      ],
+      "pmTypes": [
+        "codeBlock"
+      ],
+      "unsupported": [],
+      "exportedMarkdown": "```json\n{\"verified\": true}\n```\n"
+    }
+  ],
+  "binaryProof": null
+}

@@ -3,7 +3,7 @@
 Research checkpoint: September 20, 2026. The operator
 clarified that the priority is MQ, DC, realtime-modules, examples, and the
 supporting Docker containers, with fixes made in the owning repositories.
-Editor work is deferred. This document supersedes the deployment-choice section
+Editor integration has resumed; see the [concrete reuse research and converter fix](document-workspace-reuse-research-2026-09-20.md). This document supersedes the deployment-choice section
 of [the earlier document integration map](document-backend-integration-2026-09-19.md).
 
 ## Latest checkpoint: authenticated middleware and document admission

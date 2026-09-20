@@ -1,0 +1,121 @@
+{
+  "consumer": "realtime-examples",
+  "runtimeVersion": "0.69.0",
+  "peers": {
+    "@tiptap/extension-text-style": true,
+    "@tiptap/extension-table": true,
+    "@tiptap/extension-image": true
+  },
+  "results": [
+    {
+      "name": "assessment",
+      "inputBlockTypes": [
+        "heading",
+        "paragraph",
+        "heading",
+        "list"
+      ],
+      "pmTypes": [
+        "heading",
+        "paragraph",
+        "heading",
+        "bulletList"
+      ],
+      "unsupported": [],
+      "exportedMarkdown": "# Rubric Overview\n\nEvery team is assessed against **17 dimensions**.\n\n## Two tracks\n\n- **Claimed level** — what the team reports.\n- **Verified level** — what evidence establishes.\n"
+    },
+    {
+      "name": "frontmatter",
+      "inputBlockTypes": [
+        "heading",
+        "paragraph"
+      ],
+      "pmTypes": [
+        "heading",
+        "paragraph"
+      ],
+      "unsupported": [],
+      "exportedMarkdown": "---\nowner: assessment\ntitle: Runbook\n---\n\n# Runbook\n\n[Evidence](https://example.com/evidence) and `code`.\n"
+    },
+    {
+      "name": "table",
+      "inputBlockTypes": [
+        "table"
+      ],
+      "pmTypes": [
+        "codeBlock"
+      ],
+      "unsupported": [
+        {
+          "kind": "table",
+          "reason": "no Table node in the canvas schema; preserved verbatim as a markdown code block"
+        }
+      ],
+      "exportedMarkdown": "```markdown\n| Dimension | Level |\n| --------- | ----- |\n| CI        | 3     |\n```\n"
+    },
+    {
+      "name": "image",
+      "inputBlockTypes": [
+        "paragraph"
+      ],
+      "pmTypes": [
+        "paragraph"
+      ],
+      "unsupported": [
+        {
+          "kind": "image",
+          "reason": "no Image node in the canvas schema; inline images are a Phase 5 import concern"
+        }
+      ],
+      "exportedMarkdown": "Architecture\n"
+    },
+    {
+      "name": "tasks",
+      "inputBlockTypes": [
+        "list"
+      ],
+      "pmTypes": [
+        "taskList"
+      ],
+      "unsupported": [],
+      "exportedMarkdown": "- [ ] Validate evidence\n- [x] Read the rubric\n"
+    },
+    {
+      "name": "code",
+      "inputBlockTypes": [
+        "code"
+      ],
+      "pmTypes": [
+        "codeBlock"
+      ],
+      "unsupported": [],
+      "exportedMarkdown": "```json\n{\"verified\": true}\n```\n"
+    }
+  ],
+  "binaryProof": {
+    "equalAfterBinaryRestore": true,
+    "bytes": 535,
+    "marks": [
+      {
+        "type": "textStyle",
+        "attrs": {
+          "backgroundColor": null,
+          "color": "#112233",
+          "fontFamily": "Georgia",
+          "fontSize": "24px",
+          "lineHeight": null
+        }
+      },
+      {
+        "type": "underline",
+        "attrs": {}
+      }
+    ],
+    "nodeTypes": [
+      "paragraph",
+      "image",
+      "table"
+    ],
+    "markdownProjection": "Styled assessment\n\nEvidence\n"
+  }
+}

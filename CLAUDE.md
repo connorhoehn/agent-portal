@@ -258,14 +258,19 @@ python3.11 -m venv .venv-synth && .venv-synth/bin/pip install -r schema/synth/re
   `distributed-core` import — nothing in the repo depends on `distributed-core`
   any more, and a lone stale comment in `providers/distillation.ts` still names
   its EventBus. ⚠️ Two remotes, two version lines: this repo pins the
-  **`connorhoehn/realtime-modules`** canonical repository at `08771183`
-  (0.51.0), matching realtime-examples. The dependency key remains
+  **`connorhoehn/realtime-modules`** canonical repository at `37e70c94`
+  (0.69.4), including the schema-aware canvas table/image fix. The example
+  frontend was inspected at 0.69.0 and subsequently adopted 0.69.4 as well.
+  The dependency key remains
   `@connorhoehnslalom/realtime-modules` so existing imports keep working.
   The former slalom 0.17.0 pin advertised server/typed-documents subpaths with
   absent built files. Server exports now load. The full document workflows
   additionally depend on platform-api; see
   `docs/document-backend-integration-2026-09-19.md`. Do not confuse that REST
   backend with the package's typed-documents subscription service.
+  [The workspace reuse research](docs/document-workspace-reuse-research-2026-09-20.md)
+  records the shared canvas composition, converter regressions, and the user
+  requirement to preserve the accelerator's navigation/draft/publish UX.
 
 **Realtime integration task exception (user-authorized 2026-09-19):** the user
 explicitly requested fixes in the owning sibling repos while making the MQ/DC/

@@ -1,0 +1,96 @@
+{
+  "consumer": "aws-agentcore/portal",
+  "runtimeVersion": "0.51.0",
+  "peers": {
+    "@tiptap/extension-text-style": false,
+    "@tiptap/extension-table": false,
+    "@tiptap/extension-image": false
+  },
+  "results": [
+    {
+      "name": "assessment",
+      "inputBlockTypes": [
+        "heading",
+        "paragraph",
+        "heading",
+        "list"
+      ],
+      "pmTypes": [
+        "heading",
+        "paragraph",
+        "heading",
+        "bulletList"
+      ],
+      "unsupported": [],
+      "exportedMarkdown": "# Rubric Overview\n\nEvery team is assessed against **17 dimensions**.\n\n## Two tracks\n\n- **Claimed level** — what the team reports.\n- **Verified level** — what evidence establishes.\n"
+    },
+    {
+      "name": "frontmatter",
+      "inputBlockTypes": [
+        "heading",
+        "paragraph"
+      ],
+      "pmTypes": [
+        "heading",
+        "paragraph"
+      ],
+      "unsupported": [],
+      "exportedMarkdown": "---\nowner: assessment\ntitle: Runbook\n---\n\n# Runbook\n\n[Evidence](https://example.com/evidence) and `code`.\n"
+    },
+    {
+      "name": "table",
+      "inputBlockTypes": [
+        "table"
+      ],
+      "pmTypes": [
+        "codeBlock"
+      ],
+      "unsupported": [
+        {
+          "kind": "table",
+          "reason": "no Table node in the canvas schema; preserved verbatim as a markdown code block"
+        }
+      ],
+      "exportedMarkdown": "```markdown\n| Dimension | Level |\n| --------- | ----- |\n| CI        | 3     |\n```\n"
+    },
+    {
+      "name": "image",
+      "inputBlockTypes": [
+        "paragraph"
+      ],
+      "pmTypes": [
+        "paragraph"
+      ],
+      "unsupported": [
+        {
+          "kind": "image",
+          "reason": "no Image node in the canvas schema; inline images are a Phase 5 import concern"
+        }
+      ],
+      "exportedMarkdown": "Architecture\n"
+    },
+    {
+      "name": "tasks",
+      "inputBlockTypes": [
+        "list"
+      ],
+      "pmTypes": [
+        "taskList"
+      ],
+      "unsupported": [],
+      "exportedMarkdown": "- [ ] Validate evidence\n- [x] Read the rubric\n"
+    },
+    {
+      "name": "code",
+      "inputBlockTypes": [
+        "code"
+      ],
+      "pmTypes": [
+        "codeBlock"
+      ],
+      "unsupported": [],
+      "exportedMarkdown": "```json\n{\"verified\": true}\n```\n"
+    }
+  ],
+  "binaryProof": null
+}

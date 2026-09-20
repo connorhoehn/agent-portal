@@ -1,0 +1,41 @@
+{
+  "date": "2026-09-20",
+  "realtimeModules": {
+    "commit": "37e70c945678d77534c1b0863a1a5a3cca5d730b",
+    "version": "0.69.4",
+    "testsPassed": 1355,
+    "build": "pass",
+    "exportChecksPassed": 29
+  },
+  "realtimeExamples": {
+    "commit": "b0845a47",
+    "documentTestsPassed": 548,
+    "frontendTypecheck": "pass",
+    "gatewayBuild": "pass",
+    "browserCanvasProbe": "pass"
+  },
+  "assessment": {
+    "portalTestsPassed": 923,
+    "portalProductionBuild": "pass",
+    "browserCanvasProbe": "pass",
+    "middlewareTypecheck": "pass",
+    "middlewareTestsPassed": 4299,
+    "middlewareTestsFailed": 3,
+    "middlewareFailures": [
+      "write-policy route snapshot missing internal compute capability writes",
+      "route snapshot missing internal compute capability routes",
+      "harness-writes promotion test assumes first sorted row"
+    ],
+    "liveWorkspace": {
+      "url": "http://localhost:5183/assessment/workspace?doc=page%3A100002",
+      "documentVisible": true,
+      "pageErrors": [],
+      "note": "Verified after restarting the portal with dependency reoptimization; this is a regression check, not the completed UX integration."
+    }
+  },
+  "limitations": [
+    "Canvas browser probes use in-memory Y.Doc and do not prove backend durability",
+    "Assessment workspace UX integration remains incomplete",
+    "Rich fonts and merged-cell layout are not losslessly represented by GFM; binary Yjs remains canonical"
+  ]
+}
