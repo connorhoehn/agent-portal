@@ -82,6 +82,7 @@ import { startPrWatchPoller } from './lib/pr-watch-poller.js';
 import { startRetentionSweep } from './lib/retention-sweep.js';
 import { startLocalController } from './lib/canary-local-controller.js';
 import { startComputeWorkGraphProducer } from './work-graph/compute-emitter.js';
+import { internalWorkGraphComputeRouter } from './routes/internal-work-graph-compute.js';
 
 import { trustedProxyHops } from './lib/trusted-proxy.js';
 
@@ -94,6 +95,10 @@ app.set('trust proxy', trustedProxyHops());
 app.use(browserOrigin);
 app.use(express.json());
 app.use(cookieParser());
+// HMAC-only source-owned attachments for platform/gateway collaboration
+// sessions. Mount before browser/session routes so it never inherits a user
+// session as an alternate authorization path.
+app.use('/internal/work-graph/compute-capabilities', internalWorkGraphComputeRouter);
 setGrantsResolver(async (id) => {
   const u = await getIdentityUser(id);
   return u ? { displayName: u.displayName, grants: u.grants, epoch: u.epoch } : null;

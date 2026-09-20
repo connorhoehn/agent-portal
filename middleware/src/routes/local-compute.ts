@@ -125,6 +125,7 @@ import {
   emitLocalDisconnected,
   emitLocalSessionEnd,
 } from '../work-graph/compute-emitter.js';
+import { invalidateComputeCapabilitySource } from '../work-graph/compute-capability-runtime.js';
 
 export const localComputeRouter = Router();
 
@@ -371,7 +372,10 @@ localComputeRouter.post('/announce', requireNodeToken(async (req, res, node) => 
   const active = new Set(presence.sessions.map((session) => session.sessionId));
   await Promise.all(before.sessions
     .filter((session) => !active.has(session.sessionId))
-    .map((session) => emitLocalSessionEnd(node, session.sessionId, presence.lastSeenAt ?? new Date().toISOString())));
+    .map((session) => {
+      invalidateComputeCapabilitySource('local-compute', `session:${node.id}:${session.sessionId}`);
+      return emitLocalSessionEnd(node, session.sessionId, presence.lastSeenAt ?? new Date().toISOString());
+    }));
   res.json({ ok: true, nodeId: node.id, sessions: presence.sessions.length });
 }));
 
@@ -388,6 +392,7 @@ localComputeRouter.post('/sessions/:sessionId/end', requireNodeToken(async (req,
   const removed = endSession(node.id, sessionId);
   await touchNode(node.id);
   const endedAt = presenceOf(node.id).lastSeenAt;
+  if (removed) invalidateComputeCapabilitySource('local-compute', `session:${node.id}:${sessionId}`);
   if (removed && endedAt) await emitLocalSessionEnd(node, sessionId, endedAt);
   res.json({ ok: true, removed });
 }));
@@ -1124,6 +1129,7 @@ localComputeRouter.delete(
     const sourceNode = await getNode(id);
     const revoked = await revokeNode(id, session.sub);
     if (!revoked) { res.status(404).json({ error: 'node not found' }); return; }
+    invalidateComputeCapabilitySource('local-compute', `machine:${id}`);
     // Token revocation is an authoritative source stop. The node's owner was
     // joined before the write, so a browser cannot use this route to emit a
     // disconnect for another person's machine.

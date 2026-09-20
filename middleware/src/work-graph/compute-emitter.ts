@@ -23,6 +23,7 @@ import { getBox, listBoxes, subscribeLifecycle, type FleetBox } from '../lib/dev
 import { nodeIdFromBoxId } from '../lib/local-compute-fleet.js';
 import { getJob, jobEvents, type AgentJob, type JobChangeEvent } from '../providers/agent-jobs.js';
 import { getNode, type ComputeNode } from '../providers/local-compute.js';
+import { invalidateComputeCapabilitySource } from './compute-capability-runtime.js';
 
 type Mapped = { supported: true; event: WorkGraphProducerEvent } | { supported: false; reason: string };
 
@@ -150,6 +151,12 @@ export function startComputeWorkGraphProducer(): () => void {
     void emitCloudBox(box).catch((error) => console.warn('[work-graph] cloud box reconciliation failed:', (error as Error).message));
   }
   const stopFleet = subscribeLifecycle((event) => {
+    if (event.kind === 'removed') {
+      // A removed cloud box is authoritative source revocation. End attached
+      // observe/control transports immediately rather than waiting for their
+      // next platform poll.
+      invalidateComputeCapabilitySource('cloud-compute', `box:${event.box.id}`);
+    }
     const emitBox = event.kind === 'removed' ? emitCloudBoxDeleted(event.box) : emitCloudBox(event.box);
     void emitBox.catch((error) => console.warn('[work-graph] cloud box delivery failed:', (error as Error).message));
   });
@@ -171,11 +178,17 @@ async function emitJobChange(change: JobChangeEvent): Promise<void> {
   if (localNodeId) {
     const node = await getNode(localNodeId);
     if (node) await emitLocalJob(job, node);
+    if (['done', 'failed', 'cancelled'].includes(job.status)) {
+      invalidateComputeCapabilitySource('local-compute', `job:${job.id}`);
+    }
     return;
   }
   if (!job.boxId) return;
   const box = getBox(job.boxId);
   if (box) await emitCloudJob(job, box);
+  if (['done', 'failed', 'cancelled'].includes(job.status)) {
+    invalidateComputeCapabilitySource('cloud-compute', `job:${job.id}`);
+  }
 }
 
 /** Test hook: removes process-global listeners between isolated test files. */

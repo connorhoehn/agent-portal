@@ -739,31 +739,37 @@ devboxRouter.post('/:sessionId/shell-url', asyncHandler(async (req, res) => {
  *     retry then lands on ResourceNotFoundException, saying so leaves the
  *     operator with a next step that resolves it.
  */
-devboxRouter.delete('/:sessionId', asyncHandler(async (req, res) => {
-  const sessionId = requireSessionId(String(req.params['sessionId'] ?? ''), res);
-  if (!sessionId) return;
-  if (!await requireBoxAccess(req, res, sessionId)) return;
-  const arn = await requireArn(res);
-  if (!arn) return;
-
-  const settle = (): void => {
-    const box = getBoxBySession(sessionId);
-    if (box) markStopped(box.id);
-  };
-
+export async function stopDevboxSessionForSourceControl(sessionId: string): Promise<'stopped' | 'already-stopped'> {
+  const arn = await resolveDevboxArn();
+  if (!arn) throw new Error('devbox runtime is not configured');
   try {
     await dataClient().send(new StopRuntimeSessionCommand({
       agentRuntimeArn: arn,
       runtimeSessionId: sessionId,
     }));
   } catch (err) {
-    const name = (err as { name?: string }).name ?? '';
+    if ((err as { name?: string }).name === 'ResourceNotFoundException') return 'already-stopped';
+    throw err;
+  }
+  return 'stopped';
+}
+
+devboxRouter.delete('/:sessionId', asyncHandler(async (req, res) => {
+  const sessionId = requireSessionId(String(req.params['sessionId'] ?? ''), res);
+  if (!sessionId) return;
+  if (!await requireBoxAccess(req, res, sessionId)) return;
+  const settle = (): void => {
+    const box = getBoxBySession(sessionId);
+    if (box) markStopped(box.id);
+  };
+
+  try {
+    const outcome = await stopDevboxSessionForSourceControl(sessionId);
+    settle();
+    res.json({ stopped: true, sessionId, ...(outcome === 'already-stopped' ? { alreadyStopped: true } : {}) });
+    return;
+  } catch (err) {
     const message = (err as Error).message ?? String(err);
-    if (name === 'ResourceNotFoundException') {
-      settle();
-      res.json({ stopped: true, sessionId, alreadyStopped: true });
-      return;
-    }
     console.warn(`[devbox] stop session ${sessionId} failed:`, message);
     res.status(502).json({
       error: 'the runtime did not confirm the stop — retry to check whether it took',
@@ -773,8 +779,6 @@ devboxRouter.delete('/:sessionId', asyncHandler(async (req, res) => {
     return;
   }
 
-  settle();
-  res.json({ stopped: true, sessionId });
 }));
 
 // ─── Test hooks ──────────────────────────────────────────────────────────────
