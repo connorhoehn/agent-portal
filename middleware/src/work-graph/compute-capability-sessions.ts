@@ -140,8 +140,9 @@ export function createComputeCapabilitySessions(options: {
   return {
     /**
      * Does not allocate a source attachment. The platform uses this to learn
-     * whether the current viewer is the durable source owner; accepted
-     * collaboration remains platform-owned and never becomes a source grant.
+     * whether the current viewer is the durable source owner. Capabilities
+     * are source availability, never a grant: platform must independently
+     * enforce sharing and accepted collaboration before calling /open.
      */
     async authorizeDisclosure(input: Omit<OpenComputeCapabilityInput, 'capability' | 'requestedExpiresAt'>): Promise<ComputeCapabilityDisclosureDecision> {
       if (input.organizationId !== options.organizationId || !input.viewerId || !input.personId || !input.resource?.resourceId) {
@@ -154,9 +155,7 @@ export function createComputeCapabilitySessions(options: {
       return {
         allowed: true,
         directAccess,
-        capabilities: directAccess
-          ? (target.controllable ? ['observe-terminal', 'control-terminal'] : ['observe-terminal'])
-          : [],
+        capabilities: target.controllable ? ['observe-terminal', 'control-terminal'] : ['observe-terminal'],
       };
     },
 

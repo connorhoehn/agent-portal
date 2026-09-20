@@ -64,7 +64,7 @@ describe('source-owned compute capability sessions', () => {
     })).resolves.toEqual({ allowed: true, directAccess: true, capabilities: ['observe-terminal', 'control-terminal'] });
     await expect(sessions.authorizeDisclosure({
       organizationId: 'org-1', viewerId: 'person-2', personId: 'person-1', resource,
-    })).resolves.toEqual({ allowed: true, directAccess: false, capabilities: [] });
+    })).resolves.toEqual({ allowed: true, directAccess: false, capabilities: ['observe-terminal', 'control-terminal'] });
     expect(sessions._sessionsForTest()).toHaveLength(0);
   });
 

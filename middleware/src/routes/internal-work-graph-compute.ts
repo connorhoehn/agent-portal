@@ -135,8 +135,9 @@ internalWorkGraphComputeRouter.post('/open', asyncHandler(async (req, res) => {
 
 /**
  * Session-free durable source check for graph disclosure. A positive result
- * says only whether this viewer is the source owner; it never creates a
- * bearer-like attachment or turns platform collaboration into source access.
+ * reports durable source capability availability plus whether this viewer is
+ * the source owner. It never creates an attachment or turns availability into
+ * collaboration access; platform enforces sharing and accepted controls.
  */
 internalWorkGraphComputeRouter.post('/authorize', asyncHandler(async (req, res) => {
   if (!authorizeBody(req.body) || !signed(req, res, req.body)) {
