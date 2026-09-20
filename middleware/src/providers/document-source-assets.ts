@@ -1,7 +1,7 @@
 /** Rewrite only the configured source's attachment convention, never fetch an arbitrary URL. */
 export function sourceMarkdownForCanvas(id:string,markdown:string):string {
   if (!/^page:[0-9]+$/.test(id)) throw new Error('A synced source page is required');
-  return markdown.replace(/attachment:([^\s)<>]+)/g,(_all,name:string)=>`/api/assessment/knowledge/source/asset?id=${encodeURIComponent(id)}&name=${encodeURIComponent(name)}`);
+  return markdown.replace(/(!\[[^\]]*\]\()attachment:([\w][\w.\- ]*)(\))/g,(_all,start:string,name:string,end:string)=>`${start}/api/assessment/knowledge/source/asset?id=${encodeURIComponent(id)}&name=${encodeURIComponent(name)}${end}`);
 }
 export function canvasMarkdownForSource(id:string,markdown:string):string {
   if (!/^page:[0-9]+$/.test(id)) throw new Error('A synced source page is required');

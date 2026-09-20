@@ -12,6 +12,7 @@ assessmentCanvasRouter.post('/canvas', requireTenant('assessment'), requireActio
   // identity record and cannot be delegated to another service.
   const session = req.session;
   if (!session) { res.status(401).json({ error: 'Sign in to open collaborative documents' }); return; }
+  if (session.tenant !== 'assessment') { res.status(403).json({ error: 'Switch to the assessment tenant before opening documents' }); return; }
   try {
     const source = await getKnowledgeDoc(id);
     if (!source) { res.status(404).json({ error: 'document not found' }); return; }

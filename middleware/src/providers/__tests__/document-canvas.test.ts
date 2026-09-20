@@ -113,3 +113,17 @@ it('does not grant workflow management to another source owner even when request
   expect(result.canManageWorkflow).toBe(false);
   expect(jest.mocked(createDocumentGrant).mock.calls[0]![0].operations).not.toContain('manage');
 });
+
+it('does not delegate a global administrator from the wrong current tenant',async()=>{
+ await expect(connectDocumentCanvas(source,{...session,tenant:'orgiq',role:'admin',grants:{orgiq:['admin'],assessment:['admin']}},true)).rejects.toThrow('assessment session');
+ expect(ensureDocumentMapping).not.toHaveBeenCalled();
+ expect(createDocumentGrant).not.toHaveBeenCalled();
+});
+it('rechecks editing authority inside the grant issuer even when a caller requests edit',async()=>{
+ const {isAllowed}=await import('../../lib/authz.js');
+ jest.mocked(isAllowed).mockImplementation(async(_session,action)=>action==='ViewAssessment');
+ const result=await connectDocumentCanvas(source,session,true);
+ expect(result.canEdit).toBe(false);
+ expect(jest.mocked(createDocumentGrant).mock.calls.at(-1)![0].operations).toEqual(['read','comment']);
+ jest.mocked(isAllowed).mockResolvedValue(true);
+});

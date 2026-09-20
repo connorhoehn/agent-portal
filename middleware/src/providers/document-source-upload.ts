@@ -17,7 +17,10 @@ export async function stageDocumentSourceImages(source:CanvasSource,session:Sess
     const raw=match[1]!;
     if(!raw.includes('/api/uploads/')||replacements.has(raw)) continue;
     const candidate=new URL(raw,publicBase);
-    if(candidate.origin!==publicBase.origin || !/^\/api\/uploads\/[A-Za-z0-9_-]{1,160}$/.test(candidate.pathname) || candidate.search || candidate.hash || candidate.username || candidate.password) throw new Error('Only document-owned gateway upload URLs can be transferred to the source');
+    const uploadPath=/^\/api\/uploads\/([^/]+)$/.exec(candidate.pathname);
+    let uploadId='';try {uploadId=decodeURIComponent(uploadPath?.[1]??'');}catch { /* Invalid encoded identifiers are denied below. */ }
+    const validId=/^[A-Za-z0-9_-]{1,160}$/.test(uploadId) || new RegExp(`^${session.tenant}\\|[A-Za-z0-9_-]{1,160}$`).test(uploadId);
+    if(candidate.origin!==publicBase.origin || !validId || candidate.search || candidate.hash || candidate.username || candidate.password) throw new Error('Only document-owned gateway upload URLs can be transferred to the source');
     const response=await fetch(new URL(candidate.pathname,internalBase),{headers:{authorization:`Bearer ${access.token}`},redirect:'error',signal:AbortSignal.timeout(20_000)});
     if(!response.ok) throw new Error('A document image could not be read with the current document permission');
     const contentType=(response.headers.get('content-type')??'').split(';')[0]!.trim().toLowerCase();

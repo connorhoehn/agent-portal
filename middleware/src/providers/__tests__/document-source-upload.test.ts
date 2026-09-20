@@ -33,3 +33,11 @@ it('does not stage images when current document permission is rejected',async()=
  await expect(stageDocumentSourceImages(source,session,'![x](/api/uploads/id)',stage)).rejects.toThrow('current document permission');
  expect(stage).not.toHaveBeenCalled();
 });
+
+it('accepts the existing tenant-scoped upload ID encoding and rejects another tenant prefix',async()=>{
+ const stage=jest.fn(async()=>{});
+ await stageDocumentSourceImages(source,session,'![x](/api/uploads/assessment%7Cabc-123)',stage);
+ expect(jest.mocked(fetch).mock.calls[0]![0]!.toString()).toBe('http://gateway.internal:8080/api/uploads/assessment%7Cabc-123');
+ await expect(stageDocumentSourceImages(source,session,'![x](/api/uploads/orgiq%7Cabc-123)',stage)).rejects.toThrow('Only document-owned');
+ expect(fetch).toHaveBeenCalledTimes(1);
+});

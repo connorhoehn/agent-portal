@@ -7,7 +7,7 @@ import { currentDocumentSessionEpoch, documentSessionId } from '../lib/document-
 import { documentCanvasSchema } from '../lib/document-canvas-schema.js';
 import { documentSourceRevision, ensureDocumentMapping, markDocumentMappingReady } from './document-mapping.js';
 
-interface CanvasSource { id: string; title: string; classification: string; markdown: string; editable?: boolean }
+interface CanvasSource { id: string; title: string; classification: string; markdown: string; editable?: boolean; source_parent_id?: string | null }
 
 function configuration() {
   const issuer = process.env['DOCUMENT_GRANT_ISSUER'];
@@ -52,7 +52,15 @@ export function seedCanvasOverGateway(url: string, token: string, documentId: st
   });
 }
 
-export async function connectDocumentCanvas(source: CanvasSource, session: Session, canEdit: boolean, options: { workflowManage?: boolean } = {}) {
+export interface DocumentCanvasAccess {
+  documentId:string;sourceId:string;title:string;classification:string;canEdit:boolean;canManageWorkflow:boolean;
+  sourceParentId?:string|null;gatewayUrl:string;token:string;expiresAt:number;sourceRevision:string;
+}
+
+export async function connectDocumentCanvas(source: CanvasSource, session: Session, canEdit: boolean, options: { workflowManage?: boolean } = {}):Promise<DocumentCanvasAccess> {
+  const { isAllowed } = await import('../lib/authz.js');
+  if (session.tenant !== 'assessment' || !await isAllowed(session, 'ViewAssessment')) throw new Error('Switch to an authorized assessment session before opening documents');
+  const mayEdit = canEdit && !source.id.startsWith('prompt:') && (source.editable === true || source.classification === 'synced') && await isAllowed(session, 'ManageKnowledge');
   const settings = configuration();
   const sessionId = documentSessionId(session);
   const epoch = await currentDocumentSessionEpoch(session.sub, 'assessment', sessionId);
@@ -70,15 +78,15 @@ export async function connectDocumentCanvas(source: CanvasSource, session: Sessi
     await seedCanvasOverGateway(settings.internalUrl, issue(['seed']), mapping.document_id, mapping.source_revision, seed.snapshot, source.title);
     if (!await markDocumentMappingReady(mapping.document_id, mapping.source_revision)) throw new Error('Document import acknowledgement could not be recorded');
   }
-  const operations: DocumentOperation[] = canEdit ? ['read', 'comment', 'edit'] : ['read', 'comment'];
+  const operations: DocumentOperation[] = mayEdit ? ['read', 'comment', 'edit'] : ['read', 'comment'];
   let canManageWorkflow = false;
-  if (canEdit && mapping.owner_sub === session.sub) {
+  if (mayEdit && mapping.owner_sub === session.sub) {
     const { isAllowed } = await import('../lib/authz.js');
     canManageWorkflow = await isAllowed(session, 'ManageKnowledge');
     if (options.workflowManage && canManageWorkflow) operations.push('manage');
   }
   return { documentId: mapping.document_id, sourceId: source.id, title: source.title, classification: source.classification,
-    canEdit, canManageWorkflow, gatewayUrl: settings.gatewayUrl, token: issue(operations),
+    canEdit: mayEdit, canManageWorkflow, sourceParentId: source.source_parent_id ?? null, gatewayUrl: settings.gatewayUrl, token: issue(operations),
     expiresAt: Date.now() + 120_000, sourceRevision: mapping.published_revision ?? mapping.source_revision };
 }
 

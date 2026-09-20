@@ -2,6 +2,7 @@ jest.mock('../../config.js', () => ({ config: { mock: { aurora: true }, auth: {}
 jest.mock('../../providers/assessment.js', () => ({ getKnowledgeDoc: jest.fn() }));
 jest.mock('../../providers/document-canvas.js', () => ({ connectDocumentCanvas: jest.fn() }));
 jest.mock('../../lib/role-registry.js', () => ({ roleRegistry: () => [
+  {id:'admin',tenant:null,label:'Admin',summary:'',capabilities:['*']},
   { id: 'assessor', tenant: 'assessment', label: 'Assessor', summary: '', capabilities: ['ViewAssessment'] },
   { id: 'lead-assessor', tenant: 'assessment', label: 'Lead', summary: '', capabilities: ['ViewAssessment', 'ManageKnowledge'] },
 ] }));
@@ -48,4 +49,13 @@ it('does not mint access for a missing source', async () => {
   jest.mocked(getKnowledgeDoc).mockResolvedValueOnce(null);
   expect((await request(app()).post('/api/assessment/knowledge/canvas').send({ id: 'missing' })).status).toBe(404);
   expect(connectDocumentCanvas).not.toHaveBeenCalled();
+});
+
+it('requires the current assessment tenant even for a global administrator with assessment grants',async()=>{
+ const admin:Session={...user,tenant:'orgiq',role:'admin',grants:{orgiq:['admin'],assessment:['admin']}};
+ const response=await request(app(admin)).post('/api/assessment/knowledge/canvas').send({id:'page:100002'});
+ expect(response.status).toBe(403);
+ expect(response.body.error).toContain('Switch to the assessment tenant');
+ expect(getKnowledgeDoc).not.toHaveBeenCalled();
+ expect(connectDocumentCanvas).not.toHaveBeenCalled();
 });

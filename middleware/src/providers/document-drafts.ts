@@ -57,7 +57,7 @@ export async function recordDraftPublication(id:string,documentId:string,pageId:
   if(config.mock.aurora) {
     const doc=knowledgeDocs().find(row=>row.id===id);
     if(!doc || (doc.published_page_id && doc.published_page_id!==pageId)) return false;
-    if(!await advanceDocumentSourceRevision(documentId,expectedRevision,nextRevision)) return false;
+    if(!await advanceDocumentSourceRevision(documentId,expectedRevision,nextRevision) && !await advanceDocumentSourceRevision(documentId,nextRevision,nextRevision)) return false;
     doc.published_page_id=pageId;
     return true;
   }
@@ -66,7 +66,7 @@ export async function recordDraftPublication(id:string,documentId:string,pageId:
     return await withTransaction(async tx=>{
       const rows=await tx(`UPDATE assessment_knowledge_docs SET published_page_id=:page WHERE id=:id
         AND (published_page_id IS NULL OR published_page_id=:page) RETURNING id`,[str('id',id),str('page',pageId)]);
-      if(!rows.length || !await advanceDocumentSourceRevision(documentId,expectedRevision,nextRevision,tx)) throw conflict;
+      if(!rows.length || (!await advanceDocumentSourceRevision(documentId,expectedRevision,nextRevision,tx) && !await advanceDocumentSourceRevision(documentId,nextRevision,nextRevision,tx))) throw conflict;
       return true;
     });
   } catch(error) { if(error===conflict) return false; throw error; }

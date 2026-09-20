@@ -97,3 +97,10 @@ it('records the authoritative re-pulled source hash when the source normalizes M
  await publishSourcePage(source,session,reviewed);
  expect(advanceDocumentSourceRevision).toHaveBeenCalledWith('uuid',hash('base'),actual);
 });
+
+it('roundtrips source image filenames with spaces using scoped percent-encoded URLs',()=>{
+ const original='![diagram](attachment:architecture diagram.png)';
+ const display=sourceMarkdownForCanvas('page:123',original);
+ expect(display).toContain('name=architecture%20diagram.png');
+ expect(canvasMarkdownForSource('page:123',display)).toBe(original);
+});

@@ -51,6 +51,13 @@ it('records new remote page association and revision in one transaction',async()
 });
 it('rolls back association if the source baseline changed concurrently',async()=>{
  tx.mockResolvedValueOnce([{id:'draft:11111111-1111-4111-8111-111111111111'}]);
- jest.mocked(advanceDocumentSourceRevision).mockResolvedValueOnce(false);
+ jest.mocked(advanceDocumentSourceRevision).mockResolvedValueOnce(false).mockResolvedValueOnce(false);
  expect(await recordDraftPublication('draft:11111111-1111-4111-8111-111111111111','uuid','123','old','new')).toBe(false);
+});
+
+it('accepts a replay whose exact remote association and revision were already recorded',async()=>{
+ tx.mockResolvedValueOnce([{id:'draft:11111111-1111-4111-8111-111111111111'}]);
+ jest.mocked(advanceDocumentSourceRevision).mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+ expect(await recordDraftPublication('draft:11111111-1111-4111-8111-111111111111','uuid','123','old','new')).toBe(true);
+ expect(advanceDocumentSourceRevision).toHaveBeenLastCalledWith('uuid','new','new',tx);
 });
