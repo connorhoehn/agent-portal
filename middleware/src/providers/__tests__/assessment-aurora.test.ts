@@ -498,6 +498,7 @@ describe('knowledge', () => {
     const doc = await A.fetchKnowledgeDoc('rule:scoring-guardrails.md');
     expect(doc).toEqual({
       id: 'rule:scoring-guardrails.md', title: 'Scoring Guardrails', classification: 'internal',
+      source_parent_id:null,published_page_id:null,
       markdown: '# Scoring Guardrails\n', editable: true, path: 'rules/scoring-guardrails.md', updated_at: '2026-08-01T00:00:00Z',
     });
 

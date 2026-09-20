@@ -1,12 +1,12 @@
 jest.mock('../../lib/authz.js',()=>({isAllowed:jest.fn(async()=>true)}));
 jest.mock('../../config.js',()=>({config:{mock:{aurora:false}}}));
 jest.mock('../aurora.js',()=>({withTransaction:jest.fn()}));
-jest.mock('../document-mapping.js',()=>({documentSourceRevision:()=> 'hash',ensureDocumentMapping:jest.fn(async()=>({document_id:'uuid'}))}));
+jest.mock('../document-mapping.js',()=>({documentSourceRevision:()=> 'hash',ensureDocumentMapping:jest.fn(async()=>({document_id:'uuid'})),advanceDocumentSourceRevision:jest.fn(async()=>true)}));
 jest.mock('../document-source.js',()=>({DocumentSourceError:class extends Error {constructor(public status:number,message:string){super(message);}},sourceConfigured:()=>false,readSourceTree:jest.fn()}));
 jest.mock('../../lib/assessment-broker.js',()=>({assessmentBroker:{publish:jest.fn()}}));
-import {createDocumentDraft} from '../document-drafts.js';
+import {createDocumentDraft,recordDraftPublication} from '../document-drafts.js';
 import {withTransaction} from '../aurora.js';
-import {ensureDocumentMapping} from '../document-mapping.js';
+import {ensureDocumentMapping,advanceDocumentSourceRevision} from '../document-mapping.js';
 import {isAllowed} from '../../lib/authz.js';
 import {assessmentBroker} from '../../lib/assessment-broker.js';
 import type {Session} from '../../lib/session.js';
@@ -41,4 +41,16 @@ it('rejects unauthorized callers and never remotely creates a page',async()=>{
  await expect(createDocumentDraft({title:'Draft',sectionKey:'enterprise_context'},session)).rejects.toMatchObject({status:403});
  await expect(createDocumentDraft({title:'Draft',sectionKey:'enterprise_context',sourceParentId:'page:1'},session)).rejects.toMatchObject({status:503});
  expect(withTransaction).not.toHaveBeenCalled();
+});
+
+it('records new remote page association and revision in one transaction',async()=>{
+ tx.mockResolvedValueOnce([{id:'draft:11111111-1111-4111-8111-111111111111'}]);
+ expect(await recordDraftPublication('draft:11111111-1111-4111-8111-111111111111','uuid','123','old','new')).toBe(true);
+ expect(advanceDocumentSourceRevision).toHaveBeenCalledWith('uuid','old','new',tx);
+ expect(tx.mock.calls[0][0]).toContain('published_page_id');
+});
+it('rolls back association if the source baseline changed concurrently',async()=>{
+ tx.mockResolvedValueOnce([{id:'draft:11111111-1111-4111-8111-111111111111'}]);
+ jest.mocked(advanceDocumentSourceRevision).mockResolvedValueOnce(false);
+ expect(await recordDraftPublication('draft:11111111-1111-4111-8111-111111111111','uuid','123','old','new')).toBe(false);
 });

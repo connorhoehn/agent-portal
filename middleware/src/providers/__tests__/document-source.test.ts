@@ -1,3 +1,4 @@
+jest.mock('../document-drafts.js',()=>({recordDraftPublication:jest.fn(async()=>true)}));
 jest.mock('@connorhoehnslalom/realtime-modules/server', () => ({ createCanvasSeed: jest.fn(() => ({snapshot:'baseline'})), exportCanvasProjection: jest.fn(() => ({markdown:'base normalized'})) }));
 jest.mock('../../lib/document-canvas-schema.js', () => ({ documentCanvasSchema:{} }));
 jest.mock('../../lib/authz.js', () => ({ isAllowed: jest.fn(async () => true) }));
@@ -78,4 +79,21 @@ it('rejects changed content or source revision after a preview without reaching 
   await expect(publishSourcePage(source,session,{...reviewed,projectionHash:hash('old preview')})).rejects.toMatchObject({status:409});
   await expect(publishSourcePage(source,session,{...reviewed,sourceRevision:hash('old source')})).rejects.toMatchObject({status:409});
   expect(fetch).not.toHaveBeenCalled();
+});
+
+it('publishes a new local draft using its stable canvas UUID and recorded target parent',async()=>{
+ const draft={...source,id:'draft:11111111-1111-4111-8111-111111111111',source_parent_id:'page:1'};
+ const projectionHash=hash(JSON.stringify({markdown:'acknowledged edit',title:draft.title,parent:draft.source_parent_id}));
+ global.fetch=jest.fn(async()=>new Response(JSON.stringify({published:true,page_id:'456',source_revision:hash('acknowledged edit')}),{status:200}));
+ await publishSourcePage(draft,session,{sourceRevision:hash('base'),projectionHash});
+ expect(JSON.parse(jest.mocked(fetch).mock.calls[0]![1]!.body as string)).toMatchObject({action:'create',parent_id:'1',operation_id:'uuid',markdown:'acknowledged edit'});
+ const {recordDraftPublication}=await import('../document-drafts.js');
+ expect(recordDraftPublication).toHaveBeenCalledWith(draft.id,'uuid','456',hash('base'),hash('acknowledged edit'));
+});
+
+it('records the authoritative re-pulled source hash when the source normalizes Markdown',async()=>{
+ const actual=hash('normalized upstream markdown');
+ global.fetch=jest.fn(async()=>new Response(JSON.stringify({published:true,source_revision:actual}),{status:200}));
+ await publishSourcePage(source,session,reviewed);
+ expect(advanceDocumentSourceRevision).toHaveBeenCalledWith('uuid',hash('base'),actual);
 });

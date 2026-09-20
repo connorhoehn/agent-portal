@@ -5,7 +5,7 @@ import { config } from '../config.js';
 import { clock } from '../mock/core/index.js';
 import { knowledgeDocs, knowledgeSections, type KnowledgeDoc } from '../mock/assessment.js';
 import { withTransaction } from './aurora.js';
-import { documentSourceRevision, ensureDocumentMapping } from './document-mapping.js';
+import { advanceDocumentSourceRevision, documentSourceRevision, ensureDocumentMapping } from './document-mapping.js';
 import { DocumentSourceError, readSourceTree, sourceConfigured } from './document-source.js';
 import { assessmentBroker } from '../lib/assessment-broker.js';
 export interface CreateDocumentDraft { title:string;sectionKey:string;parentId?:string|null;sourceParentId?:string }
@@ -49,4 +49,25 @@ export async function createDocumentDraft(input:CreateDocumentDraft,session:Sess
   }
   assessmentBroker.publish({type:'knowledge.doc.saved',id,stamp:now,by:session.sub,ts:now});
   return {ok:true as const,id,documentId,title};
+}
+
+/** Record a remotely created page without changing the draft's canvas identity. */
+export async function recordDraftPublication(id:string,documentId:string,pageId:string,expectedRevision:string,nextRevision:string):Promise<boolean> {
+  if(!/^draft:[a-f0-9-]+$/.test(id)||!/^\d+$/.test(pageId)) return false;
+  if(config.mock.aurora) {
+    const doc=knowledgeDocs().find(row=>row.id===id);
+    if(!doc || (doc.published_page_id && doc.published_page_id!==pageId)) return false;
+    if(!await advanceDocumentSourceRevision(documentId,expectedRevision,nextRevision)) return false;
+    doc.published_page_id=pageId;
+    return true;
+  }
+  const conflict=new Error('Publication mapping changed');
+  try {
+    return await withTransaction(async tx=>{
+      const rows=await tx(`UPDATE assessment_knowledge_docs SET published_page_id=:page WHERE id=:id
+        AND (published_page_id IS NULL OR published_page_id=:page) RETURNING id`,[str('id',id),str('page',pageId)]);
+      if(!rows.length || !await advanceDocumentSourceRevision(documentId,expectedRevision,nextRevision,tx)) throw conflict;
+      return true;
+    });
+  } catch(error) { if(error===conflict) return false; throw error; }
 }

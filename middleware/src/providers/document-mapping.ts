@@ -69,7 +69,7 @@ export async function ensureDocumentMapping(sourceId: string, revision: string, 
 }
 
 /** A remote publication advances the comparison base without changing import identity. */
-export async function advanceDocumentSourceRevision(documentId: string, expected: string, next: string): Promise<boolean> {
+export async function advanceDocumentSourceRevision(documentId: string, expected: string, next: string, transaction?: TxExec): Promise<boolean> {
   if (config.mock.aurora) {
     const row = documentMappingsFixture.rows().find(value => value.document_id === documentId
       && (value.published_revision ?? value.source_revision) === expected);
@@ -77,7 +77,7 @@ export async function advanceDocumentSourceRevision(documentId: string, expected
     row.published_revision = next;
     return true;
   }
-  const rows = await exec(`UPDATE assessment_document_mappings SET published_revision = :next
+  const rows = await (transaction ?? exec)(`UPDATE assessment_document_mappings SET published_revision = :next
     WHERE tenant_id = 'assessment' AND document_id = :document
       AND COALESCE(published_revision, source_revision) = :expected RETURNING document_id`,
   [str('next', next), str('document', documentId), str('expected', expected)]);
