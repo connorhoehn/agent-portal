@@ -6,6 +6,54 @@ supporting Docker containers, with fixes made in the owning repositories.
 Editor work is deferred. This document supersedes the deployment-choice section
 of [the earlier document integration map](document-backend-integration-2026-09-19.md).
 
+## Latest verified checkpoint: cold loads, catalog and CDK tables
+
+- **realtime-modules `cb16b02` / 0.69.2** now distinguishes missing snapshots
+  from failed/corrupt durable reads. Concurrent hydration is shared and updates
+  wait for it; failed loading rolls back subscriptions and retries safely.
+  Full suite: 1,341 passed. All 13 focused policy/commit/hydration tests pass;
+  strict build and 29 export checks pass.
+- **event-catalog `947b5fb` / 0.6.5** checks HTTP acknowledgement failures and
+  bounds deletion timeouts. Failed acknowledgements do not consume the handler
+  poison budget or falsely increment successful receives. Full suite: 3,097
+  tests in 142 suites pass; library/CLI builds and published exports pass.
+  Processing remains at-least-once; the existing in-memory DLQ is best-effort.
+- **platform-api `ba5f9af`** and **examples `e2ff7ec2`** adopt exact release
+  commits in their lockfiles. API: 57 consumer/outbox/projector tests pass,
+  one skipped; gateway catalog consumers: 84 pass. Strict Linux image builds
+  pass and installed versions were inspected inside both images.
+- The expanded isolated application gate **passes**: all prior replacement,
+  cache-free recovery, failed-save, readiness and graceful-stop assertions,
+  plus corrupt cold-load rejection, retry after repairing bytes without
+  restarting the gateway, catalog registry recovery after replacement, and
+  actual consumer redelivery after acknowledgement fails during a store outage.
+  [Evidence with all six image IDs](research-evidence/middleware-application-2026-09-20.json).
+- Examples now supplies an opt-in **ApplicationTables** CDK construct using the
+  same 51-table manifest: selected tables or imported resources, explicit
+  task grants, retained encrypted tables with PITR and deletion protection.
+  Five synthesis tests, seven initializer tests and dedicated CDK typecheck
+  pass. No services or AWS resources were deployed. Service composition and
+  production authentication are unfinished.
+
+One interrupted run exhausted Colima memory while two cold Docker builds ran
+alongside the stack. Docker socket forwarding was restored without restarting
+Docker/VM; only that gate's UUID-owned resources were removed. Images were
+then built serially and the complete gate rerun successfully. The interrupted
+run is not evidence of application success or failure. Build serially here.
+
+**Deployment correction:** `desiredCount: 1` and even minHealthy=0/max=100 do
+not establish exclusive ownership. AWS documents the maximum as counting
+[RUNNING/PENDING tasks](https://docs.aws.amazon.com/AmazonECS/latest/APIReference/API_DeploymentConfiguration.html);
+a [STOPPING process may still execute until its stop timeout](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-lifecycle-explanation.html).
+Inference: without storage-enforced fencing, replacement must confirm the old
+owner is STOPPED before admitting its successor. AWS replacement behavior has
+not been tested in this pass. MQ must not be autoscaled or rolled concurrently.
+
+The earlier sections below record the sequence of discoveries. This checkpoint
+supersedes their pending cold-read and catalog-adoption statements. Remaining:
+production service authentication, full document policies, exclusive ownership,
+reusable ECS service/network/identity composition, and media validation.
+
 ## Application bootstrap and document follow-up
 
 The next wave is implemented upstream:
