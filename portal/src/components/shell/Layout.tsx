@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { NavLink, Outlet, useLocation } from 'react-router';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router';
 import {
   ChannelHeader,
   CommandPalette,
   CommandPaletteHint,
   CommandPaletteProvider,
+  DropdownMenu,
   Inline,
   Stack,
   SubNavLayout,
@@ -217,6 +218,7 @@ export function Layout() {
   const { data: work } = useFetch<WorkSummary>(
     session?.tenant === 'orgiq' ? '/api/work/summary' : null, 15_000);
   const { pathname } = useLocation();
+  const navigate = useNavigate();
 
   // Routes that render their own SubNavLayout (iq/admin) go
   // full-bleed — the outer p-6 was double-framing them and wasting a 24px
@@ -379,7 +381,21 @@ export function Layout() {
           description={statusLabel}
           online={mockedSubsystems.length === 0 && !!health && !credsExpired && !dbDown}
           actions={
-            <Inline gap="md" wrap={false}>
+            <Inline gap="md" wrap>
+              <DropdownMenu
+                trigger="Navigation"
+                triggerLabel={`${tenantLabel} navigation`}
+                triggerClassName="md:hidden text-xs"
+                className="max-h-[70vh] overflow-y-auto"
+                sections={Array.from(new Set(subNavItems.map((item) => item.group))).map((group) => ({
+                  label: group,
+                  items: subNavItems.filter((item) => item.group === group).map((item) => ({
+                    label: item.label,
+                    active: pathname === item.path || pathname.startsWith(`${item.path}/`),
+                    onSelect: () => navigate(item.path),
+                  })),
+                }))}
+              />
               <CommandPaletteHint />
               {/* The user's own machine in the fleet — renders nothing until
                   a machine is paired, so most sessions never see it.

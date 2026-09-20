@@ -473,6 +473,12 @@ tbody tr:focus-within .row-reveal,
 [data-shell-nav] aside {
   background: var(--color-surface-panel);
 }
+/* Narrow screens use the same role-filtered links in the shared header
+   DropdownMenu. Hide only the shell's primary rail, never nested page rails. */
+@media (max-width: 767px) {
+  [data-shell-nav] > div > aside:first-child { display: none; }
+  .shell-header > div:last-child { max-width: 100%; }
+}
 /* One content padding, everywhere: the shell's SubNavLayout <main> pads 24px
    and that is the only padding a route gets. A NESTED section layout
    (Library, Automate, Budgets, Observability …) pads its own content pane

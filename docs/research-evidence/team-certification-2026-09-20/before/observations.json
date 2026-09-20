@@ -1,0 +1,271 @@
+{
+  "identity": {
+    "sub": "u-operator",
+    "tenant": "assessment",
+    "role": "admin"
+  },
+  "tabs": [
+    {
+      "name": "Improvement Plan",
+      "url": "http://127.0.0.1:5183/assessment/teams/TEAM-001?tab=plan"
+    },
+    {
+      "name": "Stories",
+      "url": "http://127.0.0.1:5183/assessment/teams/TEAM-001?tab=stories"
+    },
+    {
+      "name": "Evidence & Intake",
+      "url": "http://127.0.0.1:5183/assessment/teams/TEAM-001?tab=evidence"
+    },
+    {
+      "name": "Documents",
+      "url": "http://127.0.0.1:5183/assessment/teams/TEAM-001?tab=documents"
+    },
+    {
+      "name": "Certification",
+      "url": "http://127.0.0.1:5183/assessment/teams/TEAM-001"
+    }
+  ],
+  "dimensionSelectionSurvivesTabs": true,
+  "detailTabs": 5,
+  "claims": 6,
+  "emptyFilter": true,
+  "repos": [
+    {
+      "name": "northstar-payments-api",
+      "url": "https://gitlab.example.com/payments/northstar-payments-api"
+    },
+    {
+      "name": "northstar-payments-infra",
+      "url": "https://gitlab.example.com/payments/northstar-payments-infra"
+    }
+  ],
+  "keyboard": {
+    "controls": 47,
+    "visited": [
+      "0",
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+      "7",
+      "8",
+      "9",
+      "10",
+      "11",
+      "12",
+      "13",
+      "14",
+      "15",
+      "16",
+      "17",
+      "18",
+      "19",
+      "20",
+      "21",
+      "22",
+      "23",
+      "24",
+      "25",
+      "26",
+      "27",
+      "28",
+      "29",
+      "30",
+      "31",
+      "32",
+      "33",
+      "34",
+      "35",
+      "36",
+      "37",
+      "38",
+      "39",
+      "40",
+      "41",
+      "42",
+      "43",
+      "44",
+      "45",
+      "46"
+    ],
+    "reachedAll": true
+  },
+  "measurements": {
+    "desktop": {
+      "viewport": 1500,
+      "scrollWidth": 1500,
+      "main": {
+        "x": 200,
+        "y": 64.5,
+        "width": 1300,
+        "height": 935.5,
+        "top": 64.5,
+        "right": 1500,
+        "bottom": 1000,
+        "left": 200
+      },
+      "contentLeft": 224,
+      "contentWidth": 1252,
+      "master": {
+        "x": 224,
+        "y": 111,
+        "width": 1252,
+        "height": 865,
+        "top": 111,
+        "right": 1476,
+        "bottom": 976,
+        "left": 224
+      },
+      "rail": {
+        "x": 225,
+        "y": 112,
+        "width": 340,
+        "height": 863,
+        "top": 112,
+        "right": 565,
+        "bottom": 975,
+        "left": 225
+      },
+      "detail": {
+        "x": 565,
+        "y": 112,
+        "width": 910,
+        "height": 863,
+        "top": 112,
+        "right": 1475,
+        "bottom": 975,
+        "left": 565
+      },
+      "selected": "assessment-dimension-master-detail-row-1"
+    },
+    "tablet": {
+      "viewport": 768,
+      "scrollWidth": 768,
+      "main": {
+        "x": 200,
+        "y": 64.5,
+        "width": 568,
+        "height": 959.5,
+        "top": 64.5,
+        "right": 768,
+        "bottom": 1024,
+        "left": 200
+      },
+      "contentLeft": 224,
+      "contentWidth": 520,
+      "master": {
+        "x": 224,
+        "y": 111,
+        "width": 520,
+        "height": 2555.25,
+        "top": 111,
+        "right": 744,
+        "bottom": 2666.25,
+        "left": 224
+      },
+      "rail": {
+        "x": 225,
+        "y": 112,
+        "width": 340,
+        "height": 2553.25,
+        "top": 112,
+        "right": 565,
+        "bottom": 2665.25,
+        "left": 225
+      },
+      "detail": {
+        "x": 565,
+        "y": 112,
+        "width": 178,
+        "height": 2553.25,
+        "top": 112,
+        "right": 743,
+        "bottom": 2665.25,
+        "left": 565
+      },
+      "selected": "assessment-dimension-master-detail-row-1"
+    },
+    "mobile": {
+      "viewport": 390,
+      "scrollWidth": 390,
+      "main": {
+        "x": 200,
+        "y": 94.5,
+        "width": 190,
+        "height": 749.5,
+        "top": 94.5,
+        "right": 390,
+        "bottom": 844,
+        "left": 200
+      },
+      "contentLeft": 224,
+      "contentWidth": 142,
+      "master": {
+        "x": 224,
+        "y": 164.25,
+        "width": 142,
+        "height": 4057.5,
+        "top": 164.25,
+        "right": 366,
+        "bottom": 4221.75,
+        "left": 224
+      },
+      "rail": {
+        "x": 225,
+        "y": 165.25,
+        "width": 340,
+        "height": 4055.5,
+        "top": 165.25,
+        "right": 565,
+        "bottom": 4220.75,
+        "left": 225
+      },
+      "detail": {
+        "x": 565,
+        "y": 165.25,
+        "width": 0,
+        "height": 4055.5,
+        "top": 165.25,
+        "right": 565,
+        "bottom": 4220.75,
+        "left": 565
+      },
+      "selected": "assessment-dimension-master-detail-row-1"
+    }
+  },
+  "missingTeam": "No team TEAM-999 with Back to the dashboard",
+  "errors": [
+    {
+      "phase": "login",
+      "message": "WebSocket connection to 'ws://localhost:3001/ws' failed: Error during WebSocket handshake: Unexpected response code: 404"
+    },
+    {
+      "phase": "login",
+      "message": "WebSocket connection to 'ws://localhost:3001/ws' failed: Error during WebSocket handshake: Unexpected response code: 404"
+    },
+    {
+      "phase": "login",
+      "message": "WebSocket connection to 'ws://localhost:3001/ws' failed: Error during WebSocket handshake: Unexpected response code: 404"
+    },
+    {
+      "phase": "team",
+      "message": "WebSocket connection to 'ws://localhost:3001/ws' failed: Error during WebSocket handshake: Unexpected response code: 404"
+    },
+    {
+      "phase": "Documents",
+      "message": "WebSocket connection to 'ws://localhost:3001/ws' failed: Error during WebSocket handshake: Unexpected response code: 404"
+    },
+    {
+      "phase": "missing team",
+      "message": "WebSocket connection to 'ws://localhost:3001/ws' failed: Error during WebSocket handshake: Unexpected response code: 404"
+    },
+    {
+      "phase": "missing team",
+      "message": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    }
+  ],
+  "pageErrors": []
+}

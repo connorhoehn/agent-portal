@@ -155,7 +155,7 @@ function ProgressTab({ dimension }: { dimension: Dimension }) {
         {!dimension.is_na && dimension.next_level_criteria.length > 0 ? (
           <Stack gap="xs" className="mt-2">
             {dimension.next_level_criteria.map((c, i) => (
-              <Inline key={i} gap="xs" className="text-sm text-text-secondary">
+              <Inline key={i} gap="xs" wrap={false} className="text-sm text-text-secondary">
                 <strong className="text-accent">&bull;</strong>{c}
               </Inline>
             ))}
@@ -292,7 +292,7 @@ function DefinitionTab({ dimension }: { dimension: Dimension }) {
                 {rl.level_up_criteria.length > 0 && (
                   <Stack gap="xs" className="mt-2">
                     {rl.level_up_criteria.map((c, i) => (
-                      <Inline key={i} gap="xs" className="text-xs text-text-secondary">
+                      <Inline key={i} gap="xs" wrap={false} className="text-xs text-text-secondary">
                         <strong className="text-accent">&bull;</strong>{c}
                       </Inline>
                     ))}
@@ -452,6 +452,7 @@ export function DimensionMasterDetail({ dimensions, selectedId, onSelect }: Dime
         <Input aria-label="Find a dimension" placeholder="Find a dimension…" value={query} onChange={(event) => setQuery(event.target.value)} />
       </Toolbar>
       <MasterDetail<Dimension>
+        className="max-lg:flex-col max-lg:[&>nav]:!w-full max-lg:[&>nav]:max-h-64 max-lg:[&>nav]:border-r-0 max-lg:[&>nav]:border-b"
         items={filtered}
         keyOf={(d: Dimension) => d.id}
         selectedKey={effectiveId}

@@ -113,11 +113,12 @@ export function TeamScorecard({ teamId, tab, onTabChange }: TeamScorecardProps) 
   return (
     <Stack gap="lg">
       <PageHeader
+        className="[&>div]:flex-wrap"
         title={team.name}
         badge={<Chip tone="accent" uppercase size="xs">{team.cohort_label}</Chip>}
         description={`${team.status} · Updated ${fmtDate(team.updated_at)}`}
         actions={
-          <Inline gap="sm" align="center">
+          <Inline gap="sm" align="center" wrap>
             <Button variant="secondary" size="sm" onClick={() => setDetailsOpen(true)}>Team details</Button>
             <DropdownMenu trigger="Review" triggerClassName="text-xs px-2.5 py-1" triggerLabel="Assessment review actions" align="end" sections={[{ items: [
               { label: 'Exceptions', onSelect: () => setExceptionsOpen(true) },
@@ -141,6 +142,7 @@ export function TeamScorecard({ teamId, tab, onTabChange }: TeamScorecardProps) 
       />
 
       <StatStrip
+        className="max-lg:grid max-lg:grid-cols-2 max-lg:divide-x-0"
         items={[
           {
             label: 'Highest verified',

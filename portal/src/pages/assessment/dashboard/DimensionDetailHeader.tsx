@@ -17,7 +17,7 @@ const confidenceLabel = (confidence: string) => confidence.replace(/_/g, ' ');
 export function DimensionDetailHeader({ dimension, index }: { dimension: Dimension; index: number }) {
   const tracks = railTracks(dimension);
   return (
-    <Inline align="start" justify="between" wrap={false} gap="md" className="p-5 pb-4">
+    <Inline align="start" justify="between" wrap gap="md" className="p-5 pb-4">
       <Stack gap="none" className="min-w-0">
         <SectionLabel as="div">Dimension {String(index + 1).padStart(2, '0')}</SectionLabel>
         <h2 className="mt-0.5 text-lg font-bold text-text-primary">{dimension.title}</h2>
