@@ -102,6 +102,11 @@ function collectCalls(node: ts.Node, sf: ts.SourceFile): Set<string> {
       const callee = n.expression;
       if (ts.isIdentifier(callee)) calls.add(callee.text);
       else if (ts.isPropertyAccessExpression(callee)) {
+        // A RegExp literal's exec is not the Aurora transport with that name.
+        if (callee.name.text === 'exec' && ts.isRegularExpressionLiteral(callee.expression)) {
+          ts.forEachChild(n, visit);
+          return;
+        }
         calls.add(callee.name.text);
         if (ts.isIdentifier(callee.expression)) calls.add(callee.expression.text);
       }
@@ -438,6 +443,23 @@ export interface WriteRouteFinding extends Finding {
   provider: string;
 }
 
+/** These integrations deliberately use their owning durable services even when
+ * Aurora is mocked. Their configuration fails closed; a fake success response
+ * would claim that a draft/version/publication had persisted when it had not.
+ * Keep them in the report, separately from missing Aurora mock branches. This
+ * list is function-qualified: adding a new outbound function still trips the
+ * ratchet until it receives its own evidence and explicit classification. */
+export const DOCUMENT_SERVICE_BOUNDARIES: Readonly<Record<string, string>> = {
+  'src/providers/document-canvas.ts:seedCanvasOverGateway': 'Durable seed acknowledgement; document-canvas.test.ts and document-workspace-live-2026-09-20.json.',
+  'src/providers/document-versions.ts:exchangeVersion': 'Canonical binary save/restore; document-versions.test.ts and document-workspace-live-2026-09-20.json.',
+  'src/providers/document-workflows.ts:performDocumentWorkflow': 'Platform owner/reviewer authority; document-workflows.test.ts and document-workspace-live-2026-09-20.json.',
+  'src/providers/document-source.ts:request': 'Explicit source bridge configuration; document-source.test.ts. Missing source returns 503; no simulated publication.',
+};
+export function documentServiceBoundary(finding: WriteRouteFinding): string | undefined {
+  const key = finding.provider.replace(/:\d+ (\w+)\(\)$/, ':$1');
+  return DOCUMENT_SERVICE_BOUNDARIES[key];
+}
+
 /**
  * Write routes (POST/PUT/PATCH/DELETE) whose handler chain reaches a provider
  * function that talks to live AWS with no `config.mock` branch.
@@ -521,7 +543,10 @@ function main(): void {
     for (const f of scanProviderMockMints()) console.log(`MINT ${f.where} ${f.what}`);
   }
   if (which === 'writes' || which === 'both') {
-    for (const f of scanWriteRoutesWithoutMockBranch()) console.log(`WRITE ${f.what}`);
+    for (const f of scanWriteRoutesWithoutMockBranch()) {
+      const boundary = documentServiceBoundary(f);
+      console.log(boundary ? `DOCUMENT_SERVICE ${f.what} — ${boundary}` : `WRITE ${f.what}`);
+    }
   }
 }
 

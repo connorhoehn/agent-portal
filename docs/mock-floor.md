@@ -947,3 +947,16 @@ for exactly the same reason. It re-reads the fixture rather than caching a
 copy, so it follows a pinned `empty` instead of dragging the default fleet back
 over it.
 
+
+### Durable document service boundaries
+
+Document collaboration deliberately uses the owning gateway/platform/source
+services when Aurora is mocked. Their successful replies mean a real durable
+write, review transition, or remote publication; manufacturing those replies in
+an Aurora fixture would create a second authority. Missing configuration returns
+an explicit unavailable response. The write scanner still reports these paths as
+`DOCUMENT_SERVICE`, with function-qualified entries and test/evidence references
+in `DOCUMENT_SERVICE_BOUNDARIES`; the existing unmocked-Aurora budget stays 25.
+New outbound functions are not implicitly covered. The wire replay refuses these
+operations because resetting Aurora fixtures cannot undo them. Isolated integration
+proof is in `research-evidence/document-workspace-live-2026-09-20.json`.

@@ -65,7 +65,7 @@ const tree = async () => (await request(buildApp()).get('/api/assessment/knowled
 /** Sibling order as the portal derives it: array order, filtered by parent. */
 async function childrenOf(parentId: string | null): Promise<string[]> {
   const t = await tree();
-  const sec = t.sections.find((s: { kind: string }) => s.kind === 'local');
+  const sec = t.sections.find((s: { key: string }) => s.key === 'enterprise_context');
   return sec.nodes
     .filter((n: { parent_id: string | null }) => n.parent_id === parentId)
     .map((n: { id: string }) => n.id);

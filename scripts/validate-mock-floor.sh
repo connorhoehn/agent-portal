@@ -271,6 +271,13 @@ fi
 # It is a ratchet and it is a HEURISTIC in both directions — what it can and
 # cannot prove is written out in docs/mock-floor.md § What the judge cannot see.
 if [ "$SCAN_OK" = 1 ]; then
+  # These remain visible: configured document services use their real durable
+  # authority in dev:mock and refuse writes when absent, rather than fabricating
+  # successful persistence in Aurora fixtures. The scanner names exact functions.
+  n_document_services=$(grep -c '^DOCUMENT_SERVICE ' "$TMP/scan.txt" || true)
+  if [ "$n_document_services" -gt 0 ]; then
+    note "$n_document_services document-service paths use explicit integration boundaries (not resettable Aurora mocks)"
+  fi
   n_write=$(wc -l < "$TMP/writes.txt" | tr -d ' ')
   n_write_routes=$(sed 's/ reaches .*//' "$TMP/writes.txt" | sort -u | wc -l | tr -d ' ')
   ratchet scripts/mock-write-route-budget.txt "$n_write" \

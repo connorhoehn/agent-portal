@@ -6,7 +6,7 @@
 // sweep unreadable — 179 findings, nearly all of them a route "reaching" a
 // provider it cannot reach offline).
 
-import { scanProviderMockMints, scanWriteRoutesWithoutMockBranch } from '../mock-branches.js';
+import { scanProviderMockMints, scanWriteRoutesWithoutMockBranch, documentServiceBoundary, DOCUMENT_SERVICE_BOUNDARIES } from '../mock-branches.js';
 
 // These are slow-ish: both parse every module under src/{routes,lib,providers}.
 const mints = scanProviderMockMints();
@@ -35,6 +35,16 @@ describe('rule 3, widened — wall-clock mints in a provider mock branch', () =>
 });
 
 describe('rule 4, widened — write routes reaching an unmocked provider', () => {
+  it('reports durable document service boundaries explicitly without exempting new functions', () => {
+    for (const [key, reason] of Object.entries(DOCUMENT_SERVICE_BOUNDARIES)) {
+      expect(reason.length).toBeGreaterThan(40);
+      expect(writes.some(finding => finding.provider.replace(/:\d+ (\w+)\(\)$/, ':$1') === key)).toBe(true);
+    }
+    const example = writes.find(finding => documentServiceBoundary(finding))!;
+    expect(example).toBeDefined();
+    expect(documentServiceBoundary({ ...example, provider: 'src/providers/document-source.ts:1 newlyAddedNetworkCall()' })).toBeUndefined();
+    expect(writes.some(finding => finding.provider.includes('pageId()'))).toBe(false);
+  });
   it('clears the four agent-projects write paths that were fixed', () => {
     const routes = new Set(writes.map((f) => f.route));
     expect(routes.has('POST /api/agent-projects')).toBe(false);

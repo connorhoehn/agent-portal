@@ -1,0 +1,39 @@
+{
+  "capturedAt": "2026-09-20",
+  "environment": "isolated assessment-document-workspace Docker project; mock BFF identities; real durable document services",
+  "collaboration": {
+    "sourceId": "draft:7a3ba04b-39f9-4201-b70b-6b30b9d9df93",
+    "documentId": "7d026d4d-0e81-597a-ab2e-dc4e76329491",
+    "writerReceipt": true,
+    "readerConverged": true,
+    "readOnlyWriteRejected": true,
+    "reloadPreserved": true,
+    "marker": "Durable proof 77eadacd-a8e1-4012-9c3c-3af6f9863a06"
+  },
+  "coldCache": {
+    "documentId": "7d026d4d-0e81-597a-ab2e-dc4e76329491",
+    "coldCacheContentPreserved": true
+  },
+  "lifecycle": {
+    "documentId": "bc3e88fb-beaf-4a44-bfb6-ef6934d0b537",
+    "passed": [
+      "seed durable document",
+      "verified epoch identity",
+      "explicit ownership",
+      "draft acknowledged write",
+      "assigned review and approval",
+      "already-connected edit denied",
+      "restore denied",
+      "pending HTTP upload denied",
+      "REST section mutation denied",
+      "locked snapshot readable",
+      "finalized irreversible"
+    ],
+    "status": "passed"
+  },
+  "limits": [
+    "No cloud deployment or live Aurora migration.",
+    "Local draft metadata uses resettable BFF fixtures in dev:mock; production metadata requires Aurora.",
+    "Cold-cache check uses a fresh scoped reader grant directly against the persisted UUID after BFF hot reload."
+  ]
+}

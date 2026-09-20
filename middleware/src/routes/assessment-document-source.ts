@@ -2,7 +2,7 @@ import { Router, type Request, type Response } from 'express';
 import { requireAction, requireTenant } from '../lib/authz.js';
 import { getKnowledgeDoc } from '../providers/assessment.js';
 import { createDocumentDraft } from '../providers/document-drafts.js';
-import { DocumentSourceError, previewSourceChanges, publishSourcePage, pullSourcePage, readSourceAsset, sourceConfigured } from '../providers/document-source.js';
+import { DocumentSourceError, previewSourceChanges, publishSourcePage, pullSourcePage, readSourceAsset, sourceConfigured, moveSourcePage } from '../providers/document-source.js';
 
 export const assessmentDocumentSourceRouter = Router();
 assessmentDocumentSourceRouter.use('/source', requireTenant('assessment'), requireAction('ViewAssessment'));
@@ -62,3 +62,15 @@ function mutation(action: 'preview' | 'publish' | 'pull') {
 assessmentDocumentSourceRouter.post('/source/preview', requireAction('ManageKnowledge'), mutation('preview'));
 assessmentDocumentSourceRouter.post('/source/publish', requireAction('ManageKnowledge'), mutation('publish'));
 assessmentDocumentSourceRouter.post('/source/pull', requireAction('ManageKnowledge'), mutation('pull'));
+assessmentDocumentSourceRouter.post('/source/move', requireAction('ManageKnowledge'), async (req, res) => {
+  if (!req.session) { res.status(401).json({ error: 'Sign in to move source pages' }); return; }
+  const input = req.body;
+  if (!input || typeof input !== 'object' || Array.isArray(input)
+    || Object.keys(input).some(key => !['id', 'parentId', 'position'].includes(key))
+    || typeof input.id !== 'string' || typeof input.parentId !== 'string'
+    || !Number.isSafeInteger(input.position) || input.position < 0) {
+    res.status(400).json({ error: 'A page, parent and nonnegative sibling position are required' }); return;
+  }
+  try { res.json(await moveSourcePage(input.id, input.parentId, input.position, req.session)); }
+  catch (error) { failure(error, res); }
+});

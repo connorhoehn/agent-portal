@@ -241,7 +241,7 @@ describe('promoting a prompt version (mockPromotePromptVersion)', () => {
     expect(mockPromotePromptVersion({
       promptVersion: pv, agentId: 'orgiq-search', promotedBy: 'b', notes: 'second look',
     })).toEqual({ ok: true, promotedAt: '2026-09-08T10:00:00.000Z' });
-    expect(mockListPromotedVersions()[0]).toMatchObject({ promotedBy: 'b', promoteNotes: 'second look' });
+    expect(mockListPromotedVersions().find(row => row.promptVersion === pv)).toMatchObject({ promotedBy: 'b', promoteNotes: 'second look' });
   });
 
   it('is undone by reset — including a promotion of a SEEDED row', () => {
