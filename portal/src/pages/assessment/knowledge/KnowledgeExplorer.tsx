@@ -18,6 +18,7 @@ import {
   RailSection,
   Stack,
   T,
+  Toolbar,
   VisuallyHidden,
 } from '@connorhoehnslalom/ui-components/shared';
 import { usePresence } from '@connorhoehnslalom/realtime-modules/client';
@@ -27,6 +28,7 @@ import { useCapabilities } from '../../../lib/capabilities';
 import { sendJson } from '../../../lib/writeJson';
 import { DocPane, FolderPane } from './DocPane';
 import { ActivityBar } from './ActivityBar';
+import { DocumentLibrary } from './DocumentLibrary';
 import { ExplorerFrame } from './ExplorerFrame';
 import { KeyboardTreeView } from './KeyboardTreeView';
 import { RenameNodeDialog, RowActionsMenu } from './RenameNodeDialog';
@@ -260,6 +262,7 @@ export function KnowledgeExplorer({ mode }: KnowledgeExplorerProps) {
 
   const sections = sectionsForMode(treeFetch.data?.sections ?? [], mode);
   const nodes = flatNodes(sections);
+  const libraryOpen = searchParams.get('view') === 'library';
   const selectedId = searchParams.get('doc');
   const selectedNode = findNode(nodes, selectedId);
 
@@ -284,11 +287,18 @@ export function KnowledgeExplorer({ mode }: KnowledgeExplorerProps) {
     setView({ kind: 'node' });
     const next = new URLSearchParams(searchParams);
     next.set('doc', id);
+    next.delete('view');
     setSearchParams(next);
   };
 
   const handleTreeSelect = (section: KnowledgeSection, id: string) => {
-    if (id === ACTIVITY_ID(section.key)) { setView({ kind: 'activity', sectionKey: section.key }); return; }
+    if (id === ACTIVITY_ID(section.key)) {
+      const next = new URLSearchParams(searchParams);
+      next.delete('view');
+      setSearchParams(next);
+      setView({ kind: 'activity', sectionKey: section.key });
+      return;
+    }
     handleSelectNode(id);
   };
 
@@ -414,7 +424,7 @@ export function KnowledgeExplorer({ mode }: KnowledgeExplorerProps) {
     <ExplorerFrame
       rail={rail}
       title={modeLabel}
-      aside={view.kind === 'node' && isPage && selectedNode
+      aside={!libraryOpen && view.kind === 'node' && isPage && selectedNode
         ? <ActivityBar node={selectedNode} sectionKey={selectedSectionKey} sseEvents={sse.events} />
         : undefined}
     >
@@ -426,11 +436,25 @@ export function KnowledgeExplorer({ mode }: KnowledgeExplorerProps) {
           name already exists as `modeLabel`; this puts it in the outline
           without adding chrome the explorer does not want. */}
       <VisuallyHidden as="h1">{modeLabel}</VisuallyHidden>
-      <Stack className="mb-4"><Breadcrumbs items={crumbs} /></Stack>
+      <Toolbar aria-label="Document navigation" wrap className="mb-4" end={
+        <Button variant="ghost" size="sm" disabled={treeFetch.isLoading} onClick={() => void treeFetch.refresh()}>Refresh library</Button>
+      }>
+        <Button variant={libraryOpen ? 'secondary' : 'ghost'} size="sm" aria-pressed={libraryOpen} onClick={() => {
+          const next = new URLSearchParams(searchParams);
+          if (libraryOpen) next.delete('view'); else next.set('view', 'library');
+          setSearchParams(next);
+          setView({ kind: 'node' });
+        }}>{libraryOpen && selectedNode ? 'Back to document' : libraryOpen ? 'Back to tree' : 'Browse library'}</Button>
+        {!libraryOpen && <Breadcrumbs items={crumbs} />}
+      </Toolbar>
 
-      {view.kind === 'activity' && activityPane}
+      {libraryOpen && (treeFetch.isLoading ? <LoadingState label="Loading document library…" />
+        : treeFetch.error ? <ErrorState title="Couldn't load the document library" body={treeFetch.error} />
+        : <DocumentLibrary sections={sections} onSelect={handleSelectNode} />)}
 
-      {view.kind === 'node' && (
+      {!libraryOpen && view.kind === 'activity' && activityPane}
+
+      {!libraryOpen && view.kind === 'node' && (
         !selectedNode ? (
           <EmptyState title="Select a document from the library to view it." />
         ) : isFolderNode(selectedNode) ? (
