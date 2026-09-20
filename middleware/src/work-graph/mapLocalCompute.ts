@@ -311,6 +311,31 @@ export function mapLocalHeartbeat(
   });
 }
 
+/**
+ * A server-side revocation or an authoritative fleet disconnect is distinct
+ * from a late heartbeat: it ends the machine source immediately, without
+ * claiming that the human owner is absent.
+ */
+export function mapLocalDisconnected(
+  machine: LocalComputeMachineRecord | undefined,
+  occurredAt: string,
+  context: AuthenticatedLocalComputeContext,
+): LocalComputeMapResult {
+  const denied = authorizeMachine(machine, context);
+  if (denied) return denied;
+  if (!machine) return unsupported('missing-machine');
+  if (!Number.isFinite(Date.parse(occurredAt))) return unsupported('invalid-heartbeat');
+  return eventFor(context, {
+    eventId: `local-compute:machine:${machine.id}:disconnected:${occurredAt}`,
+    sourceSequence: `disconnected:${occurredAt}`,
+    occurredAt,
+    machineId: machine.id,
+    lifecycle: 'disconnected',
+    resourceId: `machine:${machine.id}`,
+    resourceVersion: occurredAt,
+  });
+}
+
 /** Maps a local queue row after its local-box attribution is verified. */
 export function mapLocalJob(
   job: LocalComputeJobRecord,

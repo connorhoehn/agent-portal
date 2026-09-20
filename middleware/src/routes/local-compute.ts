@@ -48,6 +48,7 @@ import {
   claimPairingCode,
   createPairingCode,
   getNodeByToken,
+  getNode,
   getPairingCodeStatus,
   hasNodeCapabilityColumns,
   listAllNodes,
@@ -121,6 +122,7 @@ import { DEMO_NODE_ID, demoPresenceSessions, demoMetrics } from '../mock/local-c
 import {
   emitLocalAnnounce,
   emitLocalHeartbeat,
+  emitLocalDisconnected,
   emitLocalSessionEnd,
 } from '../work-graph/compute-emitter.js';
 
@@ -356,12 +358,20 @@ localComputeRouter.post('/announce', requireNodeToken(async (req, res, node) => 
     });
     return;
   }
+  const before = presenceOf(node.id);
   const presence = recordAnnounce(node.id, sessions, metrics);
   await touchNode(node.id);
   // The paired node and its owner were resolved before the request body was
   // parsed. Emit only the mapper's safe session lifecycle to the signed,
   // durable platform boundary; repo/worktree/intent never leave this route.
   await emitLocalAnnounce(node, presence.sessions);
+  // An announce is an authoritative snapshot. Sessions omitted from it ended;
+  // emit their terminal lifecycle from the paired node, not from a client
+  // assertion made after the fact.
+  const active = new Set(presence.sessions.map((session) => session.sessionId));
+  await Promise.all(before.sessions
+    .filter((session) => !active.has(session.sessionId))
+    .map((session) => emitLocalSessionEnd(node, session.sessionId, presence.lastSeenAt ?? new Date().toISOString())));
   res.json({ ok: true, nodeId: node.id, sessions: presence.sessions.length });
 }));
 
@@ -1110,8 +1120,14 @@ localComputeRouter.delete(
   requireAction('ConnectLocalCompute'),
   asyncHandler(async (req, res) => {
     const session = resolveSession(req)!;
-    const revoked = await revokeNode(String(req.params['id']), session.sub);
+    const id = String(req.params['id']);
+    const sourceNode = await getNode(id);
+    const revoked = await revokeNode(id, session.sub);
     if (!revoked) { res.status(404).json({ error: 'node not found' }); return; }
+    // Token revocation is an authoritative source stop. The node's owner was
+    // joined before the write, so a browser cannot use this route to emit a
+    // disconnect for another person's machine.
+    if (sourceNode) await emitLocalDisconnected(sourceNode, new Date().toISOString());
     res.json({ ok: true });
   }),
 );

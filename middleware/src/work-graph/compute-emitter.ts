@@ -7,6 +7,7 @@ import {
 } from './mapCloudCompute.js';
 import {
   mapLocalHeartbeat,
+  mapLocalDisconnected,
   mapLocalJob,
   mapLocalSessionAnnounce,
   mapLocalSessionEnd,
@@ -110,6 +111,12 @@ export async function emitLocalHeartbeat(node: ComputeNode, heartbeatAt: string)
   const context = workGraphContextForOwner(node.ownerId);
   if (!context) return false;
   return emit(mapLocalHeartbeat(asLocalMachine(node), heartbeatAt, context), node.ownerId);
+}
+
+export async function emitLocalDisconnected(node: ComputeNode, occurredAt: string): Promise<boolean> {
+  const context = workGraphContextForOwner(node.ownerId);
+  if (!context) return false;
+  return emit(mapLocalDisconnected(asLocalMachine(node), occurredAt, context), node.ownerId);
 }
 
 export async function emitLocalSessionEnd(node: ComputeNode, sessionId: string, endedAt: string): Promise<boolean> {

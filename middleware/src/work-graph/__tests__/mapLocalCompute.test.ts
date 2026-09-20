@@ -3,6 +3,7 @@ import {
   LOCAL_COMPUTE_HEARTBEAT_STALE_MS,
   heartbeatFreshness,
   mapLocalHeartbeat,
+  mapLocalDisconnected,
   mapLocalJob,
   mapLocalSessionAnnounce,
   mapLocalSessionEnd,
@@ -61,6 +62,12 @@ describe('mapLocalCompute', () => {
     const event = eventOf(mapLocalHeartbeat(machine, '2026-09-19T12:00:00.000Z', context));
     expect(event.payload).toEqual({ kind: 'local-compute', lifecycle: 'heartbeat', machineId: 'node-7', heartbeatAt: '2026-09-19T12:00:00.000Z' });
     expect(JSON.stringify(event)).not.toContain('Connor laptop');
+  });
+
+  it('maps an authoritative source disconnect without inferring human presence', () => {
+    const event = eventOf(mapLocalDisconnected(machine, '2026-09-19T12:02:00.000Z', context));
+    expect(event.payload).toEqual({ kind: 'local-compute', lifecycle: 'disconnected', machineId: 'node-7' });
+    expect(event.resource).toEqual({ source: 'local-compute', resourceId: 'machine:node-7', resourceVersion: '2026-09-19T12:02:00.000Z' });
   });
 
   it('uses C0 freshness and stale thresholds without collapsing delayed into disconnected', () => {
