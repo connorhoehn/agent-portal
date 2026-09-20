@@ -31,7 +31,7 @@
     "@aws-sdk/lib-dynamodb": "^3.700.0",
     "@aws-sdk/signature-v4": "^3.370.0",
     "@connorhoehn/service-runtime": "github:connorhoehn/service-runtime#7b93fa32ed93b1863ec6fc9f3a819101908f6ad8",
-    "@connorhoehnslalom/realtime-modules": "github:connorhoehnslalom/realtime-modules#ccf37b6c2b97aa3c5339444c348847c5c5595023",
+    "@connorhoehnslalom/realtime-modules": "github:connorhoehn/realtime-modules#08771183e29b6a560912a66328879c9e442518be",
     "@smithy/protocol-http": "^5.3.14",
     "@types/ws": "^8.18.1",
     "ajv": "^8.20.0",

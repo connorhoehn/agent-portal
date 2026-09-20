@@ -102,9 +102,12 @@ permissions. Keep the shared header until it accepts read-only/allowed-mode
 props. `DocumentEditorPage` owns a different section/Yjs document model: a
 validated Markdown migration is still needed before replacing the editor.
 
-The pinned realtime-modules package declares `./typed-documents`, but its target
-`dist/typed-documents/index.js` is absent and a runtime import fails. Queue the
-packaging fix upstream; existing BFF document reads and writes remain durable.
+The former realtime-modules 0.17.0 pin advertised `./typed-documents` without
+its built target. Adoption of the examples' canonical 0.51.0 commit resolves
+that packaging gap: server and typed-documents runtime imports now work.
+`DocumentEventsService` only manages subscriptions; comments, reviews and
+lifecycle persistence live in platform-api. See
+[the backend integration map](document-backend-integration-2026-09-19.md).
 
 The installed social toolkit also exposes `onReply`, `QuoteBlock` and
 `message.metadata.replyTo` for quote replies. Assessment comments now persist an immutable nullable `parent_id`, validate

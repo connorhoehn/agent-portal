@@ -11,7 +11,7 @@ const libraries = JSON.parse(readFileSync(resolve(vendor, 'manifest.json')));
 for (const [packagePath, entry] of Object.entries(lock.packages)) {
   if (!entry.resolved?.startsWith('git+')) continue;
   const name = packagePath.split('node_modules/').at(-1);
-  const lib = libraries[name];
+  const lib = libraries[entry.resolved] ?? libraries[name];
   if (!lib || lib.resolved !== entry.resolved) {
     throw new Error(`Stale or mismatched build artifact for ${name}; run node scripts/docker/prepare-libraries.mjs`);
   }
@@ -19,7 +19,7 @@ for (const [packagePath, entry] of Object.entries(lock.packages)) {
   const integrity = `sha512-${createHash('sha512').update(readFileSync(tar)).digest('base64')}`;
   if (integrity !== lib.integrity) throw new Error(`Corrupt library artifact for ${name}`);
   const locator = `file:${tar}`;
-  if (pkg.dependencies[name]) {
+  if (packagePath === `node_modules/${name}` && pkg.dependencies[name]) {
     if (pkg.dependencies[name] !== lock.packages[''].dependencies[name] ||
         !pkg.dependencies[name].endsWith(`#${lib.commit}`)) {
       throw new Error(`Manifest and lock disagree for ${name}`);
@@ -34,7 +34,11 @@ for (const entry of Object.values(lock.packages)) {
   for (const section of ['dependencies', 'optionalDependencies']) {
     for (const [name, spec] of Object.entries(entry[section] ?? {})) {
       if (!spec.startsWith('github:')) continue;
-      const lib = libraries[name];
+      const matching = Object.values(libraries).find((candidate) => {
+        const locator = candidate.resolved.replace('git+ssh://git@github.com/', 'github:').replace('.git#', '#');
+        return locator === spec;
+      });
+      const lib = matching;
       if (!lib || !spec.endsWith(`#${lib.commit}`)) throw new Error(`Unpinned nested library ${name}`);
       entry[section][name] = `file:${resolve(vendor, lib.file)}`;
     }

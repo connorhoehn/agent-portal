@@ -48,3 +48,28 @@ for (const corruption of ['artifact bytes', 'commit']) test(`rejects stale ${cor
     assert.equal(readFileSync(resolve(f.dir, 'package.json'), 'utf8'), original);
   } finally { rmSync(f.dir, { recursive: true, force: true }); }
 });
+
+test('distinct nested commits retain their own artifacts and dependency edges', () => {
+  const f = fixture(); try {
+    const commit = 'b'.repeat(40);
+    const spec = `github:connorhoehnslalom/example#${commit}`;
+    const resolved = `git+ssh://git@github.com/connorhoehnslalom/example.git#${commit}`;
+    const bytes = Buffer.from('second committed version');
+    const integrity = 'sha512-' + createHash('sha512').update(bytes).digest('base64');
+    writeFileSync(resolve(f.vendor, 'example-b.tgz'), bytes);
+    const manifests = {
+      [f.manifest.example.resolved]: f.manifest.example,
+      [resolved]: { commit, resolved, integrity, file: 'example-b.tgz' },
+    };
+    f.lock.packages['node_modules/public'].dependencies = { example: spec };
+    f.lock.packages['node_modules/public/node_modules/example'] = { version: '2.0.0', resolved };
+    writeFileSync(resolve(f.vendor, 'manifest.json'), JSON.stringify(manifests));
+    writeFileSync(resolve(f.dir, 'package-lock.json'), JSON.stringify(f.lock));
+    f.run();
+    const result = JSON.parse(readFileSync(resolve(f.dir, 'package-lock.json')));
+    assert.equal(result.packages[''].dependencies.example, `file:${f.vendor}/example.tgz`);
+    assert.equal(result.packages['node_modules/public'].dependencies.example, `file:${f.vendor}/example-b.tgz`);
+    assert.equal(result.packages['node_modules/public/node_modules/example'].resolved, `file:${f.vendor}/example-b.tgz`);
+    assert.equal(result.packages['node_modules/public/node_modules/example'].integrity, integrity);
+  } finally { rmSync(f.dir, { recursive: true, force: true }); }
+});

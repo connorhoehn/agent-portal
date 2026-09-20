@@ -258,12 +258,14 @@ python3.11 -m venv .venv-synth && .venv-synth/bin/pip install -r schema/synth/re
   `distributed-core` import — nothing in the repo depends on `distributed-core`
   any more, and a lone stale comment in `providers/distillation.ts` still names
   its EventBus. ⚠️ Two remotes, two version lines: this repo pins the
-  **`connorhoehnslalom/realtime-modules`** fork (0.17.x — `ccf37b6c` = 0.17.0
-  carries `useAgentStream` `steps`/`reasoning`), while `connorhoehn/realtime-modules`
-  (`origin` in the library checkout) is the 0.46.x/0.47.x line the
-  realtime-examples gateway pins, with chat-members/channelAudience/onChannelJoin
-  the slalom fork never received. A "bump to head" that reads the wrong remote
-  moves the pin backwards; cut a library change on both remotes.
+  **`connorhoehn/realtime-modules`** canonical repository at `08771183`
+  (0.51.0), matching realtime-examples. The dependency key remains
+  `@connorhoehnslalom/realtime-modules` so existing imports keep working.
+  The former slalom 0.17.0 pin advertised server/typed-documents subpaths with
+  absent built files. Server exports now load. The full document workflows
+  additionally depend on platform-api; see
+  `docs/document-backend-integration-2026-09-19.md`. Do not confuse that REST
+  backend with the package's typed-documents subscription service.
 
 **Do NOT modify ui-components or realtime-modules from this repo.** Consume as
 libraries; queue gaps in `docs/ui-components-queue.md` rather than cross-repo

@@ -19,12 +19,11 @@ for (const project of ['middleware', 'portal']) {
     if (!match) throw new Error(`Unsupported Git locator: ${entry.resolved}`);
     const name = packagePath.split('node_modules/').at(-1);
     const [, owner, repo, commit] = match;
-    const spec = pkg.dependencies[name];
+    const spec = packagePath === `node_modules/${name}` ? pkg.dependencies[name] : undefined;
     if (spec && spec !== `github:${owner}/${repo}#${commit}`) {
       throw new Error(`${project}: ${name} manifest does not match its locked commit`);
     }
-    if (manifest[name]) {
-      if (manifest[name].resolved !== entry.resolved) throw new Error(`Conflicting pins for ${name}`);
+    if (manifest[entry.resolved]) {
       continue;
     }
     const checkout = resolve(root, '..', repo);
@@ -40,7 +39,14 @@ for (const project of ['middleware', 'portal']) {
         for (const [dep, range] of Object.entries(archived[section] ?? {})) {
           if (!range.startsWith('github:')) continue;
           const pin = /^github:connorhoehn(?:slalom)?\/([a-z-]+)#([a-f0-9]{40})$/.exec(range);
-          const target = lock.packages[`node_modules/${dep}`];
+          // Follow Node's nearest-package resolution, including nested Git pins.
+          let parent = packagePath;
+          let target;
+          while (true) {
+            target = lock.packages[`${parent ? parent + '/' : ''}node_modules/${dep}`];
+            if (target || !parent) break;
+            parent = parent.includes('/node_modules/') ? parent.slice(0, parent.lastIndexOf('/node_modules/')) : '';
+          }
           if (!pin || !target?.resolved.endsWith(`#${pin[2]}`)) throw new Error(`Unpinned nested dependency ${dep}`);
           archived[section][dep] = `file:/vendor/${pin[1]}-${pin[2]}.tgz`;
         }
@@ -51,7 +57,7 @@ for (const project of ['middleware', 'portal']) {
       copyFileSync(resolve(output, packed[0].filename), resolve(output, file));
       rmSync(resolve(output, packed[0].filename));
       const integrity = `sha512-${createHash('sha512').update(readFileSync(resolve(output, file))).digest('base64')}`;
-      manifest[name] = { resolved: entry.resolved, commit, file, integrity };
+      manifest[entry.resolved] = { resolved: entry.resolved, commit, file, integrity };
       console.log(`${name}: packaged committed dist at ${commit}`);
     } finally { rmSync(temp, { recursive: true, force: true }); }
   }
