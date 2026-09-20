@@ -4,7 +4,7 @@
     "MQ_IMAGE": "sha256:556a23e983f8a514e4f917df2cb3d717d9c20dadbeeba31b677676039d1a9525",
     "REDIS_IMAGE": "sha256:7aec734b2bb298a1d769fd8729f13b8514a41bf90fcdd1f38ec52267fbaa8ee6",
     "PLATFORM_API_IMAGE": "sha256:bcfa383edf94197a56c3e35f92877ab226fd1f3fa7de95b92512e133443a1d31",
-    "GATEWAY_IMAGE": "sha256:b64584d58f8285ac01c19b03c9ade89d098982fe0e21fd89c5796a80e9f862b2",
+    "GATEWAY_IMAGE": "sha256:45212fa1e6069f3f5b25cc82d97ff6269ee3ab17dffe10c3e2b3f9129c64c82a",
     "CATALOG_IMAGE": "sha256:934119dc904e82163e06f4c32ba921f042e08e62a105f6a343f918d78b8a785e"
   },
   "teamAndChannelSurvivedReplacement": true,
@@ -17,6 +17,8 @@
   "catalogMutationAuthentication": true,
   "catalogMissingProductionTokenRefused": true,
   "catalogAcknowledgementFailureRedelivered": true,
+  "documentOwnershipRoutingEnabled": true,
+  "gatewayReplicas": 1,
   "publishSurvivedReplacement": true,
   "recoveredReceiptDeletedBody": true,
   "deleteSurvivedReplacement": true,

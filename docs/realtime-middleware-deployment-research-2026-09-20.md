@@ -1,12 +1,12 @@
 # Deploy the existing realtime middleware as a reusable stack
 
-Research checkpoint: 2026-09-20 UTC / September 19 US Eastern. The operator
+Research checkpoint: September 20, 2026. The operator
 clarified that the priority is MQ, DC, realtime-modules, examples, and the
 supporting Docker containers, with fixes made in the owning repositories.
 Editor work is deferred. This document supersedes the deployment-choice section
 of [the earlier document integration map](document-backend-integration-2026-09-19.md).
 
-## Latest checkpoint: authenticated middleware and snapshot ownership
+## Latest checkpoint: authenticated middleware and document admission
 
 The middleware authentication work is pushed across its owners:
 
@@ -20,7 +20,8 @@ The middleware authentication work is pushed across its owners:
 | realtime-examples | Adopt signing in catalog and pipeline consumers; authenticated container gate; scoped MQ task construct | `70a2bbb0` |
 
 The complete authenticated container gate passes with the snapshot-ownership
-follow-up **examples `4f694a55`**, followed by test maintenance `e8868269`.
+follow-ups **examples `4f694a55`** (honest save results), `e8868269` (test
+maintenance), and **`f4c1eb3c`** (normal document ownership admission).
 It checks unsigned HTTP/WS rejection, signed admission, refusal to start
 production MQ/catalog without credentials, registry mutation auth, and all
 previous crash/replacement/outage recovery assertions. The final run exited 0
@@ -47,17 +48,30 @@ wiring. Regressions use the installed SnapshotManager and verify dirty-state
 retention and retry after ownership resolves. This is admission checking, not
 storage fencing: a write already in flight can still finish after a handoff.
 
-The single-gateway Compose profile explicitly disables ownership routing.
-Ordinary document subscription does not currently claim rooms; clustered room
-admission and owner-directed saves need integration before enabling that mode.
-This is a newly documented deployment gap, not a claim of safe multi-node saves.
+The admission correction uses the existing RoomOwnershipService/DC claim
+before an authorized document subscription joins. Single-gateway concurrent
+subscribers share one claim; failed claims can be retried. Disconnects or policy
+revocation during that wait reject admission. Unknown rooms in a configured
+fleet and rooms owned remotely are rejected: owner selection/forwarding and
+storage fencing remain prerequisites for a multi-gateway deployment.
+
+**realtime-modules `c89571e` / 0.69.3** now honors an explicit false from the
+router: it neither hydrates a denied document nor reports a successful join.
+Legacy void-returning routers remain compatible. This is adopted in both gateway
+manifests and locks; installed JavaScript matches the release build byte-for-byte.
+The foundation profile now enables ownership routing with one expected gateway.
+The final full container gate exits 0 with ownership routing enabled, including
+named saves, replacement recovery and failed-save/corrupt-load checks. The new
+gateway image ID is recorded in the linked evidence; the other five images are
+unchanged from the previous authenticated run.
 
 Full library suites passed: service-runtime 351, event-catalog 3,101, MQ 1,488
 (42 skipped); API's 57 relevant consumer tests passed (one skipped). Gateway
-strict build passes, and its full suite exits 0: **3,704 passed, 6 skipped,
-1 todo**, 269 passing suites. This required updating a stale corruption test,
+strict build passes, and its latest full suite exits 0: **3,715 passed, 6 skipped,
+1 todo**, 270 passing suites. This required updating a stale corruption test,
 declaring the existing HTTP fixture's missing Express dev dependency, and
-closing router timers in an error-path suite. The opt-in real HTTP privacy
+closing router timers in an error-path suite. The latest library suite also
+exits 0 with **1,342 tests** after cleaning up five leaked test awareness timers. The opt-in real HTTP privacy
 integration remains skipped; it is not counted as verified user authorization.
 
 A second image rebuild exposed recursive Git dependency prepare installs in the
@@ -501,3 +515,13 @@ The verified follow-up above delivers the isolated ordinary-queue foundation.
 The next milestone extends acceptance through application schema initialization,
 gateway/platform-api persistence and authentication, then CDK composition. No UI
 implementation is needed for that milestone.
+
+
+The admission image build initially timed out through Colima's normal Docker
+socket while the VM was near its memory limit. A fresh local SSH connection
+confirmed the daemon was healthy. A temporary, explicitly selected Docker
+context reached the same daemon; compilation and the full isolated gate then
+passed. The gate's project, six temporary image holders, audit context and SSH
+forward were removed. The user's selected Docker context, VM and other workloads
+were not restarted or reconfigured. This does not claim the original socket
+forward was repaired.
