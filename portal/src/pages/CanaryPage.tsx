@@ -354,7 +354,7 @@ function scenarioColumns(onRun: (key: string) => void, onReset: (key: string) =>
           {row.score.toFixed(2)}
         </T>
       ) : row.phase === 'running' ? (
-        <ThinkingDots size="sm" color="var(--color-primary)" />
+        <ThinkingDots size="sm" className="text-primary" />
       ) : (
         <T className="text-text-tertiary">—</T>
       ),

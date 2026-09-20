@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Button, Drawer, MarkdownView, Stack, Toolbar } from '@connorhoehnslalom/ui-components/shared';
+import { DocumentContextPanel, useDocumentContext } from './ExplorerFrame';
 import { DocumentOutline, DocumentStatusBar, type OutlineEntry } from '@connorhoehnslalom/ui-components/doc-editor';
 
 /** Build navigation from rendered headings, so fenced code never becomes an outline entry. */
 export function DocumentReader({ markdown, reactions }: { markdown: string; reactions?: ReactNode }) {
+  const context = useDocumentContext();
   const root = useRef<HTMLElement>(null);
   const [outlineOpen, setOutlineOpen] = useState(false);
   const [wide, setWide] = useState(false);
@@ -19,16 +21,7 @@ export function DocumentReader({ markdown, reactions }: { markdown: string; reac
       return { id: heading.id, text: heading.textContent ?? '', level: Number(heading.tagName.slice(1)) };
     }));
   }, [markdown]);
-  return <Stack gap="md">
-    <Toolbar aria-label="Reading tools" end={<Button variant="ghost" size="sm" aria-pressed={wide} onClick={() => setWide((value) => !value)}>{wide ? 'Reading width' : 'Full width'}</Button>}>
-      {reactions}
-      <Button variant="ghost" size="sm" onClick={() => setOutlineOpen(true)}>On this page</Button>
-    </Toolbar>
-    <Stack ref={root} className={wide ? 'min-w-0' : 'mx-auto w-full max-w-3xl'}>
-      <MarkdownView markdown={markdown} className="doc-markdown" />
-    </Stack>
-    <DocumentStatusBar wordCount={wordCount} />
-    <Drawer open={outlineOpen} onClose={() => setOutlineOpen(false)} title="On this page" width={320}>
+  const outline = (
       <DocumentOutline entries={entries} onSelect={(id) => {
         setOutlineOpen(false);
         window.setTimeout(() => {
@@ -37,6 +30,19 @@ export function DocumentReader({ markdown, reactions }: { markdown: string; reac
           heading?.focus({ preventScroll: true });
         }, 0);
       }} />
+  );
+  return <Stack gap="md" className="min-w-0">
+    <Toolbar aria-label="Reading tools" end={<Button variant="ghost" size="sm" aria-pressed={wide} onClick={() => setWide((value) => !value)}>{wide ? 'Reading width' : 'Full width'}</Button>}>
+      {reactions}
+      <Button variant="ghost" size="sm" onClick={() => context ? context.open('outline') : setOutlineOpen(true)}>On this page</Button>
+    </Toolbar>
+    <Stack ref={root} className={wide ? 'min-w-0' : 'mx-auto w-full max-w-3xl'}>
+      <MarkdownView markdown={markdown} className="doc-markdown" />
+    </Stack>
+    <DocumentStatusBar wordCount={wordCount} />
+    <DocumentContextPanel id="outline">{outline}</DocumentContextPanel>
+    <Drawer open={outlineOpen} onClose={() => setOutlineOpen(false)} title="On this page" width={320}>
+      {outline}
     </Drawer>
   </Stack>;
 }

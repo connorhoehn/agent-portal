@@ -237,7 +237,7 @@ python3.11 -m venv .venv-synth && .venv-synth/bin/pip install -r schema/synth/re
 ## Project dependencies
 
 - **ui-components** (`~/projects/ui-components`): `@connorhoehnslalom/ui-components`,
-  installed at **2.277.2** (sha `81dca942`, verified 2026-09-17 with the two settling
+  installed at **2.330.0** (sha `3b0a7e57`, verified 2026-09-20 with the two settling
   commands below — the version this file claimed, 2.276.0 at `495eddda`, was two
   releases behind the pin). The portal pins it by **git sha** in `package.json`
   (`github:connorhoehnslalom/ui-components#<sha>`) rather than resolving a range

@@ -1,15 +1,28 @@
-import { useState, type ReactNode } from 'react';
-import { ExplorerLayout, ContextColumn, type ContextColumnState } from '@connorhoehnslalom/ui-components';
+import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
+import { ExplorerLayout, ContextColumn, ViewportFillRegion, type ContextColumnState } from '@connorhoehnslalom/ui-components';
+import { Stack } from '@connorhoehnslalom/ui-components/shared';
+
+type PanelId = 'outline' | 'comments' | 'activity';
+const DocumentContext = createContext<{ open: (id: PanelId) => void; active: PanelId; host: HTMLElement | null } | null>(null);
+export const useDocumentContext = () => useContext(DocumentContext);
+
+/** The examples' dock pattern keeps document state in its owner while the library owns the column. */
+export function DocumentContextPanel({ id, children }: { id: PanelId; children: ReactNode }) {
+  const context = useDocumentContext();
+  return context?.active === id && context.host ? createPortal(children, context.host) : null;
+}
 
 export interface ExplorerFrameProps {
   rail: ReactNode;
+  railHeader?: ReactNode;
+  railActions?: ReactNode;
   children: ReactNode;
   aside?: ReactNode;
   title?: string;
 }
 
-/** Library-owned layout: both navigation and context can yield space to the document. */
-export function ExplorerFrame({ rail, children, aside, title = 'Documents' }: ExplorerFrameProps) {
+export function ExplorerFrame({ rail, railHeader, railActions, children, aside, title = 'Documents' }: ExplorerFrameProps) {
   const [collapsed, setCollapsed] = useState(() => {
     try { return localStorage.getItem('assessment.documentRail.collapsed') === 'true'; }
     catch { return false; }
@@ -20,23 +33,38 @@ export function ExplorerFrame({ rail, children, aside, title = 'Documents' }: Ex
       return !value;
     });
   }
-  const [context, setContext] = useState<ContextColumnState>('collapsed');
+  const [state, setState] = useState<ContextColumnState>('open');
+  const [active, setActive] = useState<PanelId>('outline');
+  const [host, setHost] = useState<HTMLElement | null>(null);
+  const open = useCallback((id: PanelId) => { setActive(id); setState('open'); }, []);
+  const context = useMemo(() => ({ open, active, host: state === 'collapsed' ? null : host }), [open, active, host, state]);
+  const dock = <Stack ref={setHost} gap="sm" className="min-h-0 flex-1 p-4" />;
   return (
-    <ExplorerLayout
-      rail={rail}
-      railTitle={title}
-      railLabel="document library"
-      railWidth="sm"
-      railCollapsed={collapsed}
-      onToggleRail={toggleRail}
-      panePadding="md"
-      aside={aside ? <ContextColumn state={context} onStateChange={setContext}
-        label="Document activity" activeId="activity" onActivate={() => setContext('open')}
-        panels={[{ id: 'activity', label: 'Activity', icon: '◷', content: aside }]} /> : undefined}
-      data-testid="knowledge-explorer"
-    >
-      {children}
-    </ExplorerLayout>
+    <DocumentContext.Provider value={aside ? context : null}>
+      <ViewportFillRegion bottomGap={16} data-testid="knowledge-workspace">
+        <ExplorerLayout
+          rail={rail}
+          railTitle={title}
+          railHeader={railHeader}
+          railActions={railActions}
+          railLabel="document library"
+          railWidth="md"
+          railCollapsed={collapsed}
+          onToggleRail={toggleRail}
+          panePadding="none"
+          aside={aside ? <ContextColumn state={state} onStateChange={setState}
+            label="Document context" activeId={active} onActivate={(id) => open(id as PanelId)}
+            panels={[
+              { id: 'outline', label: 'Outline', icon: '☷', content: dock },
+              { id: 'comments', label: 'Comments', icon: '☰', content: dock },
+              { id: 'activity', label: 'Activity', icon: '◷', content: aside },
+            ]} /> : undefined}
+          data-testid="knowledge-explorer"
+        >
+          {children}
+        </ExplorerLayout>
+      </ViewportFillRegion>
+    </DocumentContext.Provider>
   );
 }
 

@@ -1,3 +1,4 @@
+import { DocumentContextPanel, useDocumentContext } from './ExplorerFrame';
 import { DocumentReader } from './DocumentReader';
 import { DocumentCommentThread } from './DocumentCommentThread';
 import { nextPresenceSequence } from './presenceSequence';
@@ -19,6 +20,7 @@ import {
   Chip,
   DataTable,
   DetailHeader,
+  PageHeader,
   Divider,
   Drawer,
   DropdownMenu,
@@ -213,6 +215,7 @@ export interface DocPaneProps {
 const EDITOR_TABS_ID = 'doc-editor-view';
 
 export function DocPane({ node, mode, sseEvents, sseConnected, sseGapped, onTreeChanged }: DocPaneProps) {
+  const context = useDocumentContext();
   const { can, ready } = useCapabilities();
   const { session } = useSession();
   const gateway = useGateway();
@@ -723,47 +726,33 @@ interface StoredCommentWire {
   const editorBuffer = editSource === 'fallback' ? (fallbackContent ?? '') : crdt.content;
   const previewMarkdown = defuseJsonFences(stripTitleHeading(stripFrontmatter(editorBuffer), doc.title));
 
+  const commentThread = (
+    <Stack gap="sm" data-testid="doc-pane-comment-composer">
+      {commentError && (
+        <InlineAlert tone="error" onDismiss={() => setCommentError(null)}>{commentError}</InlineAlert>
+      )}
+      <DocumentCommentThread key={node.id} title={doc.title}
+        comments={mergedComments} reactions={storedReactions}
+        userId={session?.sub} userName={session?.name}
+        onSend={handleSendComment} onEdit={handleEditComment} onDelete={handleDeleteComment}
+        onReact={(messageId, emoji) => void toggleReaction(messageId, emoji)} />
+    </Stack>
+  );
+
   return (
     <>
-      <Card padding="md" className="shadow-sm">
+      <Stack gap="none" className="p-6 lg:p-8" data-testid="document-surface">
         <Stack gap="md">
-          <Inline justify="between" align="start" wrap>
-            <Stack gap="xs" className="min-w-0">
-              <Inline gap="xs" align="center">
-                <Chip
-                  size="xs"
-                  uppercase
-                  className="bg-brand-soft text-brand-ink"
-                >
-                  {CLASSIFICATION_LABEL[doc.classification] ?? doc.classification}
-                </Chip>
-              </Inline>
-              <DetailHeader
-                as="h2"
-                title={doc.title}
-                meta={
-                  /* `updated_at` came down on every doc read and was used only
-                     to confirm this tab's own save — never shown. "When did
-                     this last change?" is the second question anyone asks of a
-                     document, and the answer was already in hand. */
-                  <MetaLine
-                    items={[
-                      doc.path,
-                      doc.argument_hint && `Arguments: ${doc.argument_hint}`,
-                      doc.updated_at ? `Updated ${relativeTime(doc.updated_at)}` : null,
-                    ]}
-                    size="xs"
-                    tone="tertiary"
-                  />
-                }
-              />
-            </Stack>
+          <PageHeader title={doc.title}
+            badge={<Chip size="xs" uppercase className="bg-brand-soft text-brand-ink">{CLASSIFICATION_LABEL[doc.classification] ?? doc.classification}</Chip>}
+            description={[doc.path, doc.argument_hint && `Arguments: ${doc.argument_hint}`, doc.updated_at && `Updated ${relativeTime(doc.updated_at)}`].filter(Boolean).join(' · ')}
+            actions={
             <Inline gap="sm" align="start" wrap>
               {presenceUsers.length > 0 && (
                 <PresenceAvatars users={presenceUsers.map((u) => ({ id: u.id, name: u.name, online: true, detail: u.detail }))} size={28} />
               )}
               <Inline gap="xs">
-                <Button variant="secondary" size="sm" onClick={() => setCommentsOpen(true)}>
+                <Button variant="secondary" size="sm" onClick={() => context ? context.open('comments') : setCommentsOpen(true)}>
                   Comments{mergedComments.length > 0 ? ` (${mergedComments.length})` : ''}
                 </Button>
                 <DropdownMenu trigger="More" triggerClassName="text-xs px-2.5 py-1" triggerLabel="Document actions" align="end" sections={[{ items: [
@@ -802,7 +791,8 @@ interface StoredCommentWire {
                 )}
               </Inline>
             </Inline>
-          </Inline>
+            }
+          />
 
           {/* A rule under the header block. The reference DocView separates
               "what this is" from "what it says" with one; without it the
@@ -985,19 +975,13 @@ interface StoredCommentWire {
           {restoreError && <Chip tone="danger">{restoreError}</Chip>}
         </Drawer>
 
+        <DocumentContextPanel id="comments">
+          {commentThread}
+        </DocumentContextPanel>
         <Drawer open={commentsOpen} onClose={() => setCommentsOpen(false)} title="Comments" width={420}>
-          <Stack gap="sm" data-testid="doc-pane-comment-composer">
-            {commentError && (
-              <InlineAlert tone="error" onDismiss={() => setCommentError(null)}>{commentError}</InlineAlert>
-            )}
-            <DocumentCommentThread key={node.id} title={doc.title}
-              comments={mergedComments} reactions={storedReactions}
-              userId={session?.sub} userName={session?.name}
-              onSend={handleSendComment} onEdit={handleEditComment} onDelete={handleDeleteComment}
-              onReact={(messageId, emoji) => void toggleReaction(messageId, emoji)} />
-          </Stack>
+          {commentThread}
         </Drawer>
-      </Card>
+      </Stack>
     </>
   );
 }

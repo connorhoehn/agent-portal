@@ -13,14 +13,16 @@ import {
   ErrorState,
   Inline,
   InlinePlaceholder,
-  Input,
+  SearchInput,
   LoadingState,
   RailSection,
   Stack,
   T,
   Toolbar,
   VisuallyHidden,
+  IconButton,
 } from '@connorhoehnslalom/ui-components/shared';
+import { ConversationShelf } from '@connorhoehnslalom/ui-components';
 import { usePresence } from '@connorhoehnslalom/realtime-modules/client';
 import { relativeTime } from '../../../lib/relativeTime';
 import { useFetch } from '../../../hooks/useFetch';
@@ -312,8 +314,14 @@ export function KnowledgeExplorer({ mode }: KnowledgeExplorerProps) {
 
   const rail = (
     <>
-      <Stack gap="sm" className="p-3">
-        <Input aria-label="Find a document" placeholder="Find a document…" value={query} onChange={(event) => setQuery(event.target.value)} />
+      <RailSection title="Views">
+        <ConversationShelf items={[{ id: 'library', label: 'All documents', count: nodes.filter((node) => !node.is_dir).length }]}
+          activeId={libraryOpen ? 'library' : null} onSelect={() => {
+            const next = new URLSearchParams(searchParams); next.set('view', 'library');
+            setSearchParams(next); setView({ kind: 'node' });
+          }} />
+      </RailSection>
+      <Stack gap="sm" className="px-3">
         {query.trim() && <Stack gap="xs">
           <T className="text-xs text-text-secondary">{matches.length} results</T>
           {matches.map((node) => <Button key={node.id} variant="ghost" size="sm" className="justify-start border-0" onClick={() => { handleSelectNode(node.id); setQuery(''); }}>{node.title}</Button>)}
@@ -348,7 +356,7 @@ export function KnowledgeExplorer({ mode }: KnowledgeExplorerProps) {
         return (
           <RailSection
             key={section.key}
-            title={`${section.title} · ${section.nodes.length}${section.kind === 'synced' ? ' · Synced' : ''}`}
+            title={section.title}
           >
             <Stack gap="xs">
               <Inline justify="between" align="center">
@@ -424,33 +432,25 @@ export function KnowledgeExplorer({ mode }: KnowledgeExplorerProps) {
     <ExplorerFrame
       rail={rail}
       title={modeLabel}
+      railHeader={<SearchInput aria-label="Find a document" placeholder="Find a document…" value={query} onChange={setQuery} onClear={() => setQuery('')} />}
+      railActions={<IconButton aria-label="Refresh library" title="Refresh library" variant="ghost" size="sm" icon="↻" disabled={treeFetch.isLoading} onClick={() => void treeFetch.refresh()} />}
       aside={!libraryOpen && view.kind === 'node' && isPage && selectedNode
         ? <ActivityBar node={selectedNode} sectionKey={selectedSectionKey} sseEvents={sse.events} />
         : undefined}
     >
-      {/* All four Informatics routes — Enterprise, Workspace, Prompts, Rules —
-          are this one component with a different `mode`, and none of them had
-          an `h1`: the explorer draws its own in-pane Breadcrumbs instead of a
-          PageSection title block, so the document outline was empty on every
-          one of them. `Breadcrumbs` is a nav landmark, not a heading. The
-          name already exists as `modeLabel`; this puts it in the outline
-          without adding chrome the explorer does not want. */}
-      <VisuallyHidden as="h1">{modeLabel}</VisuallyHidden>
-      <Toolbar aria-label="Document navigation" wrap className="mb-4" end={
-        <Button variant="ghost" size="sm" disabled={treeFetch.isLoading} onClick={() => void treeFetch.refresh()}>Refresh library</Button>
-      }>
-        <Button variant={libraryOpen ? 'secondary' : 'ghost'} size="sm" aria-pressed={libraryOpen} onClick={() => {
-          const next = new URLSearchParams(searchParams);
-          if (libraryOpen) next.delete('view'); else next.set('view', 'library');
-          setSearchParams(next);
-          setView({ kind: 'node' });
-        }}>{libraryOpen && selectedNode ? 'Back to document' : libraryOpen ? 'Back to tree' : 'Browse library'}</Button>
+      {/* Document pages use their own visible heading; other views still name the workspace. */}
+      {(libraryOpen || view.kind !== 'node' || !isPage) && <VisuallyHidden as="h1">{modeLabel}</VisuallyHidden>}
+      <Toolbar aria-label="Document navigation" wrap className="px-6 py-3">
+        <Button variant="ghost" size="sm" className="border-0" onClick={() => {
+          const next = new URLSearchParams(searchParams); next.set('view', 'library');
+          setSearchParams(next); setView({ kind: 'node' });
+        }}>Documents</Button>
         {!libraryOpen && <Breadcrumbs items={crumbs} />}
       </Toolbar>
 
       {libraryOpen && (treeFetch.isLoading ? <LoadingState label="Loading document library…" />
         : treeFetch.error ? <ErrorState title="Couldn't load the document library" body={treeFetch.error} />
-        : <DocumentLibrary sections={sections} onSelect={handleSelectNode} />)}
+        : <Stack className="p-6"><DocumentLibrary sections={sections} onSelect={handleSelectNode} /></Stack>)}
 
       {!libraryOpen && view.kind === 'activity' && activityPane}
 

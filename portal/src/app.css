@@ -511,8 +511,3 @@ tbody tr:focus-within .row-reveal,
     box-shadow: none;
   }
 }
-
-/* The explorer desk uses the tenant ground; the document remains a surface. */
-[data-testid="knowledge-explorer-pane"] {
-  background-color: var(--color-bg);
-}
