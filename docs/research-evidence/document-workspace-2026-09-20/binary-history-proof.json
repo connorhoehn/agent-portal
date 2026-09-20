@@ -1,0 +1,19 @@
+{
+  "title": "Canvas browser acceptance 1789920025782",
+  "url": "http://127.0.0.1:5183/assessment/workspace?doc=draft%3Ad470f9bd-298c-4728-8cfc-57f70fadff3e",
+  "text": "Durable canvas browser proof 1789920026054",
+  "errors": [],
+  "readerEditControls": 0,
+  "observed_steps": [
+    "Create blank local draft through UI",
+    "Edit TipTap canvas",
+    "Wait for durable Saved receipt",
+    "Explicit Take ownership",
+    "Save Version Browser checkpoint",
+    "Change live content",
+    "Preview stored binary checkpoint",
+    "Confirm Restore version",
+    "Reload restored body",
+    "Read same restored body in separate u-jonas session"
+  ]
+}

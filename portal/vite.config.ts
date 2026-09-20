@@ -30,6 +30,34 @@ export default defineConfig(async () => ({
       '@': resolve(__dirname, './src'),
     },
     preserveSymlinks: true,
+    dedupe: ['react', 'react-dom', 'yjs', 'y-protocols', 'lib0'],
+  },
+  // TipTap and the shared canvas must use the same ProseMirror module instances.
+  // Keep the CommonJS runtime optimized, while PM enters through native ESM.
+  optimizeDeps: {
+    include: [
+      '@connorhoehnslalom/realtime-modules/client',
+      '@connorhoehnslalom/realtime-modules/adapters/tiptap',
+      'yjs', 'y-protocols/awareness', 'lib0/observable', '@tiptap/core', '@tiptap/react',
+      'react', 'react-dom', 'react-dom/client', 'react/jsx-runtime', 'react/jsx-dev-runtime',
+      // The excluded UI package hides these CJS-containing graphs from scanning.
+      'react-markdown', 'remark-gfm', 'recharts', 'es-toolkit', 'es-toolkit/compat',
+      'buffer', 'amazon-cognito-identity-js', 'ajv',
+      'y-protocols/sync',
+      'lib0/buffer', 'lib0/mutex', 'lib0/math', 'lib0/object', 'lib0/set',
+      'lib0/diff', 'lib0/error', 'lib0/random', 'lib0/environment',
+      'lib0/dom', 'lib0/eventloop', 'lib0/map', 'lib0/hash/sha256',
+      '@tiptap/starter-kit', '@tiptap/extension-task-list', '@tiptap/extension-task-item',
+      '@tiptap/extension-placeholder', '@tiptap/extension-collaboration',
+    ],
+    exclude: [
+      '@connorhoehnslalom/ui-components',
+      '@tiptap/pm/model', '@tiptap/pm/state', '@tiptap/pm/transform', '@tiptap/pm/view',
+      'prosemirror-state', 'prosemirror-model', 'prosemirror-transform', 'prosemirror-view',
+      'prosemirror-gapcursor', 'prosemirror-dropcursor', 'prosemirror-history',
+      'prosemirror-keymap', 'prosemirror-commands', 'prosemirror-schema-list',
+      'prosemirror-tables', 'prosemirror-changeset', '@tiptap/y-tiptap',
+    ],
   },
   server: {
     port: 5183,

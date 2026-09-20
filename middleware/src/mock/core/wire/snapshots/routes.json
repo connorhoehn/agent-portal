@@ -231,6 +231,11 @@
       "source": "src/routes/assessment.ts:343"
     },
     {
+      "method": "POST",
+      "path": "/api/assessment/knowledge/canvas",
+      "source": "src/routes/assessment-canvas.ts:7"
+    },
+    {
       "method": "GET",
       "path": "/api/assessment/knowledge/doc",
       "source": "src/routes/assessment.ts:666"
@@ -259,6 +264,11 @@
       "method": "GET",
       "path": "/api/assessment/knowledge/doc/comments",
       "source": "src/routes/assessment.ts:745"
+    },
+    {
+      "method": "POST",
+      "path": "/api/assessment/knowledge/doc/create",
+      "source": "src/routes/assessment-document-source.ts:9"
     },
     {
       "method": "POST",
@@ -301,6 +311,71 @@
       "source": "src/routes/assessment.ts:641"
     },
     {
+      "method": "GET",
+      "path": "/api/assessment/knowledge/doc/workflows",
+      "source": "src/routes/assessment-document-workflows.ts:40"
+    },
+    {
+      "method": "POST",
+      "path": "/api/assessment/knowledge/doc/workflows/ownership",
+      "source": "src/routes/assessment-document-workflows.ts:42"
+    },
+    {
+      "method": "GET",
+      "path": "/api/assessment/knowledge/doc/workflows/review-requests",
+      "source": "src/routes/assessment-document-workflows.ts:43"
+    },
+    {
+      "method": "POST",
+      "path": "/api/assessment/knowledge/doc/workflows/review-requests",
+      "source": "src/routes/assessment-document-workflows.ts:44"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/assessment/knowledge/doc/workflows/review-requests/:requestKey",
+      "source": "src/routes/assessment-document-workflows.ts:45"
+    },
+    {
+      "method": "GET",
+      "path": "/api/assessment/knowledge/doc/workflows/reviewers",
+      "source": "src/routes/assessment-document-workflows.ts:62"
+    },
+    {
+      "method": "GET",
+      "path": "/api/assessment/knowledge/doc/workflows/reviews",
+      "source": "src/routes/assessment-document-workflows.ts:46"
+    },
+    {
+      "method": "GET",
+      "path": "/api/assessment/knowledge/doc/workflows/sections/:sectionId/items",
+      "source": "src/routes/assessment-document-workflows.ts:47"
+    },
+    {
+      "method": "POST",
+      "path": "/api/assessment/knowledge/doc/workflows/sections/:sectionId/items/:itemId/ack",
+      "source": "src/routes/assessment-document-workflows.ts:48"
+    },
+    {
+      "method": "POST",
+      "path": "/api/assessment/knowledge/doc/workflows/sections/:sectionId/items/:itemId/answer",
+      "source": "src/routes/assessment-document-workflows.ts:49"
+    },
+    {
+      "method": "POST",
+      "path": "/api/assessment/knowledge/doc/workflows/transitions",
+      "source": "src/routes/assessment-document-workflows.ts:41"
+    },
+    {
+      "method": "POST",
+      "path": "/api/assessment/knowledge/doc/workflows/versions",
+      "source": "src/routes/assessment-document-workflows.ts:51"
+    },
+    {
+      "method": "POST",
+      "path": "/api/assessment/knowledge/doc/workflows/versions/restore",
+      "source": "src/routes/assessment-document-workflows.ts:56"
+    },
+    {
       "method": "POST",
       "path": "/api/assessment/knowledge/presence",
       "source": "src/routes/assessment.ts:822"
@@ -309,6 +384,31 @@
       "method": "POST",
       "path": "/api/assessment/knowledge/pull",
       "source": "src/routes/assessment.ts:730"
+    },
+    {
+      "method": "GET",
+      "path": "/api/assessment/knowledge/source/asset",
+      "source": "src/routes/assessment-document-source.ts:26"
+    },
+    {
+      "method": "POST",
+      "path": "/api/assessment/knowledge/source/move",
+      "source": "src/routes/assessment-document-source.ts:65"
+    },
+    {
+      "method": "POST",
+      "path": "/api/assessment/knowledge/source/preview",
+      "source": "src/routes/assessment-document-source.ts:62"
+    },
+    {
+      "method": "POST",
+      "path": "/api/assessment/knowledge/source/publish",
+      "source": "src/routes/assessment-document-source.ts:63"
+    },
+    {
+      "method": "POST",
+      "path": "/api/assessment/knowledge/source/pull",
+      "source": "src/routes/assessment-document-source.ts:64"
     },
     {
       "method": "GET",
@@ -783,7 +883,7 @@
     {
       "method": "DELETE",
       "path": "/api/devbox/:sessionId",
-      "source": "src/routes/devbox.ts:742"
+      "source": "src/routes/devbox.ts:761"
     },
     {
       "method": "POST",
@@ -1123,7 +1223,7 @@
     {
       "method": "GET",
       "path": "/api/health",
-      "source": "src/index.ts:128"
+      "source": "src/index.ts:139"
     },
     {
       "method": "GET",
@@ -1463,132 +1563,132 @@
     {
       "method": "POST",
       "path": "/api/local-compute/announce",
-      "source": "src/routes/local-compute.ts:339"
+      "source": "src/routes/local-compute.ts:347"
     },
     {
       "method": "POST",
       "path": "/api/local-compute/claim",
-      "source": "src/routes/local-compute.ts:470"
+      "source": "src/routes/local-compute.ts:499"
     },
     {
       "method": "GET",
       "path": "/api/local-compute/events",
-      "source": "src/routes/local-compute.ts:1016"
+      "source": "src/routes/local-compute.ts:1045"
     },
     {
       "method": "POST",
       "path": "/api/local-compute/heartbeat",
-      "source": "src/routes/local-compute.ts:359"
+      "source": "src/routes/local-compute.ts:382"
     },
     {
       "method": "POST",
       "path": "/api/local-compute/jobs/:jobId/complete",
-      "source": "src/routes/local-compute.ts:577"
+      "source": "src/routes/local-compute.ts:606"
     },
     {
       "method": "POST",
       "path": "/api/local-compute/jobs/:jobId/heartbeat",
-      "source": "src/routes/local-compute.ts:556"
+      "source": "src/routes/local-compute.ts:585"
     },
     {
       "method": "GET",
       "path": "/api/local-compute/jobs/:jobId/log",
-      "source": "src/routes/local-compute.ts:700"
+      "source": "src/routes/local-compute.ts:729"
     },
     {
       "method": "POST",
       "path": "/api/local-compute/jobs/:jobId/log",
-      "source": "src/routes/local-compute.ts:660"
+      "source": "src/routes/local-compute.ts:689"
     },
     {
       "method": "GET",
       "path": "/api/local-compute/jobs/:jobId/log/stream",
-      "source": "src/routes/local-compute.ts:718"
+      "source": "src/routes/local-compute.ts:747"
     },
     {
       "method": "POST",
       "path": "/api/local-compute/jobs/:jobId/start",
-      "source": "src/routes/local-compute.ts:541"
+      "source": "src/routes/local-compute.ts:570"
     },
     {
       "method": "POST",
       "path": "/api/local-compute/log",
-      "source": "src/routes/local-compute.ts:778"
+      "source": "src/routes/local-compute.ts:807"
     },
     {
       "method": "GET",
       "path": "/api/local-compute/nodes",
-      "source": "src/routes/local-compute.ts:895"
+      "source": "src/routes/local-compute.ts:924"
     },
     {
       "method": "DELETE",
       "path": "/api/local-compute/nodes/:id",
-      "source": "src/routes/local-compute.ts:1093"
+      "source": "src/routes/local-compute.ts:1122"
     },
     {
       "method": "PATCH",
       "path": "/api/local-compute/nodes/:id",
-      "source": "src/routes/local-compute.ts:1071"
+      "source": "src/routes/local-compute.ts:1100"
     },
     {
       "method": "GET",
       "path": "/api/local-compute/nodes/:nodeId/log",
-      "source": "src/routes/local-compute.ts:824"
+      "source": "src/routes/local-compute.ts:853"
     },
     {
       "method": "GET",
       "path": "/api/local-compute/nodes/:nodeId/log/stream",
-      "source": "src/routes/local-compute.ts:842"
+      "source": "src/routes/local-compute.ts:871"
     },
     {
       "method": "POST",
       "path": "/api/local-compute/nodes/:nodeId/work",
-      "source": "src/routes/local-compute.ts:1138"
+      "source": "src/routes/local-compute.ts:1174"
     },
     {
       "method": "GET",
       "path": "/api/local-compute/nodes/all",
-      "source": "src/routes/local-compute.ts:907"
+      "source": "src/routes/local-compute.ts:936"
     },
     {
       "method": "GET",
       "path": "/api/local-compute/pair/:code",
-      "source": "src/routes/local-compute.ts:219"
+      "source": "src/routes/local-compute.ts:227"
     },
     {
       "method": "POST",
       "path": "/api/local-compute/pair/claim",
-      "source": "src/routes/local-compute.ts:235"
+      "source": "src/routes/local-compute.ts:243"
     },
     {
       "method": "POST",
       "path": "/api/local-compute/pair/start",
-      "source": "src/routes/local-compute.ts:204"
+      "source": "src/routes/local-compute.ts:212"
     },
     {
       "method": "GET",
       "path": "/api/local-compute/presence/repos",
-      "source": "src/routes/local-compute.ts:942"
+      "source": "src/routes/local-compute.ts:971"
     },
     {
       "method": "POST",
       "path": "/api/local-compute/register",
-      "source": "src/routes/local-compute.ts:394"
+      "source": "src/routes/local-compute.ts:423"
     },
     {
       "method": "GET",
       "path": "/api/local-compute/runs",
-      "source": "src/routes/local-compute.ts:1270"
+      "source": "src/routes/local-compute.ts:1306"
     },
     {
       "method": "POST",
       "path": "/api/local-compute/sessions/:sessionId/end",
-      "source": "src/routes/local-compute.ts:365"
+      "source": "src/routes/local-compute.ts:390"
     },
     {
       "method": "GET",
       "path": "/api/local-compute/stream",
-      "source": "src/routes/local-compute.ts:988"
+      "source": "src/routes/local-compute.ts:1017"
     },
     {
       "method": "GET",
@@ -2443,7 +2543,42 @@
     {
       "method": "GET",
       "path": "/health",
-      "source": "src/index.ts:127"
+      "source": "src/index.ts:138"
+    },
+    {
+      "method": "POST",
+      "path": "/internal/document-grants/session",
+      "source": "src/routes/internal-document-grants.ts:7"
+    },
+    {
+      "method": "POST",
+      "path": "/internal/work-graph/compute-capabilities/authorize",
+      "source": "src/routes/internal-work-graph-compute.ts:142"
+    },
+    {
+      "method": "POST",
+      "path": "/internal/work-graph/compute-capabilities/close",
+      "source": "src/routes/internal-work-graph-compute.ts:176"
+    },
+    {
+      "method": "GET",
+      "path": "/internal/work-graph/compute-capabilities/events/:sessionId",
+      "source": "src/routes/internal-work-graph-compute.ts:190"
+    },
+    {
+      "method": "POST",
+      "path": "/internal/work-graph/compute-capabilities/open",
+      "source": "src/routes/internal-work-graph-compute.ts:107"
+    },
+    {
+      "method": "POST",
+      "path": "/internal/work-graph/compute-capabilities/revalidate",
+      "source": "src/routes/internal-work-graph-compute.ts:158"
+    },
+    {
+      "method": "POST",
+      "path": "/internal/work-graph/compute-capabilities/use",
+      "source": "src/routes/internal-work-graph-compute.ts:166"
     }
   ],
   "unresolved": []

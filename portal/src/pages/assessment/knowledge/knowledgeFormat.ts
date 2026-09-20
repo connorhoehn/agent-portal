@@ -52,7 +52,7 @@ export const MODE_LABEL: Record<KnowledgeMode, string> = {
  * section, keyed to match (see docs/knowledge-library.md's tree shape).
  */
 export function sectionsForMode(sections: KnowledgeSection[], mode: KnowledgeMode): KnowledgeSection[] {
-  if (mode === 'workspace') return sections.filter((s) => s.kind === 'synced');
+  if (mode === 'workspace') return sections.filter((s) => s.kind === 'synced' || s.key === 'workspace_drafts');
   const key = SECTION_KEY_FOR_MODE[mode];
   return sections.filter((s) => s.key === key);
 }

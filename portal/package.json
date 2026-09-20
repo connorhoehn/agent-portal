@@ -11,8 +11,8 @@
   },
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
-    "@connorhoehnslalom/realtime-modules": "github:connorhoehn/realtime-modules#37e70c945678d77534c1b0863a1a5a3cca5d730b",
-    "@connorhoehnslalom/ui-components": "github:connorhoehnslalom/ui-components#3b0a7e57fcb91a107b1aeeaa6087b76523c75e55",
+    "@connorhoehnslalom/realtime-modules": "github:connorhoehn/realtime-modules#99eb8c3b7a8aaa05d75f7215e06bbe554afdfce5",
+    "@connorhoehnslalom/ui-components": "github:connorhoehnslalom/ui-components#9ef190a95b43c38e3d267566c892cb18f55f4425",
     "@tiptap/core": "^3.31.3",
     "@tiptap/extension-collaboration": "^3.31.3",
     "@tiptap/extension-image": "3.31.3",

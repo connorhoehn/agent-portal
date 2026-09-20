@@ -1,9 +1,9 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { ExplorerLayout, ContextColumn, ViewportFillRegion, type ContextColumnState } from '@connorhoehnslalom/ui-components';
-import { Stack } from '@connorhoehnslalom/ui-components/shared';
+import { Inline, Stack } from '@connorhoehnslalom/ui-components/shared';
 
-type PanelId = 'outline' | 'comments' | 'activity';
+type PanelId = 'outline' | 'comments' | 'activity' | 'history' | 'reviews';
 const DocumentContext = createContext<{ open: (id: PanelId) => void; active: PanelId; host: HTMLElement | null } | null>(null);
 export const useDocumentContext = () => useContext(DocumentContext);
 
@@ -33,7 +33,7 @@ export function ExplorerFrame({ rail, railHeader, railActions, children, aside, 
       return !value;
     });
   }
-  const [state, setState] = useState<ContextColumnState>('open');
+  const [state, setState] = useState<ContextColumnState>('collapsed');
   const [active, setActive] = useState<PanelId>('outline');
   const [host, setHost] = useState<HTMLElement | null>(null);
   const open = useCallback((id: PanelId) => { setActive(id); setState('open'); }, []);
@@ -52,16 +52,20 @@ export function ExplorerFrame({ rail, railHeader, railActions, children, aside, 
           railCollapsed={collapsed}
           onToggleRail={toggleRail}
           panePadding="none"
-          aside={aside ? <ContextColumn state={state} onStateChange={setState}
+          data-testid="knowledge-explorer"
+        >
+          <Inline gap="none" align="stretch" wrap={false} className="min-h-0 min-w-0 flex-1 overflow-hidden">
+            <Stack gap="none" className="min-h-0 min-w-0 flex-1 overflow-y-auto">{children}</Stack>
+            {aside ? <ContextColumn state={state} onStateChange={setState}
             label="Document context" activeId={active} onActivate={(id) => open(id as PanelId)}
             panels={[
               { id: 'outline', label: 'Outline', icon: '☷', content: dock },
               { id: 'comments', label: 'Comments', icon: '☰', content: dock },
               { id: 'activity', label: 'Activity', icon: '◷', content: aside },
-            ]} /> : undefined}
-          data-testid="knowledge-explorer"
-        >
-          {children}
+              { id: 'history', label: 'Versions', icon: '↶', content: dock },
+              { id: 'reviews', label: 'Reviews', icon: '✓', content: dock },
+            ]} /> : null}
+          </Inline>
         </ExplorerLayout>
       </ViewportFillRegion>
     </DocumentContext.Provider>

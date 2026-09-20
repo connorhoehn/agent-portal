@@ -45,6 +45,7 @@ export interface KnowledgeSection {
 }
 
 export interface KnowledgeTreeResponse {
+  sourceConfigured?: boolean;
   sections: KnowledgeSection[];
 }
 

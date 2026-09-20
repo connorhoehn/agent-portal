@@ -105,3 +105,8 @@ untracked `.env` file never enter the resulting context:
 ```sh
 node --test scripts/docker/tests/document-workspace-build.test.mjs
 ```
+
+Start the portal with `node scripts/document-workspace.mjs portal`. This clears
+the legacy global gateway URL by default; document sockets receive their own
+scoped BFF grants. Set `VITE_GATEWAY_URL` explicitly only when a separate global
+gateway is actually available. The BFF on 3001 does not implement `/ws`.

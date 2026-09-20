@@ -64,8 +64,13 @@ if (action === 'build' || action === 'build-plan') {
   run('docker', [...compose, 'config', '--quiet']);
 } else if (action === 'middleware') {
   run('npm', ['run', 'dev:mock'], resolve(root, 'middleware'), { ...env, PORT: '3001' });
+} else if (action === 'portal') {
+  // Document sockets use BFF grants. A legacy .env.local pointing the global
+  // gateway at BFF /ws would otherwise keep reconnecting to a 404.
+  run('npm', ['run', 'dev', '--', '--port', '5183', '--strictPort', '--force'], resolve(root, 'portal'),
+    { ...process.env, VITE_GATEWAY_URL: process.env.VITE_GATEWAY_URL ?? '' });
 } else {
-  console.log('Usage: node scripts/document-workspace.mjs build|build-plan|foundation|up|middleware|status|check|down');
+  console.log('Usage: node scripts/document-workspace.mjs build|build-plan|foundation|up|middleware|portal|status|check|down');
   console.log('Build archives pinned owning repositories for all five services and the catalog UI dependency; no sibling dirty files are copied.');
   console.log('Uses gateway :18081 and API :13002. Run the portal normally on :5183.');
   console.log('Private local keys remain in .scratch/document-workspace/settings.json. Down retains data.');
