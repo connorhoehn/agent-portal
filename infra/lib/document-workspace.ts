@@ -1,0 +1,123 @@
+import * as cdk from 'aws-cdk-lib';
+import * as ec2 from 'aws-cdk-lib/aws-ec2';
+import * as ecs from 'aws-cdk-lib/aws-ecs';
+import * as ecr from 'aws-cdk-lib/aws-ecr';
+import * as efs from 'aws-cdk-lib/aws-efs';
+import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
+import * as elbv2 from 'aws-cdk-lib/aws-elasticloadbalancingv2';
+import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
+import * as discovery from 'aws-cdk-lib/aws-servicediscovery';
+import type { ApplicationLoadBalancedFargateService } from 'aws-cdk-lib/aws-ecs-patterns';
+import { ApplicationTables, DocumentWorkspaceServices, RedisService } from 'realtime-examples/cdk/document-workspace';
+
+interface ImageConfig { repositoryName: string; digest: string }
+export interface DocumentWorkspaceConfig {
+  tenantId: string;
+  /** HTTPS origin served by the middleware ALB and covered by its certificate. */
+  publicBaseUrl: string;
+  grantIssuer: string;
+  grantKeyId: string;
+  /** Existing matching Ed25519 PEM keys; CDK never generates or reads key bytes. */
+  grantPrivateKeySecretArn: string;
+  grantPublicKeySecretArn: string;
+  images: Record<'gateway' | 'platform' | 'catalog' | 'mq' | 'redis', ImageConfig>;
+  architecture: 'ARM64' | 'X86_64';
+}
+
+export function attachDocumentWorkspace(scope: cdk.Stack, props: {
+  config: DocumentWorkspaceConfig;
+  prefix: string;
+  vpc: ec2.Vpc;
+  cluster: ecs.Cluster;
+  middleware: ApplicationLoadBalancedFargateService;
+  cognitoUserPoolId: string;
+}): DocumentWorkspaceServices {
+  const { config, prefix, vpc, cluster, middleware } = props;
+  if (config.tenantId !== 'assessment') throw new Error('This BFF document adapter currently serves the assessment tenant');
+  const origin = new URL(config.publicBaseUrl);
+  if (origin.protocol !== 'https:' || origin.username || origin.password || origin.pathname !== '/' || origin.search || origin.hash) {
+    throw new Error('documentWorkspace.publicBaseUrl must be an HTTPS origin');
+  }
+  if (!['ARM64', 'X86_64'].includes(config.architecture)) throw new Error('Document image architecture must be explicit');
+  for (const name of ['gateway', 'platform', 'catalog', 'mq', 'redis'] as const) {
+    const image = config.images?.[name];
+    if (!image?.repositoryName || !/^sha256:[a-f0-9]{64}$/.test(image.digest)) throw new Error(`Document ${name} image requires a repository and immutable digest`);
+  }
+  if (!config.grantPrivateKeySecretArn || !config.grantPublicKeySecretArn) throw new Error('Matching document signing key secret ARNs are required');
+  if (config.grantPrivateKeySecretArn === config.grantPublicKeySecretArn) throw new Error('Document public and private key secrets must be separate');
+  const namespace = new discovery.PrivateDnsNamespace(scope, 'DocumentNamespace', { vpc, name: `${prefix}-documents.local` });
+  middleware.service.enableCloudMap({ cloudMapNamespace: namespace, name: 'bff' });
+  const cpuArchitecture = config.architecture === 'ARM64' ? ecs.CpuArchitecture.ARM64 : ecs.CpuArchitecture.X86_64;
+  const images = Object.fromEntries(Object.entries(config.images).map(([name, image]) => [name, {
+    repository: ecr.Repository.fromRepositoryName(scope, `Document${name}Image`, image.repositoryName), digest: image.digest,
+  }])) as Record<keyof DocumentWorkspaceConfig['images'], { repository: ecr.IRepository; digest: string }>;
+  const redis = new RedisService(scope, 'DocumentRedis', {
+    vpc, cluster, namespace, cpuArchitecture,
+    subnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
+    image: ecs.ContainerImage.fromEcrRepository(images.redis.repository, images.redis.digest),
+  });
+  const tablePrefix = `${prefix}-${config.tenantId}-documents-`;
+  const tables = new ApplicationTables(scope, 'DocumentTables', { tablePrefix });
+  const mqTable = new dynamodb.Table(scope, 'DocumentQueueTable', {
+    tableName: `${tablePrefix}mq`, partitionKey: { name: 'pk', type: dynamodb.AttributeType.STRING },
+    sortKey: { name: 'sk', type: dynamodb.AttributeType.STRING }, billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+    timeToLiveAttribute: 'ttl', pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
+    deletionProtection: true, removalPolicy: cdk.RemovalPolicy.RETAIN,
+  });
+  const uploads = new efs.FileSystem(scope, 'DocumentUploads', {
+    vpc, encrypted: true, removalPolicy: cdk.RemovalPolicy.RETAIN,
+    enableAutomaticBackups: true, vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
+  });
+  const accessPoint = uploads.addAccessPoint('DocumentUploadsAccess', {
+    path: '/document-uploads', posixUser: { uid: '1000', gid: '1000' },
+    createAcl: { ownerUid: '1000', ownerGid: '1000', permissions: '750' },
+  });
+  const secret = (id: string) => new secretsmanager.Secret(scope, id, { generateSecretString: { passwordLength: 48, excludePunctuation: true } });
+  const policySecret = secret('DocumentPolicySecret');
+  const gatewaySecret = secret('DocumentGatewayServiceSecret');
+  const publicKey = secretsmanager.Secret.fromSecretCompleteArn(scope, 'DocumentGrantPublicKey', config.grantPublicKeySecretArn);
+  const privateKey = secretsmanager.Secret.fromSecretCompleteArn(scope, 'DocumentGrantPrivateKey', config.grantPrivateKeySecretArn);
+  const workspace = new DocumentWorkspaceServices(scope, 'DocumentWorkspace', {
+    vpc, cluster, namespace, servicePrefix: 'workspace', cpuArchitecture,
+    images, tables, tablePrefix, messageQueueTable: mqTable,
+    gatewayTableNames: ['crdt-snapshots', 'crdt-documents', 'file-uploads', 'chat-messages', 'chat-conversations', 'chat-reactions', 'chat-pins', 'chat-reads', 'chat-members', 'call-session-bindings', 'work-graph'],
+    // The existing platform boots shared workflow/outbox consumers. Their
+    // canonical schema remains one owned manifest, scoped to this deployment.
+    platformTableNames: [...tables.tables.keys()],
+    redis: { host: `redis.${namespace.namespaceName}`, securityGroup: redis.securityGroup },
+    uploads: { accessPoint, securityGroup: uploads.connections.securityGroups[0]! },
+    tenantId: config.tenantId, grantIssuer: config.grantIssuer, grantKeyId: config.grantKeyId, grantPublicKey: publicKey,
+    sessionEpochUrl: `http://bff.${namespace.namespaceName}:3001/internal/document-grants/session`,
+    documentPolicySecret: policySecret, mqAuthSecret: secret('DocumentQueueAuthSecret'), catalogAuthSecret: secret('DocumentCatalogAuthSecret'),
+    gatewayServiceAuthSecret: gatewaySecret, videoWebhookSecret: secret('DocumentVideoWebhookSecret'), videoAdminSecret: secret('DocumentVideoAdminSecret'),
+    cognito: { region: scope.region, userPoolId: props.cognitoUserPoolId },
+  });
+  const container = middleware.taskDefinition.defaultContainer!;
+  container.addEnvironment('DOCUMENT_GATEWAY_INTERNAL_URL', workspace.gatewayUrl.replace(/^http:/, 'ws:'));
+  container.addEnvironment('DOCUMENT_GATEWAY_PUBLIC_URL', `${origin.origin.replace(/^https:/, 'wss:')}/document-realtime`);
+  container.addEnvironment('DOCUMENT_PLATFORM_INTERNAL_URL', workspace.platformUrl);
+  container.addEnvironment('DOCUMENT_GRANT_ISSUER', config.grantIssuer);
+  container.addEnvironment('DOCUMENT_GRANT_KEY_ID', config.grantKeyId);
+  container.addSecret('DOCUMENT_GRANT_PRIVATE_KEY', ecs.Secret.fromSecretsManager(privateKey));
+  container.addSecret('DOCUMENT_POLICY_SECRET', ecs.Secret.fromSecretsManager(policySecret));
+  workspace.gateway.connections.allowFrom(middleware.service, ec2.Port.tcp(8080), 'BFF scoped document transport');
+  workspace.platform.connections.allowFrom(middleware.service, ec2.Port.tcp(3001), 'BFF document workflow proxy');
+  middleware.service.connections.allowFrom(workspace.gateway, ec2.Port.tcp(3001), 'Gateway document session policy');
+  middleware.service.connections.allowFrom(workspace.platform, ec2.Port.tcp(3001), 'Platform document session policy');
+  middleware.listener.addAction('DenyPublicDocumentPolicy', {
+    priority: 10, conditions: [elbv2.ListenerCondition.pathPatterns(['/internal/document-grants/*'])],
+    action: elbv2.ListenerAction.fixedResponse(404),
+  });
+  middleware.listener.addTargets('DocumentRealtime', {
+    priority: 20, conditions: [elbv2.ListenerCondition.pathPatterns(['/document-realtime', '/document-realtime/*', '/api/uploads/*'])],
+    port: 8080, protocol: elbv2.ApplicationProtocol.HTTP,
+    targets: [workspace.gateway.loadBalancerTarget({ containerName: 'gateway', containerPort: 8080 })],
+    healthCheck: { path: '/health', healthyHttpCodes: '200', interval: cdk.Duration.seconds(30) },
+    deregistrationDelay: cdk.Duration.seconds(120),
+  });
+  middleware.loadBalancer.setAttribute('idle_timeout.timeout_seconds', '300');
+  new cdk.CfnOutput(scope, 'DocumentGatewayPublicUrl', { value: `${origin.origin.replace(/^https:/, 'wss:')}/document-realtime` });
+  new cdk.CfnOutput(scope, 'DocumentPlatformPrivateUrl', { value: workspace.platformUrl });
+  new cdk.CfnOutput(scope, 'DocumentTablePrefix', { value: tablePrefix });
+  return workspace;
+}

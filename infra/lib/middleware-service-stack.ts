@@ -1,3 +1,4 @@
+import { attachDocumentWorkspace, type DocumentWorkspaceConfig } from './document-workspace';
 import * as cdk from 'aws-cdk-lib';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import * as ecs from 'aws-cdk-lib/aws-ecs';
@@ -12,6 +13,8 @@ import type { Construct } from 'constructs';
 
 export interface MiddlewareServiceStackProps extends cdk.StackProps {
   readonly prefix?: string;
+  /** Opt-in reusable document stack configuration, activated by deployDocumentWorkspace. */
+  readonly documentWorkspace?: DocumentWorkspaceConfig;
 
   /**
    * ARN of the ACM certificate for the ALB HTTPS listener.
@@ -897,6 +900,21 @@ export class MiddlewareServiceStack extends cdk.Stack {
       scaleInCooldown: cdk.Duration.seconds(60),
       scaleOutCooldown: cdk.Duration.seconds(30),
     });
+
+    const deployDocuments = this.node.tryGetContext('deployDocumentWorkspace') === true
+      || this.node.tryGetContext('deployDocumentWorkspace') === 'true';
+    if (deployDocuments) {
+      if (!deployService) throw new Error('deployDocumentWorkspace requires deployMiddlewareService=true');
+      if (!certArn) throw new Error('deployDocumentWorkspace requires an HTTPS certificate');
+      const documentConfig = props.documentWorkspace
+        ?? this.node.tryGetContext('documentWorkspace') as DocumentWorkspaceConfig | undefined;
+      if (!documentConfig) throw new Error('deployDocumentWorkspace requires documentWorkspace configuration');
+      if (!props.cognitoUserPoolId) throw new Error('deployDocumentWorkspace requires the normal identity pool');
+      attachDocumentWorkspace(this, {
+        config: documentConfig, prefix, vpc, cluster, middleware: fargateService,
+        cognitoUserPoolId: props.cognitoUserPoolId,
+      });
+    }
 
     this.loadBalancerDnsName = fargateService.loadBalancer.loadBalancerDnsName;
 

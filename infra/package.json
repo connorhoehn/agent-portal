@@ -12,11 +12,18 @@
   },
   "dependencies": {
     "aws-cdk-lib": "^2.270.0",
-    "constructs": "^10.4.0"
+    "constructs": "^10.4.0",
+    "realtime-examples": "github:connorhoehn/realtime-examples#2549856eaabdb307da2bc20c3853d21015e30cae"
   },
   "devDependencies": {
     "aws-cdk": "^2.1121.0",
     "ts-node": "^10.9.0",
     "typescript": "~5.9.0"
+  },
+  "overrides": {
+    "realtime-examples": {
+      "aws-cdk-lib": "$aws-cdk-lib",
+      "constructs": "$constructs"
+    }
   }
 }
