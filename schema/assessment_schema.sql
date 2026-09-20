@@ -237,6 +237,21 @@ CREATE INDEX IF NOT EXISTS idx_assessment_feedback_open ON assessment_feedback_t
 -- pages carry `page_id`); nodes form a tree; docs keep a version history that
 -- is snapshotted before every save.
 -- ---------------------------------------------------------------------------
+-- Stable source-to-canvas identity. Source URLs remain unchanged while the
+-- realtime channel is an opaque UUID that fits the gateway channel contract.
+CREATE TABLE IF NOT EXISTS assessment_document_mappings (
+  tenant_id text NOT NULL CHECK (tenant_id = 'assessment'),
+  source_namespace text NOT NULL,
+  source_id text NOT NULL,
+  document_id uuid NOT NULL UNIQUE,
+  source_revision text NOT NULL,
+  schema_version integer NOT NULL DEFAULT 2 CHECK (schema_version >= 2),
+  migration_state text NOT NULL DEFAULT 'pending' CHECK (migration_state IN ('pending', 'ready')),
+  owner_sub text,
+  published_revision text,
+  PRIMARY KEY (tenant_id, source_namespace, source_id)
+);
+
 CREATE TABLE IF NOT EXISTS assessment_knowledge_sections (
   key       TEXT PRIMARY KEY,
   title     TEXT NOT NULL,
@@ -269,6 +284,10 @@ CREATE TABLE IF NOT EXISTS assessment_knowledge_docs (
   editable        BOOLEAN NOT NULL DEFAULT TRUE,
   updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Local drafts retain their intended source parent without publishing on create.
+ALTER TABLE assessment_knowledge_docs ADD COLUMN IF NOT EXISTS source_parent_id TEXT;
+ALTER TABLE assessment_knowledge_docs ADD COLUMN IF NOT EXISTS published_page_id TEXT;
 
 CREATE TABLE IF NOT EXISTS assessment_knowledge_doc_versions (
   doc_id    TEXT NOT NULL REFERENCES assessment_knowledge_docs(id) ON DELETE CASCADE,

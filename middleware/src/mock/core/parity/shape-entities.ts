@@ -70,6 +70,15 @@ export const FIXTURES_WITHOUT_A_TABLE: Record<string, string> = {
 
 
 export const SHAPE_ENTITIES: Array<ShapeEntity<any>> = [
+  {
+    name: 'assessment_document_mappings',
+    fixture: 'assessment-document-mappings',
+    describes: 'Opaque canvas identities provisioned on first open; migration state resets with the registered fixture.',
+    sqlFile: 'assessment_schema.sql',
+    table: 'assessment_document_mappings',
+    mockRows: async () => (await import('../../../providers/document-mapping.js')).documentMappingsFixture.rows('default'),
+    mockId: (row: { document_id: string }) => row.document_id,
+  },
   // ── identity & tenancy (schema/identity_schema.sql) ────────────────────────
   {
     name: 'tenants (shape)',
@@ -371,7 +380,7 @@ export const SHAPE_ENTITIES: Array<ShapeEntity<any>> = [
     describes: 'The 18 documents behind the knowledge rails, with the markdown each editor opens.',
     sqlFile: 'assessment_schema.sql',
     table: 'assessment_knowledge_docs',
-    mockRows: async () => (await assessment()).knowledgeDocsFixture.rows('default'),
+    mockRows: async () => (await assessment()).knowledgeDocsFixture.rows('default').map(row => ({...row, source_parent_id:row.source_parent_id ?? null, published_page_id:row.published_page_id ?? null})),
     mockId: (d: { id: string }) => d.id,
   },
   {

@@ -12,6 +12,7 @@ import type { Session } from '../../lib/session.js';
 const session:Session={sub:'alice',tenant:'assessment',role:'assessor',grants:{assessment:['assessor']},iat:1};
 const source={id:'page:123',title:'Guide',classification:'synced',markdown:'base'};
 const hash=(s:string)=>createHash('sha256').update(s).digest('hex');
+const reviewed={canvasVersion:'41',sourceRevision:hash('base'),projectionHash:hash('acknowledged edit')};
 const originalFetch=global.fetch;
 const originalEnv={...process.env};
 beforeEach(()=>{
@@ -24,7 +25,7 @@ beforeEach(()=>{
 });
 afterAll(()=>{process.env=originalEnv;global.fetch=originalFetch;});
 it('publishes the saved binary projection and advances its baseline',async()=>{
-  await publishSourcePage(source,session);
+  await publishSourcePage(source,session,reviewed);
   const init=jest.mocked(fetch).mock.calls[0]![1]!;
   expect(JSON.parse(init.body as string)).toMatchObject({markdown:'acknowledged edit',expected_revision:hash('base'),canvas_version:'42',actor:'alice'});
   expect(init.redirect).toBe('error');
@@ -32,7 +33,7 @@ it('publishes the saved binary projection and advances its baseline',async()=>{
 });
 it('reports remote success plus local CAS failure as reconciliation',async()=>{
   jest.mocked(advanceDocumentSourceRevision).mockResolvedValue(false);
-  expect(await publishSourcePage(source,session)).toMatchObject({published:true,reconciliation_needed:true});
+  expect(await publishSourcePage(source,session,reviewed)).toMatchObject({published:true,reconciliation_needed:true});
   expect(fetch).toHaveBeenCalledTimes(1);
 });
 it('preview never advances a baseline',async()=>{
@@ -42,7 +43,7 @@ it('preview never advances a baseline',async()=>{
 });
 it('denied mutations and pull over collaborative edits never reach the source',async()=>{
   jest.mocked(isAllowed).mockResolvedValueOnce(false);
-  await expect(publishSourcePage(source,session)).rejects.toMatchObject({status:403});
+  await expect(publishSourcePage(source,session,reviewed)).rejects.toMatchObject({status:403});
   await expect(pullSourcePage(source,session)).rejects.toMatchObject({status:409});
   expect(fetch).not.toHaveBeenCalled();
 });
@@ -61,7 +62,7 @@ it('roundtrips scoped attachments and rejects asset path traversal',async()=>{
 });
 it('preserves source conflicts without automatically retrying publication',async()=>{
   global.fetch=jest.fn(async()=>new Response(JSON.stringify({detail:'Remote source version changed'}),{status:409}));
-  await expect(publishSourcePage(source,session)).rejects.toMatchObject({status:409});
+  await expect(publishSourcePage(source,session,reviewed)).rejects.toMatchObject({status:409});
   expect(fetch).toHaveBeenCalledTimes(1);
   expect(advanceDocumentSourceRevision).not.toHaveBeenCalled();
 });
@@ -71,4 +72,10 @@ it('permits a pull when only the canonical schema normalized source formatting',
   global.fetch=jest.fn(async()=>new Response(JSON.stringify({ok:true,source_revision:hash('changed source')}),{status:200}));
   expect(await pullSourcePage(source,session)).toMatchObject({ok:true,canvas_reconciliation_required:true});
   expect(advanceDocumentSourceRevision).not.toHaveBeenCalled();
+});
+
+it('rejects changed content or source revision after a preview without reaching upstream',async()=>{
+  await expect(publishSourcePage(source,session,{...reviewed,projectionHash:hash('old preview')})).rejects.toMatchObject({status:409});
+  await expect(publishSourcePage(source,session,{...reviewed,sourceRevision:hash('old source')})).rejects.toMatchObject({status:409});
+  expect(fetch).not.toHaveBeenCalled();
 });

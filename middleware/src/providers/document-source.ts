@@ -1,15 +1,14 @@
-import { createCanvasSeed, exportCanvasProjection } from '@connorhoehnslalom/realtime-modules/server';
-import { documentCanvasSchema } from '../lib/document-canvas-schema.js';
+import { sourceMarkdownForCanvas, canvasMarkdownForSource } from './document-source-assets.js';
+export { sourceMarkdownForCanvas, canvasMarkdownForSource } from './document-source-assets.js';
 import type { Session } from '../lib/session.js';
 import { isAllowed } from '../lib/authz.js';
-import { readDocumentCanvasProjection } from './document-canvas.js';
 import { advanceDocumentSourceRevision, documentSourceRevision } from './document-mapping.js';
 
 export interface SourceTree { root_page_id: string; pulled_at: string; nodes: Array<{page_id:string; title:string; parent_id:string|null; position:number; has_children:boolean; version:number}> }
 export interface SourcePage { markdown:string; source_revision:string; meta:{page_id:string; title:string; parent_id:string|null; last_pulled_at:string; version:number; webui_url?:string}; has_local_edits:boolean }
 export interface CanvasSource { id:string; title:string; classification:string; markdown:string; editable?:boolean }
 export class DocumentSourceError extends Error { constructor(public readonly status:number,message:string) { super(message); } }
-export function sourceConfigured():boolean { return Boolean(process.env['ASSESSMENT_SOURCE_URL'] && process.env['ASSESSMENT_SOURCE_SECRET']); }
+export function sourceConfigured():boolean { return Boolean(process.env['ASSESSMENT_SOURCE_URL'] || process.env['ASSESSMENT_SOURCE_SECRET']); }
 function configuration() {
   const base=process.env['ASSESSMENT_SOURCE_URL']; const secret=process.env['ASSESSMENT_SOURCE_SECRET'];
   if(!base || !secret?.trim()) throw new DocumentSourceError(503,'Document source is not configured');
@@ -47,17 +46,6 @@ export async function readSourceAsset(id:string,filename:string):Promise<{bytes:
   if(!/^[\w][\w. -]*$/.test(filename)||filename.includes('..')) throw new DocumentSourceError(400,'Invalid asset name');
   return request({action:'asset',actor:'assessment-reader',page_id:pageId(id),filename},true);
 }
-/** Rewrite only the configured source's attachment convention, never fetch an arbitrary URL. */
-export function sourceMarkdownForCanvas(id:string,markdown:string):string {
-  pageId(id);
-  return markdown.replace(/attachment:([^\s)<>]+)/g,(_all,name:string)=>`/api/assessment/knowledge/source/asset?id=${encodeURIComponent(id)}&name=${encodeURIComponent(name)}`);
-}
-export function canvasMarkdownForSource(id:string,markdown:string):string {
-  pageId(id);
-  return markdown.replace(/\/api\/assessment\/knowledge\/source\/asset\?id=([^&\s)<>]+)&name=([^\s)<>]+)/g,(all,source:string,name:string)=>{
-    try { return decodeURIComponent(source)===id ? `attachment:${decodeURIComponent(name)}` : all; } catch { return all; }
-  });
-}
 export async function moveSourcePage(id:string,parentId:string,position:number,session:Session):Promise<{ok:true;tree_refresh_failed?:boolean}> {
   await requireWriter(session);
   if(!Number.isSafeInteger(position)||position<0) throw new DocumentSourceError(400,'A nonnegative sibling position is required');
@@ -65,15 +53,19 @@ export async function moveSourcePage(id:string,parentId:string,position:number,s
 }
 async function projection(source:CanvasSource,session:Session) {
   await requireWriter(session);
+  const {readDocumentCanvasProjection}=await import('./document-canvas.js');
   const saved=await readDocumentCanvasProjection(source,session);
   return {...saved,markdown:canvasMarkdownForSource(source.id,saved.markdown)};
 }
 export async function previewSourceChanges(source:CanvasSource,session:Session):Promise<Record<string,unknown>> {
   const saved=await projection(source,session);
-  return request({action:'preview',actor:session.sub,page_id:pageId(source.id),markdown:saved.markdown,expected_revision:saved.sourceRevision,canvas_version:saved.version});
+  const changes=await request({action:'preview',actor:session.sub,page_id:pageId(source.id),markdown:saved.markdown,expected_revision:saved.sourceRevision,canvas_version:saved.version});
+  return {...changes,canvasVersion:saved.version,sourceRevision:saved.sourceRevision,projectionHash:documentSourceRevision(saved.markdown)};
 }
-export async function publishSourcePage(source:CanvasSource,session:Session):Promise<Record<string,unknown>> {
+export interface ReviewedSourceProjection { canvasVersion?:string; sourceRevision:string; projectionHash:string }
+export async function publishSourcePage(source:CanvasSource,session:Session,expected:ReviewedSourceProjection):Promise<Record<string,unknown>> {
   const saved=await projection(source,session);
+  if(!expected || expected.sourceRevision!==saved.sourceRevision || expected.projectionHash!==documentSourceRevision(saved.markdown)) throw new DocumentSourceError(409,'Document changed after preview; review the latest changes before publishing');
   const result=await request({action:'publish',actor:session.sub,page_id:pageId(source.id),markdown:saved.markdown,expected_revision:saved.sourceRevision,canvas_version:saved.version});
   if(result.published===true) {
     const revision=documentSourceRevision(saved.markdown);
@@ -92,6 +84,7 @@ export async function pullSourcePage(source:CanvasSource,session:Session):Promis
     // the same canvas projection of the exact imported source before declaring
     // a conflict; never compare to a newer upstream body as the baseline.
     if(documentSourceRevision(source.markdown)!==saved.sourceRevision) throw new DocumentSourceError(409,'Source baseline changed; review before pulling');
+    const [{createCanvasSeed,exportCanvasProjection},{documentCanvasSchema}]=await Promise.all([import('@connorhoehnslalom/realtime-modules/server'),import('../lib/document-canvas-schema.js')]);
     const baselineSeed=createCanvasSeed(sourceMarkdownForCanvas(source.id,source.markdown),{schema:documentCanvasSchema});
     const baseline=canvasMarkdownForSource(source.id,exportCanvasProjection(baselineSeed.snapshot).markdown);
     if(saved.markdown!==baseline) throw new DocumentSourceError(409,'Document has collaborative edits; publish or review them before pulling');

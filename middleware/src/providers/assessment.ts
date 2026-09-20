@@ -14,12 +14,14 @@
 // `sdlcd assess apply-scores` deterministic verb.
 
 import { randomBytes, randomUUID } from 'node:crypto';
+import { assertLegacyDocumentWritable } from './document-legacy-write.js';
 import { config } from '../config.js';
 import { clock } from '../mock/core/index.js';
 import * as M from '../mock/assessment.js';
 import { assessmentBroker } from '../lib/assessment-broker.js';
 import { NotFoundError } from '../lib/async-handler.js';
 import * as A from './assessment-aurora.js';
+import { sourceConfigured, readSourceTree, readSourcePage } from './document-source.js';
 import { assessmentRunInput } from '../lib/assessment-run-input.js';
 
 // ─── Wire types (mirrors the source's ui/src/components/assessment/types.ts) ─
@@ -2950,9 +2952,14 @@ function withSyncStamp(sections: M.KnowledgeSection[]): M.KnowledgeSection[] {
   });
 }
 
-export async function getKnowledgeTree(): Promise<{ sections: M.KnowledgeSection[] }> {
-  if (!config.mock.aurora) return { sections: withSyncStamp(await A.fetchKnowledgeTree()) };
-  return { sections: withSyncStamp(M.knowledgeSections()) };
+export async function getKnowledgeTree(): Promise<{ sections: M.KnowledgeSection[]; sourceConfigured?: boolean }> {
+  const sections=withSyncStamp(config.mock.aurora ? M.knowledgeSections() : await A.fetchKnowledgeTree());
+  if (!sourceConfigured()) return {sections,sourceConfigured:false};
+  const tree=await readSourceTree();
+  const prior=sections.find(section=>section.kind==='synced');
+  const synced:M.KnowledgeSection={key:prior?.key ?? 'confluence',title:prior?.title ?? 'Confluence',kind:'synced',provider:'confluence',last_pulled_at:tree.pulled_at,
+    nodes:[...tree.nodes].sort((a,b)=>a.position-b.position).map(node=>({id:`page:${node.page_id}`,title:node.title,parent_id:node.parent_id && tree.nodes.some(candidate=>candidate.page_id===node.parent_id)?`page:${node.parent_id}`:null,is_dir:node.has_children,classification:'synced',editable:true,viewable:true,page_id:node.page_id,updated_at:tree.pulled_at}))};
+  return {sections:[...sections.filter(section=>section.kind!=='synced'),synced],sourceConfigured:true};
 }
 
 // Synced Confluence pages are read-only mirrors. In the source app they come
@@ -3000,28 +3007,15 @@ function syncedPageDoc(id: string): M.KnowledgeDoc | null {
   };
 }
 
-// Aurora equivalent of syncedPageDoc: assessment_knowledge_docs never carries
-// a row for a synced page (see assessment-aurora.ts's fetchKnowledgeTree/
-// fetchKnowledgeNode comment), so a `page:` id falls back to the node row +
-// the same SYNCED_PAGE_BODIES fixture — there's no real Confluence to read
-// from on either path.
-async function auroraSyncedPageDoc(id: string): Promise<M.KnowledgeDoc | null> {
-  const node = await A.fetchKnowledgeNode(id);
-  if (!node?.page_id) return null;
-  const body = SYNCED_PAGE_BODIES[node.page_id]
-    ?? `_${node.title}_ — synced from Confluence. Edit it there; this mirror is read-only.`;
-  return {
-    id, title: node.title, classification: 'synced',
-    markdown: `# ${node.title}\n\n${body}\n`,
-    editable: false, path: `confluence/${node.page_id}`, updated_at: node.updated_at ?? new Date().toISOString(),
-  };
-}
-
 export async function getKnowledgeDoc(id: string): Promise<M.KnowledgeDoc | null> {
+  if (sourceConfigured() && id.startsWith('page:')) {
+    const page=await readSourcePage(id);
+    return {id,title:page.meta.title,classification:'synced',markdown:page.markdown,editable:true,path:`confluence/${page.meta.page_id}`,updated_at:page.meta.last_pulled_at};
+  }
   if (!config.mock.aurora) {
     const doc = await A.fetchKnowledgeDoc(id);
     if (doc) return doc;
-    return id.startsWith('page:') ? auroraSyncedPageDoc(id) : null;
+    return null; // Production never manufactures a Confluence body from demo fixtures.
   }
   return M.findKnowledgeDoc(id) ?? (id.startsWith('page:') ? syncedPageDoc(id) : null);
 }
@@ -3029,6 +3023,7 @@ export async function getKnowledgeDoc(id: string): Promise<M.KnowledgeDoc | null
 export async function putKnowledgeDoc(
   id: string, markdown: string, opts: { label?: string | null; actor?: string } = {},
 ): Promise<{ ok: boolean; updated_at: string } | null> {
+  await assertLegacyDocumentWritable(id);
   if (!config.mock.aurora) {
     const doc = await A.fetchKnowledgeDoc(id);
     if (!doc) return null;
@@ -3073,6 +3068,7 @@ export async function getKnowledgeDocVersion(id: string, stamp: string): Promise
 export async function restoreKnowledgeDocVersion(
   id: string, stamp: string, actor = 'unknown',
 ): Promise<{ ok: boolean; updated_at: string } | null> {
+  await assertLegacyDocumentWritable(id);
   if (!config.mock.aurora) {
     const doc = await A.fetchKnowledgeDoc(id);
     const version = doc ? await A.fetchKnowledgeDocVersion(id, stamp) : null;
@@ -3112,7 +3108,7 @@ export async function restoreKnowledgeDocVersion(
 const KNOWLEDGE_PULL_DELAY_MS = 1_500;
 const publishedVersions = new Map<string, number>();
 
-export type PullSectionResult = { ok: true } | { ok: false; status: 404; reason: string };
+export type PullSectionResult = { ok: true } | { ok: false; status: 404 | 409 | 503; reason: string };
 
 /**
  * Kicks off a mock Confluence pull for a synced section. Returns immediately
@@ -3121,26 +3117,8 @@ export type PullSectionResult = { ok: true } | { ok: false; status: 404; reason:
  * button actually waits on via the SSE stream, not this response.
  */
 export async function pullKnowledgeSection(sectionKey: string): Promise<PullSectionResult> {
-  if (!config.mock.aurora) {
-    const sections = await A.fetchKnowledgeTree();
-    const section = sections.find((sec) => sec.key === sectionKey && sec.kind === 'synced');
-    if (!section) return { ok: false, status: 404, reason: `no synced section "${sectionKey}"` };
-
-    const timer = setTimeout(() => {
-      void (async () => {
-        const now = new Date().toISOString();
-        const updated = await A.touchSyncedSectionNodes(sectionKey, now);
-        if (!updated) return;
-        const pageNodes = updated.nodes.filter((n) => !n.is_dir);
-        assessmentBroker.publish({
-          type: 'knowledge.pulled', section: sectionKey, pages: updated.nodes.length, files_pulled: pageNodes.length, ts: now,
-        });
-      })();
-    }, KNOWLEDGE_PULL_DELAY_MS);
-    timer.unref?.();
-
-    return { ok: true };
-  }
+  if (sourceConfigured()) return {ok:false,status:409,reason:'Pull individual source pages so collaborative changes can be reviewed before replacement'};
+  if (!config.mock.aurora) return {ok:false,status:503,reason:'Document source is not configured'};
   const section = M.knowledgeSections().find((s) => s.key === sectionKey && s.kind === 'synced');
   if (!section) return { ok: false, status: 404, reason: `no synced section "${sectionKey}"` };
 
@@ -3161,7 +3139,7 @@ export async function pullKnowledgeSection(sectionKey: string): Promise<PullSect
   return { ok: true };
 }
 
-export type PublishDocResult = { ok: true; page_id: string; version: number } | { ok: false; status: 404; reason: string };
+export type PublishDocResult = { ok: true; page_id: string; version: number } | { ok: false; status: 404 | 409 | 503; reason: string };
 
 export type MoveNodeResult =
   | { ok: true; id: string; parent_id: string | null; position: number; section: string }
@@ -3345,20 +3323,8 @@ function checkMove(
  * updates its existing page in place and increments its version.
  */
 export async function publishKnowledgeDoc(id: string, actor = 'unknown'): Promise<PublishDocResult> {
-  if (!config.mock.aurora) {
-    const doc = await A.fetchKnowledgeDoc(id);
-    if (!doc) return { ok: false, status: 404, reason: `document "${id}" not found` };
-    const targetKey = await A.fetchFirstSyncedSectionKey();
-    if (!targetKey) return { ok: false, status: 404, reason: 'no synced section to publish into' };
-
-    const pageId = `published:${id}`;
-    const now = new Date().toISOString();
-    const version = await A.upsertPublishedPageNode(targetKey, `page:${pageId}`, doc.title, doc.classification, pageId, now);
-
-    assessmentBroker.publish({ type: 'knowledge.published', id, page_id: pageId, version, ts: now });
-    void actor; // published-by isn't modeled on the page node yet — kept for the event/audit trail
-    return { ok: true, page_id: pageId, version };
-  }
+  if (sourceConfigured()) return {ok:false,status:409,reason:'Preview and explicitly publish the acknowledged document version through source workflows'};
+  if (!config.mock.aurora) return {ok:false,status:503,reason:'Document source is not configured'};
   const doc = M.findKnowledgeDoc(id);
   if (!doc) return { ok: false, status: 404, reason: `document "${id}" not found` };
   const target = M.knowledgeSections().find((s) => s.kind === 'synced');

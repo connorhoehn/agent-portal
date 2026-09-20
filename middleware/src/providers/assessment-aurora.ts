@@ -1093,13 +1093,13 @@ export async function fetchKnowledgeNode(id: string): Promise<M.KnowledgeNode | 
   return rows.length ? rowToKnowledgeNode(rows[0]!) : null;
 }
 
-const KNOWLEDGE_DOC_COLS = 'id, title, classification, markdown, editable, path, updated_at::text AS updated_at';
+const KNOWLEDGE_DOC_COLS = 'id, title, classification, markdown, editable, path, source_parent_id, published_page_id, updated_at::text AS updated_at';
 
 function rowToKnowledgeDoc(r: Record<string, unknown>): M.KnowledgeDoc {
   return {
     id: toStr(r['id']), title: toStr(r['title']), classification: toStr(r['classification']),
     markdown: toStr(r['markdown']), editable: toBool(r['editable']), path: toStr(r['path']),
-    updated_at: toStr(r['updated_at']),
+    updated_at: toStr(r['updated_at']), source_parent_id:toStrOrNull(r['source_parent_id']), published_page_id:toStrOrNull(r['published_page_id']),
   };
 }
 

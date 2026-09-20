@@ -8362,6 +8362,7 @@ export interface KnowledgeSection {
 }
 
 const seedKnowledgeSections = (): KnowledgeSection[] => [
+ {key: 'workspace_drafts', title: 'Workspace drafts', kind: 'local', nodes: []},
  {
   "key": "enterprise_context",
   "title": "Enterprise Context",
@@ -8658,6 +8659,8 @@ const seedKnowledgeSections = (): KnowledgeSection[] => [
 ];
 
 export interface KnowledgeDoc {
+  source_parent_id?: string | null;
+  published_page_id?: string | null;
   id: string;
   title: string;
   classification: string;
