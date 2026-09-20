@@ -56,3 +56,9 @@ client configuration support before enabling that cache topology.
 Synthesis is validated locally, not applied. Image build/restart, two-user cold
 restart, signed upload authorization and BFF revocation acceptance remain separate
 runtime gates; generated infrastructure does not by itself prove those flows.
+
+`documentWorkspace.sourceOwnerSub` optionally names an existing assessment steward
+for newly imported source mappings. It is passed only to the BFF as
+`DOCUMENT_SOURCE_OWNER_SUB`. Omitting it leaves ownership unestablished; a viewer
+is never promoted to owner by opening a document. Changing this setting does not
+rewrite existing mapping ownership or automatically claim platform lifecycle rows.

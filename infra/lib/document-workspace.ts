@@ -17,6 +17,8 @@ export interface DocumentWorkspaceConfig {
   publicBaseUrl: string;
   grantIssuer: string;
   grantKeyId: string;
+  /** Optional known source steward, recorded on newly imported mappings only. */
+  sourceOwnerSub?: string;
   /** Existing matching Ed25519 PEM keys; CDK never generates or reads key bytes. */
   grantPrivateKeySecretArn: string;
   grantPublicKeySecretArn: string;
@@ -98,6 +100,7 @@ export function attachDocumentWorkspace(scope: cdk.Stack, props: {
   container.addEnvironment('DOCUMENT_PLATFORM_INTERNAL_URL', workspace.platformUrl);
   container.addEnvironment('DOCUMENT_GRANT_ISSUER', config.grantIssuer);
   container.addEnvironment('DOCUMENT_GRANT_KEY_ID', config.grantKeyId);
+  if (config.sourceOwnerSub) container.addEnvironment('DOCUMENT_SOURCE_OWNER_SUB', config.sourceOwnerSub);
   container.addSecret('DOCUMENT_GRANT_PRIVATE_KEY', ecs.Secret.fromSecretsManager(privateKey));
   container.addSecret('DOCUMENT_POLICY_SECRET', ecs.Secret.fromSecretsManager(policySecret));
   workspace.gateway.connections.allowFrom(middleware.service, ec2.Port.tcp(8080), 'BFF scoped document transport');

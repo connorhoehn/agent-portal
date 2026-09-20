@@ -8,7 +8,7 @@ const config: DocumentWorkspaceConfig = {
   tenantId: 'assessment', publicBaseUrl: 'https://assessment.example.test', grantIssuer: 'assessment-bff', grantKeyId: 'v1',
   grantPrivateKeySecretArn: 'arn:aws:secretsmanager:us-east-1:111111111111:secret:document-private-abcdef',
   grantPublicKeySecretArn: 'arn:aws:secretsmanager:us-east-1:111111111111:secret:document-public-abcdef',
-  architecture: 'ARM64',
+  architecture: 'ARM64', sourceOwnerSub: 'assessment-steward',
   images: Object.fromEntries(['gateway', 'platform', 'catalog', 'mq', 'redis'].map(name => [name, { repositoryName: `documents-${name}`, digest: 'sha256:' + 'a'.repeat(64) }])) as DocumentWorkspaceConfig['images'],
 };
 const context = { deployMiddlewareService: true, deployDocumentWorkspace: true };
@@ -24,6 +24,7 @@ test('opt-in document workspace uses the exported backend composition with scope
   const bff = containers.find(c => c.Name === 'middleware');
   assert.ok(bff.Secrets.some((s: any) => s.Name === 'DOCUMENT_GRANT_PRIVATE_KEY' && s.ValueFrom === config.grantPrivateKeySecretArn));
   assert.ok(bff.Environment.some((e: any) => e.Name === 'DOCUMENT_GATEWAY_PUBLIC_URL' && e.Value === 'wss://assessment.example.test/document-realtime'));
+  assert.ok(bff.Environment.some((e: any) => e.Name === 'DOCUMENT_SOURCE_OWNER_SUB' && e.Value === 'assessment-steward'));
   assert.ok(bff.Environment.some((e: any) => e.Name === 'DOCUMENT_PLATFORM_INTERNAL_URL' && String(e.Value).startsWith('http://workspace-platform.')));
   for (const container of containers.filter(c => c.Name !== 'middleware')) {
     assert.ok(!container.Secrets?.some((s: any) => s.Name === 'DOCUMENT_GRANT_PRIVATE_KEY'));
