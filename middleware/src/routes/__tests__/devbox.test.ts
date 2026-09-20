@@ -14,7 +14,15 @@
 
 import express from 'express';
 import request from '../../test-support/http.js';
-import { devboxRouter, _internal, validateCommand, buildContainerCommand, validateCwd, CWD_MARKER } from '../devbox.js';
+import {
+  devboxRouter,
+  _internal,
+  validateCommand,
+  buildContainerCommand,
+  validateCwd,
+  CWD_MARKER,
+  stopDevboxSessionForSourceControl,
+} from '../devbox.js';
 import { type Session } from '../../lib/session.js';
 import { registerBox, _resetFleet, getBoxBySession } from '../../lib/devbox-fleet.js';
 import { decideReaping, MAX_LIFETIME_MS } from '../../lib/devbox-reaper.js';
@@ -74,6 +82,7 @@ beforeEach(() => {
 
 afterEach(() => {
   delete process.env['DEVBOX_RUNTIME_ARN'];
+  delete process.env['MOCK_AGENTCORE'];
   _internal.setDataClient(null);
 });
 
@@ -263,6 +272,16 @@ describe('POST /api/devbox/:sessionId/task', () => {
 // ─── 7. Stop ─────────────────────────────────────────────────────────────────
 
 describe('DELETE /api/devbox/:sessionId', () => {
+  it('settles source control locally in mock mode without contacting AWS', async () => {
+    process.env['MOCK_AGENTCORE'] = 'true';
+    const { client } = mockDataClient(async () => {
+      throw new Error('must not contact AgentCore');
+    });
+
+    await expect(stopDevboxSessionForSourceControl(SESSION)).resolves.toBe('stopped');
+    expect(client.send).not.toHaveBeenCalled();
+  });
+
   it('stops the runtime session', async () => {
     const { calls } = mockDataClient(async () => ({}));
     const res = await request(buildApp()).delete(`/api/devbox/${SESSION}`);

@@ -151,10 +151,11 @@ export function startComputeWorkGraphProducer(): () => void {
     void emitCloudBox(box).catch((error) => console.warn('[work-graph] cloud box reconciliation failed:', (error as Error).message));
   }
   const stopFleet = subscribeLifecycle((event) => {
-    if (event.kind === 'removed') {
-      // A removed cloud box is authoritative source revocation. End attached
-      // observe/control transports immediately rather than waiting for their
-      // next platform poll.
+    if (event.kind === 'removed' || event.box.status === 'stopped' || event.box.status === 'error') {
+      // Removed and terminal cloud boxes are authoritative source revocation.
+      // End attached observe/control transports immediately rather than
+      // waiting for their next platform poll. This also closes observers in
+      // the same call stack after an approved control action stops a box.
       invalidateComputeCapabilitySource('cloud-compute', `box:${event.box.id}`);
     }
     const emitBox = event.kind === 'removed' ? emitCloudBoxDeleted(event.box) : emitCloudBox(event.box);

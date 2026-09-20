@@ -740,6 +740,10 @@ devboxRouter.post('/:sessionId/shell-url', asyncHandler(async (req, res) => {
  *     operator with a next step that resolves it.
  */
 export async function stopDevboxSessionForSourceControl(sessionId: string): Promise<'stopped' | 'already-stopped'> {
+  // Source-owned control must follow the same offline boundary as every other
+  // devbox operation. The caller settles the durable fleet row after this
+  // returns; there is no runtime service to contact in mock mode.
+  if (mockAgentCore()) return 'stopped';
   const arn = await resolveDevboxArn();
   if (!arn) throw new Error('devbox runtime is not configured');
   try {
