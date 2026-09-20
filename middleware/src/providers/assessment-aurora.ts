@@ -1257,7 +1257,7 @@ export async function renameKnowledgeNodeRow(id: string, title: string): Promise
 /** Oldest first — a thread reads top-down, and the pane does not re-sort. */
 export async function fetchKnowledgeComments(docId: string): Promise<M.KnowledgeComment[]> {
   const rows = await exec(
-    `SELECT id, doc_id, body, author, created_at::text AS created_at,
+    `SELECT id, doc_id, parent_id, body, author, created_at::text AS created_at,
             edited_at::text AS edited_at, deleted_at::text AS deleted_at
        FROM assessment_knowledge_comments
       WHERE doc_id = :doc
@@ -1265,7 +1265,7 @@ export async function fetchKnowledgeComments(docId: string): Promise<M.Knowledge
     [s('doc', docId)],
   );
   return rows.map((r) => ({
-    id: toStr(r['id']), doc_id: toStr(r['doc_id']), body: toStr(r['body']),
+    id: toStr(r['id']), doc_id: toStr(r['doc_id']), parent_id: toStrOrNull(r['parent_id']), body: toStr(r['body']),
     author: toStr(r['author']), created_at: toStr(r['created_at']),
     edited_at: toStrOrNull(r['edited_at']), deleted_at: toStrOrNull(r['deleted_at']),
   }));
@@ -1310,14 +1310,14 @@ export async function toggleKnowledgeReaction(
 
 export async function fetchKnowledgeComment(id: string): Promise<M.KnowledgeComment | null> {
   const rows = await exec(
-    `SELECT id, doc_id, body, author, created_at::text AS created_at,
+    `SELECT id, doc_id, parent_id, body, author, created_at::text AS created_at,
             edited_at::text AS edited_at, deleted_at::text AS deleted_at
        FROM assessment_knowledge_comments WHERE id = :id`,
     [s('id', id)],
   );
   const r = rows[0];
   return r ? {
-    id: toStr(r['id']), doc_id: toStr(r['doc_id']), body: toStr(r['body']),
+    id: toStr(r['id']), doc_id: toStr(r['doc_id']), parent_id: toStrOrNull(r['parent_id']), body: toStr(r['body']),
     author: toStr(r['author']), created_at: toStr(r['created_at']),
     edited_at: toStrOrNull(r['edited_at']), deleted_at: toStrOrNull(r['deleted_at']),
   } : null;
@@ -1337,10 +1337,22 @@ export async function softDeleteKnowledgeComment(id: string, deletedAt: string):
   );
 }
 
-export async function insertKnowledgeComment(id: string, docId: string, body: string, author: string, createdAt: string): Promise<void> {
-  await exec(
-    `INSERT INTO assessment_knowledge_comments (id, doc_id, body, author, created_at)
-     VALUES (:id, :doc, :body, :author, :created::timestamptz)`,
-    [s('id', id), s('doc', docId), s('body', body), s('author', author), s('created', createdAt)],
-  );
+export async function insertKnowledgeComment(
+  id: string, docId: string, body: string, author: string, createdAt: string, parentId: string | null = null,
+): Promise<boolean> {
+  return withTransaction(async tx => {
+    if (parentId !== null) {
+      // A concurrent soft delete must serialize with this validation + insert.
+      const parents = await tx(`SELECT id FROM assessment_knowledge_comments
+        WHERE id = :parent AND doc_id = :doc AND deleted_at IS NULL FOR UPDATE`,
+      [s('parent', parentId), s('doc', docId)]);
+      if (!parents.length) return false;
+    }
+    await tx(
+      `INSERT INTO assessment_knowledge_comments (id, doc_id, parent_id, body, author, created_at)
+       VALUES (:id, :doc, :parent, :body, :author, :created::timestamptz)`,
+      [s('id', id), s('doc', docId), maybe('parent', parentId), s('body', body), s('author', author), s('created', createdAt)],
+    );
+    return true;
+  });
 }

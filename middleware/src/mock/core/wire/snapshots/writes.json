@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-09-19T20:36:08.129Z",
-  "serverHandlerSha": "c22ee6bb3ea445c98d6f1a5066341ef27fb4b39716fb10dc195b3fad3b25fd14",
+  "capturedAt": "2026-09-20T00:36:38.132Z",
+  "serverHandlerSha": "9eb1c8224e7b578b8a74b2cea782e5b7b9a4b7fa356f24f14aa53414aac2ef0a",
   "baseUrl": "http://127.0.0.1:3017",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [

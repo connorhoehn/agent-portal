@@ -94,3 +94,15 @@ confirm 409 without duplicate history. Test stop/completion ordering. Post and
 reload a comment on a synced page. Observe worker errors and bounded expiry on
 a controlled interrupted run. Keep this live acceptance separate from local
 transaction-fake tests and mock browser journeys.
+
+## Comment reply migration
+
+Before deploying durable quote replies, apply the additive `parent_id TEXT`
+self-reference on `assessment_knowledge_comments` in `assessment_schema.sql`.
+Existing comments retain NULL parents. The application validates same-document,
+undeleted parents and locks them while inserting replies. Edits cannot reparent
+comments. Soft deletes preserve child replies; the self-reference uses NO ACTION
+rather than cascading an individual parent's removal through the conversation.
+This migration has not been applied to a live database. Deployment acceptance
+must include posting/reloading a reply and deleting its parent while preserving
+the reply and rendering a deleted-parent quote.

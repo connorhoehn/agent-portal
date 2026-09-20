@@ -8,7 +8,10 @@
 // untouched by any of this — see assessment.test.ts / assessment-fixes.test.ts,
 // which still pass unmodified against the same file.
 
-jest.mock('../aurora.js', () => ({ exec: jest.fn() }));
+jest.mock('../aurora.js', () => {
+  const exec = jest.fn();
+  return { exec, withTransaction: (work: (tx: typeof exec) => Promise<unknown>) => work(exec) };
+});
 
 import { exec } from '../aurora.js';
 import * as A from '../assessment-aurora.js';
@@ -527,5 +530,29 @@ describe('knowledge', () => {
     expect(sqlOf()).not.toContain('DROP TABLE');
     expect(sqlOf()).toMatch(/INSERT INTO assessment_knowledge_comments/);
     expect(paramsOf()).toContainEqual({ name: 'body', value: { stringValue: body } });
+  });
+});
+
+
+describe('durable reply parents', () => {
+  it('locks a live parent in the same document before inserting its reference', async () => {
+    execMock.mockResolvedValueOnce([{ id: 'parent' }]).mockResolvedValueOnce([]);
+    expect(await A.insertKnowledgeComment('reply', 'doc', 'text', 'actor', '2026-09-19T00:00:00Z', 'parent')).toBe(true);
+    expect(sqlOf()).toMatch(/doc_id = :doc AND deleted_at IS NULL FOR UPDATE/);
+    expect(paramsOf()).toEqual(expect.arrayContaining([{ name: 'parent', value: { stringValue: 'parent' } }, { name: 'doc', value: { stringValue: 'doc' } }]));
+    expect(sqlOf(1)).toContain('parent_id');
+    expect(paramsOf(1)).toContainEqual({ name: 'parent', value: { stringValue: 'parent' } });
+  });
+  it('does not insert when the parent lookup refuses the target', async () => {
+    execMock.mockResolvedValueOnce([]);
+    expect(await A.insertKnowledgeComment('reply', 'doc', 'text', 'actor', '2026-09-19T00:00:00Z', 'bad')).toBe(false);
+    expect(execMock).toHaveBeenCalledTimes(1);
+  });
+  it('maps nullable legacy parents and persisted reply references on both reads', async () => {
+    execMock.mockResolvedValueOnce([{ id: 'legacy', doc_id: 'doc' }, { id: 'reply', doc_id: 'doc', parent_id: 'legacy' }]);
+    const rows = await A.fetchKnowledgeComments('doc');
+    expect(rows.map(row => row.parent_id)).toEqual([null, 'legacy']);
+    execMock.mockResolvedValueOnce([{ id: 'reply', doc_id: 'doc', parent_id: 'legacy' }]);
+    expect((await A.fetchKnowledgeComment('reply'))?.parent_id).toBe('legacy');
   });
 });

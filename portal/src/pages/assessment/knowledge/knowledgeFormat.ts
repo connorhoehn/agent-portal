@@ -583,6 +583,7 @@ export function docSavedNoticeText(by: string, ts: string): string {
 
 export interface KnowledgeCommentItem {
   id: string;
+  parentId?: string;
   clientId: string;
   /**
    * The authenticated author. Distinct from `clientId`, which identifies a
@@ -615,31 +616,61 @@ export function commentsForDoc(events: AssessmentSSEEvent[], docId: string): Kno
   return events
     .filter((e): e is Extract<AssessmentSSEEvent, { type: 'knowledge.comment.created' }> =>
       e.type === 'knowledge.comment.created' && e.doc_id === docId)
-    .map((e) => ({ id: e.id, clientId: e.by, userId: e.by, content: e.body, timestamp: e.ts, displayName: e.by }));
+    .map((e) => ({ id: e.id, clientId: e.by, userId: e.by, content: e.body, timestamp: e.ts, displayName: e.by,
+      ...(e.parent_id ? { parentId: e.parent_id } : {}),
+    }));
 }
 
-// A send goes out over BOTH paths at once (the POST for the durable SSE
-// echo, `chat.sendMessage` for real-time peer delivery over the channel),
-// sequentially in the same call — so the same human comment can arrive
-// twice, a few hundred ms apart, under two UNRELATED identity namespaces
-// (a server comment id + the session sub vs. a gateway message id + the
-// gateway's own per-connection clientId). Neither id nor an exact
-// timestamp lines the two up, so dedupe falls back to "same text, close
-// enough in time" — a coarse but effective heuristic for one person's own
-// double-delivered send; two different people happening to send identical
-// text within the window is the accepted false-positive.
+/** Resolve quotes from the current document, never a stale copy of deleted text. */
+export function commentQuote(comments: KnowledgeCommentItem[], parentId: string) {
+  const parent = comments.find((comment) => comment.id === parentId);
+  return {
+    messageId: parentId,
+    author: parent?.displayName ?? parent?.userId ?? 'Comment',
+    ...(parent ? { timestamp: parent.timestamp } : {}),
+    text: !parent ? 'Original comment unavailable.' : parent.deletedAt ? 'This comment was deleted.' : parent.content,
+  };
+}
+
+/** Replayed events must not overwrite a newer durable edit or resurrect a tombstone. */
+export function applyCommentUpdates(comments: KnowledgeCommentItem[], events: AssessmentSSEEvent[], docId: string): KnowledgeCommentItem[] {
+  const byId = new Map(comments.map((comment) => [comment.id, { ...comment }]));
+  for (const event of events) {
+    if ((event.type !== 'knowledge.comment.edited' && event.type !== 'knowledge.comment.deleted') || event.doc_id !== docId) continue;
+    const comment = byId.get(event.id);
+    if (!comment) continue;
+    if (event.type === 'knowledge.comment.deleted') {
+      if (!comment.deletedAt || Date.parse(event.ts) > Date.parse(comment.deletedAt)) comment.deletedAt = event.ts;
+    } else if (!comment.deletedAt && Date.parse(event.ts) >= Date.parse(comment.editedAt ?? comment.timestamp)) {
+      comment.content = event.body;
+      comment.editedAt = event.ts;
+    }
+  }
+  return [...byId.values()];
+}
+
+/** Keep observed writes when the bounded event feed rolls over or a stale GET lands. */
+export function retainCommentUpdates(previous: KnowledgeCommentItem[], incoming: KnowledgeCommentItem[]): KnowledgeCommentItem[] {
+  const rows = new Map(previous.map((comment) => [comment.id, comment]));
+  for (const comment of incoming) {
+    const prior = rows.get(comment.id);
+    const merged = { ...comment };
+    if (prior?.editedAt && Date.parse(prior.editedAt) > Date.parse(comment.editedAt ?? comment.timestamp)) {
+      merged.content = prior.content;
+      merged.editedAt = prior.editedAt;
+    }
+    if (prior?.deletedAt && (!comment.deletedAt || Date.parse(prior.deletedAt) > Date.parse(comment.deletedAt))) merged.deletedAt = prior.deletedAt;
+    if (prior?.parentId) merged.parentId = prior.parentId;
+    rows.set(comment.id, merged);
+  }
+  return [...rows.values()].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+}
+
+// Older clients and optional gateway peers can still deliver a separate
+// channel message for a durable comment. New posts use only the BFF + SSE.
+// Retain the legacy cross-source window for those unrelated gateway IDs.
 const COMMENT_DEDUPE_WINDOW_MS = 15_000;
 
-/**
- * Folds the SSE-derived comment list with the channel's own chat messages
- * (the gateway path — dead while the /ws stub is in front, correct once a
- * real gateway is live) into one chronological list with same-text/
- * near-same-time cross-source duplicates removed. SSE is treated as
- * authoritative (stable id, durable, known actor); a channel message is
- * dropped only when a matching SSE comment already covers it — anything
- * the channel carries that SSE never heard about (a peer on the channel
- * this app's own comment box never touched) still comes through.
- */
 /**
  * Fold the DURABLE thread in under the live ones.
  *

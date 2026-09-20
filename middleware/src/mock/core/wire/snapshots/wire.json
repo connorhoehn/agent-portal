@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-09-19T20:36:07.117Z",
-  "serverHandlerSha": "c22ee6bb3ea445c98d6f1a5066341ef27fb4b39716fb10dc195b3fad3b25fd14",
+  "capturedAt": "2026-09-20T00:36:37.329Z",
+  "serverHandlerSha": "9eb1c8224e7b578b8a74b2cea782e5b7b9a4b7fa356f24f14aa53414aac2ef0a",
   "baseUrl": "http://127.0.0.1:3017",
   "personas": [
     "orgiq/admin",
@@ -802,7 +802,15 @@
       "status": 200,
       "shape": {
         "$": "object",
-        "comments": "array"
+        "comments": "array",
+        "comments[]": "object",
+        "comments[].author": "string",
+        "comments[].body": "string",
+        "comments[].created_at": "string",
+        "comments[].doc_id": "string",
+        "comments[].edited_at": "string",
+        "comments[].id": "string",
+        "comments[].parent_id": "null|string"
       },
       "values": {}
     },
@@ -2438,7 +2446,7 @@
       },
       "values": {
         "kind": [
-          "decision"
+          "convention"
         ],
         "level": [
           "L0"
@@ -4476,8 +4484,26 @@
       },
       "values": {
         "events[].action": [
+          "ApproveTransaction",
+          "ConnectLocalCompute",
+          "DispatchAgentRun",
+          "EditGuardrail",
+          "LabelFeedback",
           "Login",
+          "ManageAssessmentConfig",
+          "ManageBots",
+          "ManageBudgets",
+          "ManageCanary",
+          "ManageDevbox",
           "ManageIngest",
+          "ManageKB",
+          "ManageKnowledge",
+          "ManageSprints",
+          "ManageSubmissions",
+          "ManageUsers",
+          "PublishReport",
+          "RunAssessmentAgent",
+          "ScoreAssessment",
           "ViewAssessment",
           "ViewIdentityAdmin",
           "ViewLeaderboard",
@@ -4491,7 +4517,6 @@
           "admin",
           "assessor",
           "hr-admin",
-          "lead-assessor",
           "member",
           "sme"
         ],
@@ -4668,9 +4693,31 @@
       "status": 200,
       "shape": {
         "$": "object",
-        "events": "array"
+        "events": "array",
+        "events[]": "object",
+        "events[].detail": "object",
+        "events[].detail.agentName": "string",
+        "events[].detail.bytes": "number",
+        "events[].detail.codeSnippet": "string",
+        "events[].detail.language": "string",
+        "events[].detail.outputSnippet": "string",
+        "events[].detail.pageTitle": "string",
+        "events[].detail.url": "string",
+        "events[].durationMs": "number",
+        "events[].id": "string",
+        "events[].kind": "string",
+        "events[].ok": "boolean",
+        "events[].sessionId": "string",
+        "events[].startedAt": "string"
       },
-      "values": {}
+      "values": {
+        "events[].kind": [
+          "browser_launch",
+          "browser_navigate",
+          "browser_screenshot",
+          "code_execute"
+        ]
+      }
     },
     "GET /api/observability/cost/a2a-overhead": {
       "persona": "orgiq/admin",
@@ -6806,9 +6853,27 @@
       "open": false,
       "values": [
         "ANONYMIZE",
+        "ApproveTransaction",
         "BLOCK",
+        "ConnectLocalCompute",
+        "DispatchAgentRun",
+        "EditGuardrail",
+        "LabelFeedback",
         "Login",
+        "ManageAssessmentConfig",
+        "ManageBots",
+        "ManageBudgets",
+        "ManageCanary",
+        "ManageDevbox",
         "ManageIngest",
+        "ManageKB",
+        "ManageKnowledge",
+        "ManageSprints",
+        "ManageSubmissions",
+        "ManageUsers",
+        "PublishReport",
+        "RunAssessmentAgent",
+        "ScoreAssessment",
         "ViewAssessment",
         "ViewIdentityAdmin",
         "ViewLeaderboard",
@@ -6886,8 +6951,12 @@
         "answer",
         "artifact",
         "blocked",
+        "browser_launch",
+        "browser_navigate",
+        "browser_screenshot",
         "clarification",
         "close_claim",
+        "code_execute",
         "comment",
         "confluence",
         "convention",
@@ -6966,7 +7035,6 @@
         "contributor",
         "decider",
         "hr-admin",
-        "lead-assessor",
         "member",
         "org-leader",
         "owner",

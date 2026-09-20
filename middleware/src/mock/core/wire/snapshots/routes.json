@@ -203,7 +203,7 @@
     {
       "method": "GET",
       "path": "/api/assessment/events",
-      "source": "src/routes/assessment.ts:864"
+      "source": "src/routes/assessment.ts:866"
     },
     {
       "method": "GET",
@@ -303,7 +303,7 @@
     {
       "method": "POST",
       "path": "/api/assessment/knowledge/presence",
-      "source": "src/routes/assessment.ts:820"
+      "source": "src/routes/assessment.ts:822"
     },
     {
       "method": "POST",

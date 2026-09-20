@@ -9307,6 +9307,8 @@ export const knowledgeSectionsFixture = defineFixture<KnowledgeSection>({
 export const knowledgeSections = (): KnowledgeSection[] => knowledgeSectionsFixture.rows();
 
 export interface KnowledgeComment {
+  /** Immutable reply target; absent on legacy fixture rows. */
+  parent_id?: string | null;
   id: string;
   doc_id: string;
   body: string;
@@ -9380,7 +9382,7 @@ export const knowledgeCommentsFixture = defineFixture<KnowledgeComment>({
   scenarios: {
     default: () => [
       {
-        id: 'kc-classify-01', doc_id: 'prompt:classify-transcript.md',
+        parent_id: null, id: 'kc-classify-01', doc_id: 'prompt:classify-transcript.md',
         author: 'u-asha',
         body: 'Worth flagging: the dimension ids here are plain numbers ("1".."17"). '
           + 'We had a run last month that emitted "DIM-01" and apply-classification rejected '
@@ -9388,7 +9390,7 @@ export const knowledgeCommentsFixture = defineFixture<KnowledgeComment>({
         created_at: daysAgo(4),
       },
       {
-        id: 'kc-classify-02', doc_id: 'prompt:classify-transcript.md',
+        parent_id: 'kc-classify-01', id: 'kc-classify-02', doc_id: 'prompt:classify-transcript.md',
         author: 'u-farah',
         body: 'Agreed — and the strictness is deliberate, since relevant_dimension_ids is what '
           + 'decides which dimensions a later /score-dimensions pass touches at all.',
@@ -9401,7 +9403,7 @@ export const knowledgeCommentsFixture = defineFixture<KnowledgeComment>({
         edited_at: daysAgo(3),
       },
       {
-        id: 'kc-evidence-01', doc_id: 'rule:what-counts-as-evidence.md',
+        parent_id: null, id: 'kc-evidence-01', doc_id: 'rule:what-counts-as-evidence.md',
         author: 'u-jonas',
         body: 'The "verbal confirmation" line is the one teams push back on most. '
           + 'It is not a judgement about the team, it is about what a later reader can check.',

@@ -29,7 +29,7 @@ export type AssessmentEvent =
   | { type: 'knowledge.doc.saved'; id: string; stamp: string; by: string; ts: string }
   | { type: 'knowledge.moved'; id: string; parent_id: string | null; position: number; by: string; ts: string }
   | { type: 'knowledge.renamed'; id: string; title: string; by: string; ts: string }
-  | { type: 'knowledge.comment.created'; id: string; doc_id: string; by: string; body: string; ts: string }
+  | { type: 'knowledge.comment.created'; id: string; doc_id: string; parent_id?: string | null; by: string; body: string; ts: string }
   | { type: 'knowledge.comment.edited'; id: string; doc_id: string; by: string; body: string; ts: string }
   | { type: 'knowledge.comment.deleted'; id: string; doc_id: string; by: string; ts: string }
   | { type: 'knowledge.reaction.toggled'; doc_id: string; target_id: string; emoji: string; by: string; reacted: boolean; ts: string }

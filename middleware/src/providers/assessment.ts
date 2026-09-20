@@ -3525,39 +3525,31 @@ export async function listKnowledgeComments(id: string): Promise<M.KnowledgeComm
   if (!config.mock.aurora) {
     return A.fetchKnowledgeComments(id);
   }
-  return M.knowledgeComments(id);
+  return M.knowledgeComments(id).map(c => ({ ...c, parent_id: c.parent_id ?? null }));
 }
 
 export async function createKnowledgeComment(
-  id: string, body: string, actor = 'unknown',
-): Promise<{ ok: boolean } | null> {
+  id: string, body: string, actor = 'unknown', parentId: string | null = null,
+): Promise<{ ok: true } | { ok: false; reason: string } | null> {
   if (!(await getKnowledgeDoc(id))) return null;
-  if (!config.mock.aurora) {
-    const commentId = `comment-${stampNow()}-${hex(6)}`;
-    const now = new Date().toISOString();
-    // Durable, unlike the mock path — see schema/assessment_schema.sql's
-    // assessment_knowledge_comments (added for this) — in addition to the
-    // same broker echo the mock path relies on for "live" viewers.
-    await A.insertKnowledgeComment(commentId, id, body, actor, now);
-    assessmentBroker.publish({ type: 'knowledge.comment.created', id: commentId, doc_id: id, by: actor, body, ts: now });
-    return { ok: true };
-  }
-  // Persist into the REGISTERED fixture, not just onto the event bus. The echo
-  // alone is what made a comment write-only: it reached whoever was connected
-  // at that instant and nothing afterwards. Registered means
-  // `POST /api/__mock/reset` still undoes it.
   const commentId = `comment-${stampNow()}-${hex(6)}`;
   const now = new Date().toISOString();
-  M.knowledgeCommentsFixture.rows().push({
-    id: commentId, doc_id: id, body, author: actor, created_at: now,
-  });
+  if (!config.mock.aurora) {
+    if (!(await A.insertKnowledgeComment(commentId, id, body, actor, now, parentId))) {
+      return { ok: false, reason: 'Invalid reply parent' };
+    }
+  } else {
+    if (parentId !== null && !M.knowledgeCommentsFixture.rows().some(c =>
+      c.id === parentId && c.doc_id === id && !c.deleted_at)) {
+      return { ok: false, reason: 'Invalid reply parent' };
+    }
+    M.knowledgeCommentsFixture.rows().push({
+      id: commentId, doc_id: id, parent_id: parentId, body, author: actor, created_at: now,
+    });
+  }
   assessmentBroker.publish({
-    type: 'knowledge.comment.created',
-    id: commentId,
-    doc_id: id,
-    by: actor,
-    body,
-    ts: now,
+    type: 'knowledge.comment.created', id: commentId, doc_id: id,
+    parent_id: parentId, by: actor, body, ts: now,
   });
   return { ok: true };
 }

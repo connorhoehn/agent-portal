@@ -1,4 +1,5 @@
 import { DocumentReader } from './DocumentReader';
+import { DocumentCommentThread } from './DocumentCommentThread';
 import { nextPresenceSequence } from './presenceSequence';
 // The document viewer/editor pane — one document's realtime surface. Owns
 // its channel (assessment:doc:<id>: chat + presence + reactions) and the
@@ -35,7 +36,7 @@ import {
   T,
   Textarea,
 } from '@connorhoehnslalom/ui-components/shared';
-import { ChatPanel, ReactionsBar } from '@connorhoehnslalom/ui-components/social';
+import { ReactionsBar } from '@connorhoehnslalom/ui-components/social';
 import { useChannel, useCRDT, useGateway } from '@connorhoehnslalom/realtime-modules/client';
 import { useFetch } from '../../../hooks/useFetch';
 import { useCapabilities } from '../../../lib/capabilities';
@@ -47,6 +48,8 @@ import {
   CLASSIFICATION_LABEL,
   channelForDoc,
   commentsForDoc,
+  applyCommentUpdates,
+  retainCommentUpdates,
   decideDocSaveGate,
   docSavedNoticeText,
   docSyncStatus,
@@ -146,42 +149,6 @@ function putJson<T>(url: string, body: unknown): Promise<T> {
 
 function postJson<T>(url: string, body: unknown): Promise<T> {
   return sendJson<T>(url, 'POST', body);
-}
-
-// ChatPanel (ui-components/social) renders its built-in composer as a plain
-// `<Input placeholder="Type a message...">` with no `aria-label`/`label`
-// prop reaching that field (see docs/assessment-journeys/stretch/
-// accessibility.md and docs/ui-components-queue.md) — a placeholder is a
-// hint, not an accessible name. This repo cannot edit the library (CLAUDE.md),
-// so — same technique `DimensionMasterDetail.tsx`'s
-// useDimensionListboxSemantics uses for `MasterDetail` — this patches the
-// rendered DOM directly via a `data-testid` wrapper this component owns,
-// scoped narrowly enough (one plain text field, since DocPane never passes
-// `onSendFiles`, so no hidden file-picker element is ever rendered alongside
-// it) that no library internals need to be assumed beyond "there is exactly
-// one non-file text field in here". A MutationObserver re-applies it because
-// ChatPanel re-renders the composer (new placeholder text) whenever
-// `disabled` flips.
-const COMMENT_COMPOSER_TEST_ID = 'doc-pane-comment-composer';
-
-function useCommentComposerLabel(active: boolean): void {
-  useEffect(() => {
-    if (!active) return;
-    const root = document.querySelector<HTMLElement>(`[data-testid="${COMMENT_COMPOSER_TEST_ID}"]`);
-    if (!root) return;
-    const label = () => {
-      const input = root.querySelector<HTMLInputElement>('input:not([type="file"])');
-      if (input && input.getAttribute('aria-label') !== 'Add a comment') input.setAttribute('aria-label', 'Add a comment');
-    };
-    const observer = new MutationObserver(() => {
-      observer.disconnect();
-      label();
-      observer.observe(root, { childList: true, subtree: true, attributes: true, attributeFilter: ['aria-label', 'placeholder'] });
-    });
-    label();
-    observer.observe(root, { childList: true, subtree: true, attributes: true, attributeFilter: ['aria-label', 'placeholder'] });
-    return () => observer.disconnect();
-  }, [active]);
 }
 
 export function FolderPane({ node, children, onSelectChild }: { node: KnowledgeNode; children: KnowledgeNode[]; onSelectChild: (id: string) => void }) {
@@ -467,6 +434,7 @@ interface StoredCommentWire {
   created_at: string;
   edited_at?: string | null;
   deleted_at?: string | null;
+  parent_id?: string | null;
 }
 
 // ─── Comments: SSE-authoritative, gateway chat merged in when live ──────
@@ -489,20 +457,36 @@ interface StoredCommentWire {
     `/api/assessment/knowledge/doc/comments?id=${encodeURIComponent(node.id)}`,
   );
   const storedComments = useMemo<KnowledgeCommentItem[]>(
-    () => (storedFetch.data?.comments ?? []).map((c) => ({
+    () => (storedFetch.data?.comments ?? []).filter((c) => c.doc_id === node.id).map((c) => ({
       id: c.id, clientId: c.author, userId: c.author, content: c.body,
       timestamp: c.created_at, displayName: c.author,
+      ...(c.parent_id ? { parentId: c.parent_id } : {}),
       ...(c.edited_at ? { editedAt: c.edited_at } : {}),
       ...(c.deleted_at ? { deletedAt: c.deleted_at } : {}),
     })),
-    [storedFetch.data],
+    [storedFetch.data, node.id],
   );
   const liveComments = useMemo(
     () => mergeComments(sseComments, channelComments), [sseComments, channelComments],
   );
-  const mergedComments = useMemo(
-    () => withStoredComments(storedComments, liveComments), [storedComments, liveComments],
-  );
+  const [commentState, setCommentState] = useState<{ docId: string; rows: KnowledgeCommentItem[] }>({ docId: node.id, rows: [] });
+  useEffect(() => {
+    setCommentState((previous) => ({
+      docId: node.id,
+      rows: applyCommentUpdates(retainCommentUpdates(previous.docId === node.id ? previous.rows : [],
+        withStoredComments(storedComments, liveComments)), sseEvents, node.id),
+    }));
+  }, [storedComments, liveComments, sseEvents, node.id]);
+  const mergedComments = commentState.docId === node.id ? commentState.rows : [];
+  const latestCommentMutation = sseEvents.filter((event) =>
+    (event.type === 'knowledge.comment.created' || event.type === 'knowledge.comment.edited' || event.type === 'knowledge.comment.deleted')
+    && event.doc_id === node.id).at(-1);
+  useEffect(() => {
+    // Catch up after reconnect/gaps and retain durable mutations independently
+    // of the event feed's 200-frame window. The refresh callback is not a trigger.
+    if (sseConnected || sseGapped) storedFetch.refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [node.id, sseConnected, sseGapped, latestCommentMutation]);
 
   // Durable reactions, from the BFF. These hooks live UP HERE, above the
   // `if (docFetch.isLoading) return` below, because a hook after an early
@@ -550,7 +534,6 @@ interface StoredCommentWire {
   );
   const presenceUsers = useMemo(() => mergePresenceForDisplay(sseViewers, channelPeers), [sseViewers, channelPeers]);
 
-  useCommentComposerLabel(commentsOpen);
 
   if (docFetch.isLoading) return <LoadingState label="Loading document…" />;
   if (docFetch.error || !docFetch.data) {
@@ -705,17 +688,11 @@ interface StoredCommentWire {
     }
   };
 
-  // Sends over BOTH paths: the channel (real-time delivery to peers
-  // currently connected to the gateway, when one is live) AND the durable
-  // POST, whose SSE echo is what actually renders the message — including
-  // back to the sender, and to any tab/dashboard not on the channel at all.
-  // mergeComments folds the two back into one list when both land.
-  const handleSendComment = (text: string) => {
-    setCommentError(null);
-    chat?.sendMessage(text);
-    void postJson('/api/assessment/knowledge/doc/comment', { id: node.id, body: text }).catch((err) => {
-      setCommentError(err instanceof Error ? err.message : 'Failed to send comment.');
-    });
+  // The durable write also publishes the SSE echo to every viewer. A second
+  // gateway send would have an unrelated ID and no durable reply relationship.
+  const handleSendComment = async (text: string, parentId?: string) => {
+    await postJson('/api/assessment/knowledge/doc/comment', { id: node.id, body: text, parentId });
+    storedFetch.refresh();
   };
 
   async function handleEditComment(message: { id?: string }, text: string) {
@@ -725,6 +702,7 @@ interface StoredCommentWire {
       storedFetch.refresh();
     } catch (err) {
       setCommentError(err instanceof Error ? err.message : 'That edit could not be saved.');
+      throw err; // ChatPanel keeps its inline editor open when persistence fails.
     }
   }
 
@@ -1008,66 +986,15 @@ interface StoredCommentWire {
         </Drawer>
 
         <Drawer open={commentsOpen} onClose={() => setCommentsOpen(false)} title="Comments" width={420}>
-          <Stack gap="sm" data-testid={COMMENT_COMPOSER_TEST_ID}>
+          <Stack gap="sm" data-testid="doc-pane-comment-composer">
             {commentError && (
               <InlineAlert tone="error" onDismiss={() => setCommentError(null)}>{commentError}</InlineAlert>
             )}
-            <ChatPanel
-              messages={mergedComments.map((c) => ({
-                id: c.id, clientId: c.clientId, userId: c.userId, content: c.content,
-                timestamp: c.timestamp, displayName: c.displayName,
-                ...(c.editedAt ? { editedAt: c.editedAt } : {}),
-                ...(c.deletedAt ? { deletedAt: c.deletedAt } : {}),
-              }))}
-              onSend={handleSendComment}
-              /* Edit and delete are ChatPanel's own affordances — it renders
-                 the action bar, the inline editor and the tombstone. They
-                 needed somewhere to write to, which is what the PATCH and
-                 DELETE are. The panel only offers them on the viewer's own
-                 messages, and the server checks authorship again from the
-                 session rather than trusting that. */
-              onEditMessage={handleEditComment}
-              onDeleteMessage={handleDeleteComment}
-              /* Per-comment reactions, off the same store as the document's
-                 own bar. ChatPanel renders the summaries and the picker; the
-                 library's note is that `reactionsFor` omitted means no
-                 reaction UI at all, and `onToggleReaction` present is what
-                 enables the controls.
-
-                 Note the two contracts differ: `ReactionsBar` above takes
-                 AGGREGATED {emoji,count,mine} summaries, while ChatPanel wants
-                 the RAW per-reactor rows and aggregates them itself — which is
-                 how it can name who reacted. Our store is one row per actor,
-                 so it feeds both without a second source of truth. */
-              reactionsFor={(messageId) => storedReactions
-                .filter((r) => r.target_id === messageId)
-                .map((r) => ({ emoji: r.emoji, userId: r.actor, displayName: r.actor }))}
-              onToggleReaction={(messageId, emoji) => void toggleReaction(messageId, emoji)}
-              /* `currentUserId` is the identity prop; `currentActor` is a
-                 legacy DISPLAY-NAME fallback, and its own doc comment says so
-                 — "a display name is not an identity, and deciding ownership
-                 from it gave two participants named Alex a cancel button on
-                 each other's uploads". This passed the session `sub` into the
-                 display-name slot and nothing into the identity one, so the
-                 panel could not answer "is this mine" about any comment. */
-              currentUserId={session?.sub ?? gateway.clientId ?? undefined}
-              currentActor={session?.name ?? undefined}
-              /* ChatPanel's default empty line is the bare "No messages yet",
-                 which its own prop doc calls out as the thing `emptyState`
-                 exists to replace. On a document, "no messages" is also the
-                 wrong noun: this is a comment thread about a specific page,
-                 not a chat room. */
-              emptyState={
-                <Stack gap="xs">
-                  <T className="text-[13px] font-medium text-text-primary">No comments on this document yet</T>
-                  <T className="text-[12px] text-text-secondary leading-snug">
-                    {`Comments are attached to ${doc.title} and everyone with access to it sees them. Ask a question about a specific claim, or leave the reasoning behind a change so the next reader does not have to reconstruct it.`}
-                  </T>
-                </Stack>
-              }
-              showHeader={false}
-              fill
-            />
+            <DocumentCommentThread key={node.id} title={doc.title}
+              comments={mergedComments} reactions={storedReactions}
+              userId={session?.sub} userName={session?.name}
+              onSend={handleSendComment} onEdit={handleEditComment} onDelete={handleDeleteComment}
+              onReact={(messageId, emoji) => void toggleReaction(messageId, emoji)} />
           </Stack>
         </Drawer>
       </Card>

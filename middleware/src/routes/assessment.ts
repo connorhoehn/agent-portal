@@ -795,10 +795,12 @@ assessmentRouter.delete('/knowledge/doc/comment', viewGate, asyncHandler(async (
 }));
 
 assessmentRouter.post('/knowledge/doc/comment', viewGate, asyncHandler(async (req, res) => {
-  const body = req.body as { id?: string; body?: string };
+  const body = req.body as { id?: string; body?: string; parentId?: unknown };
   if (!body.id || !body.body || typeof body.body !== 'string') throw new ValidationError('id and body are required');
-  const result = await provider.createKnowledgeComment(body.id, body.body, req.session?.sub ?? 'unknown');
+  if (body.parentId != null && (typeof body.parentId !== 'string' || !body.parentId.trim())) throw new ValidationError('Invalid reply parent');
+  const result = await provider.createKnowledgeComment(body.id, body.body, req.session?.sub ?? 'unknown', (body.parentId as string | null | undefined) ?? null);
   if (!result) throw new NotFoundError('document not found');
+  if (!result.ok) throw new ValidationError(result.reason);
   res.status(201).json(result);
 }));
 

@@ -391,3 +391,9 @@ GROUP BY t.id, t.name, t.cohort, t.updated_at;
 -- claims expire as failed, never silently retry non-idempotent score application.
 ALTER TABLE assessment_runs ADD COLUMN IF NOT EXISTS dispatch_payload JSONB;
 ALTER TABLE assessment_runs ADD COLUMN IF NOT EXISTS dispatch_claimed_at TIMESTAMPTZ;
+
+-- Quote replies retain their parent when it becomes a soft-delete tombstone.
+-- Existing comments remain top-level. NO ACTION never cascades parent deletion
+-- into deleting replies; whole-document cascades still delete the entire thread.
+ALTER TABLE assessment_knowledge_comments ADD COLUMN IF NOT EXISTS parent_id TEXT
+  REFERENCES assessment_knowledge_comments(id) ON DELETE NO ACTION;

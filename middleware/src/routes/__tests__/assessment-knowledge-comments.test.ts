@@ -29,6 +29,7 @@ jest.mock('../../lib/role-registry.js', () => ({
 }));
 
 import express from 'express';
+import { assessmentBroker } from '../../lib/assessment-broker.js';
 import request from '../../test-support/http.js';
 import { assessmentRouter } from '../assessment.js';
 import { errorHandler } from '../../lib/async-handler.js';
@@ -291,4 +292,39 @@ it('synced workspace pages accept durable comments and expose document/comment r
   expect(thread.body.comments.some((c: { body: string }) => c.body === 'Review this synced page')).toBe(true);
   const reactions = await request(buildApp()).get(`/api/assessment/knowledge/doc/reactions?id=${encodeURIComponent(doc)}`);
   expect(reactions.status).toBe(200);
+});
+
+
+describe('durable quote replies', () => {
+  it('persists a parent through reads and publishes it; editing cannot reparent and deleting the parent preserves replies', async () => {
+    const events: unknown[] = [];
+    const unsubscribe = assessmentBroker.subscribe(event => events.push(event));
+    try {
+      expect((await post({ id: DOC, body: 'Parent' })).status).toBe(201);
+      const parent = (await list()).body.comments.find((c: { body: string }) => c.body === 'Parent');
+      expect((await post({ id: DOC, body: 'Reply', parentId: parent.id })).status).toBe(201);
+      const reply = (await list()).body.comments.find((c: { body: string }) => c.body === 'Reply');
+      expect(reply.parent_id).toBe(parent.id);
+      expect(JSON.stringify(events)).toContain(`"parent_id":"${parent.id}"`);
+      await request(buildApp()).patch('/api/assessment/knowledge/doc/comment').send({ commentId: reply.id, body: 'Edited reply', parentId: 'kc-classify-01' });
+      await request(buildApp()).delete('/api/assessment/knowledge/doc/comment').send({ commentId: parent.id });
+      const rows = (await list()).body.comments;
+      expect(rows.find((c: { id: string }) => c.id === reply.id)).toMatchObject({ parent_id: parent.id, body: 'Edited reply' });
+      expect(rows.find((c: { id: string }) => c.id === parent.id).deleted_at).toBeTruthy();
+      expect((await post({ id: DOC, body: 'Late', parentId: parent.id })).status).toBe(400);
+    } finally { unsubscribe(); }
+  });
+  it.each(['missing-parent', 'kc-evidence-01', '', 123, {}])('uniformly rejects invalid parent %p without writes', async parentId => {
+    const before = (await list()).body.comments.length;
+    const response = await post({ id: DOC, body: 'Reply', parentId });
+    expect(response.status).toBe(400);
+    expect(response.body.error).toBe('Invalid reply parent');
+    expect((await list()).body.comments).toHaveLength(before);
+  });
+  it('legacy rows without a parent and omitted/null input remain top-level', async () => {
+    delete knowledgeCommentsFixture.rows()[0]!.parent_id;
+    expect((await list()).body.comments[0].parent_id).toBeNull();
+    await post({ id: DOC, body: 'Top level', parentId: null });
+    expect((await list()).body.comments.find((c: { body: string }) => c.body === 'Top level').parent_id).toBeNull();
+  });
 });

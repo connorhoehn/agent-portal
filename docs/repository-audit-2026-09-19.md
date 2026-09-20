@@ -189,3 +189,31 @@ and found one AWS-key-shaped test fixture match. It covered AWS IDs, PEM private
 key headers and selected GitHub/Slack/OpenAI token formats. Generic passwords,
 arbitrary secrets, untracked files and unreachable objects were outside scope.
 No claim that the repository contains no secrets follows from that scan.
+
+## Resumed checkpoint: durable comment replies
+
+The user resumed implementation after the earlier pause. Document comments now
+support durable quote replies through the installed ChatComposer, ChatPanel
+composer slot and QuoteBlock. The backend validates an existing, undeleted
+parent in the same document, under a transaction lock. Parent links cannot be
+changed by edits. Soft-deleting a parent preserves its replies and displays a
+tombstone instead of its quoted body. These are chronological quote replies;
+a nested thread view and rich document editor migration remain unfinished.
+
+The frontend retains newer edits and deletion tombstones when the bounded SSE
+feed rolls over or an older GET completes. It refreshes on comment mutations,
+reconnects and stream gaps. Failed posts retain the draft and reply target;
+failed edits reject back to the toolkit so its editor remains open.
+
+Validation: all 923 portal tests pass; 103 targeted backend tests and middleware
+typecheck pass. Mock-floor quick validation passes after an isolated capture
+witnessed nullable/string parent IDs (224 GET and 103 write routes). Browser
+observations establish seeded quote rendering and the accessible multiline
+composer only. Posting, reload, parent edit/delete and simulated failure journeys
+remain unverified because Chrome was actively in use. No new browser seal was
+applied. The wizard duplicate-rematch step was observed separately; its journey
+records the exact behavior without sealing the whole protocol.
+
+Apply the additive assessment comment parent migration before deploying this
+feature. No live migration or deployment was performed. Unrelated work-graph
+and dependency changes from a concurrent session are outside this checkpoint.

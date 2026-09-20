@@ -41,8 +41,8 @@ import { describe, fieldName, sortShape, type ShapeResult } from './shape.js';
 const QUERY_HINTS: Record<string, string> = {
   'GET /api/assessment/knowledge/doc': 'id=ec%3Astandards%2Fci-cd-standards.md',
   'GET /api/assessment/knowledge/doc/versions': 'id=ec%3Astandards%2Fci-cd-standards.md',
-  // Same id shape; the comment thread is per-document like the others.
-  'GET /api/assessment/knowledge/doc/comments': 'id=ec%3Astandards%2Fci-cd-standards.md',
+  // Use the populated thread so root/reply fields are actually witnessed.
+  'GET /api/assessment/knowledge/doc/comments': 'id=prompt%3Aclassify-transcript.md',
   'GET /api/assessment/knowledge/doc/reactions': 'id=ec%3Astandards%2Fci-cd-standards.md',
   'GET /api/graph/help': 'q=auth',
   'GET /api/scores/by-skill': 'skill=Kubernetes',

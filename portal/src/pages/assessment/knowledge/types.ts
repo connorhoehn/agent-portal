@@ -167,7 +167,9 @@ export type AssessmentSSEEvent =
   | { type: 'knowledge.pulled'; section: string; pages: number; files_pulled: number; ts: string }
   | { type: 'knowledge.published'; id: string; page_id: string; version: number; ts: string }
   | { type: 'knowledge.doc.saved'; id: string; stamp: string; by: string; ts: string }
-  | { type: 'knowledge.comment.created'; id: string; doc_id: string; by: string; body: string; ts: string }
+  | { type: 'knowledge.comment.created'; id: string; doc_id: string; by: string; body: string; parent_id?: string | null; ts: string }
+  | { type: 'knowledge.comment.edited'; id: string; doc_id: string; by: string; body: string; ts: string }
+  | { type: 'knowledge.comment.deleted'; id: string; doc_id: string; by: string; ts: string }
   | { type: 'knowledge.presence'; doc_id: string; viewers: PresenceViewer[]; ts: string }
   | { type: 'run.started'; run_id: string; command: string; team_id: string | null; ts: string }
   | { type: 'run.progress'; run_id: string; command: string; team_id: string | null; percent: number; ts: string }
