@@ -741,12 +741,16 @@ export function mockSetCommitSha(id: string, sha: string): void {
 export function mockCreateChange(input: {
   projectId: string; runId: string | null; title: string;
   diff: string; diffTruncated: boolean; files: string[]; model: string | null;
+  workItemId?: string | null;
 }): JoinedChange {
   const row: ChangeRow = {
     id: randomUUID(),
     runId: input.runId,
     projectId: input.projectId,
-    workItemId: null,
+    // Hard-coded null until the marketplace could dispatch a real governed run
+    // offline; the real path reads it off the run row at capture time and this
+    // is the same fact arriving by a route a mock can travel.
+    workItemId: input.workItemId ?? null,
     title: input.title,
     status: 'captured',
     diff: input.diff,

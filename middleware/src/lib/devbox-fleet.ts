@@ -251,6 +251,21 @@ function trustedCreatedAt(supplied: string | undefined): string {
   return t > Date.now() ? now() : new Date(t).toISOString();
 }
 
+/**
+ * A readable name for a box the fleet mints for an initiative.
+ *
+ * The seed's own convention — `auth-migration-1`, `observability-1` — and the
+ * reason the lab's rail groups at all: a dispatch used to land on
+ * `computer-6`, which sorts next to nothing and says nothing about the work it
+ * was created for. The index counts existing boxes on the same initiative, so
+ * the second computer on Auth Migration is `auth-migration-2`.
+ */
+function labelForProject(projectId: string): string {
+  const stem = projectId.replace(/^p-/, '');
+  const taken = [...boxes.values()].filter((s) => s.box.projectId === projectId).length;
+  return `${stem}-${taken + 1}`;
+}
+
 export function registerBox(opts: {
   sessionId: string; label?: string; id?: string; createdAt?: string;
   ownerId?: string; projectId?: string;
@@ -260,7 +275,7 @@ export function registerBox(opts: {
   if (existing) return existing.box;
   const box: FleetBox = {
     id,
-    label: opts.label ?? `computer-${boxes.size + 1}`,
+    label: opts.label ?? (opts.projectId ? labelForProject(opts.projectId) : `computer-${boxes.size + 1}`),
     sessionId: opts.sessionId,
     createdAt: trustedCreatedAt(opts.createdAt),
     ...(opts.ownerId ? { ownerId: opts.ownerId } : {}),

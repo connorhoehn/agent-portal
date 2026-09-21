@@ -144,15 +144,27 @@ export function ComputeHost({ children }: { children: ReactNode }) {
   const { data: orgProjects } = useFetch<OrgProject[]>(canManage ? '/api/graph/projects' : null);
 
   // Budgets ride a SEPARATE fetch rather than joining server-side, on purpose:
-  // /api/graph/projects and /api/budgets are gated differently (budgets reads
-  // are org-leader/hr-admin/ManageBudgets, not ManageDevbox), so a caller who
-  // can see the fleet may legitimately get nothing back here — the fetch just
-  // 403s, `data` stays null, and the merge below no-ops instead of the whole
-  // project list failing to load over one field it didn't have permission
-  // for anyway. Gating this fetch on canManage rather than a budgets-specific
-  // check keeps the Computer Lab's ask simple ("give me what you have"); the
-  // server, not this component, is the enforcement point.
-  const { data: budgetsRes } = useFetch<BudgetsResponse>(canManage ? '/api/budgets' : null);
+  // /api/graph/projects and /api/budgets are gated differently, so a caller
+  // who can see the fleet may legitimately have no business reading the money.
+  // The merge below no-ops when it is absent — a computer without a cost
+  // centre still renders.
+  //
+  // Asked for only where it will be answered. This used to ride `canManage`
+  // (ManageDevbox) with the reasoning that a 403 is harmless: `data` stays
+  // null and the merge no-ops. It is harmless to the render and not harmless
+  // to watch — ComputeHost is mounted above the router, so an SME (who holds
+  // ManageDevbox and not the budgets tier) fired a request that could only be
+  // refused on EVERY page, and their devtools showed a 403 everywhere they
+  // went. The condition mirrors `budgetsRouter`'s own read gate
+  // (readForRolesElseAction([...], 'ManageBudgets')), the same way
+  // pages/projects/SprintsLens.tsx spells that tier out for `scope=all`. The
+  // server is still the enforcement point; this only decides whether asking
+  // is worth anyone's time.
+  const role = session?.role;
+  const canReadBudgets = ready && (can('ManageBudgets')
+    || role === 'org-leader' || role === 'hr-admin' || role === 'program-owner' || role === 'admin');
+  const { data: budgetsRes } = useFetch<BudgetsResponse>(
+    canManage && canReadBudgets ? '/api/budgets' : null);
   const budgetsById = useMemo(() => {
     const m = new Map<string, BudgetRow>();
     for (const b of budgetsRes?.budgets ?? []) m.set(b.orgProjectId, b);

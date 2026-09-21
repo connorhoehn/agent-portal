@@ -36,6 +36,8 @@ export interface ProjectRunSeed {
   diffSummary: string | null;
   error: string | null;
   costUsd: number | null;
+  /** The marketplace work item this run answers, when a dispatch bound one. */
+  workItemId?: string | null;
 }
 
 /** The wire shape both routes return — `durationMs` computed, everything else carried. */
@@ -210,7 +212,7 @@ export function mockRecentRunsForProjects(
  * `finishRun` — so a run in flight has no duration rather than a zero.
  */
 export function mockStartRun(input: {
-  projectId: string; prompt: string; model?: string | null;
+  projectId: string; prompt: string; model?: string | null; workItemId?: string | null;
 }): ProjectRunRow {
   const seed: ProjectRunSeed = {
     id: randomUUID(),
@@ -224,6 +226,7 @@ export function mockStartRun(input: {
     diffSummary: null,
     error: null,
     costUsd: null,
+    ...(input.workItemId ? { workItemId: input.workItemId } : {}),
   };
   agentProjectRuns.rows().push(seed);
   return toRow(seed);

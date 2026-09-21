@@ -45,6 +45,18 @@ export function runMockShell(sessionId: string, wrapped: string): string {
   const cmd = unwrapProbe(wrapped);
   const ws = workspaceFor(sessionId);
 
+  // The clone, which is how a workspace comes into existence on BOTH paths.
+  // Without it `ensureWorkspace` (lib/bot-runner.ts) fell through to the
+  // unsupported-command `fatal:` below and every marketplace dispatch 503'd
+  // with "clone failed" offline — the run never started, so nothing downstream
+  // of it could be exercised either. The command ends in a `git log --oneline
+  // -1` verify (providers/agent-projects.ts::buildCloneCommand), so that one
+  // line is what a successful clone streams back; anything matching
+  // CLONE_FAILURE here would be read as a broken checkout.
+  if (/git clone /.test(cmd)) {
+    return `${ws.commits[0]!.slice(0, 7)} Initial import\n`;
+  }
+
   const catFile = /cat-file -e ([0-9a-f]{40})/.exec(cmd);
   if (catFile) return hasCommit(sessionId, catFile[1]!) ? '__OK__\n' : '__MISSING__\n';
 
@@ -107,9 +119,29 @@ async function* shellStream(out: string): AsyncGenerator<{ chunk: { contentDelta
   yield { chunk: { contentDelta: { stdout: out } } };
 }
 
+/**
+ * Milliseconds between a mock run's events.
+ *
+ * `MOCK_DEVBOX_PACE_MS` overrides; default 900ms in development and 0 under
+ * jest so the suites stay instant. A real devbox task takes a minute or two,
+ * and yielding every event in one tick made a run begin and end inside the
+ * same event-loop turn — so a computer in the lab never *showed* as running,
+ * it simply had a finished run attached to it. The pace is per event, so the
+ * five-ish events of a typical work product run for a few seconds.
+ */
+function devboxPaceMs(): number {
+  const raw = process.env['MOCK_DEVBOX_PACE_MS'];
+  if (raw !== undefined && raw !== '') return Math.max(0, Number(raw) || 0);
+  return process.env['NODE_ENV'] === 'test' ? 0 : 900;
+}
+
 async function* taskStream(lines: string[]): AsyncGenerator<Uint8Array> {
   const enc = new TextEncoder();
-  for (const line of lines) yield enc.encode(line);
+  const pace = devboxPaceMs();
+  for (const line of lines) {
+    if (pace > 0) await new Promise<void>((r) => { const t = setTimeout(r, pace); t.unref?.(); });
+    yield enc.encode(line);
+  }
 }
 
 /**

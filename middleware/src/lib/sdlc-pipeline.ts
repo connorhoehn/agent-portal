@@ -37,6 +37,8 @@ export interface CaptureInput {
   runId?: string | null;
   prompt: string;
   model?: string | null;
+  /** The marketplace work item this run answers, when a dispatch bound one. */
+  workItemId?: string | null;
 }
 
 /**
@@ -50,6 +52,13 @@ export interface CaptureInput {
  */
 export async function dispatchGovernedRun(input: {
   project: AgentProject; prompt: string; model?: string | null; sessionId: string;
+  /** The work item this run answers — carried onto the run row and the change
+   *  it captures, so the review queue names the issue that asked for it. */
+  workItemId?: string | null;
+  /** Who the computer belongs to and which initiative it is charged to, for a
+   *  box this dispatch has to mint. See ensureWorkspace in lib/bot-runner.ts:
+   *  an unattributed box is invisible to the SME who created it. */
+  attribution?: { ownerId?: string | undefined; projectId?: string | undefined };
 }): Promise<{ ok: true; runId: string; checkout: string } | { ok: false; error: string }> {
   const arn = await resolveDevboxArn();
   if (!arn) return { ok: false, error: 'the devbox runtime is not deployed' };
@@ -57,9 +66,27 @@ export async function dispatchGovernedRun(input: {
   const run = await startRun({
     projectId: input.project.id, prompt: input.prompt,
     model: input.model ?? null, sessionId: input.sessionId,
+    ...(input.workItemId ? { workItemId: input.workItemId } : {}),
   });
   const checkout = checkoutPath(input.project);
-  const box = getBoxBySession(input.sessionId) ?? registerBox({ sessionId: input.sessionId });
+  const box = getBoxBySession(input.sessionId) ?? registerBox({
+    sessionId: input.sessionId,
+    ...(input.attribution?.ownerId ? { ownerId: input.attribution.ownerId } : {}),
+    ...(input.attribution?.projectId ? { projectId: input.attribution.projectId } : {}),
+  });
+
+  // Tell the fleet what this computer is doing, now rather than when the
+  // runtime's first event happens to arrive. `appendEvent` reads `task_started`
+  // as "this box is running THIS task" (lib/devbox-fleet.ts) and nothing on
+  // this path emitted one — the runtime streams `assistant`/`result`, not a
+  // kickoff — so a box that had just been handed work still rendered idle with
+  // no current task, which is the one thing Computer Lab exists to show.
+  appendEvent(box.id, {
+    type: 'task_started',
+    prompt: input.prompt,
+    ...(input.model ? { model: input.model } : {}),
+    ts: new Date().toISOString(),
+  });
 
   void executeProjectRun({
     runId: run.id,
@@ -75,6 +102,7 @@ export async function dispatchGovernedRun(input: {
         client: devboxDataClient(), runtimeArn: arn, sessionId: input.sessionId,
         checkout, projectId: input.project.id, runId: run.id,
         prompt: input.prompt, model: input.model ?? null,
+        ...(input.workItemId ? { workItemId: input.workItemId } : {}),
       }).catch((err) => console.warn('[sdlc] capture failed:', (err as Error).message));
     },
   });
@@ -176,6 +204,7 @@ export async function captureAndGate(input: CaptureInput): Promise<string | null
     diff: captured.diff,
     files: captured.files,
     model: input.model ?? null,
+    ...(input.workItemId ? { workItemId: input.workItemId } : {}),
   });
   console.warn(`[sdlc] captured change ${change.id} (${captured.files.length} file(s)) for project ${input.projectId}`);
 

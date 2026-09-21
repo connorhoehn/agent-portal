@@ -306,22 +306,34 @@ export async function markCloned(id: string, sessionId: string): Promise<void> {
 
 export async function startRun(input: {
   projectId: string; prompt: string; model?: string | null; sessionId?: string | null;
+  /**
+   * The work item this run is answering, when a marketplace dispatch started
+   * it. First-class rather than the `UPDATE ... SET work_item_id` that used to
+   * follow the insert: that write was raw SQL guarded by `!config.mock.aurora`,
+   * so offline the binding simply did not happen and every captured change
+   * came back detached from the issue that asked for it.
+   */
+  workItemId?: string | null;
 }): Promise<ProjectRun> {
   // The run rows render offline (mockRunsForProject) but could not be *made*
   // offline, so the portal's run button 500'd here on a laptop. The mock row
   // starts `running` with a clock stamp and no duration — the same state the
   // table's defaults produce — and `finishRun` below closes it.
   if (config.mock.aurora) {
-    return mockStartRun({ projectId: input.projectId, prompt: input.prompt, model: input.model ?? null });
+    return mockStartRun({
+      projectId: input.projectId, prompt: input.prompt, model: input.model ?? null,
+      ...(input.workItemId ? { workItemId: input.workItemId } : {}),
+    });
   }
   const id = randomUUID();
   const rows = await exec(
-    `INSERT INTO agent_project_runs (id, project_id, prompt, model, session_id)
-     VALUES (:id::uuid, :pid::uuid, :prompt, :model, :sid)
+    `INSERT INTO agent_project_runs (id, project_id, prompt, model, session_id, work_item_id)
+     VALUES (:id::uuid, :pid::uuid, :prompt, :model, :sid, :wid)
      RETURNING *`,
     [
       s('id', id), s('pid', input.projectId), s('prompt', input.prompt),
       maybe('model', input.model ?? null), maybe('sid', input.sessionId ?? null),
+      maybe('wid', input.workItemId ?? null),
     ],
   );
   const row = rows[0];

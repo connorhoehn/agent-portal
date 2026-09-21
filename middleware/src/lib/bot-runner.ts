@@ -786,7 +786,19 @@ export type FireResult =
  * a workspace wipe) leaves session ids that point at nothing. Bots re-clone on
  * demand rather than assume, the same posture Codebases takes.
  */
-async function ensureWorkspace(project: AgentProject): Promise<
+async function ensureWorkspace(
+  project: AgentProject,
+  /**
+   * Who the computer belongs to and which initiative it is charged to.
+   *
+   * Without it every dispatch registered an UNATTRIBUTED box — no owner, no
+   * initiative — and `lib/devbox-visibility.ts` shows those to org-wide roles
+   * only. So an SME dispatched work, the run started, and the computer it ran
+   * on was invisible in their own Computer Lab: the fleet's central surface
+   * silently omitted the thing the dispatch had just created.
+   */
+  attribution?: { ownerId?: string | undefined; projectId?: string | undefined },
+): Promise<
   { ok: true; sessionId: string; boxId: string } | { ok: false; error: string }
 > {
   const existing = project.sessionId ? getBoxBySession(project.sessionId) : null;
@@ -816,7 +828,11 @@ async function ensureWorkspace(project: AgentProject): Promise<
   // leave a live-looking fleet entry for a workspace with no checkout, and the
   // sessionId+registry check at the top would then trust it on the next fire —
   // a failed clone poisoning every later dispatch.
-  const box = registerBox({ sessionId });
+  const box = registerBox({
+    sessionId,
+    ...(attribution?.ownerId ? { ownerId: attribution.ownerId } : {}),
+    ...(attribution?.projectId ? { projectId: attribution.projectId } : {}),
+  });
   await markCloned(project.id, sessionId);
   return { ok: true, sessionId, boxId: box.id };
 }
@@ -938,7 +954,10 @@ export async function fireBot(botId: string, opts: {
     const project = await getAgentProject(bot.agentProjectId);
     if (!project) return { ok: false, reason: 'the bot\'s target codebase no longer exists' };
 
-    const ws = await ensureWorkspace(project);
+    const ws = await ensureWorkspace(project, {
+      projectId: bot.orgProjectId ?? project.orgProjectId ?? undefined,
+      ownerId: opts.dispatchedBy ?? bot.createdBy ?? undefined,
+    });
     if (!ws.ok) {
       const run = await createBotRun({
         botId: bot.id, trigger: opts.trigger, status: 'failed',
@@ -1061,7 +1080,12 @@ export function renderWorkItemPrompt(
   const preamble = item.storyPoints != null
     ? `Work item ${item.id} (${item.type}, ${item.storyPoints} pts)`
     : `Work item ${item.id} (${item.type})`;
-  const parts = [`${preamble}\n${item.title}`];
+  // Title FIRST, identifier under it. `lib/sdlc-pipeline.ts::titleFrom` names a
+  // captured change after the prompt's first line, so the other order filled
+  // the review queue with rows called "Work item wi-auth-e2-b3 (bug, 2 pts)" —
+  // the bookkeeping, never the work. Same for the fleet's `currentTask`, which
+  // is the line an operator reads off a computer in the lab.
+  const parts = [`${item.title}\n${preamble}`];
   if (item.description) parts.push(item.description);
   if (item.labels.length > 0) parts.push(`Labels: ${item.labels.join(', ')}`);
   if (instruction) parts.push(`For this run specifically: ${instruction}`);
@@ -1186,11 +1210,21 @@ export async function dispatchWorkItem(input: {
 
   const prompt = renderWorkItemPrompt(item, input.instruction);
 
-  // Offline, everything below this line needs a deployed devbox runtime, so
-  // the queue stands in for the workspace — see simulateMarketplaceDispatch.
-  // Deliberately AFTER the claim: the compare-and-swap above is the only thing
-  // stopping two dispatches working one item, and it must hold offline too.
-  if (config.mock.aurora) {
+  // The shallow simulation is for having NO DEVBOX RUNTIME, which is a
+  // different question from whether Aurora is mocked — and asking the wrong
+  // one cost the whole governed beat offline. `dev:mock` resolves a mock
+  // runtime ARN and `mock/devbox-shell.ts` answers it (that is the entire
+  // reason those exist), so a marketplace dispatch there CAN check out a
+  // workspace, capture a real diff and reach the review gate — exactly as a
+  // repo-target bot already did through the same fake microVM. Branching on
+  // `config.mock.aurora` skipped all of it and handed back a run that had
+  // changed nothing, so offline the marketplace was the one dispatch path
+  // that never exercised governance.
+  //
+  // Deliberately AFTER the claim: the compare-and-swap above is the only
+  // thing stopping two dispatches working one item, and it must hold in both
+  // worlds.
+  if (!await resolveDevboxArn()) {
     return simulateMarketplaceDispatch({
       item, project, prompt, model: input.model, revertClaim,
       ...(input.actor ? { actor: input.actor } : {}),
@@ -1198,25 +1232,22 @@ export async function dispatchWorkItem(input: {
     });
   }
 
-  const ws = await ensureWorkspace(project);
+  const ws = await ensureWorkspace(project, {
+    projectId: item.projectId, ...(input.actor ? { ownerId: input.actor } : {}),
+  });
   if (!ws.ok) { await revertClaim(); return { ok: false, status: 503, error: ws.error }; }
 
+  // The work item rides the dispatch rather than being stitched on afterwards.
+  // It used to be a raw `UPDATE agent_project_runs SET work_item_id` here,
+  // guarded by `!config.mock.aurora` — so the binding existed only against
+  // real Aurora, and every offline capture came back detached from the issue
+  // that asked for it. startRun writes the column now, in both worlds.
   const started = await dispatchGovernedRun({
     project, prompt, model: input.model, sessionId: ws.sessionId,
+    workItemId: item.id,
+    attribution: { projectId: item.projectId, ...(input.actor ? { ownerId: input.actor } : {}) },
   });
   if (!started.ok) { await revertClaim(); return { ok: false, status: 503, error: started.error }; }
-
-  // Bind the governed run to its work item. Direct SQL on purpose — the
-  // sdlc-pipeline API takes no work-item concept and stays that way; the
-  // column was added by agent_bots_schema.sql for exactly this write.
-  // (No mock branch above this point creates a real agent_project_runs row,
-  // so there is nothing to bind in mock mode — skip rather than crash.)
-  if (!config.mock.aurora) {
-    await exec(
-      `UPDATE agent_project_runs SET work_item_id = :wid WHERE id = :rid::uuid`,
-      [s('wid', item.id), s('rid', started.runId)],
-    );
-  }
 
   const run = await createBotRun({
     botId: null, trigger: 'marketplace', runId: started.runId, workItemId: item.id,

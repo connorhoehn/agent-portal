@@ -216,6 +216,9 @@ function rowToChange(r: Record<string, unknown>): ChangeRequest {
 export async function createChangeRequest(input: {
   projectId: string; runId?: string | null; title: string;
   diff: string; files: string[]; model?: string | null;
+  /** The work item behind the run, when the caller knows it. Real Aurora can
+   *  read it back off the run row; the offline store has no subquery. */
+  workItemId?: string | null;
 }): Promise<ChangeRequest> {
   const truncated = input.diff.length > MAX_DIFF_CHARS;
   const diff = truncated ? input.diff.slice(0, MAX_DIFF_CHARS) : input.diff;
@@ -224,6 +227,7 @@ export async function createChangeRequest(input: {
     return joinedToChange(mockCreateChange({
       projectId: input.projectId, runId: input.runId ?? null, title,
       diff, diffTruncated: truncated, files: input.files, model: input.model ?? null,
+      ...(input.workItemId ? { workItemId: input.workItemId } : {}),
     }));
   }
   // work_item_id is copied from the run at capture time, so the change carries
