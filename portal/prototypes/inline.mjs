@@ -17,7 +17,7 @@ import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const outDir = resolve(process.argv[2] ?? join(here, 'build'));
+const outDir = resolve(process.argv[2] ?? join(here, 'active-now', 'build'));
 const htmlPath = join(outDir, 'index.html');
 if (!existsSync(htmlPath)) {
   console.error(`No build at ${htmlPath} — run the build first.`);

@@ -1,0 +1,39 @@
+/* Work activity remains legible on plain surfaces. Motion marks specific states. */
+.social-active-people{padding:8px 5px 12px}
+.attention-enabled [data-testid="rail-active-now-person-connor"]>span:first-child:before{content:'';position:absolute;inset:-5px;border:1px solid #8b9df8;border-radius:50%;box-shadow:0 0 0 3px #ccd6ff66;animation:avatar-breathe 2.8s ease-out infinite;pointer-events:none}
+@keyframes avatar-breathe{0%,100%{transform:scale(.95);opacity:.35}55%{transform:scale(1.08);opacity:.9}}
+
+/* Subtle star particles are confined to the existing chat input. */
+.composer-effect{position:relative;isolation:isolate}
+.composer-stars{position:absolute;inset:0;border-radius:8px;overflow:hidden;pointer-events:none!important;z-index:2;--attention-star:#7989e9;opacity:.65;mask-image:radial-gradient(ellipse at center,transparent 43%,#000 100%)}
+.composer-stars svg{display:block;overflow:hidden}
+.attention-disabled .composer-stars{display:none}
+
+/* Three drifting box-shadow layers give the pipeline canvas its own sky. */
+.graph{background:radial-gradient(ellipse at bottom,#fff 0%,#f4f6fb 100%)}
+.pipeline-starfield{position:absolute;inset:0;z-index:0;overflow:hidden;pointer-events:none}
+.graph>.react-flow{z-index:1}
+.pipeline-star-layer{position:absolute;top:0;left:0;width:1px;height:1px;background:transparent;animation:pipeline-stars 70s linear infinite}
+.pipeline-star-layer:after{content:'';position:absolute;top:1200px;left:0;width:inherit;height:inherit;box-shadow:inherit}
+.pipeline-star-layer.medium{width:2px;height:2px;animation-duration:110s}
+.pipeline-star-layer.large{width:3px;height:3px;animation-duration:160s}
+.attention-disabled .pipeline-starfield{display:none}
+@keyframes pipeline-stars{from{transform:translateY(0)}to{transform:translateY(-1200px)}}
+
+/* Falling stems and splats stay inside the failed node's white face. */
+.failed-generation-node{position:relative;isolation:isolate}
+.failed-generation-node [data-pipeline-node]{background:#fff!important;border-color:#d96877;box-shadow:0 0 0 1px #d9687744!important}
+.node-rain{position:absolute;inset:0 0 auto;width:200px;height:72px;overflow:hidden;border-radius:8px;pointer-events:none;z-index:4}
+.rain-row{position:absolute;inset:0;overflow:hidden}
+.rain-row.back-row{opacity:.52}
+.rain-drop{position:absolute;top:-28px;width:12px;height:30px;animation:node-rain-drop 1s linear infinite}
+.rain-stem{display:block;width:2px;height:19px;margin-left:5px;border-radius:2px;background:linear-gradient(to bottom,#7794ba00,#4c6f9fc9)}
+.rain-splat{display:block;width:12px;height:5px;margin-top:2px;border-top:2px dotted #6484ae;border-radius:50%;opacity:0;animation:node-rain-splat 1s linear infinite;animation-delay:inherit;animation-duration:inherit}
+.back-row .rain-stem{height:14px;width:1px;background:linear-gradient(to bottom,#9fb4ce00,#829cbd99)}
+.attention-disabled .node-rain{display:none}
+@keyframes node-rain-drop{0%{translate:0 0;opacity:0}10%{opacity:1}75%{translate:-7px 76px;opacity:1}100%{translate:-9px 79px;opacity:0}}
+@keyframes node-rain-splat{0%,76%{transform:scale(0);opacity:0}82%{transform:scale(.7);opacity:.9}100%{transform:scale(1.25);opacity:0}}
+
+/* Non-running source nodes retain invisible React Flow handles for edges. */
+.activity-main .context-node .react-flow__handle,.activity-main .input-node .react-flow__handle{opacity:0;pointer-events:none}
+@media(prefers-reduced-motion:reduce){.attention-enabled [data-testid="rail-active-now-person-connor"]>span:first-child:before{animation:none!important}.pipeline-star-layer{animation:none!important}.node-rain{display:none}}

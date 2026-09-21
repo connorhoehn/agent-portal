@@ -6,7 +6,7 @@
 // product could not reproduce.
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import '../src/app.css';
+import '../../src/app.css';
 import { ComputerLabChat } from './ComputerLabChat';
 
 createRoot(document.getElementById('root')!).render(

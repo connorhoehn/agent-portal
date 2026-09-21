@@ -14,24 +14,34 @@
 // `npm run typecheck` or `npm run build`. That is deliberate: a prototype is a
 // sketch to argue with, and it should never be able to break the app's gates.
 //
-//   npm run prototype          # dev server on :5190
-//   npm run prototype:build    # one self-contained .html in prototypes/build
+// One directory per prototype under `prototypes/`, picked by name:
+//
+//   npm run prototype                          # active-now on :5190
+//   PROTOTYPE=computer-lab-chat npm run prototype
+//   npm run prototype:build                    # → prototypes/<name>/build/index.html
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { resolve } from 'node:path';
 
+const name = process.env['PROTOTYPE'] ?? 'active-now';
+
 export default defineConfig({
-  root: resolve(import.meta.dirname, 'prototypes'),
+  root: resolve(import.meta.dirname, 'prototypes', name),
   // Its own cache, so switching between the app and a prototype does not make
   // each one re-optimize the other's dependency graph.
   cacheDir: resolve(import.meta.dirname, 'node_modules/.vite-prototypes'),
   plugins: [react(), tailwindcss()],
-  // The library and the app must agree on one React, or hooks throw.
-  resolve: { dedupe: ['react', 'react-dom', '@xyflow/react'] },
+  resolve: {
+    // The library and the app must agree on one React, or hooks throw.
+    dedupe: ['react', 'react-dom', '@xyflow/react'],
+    // A peer the app does not install because it never mounts the rich
+    // composer; prototypes do. See prototypes/shims/tiptap-extension-mention.ts.
+    alias: { '@tiptap/extension-mention': resolve(import.meta.dirname, 'prototypes/shims/tiptap-extension-mention.ts') },
+  },
   server: { host: '127.0.0.1', port: 5190, strictPort: true },
   build: {
-    outDir: resolve(import.meta.dirname, 'prototypes/build'),
+    outDir: resolve(import.meta.dirname, 'prototypes', name, 'build'),
     emptyOutDir: true,
     // Inline every asset, so `inline.mjs` only has to fold in the entry chunk
     // and the stylesheet to leave one file somebody can open or send.

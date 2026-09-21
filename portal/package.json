@@ -9,7 +9,7 @@
     "test": "node --test 'src/**/__tests__/*.test.ts' 'src/**/__tests__/*.test.tsx'",
     "typecheck": "tsc --noEmit",
     "prototype": "vite --config vite.prototype.config.ts",
-    "prototype:build": "vite build --config vite.prototype.config.ts && node prototypes/inline.mjs"
+    "prototype:build": "vite build --config vite.prototype.config.ts && node prototypes/inline.mjs \"prototypes/${PROTOTYPE:-active-now}/build\""
   },
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
