@@ -11,3 +11,7 @@ e2e-shots/
 playwright-report/
 # Recorded demo takes (playwright.demo.config.ts) — multi-megabyte video per run
 e2e-demo/
+# Throwaway UI-discovery specs (.claude/skills/demo-recording). Reserved prefix
+# so a leftover probe can never ship, and so playwright.config.ts picking it up
+# costs nothing.
+e2e/zz-*.spec.ts
