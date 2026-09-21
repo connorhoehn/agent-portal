@@ -63,6 +63,10 @@ function isFutureTimestamp(value: string, now: number): boolean {
   return Number.isFinite(time) && time > now;
 }
 
+function resourceKey(resource: ComputeCapabilityResource): string {
+  return `${resource.source}:${resource.resourceId}`;
+}
+
 /**
  * An in-process session registry deliberately holds no bearer token. Platform
  * and gateway retain their own authenticated collaboration session; this store
@@ -79,6 +83,15 @@ export function createComputeCapabilitySessions(options: {
   const sessions = new Map<string, ComputeCapabilitySession>();
   const listeners = new Map<string, Set<(session: ComputeCapabilitySession) => void>>();
   const timers = new Map<string, ReturnType<typeof setTimeout>>();
+  // Explicit, source-owned shares: viewers a durable owner has named for a
+  // resource, independent of any work-graph sharing grant. This is what lets
+  // authorizeDisclosure() answer 'details' for a non-owner honestly — the
+  // grant alone only says the OWNER wants to share; this is the SOURCE
+  // confirming the named viewer is real. Deliberately NOT populated from
+  // request input (a caller cannot grant itself access by asserting it), only
+  // from `share()`, called by durable-owner-authenticated callers (the portal,
+  // or — locally — the dev-only fixtures route).
+  const explicitShares = new Map<string, Set<string>>();
   const now = options.now ?? Date.now;
   const newId = options.newId ?? randomUUID;
   const maxTtlMs = Math.max(1_000, Math.min(options.maxTtlMs ?? 5 * 60_000, 30 * 60_000));
@@ -151,7 +164,13 @@ export function createComputeCapabilitySessions(options: {
       const target = await options.sources.resolve(input.resource);
       if (!target) return { allowed: false, reason: 'source-missing', directAccess: false, capabilities: [] };
       if (target.ownerId !== input.personId) return { allowed: false, reason: 'owner-mismatch', directAccess: false, capabilities: [] };
-      const directAccess = input.viewerId === input.personId;
+      // Direct access is the owner, or a viewer the owner has explicitly
+      // named for this exact resource — never inferred from the request
+      // alone. A viewer with neither fails closed to `directAccess: false`
+      // (capped at 'summary' upstream), the same as before this existed; a
+      // resource nobody resolved already returned above.
+      const directAccess = input.viewerId === input.personId
+        || (explicitShares.get(resourceKey(input.resource))?.has(input.viewerId) ?? false);
       return {
         allowed: true,
         directAccess,
@@ -218,6 +237,21 @@ export function createComputeCapabilitySessions(options: {
     close(sessionId: string): ComputeCapabilitySession | null {
       const session = sessions.get(sessionId);
       return session ? end(session, 'closed') : null;
+    },
+
+    /**
+     * Names a viewer as an explicit, source-owned collaborator on a resource,
+     * so authorizeDisclosure() can honestly answer 'details' for them instead
+     * of capping every non-owner at 'summary'. Idempotent (a Set). Does not
+     * touch — and is never consulted by — open()/use(), which decide
+     * observe/control capability from durable ownership alone; a share here
+     * only ever widens DISCLOSURE, never collaboration capability.
+     */
+    share(resource: ComputeCapabilityResource, viewerId: string): void {
+      const key = resourceKey(resource);
+      const existing = explicitShares.get(key);
+      if (existing) existing.add(viewerId);
+      else explicitShares.set(key, new Set([viewerId]));
     },
 
     invalidateByRevocationKey(source: ComputeCapabilitySource, key: string): number {

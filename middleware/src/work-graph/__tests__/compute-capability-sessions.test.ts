@@ -68,6 +68,55 @@ describe('source-owned compute capability sessions', () => {
     expect(sessions._sessionsForTest()).toHaveLength(0);
   });
 
+  describe('explicit shares (owner / shared-viewer / stranger)', () => {
+    it('grants directAccess to the durable owner without any share', async () => {
+      const { sessions } = fixture();
+      await expect(sessions.authorizeDisclosure({
+        organizationId: 'org-1', viewerId: 'person-1', personId: 'person-1', resource,
+      })).resolves.toEqual({ allowed: true, directAccess: true, capabilities: ['observe-terminal', 'control-terminal'] });
+    });
+
+    it('grants directAccess to a viewer the owner has explicitly shared the resource with', async () => {
+      const { sessions } = fixture();
+      sessions.share(resource, 'person-2');
+      await expect(sessions.authorizeDisclosure({
+        organizationId: 'org-1', viewerId: 'person-2', personId: 'person-1', resource,
+      })).resolves.toEqual({ allowed: true, directAccess: true, capabilities: ['observe-terminal', 'control-terminal'] });
+    });
+
+    it('still fails closed to directAccess: false for a stranger with no share', async () => {
+      const { sessions } = fixture();
+      sessions.share(resource, 'person-2');
+      await expect(sessions.authorizeDisclosure({
+        organizationId: 'org-1', viewerId: 'person-3', personId: 'person-1', resource,
+      })).resolves.toEqual({ allowed: true, directAccess: false, capabilities: ['observe-terminal', 'control-terminal'] });
+    });
+
+    it('a disclosure share never makes the shared viewer the resource owner for open()/use()', async () => {
+      const { sessions } = fixture();
+      sessions.share(resource, 'person-2');
+      // A share widens DISCLOSURE only. It must not let the shared viewer
+      // open a capability session by claiming ownership themselves — that
+      // still requires being the durable source owner, exactly as before.
+      await expect(sessions.open(openInput({ viewerId: 'person-2', personId: 'person-2' })))
+        .resolves.toEqual({ allowed: false, reason: 'owner-mismatch' });
+    });
+
+    it('is scoped per resource, not global to the viewer', async () => {
+      const otherResource: ComputeCapabilityResource = { source: 'cloud-compute', resourceId: 'box:box-2' };
+      const resolve = jest.fn(async (input: ComputeCapabilityResource) => (
+        input.resourceId === resource.resourceId ? target() : target({ resource: otherResource })
+      ));
+      const { sessions } = fixture({ resolve });
+      sessions.share(resource, 'person-2');
+      // Shared on `resource` only — the same viewer gets no direct access on
+      // a second, unrelated box the owner never named them on.
+      await expect(sessions.authorizeDisclosure({
+        organizationId: 'org-1', viewerId: 'person-2', personId: 'person-1', resource: otherResource,
+      })).resolves.toEqual({ allowed: true, directAccess: false, capabilities: ['observe-terminal', 'control-terminal'] });
+    });
+  });
+
   it('caps source-side expiry and actively notifies when durable ownership changes', async () => {
     const { sessions, setTarget } = fixture();
     const opened = await sessions.open(openInput());

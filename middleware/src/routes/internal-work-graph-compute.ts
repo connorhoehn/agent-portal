@@ -216,15 +216,17 @@ internalWorkGraphComputeRouter.get('/events/:sessionId', asyncHandler(async (req
 }));
 
 function fixtureBoxBody(value: unknown): value is {
-  id: string; ownerId: string; sessionId?: string; label?: string; projectId?: string;
+  id: string; ownerId: string; sessionId?: string; label?: string; projectId?: string; sharedWith?: string[];
 } {
   return record(value)
-    && Object.keys(value).every((key) => ['id', 'ownerId', 'sessionId', 'label', 'projectId'].includes(key))
+    && Object.keys(value).every((key) => ['id', 'ownerId', 'sessionId', 'label', 'projectId', 'sharedWith'].includes(key))
     && typeof value.id === 'string' && FIXTURE_ID.test(value.id)
     && typeof value.ownerId === 'string' && FIXTURE_ID.test(value.ownerId)
     && (value.sessionId === undefined || (typeof value.sessionId === 'string' && value.sessionId.length > 0))
     && (value.label === undefined || typeof value.label === 'string')
-    && (value.projectId === undefined || (typeof value.projectId === 'string' && FIXTURE_ID.test(value.projectId)));
+    && (value.projectId === undefined || (typeof value.projectId === 'string' && FIXTURE_ID.test(value.projectId)))
+    && (value.sharedWith === undefined || (Array.isArray(value.sharedWith)
+      && value.sharedWith.every((viewerId) => typeof viewerId === 'string' && FIXTURE_ID.test(viewerId))));
 }
 
 /**
@@ -243,7 +245,14 @@ function fixtureBoxBody(value: unknown): value is {
  * source-owned callbacks above are — a signed service-auth envelope, not an
  * open door. It is never mounted in production and grants no capability by
  * itself; `/authorize`/`/open` still make their own decision from whatever
- * this seeds.
+ * this seeds. `sharedWith` (optional) is the same idea one level up: it
+ * names viewers as explicit, source-owned collaborators via
+ * computeCapabilitySessions.share() (compute-capability-sessions.ts), the
+ * durable-owner-authenticated seam that authorizeDisclosure() consults so a
+ * genuinely shared viewer gets 'details' instead of every non-owner being
+ * capped at 'summary'. Registered under the exact resourceId shape
+ * platform-api sends (`box:<id>`) — see sourceOwnedResourceId in
+ * platform-api's runtime.ts.
  */
 internalWorkGraphComputeRouter.post('/fixtures/register-box', asyncHandler(async (req, res) => {
   if (process.env['NODE_ENV'] === 'production') { res.status(404).end(); return; }
@@ -269,5 +278,8 @@ internalWorkGraphComputeRouter.post('/fixtures/register-box', asyncHandler(async
     ...(req.body.projectId ? { projectId: req.body.projectId } : {}),
     ...(req.body.label ? { label: req.body.label } : {}),
   });
+  for (const viewerId of req.body.sharedWith ?? []) {
+    computeCapabilitySessions.share({ source: 'cloud-compute', resourceId: `box:${box.id}` }, viewerId);
+  }
   res.status(200).json({ box });
 }));
