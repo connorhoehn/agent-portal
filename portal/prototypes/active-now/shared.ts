@@ -18,7 +18,7 @@ export {
   BaseNode, AgentNode, ServerStepNode, AnimatedEdge, PipelineNodeRuntimeProvider, portCls,
 } from '@connorhoehnslalom/ui-components/pipelines';
 export {
-  ComputeProvider, ComputerLab, ShellTerminal, fixtureComputers, fixtureModels, fixtureRuntimeStatus,
-  installMockShellSocket, installMockTailSource, mockShellUrl, mockTailUrl,
+  ComputeProvider, ComputerLab, ShellTerminal, TailPane, PaneStatusLine, fixtureComputers, fixtureModels,
+  fixtureRuntimeStatus, fixtureWorkspace, installMockShellSocket, installMockTailSource, mockShellUrl, mockTailUrl,
 } from '@connorhoehnslalom/ui-components/compute';
 export type { ComputeClient } from '@connorhoehnslalom/ui-components/compute';

@@ -14,7 +14,7 @@ export const periods={
 const groupOf={w1:'story1',t1:'story1',a1:'story1',b1:'story1',w2:'story2',t2:'story2',a2:'story2',b2:'story2',chat:'chat',meeting:'meeting',transcript:'meeting',doc:'document',deckagent:'presentation',deck:'presentation',workitem:'background',background:'background'};
 const groups={
  presentation:{title:'SPRINT REVIEW',detail:'Sources → presentation',order:105},
- background:{title:'ALSO RUNNING',detail:'Cloud project · Coverage checks',order:104},
+ background:{title:'ALSO RUNNING',detail:'Cloud terminal · Flaky test triage',order:104},
  document:{title:'09:08 — DOCUMENT UPDATE',detail:'Release plan · revision 6',order:68},
  meeting:{title:'08:30–09:00 — PLANNING SYNC',detail:'Shared meeting and transcript',order:60},
  chat:{title:'08:28 — ENGINEERING CHAT',detail:'Release discussion',order:28,start:28},
@@ -58,7 +58,7 @@ export function projectWindow(allNodes,allEdges,range,viewport={width:1200,heigh
  for(const {group,width,height,placed,x,y,collapsed,sourceCount,mode} of packed.layouts){
   const g=metadata[group],live=range.end===NOW&&concurrent.includes(group);let title=g.title,detail=g.detail;
   if(group==='presentation'){title='Sprint review';detail=range.end>=103?'v3 generating · v2 available':range.end>=98?'v2 ready':range.end>=87?'First draft ready':'Creating first draft';}
-  if(group==='background'){title='Coverage checks';detail='Gateway · Cloud project';}
+  if(group==='background'){title='Flaky test triage';detail='Gateway · AgentCore microVM';}
   result.push({id:`frame-${group}`,type:'activityFrame',position:{x,y},style:{width,height},zIndex:-1,
    data:{group,title,sub:detail,live,width,height,collapsed,sourceCount,focused:options.focusGroup===group},selectable:false,draggable:false,focusable:false});
   for(const item of placed)result.push({...item.node,className:emphasisFor(item.node,allEdges,nodeMap),position:{x:x+item.x,y:y+item.y}});

@@ -14,8 +14,8 @@ export const nodes=[
  node('doc',{title:'Project documents',icon:'▤',category:'source',text:'Release plan · rev 6 · 09:08',compact:true,role:'context'}),
  node('deckagent',{prompt:'Generate presentation',model:'Presentation agent',allowedTools:['Slides','Charts','Files'],showTools:true,_state:'running'},'agent'),
  node('deck',{title:'Sprint review',icon:'▣',category:'sink',text:'v3 generating · v2 available',slide:2,state:'running',time:'First draft · 09:27',feedbackCount:2}),
- node('workitem',{title:'WORK-144',icon:'☑',category:'source',text:'Gateway · Coverage checks',compact:true,tag:'Cloud project',state:'idle',role:'context'}),
- node('background',{title:'Cloud terminal',icon:'⌘',category:'source',text:'Gateway / WORK-144',state:'running',time:'Cloud session · 09:15',tag:'Tests running'}),
+ node('workitem',{title:'WORK-144',icon:'☑',category:'source',text:'Gateway · Flaky test triage',compact:true,tag:'Cloud project',state:'idle',role:'context'}),
+ node('background',{title:'Cloud terminal',icon:'⌘',category:'source',text:'auth-migration-3 · WORK-144',state:'running',time:'AgentCore microVM · 09:15',tag:'Triaging tests'}),
 ];
 const edge=(id,source,target,options={})=>({id,source,target,sourceHandle:'out',targetHandle:'in',type:'existing',...options,data:{state:'default',...(options.data??{})}});
 export const edges=[
@@ -34,9 +34,9 @@ const extraEfforts=[
   node('release-source',{title:'Release plan',icon:'▤',category:'source',text:'Revision 6 · Shared document',compact:true,role:'context'}),
   node('release-agent',{prompt:'Draft release notes',model:'Document agent',allowedTools:['Documents'],_state:'running'},'agent'),
  ]},
- {id:'preview-build',title:'Preview build',detail:'Cloud terminal · Building',order:101,nodes:[
-  node('preview-source',{title:'WORK-145',icon:'☑',category:'source',text:'Gateway · Preview deployment',compact:true,role:'context'}),
-  node('preview-terminal',{title:'Cloud terminal 2',icon:'⌘',category:'source',text:'Building the preview',state:'running',tag:'Build running',time:'Started 09:34'}),
+ {id:'preview-build',title:'Dependency audit',detail:'Cloud terminal · Auditing',order:101,nodes:[
+  node('preview-source',{title:'WORK-145',icon:'☑',category:'source',text:'Gateway · Dependency audit',compact:true,role:'context'}),
+  node('preview-terminal',{title:'Cloud terminal 2',icon:'⌘',category:'source',text:'auth-migration-4 · WORK-145',state:'running',tag:'Audit running',time:'AgentCore microVM · 09:34'}),
  ]},
  {id:'design-assets',title:'Design assets',detail:'Design agent · Rendering',order:100,nodes:[
   node('design-source',{title:'Design brief',icon:'▤',category:'source',text:'Product launch · Shared brief',compact:true,role:'context'}),

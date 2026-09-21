@@ -161,7 +161,7 @@ export function App(){
       </div>
       <div className="graph-footer"><span>{focusGroup?<Button size="sm" variant="ghost" onClick={()=>setFocusGroup(null)}>← All activities</Button>:`${projected.activityCount} parallel activities · Newest work first`}</span><Button size="sm" variant="ghost" disabled={range.start===0} onClick={()=>changeRange(moveWindow(range,-1))}>← Earlier work</Button></div>
      </div>
-     {selection&&<Inspector selection={selection} asked={asked} setAsked={setAsked} range={range} close={()=>setSelection(null)} select={select} reference={addReference} runFailed={runFailed&&live}/>}
+     {selection&&<Inspector selection={selection} asked={asked} setAsked={setAsked} range={range} close={()=>setSelection(null)} select={select} reference={addReference} runFailed={runFailed&&live} openLab={()=>{setPanelMode('lab');setSelection(null)}}/>}
     </div>}
    </ChatSidePanelFrame>}
   </div>

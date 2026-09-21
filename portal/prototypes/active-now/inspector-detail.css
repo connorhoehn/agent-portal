@@ -91,3 +91,20 @@
 .lab-frame{flex:1;min-height:0}
 .panel-mode{display:flex;align-items:center;gap:10px;padding:6px 12px;border-bottom:1px solid #e2e7ef;background:#fff;flex-shrink:0}
 .panel-mode small{color:#7b869a;font-size:11px}
+
+/* Cloud terminal inspector: the session, not a box with a prompt in it. */
+.terminal-inspector{display:flex;flex-direction:column;gap:10px}
+.terminal-inspector .detail-status-block{margin-bottom:0}
+.terminal-gauges{border:1px solid #e2e8f2;border-radius:8px;background:#0f172a;color:#cbd5e1;padding:2px 6px;font-size:11px}
+.terminal-gauges *{font-size:11px}
+.terminal-frame{height:clamp(300px,44vh,560px);min-height:0;border:1px solid #dfe6ef;border-radius:8px;overflow:hidden;background:#0f172a;display:flex;flex-direction:column}
+.terminal-frame>*{flex:1;min-height:0}
+.terminal-frame.is-shell{background:#111827}
+.terminal-inspector .inspector-terminal-meta{margin:0}
+.terminal-workspace{display:flex;flex-direction:column;gap:6px}
+.terminal-workspace .detail-section-label{margin-top:6px}
+.workspace-repo{display:flex;flex-direction:column;gap:2px;font-size:12.5px}.workspace-repo b{color:#25344b}.workspace-repo span{font-size:11px;color:#62718b;font-family:ui-monospace,Menlo,monospace}
+.workspace-files{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}
+.workspace-files li{display:flex;justify-content:space-between;gap:8px;font-size:11.5px}.workspace-files code{color:#25344b}.workspace-files span{color:#21a459;font-family:ui-monospace,Menlo,monospace;white-space:nowrap}
+.workspace-git{margin:0;padding:8px 10px;border-radius:6px;background:#0f172a;color:#cbd5e1;font-size:11px;line-height:1.5;overflow-x:auto}
+.terminal-inspector .detail-source{margin:0}

@@ -34,7 +34,9 @@ export const fixtureClient=({
  adoptComputer:async()=>{},renameComputer:async()=>{},removeComputer:async()=>{},stopSession:async()=>{},
  runTask:async()=>{},runCommand:async()=>{},
  getShellUrl:async(sessionId:string,shellId?:string)=>mockShellUrl(sessionId,shellId),
- tail:(boxId:string)=>({url:mockTailUrl(boxId),withCredentials:false}),
+ // The library ships three scripted tails; the test-triage one is the story a
+ // 'coverage checks' terminal is telling.
+ tail:(boxId:string)=>({url:mockTailUrl(boxId,boxId==='auth-migration-4'?'nightly-dependency-audit':'flaky-test-triage'),withCredentials:false,headers:{}}),
 } as unknown) as ComputeClient;
 export {fixtureComputers,fixtureModels};
 
