@@ -42,6 +42,7 @@ import { dispatchGovernedRun } from './sdlc-pipeline.js';
 import { runDevboxShell } from './project-runner.js';
 import { resolveDevboxArn, devboxDataClient } from './devbox-arn.js';
 import { registerBox, getBoxBySession, appendEvent } from './devbox-fleet.js';
+import { playDispatchedRun } from './mock-bot-runner.js';
 import { normalizeRuntimeSessionId } from './runtime-session.js';
 import type { ForecastConfidence } from './bot-estimate.js';
 import { selectDispatchForecast, type ForecastSamples } from './marketplace-estimate.js';
@@ -1320,6 +1321,16 @@ const SIMULATED_RESULT = { costUsd: 0.0341, turns: 6, toolCalls: 5 } as const;
 let mockDispatchStepMs = 2_000;
 export function __setMockDispatchStepMs(ms: number): void { mockDispatchStepMs = ms; }
 
+/**
+ * The pace at or above which a simulated dispatch also NARRATES its run into
+ * the box's tail, rather than only emitting the job_started/job_finished
+ * bookends. Below it the caller has asked for speed and gets the bookends.
+ *
+ * Sits under the 2s default (so dev narrates) and above every pace the tests
+ * pick (so they do not wait ~15s for prose they never assert on).
+ */
+const NARRATE_ABOVE_MS = 1_000;
+
 /** Sleep between simulated states. Unref'd: a pending step must never be the
  *  reason a process stays alive. */
 function pause(ms: number): Promise<void> {
@@ -1354,8 +1365,22 @@ async function simulateMarketplaceDispatch(input: {
   // job's box_id/session_id below are real registry values rather than
   // placeholders, and an operator tailing that box sees the same
   // job_started/job_finished bookends lib/job-dispatcher.ts emits.
+  //
+  // The box is registered ATTRIBUTED — owner and initiative both. Without them
+  // it lands in lib/devbox-visibility.ts's third shape, "unattributed", which
+  // that module deliberately shows to org-wide roles only. The effect was that
+  // an SME dispatched a work item, got a 202 naming a boxId, and then could not
+  // see that box in Computer Lab: the fleet list is visibility-scoped, so the
+  // one computer working on her own dispatch was the one computer hidden from
+  // her, while hr-admin saw it fine. Both fields are honest here — the box IS
+  // this actor's, working this initiative's item — so this is the attribution
+  // the rule was written to read, not an exemption from it.
   const sessionId = normalizeRuntimeSessionId(project.sessionId);
-  const box = getBoxBySession(sessionId) ?? registerBox({ sessionId });
+  const box = getBoxBySession(sessionId) ?? registerBox({
+    sessionId,
+    projectId: item.projectId,
+    ...(input.actor ? { ownerId: input.actor } : {}),
+  });
   await markCloned(project.id, sessionId);
 
   const job = await enqueueJob({
@@ -1407,6 +1432,49 @@ async function simulateMarketplaceDispatch(input: {
         type: 'job_started', jobId: job.id, title: job.title, kind: job.kind,
         ts: new Date().toISOString(),
       });
+      // `task_started` is what actually moves the box: devbox-fleet.ts's
+      // appendEvent derives `status = 'running'` and `currentTask` from THIS
+      // event type and no other (`job_started` only contributes the model).
+      // Emitting the pair is what the ambient mock runner's `play()` does, and
+      // omitting it is why a dispatched box sat at `idle` with no task showing
+      // while its tail was streaming — the lab's own status column disagreed
+      // with the run happening inside it. The prompt rides along because
+      // `currentTask` is read off it; appendEvent truncates.
+      appendEvent(box.id, {
+        type: 'task_started', prompt: input.prompt, ts: new Date().toISOString(),
+      });
+      // Then narrate it, in the dialect lib/job-dispatcher.ts already uses for
+      // a queue job offline — one fake-run vocabulary, not two.
+      //
+      // Only when the progression is paced for someone to WATCH. narration is
+      // ~15s of wall clock, which is the point when a human is looking at the
+      // tail and ruinous otherwise: at the `0` seam (states settled
+      // synchronously before the route answers) it blew the 5s jest timeout in
+      // every suite that dispatches, and at the deliberately-short paces a test
+      // picks to observe three quick hops — `15`, `400` — it overran the poll
+      // deadline those tests wait on, so the job never reached `done`.
+      //
+      // Keying off the pace rather than adding a second seam is deliberate:
+      // "how long may each state take" already encodes whether a person is
+      // watching, so one knob keeps saying one thing. Tests that shorten it get
+      // the bookends, which is what their assertions read.
+      //
+      // Without this the box emitted job_started immediately followed by
+      // job_finished, so "watch the computer work" was two log lines and a
+      // status that was already terminal. The tail pane is the whole point of
+      // opening the lab after a dispatch; a bookend pair renders as a run that
+      // said nothing rather than a run anyone can follow. playDispatchedRun's
+      // steps are generic on purpose (it narrates picking the work up and
+      // landing it, not the contents of a prompt it cannot read), and its
+      // returned figures are SIMULATED_RESULT's, so settleSimulatedRun below
+      // still quotes the same price for the same fake run.
+      if (mockDispatchStepMs >= NARRATE_ABOVE_MS) {
+        await playDispatchedRun({
+          title: item.title,
+          prompt: input.prompt,
+          onEvent: (ev) => appendEvent(box.id, ev),
+        });
+      }
     },
     async () => { await settleSimulatedRun({ jobId: job.id, runId: run.id, boxId: box.id, item, startedMs }); },
   ];
