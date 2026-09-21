@@ -6,9 +6,14 @@ import { asyncHandler } from '../lib/async-handler.js';
 import { initSSE, writeSSE, endSSE } from '../lib/sse.js';
 import { computeCapabilityConfigured, computeCapabilitySessions } from '../work-graph/compute-capability-runtime.js';
 import type { ComputeCapability, ComputeCapabilityResource } from '../work-graph/compute-capability-sessions.js';
+import { registerBox } from '../lib/devbox-fleet.js';
 
 export const internalWorkGraphComputeRouter = Router();
 const ID = /^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,127}$/;
+// Narrower than ID above: matches the id shape resolveCloud() in
+// work-graph/mapCloudCompute.ts actually accepts once a `box:`/`job:`
+// prefix is stripped (no ':', '@' or '/').
+const FIXTURE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 const requestCache = new Map<string, { expiresAt: number; fingerprint: string; body: unknown }>();
 
 function record(value: unknown): value is Record<string, unknown> {
@@ -208,4 +213,61 @@ internalWorkGraphComputeRouter.get('/events/:sessionId', asyncHandler(async (req
     endSSE(res);
   });
   req.on('close', () => { unsubscribe(); endSSE(res); });
+}));
+
+function fixtureBoxBody(value: unknown): value is {
+  id: string; ownerId: string; sessionId?: string; label?: string; projectId?: string;
+} {
+  return record(value)
+    && Object.keys(value).every((key) => ['id', 'ownerId', 'sessionId', 'label', 'projectId'].includes(key))
+    && typeof value.id === 'string' && FIXTURE_ID.test(value.id)
+    && typeof value.ownerId === 'string' && FIXTURE_ID.test(value.ownerId)
+    && (value.sessionId === undefined || (typeof value.sessionId === 'string' && value.sessionId.length > 0))
+    && (value.label === undefined || typeof value.label === 'string')
+    && (value.projectId === undefined || (typeof value.projectId === 'string' && FIXTURE_ID.test(value.projectId)));
+}
+
+/**
+ * Dev/test-only seam: registers a fleet box directly against the SAME
+ * in-memory registry `resolveCloud()` reads (lib/devbox-fleet.ts), without
+ * going through the portal's session/Cedar/Aurora stack.
+ *
+ * WHY THIS EXISTS. `/authorize` and `/open` above answer honestly from
+ * durable source state — they were never the problem. The problem is that a
+ * *local* seed script (no browser, no OrgIQ session, no Aurora) has no way to
+ * put a real box into that state, so a seeded "cloud terminal" effort could
+ * never clear disclosure locally and platform-api correctly, if unhelpfully,
+ * withheld it. This route is that seam: same shape as
+ * routes/test-fixtures.ts (idempotent, dev-only, no session), scoped to
+ * exactly the one write a seed needs (a box row), and gated the same way the
+ * source-owned callbacks above are — a signed service-auth envelope, not an
+ * open door. It is never mounted in production and grants no capability by
+ * itself; `/authorize`/`/open` still make their own decision from whatever
+ * this seeds.
+ */
+internalWorkGraphComputeRouter.post('/fixtures/register-box', asyncHandler(async (req, res) => {
+  if (process.env['NODE_ENV'] === 'production') { res.status(404).end(); return; }
+  const secret = configuredSecret();
+  const header = req.header(SERVICE_AUTH_HEADER);
+  if (!secret || !header) { res.status(401).json({ error: 'SERVICE_AUTH_INVALID' }); return; }
+  if (!fixtureBoxBody(req.body)) { res.status(400).json({ error: 'INVALID_REQUEST' }); return; }
+  const result = verifyEnvelope(header, {
+    secret,
+    // Deliberately its own allowlist, not the platform's: this route is
+    // aws-agentcore seeding its own state for itself, not platform-api
+    // calling in, so it never claims the 'platform-api' service identity.
+    allowedServices: [process.env['WORK_GRAPH_FIXTURE_SERVICE_ID']?.trim() || 'aws-agentcore'],
+    payload: req.body,
+    ttlSec: 30,
+    toleranceSec: 5,
+  });
+  if (!result.ok) { res.status(401).json({ error: 'SERVICE_AUTH_INVALID' }); return; }
+  const box = registerBox({
+    id: req.body.id,
+    sessionId: req.body.sessionId ?? `fixture-${req.body.id}`,
+    ownerId: req.body.ownerId,
+    ...(req.body.projectId ? { projectId: req.body.projectId } : {}),
+    ...(req.body.label ? { label: req.body.label } : {}),
+  });
+  res.status(200).json({ box });
 }));
