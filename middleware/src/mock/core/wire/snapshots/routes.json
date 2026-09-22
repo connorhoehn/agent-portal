@@ -883,57 +883,57 @@
     {
       "method": "DELETE",
       "path": "/api/devbox/:sessionId",
-      "source": "src/routes/devbox.ts:761"
+      "source": "src/routes/devbox.ts:870"
     },
     {
       "method": "POST",
       "path": "/api/devbox/:sessionId/command",
-      "source": "src/routes/devbox.ts:591"
+      "source": "src/routes/devbox.ts:663"
     },
     {
       "method": "POST",
       "path": "/api/devbox/:sessionId/shell-url",
-      "source": "src/routes/devbox.ts:668"
+      "source": "src/routes/devbox.ts:799"
     },
     {
       "method": "POST",
       "path": "/api/devbox/:sessionId/task",
-      "source": "src/routes/devbox.ts:518"
+      "source": "src/routes/devbox.ts:642"
     },
     {
       "method": "GET",
       "path": "/api/devbox/boxes",
-      "source": "src/routes/devbox.ts:402"
+      "source": "src/routes/devbox.ts:428"
     },
     {
       "method": "POST",
       "path": "/api/devbox/boxes",
-      "source": "src/routes/devbox.ts:415"
+      "source": "src/routes/devbox.ts:441"
     },
     {
       "method": "DELETE",
       "path": "/api/devbox/boxes/:boxId",
-      "source": "src/routes/devbox.ts:456"
+      "source": "src/routes/devbox.ts:482"
     },
     {
       "method": "PATCH",
       "path": "/api/devbox/boxes/:boxId",
-      "source": "src/routes/devbox.ts:443"
+      "source": "src/routes/devbox.ts:469"
     },
     {
       "method": "GET",
       "path": "/api/devbox/boxes/:boxId/tail",
-      "source": "src/routes/devbox.ts:495"
+      "source": "src/routes/devbox.ts:543"
     },
     {
       "method": "POST",
       "path": "/api/devbox/sessions",
-      "source": "src/routes/devbox.ts:391"
+      "source": "src/routes/devbox.ts:417"
     },
     {
       "method": "GET",
       "path": "/api/devbox/status",
-      "source": "src/routes/devbox.ts:377"
+      "source": "src/routes/devbox.ts:413"
     },
     {
       "method": "GET",
@@ -1223,7 +1223,7 @@
     {
       "method": "GET",
       "path": "/api/health",
-      "source": "src/index.ts:139"
+      "source": "src/index.ts:144"
     },
     {
       "method": "GET",
@@ -2543,7 +2543,37 @@
     {
       "method": "GET",
       "path": "/health",
-      "source": "src/index.ts:138"
+      "source": "src/index.ts:143"
+    },
+    {
+      "method": "DELETE",
+      "path": "/internal/devbox/:sessionId",
+      "source": "src/routes/internal-devbox.ts:251"
+    },
+    {
+      "method": "POST",
+      "path": "/internal/devbox/:sessionId/shell-url",
+      "source": "src/routes/internal-devbox.ts:235"
+    },
+    {
+      "method": "POST",
+      "path": "/internal/devbox/:sessionId/task",
+      "source": "src/routes/internal-devbox.ts:175"
+    },
+    {
+      "method": "GET",
+      "path": "/internal/devbox/boxes/:boxId/tail",
+      "source": "src/routes/internal-devbox.ts:225"
+    },
+    {
+      "method": "POST",
+      "path": "/internal/devbox/sessions",
+      "source": "src/routes/internal-devbox.ts:155"
+    },
+    {
+      "method": "GET",
+      "path": "/internal/devbox/status",
+      "source": "src/routes/internal-devbox.ts:144"
     },
     {
       "method": "POST",
@@ -2553,32 +2583,37 @@
     {
       "method": "POST",
       "path": "/internal/work-graph/compute-capabilities/authorize",
-      "source": "src/routes/internal-work-graph-compute.ts:142"
+      "source": "src/routes/internal-work-graph-compute.ts:147"
     },
     {
       "method": "POST",
       "path": "/internal/work-graph/compute-capabilities/close",
-      "source": "src/routes/internal-work-graph-compute.ts:176"
+      "source": "src/routes/internal-work-graph-compute.ts:181"
     },
     {
       "method": "GET",
       "path": "/internal/work-graph/compute-capabilities/events/:sessionId",
-      "source": "src/routes/internal-work-graph-compute.ts:190"
+      "source": "src/routes/internal-work-graph-compute.ts:195"
+    },
+    {
+      "method": "POST",
+      "path": "/internal/work-graph/compute-capabilities/fixtures/register-box",
+      "source": "src/routes/internal-work-graph-compute.ts:257"
     },
     {
       "method": "POST",
       "path": "/internal/work-graph/compute-capabilities/open",
-      "source": "src/routes/internal-work-graph-compute.ts:107"
+      "source": "src/routes/internal-work-graph-compute.ts:112"
     },
     {
       "method": "POST",
       "path": "/internal/work-graph/compute-capabilities/revalidate",
-      "source": "src/routes/internal-work-graph-compute.ts:158"
+      "source": "src/routes/internal-work-graph-compute.ts:163"
     },
     {
       "method": "POST",
       "path": "/internal/work-graph/compute-capabilities/use",
-      "source": "src/routes/internal-work-graph-compute.ts:166"
+      "source": "src/routes/internal-work-graph-compute.ts:171"
     }
   ],
   "unresolved": []

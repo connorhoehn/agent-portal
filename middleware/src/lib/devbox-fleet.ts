@@ -95,6 +95,15 @@ export interface FleetBox {
    * downgraded server-side (see devboxModels.ts).
    */
   activeModel?: string;
+  /**
+   * Who created this box, when it was not a person clicking "new computer" in
+   * the portal — e.g. `'platform-api'` for a box `routes/internal-devbox.ts`
+   * registered on behalf of a chat `/agent` loop. Absent for portal-created
+   * boxes, which is the common case and needs no marker. Purely descriptive:
+   * it changes nothing about `canSee`/visibility, ownership still comes from
+   * `ownerId`/`projectId` — this only tells an operator where a box came from.
+   */
+  source?: string;
 }
 
 export type FleetEvent = Record<string, unknown>;
@@ -268,7 +277,7 @@ function labelForProject(projectId: string): string {
 
 export function registerBox(opts: {
   sessionId: string; label?: string; id?: string; createdAt?: string;
-  ownerId?: string; projectId?: string;
+  ownerId?: string; projectId?: string; source?: string;
 }): FleetBox {
   const id = opts.id ?? opts.sessionId.slice(-8);
   const existing = boxes.get(id);
@@ -280,6 +289,7 @@ export function registerBox(opts: {
     createdAt: trustedCreatedAt(opts.createdAt),
     ...(opts.ownerId ? { ownerId: opts.ownerId } : {}),
     ...(opts.projectId ? { projectId: opts.projectId } : {}),
+    ...(opts.source ? { source: opts.source } : {}),
     status: 'idle',
     lastActivityAt: now(),
   };

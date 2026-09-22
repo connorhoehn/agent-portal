@@ -84,6 +84,7 @@ import { startLocalController } from './lib/canary-local-controller.js';
 import { startComputeWorkGraphProducer } from './work-graph/compute-emitter.js';
 import { internalWorkGraphComputeRouter } from './routes/internal-work-graph-compute.js';
 import { internalDocumentGrantsRouter } from './routes/internal-document-grants.js';
+import { internalDevboxRouter } from './routes/internal-devbox.js';
 import { assessmentCanvasRouter } from './routes/assessment-canvas.js';
 import { assessmentDocumentWorkflowsRouter } from './routes/assessment-document-workflows.js';
 import { assessmentDocumentSourceRouter } from './routes/assessment-document-source.js';
@@ -104,6 +105,10 @@ app.use(cookieParser());
 // session as an alternate authorization path.
 app.use('/internal/work-graph/compute-capabilities', internalWorkGraphComputeRouter);
 app.use('/internal/document-grants', internalDocumentGrantsRouter);
+// Computer-lab surface for platform-api's chat agent loop — see
+// routes/internal-devbox.ts for why this must live here, before any
+// session/cookie middleware, exactly like its siblings above.
+app.use('/internal/devbox', internalDevboxRouter);
 setGrantsResolver(async (id) => {
   const u = await getIdentityUser(id);
   return u ? { displayName: u.displayName, grants: u.grants, epoch: u.epoch } : null;

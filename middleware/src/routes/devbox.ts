@@ -8,6 +8,13 @@
 //   DELETE /api/devbox/:sessionId            stop the runtime session
 //   GET    /api/devbox/status                resolved runtime ARN + config
 //
+// `routes/internal-devbox.ts` mounts a second, HMAC-only router at
+// `/internal/devbox` for platform-api's agent loop (chat `/agent`). It calls
+// several of the functions exported below (`runTaskAndForward`,
+// `streamBoxTail`, `mintShellUrl`, `respondStopSession`,
+// `buildDevboxStatusPayload`, `requireArn`, `mockAgentCore`) rather than
+// duplicating this router's bodies — same transport, different principal.
+//
 // ⚠️ SDK NAMING TRAP — read before editing the imports:
 // The class `InvokeAgentRuntimeCommand` used elsewhere in this codebase is the
 // SDK v3 wrapper for the plain InvokeAgentRuntime *operation* (every operation
@@ -72,8 +79,10 @@ let _control: BedrockAgentCoreControlClient | null = null;
 const region = (): string => process.env['AWS_REGION'] ?? 'us-east-1';
 
 /** Read straight off the environment, like every other flag in this file —
- *  importing config.ts drags import.meta into a CommonJS test build. */
-const mockAgentCore = (): boolean => process.env['MOCK_AGENTCORE'] === 'true';
+ *  importing config.ts drags import.meta into a CommonJS test build.
+ *  Exported: `routes/internal-devbox.ts` needs the same read to decide
+ *  between the real transport and its own loop-shaped mock frames. */
+export const mockAgentCore = (): boolean => process.env['MOCK_AGENTCORE'] === 'true';
 
 function dataClient(): BedrockAgentCoreClient {
   // Offline this is the same fake microVM `lib/devbox-arn.ts` hands every
@@ -325,7 +334,9 @@ async function requireBoxAccess(req: Request, res: Response, sessionId: string):
   return false;
 }
 
-async function requireArn(res: Response): Promise<string | null> {
+/** Exported for `routes/internal-devbox.ts` — the real (non-mock) transport
+ *  path resolves the ARN the exact same way for either principal. */
+export async function requireArn(res: Response): Promise<string | null> {
   const arn = await resolveDevboxArn();
   if (!arn) {
     res.status(503).json({
@@ -374,10 +385,21 @@ async function deployedModelCapability(arn: string | null): Promise<{
   }
 }
 
-devboxRouter.get('/status', asyncHandler(async (_req, res) => {
+/**
+ * Assembles the exact JSON `GET /status` answers with.
+ *
+ * Exported so `routes/internal-devbox.ts` reports the SAME resolved runtime —
+ * same ARN cache, same client — rather than a second opinion that could drift
+ * from what the browser-facing route sees.
+ */
+export async function buildDevboxStatusPayload(): Promise<{
+  defaultModel: string | null; allowedModels: string[]; perTaskModel: boolean;
+  deployed: boolean; runtimeArn: string | null; runtimeName: string;
+  commandAllowlist: string[]; fullExecEnabled: boolean; workspace: string;
+}> {
   const arn = await resolveDevboxArn();
   const models = await deployedModelCapability(arn);
-  res.json({
+  return {
     ...models,
     deployed: Boolean(arn),
     runtimeArn: arn,
@@ -385,7 +407,11 @@ devboxRouter.get('/status', asyncHandler(async (_req, res) => {
     commandAllowlist: commandAllowlist(),
     fullExecEnabled: fullExecEnabled(),
     workspace: '/mnt/workspace',
-  });
+  };
+}
+
+devboxRouter.get('/status', asyncHandler(async (_req, res) => {
+  res.json(await buildDevboxStatusPayload());
 }));
 
 devboxRouter.post('/sessions', asyncHandler(async (req, res) => {
@@ -492,14 +518,16 @@ devboxRouter.delete('/boxes/:boxId', asyncHandler(async (req, res) => {
 // `replayEvents` and `subscribeFleet` are pure map reads and `writeSSE`
 // no-ops on an ended stream, so nothing there hands asyncHandler an error it
 // would try to answer with a second set of headers.
-devboxRouter.get('/boxes/:boxId/tail', asyncHandler(async (req, res) => {
-  const boxId = String(req.params['boxId'] ?? '');
-  const box = getBox(boxId);
-  if (!box) { res.status(404).json({ error: 'computer not found' }); return; }
-  if (!await canSee(req.session ?? null, box)) {
-    res.status(403).json({ error: 'that computer is not yours to watch' });
-    return;
-  }
+/**
+ * Replay-then-live tail of a box's event buffer, assuming the caller has
+ * ALREADY decided this box is theirs to watch — the public route checks
+ * `canSee` against a browser session first; `routes/internal-devbox.ts`
+ * checks its own HMAC envelope first. Both then stream identically, which is
+ * the property that matters: a tail must never diverge by principal, or an
+ * operator watching a run started from chat sees a different log than one
+ * started from the browser.
+ */
+export function streamBoxTail(boxId: string, req: Request, res: Response): void {
   initSSE(res);
   for (const ev of replayEvents(boxId)) writeSSE(res, ev);
   // `box_removed` is terminal: forward it so the client can say why the log
@@ -510,32 +538,55 @@ devboxRouter.get('/boxes/:boxId/tail', asyncHandler(async (req, res) => {
     if (ev['type'] === 'box_removed') endSSE(res);
   });
   req.on('close', () => { unsubscribe(); endSSE(res); });
+}
+
+devboxRouter.get('/boxes/:boxId/tail', asyncHandler(async (req, res) => {
+  const boxId = String(req.params['boxId'] ?? '');
+  const box = getBox(boxId);
+  if (!box) { res.status(404).json({ error: 'computer not found' }); return; }
+  if (!await canSee(req.session ?? null, box)) {
+    res.status(403).json({ error: 'that computer is not yours to watch' });
+    return;
+  }
+  streamBoxTail(boxId, req, res);
 }));
 
-// Task mode: Claude Code headless run in /mnt/workspace, stream-json events
-// forwarded as SSE. The devbox wrapper emits devbox_start/devbox_end envelope
-// events around Claude Code's own stream.
-devboxRouter.post('/:sessionId/task', asyncHandler(async (req, res) => {
-  const sessionId = requireSessionId(String(req.params['sessionId'] ?? ''), res);
-  if (!sessionId) return;
-  if (!await requireBoxAccess(req, res, sessionId)) return;
-  const arn = await requireArn(res);
-  if (!arn) return;
-
-  const body = (req.body ?? {}) as { prompt?: string; resume?: boolean; timeout?: number; model?: string };
-  const prompt = (body.prompt ?? '').trim();
-  if (!prompt) { res.status(400).json({ error: 'prompt is required' }); return; }
-
+/**
+ * Real-transport task run: invoke the resolved runtime (or, under
+ * MOCK_AGENTCORE, whatever `dataClient()` swaps in — `mockDevboxClient()` for
+ * this router) and forward its SSE body verbatim, re-framed one JSON object
+ * per line.
+ *
+ * Exported so `routes/internal-devbox.ts` runs a REAL (non-mock) task through
+ * the exact same invoke-and-forward code as the browser route — the only
+ * difference between principals is who was allowed to reach this far, not
+ * what happens once they have. Its own mock path bypasses this entirely (see
+ * `mock/devbox-agent-loop.ts`), since the platform-api loop's mock needs a
+ * different frame shape (resume-aware growing context, DONE-on-completion)
+ * than `mockDevboxClient()` produces, and this function must keep producing
+ * exactly what it always has for the public route's own mock tests.
+ */
+export async function runTaskAndForward(opts: {
+  sessionId: string;
+  prompt: string;
+  resume: boolean;
+  model?: string;
+  timeout?: number;
+  res: Response;
+  arn: string;
+}): Promise<void> {
+  const { sessionId, prompt, resume, model, timeout, res, arn } = opts;
   const payload = JSON.stringify({
     prompt,
-    resume: Boolean(body.resume),
-    ...(body.model ? { model: body.model } : {}),
-    ...(body.timeout ? { timeout: Math.min(Number(body.timeout), 3300) } : {}),
+    resume,
+    ...(model ? { model } : {}),
+    ...(timeout ? { timeout: Math.min(Number(timeout), 3300) } : {}),
   });
 
-  // Fleet tee: auto-register unknown sessions (curl/notebook starts show up in
-  // the herd too), flip status to running, and mirror every event into the
-  // box's server-side log so other clients can tail this run.
+  // Fleet tee: auto-register unknown sessions (curl/notebook starts, and an
+  // internal-router session that predates this call, show up in the herd
+  // too), flip status to running, and mirror every event into the box's
+  // server-side log so other clients can tail this run.
   const fleetBox = getBoxBySession(sessionId) ?? registerBox({ sessionId });
   appendEvent(fleetBox.id, { type: 'task_started', prompt, ts: new Date().toISOString() });
 
@@ -583,6 +634,27 @@ devboxRouter.post('/:sessionId/task', asyncHandler(async (req, res) => {
   } finally {
     endSSE(res);
   }
+}
+
+// Task mode: Claude Code headless run in /mnt/workspace, stream-json events
+// forwarded as SSE. The devbox wrapper emits devbox_start/devbox_end envelope
+// events around Claude Code's own stream.
+devboxRouter.post('/:sessionId/task', asyncHandler(async (req, res) => {
+  const sessionId = requireSessionId(String(req.params['sessionId'] ?? ''), res);
+  if (!sessionId) return;
+  if (!await requireBoxAccess(req, res, sessionId)) return;
+  const arn = await requireArn(res);
+  if (!arn) return;
+
+  const body = (req.body ?? {}) as { prompt?: string; resume?: boolean; timeout?: number; model?: string };
+  const prompt = (body.prompt ?? '').trim();
+  if (!prompt) { res.status(400).json({ error: 'prompt is required' }); return; }
+
+  await runTaskAndForward({
+    sessionId, prompt, resume: Boolean(body.resume), res, arn,
+    ...(body.model ? { model: body.model } : {}),
+    ...(body.timeout ? { timeout: body.timeout } : {}),
+  });
 }));
 
 // Command mode: deterministic shell via the InvokeAgentRuntimeCommand
@@ -665,12 +737,17 @@ devboxRouter.post('/:sessionId/command', asyncHandler(async (req, res) => {
  * same PTY with its working directory, environment and running processes
  * intact, and up to 256 KB of missed output replayed.
  */
-devboxRouter.post('/:sessionId/shell-url', asyncHandler(async (req, res) => {
-  const sessionId = requireSessionId(String(req.params['sessionId'] ?? ''), res);
-  if (!sessionId) return;
-  if (!await requireBoxAccess(req, res, sessionId)) return;
-
-  const body = (req.body ?? {}) as { shellId?: string; expiresIn?: number };
+/**
+ * Shared shell-url minting — public route and `routes/internal-devbox.ts`
+ * both call this after their own principal-specific access check. Handles
+ * both the MOCK_AGENTCORE and real-runtime paths itself, unchanged from the
+ * original inline handler.
+ */
+export async function mintShellUrl(
+  sessionId: string,
+  body: { shellId?: string; expiresIn?: number },
+  res: Response,
+): Promise<void> {
   // A stable default per session means a plain reload reattaches instead of
   // stranding the old shell against the 10-per-runtime limit.
   const shellId = (body.shellId ?? `portal-${sessionId.slice(-12)}`).trim();
@@ -717,6 +794,13 @@ devboxRouter.post('/:sessionId/shell-url', asyncHandler(async (req, res) => {
   } catch (err) {
     res.status(502).json({ error: `could not mint a shell URL: ${(err as Error).message}` });
   }
+}
+
+devboxRouter.post('/:sessionId/shell-url', asyncHandler(async (req, res) => {
+  const sessionId = requireSessionId(String(req.params['sessionId'] ?? ''), res);
+  if (!sessionId) return;
+  if (!await requireBoxAccess(req, res, sessionId)) return;
+  await mintShellUrl(sessionId, (req.body ?? {}) as { shellId?: string; expiresIn?: number }, res);
 }));
 
 /**
@@ -758,10 +842,11 @@ export async function stopDevboxSessionForSourceControl(sessionId: string): Prom
   return 'stopped';
 }
 
-devboxRouter.delete('/:sessionId', asyncHandler(async (req, res) => {
-  const sessionId = requireSessionId(String(req.params['sessionId'] ?? ''), res);
-  if (!sessionId) return;
-  if (!await requireBoxAccess(req, res, sessionId)) return;
+/**
+ * Shared stop-and-settle — public DELETE and `routes/internal-devbox.ts`
+ * both call this after their own principal-specific access check.
+ */
+export async function respondStopSession(sessionId: string, res: Response): Promise<void> {
   const settle = (): void => {
     const box = getBoxBySession(sessionId);
     if (box) markStopped(box.id);
@@ -771,7 +856,6 @@ devboxRouter.delete('/:sessionId', asyncHandler(async (req, res) => {
     const outcome = await stopDevboxSessionForSourceControl(sessionId);
     settle();
     res.json({ stopped: true, sessionId, ...(outcome === 'already-stopped' ? { alreadyStopped: true } : {}) });
-    return;
   } catch (err) {
     const message = (err as Error).message ?? String(err);
     console.warn(`[devbox] stop session ${sessionId} failed:`, message);
@@ -780,9 +864,14 @@ devboxRouter.delete('/:sessionId', asyncHandler(async (req, res) => {
       sessionId,
       detail: message,
     });
-    return;
   }
+}
 
+devboxRouter.delete('/:sessionId', asyncHandler(async (req, res) => {
+  const sessionId = requireSessionId(String(req.params['sessionId'] ?? ''), res);
+  if (!sessionId) return;
+  if (!await requireBoxAccess(req, res, sessionId)) return;
+  await respondStopSession(sessionId, res);
 }));
 
 // ─── Test hooks ──────────────────────────────────────────────────────────────
