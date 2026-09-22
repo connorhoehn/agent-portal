@@ -16,6 +16,7 @@ import { SERVICE_AUTH_HEADER, signEnvelope } from '@connorhoehn/service-runtime'
 import { internalDevboxRouter } from '../internal-devbox.js';
 import { _resetFleet } from '../../lib/devbox-fleet.js';
 import { _resetLoopMock } from '../../mock/devbox-agent-loop.js';
+import { isValidFileId } from '../../lib/devbox-files.js';
 
 const SECRET = 'devbox-internal-test-secret';
 const originalEnv = { ...process.env };
@@ -287,5 +288,117 @@ describe('internal devbox router — mock loop round trip', () => {
     const boxId = 'no-such-box';
     const res = await request(app()).get(`/internal/devbox/boxes/${boxId}/tail`).set(signed({ boxId }));
     expect(res.status).toBe(404);
+  });
+});
+
+// ─── 4. Workspace files (mock mode) ─────────────────────────────────────────
+
+describe('internal devbox router — workspace files (mock)', () => {
+  const originalMock = process.env['MOCK_AGENTCORE'];
+
+  beforeEach(() => {
+    process.env['MOCK_AGENTCORE'] = 'true';
+  });
+
+  afterEach(() => {
+    if (originalMock === undefined) delete process.env['MOCK_AGENTCORE'];
+    else process.env['MOCK_AGENTCORE'] = originalMock;
+  });
+
+  async function createSession(): Promise<{ sessionId: string; boxId: string }> {
+    const body = { principal: principal(), label: 'agent-loop-files' };
+    const res = await request(app()).post('/internal/devbox/sessions').set(signed(body)).send(body);
+    expect(res.status).toBe(201);
+    return res.body as { sessionId: string; boxId: string };
+  }
+
+  async function runTask(sessionId: string, prompt: string, resume: boolean) {
+    const body = { principal: principal(), prompt, resume };
+    const res = await request(app()).post(`/internal/devbox/${sessionId}/task`).set(signed(body)).send(body);
+    expect(res.status).toBe(200);
+  }
+
+  it('401s the files list and the file fetch with no valid envelope', async () => {
+    const sessionId = 'orgiq-devbox-test-session-000000000000000';
+    const listRes = await request(app()).get(`/internal/devbox/${sessionId}/files`);
+    expect(listRes.status).toBe(401);
+    const fetchRes = await request(app()).get(`/internal/devbox/${sessionId}/files/notes.md`);
+    expect(fetchRes.status).toBe(401);
+  });
+
+  it('lists and fetches the real notes.md the mock loop wrote, round trip', async () => {
+    const { sessionId } = await createSession();
+    await runTask(sessionId, 'Draft the meeting agenda', false);
+
+    const listRes = await request(app())
+      .get(`/internal/devbox/${sessionId}/files`)
+      .set(signed({ sessionId }));
+    expect(listRes.status).toBe(200);
+    expect(listRes.body.files).toEqual([
+      expect.objectContaining({ id: 'notes.md', name: 'notes.md', sizeBytes: expect.any(Number), updatedAt: expect.any(String) }),
+    ]);
+    expect(listRes.body.files[0].sizeBytes).toBeGreaterThan(0);
+
+    const fetchRes = await request(app())
+      .get(`/internal/devbox/${sessionId}/files/notes.md`)
+      .set(signed({ sessionId, fileId: 'notes.md' }));
+    expect(fetchRes.status).toBe(200);
+    expect(fetchRes.headers['content-type']).toMatch(/text\/markdown/);
+    expect(fetchRes.text).toContain(`# Notes — ${sessionId}`);
+    expect(fetchRes.text).toContain('Draft the meeting agenda');
+  });
+
+  it('appends further iterations to the same notes.md on resume', async () => {
+    const { sessionId } = await createSession();
+    await runTask(sessionId, 'Draft the meeting agenda', false);
+    await runTask(sessionId, 'Continue the same task.', true);
+
+    const fetchRes = await request(app())
+      .get(`/internal/devbox/${sessionId}/files/notes.md`)
+      .set(signed({ sessionId, fileId: 'notes.md' }));
+    expect(fetchRes.status).toBe(200);
+    expect(fetchRes.text).toContain('Iteration 1');
+    expect(fetchRes.text).toContain('Iteration 2');
+  });
+
+  it('404s a listing for a session with no workspace, and a fetch for an unknown file', async () => {
+    const { sessionId } = await createSession();
+
+    const listRes = await request(app())
+      .get(`/internal/devbox/${sessionId}/files`)
+      .set(signed({ sessionId }));
+    expect(listRes.status).toBe(200);
+    expect(listRes.body.files).toEqual([]);
+
+    const fetchRes = await request(app())
+      .get(`/internal/devbox/${sessionId}/files/nope.md`)
+      .set(signed({ sessionId, fileId: 'nope.md' }));
+    expect(fetchRes.status).toBe(404);
+  });
+
+  it('refuses a path-traversal fileId with 400, never touching the filesystem outside the workspace', async () => {
+    const { sessionId } = await createSession();
+    await runTask(sessionId, 'Draft the meeting agenda', false);
+
+    // Each of these arrives as a single decoded route param (the embedded
+    // '/' travels URL-encoded, so Express never splits it into extra path
+    // segments) — exactly what a caller trying to climb out of the
+    // workspace/temp-dir would send.
+    const traversalIds = ['../notes.md', '../../etc/passwd', '..%2Fnotes.md'];
+    for (const fileId of traversalIds) {
+      const res = await request(app())
+        .get(`/internal/devbox/${sessionId}/files/${encodeURIComponent(fileId)}`)
+        .set(signed({ sessionId, fileId }));
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(/invalid fileId/);
+    }
+  });
+
+  it('isValidFileId rejects bare "." and ".." and any embedded slash', () => {
+    expect(isValidFileId('.')).toBe(false);
+    expect(isValidFileId('..')).toBe(false);
+    expect(isValidFileId('../notes.md')).toBe(false);
+    expect(isValidFileId('a/b')).toBe(false);
+    expect(isValidFileId('notes.md')).toBe(true);
   });
 });

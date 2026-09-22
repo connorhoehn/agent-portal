@@ -21,6 +21,10 @@
 // A separate module, a separate Map of per-session state, and a separate
 // test file — nothing here is reachable from the public devbox surface.
 
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
 export interface LoopMockUsage {
   input_tokens: number;
   output_tokens: number;
@@ -60,6 +64,52 @@ export function _resetLoopMock(): void {
 
 function now(): string {
   return new Date().toISOString();
+}
+
+// ─── Mock workspace ─────────────────────────────────────────────────────────
+//
+// `routes/internal-devbox.ts`'s `GET /:sessionId/files[/:fileId]` (LOOP-BRIEF.md
+// §7) must return true bytes even under MOCK_AGENTCORE=true — never invented
+// file names. So the mock loop writes a REAL `notes.md` here, under a
+// per-session temp dir, containing the mock's own assistant text
+// (`narration` + `summaryText` below), appended as the loop iterates.
+// `lib/devbox-files.ts` lists/reads directly off this directory in mock mode.
+
+/** Per-session temp workspace the mock loop writes into. Exported so
+ *  `lib/devbox-files.ts` can list/read the same directory, and so
+ *  `routes/internal-devbox.ts` can clear it on `DELETE /:sessionId`. */
+export function mockWorkspaceDir(sessionId: string): string {
+  return path.join(os.tmpdir(), 'devbox-mock', sessionId);
+}
+
+function notesPath(sessionId: string): string {
+  return path.join(mockWorkspaceDir(sessionId), 'notes.md');
+}
+
+/** Removes a session's mock workspace. Called from `DELETE /:sessionId` in
+ *  mock mode, mirroring the real transport stopping the microVM (and its
+ *  workspace) on session stop. Safe to call for a session that never wrote
+ *  anything. */
+export function clearMockWorkspace(sessionId: string): void {
+  fs.rmSync(mockWorkspaceDir(sessionId), { recursive: true, force: true });
+}
+
+/** Writes (fresh task) or appends (resumed task) this iteration's assistant
+ *  text to the session's `notes.md` — a fresh task starts the file over,
+ *  matching the same "fresh resets tracking" rule `buildLoopMockFrames`
+ *  already applies to `cumulativeContext`. */
+function writeMockNotes(
+  sessionId: string,
+  opts: { fresh: boolean; resumeCount: number; narration: string; summaryText: string },
+): void {
+  const dir = mockWorkspaceDir(sessionId);
+  fs.mkdirSync(dir, { recursive: true });
+  const entry = `## Iteration ${opts.resumeCount + 1} — ${now()}\n\n${opts.narration}\n\n${opts.summaryText}\n`;
+  if (opts.fresh) {
+    fs.writeFileSync(notesPath(sessionId), `# Notes — ${sessionId}\n\n${entry}`);
+  } else {
+    fs.appendFileSync(notesPath(sessionId), `\n${entry}`);
+  }
 }
 
 function usageFor(fresh: boolean, priorCumulative: number): LoopMockUsage {
@@ -126,6 +176,8 @@ export function buildLoopMockFrames(opts: {
   const summaryText = isDone
     ? `Task complete: ${prompt.slice(0, 120)}.\nDONE`
     : `Made progress on the task; more work remains.`;
+
+  writeMockNotes(sessionId, { fresh, resumeCount: state.resumeCount, narration, summaryText });
 
   return [
     { type: 'task_started', prompt, model: resolvedModel, mock: true, ts: now() },

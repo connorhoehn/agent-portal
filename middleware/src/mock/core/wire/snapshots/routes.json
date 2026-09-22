@@ -883,7 +883,7 @@
     {
       "method": "DELETE",
       "path": "/api/devbox/:sessionId",
-      "source": "src/routes/devbox.ts:870"
+      "source": "src/routes/devbox.ts:910"
     },
     {
       "method": "POST",
@@ -893,7 +893,7 @@
     {
       "method": "POST",
       "path": "/api/devbox/:sessionId/shell-url",
-      "source": "src/routes/devbox.ts:799"
+      "source": "src/routes/devbox.ts:839"
     },
     {
       "method": "POST",
@@ -2548,32 +2548,42 @@
     {
       "method": "DELETE",
       "path": "/internal/devbox/:sessionId",
-      "source": "src/routes/internal-devbox.ts:251"
+      "source": "src/routes/internal-devbox.ts:315"
+    },
+    {
+      "method": "GET",
+      "path": "/internal/devbox/:sessionId/files",
+      "source": "src/routes/internal-devbox.ts:264"
+    },
+    {
+      "method": "GET",
+      "path": "/internal/devbox/:sessionId/files/:fileId",
+      "source": "src/routes/internal-devbox.ts:286"
     },
     {
       "method": "POST",
       "path": "/internal/devbox/:sessionId/shell-url",
-      "source": "src/routes/internal-devbox.ts:235"
+      "source": "src/routes/internal-devbox.ts:244"
     },
     {
       "method": "POST",
       "path": "/internal/devbox/:sessionId/task",
-      "source": "src/routes/internal-devbox.ts:175"
+      "source": "src/routes/internal-devbox.ts:184"
     },
     {
       "method": "GET",
       "path": "/internal/devbox/boxes/:boxId/tail",
-      "source": "src/routes/internal-devbox.ts:225"
+      "source": "src/routes/internal-devbox.ts:234"
     },
     {
       "method": "POST",
       "path": "/internal/devbox/sessions",
-      "source": "src/routes/internal-devbox.ts:155"
+      "source": "src/routes/internal-devbox.ts:164"
     },
     {
       "method": "GET",
       "path": "/internal/devbox/status",
-      "source": "src/routes/internal-devbox.ts:144"
+      "source": "src/routes/internal-devbox.ts:153"
     },
     {
       "method": "POST",

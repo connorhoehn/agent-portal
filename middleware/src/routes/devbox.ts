@@ -726,6 +726,46 @@ devboxRouter.post('/:sessionId/command', asyncHandler(async (req, res) => {
 }));
 
 /**
+ * Run a single command in the workspace via the same exec transport as
+ * `/command` above, and return its captured stdout as one string (the
+ * trailing `__ORGIQ_CWD__:` marker line stripped) — no SSE, one blob back.
+ *
+ * Exported for `lib/devbox-files.ts`, which backs
+ * `routes/internal-devbox.ts`'s `GET /:sessionId/files[/:fileId]`
+ * (LOOP-BRIEF.md §7). The deployed devbox runtime has no dedicated
+ * file-listing or file-read API — `agents/devbox/main.py` exposes only the
+ * headless `/task` entrypoint — so those endpoints fall back to `ls -la` /
+ * `cat` through this same transport rather than inventing a new one.
+ * Deliberately skips `validateCommand`'s safe/full allowlist: the caller is
+ * platform-api behind the internal HMAC envelope, not a browser session, so
+ * the allowlist's "protect an operator poking at someone else's box"
+ * rationale does not apply here.
+ */
+export async function execWorkspaceCommand(
+  sessionId: string,
+  arn: string,
+  command: string,
+  cwd = '/mnt/workspace',
+): Promise<string> {
+  const resp = await dataClient().send(new RunRuntimeCommand({
+    agentRuntimeArn: arn,
+    runtimeSessionId: sessionId,
+    body: {
+      command: buildContainerCommand(command, cwd),
+      timeout: Number(process.env['DEVBOX_COMMAND_TIMEOUT_S'] ?? 30),
+    },
+  }));
+  let out = '';
+  for await (const event of resp.stream ?? []) {
+    const chunk = (event as { chunk?: Record<string, unknown> }).chunk;
+    const delta = chunk?.['contentDelta'] as { stdout?: string } | undefined;
+    if (delta?.stdout) out += delta.stdout;
+  }
+  const markerAt = out.indexOf(`\n${CWD_MARKER}`);
+  return markerAt >= 0 ? out.slice(0, markerAt) : out;
+}
+
+/**
  * Mint a short-lived presigned WebSocket URL for an interactive terminal.
  *
  * The browser opens the socket itself with this URL — terminal frames never

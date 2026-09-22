@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-09-22T00:04:12.857Z",
-  "serverHandlerSha": "b3db0cceab1376840b01ebf8d08ad74dab98891679d935705f28d09ff633bc23",
+  "capturedAt": "2026-09-22T00:39:04.438Z",
+  "serverHandlerSha": "12c7a56cd88f26adf9ca12133308ad1f45d51464779be4e0edb1f914e42ca884",
   "baseUrl": "http://127.0.0.1:3012",
   "personas": [
     "orgiq/admin",
@@ -4995,7 +4995,7 @@
         "points[].bucketStart": "string",
         "points[].count": "number",
         "points[].driftP95": "number",
-        "points[].judgeP50": "null|number",
+        "points[].judgeP50": "number",
         "windowHours": "number"
       },
       "values": {}
@@ -6825,6 +6825,12 @@
           "ok"
         ]
       }
+    },
+    "GET /internal/devbox/:sessionId/files": {
+      "skipped": "no value found for :sessionId under /internal/devbox (orgiq/admin); no value found for :sessionId under /internal/devbox (assessment/admin); no value found for :sessionId under /internal/devbox (anonymous)"
+    },
+    "GET /internal/devbox/:sessionId/files/:fileId": {
+      "skipped": "no value found for :sessionId under /internal/devbox (orgiq/admin); no value found for :sessionId under /internal/devbox (assessment/admin); no value found for :sessionId under /internal/devbox (anonymous)"
     },
     "GET /internal/devbox/boxes/:boxId/tail": {
       "skipped": "no value found for :boxId under /internal/devbox/boxes (orgiq/admin); no value found for :boxId under /internal/devbox/boxes (assessment/admin); no value found for :boxId under /internal/devbox/boxes (anonymous)"

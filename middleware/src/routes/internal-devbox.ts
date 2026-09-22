@@ -10,6 +10,8 @@
 //   POST   /internal/devbox/:sessionId/task        Claude Code headless run (SSE)
 //   GET    /internal/devbox/boxes/:boxId/tail      replay + live tail (SSE)
 //   POST   /internal/devbox/:sessionId/shell-url   presigned/mock terminal URL
+//   GET    /internal/devbox/:sessionId/files        workspace file list
+//   GET    /internal/devbox/:sessionId/files/:fileId  one file's bytes
 //   DELETE /internal/devbox/:sessionId             stop the runtime session
 //
 // Every route calls the SAME handler code the public `/api/devbox` router
@@ -53,7 +55,14 @@ import {
   respondStopSession,
   buildDevboxStatusPayload,
 } from './devbox.js';
-import { buildLoopMockFrames, loopMockPaceMs } from '../mock/devbox-agent-loop.js';
+import { buildLoopMockFrames, loopMockPaceMs, clearMockWorkspace } from '../mock/devbox-agent-loop.js';
+import {
+  isValidFileId,
+  listMockFiles,
+  readMockFile,
+  listRealFiles,
+  readRealFile,
+} from '../lib/devbox-files.js';
 
 export const internalDevboxRouter = Router();
 
@@ -246,6 +255,61 @@ internalDevboxRouter.post('/:sessionId/shell-url', asyncHandler(async (req, res)
   await mintShellUrl(sessionId, body, res);
 }));
 
+// ─── GET /:sessionId/files ──────────────────────────────────────────────────
+// Workspace file list for the Computer Lab "Files" tab (LOOP-BRIEF.md §7).
+// No request body on a GET, so the signed payload is `{ sessionId }`, same
+// convention as the tail route's `{ boxId }`. See `lib/devbox-files.ts` for
+// why real mode falls back to an exec transport rather than a real file API.
+
+internalDevboxRouter.get('/:sessionId/files', asyncHandler(async (req, res) => {
+  const sessionId = sessionIdParam(req, res);
+  if (!sessionId) return;
+  if (!verifyServiceAuth(req, res, { sessionId })) return;
+
+  if (mockAgentCore()) {
+    res.json({ files: listMockFiles(sessionId) });
+    return;
+  }
+
+  const box = getBoxBySession(sessionId);
+  if (!box) { res.status(404).json({ error: 'computer not found' }); return; }
+  const arn = await requireArn(res);
+  if (!arn) return;
+  res.json({ files: await listRealFiles(sessionId, arn) });
+}));
+
+// ─── GET /:sessionId/files/:fileId ──────────────────────────────────────────
+// One file's bytes. Signed payload `{ sessionId, fileId }` — same shape as
+// above plus the id, so a caller cannot replay a signed listing request to
+// fetch an arbitrary file's bytes.
+
+internalDevboxRouter.get('/:sessionId/files/:fileId', asyncHandler(async (req, res) => {
+  const sessionId = sessionIdParam(req, res);
+  if (!sessionId) return;
+  const fileId = String(req.params['fileId'] ?? '');
+  if (!verifyServiceAuth(req, res, { sessionId, fileId })) return;
+
+  if (!isValidFileId(fileId)) {
+    res.status(400).json({ error: 'invalid fileId — path separators and traversal are not allowed' });
+    return;
+  }
+
+  let file: Awaited<ReturnType<typeof readMockFile>> | Awaited<ReturnType<typeof readRealFile>>;
+  if (mockAgentCore()) {
+    file = readMockFile(sessionId, fileId);
+  } else {
+    const box = getBoxBySession(sessionId);
+    if (!box) { res.status(404).json({ error: 'computer not found' }); return; }
+    const arn = await requireArn(res);
+    if (!arn) return;
+    file = await readRealFile(sessionId, arn, fileId);
+  }
+  if (!file) { res.status(404).json({ error: 'file not found' }); return; }
+
+  res.setHeader('Content-Type', file.contentType);
+  res.send(file.data);
+}));
+
 // ─── DELETE /:sessionId ───────────────────────────────────────────────────
 
 internalDevboxRouter.delete('/:sessionId', asyncHandler(async (req, res) => {
@@ -254,6 +318,11 @@ internalDevboxRouter.delete('/:sessionId', asyncHandler(async (req, res) => {
   const serviceId = verifyServiceAuth(req, res, req.body ?? {});
   if (!serviceId) return;
   if (!requirePrincipal(req, res, serviceId)) return;
+
+  // Mirrors the real transport stopping the microVM (and its workspace) on
+  // session stop — the mock's per-session notes.md temp dir must not
+  // outlive the session either.
+  if (mockAgentCore()) clearMockWorkspace(sessionId);
 
   await respondStopSession(sessionId, res);
 }));
