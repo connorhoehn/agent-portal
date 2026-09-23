@@ -4,6 +4,7 @@ import { presenceOf } from '../lib/local-compute-fleet.js';
 import { getJob, cancelJob, type AgentJob } from '../providers/agent-jobs.js';
 import { getNode } from '../providers/local-compute.js';
 import { stopDevboxSessionForSourceControl } from '../routes/devbox.js';
+import { computeRegistry } from './compute-registry-runtime.js';
 import type {
   ComputeCapabilityResource,
   ComputeCapabilitySources,
@@ -38,11 +39,21 @@ function cloudBoxTarget(resource: ComputeCapabilityResource, box: FleetBox): Tar
   };
 }
 
+/**
+ * The shared registry first — it is what every replica agrees on, and it
+ * survives a restart — then this process's own fleet, which covers a box
+ * registered here whose mirror write has not landed yet (or no store at all).
+ */
+async function findBox(id: string): Promise<FleetBox | null> {
+  const shared = await computeRegistry.getBox(id).catch(() => null);
+  return shared ?? getBox(id);
+}
+
 async function resolveCloud(resource: ComputeCapabilityResource): Promise<Target | null> {
   if (resource.resourceId.startsWith('box:')) {
     const id = resource.resourceId.slice(4);
     if (!ID.test(id)) return null;
-    const box = getBox(id);
+    const box = await findBox(id);
     return box ? cloudBoxTarget(resource, box) : null;
   }
   if (!resource.resourceId.startsWith('job:')) return null;
@@ -51,7 +62,7 @@ async function resolveCloud(resource: ComputeCapabilityResource): Promise<Target
   const job = await getJob(id);
   // A local worker's job is never a cloud resource, even if its id looks valid.
   if (!job?.boxId || job.boxId.startsWith('local:')) return null;
-  const box = getBox(job.boxId);
+  const box = await findBox(job.boxId);
   const base = box ? cloudBoxTarget(resource, box) : null;
   return base && box ? { ...base, status: jobStatus(job), revocationKeys: [`box:${box.id}`, `job:${job.id}`], job } : null;
 }

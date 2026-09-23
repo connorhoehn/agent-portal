@@ -1,5 +1,6 @@
 import { computeCapabilitySources } from './compute-capability-source.js';
 import { createComputeCapabilitySessions } from './compute-capability-sessions.js';
+import { computeRegistry } from './compute-registry-runtime.js';
 
 const organizationId = (process.env['WORK_GRAPH_ORGANIZATION_ID'] ?? '').trim();
 
@@ -7,6 +8,7 @@ export const computeCapabilitySessions = createComputeCapabilitySessions({
   organizationId,
   sources: computeCapabilitySources,
   maxTtlMs: Number(process.env['WORK_GRAPH_CAPABILITY_MAX_TTL_MS'] ?? 5 * 60_000),
+  registry: computeRegistry,
 });
 
 export function computeCapabilityConfigured(): boolean {

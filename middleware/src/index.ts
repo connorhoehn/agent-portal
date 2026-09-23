@@ -74,6 +74,7 @@ import { HARNESS_RUNNER_SERVICE_AUTH, serviceAuthOr } from './lib/service-auth.j
 import { initScheduler } from './lib/ingest-scheduler.js';
 import { initBotScheduler } from './lib/bot-scheduler.js';
 import { initFleetPersistence } from './providers/devbox-fleet-store.js';
+import { initComputeRegistry } from './work-graph/compute-registry-runtime.js';
 import { initCrawlTargets } from './lib/crawl-targets.js';
 import { ensureSchema, seedPoliciesIfMissing } from './lib/policy-seeds.js';
 import { startTracePoller } from './lib/cw-trace-ingest.js';
@@ -397,7 +398,9 @@ initCrawlTargets();
 // reaper at import time, but its first sweep is a full interval away, so the
 // load lands first in practice — and an Aurora that is slow, mocked, or
 // missing the table must not delay the listen() below or fail the boot.
-void initFleetPersistence();
+// The compute registry adopts shared registrations and publishes this
+// replica's fleet, so it runs after the fleet's own hydration settles.
+void initFleetPersistence().catch(() => 0).then(() => initComputeRegistry());
 // Cloud boxes/jobs and paired local-machine sessions now emit only through the
 // authenticated platform ingestion boundary. The producer stays inert unless
 // its server-owned org/credential configuration is complete.

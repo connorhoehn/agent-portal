@@ -191,6 +191,25 @@ export function setFleetStore(next: FleetStore | null): void {
 }
 
 /**
+ * Additional mirrors, told the same things as the durable store. The compute
+ * registry (work-graph/compute-registry-runtime.ts) is one: it shares box
+ * registrations across replicas with a TTL, independently of whether the
+ * Aurora mirror above is attached. Returns a detach function.
+ */
+const mirrors = new Set<FleetStore>();
+export function addFleetMirror(mirror: FleetStore): () => void {
+  mirrors.add(mirror);
+  return () => { mirrors.delete(mirror); };
+}
+
+function tellStores(fn: (s: FleetStore) => void): void {
+  if (store) fn(store);
+  for (const mirror of mirrors) {
+    try { fn(mirror); } catch { /* a mirror must never break a registry write */ }
+  }
+}
+
+/**
  * Load persisted boxes into the registry at boot.
  *
  * Writes straight into the maps rather than going through `registerBox`,
@@ -295,7 +314,7 @@ export function registerBox(opts: {
   };
   boxes.set(id, { box, events: [], subscribers: new Set(), lastResultText: '', contextTokens: 0 });
   bySession.set(opts.sessionId, id);
-  store?.upsert(box);
+  tellStores((s) => s.upsert(box));
   emitLifecycle('created', box);
   return box;
 }
@@ -318,7 +337,7 @@ export function renameBox(id: string, label: string): FleetBox | null {
   const s = boxes.get(id);
   if (!s) return null;
   s.box.label = label;
-  store?.upsert(s.box);
+  tellStores((t) => t.upsert(s.box));
   return s.box;
 }
 
@@ -327,7 +346,7 @@ export function markStopped(id: string): void {
   if (!s) return;
   s.box.status = 'stopped';
   s.box.lastActivityAt = now();
-  store?.upsert(s.box);
+  tellStores((t) => t.upsert(s.box));
   emitLifecycle('updated', s.box);
 }
 
@@ -360,7 +379,7 @@ export function removeBox(id: string): boolean {
   emitLifecycle('removed', s.box);
   bySession.delete(s.box.sessionId);
   boxes.delete(id);
-  store?.remove(id);
+  tellStores((t) => t.remove(id));
   return true;
 }
 
@@ -458,7 +477,7 @@ export function appendEvent(id: string, ev: FleetEvent): void {
   s.box.lastActivityAt = now();
   // Every event moves the idle clock, so this is the hot path — the store is
   // responsible for throttling, not the caller.
-  store?.touch(s.box);
+  tellStores((t) => t.touch(s.box));
 
   const type = ev['type'];
 

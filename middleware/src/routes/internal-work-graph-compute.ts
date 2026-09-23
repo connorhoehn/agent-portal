@@ -183,7 +183,7 @@ internalWorkGraphComputeRouter.post('/close', asyncHandler(async (req, res) => {
     if (!res.headersSent) res.status(400).json({ error: 'INVALID_REQUEST' });
     return;
   }
-  const session = computeCapabilitySessions.close(req.body.sessionId);
+  const session = await computeCapabilitySessions.close(req.body.sessionId);
   res.json({ closed: !!session, ...(session ? { reason: session.endReason } : {}) });
 }));
 
@@ -279,7 +279,7 @@ internalWorkGraphComputeRouter.post('/fixtures/register-box', asyncHandler(async
     ...(req.body.label ? { label: req.body.label } : {}),
   });
   for (const viewerId of req.body.sharedWith ?? []) {
-    computeCapabilitySessions.share({ source: 'cloud-compute', resourceId: `box:${box.id}` }, viewerId);
+    await computeCapabilitySessions.share({ source: 'cloud-compute', resourceId: `box:${box.id}` }, viewerId);
   }
   res.status(200).json({ box });
 }));
