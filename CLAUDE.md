@@ -237,9 +237,11 @@ python3.11 -m venv .venv-synth && .venv-synth/bin/pip install -r schema/synth/re
 ## Project dependencies
 
 - **ui-components** (`~/projects/ui-components`): `@connorhoehnslalom/ui-components`,
-  installed at **2.330.0** (sha `3b0a7e57`, verified 2026-09-20 with the two settling
-  commands below — the version this file claimed, 2.276.0 at `495eddda`, was two
-  releases behind the pin). The portal pins it by **git sha** in `package.json`
+  installed at **2.387.0** (sha `718a5836`, verified 2026-09-23 with the two settling
+  commands below). 2.385 added `@tiptap/extension-mention` to what the rich
+  composer imports; it is an *optional* peer, so npm does not install it and Vite
+  fails at runtime with "Could not resolve @tiptap/extension-mention" — the portal
+  now lists it directly. Check new optional peers after every bump. The portal pins it by **git sha** in `package.json`
   (`github:connorhoehnslalom/ui-components#<sha>`) rather than resolving a range
   from GitHub Packages — bump by moving the sha. It resolves over SSH, so no
   `GITHUB_TOKEN` and no registry `.npmrc` are needed; `portal/.npmrc` holds only
