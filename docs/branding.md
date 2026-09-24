@@ -51,8 +51,20 @@ props:
   `brand-gradient` hairline along its top;
 - the content column paints `bg`; every `Card` lifts off it in `surface`.
 
-A page's own context rail (the initiative page's right column) is a
+A page's own context rail (a nested section rail such as Automate's) is a
 `surface-panel` panel, so it reads as chrome beside the `surface` cards.
+
+**Flush workspace pages.** A page that brings its own header and panes marks
+its root `data-shell-flush`; `app.css` then drops the shell's 24px content
+padding and hides the shell's breadcrumb row for it, because the page's
+header prints the same trail (`useShellBreadcrumbItems`). The initiative
+page (`/iq/projects/:id`, the Work four-pane view) is the first: its
+ui-components `ScopeHeader` sets its own rhythm — the trail about 6px above
+a 22px/600 title, as the Work mockup draws it — so the branding journeys'
+16px trail→title rule is judged on pages in the shell's padded column, and
+the detail surface in that rule is the Automate job page. Mark a page flush
+only when it is a full workspace; a list or record page keeps the shell's
+padding and title rhythm.
 
 ## Dark
 

@@ -334,3 +334,16 @@ section. Nothing is open for this role right now.
   reason. Every path now goes through one `send()` in `InvokePage.tsx` that
   sets the ref, clears the retried flag and streams; the call sites no longer
   each have to remember.
+
+## Fixed (pending re-audit) — initiative-page session, 2026-09-24
+
+- **Design detail had no real page title.** `/iq/designs/:id` rendered
+  `PageSection title=""` — an empty `<h1>` at the title position — with the
+  thread's name as an 18px/400 `<h2>` inside a DetailHeader 58px below the
+  breadcrumb trail, so the page failed the shell's 16px / 20px-600 title
+  rhythm and a screen reader found an empty top heading. Found while choosing
+  a detail page for the branding rhythm. Fix: the thread title is the
+  PageSection title; the status chip and meta line sit in an Inline under it
+  (`portal/src/pages/designs/DesignThreadPage.tsx`). Re-measured: one `<h1>`,
+  16px under the trail, 20px/600.
+
