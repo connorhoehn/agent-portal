@@ -21,7 +21,7 @@
  * Only under DEV_OFFLINE does it create its table — against AWS the table is
  * the stack's, and a missing one means memory mode with a warning.
  */
-import { CreateTableCommand, DescribeTableCommand, DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { CreateTableCommand, DescribeTableCommand, DescribeTimeToLiveCommand, DynamoDBClient, UpdateTimeToLiveCommand } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import { addFleetMirror, hydrateBoxes, listBoxes, type FleetBox } from '../lib/devbox-fleet.js';
 import { createComputeRegistry, DEFAULT_REGISTRATION_TTL_MS, type ComputeRegistry } from './compute-registry.js';
@@ -86,6 +86,23 @@ async function connectDynamo(): Promise<{ store: ComputeRegistryStore; table: st
         warn(`could not create ${table} — registry stays in memory`, createErr);
         return null;
       }
+    }
+  }
+  if (offline) {
+    // The table this creates had TTL off, so dead registrations (`ttl`, epoch
+    // seconds) stayed forever — 76 of 81 rows expired on 2026-09-24
+    // (realtime-examples NFR #226). With it on, the dev stack's local TTL
+    // sweep reaps them as AWS would; orgiq-sessions already has TTL.
+    try {
+      const ttl = await probe((abortSignal) => raw.send(new DescribeTimeToLiveCommand({ TableName: table }), { abortSignal }));
+      if (ttl.TimeToLiveDescription?.TimeToLiveStatus !== 'ENABLED') {
+        await probe((abortSignal) => raw.send(new UpdateTimeToLiveCommand({
+          TableName: table,
+          TimeToLiveSpecification: { Enabled: true, AttributeName: 'ttl' },
+        }), { abortSignal }));
+      }
+    } catch (err) {
+      warn(`could not enable TTL on ${table}`, err);
     }
   }
   return {
