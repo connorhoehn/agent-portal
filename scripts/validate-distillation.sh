@@ -48,10 +48,17 @@ section "information architecture (docs/distillation-redesign-spec.md §1)"
 MODULE="$PAGES/DistillationModule.tsx"
 { [ -f "$MODULE" ] && grep -q "ScopeHeader" "$MODULE" && grep -q "data-shell-flush" "$MODULE"; } \
   && ok "one module frame: ScopeHeader, flush" || fail "no DistillationModule.tsx on ScopeHeader with data-shell-flush under $PAGES"
-grep -rq "SubNavLayout" "$PAGES" && fail "SubNavLayout still used under $PAGES (the module has no second rail)" || ok "no SubNavLayout second rail"
+# One navigation: the vertical sub-nav (SubNavLayout) in the module frame,
+# grouped Knowledge / Review / Activity — and no horizontal tab row beside it.
+{ grep -q "SubNavLayout" "$MODULE" && grep -q "moduleNav(" "$MODULE"; } \
+  && ok "vertical sub-nav: SubNavLayout over moduleNav (Knowledge / Review / Activity)" \
+  || fail "DistillationModule.tsx has no SubNavLayout sub-nav built from moduleNav()"
+grep -qE "tabs=\{" "$MODULE" && fail "DistillationModule.tsx still passes horizontal tabs beside the sub-nav" || ok "no second, horizontal navigation"
 [ -f "$PAGES/DistillationLayout.tsx" ] && fail "DistillationLayout.tsx still present (retired)" || ok "DistillationLayout retired"
-{ grep -q "tabs" "$MODULE" && grep -q "dot:" "$MODULE" && grep -q "controls=" "$MODULE" && grep -q "/iq/library" "$MODULE"; } \
-  && ok "header: tabs with live count + health dot, repo selector, Open Library" || fail "DistillationModule header lacks tabs/dot/controls/Library link"
+# The live signals moved from header tabs to the sub-nav: pending count and
+# tier counts as rail counts, tier health as the Runs entry's accent.
+{ grep -q "health: dot" "$MODULE" && grep -q "pending" "$MODULE" && grep -q "controls=" "$MODULE" && grep -q "/iq/library" "$MODULE"; } \
+  && ok "sub-nav carries live counts + health accent; header keeps the repo selector and Open Library" || fail "DistillationModule lacks live rail counts/health accent, the repo selector or the Library link"
 grep -qE "path=\"distillation\"" portal/src/App.tsx && ok "/iq/distillation is a route tree" || fail "App.tsx: /iq/distillation is not a nested route tree"
 for s in knowledge review activity; do
   grep -qE "path=\"$s\"" portal/src/App.tsx || fail "App.tsx: no route for /iq/distillation/$s"

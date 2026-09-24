@@ -15,7 +15,7 @@ This spec is the contract between three workstreams: **L** (library),
 
 ## 1. Information architecture
 
-Destinations (horizontal tabs in one module header; no second rail):
+Destinations (groups in the module's vertical sub-nav rail; each group lists its views):
 
 | Tab | Route | Default surface |
 |---|---|---|
@@ -23,10 +23,13 @@ Destinations (horizontal tabs in one module header; no second rail):
 | Review 7 | `/iq/distillation/review?tab=pending\|decided&sample=<id>&panel=sources&sourceView=…` | queue · claim · Sources |
 | Activity • | `/iq/distillation/activity?view=runs\|graph&run=<id>&repo` | runs or tier graph · run inspector |
 
-The header shows: title "Distillation", the three tabs (Review carries the
-pending count; Activity carries a warning dot when any tier is behind or
-stalled), a repository selector, and "Open Library ↗". Counts come from live
-data, never literals.
+The rail (`SubNavLayout`, titled "Distillation") shows Knowledge → Guides &
+findings / Patterns / Run notes with tier counts, Review → Pending / Reviewed
+with counts, and Activity → Runs (amber/red when any tier is behind or
+stalled) / Tier graph. The content header shows the destination title, a
+repository selector, and "Open Library ↗". Counts come from live data, never
+literals. (Revised 2026-09-24: the first build used horizontal header tabs;
+the mockups draw a vertical sub-nav.)
 
 **Knowledge** — explorer column: search (scoped to the current view, and says
 so), view selector "Guides & findings 11 / Patterns 22 / Run notes 304",
@@ -135,7 +138,7 @@ Add `distillation_compactions` (job rows incl. input/output ids, log, cost, dura
 
 ## 4. Portal workstream (P)
 
-- One module frame: `ScopeHeader` (tabs + dot + repo `controls` + Library link) over `ViewportFillRegion`, flush (`data-shell-flush`), no `SubNavLayout`.
+- One module frame: `SubNavLayout` rail (`moduleNavModel.ts`: groups, counts, accent) beside a `ScopeHeader` (destination title + repo `controls` + Library link), inside a flush `ViewportFillRegion` (`data-shell-flush`).
 - Knowledge: `ExplorerLayout` rail (`SearchInput`, view `Select`, filter popover via `WorkListFilters`, `GroupedList` rows with `FileKindMark`/icon, footer Load more + counts) · `EditorShell` record (`MarkdownView scale`, `ProcedureSteps`, `TechnicalDetails`, `KeyValue`, tabs) · `ContextColumn` Sources (`SegmentedControl` List/Graph, `SourceList`, `TypedNodeCanvas` lineage) · `RichChatComposer` footer.
 - Review: `Tabs` + `SearchInput` + `GroupedList` queue · `EditorShell` claim (`OutcomeSection` note, Buttons, `AccessNotice`, `Disclosure` + `CommentList` earlier reviews, `Disclosure` + `StatStrip` sampling) · Sources as in Knowledge.
 - Activity: `StatStrip` tier flow (connectors + status) · `Banner` status line · `SegmentedControl` Runs/Tier graph · runs `GroupedList`/`DataTable` · `TypedNodeCanvas` + `CanvasZoomControls` tier graph in `CanvasPaneLayout` · run inspector (`DetailHeader`, `StatusPill`, `KeyValue`, `DetailSection`, `LinkedItemsSection` produced, `Disclosure` + `LogStream` run log, `TechnicalDetails`).

@@ -94,10 +94,12 @@ page must become a section with a rail.
 ## Information architecture (the contract for the portal)
 
 Superseded 2026-09-24 by `docs/distillation-redesign-spec.md` §1. In short:
-`/iq/distillation` mounts `DistillationModule` — a `ScopeHeader` (title,
-tabs **Knowledge** / **Review N** / **Activity •**, repository selector in
-`controls`, "Open Library ↗") over a flush `ViewportFillRegion`; no second
-rail.
+`/iq/distillation` mounts `DistillationModule` — a flush `ViewportFillRegion`
+holding a vertical `SubNavLayout` rail (groups **Knowledge** — Guides &
+findings / Patterns / Run notes; **Review** — Pending N / Reviewed N;
+**Activity** — Runs, tinted when a tier is behind or stalled / Tier graph)
+beside a `ScopeHeader` (destination title, repository selector in `controls`,
+"Open Library ↗").
 
 | tab | route | surface |
 |---|---|---|

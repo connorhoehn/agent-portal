@@ -8,8 +8,11 @@ distilled fact can be traced back to the evidence it rests on.
 
 ## Where to look: Knowledge, Review, Activity
 
-The module is one frame (`DistillationModule.tsx`: a `ScopeHeader` with
-three tabs, a repository selector and "Open Library ↗"; no second rail). The
+The module is one frame (`DistillationModule.tsx`): a vertical `SubNavLayout`
+rail beside the content, and over the content a `ScopeHeader` naming the
+current destination, with the repository selector and "Open Library ↗". The
+rail's groups are the destinations and its entries are their views (model in
+`moduleNavModel.ts`). The
 three destinations answer three different questions
 (`docs/distillation-redesign-spec.md` §1 is the contract):
 
@@ -19,8 +22,9 @@ three destinations answer three different questions
 | **Review** | Does this finding match the evidence? | `/iq/distillation/review?tab=pending\|decided&sample=&panel=sources` | queue (Pending N / Reviewed, rows titled by the resolved target) · the claim with Agree / Disagree (ManageBots; read-only notice otherwise) · Sources |
 | **Activity** | Is new work being turned into useful knowledge? | `/iq/distillation/activity?view=runs\|graph&run=&repo&level&status` | tier-flow strip + health status line · Runs or Tier graph · run inspector |
 
-The tab row shows Review's pending count and a warning dot on Activity when
-the server reports a tier behind or stalled. Every old link still works:
+The rail carries live counts — each Knowledge view's tier size, Pending and
+Reviewed — and tints Activity → Runs amber or red when the server reports a
+tier behind or stalled. Each entry's one-line description is its tooltip. Every old link still works:
 `/overview` and the bare root land on Knowledge; `/tiers?level=` maps to the
 matching Knowledge view; `/artifacts?open=X` and `/lineage?focus=X` open that
 record (the latter with Sources → Graph); `/compactions` lands on Activity
