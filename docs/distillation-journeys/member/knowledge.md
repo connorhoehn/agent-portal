@@ -1,0 +1,14 @@
+surface: knowledge
+role: member
+user: u-theo (Theo Chang) — GET /api/session/me on this sign-in: sub u-theo, tenant orgiq, role member
+url: /iq/distillation/knowledge
+audited: 2026-09-24 08:40 local, Chrome window (innerWidth 1670, innerHeight 677), middleware dev:mock (MOCK_QUEUE in-process), ui-components 2.388.2 (first audit of the Knowledge / Review / Activity redesign)
+screenshot: knowledge.jpg
+pages: portal/src/pages/distillation/DistillationModule.tsx,portal/src/pages/distillation/KnowledgeTab.tsx,portal/src/pages/distillation/KnowledgeRecord.tsx,portal/src/pages/distillation/ProcedureRuns.tsx,portal/src/pages/distillation/SourcesPanel.tsx,portal/src/pages/distillation/ExplainComposer.tsx
+verdict: pass
+console errors: 0
+layout: pass — the module is flush with the shell: content col left 200px w 1470px; ScopeHeader trail "Build › Distillation › Knowledge", title, tabs Knowledge / Review 6 / Activity (warning dot), repository select and Open Library ↗; first-row-top: 384px (the first "Recently updated" row) under one search field, one view select + filter button; no horizontal scroll (scrollWidth 1670 = innerWidth); exactly one <main>; clipped-text sweep 0 untitled clips
+keyboard: pass — 56 tabbable controls and all 56 accept focus (`.focus()` walk; the automation tab reports visibilityState hidden, so physical keys do not reach it). Explorer rows are native buttons that open the record; the Sources List/Graph switch is a radio group; the graph offers "Show as list"
+empty-state: pass — search "zzznoexist" in Guides & findings reads "No matches — Nothing in this view matches" and says the search covers guides & findings only; /iq/distillation/lineage with no item reads "Choose an item to trace its sources" and picks nothing for the reader
+role-gating: member reads everything: explorer, record (Content / History, and Runs on procedures), Sources List and Graph, Open in Library, the explain-only composer. The procedure Runs tab shows the run history but no "Record a run" form (ManageBots only). No publish control anywhere
+notes: Acceptance journey 1 walked on this build (as u-vera): "Rerun-and-diff triage for a flaky collector-fleet test" (art-001) → Sources 4 lists the pattern "Flaky collector-fleet tests only fail under parallel CI runs" and three run notes with excerpts ("Two integration tests bound to the same local port only collided when CI ran them in parallel…") → opening a note lands in Run notes with that note selected and its session as the source → Back returns to art-001 with Sources open. Journey 2: the view select moves the same explorer between Guides & findings 11, Patterns 22 and Run notes N without leaving the page; "50 of 93 loaded · Load more" in the footer. Console errors 0, read with onlyErrors after load and after each interaction.

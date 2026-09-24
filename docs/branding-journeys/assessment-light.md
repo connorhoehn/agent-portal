@@ -2,7 +2,7 @@ tenant: assessment
 theme: light
 user: u-asha
 url: /assessment/teams
-audited: 2026-09-24 01:08 local, Chrome 1670px, middleware dev:mock
+audited: 2026-09-24 09:20 local, Chrome 1670px, middleware dev:mock
 screenshot: assessment-light.jpg
 verdict: pass
 console errors: 0
@@ -89,4 +89,6 @@ re-observed 2026-09-18 (row-level controls stop being furniture): app.css gained
 re-observed 2026-09-18 (ghost-Button borders off three row labels): no token moved and every ratio above still holds. Three call sites dropped the ghost `Button` variant's 1px border from a row's identifying LABEL (ReportsPage twice, FeedbackPage once) — the border turned each table's first column into a column of controls beside flat data chips. Same queued library gap as the four row-shaped Buttons fixed earlier; same `border-0` workaround.
 
 re-observed 2026-09-24 01:08 (app.css — half this log's digest — gained the flush-page rule for pages marked `data-shell-flush`; no assessment page carries that marker, so nothing here was expected to move). Signed in as Asha Nair (`/api/session/me` = sub u-asha, tenant assessment, role assessor), `orgiq:preferences:v1` theme=light, `data-theme` absent, `[data-tenant]` = assessment, innerWidth 1670, no horizontal scroll. Layers from `getComputedStyle`: body rgb(241,246,245); `[data-shell-nav] aside` rgb(231,238,235); `.shell-header` rgb(255,255,255); the dashboard's StatStrip card rgb(255,255,255); panel tone rgb(231,238,235) read from the team-detail page (/assessment/teams/TEAM-001). text-primary rgb(26,45,45) → WCAG 13.20 on bg, 14.41 on surface. Brand on `[data-tenant="assessment"]`: --color-brand / --color-primary #0B6666, --color-bg #F1F6F5; the active nav item's border-left rgb(11,102,102). Rhythm, trail bottom → title top: dashboard 16, submissions 16, reports 16, feedback 16, activity 16 (/assessment/runs, "System › Activity"), configuration 16, team-detail 16 (TEAM-001) — every title 20px/600. team-detail now measures 16 where it measured 17 before; both are inside the 2px tolerance. Console errors 0.
+
+re-observed 2026-09-24 09:20 (Layout.tsx — half this log's digest — changed: the shell rail's Distillation entry now opens /iq/distillation/knowledge and stays lit across the Knowledge / Review / Activity routes; app.css is unchanged). Signed in as Asha Nair (u-asha, assessor), light theme, innerWidth 1670, no horizontal scroll. Every number on the lines above was re-measured and is unchanged: body rgb(241,246,245), nav rgb(231,238,235), header rgb(255,255,255), StatStrip card rgb(255,255,255), panel rgb(231,238,235) (team-detail); WCAG 13.20 on bg, 14.41 on surface; --color-brand #0B6666, --color-bg #F1F6F5, active nav border-left rgb(11,102,102). Rhythm, trail bottom → title top: dashboard 16, submissions 16, reports 16, feedback 16, activity 16, configuration 16, team-detail 16 — every title 20px/600. Console errors 0.
 

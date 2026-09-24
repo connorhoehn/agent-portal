@@ -2,7 +2,7 @@ tenant: assessment
 theme: dark
 user: u-asha
 url: /assessment/teams
-audited: 2026-09-24 01:12 local, Chrome 1670px, middleware dev:mock
+audited: 2026-09-24 09:18 local, Chrome 1670px, middleware dev:mock
 screenshot: assessment-dark.jpg
 verdict: pass
 console errors: 0
@@ -89,4 +89,6 @@ re-observed 2026-09-18 (row-level controls stop being furniture): app.css gained
 re-observed 2026-09-18 (ghost-Button borders off three row labels): no token moved and every ratio above still holds. Three call sites dropped the ghost `Button` variant's 1px border from a row's identifying LABEL (ReportsPage twice, FeedbackPage once) — the border turned each table's first column into a column of controls beside flat data chips. Same queued library gap as the four row-shaped Buttons fixed earlier; same `border-0` workaround.
 
 re-observed 2026-09-24 01:12 (app.css, half this log's digest, gained the flush-page rule for pages marked `data-shell-flush`; no assessment page carries it). Same Asha Nair session as the light log (sub u-asha, tenant assessment, role assessor); `orgiq:preferences:v1` theme=dark, full reload, `data-theme="dark"`, innerWidth 1670, no horizontal scroll. Layers: body rgb(10,61,61); `[data-shell-nav] aside` rgb(10,66,66); `.shell-header` rgb(13,74,74); the dashboard's StatStrip card rgb(13,74,74); panel = the surface-panel tone rgb(10,66,66), read on the shell rail (in the dark theme no element on the team-detail page paints that tone, so the rail is the observation). text-primary rgb(243,247,245) gives WCAG 11.12 on bg and 9.27 on surface. Brand on `[data-tenant="assessment"]`: --color-brand / --color-primary #2dd4bf, --color-bg #0A3D3D; the active nav item's border-left rgb(45,212,191). Rhythm: dashboard 16, submissions 16, reports 16, feedback 16, activity 16, configuration 16, team-detail 16 (TEAM-001); every title 20px/600. Console errors 0.
+
+re-observed 2026-09-24 09:18 (Layout.tsx — half this log's digest — changed: the shell rail's Distillation entry now opens /iq/distillation/knowledge and stays lit across the Knowledge / Review / Activity routes; app.css is unchanged). Signed in as Asha Nair (u-asha, assessor), dark theme (`data-theme="dark"`), innerWidth 1670, no horizontal scroll. Every number on the lines above was re-measured and is unchanged: body rgb(10,61,61), nav rgb(10,66,66), header rgb(13,74,74), card rgb(13,74,74), panel = the surface-panel tone rgb(10,66,66) read on the shell rail; WCAG 11.12 on bg, 9.27 on surface; --color-brand #2dd4bf, --color-bg #0A3D3D, active nav border-left rgb(45,212,191). Rhythm, trail bottom → title top: dashboard 16, submissions 16, reports 16, feedback 16, activity 16, configuration 16, team-detail 16 — every title 20px/600. Console errors 0.
 

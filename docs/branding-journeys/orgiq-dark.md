@@ -2,7 +2,7 @@ tenant: orgiq
 theme: dark
 user: u-theo
 url: /iq/projects
-audited: 2026-09-24 01:00 local, Chrome 1670px, middleware dev:mock
+audited: 2026-09-24 09:15 local, Chrome 1670px, middleware dev:mock
 screenshot: orgiq-dark.jpg
 verdict: pass
 console errors: 0
@@ -86,4 +86,6 @@ re-observed 2026-09-18 (row-level controls stop being furniture): app.css gained
 re-observed 2026-09-18 (ghost-Button borders off three row labels): no token moved and every ratio above still holds. Three call sites dropped the ghost `Button` variant's 1px border from a row's identifying LABEL (ReportsPage twice, FeedbackPage once) — the border turned each table's first column into a column of controls beside flat data chips. Same queued library gap as the four row-shaped Buttons fixed earlier; same `border-0` workaround.
 
 re-observed 2026-09-24 01:00 (app.css — half this log's digest — gained the flush-page rule for pages marked `data-shell-flush`; see orgiq-light.md for why the rhythm's detail surface moved from the initiative page to the Automate job page). Signed in as Theo Chang (member), `orgiq:preferences:v1` theme=dark, full reload, `data-theme="dark"`, innerWidth 1670, no horizontal scroll. Layers from `getComputedStyle`: body rgb(11,18,32); `[data-shell-nav] aside` rgb(17,26,46); `.shell-header` rgb(23,32,51); the StatStrip card on /iq/projects rgb(23,32,51); panel = the Automate nested rail rgb(17,26,46). text-primary rgb(241,245,249) → WCAG 17.09 on bg, 14.85 on surface. Brand on `[data-tenant="orgiq"]`: --color-brand / --color-primary #8b91ff; active nav border-left rgb(139,145,255) over rgb(30,27,75); "+ New sprint" (as Mia Singh, program-owner, same theme) rgb(139,145,255) with rgb(15,23,42) text. Rhythm, re-measured in the dark theme: initiatives 16, library 16, promotions 16, designs 16, budgets 16 (as Mia), automate 16, job-detail 16 (/iq/work/job-inf-maint-1) — every title h1 20px/600. Every number above is unchanged from the previous observation. Console errors 0.
+
+re-observed 2026-09-24 09:15 (Layout.tsx — half this log's digest — changed: the shell rail's Distillation entry now opens /iq/distillation/knowledge and stays lit across the Knowledge / Review / Activity routes; app.css is unchanged). Signed in as Theo Chang (u-theo, member), dark theme (`data-theme="dark"`), innerWidth 1670, no horizontal scroll. Every number on the lines above was re-measured and is unchanged: body rgb(11,18,32), nav rgb(17,26,46), header rgb(23,32,51), card rgb(23,32,51), panel rgb(17,26,46); WCAG 17.09 on bg, 14.85 on surface; --color-brand #8b91ff, active nav border-left rgb(139,145,255) over rgb(30,27,75); "+ New sprint" (as Mia Singh) rgb(139,145,255). Rhythm, trail bottom → title top: initiatives 16, library 16, promotions 16, designs 16, budgets 16 (as Mia), automate 16, job-detail 16 — every title 20px/600. Console errors 0.
 
