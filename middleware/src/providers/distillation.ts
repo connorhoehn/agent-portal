@@ -28,9 +28,14 @@
 // banner of constants that never moved when a sample was decided), and the
 // only durable fix is having no number to drift.
 //
-// Aurora path: lab_experiences exists (schema/lab_loop_schema.sql) but there
-// is no compaction-job or level-rollup table yet — mock-first, same as
-// promotions.ts and design-reviews.ts.
+// Aurora path: the operational rows are Aurora-backed. With config.mock.aurora
+// off, listCompactions / getCompaction read distillation_compactions and
+// ingest() / levelsView()'s L0 writer count read distillation_ingest_writers
+// (schema/distillation_ops_schema.sql, via providers/distillation-store.ts),
+// mapped to the same wire types; a failed read is a 503, never an empty list.
+// The corpus — observations, clusters, artifacts, facts, reviews — has no
+// Aurora path yet and stays mock-first, like promotions.ts and
+// design-reviews.ts. With config.mock.aurora on, every read is the fixture.
 
 import { config } from '../config.js';
 import { NotFoundError, AppError, ValidationError } from '../lib/async-handler.js';
@@ -57,7 +62,9 @@ import { MemoryMessageQueue } from '../lib/memory-queue.js';
 import type { QueueMessage } from '../lib/mq-client.js';
 import { tierDigest } from '../lib/distillation-digest.js';
 import { L2Replica, type ReplicationStatus } from '../lib/distillation-replica.js';
-import { persistJob, recordWriterWrite } from './distillation-store.js';
+import {
+  persistJob, recordWriterWrite, readCompactions, readCompaction, readRecentWriters,
+} from './distillation-store.js';
 
 export type {
   Observation, Cluster, Artifact, ArtifactRow, Fact, ReviewSample,
@@ -113,7 +120,10 @@ export interface CompactionJob {
   inputItems: number;
   outputItems: number;
   dedupedItems: number;
-  bytesReclaimed: number;
+  /** Always a count on the mock path. From Aurora it is the value recorded
+   *  when the pass finished, or null for a row written before that column
+   *  existed — unknown, never a stand-in zero. */
+  bytesReclaimed: number | null;
   costUsd: number;
   error?: string;
   /** What this pass actually made, so a job row can open it: the L1 clusters
@@ -905,7 +915,13 @@ const WRITERS_WINDOW_MS = 60 * 60 * 1000;
 /** /levels, enriched. The realtime `distill:levels` frame carries exactly this
  *  array, so the pushed state and the fetched state are one serializer. */
 export async function levelsView(): Promise<{ levels: LevelView[]; health: LevelHealth[] }> {
-  const [ls, jobs] = await Promise.all([levels(), listCompactions()]);
+  const [ls, jobs, storedWriters] = await Promise.all([
+    levels(),
+    listCompactions(),
+    // Aurora: L0's writers are the sessions the writers table saw land a row
+    // in the window. Mock: counted from the observation rows below.
+    config.mock.aurora ? Promise.resolve(null) : readRecentWriters(WRITERS_WINDOW_MS),
+  ]);
   const health = compactionHealth(ls, jobs);
   const now = clock.now().getTime();
   const recent = (iso: string): boolean => now - Date.parse(iso) <= WRITERS_WINDOW_MS;
@@ -914,7 +930,9 @@ export async function levelsView(): Promise<{ levels: LevelView[]; health: Level
   const artifacts = artifactsOnWire();
 
   const writersFor: Record<Level, number> = {
-    L0: new Set(observations.filter((o) => recent(o.created_at)).map((o) => o.session_id)).size,
+    L0: storedWriters
+      ? new Set(storedWriters.map((w) => w.session_id)).size
+      : new Set(observations.filter((o) => recent(o.created_at)).map((o) => o.session_id)).size,
     L1: new Set(clusters.filter((c) => recent(c.created_at)).map((c) => c.created_by_compaction_id)).size,
     L2: new Set(artifacts.filter((a) => recent(a.created_at)).map((a) => a.created_by_compaction_id)).size,
   };
@@ -952,7 +970,11 @@ export async function levelsView(): Promise<{ levels: LevelView[]; health: Level
 
 export async function ingest(): Promise<IngestState> {
   simulateIngest();
-  const writers = writerRows();
+  // Aurora: the writers that landed a row in the last hour — the table keeps
+  // every writer it has ever seen, so "active" is a window, not a row count.
+  const writers: Array<{ repo: string; observationsPerHour: number }> = config.mock.aurora
+    ? writerRows()
+    : await readRecentWriters(WRITERS_WINDOW_MS);
   const perHour = sumBy(writers, 'observationsPerHour');
   const byRepo = groupBy(writers, 'repo');
   return {
@@ -968,10 +990,17 @@ export async function ingest(): Promise<IngestState> {
 }
 
 export async function listCompactions(opts: { level?: Level; status?: CompactionStatus } = {}): Promise<CompactionJob[]> {
+  if (!config.mock.aurora) return readCompactions(opts, clock.now().getTime());
   let rows = jobRows().slice().sort((a, b) => b.startedAt.localeCompare(a.startedAt));
   if (opts.level) rows = rows.filter((j) => j.level === opts.level);
   if (opts.status) rows = rows.filter((j) => j.status === opts.status);
   return rows.map(jobView);
+}
+
+/** One job by id, or null when there is none (the route's 404). */
+export async function getCompaction(id: string): Promise<CompactionJob | null> {
+  if (!config.mock.aurora) return readCompaction(id, clock.now().getTime());
+  return (await listCompactions()).find((j) => j.id === id) ?? null;
 }
 
 /** One job as it stands this instant, as plain JSON — what a `distill:jobs`
@@ -1304,6 +1333,7 @@ function announce(row: CompactionJobRow): void {
     startedAt: view.startedAt, finishedAt: view.finishedAt, input_ids: view.input_ids,
     output_ids: view.output_ids, log: view.log, what_changed: view.what_changed,
     duration_ms: view.duration_ms, cost_usd: view.cost_usd, attempts: view.attempts,
+    stepLabel: view.stepLabel, bytesReclaimed: view.bytesReclaimed,
     ...(view.error ? { error: view.error } : {}),
   });
   distillationEvents.emit('job', row.id);
@@ -1469,7 +1499,13 @@ export async function pumpCompactionQueue(level: CompactableLevel, waitSeconds =
  */
 export async function compactNow(level: CompactableLevel, by: string, repo: string | null = null): Promise<CompactionJob> {
   compactSeq += 1;
-  const jobId = `comp-9${compactSeq}`;
+  // The mock id restarts at comp-91 with the process, which is harmless in
+  // memory and a primary-key collision in distillation_compactions: a restart
+  // would upsert over the previous run's record. With Aurora, the id carries
+  // the queue time so it is unique across restarts.
+  const jobId = config.mock.aurora
+    ? `comp-9${compactSeq}`
+    : `comp-${clock.now().getTime().toString(36)}-${compactSeq}`;
   const now = clock.nowIso();
   const row: CompactionJobRow = {
     id: jobId,

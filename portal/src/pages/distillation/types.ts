@@ -55,7 +55,8 @@ export interface CompactionJob {
   inputItems: number;
   outputItems: number;
   dedupedItems: number;
-  bytesReclaimed: number;
+  /** Null for a job row written before Aurora stored it — unknown, not 0. */
+  bytesReclaimed: number | null;
   costUsd: number;
   error?: string;
   produced?: CompactionProduced;

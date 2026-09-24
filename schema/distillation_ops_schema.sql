@@ -6,8 +6,10 @@
 --
 -- Written by middleware/src/providers/distillation-store.ts as a durable
 -- mirror of what the queue consumer did (fire-and-forget upserts, one per job
--- transition). The distillation read path is still mock-first; see that
--- module's note for what reading these back as the source of truth needs.
+-- transition). With Aurora configured (MOCK_AURORA off) the compaction list,
+-- a single job, /ingest and /levels' L0 writer count are READ back from these
+-- tables by the same module; the corpus (observations, clusters, artifacts,
+-- facts, reviews) is still mock-first. See docs/distillation.md.
 --
 -- Loads right after distillation_schema.sql (load_schema.py).
 -- ---------------------------------------------------------------------------
@@ -40,8 +42,18 @@ CREATE TABLE IF NOT EXISTS distillation_compactions (
   error         TEXT,
   -- Queue deliveries so far; the dead-letter threshold is MAX_RECEIVES in
   -- middleware/src/lib/distillation-queue.ts.
-  attempts      SMALLINT NOT NULL DEFAULT 0
+  attempts      SMALLINT NOT NULL DEFAULT 0,
+  -- The running pass's current step sentence; NULL once it is done or queued.
+  step_label    TEXT,
+  -- Bytes the pass reclaimed, as counted when it finished. NULL = not recorded
+  -- (a row written before the column existed) — unknown, never zero.
+  bytes_reclaimed BIGINT CHECK (bytes_reclaimed IS NULL OR bytes_reclaimed >= 0)
 );
+
+-- Clusters that created the table before these two columns existed.
+ALTER TABLE distillation_compactions ADD COLUMN IF NOT EXISTS step_label TEXT;
+ALTER TABLE distillation_compactions ADD COLUMN IF NOT EXISTS bytes_reclaimed BIGINT
+  CHECK (bytes_reclaimed IS NULL OR bytes_reclaimed >= 0);
 
 CREATE INDEX IF NOT EXISTS distillation_compactions_level_idx
   ON distillation_compactions (level, queued_at DESC);

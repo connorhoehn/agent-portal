@@ -14,7 +14,7 @@ import { Router } from 'express';
 import { asyncHandler, NotFoundError, ValidationError } from '../lib/async-handler.js';
 import { requireAction, resolveSession } from '../lib/authz.js';
 import {
-  compactNow, ingest, levelsView, listCompactions, sampling, samplingVerdict,
+  compactNow, ingest, levelsView, listCompactions, getCompaction, sampling, samplingVerdict,
   listFacets, itemSources, getSession, procedureRuns, replicationStatus,
   listItems, getItem, lineageFor, isLineageRoot, listArtifacts, factLineage, listReview, decideReview, libraryProvenance,
   publishArtifact, sampleForReview,
@@ -130,7 +130,7 @@ distillationRouter.post('/compact', manageGate, asyncHandler(async (req, res) =>
 // GET /api/distillation/compactions/:id — one job, with its run log.
 distillationRouter.get('/compactions/:id', asyncHandler(async (req, res) => {
   const id = requireId(String(req.params['id']));
-  const job = (await listCompactions()).find((j) => j.id === id);
+  const job = await getCompaction(id);
   if (!job) throw new NotFoundError(`compaction ${id} not found`);
   res.json(job);
 }));

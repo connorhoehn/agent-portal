@@ -143,6 +143,11 @@ Library's "Distilled from" section links the same way.
 - Middleware: `routes/distillation.ts`, `providers/distillation.ts`,
   `mock/distillation.ts` (the mock is the contract; the shapes are in
   `docs/distillation-goal.md`), `schema/distillation_schema.sql`.
+- Aurora-backed reads (with `MOCK_AURORA` off): the compaction list and a single
+  job (`/compactions`, `/compactions/:id`), `/ingest`, and `/levels`' L0 writer
+  count, from `schema/distillation_ops_schema.sql` via
+  `providers/distillation-store.ts` (a failed read is a 503); every other read
+  (observations, clusters, artifacts, facts, review, procedures) is still mock.
 - Portal: `pages/distillation/` — `DistillationModule` (the frame),
   `KnowledgeTab` / `KnowledgeRecord`, `ReviewTab`, `ActivityTab` /
   `RunInspector`, the shared `SourcesPanel` and `ExplainComposer` (the
