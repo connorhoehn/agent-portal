@@ -8,6 +8,21 @@ local `*Frame.tsx` and queued in `docs/ui-components-queue.md` ("Composed
 locally in `<file>`" is what exempts it). Build to the middleware's response
 shapes — the mock is the contract; a page never invents a key.
 
+## Status (2026-09-24) — IA redesign
+
+The six-page `SubNavLayout` section was replaced by three destinations —
+**Knowledge / Review / Activity** — per `docs/distillation-redesign-spec.md`
+and the IA doc it cites. The portal half (workstream P) is built: one
+`ScopeHeader` frame, explorer · record · Sources for Knowledge and Review,
+runs / tier graph · run inspector for Activity, legacy routes redirected
+with selection kept. The retired pages (Overview, Tiers, Artifacts, Lineage,
+Compactions, the old Review sample) and their xyflow frames are deleted;
+both graphs are the library's `TypedNodeCanvas`. The validator's IA section
+and journey surfaces were rewritten for this structure; the six journey
+logs (member + org-leader × knowledge / review / activity) are the open
+item — they need a browser walk. The status entries below are the history
+of the pre-redesign section.
+
 ## Status (2026-09-05 15:45)
 
 Compaction flow shipped (user request 15:00): xyflow tier ladder on
@@ -78,23 +93,24 @@ page must become a section with a rail.
 
 ## Information architecture (the contract for the portal)
 
-`/iq/distillation` mounts `DistillationLayout` → `SubNavLayout` (the same
-composite `ObservabilityLayout` uses), groups and items:
+Superseded 2026-09-24 by `docs/distillation-redesign-spec.md` §1. In short:
+`/iq/distillation` mounts `DistillationModule` — a `ScopeHeader` (title,
+tabs **Knowledge** / **Review N** / **Activity •**, repository selector in
+`controls`, "Open Library ↗") over a flush `ViewportFillRegion`; no second
+rail.
 
-| group | path | label | what it is |
-|---|---|---|---|
-| Memory | `overview` | Overview | the stat strip + tier health + ingest pressure + sampling verdict (today's top of page, nothing else) |
-| Memory | `tiers` | Tiers | the three level cards; each card is a door: L0 → observations, L1 → clusters, L2 → artifacts (filtered item list) |
-| Knowledge | `artifacts` | Artifacts | L2 list: type, title, status, Library link, clusters, evidence count, last compaction; row → detail drawer |
-| Knowledge | `lineage` | Lineage | node graph (`@xyflow/react`, the dependency Explore already uses) for a selected artifact, cluster, or fact: observation → cluster → artifact → library item; `?focus=<id>` deep link |
-| Operations | `compactions` | Compactions | the **compaction flow** at the top (≤ 200px: L0 → L1 → L2 → Library tier nodes on `@xyflow/react`, edges labelled with the latest merge, animated while a job runs, health-toned when a tier is behind/stalled, reduced-motion aware), then today's history table + job detail drawer with "what this compaction produced" (items in / clusters out / artifacts touched) |
-| Operations | `review` | Review sample | the human sample queue: cluster or artifact, evidence, agree / disagree with a note; the calibration verdict lives here |
+| tab | route | surface |
+|---|---|---|
+| Knowledge | `knowledge?view=guides\|patterns\|notes&item=&panel=sources&sourceView=list\|graph&repo&initiative&q&kind&lifecycle` | `ExplorerLayout` rail (view-scoped `SearchInput`, view `Select` with tier counts, `FilterPopover` + `WorkListFilters` over `GET /facets`, `GroupedList`, "N of M loaded" + cursor Load more) · `EditorShell` record (Content \| History, + Runs for a procedure; Sources N and Open in Library ↗) · `ContextColumn` Sources (`SourceList` \| `TypedNodeCanvas`) · docked explain-only `RichChatComposer` |
+| Review | `review?tab=pending\|decided&sample=&panel=sources&repo` | `Tabs` + `SearchInput` + `GroupedList` queue (resolved target titles; unresolvable targets say so with Retry) · `EditorShell` claim (Agree / Disagree for `ManageBots`, `AccessNotice` otherwise; Earlier reviews and Sampling details disclosures) · Sources |
+| Activity | `activity?view=runs\|graph&run=&repo&level&status` | `StatStrip` tier flow with Compact / Compact / Publish connectors · health `Banner` · `SegmentedControl` Runs \| Tier graph inside `CanvasPaneLayout` · run inspector (`DetailHeader`, `KeyValue`, Produced `LinkedItemsSection`, `Disclosure` inputs / `LogStream` run log, `TechnicalDetails`) · Compact buttons for `ManageBots` · replica status |
 
-`/iq/distillation` redirects to `overview`. Breadcrumbs read
-`Build › Distillation › Artifacts`. The palette gets one entry per item.
-The rail item count on the shell stays one ("Distillation"); the six
-destinations live in the nested rail. Every surface is a route, not a scroll
-position.
+Legacy routes redirect with selection and filters kept
+(`distillationRoutes.migrateDistillationUrl`): the root and `/overview` →
+Knowledge; `/tiers?level=` → the matching view; `/artifacts?open=` and
+`/lineage?focus=` → that record (Sources → Graph for lineage); `/compactions`
+→ Activity. The palette has one entry per destination; the shell rail
+targets Knowledge.
 
 ## Domain model (the contract for the middleware — mock = truth)
 
@@ -196,8 +212,9 @@ in `schema/load_schema.py`. Aurora path optional; mock path mandatory.
 6. **Library back-links** — Library item detail shows "Distilled from" with
    the artifact and a lineage link; the artifact shows "Published as".
 7. **Journey audit** — `docs/distillation-journeys/<role>/<surface>.md` +
-   screenshot for roles `member` (u-theo) and `org-leader` (u-vera), six
-   surfaces each, protocol as in `docs/assessment-journeys/PROTOCOL.md`
+   screenshot for roles `member` (u-theo) and `org-leader` (u-vera), three
+   surfaces each since the 2026-09-24 redesign (`knowledge`, `review`,
+   `activity`; the IA doc's acceptance journeys 1–5 walk across them), protocol as in `docs/assessment-journeys/PROTOCOL.md`
    (console errors 0, layout numbers, keyboard, empty/error state, gating).
    Sign in as the REAL users via /select → Sign in as. Then a defects file
    per role and the fix → re-audit loop until every log passes.
@@ -208,8 +225,8 @@ in `schema/load_schema.py`. Aurora path optional; mock path mandatory.
 
 ## Density rule (added 13:40 after the user's review of Tiers)
 
-A list page's list is the page. On tiers, artifacts, compactions and review
-the first data row must sit above the fold at the audit width
+A list page's list is the page. On knowledge, review and activity (before
+2026-09-24: tiers, artifacts, compactions and review) the first data row must sit above the fold at the audit width
 (`first-row-top` ≤ 640px, recorded in every journey log and enforced by the
 validator). Selectors and filters share one compact row (segmented control
 + selects + search); a description is one line; cards are only for things

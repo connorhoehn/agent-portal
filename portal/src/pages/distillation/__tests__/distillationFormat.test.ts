@@ -321,7 +321,7 @@ test('compactionFlowModel lays out L0 → L1 → L2 → Library left to right wi
   assert.equal(nodes[3].count, 4);
   assert.equal(nodes[3].health, undefined);
   assert.equal(nodes[3].navigateTo, '/iq/library');
-  assert.equal(nodes[0].navigateTo, '/iq/distillation/tiers?level=L0');
+  assert.equal(nodes[0].navigateTo, '/iq/distillation/knowledge?view=notes');
 });
 
 test('compactionFlowModel labels merge edges from the latest job for that step, and flags "no merges yet"', () => {

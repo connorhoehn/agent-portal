@@ -15,6 +15,7 @@ import { useFetch } from '../../hooks/useFetch';
 import {
   ARTIFACT_STATUS_LABEL, ARTIFACT_STATUS_TONE, ARTIFACT_TYPE_LABEL, ARTIFACT_TYPE_TONE,
 } from '../distillation/distillationFormat';
+import { knowledgeHref } from '../distillation/distillationRoutes';
 import { T } from '../distillation/Text';
 import type { ProvenanceResponse } from '../distillation/types';
 
@@ -43,7 +44,7 @@ export function DistillationProvenance({ libraryItemId }: { libraryItemId: strin
           {a.cluster_ids.length} cluster{a.cluster_ids.length === 1 ? '' : 's'} · {data.lineage.nodes.length} lineage node{data.lineage.nodes.length === 1 ? '' : 's'}
         </T>
         <Link
-          to={`/iq/distillation/lineage?focus=${encodeURIComponent(a.id)}`}
+          to={knowledgeHref({ item: a.id, panel: 'sources', sourceView: 'graph' })}
           className="text-primary no-underline hover:underline text-[12px]"
         >
           Open lineage →

@@ -5,6 +5,7 @@
 
 import { relativeTime } from '../../lib/relativeTime.ts';
 import { pgTimestampMs } from '../../lib/pgTimestamp.ts';
+import { knowledgeHref, reviewHref, viewForLevel } from './distillationRoutes.ts';
 import type {
   ApplicationOutcome, Artifact, ArtifactStatus, ArtifactType, CompactableLevel, CompactionFlowEdge,
   CompactionFlowEdgeTone, CompactionFlowModel, CompactionFlowNode, CompactionJob, CompactionProduced,
@@ -635,7 +636,7 @@ export function compactionFlowModel(
       x: index * COMPACTION_FLOW_COLUMN_WIDTH,
       y: 0,
       ariaLabel: `${level} ${TIER_NOUN[level]}, ${count} item${count === 1 ? '' : 's'}${status ? `, ${status}` : ''}`,
-      navigateTo: `/iq/distillation/tiers?level=${level}`,
+      navigateTo: knowledgeHref({ view: viewForLevel(level) }),
     };
   };
 
@@ -757,7 +758,7 @@ export function processFlowModel(input: ProcessFlowInputs): CompactionFlowModel 
       id: level, kind: 'tier', level, label: TIER_TITLE[level], count, health: status,
       x: col(index), y: centre,
       ariaLabel: `${level} ${TIER_NOUN[level]}, ${plural(count, 'item')}${status ? `, ${status}` : ''}`,
-      navigateTo: `/iq/distillation/tiers?level=${level}`,
+      navigateTo: knowledgeHref({ view: viewForLevel(level) }),
     };
   };
   const source = (
@@ -787,7 +788,7 @@ export function processFlowModel(input: ProcessFlowInputs): CompactionFlowModel 
       id: 'review', kind: 'review', label: 'Human review', count: input.reviewed30d,
       x: col(1), y: row(3.5),
       ariaLabel: `Human review, ${plural(input.reviewed30d, 'verdict')} in 30 days, calibrates L1`,
-      navigateTo: '/iq/distillation/review',
+      navigateTo: reviewHref(),
     },
     {
       id: 'library', kind: 'library', label: 'Library', count: input.publishedCount,

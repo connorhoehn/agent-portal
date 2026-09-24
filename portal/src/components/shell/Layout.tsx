@@ -101,7 +101,7 @@ const NAV_ITEMS: NavItem[] = [
   // The other half of the loop: Automate is what the fleet DOES, Distillation
   // is what it LEARNED — the run log of the pipeline that turns session
   // observations into reusable runbooks and skills.
-  { path: '/iq/distillation', label: 'Distillation', tenant: 'orgiq',   group: 'Build' },
+  { path: '/iq/distillation/knowledge', label: 'Distillation', tenant: 'orgiq',   group: 'Build' },
   { path: '/iq/local-compute', label: 'Local compute', tenant: 'orgiq', group: 'Build' },
   { path: '/iq/invoke',     label: 'Ask',         tenant: 'orgiq',     group: 'Org' },
   { path: '/iq/explore',    label: 'Explore',     tenant: 'orgiq',     group: 'Org' },
@@ -440,6 +440,10 @@ export function Layout() {
                   ) || (
                     item.path === '/iq/work' &&
                     (pathname.startsWith('/admin/bots') || pathname.startsWith('/admin/changes'))
+                  ) || (
+                    // The rail opens Distillation on Knowledge; Review and
+                    // Activity are tabs of the same module.
+                    item.path.startsWith('/iq/distillation/') && pathname.startsWith('/iq/distillation')
                   ) || (
                     // The prompt-management family all lives behind Library.
                     item.path === '/iq/library' && (

@@ -205,6 +205,10 @@ export type Item =
 export interface ItemsResponse {
   items: Item[];
   next_cursor: string | null;
+  /** Rows matching the filtered query across every page (spec §3a). Absent
+   *  on a middleware that has not shipped it — then only "N loaded" can be
+   *  said, never "N of M". */
+  total?: number | null;
 }
 
 /** GET /artifacts?status=&type=&q= */
@@ -403,4 +407,161 @@ export interface CompactionFlowEdge {
 export interface CompactionFlowModel {
   nodes: CompactionFlowNode[];
   edges: CompactionFlowEdge[];
+}
+
+// ── Redesign wire additions (docs/distillation-redesign-spec.md §3a) ────────
+// Additive: every field is optional on the existing shapes so the portal
+// keeps rendering against a middleware that has not shipped them yet. The
+// models (tierFlowModel, reviewQueueModel, sourcesModel, procedureRunsModel)
+// treat "absent" as "unknown", never as zero or healthy.
+
+/** Server-owned verdict for a tier's inbound edge. 'ok' | 'behind' |
+ *  'stalled' — never inferred by the portal from `lastCompletedAt`. */
+export type TierHealthState = 'ok' | 'behind' | 'stalled';
+
+export interface TierHealth {
+  state: TierHealthState;
+  reason: string;
+  lagSeconds: number;
+}
+
+/** One tier in GET /api/distillation/levels after §3a. `count` is the new
+ *  spelling of the item count; `items` is the pre-redesign field and is
+ *  still read when `count` is absent. */
+export interface TierLevel extends Partial<LevelState> {
+  level: Level;
+  count?: number;
+  /** Distinct sessions writing in the last hour (L0). */
+  writers?: number;
+  /** Items waiting for the next pass into this tier. */
+  backlog?: number;
+  /** Last completed run of this tier's INBOUND edge. */
+  lastCompletedAt?: string | null;
+  /** Merkle root over (id, updated_at) of the tier's rows. */
+  digest?: string;
+  health?: TierHealth;
+}
+
+export interface TierLevelsResponse {
+  levels: TierLevel[];
+  /** Pre-redesign verdicts — read only when a level carries no `health`. */
+  health?: LevelHealth[];
+}
+
+export interface CompactionLogLine {
+  at: string;
+  level: 'info' | 'warn' | 'error' | string;
+  message: string;
+}
+
+/** A compaction job after §3a/§3b — queue states plus the run inspector's
+ *  fields. */
+export interface CompactionRun extends Omit<CompactionJob, 'status'> {
+  status: 'queued' | CompactionStatus;
+  input_ids?: string[];
+  output_ids?: string[];
+  log?: CompactionLogLine[];
+  what_changed?: string;
+  duration_ms?: number | null;
+  cost_usd?: number | null;
+  /** Live progress (distill:jobs frames). */
+  phase?: string;
+  percent?: number;
+  stepLabel?: string;
+  repo?: string;
+}
+
+/** GET /review — the server-joined target of a sample. */
+export interface ReviewTarget {
+  id: string;
+  kind: string;
+  /** Cluster kind (gotcha/worked/…) or artifact type (runbook/…). */
+  type?: string | null;
+  title: string;
+  repo: string | null;
+  source_count: number | null;
+}
+
+export interface ReviewSampleWithTarget extends ReviewSample {
+  target?: ReviewTarget | null;
+  target_error?: string | null;
+  reviewed_at?: string | null;
+}
+
+/** GET /items/:id/sources — direct evidence of one item. */
+export type SourceKind = 'cluster' | 'observation' | 'session' | 'artifact' | string;
+
+export interface ItemSource {
+  id: string;
+  kind: SourceKind;
+  title: string;
+  timestamp: string | null;
+  excerpt: string | null;
+  session_id?: string | null;
+  repo?: string | null;
+}
+
+export interface ItemSourcesResponse {
+  sources: ItemSource[];
+}
+
+/** GET /procedures/:id/runs */
+export type ProcedureStepStatus = 'done' | 'failed' | 'pending' | 'skipped';
+
+export interface ProcedureRun {
+  id?: string;
+  at: string;
+  actor: string | null;
+  note: string | null;
+  steps: Array<{ step_id: string; status: ProcedureStepStatus }>;
+  /** Carried over from the application row when the server sends it. */
+  outcome?: ApplicationOutcome;
+  failed_at_step_id?: string | null;
+  box_id?: string | null;
+}
+
+export interface ProcedureRunsResponse {
+  runs: ProcedureRun[];
+}
+
+// ── Facets, sessions, replication (spec §3a/§3c) ─────────────────────────
+
+export interface FacetOption {
+  value: string;
+  label: string;
+  count?: number;
+}
+
+/** GET /facets?level= — the filter popover's options for one tier. */
+export interface FacetsResponse {
+  repos?: FacetOption[];
+  initiatives?: FacetOption[];
+  kinds?: FacetOption[];
+}
+
+/** GET /sessions/:id — the agent run a set of run notes came from. */
+export interface SessionRecord {
+  id: string;
+  repo?: string | null;
+  box_id?: string | null;
+  initiative_id?: string | null;
+  started_at?: string | null;
+  last_at?: string | null;
+  writing?: boolean;
+  notes?: Observation[];
+}
+
+export interface ReplicaState {
+  id: string;
+  digest?: string;
+  lagMs?: number | null;
+  lastSync?: string | null;
+  repaired?: number;
+}
+
+/** GET /replication — the L2 read replicas against the primary's digest. */
+export interface ReplicationResponse {
+  primary?: { id: string; digest?: string } | null;
+  replicas?: ReplicaState[];
+  inSync?: boolean;
 }

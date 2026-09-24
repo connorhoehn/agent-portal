@@ -6,6 +6,36 @@ compacts those writes upward into stable artifacts, links each artifact to
 the runbook or skill it became in the Library, and keeps the lineage so any
 distilled fact can be traced back to the evidence it rests on.
 
+## Where to look: Knowledge, Review, Activity
+
+The module is one frame (`DistillationModule.tsx`: a `ScopeHeader` with
+three tabs, a repository selector and "Open Library ↗"; no second rail). The
+three destinations answer three different questions
+(`docs/distillation-redesign-spec.md` §1 is the contract):
+
+| tab | question | route | surface |
+|---|---|---|---|
+| **Knowledge** | What did the agents learn that I can use? | `/iq/distillation/knowledge?view=guides\|patterns\|notes&item=&panel=sources&sourceView=list\|graph&repo&initiative&q&kind&lifecycle` | explorer (search scoped to the view, view selector, filter popover, cursor Load more with "N of M loaded") · the record (Content \| History, + Runs for a procedure) · optional Sources inspector (List \| Graph) |
+| **Review** | Does this finding match the evidence? | `/iq/distillation/review?tab=pending\|decided&sample=&panel=sources` | queue (Pending N / Reviewed, rows titled by the resolved target) · the claim with Agree / Disagree (ManageBots; read-only notice otherwise) · Sources |
+| **Activity** | Is new work being turned into useful knowledge? | `/iq/distillation/activity?view=runs\|graph&run=&repo&level&status` | tier-flow strip + health status line · Runs or Tier graph · run inspector |
+
+The tab row shows Review's pending count and a warning dot on Activity when
+the server reports a tier behind or stalled. Every old link still works:
+`/overview` and the bare root land on Knowledge; `/tiers?level=` maps to the
+matching Knowledge view; `/artifacts?open=X` and `/lineage?focus=X` open that
+record (the latter with Sources → Graph); `/compactions` lands on Activity
+(`distillationRoutes.migrateDistillationUrl`, tested).
+
+The views are the tiers below under reader-facing names: **Run notes** = L0,
+**Patterns** = L1, **Guides & findings** = L2. The level codes stay visible
+in the tier graph and in each record's Technical details.
+
+Live data: the pages read a REST snapshot and patch it from the middleware's
+realtime channels (`distill:levels`, `distill:jobs`, `distill:review`) through
+`hooks/useDistillationChannel.ts`; with no gateway they poll. To get live
+frames locally set `VITE_GATEWAY_URL=ws://localhost:3001/realtime` in
+`portal/.env.local` and restart Vite.
+
 ## The three tiers
 
 | tier | what lives there | who writes it | what a person does with it |
@@ -34,7 +64,7 @@ decision or convention; a failure with no resolution is an insight.
 What makes procedural memory different from the rest of the store is that
 it is judged at reuse, not at extraction. Every time a session runs a
 procedure it records an **application** — `succeeded`, `failed` (and the
-step it stopped on), or `abandoned` — and the Overview counts those rows
+step it stopped on), or `abandoned` — and the middleware counts those rows
 into a verdict per procedure:
 
 - **proven** — it succeeded recently and nothing has moved since.
@@ -45,21 +75,27 @@ into a verdict per procedure:
   every raw write.
 - **unproven** — published, never run to completion.
 
-The artifact drawer shows the steps toned by the latest run (proven up to
-the step it failed on, blamed there, unknown after) and the run ledger
-those tones come from.
+A procedure's Knowledge record renders its steps once, each with the latest
+run's marker (✓ done, ! failed, ○ not reached); its **Runs** tab leads with
+the latest-run callout ("Latest run stopped at step 3 — …"), then the run
+history, and — for ManageBots — "Record a run".
 
 ## What a compaction does
 
-A compaction is a job (`Compactions` page) that reads one tier and writes the
-next: L0 → L1 merges observations into clusters and reports what it deduped
-and reclaimed; L1 → L2 distils clusters into artifacts and their facts. Each
-job records `produced` — the cluster and artifact ids it created — so a job
-row opens what it made. The machine runs unattended; the Overview's health
-banners say when a tier is behind or stalled, and `Compact L0 → L1` /
-`Compact L1 → L2` (ManageBots) trigger one by hand.
+A compaction is a job (Activity → Runs) that reads one tier and writes the
+next: L0 → L1 merges run notes into patterns; L1 → L2 distils patterns into
+guides and their facts. Jobs are queued (`queued → running → succeeded |
+failed`) and each records its own `input_ids` / `output_ids`, a log, what
+changed, duration and cost — the run inspector shows exactly those, and its
+Produced list links into Knowledge from the job's own output ids (never a
+sample of the tier). The machine runs unattended; Activity's status line
+says when a tier is behind or stalled (from the server's health verdict, not
+from "last completed"), and `Compact L0 → L1` / `Compact L1 → L2`
+(ManageBots) queue one by hand. Activity → Tier graph draws L0 → L1 → L2 →
+Library with a job marker on an edge; only a job the server confirms is
+running animates.
 
-In the mock, L0 keeps filling at the ingest rate the Overview shows
+In the mock, L0 keeps filling at the ingest rate `GET /ingest` reports
 (`observationsPerHour`): every read of levels, items or ingest mints the
 observations that "landed" since the last minute tick, so a demo can run
 the ladder more than once instead of finding L0 empty after one pass.
@@ -67,12 +103,15 @@ the ladder more than once instead of finding L0 empty after one pass.
 ## The human sample
 
 Clusters and artifacts drawn for review are put in front of a person on the
-`Review sample` page: the target, its evidence, and Agree / Disagree with a
-note. The agreement rate over the last 30 days is the calibration verdict —
+**Review** tab: the claim, its evidence in the Sources inspector, and Agree /
+Disagree with a note ("This records your review; it does not publish the
+guide"). After a verdict the next pending sample opens and the decided one
+moves to Reviewed; a failed write rolls back. The sampling figures live in the
+claim's **Sampling details** disclosure. The agreement rate over the last 30 days is the calibration verdict —
 enough disagreement to prove the sample finds real problems, not so much that
 the unreviewed rest should be trusted less.
 
-Every number on that banner is **counted from the queue underneath it**, the
+Every sampling figure is **counted from the queue**, the
 sample rate included: "% of L1 sampled" is how many L1 clusters a reviewer has
 actually been handed, over how many exist. It is not a dial set in code, which
 is what it used to be — a constant `4` that never moved when a sample was
@@ -83,7 +122,9 @@ cluster in it really has been sampled.
 
 ## Reading lineage
 
-`Lineage` draws one artifact, cluster, or fact as a graph, columns by kind:
+A record's **Sources** inspector lists its direct evidence (List) or draws
+its actual lineage (Graph, the library's `TypedNodeCanvas` with zoom
+controls and a list equivalent), columns by kind:
 
 ```
 session ──written_by──▶ observation ──merged_into──▶ cluster ──distilled_into──▶ artifact ──published_as──▶ library item
@@ -92,15 +133,21 @@ session ──written_by──▶ observation ──merged_into──▶ cluster
                                                                                         └──applied_in──▶ application (a run: succeeded / failed at step n / abandoned)
 ```
 
-Click any node for its record and "Focus here" to re-centre the graph on
-it. `?focus=<id>` is a deep link; Artifacts and Library both open it.
+Opening a source or a graph node opens that record in Knowledge with the
+scope and the inspector kept; Back returns. The old `/lineage?focus=<id>`
+deep link still resolves (to that record with Sources → Graph), and the
+Library's "Distilled from" section links the same way.
 
 ## Where things live
 
 - Middleware: `routes/distillation.ts`, `providers/distillation.ts`,
   `mock/distillation.ts` (the mock is the contract; the shapes are in
   `docs/distillation-goal.md`), `schema/distillation_schema.sql`.
-- Portal: `pages/distillation/` — `DistillationLayout` (nested rail:
-  Memory / Knowledge / Operations) and one page per rail item;
-  `LineageFrame.tsx` hosts the `@xyflow/react` graph.
+- Portal: `pages/distillation/` — `DistillationModule` (the frame),
+  `KnowledgeTab` / `KnowledgeRecord`, `ReviewTab`, `ActivityTab` /
+  `RunInspector`, the shared `SourcesPanel` and `ExplainComposer` (the
+  docked composer only explains — it prepares a question for Ask), and pure
+  models with node:test coverage (`distillationRoutes`, `knowledgeModel`,
+  `reviewQueueModel`, `sourcesModel`, `tierFlowModel`, `activityModel`,
+  `procedureRunsModel`, `distillationChannel`).
 - Validator: `scripts/validate-distillation.sh` is the definition of done.

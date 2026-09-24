@@ -245,8 +245,7 @@ function AgentFlowPage() {
         // hidden and untabbable (DEFECTS.md #6). `initialWidth`/
         // `initialHeight` seed `hasDimensions` immediately; once the real
         // observer does fire, xyflow drops back to measuring the actual
-        // DOM size (see AgentNodeComp's fixed w-[215px] card). Same
-        // approach as distillation/CompactionFlowFrame.tsx.
+        // DOM size (see AgentNodeComp's fixed w-[215px] card).
         initialWidth: NODE_WIDTH,
         initialHeight: NODE_HEIGHT,
         data: { meta, summary: summaries.get(id) ?? null, onSelect: handleSelect } as unknown as Record<string, unknown>,

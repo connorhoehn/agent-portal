@@ -52,9 +52,10 @@ const PROMPT_PAGES: Record<string, string> = {
   prompts: 'Studio', canary: 'Rollout', history: 'Versions',
   diff: 'Diff', evaluations: 'Evals',
 };
+// The module header prints the three tabs; the crumb names the one open.
+// Legacy sub-paths redirect before they render, so they need no label.
 const DISTILLATION_LABELS: Record<string, string> = {
-  overview: 'Overview', tiers: 'Tiers', artifacts: 'Artifacts',
-  lineage: 'Lineage', compactions: 'Compactions', review: 'Review sample',
+  knowledge: 'Knowledge', review: 'Review', activity: 'Activity',
 };
 
 function shortId(s: string): string {
@@ -97,8 +98,8 @@ export function resolveBreadcrumbs(pathname: string): Crumb[] {
       // Library on these pages, so the crumb says the same.
       case 'prompt-ops': return [{ label: 'Design' }, { label: 'Library', path: '/iq/library' }, { label: 'What is deployed' }];
       case 'distillation': {
-        const page = b ?? 'overview';
-        return [{ label: 'Build' }, { label: 'Distillation', path: '/iq/distillation' }, { label: DISTILLATION_LABELS[page] ?? page }];
+        const page = b ?? 'knowledge';
+        return [{ label: 'Build' }, { label: 'Distillation', path: '/iq/distillation/knowledge' }, { label: DISTILLATION_LABELS[page] ?? page }];
       }
       case 'local-compute': return [{ label: 'Build' }, { label: 'Local compute' }];
       default:

@@ -7,6 +7,8 @@ import { useSession } from './lib/auth';
 import { ASSESSMENT_ENABLED } from './lib/features';
 import { resolveHome } from './lib/tenantHome';
 import { OptionalGatewayProvider } from './components/OptionalGatewayProvider';
+// Eager: a redirect has nothing to lazy-load and must not flash a spinner.
+import DistillationLegacyRedirect from './pages/distillation/LegacyRedirect';
 import { ComputeHost } from './components/compute/ComputeHost';
 import { LoadingState } from '@connorhoehnslalom/ui-components/shared';
 
@@ -57,13 +59,10 @@ const DesignsPage = lazy(() => import('./pages/designs/DesignsPage'));
 const LibraryPage = lazy(() => import('./pages/library/LibraryPage'));
 const PromotionsPage = lazy(() => import('./pages/promotions/PromotionsPage'));
 const SessionConfigPage = lazy(() => import('./pages/release/SessionConfigPage'));
-const DistillationLayout = lazy(() => import('./pages/distillation/DistillationLayout'));
-const DistillationOverviewPage = lazy(() => import('./pages/distillation/OverviewPage'));
-const DistillationTiersPage = lazy(() => import('./pages/distillation/TiersPage'));
-const DistillationArtifactsPage = lazy(() => import('./pages/distillation/ArtifactsPage'));
-const DistillationLineagePage = lazy(() => import('./pages/distillation/LineagePage'));
-const DistillationCompactionsPage = lazy(() => import('./pages/distillation/CompactionsPage'));
-const DistillationReviewPage = lazy(() => import('./pages/distillation/ReviewPage'));
+const DistillationModule = lazy(() => import('./pages/distillation/DistillationModule'));
+const DistillationKnowledgeTab = lazy(() => import('./pages/distillation/KnowledgeTab'));
+const DistillationReviewTab = lazy(() => import('./pages/distillation/ReviewTab'));
+const DistillationActivityTab = lazy(() => import('./pages/distillation/ActivityTab'));
 const DesignThreadPage = lazy(() => import('./pages/designs/DesignThreadPage'));
 const WorkFindingsPage = lazy(() => import('./pages/work/FindingsPage'));
 const JobDetailPage = lazy(() => import('./pages/work/JobDetailPage'));
@@ -328,19 +327,21 @@ export function App() {
           {/* Release: what the Claude Code sessions themselves are shipped —
               hooks, bundled skills, config. */}
           <Route path="release" element={<Page element={<SessionConfigPage />} />} />
-          {/* The shared-memory pipeline: L0 raw observations compacting into
-              L1 clusters and L2 artifacts. A nested rail (like Observability)
-              rather than one long page — Memory (what's in the store),
-              Knowledge (what it produced, with provenance), Operations
-              (running it and keeping it honest). */}
-          <Route path="distillation" element={<Page element={<DistillationLayout />} />}>
-            <Route index element={<Navigate to="overview" replace />} />
-            <Route path="overview" element={<Page element={<DistillationOverviewPage />} />} />
-            <Route path="tiers" element={<Page element={<DistillationTiersPage />} />} />
-            <Route path="artifacts" element={<Page element={<DistillationArtifactsPage />} />} />
-            <Route path="lineage" element={<Page element={<DistillationLineagePage />} />} />
-            <Route path="compactions" element={<Page element={<DistillationCompactionsPage />} />} />
-            <Route path="review" element={<Page element={<DistillationReviewPage />} />} />
+          {/* The shared-memory pipeline: L0 run notes compacting into L1
+              patterns and L2 guides. One module frame, three destinations
+              (docs/distillation-redesign-spec.md §1): Knowledge, Review,
+              Activity. Every pre-redesign sub-route redirects to its new
+              home with filters and selection kept (distillationRoutes.ts). */}
+          <Route path="distillation" element={<Page element={<DistillationModule />} />}>
+            <Route index element={<DistillationLegacyRedirect />} />
+            <Route path="knowledge" element={<Page element={<DistillationKnowledgeTab />} />} />
+            <Route path="review" element={<Page element={<DistillationReviewTab />} />} />
+            <Route path="activity" element={<Page element={<DistillationActivityTab />} />} />
+            <Route path="overview" element={<DistillationLegacyRedirect />} />
+            <Route path="tiers" element={<DistillationLegacyRedirect />} />
+            <Route path="artifacts" element={<DistillationLegacyRedirect />} />
+            <Route path="lineage" element={<DistillationLegacyRedirect />} />
+            <Route path="compactions" element={<DistillationLegacyRedirect />} />
           </Route>
           <Route path="local-compute" element={<Page element={<LocalComputePage />} />} />
           <Route path="designs" element={<Page element={<DesignsPage />} />} />

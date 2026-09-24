@@ -44,26 +44,54 @@ fi
 [ "$n_sty" = 0 ] && ok "no inline style={{}}" || fail "inline style={{}} in pages: $n_sty"
 
 # ─────────────────────────────────────────────────────────────────────────────
-section "information architecture"
-LAYOUT="$PAGES/DistillationLayout.tsx"
-[ -f "$LAYOUT" ] && grep -q "SubNavLayout" "$LAYOUT" && ok "DistillationLayout on SubNavLayout" || fail "no DistillationLayout.tsx using SubNavLayout under $PAGES"
-for s in overview tiers artifacts lineage compactions review; do
+section "information architecture (docs/distillation-redesign-spec.md §1)"
+MODULE="$PAGES/DistillationModule.tsx"
+{ [ -f "$MODULE" ] && grep -q "ScopeHeader" "$MODULE" && grep -q "data-shell-flush" "$MODULE"; } \
+  && ok "one module frame: ScopeHeader, flush" || fail "no DistillationModule.tsx on ScopeHeader with data-shell-flush under $PAGES"
+grep -rq "SubNavLayout" "$PAGES" && fail "SubNavLayout still used under $PAGES (the module has no second rail)" || ok "no SubNavLayout second rail"
+[ -f "$PAGES/DistillationLayout.tsx" ] && fail "DistillationLayout.tsx still present (retired)" || ok "DistillationLayout retired"
+{ grep -q "tabs" "$MODULE" && grep -q "dot:" "$MODULE" && grep -q "controls=" "$MODULE" && grep -q "/iq/library" "$MODULE"; } \
+  && ok "header: tabs with live count + health dot, repo selector, Open Library" || fail "DistillationModule header lacks tabs/dot/controls/Library link"
+grep -qE "path=\"distillation\"" portal/src/App.tsx && ok "/iq/distillation is a route tree" || fail "App.tsx: /iq/distillation is not a nested route tree"
+for s in knowledge review activity; do
   grep -qE "path=\"$s\"" portal/src/App.tsx || fail "App.tsx: no route for /iq/distillation/$s"
 done
-grep -qE "path=\"distillation\"" portal/src/App.tsx && ok "/iq/distillation is a route tree" || fail "App.tsx: /iq/distillation is not a nested route tree"
-grep -qE "Navigate to=\"(/iq/distillation/)?overview\"" portal/src/App.tsx && ok "/iq/distillation redirects to overview" || fail "App.tsx: /iq/distillation does not redirect to overview"
-pal=$(grep -cE "path: '/iq/distillation/(overview|tiers|artifacts|lineage|compactions|review)'" portal/src/components/shell/portalCommands.ts)
-[ "$pal" -ge 6 ] && ok "palette knows the 6 distillation pages" || fail "portalCommands.ts lists $pal of 6 distillation pages"
-grep -qE "/iq/library/" $PAGES/*.tsx $PAGES/**/*.tsx 2>/dev/null && ok "artifacts link into the Library" || fail "no /iq/library/ link in distillation pages (artifacts must link to the runbook/skill they became)"
-grep -rq "@xyflow/react" "$PAGES" && ok "lineage graph uses @xyflow/react" || fail "no @xyflow/react lineage view under $PAGES"
-grep -rqE "focus" "$PAGES"/Lineage*.tsx 2>/dev/null && ok "lineage honours ?focus=" || fail "Lineage page has no ?focus= deep link"
-{ [ -f "$PAGES/CompactionFlow.tsx" ] && grep -q "@xyflow/react" "$PAGES/CompactionFlowFrame.tsx" 2>/dev/null && grep -q "CompactionFlow" "$PAGES/CompactionsPage.tsx"; } && ok "compaction flow visualization on Compactions" || fail "no CompactionFlow (xyflow tier ladder, animated while a job runs) mounted on CompactionsPage"
+for s in overview tiers artifacts lineage compactions; do
+  grep -qE "path=\"$s\" element=\{<DistillationLegacyRedirect" portal/src/App.tsx || fail "App.tsx: legacy /iq/distillation/$s does not redirect (old links must keep working)"
+done
+grep -qE "<Route index element=\{<DistillationLegacyRedirect" portal/src/App.tsx && ok "legacy routes + module root redirect into the new IA" || fail "App.tsx: /iq/distillation index does not redirect"
+grep -q "export function migrateDistillationUrl" "$PAGES/distillationRoutes.ts" 2>/dev/null && [ -f "$PAGES/__tests__/distillationRoutes.test.ts" ] \
+  && ok "migration mapping is pure and tested" || fail "distillationRoutes.migrateDistillationUrl or its test is missing"
+pal=$(grep -cE "path: '/iq/distillation/(knowledge|review|activity)'" portal/src/components/shell/portalCommands.ts)
+[ "$pal" -ge 3 ] && ok "palette knows the 3 destinations" || fail "portalCommands.ts lists $pal of 3 distillation destinations"
+grep -qE "path: '/iq/distillation/knowledge'" portal/src/components/shell/Layout.tsx && ok "shell rail targets Knowledge" || fail "shell rail does not target /iq/distillation/knowledge"
+grep -rqE "/iq/library" $PAGES/*.tsx && ok "records link into the Library" || fail "no /iq/library link in distillation pages (guides must link to the asset they became)"
+n_canvas=$(grep -l "TypedNodeCanvas" $PAGES/*.tsx 2>/dev/null | wc -l | tr -d ' ')
+[ "$n_canvas" -ge 2 ] && ok "graphs on the library TypedNodeCanvas ($n_canvas files: Sources lineage + Activity tier graph)" || fail "TypedNodeCanvas used in $n_canvas distillation files (need Sources graph + tier graph)"
+grep -rqE "from ['\"]@xyflow/react['\"]" "$PAGES" && fail "a distillation page imports @xyflow/react directly (use TypedNodeCanvas)" || ok "no hand-rolled xyflow canvas"
+grep -q "controls={false}" $PAGES/*.tsx && fail "a canvas hides its CanvasZoomControls" || ok "canvases keep their zoom controls"
+grep -q "CanvasPaneLayout" "$PAGES/ActivityTab.tsx" 2>/dev/null && ok "Activity: canvas + run inspector in CanvasPaneLayout" || fail "ActivityTab does not use CanvasPaneLayout"
+{ grep -q "SourceList" "$PAGES/SourcesPanel.tsx" && grep -q "SegmentedControl" "$PAGES/SourcesPanel.tsx"; } 2>/dev/null \
+  && ok "Sources inspector: List | Graph" || fail "SourcesPanel lacks SourceList + List/Graph switch"
+{ grep -q "ExplorerLayout" "$PAGES/KnowledgeTab.tsx" && grep -q "ExplorerLayout" "$PAGES/ReviewTab.tsx" && grep -q "ContextColumn" "$PAGES/KnowledgeTab.tsx"; } 2>/dev/null \
+  && ok "Knowledge + Review: explorer · record · ContextColumn" || fail "Knowledge/Review are not ExplorerLayout + ContextColumn"
+grep -q "Load more" "$PAGES/KnowledgeTab.tsx" 2>/dev/null && ok "explorer keeps cursor Load more" || fail "Knowledge explorer lost cursor Load more"
+{ grep -q "can('ManageBots')" "$PAGES/ReviewTab.tsx" && grep -q "AccessNotice" "$PAGES/ReviewTab.tsx"; } 2>/dev/null \
+  && ok "Review: verdicts gated on ManageBots, read-only notice otherwise" || fail "ReviewTab does not gate verdicts on can('ManageBots') with an AccessNotice"
+{ grep -q "RichChatComposer" "$PAGES/ExplainComposer.tsx" && grep -q "/iq/invoke" "$PAGES/ExplainComposer.tsx"; } 2>/dev/null \
+  && ok "docked composer explains via Ask (no writes)" || fail "ExplainComposer missing or not routed to /iq/invoke"
+grep -rq "useDistillationChannel" "$PAGES" && [ -f portal/src/hooks/useDistillationChannel.ts ] && ok "live data over useDistillationChannel" || fail "pages do not use useDistillationChannel"
+for m in distillationRoutes tierFlowModel reviewQueueModel sourcesModel procedureRunsModel knowledgeModel activityModel distillationChannel; do
+  [ -f "$PAGES/$m.ts" ] && [ -f "$PAGES/__tests__/$m.test.ts" ] || fail "pure model $m.ts or its node:test is missing"
+done
+ok "pure models have node:test coverage"
 grep -rq "distillation/library/" portal/src/pages/library 2>/dev/null && grep -rq "Distilled from" portal/src/pages/library 2>/dev/null && ok "Library shows provenance" || fail "Library detail has no 'Distilled from' section reading /api/distillation/library/:id/provenance"
 
 # ─────────────────────────────────────────────────────────────────────────────
 section "middleware contract"
 ROUTER=middleware/src/routes/distillation.ts
-for p in "/items" "/items/:id" "/items/:id/lineage" "/artifacts" "/review" "/review/:id" "/library/:libraryItemId/provenance" "/procedures" "/procedures/:id" "/procedures/:id/applications" "/procedures/:id/apply"; do
+for p in "/items" "/items/:id" "/items/:id/lineage" "/artifacts" "/review" "/review/:id" "/library/:libraryItemId/provenance" "/procedures" "/procedures/:id" "/procedures/:id/applications" "/procedures/:id/apply" \
+         "/facets" "/items/:id/sources" "/sessions/:id" "/procedures/:id/runs" "/replication" "/compactions/:id"; do
   grep -qF "'$p'" "$ROUTER" || fail "route missing: $p"
 done
 grep -qE "produced\??: *\{" middleware/src/providers/distillation.ts && grep -q "artifact_ids" middleware/src/providers/distillation.ts && ok "compaction jobs carry produced{}" || fail "CompactionJob has no produced{cluster_ids,artifact_ids}"
@@ -93,7 +121,7 @@ else fail "middleware/src/mock/distillation.ts missing"; fi
 section "journey audit (docs/distillation-journeys)"
 JDIR=docs/distillation-journeys
 ROLES=(member org-leader)
-SURFACES=(overview tiers artifacts lineage compactions review)
+SURFACES=(knowledge review activity)
 jmissing=0; jbad=0
 for r in "${ROLES[@]}"; do for s in "${SURFACES[@]}"; do
   f="$JDIR/$r/$s.md"
@@ -103,7 +131,7 @@ for r in "${ROLES[@]}"; do for s in "${SURFACES[@]}"; do
   grep -qiE '^console errors: *0' "$f" || bad="$bad console-errors"
   grep -qiE '^layout: *pass' "$f" || bad="$bad layout"
   # Density: list surfaces must put the first data row above the fold.
-  case "$s" in tiers|artifacts|compactions|review)
+  case "$s" in knowledge|review|activity)
     frt=$(grep -ioE 'first-row-top[^0-9]*[0-9]+' "$f" | grep -oE '[0-9]+' | head -1)
     { [ -n "$frt" ] && [ "$frt" -le 640 ]; } || bad="$bad first-row-top(${frt:-missing})";;
   esac
@@ -114,7 +142,7 @@ for r in "${ROLES[@]}"; do for s in "${SURFACES[@]}"; do
   grep -qiE 'TODO|unverified|placeholder' "$f" && bad="$bad contains-TODO/unverified"
   [ -n "$bad" ] && { jbad=$((jbad+1)); printf '      %s/%s:%s\n' "$r" "$s" "$bad"; }
 done; done
-[ "$jmissing" = 0 ] && ok "all 12 role×surface logs present" || fail "$jmissing of 12 journey logs missing (roles: ${ROLES[*]}; surfaces: ${SURFACES[*]})"
+[ "$jmissing" = 0 ] && ok "all 6 role×surface logs present" || fail "$jmissing of 6 journey logs missing (roles: ${ROLES[*]}; surfaces: ${SURFACES[*]})"
 [ "$jbad" = 0 ] && ok "every present log passes all fields" || fail "$jbad journey logs fail a required field"
 # Freshness, per surface: a log must be newer than the newest .tsx among the
 # files/dirs its own `pages:` line names — the same rule the orgiq audit uses.
@@ -132,9 +160,15 @@ if [ -d "$JDIR" ]; then
     done; echo "$newest"
   }
   stale=0; stale_names=""
-  for f in $(find "$JDIR" -name '*.md' ! -name 'DEFECTS.md' ! -name 'PROTOCOL.md' 2>/dev/null); do
+  # Only the current surfaces are judged; logs for surfaces the 2026-09-24
+  # redesign retired (overview, tiers, artifacts, lineage, compactions) are
+  # history and are not re-audited.
+  for f in $(for r in "${ROLES[@]}"; do for s in "${SURFACES[@]}"; do [ -f "$JDIR/$r/$s.md" ] && echo "$JDIR/$r/$s.md"; done; done); do
     pages=$(grep -iE '^pages: *' "$f" | head -1 | sed -E 's/^pages: *//')
     ref=$([ -n "$pages" ] && newest_in "$pages" || echo "$newest_global")
+    # A `pages:` line naming only files that no longer exist (a retired
+    # surface) proves nothing — judge it against the newest page instead.
+    [ -z "$ref" ] && ref="$newest_global"
     [ -n "$ref" ] && [ "$ref" -nt "$f" ] && { stale=$((stale+1)); stale_names="$stale_names ${f#$JDIR/}(${ref##*/})"; }
   done
   [ "$stale" = 0 ] && ok "journey logs are newer than the pages their surface renders from" || fail "$stale journey logs predate a page they render from — re-audit them:$stale_names"
@@ -142,6 +176,7 @@ fi
 
 section "docs"
 [ -f docs/distillation.md ] && ok "docs/distillation.md exists" || fail "docs/distillation.md missing (tiers, compaction, artifact → Library, reading lineage)"
+grep -qE "Knowledge.*Review.*Activity" docs/distillation.md 2>/dev/null && ok "docs/distillation.md describes Knowledge / Review / Activity" || fail "docs/distillation.md does not describe the Knowledge / Review / Activity IA"
 
 # ─────────────────────────────────────────────────────────────────────────────
 echo

@@ -41,6 +41,7 @@ import {
   contractLine, evalLabel, facetOptions, libraryEmptyKind, usageLine,
 } from './libraryFormat';
 import type { AssetKind, AssetTier, LibraryAsset, LibraryResponse } from './types';
+import { knowledgeHref } from '../distillation/distillationRoutes';
 
 // Same cadence TiersPage.tsx set for this exact pattern.
 const SEARCH_DEBOUNCE_MS = 250;
@@ -254,8 +255,8 @@ export default function LibraryPage() {
           title="The library has no assets yet"
           description="Assets ship here from Distillation, once a runbook, insight or skill is promoted and published."
           action={(
-            <Link to="/iq/distillation/artifacts" className="text-[12px] font-semibold text-primary no-underline hover:underline">
-              Open Distillation → Artifacts →
+            <Link to={knowledgeHref({ view: 'guides' })} className="text-[12px] font-semibold text-primary no-underline hover:underline">
+              Open Distillation → Knowledge →
             </Link>
           )}
         />
