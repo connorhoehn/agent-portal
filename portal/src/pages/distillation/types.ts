@@ -159,6 +159,49 @@ export interface Fact {
    *  arrive through lineage (unordered nodes), and the reader must be able to
    *  say "failed at step 3" without depending on node order on the wire. */
   ordinal: number | null;
+  /** The step (or claim) in plain words for a reader deciding whether the
+   *  guide applies to them — stored, not generated. Null when nobody wrote
+   *  one (compaction-minted facts); readers fall back to `statement`.
+   *  Optional: absent on a middleware that predates the field. */
+  plain?: string | null;
+}
+
+/** One numbered step of a guide's approach — `plain ?? statement`, in
+ *  ordinal order, computed by the server from the artifact's facts. */
+export interface GuideStep {
+  step_id: string;
+  ordinal: number;
+  text: string;
+}
+
+/** A pattern the guide was distilled from. `repo_label` is the server's one
+ *  display rule for a repository (the same one the facets use). */
+export interface GuideSource {
+  id: string;
+  kind: 'cluster';
+  title: string;
+  repo: string | null;
+  repo_label: string | null;
+}
+
+/** Present only when the procedure's latest run (newest first, the Runs
+ *  tab's order) failed or was abandoned. Title and body are server-written
+ *  sentences; the portal renders them verbatim. */
+export interface GuideRunWarning {
+  run_id: string;
+  outcome: 'failed' | 'abandoned';
+  at: string;
+  failed_at_ordinal: number | null;
+  title: string;
+  body: string;
+}
+
+/** GET /items/:id for an L2 record embeds this read-time projection — what
+ *  the Content tab renders (approach, based on, run warning). Never stored. */
+export interface GuideView {
+  approach: GuideStep[];
+  based_on: GuideSource[];
+  run_warning: GuideRunWarning | null;
 }
 
 export interface Artifact {
@@ -193,6 +236,12 @@ export interface Artifact {
   created_by_compaction_id: string;
   created_at: string;
   updated_at: string;
+  /** Plain-language "when this helps" paragraph(s), `\n`-separated; stored.
+   *  Null when nobody wrote one — the record falls back to its summary.
+   *  Optional: absent on a middleware that predates the field. */
+  when_this_helps?: string | null;
+  /** Only on GET /items/:id for L2 — never on list rows. */
+  guide?: GuideView;
 }
 
 /** GET /items/:id — kind-discriminated by `level`; GET /items?level=&… — a
@@ -290,6 +339,12 @@ export interface ProcedureApplication {
    *  'failed' — an abandoned run stopped without a step blaming itself. */
   failed_at_step_id: string | null;
   note: string | null;
+  /** Failed/abandoned runs only: a short plain title for the guide's warning
+   *  ("Check the redirect before you use this"). */
+  advice?: string | null;
+  /** Failed/abandoned runs only: the reason in plain words, finishing the
+   *  sentence "stopped at step N because …". */
+  plain_reason?: string | null;
 }
 
 /** 'proven' = recent runs succeed; 'drifting' = it used to work but recent

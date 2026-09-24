@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  orderedSteps, latestRun, stepMarkers, latestRunCallout, runHistoryRows, STEP_MARKER,
+  orderedSteps, latestRun, chosenRun, stepMarkers, latestRunCallout, runHistoryRows, STEP_MARKER,
 } from '../procedureRunsModel.ts';
 import type { ProcedureRun } from '../types.ts';
 
@@ -71,4 +71,22 @@ test('history rows newest first with outcome and summary', () => {
   ]);
   const anon = runHistoryRows(STEPS, [{ at: 'x', actor: null, note: null, steps: [] }]);
   assert.equal(anon[0].id, 'x#0', 'a run without an id still gets a stable key');
+});
+
+test('stepMarkers shows a chosen run; an unknown or absent id falls back to the latest', () => {
+  const old = stepMarkers(STEPS, RUNS, 'r-old');
+  assert.deepEqual(old.map((m) => m.status), ['done', 'done', 'done']);
+  assert.equal(old.some((m) => m.note), false);
+  const latest = stepMarkers(STEPS, RUNS).map((m) => m.status);
+  assert.deepEqual(stepMarkers(STEPS, RUNS, 'r-gone').map((m) => m.status), latest);
+  assert.deepEqual(stepMarkers(STEPS, RUNS, null).map((m) => m.status), latest);
+  assert.equal(chosenRun(RUNS, 'r-old')?.id, 'r-old');
+  assert.equal(chosenRun(RUNS)?.id, 'r-new');
+  assert.equal(chosenRun([], 'r-old'), null);
+});
+
+test('chosenRun matches an id-less run by the history row key', () => {
+  const idless: ProcedureRun[] = [{ at: '2026-09-21T10:00:00Z', actor: null, note: null, steps: [{ step_id: 's1', status: 'failed' }] }];
+  const key = runHistoryRows(STEPS, [...RUNS, ...idless]).find((r) => r.at === '2026-09-21T10:00:00Z')!.id;
+  assert.equal(chosenRun([...RUNS, ...idless], key)?.at, '2026-09-21T10:00:00Z');
 });
