@@ -218,7 +218,9 @@ export function WorkItemDetail({
             references={[{ id: item.id, label: 'This work item' }]}
             onSend={(msg) => {
               if (mode === 'chat') return thread.postComment(msg.text);
-              onPrepare(msg.text);
+              // Agent mode sends `/agent <text>` for hosts with an /agent
+              // command path; the run's instruction is only what was typed.
+              onPrepare(msg.text.replace(/^\/agent\s+/, ''));
               return true;
             }}
           />

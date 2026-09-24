@@ -109,11 +109,15 @@ export function RunDraft({
   // its forecast is over it. Blank means no cap — a cap is opt-in.
   const [capUsd, setCapUsd] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
-  // A new item is a new draft: the last item's codebase may not deliver this one.
+  // A new item is a new draft: the last item's codebase may not deliver this
+  // one. Keyed on the ids, not the array — the host rebuilds that array every
+  // render, and depending on it reset the cap and codebase on each keystroke.
+  const codebaseKey = codebases.map((c) => c.id).join(',');
+  const onlyCodebase = codebases.length === 1 ? codebases[0]!.id : null;
   useEffect(() => {
-    setAgentProjectId(codebases.length === 1 ? codebases[0]!.id : null);
+    setAgentProjectId(onlyCodebase);
     setCapUsd(null);
-  }, [item.id, codebases]);
+  }, [item.id, codebaseKey, onlyCodebase]);
 
   const est = useWorkEstimate(item, model, agentProjectId, canDispatch);
   const { cost, duration } = asEstimates(item, est, canDispatch);

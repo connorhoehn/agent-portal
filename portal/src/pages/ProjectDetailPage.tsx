@@ -282,7 +282,7 @@ function ProjectDetailPage() {
   // Every edit to a work item — the list's tick, the meta bar, the outcome —
   // is optimistic, then confirmed. A failure puts the fields back the way
   // they were and says why, rather than leaving a value the server refused.
-  const patchItem = useCallback((itemId: string, fields: WorkItemPatch) => {
+  const patchItem = useCallback((itemId: string, fields: WorkItemPatch): Promise<boolean> => {
     const base = localItems ?? rawTree ?? [];
     let before: WorkItemPatch = {};
     mapTree(base, (n) => {
@@ -303,18 +303,21 @@ function ProjectDetailPage() {
     if (isPendingId(itemId)) {
       revert();
       toastError(null, 'Not saved', 'This item has not been created on the server yet — reload and try again.');
-      return;
+      return Promise.resolve(false);
     }
 
     // assigneeName is display-only: the server resolves it from assigneeId.
     const { assigneeName: _name, ...wire } = fields;
     setPendingIds((prev) => new Set(prev).add(itemId));
-    void (async () => {
+    // Resolves true once the server has it, so a caller can follow up.
+    return (async () => {
       try {
         await sendJson(`/api/graph/work-items/${encodeURIComponent(itemId)}`, 'PATCH', wire);
+        return true;
       } catch (err) {
         revert();
         surfaceWriteError(err, 'Updating this item');
+        return false;
       } finally {
         setPendingIds((prev) => { const next = new Set(prev); next.delete(itemId); return next; });
       }
@@ -524,10 +527,23 @@ function ProjectDetailPage() {
                   : () => setCreating({ parentId: null, parentTitle: null })}
                 onOpenItem={(row) => setWantedItem(row.id)}
                 // Read-only rows (no checkbox) for a role that cannot PATCH work.
-                onToggleDone={canDispatch ? (row, done) => patchItem(row.id, { status: done ? 'done' : 'open' }) : undefined}
+                onToggleDone={canDispatch
+                  ? (row, done) => {
+                      void patchItem(row.id, { status: done ? 'done' : 'open' }).then((ok) => {
+                        if (ok && row.id === current?.id) thread.refreshComments();
+                      });
+                    }
+                  : undefined}
                 loading={workLoading && !rawTree}
                 error={workFailure ? `The work list could not be read: ${workFailure}` : null}
-                emptyLabel="No work yet — ingest this initiative's documents or add an epic"
+                // Three different empties: work exists but the search/filters
+                // hide it, no work at all for someone who can add some, and
+                // no work for someone who cannot.
+                emptyLabel={allRows.length > 0
+                  ? 'No work matches this search or these filters'
+                  : canDispatch
+                    ? "No work yet — ingest this initiative's documents or add an epic"
+                    : "No work yet — it arrives when this initiative's documents are ingested"}
                 storageKey={`initiative.${id}.work-groups`}
               />
             )}
@@ -571,7 +587,13 @@ function ProjectDetailPage() {
                 onTabChange={setDetailTab}
                 canEdit={canDispatch}
                 canDispatch={canDispatch}
-                onPatch={(fields) => patchItem(current.id, fields)}
+                onPatch={(fields) => {
+                  // A status move writes an audit row server-side; re-read the
+                  // thread so Activity shows it.
+                  void patchItem(current.id, fields).then((ok) => {
+                    if (ok && fields.status) thread.refreshComments();
+                  });
+                }}
                 onOpenEpic={() => setQuery(current.epicTitle)}
                 onOpenDecisions={() => setTab('decisions')}
                 onPrepare={(text) => {

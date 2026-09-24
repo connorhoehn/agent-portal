@@ -141,6 +141,14 @@ export function useWorkItemThread(itemId: string | null) {
     }
   }, [itemId, comments]);
 
+  /** Re-read the thread — after a write elsewhere (a status move) added an
+   *  audit row the local copy has never seen. */
+  const { refresh: refreshNotes } = notes;
+  const refreshComments = useCallback(() => {
+    setNotesLocal(null);
+    refreshNotes();
+  }, [refreshNotes]);
+
   const humanComments = comments.filter((c) => !c.isSystem);
   return {
     criteria: [...criteria].sort((a, b) => a.position - b.position),
@@ -150,7 +158,7 @@ export function useWorkItemThread(itemId: string | null) {
     commentCount: humanComments.length,
     commentsLoading: live && notes.isLoading && !notes.data,
     commentsError: notes.error,
-    toggle, add, edit, remove, move, postComment,
+    toggle, add, edit, remove, move, postComment, refreshComments,
   };
 }
 
