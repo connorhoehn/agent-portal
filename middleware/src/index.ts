@@ -3,6 +3,8 @@ import express from 'express';
 import { browserOrigin } from './lib/browser-origin.js';
 import cookieParser from 'cookie-parser';
 import { rejectUnsupportedUpgrades } from './lib/unsupported-upgrades.js';
+import { attachDistillationRealtime, REALTIME_PATH } from './lib/distillation-realtime.js';
+import { startCompactionConsumer, startCompactionScheduler, startReplicaSync } from './providers/distillation.js';
 import { config } from './config.js';
 import { errorHandler } from './lib/async-handler.js';
 import { sessionMiddleware, setGrantsResolver } from './lib/session.js';
@@ -471,6 +473,17 @@ const server = app.listen(config.port, '0.0.0.0', () => {
   console.log(`orgiq-middleware listening on :${config.port} (${mockSuffix})`);
 });
 
-// This BFF serves SSE, not the gateway protocol. Never acknowledge a socket
-// that cannot authenticate a user or deliver the advertised collaboration.
-rejectUnsupportedUpgrades(server);
+// This BFF serves SSE, not the gateway protocol — with one exception:
+// realtime-modules on REALTIME_PATH, which pushes the distillation channels
+// (distill:levels / distill:jobs / distill:review) to a signed-in orgiq
+// session. Every other upgrade is still refused before a socket is accepted.
+attachDistillationRealtime(server);
+rejectUnsupportedUpgrades(server, { allowPaths: [REALTIME_PATH] });
+
+// Distillation's background work: the compaction consumer (claims passes off
+// distill-compact-l1|l2 — message-queue, or in process under MOCK_QUEUE), the
+// optional cadence scheduler (DISTILL_COMPACT_INTERVAL_MIN), and the L2
+// replica's anti-entropy sweep.
+startCompactionConsumer();
+startCompactionScheduler();
+startReplicaSync();

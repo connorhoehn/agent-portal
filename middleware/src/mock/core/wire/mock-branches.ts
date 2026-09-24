@@ -397,12 +397,19 @@ function callsLiveAws(fn: FnDecl, modRel: string): boolean {
  *     reported as reaching live AWS through its own auth check.
  *   * `sessionSigningSecretArn` — lib/session.ts signs with a deterministic dev
  *     key rather than reading Secrets Manager when no secret ARN is set.
+ *   * `inProcessQueue` — lib/distillation-queue.ts carries distillation
+ *     compaction passes on the in-process queue (lib/memory-queue.ts, same
+ *     send/receive/ack/redrive semantics, rows in a registered fixture) under
+ *     MOCK_QUEUE — which `dev:mock` sets — or when MESSAGE_QUEUE_URL is unset,
+ *     and on message-queue over HTTP otherwise. A queue `.send()` looks like an
+ *     SDK send to this scan; the named decision is what says it has an
+ *     offline branch.
  *
  * Four mechanisms is drift waiting to happen and the widened lib scan is what
  * made that visible. Consolidating them is a separate slice; recording them
  * honestly is this one.
  */
-const GUARD_TOKENS = ['config.mock', 'auroraConfigured', 'policyStoreId', 'sessionSigningSecretArn'];
+const GUARD_TOKENS = ['config.mock', 'auroraConfigured', 'policyStoreId', 'sessionSigningSecretArn', 'inProcessQueue'];
 
 const mentionsGuard = (text: string): boolean => GUARD_TOKENS.some((t) => text.includes(t));
 

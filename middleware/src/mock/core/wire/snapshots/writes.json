@@ -1,7 +1,7 @@
 {
-  "capturedAt": "2026-09-24T02:36:50.378Z",
-  "serverHandlerSha": "5b3083182df584b6b0f3ff3658827f14cbd5b12a664a9ad410d4bf0f25a91580",
-  "baseUrl": "http://127.0.0.1:3013",
+  "capturedAt": "2026-09-24T11:55:27.330Z",
+  "serverHandlerSha": "3c5bd76345a6796031a11ba7a59f8a7c11b2eb824d2d61563a74bb5d16e5fef2",
+  "baseUrl": "http://127.0.0.1:3012",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
     "agentcore",
@@ -619,6 +619,7 @@
           "agent-projects",
           "assessment-archetypes",
           "assessment-configuration",
+          "assessment-document-mappings",
           "assessment-evidence-log",
           "assessment-feedback",
           "assessment-knowledge-comments",
@@ -665,6 +666,7 @@
           "distillation-library-links",
           "distillation-observations",
           "distillation-procedure-applications",
+          "distillation-queue-messages",
           "distillation-review-samples",
           "github-identity",
           "github-orgs",
@@ -722,6 +724,7 @@
           "trace-sink-traces",
           "traces",
           "work-item-comments",
+          "work-item-criteria",
           "work-items"
         ],
         "fixtures[].scenario": [
@@ -1120,27 +1123,7 @@
       }
     },
     "POST /api/assessment/runs/:runId/complete": {
-      "persona": "assessment/admin",
-      "status": 200,
-      "shape": {
-        "$": "object",
-        "args": "object",
-        "command": "string",
-        "error": "null",
-        "files_written": "array",
-        "finished_at": "string",
-        "id": "string",
-        "source": "string",
-        "started_at": "string",
-        "status": "string",
-        "summary": "string",
-        "team_id": "string"
-      },
-      "values": {
-        "status": [
-          "completed"
-        ]
-      },
+      "skipped": "HTTP 400: A scoring run requires a non-empty scoring_log to complete (assessment/admin)",
       "sent": [
         "status"
       ]
@@ -2575,7 +2558,16 @@
       ]
     },
     "POST /api/observability/quality/feedback": {
-      "skipped": "HTTP 404: invocation not found (orgiq/admin)",
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "invocationId": "string",
+        "label": "string",
+        "note": "string",
+        "ok": "boolean"
+      },
+      "values": {},
       "sent": [
         "invocationId",
         "label",

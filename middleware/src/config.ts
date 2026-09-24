@@ -68,6 +68,21 @@ export const config = {
     cloudwatch: flag('MOCK_CLOUDWATCH'),
   },
 
+  // The message-queue service (~/projects/message-queue) that carries the
+  // distillation compaction jobs. `url` is the bare origin (the /api/v1 prefix
+  // lives in lib/mq-client.ts). `mock` (MOCK_QUEUE=true, on under dev:mock)
+  // swaps in the in-process queue with the same semantics; so does an unset
+  // url, with a boot warning, so a laptop without the service still compacts.
+  // Kept out of `mock` above on purpose: that object is reported verbatim by
+  // /api/health and read by the wire capture as "which AWS providers are
+  // intercepted", and a queue is not an AWS provider.
+  messageQueue: {
+    url: env('MESSAGE_QUEUE_URL'),
+    serviceId: env('MESSAGE_QUEUE_SERVICE_ID', 'orgiq-middleware'),
+    secret: env('MESSAGE_QUEUE_AUTH_SECRET'),
+    mock: flag('MOCK_QUEUE'),
+  },
+
   aurora: {
     clusterArn: env('AURORA_CLUSTER_ARN'),
     secretArn: env('AURORA_SECRET_ARN'),

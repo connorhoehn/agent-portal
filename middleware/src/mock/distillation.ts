@@ -58,7 +58,22 @@ import { clock, defineFixture } from './core/index.js';
 /** L0 write head, L1 deduped clusters, L2 distilled artifacts. */
 export type Level = 'L0' | 'L1' | 'L2';
 
-export type CompactionStatus = 'running' | 'succeeded' | 'failed';
+/** `queued` is a pass waiting on its message-queue queue (lib/distillation-
+ *  queue.ts); a consumer claims it into `running`. */
+export type CompactionStatus = 'queued' | 'running' | 'succeeded' | 'failed';
+
+/** Where a pass is inside its run — what the `distill:jobs` channel pushes
+ *  between claim and finish. `retrying` is a delivery that threw and was left
+ *  unacked for the queue to hand back. */
+export type CompactionPhase = 'queued' | 'claim' | 'read' | 'merge' | 'write' | 'done' | 'failed' | 'retrying';
+
+/** One line of a pass's run log. Stored as it happens — a log is a record of
+ *  events, not a number that could be counted from other rows. */
+export interface CompactionLogEntry {
+  at: string;
+  level: 'info' | 'warn' | 'error';
+  message: string;
+}
 
 export type ObservationKind = 'worked' | 'failed' | 'gotcha' | 'decision' | 'convention';
 
@@ -234,6 +249,24 @@ export interface CompactionJobRow {
    *  are what this one had consumed when it aborted, which is how a failed
    *  job reports a real input count while producing nothing. */
   retriedBy?: string;
+  // ── Set by the queue consumer on passes run in this process. The seeded
+  // history has none of them: its log and phase are derived by the provider
+  // from the rows it produced, so a seed cannot narrate a count it never made.
+  /** When the pass was put on the queue (seeded rows: their startedAt). */
+  queuedAt?: string;
+  /** The repo a pass was scoped to — also its FIFO message group. Absent =
+   *  the whole store. */
+  repo?: string;
+  requestedBy?: string;
+  /** The batch the consumer claimed: observation ids (L1) or cluster ids (L2).
+   *  Ids, not a count — the count is `inputIds.length`. */
+  inputIds?: string[];
+  log?: CompactionLogEntry[];
+  phase?: CompactionPhase;
+  percent?: number | null;
+  stepLabel?: string | null;
+  /** Deliveries so far (the queue's receive count on the latest claim). */
+  attempts?: number;
 }
 
 /**

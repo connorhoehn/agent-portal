@@ -14,7 +14,8 @@ import { Router } from 'express';
 import { asyncHandler, NotFoundError, ValidationError } from '../lib/async-handler.js';
 import { requireAction, resolveSession } from '../lib/authz.js';
 import {
-  compactionHealth, compactNow, ingest, levels, listCompactions, sampling, samplingVerdict,
+  compactNow, ingest, levelsView, listCompactions, sampling, samplingVerdict,
+  listFacets, itemSources, getSession, procedureRuns, replicationStatus,
   listItems, getItem, lineageFor, isLineageRoot, listArtifacts, factLineage, listReview, decideReview, libraryProvenance,
   publishArtifact, sampleForReview,
   listProcedures, getProcedure, listApplications, applyProcedure,
@@ -27,6 +28,8 @@ import {
 // every Library asset id it links to) is lowercase-letters-then-dash
 // followed by alnum/dash.
 const ID_RE = /^[a-z]+-[A-Za-z0-9-]+$/;
+// owner/name, the GitHub shape every repo in this domain carries.
+const REPO_RE = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 const LEVELS = ['L0', 'L1', 'L2'] as const;
 const ARTIFACT_STATUSES = ['draft', 'published', 'retired'] as const;
 const ARTIFACT_TYPES = ['runbook', 'insight', 'convention', 'decision', 'procedure'] as const;
@@ -65,10 +68,18 @@ const manageGate = requireAction('ManageBots');
 
 // GET /api/distillation/levels — L0/L1/L2 with the computed health verdict
 // attached per level, so the portal renders a judgment made in one place
-// rather than re-deriving the lag/stall thresholds client-side.
+// rather than re-deriving the lag/stall thresholds client-side. Each tier also
+// carries writers, backlog, lastCompletedAt, its Merkle digest and
+// health {state, reason, lagSeconds}; `health[]` stays for existing readers.
+// The distill:levels channel pushes this same `levels` array.
 distillationRouter.get('/levels', asyncHandler(async (_req, res) => {
-  const [ls, jobs] = await Promise.all([levels(), listCompactions()]);
-  res.json({ levels: ls, health: compactionHealth(ls, jobs) });
+  res.json(await levelsView());
+}));
+
+// GET /api/distillation/replication — the L2 read replica against its
+// primary: digests, lag, last anti-entropy sweep, keys repaired.
+distillationRouter.get('/replication', asyncHandler(async (_req, res) => {
+  res.json(await replicationStatus());
 }));
 
 // GET /api/distillation/ingest — write pressure right now.
@@ -81,7 +92,7 @@ distillationRouter.get('/compactions', asyncHandler(async (req, res) => {
   const levelRaw = String(req.query['level'] ?? '').trim();
   const statusRaw = String(req.query['status'] ?? '').trim();
   const level = (['L0', 'L1', 'L2'] as const).includes(levelRaw as Level) ? (levelRaw as Level) : undefined;
-  const status = (['running', 'succeeded', 'failed'] as const).includes(statusRaw as CompactionStatus)
+  const status = (['queued', 'running', 'succeeded', 'failed'] as const).includes(statusRaw as CompactionStatus)
     ? (statusRaw as CompactionStatus) : undefined;
   const jobs = await listCompactions({ ...(level ? { level } : {}), ...(status ? { status } : {}) });
   res.json({ jobs });
@@ -98,14 +109,30 @@ distillationRouter.get('/sampling', asyncHandler(async (_req, res) => {
 // POST /api/distillation/compact — force a pass ahead of the background
 // scheduler. L0 is the write head, not a valid target: nothing compacts
 // into it, so that's a 400, not a silent no-op.
+//
+// The pass is put on the message queue (distill-compact-l1|l2) and answered
+// `queued`; a consumer claims it and the distill:jobs channel carries it from
+// there. `repo` (optional) scopes the pass to one repository — and is its FIFO
+// message group, so two passes over one repo never run at once.
 distillationRouter.post('/compact', manageGate, asyncHandler(async (req, res) => {
-  const level = String((req.body as { level?: unknown } | undefined)?.level ?? '');
+  const body = req.body as { level?: unknown; repo?: unknown } | undefined;
+  const level = String(body?.level ?? '');
   if (level !== 'L1' && level !== 'L2') {
     throw new ValidationError("level must be 'L1' or 'L2' — L0 is the write head, nothing compacts into it");
   }
+  const repoRaw = body?.repo === undefined || body?.repo === null ? '' : String(body.repo).trim();
+  if (repoRaw && !REPO_RE.test(repoRaw)) throw new ValidationError('repo must look like owner/name');
   const session = resolveSession(req);
-  const job = await compactNow(level as CompactableLevel, session?.name ?? session?.sub ?? 'someone');
+  const job = await compactNow(level as CompactableLevel, session?.name ?? session?.sub ?? 'someone', repoRaw || null);
   res.status(201).json(job);
+}));
+
+// GET /api/distillation/compactions/:id — one job, with its run log.
+distillationRouter.get('/compactions/:id', asyncHandler(async (req, res) => {
+  const id = requireId(String(req.params['id']));
+  const job = (await listCompactions()).find((j) => j.id === id);
+  if (!job) throw new NotFoundError(`compaction ${id} not found`);
+  res.json(job);
 }));
 
 // ─── Navigable knowledge: items, lineage, artifacts, facts, review ─────────
@@ -132,12 +159,36 @@ distillationRouter.get('/items', asyncHandler(async (req, res) => {
   res.json(result);
 }));
 
+// GET /api/distillation/facets?level= — the repos, initiatives and kinds
+// present in a level, each counted the way /items would filter it.
+distillationRouter.get('/facets', asyncHandler(async (req, res) => {
+  const level = enumOrUndefined(req.query['level'], 'level', LEVELS);
+  res.json(await listFacets(level));
+}));
+
 // GET /api/distillation/items/:id — kind-discriminated by `level`.
 distillationRouter.get('/items/:id', asyncHandler(async (req, res) => {
   const id = requireId(String(req.params['id']));
   const item = await getItem(id);
   if (!item) throw new NotFoundError(`item ${id} not found`);
   res.json(item);
+}));
+
+// GET /api/distillation/items/:id/sources — the item's direct evidence:
+// L2 → its patterns + their run notes, L1 → member notes, L0 → its session.
+distillationRouter.get('/items/:id/sources', asyncHandler(async (req, res) => {
+  const id = requireId(String(req.params['id']));
+  const sources = await itemSources(id);
+  if (!sources) throw new NotFoundError(`item ${id} not found`);
+  res.json({ sources });
+}));
+
+// GET /api/distillation/sessions/:id — a run-note session and its notes.
+distillationRouter.get('/sessions/:id', asyncHandler(async (req, res) => {
+  const id = requireId(String(req.params['id']));
+  const session = await getSession(id);
+  if (!session) throw new NotFoundError(`session ${id} not found`);
+  res.json(session);
 }));
 
 // GET /api/distillation/items/:id/lineage?depth=1-4
@@ -252,6 +303,15 @@ distillationRouter.get('/procedures/:id/applications', asyncHandler(async (req, 
   const applications = await listApplications(id);
   if (!applications) throw new NotFoundError(`procedure ${id} not found`);
   res.json({ applications });
+}));
+
+// GET /api/distillation/procedures/:id/runs — each run with per-step
+// outcomes, newest first (the procedure's Runs tab).
+distillationRouter.get('/procedures/:id/runs', asyncHandler(async (req, res) => {
+  const id = requireId(String(req.params['id']));
+  const runs = await procedureRuns(id);
+  if (!runs) throw new NotFoundError(`procedure ${id} not found`);
+  res.json({ runs });
 }));
 
 // POST /api/distillation/procedures/:id/apply

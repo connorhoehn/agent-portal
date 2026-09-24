@@ -23,6 +23,7 @@ import {
 import { freezeClock } from '../../mock/core/index.js';
 import {
   levels, compactNow, getItem, listArtifacts, lineageFor, __resetDistillationMock, __setCompactRunMs,
+  startCompactionConsumer,
   isProceduralChunk, procedureHealth, type ProcedureView,
 } from '../distillation.js';
 
@@ -294,23 +295,32 @@ describe('procedureHealth', () => {
 });
 
 // The audit saw every Compact resolve to `succeeded` in the same response —
-// no observable running state. The job now starts `running` and completes
-// after the run window, producing its items then.
-describe('compactNow runs before it succeeds', () => {
-  it('returns a running job that completes after the run window', async () => {
+// no observable running state. The job now goes on the compaction queue
+// `queued`, a consumer claims it into `running`, and it completes after the
+// run window, producing its items then.
+describe('compactNow queues, then runs, then succeeds', () => {
+  it('returns a queued job that a consumer runs to completion after the run window', async () => {
     __resetDistillationMock();
     __setCompactRunMs(3_000);
     jest.useFakeTimers();
+    const stop = startCompactionConsumer();
     try {
       const job = await compactNow('L1', 'Test Operator');
-      expect(job.status).toBe('running');
+      expect(job.status).toBe('queued');
       expect(job.finishedAt).toBeNull();
+      expect(job.duration_ms).toBeNull();
       expect(job.produced.cluster_ids).toEqual([]);
-      jest.advanceTimersByTime(3_000);
+      await jest.advanceTimersByTimeAsync(10);
+      expect(job.status).toBe('running');
+      expect(job.input_ids.length).toBeGreaterThan(0);
+      await jest.advanceTimersByTimeAsync(3_100);
       expect(job.status).toBe('succeeded');
       expect(job.finishedAt).not.toBeNull();
       expect(job.produced.cluster_ids.length).toBeGreaterThan(0);
+      expect(job.phase).toBe('done');
+      expect(job.percent).toBe(100);
     } finally {
+      stop();
       jest.useRealTimers();
       __setCompactRunMs(0);
     }

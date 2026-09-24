@@ -1,7 +1,7 @@
 {
-  "capturedAt": "2026-09-24T02:36:49.301Z",
-  "serverHandlerSha": "5b3083182df584b6b0f3ff3658827f14cbd5b12a664a9ad410d4bf0f25a91580",
-  "baseUrl": "http://127.0.0.1:3013",
+  "capturedAt": "2026-09-24T11:55:26.578Z",
+  "serverHandlerSha": "3c5bd76345a6796031a11ba7a59f8a7c11b2eb824d2d61563a74bb5d16e5fef2",
+  "baseUrl": "http://127.0.0.1:3012",
   "personas": [
     "orgiq/admin",
     "assessment/admin",
@@ -34,6 +34,7 @@
           "agent-projects",
           "assessment-archetypes",
           "assessment-configuration",
+          "assessment-document-mappings",
           "assessment-evidence-log",
           "assessment-feedback",
           "assessment-knowledge-comments",
@@ -80,6 +81,7 @@
           "distillation-library-links",
           "distillation-observations",
           "distillation-procedure-applications",
+          "distillation-queue-messages",
           "distillation-review-samples",
           "github-identity",
           "github-orgs",
@@ -137,6 +139,7 @@
           "trace-sink-traces",
           "traces",
           "work-item-comments",
+          "work-item-criteria",
           "work-items"
         ]
       }
@@ -165,6 +168,7 @@
           "agent-projects",
           "assessment-archetypes",
           "assessment-configuration",
+          "assessment-document-mappings",
           "assessment-evidence-log",
           "assessment-feedback",
           "assessment-knowledge-comments",
@@ -211,6 +215,7 @@
           "distillation-library-links",
           "distillation-observations",
           "distillation-procedure-applications",
+          "distillation-queue-messages",
           "distillation-review-samples",
           "github-identity",
           "github-orgs",
@@ -268,6 +273,7 @@
           "trace-sink-traces",
           "traces",
           "work-item-comments",
+          "work-item-criteria",
           "work-items"
         ],
         "fixtures[].scenario": [
@@ -809,7 +815,8 @@
         "comments[].created_at": "string",
         "comments[].doc_id": "string",
         "comments[].edited_at": "string",
-        "comments[].id": "string"
+        "comments[].id": "string",
+        "comments[].parent_id": "null|string"
       },
       "values": {}
     },
@@ -841,22 +848,22 @@
       "values": {}
     },
     "GET /api/assessment/knowledge/doc/workflows": {
-      "skipped": "non-JSON (text/html; charset=utf-8) (orgiq/admin); non-JSON (text/html; charset=utf-8) (assessment/admin); HTTP 403 (anonymous)"
+      "skipped": "HTTP 400 (orgiq/admin); HTTP 400 (assessment/admin); HTTP 403 (anonymous)"
     },
     "GET /api/assessment/knowledge/doc/workflows/review-requests": {
-      "skipped": "non-JSON (text/html; charset=utf-8) (orgiq/admin); non-JSON (text/html; charset=utf-8) (assessment/admin); HTTP 403 (anonymous)"
+      "skipped": "HTTP 400 (orgiq/admin); HTTP 400 (assessment/admin); HTTP 403 (anonymous)"
     },
     "GET /api/assessment/knowledge/doc/workflows/reviewers": {
-      "skipped": "non-JSON (text/html; charset=utf-8) (orgiq/admin); non-JSON (text/html; charset=utf-8) (assessment/admin); HTTP 403 (anonymous)"
+      "skipped": "HTTP 400 (orgiq/admin); HTTP 400 (assessment/admin); HTTP 403 (anonymous)"
     },
     "GET /api/assessment/knowledge/doc/workflows/reviews": {
-      "skipped": "non-JSON (text/html; charset=utf-8) (orgiq/admin); non-JSON (text/html; charset=utf-8) (assessment/admin); HTTP 403 (anonymous)"
+      "skipped": "HTTP 400 (orgiq/admin); HTTP 400 (assessment/admin); HTTP 403 (anonymous)"
     },
     "GET /api/assessment/knowledge/doc/workflows/sections/:sectionId/items": {
       "skipped": "no value found for :sectionId under /api/assessment/knowledge/doc/workflows/sections (orgiq/admin); no value found for :sectionId under /api/assessment/knowledge/doc/workflows/sections (assessment/admin); no value found for :sectionId under /api/assessment/knowledge/doc/workflows/sections (anonymous)"
     },
     "GET /api/assessment/knowledge/source/asset": {
-      "skipped": "non-JSON (text/html; charset=utf-8) (orgiq/admin); non-JSON (text/html; charset=utf-8) (assessment/admin); HTTP 403 (anonymous)"
+      "skipped": "HTTP 400 (orgiq/admin); HTTP 400 (assessment/admin); HTTP 403 (anonymous)"
     },
     "GET /api/assessment/knowledge/tree": {
       "persona": "orgiq/admin",
@@ -880,14 +887,16 @@
         "sections[].nodes[].updated_at": "string",
         "sections[].nodes[].viewable": "boolean",
         "sections[].provider": "string",
-        "sections[].title": "string"
+        "sections[].title": "string",
+        "sourceConfigured": "boolean"
       },
       "values": {
         "sections[].key": [
           "confluence-eng",
           "enterprise_context",
           "prompts",
-          "rules"
+          "rules",
+          "workspace_drafts"
         ],
         "sections[].kind": [
           "local",
@@ -1099,13 +1108,11 @@
         ],
         "envelopes[].status": [
           "committed",
-          "processed",
           "staged",
           "superseded"
         ],
         "groups[].status": [
           "committed",
-          "processed",
           "staged"
         ]
       }
@@ -1573,14 +1580,16 @@
         "sections[].nodes[].updated_at": "string",
         "sections[].nodes[].viewable": "boolean",
         "sections[].provider": "string",
-        "sections[].title": "string"
+        "sections[].title": "string",
+        "sourceConfigured": "boolean"
       },
       "values": {
         "sections[].key": [
           "confluence-eng",
           "enterprise_context",
           "prompts",
-          "rules"
+          "rules",
+          "workspace_drafts"
         ],
         "sections[].kind": [
           "local",
@@ -2253,7 +2262,7 @@
       },
       "values": {
         "boxes[].status": [
-          "error",
+          "idle",
           "running",
           "waiting"
         ]
@@ -2334,33 +2343,139 @@
         "$": "object",
         "jobs": "array",
         "jobs[]": "object",
+        "jobs[].attempts": "number",
         "jobs[].bytesReclaimed": "number",
         "jobs[].costUsd": "number",
+        "jobs[].cost_usd": "number",
         "jobs[].dedupedItems": "number",
+        "jobs[].duration_ms": "number",
         "jobs[].error": "string",
         "jobs[].finishedAt": "string",
         "jobs[].id": "string",
         "jobs[].inputItems": "number",
+        "jobs[].input_ids": "array",
+        "jobs[].input_ids[]": "string",
         "jobs[].level": "string",
+        "jobs[].log": "array",
+        "jobs[].log[]": "object",
+        "jobs[].log[].at": "string",
+        "jobs[].log[].level": "string",
+        "jobs[].log[].message": "string",
         "jobs[].outputItems": "number",
+        "jobs[].output_ids": "array",
+        "jobs[].output_ids[]": "string",
+        "jobs[].percent": "null|number",
+        "jobs[].phase": "string",
         "jobs[].produced": "object",
         "jobs[].produced.artifact_ids": "array",
         "jobs[].produced.artifact_ids[]": "string",
         "jobs[].produced.cluster_ids": "array",
         "jobs[].produced.cluster_ids[]": "string",
+        "jobs[].queue": "string",
+        "jobs[].queued_at": "string",
+        "jobs[].repo": "null",
+        "jobs[].requested_by": "null",
         "jobs[].startedAt": "string",
-        "jobs[].status": "string"
+        "jobs[].status": "string",
+        "jobs[].stepLabel": "null",
+        "jobs[].what_changed": "string"
       },
       "values": {
         "jobs[].level": [
           "L1",
           "L2"
         ],
+        "jobs[].log[].level": [
+          "error",
+          "info"
+        ],
+        "jobs[].phase": [
+          "done",
+          "failed"
+        ],
         "jobs[].status": [
           "failed",
           "succeeded"
         ]
       }
+    },
+    "GET /api/distillation/compactions/:id": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "attempts": "number",
+        "bytesReclaimed": "number",
+        "costUsd": "number",
+        "cost_usd": "number",
+        "dedupedItems": "number",
+        "duration_ms": "number",
+        "finishedAt": "string",
+        "id": "string",
+        "inputItems": "number",
+        "input_ids": "array",
+        "input_ids[]": "string",
+        "level": "string",
+        "log": "array",
+        "log[]": "object",
+        "log[].at": "string",
+        "log[].level": "string",
+        "log[].message": "string",
+        "outputItems": "number",
+        "output_ids": "array",
+        "output_ids[]": "string",
+        "percent": "number",
+        "phase": "string",
+        "produced": "object",
+        "produced.artifact_ids": "array",
+        "produced.cluster_ids": "array",
+        "produced.cluster_ids[]": "string",
+        "queue": "string",
+        "queued_at": "string",
+        "repo": "null",
+        "requested_by": "null",
+        "startedAt": "string",
+        "status": "string",
+        "stepLabel": "null",
+        "what_changed": "string"
+      },
+      "values": {
+        "level": [
+          "L1"
+        ],
+        "log[].level": [
+          "info"
+        ],
+        "phase": [
+          "done"
+        ],
+        "status": [
+          "succeeded"
+        ]
+      }
+    },
+    "GET /api/distillation/facets": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "initiatives": "array",
+        "initiatives[]": "object",
+        "initiatives[].count": "number",
+        "initiatives[].label": "string",
+        "initiatives[].value": "string",
+        "kinds": "array",
+        "kinds[]": "object",
+        "kinds[].count": "number",
+        "kinds[].label": "string",
+        "kinds[].value": "string",
+        "repos": "array",
+        "repos[]": "object",
+        "repos[].count": "number",
+        "repos[].label": "string",
+        "repos[].value": "string"
+      },
+      "values": {}
     },
     "GET /api/distillation/facts/:id/lineage": {
       "skipped": "no value found for :id under /api/distillation/facts (orgiq/admin); no value found for :id under /api/distillation/facts (assessment/admin); no value found for :id under /api/distillation/facts (anonymous)"
@@ -2387,26 +2502,44 @@
         "items": "array",
         "items[]": "object",
         "items[].body": "string",
+        "items[].body_markdown": "string",
         "items[].box_id": "string",
+        "items[].classification": "string",
+        "items[].cluster_ids": "array",
+        "items[].cluster_ids[]": "string",
         "items[].confidence": "number",
         "items[].created_at": "string",
         "items[].created_by_compaction_id": "string",
+        "items[].facts": "array",
+        "items[].facts[]": "string",
         "items[].id": "string",
         "items[].initiative_id": "string",
         "items[].kind": "string",
+        "items[].last_used_at": "null|string",
         "items[].level": "string",
+        "items[].library_item_id": "null|string",
         "items[].member_observation_ids": "array",
         "items[].member_observation_ids[]": "string",
+        "items[].owner": "string",
         "items[].repo": "string",
+        "items[].reviewed_at": "null|string",
+        "items[].reviewed_by": "null|string",
         "items[].session_id": "string",
+        "items[].status": "string",
         "items[].summary": "string",
         "items[].tags": "array",
         "items[].tags[]": "string",
         "items[].title": "string",
+        "items[].type": "string",
         "items[].updated_at": "string",
-        "next_cursor": "string"
+        "next_cursor": "string",
+        "total": "number"
       },
       "values": {
+        "items[].classification": [
+          "confidential",
+          "internal"
+        ],
         "items[].kind": [
           "convention",
           "decision",
@@ -2416,7 +2549,15 @@
         ],
         "items[].level": [
           "L0",
-          "L1"
+          "L1",
+          "L2"
+        ],
+        "items[].status": [
+          "draft",
+          "published"
+        ],
+        "items[].type": [
+          "procedure"
         ]
       }
     },
@@ -2440,7 +2581,7 @@
       },
       "values": {
         "kind": [
-          "failed"
+          "decision"
         ],
         "level": [
           "L0"
@@ -2477,6 +2618,27 @@
         ]
       }
     },
+    "GET /api/distillation/items/:id/sources": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "sources": "array",
+        "sources[]": "object",
+        "sources[].excerpt": "string",
+        "sources[].id": "string",
+        "sources[].kind": "string",
+        "sources[].repo": "string",
+        "sources[].session_id": "string",
+        "sources[].timestamp": "string",
+        "sources[].title": "string"
+      },
+      "values": {
+        "sources[].kind": [
+          "session"
+        ]
+      }
+    },
     "GET /api/distillation/levels": {
       "persona": "orgiq/admin",
       "status": 200,
@@ -2489,11 +2651,19 @@
         "health[].status": "string",
         "levels": "array",
         "levels[]": "object",
+        "levels[].backlog": "number",
+        "levels[].digest": "string",
+        "levels[].health": "object",
+        "levels[].health.lagSeconds": "number",
+        "levels[].health.reason": "string",
+        "levels[].health.state": "string",
         "levels[].items": "number",
         "levels[].lagSeconds": "number",
+        "levels[].lastCompletedAt": "null|string",
         "levels[].level": "string",
         "levels[].oldestAt": "string",
-        "levels[].sizeBytes": "number"
+        "levels[].sizeBytes": "number",
+        "levels[].writers": "number"
       },
       "values": {
         "health[].level": [
@@ -2502,7 +2672,13 @@
           "L2"
         ],
         "health[].status": [
+          "behind",
           "healthy",
+          "stalled"
+        ],
+        "levels[].health.state": [
+          "behind",
+          "ok",
           "stalled"
         ],
         "levels[].level": [
@@ -2664,6 +2840,56 @@
         ]
       }
     },
+    "GET /api/distillation/procedures/:id/runs": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "runs": "array",
+        "runs[]": "object",
+        "runs[].actor": "string",
+        "runs[].at": "string",
+        "runs[].box_id": "string",
+        "runs[].failed_at_step_id": "null|string",
+        "runs[].id": "string",
+        "runs[].note": "null|string",
+        "runs[].outcome": "string",
+        "runs[].steps": "array",
+        "runs[].steps[]": "object",
+        "runs[].steps[].status": "string",
+        "runs[].steps[].step_id": "string"
+      },
+      "values": {
+        "runs[].outcome": [
+          "failed",
+          "succeeded"
+        ],
+        "runs[].steps[].status": [
+          "done",
+          "failed",
+          "pending"
+        ]
+      }
+    },
+    "GET /api/distillation/replication": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "inSync": "boolean",
+        "primary": "object",
+        "primary.digest": "string",
+        "primary.id": "string",
+        "replicas": "array",
+        "replicas[]": "object",
+        "replicas[].digest": "string",
+        "replicas[].id": "string",
+        "replicas[].lagMs": "number",
+        "replicas[].lastSync": "string",
+        "replicas[].repaired": "number"
+      },
+      "values": {}
+    },
     "GET /api/distillation/review": {
       "persona": "orgiq/admin",
       "status": 200,
@@ -2675,11 +2901,32 @@
         "samples[].note": "null|string",
         "samples[].reviewer": "null|string",
         "samples[].sampled_at": "string",
+        "samples[].target": "object",
+        "samples[].target.id": "string",
+        "samples[].target.kind": "string",
+        "samples[].target.repo": "string",
+        "samples[].target.source_count": "number",
+        "samples[].target.title": "string",
+        "samples[].target.type": "string",
         "samples[].target_id": "string",
         "samples[].target_kind": "string",
         "samples[].verdict": "string"
       },
       "values": {
+        "samples[].target.kind": [
+          "artifact",
+          "cluster"
+        ],
+        "samples[].target.type": [
+          "convention",
+          "decision",
+          "failed",
+          "gotcha",
+          "insight",
+          "procedure",
+          "runbook",
+          "worked"
+        ],
         "samples[].verdict": [
           "agree",
           "disagree",
@@ -2705,6 +2952,9 @@
           "calibrated"
         ]
       }
+    },
+    "GET /api/distillation/sessions/:id": {
+      "skipped": "no value found for :id under /api/distillation/sessions (orgiq/admin); no value found for :id under /api/distillation/sessions (assessment/admin); no value found for :id under /api/distillation/sessions (anonymous)"
     },
     "GET /api/drop/:token": {
       "skipped": "no value found for :token under /api/drop (orgiq/admin); no value found for :token under /api/drop (assessment/admin); no value found for :token under /api/drop (anonymous)"
@@ -3383,10 +3633,23 @@
       }
     },
     "GET /api/graph/work-items/:id/comments": {
-      "skipped": "non-JSON (text/html; charset=utf-8) (orgiq/admin); non-JSON (text/html; charset=utf-8) (assessment/admin); non-JSON (text/html; charset=utf-8) (anonymous)"
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "comments": "array",
+        "total": "number"
+      },
+      "values": {}
     },
     "GET /api/graph/work-items/:id/criteria": {
-      "skipped": "non-JSON (text/html; charset=utf-8) (orgiq/admin); non-JSON (text/html; charset=utf-8) (assessment/admin); non-JSON (text/html; charset=utf-8) (anonymous)"
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "criteria": "array"
+      },
+      "values": {}
     },
     "GET /api/health": {
       "persona": "orgiq/admin",
@@ -3936,7 +4199,8 @@
       },
       "values": {
         "consults[].status": [
-          "expired"
+          "expired",
+          "pending"
         ]
       }
     },
@@ -3961,7 +4225,7 @@
       },
       "values": {
         "consult.status": [
-          "expired"
+          "pending"
         ]
       }
     },
@@ -4279,12 +4543,35 @@
         "nodes[].presence.lastSeenAt": "string",
         "nodes[].presence.nodeId": "string",
         "nodes[].presence.sessions": "array",
+        "nodes[].presence.sessions[]": "object",
+        "nodes[].presence.sessions[].branch": "string",
+        "nodes[].presence.sessions[].contextUsed": "number",
+        "nodes[].presence.sessions[].harness": "string",
+        "nodes[].presence.sessions[].intent": "string",
+        "nodes[].presence.sessions[].lastSeenAt": "string",
+        "nodes[].presence.sessions[].memory": "object",
+        "nodes[].presence.sessions[].memory.lastPushAt": "number",
+        "nodes[].presence.sessions[].memory.mode": "string",
+        "nodes[].presence.sessions[].memory.pullCursorAgeS": "number",
+        "nodes[].presence.sessions[].model": "string",
+        "nodes[].presence.sessions[].modelProvider": "string",
+        "nodes[].presence.sessions[].projectId": "string",
+        "nodes[].presence.sessions[].repo": "string",
+        "nodes[].presence.sessions[].sessionId": "string",
+        "nodes[].presence.sessions[].startedAt": "number",
+        "nodes[].presence.sessions[].touching": "array",
+        "nodes[].presence.sessions[].touching[]": "string",
+        "nodes[].presence.sessions[].worktree": "string",
         "nodes[].presence.status": "string",
         "nodes[].revokedAt": "null"
       },
       "values": {
+        "nodes[].presence.sessions[].memory.mode": [
+          "synced"
+        ],
         "nodes[].presence.status": [
-          "offline"
+          "offline",
+          "stale"
         ]
       }
     },
@@ -4334,7 +4621,8 @@
       "values": {
         "nodes[].presence.status": [
           "connected",
-          "offline"
+          "offline",
+          "stale"
         ]
       }
     },
@@ -4945,7 +5233,7 @@
         "points[].bucketStart": "string",
         "points[].count": "number",
         "points[].driftP95": "number",
-        "points[].judgeP50": "number",
+        "points[].judgeP50": "null|number",
         "windowHours": "number"
       },
       "values": {}
@@ -5239,33 +5527,45 @@
         "invocation.agentId": "string",
         "invocation.agentName": "string",
         "invocation.durationMs": "number",
-        "invocation.estCostUsd": "null",
+        "invocation.estCostUsd": "number",
         "invocation.guardrailAction": "null",
-        "invocation.humanLabel": "null",
+        "invocation.humanLabel": "string",
         "invocation.humanNote": "null",
-        "invocation.inputTokens": "null",
+        "invocation.inputTokens": "number",
         "invocation.invocationId": "string",
         "invocation.judgeCostUsd": "number",
         "invocation.judgeInputTokens": "number",
         "invocation.judgeOutputTokens": "number",
         "invocation.judgeRationale": "string",
         "invocation.judgeScore": "number",
-        "invocation.modelId": "null",
-        "invocation.outputTokens": "null",
+        "invocation.modelId": "string",
+        "invocation.outputTokens": "number",
         "invocation.parentInvocationId": "null",
         "invocation.piiDetected": "boolean",
         "invocation.promptSnippet": "string",
-        "invocation.promptVersion": "null",
+        "invocation.promptVersion": "string",
         "invocation.responseSnippet": "string",
-        "invocation.runtimeImageDigest": "null",
-        "invocation.schemaValid": "null",
-        "invocation.sessionId": "null",
-        "invocation.templateId": "null",
+        "invocation.runtimeImageDigest": "string",
+        "invocation.schemaValid": "boolean",
+        "invocation.sessionId": "string",
+        "invocation.templateId": "string",
         "invocation.totalCostUsd": "number",
         "invocation.ts": "string",
-        "invocation.userId": "null",
+        "invocation.userId": "string",
         "parent": "null",
-        "toolCalls": "array"
+        "toolCalls": "array",
+        "toolCalls[]": "object",
+        "toolCalls[].durationMs": "number",
+        "toolCalls[].errorMessage": "null",
+        "toolCalls[].errored": "boolean",
+        "toolCalls[].estCostUsd": "null",
+        "toolCalls[].inputSample": "string",
+        "toolCalls[].inputSize": "number",
+        "toolCalls[].outputSample": "string",
+        "toolCalls[].outputSize": "number",
+        "toolCalls[].startedAt": "string",
+        "toolCalls[].toolCallId": "string",
+        "toolCalls[].toolName": "string"
       },
       "values": {}
     },
@@ -6774,7 +7074,7 @@
       "skipped": "no value found for :boxId under /internal/devbox/boxes (orgiq/admin); no value found for :boxId under /internal/devbox/boxes (assessment/admin); no value found for :boxId under /internal/devbox/boxes (anonymous)"
     },
     "GET /internal/devbox/status": {
-      "skipped": "non-JSON (text/html; charset=utf-8) (orgiq/admin); non-JSON (text/html; charset=utf-8) (assessment/admin); non-JSON (text/html; charset=utf-8) (anonymous)"
+      "skipped": "HTTP 503 (orgiq/admin); HTTP 503 (assessment/admin); HTTP 503 (anonymous)"
     },
     "GET /internal/work-graph/compute-capabilities/events/:sessionId": {
       "skipped": "no value found for :sessionId under /internal/work-graph/compute-capabilities/events (orgiq/admin); no value found for :sessionId under /internal/work-graph/compute-capabilities/events (assessment/admin); no value found for :sessionId under /internal/work-graph/compute-capabilities/events (anonymous)"
@@ -6867,6 +7167,7 @@
         "blocked",
         "clarification",
         "close_claim",
+        "cluster",
         "comment",
         "confluence",
         "convention",
@@ -6916,7 +7217,9 @@
       "values": [
         "L0",
         "L1",
-        "L2"
+        "L2",
+        "error",
+        "info"
       ]
     },
     "mode": {
@@ -6925,15 +7228,24 @@
         "browser",
         "browser_spa",
         "fetch",
-        "sim"
+        "sim",
+        "synced"
       ]
     },
     "outcome": {
       "open": false,
       "values": [
+        "failed",
         "pass",
         "requires_approval",
         "succeeded"
+      ]
+    },
+    "phase": {
+      "open": false,
+      "values": [
+        "done",
+        "failed"
       ]
     },
     "role": {
@@ -6981,8 +7293,10 @@
     "state": {
       "open": false,
       "values": [
+        "behind",
         "missing",
-        "ok"
+        "ok",
+        "stalled"
       ]
     },
     "status": {
@@ -7008,6 +7322,7 @@
         "active",
         "approved",
         "awaiting_input",
+        "behind",
         "cancelled",
         "candidate",
         "changes_requested",
@@ -7028,6 +7343,7 @@
         "failed",
         "healthy",
         "ideating",
+        "idle",
         "in_progress",
         "in_review",
         "live",
@@ -7038,7 +7354,6 @@
         "open",
         "pending",
         "planning",
-        "processed",
         "promoted",
         "proven",
         "provisioning",
@@ -7082,6 +7397,8 @@
         "decision",
         "enum",
         "epic",
+        "failed",
+        "gotcha",
         "insight",
         "longtext",
         "mentors",
@@ -7090,7 +7407,8 @@
         "runbook",
         "sql",
         "story",
-        "text"
+        "text",
+        "worked"
       ]
     },
     "verdict": {

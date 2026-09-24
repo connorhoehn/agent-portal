@@ -45,15 +45,27 @@ import {
   type CompactionJobRow, type IngestWriter, type ProcedureApplication, type ApplicationOutcome,
   type ObservationKind, type ArtifactStatus, type ArtifactType, type ArtifactClassification,
   type ReviewTargetKind, type ReviewVerdict,
-  type Level, type CompactionStatus,
+  type Level, type CompactionStatus, type CompactionPhase, type CompactionLogEntry,
   type Lineage, type LineageNode, type LineageEdge, type LineageRelation,
 } from '../mock/distillation.js';
+import { distillationQueueMessages } from '../mock/distillation-queue.js';
+import { distillationEvents } from '../lib/distillation-events.js';
+import {
+  COMPACTION_QUEUES, MAX_RECEIVES, compactionQueue, ensureCompactionQueues, enqueueCompaction,
+} from '../lib/distillation-queue.js';
+import { MemoryMessageQueue } from '../lib/memory-queue.js';
+import type { QueueMessage } from '../lib/mq-client.js';
+import { tierDigest } from '../lib/distillation-digest.js';
+import { L2Replica, type ReplicationStatus } from '../lib/distillation-replica.js';
+import { persistJob, recordWriterWrite } from './distillation-store.js';
 
 export type {
   Observation, Cluster, Artifact, ArtifactRow, Fact, ReviewSample,
   ArtifactStatus, ArtifactType, ArtifactClassification, ReviewTargetKind, ReviewVerdict, Lineage, LineageNode, LineageEdge,
   Level, CompactionStatus, CompactionJobRow, IngestWriter, ProcedureApplication, ApplicationOutcome,
+  CompactionPhase, CompactionLogEntry,
 } from '../mock/distillation.js';
+export type { ReplicationStatus } from '../lib/distillation-replica.js';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -108,6 +120,33 @@ export interface CompactionJob {
    *  or L2 artifacts it created. A failed job (comp-104) produces neither —
    *  its inputs are untouched in the level below, not silently consumed. */
   produced: { cluster_ids: string[]; artifact_ids: string[] };
+  // ── The run, as the Activity inspector reads it (spec §3a) ──────────────
+  /** When the pass was put on its queue. Equal to startedAt for the seeded
+   *  history, which predates the queue. */
+  queued_at: string;
+  /** The message-queue queue this pass rides (lib/distillation-queue.ts). */
+  queue: string;
+  /** The repo the pass was scoped to — its FIFO group — or null for all. */
+  repo: string | null;
+  requested_by: string | null;
+  /** What it consumed: observation ids (L1) or cluster ids (L2). While a pass
+   *  runs this is the batch it claimed; once it succeeds it is counted back
+   *  out of what it produced, so the two can never disagree. */
+  input_ids: string[];
+  /** What it wrote: the produced cluster/artifact ids, flattened. */
+  output_ids: string[];
+  log: CompactionLogEntry[];
+  /** One sentence: what this run changed in the store. */
+  what_changed: string;
+  /** finished − started; running = so far; null while still queued. */
+  duration_ms: number | null;
+  cost_usd: number;
+  phase: CompactionPhase;
+  /** 0–100 while it runs, 100 once done, null when it failed or never ran. */
+  percent: number | null;
+  stepLabel: string | null;
+  /** Queue deliveries so far. */
+  attempts: number;
 }
 
 export interface SamplingState {
@@ -205,12 +244,20 @@ export function compactionHealth(levels: LevelState[], jobs: CompactionJob[]): L
 
     if (stalled) {
       const hoursSince = lastAttemptMs == null ? null : Math.round((now - lastAttemptMs) / 3_600_000);
+      // What is actually waiting for the pass INTO this tier is the tier
+      // below's unclaimed rows — not this tier's own row count, which used to
+      // be quoted here ("L2 has 11 items waiting" meant 11 guides, while 10
+      // patterns were the real backlog).
+      const waiting = lvl.level === 'L2' ? pendingClusters().length : pendingObservations().length;
+      const waitingLabel = lvl.level === 'L2'
+        ? `${waiting} pattern${waiting === 1 ? '' : 's'}`
+        : `${waiting} run note${waiting === 1 ? '' : 's'}`;
       return {
         level: lvl.level,
         status: 'stalled',
         reason: hoursSince == null
-          ? `${lvl.level} has ${lvl.items} items waiting and no compaction has ever run against it — trigger one by hand.`
-          : `${lvl.level} has ${lvl.items} items waiting and no compaction has run against it in ${hoursSince}h — trigger one by hand before the backlog grows further.`,
+          ? `${waitingLabel} waiting for ${lvl.level} and no compaction has ever run into it — trigger one by hand.`
+          : `${waitingLabel} waiting for ${lvl.level} and no compaction has run into it in ${hoursSince}h — trigger one by hand before the backlog grows further.`,
       };
     }
     if (lvl.lagSeconds > LAG_BEHIND_SECONDS) {
@@ -497,6 +544,16 @@ function producedBy(jobId: string): { clusters: Cluster[]; artifacts: ArtifactRo
  */
 function consumedBy(row: CompactionJobRow): { items: number; bytes: number } {
   const { clusters, artifacts } = producedBy(row.status === 'failed' && row.retriedBy ? row.retriedBy : row.id);
+  // A pass run by the queue consumer that has not produced anything yet (it is
+  // still running, or it failed with no retry) consumed the batch it claimed —
+  // ids on the row, resolved against the level below, still counted.
+  if (clusters.length === 0 && artifacts.length === 0 && row.inputIds && row.inputIds.length > 0) {
+    const claimed = new Set(row.inputIds);
+    const rows: unknown[] = row.level === 'L1'
+      ? observationRows().filter((o) => claimed.has(o.id))
+      : clusterRows().filter((c) => claimed.has(c.id));
+    return { items: rows.length, bytes: sumBy(rows, rowBytes) };
+  }
   if (row.level === 'L1') {
     const byId = new Map(observationRows().map((o) => [o.id, o]));
     const consumed = clusters.flatMap((c) => c.member_observation_ids.flatMap((id) => {
@@ -519,6 +576,95 @@ function consumedBy(row: CompactionJobRow): { items: number; bytes: number } {
  * handed back while it is still `running` and finishes a few seconds later —
  * a caller (or a test) holding that object must see the pass complete, not a
  * photograph of the moment it started.
+ */
+/** "1 note" / "3 notes" — every sentence below counts, so it pluralises. */
+function plural(n: number, one: string, many = `${one}s`): string {
+  return `${n} ${n === 1 ? one : many}`;
+}
+
+/** The unit a pass reads and the unit it writes, in the words the portal uses
+ *  for the tiers (run notes → patterns → guides). */
+function unitsFor(level: Level): { input: string; output: string } {
+  return level === 'L1'
+    ? { input: 'run note', output: 'pattern' }
+    : { input: 'pattern', output: 'draft guide' };
+}
+
+/** The ids a pass consumed. Once it has produced anything (or failed and been
+ *  retried) the answer is counted back out of the corpus by consumedBy; before
+ *  that it is the batch the consumer claimed, recorded on the row. */
+function inputIdsOf(row: CompactionJobRow): string[] {
+  const source = row.status === 'failed' && row.retriedBy ? row.retriedBy : row.id;
+  const { clusters, artifacts } = producedBy(source);
+  if (row.level === 'L1' && clusters.length > 0) return clusters.flatMap((c) => c.member_observation_ids);
+  if (row.level === 'L2' && artifacts.length > 0) return artifacts.flatMap((a) => a.cluster_ids);
+  return row.inputIds ? row.inputIds.slice() : [];
+}
+
+function whatChanged(row: CompactionJobRow): string {
+  const { input, output } = unitsFor(row.level);
+  const queue = COMPACTION_QUEUES[row.level as CompactableLevel] ?? row.level;
+  const scope = row.repo ? ` for ${row.repo}` : '';
+  if (row.status === 'queued') return `Waiting on ${queue}${scope} — nothing has changed yet.`;
+  if (row.status === 'running') return `In progress${scope}: ${row.stepLabel ?? 'claimed from the queue'} — nothing is written until the pass finishes.`;
+  const consumed = consumedBy(row).items;
+  if (row.status === 'failed') {
+    const below = row.level === 'L1' ? 'L0' : 'L1';
+    return `Nothing changed — the pass stopped before writing, so its ${plural(consumed, input)} ${consumed === 1 ? 'is' : 'are'} still waiting in ${below}.`;
+  }
+  const { clusters, artifacts } = producedBy(row.id);
+  const made = row.level === 'L1' ? clusters.length : artifacts.length;
+  if (consumed === 0 && made === 0) return `Nothing was waiting${scope} — no new ${output}s.`;
+  if (row.level === 'L1') {
+    const folded = Math.max(0, consumed - made);
+    return `Merged ${plural(consumed, input)} into ${plural(made, output)}${folded > 0 ? `, folding ${plural(folded, 'duplicate')}` : ''}.`;
+  }
+  return `Distilled ${plural(consumed, input)} into ${plural(made, output)}.`;
+}
+
+/**
+ * The run log. A pass run by this process wrote its own log as it went. The
+ * seeded history predates the queue, so its log is reconstructed from what the
+ * row and the corpus say — claim at startedAt, outcome at finishedAt — with
+ * every number counted, never quoted from the seed.
+ */
+function logOf(row: CompactionJobRow): CompactionLogEntry[] {
+  if (row.log) return row.log.slice();
+  const { input } = unitsFor(row.level);
+  const queue = COMPACTION_QUEUES[row.level as CompactableLevel] ?? row.level;
+  const consumed = consumedBy(row).items;
+  const entries: CompactionLogEntry[] = [
+    { at: row.startedAt, level: 'info', message: `Claimed from ${queue}: ${plural(consumed, input)} waiting.` },
+  ];
+  if (row.finishedAt) {
+    entries.push(row.status === 'failed'
+      ? { at: row.finishedAt, level: 'error', message: row.error ?? 'The pass failed.' }
+      : { at: row.finishedAt, level: 'info', message: whatChanged(row) });
+  }
+  return entries;
+}
+
+function phaseOf(row: CompactionJobRow): CompactionPhase {
+  if (row.phase) return row.phase;
+  if (row.status === 'succeeded') return 'done';
+  if (row.status === 'failed') return 'failed';
+  return row.status === 'queued' ? 'queued' : 'claim';
+}
+
+function percentOf(row: CompactionJobRow): number | null {
+  if (row.percent !== undefined) return row.percent;
+  if (row.status === 'succeeded') return 100;
+  if (row.status === 'queued') return 0;
+  return null;
+}
+
+/**
+ * The wire job: stored fields read through, counted fields counted on every
+ * access. Getters rather than a snapshot because a hand-triggered pass is
+ * handed back while it is still `queued` and finishes a few seconds later —
+ * a caller (or a test) holding that object must see the pass complete, not a
+ * photograph of the moment it started. Getters on an object literal are own
+ * enumerable properties, so JSON.stringify serialises every one of them.
  */
 function jobView(row: CompactionJobRow): CompactionJob {
   const outputs = () => {
@@ -559,6 +705,27 @@ function jobView(row: CompactionJobRow): CompactionJob {
       const unit = row.level === 'L1' ? 'observations' : 'clusters';
       return `${row.error} Its ${items} input ${unit} were left untouched in the level below, and ${row.retriedBy} re-merged them.`;
     },
+    get queued_at() { return row.queuedAt ?? row.startedAt; },
+    get queue() { return COMPACTION_QUEUES[row.level as CompactableLevel] ?? row.level; },
+    get repo() { return row.repo ?? null; },
+    get requested_by() { return row.requestedBy ?? null; },
+    get input_ids() { return inputIdsOf(row); },
+    get output_ids() {
+      const p = outputs();
+      return [...p.clusters.map((c) => c.id), ...p.artifacts.map((a) => a.id)];
+    },
+    get log() { return logOf(row); },
+    get what_changed() { return whatChanged(row); },
+    get duration_ms() {
+      if (row.status === 'queued') return null;
+      const end = row.finishedAt ? Date.parse(row.finishedAt) : clock.now().getTime();
+      return Math.max(0, end - Date.parse(row.startedAt));
+    },
+    get cost_usd() { return Number((consumedBy(row).items * COST_PER_INPUT_ITEM_USD).toFixed(4)); },
+    get phase() { return phaseOf(row); },
+    get percent() { return percentOf(row); },
+    get stepLabel() { return row.stepLabel ?? null; },
+    get attempts() { return row.attempts ?? (row.status === 'queued' ? 0 : 1); },
   };
 }
 
@@ -647,7 +814,11 @@ export function simulateIngest(nowMs: number = clock.now().getTime()): Observati
     };
     rows.push(obs);
     minted.push(obs);
+    recordWriterWrite(w, obs.created_at);
   }
+  // An L0 write is a tier change: the realtime publisher re-reads /levels and
+  // pushes it on distill:levels (lib/distillation-realtime.ts).
+  if (minted.length > 0) distillationEvents.emit('levels');
   return minted;
 }
 
@@ -663,6 +834,12 @@ export function simulateIngest(nowMs: number = clock.now().getTime()): Observati
  */
 export function __resetDistillationMock(): void {
   for (const fixture of distillationFixtures) fixture.reset();
+  distillationQueueMessages.reset();
+  runningJobs.clear();
+  injectedFailures = 0;
+  // Emptied, not replaced: a running startReplicaSync holds this instance, and
+  // a fresh one would be a replica nothing ever syncs.
+  void replica?.clear();
   ingestSeq = 0;
   ingestLastTick = clock.now().getTime();
   compactSeq = 0;
@@ -694,6 +871,85 @@ export async function levels(): Promise<LevelState[]> {
   }));
 }
 
+/** A tier's health as the Activity page reads it: `compactionHealth`'s verdict
+ *  in the spec's vocabulary (`ok` rather than `healthy`), with the lag it was
+ *  decided from. The judgment is still made once, in compactionHealth. */
+export interface TierHealth {
+  state: 'ok' | 'behind' | 'stalled';
+  reason: string;
+  lagSeconds: number;
+}
+
+/** One tier on /levels (spec §3a): the counted state plus what the tier-flow
+ *  strip and the status line need. */
+export interface LevelView extends LevelState {
+  /** L0: distinct sessions that wrote an observation in the last hour. L1/L2:
+   *  distinct compaction passes that wrote a row into the tier in the last
+   *  hour — for a tier written by the machine, the pass IS the writer. */
+  writers: number;
+  /** Rows waiting on the tier's OUTBOUND step: L0 notes no pattern has
+   *  claimed, L1 patterns no guide has distilled, L2 draft guides not yet
+   *  published to the Library. */
+  backlog: number;
+  /** When the pass INTO this tier last succeeded; null for L0 (nothing flows
+   *  in) or a tier no pass has ever completed. */
+  lastCompletedAt: string | null;
+  /** Merkle root over (id, updated_at) of the tier's rows — changes iff the
+   *  tier's content does (lib/distillation-digest.ts). */
+  digest: string;
+  health: TierHealth;
+}
+
+const WRITERS_WINDOW_MS = 60 * 60 * 1000;
+
+/** /levels, enriched. The realtime `distill:levels` frame carries exactly this
+ *  array, so the pushed state and the fetched state are one serializer. */
+export async function levelsView(): Promise<{ levels: LevelView[]; health: LevelHealth[] }> {
+  const [ls, jobs] = await Promise.all([levels(), listCompactions()]);
+  const health = compactionHealth(ls, jobs);
+  const now = clock.now().getTime();
+  const recent = (iso: string): boolean => now - Date.parse(iso) <= WRITERS_WINDOW_MS;
+  const observations = observationRows();
+  const clusters = clusterRows();
+  const artifacts = artifactsOnWire();
+
+  const writersFor: Record<Level, number> = {
+    L0: new Set(observations.filter((o) => recent(o.created_at)).map((o) => o.session_id)).size,
+    L1: new Set(clusters.filter((c) => recent(c.created_at)).map((c) => c.created_by_compaction_id)).size,
+    L2: new Set(artifacts.filter((a) => recent(a.created_at)).map((a) => a.created_by_compaction_id)).size,
+  };
+  const backlogFor: Record<Level, number> = {
+    L0: pendingObservations().length,
+    L1: pendingClusters().length,
+    L2: artifacts.filter((a) => a.status === 'draft').length,
+  };
+  const lastCompleted = (level: Level): string | null => {
+    const done = jobs.filter((j) => j.level === level && j.status === 'succeeded' && j.finishedAt)
+      .map((j) => j.finishedAt!)
+      .sort();
+    return done[done.length - 1] ?? null;
+  };
+  const digestRows: Record<Level, Array<{ id: string; stamp: string }>> = {
+    L0: observations.map((o) => ({ id: o.id, stamp: o.created_at })),
+    L1: clusters.map((c) => ({ id: c.id, stamp: c.updated_at })),
+    L2: artifacts.map((a) => ({ id: a.id, stamp: a.updated_at })),
+  };
+  const digests = await Promise.all(ls.map((l) => tierDigest(digestRows[l.level])));
+
+  const views = ls.map((l, i): LevelView => {
+    const h = health.find((x) => x.level === l.level)!;
+    return {
+      ...l,
+      writers: writersFor[l.level],
+      backlog: backlogFor[l.level],
+      lastCompletedAt: l.level === 'L0' ? null : lastCompleted(l.level),
+      digest: digests[i]!,
+      health: { state: h.status === 'healthy' ? 'ok' : h.status, reason: h.reason, lagSeconds: l.lagSeconds },
+    };
+  });
+  return { levels: views, health };
+}
+
 export async function ingest(): Promise<IngestState> {
   simulateIngest();
   const writers = writerRows();
@@ -716,6 +972,15 @@ export async function listCompactions(opts: { level?: Level; status?: Compaction
   if (opts.level) rows = rows.filter((j) => j.level === opts.level);
   if (opts.status) rows = rows.filter((j) => j.status === opts.status);
   return rows.map(jobView);
+}
+
+/** One job as it stands this instant, as plain JSON — what a `distill:jobs`
+ *  frame carries. Synchronous on purpose: the phases of a fast pass are
+ *  announced back to back, and an async read would see the LAST phase for
+ *  every frame instead of each phase in turn. */
+export function jobSnapshot(id: string): CompactionJob | null {
+  const row = jobRows().find((j) => j.id === id);
+  return row ? (JSON.parse(JSON.stringify(jobView(row))) as CompactionJob) : null;
 }
 
 export async function sampling(): Promise<SamplingState> {
@@ -801,8 +1066,12 @@ export function isProceduralChunk(chunk: Cluster[], observationsById: Map<string
  * its output, its input and its dedupe are counted off the corpus afterwards
  * — including the honest 0/0/0 when nothing was left to compact.
  */
-function runL1Compaction(jobId: string, startedAt: string): void {
+function runL1Compaction(jobId: string, startedAt: string, batch?: ReadonlySet<string>): void {
+  // `batch` is what the consumer claimed. Anything that landed in L0 after the
+  // claim waits for the next pass, and anything another pass clustered in the
+  // meantime is no longer pending — so a pass writes exactly its own batch.
   const pending = pendingObservations()
+    .filter((o) => !batch || batch.has(o.id))
     .slice()
     .sort((a, b) => a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id));
   if (pending.length === 0) return;
@@ -927,8 +1196,9 @@ function mintProcedureFacts(
  * (nobody has published it) — the absence of a row in the links fixture,
  * not a stored null.
  */
-function runL2Compaction(jobId: string, startedAt: string): void {
+function runL2Compaction(jobId: string, startedAt: string, batch?: ReadonlySet<string>): void {
   const pending = pendingClusters()
+    .filter((c) => !batch || batch.has(c.id))
     .slice()
     .sort((a, b) => a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id));
   if (pending.length === 0) return;
@@ -985,62 +1255,332 @@ function runL2Compaction(jobId: string, startedAt: string): void {
   }
 }
 
-/**
- * Force a compaction pass ahead of the background scheduler. Unlike the
- * fabricated-counter version this replaced, this one really compacts: an L1
- * pass merges every not-yet-clustered observation into new clusters, an L2
- * pass distils every not-yet-referenced cluster into new draft artifacts —
- * so the level cards, /items, and lineage all agree immediately afterward.
- * `by` is accepted for the route's audit trail, same convention as
- * design-reviews.ts's signoff `byName` and promotions' `approvedBy`.
- */
-// How long a hand-triggered pass stays `running` before it completes. The
-// audit saw every Compact resolve to `succeeded` in the same response — no
-// observable running state, so the page had nothing to show while the
-// machine "worked". 0 completes synchronously (the test seam).
+// ─── Compaction jobs on the queue ───────────────────────────────────────────
+//
+// `POST /compact` no longer runs a pass on a timer. It writes a `queued` job
+// row and sends one message to `distill-compact-l1|l2` (lib/distillation-
+// queue.ts) — FIFO, grouped by repo, deduplicated by job id. A consumer loop
+// in this process claims the message, runs the pass in phases (each one a
+// `distill:jobs` frame), and acks it. The pieces that make that safe:
+//
+//   - Idempotency is the job id. A redelivered message whose job already
+//     finished is acked and noted in the job's log, never run twice. A
+//     message whose job is running in this process is left for its lease.
+//   - A pass that throws is left unacked: the queue hands it back after the
+//     visibility timeout, and after MAX_RECEIVES deliveries the job is marked
+//     failed and the queue moves the message to the dead-letter queue.
+//   - A reset (`POST /api/__mock/reset`) empties the queue fixture and the job
+//     rows together. A pass mid-flight re-checks that its row still exists
+//     before writing, so it cannot write into the world the reset restored.
+//
+// Scheduling on a cadence is `startCompactionScheduler` below, off unless
+// DISTILL_COMPACT_INTERVAL_MIN is set: under dev:mock a background pass would
+// quietly compact away the backlog an audit came to look at.
+
+/** How long a pass takes end to end, spread across its phases. The audit saw
+ *  every Compact resolve to `succeeded` in the same response — no observable
+ *  running state. 0 runs the phases back to back (the test seam), and with
+ *  the in-process queue compactNow then drains the queue before returning. */
 let compactRunMs = 3_000;
 export function __setCompactRunMs(ms: number): void { compactRunMs = ms; }
 
-/**
- * The pass runs, and the job row records only that it finished. Every number
- * it "produced" is counted afterwards from the rows it pushed — and so is the
- * level's lag, which is now the age of whatever is still waiting rather than a
- * watermark this function has to remember to reset. An empty pass therefore
- * needs no special case: nothing was consumed, so nothing about the backlog
- * changed, and nothing here has to claim otherwise.
- */
-function completeCompaction(row: CompactionJobRow, level: CompactableLevel): void {
-  if (level === 'L1') runL1Compaction(row.id, row.startedAt);
-  else runL2Compaction(row.id, row.startedAt);
-  row.status = 'succeeded';
-  row.finishedAt = clock.nowIso();
+/** Jobs a consumer in this process is running now — a redelivery of one of
+ *  these is a slow pass, not a duplicate, and must not be acked from under it. */
+const runningJobs = new Set<string>();
+
+interface CompactionMessage { job_id: string; level: CompactableLevel; repo: string | null }
+
+function appendLog(row: CompactionJobRow, level: CompactionLogEntry['level'], message: string): void {
+  if (!row.log) row.log = logOf(row);
+  row.log.push({ at: clock.nowIso(), level, message });
 }
 
-export async function compactNow(level: CompactableLevel, by: string): Promise<CompactionJob> {
-  void by;
+/** Tell the world a job moved: the realtime publisher, and the Aurora mirror. */
+function announce(row: CompactionJobRow): void {
+  const view = jobView(row);
+  persistJob({
+    id: view.id, level: view.level, repo: view.repo, status: view.status, phase: view.phase,
+    percent: view.percent, requested_by: view.requested_by, queued_at: view.queued_at,
+    startedAt: view.startedAt, finishedAt: view.finishedAt, input_ids: view.input_ids,
+    output_ids: view.output_ids, log: view.log, what_changed: view.what_changed,
+    duration_ms: view.duration_ms, cost_usd: view.cost_usd, attempts: view.attempts,
+    ...(view.error ? { error: view.error } : {}),
+  });
+  distillationEvents.emit('job', row.id);
+}
+
+function setPhase(row: CompactionJobRow, phase: CompactionPhase, percent: number | null, stepLabel: string | null): void {
+  row.phase = phase;
+  row.percent = percent;
+  row.stepLabel = stepLabel;
+  if (stepLabel) appendLog(row, 'info', stepLabel);
+  announce(row);
+}
+
+const sleep = (ms: number): Promise<void> => new Promise((resolve) => {
+  const t = setTimeout(resolve, ms);
+  t.unref?.();
+});
+
+/** The batch a pass claims: what is waiting in the level below, in its repo. */
+function claimBatch(level: CompactableLevel, repo: string | null): string[] {
+  const waiting: Array<{ id: string; repo: string }> = level === 'L1' ? pendingObservations() : pendingClusters();
+  return waiting.filter((r) => !repo || r.repo === repo).map((r) => r.id);
+}
+
+/** Test seam: fail the next N passes at the write phase, so DLQ behaviour can
+ *  be exercised through the real consumer rather than a stubbed one. */
+let injectedFailures = 0;
+export function __failNextCompactions(n: number): void { injectedFailures = n; }
+
+/** Run one claimed pass. Throws when the pass fails (the caller leaves the
+ *  message unacked); returns false when the job vanished mid-run (a reset). */
+async function runPass(row: CompactionJobRow, level: CompactableLevel, delivery: number): Promise<boolean> {
+  const queue = COMPACTION_QUEUES[level];
+  const step = Math.max(0, compactRunMs) / 4;
+  const { input } = unitsFor(level);
+  row.status = 'running';
+  row.startedAt = clock.nowIso();
+  row.finishedAt = null;
+  row.attempts = delivery;
+  row.inputIds = claimBatch(level, row.repo ?? null);
+  setPhase(row, 'claim', 5, `Claimed from ${queue} (delivery ${delivery})`);
+  if (step > 0) await sleep(step);
+  setPhase(row, 'read', 25, `Reading ${plural(row.inputIds.length, `waiting ${input}`)}${row.repo ? ` in ${row.repo}` : ''}`);
+  if (step > 0) await sleep(step);
+  setPhase(row, 'merge', 60, level === 'L1' ? 'Merging notes by repo and kind' : 'Distilling patterns into draft guides');
+  if (step > 0) await sleep(step);
+  // A reset between claim and write replaced the job rows: this pass belongs
+  // to a world that no longer exists, so it writes nothing into the new one.
+  if (!jobRows().includes(row)) return false;
+  if (injectedFailures > 0) {
+    injectedFailures -= 1;
+    throw new Error('compaction write failed (injected)');
+  }
+  setPhase(row, 'write', 90, level === 'L1' ? 'Writing patterns' : 'Writing draft guides');
+  const batch = new Set(row.inputIds);
+  if (level === 'L1') runL1Compaction(row.id, row.startedAt, batch);
+  else runL2Compaction(row.id, row.startedAt, batch);
+  if (step > 0) await sleep(step);
+  row.status = 'succeeded';
+  row.finishedAt = clock.nowIso();
+  row.phase = 'done';
+  row.percent = 100;
+  row.stepLabel = null;
+  appendLog(row, 'info', whatChanged(row));
+  announce(row);
+  distillationEvents.emit('levels');
+  if (level === 'L2') distillationEvents.emit('artifacts');
+  return true;
+}
+
+/**
+ * Handle one delivery. Acks when the work is done or was already done (the
+ * idempotent redelivery), leaves it unacked when the pass threw so the queue
+ * can hand it back, and marks the job failed on its last allowed delivery.
+ */
+export async function processCompactionMessage(level: CompactableLevel, msg: QueueMessage): Promise<'ran' | 'duplicate' | 'orphan' | 'busy' | 'failed'> {
+  const q = compactionQueue();
+  const queue = COMPACTION_QUEUES[level];
+  let body: CompactionMessage;
+  try {
+    body = JSON.parse(msg.body) as CompactionMessage;
+  } catch {
+    await q.ack(queue, msg.receipt_handle);
+    return 'orphan';
+  }
+  const row = jobRows().find((j) => j.id === body.job_id);
+  if (!row) {
+    // The job row is gone (a reset, or a message from another process's
+    // world). Nothing to run it against — ack so it does not dead-letter.
+    await q.ack(queue, msg.receipt_handle);
+    return 'orphan';
+  }
+  if (row.status === 'succeeded' || row.status === 'failed') {
+    appendLog(row, 'warn', `Redelivered by ${queue} (delivery ${msg.approximate_receive_count}) after it had already ${row.status} — acknowledged without running again.`);
+    announce(row);
+    await q.ack(queue, msg.receipt_handle);
+    return 'duplicate';
+  }
+  if (runningJobs.has(row.id)) return 'busy';
+
+  runningJobs.add(row.id);
+  try {
+    const wrote = await runPass(row, level, msg.approximate_receive_count);
+    await q.ack(queue, msg.receipt_handle);
+    return wrote ? 'ran' : 'orphan';
+  } catch (err) {
+    const message = (err as Error).message;
+    if (msg.approximate_receive_count >= MAX_RECEIVES) {
+      row.status = 'failed';
+      row.finishedAt = clock.nowIso();
+      row.phase = 'failed';
+      row.percent = null;
+      row.stepLabel = null;
+      row.error = `${message} — gave up after ${plural(msg.approximate_receive_count, 'delivery', 'deliveries')}; the message goes to ${queue}-dlq.`;
+      appendLog(row, 'error', row.error);
+    } else {
+      row.status = 'queued';
+      row.phase = 'retrying';
+      row.percent = 0;
+      row.stepLabel = null;
+      appendLog(row, 'warn', `${message} — left on ${queue} for redelivery (delivery ${msg.approximate_receive_count} of ${MAX_RECEIVES}).`);
+    }
+    announce(row);
+    return 'failed';
+  } finally {
+    runningJobs.delete(row.id);
+  }
+}
+
+const pumping: Record<CompactableLevel, boolean> = { L1: false, L2: false };
+
+/** Receive and process whatever is deliverable on one queue now. Returns how
+ *  many deliveries it handled. Never runs two pumps on one queue at once. */
+export async function pumpCompactionQueue(level: CompactableLevel, waitSeconds = 0): Promise<number> {
+  if (pumping[level]) return 0;
+  pumping[level] = true;
+  let handled = 0;
+  try {
+    await ensureCompactionQueues();
+    const q = compactionQueue();
+    for (;;) {
+      const msgs = await q.receive(COMPACTION_QUEUES[level], { max: 5, ...(waitSeconds > 0 ? { waitSeconds } : {}) });
+      if (msgs.length === 0) break;
+      for (const msg of msgs) {
+        await processCompactionMessage(level, msg);
+        handled += 1;
+      }
+      // Over HTTP a long poll returns as soon as anything arrives; loop only
+      // while the queue keeps answering, and let the caller re-poll.
+      if (waitSeconds > 0) break;
+    }
+  } finally {
+    pumping[level] = false;
+  }
+  return handled;
+}
+
+/**
+ * Force a compaction pass ahead of the background scheduler: write a `queued`
+ * job and put it on the queue. `by` is recorded as `requested_by`; `repo`
+ * scopes the pass (and its FIFO group) to one repository. The returned view
+ * reads through to the row, so the caller watches it run.
+ */
+export async function compactNow(level: CompactableLevel, by: string, repo: string | null = null): Promise<CompactionJob> {
   compactSeq += 1;
   const jobId = `comp-9${compactSeq}`;
-
-  // The job is `running` first: the corpus changes and the produced ids land
-  // when it completes, so a page polling /compactions sees the pass happen.
-  // The view handed back reads through to this row, so a caller holding it
-  // watches the pass finish instead of a snapshot of it starting.
+  const now = clock.nowIso();
   const row: CompactionJobRow = {
     id: jobId,
     level,
-    startedAt: clock.nowIso(),
+    startedAt: now,
     finishedAt: null,
-    status: 'running',
+    status: 'queued',
+    queuedAt: now,
+    ...(repo ? { repo } : {}),
+    requestedBy: by,
+    phase: 'queued',
+    percent: 0,
+    stepLabel: null,
+    attempts: 0,
+    log: [{ at: now, level: 'info', message: `Queued on ${COMPACTION_QUEUES[level]} by ${by}${repo ? ` for ${repo}` : ''}.` }],
   };
   jobRows().unshift(row);
+  announce(row);
 
-  if (compactRunMs <= 0) {
-    completeCompaction(row, level);
-  } else {
-    const timer = setTimeout(() => completeCompaction(row, level), compactRunMs);
-    timer.unref?.();
+  try {
+    await enqueueCompaction(level, { job_id: jobId, level, repo });
+  } catch (err) {
+    row.status = 'failed';
+    row.finishedAt = clock.nowIso();
+    row.phase = 'failed';
+    row.percent = null;
+    row.error = `Could not put the pass on ${COMPACTION_QUEUES[level]}: ${(err as Error).message}`;
+    appendLog(row, 'error', row.error);
+    announce(row);
+    throw new AppError(503, row.error);
+  }
+
+  // The synchronous seam: with the in-process queue and no run window, drain
+  // the queue before answering so a test sees the finished pass — through the
+  // real send → receive → run → ack path, not around it.
+  if (compactRunMs <= 0 && compactionQueue() instanceof MemoryMessageQueue) {
+    while ((await pumpCompactionQueue(level)) > 0) { /* drain */ }
   }
   return jobView(row);
+}
+
+let consumerStop: (() => void) | null = null;
+
+/**
+ * The consumer loop, started once at boot (index.ts). In-process queue: wake
+ * on every send, plus a slow sweep for redeliveries whose lease expired.
+ * message-queue over HTTP: one long-poll loop per queue, backing off on error.
+ */
+export function startCompactionConsumer(): () => void {
+  if (consumerStop) return consumerStop;
+  const q = compactionQueue();
+  const levelsToRun: CompactableLevel[] = ['L1', 'L2'];
+  let stopped = false;
+  const timers: Array<ReturnType<typeof setTimeout>> = [];
+  const pumpSoon = (level: CompactableLevel): void => {
+    const t = setTimeout(() => { void pumpCompactionQueue(level).catch((err: unknown) => console.warn(`[distill] ${level} consumer:`, (err as Error).message)); }, 0);
+    t.unref?.();
+  };
+
+  if (q instanceof MemoryMessageQueue) {
+    const off = q.onSend((queue) => {
+      const level = levelsToRun.find((l) => COMPACTION_QUEUES[l] === queue);
+      if (level) pumpSoon(level);
+    });
+    const sweep = setInterval(() => levelsToRun.forEach(pumpSoon), 5_000);
+    sweep.unref?.();
+    consumerStop = () => { stopped = true; off(); clearInterval(sweep); consumerStop = null; };
+    return consumerStop;
+  }
+
+  for (const level of levelsToRun) {
+    let backoffMs = 1_000;
+    const loop = async (): Promise<void> => {
+      while (!stopped) {
+        try {
+          await pumpCompactionQueue(level, 10);
+          backoffMs = 1_000;
+        } catch (err) {
+          console.warn(`[distill] ${level} consumer: ${(err as Error).message} — retrying in ${backoffMs}ms`);
+          await sleep(backoffMs);
+          backoffMs = Math.min(backoffMs * 2, 30_000);
+        }
+      }
+    };
+    void loop();
+  }
+  consumerStop = () => { stopped = true; timers.forEach(clearTimeout); consumerStop = null; };
+  return consumerStop;
+}
+
+/**
+ * Re-enqueue passes on a cadence. L1 every DISTILL_COMPACT_INTERVAL_MIN, L2 at
+ * DISTILL_COMPACT_L2_INTERVAL_MIN (default 6× the L1 cadence). Off when the L1
+ * interval is unset or 0. A level with a pass already queued or running is
+ * skipped, so a slow consumer never accumulates a pile of identical passes.
+ */
+export function startCompactionScheduler(): (() => void) | null {
+  const l1Min = Number(process.env['DISTILL_COMPACT_INTERVAL_MIN'] ?? 0);
+  if (!Number.isFinite(l1Min) || l1Min <= 0) return null;
+  const l2Min = Number(process.env['DISTILL_COMPACT_L2_INTERVAL_MIN'] ?? l1Min * 6);
+  const tick = (level: CompactableLevel): void => {
+    const open = jobRows().some((j) => j.level === level && (j.status === 'queued' || j.status === 'running'));
+    if (open) return;
+    void compactNow(level, 'scheduler').catch((err: unknown) => console.warn(`[distill] scheduled ${level} pass:`, (err as Error).message));
+  };
+  const t1 = setInterval(() => tick('L1'), l1Min * 60_000);
+  const t2 = setInterval(() => tick('L2'), Math.max(1, l2Min) * 60_000);
+  t1.unref?.();
+  t2.unref?.();
+  console.log(`[distill] compaction scheduler: L1 every ${l1Min} min, L2 every ${l2Min} min`);
+  return () => { clearInterval(t1); clearInterval(t2); };
 }
 
 // ─── Navigable knowledge: items, lineage, artifacts, facts, review ─────────
@@ -1073,6 +1613,9 @@ export interface ListItemsQuery {
 
 export interface ListItemsResult {
   items: DistillationItem[];
+  /** How many rows the filtered query matches, before paging — counted from
+   *  the same filtered list the page is sliced from. */
+  total: number;
   next_cursor: string | null;
 }
 
@@ -1120,30 +1663,81 @@ function decodeCursor(cursor: string): string | null {
   try { return Buffer.from(cursor, 'base64url').toString('utf8'); } catch { return null; }
 }
 
-export async function listItems(q: ListItemsQuery = {}): Promise<ListItemsResult> {
-  simulateIngest();
+/** The filters /items and /facets share, so a facet count is the number of
+ *  rows /items would return with that value selected. */
+function filteredItems(q: Omit<ListItemsQuery, 'limit' | 'cursor'>): DistillationItem[] {
   let items = allItems(q.level);
   if (q.repo) items = items.filter((i) => repoOf(i) === q.repo);
   if (q.initiative) items = items.filter((i) => initiativeOf(i) === q.initiative);
   const term = (q.q ?? '').trim().toLowerCase();
   if (term) items = items.filter((i) => searchableText(i).toLowerCase().includes(term));
+  return items;
+}
+
+export async function listItems(q: ListItemsQuery = {}): Promise<ListItemsResult> {
+  simulateIngest();
+  // Every row the query matches. filteredItems builds a fresh array, so it is
+  // sorted in place; `total` is its length — the whole match, not the page.
+  const matched = filteredItems(q);
 
   // Stable order: newest first, id as the tiebreak — required for a cursor
   // to mean anything across repeated calls with unchanged data.
-  items = items.slice().sort((a, b) => b.created_at.localeCompare(a.created_at) || a.id.localeCompare(b.id));
+  matched.sort((a, b) => b.created_at.localeCompare(a.created_at) || a.id.localeCompare(b.id));
 
   let start = 0;
   if (q.cursor) {
     const afterId = decodeCursor(q.cursor);
-    const idx = afterId ? items.findIndex((i) => i.id === afterId) : -1;
+    const idx = afterId ? matched.findIndex((i) => i.id === afterId) : -1;
     start = idx >= 0 ? idx + 1 : 0;
   }
   const limit = q.limit ?? 50;
-  const page = items.slice(start, start + limit);
-  const next_cursor = start + limit < items.length && page.length > 0
+  const page = matched.slice(start, start + limit);
+  const next_cursor = start + limit < matched.length && page.length > 0
     ? encodeCursor(page[page.length - 1]!.id)
     : null;
-  return { items: page, next_cursor };
+  return { items: page, total: matched.length, next_cursor };
+}
+
+export interface FacetValue { value: string; label: string; count: number }
+export interface Facets { repos: FacetValue[]; initiatives: FacetValue[]; kinds: FacetValue[] }
+
+/** The kind a row is filtered by: an observation's/cluster's kind, an
+ *  artifact's type. */
+function kindOf(item: DistillationItem): string {
+  return item.level === 'L2' ? item.type : item.kind;
+}
+
+/** Initiative display names come from the initiatives the org graph already
+ *  runs (providers/projects.ts), loaded lazily so the distillation suites do
+ *  not drag that module's dependency tree into every import. */
+async function initiativeLabel(id: string): Promise<string> {
+  try {
+    const { mockProjectName } = await import('./projects.js');
+    return mockProjectName(id) ?? id;
+  } catch {
+    return id;
+  }
+}
+
+/**
+ * GET /facets?level — every repo, initiative and kind present in a level,
+ * each with the number of rows /items returns when it is selected. Counted
+ * from the rows, sorted by count then label, never a stored list: a facet
+ * that is not in the data cannot appear, and one that is cannot be missed.
+ */
+export async function listFacets(level?: Level): Promise<Facets> {
+  simulateIngest();
+  const items = filteredItems(level ? { level } : {});
+  const tally = async (key: (i: DistillationItem) => string | undefined, label: (v: string) => string | Promise<string>): Promise<FacetValue[]> => {
+    const counts = countBy(items.flatMap((i) => { const v = key(i); return v ? [{ v }] : []; }), 'v');
+    const out = await Promise.all([...counts].map(async ([value, count]) => ({ value, label: await label(value), count })));
+    return out.sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+  };
+  return {
+    repos: await tally(repoOf, (r) => r.split('/').pop() ?? r),
+    initiatives: await tally(initiativeOf, initiativeLabel),
+    kinds: await tally(kindOf, (k) => k),
+  };
 }
 
 export async function getItem(id: string): Promise<DistillationItem | null> {
@@ -1326,10 +1920,52 @@ export interface ListReviewQuery {
   verdict?: ReviewVerdict;
 }
 
-export async function listReview(q: ListReviewQuery = {}): Promise<ReviewSample[]> {
+/** What a sample is ABOUT, resolved server-side so the queue never shows a
+ *  bare `cl-022`. `kind` is the sample's target_kind; `type` is the
+ *  artifact's type or the cluster's observation kind. */
+export interface ReviewTarget {
+  id: string;
+  kind: ReviewTargetKind;
+  type: string;
+  title: string;
+  repo: string | null;
+  source_count: number;
+}
+
+export type ReviewSampleView = ReviewSample & { target: ReviewTarget | null; target_error?: string };
+
+async function resolveReviewTarget(sample: ReviewSample): Promise<Pick<ReviewSampleView, 'target' | 'target_error'>> {
+  const item = await getItem(sample.target_id);
+  const expected = sample.target_kind === 'artifact' ? 'L2' : 'L1';
+  if (!item || item.level !== expected) {
+    return { target: null, target_error: `${sample.target_kind} ${sample.target_id} could not be found — it may have been re-distilled or removed since it was sampled.` };
+  }
+  const sources = await itemSources(item.id);
+  return {
+    target: {
+      id: item.id,
+      kind: sample.target_kind,
+      type: kindOf(item),
+      title: item.title,
+      repo: repoOf(item) ?? null,
+      source_count: sources?.length ?? 0,
+    },
+  };
+}
+
+export async function listReview(q: ListReviewQuery = {}): Promise<ReviewSampleView[]> {
   let items = reviewRows().slice();
   if (q.verdict) items = items.filter((r) => r.verdict === q.verdict);
-  return items.sort((a, b) => b.sampled_at.localeCompare(a.sampled_at));
+  items.sort((a, b) => b.sampled_at.localeCompare(a.sampled_at));
+  return Promise.all(items.map(async (r) => ({ ...r, ...(await resolveReviewTarget(r)) })));
+}
+
+/** The counts `distill:review` pushes after any sample change — counted from
+ *  the same store `/review` lists. */
+export function reviewCounts(): { pending: number; decided: number } {
+  const byVerdict = countBy(reviewRows(), 'verdict');
+  const pending = byVerdict.get('pending') ?? 0;
+  return { pending, decided: reviewRows().length - pending };
 }
 
 /**
@@ -1348,6 +1984,7 @@ export async function decideReview(
   sample.verdict = input.verdict;
   sample.note = input.note ?? null;
   sample.reviewer = by;
+  distillationEvents.emit('review');
   return sample;
 }
 
@@ -1370,6 +2007,8 @@ export async function publishArtifact(id: string, _by: string): Promise<Artifact
   }
   row.status = 'published';
   row.updated_at = clock.nowIso();
+  distillationEvents.emit('artifacts');
+  distillationEvents.emit('levels');
   return withLink(row);
 }
 
@@ -1405,6 +2044,7 @@ export async function sampleForReview(
     note: `Requested by ${by}`,
   };
   reviewRows().push(sample);
+  distillationEvents.emit('review');
   return sample;
 }
 
@@ -1594,4 +2234,219 @@ export async function applyProcedure(
   };
   applicationRows().push(row);
   return row;
+}
+
+// ─── Sources, sessions, procedure runs (spec §3a) ─────────────────────────
+//
+// Sources are an item's DIRECT evidence, one hop down — what the Sources
+// inspector lists and a reviewer checks a claim against:
+//   L2 guide   → its patterns, then the run notes behind them (the notes its
+//                facts cite as evidence, and the patterns' own members)
+//   L1 pattern → its member run notes
+//   L0 note    → the session that wrote it
+// Lineage (`/items/:id/lineage`) is the whole graph; this is the short list.
+
+export type SourceKind = 'cluster' | 'observation' | 'session';
+
+export interface Source {
+  id: string;
+  kind: SourceKind;
+  title: string;
+  timestamp: string;
+  excerpt: string;
+  session_id?: string;
+  repo?: string;
+}
+
+const EXCERPT_CHARS = 240;
+
+/** First EXCERPT_CHARS of a body, cut at a word boundary. */
+function excerptOf(text: string): string {
+  const flat = text.replace(/\s+/g, ' ').trim();
+  if (flat.length <= EXCERPT_CHARS) return flat;
+  const cut = flat.slice(0, EXCERPT_CHARS);
+  const space = cut.lastIndexOf(' ');
+  return `${(space > EXCERPT_CHARS * 0.6 ? cut.slice(0, space) : cut).trimEnd()}…`;
+}
+
+function sourceFromObservation(o: Observation): Source {
+  return { id: o.id, kind: 'observation', title: o.title, timestamp: o.created_at, excerpt: excerptOf(o.body), session_id: o.session_id, repo: o.repo };
+}
+
+function sourceFromCluster(c: Cluster): Source {
+  return { id: c.id, kind: 'cluster', title: c.title, timestamp: c.created_at, excerpt: excerptOf(c.summary), repo: c.repo };
+}
+
+/** The notes one session wrote, oldest first — the order it wrote them. */
+function sessionNotes(sessionId: string): Observation[] {
+  return observationRows()
+    .filter((o) => o.session_id === sessionId)
+    .sort((a, b) => a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id));
+}
+
+/** Null for an id no tier knows (the route 404s). */
+export async function itemSources(id: string): Promise<Source[] | null> {
+  const item = await getItem(id);
+  if (!item) return null;
+  const byObs = new Map(observationRows().map((o) => [o.id, o]));
+
+  if (item.level === 'L0') {
+    const notes = sessionNotes(item.session_id);
+    return [{
+      id: item.session_id,
+      kind: 'session',
+      title: `Session ${item.session_id}`,
+      timestamp: notes[0]?.created_at ?? item.created_at,
+      excerpt: `${plural(notes.length, 'run note')} written in ${item.repo} on ${item.box_id}.`,
+      session_id: item.session_id,
+      repo: item.repo,
+    }];
+  }
+
+  if (item.level === 'L1') {
+    return item.member_observation_ids
+      .flatMap((oid) => { const o = byObs.get(oid); return o ? [sourceFromObservation(o)] : []; });
+  }
+
+  const patterns = clusterRows().filter((c) => item.cluster_ids.includes(c.id));
+  const cited = factRows().filter((f) => f.artifact_id === item.id).flatMap((f) => f.evidence_observation_ids);
+  const noteIds = [...new Set([...cited, ...patterns.flatMap((c) => c.member_observation_ids)])];
+  const notes = noteIds
+    .flatMap((oid) => { const o = byObs.get(oid); return o ? [o] : []; })
+    .sort((a, b) => a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id));
+  return [...patterns.map(sourceFromCluster), ...notes.map(sourceFromObservation)];
+}
+
+export interface SessionRecord {
+  id: string;
+  repo: string | null;
+  box_id: string | null;
+  initiative_id: string | null;
+  /** The session's first note — when it started writing, as far as the store
+   *  can see. */
+  started_at: string | null;
+  last_at: string | null;
+  /** True when the session is in the live write stream right now. */
+  writing: boolean;
+  notes: Observation[];
+}
+
+/** GET /sessions/:id — a run-note session, or null when neither a note nor a
+ *  live writer names it. */
+export async function getSession(sessionId: string): Promise<SessionRecord | null> {
+  simulateIngest();
+  const notes = sessionNotes(sessionId);
+  const writer = writerRows().find((w) => w.session_id === sessionId);
+  if (notes.length === 0 && !writer) return null;
+  const first = notes[0];
+  return {
+    id: sessionId,
+    repo: first?.repo ?? writer?.repo ?? null,
+    box_id: first?.box_id ?? writer?.box_id ?? null,
+    initiative_id: first?.initiative_id ?? writer?.initiative_id ?? null,
+    started_at: first?.created_at ?? null,
+    last_at: notes[notes.length - 1]?.created_at ?? null,
+    writing: Boolean(writer),
+    notes,
+  };
+}
+
+export type StepStatus = 'done' | 'failed' | 'pending' | 'skipped';
+
+export interface ProcedureRun {
+  id: string;
+  at: string;
+  /** The session that ran it. */
+  actor: string;
+  box_id: string;
+  outcome: ApplicationOutcome;
+  note: string | null;
+  failed_at_step_id: string | null;
+  /** One entry per step, in order. A success marks every step done; a failure
+   *  marks the steps before it done, its own step failed and the rest pending
+   *  (never reached). An abandoned run recorded no step, so every step reads
+   *  pending — the ledger cannot say how far it got, and a guess would blame
+   *  or credit a step for something nobody saw. */
+  steps: Array<{ step_id: string; status: StepStatus }>;
+}
+
+/** GET /procedures/:id/runs — newest first; null for a non-procedure id. */
+export async function procedureRuns(procedureId: string): Promise<ProcedureRun[] | null> {
+  const apps = await listApplications(procedureId);
+  if (!apps) return null;
+  const steps = stepsOf(procedureId);
+  return apps.map((p) => {
+    const failedIdx = p.failed_at_step_id ? steps.findIndex((f) => f.id === p.failed_at_step_id) : -1;
+    return {
+      id: p.id,
+      at: p.applied_at,
+      actor: p.session_id,
+      box_id: p.box_id,
+      outcome: p.outcome,
+      note: p.note,
+      failed_at_step_id: p.failed_at_step_id,
+      steps: steps.map((f, i): { step_id: string; status: StepStatus } => {
+        if (p.outcome === 'succeeded') return { step_id: f.id, status: 'done' };
+        if (p.outcome === 'failed' && failedIdx >= 0) {
+          return { step_id: f.id, status: i < failedIdx ? 'done' : i === failedIdx ? 'failed' : 'pending' };
+        }
+        return { step_id: f.id, status: 'pending' };
+      }),
+    };
+  });
+}
+
+// ─── The L2 read replica (lib/distillation-replica.ts) ────────────────────
+
+let replica: L2Replica | null = null;
+
+/** The one L2 replica this process keeps, fed from the artifacts store. */
+export function l2Replica(): L2Replica {
+  if (!replica) {
+    replica = new L2Replica({ primaryRows: () => artifactRows(), now: () => clock.now().getTime() });
+  }
+  return replica;
+}
+
+/** GET /replication — the replica's digest against the primary's. */
+export async function replicationStatus(): Promise<ReplicationStatus> {
+  return l2Replica().status();
+}
+
+let replicaStop: (() => void) | null = null;
+
+/**
+ * Start anti-entropy: one sweep now, the syncer's own interval after that,
+ * and a debounced sweep whenever L2 changes. A sweep that repaired anything
+ * announces a levels change (spec §3d: levels are pushed on replica sync).
+ */
+export function startReplicaSync(intervalMs = 15_000): () => void {
+  if (replicaStop) return replicaStop;
+  const r = new L2Replica({ primaryRows: () => artifactRows(), now: () => clock.now().getTime(), intervalMs });
+  replica = r;
+  let pending: ReturnType<typeof setTimeout> | null = null;
+  const sweep = (): void => {
+    void r.sync()
+      .then((res) => { if (res.keysRepaired > 0) distillationEvents.emit('levels'); })
+      .catch((err: unknown) => console.warn('[distill] replica sync:', (err as Error).message));
+  };
+  const onChange = (): void => {
+    if (pending) return;
+    pending = setTimeout(() => { pending = null; sweep(); }, 250);
+    pending.unref?.();
+  };
+  distillationEvents.on('artifacts', onChange);
+  sweep();
+  // Our own interval rather than the syncer's start(): the syncer's timer
+  // discards each sweep's result, and the repaired count is what /replication
+  // reports.
+  const timer = setInterval(sweep, intervalMs);
+  timer.unref?.();
+  replicaStop = () => {
+    distillationEvents.off('artifacts', onChange);
+    if (pending) clearTimeout(pending);
+    clearInterval(timer);
+    replicaStop = null;
+  };
+  return replicaStop;
 }

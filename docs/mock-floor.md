@@ -618,6 +618,13 @@ Two things came with the widening, both recorded in `mock-branches.ts`:
   through its own auth check, which names the guard rather than a gap. Four
   spellings of "this has an offline path" is drift waiting to happen;
   consolidating them is a separate slice.
+- `GUARD_TOKENS` later gained `inProcessQueue` (2026-09-24), the named
+  decision in `lib/distillation-queue.ts` that puts distillation compaction
+  passes on the in-process queue under `MOCK_QUEUE` (or with no
+  `MESSAGE_QUEUE_URL`). A queue client's `.send()` reads as an SDK send to the
+  scan, so without the token `POST /api/distillation/compact` was reported as
+  reaching live AWS while its offline branch was the one `dev:mock` takes.
+  Five spellings now; the consolidation slice still stands.
 
 **It was widened a second time, in 2026-09, to count an outbound `fetch`.**
 Counting only `.send()` and `exec()` meant "reaches a backend `dev:mock` cannot
@@ -810,6 +817,35 @@ Say it out loud so nobody over-trusts it.
 - **None of it reads the portal.** The floor makes fixtures agree with the
   server. Where a fixture is right and the page is wrong — or both are wrong
   together in a way no fixture states — only an audit will find it.
+
+## Distillation's queue, replica and live channel offline (2026-09-24)
+
+The distillation redesign (`docs/distillation-redesign-spec.md` §3) put three
+pieces of infrastructure under `/api/distillation`. All three run under
+`dev:mock` with nothing else started, and all three reset with the floor.
+
+| Piece | Offline | Against the real thing |
+|---|---|---|
+| Compaction jobs on **message-queue** — `distill-compact-l1`, `distill-compact-l2` (FIFO, group = repo, DLQ after 3 deliveries) | `MOCK_QUEUE=true` (set by `dev:mock`): `lib/memory-queue.ts`, same send/receive/ack/visibility/redrive semantics; its messages are the `distillation-queue-messages` fixture, so `POST /api/__mock/reset` drops queued and leased passes with the job rows they belong to | `MESSAGE_QUEUE_URL=http://127.0.0.1:3000` and `MOCK_QUEUE` unset. `MESSAGE_QUEUE_AUTH_SECRET` + `MESSAGE_QUEUE_SERVICE_ID` (default `orgiq-middleware`) sign `X-Service-Auth`; leave the secret unset against a non-production message-queue with no secret of its own |
+| The **L2 read replica** (`lib/distillation-replica.ts`, distributed-core `MerkleSyncer`) | In process always — the "remote" is the artifacts fixture, reached through `fetchSubtree`/`fetchValues` callbacks | Same; `GET /api/distillation/replication` reports digest, lag, last sweep, keys repaired |
+| **realtime-modules** on `/realtime` — `distill:levels`, `distill:jobs`, `distill:review` | The local router needs no infra; the portal points `VITE_GATEWAY_URL` at `ws://localhost:3001/realtime` | Same path behind the ALB (WebSockets pass through); the upgrade checks Origin and the signed session cookie |
+
+What the floor rules mean here:
+
+- **No stored aggregates on a job.** A job row stores what happened (its
+  status, the batch ids it claimed, its log as it ran); `input_ids`,
+  `output_ids`, `what_changed`, `duration_ms` and `cost_usd` are counted from
+  the corpus on every read. The seeded jobs predate the queue, so their log is
+  reconstructed from their rows rather than typed into the seed.
+- **The clock.** Lease expiry, dedup windows and job timestamps read the mock
+  clock, so a test freezes it and steps past a visibility timeout on purpose
+  (`providers/__tests__/distillation-queue.test.ts`).
+- **The scheduler is off offline.** `DISTILL_COMPACT_INTERVAL_MIN` (and
+  `DISTILL_COMPACT_L2_INTERVAL_MIN`, default 6×) enables re-enqueueing passes on
+  a cadence. Unset under `dev:mock`, because a background pass would compact
+  away the backlog an audit came to look at.
+- **A pass mid-flight across a reset writes nothing.** It re-checks that its
+  job row still exists before its write phase.
 
 ## The mock agent stream is paced
 

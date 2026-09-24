@@ -12,6 +12,9 @@ function job(over: Partial<CompactionJob> & Pick<CompactionJob, 'id' | 'level' |
     finishedAt: null, status: 'succeeded',
     inputItems: 100, outputItems: 50, dedupedItems: 50, bytesReclaimed: 1000, costUsd: 0.02,
     produced: { cluster_ids: [], artifact_ids: [] },
+    queued_at: over.startedAt, queue: 'distill-compact-l1', repo: null, requested_by: null,
+    input_ids: [], output_ids: [], log: [], what_changed: '', duration_ms: null, cost_usd: 0.02,
+    phase: 'done', percent: 100, stepLabel: null, attempts: 1,
     ...over,
   };
 }
@@ -81,7 +84,10 @@ describe('compactionHealth — per level, always names what to do', () => {
     const staleJob = job({ id: 'a', level: 'L2', startedAt: new Date(Date.now() - 10 * 3_600_000).toISOString() });
     const h = compactionHealth([level({ level: 'L2', items: 40, lagSeconds: 40_000 })], [staleJob]);
     expect(h[0]!.status).toBe('stalled');
-    expect(h[0]!.reason).toMatch(/L2 has 40 items waiting/);
+    // Names the tier and what is waiting FOR it (the unclaimed patterns), not
+    // the tier's own row count — "L2 has 40 items waiting" meant 40 guides.
+    expect(h[0]!.reason).toMatch(/\d+ patterns? waiting for L2/);
+    expect(h[0]!.reason).not.toMatch(/40/);
   });
 
   it('a level with backlog and NO job ever run against it is stalled', () => {

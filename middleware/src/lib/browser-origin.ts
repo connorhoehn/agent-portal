@@ -13,11 +13,13 @@ function originOf(value: string): string | null {
  * Non-browser clients without Origin still use the route's normal auth gates.
  * Production allows the API's own origin and explicitly configured frontends.
  */
-export const browserOrigin: RequestHandler = (req, res, next) => {
-  const origin = req.get('origin');
-  if (!origin) { next(); return; }
+/** The allowlist decision on its own, so the realtime upgrade
+ *  (lib/distillation-realtime.ts) — which never passes through Express —
+ *  applies exactly the rule the HTTP side does. `selfOrigin` is the API's own
+ *  `proto://host` as the request saw it. */
+export function isAllowedBrowserOrigin(origin: string, selfOrigin: string): boolean {
   const parsed = originOf(origin);
-  const sameOrigin = originOf(`${req.protocol}://${req.get('host') ?? ''}`);
+  const sameOrigin = originOf(selfOrigin);
   const configured = [
     config.cognito.portalOrigin,
     process.env['PUBLIC_BASE_URL'] ?? '',
@@ -25,8 +27,14 @@ export const browserOrigin: RequestHandler = (req, res, next) => {
   ].map(value => originOf(value.trim())).filter(Boolean);
   const localDev = process.env['NODE_ENV'] !== 'production' && parsed !== null &&
     ['localhost', '127.0.0.1', '[::1]'].includes(new URL(parsed).hostname);
-  if (parsed === null || parsed !== origin ||
-      !(parsed === sameOrigin || configured.includes(parsed) || localDev)) {
+  return !(parsed === null || parsed !== origin ||
+    !(parsed === sameOrigin || configured.includes(parsed) || localDev));
+}
+
+export const browserOrigin: RequestHandler = (req, res, next) => {
+  const origin = req.get('origin');
+  if (!origin) { next(); return; }
+  if (!isAllowedBrowserOrigin(origin, `${req.protocol}://${req.get('host') ?? ''}`)) {
     res.status(403).json({ error: 'Browser origin is not allowed' });
     return;
   }
