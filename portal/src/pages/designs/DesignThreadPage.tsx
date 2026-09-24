@@ -16,7 +16,6 @@ import {
   Button,
   Card,
   Chip,
-  DetailHeader,
   Divider,
   Inline,
   InlineAlert,
@@ -176,31 +175,29 @@ export default function DesignThreadPage() {
   );
 
   return (
+    // The thread's title IS the page title: an empty PageSection title here
+    // rendered a blank <h1> above an 18px <h2>, so the page had no real h1
+    // and its title sat 42px lower than every other page's.
     <PageSection
-      title=""
+      title={thread.title}
       actions={
         <Link to="/iq/designs" className="text-[12px] text-primary no-underline hover:underline">← All designs</Link>
       }
     >
       <Stack gap="md">
-        <DetailHeader
-          title={thread.title}
-          badge={
-            <Chip tone={STATUS_TONE[thread.status]} size="sm" dot="static">
-              {STATUS_LABEL[thread.status]}
-            </Chip>
-          }
-          meta={
-            <MetaLine
-              size="sm"
-              items={[
-                thread.orgProjectName,
-                `${thread.postCount} posts`,
-                thread.openQuestions > 0 ? `${thread.openQuestions} open question${thread.openQuestions === 1 ? '' : 's'}` : null,
-              ]}
-            />
-          }
-        />
+        <Inline align="center" gap="sm">
+          <Chip tone={STATUS_TONE[thread.status]} size="sm" dot="static">
+            {STATUS_LABEL[thread.status]}
+          </Chip>
+          <MetaLine
+            size="sm"
+            items={[
+              thread.orgProjectName,
+              `${thread.postCount} posts`,
+              thread.openQuestions > 0 ? `${thread.openQuestions} open question${thread.openQuestions === 1 ? '' : 's'}` : null,
+            ]}
+          />
+        </Inline>
 
         {/* ── The summary band — what the thread decides, where it stands,
                and its blast radius, BEFORE a single post is read. ── */}

@@ -392,6 +392,15 @@ function ProjectDetailPage() {
   if (projLoading) {
     return <PageSection title="Initiative"><LoadingState label="Loading initiative…" /></PageSection>;
   }
+  // A 404 is an answer (no such initiative), not an outage; only a real
+  // failure should read as one.
+  if (projError && /\b404\b|not found/i.test(projError)) {
+    return (
+      <PageSection title="Initiative">
+        <ErrorState title="Initiative not found" body={`No initiative has the id "${id}".`} action={<BackToProjects />} />
+      </PageSection>
+    );
+  }
   if (projError) {
     return (
       <PageSection title="Initiative">
