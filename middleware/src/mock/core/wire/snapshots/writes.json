@@ -1,7 +1,7 @@
 {
-  "capturedAt": "2026-09-22T00:39:05.257Z",
-  "serverHandlerSha": "12c7a56cd88f26adf9ca12133308ad1f45d51464779be4e0edb1f914e42ca884",
-  "baseUrl": "http://127.0.0.1:3012",
+  "capturedAt": "2026-09-24T02:36:50.378Z",
+  "serverHandlerSha": "5b3083182df584b6b0f3ff3658827f14cbd5b12a664a9ad410d4bf0f25a91580",
+  "baseUrl": "http://127.0.0.1:3013",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
     "agentcore",
@@ -107,6 +107,12 @@
       }
     },
     "DELETE /api/grants/:id": {
+      "refused": {
+        "rule": "destructive",
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The one exception is a delete somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
+      }
+    },
+    "DELETE /api/graph/work-items/:id/criteria/:criterionId": {
       "refused": {
         "rule": "destructive",
         "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The one exception is a delete somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
@@ -455,6 +461,12 @@
         "priority"
       ]
     },
+    "PATCH /api/graph/work-items/:id/criteria/:criterionId": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
+    },
     "PATCH /api/ingest/crawl-targets/:id": {
       "refused": {
         "rule": "fires",
@@ -607,7 +619,6 @@
           "agent-projects",
           "assessment-archetypes",
           "assessment-configuration",
-          "assessment-document-mappings",
           "assessment-evidence-log",
           "assessment-feedback",
           "assessment-knowledge-comments",
@@ -1109,7 +1120,27 @@
       }
     },
     "POST /api/assessment/runs/:runId/complete": {
-      "skipped": "HTTP 400: A scoring run requires a non-empty scoring_log to complete (assessment/admin)",
+      "persona": "assessment/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "args": "object",
+        "command": "string",
+        "error": "null",
+        "files_written": "array",
+        "finished_at": "string",
+        "id": "string",
+        "source": "string",
+        "started_at": "string",
+        "status": "string",
+        "summary": "string",
+        "team_id": "string"
+      },
+      "values": {
+        "status": [
+          "completed"
+        ]
+      },
       "sent": [
         "status"
       ]
@@ -1928,6 +1959,18 @@
         "type"
       ]
     },
+    "POST /api/graph/work-items/:id/comments": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
+    },
+    "POST /api/graph/work-items/:id/criteria": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
+    },
     "POST /api/identity/policies": {
       "skipped": "no body: `statement` is Cedar policy source. GET /api/identity/policies needs a live policy store, so no real statement is readable offline, and writing one from memory is the invention this harness forbids."
     },
@@ -2532,16 +2575,7 @@
       ]
     },
     "POST /api/observability/quality/feedback": {
-      "persona": "orgiq/admin",
-      "status": 200,
-      "shape": {
-        "$": "object",
-        "invocationId": "string",
-        "label": "string",
-        "note": "string",
-        "ok": "boolean"
-      },
-      "values": {},
+      "skipped": "HTTP 404: invocation not found (orgiq/admin)",
       "sent": [
         "invocationId",
         "label",

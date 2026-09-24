@@ -65,6 +65,14 @@ export const workItemComments = defineFixture<WorkItemCommentRow>({
       { id: 'wic-prog-8', workItemId: 'wi-cost-e2-s2', authorId: 'p-017', isSystem: false,
         createdAt: clock.daysAgo(3),
         body: 'Showback needs the bot baseline broken out separately from interactive runs — maintenance is a floor, not a choice.' },
+      // Planning notes on wi-obs-e1-s4, fixed ages rather than the random draw
+      // above (schema/seeds/generate_program_seed.py's FIXED_AGE_COMMENTS).
+      { id: 'wic-prog-9', workItemId: 'wi-obs-e1-s4', authorId: 'p-004', isSystem: false,
+        createdAt: clock.daysAgo(2),
+        body: 'Start with low-risk services after the collector rollout.' },
+      { id: 'wic-prog-10', workItemId: 'wi-obs-e1-s4', authorId: 'p-011', isSystem: false,
+        createdAt: clock.daysAgo(1),
+        body: 'Keep the bridge available until dashboard parity is verified.' },
     ],
     // Declared, so an auditor can see the feed's own empty state without
     // damaging the seed — see docs/mock-floor.md's fallback rule.

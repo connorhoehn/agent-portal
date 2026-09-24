@@ -24,6 +24,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { clock } from './core/index.js';
 
 export interface LoopMockUsage {
   input_tokens: number;
@@ -63,7 +64,7 @@ export function _resetLoopMock(): void {
 }
 
 function now(): string {
-  return new Date().toISOString();
+  return clock.nowIso();
 }
 
 // ─── Mock workspace ─────────────────────────────────────────────────────────

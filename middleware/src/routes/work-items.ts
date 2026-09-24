@@ -7,6 +7,12 @@
 //   GET  /api/graph/people/:personId/work  — work assigned to a person
 //   POST /api/graph/work-items             — create a new work item
 //   PATCH /api/graph/work-items/:id        — update an existing work item
+//   GET   /api/graph/work-items/:id/criteria         — acceptance-criteria checklist
+//   POST  /api/graph/work-items/:id/criteria         — append a criterion
+//   PATCH /api/graph/work-items/:id/criteria/:cid    — edit/check/move a criterion
+//   DELETE /api/graph/work-items/:id/criteria/:cid   — remove a criterion
+//   GET   /api/graph/work-items/:id/comments         — planning notes + status audit
+//   POST  /api/graph/work-items/:id/comments         — add a planning note
 //
 // House rule for this surface: an input this API accepts is an input it acts
 // on. A parameter it cannot honour is a 400, never a silent no-op — the old
@@ -16,7 +22,8 @@
 
 import { Router, type Response } from 'express';
 import { asyncHandler } from '../lib/async-handler.js';
-import { requireAction } from '../lib/authz.js';
+import { requireAction, resolveSession } from '../lib/authz.js';
+import { getUser } from '../providers/identity.js';
 import {
   searchWorkItems,
   getProjectWorkTree,
@@ -31,6 +38,13 @@ import {
   wouldCreateParentCycle,
   projectExists,
   personExists,
+  listWorkItemCriteria,
+  createWorkItemCriterion,
+  updateWorkItemCriterion,
+  deleteWorkItemCriterion,
+  listWorkItemComments,
+  createWorkItemComment,
+  addWorkItemComment,
   type CreateWorkItemInput,
   type UpdateWorkItemPatch,
   type WorkItemType,
@@ -69,6 +83,11 @@ function unknownKeys(body: Record<string, unknown>, allowed: readonly string[]):
   return Object.keys(body).filter((k) => !allowed.includes(k));
 }
 
+/** `in_progress` -> `in progress`, for the status-change audit comment's prose. */
+function statusLabel(status: WorkItemStatus): string {
+  return status.replace(/_/g, ' ');
+}
+
 /** Field validators — each returns an error string, or null when acceptable. */
 function checkStoryPoints(v: unknown): string | null {
   if (v === undefined || v === null) return null;
@@ -97,6 +116,25 @@ function checkLabels(v: unknown): string | null {
 function checkNullableId(v: unknown, field: string): string | null {
   if (v === undefined || v === null) return null;
   if (typeof v !== 'string' || !v.trim()) return `${field} must be a non-empty string, or null`;
+  return null;
+}
+
+function checkCriterionText(v: unknown): string | null {
+  if (typeof v !== 'string' || !v.trim()) return 'text is required and must be a non-empty string';
+  if (v.trim().length > 500) return 'text must be 500 characters or fewer';
+  return null;
+}
+function checkCriterionDone(v: unknown): string | null {
+  if (typeof v !== 'boolean') return 'done must be a boolean';
+  return null;
+}
+function checkCriterionPosition(v: unknown): string | null {
+  if (typeof v !== 'number' || !Number.isInteger(v) || v < 0) return 'position must be a non-negative integer';
+  return null;
+}
+function checkCommentBody(v: unknown): string | null {
+  if (typeof v !== 'string' || !v.trim()) return 'body is required and must be a non-empty string';
+  if (v.trim().length > 4000) return 'body must be 4000 characters or fewer';
   return null;
 }
 
@@ -442,11 +480,180 @@ workItemsRouter.patch(
         res.status(409).json({ error: 'the work item changed while this update was in flight — re-read it and retry' });
         return;
       }
+
+      // A status move gets an is_system audit comment so the Activity tab has
+      // real history to show, not just the board's own before/after. Best
+      // effort deliberately: the PATCH already landed, and a session/identity
+      // hiccup writing the audit trail must never turn a successful update
+      // into a failed response.
+      if (movingStatus) {
+        try {
+          const session = resolveSession(req);
+          const actorPersonId = session ? (await getUser(session.sub))?.personId ?? null : null;
+          await addWorkItemComment(
+            id,
+            `Status changed from ${statusLabel(current.status)} to ${statusLabel(nextStatus!)}`,
+            { authorId: actorPersonId, isSystem: true },
+          );
+        } catch {
+          // Swallowed on purpose — see the comment above.
+        }
+      }
+
       res.json(updated);
     } catch (err) {
       const mapped = toClientError(err as Error);
       if (!mapped) throw err;
       res.status(mapped.status).json({ error: mapped.error });
     }
+  }),
+);
+
+// ── Acceptance-criteria checklist ─────────────────────────────────────────────
+// GET/POST /api/graph/work-items/:id/criteria
+// PATCH/DELETE /api/graph/work-items/:id/criteria/:criterionId
+//
+// Tenant-open reads, writeGate'd mutations — the same posture as the rest of
+// this router. A checklist item belongs to exactly one work item, so every
+// route below checks the parent id first: a criterion id that resolves under
+// the WRONG work item id is treated as not found, not silently allowed.
+
+workItemsRouter.get(
+  '/work-items/:id/criteria',
+  asyncHandler(async (req, res) => {
+    const id = req.params['id'] as string;
+    if (!id) { res.status(400).json({ error: 'Missing work item id' }); return; }
+    if (!(await getWorkItem(id))) { res.status(404).json({ error: 'Work item not found' }); return; }
+    const criteria = await listWorkItemCriteria(id);
+    res.json({ criteria });
+  }),
+);
+
+workItemsRouter.post(
+  '/work-items/:id/criteria',
+  writeGate,
+  asyncHandler(async (req, res) => {
+    const id = req.params['id'] as string;
+    if (!id) { res.status(400).json({ error: 'Missing work item id' }); return; }
+    const body = (req.body ?? {}) as Record<string, unknown>;
+
+    const stray = unknownKeys(body, ['text']);
+    if (stray.length > 0) {
+      res.status(400).json({ error: `unrecognised field${stray.length === 1 ? '' : 's'}: ${stray.join(', ')}` });
+      return;
+    }
+    const textError = checkCriterionText(body['text']);
+    if (textError) { res.status(400).json({ error: textError }); return; }
+
+    if (!(await getWorkItem(id))) { res.status(404).json({ error: 'Work item not found' }); return; }
+
+    const criterion = await createWorkItemCriterion(id, (body['text'] as string).trim());
+    res.status(201).json(criterion);
+  }),
+);
+
+const CRITERION_PATCH_KEYS = ['text', 'done', 'position'] as const;
+
+workItemsRouter.patch(
+  '/work-items/:id/criteria/:criterionId',
+  writeGate,
+  asyncHandler(async (req, res) => {
+    const id = req.params['id'] as string;
+    const criterionId = req.params['criterionId'] as string;
+    if (!id || !criterionId) { res.status(400).json({ error: 'Missing work item or criterion id' }); return; }
+    const body = (req.body ?? {}) as Record<string, unknown>;
+
+    const stray = unknownKeys(body, CRITERION_PATCH_KEYS);
+    if (stray.length > 0) {
+      res.status(400).json({ error: `unrecognised field${stray.length === 1 ? '' : 's'}: ${stray.join(', ')}` });
+      return;
+    }
+    if (Object.keys(body).length === 0) {
+      res.status(400).json({ error: `no fields to update — send one of: ${CRITERION_PATCH_KEYS.join(', ')}` });
+      return;
+    }
+    const fieldError = ('text' in body ? checkCriterionText(body['text']) : null)
+      ?? ('done' in body ? checkCriterionDone(body['done']) : null)
+      ?? ('position' in body ? checkCriterionPosition(body['position']) : null);
+    if (fieldError) { res.status(400).json({ error: fieldError }); return; }
+
+    if (!(await getWorkItem(id))) { res.status(404).json({ error: 'Work item not found' }); return; }
+
+    const updated = await updateWorkItemCriterion(id, criterionId, {
+      ...('text' in body ? { text: (body['text'] as string).trim() } : {}),
+      ...('done' in body ? { done: body['done'] as boolean } : {}),
+      ...('position' in body ? { position: body['position'] as number } : {}),
+    });
+    if (!updated) { res.status(404).json({ error: 'Criterion not found' }); return; }
+    res.json(updated);
+  }),
+);
+
+workItemsRouter.delete(
+  '/work-items/:id/criteria/:criterionId',
+  writeGate,
+  asyncHandler(async (req, res) => {
+    const id = req.params['id'] as string;
+    const criterionId = req.params['criterionId'] as string;
+    if (!id || !criterionId) { res.status(400).json({ error: 'Missing work item or criterion id' }); return; }
+
+    if (!(await getWorkItem(id))) { res.status(404).json({ error: 'Work item not found' }); return; }
+
+    const deleted = await deleteWorkItemCriterion(id, criterionId);
+    if (!deleted) { res.status(404).json({ error: 'Criterion not found' }); return; }
+    res.status(204).end();
+  }),
+);
+
+// ── Comments (planning notes / discussion) ────────────────────────────────────
+// GET/POST /api/graph/work-items/:id/comments
+//
+// The comment feed a work item's own detail view reads — oldest first, unlike
+// the project-wide activity feed (getProjectActivity), which is newest-first
+// and unions comments with item lifecycle events. `total` counts non-system
+// rows only: the status-change audit trail PATCH now leaves behind is history,
+// not something a "N comments" pill should count.
+
+workItemsRouter.get(
+  '/work-items/:id/comments',
+  asyncHandler(async (req, res) => {
+    const id = req.params['id'] as string;
+    if (!id) { res.status(400).json({ error: 'Missing work item id' }); return; }
+    if (!(await getWorkItem(id))) { res.status(404).json({ error: 'Work item not found' }); return; }
+    const { comments, total } = await listWorkItemComments(id);
+    res.json({ comments, total });
+  }),
+);
+
+workItemsRouter.post(
+  '/work-items/:id/comments',
+  writeGate,
+  asyncHandler(async (req, res) => {
+    const id = req.params['id'] as string;
+    if (!id) { res.status(400).json({ error: 'Missing work item id' }); return; }
+    const body = (req.body ?? {}) as Record<string, unknown>;
+
+    const stray = unknownKeys(body, ['body']);
+    if (stray.length > 0) {
+      res.status(400).json({ error: `unrecognised field${stray.length === 1 ? '' : 's'}: ${stray.join(', ')}` });
+      return;
+    }
+    const bodyError = checkCommentBody(body['body']);
+    if (bodyError) { res.status(400).json({ error: bodyError }); return; }
+
+    if (!(await getWorkItem(id))) { res.status(404).json({ error: 'Work item not found' }); return; }
+
+    // writeGate already required a session (requireAction 401s otherwise),
+    // so this is never null here — but resolveSession's return type is
+    // nullable and there is no reason to assert past it blind.
+    const session = resolveSession(req);
+    const personId = session ? (await getUser(session.sub))?.personId ?? null : null;
+    if (!personId) {
+      res.status(409).json({ error: 'Link your account to a person in the org graph before commenting' });
+      return;
+    }
+
+    const comment = await createWorkItemComment(id, personId, (body['body'] as string).trim());
+    res.status(201).json(comment);
   }),
 );

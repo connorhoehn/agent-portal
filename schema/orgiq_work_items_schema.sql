@@ -97,6 +97,33 @@ CREATE INDEX IF NOT EXISTS wic_author_id_idx    ON work_item_comments (author_id
 CREATE INDEX IF NOT EXISTS wic_created_at_idx   ON work_item_comments (created_at DESC);
 
 -- ─────────────────────────────────────────────────────────────────────────────
+-- work_item_criteria — the acceptance-criteria checklist on a work item
+-- ─────────────────────────────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS work_item_criteria (
+  id           TEXT PRIMARY KEY DEFAULT ('wicr-' || gen_random_uuid()::TEXT),
+  work_item_id TEXT NOT NULL REFERENCES work_items(id) ON DELETE CASCADE,
+  text         TEXT NOT NULL,
+  done         BOOLEAN NOT NULL DEFAULT FALSE,
+  position     INTEGER NOT NULL,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+COMMENT ON TABLE work_item_criteria IS
+  'Ordered acceptance-criteria checklist on a work item. position is dense '
+  '0..n-1 within a work_item_id; the API renumbers siblings on insert/move/delete '
+  'so the ordering never carries a gap. No UNIQUE(work_item_id, position) — a '
+  'renumber lands as one UPDATE ... FROM a ROW_NUMBER() window (see '
+  'renumberWorkItemCriteria in providers/work-items.ts, the same shape as '
+  'moveKnowledgeNodeRow in providers/assessment-aurora.ts), and Postgres checks a '
+  'non-deferred unique constraint per row rather than after the statement, which '
+  'would spuriously reject a plain two-item swap.';
+
+CREATE INDEX IF NOT EXISTS wicr_work_item_position_idx
+  ON work_item_criteria (work_item_id, position);
+
+-- ─────────────────────────────────────────────────────────────────────────────
 -- View: v_work_item_summary — denormalised for fast list rendering
 -- ─────────────────────────────────────────────────────────────────────────────
 

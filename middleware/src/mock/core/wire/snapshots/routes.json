@@ -1153,7 +1153,7 @@
     {
       "method": "GET",
       "path": "/api/graph/people/:personId/work",
-      "source": "src/routes/work-items.ts:242"
+      "source": "src/routes/work-items.ts:280"
     },
     {
       "method": "GET",
@@ -1178,12 +1178,12 @@
     {
       "method": "GET",
       "path": "/api/graph/projects/:id/activity",
-      "source": "src/routes/work-items.ts:189"
+      "source": "src/routes/work-items.ts:227"
     },
     {
       "method": "GET",
       "path": "/api/graph/projects/:id/activity/series",
-      "source": "src/routes/work-items.ts:212"
+      "source": "src/routes/work-items.ts:250"
     },
     {
       "method": "PATCH",
@@ -1193,12 +1193,12 @@
     {
       "method": "GET",
       "path": "/api/graph/projects/:id/decisions",
-      "source": "src/routes/work-items.ts:227"
+      "source": "src/routes/work-items.ts:265"
     },
     {
       "method": "GET",
       "path": "/api/graph/projects/:id/work",
-      "source": "src/routes/work-items.ts:174"
+      "source": "src/routes/work-items.ts:212"
     },
     {
       "method": "GET",
@@ -1208,22 +1208,52 @@
     {
       "method": "GET",
       "path": "/api/graph/work",
-      "source": "src/routes/work-items.ts:136"
+      "source": "src/routes/work-items.ts:174"
     },
     {
       "method": "POST",
       "path": "/api/graph/work-items",
-      "source": "src/routes/work-items.ts:258"
+      "source": "src/routes/work-items.ts:296"
     },
     {
       "method": "PATCH",
       "path": "/api/graph/work-items/:id",
-      "source": "src/routes/work-items.ts:338"
+      "source": "src/routes/work-items.ts:376"
+    },
+    {
+      "method": "GET",
+      "path": "/api/graph/work-items/:id/comments",
+      "source": "src/routes/work-items.ts:617"
+    },
+    {
+      "method": "POST",
+      "path": "/api/graph/work-items/:id/comments",
+      "source": "src/routes/work-items.ts:628"
+    },
+    {
+      "method": "GET",
+      "path": "/api/graph/work-items/:id/criteria",
+      "source": "src/routes/work-items.ts:521"
+    },
+    {
+      "method": "POST",
+      "path": "/api/graph/work-items/:id/criteria",
+      "source": "src/routes/work-items.ts:532"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/graph/work-items/:id/criteria/:criterionId",
+      "source": "src/routes/work-items.ts:592"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/graph/work-items/:id/criteria/:criterionId",
+      "source": "src/routes/work-items.ts:557"
     },
     {
       "method": "GET",
       "path": "/api/health",
-      "source": "src/index.ts:144"
+      "source": "src/index.ts:145"
     },
     {
       "method": "GET",
@@ -2543,7 +2573,7 @@
     {
       "method": "GET",
       "path": "/health",
-      "source": "src/index.ts:143"
+      "source": "src/index.ts:144"
     },
     {
       "method": "DELETE",

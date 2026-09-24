@@ -461,6 +461,42 @@ COMMENTS = [
     ('cost', 'e2-s2', 'p-017', 'Showback needs the bot baseline broken out separately from interactive runs — maintenance is a floor, not a choice.'),
 ]
 
+# Planning notes on wi-obs-e1-s4, with fixed ages rather than the random draw
+# above — the task this fixture backs (docs/ui-components-queue.md's work-item
+# criteria/comments contract) names the exact ages, so these are excluded from
+# the RNG.randint(1, 12) below and carry their age as a 5th tuple element.
+FIXED_AGE_COMMENTS = [
+    ('obs', 'e1-s4', 'p-004', 'Start with low-risk services after the collector rollout.', 2),
+    ('obs', 'e1-s4', 'p-011', 'Keep the bridge available until dashboard parity is verified.', 1),
+]
+
+# Acceptance-criteria checklists. Each entry is
+# (initiative slug, work-item key, [(text, done, created_days_ago, updated_days_ago), ...]).
+# wi-obs-e1-s4 is the flagship example the design mockup names; the other three
+# are open Observability stories seeded so the initiative's board is not a
+# one-item demo.
+CRITERIA = [
+    ('obs', 'e1-s4', [
+        ('Route metrics through the collector', False, 5, 5),
+        ('Verify dashboard and alert parity', False, 5, 5),
+        ('Keep a rollback path during migration', False, 5, 5),
+    ]),
+    ('obs', 'e3-s1', [
+        ('Define per-service label cardinality budgets', True, 10, 3),
+        ('Add a CI check that fails a PR exceeding budget', False, 10, 10),
+        ('Document the exemption process for legitimate spikes', False, 10, 10),
+    ]),
+    ('obs', 'e3-s2', [
+        ('Classify log levels into debug/info/audit tiers', True, 12, 6),
+        ('Configure the sampling rate for the debug tier', True, 12, 4),
+        ('Confirm audit logs bypass sampling entirely', False, 12, 12),
+    ]),
+    ('obs', 'e2-s3', [
+        ('Wire one dashboard panel per team', False, 4, 4),
+        ('Add drill-down to the underlying SLO burn', False, 4, 4),
+    ]),
+]
+
 
 def q(s: str) -> str:
     return s.replace("'", "''")
@@ -741,6 +777,30 @@ def main() -> None:
             f"VALUES ('wic-prog-{ci}', 'wi-{slug}-{key}', '{author}', '{q(body)}', FALSE, {days(RNG.randint(1, 12))}) "
             "ON CONFLICT (id) DO NOTHING"
         )
+
+    # Planning notes with a fixed age (not the random draw above).
+    L.append('')
+    L.append('-- Planning notes on wi-obs-e1-s4 (fixed ages).')
+    base = len(COMMENTS)
+    for fi, (slug, key, author, body, age) in enumerate(FIXED_AGE_COMMENTS, start=1):
+        emit(
+            "INSERT INTO work_item_comments (id, work_item_id, author_id, body, is_system, created_at) "
+            f"VALUES ('wic-prog-{base + fi}', 'wi-{slug}-{key}', '{author}', '{q(body)}', FALSE, {days(age)}) "
+            "ON CONFLICT (id) DO NOTHING"
+        )
+
+    # Acceptance-criteria checklists.
+    L.append('')
+    L.append('-- Acceptance-criteria checklists on select Observability items.')
+    for slug, key, items in CRITERIA:
+        for i, (text, done, created_age, updated_age) in enumerate(items):
+            cid = f'wicr-{slug}-{key}-{i + 1}'
+            emit(
+                "INSERT INTO work_item_criteria (id, work_item_id, text, done, position, created_at, updated_at) "
+                f"VALUES ('{cid}', 'wi-{slug}-{key}', '{q(text)}', {'TRUE' if done else 'FALSE'}, {i}, "
+                f"{days(created_age)}, {days(updated_age)}) "
+                "ON CONFLICT (id) DO NOTHING"
+            )
 
     OUT.write_text('\n'.join(L) + '\n', encoding='utf-8')
     stmt_count = sum(1 for line in L if line.endswith(';'))

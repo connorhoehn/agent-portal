@@ -12,6 +12,7 @@ import { config } from '../config.js';
 import { mockProjectExists, mockProjectName } from './projects.js';
 import { clock } from '../mock/core/index.js';
 import { workItemComments } from '../mock/work-item-comments.js';
+import { workItemCriteria, type WorkItemCriterionRow } from '../mock/work-item-criteria.js';
 // Names only, for the activity feed's `LEFT JOIN people` — the same cast
 // providers/people.ts serves, so an actor's name here is the name every other
 // surface gives that id.
@@ -241,6 +242,9 @@ function intParam(name: string, value: number): SqlParameter {
 }
 function numParam(name: string, value: number): SqlParameter {
   return { name, value: { doubleValue: value } };
+}
+function boolParam(name: string, value: boolean): SqlParameter {
+  return { name, value: { booleanValue: value } };
 }
 
 /** Every read projects the same column list, including the two that were dead. */
@@ -1220,6 +1224,307 @@ export async function addWorkItemComment(
      VALUES (:wid, ${authorClause}, :body, ${opts.isSystem ? 'TRUE' : 'FALSE'})`,
     params,
   );
+}
+
+// ── Acceptance-criteria checklist ──────────────────────────────────────────────
+// work_item_criteria: an ordered checklist on a work item. `position` is dense
+// 0..n-1 within a work_item_id; every mutation renumbers so a caller never has
+// to reason about gaps. The renumber is the same shape as
+// providers/assessment-aurora.ts's `moveKnowledgeNodeRow` — one
+// `UPDATE ... FROM` over a `ROW_NUMBER()` window, which is why the table
+// carries no UNIQUE(work_item_id, position): Postgres checks a non-deferred
+// unique constraint per row, not after the statement, and would spuriously
+// reject a plain two-item swap.
+
+export interface WorkItemCriterion {
+  id: string;
+  workItemId: string;
+  text: string;
+  done: boolean;
+  position: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+function mockCriteriaRows(): WorkItemCriterionRow[] {
+  return workItemCriteria.rows();
+}
+
+function toWorkItemCriterion(r: WorkItemCriterionRow): WorkItemCriterion {
+  return { ...r };
+}
+
+function rowToCriterion(r: Record<string, unknown>): WorkItemCriterion {
+  return {
+    id: String(r['id'] ?? ''),
+    workItemId: String(r['work_item_id'] ?? ''),
+    text: String(r['text'] ?? ''),
+    done: r['done'] === true,
+    position: Number(r['position'] ?? 0),
+    createdAt: utcIso(r['created_at']),
+    updatedAt: utcIso(r['updated_at']),
+  };
+}
+
+export async function listWorkItemCriteria(workItemId: string): Promise<WorkItemCriterion[]> {
+  if (config.mock.aurora) {
+    return mockCriteriaRows()
+      .filter((c) => c.workItemId === workItemId)
+      .sort((a, b) => a.position - b.position)
+      .map(toWorkItemCriterion);
+  }
+  const rows = await safeExec(
+    `SELECT id, work_item_id, text, done, position, created_at, updated_at
+       FROM work_item_criteria
+      WHERE work_item_id = :wid
+      ORDER BY position`,
+    [strParam('wid', workItemId)],
+  );
+  return rows.map(rowToCriterion);
+}
+
+export async function createWorkItemCriterion(workItemId: string, text: string): Promise<WorkItemCriterion> {
+  if (config.mock.aurora) {
+    const rows = mockCriteriaRows();
+    const siblings = rows.filter((c) => c.workItemId === workItemId);
+    const now = clock.nowIso();
+    const row: WorkItemCriterionRow = {
+      id: `wicr-${randomUUID()}`,
+      workItemId,
+      text,
+      done: false,
+      position: siblings.length,
+      createdAt: now,
+      updatedAt: now,
+    };
+    rows.push(row);
+    return toWorkItemCriterion(row);
+  }
+  const rows = await safeExec(
+    `INSERT INTO work_item_criteria (work_item_id, text, position)
+     VALUES (:wid, :text,
+       (SELECT COALESCE(MAX(position), -1) + 1 FROM work_item_criteria WHERE work_item_id = :wid))
+     RETURNING id, work_item_id, text, done, position, created_at, updated_at`,
+    [strParam('wid', workItemId), strParam('text', text)],
+  );
+  return rowToCriterion(rows[0]!);
+}
+
+export interface UpdateCriterionPatch {
+  text?: string;
+  done?: boolean;
+  position?: number;
+}
+
+/**
+ * `position` is a request, not an absolute slot: the renumber sorts the
+ * target alongside its siblings by the raw value it was given, so an
+ * out-of-range ask (negative, or past the end) lands clamped at the nearer
+ * end rather than erroring — the same contract `moveKnowledgeNodeRow` gives.
+ */
+export async function updateWorkItemCriterion(
+  workItemId: string,
+  criterionId: string,
+  patch: UpdateCriterionPatch,
+): Promise<WorkItemCriterion | null> {
+  if (config.mock.aurora) {
+    const rows = mockCriteriaRows();
+    const row = rows.find((c) => c.id === criterionId && c.workItemId === workItemId);
+    if (!row) return null;
+    const now = clock.nowIso();
+    if (patch.text !== undefined) row.text = patch.text;
+    if (patch.done !== undefined) row.done = patch.done;
+    if (patch.text !== undefined || patch.done !== undefined) row.updatedAt = now;
+    if (patch.position !== undefined) {
+      // Stable-sort the target into its requested slot among siblings ordered
+      // by their CURRENT position, then renumber densely — the in-memory twin
+      // of the SQL ROW_NUMBER() window below.
+      const withoutTarget = rows
+        .filter((c) => c.workItemId === workItemId && c.id !== criterionId)
+        .sort((a, b) => a.position - b.position);
+      const clamped = Math.max(0, Math.min(patch.position, withoutTarget.length));
+      withoutTarget.splice(clamped, 0, row);
+      withoutTarget.forEach((c, i) => { c.position = i; });
+      row.updatedAt = now;
+    }
+    return toWorkItemCriterion(row);
+  }
+  if (patch.text !== undefined || patch.done !== undefined) {
+    const sets: string[] = ['updated_at = NOW()'];
+    const params: SqlParameter[] = [strParam('id', criterionId), strParam('wid', workItemId)];
+    if (patch.text !== undefined) { sets.push('text = :text'); params.push(strParam('text', patch.text)); }
+    if (patch.done !== undefined) { sets.push('done = :done'); params.push(boolParam('done', patch.done)); }
+    const rows = await safeExec(
+      `UPDATE work_item_criteria SET ${sets.join(', ')} WHERE id = :id AND work_item_id = :wid RETURNING id`,
+      params,
+    );
+    if (rows.length === 0) return null;
+  } else {
+    const existing = await safeExec(
+      `SELECT id FROM work_item_criteria WHERE id = :id AND work_item_id = :wid`,
+      [strParam('id', criterionId), strParam('wid', workItemId)],
+    );
+    if (existing.length === 0) return null;
+  }
+  if (patch.position !== undefined) {
+    await safeExec(
+      `UPDATE work_item_criteria SET position = :pos WHERE id = :id AND work_item_id = :wid`,
+      [strParam('id', criterionId), strParam('wid', workItemId), intParam('pos', patch.position)],
+    );
+    await safeExec(
+      `WITH ordered AS (
+         SELECT id, ROW_NUMBER() OVER (
+                  ORDER BY position, CASE WHEN id = :id THEN 0 ELSE 1 END, id
+                ) - 1 AS rn
+           FROM work_item_criteria
+          WHERE work_item_id = :wid
+       )
+       UPDATE work_item_criteria t SET position = o.rn
+        FROM ordered o WHERE t.id = o.id`,
+      [strParam('id', criterionId), strParam('wid', workItemId)],
+    );
+  }
+  const rows = await safeExec(
+    `SELECT id, work_item_id, text, done, position, created_at, updated_at
+       FROM work_item_criteria WHERE id = :id`,
+    [strParam('id', criterionId)],
+  );
+  return rows[0] ? rowToCriterion(rows[0]) : null;
+}
+
+export async function deleteWorkItemCriterion(workItemId: string, criterionId: string): Promise<boolean> {
+  if (config.mock.aurora) {
+    const rows = mockCriteriaRows();
+    const idx = rows.findIndex((c) => c.id === criterionId && c.workItemId === workItemId);
+    if (idx === -1) return false;
+    rows.splice(idx, 1);
+    rows
+      .filter((c) => c.workItemId === workItemId)
+      .sort((a, b) => a.position - b.position)
+      .forEach((c, i) => { c.position = i; });
+    return true;
+  }
+  const deleted = await safeExec(
+    `DELETE FROM work_item_criteria WHERE id = :id AND work_item_id = :wid RETURNING id`,
+    [strParam('id', criterionId), strParam('wid', workItemId)],
+  );
+  if (deleted.length === 0) return false;
+  await safeExec(
+    `WITH ordered AS (
+       SELECT id, ROW_NUMBER() OVER (ORDER BY position, id) - 1 AS rn
+         FROM work_item_criteria WHERE work_item_id = :wid
+     )
+     UPDATE work_item_criteria t SET position = o.rn
+      FROM ordered o WHERE t.id = o.id`,
+    [strParam('wid', workItemId)],
+  );
+  return true;
+}
+
+// ── Comments (planning notes / discussion) ─────────────────────────────────────
+// Distinct from addWorkItemComment above, which lib/bot-runner.ts uses for
+// is_system audit rows and does not need a response shape for. These two serve
+// GET/POST /api/graph/work-items/:id/comments, where the caller needs the
+// created (or listed) row back with the author's name and title joined.
+
+export interface WorkItemCommentView {
+  id: string;
+  workItemId: string;
+  authorId: string | null;
+  authorName: string | null;
+  authorTitle: string | null;
+  body: string;
+  isSystem: boolean;
+  createdAt: string;
+}
+
+function personName(id: string | null): string | null {
+  return id ? mockPeople.find((p) => p.id === id)?.name ?? null : null;
+}
+function personTitle(id: string | null): string | null {
+  return id ? mockPeople.find((p) => p.id === id)?.title ?? null : null;
+}
+
+export async function listWorkItemComments(
+  workItemId: string,
+): Promise<{ comments: WorkItemCommentView[]; total: number }> {
+  let comments: WorkItemCommentView[];
+  if (config.mock.aurora) {
+    comments = workItemComments.rows()
+      .filter((c) => c.workItemId === workItemId)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+      .map((c) => ({
+        id: c.id, workItemId: c.workItemId, authorId: c.authorId,
+        authorName: personName(c.authorId), authorTitle: personTitle(c.authorId),
+        body: c.body, isSystem: c.isSystem, createdAt: c.createdAt,
+      }));
+  } else {
+    const rows = await safeExec(
+      `SELECT c.id, c.work_item_id, c.author_id, p.name AS author_name, p.title AS author_title,
+              c.body, c.is_system, c.created_at::text AS created_at
+         FROM work_item_comments c
+         LEFT JOIN people p ON p.id = c.author_id
+        WHERE c.work_item_id = :wid
+        ORDER BY c.created_at ASC, c.id ASC`,
+      [strParam('wid', workItemId)],
+    );
+    comments = rows.map((r) => ({
+      id: String(r['id'] ?? ''),
+      workItemId: String(r['work_item_id'] ?? ''),
+      authorId: r['author_id'] != null ? String(r['author_id']) : null,
+      authorName: r['author_name'] != null ? String(r['author_name']) : null,
+      authorTitle: r['author_title'] != null ? String(r['author_title']) : null,
+      body: String(r['body'] ?? ''),
+      isSystem: r['is_system'] === true,
+      createdAt: utcIso(r['created_at']),
+    }));
+  }
+  const total = comments.filter((c) => !c.isSystem).length;
+  return { comments, total };
+}
+
+export async function createWorkItemComment(
+  workItemId: string,
+  authorId: string,
+  body: string,
+): Promise<WorkItemCommentView> {
+  if (config.mock.aurora) {
+    const row = {
+      id: `wic-${randomUUID()}`,
+      workItemId,
+      authorId,
+      body,
+      isSystem: false,
+      createdAt: clock.nowIso(),
+    };
+    workItemComments.rows().push(row);
+    return {
+      id: row.id, workItemId, authorId, authorName: personName(authorId), authorTitle: personTitle(authorId),
+      body, isSystem: false, createdAt: row.createdAt,
+    };
+  }
+  const rows = await safeExec(
+    `WITH ins AS (
+       INSERT INTO work_item_comments (work_item_id, author_id, body, is_system)
+       VALUES (:wid, :author, :body, FALSE)
+       RETURNING id, work_item_id, author_id, body, is_system, created_at
+     )
+     SELECT ins.id, ins.work_item_id, ins.author_id, ins.body, ins.is_system, ins.created_at,
+            p.name AS author_name, p.title AS author_title
+       FROM ins LEFT JOIN people p ON p.id = ins.author_id`,
+    [strParam('wid', workItemId), strParam('author', authorId), strParam('body', body)],
+  );
+  const r = rows[0]!;
+  return {
+    id: String(r['id'] ?? ''),
+    workItemId: String(r['work_item_id'] ?? ''),
+    authorId: r['author_id'] != null ? String(r['author_id']) : null,
+    authorName: r['author_name'] != null ? String(r['author_name']) : null,
+    authorTitle: r['author_title'] != null ? String(r['author_title']) : null,
+    body: String(r['body'] ?? ''),
+    isSystem: false,
+    createdAt: utcIso(r['created_at']),
+  };
 }
 
 // ── Project activity feed ─────────────────────────────────────────────────────
