@@ -137,7 +137,7 @@ function agoLabel(iso: string): string {
  * number with somebody's name lending it authority, which is worse than the
  * unattributed recompute this replaces.
  */
-function storedEstimateFor(item: EstimateItem | null, model: string): WorkEstimate | null {
+export function storedEstimateFor(item: EstimateItem | null, model: string): WorkEstimate | null {
   if (!item?.estimateForecast || !item.estimatedAt) return null;
   if (item.estimateModel !== model) return null;
   const f = item.estimateForecast as Partial<WorkEstimate>;
@@ -174,6 +174,17 @@ export interface EstimateDrawerProps {
    * the thing a standing estimate is read for.
    */
   onEstimateSaved?: (workItemId: string, saved: EstimateProvenance) => void;
+  /**
+   * What the host already chose, applied each time the drawer opens — the
+   * initiative page's run-draft panel picks model, codebase and instruction
+   * beside the work item and hands them over here, so authorizing still runs
+   * through this drawer's gates without asking for them twice.
+   */
+  initialModel?: string;
+  initialAgentProjectId?: string | null;
+  initialInstruction?: string;
+  /** The run budget chosen beside the item — prefills "Cap this run". */
+  initialCapUsd?: number | null;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -326,6 +337,7 @@ export function estimateLine(est: WorkEstimate): string {
 
 export function EstimateDrawer({
   open, onClose, item, codebases, orgProjectId = null, onDispatched, onEstimateSaved,
+  initialModel, initialAgentProjectId, initialInstruction, initialCapUsd,
 }: EstimateDrawerProps) {
   // The library's Drawer restores focus to whatever was document.activeElement
   // when it MOUNTED. That's wrong here: the most common trigger is the
@@ -418,9 +430,9 @@ export function EstimateDrawer({
   const itemId = item?.id ?? null;
   useEffect(() => {
     if (!open) return;
-    setModel(DEFAULT_DEVBOX_MODEL);
-    setInstruction('');
-    setCapText('');
+    setModel(initialModel ?? DEFAULT_DEVBOX_MODEL);
+    setInstruction(initialInstruction ?? '');
+    setCapText(initialCapUsd != null ? String(initialCapUsd) : '');
     setPickerOptions(null);
     setConcurrencyMsg(null);
     setGrantGapMsg(null);
@@ -429,7 +441,7 @@ export function EstimateDrawer({
     setOverRunBudget(null);
     setOverEnvelope(null);
     confirmsRef.current = {};
-    setAgentProjectId(codebases.length === 1 ? codebases[0]!.id : null);
+    setAgentProjectId(initialAgentProjectId ?? (codebases.length === 1 ? codebases[0]!.id : null));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, itemId]);
 

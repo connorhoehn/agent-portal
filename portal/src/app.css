@@ -490,6 +490,17 @@ tbody tr:focus-within .row-reveal,
 [data-shell-nav] > div > main .flex-1.min-w-0.overflow-auto.p-6 {
   padding: 0 0 0 1.5rem;
 }
+/* A flush page — a workspace that brings its own header and panes, like the
+   initiative page — marks its root `data-shell-flush`. The shell then gives it
+   the whole content column: no 24px ring (which painted a grey frame around
+   a white workspace) and no shell breadcrumb row, because the page's own
+   header prints the same trail (useShellBreadcrumbItems). */
+[data-shell-nav] > div > main:has([data-shell-flush]) {
+  padding: 0;
+}
+[data-shell-nav] > div > main:has([data-shell-flush]) .shell-breadcrumbs {
+  display: none;
+}
 .shell-header {
   position: relative;
   background: var(--color-surface);

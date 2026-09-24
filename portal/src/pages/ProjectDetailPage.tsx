@@ -1,24 +1,32 @@
 // Mission control for an initiative: one owner, SMEs directing agents.
 //
-// This file owns state, data and which child is mounted — nothing else. The
-// header, the work column, the board, the rail, the tables, the modal and the
-// forms are in ./project-detail, one component per file; the tone lookups and
-// tree arithmetic are in ./project-detail/projectFormat, which has no React in
-// it at all.
+// Four panes, all from the library: the ScopeHeader across the top, then on
+// the Work tab the work list (WorkListView), the open item (WorkItemDetail on
+// EditorShell) and the run draft (RunDraftPanel) side by side. This file owns
+// state, data and which child is mounted — nothing else. The tone lookups and
+// tree arithmetic are in ./project-detail/projectFormat and the list model in
+// ./project-detail/workListModel, neither of which has React in it.
 
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router';
 import {
+  ContextColumn,
+  ExplorerLayout,
+  ScopeHeader,
+  ViewportFillRegion,
+  WorkListView,
+  type ContextColumnState,
+  type ScopeHeaderPeopleGroup,
+} from '@connorhoehnslalom/ui-components';
+import {
+  BranchIcon,
   Button,
-  Chip,
+  EmptyState,
   ErrorState,
-  Inline,
   LoadingState,
+  Modal,
   PageSection,
-  RailLayout,
   Stack,
-  TabPanel,
-  Tabs,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../hooks/useFetch';
 import { useUrlState } from '../lib/useUrlState';
@@ -26,15 +34,30 @@ import { useCapabilities } from '../lib/capabilities';
 import { useSession } from '../lib/auth';
 import { githubRepoUrl } from '../lib/repoLink';
 import { EstimateDrawer, type EstimateProvenance } from '../components/marketplace/EstimateDrawer';
+import { OwnerEditor } from '../components/marketplace/GovernanceEditor';
 import { useInitiativeAgentActivity } from '../components/marketplace/InitiativeAgentRail';
 import type { BotRun } from './bots/BotsPage';
 import { ContributorModal } from './project-detail/ContributorModal';
 import { ContributorsTable } from './project-detail/ContributorsTable';
 import { DecisionQueue } from './project-detail/DecisionQueue';
-import { InitiativeHeader } from './project-detail/InitiativeHeader';
 import { InitiativeRail } from './project-detail/InitiativeRail';
-import { WorkPanel } from './project-detail/WorkPanel';
-import type { NewItemDraft } from './project-detail/NewItemForm';
+import { NewItemForm, type NewItemDraft } from './project-detail/NewItemForm';
+import { RunDraft, type RunChoice } from './project-detail/RunDraft';
+import { WorkItemDetail, type DetailTab, type WorkItemPatch } from './project-detail/WorkItemDetail';
+import { useWorkItemThread } from './project-detail/useWorkItemThread';
+import { useShellBreadcrumbItems } from '../components/shell/Breadcrumbs';
+import {
+  NO_FILTERS,
+  WORK_GROUPS,
+  WORK_SORT_OPTIONS,
+  activeFilterCount,
+  ownerOptions,
+  pickCurrent,
+  toWorkListItem,
+  workRows,
+  type WorkFilterState,
+  type WorkSort,
+} from './project-detail/workListModel';
 import {
   hasActiveGrantOnInitiative,
   runsByWorkItem,
@@ -102,6 +125,8 @@ function draftItem(id: string, projectId: string, projectName: string, parentId:
   };
 }
 
+const RUN_COLUMN_KEY = 'orgiq.initiative.run-column';
+
 function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [localItems, setLocalItems] = useState<WorkItemTree[] | null>(null);
@@ -141,13 +166,49 @@ function ProjectDetailPage() {
     setOpenPerson({ id: personId, role });
   }, []);
 
-  // ?tab= — work | decisions | contributors, defaulting to work so an
+  // ?tab= — work | decisions | agents | contributors, defaulting to work so an
   // unscoped or stale link still lands somewhere real.
   const [tab, setTab] = useUrlState<string>(
     'tab',
-    (raw) => (raw === 'decisions' || raw === 'contributors' ? raw : 'work'),
+    (raw) => (raw === 'decisions' || raw === 'agents' || raw === 'contributors' ? raw : 'work'),
     (v) => (v === 'work' ? null : v),
   );
+  // ?item= — the work item open in the detail column. A stale id falls back
+  // to the first item up next (pickCurrent), so the link never lands empty.
+  const [wantedItem, setWantedItem] = useUrlState<string | null>('item', (raw) => raw, (v) => v);
+
+  const [sort, setSort] = useState<WorkSort>('priority');
+  const [query, setQuery] = useState('');
+  const [filters, setFilters] = useState<WorkFilterState>(NO_FILTERS);
+  // ?view= — the open item's tab (brief | comments | history).
+  const [detailTab, setDetailTab] = useUrlState<DetailTab>(
+    'view',
+    (raw) => (raw === 'comments' || raw === 'history' ? raw : 'brief'),
+    (v) => (v === 'brief' ? null : v),
+  );
+  const crumbs = useShellBreadcrumbItems();
+  // The run-draft column: the reader's to fold, remembered per browser. First
+  // visit opens it only where three panes fit (≥1440px); below that the item
+  // keeps the width and the column waits as a strip.
+  const [runColumn, setRunColumnRaw] = useState<ContextColumnState>(() => {
+    try {
+      const saved = localStorage.getItem(RUN_COLUMN_KEY);
+      if (saved === 'open' || saved === 'wide' || saved === 'collapsed') return saved;
+    } catch { /* no storage — fall through to the width default */ }
+    return typeof window !== 'undefined' && window.innerWidth >= 1440 ? 'open' : 'collapsed';
+  });
+  const setRunColumn = useCallback((next: ContextColumnState) => {
+    setRunColumnRaw(next);
+    try { localStorage.setItem(RUN_COLUMN_KEY, next); } catch { /* session-only */ }
+  }, []);
+  // Status toggles in flight, so the row's checkbox reads busy until the
+  // server answers rather than flickering back and forth.
+  const [pendingIds, setPendingIds] = useState<ReadonlySet<string>>(new Set());
+  // The composer's prepared instruction, per item — switching items must not
+  // carry one item's instruction into another's run.
+  const [instructions, setInstructions] = useState<Record<string, string>>({});
+  // What "New work item" creates: a story under an epic, or a new epic.
+  const [creating, setCreating] = useState<{ parentId: string | null; parentTitle: string | null } | null>(null);
 
   const { data: project, isLoading: projLoading, error: projError } =
     useFetch<ProjectDetail>(id ? `/api/graph/projects/${encodeURIComponent(id)}` : '');
@@ -211,31 +272,51 @@ function ProjectDetailPage() {
 
   const marketRuns = runsByWorkItem(marketplaceRuns);
   const workTree = localItems ?? rawTree ?? [];
+  // The list is sorted and searched; the open item is chosen from the whole
+  // backlog, so typing a search never swaps the item you are reading.
+  const allRows = useMemo(() => workRows(workTree, sort, ''), [workTree, sort]);
+  const visibleRows = useMemo(() => workRows(workTree, sort, query, filters), [workTree, sort, query, filters]);
+  const current = pickCurrent(allRows, wantedItem);
+  const thread = useWorkItemThread(current?.id ?? null);
 
-  // Status toggle — optimistic, then confirmed. A failure puts the row back
-  // where it was and says why, rather than leaving a tick the server refused.
-  const handleStatusToggle = useCallback((itemId: string, current: WorkItemStatus) => {
-    const newStatus: WorkItemStatus = current === 'done' ? 'open' : 'done';
-    const setStatus = (want: WorkItemStatus) => (nodes: WorkItemTree[]) =>
-      mapTree(nodes, (n) => (n.id === itemId ? { ...n, status: want } : n));
+  // Every edit to a work item — the list's tick, the meta bar, the outcome —
+  // is optimistic, then confirmed. A failure puts the fields back the way
+  // they were and says why, rather than leaving a value the server refused.
+  const patchItem = useCallback((itemId: string, fields: WorkItemPatch) => {
+    const base = localItems ?? rawTree ?? [];
+    let before: WorkItemPatch = {};
+    mapTree(base, (n) => {
+      if (n.id === itemId) {
+        before = Object.fromEntries(Object.keys(fields).map((k) => [k, n[k as keyof WorkItemTree]])) as WorkItemPatch;
+      }
+      return n;
+    });
+    const apply = (patch: WorkItemPatch) => (nodes: WorkItemTree[]) =>
+      mapTree(nodes, (n) => (n.id === itemId ? { ...n, ...patch } : n));
+    const revert = () => setLocalItems((prev) => apply(before)(prev ?? rawTree ?? []));
 
-    setLocalItems(setStatus(newStatus)(localItems ?? rawTree ?? []));
+    setLocalItems(apply(fields)(base));
 
     // An item this page created but the server never acknowledged has a
-    // client-side id; PATCHing it can only 404, and the row would silently
-    // stay ticked until the next reload dropped it.
+    // client-side id; PATCHing it can only 404, and the edit would silently
+    // stay until the next reload dropped it.
     if (isPendingId(itemId)) {
-      setLocalItems((prev) => setStatus(current)(prev ?? rawTree ?? []));
+      revert();
       toastError(null, 'Not saved', 'This item has not been created on the server yet — reload and try again.');
       return;
     }
 
+    // assigneeName is display-only: the server resolves it from assigneeId.
+    const { assigneeName: _name, ...wire } = fields;
+    setPendingIds((prev) => new Set(prev).add(itemId));
     void (async () => {
       try {
-        await sendJson(`/api/graph/work-items/${encodeURIComponent(itemId)}`, 'PATCH', { status: newStatus });
+        await sendJson(`/api/graph/work-items/${encodeURIComponent(itemId)}`, 'PATCH', wire);
       } catch (err) {
-        setLocalItems((prev) => setStatus(current)(prev ?? rawTree ?? []));
+        revert();
         surfaceWriteError(err, 'Updating this item');
+      } finally {
+        setPendingIds((prev) => { const next = new Set(prev); next.delete(itemId); return next; });
       }
     })();
   }, [localItems, rawTree]);
@@ -270,16 +351,9 @@ function ProjectDetailPage() {
     })();
   }, [id, project, rawTree]);
 
-  const handleAddItem = useCallback((parentId: string, draft: NewItemDraft) => {
-    createItem(parentId, draft);
-  }, [createItem]);
-
-  const handleAddEpic = useCallback((draft: NewItemDraft) => {
-    createItem(null, draft);
-  }, [createItem]);
-
-  // Marketplace: the item being estimated, and the optimistic flip on 202.
-  const [estimateItem, setEstimateItem] = useState<WorkItemTree | null>(null);
+  // Marketplace: the item being authorized with the run draft's choices, and
+  // the optimistic flip on 202.
+  const [authorizing, setAuthorizing] = useState<{ item: WorkItemTree; choice: RunChoice } | null>(null);
 
   const handleDispatched = useCallback((workItemId: string, _run: BotRun) => {
     setLocalItems((prev) => mapTree(prev ?? rawTree ?? [], (n) =>
@@ -331,7 +405,6 @@ function ProjectDetailPage() {
   }
 
   const escalatedCount = (decisions ?? []).filter((d) => d.status === 'escalated').length;
-  const openDecisionCount = (decisions ?? []).filter((d) => d.status === 'open' || d.status === 'escalated').length;
   // Governance, with optimistic overrides applied on top of the fetch.
   const contributors = project.contributors.map((c) =>
     c.personId in roleOverrides ? { ...c, role: roleOverrides[c.personId] ?? null } : c,
@@ -341,120 +414,215 @@ function ProjectDetailPage() {
   // Cross-initiative SMEs — the people directing agents here.
   const smes = contributors.filter((c) => (c.role ?? '').toLowerCase() === 'sme');
   const points = sumForestPoints(workTree);
-
-  // Work, decisions and attribution used to be a pane plus two collapsibles
-  // wedged into two columns. They are three unrelated concerns, so they are
-  // three tabs: one is on screen, the counts stay visible on the triggers.
-  const tabs = [
-    { id: 'work', label: 'Work' },
-    // Activity is not a tab: it sits in the fixed rail beside the work, so
-    // the day-by-day lines are readable while the table scrolls.
-    {
-      id: 'decisions',
-      label: 'Decisions',
-      badge: escalatedCount > 0
-        ? <Chip tone="danger" size="xs">{escalatedCount}</Chip>
-        : (decisions ?? []).length > 0
-          ? <Chip tone="neutral" size="xs" mono>{(decisions ?? []).length}</Chip>
-          : undefined,
-    },
-    {
-      id: 'contributors',
-      label: 'Contributors',
-      badge: contributors.length > 0
-        ? <Chip tone="neutral" size="xs" mono>{contributors.length}</Chip>
-        : undefined,
-    },
+  const people: ScopeHeaderPeopleGroup[] = [
+    { label: 'Owner', people: ownerId && ownerName ? [{ id: ownerId, name: ownerName }] : [] },
+    { label: 'SMEs', people: smes.map((c) => ({ id: c.personId, name: c.name })) },
   ];
+  const repoHref = repoUrl ?? project.githubUrl ?? null;
+  const statusLabel = project.status
+    ? project.status.charAt(0).toUpperCase() + project.status.slice(1).replace(/_/g, ' ')
+    : null;
+  const firstEpic = workTree.find((n) => n.type === 'epic') ?? null;
+  const currentRun = current ? marketRuns[current.id] : undefined;
+  const itemDecisions = current ? (decisions ?? []).filter((d) => d.workItemId === current.id) : [];
+
+  const header = (
+    <ScopeHeader
+      breadcrumbs={crumbs}
+      title={project.name}
+      status={statusLabel ? { label: statusLabel, tone: project.status === 'archived' ? 'neutral' : 'info' } : null}
+      progress={{ done: points.done, total: points.total }}
+      spentUsd={serverSpendUsd}
+      stats={[
+        project.sponsorName ? `Sponsored by ${project.sponsorName}` : null,
+        escalatedCount > 0 ? `${escalatedCount} escalated` : null,
+      ]}
+      people={people}
+      link={repoHref ? { label: project.repoFullName ?? 'Repository', href: repoHref } : null}
+      menu={[{
+        // Creating work is dispatch-gated server-side (POST /work-items), so
+        // a role without it is not offered the menu entries.
+        items: [
+          ...(canDispatch && current ? [{ label: `New story in ${current.epicTitle}`, onSelect: () => setCreating({ parentId: current.epicId, parentTitle: current.epicTitle }) }] : []),
+          ...(canDispatch ? [{ label: 'New epic', onSelect: () => setCreating({ parentId: null, parentTitle: null }) }] : []),
+          { label: 'Contributors', onSelect: () => setTab('contributors') },
+        ],
+      }]}
+      tabs={[
+        { id: 'work', label: 'Work' },
+        { id: 'decisions', label: 'Decisions', count: decisions?.length },
+        // A count only when the roster was readable — "0" for a role that
+        // cannot read bots would claim there are none.
+        { id: 'agents', label: 'Agents', count: mayReadAgentWork && !agentActivity.botsError ? agentActivity.bots?.length : undefined },
+        { id: 'contributors', label: 'Contributors', count: contributors.length },
+      ]}
+      activeTab={tab}
+      onTabChange={setTab}
+      data-testid="initiative-header"
+    />
+  );
 
   return (
-    <Stack gap="lg" className="pb-16">
-      {/* RailLayout stacks the rail below the main column under `lg`
-          (1024px) instead of crushing a fixed-520px main column against a
-          fixed-320px rail — the hand-rolled Inline split never scrolled
-          below that. Sticky positioning is RailLayout's own (`lg:sticky
-          lg:top-4`); it no longer pins to the shell's scroll container. */}
-      <RailLayout
-        railWidth="lg"
-        rail={(
-          <InitiativeRail
-            initiativeId={id}
-            activity={agentActivity}
-            codebases={codebases}
-            runs={marketplaceRuns}
-            workTree={workTree}
-          />
-        )}
-      >
-        <Stack gap="lg">
-          <InitiativeHeader
-            project={project}
-            projectId={id ?? ''}
-            contributors={contributors}
-            ownerId={ownerId}
-            ownerName={ownerName}
-            smes={smes}
-            points={points}
-            openDecisionCount={openDecisionCount}
-            escalatedCount={escalatedCount}
-            spend={{
-              serverSpendUsd,
-              serverPending: projLoading,
-              clientSpendUsd: agentActivity.spendUsd,
-              // Blind if we could not read the roster OR could not read a bot's
-              // run history — either way the client sum is a floor, not a total.
-              clientBlind: agentActivity.botsError != null || agentActivity.runsError != null,
-              clientPending: agentActivity.botsLoading,
-            }}
-            repoUrl={repoUrl ?? project.githubUrl ?? null}
-            repoLabel={project.repoFullName ?? (repoUrl ? null : project.githubUrl ? 'GitHub' : null)}
-            repoCount={codebases.length}
-            onOwner={(oid, oname) => setOwnerOverride({ ownerId: oid, ownerName: oname })}
-            onRole={handleRoleOverride}
-          />
-
-          <Stack gap="md">
-            <Tabs
-              idPrefix="initiative"
-              aria-label="Initiative detail"
-              items={tabs}
-              value={tab}
-              onValueChange={setTab}
-            />
-
-            <TabPanel id="work" when={tab} idPrefix="initiative">
-              <WorkPanel
-                workTree={workTree}
-                workLoading={workLoading}
-                workFailure={workFailure}
-                canDispatch={canDispatch}
-                showGrantCue={showGrantCue}
-                marketRuns={marketRuns}
-                onStatusToggle={handleStatusToggle}
-                onAddItem={handleAddItem}
-                onAddEpic={handleAddEpic}
-                onEstimate={setEstimateItem}
+    <ViewportFillRegion bottomGap={0} data-testid="initiative-workspace">
+      {/* data-shell-flush: the shell drops its padding ring and breadcrumb
+          row for this page (app.css); the header above prints the trail. */}
+      <Stack gap="none" className="h-full min-h-0 bg-surface" data-shell-flush>
+        {header}
+        {tab === 'work' ? (
+          <ExplorerLayout
+            railWidth="lg"
+            railLabel="work list"
+            panePadding="none"
+            asidePlacement="beside"
+            className="min-h-0 flex-1"
+            data-testid="initiative-work"
+            rail={(
+              <WorkListView
+                groups={WORK_GROUPS}
+                items={visibleRows.map((r) => toWorkListItem(r, marketRuns[r.id], pendingIds.has(r.id)))}
+                count={allRows.length}
+                currentId={current?.id ?? null}
+                query={query}
+                onQueryChange={setQuery}
+                sort={sort}
+                sortOptions={WORK_SORT_OPTIONS}
+                onSortChange={(v) => setSort(v as WorkSort)}
+                filterFacets={[
+                  {
+                    id: 'type',
+                    label: 'Type',
+                    options: [{ value: 'story', label: 'Story' }, { value: 'bug', label: 'Bug' }],
+                    selected: filters.types,
+                    onChange: (types) => setFilters((f) => ({ ...f, types })),
+                  },
+                  {
+                    id: 'owner',
+                    label: 'Owner',
+                    options: ownerOptions(allRows),
+                    selected: filters.owners,
+                    onChange: (owners) => setFilters((f) => ({ ...f, owners })),
+                  },
+                  {
+                    id: 'priority',
+                    label: 'Priority',
+                    options: [
+                      { value: 'critical', label: 'Critical' },
+                      { value: 'high', label: 'High' },
+                      { value: 'medium', label: 'Medium' },
+                      { value: 'low', label: 'Low' },
+                    ],
+                    selected: filters.priorities,
+                    onChange: (priorities) => setFilters((f) => ({ ...f, priorities })),
+                  },
+                ]}
+                activeFilterCount={activeFilterCount(filters)}
+                onClearFilters={() => setFilters(NO_FILTERS)}
+                onCreate={!canDispatch ? undefined : current || firstEpic
+                  ? () => setCreating(current
+                    ? { parentId: current.epicId, parentTitle: current.epicTitle }
+                    : { parentId: firstEpic!.id, parentTitle: firstEpic!.title })
+                  : () => setCreating({ parentId: null, parentTitle: null })}
+                onOpenItem={(row) => setWantedItem(row.id)}
+                // Read-only rows (no checkbox) for a role that cannot PATCH work.
+                onToggleDone={canDispatch ? (row, done) => patchItem(row.id, { status: done ? 'done' : 'open' }) : undefined}
+                loading={workLoading && !rawTree}
+                error={workFailure ? `The work list could not be read: ${workFailure}` : null}
+                emptyLabel="No work yet — ingest this initiative's documents or add an epic"
+                storageKey={`initiative.${id}.work-groups`}
               />
-            </TabPanel>
-
-            <TabPanel id="decisions" when={tab} idPrefix="initiative">
-              <DecisionQueue decisions={decisions ?? []} />
-            </TabPanel>
-
-            <TabPanel id="contributors" when={tab} idPrefix="initiative">
-              <ContributorsTable
+            )}
+            aside={current ? (
+              <ContextColumn
+                state={runColumn}
+                onStateChange={setRunColumn}
+                roomy
+                label="Run draft column"
+                activeId="run-draft"
+                onActivate={() => setRunColumn('open')}
+                data-testid="initiative-run-column"
+                panels={[{
+                  id: 'run-draft',
+                  label: 'Run draft',
+                  icon: <BranchIcon size={18} />,
+                  content: (
+                    <RunDraft
+                      item={current}
+                      codebases={codebases}
+                      run={currentRun}
+                      canDispatch={canDispatch}
+                      showGrantCue={showGrantCue}
+                      instruction={instructions[current.id] ?? ''}
+                      onEstimateSaved={handleEstimateSaved}
+                      onAuthorize={(choice) => setAuthorizing({ item: current, choice })}
+                    />
+                  ),
+                }]}
+              />
+            ) : undefined}
+          >
+            {current ? (
+              <WorkItemDetail
+                item={current}
+                thread={thread}
+                decisions={itemDecisions}
                 contributors={contributors}
-                projectId={id ?? ''}
-                onRole={handleRoleOverride}
-                onOpenPerson={handleOpenPerson}
+                runs={marketplaceRuns}
+                tab={detailTab}
+                onTabChange={setDetailTab}
+                canEdit={canDispatch}
+                canDispatch={canDispatch}
+                onPatch={(fields) => patchItem(current.id, fields)}
+                onOpenEpic={() => setQuery(current.epicTitle)}
+                onOpenDecisions={() => setTab('decisions')}
+                onPrepare={(text) => {
+                  setInstructions((prev) => ({ ...prev, [current.id]: text }));
+                  // The prepared instruction lands in the run draft — show it.
+                  if (runColumn === 'collapsed') setRunColumn('open');
+                }}
               />
-            </TabPanel>
+            ) : (
+              <EmptyState
+                title={workLoading ? 'Loading work…' : 'Nothing to open'}
+                body={workLoading ? undefined : 'Pick a work item from the list, or add one.'}
+              />
+            )}
+          </ExplorerLayout>
+        ) : (
+          <Stack gap="md" className="min-h-0 flex-1 overflow-y-auto p-6">
+            {tab === 'decisions' && <DecisionQueue decisions={decisions ?? []} />}
+            {tab === 'agents' && (
+              <InitiativeRail
+                initiativeId={id}
+                activity={agentActivity}
+                codebases={codebases}
+                runs={marketplaceRuns}
+                workTree={workTree}
+              />
+            )}
+            {tab === 'contributors' && (
+              <>
+                <OwnerEditor
+                  projectId={id ?? ''}
+                  contributors={contributors}
+                  ownerId={ownerId}
+                  ownerName={ownerName}
+                  onOwner={(oid, oname) => setOwnerOverride({ ownerId: oid, ownerName: oname })}
+                  onRole={handleRoleOverride}
+                />
+                <ContributorsTable
+                  contributors={contributors}
+                  projectId={id ?? ''}
+                  onRole={handleRoleOverride}
+                  onOpenPerson={handleOpenPerson}
+                />
+              </>
+            )}
           </Stack>
-        </Stack>
-      </RailLayout>
+        )}
+      </Stack>
 
-      {/* Contributor detail card — opened from the identity line or the table,
-          keeping the user (and their breadcrumb) on this initiative. */}
+      {/* Contributor detail card — opened from the Contributors table, keeping
+          the user (and their breadcrumb) on this initiative. */}
       {openPerson && (
         <ContributorModal
           personId={openPerson.id}
@@ -463,20 +631,41 @@ function ProjectDetailPage() {
         />
       )}
 
-      {/* Marketplace: estimate → authorize drawer */}
+      {creating && (
+        <Modal
+          open
+          onClose={() => setCreating(null)}
+          ariaLabel={creating.parentTitle ? `New work in ${creating.parentTitle}` : 'New epic'}
+          maxWidth={560}
+        >
+          <NewItemForm
+            defaultType={creating.parentId ? 'story' : 'epic'}
+            typeOptions={creating.parentId ? ['story', 'bug'] : ['epic']}
+            onSave={(draft) => { createItem(creating.parentId, draft); setCreating(null); }}
+            onCancel={() => setCreating(null)}
+          />
+        </Modal>
+      )}
+
+      {/* Marketplace: authorize, with the run draft's choices prefilled. The
+          drawer owns the four dispatch gates and their confirms. */}
       <EstimateDrawer
-        open={estimateItem != null}
-        onClose={() => setEstimateItem(null)}
-        item={estimateItem}
+        open={authorizing != null}
+        onClose={() => setAuthorizing(null)}
+        item={authorizing?.item ?? null}
         codebases={codebases.map((cb) => ({ id: cb.id, repoFullName: cb.repoFullName }))}
         // The initiative this run is charged to — the drawer reads the caller's
         // own sprint envelope on it and reports what is left BEFORE they
         // authorize, instead of leaving the envelope brake's 409 to say it.
         orgProjectId={id ?? null}
+        initialModel={authorizing?.choice.model}
+        initialAgentProjectId={authorizing?.choice.agentProjectId}
+        initialInstruction={authorizing ? instructions[authorizing.item.id] : undefined}
+        initialCapUsd={authorizing?.choice.capUsd}
         onDispatched={handleDispatched}
         onEstimateSaved={handleEstimateSaved}
       />
-    </Stack>
+    </ViewportFillRegion>
   );
 }
 

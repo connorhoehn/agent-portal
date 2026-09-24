@@ -16,7 +16,10 @@ import { useCrumbLabels } from '../../lib/crumbLabels';
 export type { Crumb } from './breadcrumbResolve';
 
 
-export function Breadcrumbs() {
+/** The trail's items for the current route. A flush page (`data-shell-flush`,
+ *  see app.css) hides the shell's own row and hands these to its header, so
+ *  the trail reads the same either way. */
+export function useShellBreadcrumbItems() {
   const { pathname } = useLocation();
   const navigate = useNavigate();
   // A detail page that fetched its entity registers the title under the id
@@ -56,7 +59,11 @@ export function Breadcrumbs() {
     }),
     [crumbs, navigate],
   );
+  return items;
+}
 
+export function Breadcrumbs() {
+  const items = useShellBreadcrumbItems();
   return (
     <UIBreadcrumbs
       items={items}
@@ -67,7 +74,7 @@ export function Breadcrumbs() {
       // always sits the same distance under the same rule, so a list page and
       // a detail page line up instead of the detail title landing lower.
       minItems={2}
-      className="shrink-0 mb-4 pb-1.5 border-b border-border text-[11.5px] overflow-x-auto whitespace-nowrap"
+      className="shell-breadcrumbs shrink-0 mb-4 pb-1.5 border-b border-border text-[11.5px] overflow-x-auto whitespace-nowrap"
     />
   );
 }
