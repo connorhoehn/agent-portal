@@ -1,7 +1,7 @@
 {
-  "capturedAt": "2026-09-24T12:52:38.935Z",
-  "serverHandlerSha": "8fbab31916229a3398a3b67e0974b82deb5598bdcdd9ad437406c390ba236f6b",
-  "baseUrl": "http://127.0.0.1:3017",
+  "capturedAt": "2026-09-24T23:50:25.626Z",
+  "serverHandlerSha": "f20a30d69c24cbceba4481ebb88321dfc3174060218c39d4769df7404db8ed4f",
+  "baseUrl": "http://127.0.0.1:3012",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
     "agentcore",
@@ -1755,7 +1755,8 @@
         "summary": "string",
         "title": "string",
         "type": "string",
-        "updated_at": "string"
+        "updated_at": "string",
+        "when_this_helps": "string"
       },
       "values": {
         "classification": [
@@ -1781,12 +1782,14 @@
       "status": 201,
       "shape": {
         "$": "object",
+        "advice": "null",
         "applied_at": "string",
         "box_id": "string",
         "failed_at_step_id": "null",
         "id": "string",
         "note": "null",
         "outcome": "string",
+        "plain_reason": "null",
         "procedure_id": "string",
         "repo": "string",
         "session_id": "string"
