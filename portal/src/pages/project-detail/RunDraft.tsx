@@ -1,6 +1,8 @@
-// The run-draft column beside the open work item: which model, which codebase,
-// what it should cost, and the two acts — record the estimate, or authorize a
-// run. The library's RunDraftPanel draws it; this file only feeds it.
+// The run draft inside a work item's collapsed "Run setup" (W15): which model,
+// which codebase, what the agent should do, what it should cost, and the two
+// acts — record the estimate, or authorize a run. The library's RunDraftPanel
+// draws it; this file only feeds it. The instruction lives here now (D6): the
+// docked composer only asks the org agent, it never prepares a run.
 //
 // Authorizing opens the EstimateDrawer rather than POSTing here. The drawer is
 // where the four dispatch refusals (codebase pick, run cap, allocation,
@@ -9,7 +11,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { RunDraftPanel, type RunDraftStatus, type RunEstimate } from '@connorhoehnslalom/ui-components';
-import { BranchIcon } from '@connorhoehnslalom/ui-components/shared';
+import { BranchIcon, FormField, Textarea } from '@connorhoehnslalom/ui-components/shared';
 import {
   storedEstimateFor,
   type EstimateProvenance,
@@ -26,6 +28,8 @@ export interface RunChoice {
   agentProjectId: string | null;
   /** The per-run cap in dollars — the dispatch route's `budgetPerRunUsd`. */
   capUsd: number | null;
+  /** What the agent should do — prefilled into the authorize drawer. */
+  instruction: string;
 }
 
 /** The live forecast for one item at one model — or the stored one, which is
@@ -87,9 +91,9 @@ export function RunDraft({
   run,
   canDispatch,
   showGrantCue,
-  instruction,
   onEstimateSaved,
   onAuthorize,
+  onChoiceChange,
 }: {
   item: FlatWorkItem;
   codebases: Codebase[];
@@ -98,10 +102,10 @@ export function RunDraft({
   canDispatch: boolean;
   /** An sme with no active sprint grant here — dispatch would 403. */
   showGrantCue: boolean;
-  /** The instruction prepared in the composer, carried into the dispatch. */
-  instruction: string;
   onEstimateSaved: (workItemId: string, saved: EstimateProvenance) => void;
   onAuthorize: (choice: RunChoice) => void;
+  /** Every change to the draft — the collapsed Run setup's hint reads it. */
+  onChoiceChange?: (choice: RunChoice) => void;
 }) {
   const [model, setModel] = useState(DEFAULT_DEVBOX_MODEL);
   const [agentProjectId, setAgentProjectId] = useState<string | null>(null);
@@ -109,6 +113,7 @@ export function RunDraft({
   // its forecast is over it. Blank means no cap — a cap is opt-in.
   const [capUsd, setCapUsd] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
+  const [instruction, setInstruction] = useState('');
   // A new item is a new draft: the last item's codebase may not deliver this
   // one. Keyed on the ids, not the array — the host rebuilds that array every
   // render, and depending on it reset the cap and codebase on each keystroke.
@@ -117,7 +122,12 @@ export function RunDraft({
   useEffect(() => {
     setAgentProjectId(onlyCodebase);
     setCapUsd(null);
+    setInstruction('');
   }, [item.id, codebaseKey, onlyCodebase]);
+
+  useEffect(() => {
+    onChoiceChange?.({ model, agentProjectId, capUsd, instruction });
+  }, [onChoiceChange, model, agentProjectId, capUsd, instruction]);
 
   const est = useWorkEstimate(item, model, agentProjectId, canDispatch);
   const { cost, duration } = asEstimates(item, est, canDispatch);
@@ -159,7 +169,6 @@ export function RunDraft({
   return (
     <RunDraftPanel
       status={status}
-      className="min-h-full"
       // No target line when no codebase is readable: `null` would print the
       // library's "No workflow chosen", which is not what is missing here.
       target={codebases.length === 0
@@ -188,6 +197,23 @@ export function RunDraft({
             }]
           : []),
       ]}
+      advanced={(
+        <FormField label="Instruction" hint="What done looks like — carried into the authorize step.">
+          {(wiring) => (
+            <Textarea
+              {...wiring}
+              minRows={3}
+              autoResize
+              value={instruction}
+              onChange={(e) => setInstruction(e.target.value)}
+              placeholder="Tell the agent what done looks like…"
+              disabled={!canDispatch}
+              data-testid="run-draft-instruction"
+            />
+          )}
+        </FormField>
+      )}
+      advancedLabel="Instruction"
       cost={cost}
       duration={duration}
       // A 'prior' forecast is a static per-tier bracket, not history: the
@@ -224,7 +250,7 @@ export function RunDraft({
         : est.stored ? `Already recorded on ${modelLabel}`
         : !est.estimate ? 'No forecast to record yet'
         : undefined}
-      onDispatch={() => onAuthorize({ model, agentProjectId, capUsd })}
+      onDispatch={() => onAuthorize({ model, agentProjectId, capUsd, instruction })}
       dispatchDisabledReason={blocked}
       error={est.error && item.storyPoints != null ? est.error : null}
     />

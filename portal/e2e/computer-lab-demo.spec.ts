@@ -105,11 +105,12 @@ test('computer lab walkthrough', async ({ page }) => {
 
   await test.step('Act 1 — the SME opens her initiative', async () => {
     await signIn(page, 'u-nora');
-    await page.goto(`/iq/projects/${ISSUE.initiative}`);
-    // The header carries the story's framing: who owns it, who the SMEs are,
+    // The initiative opens on its Overview now; the board is the Work tab.
+    await page.goto(`/iq/projects/${ISSUE.initiative}?tab=work`);
+    // The header carries the story's framing: the initiative, its points,
     // how much agent spend it has drawn, and which repo delivers it.
     await expect(page.getByText(ISSUE.initiativeName).first()).toBeVisible();
-    await expect(page.getByText(/agent spend/i).first()).toBeVisible();
+    await expect(page.getByText(/\$[\d.,]+ spent/i).first()).toBeVisible();
     await beat(page, BEAT_MS * 2);
   });
 
