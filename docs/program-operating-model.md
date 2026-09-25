@@ -270,20 +270,25 @@ requesting it gets a 403, not a silently narrowed answer.
   `ManageDevbox` — so a TPM/release manager can see the initiative codebases and
   their run history without dispatch rights; writes keep the stricter gate.
 
-- **The Initiatives explorer (2026-09-24).** `/iq/projects` and
-  `/iq/projects/:id` share one frame: an explorer rail (Everyone | Mine,
-  grouped by status, "Owner · N agents" or "· Idle" per row, where N is
-  counted from running runs) beside a pane, with a composer docked at the
-  bottom that asks the read-only org agent. An initiative opens on an
-  Overview — points delivered, agents running, spend against the month's
-  allocation, the one blocked item that needs attention, and the next three
-  items to plan — and a work item reads as a brief (why it matters, the next
-  step, what the brief still lacks) with dispatch folded into a collapsed Run
-  setup whose hint names the capability or sprint grant a role is missing.
-  Mine distinguishes "not connected to a team profile" from "connected but
-  on no initiative", and "Check profile" lands on the new Settings Profile
-  section. Design record: `docs/design/initiative-variants-spec.md` and
-  `initiative-variants-plan.md`.
+- **The Initiatives explorer (2026-09-24, restyled as v2 the same night).**
+  `/iq/projects` and `/iq/projects/:id` share one frame: a 264px explorer
+  rail (search, then All initiatives / My initiatives / Sprints, then
+  title-only rows grouped by status) beside a pane, with a composer docked at
+  the bottom that asks the read-only org agent. Nothing in the rail creates
+  an initiative; they come from ingestion. An initiative opens on an
+  Overview: a header with the two-line summary and the owner and SMEs by
+  name, then one stats line (points delivered, agents running counted from
+  running runs, spend against the month's allocation — "$1.73 of $95
+  spent"), "Needs attention N" listing every blocked item still to do, and
+  "Up next" with the next three items and their assignee and points. A work
+  item reads as a brief (why it matters, the next step, what the brief still
+  lacks), with dispatch folded into a collapsed Run setup. Its hint names the
+  capability or sprint grant a role is missing. Mine distinguishes "not
+  connected to a team profile" from "connected but on no initiative", and
+  "Check profile" lands on the Settings Profile section. Design record:
+  `docs/design/initiative-v2-plan.md` (current target
+  `initiative-overview-v2-mockup.png`) over
+  `docs/design/initiative-variants-spec.md` and `initiative-variants-plan.md`.
 
 ## Not built yet
 

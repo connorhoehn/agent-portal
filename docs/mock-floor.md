@@ -916,9 +916,10 @@ moved the last hand-typed program data behind `/iq/projects` onto the floor.
   `nextStep` and `nextStepDetail` (`work_items.summary`, `blocked_reason`,
   `next_step`, `next_step_detail`, added by `orgiq_work_items_schema.sql`)
   are written by the seed generator's `BRIEFS` map and mirrored in
-  `mock/work-items.ts`; the Overview's "What needs attention" and "Plan
-  next", and the work item's "Why this matters" / "Next step", read them
-  verbatim. The portal composes no copy that reads as data. Items without a
+  `mock/work-items.ts`; the Overview's "Needs attention" row (the short
+  `blockedReason`, falling back to the summary) and the work item's "Why
+  this matters" / "Next step" read them verbatim. v2's "Up next" rows are
+  title-only, so they read no brief field. The portal composes no copy that reads as data. Items without a
   brief carry null, and the Aurora read probes the columns once per process
   so a cluster without them costs the fields, never the board.
 - **`GET /api/session/person`** answers `{linked, personId}` from the identity

@@ -2,6 +2,14 @@
 
 **Target:** `docs/design/initiative-overview-v2-mockup.png`. The user adopted it on 2026-09-24 at 23:25 because it has "better typography and layout constraints". It supersedes `initiative-overview-mockup.png` for the Overview. The image wins wherever this file disagrees with it.
 
+**Status (2026-09-25):** L, B and M shipped (ui-components 2.392.0, pinned, plus the seed and mock copy). P and D shipped on `feat/init-v2`. Build screenshots are `initiative-v2-build-{overview,work,mine-empty}.png`, from headless 1642×958 after a dev:mock reset. The ten `initiatives` and `initiative-detail` journey logs were re-walked and sealed. §3 items 1–6 hold. Deviations:
+- The Work tab keeps its 368px work column and "Work 11" heading, and takes only the header type scale. At 264px its two-line rows clipped after two words and the switcher pushed the heading out. V1 lets it keep its structure.
+- Mine-empty keeps `EmptyState size="lg"`. At `md`, its question read at the same size as "How this view works" under it.
+- "Needs attention" lists every blocked item still to do, not just the first, so its count is the rows under it.
+- Copy that named v1's "Everyone" toggle now says "All initiatives".
+- The Sprints rail sublines say "pts" and carry their full text as a tooltip, because at 264px "points" clipped.
+- One gap is left for the library. `ActionRowList tone="warning"` tints noticeably stronger than the mockup's pale amber.
+
 **Baseline:** `main` at `7309a6f3`. v1 is fully built there: the explorer frame, the Overview, the Work brief, Mine-empty, and Settings Profile. It runs on ui-components 2.390.4. v2 is a restyle of that build, not a rebuild. The data contract, the models (`overviewModel`, `initiativeListModel`, `briefModel`, `composerPrompts`) and the composer all stay.
 
 **Scale:** the mockup's shell rail is 206px wide where ours is 200px. Pixel measurements below are therefore divided by about 1.03 to get CSS px.
