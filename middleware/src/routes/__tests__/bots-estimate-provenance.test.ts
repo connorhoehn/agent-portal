@@ -176,17 +176,26 @@ describe('GET /api/bots/active-runs', () => {
   const active = () => request(buildApp()).get('/api/bots/active-runs');
 
   it('is empty when nothing is running, so the header can render nothing', async () => {
+    // The default world seeds two in-flight runs on Observability
+    // (mock/bots.ts `inFlightMarketplaceRuns`); `empty` is the fleet at rest.
+    fixtureRegistry.resetAll('empty');
     const res = await active();
     expect(res.status).toBe(200);
     expect(res.body.runs).toEqual([]);
+  });
+
+  it('lists the seeded in-flight runs, as it lists any running row', async () => {
+    const res = await active();
+    expect(res.body.runs.map((r: { projectId: string }) => r.projectId)).toEqual(['p-observability', 'p-observability']);
   });
 
   it('lists a dispatched run with the ids needed to reach it', async () => {
     await request(buildApp()).post('/api/bots/dispatch-work')
       .send({ workItemId: ITEM, model: MODEL, estimate: FORECAST });
     const res = await active();
-    expect(res.body.runs).toHaveLength(1);
-    const [run] = res.body.runs;
+    const mine = res.body.runs.filter((r: { workItemId: string }) => r.workItemId === ITEM);
+    expect(mine).toHaveLength(1);
+    const [run] = mine;
     expect(run.status).toBe('running');
     // The title makes the row readable; projectId is the destination for a
     // caller who cannot open the lab (org-leader holds no ManageDevbox).
