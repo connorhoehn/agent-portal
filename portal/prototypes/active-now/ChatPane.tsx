@@ -17,15 +17,17 @@ export const commands:ComposerCommand[]=[
  {trigger:'/deck',label:'Build a deck',hint:'no deck skill is registered on this fleet',disabled:true},
 ];
 import {AttentionStars} from './AttentionStars';
+import {TerminalGlyph,AgentGlyph,ChatBubbleGlyph,DriveGlyph,BookGlyph,MoreGlyph,ChevronDownGlyph,DocGlyph} from './icons';
 
 
 // The library owns the editor. Keep its document in the host while full view
 // unmounts the left chat, so formatting and an unfinished reply survive.
-export function DraftComposer({draft,draftStore,onSend,onReference,name='Connor'}:any){
+export function DraftComposer({draft,draftStore,onSend,onReference,name='Connor',handleRef}:any){
  const latest=useRef({draft,draftStore});latest.current={draft,draftStore};
  const release=useRef<(()=>void)|null>(null);
  const bind=useCallback((handle:any)=>{
   release.current?.();release.current=null;
+  if(handleRef)handleRef.current=handle;
   const editor=handle?.editor;if(!editor)return;
   const store=latest.current.draftStore;
   editor.commands.setContent(store.current??{type:'doc',content:[{type:'paragraph',...(latest.current.draft?{content:[{type:'text',text:latest.current.draft}]}:{})}]});
@@ -37,12 +39,37 @@ export function DraftComposer({draft,draftStore,onSend,onReference,name='Connor'
   release.current=()=>{save();editor.off('update',save)};
  },[name]);
  useEffect(()=>()=>release.current?.(),[]);
- return <div className="composer-effect"><RichChatComposer ref={bind} onSend={onSend} commands={commands} allowAttachments allowEmoji placeholder="Write a message — or / for commands" data-testid="social-composer" toolbarExtras={<IconButton size="sm" aria-label="Insert Sprint review reference" onClick={onReference}><DocumentIcon size={14}/></IconButton>}/><AttentionStars seed="chat-composer" className="composer-stars"/></div>;
+ const root=useRef<HTMLDivElement>(null);
+ // The library composer owns sending (commands, attachments, the draft); the
+ // mockup's split Send button is a face on it, so it presses the real one.
+ const send=()=>root.current?.querySelector<HTMLButtonElement>('[data-testid="social-composer-send"]')?.click();
+ const extras=<>
+  <span className="composer-hints" aria-hidden="true"><kbd>/</kbd>for commands<kbd><TerminalGlyph size={13}/></kbd>for shell<kbd>⌘K</kbd>to quickly open</span>
+  <IconButton size="sm" aria-label="Add from Google Drive" className="composer-tool"><DriveGlyph/></IconButton>
+  <IconButton size="sm" aria-label="Reference a document" className="composer-tool" onClick={onReference}><BookGlyph/></IconButton>
+  <IconButton size="sm" aria-label="More composer actions" className="composer-tool"><MoreGlyph/></IconButton>
+  <span className="composer-send-split"><Button onClick={send} className="composer-send-main"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" aria-hidden="true"><path d="M21 3L10 14"/><path d="M21 3l-7 18-4-7-7-4z"/></svg>Send</Button><IconButton aria-label="Send options" className="composer-send-more"><ChevronDownGlyph/></IconButton></span>
+ </>;
+ return <div className="composer-effect agent-composer" ref={root}><RichChatComposer ref={bind} onSend={onSend} commands={commands} allowAttachments placeholder={`Message ${name}, ask an agent, or run a command…`} data-testid="social-composer" toolbarExtras={extras}/><AttentionStars seed="chat-composer" className="composer-stars"/></div>;
 }
 
 export function ChatPane({messages,draft,draftStore,reference,setReference,onSend,onOpenDeck,onOpenActivity,onOpenLab,review,onReview,runFailed=false,person='Connor Hoehn',isConnor=true,shelf}:any){
  const [tab,setTab]=useState('chat');
  const [callNotice,setCallNotice]=useState('');
+ // Chat / Agent / Terminal: the same composer, told what the next message is.
+ // Agent and Terminal start the draft with the command the library composer
+ // already understands (`/run`, `/terminal`), so its command bar and argument
+ // menu take over from there — the mode is a shortcut, not a second input.
+ const [mode,setMode]=useState<'chat'|'agent'|'terminal'>('chat');
+ const composer=useRef<any>(null);
+ const chooseMode=(next:'chat'|'agent'|'terminal')=>{
+  setMode(next);
+  const editor=composer.current?.editor;if(!editor)return;
+  const text=editor.getText().replace(/^\/(run|terminal)\s*/,'');
+  editor.commands.setContent('');
+  composer.current.insertText((next==='agent'?'/run ':next==='terminal'?'/terminal ':'')+text);
+  composer.current.focus();
+ };
  const bottom=useRef<HTMLDivElement>(null);
  useEffect(()=>{bottom.current?.scrollIntoView({block:'end'})},[messages.length,person]);
  const firstName=person.split(' ')[0];
@@ -91,9 +118,16 @@ export function ChatPane({messages,draft,draftStore,reference,setReference,onSen
    <div ref={bottom}/>
    </div>
   </div>
-  <div className="composer">
-   {reference&&<div className="reference-chip"><DocumentIcon size={13}/><span>{reference}</span><IconButton size="sm" aria-label="Remove message reference" onClick={()=>setReference('')}><CloseIcon size={12}/></IconButton></div>}
-   <DraftComposer draft={draft} draftStore={draftStore} onSend={onSend} onReference={()=>setReference('Sprint review · v2')} name={firstName}/>
+  <div className="composer agent-composer-wrap">
+   {isConnor&&<div className="agent-status" role="status"><span className="agent-status-dot"/>Presentation agent · {runFailed?'v3 failed':'v3 generating'}<span className="agent-status-sep">·</span>Terminal tests running</div>}
+   <div className="agent-modes">
+    <div className="mode-pills" role="radiogroup" aria-label="What this message is">
+     {([['chat','Chat',<ChatBubbleGlyph key="c" size={14}/>],['agent','Agent',<AgentGlyph key="a"/>],['terminal','Terminal',<TerminalGlyph key="t" size={15}/>]] as const).map(([id,label,icon])=>
+      <button key={id} type="button" role="radio" aria-checked={mode===id} className={'mode-pill'+(mode===id?' is-on':'')} onClick={()=>chooseMode(id)}>{icon}{label}</button>)}
+    </div>
+    {reference&&<div className="reference-chip"><DocGlyph size={15}/><span>{reference}</span><IconButton size="sm" aria-label="Remove message reference" onClick={()=>setReference('')}><CloseIcon size={12}/></IconButton></div>}
+   </div>
+   <DraftComposer draft={draft} draftStore={draftStore} onSend={onSend} onReference={()=>setReference('Sprint review · v2')} name={firstName} handleRef={composer}/>
   </div>
   </>}
  </section>

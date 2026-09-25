@@ -4,7 +4,7 @@
 // happens to contain, and CLAUDE.md's rule for a reason: verify against dist,
 // never against a library's source.
 export {
-  Button, IconButton, Select, Tabs, ChannelHeader, Avatar, PresenceDot, SearchInput, TitledFrame, Chip,
+  Button, IconButton, Select, Tabs, ChannelHeader, Avatar, PresenceDot, SearchInput, TitledFrame, Chip, StatusPill,
   ChevronIcon, CloseIcon, DocumentIcon, ChatIcon, SearchIcon, PlusIcon, ActivityIcon, AtIcon,
   PhoneIcon, VideoCallIcon, MenuIcon, BranchIcon,
 } from '@connorhoehnslalom/ui-components/shared';

@@ -108,3 +108,65 @@
 .workspace-files li{display:flex;justify-content:space-between;gap:8px;font-size:11.5px}.workspace-files code{color:#25344b}.workspace-files span{color:#21a459;font-family:ui-monospace,Menlo,monospace;white-space:nowrap}
 .workspace-git{margin:0;padding:8px 10px;border-radius:6px;background:#0f172a;color:#cbd5e1;font-size:11px;line-height:1.5;overflow-x:auto}
 .terminal-inspector .detail-source{margin:0}
+
+/* ── Cloud terminal inspector (2026-09-21 mockup) ─────────────────────── */
+.term-inspector{display:flex;flex-direction:column;gap:12px;font-size:13px;color:#1f2a44}
+.term-crumbs{display:flex;align-items:center;gap:6px;color:#62718b;font-size:13px;margin-top:-4px}
+.term-crumbs>svg{opacity:.6}
+.term-crumbs [class*="rounded"]{margin-left:6px}
+.term-owner{display:flex;align-items:center;gap:9px}
+.term-owner b{font-weight:600;color:#25344b}.term-owner span{color:#7b869a;margin-left:8px}
+.term-actions{display:grid;grid-template-columns:1fr 1fr auto;gap:8px}
+.term-actions button{justify-content:center;gap:7px;height:38px;font-weight:600}
+.term-actions>button:last-child{width:38px;border:1px solid #dfe6ef;border-radius:8px}
+.term-run-card{border:1px solid #e3e8f1;border-radius:12px;padding:14px 14px 10px;background:#fbfcfe;box-shadow:0 1px 2px #14213d0a}
+.term-run-head{display:flex;gap:12px;align-items:flex-start}
+.term-run-icon{flex-shrink:0;display:grid;place-items:center;width:42px;height:42px;border-radius:10px;background:#eef0ff;color:#5b5bd6}
+.term-run-head h3{margin:1px 0 3px;font-size:16px;font-weight:650;color:#1f2a44;letter-spacing:-.1px}
+.term-run-head p{margin:0;color:#62718b;font-size:12.5px;line-height:1.4}
+.term-run-status{display:flex;align-items:center;gap:8px;margin:10px 0 12px;color:#7b869a;font-size:12px}
+.term-run-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));margin:0;border-top:1px solid #edf1f6;padding-top:10px}
+.term-run-stats>div{padding:0 8px;border-left:1px solid #edf1f6;min-width:0}
+.term-run-stats>div:first-child{padding-left:0;border-left:0}
+.term-run-stats dt{font-size:11px;color:#7b869a;margin-bottom:3px}
+.term-run-stats dd{margin:0;font-size:12.5px;font-weight:600;color:#25344b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.term-overview{display:flex;flex-direction:column;gap:10px}
+.term-section-head{display:flex;justify-content:space-between;align-items:center;color:#62718b;font-size:12.5px;margin-top:2px}
+.term-strong{color:#25344b;font-weight:600;font-size:13px}
+.term-link{display:inline-flex;gap:5px;align-items:center;border:0;background:none;color:#5b5bd6;font-size:12px;padding:0}
+.live-preview{margin:0;padding:12px 14px;border-radius:10px;background:#0f172a;color:#dbe3f0;font:12px/1.7 ui-monospace,Menlo,monospace;min-height:150px;white-space:pre-wrap}
+.live-line.ok{color:#86efac}.live-line.pending{color:#cbd5e1}.live-line.cmd{color:#fff}
+.live-caret{display:inline-block;width:8px;height:14px;margin-left:4px;vertical-align:-2px;background:#e2e8f0;animation:caret 1s steps(1) infinite}
+@keyframes caret{50%{opacity:0}}
+@media (prefers-reduced-motion:reduce){.live-caret{animation:none}}
+.term-steps{list-style:none;margin:0;padding:4px;border:1px solid #e3e8f1;border-radius:10px;display:flex;flex-direction:column;gap:2px}
+.term-steps li{display:grid;grid-template-columns:22px 1fr auto;align-items:center;gap:10px;padding:7px 8px;border-radius:7px}
+.term-steps li.is-running{background:#f2f4ff}
+.term-step-mark{width:18px;height:18px;border-radius:50%;display:grid;place-items:center;font-size:11px;color:#fff}
+.is-done .term-step-mark{background:#22a35a}
+.is-running .term-step-mark{background:#fff;border:5px solid #5b5bd6;box-sizing:border-box}
+.is-queued .term-step-mark{background:#c3cad6;box-shadow:inset 0 0 0 5px #c3cad6,inset 0 0 0 7px #fff}
+.term-step-label{color:#25344b}.is-queued .term-step-label{color:#62718b}
+.term-step-meta{color:#7b869a;font-size:12px}
+.term-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.term-box{border:1px solid #e3e8f1;border-radius:10px;padding:10px 12px;min-width:0}
+.term-box-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.term-box-head b{font-weight:600;color:#25344b}.term-box-head span{color:#7b869a;font-size:12px}
+.term-artifacts{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}
+.term-artifacts li{display:grid;grid-template-columns:32px 1fr auto;gap:8px;align-items:center}
+.term-file-icon{width:32px;height:32px;border-radius:8px;background:#eef0ff;color:#5b5bd6;display:grid;place-items:center}
+.term-file-text{min-width:0;display:flex;flex-direction:column}
+.term-file-text b{font-weight:500;font-size:12.5px;color:#25344b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.term-file-text small{font-size:11px;color:#7b869a}
+.term-work-id{display:flex;align-items:center;justify-content:space-between;gap:6px}
+.term-work-id b{color:#3b3bc4;font-size:15px;font-weight:700}
+.term-work-text{margin:6px 0 8px;color:#3a4760;font-size:12.5px;line-height:1.4}
+.term-tags{display:flex;gap:5px;flex-wrap:wrap}
+.workspace-files .muted{color:#7b869a}
+.term-footer{display:grid;grid-template-columns:1fr 1.2fr;gap:10px}
+.term-footer button{height:44px;justify-content:center;gap:8px;font-weight:600}
+.term-split{display:flex}
+.term-split>button:first-child{flex:1;border-radius:8px 0 0 8px}
+.term-split .term-split-more{width:40px;height:44px;border-radius:0 8px 8px 0;background:var(--color-primary,#5b5bd6);color:#fff;border-left:1px solid #ffffff40}
+/* The terminal inspector needs more room than the other kinds. */
+.activity-inspector:has(.term-inspector),.split-mode .activity-inspector:has(.term-inspector),.expanded-mode .activity-inspector:has(.term-inspector){flex-basis:clamp(400px,28vw,470px);width:clamp(400px,28vw,470px)}

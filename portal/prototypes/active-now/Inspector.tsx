@@ -1,5 +1,6 @@
 import React,{useEffect,useState} from 'react';
-import {Button,Tabs,Select,IconButton,ChevronIcon,ChatSidePanelFrame,ShellTerminal,TailPane,PaneStatusLine,fixtureModels} from './shared';
+import {Button,Tabs,Select,IconButton,ChevronIcon,ChatSidePanelFrame,ShellTerminal,TailPane,PaneStatusLine,fixtureModels,Avatar,Chip,StatusPill} from './shared';
+import {TerminalGlyph,FlaskGlyph,PackageGlyph,DownloadGlyph,MonitorGlyph,JoinGlyph,LinkGlyph,MoreGlyph,ChevronDownGlyph,PopOutGlyph,DocGlyph} from './icons';
 
 // PROVENANCE FIRST. A detail pane that shows more than the platform can
 // attribute — a slide preview from a generator that does not exist — teaches a
@@ -19,27 +20,116 @@ const session:Record<string,{files:{path:string;stat:string}[];git:string[];work
  'preview-terminal':{files:[{path:'package.json',stat:'+6 −6'},{path:'package-lock.json',stat:'+212 −198'}],git:['4bc2718 (HEAD -> main) Retry handling','M  package.json','M  package-lock.json'],workItem:['WORK-145','Gateway · Dependency audit']},
 };
 
-function TerminalInspector({id,reference,openLab}:{id:string;reference:(label:string)=>void;openLab?:(computerId:string)=>void}){
+// The cloud-terminal inspector, to the 2026-09-21 mockup: who and what at the
+// top, the run as a card with its four numbers, and Overview first — a live
+// preview of the terminal, the run's steps, what it produced, and the work
+// item it answers. The full shell, the files and the raw event tail are one
+// tab away each; "Join session" is the primary action because the point of a
+// shared cloud terminal is that you can get into it.
+type Step={label:string;state:'done'|'running'|'queued';meta:string};
+const runs:Record<string,{title:string;summary:string;icon:'flask'|'package';env:string;elapsed:string;ctx:string;preview:string[];steps:Step[];artifacts:{name:string;size:string;updated:string}[];work:{id:string;state:string;text:string;tags:string[]}}>={
+ background:{title:'Flaky test triage',summary:'Find the tests that failed intermittently this week and say why.',icon:'flask',env:'devbox:task',elapsed:'Started 09:15 · 30m elapsed',ctx:'32% (128K)',
+  preview:['$ flaky-test-triage','▸ Find tests that failed intermittently this week...','▸ Pulling the last 40 CI runs...','✓ Pulled CI history (40 runs, 2.3 GB)','○ Correlating flaky suites...','  Waiting for results...'],
+  steps:[{label:'Pulling CI history',state:'done',meta:'Completed · 2m 14s'},{label:'Correlating flaky suites',state:'running',meta:'Running · 30m elapsed'},{label:'Writing findings',state:'queued',meta:'Queued'}],
+  artifacts:[{name:'flaky-tests-report.md',size:'12 KB',updated:'Updated 2m ago'},{name:'ci-run-analysis.json',size:'48 KB',updated:'Updated 2m ago'}],
+  work:{id:'WORK-144',state:'In Progress',text:'Flaky test triage for auth migration',tags:['testing','reliability','auth']}},
+ 'preview-terminal':{title:'Dependency audit',summary:'Bump patch versions and flag security advisories as critical.',icon:'package',env:'devbox:task',elapsed:'Started 09:34 · 11m elapsed',ctx:'11% (128K)',
+  preview:['$ nightly-dependency-audit','▸ Reading the lockfile and resolving the graph...','▸ npm audit --json','✓ 3 advisories: 1 high, 2 moderate','○ Checking whether the high one is reachable...','  Tracing imports...'],
+  steps:[{label:'Resolve dependency graph',state:'done',meta:'Completed · 48s'},{label:'Check advisory reachability',state:'running',meta:'Running · 11m elapsed'},{label:'Open change request',state:'queued',meta:'Queued'}],
+  artifacts:[{name:'audit-report.md',size:'6 KB',updated:'Updated 4m ago'},{name:'npm-audit.json',size:'31 KB',updated:'Updated 9m ago'}],
+  work:{id:'WORK-145',state:'In Progress',text:'Nightly dependency audit for the gateway',tags:['security','dependencies']}},
+};
+
+/** Plays the run's recent output line by line, then holds on a blinking caret
+ *  — a preview, not the PTY; the Terminal tab is the real shell. */
+function LivePreview({lines}:{lines:string[]}){
+ const [shown,setShown]=useState(1);
+ useEffect(()=>{setShown(1);const t=setInterval(()=>setShown(n=>n>=lines.length?n:n+1),650);return()=>clearInterval(t)},[lines]);
+ return <pre className="live-preview" aria-label="Live terminal preview">{lines.slice(0,shown).map((line,i)=>{
+  const tone=line.startsWith('✓')?'ok':line.startsWith('○')?'pending':line.startsWith('$')?'cmd':'';
+  const last=i===shown-1&&shown===lines.length;
+  return <span key={i} className={'live-line '+tone}>{line}{last&&<i className="live-caret"/>}{'\n'}</span>;
+ })}</pre>;
+}
+
+function TerminalInspector({id,reference,view,setView}:{id:string;reference:(label:string)=>void;view:string;setView:(v:string)=>void}){
  const box=boxes[id]??boxes.background;
- const [view,setView]=useState('activity');
- return <div className="terminal-inspector">
-  <div className="detail-status-block"><span className="detail-status-dot live"/><div><strong>{box.currentTask.split(' · ')[1]??box.currentTask}</strong><span>{box.label} · AgentCore microVM · started {id==='background'?'09:15':'09:34'} · Shared with you</span></div></div>
-  <div className="terminal-gauges"><PaneStatusLine computer={box} modelId={box.activeModel} models={fixtureModels}/></div>
-  <Tabs items={[{id:'activity',label:'Activity'},{id:'shell',label:'Shell'},{id:'workspace',label:'Workspace'}]} value={view} onValueChange={setView} size="sm" aria-label="Cloud terminal view"/>
-  {view==='activity'&&<div className="terminal-frame"><TailPane computer={box}/></div>}
-  {view==='shell'&&<><div className="terminal-frame is-shell"><ShellTerminal sessionId={box.sessionId} label={box.label} autoConnect fillHeight chrome={false}/></div><p className="inspector-terminal-meta">The shell the agent is working in — same PTY, same <code>/mnt/workspace</code>. Type <code>help</code> for what this box understands.</p></>}
-  {view==='workspace'&&<div className="terminal-workspace">
-   <div className="detail-section-label">Checkout</div>
-   <div className="workspace-repo"><b>connorhoehnslalom/orgiq-auth-service</b><span>main · /mnt/workspace/orgiq-auth-service · clone 09:15</span></div>
-   <div className="detail-section-label">Changed this session</div>
-   <ul className="workspace-files">{(session[id]??session.background).files.map(f=><li key={f.path}><code>{f.path}</code><span>{f.stat}</span></li>)}</ul>
-   <div className="detail-section-label">Git</div>
-   <pre className="workspace-git">{(session[id]??session.background).git.join('\n')}</pre>
+ const run=runs[id]??runs.background;
+ const files=(session[id]??session.background);
+ return <div className="term-inspector">
+  <div className="term-crumbs"><span>AgentCore microVM</span><ChevronIcon dir="right" size={12}/><span>{box.project}</span><StatusPill state="info" label="RUNNING" size="sm"/></div>
+  <div className="term-owner"><Avatar name="Frank Davis" size={26}/><b>Frank Davis</b><span>Shared with you</span></div>
+  <div className="term-actions">
+   <Button variant="secondary" onClick={()=>setView('terminal')}><TerminalGlyph/>Open shell</Button>
+   <Button variant="secondary" onClick={()=>reference(`${box.label} · ${run.title}`)}><LinkGlyph/>Reference in chat</Button>
+   <IconButton aria-label="More actions"><MoreGlyph/></IconButton>
+  </div>
+
+  <section className="term-run-card">
+   <div className="term-run-head">
+    <span className="term-run-icon">{run.icon==='flask'?<FlaskGlyph/>:<PackageGlyph/>}</span>
+    <div><h3>{run.title}</h3><p>{run.summary}</p></div>
+   </div>
+   <div className="term-run-status"><StatusPill state="info" label="RUNNING" size="sm"/><span>{run.elapsed}</span></div>
+   <dl className="term-run-stats">
+    <div><dt>Model</dt><dd>{box.activeModel}</dd></div>
+    <div><dt>Cost</dt><dd>${box.spendUsd.toFixed(4)}</dd></div>
+    <div><dt>Context</dt><dd>{run.ctx}</dd></div>
+    <div><dt>Environment</dt><dd>{run.env}</dd></div>
+   </dl>
+  </section>
+
+  <Tabs items={[{id:'overview',label:'Overview'},{id:'terminal',label:'Terminal'},{id:'files',label:'Files'},{id:'activity',label:'Activity'}]} value={view} onValueChange={setView} aria-label="Cloud terminal view"/>
+
+  {view==='overview'&&<div className="term-overview">
+   <div className="term-section-head"><span>Live terminal preview</span><button type="button" className="term-link" onClick={()=>setView('terminal')}><PopOutGlyph/>Open in new</button></div>
+   <LivePreview lines={run.preview}/>
+
+   <div className="term-section-head"><span className="term-strong">Progress</span><span>{run.steps.length} steps</span></div>
+   <ol className="term-steps">{run.steps.map(step=><li key={step.label} className={'is-'+step.state}>
+    <span className="term-step-mark" aria-hidden="true">{step.state==='done'?'✓':''}</span><span className="term-step-label">{step.label}</span><span className="term-step-meta">{step.meta}</span>
+   </li>)}</ol>
+
+   <div className="term-grid">
+    <section className="term-box">
+     <div className="term-box-head"><b>Artifacts</b><span>{run.artifacts.length} files</span></div>
+     <ul className="term-artifacts">{run.artifacts.map(a=><li key={a.name}>
+      <span className="term-file-icon"><DocGlyph/></span><span className="term-file-text"><b>{a.name}</b><small>{a.size} · {a.updated}</small></span>
+      <IconButton size="sm" aria-label={`Download ${a.name}`}><DownloadGlyph/></IconButton>
+     </li>)}</ul>
+    </section>
+    <section className="term-box">
+     <div className="term-box-head"><b>Work item</b><IconButton size="sm" aria-label={`Open ${run.work.id}`}><PopOutGlyph/></IconButton></div>
+     <div className="term-work-id"><b>{run.work.id}</b><Chip size="xs" tone="info">{run.work.state}</Chip></div>
+     <p className="term-work-text">{run.work.text}</p>
+     <div className="term-tags">{run.work.tags.map(t=><Chip key={t} size="xs" tone="neutral">{t}</Chip>)}</div>
+    </section>
+   </div>
   </div>}
-  <div className="detail-section-label">Work item</div>
-  <button type="button" className="detail-source" onClick={()=>{}}><span>☑</span><span><strong>{(session[id]??session.background).workItem[0]}</strong><small>{(session[id]??session.background).workItem[1]}</small></span><span>↗</span></button>
-  <div className="detail-provenance"><b>Running</b><span>Dispatched from <code>#auth-migration</code> · {box.activeModel==='claude-sonnet-5'?'Sonnet':'Haiku'} · forecast $0.03–$0.30</span><small>Spends Frank's sprint envelope (Sprint 42 · $14.91 left). Every change it captures still passes review before it can ship.</small></div>
-  {openLab&&<Button size="sm" variant="secondary" fullWidth onClick={()=>openLab(box.id)}>Open in Computer Lab</Button>}
+
+  {view==='terminal'&&<><div className="terminal-frame is-shell"><ShellTerminal sessionId={box.sessionId} label={box.label} autoConnect fillHeight chrome={false}/></div>
+   <p className="inspector-terminal-meta">The shell the agent is working in — same PTY, same <code>/mnt/workspace</code>. Type <code>help</code> for what this box understands.</p></>}
+
+  {view==='files'&&<div className="terminal-workspace">
+   <div className="detail-section-label">Checkout</div>
+   <div className="workspace-repo"><b>connorhoehnslalom/orgiq-auth-service</b><span>main · /mnt/workspace/orgiq-auth-service</span></div>
+   <div className="detail-section-label">Changed this session</div>
+   <ul className="workspace-files">{files.files.map(f=><li key={f.path}><code>{f.path}</code><span>{f.stat}</span></li>)}</ul>
+   <div className="detail-section-label">Artifacts</div>
+   <ul className="workspace-files">{run.artifacts.map(a=><li key={a.name}><code>{a.name}</code><span className="muted">{a.size}</span></li>)}</ul>
+   <div className="detail-section-label">Git</div>
+   <pre className="workspace-git">{files.git.join('\n')}</pre>
+  </div>}
+
+  {view==='activity'&&<><div className="terminal-gauges"><PaneStatusLine computer={box} modelId={box.activeModel} models={fixtureModels}/></div><div className="terminal-frame"><TailPane computer={box}/></div></>}
+ </div>;
+}
+
+/** The terminal inspector's own footer: getting into the machine, not quoting it. */
+function TerminalFooter({openLab,onJoin}:{openLab?:()=>void;onJoin:()=>void}){
+ return <div className="inspector-actionbar term-footer">
+  <Button variant="secondary" onClick={openLab}><MonitorGlyph/>Open Computer Lab</Button>
+  <div className="term-split"><Button variant="primary" onClick={onJoin}><JoinGlyph/>Join session</Button><IconButton aria-label="More ways to join" className="term-split-more"><ChevronDownGlyph/></IconButton></div>
  </div>;
 }
 
@@ -54,6 +144,8 @@ const slideOptions=slideTitles.map((title,index)=>({value:String(index+1),label:
 
 export function Inspector({selection,asked,setAsked,range,close,select,reference,runFailed=false,openLab}:any){
  const [slide,setSlide]=useState(4);
+ const [termView,setTermView]=useState('overview');
+ useEffect(()=>{setTermView('overview')},[selection?.id]);
  const [previewOpen,setPreviewOpen]=useState(false);
  const [query,setQuery]=useState('Anything for me?');
  const [answerVisible,setAnswerVisible]=useState(true);
@@ -82,7 +174,7 @@ export function Inspector({selection,asked,setAsked,range,close,select,reference
   {!large&&<Select size="sm" aria-label="Go to slide" value={String(slide)} options={slideOptions} onChange={event=>setSlide(Number(event.target.value))}/>}
  </div>;
  const referenceLabel=transcript?'Planning sync · 08:42':deck?`Sprint review · v${version}${generating?'':` · Slide ${slide}`}`:generation?'Presentation generation run':title;
- return <ChatSidePanelFrame className="activity-inspector" title={transcript?'Planning sync':deck?'Sprint review':generation?'Generate Sprint review':terminal?(boxes[selection.id]??boxes.background).label:title} subtitle={transcript?'Meeting transcript · Shared with you':deck?'Presentation · Shared with you':generation?'Presentation agent · Running':terminal?'AgentCore microVM · Auth Migration · Shared with you':'Shared with you'} onClose={close} data-testid="work-details">
+ return <ChatSidePanelFrame className="activity-inspector" title={transcript?'Planning sync':deck?'Sprint review':generation?'Generate Sprint review':terminal?(boxes[selection.id]??boxes.background).label:title} subtitle={transcript?'Meeting transcript · Shared with you':deck?'Presentation · Shared with you':generation?'Presentation agent · Running':terminal?'':'Shared with you'} onClose={close} data-testid="work-details">
   <div className="inspector-content">
    <div className="inspector-main">
    {transcript?<>
@@ -99,9 +191,9 @@ export function Inspector({selection,asked,setAsked,range,close,select,reference
     </>}
     <div className="detail-section"><div className="detail-section-label">Sources used</div><button type="button" className="detail-source" onClick={()=>select({kind:'node',id:'transcript'})}><span>▤</span><span><strong>Planning sync transcript</strong><small>Meeting · 08:30–09:00</small></span><span>↗</span></button><button type="button" className="detail-source" onClick={()=>select({kind:'node',id:'doc'})}><span>▤</span><span><strong>Release plan</strong><small>Project document · Revision 6</small></span><span>↗</span></button></div>
     <DeckProvenance reference={reference}/>
-   </div>:generation?<div className="process-inspector"><div className="detail-status-block"><span className={'detail-status-dot '+(runFailed?'failed':'live')}/><div><strong>{runFailed?'Presentation agent failed':'Presentation agent running'}</strong><span>{runFailed?'v3 was not produced · v2 remains available':'Creating the next revision of Sprint review'}</span></div></div><div className="detail-section-label">Inputs</div><div className="detail-chips"><span>Planning sync transcript</span><span>Release plan · rev 6</span></div><DeckProvenance reference={reference}/><Button size="sm" variant="secondary" onClick={()=>select({kind:'node',id:'deck',version:2})}>Inspect available v2</Button></div>:terminal?<TerminalInspector id={selection.id} reference={reference} openLab={openLab}/>:<div className="process-inspector"><div className="detail-status-block"><span className="detail-status-dot ready"/><div><strong>{title}</strong><span>{selection.kind==='edge'?'Connection between work items':'Shared work context'}</span></div></div><p className="detail-copy">{selection.kind==='edge'?'This connection shows how the two work items are related. Reference it in chat to discuss this relationship.':selection.id==='workitem'?'Gateway · WORK-144 feeds the shared cloud terminal for coverage checks.':selection.id==='doc'?'Release plan · Revision 6. Used with the meeting transcript to create the sprint review presentation.':'Follow the connected sources and outputs to see the context.'}</p></div>}
+   </div>:generation?<div className="process-inspector"><div className="detail-status-block"><span className={'detail-status-dot '+(runFailed?'failed':'live')}/><div><strong>{runFailed?'Presentation agent failed':'Presentation agent running'}</strong><span>{runFailed?'v3 was not produced · v2 remains available':'Creating the next revision of Sprint review'}</span></div></div><div className="detail-section-label">Inputs</div><div className="detail-chips"><span>Planning sync transcript</span><span>Release plan · rev 6</span></div><DeckProvenance reference={reference}/><Button size="sm" variant="secondary" onClick={()=>select({kind:'node',id:'deck',version:2})}>Inspect available v2</Button></div>:terminal?<TerminalInspector id={selection.id} reference={reference} view={termView} setView={setTermView}/>:<div className="process-inspector"><div className="detail-status-block"><span className="detail-status-dot ready"/><div><strong>{title}</strong><span>{selection.kind==='edge'?'Connection between work items':'Shared work context'}</span></div></div><p className="detail-copy">{selection.kind==='edge'?'This connection shows how the two work items are related. Reference it in chat to discuss this relationship.':selection.id==='workitem'?'Gateway · WORK-144 feeds the shared cloud terminal for coverage checks.':selection.id==='doc'?'Release plan · Revision 6. Used with the meeting transcript to create the sprint review presentation.':'Follow the connected sources and outputs to see the context.'}</p></div>}
    </div>
-   <div className="inspector-actionbar"><Button size="sm" fullWidth variant="secondary" onClick={()=>reference(referenceLabel)}>Reference in chat</Button></div>
+   {terminal?<TerminalFooter openLab={openLab} onJoin={()=>setTermView('terminal')}/>:<div className="inspector-actionbar"><Button size="sm" fullWidth variant="secondary" onClick={()=>reference(referenceLabel)}>Reference in chat</Button></div>}
   </div>
   {previewOpen&&deck&&!generating&&<div className="slide-lightbox" role="dialog" aria-modal="true" aria-label={`Sprint review v${version} larger preview`}><div className="slide-lightbox-card"><div className="lightbox-heading"><div><strong>Sprint review · v{version}</strong><span>Slide {slide} of 12</span></div><IconButton aria-label="Close larger preview" onClick={()=>setPreviewOpen(false)}>✕</IconButton></div><Slide version={version} slide={slide}/>{previewControls(true)}</div></div>}
  </ChatSidePanelFrame>
