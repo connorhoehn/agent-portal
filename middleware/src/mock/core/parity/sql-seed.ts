@@ -194,6 +194,72 @@ function readSchemaFile(fileName: string): string {
 
 const INSERT_HEAD = /INSERT\s+INTO\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)\s*VALUES\s*\(/gi;
 
+const UPDATE_HEAD = /UPDATE\s+([A-Za-z_][A-Za-z0-9_]*)\s+SET\s+/gi;
+const WHERE_ID_TAIL = /\s+WHERE\s+id\s*=\s*'((?:[^']|'')*)'\s*$/i;
+const IDENT = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+/** Index of the `;` that ends the statement starting at `from`, outside strings. */
+function statementEnd(sql: string, from: number): number {
+  let inString = false;
+  for (let i = from; i < sql.length; i++) {
+    const ch = sql[i]!;
+    if (inString) {
+      if (ch === "'") {
+        if (sql[i + 1] === "'") { i += 1; continue; }
+        inString = false;
+      }
+      continue;
+    }
+    if (ch === "'") { inString = true; continue; }
+    if (ch === ';') return i;
+  }
+  return sql.length;
+}
+
+/**
+ * Overlay `UPDATE <table> SET col = <literal>, ... WHERE id = '<id>'` onto the
+ * row this same file inserted earlier under that id.
+ *
+ * schema/seeds/generate_program_seed.py writes a work item's brief (title,
+ * summary, why-this-matters, blocked reason, next step) as an UPDATE after the
+ * INSERT, because the INSERTs are ON CONFLICT DO NOTHING and an UPDATE is the
+ * only statement that lands new copy on a cluster seeded before it. A reader
+ * that saw only the INSERT would compare the mock against a title the
+ * database no longer holds. Same rule as `seedRowsById`: the later statement
+ * is the row the database ends up with.
+ *
+ * Deliberately narrow: only the single-id `WHERE id = '<literal>'` form, only
+ * plain column assignments, and only onto a row inserted ABOVE it in the same
+ * file. Anything else (`UPDATE app_users u ... FROM people p`, an UPDATE of a
+ * table another file inserts) is not this shape and is left alone.
+ */
+function applyRowUpdates(sql: string, table: string, rows: SeedRow[]): void {
+  if (rows.length === 0) return;
+  UPDATE_HEAD.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = UPDATE_HEAD.exec(sql)) !== null) {
+    const end = statementEnd(sql, UPDATE_HEAD.lastIndex);
+    const statement = sql.slice(UPDATE_HEAD.lastIndex, end);
+    UPDATE_HEAD.lastIndex = end;
+    if (m[1]!.toLowerCase() !== table.toLowerCase()) continue;
+    const where = WHERE_ID_TAIL.exec(statement);
+    if (!where) continue;
+    const id = where[1]!.replace(/''/g, "'");
+    const line = sql.slice(0, m.index).split('\n').length;
+    const target = [...rows].reverse().find((r) => r.values['id'] === id && r.line < line);
+    if (!target) continue;
+    const overlay: Record<string, SeedValue> = {};
+    for (const assignment of splitTopLevel(statement.slice(0, where.index))) {
+      const eq = assignment.indexOf('=');
+      if (eq < 0) continue;
+      const column = assignment.slice(0, eq).trim();
+      if (!IDENT.test(column)) continue;
+      overlay[column] = parseLiteral(assignment.slice(eq + 1));
+    }
+    target.values = { ...target.values, ...overlay };
+  }
+}
+
 /** Every `INSERT INTO <table>` row in `schema/<fileName>`, in file order. */
 export function seedRows(fileName: string, table: string): SeedRow[] {
   const cacheKey = `${fileName}:${table}`;
@@ -229,6 +295,7 @@ export function seedRows(fileName: string, table: string): SeedRow[] {
     INSERT_HEAD.lastIndex = cursor;
   }
 
+  applyRowUpdates(sql, table, rows);
   rowCache.set(cacheKey, rows);
   return rows;
 }

@@ -13,6 +13,8 @@
 //   DELETE /api/graph/work-items/:id/criteria/:cid   — remove a criterion
 //   GET   /api/graph/work-items/:id/comments         — planning notes + status audit
 //   POST  /api/graph/work-items/:id/comments         — add a planning note
+//   PUT    /api/graph/work-items/:id/decisions/:decisionId — link a decision to this item
+//   DELETE /api/graph/work-items/:id/decisions/:decisionId — unlink it
 //
 // House rule for this surface: an input this API accepts is an input it acts
 // on. A parameter it cannot honour is a 400, never a silent no-op — the old
@@ -45,6 +47,8 @@ import {
   listWorkItemComments,
   createWorkItemComment,
   addWorkItemComment,
+  linkDecisionToWorkItem,
+  unlinkDecisionFromWorkItem,
   type CreateWorkItemInput,
   type UpdateWorkItemPatch,
   type WorkItemType,
@@ -655,5 +659,55 @@ workItemsRouter.post(
 
     const comment = await createWorkItemComment(id, personId, (body['body'] as string).trim());
     res.status(201).json(comment);
+  }),
+);
+
+// ── Decision links ────────────────────────────────────────────────────────────
+// PUT/DELETE /api/graph/work-items/:id/decisions/:decisionId
+//
+// "Add context" on a work item's Brief: attach a decision this item depends on
+// (decisions.work_item_id). Same writeGate as every other board write. The
+// rule on which decision may link to which item is `decideDecisionLink` in the
+// provider — own initiative only, never silently re-pointed — and a refusal is
+// a 409 that names the conflict, because the caller is not wrong about the
+// shape of the request, the world is not in the state it assumed.
+
+workItemsRouter.put(
+  '/work-items/:id/decisions/:decisionId',
+  writeGate,
+  asyncHandler(async (req, res) => {
+    const id = req.params['id'] as string;
+    const decisionId = req.params['decisionId'] as string;
+    if (!id || !decisionId) { res.status(400).json({ error: 'Missing work item or decision id' }); return; }
+    // The link is the whole request — there is nothing a body could say.
+    const stray = unknownKeys((req.body ?? {}) as Record<string, unknown>, []);
+    if (stray.length > 0) {
+      res.status(400).json({ error: `unrecognised field${stray.length === 1 ? '' : 's'}: ${stray.join(', ')}` });
+      return;
+    }
+
+    const item = await getWorkItem(id);
+    if (!item) { res.status(404).json({ error: 'Work item not found' }); return; }
+
+    const result = await linkDecisionToWorkItem(item, decisionId);
+    if (result.kind === 'not-found') { res.status(404).json({ error: 'Decision not found' }); return; }
+    if (result.kind === 'refused') { res.status(result.status).json({ error: result.error }); return; }
+    res.json(result.decision);
+  }),
+);
+
+workItemsRouter.delete(
+  '/work-items/:id/decisions/:decisionId',
+  writeGate,
+  asyncHandler(async (req, res) => {
+    const id = req.params['id'] as string;
+    const decisionId = req.params['decisionId'] as string;
+    if (!id || !decisionId) { res.status(400).json({ error: 'Missing work item or decision id' }); return; }
+
+    if (!(await getWorkItem(id))) { res.status(404).json({ error: 'Work item not found' }); return; }
+
+    const unlinked = await unlinkDecisionFromWorkItem(id, decisionId);
+    if (!unlinked) { res.status(404).json({ error: 'Decision is not linked to this work item' }); return; }
+    res.status(204).end();
   }),
 );

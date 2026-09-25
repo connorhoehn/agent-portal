@@ -44,6 +44,23 @@ CREATE INDEX IF NOT EXISTS work_items_assignee_id_idx ON work_items (assignee_id
 CREATE INDEX IF NOT EXISTS work_items_status_idx      ON work_items (status);
 CREATE INDEX IF NOT EXISTS work_items_type_idx        ON work_items (type);
 
+-- The work item's brief, as data. The initiative Overview and a work item's
+-- Brief tab render these as copy (a Plan-next row's one-line description, the
+-- "What needs attention" reason, the "Next step" callout), so they live on
+-- the row rather than as portal literals. All nullable: an item without a
+-- brief renders without those lines, never with invented ones.
+--   summary          one sentence describing the change
+--   blocked_reason   why a `blocked`-labelled item cannot move yet
+--   next_step        the one action that moves it forward
+--   next_step_detail why that action comes first
+-- ADD COLUMN IF NOT EXISTS so an existing cluster converges; the middleware
+-- probes information_schema for them and reads null until they exist.
+ALTER TABLE work_items
+  ADD COLUMN IF NOT EXISTS summary          TEXT,
+  ADD COLUMN IF NOT EXISTS blocked_reason   TEXT,
+  ADD COLUMN IF NOT EXISTS next_step        TEXT,
+  ADD COLUMN IF NOT EXISTS next_step_detail TEXT;
+
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Upgrade decisions: add status, escalation, and project link
 -- ─────────────────────────────────────────────────────────────────────────────
