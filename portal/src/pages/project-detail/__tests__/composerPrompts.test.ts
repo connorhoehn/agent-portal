@@ -7,7 +7,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  askHref, commandIn, composerCommands, composerSetup, itemPrefill, workflowMenu, workflowPrompt,
+  askHref, commandIn, composerCommands, composerSetup, itemPrefill, workflowMenu, workflowMenuRows, workflowPrompt,
   type ComposerSubject,
 } from '../composerPrompts.ts';
 import { briefFacts } from '../briefModel.ts';
@@ -52,6 +52,22 @@ test('workflows: disabled with a reason where they do not apply; commands mirror
   const cmds = composerCommands(itemSubject);
   assert.deepEqual(cmds.map((c) => [c.trigger, c.disabled]), [['/prioritize', true], ['/criteria', false], ['/unblock', false]]);
   assert.equal(workflowPrompt('unblock', { ...itemSubject, facts: { ...itemSubject.facts, blocked: false } }), null);
+});
+
+test('the Workflow menu rows are DropdownMenuItem-shaped: inapplicable ones disabled, reason instead of description', () => {
+  assert.deepEqual(workflowMenuRows(initiativeSubject), [
+    { id: 'prioritize', label: 'Prioritize next work', description: 'Rank the open work and explain the tradeoffs', disabled: false },
+    { id: 'criteria', label: 'Define acceptance criteria', disabled: true, disabledReason: 'Open a work item first' },
+    { id: 'unblock', label: 'Unblock this item', disabled: true, disabledReason: 'Open a work item first' },
+  ]);
+  const onItem = workflowMenuRows({ ...itemSubject, facts: { ...itemSubject.facts, blocked: false } });
+  assert.deepEqual(onItem.map((r) => [r.id, r.disabled, r.disabledReason ?? null]), [
+    ['prioritize', true, 'Open the initiative to prioritize its work'],
+    ['criteria', false, null],
+    ['unblock', true, 'This item is not blocked'],
+  ]);
+  // A disabled row carries no description: the reason IS its second line.
+  assert.ok(onItem.filter((r) => r.disabled).every((r) => r.description === undefined));
 });
 
 test('workflow prompts are built from the rows', () => {

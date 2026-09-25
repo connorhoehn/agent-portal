@@ -30,7 +30,7 @@ import {
   askHref,
   composerCommands,
   composerSetup,
-  workflowMenu,
+  workflowMenuRows,
   type ComposerSetup,
   type ComposerSubject,
 } from '../project-detail/composerPrompts';
@@ -83,10 +83,11 @@ function DockedComposer({
 
   const commands = useMemo(() => composerCommands(subject), [subject]);
   // The menu and the slash list are the same three workflows. One that does
-  // not apply here says why on its second line; picking it anyway puts the
-  // command in the draft, where the command bar repeats the reason and Send
-  // refuses it — nothing is asked on the reader's behalf that cannot be built.
-  const workflows = useMemo(() => workflowMenu(subject), [subject]);
+  // not apply here is a disabled menu row whose reason is its second line and
+  // tooltip (DropdownMenuItem.disabledReason, 2.390.4) — it cannot be picked.
+  // A command typed by hand still meets the same rule: `askHref` builds
+  // nothing for a workflow that does not apply, so Send refuses it.
+  const workflows = useMemo(() => workflowMenuRows(subject), [subject]);
 
   const references = useMemo(
     () => (withContext ? [{ ...setup.chip }] : []),
@@ -124,7 +125,9 @@ function DockedComposer({
             sections={[{
               items: workflows.map((w) => ({
                 label: w.label,
-                description: w.disabledReason ?? w.description,
+                description: w.description,
+                disabled: w.disabled,
+                disabledReason: w.disabledReason,
                 onSelect: () => {
                   setDraft(draftOf(`/${w.id} `));
                   setSeed((n) => n + 1);

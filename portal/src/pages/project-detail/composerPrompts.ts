@@ -119,6 +119,23 @@ export function workflowMenu(s: ComposerSubject): Array<ComposerWorkflow & { dis
   return WORKFLOWS.map((w) => ({ ...w, disabledReason: workflowUnavailable(w.id, s) }));
 }
 
+/** One row of the Workflow ▾ menu, shaped for the library's DropdownMenuItem
+ *  (2.390.4+): a workflow that does not apply here is `disabled`, and the menu
+ *  prints `disabledReason` as its second line and tooltip — it never fires. */
+export interface WorkflowMenuRow {
+  id: WorkflowId;
+  label: string;
+  description?: string;
+  disabled: boolean;
+  disabledReason?: string;
+}
+
+export function workflowMenuRows(s: ComposerSubject): WorkflowMenuRow[] {
+  return workflowMenu(s).map((w) => (w.disabledReason != null
+    ? { id: w.id, label: w.label, disabled: true, disabledReason: w.disabledReason }
+    : { id: w.id, label: w.label, description: w.description, disabled: false }));
+}
+
 /** Mirrors the library's ComposerCommand. */
 export interface ComposerCommandSpec {
   trigger: string;
