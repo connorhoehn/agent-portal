@@ -34,6 +34,20 @@ export interface WorkItem {
   labels: string[];
   storyPoints: number | null;
   /**
+   * The brief fields (M2: work_items.summary / blocked_reason / next_step /
+   * next_step_detail). Optional and nullable: an Aurora cluster that has not
+   * applied the columns yet sends null (or nothing), and every consumer reads
+   * that as "not written", never as an empty string to render.
+   */
+  /** One sentence: what this item changes. The Plan-next row's description. */
+  summary?: string | null;
+  /** Why the item cannot move — set alongside the `blocked` label. */
+  blockedReason?: string | null;
+  /** The next concrete action, e.g. "Confirm the dependency map with Eli Garcia." */
+  nextStep?: string | null;
+  /** Why that step comes first. */
+  nextStepDetail?: string | null;
+  /**
    * Estimate provenance, straight off the wire
    * (schema/work_item_estimate_schema.sql). All null until somebody authorizes
    * a dispatch — that is the ordinary state, not a gap.
@@ -105,6 +119,13 @@ export interface ProjectDetail {
   agentSpendUsd?: number | null;
   /** The `owner/repo` this initiative's code lives in, null when unlinked. */
   repoFullName?: string | null;
+  /** Marketplace runs in flight on this initiative, counted from `running`
+      bot_runs rows (M1). Null when the server could not count them — which
+      is "unknown", not zero. */
+  activeAgentRuns?: number | null;
+  /** This month's allocation (initiative_budgets) the MTD spend reads
+      against. Null when no allocation exists. */
+  allocatedUsd?: number | null;
   contributors: ProjectContributor[];
 }
 

@@ -13,7 +13,9 @@ import type { WorkItemPriority, WorkItemStatus, WorkItemTree } from './types';
 
 export const WORK_GROUPS: WorkListGroup[] = [
   { id: 'open', title: 'Next up', emptyLabel: 'Nothing up next' },
-  { id: 'in_progress', title: 'In progress', emptyLabel: 'Nothing in progress' },
+  // Collapsed by default (mockup W4): agents and people are already on these,
+  // so the list opens on what can be picked up next.
+  { id: 'in_progress', title: 'In progress', defaultOpen: false, emptyLabel: 'Nothing in progress' },
   { id: 'in_review', title: 'In review', emptyLabel: 'Nothing waiting for review' },
   { id: 'done', title: 'Done', defaultOpen: false, emptyLabel: 'Nothing done yet' },
 ];
@@ -27,10 +29,10 @@ function groupOf(status: WorkItemStatus): string {
 export type WorkSort = 'priority' | 'points' | 'updated' | 'title';
 
 export const WORK_SORT_OPTIONS: Array<{ value: WorkSort; label: string }> = [
-  { value: 'priority', label: 'Priority ↓' },
-  { value: 'points', label: 'Points ↓' },
+  { value: 'priority', label: 'By priority' },
+  { value: 'points', label: 'By points' },
   { value: 'updated', label: 'Recently updated' },
-  { value: 'title', label: 'Title' },
+  { value: 'title', label: 'By title' },
 ];
 
 const PRIORITY_RANK: Record<WorkItemPriority, number> = { critical: 0, high: 1, medium: 2, low: 3 };
@@ -84,10 +86,55 @@ export function ownerOptions(rows: FlatWorkItem[]): Array<{ value: string; label
   return unassigned ? [...people, { value: 'none', label: 'Unassigned' }] : people;
 }
 
+/** Blocked is a label, not a status — the same rule the server's work
+ *  suggestions use (middleware lib/work-suggestions.ts). */
+export function isBlocked(item: Pick<FlatWorkItem, 'labels'>): boolean {
+  return item.labels.includes('blocked');
+}
+
+const KIND_LABEL: Record<FlatWorkItem['type'], string> = { epic: 'Epic', story: 'Story', bug: 'Bug' };
+
+/** "Bug", "Story" — the first part of a text meta line ("Bug · Eli Garcia · 2 points"). */
+export function kindLabel(item: Pick<FlatWorkItem, 'type'>): string {
+  return KIND_LABEL[item.type];
+}
+
+/** A right-hand row tag, e.g. the red "Blocked". */
+export interface WorkListTag {
+  label: string;
+  tone: 'danger' | 'warning' | 'neutral';
+}
+
+/**
+ * The row the list draws, plus the fields the text-meta layout reads
+ * (library L4: `WorkListItem.kindLabel` and `.tag`). Declared here rather
+ * than on the library type so the page compiles against the installed pin;
+ * once L4 ships the extra fields are simply the library's own.
+ */
+export interface InitiativeWorkListItem extends WorkListItem {
+  kindLabel?: string;
+  tag?: WorkListTag | null;
+  blocked?: boolean;
+}
+
+export interface WorkListItemOptions {
+  /**
+   * `chips` (default) keeps the type as a chip, as the list draws today.
+   * `text` is the mockup's layout: the type moves into the meta line via
+   * `kindLabel`, so the Bug chip would say it twice and is dropped.
+   */
+  metaStyle?: 'chips' | 'text';
+}
+
 /** One list row. The run is this item's latest marketplace run, if any. */
-export function toWorkListItem(item: FlatWorkItem, run: BotRun | undefined, pending: boolean): WorkListItem {
+export function toWorkListItem(
+  item: FlatWorkItem,
+  run: BotRun | undefined,
+  pending: boolean,
+  opts: WorkListItemOptions = {},
+): InitiativeWorkListItem {
   const chips: WorkListItem['chips'] = [];
-  if (item.type === 'bug') chips.push({ label: 'Bug', tone: 'danger' });
+  if (item.type === 'bug' && opts.metaStyle !== 'text') chips.push({ label: 'Bug', tone: 'danger' });
   if (item.priority === 'critical') chips.push({ label: 'Critical', tone: 'danger' });
   if (item.status === 'cancelled') chips.push({ label: 'Cancelled', tone: 'neutral' });
 
@@ -105,6 +152,11 @@ export function toWorkListItem(item: FlatWorkItem, run: BotRun | undefined, pend
     owner: item.assigneeId && item.assigneeName ? { id: item.assigneeId, name: item.assigneeName } : null,
     chips,
     signal,
+    kindLabel: kindLabel(item),
+    tag: isBlocked(item) && item.status !== 'done' && item.status !== 'cancelled'
+      ? { label: 'Blocked', tone: 'danger' }
+      : null,
+    blocked: isBlocked(item),
   };
 }
 

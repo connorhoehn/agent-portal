@@ -32,3 +32,14 @@ export interface ProjectSummary {
   /** `owner/repo` (Mission-2). Rendered as a GitHub link, no capability gate. */
   repoFullName?: string | null;
 }
+
+/**
+ * GET /api/session/person (M3): whether the signed-in account is connected to
+ * an org-graph person. The Mine view needs it to tell "you are not connected"
+ * apart from "you are connected, and nothing lists you". The person's name is
+ * a separate read (GET /api/graph/people/:id).
+ */
+export interface SessionPerson {
+  linked: boolean;
+  personId: string | null;
+}

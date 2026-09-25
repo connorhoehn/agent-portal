@@ -6,7 +6,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { activeFilterCount, ownerOptions, pickCurrent, toWorkListItem, workRows } from '../workListModel.ts';
+import {
+  WORK_GROUPS, WORK_SORT_OPTIONS, activeFilterCount, isBlocked, kindLabel, ownerOptions, pickCurrent, toWorkListItem, workRows,
+} from '../workListModel.ts';
 import type { BotRun } from '../../bots/BotsPage';
 import type { WorkItemTree } from '../types.ts';
 
@@ -86,4 +88,29 @@ test('filters narrow by type, owner (including unassigned) and priority, and cou
     { value: 'p-1', label: 'Ann' },
     { value: 'none', label: 'Unassigned' },
   ]);
+});
+
+test('groups: Next up and In review open, In progress and Done collapsed', () => {
+  assert.deepEqual(WORK_GROUPS.map((g) => [g.title, g.defaultOpen ?? true]), [
+    ['Next up', true], ['In progress', false], ['In review', true], ['Done', false],
+  ]);
+});
+
+test('sort labels read as the mockup menu', () => {
+  assert.deepEqual(WORK_SORT_OPTIONS.map((o) => o.label), ['By priority', 'By points', 'Recently updated', 'By title']);
+});
+
+test('rows carry a kind label and a red Blocked tag; text meta drops the Bug chip', () => {
+  const bug = { ...workRows(tree, 'priority', '').find((r) => r.id === 'b-crit')!, status: 'open' as const, labels: ['blocked'] };
+  assert.equal(kindLabel(bug), 'Bug');
+  assert.equal(isBlocked(bug), true);
+  const chipRow = toWorkListItem(bug, undefined, false);
+  assert.deepEqual(chipRow.chips?.map((c) => c.label), ['Bug', 'Critical']);
+  assert.deepEqual(chipRow.tag, { label: 'Blocked', tone: 'danger' });
+  const textRow = toWorkListItem(bug, undefined, false, { metaStyle: 'text' });
+  assert.deepEqual(textRow.chips?.map((c) => c.label), ['Critical']);
+  assert.equal(textRow.kindLabel, 'Bug');
+  // A finished item's leftover label is history, not a live tag.
+  assert.equal(toWorkListItem({ ...bug, status: 'done' }, undefined, false).tag, null);
+  assert.equal(toWorkListItem(workRows(tree, 'priority', '')[1]!, undefined, false).kindLabel, 'Story');
 });
