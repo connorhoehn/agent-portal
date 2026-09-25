@@ -244,7 +244,9 @@ export default function KnowledgeTab() {
     />
   ) : (
     <GroupedList
-      size="sm"
+      // md: the rail scale every other rail draws (ui-components 2.397.0
+      // railType) — 15px titles beside the 15px module rail, not 14px.
+      size="md"
       groupHeading="label"
       currentStyle="bar"
       groups={explorerGroups(rows).map((g) => ({ id: g.id, title: g.title, count: g.count }))}

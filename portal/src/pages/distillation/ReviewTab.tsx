@@ -344,7 +344,9 @@ export default function ReviewTab() {
     />
   ) : (
     <GroupedList
-      size="sm"
+      // md: the rail scale every other rail draws (ui-components 2.397.0).
+      size="md"
+      groupHeading="label"
       groups={[{ id: state.tab, title: state.tab === 'pending' ? 'Pending' : 'Reviewed', count: rows.length }]}
       rows={rows.map((r) => ({
         id: r.id,

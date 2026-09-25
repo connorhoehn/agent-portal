@@ -342,7 +342,9 @@ function KnowledgeExplorerContent({ mode }: KnowledgeExplorerProps) {
   const rail = (
     <>
       <RailSection title="Views">
-        <ConversationShelf items={[{ id: 'library', label: 'All documents', count: nodes.filter((node) => !node.is_dir).length }]}
+        {/* md, and the tree's md below: 15px rows, the one rail scale the
+            shell rail beside this explorer draws (ui-components 2.397.0). */}
+        <ConversationShelf size="md" items={[{ id: 'library', label: 'All documents', count: nodes.filter((node) => !node.is_dir).length }]}
           activeId={libraryOpen ? 'library' : null} onSelect={openLibrary} />
       </RailSection>
       <Stack gap="sm" className="px-3">
@@ -396,6 +398,7 @@ function KnowledgeExplorerContent({ mode }: KnowledgeExplorerProps) {
                 <InlinePlaceholder>Nothing here yet.</InlinePlaceholder>
               ) : (
                 <KeyboardTreeView
+                  size="md"
                   data-testid={`section-tree-${section.key}`}
                   nodes={sectionNodes.get(section.key) ?? []}
                   selectedId={selectedTreeIdFor(section, selectedId, view)}

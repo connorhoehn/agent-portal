@@ -14,6 +14,7 @@ import {
   type Command,
   activeNavItemClassName,
   inactiveNavItemClassName,
+  RAIL_CURRENT_FILL,
 } from '@connorhoehnslalom/ui-components/shared';
 
 // activeNavItemClassName / inactiveNavItemClassName come from the library, not
@@ -455,19 +456,25 @@ export function Layout() {
                       pathname.startsWith('/iq/canary')
                     )
                   );
-                  // The library's active class fills with `bg-surface-hover`,
-                  // which is right for a nested rail but drops the brand tint
-                  // the shell's PRIMARY rail is recorded as carrying
+                  // Type scale, row height and the current-item mark all come
+                  // from the library's one rail scale (ui-components 2.397.0
+                  // `railType`), the same constants the Initiatives explorer
+                  // rail beside this one draws from — so the two rails can't
+                  // drift apart again (they were 13px vs 15px).
+                  //
+                  // Only the tint is ours: the library fills the current item
+                  // with primary at 8%, but the shell's PRIMARY rail is
+                  // recorded as carrying the tenant's brand tint
                   // (docs/branding-journeys/*.md measure the active fill as
-                  // --color-brand-soft, and `bg-primary-soft` resolves to it
-                  // per tenant). Compose rather than fork: structure and the
-                  // brand border come from the library, the tint is ours.
-                  // It must REPLACE the library's fill rather than sit beside
-                  // it: two same-specificity utilities are resolved by
-                  // stylesheet order, not class-attribute order, so appending
-                  // `bg-primary-soft` silently lost to `bg-surface-hover`.
+                  // --color-brand-soft; `bg-primary-soft` resolves to it per
+                  // tenant). It must REPLACE the library's fill rather than
+                  // sit beside it — two same-specificity utilities resolve by
+                  // stylesheet order, not attribute order — and it replaces
+                  // the exported token, not a spelled-out class, so a library
+                  // change can't turn this into a silent no-op (it did once:
+                  // 2.397.0 retired the `bg-surface-hover` this used to swap).
                   return active
-                    ? activeNavItemClassName.replace('bg-surface-hover', 'bg-primary-soft')
+                    ? activeNavItemClassName.replace(RAIL_CURRENT_FILL, 'bg-primary-soft')
                     : inactiveNavItemClassName;
                 }}
               >
