@@ -54,6 +54,7 @@ import { workItemsRouter } from '../work-items.js';
 import { errorHandler } from '../../lib/async-handler.js';
 import { __setMockDispatchStepMs } from '../../lib/bot-runner.js';
 import { __resetMockRuns } from '../../providers/bots.js';
+import { botRuns } from '../../mock/bots.js';
 import { getWorkItem, updateWorkItem } from '../../providers/work-items.js';
 
 function buildApp(): Express {
@@ -84,9 +85,20 @@ async function restoreItem(): Promise<void> {
 
 beforeEach(async () => {
   __resetMockRuns();
+  // This journey counts its OWN dispatches against the ceiling and the
+  // initiative's run list, so it starts from a fleet with nothing in flight:
+  // the default world's two seeded marketplace runs on this same initiative
+  // (mock/bots.ts `inFlightMarketplaceRuns`) would take two of the three slots
+  // and turn "already being worked" (409) into "ceiling reached" (429).
+  // The ceiling's view of those seeded rows is pinned in
+  // providers/__tests__/projects-initiatives-fixture.test.ts.
+  botRuns.reset();
+  const seeded = botRuns.rows();
+  for (let i = seeded.length - 1; i >= 0; i -= 1) if (seeded[i]!.botId === null) seeded.splice(i, 1);
   await restoreItem();
 });
 afterEach(() => __setMockDispatchStepMs(2_000));
+afterAll(() => botRuns.reset());
 
 describe('a marketplace dispatch, end to end in dev:mock', () => {
   it('leaves a run, a job, a settled item and spend the activity graph sees', async () => {

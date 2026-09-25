@@ -21,6 +21,11 @@ import { PERIOD_START_SQL, MOCK_BUDGETS, mockBudgetRow } from './budgets.js';
 // owned by work-items.ts's own mock fixture, so the Initiatives list can't
 // restate a different number than the initiative-detail Work tab reads.
 import { mockWorkItemRollup } from './work-items.js';
+// The one mock attribution resolver (spendPredicateSql's three arms, row by
+// row) — the live-agents count must attribute a run exactly as spend does.
+import { mockRunsAttributedTo } from './bots.js';
+import { clock, countBy } from '../mock/core/index.js';
+import { initiatives, findInitiative, type MockInitiative } from '../mock/initiatives.js';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -103,6 +108,17 @@ export interface ProjectDetail {
       one row's number. Null when the underlying tables predate the
       work-items schema. */
   agentSpendUsd: number | null;
+  /** The monthly allocation agentSpendUsd reads against
+      (initiative_budgets.allocated_usd) — same field as
+      ProjectSummary.allocatedUsd, scoped to this id, so the detail header can
+      say "$1.73 spent of $95 allocated" without refetching the list. Null when
+      no allocation exists or the budgets schema predates this cluster. */
+  allocatedUsd: number | null;
+  /** bot_runs currently 'running' attributed to this initiative (24h guard) —
+      same definition as ProjectSummary.activeAgentRuns. The detail header's
+      "N agents running". Null only when bot_runs predates this cluster; 0 is
+      a real "nothing running". */
+  activeAgentRuns: number | null;
   /** Same repo-link rollup as ProjectSummary.repoFullName, scoped to this id. */
   repoFullName: string | null;
   contributors: Array<{
@@ -206,57 +222,10 @@ const CAST: Record<string, CastMember> = {
   'p-056': { personId: 'p-056', name: 'Hugo Lee',        title: 'Security Engineer' },
 };
 
-interface MockInitiative {
-  id: string;
-  name: string;
-  status: string;
-  createdAt: string;
-  owner: string;
-  smes: string[];
-  /** The VP-like authorizer who signed off on this initiative — mirrors
-      schema/seeds/generate_program_seed.py's INITIATIVES[*].sponsor. */
-  sponsor: string;
-  /** 1–3 sentences of prose, verbatim from the same generator's `description`
-      (also written to projects.summary — see the seed's UPDATE statement). */
-  summary: string;
-  /** Hours since the last agent run on this initiative. */
-  activeHoursAgo: number;
-  /** `owner/repo` under connorhoehnslalom/ — mirrors the agent_projects rows
-      schema/seeds/generate_program_seed.py links via org_project_id, so mock
-      mode reports the same codebase link Aurora does. */
-  repo: string;
-  /** Highest open work-item priority, mirroring the seed's open epics/stories.
-      Null for initiatives with nothing open (completed ones). */
-  priority: string | null;
-  /** bot_runs 'running' right now. Only initiatives with recent activity
-      (activeHoursAgo ≲ a working morning) carry live runs, so the mock's live
-      signal agrees with its own freshness stamps. */
-  activeAgents: number;
-  // openStories / openBugs / pointsDone / pointsTotal are NOT restated here —
-  // they are derived from the actual wi-* items in providers/work-items.ts
-  // (mockWorkItemRollup) at read time in listProjects() below, so the
-  // Initiatives-list rollup and the initiative-detail Work tab can never
-  // independently drift apart (org-leader.md #2 / program-owner #3).
-}
-
-const MOCK_INITIATIVES: MockInitiative[] = [
-  { id: 'p-observability',     name: 'Observability Platform',       status: 'in_progress', createdAt: '2026-05-24T12:00:00Z', owner: 'p-004', smes: ['p-008', 'p-011'], sponsor: 'p-002', summary: 'Unified telemetry: OpenTelemetry collection, SLO/error-budget alerting, and cost-aware retention across every service.', activeHoursAgo: 1,  repo: 'connorhoehnslalom/orgiq-observability' , priority: 'critical', activeAgents: 2 },
-  { id: 'p-auth-migration',    name: 'Auth Migration',               status: 'in_progress', createdAt: '2026-06-05T12:00:00Z', owner: 'p-002', smes: ['p-051', 'p-004'], sponsor: 'p-052', summary: 'Consolidate every login path onto Cognito + BFF OIDC and retire the legacy SAML shim, tenant by tenant, with zero forced logouts.', activeHoursAgo: 3,  repo: 'connorhoehnslalom/orgiq-auth-service' , priority: 'critical', activeAgents: 1 },
-  { id: 'p-llm-platform',      name: 'LLM Application Platform',     status: 'in_progress', createdAt: '2026-06-19T12:00:00Z', owner: 'p-047', smes: ['p-042', 'p-013'], sponsor: 'p-049', summary: 'The paved road for LLM features: managed prompts, canary evaluation, guardrail regression, and efficient serving.', activeHoursAgo: 2,  repo: 'connorhoehnslalom/orgiq-llm-platform' , priority: 'high', activeAgents: 2 },
-  { id: 'p-cost-opt',          name: 'Cost Optimization',            status: 'in_progress', createdAt: '2026-05-30T12:00:00Z', owner: 'p-008', smes: ['p-011', 'p-017'], sponsor: 'p-006', summary: 'Idle capacity teardown and per-initiative showback: every dollar of infra and agent spend attributable, every floor justified.', activeHoursAgo: 5,  repo: 'connorhoehnslalom/orgiq-finops' , priority: 'high', activeAgents: 1 },
-  { id: 'p-realtime-analytics', name: 'Real-time Analytics Pipeline', status: 'in_progress', createdAt: '2026-06-24T12:00:00Z', owner: 'p-017', smes: ['p-019', 'p-024'], sponsor: 'p-025', summary: 'Exactly-once event pipeline on Flink: schema-governed ingest, checkpointed processing, and replayable backfills.', activeHoursAgo: 9,  repo: 'connorhoehnslalom/orgiq-stream-analytics' , priority: 'high', activeAgents: 1 },
-  { id: 'p-data-lake',         name: 'Data Lake Migration',          status: 'planning',    createdAt: '2026-08-01T12:00:00Z', owner: 'p-025', smes: ['p-017', 'p-015'], sponsor: 'p-012', summary: 'Lakehouse foundation on Iceberg: contract-governed ingest zones and time-travel access for analytics and ML.', activeHoursAgo: 40, repo: 'connorhoehnslalom/orgiq-data-lake' , priority: 'medium', activeAgents: 0 },
-  { id: 'p-feature-store',     name: 'ML Feature Store',             status: 'in_progress', createdAt: '2026-06-28T12:00:00Z', owner: 'p-042', smes: ['p-019', 'p-044'], sponsor: 'p-049', summary: 'Online feature serving GA: point-in-time correct training data and freshness-SLA\'d online lookups.', activeHoursAgo: 12, repo: 'connorhoehnslalom/orgiq-feature-store' , priority: 'high', activeAgents: 0 },
-  { id: 'p-mobile-redesign',   name: 'Mobile App Redesign',          status: 'in_progress', createdAt: '2026-06-12T12:00:00Z', owner: 'p-030', smes: ['p-035', 'p-026'], sponsor: 'p-036', summary: 'Navigation-first redesign of the mobile app: new IA, deep-link routing, and gesture-safe interactions.', activeHoursAgo: 24, repo: 'connorhoehnslalom/orgiq-mobile-app' , priority: 'medium', activeAgents: 0 },
-  { id: 'p-design-v3',         name: 'Design System v3',             status: 'in_progress', createdAt: '2026-07-03T12:00:00Z', owner: 'p-035', smes: ['p-038', 'p-034'], sponsor: 'p-036', summary: 'Design System v3: semantic token pipeline from Figma to code with accessibility gates built in.', activeHoursAgo: 26, repo: 'connorhoehnslalom/orgiq-design-system' , priority: 'medium', activeAgents: 0 },
-  { id: 'p-design-system-api', name: 'Design System API',            status: 'in_progress', createdAt: '2026-07-10T12:00:00Z', owner: 'p-038', smes: ['p-035', 'p-001'], sponsor: 'p-036', summary: 'Programmatic access to the design system: typed component contracts, versioned release channels, and codemod-assisted upgrades.', activeHoursAgo: 30, repo: 'connorhoehnslalom/orgiq-design-system-api' , priority: 'low', activeAgents: 0 },
-  { id: 'p-inference-platform', name: 'Inference Platform',          status: 'in_progress', createdAt: '2026-06-15T12:00:00Z', owner: 'p-049', smes: ['p-013', 'p-043'], sponsor: 'p-012', summary: 'Shared model serving: queue-depth autoscaling, warm pools, and per-model canary rollout for every team shipping inference.', activeHoursAgo: 7,  repo: 'connorhoehnslalom/orgiq-inference-platform' , priority: 'high', activeAgents: 1 },
-  { id: 'p-rag-search',        name: 'RAG Knowledge Search',         status: 'completed',   createdAt: '2026-04-18T12:00:00Z', owner: 'p-048', smes: ['p-047'], sponsor: 'p-006', summary: 'Retrieval-augmented org search — shipped. Hybrid retrieval with grounded citations; in maintenance.',          activeHoursAgo: 22, repo: 'connorhoehnslalom/orgiq-rag-search' , priority: null, activeAgents: 0 },
-  { id: 'p-soc2',              name: 'SOC2 Compliance',              status: 'in_progress', createdAt: '2026-06-22T12:00:00Z', owner: 'p-052', smes: ['p-055', 'p-051'], sponsor: 'p-012', summary: 'SOC 2 Type II readiness: controls mapped to owners, evidence collection automated, access reviews on cadence.', activeHoursAgo: 14, repo: 'connorhoehnslalom/orgiq-compliance' , priority: 'high', activeAgents: 0 },
-  { id: 'p-zero-trust',        name: 'Zero Trust Network',           status: 'planning',    createdAt: '2026-08-08T12:00:00Z', owner: 'p-051', smes: ['p-052', 'p-056'], sponsor: 'p-052', summary: 'Zero-trust segmentation blueprint: service identity everywhere, mTLS by default, policy-engine enforced.', activeHoursAgo: 48, repo: 'connorhoehnslalom/orgiq-zero-trust' , priority: 'medium', activeAgents: 0 },
-];
-
-const HOUR_MS = 60 * 60 * 1000;
+// The initiative rows themselves are the REGISTERED `initiatives` fixture
+// (mock/initiatives.ts) — see that file for why they moved and what went with
+// them (`activeAgents`, `activeHoursAgo`). Everything below is a selector over
+// those rows, read at request time, so a reset or a scenario switch reaches it.
 
 /**
  * Does this initiative exist, in mock mode?
@@ -269,11 +238,11 @@ const HOUR_MS = 60 * 60 * 1000;
  * prevent, inverted: instead of a typo reading as empty, an empty initiative
  * read as a typo.
  *
- * Safe direction: this can only widen what is considered to exist, and the
- * failure being fixed is a false 404.
+ * Under the fixture's `empty` scenario nothing exists, so every initiative id
+ * 404s — which is what a tenant with no projects rows answers too.
  */
 export function mockProjectExists(projectId: string): boolean {
-  return MOCK_INITIATIVES.some((p) => p.id === projectId);
+  return findInitiative(projectId) !== undefined;
 }
 
 /**
@@ -293,33 +262,49 @@ export function mockProjectExists(projectId: string): boolean {
  * whether that is an empty label or a bug.
  */
 export function mockProjectName(projectId: string): string | null {
-  return MOCK_INITIATIVES.find((p) => p.id === projectId)?.name ?? null;
+  return findInitiative(projectId)?.name ?? null;
 }
 
-const MOCK_PROJECTS: Array<Omit<ProjectSummary, keyof typeof EMPTY_ROLLUPS>> = MOCK_INITIATIVES.map((p) => ({
-  id: p.id,
-  name: p.name,
-  status: p.status,
-  contributorCount: 1 + p.smes.length,
-  createdAt: p.createdAt,
-  topContributorNames: [p.owner, ...p.smes].map((id) => CAST[id]!.name),
-  lastActivityAt: new Date(Date.now() - p.activeHoursAgo * HOUR_MS).toISOString(),
-}));
+/** The 24-hour guard countRunningRuns and the SQL `active_agent_runs`
+    subquery apply, so a run stuck 'running' cannot read as live forever. */
+const ACTIVE_RUN_WINDOW_MS = 24 * 60 * 60 * 1000;
 
-// Owner and sponsor fields are defaulted at the return site so the fixtures
-// don't need per-entry churn every time the detail shape grows.
-const MOCK_PROJECT_DETAILS: Record<string, Omit<ProjectDetail, 'ownerId' | 'ownerName' | 'sponsorId' | 'sponsorName' | 'sponsorTitle' | 'agentSpendUsd' | 'repoFullName'>> =
-  Object.fromEntries(MOCK_INITIATIVES.map((p) => [p.id, {
+/**
+ * bot_runs currently 'running' and attributed to this initiative — COUNTED
+ * from the run rows, never typed.
+ *
+ * The mock analogue of the `active_agent_runs` subquery below: status
+ * 'running', started inside 24 hours, attributed through the same three arms
+ * the spend predicate uses (bots.ts `mockRunsAttributedTo` — the one place mock
+ * attribution is resolved). It replaced a typed `activeAgents` on each fixture
+ * row, which claimed two live agents on Observability over a run table with no
+ * running row in it.
+ */
+export function mockActiveAgentRuns(projectId: string): number {
+  const cutoff = clock.now().getTime() - ACTIVE_RUN_WINDOW_MS;
+  return countBy(
+    mockRunsAttributedTo(projectId),
+    (r) => r.status === 'running' && Date.parse(r.startedAt) > cutoff,
+  ).get(true) ?? 0;
+}
+
+function castName(personId: string): string {
+  return CAST[personId]?.name ?? personId;
+}
+
+function mockSummaryRow(p: MockInitiative): Omit<ProjectSummary, keyof typeof EMPTY_ROLLUPS> {
+  return {
     id: p.id,
     name: p.name,
     status: p.status,
+    contributorCount: 1 + p.smes.length,
     createdAt: p.createdAt,
-    summary: p.summary,
-    contributors: [
-      { ...CAST[p.owner]!, role: 'owner', weight: 1.0 },
-      ...p.smes.map((id) => ({ ...CAST[id]!, role: 'sme', weight: 0.8 })),
-    ],
-  }]));
+    topContributorNames: [p.owner, ...p.smes].map(castName),
+    // Overwritten from the ledger's run-derived activity at the return site;
+    // createdAt is Aurora's own fallback (`lastAgent ?? createdAt`).
+    lastActivityAt: p.createdAt,
+  };
+}
 
 // ─── Provider functions ──────────────────────────────────────────────────────
 
@@ -332,21 +317,16 @@ export async function listProjects(opts: {
   personId?: string | null;
 }): Promise<ProjectSummary[]> {
   if (config.mock.aurora) {
-    let items = MOCK_PROJECTS.slice();
+    let items = initiatives.rows().slice();
     if (opts.status) items = items.filter((p) => p.status === opts.status);
     if (opts.mineOnly) {
       const me = opts.personId ?? null;
-      items = me
-        ? items.filter((p) => {
-            const cast = MOCK_INITIATIVES.find((m) => m.id === p.id);
-            return cast != null && (cast.owner === me || cast.smes.includes(me));
-          })
-        : [];
+      items = me ? items.filter((p) => p.owner === me || p.smes.includes(me)) : [];
     }
     // The cast's first entry is the initiative owner by construction, and the
     // rest are its SMEs — same shape the real rollup returns.
-    return items.slice(0, Math.min(opts.limit ?? 50, 200)).map((p) => {
-      const cast = MOCK_INITIATIVES.find((m) => m.id === p.id);
+    return items.slice(0, Math.min(opts.limit ?? 50, 200)).map((cast) => {
+      const p = mockSummaryRow(cast);
       // Spend + liveness come from the LEDGER'S OWN mock row, not a second
       // fixture: mock mode used to default both to null here (EMPTY_ROLLUPS)
       // while providers/budgets.ts showed real money for the same initiative
@@ -361,17 +341,18 @@ export async function listProjects(opts: {
       const rollup = mockWorkItemRollup(p.id);
       return {
         ...p, ...EMPTY_ROLLUPS,
-        ownerId: cast?.owner ?? null,
+        ownerId: cast.owner,
         ownerName: p.topContributorNames[0] ?? null,
         smeNames: p.topContributorNames.slice(1),
-        repoFullName: cast?.repo ?? null,
+        repoFullName: cast.repo,
         agentSpendUsd: row ? row.spentThisPeriodUsd : 0,
         lastAgentActivityAt: row ? row.lastAgentActivityAt : null,
-        activeAgentRuns: cast?.activeAgents ?? 0,
-        // Derived from the board where there is one; the hand-typed value is
-        // the fallback for an initiative whose seeded work this fixture does
-        // not carry, so a badge can never contradict the items under it.
-        priority: rollup.highestOpenPriority ?? cast?.priority ?? null,
+        // Counted from running bot_runs rows, as the SQL subquery counts them.
+        activeAgentRuns: mockActiveAgentRuns(p.id),
+        // Derived from the board where there is one; the fixture's value is
+        // the fallback for an initiative whose seeded work this mock does not
+        // carry, so a badge can never contradict the items under it.
+        priority: rollup.highestOpenPriority ?? cast.priority,
         allocatedUsd: row ? row.allocatedUsd : null,
         openStories: rollup.openStories,
         openBugs: rollup.openBugs,
@@ -380,15 +361,8 @@ export async function listProjects(opts: {
         // Aurora derives lastActivityAt as `lastAgent ?? createdAt`, so where
         // the ledger has activity the two fields are one timestamp, not two
         // fixtures a second apart — and where it has NONE, the fallback is
-        // createdAt.
-        //
-        // This used to spread the field in only when the ledger had activity,
-        // leaving the hand-typed `lastActivityAt` on the fixture row in place
-        // otherwise. That was invisible while every ledger row carried a typed
-        // activity stamp; once the ledger began counting activity from real
-        // runs, p-zero-trust and p-data-lake — which have none — kept showing
-        // a card date with no run behind it, which is the same lie one level
-        // over from the one this change set out to fix.
+        // createdAt. (p-zero-trust and p-data-lake have no runs at all, and
+        // must not show a card date with no run behind it.)
         lastActivityAt: row?.lastAgentActivityAt ?? p.createdAt,
       };
     });
@@ -556,25 +530,36 @@ export async function listProjects(opts: {
 
 export async function getProject(id: string): Promise<ProjectDetail | null> {
   if (config.mock.aurora) {
-    const mock = MOCK_PROJECT_DETAILS[id];
-    if (!mock) return null;
-    // contributors[0] is the owner by construction (see MOCK_INITIATIVES).
-    const owner = mock.contributors[0];
-    const cast = MOCK_INITIATIVES.find((m) => m.id === id);
-    const sponsor = cast ? CAST[cast.sponsor] : undefined;
-    // Same ledger-derived spend listProjects reads — not a second fixture —
-    // so this row and the Initiatives-list row for the same id agree.
+    const cast = findInitiative(id);
+    if (!cast) return null;
+    const owner = CAST[cast.owner];
+    const sponsor = CAST[cast.sponsor];
+    // Same ledger-derived spend and allocation listProjects reads — not a
+    // second fixture — so this row and the Initiatives-list row for the same
+    // id agree.
     const ledger = MOCK_BUDGETS.find((b) => b.id === id);
     const budgetRow = ledger ? mockBudgetRow(ledger) : null;
     return {
-      ...mock,
-      ownerId: owner?.personId ?? null,
+      id: cast.id,
+      name: cast.name,
+      status: cast.status,
+      createdAt: cast.createdAt,
+      summary: cast.summary,
+      ownerId: cast.owner,
       ownerName: owner?.name ?? null,
       sponsorId: sponsor?.personId ?? null,
       sponsorName: sponsor?.name ?? null,
       sponsorTitle: sponsor?.title ?? null,
       agentSpendUsd: budgetRow ? budgetRow.spentThisPeriodUsd : 0,
-      repoFullName: cast?.repo ?? null,
+      allocatedUsd: budgetRow ? budgetRow.allocatedUsd : null,
+      activeAgentRuns: mockActiveAgentRuns(id),
+      repoFullName: cast.repo,
+      // The owner first, then SMEs — the order Aurora's `weight DESC` returns
+      // for the operating model's two weights.
+      contributors: [
+        { ...CAST[cast.owner]!, role: 'owner', weight: 1.0 },
+        ...cast.smes.map((pid) => ({ ...CAST[pid]!, role: 'sme', weight: 0.8 })),
+      ],
     };
   }
 
@@ -652,6 +637,7 @@ export async function getProject(id: string): Promise<ProjectDetail | null> {
   // work-items schema on some clusters.
   let agentSpendUsd: number | null = null;
   let repoFullName: string | null = null;
+  let activeAgentRuns: number | null = null;
   try {
     const linkPredicate = `(
           br.work_item_id IN (SELECT w2.id FROM work_items w2 WHERE w2.project_id = :id)
@@ -666,15 +652,36 @@ export async function getProject(id: string): Promise<ProjectDetail | null> {
          (SELECT COALESCE(SUM(br.cost_usd), 0)::float8 FROM bot_runs br
             WHERE br.started_at >= ${PERIOD_START_SQL} AND br.cost_usd IS NOT NULL AND ${linkPredicate}) AS agent_spend_usd,
          (SELECT ap.repo_full_name FROM agent_projects ap
-            WHERE ap.org_project_id = :id ORDER BY ap.created_at ASC LIMIT 1) AS repo_full_name`,
+            WHERE ap.org_project_id = :id ORDER BY ap.created_at ASC LIMIT 1) AS repo_full_name,
+         (SELECT COUNT(*)::int FROM bot_runs br
+            WHERE br.status = 'running' AND br.started_at > NOW() - INTERVAL '24 hours'
+              AND ${linkPredicate}) AS active_agent_runs`,
       [strParam('id', id)],
     );
     const row = spendRows[0];
     if (row) {
       agentSpendUsd = row['agent_spend_usd'] != null ? Number(row['agent_spend_usd']) : null;
       repoFullName = row['repo_full_name'] != null ? String(row['repo_full_name']) : null;
+      // The list's `active_agent_runs` subquery, scoped to this id — the same
+      // 'running' + 24h + link predicate, so the rail row and the header agree.
+      activeAgentRuns = row['active_agent_runs'] != null ? Number(row['active_agent_runs']) : null;
     }
   } catch { /* bot_runs/agent_projects absent — pre-work-items schema */ }
+
+  // The allocation in its OWN guarded query: initiative_budgets arrives with
+  // the budgets schema, a different migration from bot_runs, so a cluster
+  // missing it must cost the allocation (null → "no allocation"), not the
+  // spend figure beside it.
+  let allocatedUsd: number | null = null;
+  try {
+    const allocRows = await exec(
+      `SELECT ib.allocated_usd::float8 AS allocated_usd FROM initiative_budgets ib
+        WHERE ib.org_project_id = :id LIMIT 1`,
+      [strParam('id', id)],
+    );
+    const raw = allocRows[0]?.['allocated_usd'];
+    allocatedUsd = raw != null ? Number(raw) : null;
+  } catch { /* initiative_budgets absent — pre-budgets schema */ }
 
   return {
     id: String(proj['id'] ?? ''),
@@ -688,6 +695,8 @@ export async function getProject(id: string): Promise<ProjectDetail | null> {
     sponsorName,
     sponsorTitle,
     agentSpendUsd,
+    allocatedUsd,
+    activeAgentRuns,
     repoFullName,
     contributors: contribRows.map((r) => ({
       personId: String(r['person_id'] ?? ''),

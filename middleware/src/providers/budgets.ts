@@ -139,11 +139,6 @@ export interface MockBudget {
    *  section header below. An allocation is genuinely stored (it is a column in
    *  initiative_budgets), so it stays. */
   id: string; name: string; allocated: number | null;
-  /** Hours since this initiative's last attributed run. Per-initiative rather
-   *  than one flat stub because providers/projects.ts renders the same
-   *  timestamp as the Initiatives page's liveness — a constant here would make
-   *  every card on that page claim the identical last-activity. Mirrors
-   *  MOCK_INITIATIVES.activeHoursAgo there; the parity test pins the pair. */
   /** Who last moved the allocation and when. Unset on a seeded row (the seed
    *  reads as the release manager, six days ago); set by `upsertAllocation`
    *  so a write reads back attributed to the session that made it — the
@@ -259,7 +254,12 @@ export interface MockInitiativeSpend {
  * with 2d ago inside the period and no run anywhere behind it.
  */
 export function mockLastAgentActivityAt(orgProjectId: string): string | null {
-  const runs = mockRunsAttributedTo(orgProjectId);
+  // Costed runs only: both live queries' predicate starts `br.cost_usd IS NOT
+  // NULL` (spendPredicateSql, and projects.ts's attributionPredicate), so a run
+  // still in flight has not yet made an initiative "active" there. Without this
+  // the two seeded in-flight runs would move Observability's last activity to
+  // minutes ago offline while Aurora kept the last finished run.
+  const runs = costed(mockRunsAttributedTo(orgProjectId));
   if (runs.length === 0) return null;
   return runs.reduce(
     (latest, r) => (Date.parse(r.startedAt) > Date.parse(latest) ? r.startedAt : latest),

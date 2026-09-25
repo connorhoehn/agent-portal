@@ -87,8 +87,6 @@ function seededAllocations(): MockBudget[] {
     // exactly what the real query returns for them. p-zero-trust is the sharper
     // case: the mock sprint calendar carries spr-zt-s1, so it was an initiative
     // with a live sprint on /iq/sprints and no row on the ledger at all.
-    // `activityHoursAgo` mirrors providers/projects.ts MOCK_INITIATIVES — the
-    // pairing the parity entry pins.
     { id: 'p-zero-trust',        name: 'Zero Trust Network',       allocated: 10 },
     { id: 'p-data-lake',         name: 'Data Lake Migration',      allocated: 15 },
   ];

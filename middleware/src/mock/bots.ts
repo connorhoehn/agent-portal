@@ -291,10 +291,62 @@ function largeBotRuns(): BotRun[] {
 }
 
 /**
+ * Two marketplace runs in flight right now, on Observability Platform.
+ *
+ * WHY THEY EXIST. The Initiatives page reads "2 agents running" for
+ * Observability (docs/design/initiative-variants-*, decision D3). That number
+ * used to be a typed `activeAgents: 2` on the initiative fixture — rule 1's
+ * exact bug: a count beside a run table with no running row in it, so the rail
+ * said two agents were working while the Agents tab, the active-runs badge and
+ * the concurrency ceiling all saw none. The count is now derived from these
+ * rows, so it is true everywhere at once.
+ *
+ * Shape: what `createBotRun` records for a marketplace dispatch
+ * (lib/bot-runner.ts — `botId: null`, `trigger: 'marketplace'`, a work item,
+ * no cost yet), on the two `in_progress` items of the initiative's current
+ * sprint. `jobId` null keeps them out of the `bot_runs` parity entity (which
+ * keys on job_id) and out of mock/agent-jobs.ts (which mints a job per jobId).
+ * `dispatchedBy` null: no envelope burns down for them — they carry no cost.
+ *
+ * They are not in schema/seed_program.sql, so a seeded Aurora reads "Idle" for
+ * Observability. That is a documented divergence (docs/mock-floor.md), not
+ * drift: a seed cannot hold a run "in flight" without it being in flight
+ * forever, and the reconcile/sweep arms would rightly fail it on first boot.
+ * Offline, both of those arms are no-ops (lib/bot-runner.ts), so these stay
+ * running until a reset re-stamps them. They take two of the three concurrency
+ * slots (lib/bot-runner.ts `botMaxConcurrent`), so one more offline dispatch
+ * still fits.
+ */
+function inFlightMarketplaceRuns(): BotRun[] {
+  const inFlight = (id: string, workItemId: string, minutesAgo: number): BotRun => ({
+    id,
+    botId: null,
+    trigger: 'marketplace',
+    runId: null,
+    jobId: null,
+    workItemId,
+    status: 'running',
+    costUsd: null,
+    modelProvider: null,
+    startedAt: clock.hoursAgo(minutesAgo / 60),
+    finishedAt: null,
+    outcome: {},
+    dispatchedBy: null,
+  });
+  return [
+    // "Span-metrics connector feeding RED dashboards" — Layla Hassan, 8 points.
+    inFlight('run-inflight-obs-e1-s3', 'wi-obs-e1-s3', 18),
+    // "Collector OOMs under burst ingest when queue is unbounded" — Eli Garcia.
+    inFlight('run-inflight-obs-e1-b5', 'wi-obs-e1-b5', 42),
+  ];
+}
+
+/**
  * The seeded cron history — one FLAT list, because `bot_runs` is one table.
  *
  * `default` — the ~30 days schema/seed_program.sql writes for the twelve
- *             maintenance bots.
+ *             maintenance bots, plus the two in-flight marketplace runs
+ *             (`inFlightMarketplaceRuns` — mock-only, see there).
  * `empty`   — a fleet that has never fired. Declared explicitly: an undeclared
  *             scenario falls back to `default`, and this is the state the
  *             "no runs yet" copy on the roster and the detail page is for.
@@ -304,9 +356,9 @@ function largeBotRuns(): BotRun[] {
 export const botRuns = defineFixture<BotRun>({
   key: 'bot-runs',
   scenarios: {
-    default: () => Object.values(seededRunsByBot()).flat(),
+    default: () => [...Object.values(seededRunsByBot()).flat(), ...inFlightMarketplaceRuns()],
     empty: () => [],
-    large: largeBotRuns,
+    large: () => [...largeBotRuns(), ...inFlightMarketplaceRuns()],
   },
 });
 
@@ -346,7 +398,9 @@ export function liveRunsFor(botId: string): BotRun[] {
  * `agent_jobs` row per run and reads the history that way.
  */
 export function seededRunsByBotId(): Record<string, BotRun[]> {
-  return toRecord(groupBy(botRuns.rows(), (r) => r.botId ?? 'unassigned'));
+  // Bot-less rows (the in-flight marketplace runs) are nobody's bot history,
+  // so they are not grouped under an invented 'unassigned' bot id.
+  return toRecord(groupBy(botRuns.rows().filter((r) => r.botId !== null), (r) => r.botId as string));
 }
 
 // ─── The roster ──────────────────────────────────────────────────────────────

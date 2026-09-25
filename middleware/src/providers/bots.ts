@@ -453,10 +453,17 @@ function liveRunsForBot(botId: string): BotRun[] {
 }
 
 /** The mock analogue of countRunningRuns' 24-hour window — see that function
- *  for why the window is there. */
+ *  for why the window is there.
+ *
+ *  Over EVERY mock run — the seeded history and this process's rows — because
+ *  Aurora's count is a bare `FROM bot_runs` that does not care who wrote a row.
+ *  It read `liveBotRuns` only, which was harmless while the seed had no running
+ *  row; once it seeded two in-flight marketplace runs (mock/bots.ts), a
+ *  live-only count would have admitted three more dispatches past a ceiling of
+ *  three with two already going. */
 function countMockRunningRuns(): number {
   const cutoff = clock.now().getTime() - 24 * HOUR_MS;
-  return liveBotRuns.rows().filter(
+  return allMockRuns().filter(
     (r) => r.status === 'running' && Date.parse(r.startedAt) > cutoff,
   ).length;
 }
@@ -743,11 +750,11 @@ export async function listBotRunsForBotsResult(botIds: string[], limitPerBot = 5
  */
 export async function listMarketplaceRuns(orgProjectId: string, limit = 100): Promise<BotRun[]> {
   if (config.mock.aurora) {
-    // The same two conditions the statement below applies, resolved row by row:
-    // bot-less, and bound to a work item on this initiative. Seeded history has
-    // no marketplace runs (the seed's runs all belong to a maintenance bot), so
-    // everything here is a dispatch this process authorized.
-    const botless = liveBotRuns.rows().filter((r) => r.botId === null && r.workItemId);
+    // The same two conditions the statement below applies, resolved row by row,
+    // over the whole table: the seeded history carries two in-flight
+    // marketplace runs (mock/bots.ts `inFlightMarketplaceRuns`) and the rest is
+    // what this process dispatched.
+    const botless = allMockRuns().filter((r) => r.botId === null && r.workItemId);
     const matched: BotRun[] = [];
     for (const run of botless) {
       const item = await getWorkItem(run.workItemId as string);
@@ -784,7 +791,9 @@ export async function listMarketplaceRuns(orgProjectId: string, limit = 100): Pr
 export async function listActiveRuns(limit = 25): Promise<BotRun[]> {
   const cap = Math.min(Math.max(limit, 1), 100);
   if (config.mock.aurora) {
-    return liveBotRuns.rows()
+    // Seeded and session rows alike — the SQL below reads one table, and the
+    // seed's two in-flight marketplace runs are exactly what this widget is for.
+    return allMockRuns()
       .filter((r) => r.status === 'running')
       .sort((a, b) => b.startedAt.localeCompare(a.startedAt))
       .slice(0, cap)
@@ -997,7 +1006,9 @@ export async function finalizeBotRun(id: string, result: {
   outcome?: Record<string, unknown>;
 }): Promise<void> {
   if (config.mock.aurora) {
-    const run = liveBotRuns.rows().find((r) => r.id === id);
+    // Either half of the table: a seeded in-flight run settles the same way a
+    // dispatched one does (and a reset re-seeds it).
+    const run = allMockRuns().find((r) => r.id === id);
     if (!run) return;
     run.status = result.status;
     // COALESCE and `||` respectively: a null cost leaves the recorded one

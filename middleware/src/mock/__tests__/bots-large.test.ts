@@ -32,7 +32,16 @@ describe('botRuns large scenario', () => {
     const large = botRuns.rows('large');
     const ids = new Set(large.map((r) => r.id));
     expect(ids.size).toBe(large.length);
-    for (const run of large) {
+    // Bot history only. The two in-flight marketplace runs (bot-less, no job
+    // yet — mock/bots.ts `inFlightMarketplaceRuns`) ride along in every
+    // non-empty world and are pinned by their own shape below.
+    const inFlight = large.filter((r) => r.botId === null);
+    expect(inFlight.map((r) => r.status)).toEqual(['running', 'running']);
+    for (const run of inFlight) {
+      expect(run.jobId).toBeNull();
+      expect(run.costUsd).toBeNull();
+    }
+    for (const run of large.filter((r) => r.botId !== null)) {
       expect(run.id).toMatch(/^[0-9a-f-]+-run-\d+$/);
       expect(run.jobId).toMatch(/^job-.+-\d+$/);
       expect(typeof run.costUsd === 'number' || run.costUsd === null).toBe(true);
