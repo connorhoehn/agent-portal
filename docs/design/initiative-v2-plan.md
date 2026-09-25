@@ -8,7 +8,7 @@
 - "Needs attention" lists every blocked item still to do, not just the first, so its count is the rows under it.
 - Copy that named v1's "Everyone" toggle now says "All initiatives".
 - The Sprints rail sublines say "pts" and carry their full text as a tooltip, because at 264px "points" clipped.
-- One gap is left for the library. `ActionRowList tone="warning"` tints noticeably stronger than the mockup's pale amber.
+- The attention-tint gap is closed in ui-components 2.393.1: `ActionRowList` toned rows use the pale callout colours (rgb(255, 248, 235), matching the mockup), and the Blocked tag is the new outlined `Chip`. The overview screenshot and the five `initiative-detail` logs were re-shot and re-sealed against it.
 
 **Baseline:** `main` at `7309a6f3`. v1 is fully built there: the explorer frame, the Overview, the Work brief, Mine-empty, and Settings Profile. It runs on ui-components 2.390.4. v2 is a restyle of that build, not a rebuild. The data contract, the models (`overviewModel`, `initiativeListModel`, `briefModel`, `composerPrompts`) and the composer all stay.
 
