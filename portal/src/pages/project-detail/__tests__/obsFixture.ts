@@ -47,7 +47,7 @@ export const OBS_TREE: WorkItemTree[] = [
         labels: ['alerting', 'blocked'], storyPoints: 2, ...ELI,
         description: 'When one shared dependency fails, it can trigger forty separate pages.',
         summary: 'One failing dependency can trigger forty pages.',
-        blockedReason: 'Eli needs the dependency map before this bug can be planned.',
+        blockedReason: 'Waiting on the dependency map.',
         nextStep: 'Confirm the dependency map with Eli Garcia.',
         nextStepDetail: 'The team needs this before choosing how to group duplicate alerts.',
       }),
@@ -58,7 +58,7 @@ export const OBS_TREE: WorkItemTree[] = [
 export const OBS_PROJECT: ProjectDetail = {
   id: 'p-observability', name: 'Observability Platform', status: 'in_progress', createdAt: null,
   ownerId: 'p-004', ownerName: 'Nora DaSilva',
-  summary: 'Collect telemetry, reduce alert noise, and control retention costs.',
+  summary: 'Centralize telemetry, reduce alert noise, and control retention costs.\nFocus: actionable alerts, team error budgets, and OpenTelemetry.',
   agentSpendUsd: 1.73, allocatedUsd: 95, activeAgentRuns: 2,
   contributors: [
     { personId: 'p-004', name: 'Nora DaSilva', title: null, role: 'owner', weight: 1 },

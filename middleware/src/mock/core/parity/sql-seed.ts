@@ -65,6 +65,17 @@ export function parseLiteral(text: string): SeedValue {
   if (upper === 'TRUE') return true;
   if (upper === 'FALSE') return false;
   if (NUMERIC.test(t)) return Number(t);
+  // An escape string, E'...\n...': the generator writes a value that carries
+  // a line break this way (a raw newline would be flattened to a space by
+  // schema/apply-work-items.sh). Only \n and \\ are decoded — the generator
+  // emits no other escape — so anything else stays raw rather than guessed.
+  if ((t.startsWith("E'") || t.startsWith("e'")) && t.endsWith("'") && t.length >= 3) {
+    const body = t.slice(2, -1);
+    if (!/(^|[^'])'([^']|$)/.test(body) && !/\\[^n\\]/.test(body.replace(/\\\\/g, ''))) {
+      return body.replace(/''/g, "'").replace(/\\(n|\\)/g, (_m, c: string) => (c === 'n' ? '\n' : '\\'));
+    }
+    return { raw: t };
+  }
   if (t.startsWith("'") && t.endsWith("'") && t.length >= 2) {
     // A single quoted string only — `'a' || 'b'` stays raw.
     const body = t.slice(1, -1);

@@ -36,10 +36,15 @@ INITIATIVES = [
         id='p-observability', slug='obs', repo='orgiq-observability', tier='flagship',
         owner='p-004', smes=['p-008', 'p-011'],
         sponsor='p-002',
-        # The one-line pitch the initiative header shows (projects.summary).
-        # Only this initiative carries one distinct from `description`; every
-        # other initiative's summary is its description, as before.
-        summary='Collect telemetry, reduce alert noise, and control retention costs.',
+        # The pitch the initiative header shows (projects.summary). Only this
+        # initiative carries one distinct from `description`; every other
+        # initiative's summary is its description, as before. The second
+        # paragraph is the "Focus:" line from the v2 Overview mockup
+        # (docs/design/initiative-v2-plan.md, V3): a `\n` inside the summary
+        # rather than a new column, so no schema change — the header renders
+        # it pre-line.
+        summary='Centralize telemetry, reduce alert noise, and control retention costs.\n'
+                'Focus: actionable alerts, team error budgets, and OpenTelemetry.',
         description='Unified telemetry: OpenTelemetry collection, SLO/error-budget '
                     'alerting, and cost-aware retention across every service.',
         epics=[
@@ -530,7 +535,7 @@ BRIEFS: dict[str, dict[str, str]] = {
         description='When one shared dependency fails, it can trigger forty separate pages. '
                     'Fixing this should help the on-call engineer identify the root problem '
                     'without sorting through duplicate alerts.',
-        blocked_reason='Eli needs the dependency map before this bug can be planned.',
+        blocked_reason='Waiting on the dependency map.',
         next_step='Confirm the dependency map with Eli Garcia.',
         next_step_detail='The team needs this before choosing how to group duplicate alerts.',
     ),
@@ -558,6 +563,18 @@ TITLES: dict[str, str] = {}
 
 def q(s: str) -> str:
     return s.replace("'", "''")
+
+
+def lit(s: str) -> str:
+    """A SQL string literal for `s`, quotes included.
+
+    A value with a line break is written as an escape string (E'..\\n..')
+    rather than with a raw newline inside the quotes: schema/apply-work-items.sh
+    flattens each statement onto one line before sending it, which would turn
+    a raw newline into a space and silently change the value."""
+    if '\n' not in s:
+        return f"'{q(s)}'"
+    return "E'" + q(s.replace('\\', '\\\\')).replace('\n', '\\n') + "'"
 
 
 def days(n: int) -> str:
@@ -615,7 +632,7 @@ def main() -> None:
 
         emit(
             f"UPDATE projects SET description = '{q(ini['description'])}', "
-            f"summary = '{q(ini.get('summary', ini['description']))}', "
+            f"summary = {lit(ini.get('summary', ini['description']))}, "
             f"github_url = '{GH}/{ini['repo']}', owner_id = '{ini['owner']}', "
             f"sponsor_person_id = '{ini['sponsor']}' "
             f"WHERE id = '{pid}'"

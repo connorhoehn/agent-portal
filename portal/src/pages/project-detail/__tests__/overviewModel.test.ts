@@ -44,7 +44,7 @@ test('attention is the blocked bug, with its summary + reason and "Blocked · El
   if (m.state !== 'ready') return;
   assert.equal(m.attention?.id, 'wi-obs-e2-b4');
   assert.equal(m.attention?.title, 'Stop duplicate alerts during a dependency outage');
-  assert.equal(m.attention?.body, 'One failing dependency can trigger forty pages. Eli needs the dependency map before this bug can be planned.');
+  assert.equal(m.attention?.body, 'One failing dependency can trigger forty pages. Waiting on the dependency map.');
   assert.deepEqual(m.attention?.meta, [{ label: 'Blocked', tone: 'warning' }, { label: 'Eli Garcia' }, { label: '2 points' }]);
   assert.equal(m.attention?.actionLabel, 'Open work');
   assert.equal(m.attention?.href, '/iq/projects/p-observability?tab=work&item=wi-obs-e2-b4');

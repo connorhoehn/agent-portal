@@ -77,7 +77,7 @@ test('workflow prompts are built from the rows', () => {
   assert.doesNotMatch(p, /SLO definitions/); // done work is not up for prioritizing
   const u = workflowPrompt('unblock', itemSubject)!;
   assert.match(u, /What does Eli need before "Stop duplicate alerts during a dependency outage" can start\?/);
-  assert.match(u, /Blocked because: Eli needs the dependency map/);
+  assert.match(u, /Blocked because: Waiting on the dependency map\./);
   assert.match(u, /Planned next step: Confirm the dependency map with Eli Garcia\./);
   assert.match(workflowPrompt('criteria', itemSubject)!, /What it changes: One failing dependency can trigger forty pages\./);
   assert.match(workflowPrompt('prioritize', listSubject)!, /- Observability Platform \(in_progress, owner Nora DaSilva, 2 running\)/);

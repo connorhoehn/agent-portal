@@ -67,11 +67,12 @@ function createdOn(month: number, day: number): string {
 
 function seededInitiatives(): MockInitiative[] {
   return [
-    // Summary is the initiative-variants mockup's copy (docs/design, decision
-    // D1): schema/seeds/generate_program_seed.py carries the same sentence.
+    // Summary is the v2 Overview mockup's copy (docs/design/initiative-v2-plan.md,
+    // V3): schema/seeds/generate_program_seed.py carries the same two lines,
+    // the second a "Focus:" paragraph after a newline.
     { id: 'p-observability', name: 'Observability Platform', status: 'in_progress', createdAt: createdOn(5, 24),
       owner: 'p-004', smes: ['p-008', 'p-011'], sponsor: 'p-002',
-      summary: 'Collect telemetry, reduce alert noise, and control retention costs.',
+      summary: 'Centralize telemetry, reduce alert noise, and control retention costs.\nFocus: actionable alerts, team error budgets, and OpenTelemetry.',
       repo: 'connorhoehnslalom/orgiq-observability', priority: 'critical' },
     { id: 'p-auth-migration', name: 'Auth Migration', status: 'in_progress', createdAt: createdOn(6, 5),
       owner: 'p-002', smes: ['p-051', 'p-004'], sponsor: 'p-052',

@@ -28,7 +28,7 @@ describe('brief fields — mock path', () => {
     expect(await getWorkItem('wi-obs-e2-b4')).toMatchObject({
       title: 'Stop duplicate alerts during a dependency outage',
       summary: 'One failing dependency can trigger forty pages.',
-      blockedReason: 'Eli needs the dependency map before this bug can be planned.',
+      blockedReason: 'Waiting on the dependency map.',
       nextStep: 'Confirm the dependency map with Eli Garcia.',
       nextStepDetail: 'The team needs this before choosing how to group duplicate alerts.',
     });
@@ -65,7 +65,7 @@ describe('brief fields — Aurora path', () => {
     id: 'wi-obs-e2-b4', project_id: 'p-observability', project_name: 'Observability Platform',
     type: 'bug', title: 'Stop duplicate alerts during a dependency outage', status: 'open', priority: 'high',
     summary: 'One failing dependency can trigger forty pages.',
-    blocked_reason: 'Eli needs the dependency map before this bug can be planned.',
+    blocked_reason: 'Waiting on the dependency map.',
     next_step: 'Confirm the dependency map with Eli Garcia.',
     next_step_detail: 'The team needs this before choosing how to group duplicate alerts.',
   };
