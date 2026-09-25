@@ -1,7 +1,7 @@
 {
-  "capturedAt": "2026-09-25T01:37:00.585Z",
-  "serverHandlerSha": "3bd3a244114705501a64119df8585e27d9ec1be3cbd8f019a2045885c87f85fd",
-  "baseUrl": "http://127.0.0.1:3014",
+  "capturedAt": "2026-09-25T02:03:51.966Z",
+  "serverHandlerSha": "21d87be69c6663eaef17e05b549a57015dd33f973a220bb6a2c7e0b00a711aee",
+  "baseUrl": "http://127.0.0.1:3018",
   "personas": [
     "orgiq/admin",
     "assessment/admin",
@@ -2337,7 +2337,8 @@
         "artifacts[].summary": "string",
         "artifacts[].title": "string",
         "artifacts[].type": "string",
-        "artifacts[].updated_at": "string"
+        "artifacts[].updated_at": "string",
+        "artifacts[].when_this_helps": "null|string"
       },
       "values": {
         "artifacts[].classification": [
@@ -2554,6 +2555,7 @@
         "items[].title": "string",
         "items[].type": "string",
         "items[].updated_at": "string",
+        "items[].when_this_helps": "string",
         "next_cursor": "string",
         "total": "number"
       },
@@ -2588,25 +2590,67 @@
       "status": 200,
       "shape": {
         "$": "object",
-        "body": "string",
-        "box_id": "string",
+        "body_markdown": "string",
+        "classification": "string",
+        "cluster_ids": "array",
+        "cluster_ids[]": "string",
+        "confidence": "number",
         "created_at": "string",
+        "created_by_compaction_id": "string",
+        "facts": "array",
+        "facts[]": "string",
+        "guide": "object",
+        "guide.approach": "array",
+        "guide.approach[]": "object",
+        "guide.approach[].ordinal": "number",
+        "guide.approach[].step_id": "string",
+        "guide.approach[].text": "string",
+        "guide.based_on": "array",
+        "guide.based_on[]": "object",
+        "guide.based_on[].id": "string",
+        "guide.based_on[].kind": "string",
+        "guide.based_on[].repo": "string",
+        "guide.based_on[].repo_label": "string",
+        "guide.based_on[].title": "string",
+        "guide.run_warning": "object",
+        "guide.run_warning.at": "string",
+        "guide.run_warning.body": "string",
+        "guide.run_warning.failed_at_ordinal": "number",
+        "guide.run_warning.outcome": "string",
+        "guide.run_warning.run_id": "string",
+        "guide.run_warning.title": "string",
         "id": "string",
-        "initiative_id": "string",
-        "kind": "string",
+        "last_used_at": "null",
         "level": "string",
-        "repo": "string",
-        "session_id": "string",
-        "tags": "array",
-        "tags[]": "string",
-        "title": "string"
+        "library_item_id": "null",
+        "owner": "string",
+        "reviewed_at": "null",
+        "reviewed_by": "null",
+        "status": "string",
+        "summary": "string",
+        "title": "string",
+        "type": "string",
+        "updated_at": "string",
+        "when_this_helps": "string"
       },
       "values": {
-        "kind": [
-          "convention"
+        "classification": [
+          "confidential"
+        ],
+        "guide.based_on[].kind": [
+          "cluster"
+        ],
+        "guide.run_warning.outcome": [
+          "failed"
         ],
         "level": [
-          "L0"
+          "L2"
+        ],
+        "status": [
+          "draft"
+        ],
+        "type": [
+          "procedure"
         ]
       }
     },
@@ -2626,17 +2670,42 @@
         "nodes[].kind": "string",
         "nodes[].label": "string",
         "nodes[].meta": "object",
+        "nodes[].meta.applied_at": "string",
+        "nodes[].meta.artifactType": "string",
         "nodes[].meta.box_id": "string",
+        "nodes[].meta.clusterKind": "string",
+        "nodes[].meta.confidence": "number",
         "nodes[].meta.created_at": "string",
+        "nodes[].meta.failed_at_step_id": "null|string",
         "nodes[].meta.initiative_id": "string",
+        "nodes[].meta.library_item_id": "null",
+        "nodes[].meta.memberCount": "number",
+        "nodes[].meta.object": "string",
         "nodes[].meta.obsKind": "string",
+        "nodes[].meta.ordinal": "number",
+        "nodes[].meta.outcome": "string",
+        "nodes[].meta.plain": "string",
+        "nodes[].meta.predicate": "string",
         "nodes[].meta.repo": "string",
-        "nodes[].meta.session_id": "string"
+        "nodes[].meta.session_id": "string",
+        "nodes[].meta.status": "string",
+        "nodes[].meta.subject": "string",
+        "nodes[].meta.subtitle": "string"
       },
       "values": {
         "nodes[].kind": [
-          "observation",
-          "session"
+          "application",
+          "artifact",
+          "cluster",
+          "fact",
+          "observation"
+        ],
+        "nodes[].meta.outcome": [
+          "failed",
+          "succeeded"
+        ],
+        "nodes[].meta.status": [
+          "draft"
         ]
       }
     },
@@ -2657,7 +2726,8 @@
       },
       "values": {
         "sources[].kind": [
-          "session"
+          "cluster",
+          "observation"
         ]
       }
     },
@@ -2743,6 +2813,7 @@
         "procedures[].artifact.title": "string",
         "procedures[].artifact.type": "string",
         "procedures[].artifact.updated_at": "string",
+        "procedures[].artifact.when_this_helps": "string",
         "procedures[].drift": "object",
         "procedures[].drift.failed_runs": "number",
         "procedures[].drift.new_gotcha_clusters": "number",
@@ -2807,6 +2878,7 @@
         "artifact.title": "string",
         "artifact.type": "string",
         "artifact.updated_at": "string",
+        "artifact.when_this_helps": "string",
         "drift": "object",
         "drift.failed_runs": "number",
         "drift.new_gotcha_clusters": "number",
@@ -2846,12 +2918,14 @@
         "$": "object",
         "applications": "array",
         "applications[]": "object|object(dictionary)",
+        "applications[].advice": "null",
         "applications[].applied_at": "string",
         "applications[].box_id": "string",
         "applications[].failed_at_step_id": "null",
         "applications[].id": "string",
         "applications[].note": "null",
         "applications[].outcome": "string",
+        "applications[].plain_reason": "null",
         "applications[].procedure_id": "string",
         "applications[].repo": "string",
         "applications[].session_id": "string"
@@ -4782,26 +4856,8 @@
       },
       "values": {
         "events[].action": [
-          "ApproveTransaction",
-          "ConnectLocalCompute",
-          "DispatchAgentRun",
-          "EditGuardrail",
-          "LabelFeedback",
           "Login",
-          "ManageAssessmentConfig",
-          "ManageBots",
-          "ManageBudgets",
-          "ManageCanary",
-          "ManageDevbox",
           "ManageIngest",
-          "ManageKB",
-          "ManageKnowledge",
-          "ManageSprints",
-          "ManageSubmissions",
-          "ManageUsers",
-          "PublishReport",
-          "RunAssessmentAgent",
-          "ScoreAssessment",
           "ViewAssessment",
           "ViewIdentityAdmin",
           "ViewLeaderboard",
@@ -4815,7 +4871,6 @@
           "admin"
         ],
         "events[].tenant": [
-          "assessment",
           "orgiq"
         ]
       }
@@ -4987,31 +5042,9 @@
       "status": 200,
       "shape": {
         "$": "object",
-        "events": "array",
-        "events[]": "object",
-        "events[].detail": "object",
-        "events[].detail.agentName": "string",
-        "events[].detail.bytes": "number",
-        "events[].detail.codeSnippet": "string",
-        "events[].detail.language": "string",
-        "events[].detail.outputSnippet": "string",
-        "events[].detail.pageTitle": "string",
-        "events[].detail.url": "string",
-        "events[].durationMs": "number",
-        "events[].id": "string",
-        "events[].kind": "string",
-        "events[].ok": "boolean",
-        "events[].sessionId": "string",
-        "events[].startedAt": "string"
+        "events": "array"
       },
-      "values": {
-        "events[].kind": [
-          "browser_launch",
-          "browser_navigate",
-          "browser_screenshot",
-          "code_execute"
-        ]
-      }
+      "values": {}
     },
     "GET /api/observability/cost/a2a-overhead": {
       "persona": "orgiq/admin",
@@ -5310,7 +5343,7 @@
         "points[].bucketStart": "string",
         "points[].count": "number",
         "points[].driftP95": "number",
-        "points[].judgeP50": "number",
+        "points[].judgeP50": "null|number",
         "windowHours": "number"
       },
       "values": {}
@@ -7172,27 +7205,9 @@
       "open": false,
       "values": [
         "ANONYMIZE",
-        "ApproveTransaction",
         "BLOCK",
-        "ConnectLocalCompute",
-        "DispatchAgentRun",
-        "EditGuardrail",
-        "LabelFeedback",
         "Login",
-        "ManageAssessmentConfig",
-        "ManageBots",
-        "ManageBudgets",
-        "ManageCanary",
-        "ManageDevbox",
         "ManageIngest",
-        "ManageKB",
-        "ManageKnowledge",
-        "ManageSprints",
-        "ManageSubmissions",
-        "ManageUsers",
-        "PublishReport",
-        "RunAssessmentAgent",
-        "ScoreAssessment",
         "ViewAssessment",
         "ViewIdentityAdmin",
         "ViewLeaderboard",
@@ -7268,15 +7283,12 @@
         "agent",
         "analysis",
         "answer",
+        "application",
         "artifact",
         "blocked",
-        "browser_launch",
-        "browser_navigate",
-        "browser_screenshot",
         "clarification",
         "close_claim",
         "cluster",
-        "code_execute",
         "comment",
         "confluence",
         "convention",
@@ -7286,6 +7298,7 @@
         "eks",
         "evaluator",
         "exception_review",
+        "fact",
         "failed",
         "follow_up",
         "general",
@@ -7311,7 +7324,6 @@
         "require_review",
         "retrieval",
         "retrieve",
-        "session",
         "skill",
         "synced",
         "system",
