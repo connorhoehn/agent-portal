@@ -257,6 +257,40 @@ export const PARAM_SOURCES: Record<string, string> = {
   'personId@/api/graph/projects/:id/contributors': '^#personId',
 };
 
+/**
+ * Params whose value is a JOIN, not a lookup: the right id depends on a field
+ * of an id already resolved earlier in the same path, which no single GET of a
+ * `PARAM_SOURCES` path can express. Keyed by the templated form, like the
+ * second-param entries above. Each reads the server and returns null when the
+ * world offers no suitable row — that is reported as a skip, never guessed.
+ */
+type ParamResolver = (ctx: {
+  values: Record<string, string>;
+  read: (path: string) => Promise<Json | null>;
+}) => Promise<string | null>;
+
+const objectRows = (body: Json | null): { [k: string]: Json }[] =>
+  Array.isArray(body)
+    ? body.filter((v): v is { [k: string]: Json } => v !== null && typeof v === 'object' && !Array.isArray(v))
+    : [];
+
+export const PARAM_RESOLVERS: Record<string, ParamResolver> = {
+  // A decision links only to work on its OWN initiative, and never away from
+  // another item (`decideDecisionLink`). The first decision on the board would
+  // usually belong to some other initiative and pin nothing but the 409, so
+  // read the item's initiative off the board, then take a decision on that
+  // initiative that is unlinked or already linked to this very item.
+  'decisionId@/api/graph/work-items/:id/decisions': async ({ values, read }) => {
+    const itemId = values['id'];
+    const item = objectRows(await read('/api/graph/work')).find((w) => w['id'] === itemId);
+    const projectId = item?.['projectId'];
+    if (typeof projectId !== 'string' || projectId.length === 0) return null;
+    const decisions = objectRows(await read(`/api/graph/projects/${encodeURIComponent(projectId)}/decisions`));
+    const free = decisions.find((d) => d['workItemId'] === null || d['workItemId'] === itemId);
+    return typeof free?.['id'] === 'string' ? free['id'] : null;
+  },
+};
+
 /** Keys an element of a collection might carry its identifier under. */
 const ID_KEYS = ['id', 'key', 'slug', 'name'];
 
@@ -345,6 +379,7 @@ export async function resolvePath(
   cache: Map<string, string | null>,
 ): Promise<{ path: string } | { skipped: string }> {
   let filled = path;
+  const values: Record<string, string> = {};
   for (const param of pathParams(path)) {
     const prefix = filled.slice(0, filled.indexOf(`:${param}`)).replace(/\/$/, '');
     if (prefix.includes(':')) return { skipped: `nested param before :${param}` };
@@ -352,6 +387,17 @@ export async function resolvePath(
     const template = path.slice(0, path.indexOf(`:${param}`)).replace(/\/$/, '');
     const cacheKey = `${persona.name} ${prefix} ${param}`;
     let value = cache.get(cacheKey);
+    const resolver = PARAM_RESOLVERS[`${param}@${template}`];
+    if (value === undefined && resolver) {
+      value = await resolver({
+        values,
+        read: async (p) => {
+          const res = await get(`${BASE}${p}`, persona).catch(() => null);
+          return res && res.status === 200 && res.body !== undefined ? res.body : null;
+        },
+      });
+      cache.set(cacheKey, value);
+    }
     if (value === undefined) {
       const sources = [
         PARAM_SOURCES[`${param}@${prefix}`],
@@ -380,6 +426,7 @@ export async function resolvePath(
       cache.set(cacheKey, value);
     }
     if (value === null) return { skipped: `no value found for :${param} under ${prefix}` };
+    values[param] = value;
     filled = filled.replace(`:${param}`, encodeURIComponent(value));
   }
   return { path: filled };

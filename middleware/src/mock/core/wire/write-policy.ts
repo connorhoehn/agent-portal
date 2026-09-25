@@ -698,6 +698,10 @@ const RESTORABLE_DELETES: Family[] = [
     pattern: 'DELETE /api/local-compute/nodes/:id',
     what: 'a SOFT revoke — providers/local-compute.ts `revokeNode` stamps `revoked_at` on a row that stays for audit, and the row lives in the registered `compute-nodes` fixture, so reset clears the stamp',
   },
+  {
+    pattern: 'DELETE /api/graph/work-items/:id/decisions/:decisionId',
+    what: 'an UNLINK, not a row delete — providers/work-items.ts `unlinkDecisionFromWorkItem` nulls `workItemId` on one row of the registered `graph-decisions` fixture and removes nothing; reset restores the seeded link (proved in routes/__tests__/work-item-decision-links.test.ts, "the fixture reset puts back a seeded link the unlink cleared"). Scoped by the same writeGate as every board write',
+  },
 ];
 
 const family = (list: Family[]) => ({
@@ -732,8 +736,8 @@ export const REFUSAL_RULES: readonly RefusalRule[] = [
       'DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED ' +
       'fixtures only, and a good deal of mock state is a module-level array ' +
       'that registers nothing — so a delete is not reliably undoable, and an ' +
-      'un-undone one silently shrinks every shape captured after it. The one ' +
-      'exception is a delete somebody has read and proved restorable, named ' +
+      'un-undone one silently shrinks every shape captured after it. The only ' +
+      'exceptions are deletes somebody has read and proved restorable, named ' +
       'in RESTORABLE_DELETES with the reason; that only lets it reach the ' +
       'allowlist, where it still needs a full entry like anything else.',
     applies: (route) =>
@@ -1135,15 +1139,23 @@ export const WRITE_SPECS: readonly WriteSpec[] = [
     },
   },
   {
-    // Its DELETE twin (unlink) stays refused under `destructive` by default:
-    // it clears a column rather than a row and is restorable, but
-    // RESTORABLE_DELETES is for deletes someone has proved in a replay, and
-    // this one has not been replayed yet.
+    // `:decisionId` comes from PARAM_RESOLVERS in http.ts: a decision on the
+    // SAME initiative as the resolved item, so this pins the 200, not a 409.
     route: 'PUT /api/graph/work-items/:id/decisions/:decisionId',
     persona: 'orgiq/admin',
     safe: 'Sets `workItemId` on one row of the registered `graph-decisions` fixture (mock/decisions.ts) — reset puts the seeded link back. No AWS, no fs, no timer, no row added or removed. A refused link (another initiative, org-wide, already linked elsewhere) writes nothing and answers 409.',
-    bodyFrom: 'routes/work-items.ts: the route takes NO body (any key is a 400); both ids are path params the sweep resolves from the server. Whether the resolved pair shares an initiative is not knowable in advance, so the 404/409 refusal shapes are pinned alongside the 200.',
+    bodyFrom: 'routes/work-items.ts: the route takes NO body (any key is a 400); both ids are path params the sweep resolves from the server. The resolver picks a same-initiative decision that is unlinked or already on this item; should the server offer none, the 404/409 refusal shapes are still real and pinned.',
+    intercepts: ['aurora'],
     alsoAccept: [404, 409],
+  },
+  {
+    // Spared from `destructive` by RESTORABLE_DELETES, which says why.
+    route: 'DELETE /api/graph/work-items/:id/decisions/:decisionId',
+    persona: 'orgiq/admin',
+    safe: 'Nulls `workItemId` on one row of the registered `graph-decisions` fixture (mock/decisions.ts) and removes nothing — reset puts the seeded link back. No AWS, no fs, no timer. Unlinking a decision the item does not hold writes nothing and answers 404.',
+    bodyFrom: 'routes/work-items.ts: no body; both ids are path params. The sweep resets between writes, so the PUT above has not linked anything by now: the resolved pair is linked only if the seed links it, and otherwise the handler\'s 404 ("not linked to this work item") is the real shape pinned.',
+    intercepts: ['aurora'],
+    alsoAccept: [404],
   },
   {
     route: 'PATCH /api/graph/projects/:id',
@@ -2146,7 +2158,7 @@ export const WRITE_SPECS: readonly WriteSpec[] = [
   {
     route: 'DELETE /api/local-compute/nodes/:id',
     persona: 'orgiq/admin',
-    safe: 'The one delete on the allowlist, and it deletes nothing: `revokeNode` is a soft revoke that stamps `revoked_at` on a row kept for audit, inside the registered `compute-nodes` fixture, so reset clears the stamp and the machine is listed again. See RESTORABLE_DELETES for why the `destructive` rule lets it through — and note the rule itself is unchanged for every other DELETE.',
+    safe: 'One of two deletes on the allowlist (the decision unlink is the other), and it deletes nothing: `revokeNode` is a soft revoke that stamps `revoked_at` on a row kept for audit, inside the registered `compute-nodes` fixture, so reset clears the stamp and the machine is listed again. See RESTORABLE_DELETES for why the `destructive` rule lets it through — and note the rule itself is unchanged for every other DELETE.',
     bodyFrom: 'routes/local-compute.ts: no body; `:id` is a node off GET /api/local-compute/nodes, which lists only machines this persona owns, so the ownership clause in the UPDATE is satisfied by construction.',
     intercepts: ['aurora'],
   },

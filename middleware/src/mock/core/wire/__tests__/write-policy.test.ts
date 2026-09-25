@@ -57,7 +57,10 @@ describe('write policy — the decision', () => {
     // list is refused whether or not it happens to be restorable, because the
     // list means "somebody proved this", not "everything else destroys".
     const spared = new Set(WRITE_SPECS.filter((s) => s.route.startsWith('DELETE ')).map((s) => s.route));
-    expect([...spared]).toEqual(['DELETE /api/local-compute/nodes/:id']);
+    expect([...spared].sort()).toEqual([
+      'DELETE /api/graph/work-items/:id/decisions/:decisionId',
+      'DELETE /api/local-compute/nodes/:id',
+    ]);
 
     for (const r of deletes) {
       const v = classifyWrite(r, FULLY_MOCKED);

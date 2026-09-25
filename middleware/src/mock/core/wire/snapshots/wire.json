@@ -1,7 +1,7 @@
 {
-  "capturedAt": "2026-09-24T23:50:24.674Z",
-  "serverHandlerSha": "f20a30d69c24cbceba4481ebb88321dfc3174060218c39d4769df7404db8ed4f",
-  "baseUrl": "http://127.0.0.1:3012",
+  "capturedAt": "2026-09-25T01:37:00.585Z",
+  "serverHandlerSha": "3bd3a244114705501a64119df8585e27d9ec1be3cbd8f019a2045885c87f85fd",
+  "baseUrl": "http://127.0.0.1:3014",
   "personas": [
     "orgiq/admin",
     "assessment/admin",
@@ -100,6 +100,7 @@
           "ingest-crawls",
           "ingest-schedules",
           "initiative-budgets",
+          "initiatives",
           "invocation-tail",
           "judge-config",
           "kb-data-sources",
@@ -234,6 +235,7 @@
           "ingest-crawls",
           "ingest-schedules",
           "initiative-budgets",
+          "initiatives",
           "invocation-tail",
           "judge-config",
           "kb-data-sources",
@@ -1715,9 +1717,29 @@
       "status": 200,
       "shape": {
         "$": "object",
-        "runs": "array"
+        "runs": "array",
+        "runs[]": "object",
+        "runs[].botId": "null",
+        "runs[].costUsd": "null",
+        "runs[].dispatchedBy": "null",
+        "runs[].finishedAt": "null",
+        "runs[].id": "string",
+        "runs[].jobId": "null",
+        "runs[].modelProvider": "null",
+        "runs[].outcome": "object",
+        "runs[].projectId": "string",
+        "runs[].runId": "null",
+        "runs[].startedAt": "string",
+        "runs[].status": "string",
+        "runs[].trigger": "string",
+        "runs[].workItemId": "string",
+        "runs[].workItemTitle": "string"
       },
-      "values": {}
+      "values": {
+        "runs[].status": [
+          "running"
+        ]
+      }
     },
     "GET /api/bots/estimate": {
       "skipped": "HTTP 400 (orgiq/admin); HTTP 400 (assessment/admin); HTTP 403 (anonymous)"
@@ -2315,8 +2337,7 @@
         "artifacts[].summary": "string",
         "artifacts[].title": "string",
         "artifacts[].type": "string",
-        "artifacts[].updated_at": "string",
-        "artifacts[].when_this_helps": "null|string"
+        "artifacts[].updated_at": "string"
       },
       "values": {
         "artifacts[].classification": [
@@ -2533,7 +2554,6 @@
         "items[].title": "string",
         "items[].type": "string",
         "items[].updated_at": "string",
-        "items[].when_this_helps": "string",
         "next_cursor": "string",
         "total": "number"
       },
@@ -2568,67 +2588,25 @@
       "status": 200,
       "shape": {
         "$": "object",
-        "body_markdown": "string",
-        "classification": "string",
-        "cluster_ids": "array",
-        "cluster_ids[]": "string",
-        "confidence": "number",
+        "body": "string",
+        "box_id": "string",
         "created_at": "string",
-        "created_by_compaction_id": "string",
-        "facts": "array",
-        "facts[]": "string",
-        "guide": "object",
-        "guide.approach": "array",
-        "guide.approach[]": "object",
-        "guide.approach[].ordinal": "number",
-        "guide.approach[].step_id": "string",
-        "guide.approach[].text": "string",
-        "guide.based_on": "array",
-        "guide.based_on[]": "object",
-        "guide.based_on[].id": "string",
-        "guide.based_on[].kind": "string",
-        "guide.based_on[].repo": "string",
-        "guide.based_on[].repo_label": "string",
-        "guide.based_on[].title": "string",
-        "guide.run_warning": "object",
-        "guide.run_warning.at": "string",
-        "guide.run_warning.body": "string",
-        "guide.run_warning.failed_at_ordinal": "number",
-        "guide.run_warning.outcome": "string",
-        "guide.run_warning.run_id": "string",
-        "guide.run_warning.title": "string",
         "id": "string",
-        "last_used_at": "null",
+        "initiative_id": "string",
+        "kind": "string",
         "level": "string",
-        "library_item_id": "null",
-        "owner": "string",
-        "reviewed_at": "null",
-        "reviewed_by": "null",
-        "status": "string",
-        "summary": "string",
-        "title": "string",
-        "type": "string",
-        "updated_at": "string",
-        "when_this_helps": "string"
+        "repo": "string",
+        "session_id": "string",
+        "tags": "array",
+        "tags[]": "string",
+        "title": "string"
       },
       "values": {
-        "classification": [
-          "confidential"
-        ],
-        "guide.based_on[].kind": [
-          "cluster"
-        ],
-        "guide.run_warning.outcome": [
-          "failed"
+        "kind": [
+          "convention"
         ],
         "level": [
-          "L2"
-        ],
-        "status": [
-          "draft"
-        ],
-        "type": [
-          "procedure"
+          "L0"
         ]
       }
     },
@@ -2648,42 +2626,17 @@
         "nodes[].kind": "string",
         "nodes[].label": "string",
         "nodes[].meta": "object",
-        "nodes[].meta.applied_at": "string",
-        "nodes[].meta.artifactType": "string",
         "nodes[].meta.box_id": "string",
-        "nodes[].meta.clusterKind": "string",
-        "nodes[].meta.confidence": "number",
         "nodes[].meta.created_at": "string",
-        "nodes[].meta.failed_at_step_id": "null|string",
         "nodes[].meta.initiative_id": "string",
-        "nodes[].meta.library_item_id": "null",
-        "nodes[].meta.memberCount": "number",
-        "nodes[].meta.object": "string",
         "nodes[].meta.obsKind": "string",
-        "nodes[].meta.ordinal": "number",
-        "nodes[].meta.outcome": "string",
-        "nodes[].meta.plain": "string",
-        "nodes[].meta.predicate": "string",
         "nodes[].meta.repo": "string",
-        "nodes[].meta.session_id": "string",
-        "nodes[].meta.status": "string",
-        "nodes[].meta.subject": "string",
-        "nodes[].meta.subtitle": "string"
+        "nodes[].meta.session_id": "string"
       },
       "values": {
         "nodes[].kind": [
-          "application",
-          "artifact",
-          "cluster",
-          "fact",
-          "observation"
-        ],
-        "nodes[].meta.outcome": [
-          "failed",
-          "succeeded"
-        ],
-        "nodes[].meta.status": [
-          "draft"
+          "observation",
+          "session"
         ]
       }
     },
@@ -2704,8 +2657,7 @@
       },
       "values": {
         "sources[].kind": [
-          "cluster",
-          "observation"
+          "session"
         ]
       }
     },
@@ -2791,7 +2743,6 @@
         "procedures[].artifact.title": "string",
         "procedures[].artifact.type": "string",
         "procedures[].artifact.updated_at": "string",
-        "procedures[].artifact.when_this_helps": "string",
         "procedures[].drift": "object",
         "procedures[].drift.failed_runs": "number",
         "procedures[].drift.new_gotcha_clusters": "number",
@@ -2856,7 +2807,6 @@
         "artifact.title": "string",
         "artifact.type": "string",
         "artifact.updated_at": "string",
-        "artifact.when_this_helps": "string",
         "drift": "object",
         "drift.failed_runs": "number",
         "drift.new_gotcha_clusters": "number",
@@ -2896,14 +2846,12 @@
         "$": "object",
         "applications": "array",
         "applications[]": "object|object(dictionary)",
-        "applications[].advice": "null",
         "applications[].applied_at": "string",
         "applications[].box_id": "string",
         "applications[].failed_at_step_id": "null",
         "applications[].id": "string",
         "applications[].note": "null",
         "applications[].outcome": "string",
-        "applications[].plain_reason": "null",
         "applications[].procedure_id": "string",
         "applications[].repo": "string",
         "applications[].session_id": "string"
@@ -3422,7 +3370,9 @@
       "status": 200,
       "shape": {
         "$": "object",
+        "activeAgentRuns": "number",
         "agentSpendUsd": "number",
+        "allocatedUsd": "number",
         "contributors": "array",
         "contributors[]": "object",
         "contributors[].name": "string",
@@ -3533,6 +3483,7 @@
         "$[].assigneeDept": "string",
         "$[].assigneeId": "string",
         "$[].assigneeName": "string",
+        "$[].blockedReason": "null",
         "$[].childCount": "number",
         "$[].childDoneCount": "number",
         "$[].children": "array",
@@ -3540,6 +3491,7 @@
         "$[].children[].assigneeDept": "string",
         "$[].children[].assigneeId": "string",
         "$[].children[].assigneeName": "string",
+        "$[].children[].blockedReason": "null|string",
         "$[].children[].childCount": "number",
         "$[].children[].childDoneCount": "number",
         "$[].children[].children": "array",
@@ -3558,6 +3510,8 @@
         "$[].children[].id": "string",
         "$[].children[].labels": "array",
         "$[].children[].labels[]": "string",
+        "$[].children[].nextStep": "null|string",
+        "$[].children[].nextStepDetail": "null|string",
         "$[].children[].parentId": "string",
         "$[].children[].prStatus": "null|string",
         "$[].children[].prUrl": "null|string",
@@ -3567,6 +3521,7 @@
         "$[].children[].sprintId": "null|string",
         "$[].children[].status": "string",
         "$[].children[].storyPoints": "number",
+        "$[].children[].summary": "null|string",
         "$[].children[].title": "string",
         "$[].children[].type": "string",
         "$[].children[].updatedAt": "string",
@@ -3585,6 +3540,8 @@
         "$[].id": "string",
         "$[].labels": "array",
         "$[].labels[]": "string",
+        "$[].nextStep": "null",
+        "$[].nextStepDetail": "null",
         "$[].parentId": "null",
         "$[].prStatus": "null",
         "$[].prUrl": "null",
@@ -3594,6 +3551,7 @@
         "$[].sprintId": "null",
         "$[].status": "string",
         "$[].storyPoints": "null",
+        "$[].summary": "null",
         "$[].title": "string",
         "$[].type": "string",
         "$[].updatedAt": "string"
@@ -3662,6 +3620,7 @@
         "$[].assigneeDept": "string",
         "$[].assigneeId": "string",
         "$[].assigneeName": "string",
+        "$[].blockedReason": "null",
         "$[].childCount": "number",
         "$[].childDoneCount": "number",
         "$[].completedAt": "null|string",
@@ -3679,6 +3638,8 @@
         "$[].id": "string",
         "$[].labels": "array",
         "$[].labels[]": "string",
+        "$[].nextStep": "null",
+        "$[].nextStepDetail": "null",
         "$[].parentId": "null|string",
         "$[].prStatus": "null|string",
         "$[].prUrl": "null|string",
@@ -3688,6 +3649,7 @@
         "$[].sprintId": "null|string",
         "$[].status": "string",
         "$[].storyPoints": "null|number",
+        "$[].summary": "null|string",
         "$[].title": "string",
         "$[].type": "string",
         "$[].updatedAt": "string"
@@ -5348,7 +5310,7 @@
         "points[].bucketStart": "string",
         "points[].count": "number",
         "points[].driftP95": "number",
-        "points[].judgeP50": "null|number",
+        "points[].judgeP50": "number",
         "windowHours": "number"
       },
       "values": {}
@@ -6782,6 +6744,16 @@
         ]
       }
     },
+    "GET /api/session/person": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "linked": "boolean",
+        "personId": "null"
+      },
+      "values": {}
+    },
     "GET /api/session/users": {
       "persona": "orgiq/admin",
       "status": 200,
@@ -7296,7 +7268,6 @@
         "agent",
         "analysis",
         "answer",
-        "application",
         "artifact",
         "blocked",
         "browser_launch",
@@ -7315,7 +7286,6 @@
         "eks",
         "evaluator",
         "exception_review",
-        "fact",
         "failed",
         "follow_up",
         "general",
@@ -7341,6 +7311,7 @@
         "require_review",
         "retrieval",
         "retrieve",
+        "session",
         "skill",
         "synced",
         "system",

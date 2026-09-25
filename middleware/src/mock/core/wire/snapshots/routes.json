@@ -1183,7 +1183,7 @@
     {
       "method": "GET",
       "path": "/api/graph/people/:personId/work",
-      "source": "src/routes/work-items.ts:280"
+      "source": "src/routes/work-items.ts:284"
     },
     {
       "method": "GET",
@@ -1208,12 +1208,12 @@
     {
       "method": "GET",
       "path": "/api/graph/projects/:id/activity",
-      "source": "src/routes/work-items.ts:227"
+      "source": "src/routes/work-items.ts:231"
     },
     {
       "method": "GET",
       "path": "/api/graph/projects/:id/activity/series",
-      "source": "src/routes/work-items.ts:250"
+      "source": "src/routes/work-items.ts:254"
     },
     {
       "method": "PATCH",
@@ -1223,12 +1223,12 @@
     {
       "method": "GET",
       "path": "/api/graph/projects/:id/decisions",
-      "source": "src/routes/work-items.ts:265"
+      "source": "src/routes/work-items.ts:269"
     },
     {
       "method": "GET",
       "path": "/api/graph/projects/:id/work",
-      "source": "src/routes/work-items.ts:212"
+      "source": "src/routes/work-items.ts:216"
     },
     {
       "method": "GET",
@@ -1238,47 +1238,57 @@
     {
       "method": "GET",
       "path": "/api/graph/work",
-      "source": "src/routes/work-items.ts:174"
+      "source": "src/routes/work-items.ts:178"
     },
     {
       "method": "POST",
       "path": "/api/graph/work-items",
-      "source": "src/routes/work-items.ts:296"
+      "source": "src/routes/work-items.ts:300"
     },
     {
       "method": "PATCH",
       "path": "/api/graph/work-items/:id",
-      "source": "src/routes/work-items.ts:376"
+      "source": "src/routes/work-items.ts:380"
     },
     {
       "method": "GET",
       "path": "/api/graph/work-items/:id/comments",
-      "source": "src/routes/work-items.ts:617"
+      "source": "src/routes/work-items.ts:621"
     },
     {
       "method": "POST",
       "path": "/api/graph/work-items/:id/comments",
-      "source": "src/routes/work-items.ts:628"
+      "source": "src/routes/work-items.ts:632"
     },
     {
       "method": "GET",
       "path": "/api/graph/work-items/:id/criteria",
-      "source": "src/routes/work-items.ts:521"
+      "source": "src/routes/work-items.ts:525"
     },
     {
       "method": "POST",
       "path": "/api/graph/work-items/:id/criteria",
-      "source": "src/routes/work-items.ts:532"
+      "source": "src/routes/work-items.ts:536"
     },
     {
       "method": "DELETE",
       "path": "/api/graph/work-items/:id/criteria/:criterionId",
-      "source": "src/routes/work-items.ts:592"
+      "source": "src/routes/work-items.ts:596"
     },
     {
       "method": "PATCH",
       "path": "/api/graph/work-items/:id/criteria/:criterionId",
-      "source": "src/routes/work-items.ts:557"
+      "source": "src/routes/work-items.ts:561"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/graph/work-items/:id/decisions/:decisionId",
+      "source": "src/routes/work-items.ts:699"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/graph/work-items/:id/decisions/:decisionId",
+      "source": "src/routes/work-items.ts:675"
     },
     {
       "method": "GET",
@@ -2408,27 +2418,27 @@
     {
       "method": "GET",
       "path": "/api/session/capabilities",
-      "source": "src/routes/session.ts:115"
+      "source": "src/routes/session.ts:138"
     },
     {
       "method": "POST",
       "path": "/api/session/login",
-      "source": "src/routes/session.ts:160"
+      "source": "src/routes/session.ts:183"
     },
     {
       "method": "POST",
       "path": "/api/session/logout",
-      "source": "src/routes/session.ts:315"
+      "source": "src/routes/session.ts:338"
     },
     {
       "method": "POST",
       "path": "/api/session/masquerade",
-      "source": "src/routes/session.ts:250"
+      "source": "src/routes/session.ts:273"
     },
     {
       "method": "POST",
       "path": "/api/session/masquerade/stop",
-      "source": "src/routes/session.ts:298"
+      "source": "src/routes/session.ts:321"
     },
     {
       "method": "GET",
@@ -2436,24 +2446,29 @@
       "source": "src/routes/session.ts:93"
     },
     {
+      "method": "GET",
+      "path": "/api/session/person",
+      "source": "src/routes/session.ts:114"
+    },
+    {
       "method": "POST",
       "path": "/api/session/revoke-others",
-      "source": "src/routes/session.ts:235"
+      "source": "src/routes/session.ts:258"
     },
     {
       "method": "POST",
       "path": "/api/session/role",
-      "source": "src/routes/session.ts:177"
+      "source": "src/routes/session.ts:200"
     },
     {
       "method": "POST",
       "path": "/api/session/tenant",
-      "source": "src/routes/session.ts:200"
+      "source": "src/routes/session.ts:223"
     },
     {
       "method": "GET",
       "path": "/api/session/users",
-      "source": "src/routes/session.ts:149"
+      "source": "src/routes/session.ts:172"
     },
     {
       "method": "GET",
