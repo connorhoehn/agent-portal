@@ -1,7 +1,7 @@
 {
-  "capturedAt": "2026-09-24T12:52:38.196Z",
-  "serverHandlerSha": "8fbab31916229a3398a3b67e0974b82deb5598bdcdd9ad437406c390ba236f6b",
-  "baseUrl": "http://127.0.0.1:3017",
+  "capturedAt": "2026-09-25T01:37:00.585Z",
+  "serverHandlerSha": "3bd3a244114705501a64119df8585e27d9ec1be3cbd8f019a2045885c87f85fd",
+  "baseUrl": "http://127.0.0.1:3014",
   "personas": [
     "orgiq/admin",
     "assessment/admin",
@@ -100,6 +100,7 @@
           "ingest-crawls",
           "ingest-schedules",
           "initiative-budgets",
+          "initiatives",
           "invocation-tail",
           "judge-config",
           "kb-data-sources",
@@ -234,6 +235,7 @@
           "ingest-crawls",
           "ingest-schedules",
           "initiative-budgets",
+          "initiatives",
           "invocation-tail",
           "judge-config",
           "kb-data-sources",
@@ -1715,9 +1717,29 @@
       "status": 200,
       "shape": {
         "$": "object",
-        "runs": "array"
+        "runs": "array",
+        "runs[]": "object",
+        "runs[].botId": "null",
+        "runs[].costUsd": "null",
+        "runs[].dispatchedBy": "null",
+        "runs[].finishedAt": "null",
+        "runs[].id": "string",
+        "runs[].jobId": "null",
+        "runs[].modelProvider": "null",
+        "runs[].outcome": "object",
+        "runs[].projectId": "string",
+        "runs[].runId": "null",
+        "runs[].startedAt": "string",
+        "runs[].status": "string",
+        "runs[].trigger": "string",
+        "runs[].workItemId": "string",
+        "runs[].workItemTitle": "string"
       },
-      "values": {}
+      "values": {
+        "runs[].status": [
+          "running"
+        ]
+      }
     },
     "GET /api/bots/estimate": {
       "skipped": "HTTP 400 (orgiq/admin); HTTP 400 (assessment/admin); HTTP 403 (anonymous)"
@@ -2581,7 +2603,7 @@
       },
       "values": {
         "kind": [
-          "decision"
+          "convention"
         ],
         "level": [
           "L0"
@@ -3348,7 +3370,9 @@
       "status": 200,
       "shape": {
         "$": "object",
+        "activeAgentRuns": "number",
         "agentSpendUsd": "number",
+        "allocatedUsd": "number",
         "contributors": "array",
         "contributors[]": "object",
         "contributors[].name": "string",
@@ -3459,6 +3483,7 @@
         "$[].assigneeDept": "string",
         "$[].assigneeId": "string",
         "$[].assigneeName": "string",
+        "$[].blockedReason": "null",
         "$[].childCount": "number",
         "$[].childDoneCount": "number",
         "$[].children": "array",
@@ -3466,6 +3491,7 @@
         "$[].children[].assigneeDept": "string",
         "$[].children[].assigneeId": "string",
         "$[].children[].assigneeName": "string",
+        "$[].children[].blockedReason": "null|string",
         "$[].children[].childCount": "number",
         "$[].children[].childDoneCount": "number",
         "$[].children[].children": "array",
@@ -3484,6 +3510,8 @@
         "$[].children[].id": "string",
         "$[].children[].labels": "array",
         "$[].children[].labels[]": "string",
+        "$[].children[].nextStep": "null|string",
+        "$[].children[].nextStepDetail": "null|string",
         "$[].children[].parentId": "string",
         "$[].children[].prStatus": "null|string",
         "$[].children[].prUrl": "null|string",
@@ -3493,6 +3521,7 @@
         "$[].children[].sprintId": "null|string",
         "$[].children[].status": "string",
         "$[].children[].storyPoints": "number",
+        "$[].children[].summary": "null|string",
         "$[].children[].title": "string",
         "$[].children[].type": "string",
         "$[].children[].updatedAt": "string",
@@ -3511,6 +3540,8 @@
         "$[].id": "string",
         "$[].labels": "array",
         "$[].labels[]": "string",
+        "$[].nextStep": "null",
+        "$[].nextStepDetail": "null",
         "$[].parentId": "null",
         "$[].prStatus": "null",
         "$[].prUrl": "null",
@@ -3520,6 +3551,7 @@
         "$[].sprintId": "null",
         "$[].status": "string",
         "$[].storyPoints": "null",
+        "$[].summary": "null",
         "$[].title": "string",
         "$[].type": "string",
         "$[].updatedAt": "string"
@@ -3588,6 +3620,7 @@
         "$[].assigneeDept": "string",
         "$[].assigneeId": "string",
         "$[].assigneeName": "string",
+        "$[].blockedReason": "null",
         "$[].childCount": "number",
         "$[].childDoneCount": "number",
         "$[].completedAt": "null|string",
@@ -3605,6 +3638,8 @@
         "$[].id": "string",
         "$[].labels": "array",
         "$[].labels[]": "string",
+        "$[].nextStep": "null",
+        "$[].nextStepDetail": "null",
         "$[].parentId": "null|string",
         "$[].prStatus": "null|string",
         "$[].prUrl": "null|string",
@@ -3614,6 +3649,7 @@
         "$[].sprintId": "null|string",
         "$[].status": "string",
         "$[].storyPoints": "null|number",
+        "$[].summary": "null|string",
         "$[].title": "string",
         "$[].type": "string",
         "$[].updatedAt": "string"
@@ -4746,8 +4782,26 @@
       },
       "values": {
         "events[].action": [
+          "ApproveTransaction",
+          "ConnectLocalCompute",
+          "DispatchAgentRun",
+          "EditGuardrail",
+          "LabelFeedback",
           "Login",
+          "ManageAssessmentConfig",
+          "ManageBots",
+          "ManageBudgets",
+          "ManageCanary",
+          "ManageDevbox",
           "ManageIngest",
+          "ManageKB",
+          "ManageKnowledge",
+          "ManageSprints",
+          "ManageSubmissions",
+          "ManageUsers",
+          "PublishReport",
+          "RunAssessmentAgent",
+          "ScoreAssessment",
           "ViewAssessment",
           "ViewIdentityAdmin",
           "ViewLeaderboard",
@@ -4761,6 +4815,7 @@
           "admin"
         ],
         "events[].tenant": [
+          "assessment",
           "orgiq"
         ]
       }
@@ -4932,9 +4987,31 @@
       "status": 200,
       "shape": {
         "$": "object",
-        "events": "array"
+        "events": "array",
+        "events[]": "object",
+        "events[].detail": "object",
+        "events[].detail.agentName": "string",
+        "events[].detail.bytes": "number",
+        "events[].detail.codeSnippet": "string",
+        "events[].detail.language": "string",
+        "events[].detail.outputSnippet": "string",
+        "events[].detail.pageTitle": "string",
+        "events[].detail.url": "string",
+        "events[].durationMs": "number",
+        "events[].id": "string",
+        "events[].kind": "string",
+        "events[].ok": "boolean",
+        "events[].sessionId": "string",
+        "events[].startedAt": "string"
       },
-      "values": {}
+      "values": {
+        "events[].kind": [
+          "browser_launch",
+          "browser_navigate",
+          "browser_screenshot",
+          "code_execute"
+        ]
+      }
     },
     "GET /api/observability/cost/a2a-overhead": {
       "persona": "orgiq/admin",
@@ -5233,7 +5310,7 @@
         "points[].bucketStart": "string",
         "points[].count": "number",
         "points[].driftP95": "number",
-        "points[].judgeP50": "null|number",
+        "points[].judgeP50": "number",
         "windowHours": "number"
       },
       "values": {}
@@ -6667,6 +6744,16 @@
         ]
       }
     },
+    "GET /api/session/person": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "linked": "boolean",
+        "personId": "null"
+      },
+      "values": {}
+    },
     "GET /api/session/users": {
       "persona": "orgiq/admin",
       "status": 200,
@@ -7085,9 +7172,27 @@
       "open": false,
       "values": [
         "ANONYMIZE",
+        "ApproveTransaction",
         "BLOCK",
+        "ConnectLocalCompute",
+        "DispatchAgentRun",
+        "EditGuardrail",
+        "LabelFeedback",
         "Login",
+        "ManageAssessmentConfig",
+        "ManageBots",
+        "ManageBudgets",
+        "ManageCanary",
+        "ManageDevbox",
         "ManageIngest",
+        "ManageKB",
+        "ManageKnowledge",
+        "ManageSprints",
+        "ManageSubmissions",
+        "ManageUsers",
+        "PublishReport",
+        "RunAssessmentAgent",
+        "ScoreAssessment",
         "ViewAssessment",
         "ViewIdentityAdmin",
         "ViewLeaderboard",
@@ -7165,9 +7270,13 @@
         "answer",
         "artifact",
         "blocked",
+        "browser_launch",
+        "browser_navigate",
+        "browser_screenshot",
         "clarification",
         "close_claim",
         "cluster",
+        "code_execute",
         "comment",
         "confluence",
         "convention",

@@ -1,7 +1,7 @@
 {
-  "capturedAt": "2026-09-24T12:52:38.935Z",
-  "serverHandlerSha": "8fbab31916229a3398a3b67e0974b82deb5598bdcdd9ad437406c390ba236f6b",
-  "baseUrl": "http://127.0.0.1:3017",
+  "capturedAt": "2026-09-25T01:37:01.357Z",
+  "serverHandlerSha": "3bd3a244114705501a64119df8585e27d9ec1be3cbd8f019a2045885c87f85fd",
+  "baseUrl": "http://127.0.0.1:3014",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
     "agentcore",
@@ -13,133 +13,143 @@
     "DELETE /api/admin/kb-registry/:id": {
       "refused": {
         "rule": "destructive",
-        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The one exception is a delete somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The only exceptions are deletes somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
       }
     },
     "DELETE /api/admin/kb-registry/upload-links/:linkId": {
       "refused": {
         "rule": "destructive",
-        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The one exception is a delete somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The only exceptions are deletes somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
       }
     },
     "DELETE /api/agent-projects/:id": {
       "refused": {
         "rule": "destructive",
-        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The one exception is a delete somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The only exceptions are deletes somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
       }
     },
     "DELETE /api/assessment/knowledge/doc/comment": {
       "refused": {
         "rule": "destructive",
-        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The one exception is a delete somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The only exceptions are deletes somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
       }
     },
     "DELETE /api/assessment/submissions/:team/:envelope": {
       "refused": {
         "rule": "destructive",
-        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The one exception is a delete somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The only exceptions are deletes somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
       }
     },
     "DELETE /api/assessment/teams/:id": {
       "refused": {
         "rule": "destructive",
-        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The one exception is a delete somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The only exceptions are deletes somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
       }
     },
     "DELETE /api/bots/:id": {
       "refused": {
         "rule": "destructive",
-        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The one exception is a delete somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The only exceptions are deletes somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
       }
     },
     "DELETE /api/budgets/:orgProjectId": {
       "refused": {
         "rule": "destructive",
-        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The one exception is a delete somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The only exceptions are deletes somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
       }
     },
     "DELETE /api/capabilities/browser-sessions/:sessionId": {
       "refused": {
         "rule": "destructive",
-        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The one exception is a delete somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The only exceptions are deletes somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
       }
     },
     "DELETE /api/capabilities/browser-sessions/:sessionId/journey": {
       "refused": {
         "rule": "destructive",
-        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The one exception is a delete somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The only exceptions are deletes somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
       }
     },
     "DELETE /api/capabilities/code-sessions/:sessionId": {
       "refused": {
         "rule": "destructive",
-        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The one exception is a delete somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The only exceptions are deletes somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
       }
     },
     "DELETE /api/capabilities/guardrail/topics/:name": {
       "refused": {
         "rule": "destructive",
-        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The one exception is a delete somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The only exceptions are deletes somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
       }
     },
     "DELETE /api/connections/:name": {
       "refused": {
         "rule": "destructive",
-        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The one exception is a delete somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The only exceptions are deletes somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
       }
     },
     "DELETE /api/devbox/:sessionId": {
       "refused": {
         "rule": "destructive",
-        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The one exception is a delete somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The only exceptions are deletes somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
       }
     },
     "DELETE /api/devbox/boxes/:boxId": {
       "refused": {
         "rule": "destructive",
-        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The one exception is a delete somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The only exceptions are deletes somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
       }
     },
     "DELETE /api/environments/:id": {
       "refused": {
         "rule": "destructive",
-        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The one exception is a delete somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The only exceptions are deletes somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
       }
     },
     "DELETE /api/grants/:id": {
       "refused": {
         "rule": "destructive",
-        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The one exception is a delete somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The only exceptions are deletes somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
       }
     },
     "DELETE /api/graph/work-items/:id/criteria/:criterionId": {
       "refused": {
         "rule": "destructive",
-        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The one exception is a delete somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The only exceptions are deletes somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
       }
+    },
+    "DELETE /api/graph/work-items/:id/decisions/:decisionId": {
+      "persona": "orgiq/admin",
+      "status": 404,
+      "shape": {
+        "$": "object",
+        "error": "string"
+      },
+      "values": {},
+      "sent": []
     },
     "DELETE /api/identity/policies/:id": {
       "refused": {
         "rule": "destructive",
-        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The one exception is a delete somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The only exceptions are deletes somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
       }
     },
     "DELETE /api/ingest/crawl-targets/:id": {
       "refused": {
         "rule": "destructive",
-        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The one exception is a delete somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The only exceptions are deletes somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
       }
     },
     "DELETE /api/ingest/crawl/:id": {
       "refused": {
         "rule": "destructive",
-        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The one exception is a delete somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The only exceptions are deletes somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
       }
     },
     "DELETE /api/ingest/schedules/:id": {
       "refused": {
         "rule": "destructive",
-        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The one exception is a delete somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The only exceptions are deletes somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
       }
     },
     "DELETE /api/local-compute/nodes/:id": {
@@ -155,37 +165,37 @@
     "DELETE /api/observability/calibration/cases/:id": {
       "refused": {
         "rule": "destructive",
-        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The one exception is a delete somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The only exceptions are deletes somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
       }
     },
     "DELETE /api/observability/harness/cases/:id": {
       "refused": {
         "rule": "destructive",
-        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The one exception is a delete somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The only exceptions are deletes somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
       }
     },
     "DELETE /api/sdlc/policies/:id": {
       "refused": {
         "rule": "destructive",
-        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The one exception is a delete somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The only exceptions are deletes somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
       }
     },
     "DELETE /api/sprints/:sprintId/items/:itemId": {
       "refused": {
         "rule": "destructive",
-        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The one exception is a delete somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The only exceptions are deletes somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
       }
     },
     "DELETE /api/work/jobs/:id": {
       "refused": {
         "rule": "destructive",
-        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The one exception is a delete somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The only exceptions are deletes somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
       }
     },
     "DELETE /internal/devbox/:sessionId": {
       "refused": {
         "rule": "destructive",
-        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The one exception is a delete somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The only exceptions are deletes somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
       }
     },
     "PATCH /api/admin/kb-registry/:id": {
@@ -419,6 +429,7 @@
         "assigneeDept": "string",
         "assigneeId": "string",
         "assigneeName": "string",
+        "blockedReason": "null",
         "childCount": "number",
         "childDoneCount": "number",
         "completedAt": "string",
@@ -436,6 +447,8 @@
         "id": "string",
         "labels": "array",
         "labels[]": "string",
+        "nextStep": "null",
+        "nextStepDetail": "null",
         "parentId": "string",
         "prStatus": "string",
         "prUrl": "string",
@@ -445,6 +458,7 @@
         "sprintId": "string",
         "status": "string",
         "storyPoints": "number",
+        "summary": "null",
         "title": "string",
         "type": "string",
         "updatedAt": "string"
@@ -552,6 +566,7 @@
         "workItem.assigneeDept": "string",
         "workItem.assigneeId": "string",
         "workItem.assigneeName": "string",
+        "workItem.blockedReason": "null",
         "workItem.childCount": "number",
         "workItem.childDoneCount": "number",
         "workItem.completedAt": "null",
@@ -568,6 +583,8 @@
         "workItem.estimatedCostUsd": "null",
         "workItem.id": "string",
         "workItem.labels": "array",
+        "workItem.nextStep": "null",
+        "workItem.nextStepDetail": "null",
         "workItem.parentId": "null",
         "workItem.prStatus": "null",
         "workItem.prUrl": "null",
@@ -577,6 +594,7 @@
         "workItem.sprintId": "string",
         "workItem.status": "string",
         "workItem.storyPoints": "null",
+        "workItem.summary": "null",
         "workItem.title": "string",
         "workItem.type": "string",
         "workItem.updatedAt": "string"
@@ -685,6 +703,7 @@
           "ingest-crawls",
           "ingest-schedules",
           "initiative-budgets",
+          "initiatives",
           "invocation-tail",
           "judge-config",
           "kb-data-sources",
@@ -1899,6 +1918,7 @@
         "assigneeDept": "null",
         "assigneeId": "null",
         "assigneeName": "null",
+        "blockedReason": "null",
         "childCount": "number",
         "childDoneCount": "number",
         "completedAt": "null",
@@ -1915,6 +1935,8 @@
         "estimatedCostUsd": "null",
         "id": "string",
         "labels": "array",
+        "nextStep": "null",
+        "nextStepDetail": "null",
         "parentId": "null",
         "prStatus": "null",
         "prUrl": "null",
@@ -1924,6 +1946,7 @@
         "sprintId": "null",
         "status": "string",
         "storyPoints": "null",
+        "summary": "null",
         "title": "string",
         "type": "string",
         "updatedAt": "string"
@@ -3111,6 +3134,27 @@
       "sent": [
         "allocatedUsd"
       ]
+    },
+    "PUT /api/graph/work-items/:id/decisions/:decisionId": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "escalatedAt": "null",
+        "id": "string",
+        "requiredRole": "null",
+        "status": "string",
+        "summary": "string",
+        "topic": "string",
+        "workItemId": "string",
+        "workItemTitle": "string"
+      },
+      "values": {
+        "status": [
+          "resolved"
+        ]
+      },
+      "sent": []
     },
     "PUT /api/identity/policies/:id": {
       "skipped": "no value found for :id under /api/identity/policies (orgiq/admin)"
