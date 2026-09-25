@@ -270,6 +270,21 @@ requesting it gets a 403, not a silently narrowed answer.
   `ManageDevbox` — so a TPM/release manager can see the initiative codebases and
   their run history without dispatch rights; writes keep the stricter gate.
 
+- **The Initiatives explorer (2026-09-24).** `/iq/projects` and
+  `/iq/projects/:id` share one frame: an explorer rail (Everyone | Mine,
+  grouped by status, "Owner · N agents" or "· Idle" per row, where N is
+  counted from running runs) beside a pane, with a composer docked at the
+  bottom that asks the read-only org agent. An initiative opens on an
+  Overview — points delivered, agents running, spend against the month's
+  allocation, the one blocked item that needs attention, and the next three
+  items to plan — and a work item reads as a brief (why it matters, the next
+  step, what the brief still lacks) with dispatch folded into a collapsed Run
+  setup whose hint names the capability or sprint grant a role is missing.
+  Mine distinguishes "not connected to a team profile" from "connected but
+  on no initiative", and "Check profile" lands on the new Settings Profile
+  section. Design record: `docs/design/initiative-variants-spec.md` and
+  `initiative-variants-plan.md`.
+
 ## Not built yet
 
 - **Bot-fire allocation brake.** `decideFire` knows a bot's own per-run/per-day

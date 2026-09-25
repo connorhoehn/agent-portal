@@ -875,6 +875,62 @@ count**, so floor rule 1 holds:
   no Aurora read path — `schema/distillation_schema.sql` carries the columns
   as DDL only.
 
+## Initiatives: the fixture, two runs in flight, and the brief fields (2026-09-24)
+
+The Initiatives redesign (`docs/design/initiative-variants-spec.md`, plan §2)
+moved the last hand-typed program data behind `/iq/projects` onto the floor.
+
+- **`initiatives` is a registered fixture** (`mock/initiatives.ts`, reached
+  only through `providers/projects.ts`). It was `MOCK_INITIATIVES`, a module
+  array that broke three rules at once: each row typed `activeAgents: 2`
+  beside a runs fixture with nothing running (rule 1), `activeHoursAgo` became
+  `Date.now() - n` at import (rule 3), and there was no way to see the page
+  empty or failing (rule 4). Creation instants are `Date.UTC` dates, not ISO
+  literals. Scenarios: `default` (the fourteen `p-*` initiatives, mirroring
+  `generate_program_seed.py`), `empty`, and `error`, which throws the
+  "relation does not exist" shape so the rail and the pane both show
+  "Could not load initiatives" rather than the Mine-empty copy.
+  `mockProjectExists` and `mockProjectName` read the fixture, so under `empty`
+  every initiative route 404s the way a fresh tenant's would.
+- **"N agents" is counted, never stored.** `activeAgentRuns` on the list row
+  and on `GET /api/graph/projects/:id` is `mockActiveAgentRuns(id)`: `running`
+  bot_runs started inside the 24-hour window and attributed to the initiative
+  by the same three-way rule the ledger uses. To give it something honest to
+  count, `botRuns.default` seeds **two in-flight marketplace runs**
+  (`inFlightMarketplaceRuns` in `mock/bots.ts`): `run-inflight-obs-e1-s3`
+  (18 minutes old) and `run-inflight-obs-e1-b5` (42 minutes old), both on
+  in-progress Observability items, `botId`/`jobId`/`costUsd` null, timestamps
+  from `clock`. So Observability reads "2 agents" and every other initiative
+  "Idle", and the header's run badge reads ▶ 2 on every page. They are
+  mock-only: the parity harness's `bot_runs` entity filters to rows with a
+  `job_id`, and Aurora (which has no such rows) reads Idle — a documented
+  divergence, not drift. `allocatedUsd` joined the detail wire in the same
+  slice, from the budgets ledger.
+- **`countMockRunningRuns` counts every mock run.** It used to count only this
+  process's live rows, which was harmless while nothing seeded was running;
+  with two seeded in flight a live-only count would have let three more
+  dispatches past the concurrency ceiling of three. It now counts the seeded
+  history and the live rows together, as Aurora's bare `FROM bot_runs` does,
+  so exactly one more offline dispatch fits before the ceiling refuses.
+- **Work-item brief fields are stored text.** `summary`, `blockedReason`,
+  `nextStep` and `nextStepDetail` (`work_items.summary`, `blocked_reason`,
+  `next_step`, `next_step_detail`, added by `orgiq_work_items_schema.sql`)
+  are written by the seed generator's `BRIEFS` map and mirrored in
+  `mock/work-items.ts`; the Overview's "What needs attention" and "Plan
+  next", and the work item's "Why this matters" / "Next step", read them
+  verbatim. The portal composes no copy that reads as data. Items without a
+  brief carry null, and the Aurora read probes the columns once per process
+  so a cluster without them costs the fields, never the board.
+- **`GET /api/session/person`** answers `{linked, personId}` from the identity
+  provider's `FALLBACK_USERS` offline: `demo-user` (no cookie) is unlinked,
+  `u-theo` is `p-001`, and `u-release` is linked to `p-005` with no
+  contributions — the three states the Mine view distinguishes ("not
+  connected", "connected as Sienna Garcia, but…", rows).
+- **Decision links write a registered fixture.** `PUT/DELETE
+  /api/graph/work-items/:id/decisions/:decisionId` set or clear `workItemId` on one row of the registered `graph-decisions` fixture (an unlink removes nothing), so
+  `POST /api/__mock/reset` undoes an "Add context", and the write is classified
+  in `mock/core/wire/write-policy.ts`.
+
 ## The mock agent stream is paced
 
 `mockAgentCore.invokeAgentStreaming` (`providers/agentcore.ts`) sleeps
