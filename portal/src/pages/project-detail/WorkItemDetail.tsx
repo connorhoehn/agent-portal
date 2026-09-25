@@ -1,35 +1,51 @@
-// The open work item: its epic, type and key above the title, the meta bar
-// (status, points, owner, priority — each a PATCH), then three tabs:
+// The open work item (mockup variant 2, W8–W15): its epic, type and key above
+// a large title, the divided meta row (status · flags · owner · points ·
+// priority, each a PATCH for a role that may edit), then three tabs:
 //
-//   Brief       outcome, acceptance criteria, dependencies & decisions, and
-//               the latest planning notes.
+//   Brief       Why this matters, the amber Next step, "Complete the brief"
+//               (a ruled three-row table built by `briefModel`: criteria,
+//               dependencies and decisions, planning notes — each with its
+//               action), the full section for whatever is already written,
+//               and the collapsed Run setup holding the run draft.
 //   Discussion  the whole comment thread.
 //   Activity    the item's history (itemActivity) — status changes, runs,
 //               estimates, comments — from data already recorded.
 //
-// The composer docked underneath has two modes: Chat posts a comment to the
-// thread, Agent prepares the run draft's instruction. The library's
-// EditorShell and work sections draw all of it; this file maps one work item
-// onto them.
+// The composer is not here: it docks under the whole pane (the page's
+// InitiativeComposer), so the Overview and the item share one slot.
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import {
   ChecklistSection,
   CommentList,
+  DetailSection,
+  Disclosure,
+  KeyValue,
   LinkedItemsSection,
   OutcomeSection,
   WorkActivityList,
   WorkItemMetaBar,
   type CommentListItem,
+  type KeyValueItem,
   type LinkedItem,
   type WorkMetaOption,
   type WorkPerson,
 } from '@connorhoehnslalom/ui-components';
 import { EditorShell } from '@connorhoehnslalom/ui-components/doc-editor';
-import { RichChatComposer, type ComposerMode } from '@connorhoehnslalom/ui-components/social/rich-composer';
-import { Stack } from '@connorhoehnslalom/ui-components/shared';
+import { ArrowRightIcon, Banner, Button, Inline, Stack } from '@connorhoehnslalom/ui-components/shared';
 import { DEVBOX_MODELS } from '../../lib/devboxModels';
 import type { BotRun } from '../bots/BotsPage';
+import {
+  BRIEF_BODY,
+  BRIEF_TITLE,
+  RUN_SETUP_TITLE,
+  WHY_TITLE,
+  buildBrief,
+  itemFlags,
+  nextStepCallout,
+  type BriefRow,
+  type Read,
+} from './briefModel';
 import { itemActivity } from './itemActivity';
 import type { FlatWorkItem } from './projectFormat';
 import type { ProjectContributor, ProjectDecision, WorkItem } from './types';
@@ -78,6 +94,55 @@ function threadEmpty(loading: boolean, error: string | null, what: string, empty
   return empty;
 }
 
+/** One brief row's action: a link-styled button, disabled with its reason. */
+function RowAction({ label, disabledReason, onClick, testId }: {
+  label: string;
+  disabledReason: string | null;
+  onClick: () => void;
+  testId: string;
+}) {
+  return (
+    <Button
+      variant="link"
+      size="sm"
+      onClick={onClick}
+      disabled={disabledReason != null}
+      title={disabledReason ?? undefined}
+      aria-label={disabledReason ? `${label} — ${disabledReason}` : undefined}
+      data-testid={testId}
+    >
+      {label}
+    </Button>
+  );
+}
+
+export interface WorkItemDetailProps {
+  item: FlatWorkItem;
+  /** Criteria and comments for this item (useWorkItemThread). */
+  thread: WorkItemThread;
+  /** The initiative's decisions as read; this item's are those whose `workItemId` matches. */
+  decisions: Read<ProjectDecision[]>;
+  /** Who the owner picker offers — the initiative's contributors. */
+  contributors: ProjectContributor[];
+  /** Marketplace runs on this initiative; the ones on this item feed Activity. */
+  runs: BotRun[];
+  /** The board's write gate (DispatchAgentRun). */
+  canEdit: boolean;
+  tab: DetailTab;
+  onTabChange: (tab: DetailTab) => void;
+  onPatch: (fields: WorkItemPatch) => void;
+  onOpenEpic: () => void;
+  onOpenDecisions: () => void;
+  /** "Draft with agent": put the criteria workflow in the composer. */
+  onDraftCriteria: () => void;
+  /** "Add context": link a decision to this item. */
+  onAddContext: () => void;
+  /** "Add a note": write a planning note. */
+  onAddNote: () => void;
+  /** The collapsed Run setup: its hint and the run draft inside it. */
+  runSetup: { hint: string; body: ReactNode };
+}
+
 export function WorkItemDetail({
   item,
   thread,
@@ -85,46 +150,32 @@ export function WorkItemDetail({
   contributors,
   runs,
   canEdit,
-  canDispatch,
   tab,
   onTabChange,
   onPatch,
   onOpenEpic,
   onOpenDecisions,
-  onPrepare,
-}: {
-  item: FlatWorkItem;
-  /** Criteria and comments for this item (useWorkItemThread). */
-  thread: WorkItemThread;
-  /** Decisions whose `workItemId` is this item. */
-  decisions: ProjectDecision[];
-  /** Who the owner picker offers — the initiative's contributors. */
-  contributors: ProjectContributor[];
-  /** Marketplace runs on this initiative; the ones on this item feed Activity. */
-  runs: BotRun[];
-  canEdit: boolean;
-  canDispatch: boolean;
-  tab: DetailTab;
-  onTabChange: (tab: DetailTab) => void;
-  onPatch: (fields: WorkItemPatch) => void;
-  onOpenEpic: () => void;
-  onOpenDecisions: () => void;
-  /** The composer's Agent-mode text becomes the run draft's instruction. */
-  onPrepare: (instruction: string) => void;
-}) {
+  onDraftCriteria,
+  onAddContext,
+  onAddNote,
+  runSetup,
+}: WorkItemDetailProps) {
   const readOnly = canEdit ? undefined : 'Your role cannot edit work items';
-  const [mode, setMode] = useState<ComposerMode>('agent');
+  // An editor with no criteria yet can also write them by hand; the list
+  // opens under the table once asked for. Keyed by item so it never carries.
+  const [writingCriteriaFor, setWritingCriteriaFor] = useState<string | null>(null);
   const people = useMemo<WorkPerson[]>(
     () => contributors.map((c) => ({ id: c.personId, name: c.name })),
     [contributors],
   );
 
+  const itemDecisions = (decisions.data ?? []).filter((d) => d.workItemId === item.id);
   const itemRuns = runs.filter((r) => r.workItemId === item.id);
   const latestRun = itemRuns.reduce<BotRun | undefined>(
     (a, r) => (!a || Date.parse(r.startedAt) > Date.parse(a.startedAt) ? r : a), undefined);
 
   const links: LinkedItem[] = [
-    ...decisions.map((d) => ({
+    ...itemDecisions.map((d) => ({
       id: d.id,
       title: d.topic,
       kind: 'page' as const,
@@ -166,17 +217,67 @@ export function WorkItemDetail({
     [item, thread.comments, runs],
   );
 
+  const brief = buildBrief({
+    itemId: item.id,
+    criteria: { data: thread.criteriaLoading ? null : thread.criteria, error: thread.criteriaError },
+    decisions,
+    comments: { data: thread.commentsLoading ? null : thread.comments, error: thread.commentsError },
+    canEdit,
+  });
+  const filled = (id: BriefRow['id']) => brief.rows.find((r) => r.id === id)?.filled ?? false;
+  const showCriteria = filled('criteria') || writingCriteriaFor === item.id;
+  const nextStep = nextStepCallout(item);
+
+  const onRowAction = (row: BriefRow) => {
+    if (row.id === 'criteria') {
+      if (row.filled) {
+        document.querySelector('[data-testid="brief-criteria"]')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } else {
+        onDraftCriteria();
+      }
+    } else if (row.id === 'decisions') {
+      onAddContext();
+    } else {
+      onAddNote();
+    }
+  };
+
+  const briefItems: KeyValueItem[] = brief.rows.map((row) => ({
+    label: row.label,
+    value: row.value,
+    muted: row.muted,
+    ...(row.action
+      ? {
+          action: (
+            <Inline gap="md" align="center">
+              {row.id === 'criteria' && !row.filled && canEdit && writingCriteriaFor !== item.id && (
+                <RowAction label="Write" disabledReason={null} onClick={() => setWritingCriteriaFor(item.id)} testId="brief-action-criteria-write" />
+              )}
+              <RowAction
+                label={row.action.label}
+                disabledReason={row.action.disabledReason}
+                onClick={() => onRowAction(row)}
+                testId={`brief-action-${row.id}`}
+              />
+            </Inline>
+          ),
+        }
+      : {}),
+  }));
+
   return (
     <EditorShell
       variant="work-item"
+      titleSize="lg"
       itemType={item.type === 'bug' ? 'Bug' : 'Story'}
       itemKey={item.id}
       title={item.title}
       breadcrumbs={[{ label: item.epicTitle, onClick: onOpenEpic }]}
-      subtitle={item.labels.length > 0 ? item.labels.join(' · ') : undefined}
       metaBar={(
         <WorkItemMetaBar
-          appearance="boxed"
+          layout="divided"
+          priorityStyle="tag"
+          flags={itemFlags(item)}
           status={{ value: item.status, options: STATUS_OPTIONS, readOnlyReason: readOnly, onChange: (v) => onPatch({ status: v as WorkItem['status'] }) }}
           points={{ value: item.storyPoints, max: 21, readOnlyReason: readOnly, onChange: (v) => onPatch({ storyPoints: v }) }}
           owner={{
@@ -190,7 +291,8 @@ export function WorkItemDetail({
       )}
       tabs={[
         { id: 'brief', label: 'Brief' },
-        { id: 'comments', label: 'Discussion', count: thread.commentCount },
+        // A count only when there is one — "Discussion 0" reads as noise.
+        { id: 'comments', label: 'Discussion', ...(thread.commentCount > 0 ? { count: thread.commentCount } : {}) },
         { id: 'history', label: 'Activity' },
       ]}
       activeTab={tab}
@@ -198,70 +300,86 @@ export function WorkItemDetail({
       surface="plain"
       label="Work item"
       data-testid="work-item-detail"
-      footer={canDispatch ? (
-        <Stack gap="none" className="px-4 pb-3">
-          <RichChatComposer
-            key={item.id}
-            mode={mode}
-            onModeChange={setMode}
-            modeControl="menu"
-            modeShortcuts
-            disabledModes={['terminal']}
-            modeUnavailableReasons={{ terminal: 'A work item has no terminal — dispatch a run first' }}
-            layout="wide"
-            toolbar="compact"
-            submitLabel={{ chat: 'Comment', agent: 'Prepare run' }}
-            modePlaceholders={{
-              chat: 'Add to the discussion…',
-              agent: 'Tell the agent what done looks like…',
-            }}
-            references={[{ id: item.id, label: 'This work item' }]}
-            onSend={(msg) => {
-              if (mode === 'chat') return thread.postComment(msg.text);
-              // Agent mode sends `/agent <text>` for hosts with an /agent
-              // command path; the run's instruction is only what was typed.
-              onPrepare(msg.text.replace(/^\/agent\s+/, ''));
-              return true;
-            }}
-          />
-        </Stack>
-      ) : undefined}
     >
-      <Stack gap="xs" className="px-4 py-2">
+      <Stack gap="lg" className="px-4 pb-6 pt-2">
         {tab === 'brief' && (
           <>
             <OutcomeSection
               first
+              size="lg"
+              title={WHY_TITLE}
               value={item.description}
-              placeholder="What does done look like?"
+              placeholder="Why does this work matter?"
               readOnlyReason={readOnly}
               onChange={(v) => onPatch({ description: v })}
             />
-            <ChecklistSection
-              title="Acceptance criteria"
-              items={thread.criteria.map((c) => ({ id: c.id, text: c.text, done: c.done }))}
-              readOnlyReason={readOnly}
-              emptyLabel={threadEmpty(thread.criteriaLoading, thread.criteriaError, 'criteria', 'No acceptance criteria yet')}
-              addPlaceholder="Add a criterion"
-              onToggle={thread.toggle}
-              onAdd={thread.add}
-              onEdit={thread.edit}
-              onRemove={thread.remove}
-              onMove={thread.move}
-            />
-            <LinkedItemsSection
-              title="Dependencies & decisions"
-              items={links}
-              emptyLabel="No decisions or pull requests linked yet"
-            />
-            <CommentList
-              title="Planning notes"
-              comments={[...notes].reverse()}
-              total={notes.length}
-              max={2}
-              onViewAll={() => onTabChange('comments')}
-              emptyLabel={threadEmpty(thread.commentsLoading, thread.commentsError, 'notes', 'No planning notes yet')}
-            />
+            {nextStep && (
+              <Banner
+                layout="callout"
+                variant="warning"
+                accent="bar"
+                size="lg"
+                title={nextStep.title}
+                {...(nextStep.detail ? { meta: nextStep.detail } : {})}
+                action={(
+                  <Button variant="link" onClick={() => onTabChange('comments')} data-testid="next-step-open-discussion">
+                    <Inline gap="xs" align="center">
+                      {nextStep.actionLabel}
+                      <ArrowRightIcon size={16} />
+                    </Inline>
+                  </Button>
+                )}
+                data-testid="work-item-next-step"
+              >
+                {nextStep.step}
+              </Banner>
+            )}
+            {showCriteria && (
+              <ChecklistSection
+                title="Acceptance criteria"
+                items={thread.criteria.map((c) => ({ id: c.id, text: c.text, done: c.done }))}
+                readOnlyReason={readOnly}
+                emptyLabel={threadEmpty(thread.criteriaLoading, thread.criteriaError, 'criteria', 'No acceptance criteria yet')}
+                addPlaceholder="Add a criterion"
+                onToggle={thread.toggle}
+                onAdd={thread.add}
+                onEdit={thread.edit}
+                onRemove={thread.remove}
+                onMove={thread.move}
+                data-testid="brief-criteria"
+              />
+            )}
+            {filled('decisions') && (
+              <LinkedItemsSection
+                title="Dependencies and decisions"
+                items={links}
+                emptyLabel="No decisions or pull requests linked yet"
+              />
+            )}
+            {filled('notes') && (
+              <CommentList
+                title="Planning notes"
+                comments={[...notes].reverse()}
+                total={notes.length}
+                max={2}
+                onViewAll={() => onTabChange('comments')}
+                emptyLabel="No planning notes yet"
+              />
+            )}
+            {brief.showTable && (
+              <DetailSection variant="heading" size="lg" title={BRIEF_TITLE} description={BRIEF_BODY} data-testid="brief-table">
+                <KeyValue layout="row" divided labelWidth="w-72" items={briefItems} aria-label={BRIEF_TITLE} />
+              </DetailSection>
+            )}
+            <Disclosure
+              variant="plain"
+              size="lg"
+              summary={RUN_SETUP_TITLE}
+              hint={runSetup.hint}
+              data-testid="run-setup"
+            >
+              {runSetup.body}
+            </Disclosure>
           </>
         )}
         {tab === 'comments' && (
@@ -270,7 +388,7 @@ export function WorkItemDetail({
             title="Discussion"
             comments={notes}
             emptyLabel={threadEmpty(thread.commentsLoading, thread.commentsError, 'discussion',
-              canDispatch ? 'No comments yet — switch the composer to Chat to start one' : 'No comments yet')}
+              canEdit ? 'No comments yet — switch the composer to Chat to start one' : 'No comments yet')}
           />
         )}
         {tab === 'history' && (
