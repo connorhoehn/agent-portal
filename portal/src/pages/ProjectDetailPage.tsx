@@ -469,12 +469,14 @@ function ProjectDetailPage() {
       ]}
       activeTab={tab}
       onTabChange={setTab}
-      // ScopeHeader's tab strip sits on its host's bottom rule (-mb-px); in
-      // ExplorerLayout.paneHeader there is no host rule, so the header draws
-      // its own — the library's "Initiative overview" story composes it the
-      // same way. Without it the selected tab's underline is painted over by
-      // the pane body and no tab reads as current.
-      className="border-b border-border"
+      // The header draws the rule under its tabs itself, inset to the 24px
+      // gutter so it starts under the title rather than at the pane's edge
+      // (the v2 mockup; ui-components 2.396.0). A host `border-b` here would
+      // be a second, full-bleed rule — and the previous one was also where
+      // the selected tab's 2px underline got half painted over by the pane
+      // body; at `tabSize="md"` the library now draws a 3px bar inside its
+      // own box, as the "Initiative overview v2" story composes it.
+      tabsRule="inset"
       data-testid="initiative-header"
     />
   );

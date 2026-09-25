@@ -85,8 +85,10 @@ export function InitiativeOverview({
           <PageSection
             size="md"
             title="Needs attention"
-            // The count is the rows below it, never a stored total.
+            // The count is the rows below it, never a stored total. It reads
+            // as the mockup's pale-indigo pill (ui-components 2.396.0).
             count={model.attention.length}
+            countTone="primary"
             data-testid="overview-attention-section"
           >
             {model.attention.length > 0 ? (
@@ -99,7 +101,9 @@ export function InitiativeOverview({
                 items={model.attention.map((a) => ({
                   id: a.id,
                   title: a.title,
-                  leading: <Chip tone="danger" size="md" outline>Blocked</Chip>,
+                  // The mockup's tag: pale red fill, soft red border, 14px red
+                  // text — `outline="soft"` + `lg` since ui-components 2.396.0.
+                  leading: <Chip tone="danger" size="lg" outline="soft">Blocked</Chip>,
                   ...(a.reason ? { description: a.reason } : {}),
                   cells: cells(a.assigneeName, a.points),
                 }))}
@@ -114,11 +118,15 @@ export function InitiativeOverview({
           <PageSection
             size="md"
             title="Up next"
+            // The mockup puts 32px between the attention row and this heading
+            // where the other sections sit 24px apart (the library story's
+            // `mt-8` against `mt-6`); the stack's `xl` gap carries 24 of it.
+            className="mt-2"
             actions={model.viewAll ? (
               <Button variant="link" onClick={() => onOpen(model.viewAll!.href)} data-testid="overview-view-all">
-                <Inline gap="xs" align="center">
+                <Inline gap="sm" align="center">
                   {model.viewAll.label}
-                  <ArrowRightIcon size={16} />
+                  <ArrowRightIcon size={20} />
                 </Inline>
               </Button>
             ) : undefined}
