@@ -55,6 +55,10 @@ CREATE TABLE IF NOT EXISTS distillation_artifacts (
                           CHECK (type IN ('runbook','insight','convention','decision','procedure')),
   title                   TEXT NOT NULL,
   summary                 TEXT NOT NULL DEFAULT '',
+  -- Plain-language "when this helps", written by a person for a reader
+  -- deciding whether the guide applies to them. NULL for anything a
+  -- compaction pass minted: the machine never writes plain language.
+  when_this_helps         TEXT,
   body_markdown           TEXT NOT NULL DEFAULT '',
   -- The Library asset (observability.prompt_version_meta / Bedrock Prompt
   -- Management) this artifact was published as, if any — free-text, not an
@@ -86,6 +90,9 @@ CREATE TABLE IF NOT EXISTS distillation_facts (
   id                        TEXT PRIMARY KEY DEFAULT ('fact-' || gen_random_uuid()::TEXT),
   artifact_id               TEXT NOT NULL REFERENCES distillation_artifacts (id) ON DELETE CASCADE,
   statement                 TEXT NOT NULL,
+  -- The same claim in plain words (a guide's approach step); NULL means the
+  -- reader sees `statement`.
+  plain                     TEXT,
   subject                   TEXT NOT NULL DEFAULT '',
   predicate                 TEXT NOT NULL DEFAULT '',
   object                    TEXT NOT NULL DEFAULT '',
@@ -155,8 +162,25 @@ CREATE TABLE IF NOT EXISTS distillation_procedure_applications (
   -- ordinal. SET NULL rather than CASCADE so a re-distilled step does not
   -- erase the record that a run once failed.
   failed_at_step_id  TEXT REFERENCES distillation_facts (id) ON DELETE SET NULL,
-  note               TEXT
+  note               TEXT,
+  -- The plain-language warning a failed/abandoned run leaves on the guide:
+  -- a heading ("Check the redirect before you use this") and a reason that
+  -- reads after "because". `note` stays the operator's technical record.
+  advice             TEXT CHECK (advice IS NULL OR char_length(advice) <= 200),
+  plain_reason       TEXT CHECK (plain_reason IS NULL OR char_length(plain_reason) <= 200)
 );
 
 CREATE INDEX IF NOT EXISTS distillation_procedure_applications_proc_idx
   ON distillation_procedure_applications (procedure_id, applied_at DESC);
+
+-- Additive migration for the guide record's plain-language fields
+-- (docs/distillation-guide-record-plan.md §2), for a cluster that built these
+-- tables before them. DDL only: the corpus still has no Aurora read path
+-- (providers/distillation.ts module note) and is served from the mock, so
+-- nothing reads these columns from Aurora yet.
+ALTER TABLE distillation_artifacts ADD COLUMN IF NOT EXISTS when_this_helps TEXT;
+ALTER TABLE distillation_facts ADD COLUMN IF NOT EXISTS plain TEXT;
+ALTER TABLE distillation_procedure_applications ADD COLUMN IF NOT EXISTS advice TEXT
+  CHECK (advice IS NULL OR char_length(advice) <= 200);
+ALTER TABLE distillation_procedure_applications ADD COLUMN IF NOT EXISTS plain_reason TEXT
+  CHECK (plain_reason IS NULL OR char_length(plain_reason) <= 200);

@@ -33,6 +33,7 @@ import {
   listItems, getItem, lineageFor, factLineage, listArtifacts, listReview, decideReview,
   libraryProvenance, buildLineage, sampling,
   listProcedures, getProcedure, listApplications, applyProcedure, __resetDistillationMock,
+  guideFor, repoDisplayName, compactNow, __setCompactRunMs, listFacets,
 } from '../distillation.js';
 import { getAsset } from '../prompt-library.js';
 
@@ -354,6 +355,134 @@ describe('procedures', () => {
     expect(typeof app?.meta['subtitle']).toBe('string');
     const step = (await factLineage('fact-020')).nodes.find((n) => n.id === 'fact-020');
     expect(step?.meta['ordinal']).toBe(3);
+  });
+});
+
+// The guide record (docs/distillation-guide-record-plan.md §2): the plain-
+// language view an L2 record's Content tab reads, derived from rows on each
+// read. art-010 is the mockup's record, so its values are pinned exactly.
+describe('guideFor', () => {
+  afterEach(() => { __resetDistillationMock(); });
+
+  it('art-010: plain approach, the pattern it came from, and the latest run as a warning', async () => {
+    const g = (await guideFor('art-010'))!;
+    expect(g.approach).toEqual([
+      { step_id: 'fact-018', ordinal: 1, text: 'Keep the existing sign-in available as a fallback.' },
+      { step_id: 'fact-019', ordinal: 2, text: 'Check that active sessions stay signed in.' },
+      { step_id: 'fact-020', ordinal: 3, text: 'Switch one customer and verify sign-in.' },
+      { step_id: 'fact-021', ordinal: 4, text: 'Restore the previous sign-in if the checks fail.' },
+    ]);
+    expect(g.based_on).toEqual([{
+      id: 'cl-010', kind: 'cluster', title: 'Retire the SAML shim tenant by tenant',
+      repo: 'connorhoehnslalom/orgiq-auth-service', repo_label: 'auth-service',
+    }]);
+    expect(g.run_warning).toEqual({
+      run_id: 'papp-006', outcome: 'failed',
+      at: procedureApplications.rows().find((p) => p.id === 'papp-006')!.applied_at,
+      failed_at_ordinal: 3,
+      title: 'Check the redirect before you use this',
+      body: 'The last attempt stopped at step 3 because sign-in still pointed to the old service.',
+    });
+    expect(artifacts.rows().find((a) => a.id === 'art-010')!.when_this_helps).toBe(
+      'Planning to move a customer\'s sign-in to Cognito? Use this guide to plan a gradual switch, keep people signed in, and preserve a way to roll back.\n'
+      + 'It brings together steps and lessons from an earlier migration.');
+  });
+
+  it('every seeded artifact but the retired one has a when_this_helps, and every seeded step a plain wording', () => {
+    for (const a of artifacts.rows()) {
+      if (a.status === 'retired') continue;
+      expect(a.when_this_helps).toEqual(expect.any(String));
+    }
+    for (const f of facts.rows().filter((x) => x.ordinal !== null)) {
+      expect(f.plain).toEqual(expect.any(String));
+    }
+  });
+
+  it('a latest run that succeeded raises no warning (art-009 proven, art-011 never run)', async () => {
+    expect((await guideFor('art-009'))!.run_warning).toBeNull();
+    expect((await guideFor('art-011'))!.run_warning).toBeNull();
+    expect((await guideFor('art-011'))!.approach.map((s) => s.ordinal)).toEqual([1, 2, 3]);
+  });
+
+  it('a non-procedure guide has no approach but still names what it was based on; an unknown id is null', async () => {
+    const g = (await guideFor('art-001'))!;
+    expect(g.approach).toEqual([]);
+    expect(g.run_warning).toBeNull();
+    expect(g.based_on.map((b) => b.id)).toEqual(['cl-019']);
+    expect(await guideFor('art-nope')).toBeNull();
+  });
+
+  it('a success recorded after the failure clears the warning; reset brings the seed back', async () => {
+    await applyProcedure('art-010', { outcome: 'succeeded' }, { sessionId: 'u', boxId: 'portal' });
+    expect((await guideFor('art-010'))!.run_warning).toBeNull();
+    __resetDistillationMock();
+    expect((await guideFor('art-010'))!.run_warning?.run_id).toBe('papp-006');
+  });
+
+  it('an abandoned run reads as abandoned, with its plain reason and a default title', async () => {
+    const row = await applyProcedure('art-010',
+      { outcome: 'abandoned', plain_reason: '  the customer asked to wait a week  ' },
+      { sessionId: 'u', boxId: 'portal' });
+    expect(row.plain_reason).toBe('the customer asked to wait a week');
+    expect(row.advice).toBeNull();
+    const w = (await guideFor('art-010'))!.run_warning!;
+    expect(w).toMatchObject({
+      run_id: row.id, outcome: 'abandoned', failed_at_ordinal: null,
+      title: 'The last attempt was abandoned',
+      body: 'The last attempt was abandoned: the customer asked to wait a week.',
+    });
+  });
+
+  it('a failed run with no plain text still names its step', async () => {
+    await applyProcedure('art-010', { outcome: 'failed', failed_at_step_id: 'fact-019' }, { sessionId: 'u', boxId: 'portal' });
+    expect((await guideFor('art-010'))!.run_warning).toMatchObject({
+      failed_at_ordinal: 2, title: 'The last attempt failed at step 2', body: 'The last attempt stopped at step 2.',
+    });
+  });
+
+  it('advice and plain_reason are refused on a succeeded run and past 200 characters', async () => {
+    await expect(applyProcedure('art-010', { outcome: 'succeeded', advice: 'Careful' }, { sessionId: 'u', boxId: 'portal' }))
+      .rejects.toMatchObject({ status: 400 });
+    await expect(applyProcedure('art-010', { outcome: 'abandoned', plain_reason: 'x'.repeat(201) }, { sessionId: 'u', boxId: 'portal' }))
+      .rejects.toMatchObject({ status: 400 });
+    const blank = await applyProcedure('art-010', { outcome: 'succeeded', advice: '   ' }, { sessionId: 'u', boxId: 'portal' });
+    expect(blank.advice).toBeNull();
+  });
+
+  it('lineage carries the plain wording on a step node', async () => {
+    const step = (await factLineage('fact-020')).nodes.find((n) => n.id === 'fact-020');
+    expect(step?.meta['plain']).toBe('Switch one customer and verify sign-in.');
+  });
+
+  it('a compaction-minted artifact carries null plain fields and its approach reads the statements', async () => {
+    __setCompactRunMs(0);
+    await compactNow('L1', 'Test Operator');
+    const job = await compactNow('L2', 'Test Operator');
+    expect(job.produced.artifact_ids.length).toBeGreaterThan(0);
+    for (const id of job.produced.artifact_ids) {
+      const a = artifacts.rows().find((x) => x.id === id)!;
+      expect(a.when_this_helps).toBeNull();
+      const minted = facts.rows().filter((f) => f.artifact_id === id);
+      expect(minted.every((f) => f.plain === null)).toBe(true);
+      const g = (await guideFor(id))!;
+      for (const step of g.approach) {
+        expect(step.text).toBe(minted.find((f) => f.id === step.step_id)!.statement);
+      }
+    }
+  });
+});
+
+describe('repoDisplayName — one rule for facets and based_on', () => {
+  it('keeps the last path segment and drops the orgiq- prefix', () => {
+    expect(repoDisplayName('connorhoehnslalom/orgiq-auth-service')).toBe('auth-service');
+    expect(repoDisplayName('someone/tools')).toBe('tools');
+    expect(repoDisplayName('orgiq-')).toBe('orgiq-');
+  });
+
+  it('the facet label for a repo is the same string a guide shows for it', async () => {
+    const facets = await listFacets('L2');
+    const auth = facets.repos.find((r) => r.value === 'connorhoehnslalom/orgiq-auth-service')!;
+    expect(auth.label).toBe((await guideFor('art-010'))!.based_on[0]!.repo_label);
   });
 });
 

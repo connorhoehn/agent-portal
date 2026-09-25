@@ -1145,6 +1145,9 @@ function mintClaimFacts(artifactId: string, chunk: Cluster[]): string[] {
       id: nextFactId(),
       artifact_id: artifactId,
       statement: c.summary,
+      // Nothing in the machine writes plain language; a reader sees
+      // `statement` until a person writes one.
+      plain: null,
       subject: c.title,
       predicate: 'supports',
       object: artifactId,
@@ -1185,6 +1188,7 @@ function mintProcedureFacts(
       id: nextFactId(),
       artifact_id: artifactId,
       statement: o.title,
+      plain: null,
       subject: cluster.title,
       predicate: 'step_of',
       object: artifactId,
@@ -1200,6 +1204,7 @@ function mintProcedureFacts(
       id: nextFactId(),
       artifact_id: artifactId,
       statement: o.title,
+      plain: null,
       subject: cluster.title,
       predicate: 'supports',
       object: artifactId,
@@ -1257,6 +1262,10 @@ function runL2Compaction(jobId: string, startedAt: string, batch?: ReadonlySet<s
         type: procedural ? 'procedure' : ARTIFACT_TYPE_FOR_KIND[first.kind],
         title: chunk.length === 1 ? first.title : `${first.title} (+${chunk.length - 1} more)`,
         summary: chunk.map((c) => c.summary).join(' '),
+        // Plain-language "when this helps" is written by a person, never
+        // generated from the chunk — null is the honest state for a draft
+        // the machine just minted, and the portal falls back to `summary`.
+        when_this_helps: null,
         body_markdown,
         cluster_ids: chunk.map((c) => c.id),
         facts,
@@ -1680,6 +1689,19 @@ function repoOf(item: DistillationItem): string | undefined {
   }
   return item.repo;
 }
+/**
+ * The one display rule for a repo: its last path segment, with the org-wide
+ * `orgiq-` prefix dropped — `connorhoehnslalom/orgiq-auth-service` reads
+ * "auth-service". Every repo in this corpus carries that prefix, so it names
+ * nothing a reader can tell apart. Both the facet labels and a guide's
+ * `based_on[].repo_label` use this, so a repo reads the same in the filter
+ * and on the record. Filtering still keys on the full `owner/name` value.
+ */
+export function repoDisplayName(repo: string): string {
+  const name = repo.split('/').pop() || repo;
+  return name.replace(/^orgiq-/, '') || name;
+}
+
 function initiativeOf(item: DistillationItem): string | undefined {
   if (item.level === 'L2') {
     const c = clusterRows().find((cl) => item.cluster_ids.includes(cl.id));
@@ -1770,7 +1792,7 @@ export async function listFacets(level?: Level): Promise<Facets> {
     return out.sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
   };
   return {
-    repos: await tally(repoOf, (r) => r.split('/').pop() ?? r),
+    repos: await tally(repoOf, repoDisplayName),
     initiatives: await tally(initiativeOf, initiativeLabel),
     kinds: await tally(kindOf, (k) => k),
   };
@@ -1816,7 +1838,9 @@ function nodeForArtifact(a: Artifact): LineageNode {
 function nodeForFact(f: Fact): LineageNode {
   return {
     id: f.id, kind: 'fact', label: f.statement,
-    meta: { subject: f.subject, predicate: f.predicate, object: f.object, confidence: f.confidence, ordinal: f.ordinal },
+    // `plain` rides along so a step read through lineage (the Runs tab)
+    // shows the same words as the guide's approach: `meta.plain ?? label`.
+    meta: { subject: f.subject, predicate: f.predicate, object: f.object, confidence: f.confidence, ordinal: f.ordinal, plain: f.plain },
   };
 }
 /** A run of a procedure. `subtitle` is what the portal's LineageFrame already
@@ -2223,6 +2247,29 @@ export interface ApplyProcedureInput {
   outcome: ApplicationOutcome;
   failed_at_step_id?: string | null;
   note?: string | null;
+  /** Plain-language heading for the guide's run warning; failed/abandoned only. */
+  advice?: string | null;
+  /** Why it stopped, phrased to follow "because"; failed/abandoned only. */
+  plain_reason?: string | null;
+}
+
+/** The longest `advice` / `plain_reason` a run may carry — they are one line
+ *  on a callout, not a second note field. */
+export const PLAIN_RUN_TEXT_MAX = 200;
+
+/** Trim an optional plain-language run field; blank reads as absent. */
+function plainRunText(value: string | null | undefined, field: string, outcome: ApplicationOutcome): string | null {
+  const text = value?.trim() ?? '';
+  if (text === '') return null;
+  if (outcome === 'succeeded') {
+    // A succeeded run raises no warning, so there is nothing for this text to
+    // head or explain — accepting it would store a warning nobody can see.
+    throw new ValidationError(`${field} is only recorded for a failed or abandoned run`);
+  }
+  if (text.length > PLAIN_RUN_TEXT_MAX) {
+    throw new ValidationError(`${field} must be at most ${PLAIN_RUN_TEXT_MAX} characters`);
+  }
+  return text;
 }
 
 /**
@@ -2255,6 +2302,8 @@ export async function applyProcedure(
   if (stepId !== null && !stepsOf(procedureId).some((f) => f.id === stepId)) {
     throw new ValidationError(`failed_at_step_id must be a step (an ordinal-bearing fact) of ${procedureId}`);
   }
+  const advice = plainRunText(input.advice, 'advice', input.outcome);
+  const plainReason = plainRunText(input.plain_reason, 'plain_reason', input.outcome);
 
   applicationSeq += 1;
   const row: ProcedureApplication = {
@@ -2267,9 +2316,85 @@ export async function applyProcedure(
     outcome: input.outcome,
     failed_at_step_id: stepId,
     note: input.note ?? null,
+    advice,
+    plain_reason: plainReason,
   };
   applicationRows().push(row);
   return row;
+}
+
+// ─── The guide view (docs/distillation-guide-record-plan.md §2) ───────────
+//
+// What an L2 record's Content tab reads, in plain words: the approach, what
+// it was distilled from, and whether the last run should make a reader
+// careful. Computed from rows on every read — nothing here is stored, so a
+// run recorded through /apply moves the warning with no second write, and
+// `POST /api/__mock/reset` takes it back with the applications fixture.
+
+export interface GuideStep { step_id: string; ordinal: number; text: string }
+export interface GuideSource {
+  id: string;
+  kind: 'cluster';
+  title: string;
+  repo: string | null;
+  repo_label: string | null;
+}
+export interface GuideRunWarning {
+  run_id: string;
+  outcome: 'failed' | 'abandoned';
+  at: string;
+  failed_at_ordinal: number | null;
+  title: string;
+  body: string;
+}
+export interface GuideView {
+  approach: GuideStep[];
+  based_on: GuideSource[];
+  run_warning: GuideRunWarning | null;
+}
+
+/**
+ * The guide view of an L2 artifact, or null for an id that is not one.
+ * `approach` is the procedure's steps (a non-procedure has none) with the
+ * plain wording where a person wrote one. `run_warning` is non-null only
+ * when the LATEST run — listApplications order, the order the Runs tab
+ * reads — failed or was abandoned; an older failure a later success
+ * superseded is history, not a warning.
+ */
+export async function guideFor(artifactId: string): Promise<GuideView | null> {
+  const artifact = artifactRows().find((a) => a.id === artifactId);
+  if (!artifact) return null;
+
+  const steps = artifact.type === 'procedure' ? stepsOf(artifactId) : [];
+  const approach = steps.map((f) => ({ step_id: f.id, ordinal: f.ordinal!, text: f.plain ?? f.statement }));
+
+  const based_on = artifact.cluster_ids.flatMap((id): GuideSource[] => {
+    const c = clusterRows().find((cl) => cl.id === id);
+    if (!c) return [];
+    return [{ id: c.id, kind: 'cluster', title: c.title, repo: c.repo || null, repo_label: c.repo ? repoDisplayName(c.repo) : null }];
+  });
+
+  let run_warning: GuideRunWarning | null = null;
+  const latest = artifact.type === 'procedure' ? (await listApplications(artifactId))?.[0] : undefined;
+  if (latest && latest.outcome !== 'succeeded') {
+    const reason = latest.plain_reason;
+    if (latest.outcome === 'failed') {
+      const n = steps.find((f) => f.id === latest.failed_at_step_id)?.ordinal ?? null;
+      const where = n !== null ? ` at step ${n}` : '';
+      run_warning = {
+        run_id: latest.id, outcome: 'failed', at: latest.applied_at, failed_at_ordinal: n,
+        title: latest.advice ?? `The last attempt failed${where}`,
+        body: `The last attempt stopped${where}${reason ? ` because ${reason}` : ''}.`,
+      };
+    } else {
+      run_warning = {
+        run_id: latest.id, outcome: 'abandoned', at: latest.applied_at, failed_at_ordinal: null,
+        title: latest.advice ?? 'The last attempt was abandoned',
+        body: `The last attempt was abandoned${reason ? `: ${reason}` : ''}.`,
+      };
+    }
+  }
+  return { approach, based_on, run_warning };
 }
 
 // ─── Sources, sessions, procedure runs (spec §3a) ─────────────────────────

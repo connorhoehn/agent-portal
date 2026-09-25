@@ -18,7 +18,7 @@ import {
   listFacets, itemSources, getSession, procedureRuns, replicationStatus,
   listItems, getItem, lineageFor, isLineageRoot, listArtifacts, factLineage, listReview, decideReview, libraryProvenance,
   publishArtifact, sampleForReview,
-  listProcedures, getProcedure, listApplications, applyProcedure,
+  listProcedures, getProcedure, listApplications, applyProcedure, guideFor,
   type CompactableLevel, type CompactionStatus, type Level,
   type ArtifactStatus, type ArtifactType, type ReviewVerdict, type ReviewTargetKind, type ApplicationOutcome,
 } from '../providers/distillation.js';
@@ -166,11 +166,19 @@ distillationRouter.get('/facets', asyncHandler(async (req, res) => {
   res.json(await listFacets(level));
 }));
 
-// GET /api/distillation/items/:id — kind-discriminated by `level`.
+// GET /api/distillation/items/:id — kind-discriminated by `level`. An L2
+// record also carries `guide` { approach, based_on, run_warning }, derived
+// from rows on this read (providers/distillation.ts guideFor) so the plain
+// "how to use it" view never lags the runs recorded against it. L0/L1 carry
+// no `guide` key at all — they are not guides.
 distillationRouter.get('/items/:id', asyncHandler(async (req, res) => {
   const id = requireId(String(req.params['id']));
   const item = await getItem(id);
   if (!item) throw new NotFoundError(`item ${id} not found`);
+  if (item.level === 'L2') {
+    res.json({ ...item, guide: await guideFor(id) });
+    return;
+  }
   res.json(item);
 }));
 
@@ -315,22 +323,35 @@ distillationRouter.get('/procedures/:id/runs', asyncHandler(async (req, res) => 
 }));
 
 // POST /api/distillation/procedures/:id/apply
-//   { outcome: 'succeeded'|'failed'|'abandoned', failed_at_step_id?, note? }
+//   { outcome: 'succeeded'|'failed'|'abandoned', failed_at_step_id?, note?,
+//     advice?, plain_reason? }
+// `advice`/`plain_reason` are the plain-language warning a failed or
+// abandoned run leaves on the guide (≤200 chars each, trimmed; the provider
+// 400s them on a succeeded run).
 // The session is the caller's own (from the cookie, never the body — the
 // same attribution rule bot_runs.dispatched_by follows) and the box is the
 // portal, since a run reported through this route was driven by hand.
 distillationRouter.post('/procedures/:id/apply', manageGate, asyncHandler(async (req, res) => {
   const id = requireId(String(req.params['id']));
-  const body = req.body as { outcome?: unknown; failed_at_step_id?: unknown; note?: unknown } | undefined;
+  const body = req.body as {
+    outcome?: unknown; failed_at_step_id?: unknown; note?: unknown; advice?: unknown; plain_reason?: unknown;
+  } | undefined;
   const outcome = enumOrUndefined<ApplicationOutcome>(body?.outcome, 'outcome', APPLICATION_OUTCOMES);
   if (!outcome) throw new ValidationError(`outcome must be one of ${APPLICATION_OUTCOMES.join(', ')}`);
   const failedAtStepId = body?.failed_at_step_id === undefined || body?.failed_at_step_id === null
     ? null : requireId(String(body.failed_at_step_id), 'failed_at_step_id');
   const note = body?.note === undefined || body?.note === null ? null : String(body.note);
+  const optionalText = (value: unknown, field: string): string | null => {
+    if (value === undefined || value === null) return null;
+    if (typeof value !== 'string') throw new ValidationError(`${field} must be a string`);
+    return value;
+  };
+  const advice = optionalText(body?.advice, 'advice');
+  const plainReason = optionalText(body?.plain_reason, 'plain_reason');
   const session = resolveSession(req);
   const application = await applyProcedure(
     id,
-    { outcome, failed_at_step_id: failedAtStepId, note },
+    { outcome, failed_at_step_id: failedAtStepId, note, advice, plain_reason: plainReason },
     { sessionId: session?.sub ?? 'someone', boxId: 'portal' },
   );
   res.status(201).json(application);
