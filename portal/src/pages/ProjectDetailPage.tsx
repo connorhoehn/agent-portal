@@ -230,7 +230,7 @@ function ProjectDetailPage() {
 
   // The initiative list: the rail on every tab but Work, and the Work rail's
   // switcher options. One shared read either way.
-  const listRail = useInitiativeListRail({ currentId: id ?? null });
+  const listRail = useInitiativeListRail({ currentId: id ?? null, defaultScope: 'all' });
 
   const { data: project, isLoading: projLoading, error: projError } =
     useFetch<ProjectDetail>(id ? `/api/graph/projects/${encodeURIComponent(id)}` : '');

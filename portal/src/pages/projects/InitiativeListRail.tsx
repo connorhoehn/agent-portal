@@ -84,6 +84,12 @@ export interface InitiativeListRailOptions {
    * `/iq/projects?lens=sprints`.
    */
   sprints?: SprintRailInput | null;
+  /**
+   * Scope when `?scope=` is absent. The list route leaves it unset (leaders
+   * default to Everyone, members to Mine); the detail route passes 'all' so
+   * the initiative on screen is always in the rail, whoever is looking.
+   */
+  defaultScope?: InitiativeScope;
 }
 
 export interface InitiativeListRail {
@@ -129,7 +135,7 @@ export function useInitiativeListRail(opts: InitiativeListRailOptions = {}): Ini
   const isLeader = LEADER_ROLES.has(session?.role ?? '');
   const [scope, setScope] = useUrlState<InitiativeScope>(
     'scope',
-    (raw) => (raw === 'all' || raw === 'mine' ? raw : (isLeader ? 'all' : 'mine')),
+    (raw) => (raw === 'all' || raw === 'mine' ? raw : (opts.defaultScope ?? (isLeader ? 'all' : 'mine'))),
     (v) => v,
   );
   const [statusFilter, setStatusFilter] = useUrlState<string>('status', (raw) => raw ?? 'all', (v) => (v === 'all' ? null : v));
