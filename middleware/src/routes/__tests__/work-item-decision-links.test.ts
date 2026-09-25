@@ -175,6 +175,17 @@ describe('DELETE /api/graph/work-items/:id/decisions/:decisionId', () => {
     expect(decisionRows.rows().find((d) => d.id === 'd-otel-vendor')?.workItemId).toBe('wi-obs-e1');
   });
 
+  // What RESTORABLE_DELETES in mock/core/wire/write-policy.ts leans on: the
+  // unlink clears a column on a registered-fixture row, and reset restores a
+  // SEEDED link, not just one this test made.
+  it('the fixture reset puts back a seeded link the unlink cleared', async () => {
+    const res = await request(buildApp(nora)).delete('/api/graph/work-items/wi-obs-e1/decisions/d-otel-vendor');
+    expect(res.status).toBe(204);
+    expect(decisionRows.rows().find((d) => d.id === 'd-otel-vendor')?.workItemId).toBeNull();
+    decisionRows.reset();
+    expect(decisionRows.rows().find((d) => d.id === 'd-otel-vendor')?.workItemId).toBe('wi-obs-e1');
+  });
+
   it('404s an unknown work item', async () => {
     const res = await request(buildApp(nora)).delete('/api/graph/work-items/wi-nope/decisions/d-otel');
     expect(res.status).toBe(404);
