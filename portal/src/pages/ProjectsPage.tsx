@@ -1,338 +1,250 @@
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
+import { ScopeHeader } from '@connorhoehnslalom/ui-components';
 import {
-  CatalogGrid,
   EmptyState,
-  FilterChip,
-  PageSection,
-  SearchInput,
-  SegmentedControl,
-  Select,
-  SkeletonCard,
+  LoadingState,
+  Stack,
   StatStrip,
-  Toolbar,
-  ToolbarGroup,
-  ToolbarLabel,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../hooks/useFetch';
-import { useDebouncedSearch } from '../hooks/useDebouncedSearch';
 import { UnavailableNotice } from '../components/UnavailableNotice';
-import { useSession } from '../lib/auth';
-import { useUrlState } from '../lib/useUrlState';
-import { InitiativeCard } from './projects/InitiativeCard';
+import { useCapabilities } from '../lib/capabilities';
+import { InitiativesExplorer } from './projects/InitiativesExplorer';
+import { useInitiativeListRail } from './projects/InitiativeListRail';
+import { InitiativeComposer } from './projects/InitiativeComposer';
 import { ProjectTable } from './projects/ProjectTable';
-import { SprintsLens } from './projects/SprintsLens';
+import { SprintsLens, useSprintsLens } from './projects/SprintsLens';
+import { MINE_DESCRIPTION, MINE_TITLE, buildMine, type MineEmptyCopy } from './projects/mineModel';
 import {
   SPEND_MONTH,
-  SORT_OPTIONS,
-  STATUS_LABELS,
   compareProjects,
   filterByStatus,
   matchesQuery,
   programTotals,
   usd,
-  visibleStatusOptions,
-  type ProjectSortKey,
 } from './projects/projectFormat';
-import type { ProjectSummary } from './projects/types';
-import { useCapabilities } from '../lib/capabilities';
+import type { ProjectSummary, SessionPerson } from './projects/types';
+import type { PersonDetail } from './project-detail/types';
 
-// The program dashboard: every initiative with its people, its live agent
-// activity, its delivery progress and its money — the SAFe-style "one wall for
-// the whole program" view. This file is the shell: fetch (polled — the live
-// column has to move), scope/filter/sort state, the KPI strip, and which child
-// list is mounted. Card, row, and every derivation live in ./projects/.
+// /iq/projects — the Initiatives explorer with nothing selected (D4).
+//
+// The rail is the initiative list (or, on ?lens=sprints, the sprints); the
+// pane is the program:
+//   Everyone — "All initiatives": the program rollup strip and the table.
+//   Mine     — "My initiatives": the table of what lists you, or — when
+//              nothing does — WHY (mineModel): your account is not connected
+//              to a team profile, or it is and nobody has listed you. The two
+//              need different remedies, so the page asks /api/session/person
+//              rather than guessing. A failed read is a failure, never
+//              "nothing linked".
+//   Sprints  — the Sprints lens, unchanged, beside a rail of the same sprints.
+// Under all of them, the light Agent composer about the initiatives.
 
-type ViewMode = 'grid' | 'list';
-type Scope = 'all' | 'mine';
+const EVERYONE_TITLE = 'All initiatives';
+const EVERYONE_DESCRIPTION = 'Every initiative in the program: its owner, live agents, delivery and spend.';
+const SPRINTS_TITLE = 'Sprints';
+const SPRINTS_DESCRIPTION = "Each initiative's iterations: their window, progress and envelope.";
 
-const VIEW_OPTIONS = [
-  { value: 'grid', label: 'Cards' },
-  { value: 'list', label: 'List' },
-];
-
-/** Live-ish: agents start and finish runs on the order of minutes, so the
- *  activity column refreshes itself rather than waiting for a reload. */
-const POLL_MS = 15_000;
-
-// Same cadence TiersPage.tsx set for this exact pattern.
-const SEARCH_DEBOUNCE_MS = 250;
+function Lines({ lines }: { lines: string[] }) {
+  return <>{lines.map((l, i) => <Fragment key={l}>{i > 0 ? <br /> : null}{l}</Fragment>)}</>;
+}
 
 function ProjectsPage() {
-  // `/iq/projects` carries no requireRoles, so every signed-in role lands here
-  // — but ManageIngest is hr-admin's alone, and the empty state used to tell
-  // all five roles to go point Ingestion at a source and run it.
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { can: canDo, ready: capsReady } = useCapabilities();
   const canIngest = capsReady && canDo('ManageIngest');
-  const navigate = useNavigate();
-  const { session } = useSession();
-  // ?lens= — the page's two zooms on the same program: the initiatives wall
-  // (default) and their sprints. Sprints are a lens here, not a place: the old
-  // standalone /iq/sprints redirects in. Deeper sprint/PI planning is a future
-  // tool, deliberately not more stacking on this page.
-  const [searchParams, setSearchParams] = useSearchParams();
-  const lens = searchParams.get('lens') === 'sprints' ? 'sprints' : 'initiatives';
-  const switchLens = (v: string) => {
-    const next = new URLSearchParams(searchParams);
-    if (v === 'sprints') next.set('lens', 'sprints'); else next.delete('lens');
-    setSearchParams(next, { replace: true });
-  };
 
-  // Leadership and the program owner land on the whole program; an SME lands
-  // on their own slice — the same default /api/sprints resolves.
-  const isLeader = session?.role === 'org-leader' || session?.role === 'hr-admin'
-    || session?.role === 'program-owner' || session?.role === 'admin';
-  // Filters live in the URL — `?scope=&status=&sort=&q=` — so a filtered
-  // program wall is a shareable link and survives a reload the way `?lens=`
-  // already did above. `scope`'s default still depends on the session
-  // (leaders default to everyone, everyone else to their own slice), so an
-  // absent `?scope=` resolves through `isLeader` rather than a fixed literal.
-  const [scope, setScope] = useUrlState<Scope>(
-    'scope',
-    (raw) => (raw === 'all' || raw === 'mine' ? raw : (isLeader ? 'all' : 'mine')),
-    (v) => v,
-  );
-  const [statusFilter, setStatusFilter] = useUrlState<string>(
-    'status',
-    (raw) => raw ?? 'all',
-    (v) => (v === 'all' ? null : v),
-  );
-  const [query, setQuery] = useUrlState<string>(
-    'q',
-    (raw) => raw ?? '',
-    (v) => (v ? v : null),
-  );
-  const { searchText, onSearchChange, cancelPending: cancelSearchPending } =
-    useDebouncedSearch(query, setQuery, SEARCH_DEBOUNCE_MS);
-  const [sortKey, setSortKey] = useUrlState<ProjectSortKey>(
-    'sort',
-    (raw) => (SORT_OPTIONS.some((o) => o.value === raw) ? (raw as ProjectSortKey) : 'activity'),
-    (v) => (v === 'activity' ? null : v),
-  );
-  const [viewMode, setViewMode] = useState<ViewMode>(() => {
-    try { return (localStorage.getItem('projects-view') as ViewMode) ?? 'grid'; } catch { return 'grid'; }
+  const wantsSprints = searchParams.get('lens') === 'sprints';
+  const sprints = useSprintsLens(wantsSprints);
+  const list = useInitiativeListRail({
+    sprints: {
+      data: sprints.data,
+      error: sprints.error,
+      openId: sprints.openId,
+      onOpen: sprints.setOpenId,
+    },
   });
+  const { scope, setScope, lens } = list;
+  const rows = list.list.data;
 
-  function switchView(mode: string) {
-    setViewMode(mode as ViewMode);
-    try { localStorage.setItem('projects-view', mode); } catch { /* ignore */ }
-  }
+  // Mine's "why is it empty" — asked only when Mine came back empty.
+  const mineEmpty = lens === 'initiatives' && scope === 'mine' && rows != null && rows.length === 0;
+  const person = useFetch<SessionPerson>(mineEmpty ? '/api/session/person' : null);
+  const linkedId = person.data?.linked ? person.data.personId : null;
+  const personDetail = useFetch<PersonDetail>(
+    mineEmpty && linkedId ? `/api/graph/people/${encodeURIComponent(linkedId)}` : null,
+  );
+  const mine = useMemo(() => buildMine({
+    list: { data: rows, error: rows ? null : list.list.error },
+    person: { data: person.data, error: person.error ?? person.degraded },
+    personName: personDetail.data?.name ?? null,
+  }), [rows, list.list.error, person.data, person.error, person.degraded, personDetail.data]);
 
-  const { data, isLoading, error, degraded, refresh } = useFetch<ProjectSummary[]>(
-    lens === 'initiatives' ? `/api/graph/projects?limit=100&scope=${scope}` : null, POLL_MS);
-  const projectsFailure = error ?? degraded;
+  const visible = useMemo(
+    () => filterByStatus(rows ?? [], list.statusFilter)
+      .filter((p) => matchesQuery(p, list.query))
+      .sort((a, b) => compareProjects(a, b, list.sort) || a.name.localeCompare(b.name)),
+    [rows, list.statusFilter, list.query, list.sort],
+  );
+  const totals = useMemo(() => programTotals(rows ?? []), [rows]);
+  const openProject = (p: ProjectSummary) => navigate(`/iq/projects/${encodeURIComponent(p.id)}`);
+  const refreshAll = () => { list.list.refresh(); person.refresh(); personDetail.refresh(); };
 
-  const projects = useMemo(() => data ?? [], [data]);
-  const totals = useMemo(() => programTotals(projects), [projects]);
-  const statusOptions = useMemo(() => visibleStatusOptions(projects), [projects]);
-  const filtered = useMemo(
-    () => filterByStatus(projects, statusFilter)
-      .filter(p => matchesQuery(p, query))
-      .sort((a, b) => compareProjects(a, b, sortKey)),
-    [projects, statusFilter, query, sortKey],
+  const header = (title: string, description: string) => (
+    <ScopeHeader
+      titleSize="lg"
+      title={title}
+      description={description}
+      className="border-b border-border"
+      data-testid="initiatives-pane-header"
+    />
   );
 
-  const openProject = (project: ProjectSummary) => navigate(`/iq/projects/${project.id}`);
+  const failure = (
+    <UnavailableNotice
+      error={list.list.error ?? ''}
+      what="initiatives"
+      source="Initiatives are read from the org graph"
+      onRetry={list.list.refresh}
+    />
+  );
 
-  // Loading is handled inline, below, in the list body — the title, KPI
-  // strip and toolbar stay mounted (see the shared list-page pattern comment
-  // at the CatalogGrid/skeleton branch) so the page doesn't jump when data
-  // arrives. Only a hard failure with nothing to show bails out of the frame
-  // entirely, since there's nothing for the toolbar to filter.
-  if (lens === 'initiatives' && projectsFailure && !data) {
-    return (
-      <UnavailableNotice
-        error={projectsFailure}
-        what="initiatives"
-        source="Initiatives are read from the org graph"
-        onRetry={refresh}
-      />
-    );
+  const table = visible.length > 0 ? (
+    <ProjectTable projects={visible} onOpen={openProject} />
+  ) : (
+    <EmptyState
+      title="No matching initiatives"
+      description="No initiative matches this search or status filter."
+      actions={[{ label: 'Clear search and filters', onClick: list.clearFilters }]}
+    />
+  );
+
+  let paneHeader;
+  let body;
+
+  if (lens === 'sprints') {
+    paneHeader = header(SPRINTS_TITLE, SPRINTS_DESCRIPTION);
+    body = <SprintsLens view="list" lens={sprints} />;
+  } else if (scope === 'mine') {
+    paneHeader = header(MINE_TITLE, MINE_DESCRIPTION);
+    if (mine.state === 'loading') body = <LoadingState label="Loading your initiatives…" />;
+    else if (mine.state === 'error') {
+      body = mine.failed === 'initiatives' ? failure : (
+        <UnavailableNotice
+          error={mine.error}
+          what="your profile connection"
+          source="Whether your account is connected to a team profile is read from Identity"
+          onRetry={person.refresh}
+        />
+      );
+    } else if (mine.state === 'has-rows') body = table;
+    else body = <MineEmpty copy={mine.copy} onEveryone={() => setScope('all')} onProfile={() => navigate(mine.copy.secondary.href)} onRefresh={refreshAll} />;
+  } else {
+    paneHeader = header(EVERYONE_TITLE, EVERYONE_DESCRIPTION);
+    if (rows == null) body = list.list.error ? failure : <LoadingState label="Loading initiatives…" />;
+    else if (rows.length === 0) {
+      body = (
+        <EmptyState
+          align="start"
+          title="No initiatives yet"
+          description={canIngest
+            ? 'An initiative is a program with an owner, epics, stories and a budget. Nothing creates one by hand: they are built by the graph-builder agent from documents you ingest, so the way to fill this page is to point Ingestion at a source and run it.'
+            : 'An initiative is a program with an owner, epics, stories and a budget. Nothing creates one by hand: they are built by the graph-builder agent from documents someone ingests. Running ingestion needs the ManageIngest capability, which an HR admin holds — this page fills itself once they have pointed it at a source.'}
+        />
+      );
+    } else {
+      const velocityPct = totals.pointsTotal > 0 ? Math.round((totals.pointsDone / totals.pointsTotal) * 100) : null;
+      body = (
+        <Stack gap="md">
+          <StatStrip
+            aria-label="Program rollup"
+            items={[
+              {
+                label: 'Agents active',
+                value: totals.agentsActive,
+                ...(totals.agentsActive > 0 ? { tone: 'accent' as const } : {}),
+                // How many initiatives those runs are spread across — the
+                // same number the tile shows, not the in-flight status count.
+                hint: totals.agentsActiveInitiatives > 0
+                  ? `on ${totals.agentsActiveInitiatives} initiative${totals.agentsActiveInitiatives === 1 ? '' : 's'}`
+                  : 'none running',
+              },
+              {
+                label: 'Active initiatives',
+                value: totals.inFlight,
+                hint: totals.planning > 0 ? `${totals.planning} planning` : `${rows.length} total`,
+              },
+              {
+                label: 'Open work',
+                value: totals.openStories + totals.openBugs,
+                ...(totals.criticalCount > 0 ? { tone: 'danger' as const } : {}),
+                hint: totals.criticalCount > 0
+                  ? `${totals.criticalCount} critical`
+                  : `${totals.openStories} stories · ${totals.openBugs} bugs`,
+              },
+              {
+                label: 'Delivered',
+                value: velocityPct != null ? `${velocityPct}%` : '—',
+                hint: totals.pointsTotal > 0 ? `${totals.pointsDone}/${totals.pointsTotal} pts` : 'nothing estimated',
+              },
+              {
+                label: `Spend · ${SPEND_MONTH.split(' ')[0]}`,
+                value: usd(totals.spendUsd),
+                ...(totals.allocatedUsd > 0 && totals.spendUsd > totals.allocatedUsd ? { tone: 'danger' as const } : {}),
+                hint: totals.allocatedUsd > 0 ? `of ${usd(totals.allocatedUsd)} allocated` : 'no allocations',
+              },
+            ]}
+          />
+          {table}
+        </Stack>
+      );
+    }
   }
-
-  const velocityPct = totals.pointsTotal > 0
-    ? Math.round((totals.pointsDone / totals.pointsTotal) * 100)
-    : null;
 
   return (
-    <PageSection
-      title="Initiatives"
-      actions={
-        <>
-          <SegmentedControl
-            size="sm"
-            value={lens}
-            onChange={switchLens}
-            options={[
-              { label: 'Initiatives', value: 'initiatives' },
-              { label: 'Sprints', value: 'sprints' },
-            ]}
-          />
-          <SegmentedControl options={VIEW_OPTIONS} value={viewMode} onChange={switchView} size="sm" />
-        </>
-      }
+    <InitiativesExplorer
+      {...list.slots}
+      paneHeader={paneHeader}
+      composer={<InitiativeComposer subject={{ kind: 'initiatives', rows }} />}
+      data-testid="initiatives-page"
     >
-      {lens === 'sprints' ? <SprintsLens view={viewMode} /> : <>
-      {/* ── Program rollup — one compact strip, not a wall of tiles ────── */}
-      <StatStrip
-        aria-label="Program rollup"
-        items={[
-          {
-            label: 'Agents active',
-            value: totals.agentsActive,
-            ...(totals.agentsActive > 0 ? { tone: 'accent' as const } : {}),
-            // Describes the SAME number the tile shows — how many
-            // initiatives those active runs are spread across — not the
-            // unrelated count of initiatives whose status happens to be
-            // active/in_progress (that lives on its own tile below).
-            hint: totals.agentsActiveInitiatives > 0
-              ? `on ${totals.agentsActiveInitiatives} initiative${totals.agentsActiveInitiatives === 1 ? '' : 's'}`
-              : 'none running',
-          },
-          {
-            label: 'Active initiatives',
-            value: totals.inFlight,
-            hint: totals.planning > 0
-              ? `${totals.planning} planning`
-              : `${projects.length} total`,
-          },
-          {
-            label: 'Open work',
-            value: totals.openStories + totals.openBugs,
-            ...(totals.criticalCount > 0 ? { tone: 'danger' as const } : {}),
-            hint: totals.criticalCount > 0
-              ? `${totals.criticalCount} critical`
-              : `${totals.openStories} stories · ${totals.openBugs} bugs`,
-          },
-          {
-            label: 'Delivered',
-            value: velocityPct != null ? `${velocityPct}%` : '—',
-            hint: totals.pointsTotal > 0 ? `${totals.pointsDone}/${totals.pointsTotal} pts` : 'nothing estimated',
-          },
-          {
-            label: `Spend · ${SPEND_MONTH.split(' ')[0]}`,
-            value: usd(totals.spendUsd),
-            ...(totals.allocatedUsd > 0 && totals.spendUsd > totals.allocatedUsd ? { tone: 'danger' as const } : {}),
-            hint: totals.allocatedUsd > 0 ? `of ${usd(totals.allocatedUsd)} allocated` : 'no allocations',
-          },
+      <Stack gap="md" className="px-6 py-5">{body}</Stack>
+    </InitiativesExplorer>
+  );
+}
+
+/** Mine with nothing in it (mockup variant 3): what is true, two ways forward,
+ *  and how the view decides — left-aligned at the top of the pane. */
+function MineEmpty({
+  copy, onEveryone, onProfile, onRefresh,
+}: {
+  copy: MineEmptyCopy;
+  onEveryone: () => void;
+  onProfile: () => void;
+  onRefresh: () => void;
+}) {
+  return (
+    <Stack gap="none" className="pt-9">
+      <EmptyState
+        align="start"
+        size="lg"
+        actionsDirection="row"
+        testId="mine-empty"
+        title={copy.heading}
+        description={<Lines lines={copy.lines} />}
+        actions={[
+          { label: copy.primary.label, variant: 'primary', onClick: onEveryone },
+          { label: copy.secondary.label, variant: 'secondary', onClick: onProfile },
         ]}
+        details={{
+          title: copy.details.title,
+          body: <Lines lines={copy.details.lines} />,
+          action: { label: copy.details.action.label, variant: 'link', onClick: onRefresh },
+        }}
       />
-
-      {/* ── Filters — on the list they filter. Labeled groups + divided
-             separators (the KBRegistry composition): "Show" scopes to the
-             person, "Status" filters the rows, search matches text, and the
-             sort verb sits alone in the end slot. Without the labels the row
-             read as two unrelated "All" buttons. */}
-      <Toolbar
-        size="md"
-        aria-label="Initiative filters"
-        end={
-          <ToolbarGroup aria-label="Sort">
-            <ToolbarLabel>Sort</ToolbarLabel>
-            <Select
-              size="sm"
-              value={sortKey}
-              onChange={e => setSortKey(e.target.value as ProjectSortKey)}
-              options={SORT_OPTIONS}
-              aria-label="Sort initiatives"
-            />
-          </ToolbarGroup>
-        }
-      >
-        <ToolbarGroup aria-label="Scope">
-          <ToolbarLabel>Show</ToolbarLabel>
-          <SegmentedControl
-            size="sm"
-            value={scope}
-            onChange={(v) => setScope(v as Scope)}
-            options={[
-              { label: 'Everyone', value: 'all' },
-              { label: 'Mine', value: 'mine' },
-            ]}
-          />
-        </ToolbarGroup>
-        <ToolbarGroup divided aria-label="Status">
-          <ToolbarLabel>Status</ToolbarLabel>
-          {statusOptions.map(s => (
-            <FilterChip key={s} active={statusFilter === s} onClick={() => setStatusFilter(s)} size="sm">
-              {STATUS_LABELS[s] ?? s}
-            </FilterChip>
-          ))}
-        </ToolbarGroup>
-        <ToolbarGroup divided aria-label="Search">
-          <SearchInput
-            value={searchText}
-            onChange={onSearchChange}
-            placeholder="Name, owner, SME, repo…"
-            aria-label="Search initiatives"
-            /* 218, not 190 — same defect Library's box had. The hint names the
-               four things this box searches and ends in the author's own "and
-               more" ellipsis; at 190 the field rendered "Name, owner, SME, rep",
-               eating "repo" AND the ellipsis, so the cut read as a bug and the
-               last searchable field was unreadable. Measured in the page: 148px
-               of text + 32px left padding for the magnifier + 28px right for the
-               clear button + 2px border = 210 needed. The other eight SearchInput
-               call sites were checked the same way and all have headroom. */
-            className="w-[218px]"
-            inputClassName="h-7 text-[12px]"
-          />
-        </ToolbarGroup>
-      </Toolbar>
-
-      {/* List-page pattern: the frame above (title, KPI strip, toolbar) stays
-          mounted through every state. First load fills the body with
-          skeleton cards instead of blanking the page; a background refetch
-          (isLoading true but `data` already populated) leaves the existing
-          list on screen and swaps it in place when the new page lands — it
-          never re-shows the skeleton or drops back to a bare loader. */}
-      {isLoading && !data ? (
-        <CatalogGrid columns={3} dense>
-          {[1, 2, 3, 4, 5, 6].map(i => <SkeletonCard key={i} height={190} />)}
-        </CatalogGrid>
-      ) : filtered.length === 0 ? (
-        (() => {
-          if (scope === 'mine' && projects.length === 0) {
-            return (
-              <EmptyState
-                title="Nothing linked to you"
-                description="No initiative lists you as owner or contributor — or your sign-in is not linked to a person in the org graph (Identity → Users fixes that)."
-                actionLabel="Show all initiatives"
-                onAction={() => setScope('all')}
-              />
-            );
-          }
-          if (scope === 'all' && projects.length === 0) {
-            return (
-              <EmptyState
-                title="No initiatives yet"
-                description={canIngest
-                  ? 'An initiative is a program with an owner, epics, stories and a budget. Nothing creates one by hand: they are built by the graph-builder agent from documents you ingest, so the way to fill this page is to point Ingestion at a source and run it.'
-                  : 'An initiative is a program with an owner, epics, stories and a budget. Nothing creates one by hand: they are built by the graph-builder agent from documents someone ingests. Running ingestion needs the ManageIngest capability, which an HR admin holds — this page fills itself once they have pointed it at a source.'}
-              />
-            );
-          }
-          return (
-            <EmptyState
-              title="No matching initiatives"
-              description="No initiative matches the current filters."
-              actionLabel="Clear filters"
-              onAction={() => { cancelSearchPending(); setStatusFilter('all'); setQuery(''); }}
-            />
-          );
-        })()
-      ) : viewMode === 'list' ? (
-        <ProjectTable projects={filtered} onOpen={openProject} />
-      ) : (
-        // Fixed column count, never auto-fit: `auto-fit minmax()` stretches two
-        // lopsided cards across half the screen.
-        <CatalogGrid columns={3} dense>
-          {filtered.map(project => (
-            <InitiativeCard key={project.id} project={project} onClick={() => openProject(project)} />
-          ))}
-        </CatalogGrid>
-      )}
-      </>}
-    </PageSection>
+    </Stack>
   );
 }
 

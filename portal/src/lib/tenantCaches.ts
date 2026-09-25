@@ -12,7 +12,8 @@
 // Device/UI PREFERENCES are deliberately PRESERVED — they are neither tenant nor
 // user data, and a switch shouldn't reset someone's theme or list-view choice:
 //   'orgiq:preferences:v1'  preferences.ts STORAGE_KEY   — theme, weights, palette
-//   'projects-view'         ProjectsPage.tsx             — grid/list toggle
+//   'projects-view'         RETIRED ProjectsPage.tsx     — grid/list toggle (the card grid is gone)
+//   'initiatives.rail-collapsed' projects/InitiativesExplorer.tsx — the explorer's « fold
 //   'sprints-view'          sprints/SprintsPage.tsx      — cards/table toggle
 // (Also intentionally untouched: auth.tsx's 'orgiq.ssoAutoRedirected', which is
 //  a transient sign-in-flow marker, not tenant/user data.)

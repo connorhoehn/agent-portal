@@ -292,7 +292,6 @@ export function useInitiativeListRail(opts: InitiativeListRailOptions = {}): Ini
         <Padded>
           <EmptyState
             align="start"
-            size="sm"
             title={copy.title}
             description={copy.body}
             testId="initiative-rail-empty"
@@ -305,7 +304,6 @@ export function useInitiativeListRail(opts: InitiativeListRailOptions = {}): Ini
         <Padded>
           <EmptyState
             align="start"
-            size="sm"
             title={RAIL_NO_MATCH.title}
             description={RAIL_NO_MATCH.body}
             actions={[{ label: 'Clear search and filters', variant: 'link', onClick: clearFilters }]}

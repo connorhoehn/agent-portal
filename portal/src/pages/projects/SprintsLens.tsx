@@ -37,7 +37,13 @@ import { summarizeEnvelopes } from '../../lib/envelopeFormat';
 import type { EnvelopesResponse } from '../../lib/envelopeFormat';
 import type { Sprint, SprintsResponse } from '../sprints/types';
 
-export function SprintsLens({ view }: { view: 'grid' | 'list' }) {
+/**
+ * The lens's state and read, lifted out of the component so the Initiatives
+ * explorer's rail can list the same sprints the pane shows (one read, one
+ * scope, one open sprint). The list route calls this once and hands the
+ * result to both `<SprintsLens>` and the rail.
+ */
+export function useSprintsLens(enabled = true) {
   const { session } = useSession();
   // The wide scope carries every sprint's envelope, which is the money
   // /api/budgets gates — the API refuses `scope=all` to anyone else, so the
@@ -61,7 +67,26 @@ export function SprintsLens({ view }: { view: 'grid' | 'list' }) {
   const [envelopesOpen, setEnvelopesOpen] = useState(false);
 
   const url = `/api/sprints?scope=${scope}${activeOnly ? '&status=active' : ''}`;
-  const { data, isLoading, error, refresh } = useFetch<SprintsResponse>(url, 60_000);
+  const { data, isLoading, error, refresh } = useFetch<SprintsResponse>(enabled ? url : null, 60_000);
+
+  return {
+    canRequestAll, canManageSprints, canManageBudgets, canDispatch,
+    scope, setScope, activeOnly, setActiveOnly, openId, setOpenId,
+    newSprintOpen, setNewSprintOpen, envelopesOpen, setEnvelopesOpen,
+    data, isLoading, error, refresh,
+  };
+}
+
+export type SprintsLensState = ReturnType<typeof useSprintsLens>;
+
+export function SprintsLens({ view, lens }: { view: 'grid' | 'list'; lens: SprintsLensState }) {
+  const { session } = useSession();
+  const {
+    canRequestAll, canManageSprints, canManageBudgets, canDispatch,
+    scope, setScope, activeOnly, setActiveOnly, openId, setOpenId,
+    newSprintOpen, setNewSprintOpen, envelopesOpen, setEnvelopesOpen,
+    data, isLoading, error, refresh,
+  } = lens;
 
   // "How much of my sprint envelope is left" — the number `decideEnvelope`
   // brakes a dispatch on, which until this had no read surface at all: the
