@@ -18,7 +18,7 @@ three destinations answer three different questions
 
 | tab | question | route | surface |
 |---|---|---|---|
-| **Knowledge** | What did the agents learn that I can use? | `/iq/distillation/knowledge?view=guides\|patterns\|notes&item=&panel=sources&sourceView=list\|graph&repo&initiative&q&kind&lifecycle` | explorer (search scoped to the view, view selector, filter popover, cursor Load more with "N of M loaded") · the record (Content \| History, + Runs for a procedure) · optional Sources inspector (List \| Graph) |
+| **Knowledge** | What did the agents learn that I can use? | `/iq/distillation/knowledge?view=guides\|patterns\|notes&item=&panel=sources&sourceView=list\|graph&repo&initiative&q&kind&lifecycle` | explorer (pane title, scope row with the tier count, search scoped to the view with the filter popover beside it, cursor Load more with "N of M loaded" — no view selector: the rail picks the view) · a crumb band (trail, repository selector, Open Library) · the record (Content \| History, + Runs for a procedure; Sources N on the tab row) · Sources inspector (List \| Graph) only while `panel=sources` |
 | **Review** | Does this finding match the evidence? | `/iq/distillation/review?tab=pending\|decided&sample=&panel=sources` | queue (Pending N / Reviewed, rows titled by the resolved target) · the claim with Agree / Disagree (ManageBots; read-only notice otherwise) · Sources |
 | **Activity** | Is new work being turned into useful knowledge? | `/iq/distillation/activity?view=runs\|graph&run=&repo&level&status` | tier-flow strip + health status line · Runs or Tier graph · run inspector |
 
@@ -79,10 +79,22 @@ into a verdict per procedure:
   every raw write.
 - **unproven** — published, never run to completion.
 
-A procedure's Knowledge record renders its steps once, each with the latest
-run's marker (✓ done, ! failed, ○ not reached); its **Runs** tab leads with
-the latest-run callout ("Latest run stopped at step 3 — …"), then the run
-history, and — for ManageBots — "Record a run".
+A guide's Knowledge record reads as something to use, plain language first
+(`docs/distillation-guide-record-mockup.png`). **When this helps** (the
+record's `when_this_helps`), then **Use it in your work** — "Draft a plan for
+my project" prefills the docked composer and sends nothing, "Explain this
+guide" asks the agent on `/iq/invoke`. For a procedure, a **run-warning
+callout** follows when its latest run failed or was abandoned ("Check the
+redirect before you use this — The last attempt stopped at step 3 because
+sign-in still pointed to the old service", **View run →**); the server derives
+it (`guide.run_warning`) from the application rows on each read. Then **The
+approach · N steps** in plain words (`fact.plain`, falling back to the
+statement) with neutral numbers, **Based on** (the source patterns, each row
+opening that pattern), and a collapsed **Technical details**. Run markers
+(✓ done, ! failed, ○ not reached) appear **only on the Runs tab**, which leads
+with the latest-run callout ("Latest run stopped at step 3 — …"), then the run
+history, and — for ManageBots — "Record a run". A record with no
+`when_this_helps` (a compaction-minted one, say) shows its summary instead.
 
 ## What a compaction does
 

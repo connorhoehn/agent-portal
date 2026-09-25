@@ -847,6 +847,34 @@ What the floor rules mean here:
 - **A pass mid-flight across a reset writes nothing.** It re-checks that its
   job row still exists before its write phase.
 
+### The guide record's plain-language fields (2026-09-24)
+
+The guide-record redesign (`docs/distillation-guide-record-spec.md`) added
+plain-language text to the distillation fixtures. It is **stored text, not a
+count**, so floor rule 1 holds:
+
+- `when_this_helps` on every seeded artifact row (the `large` scenario's
+  generated rows carry null, like a compaction-minted one) —
+  the "When this helps" paragraph; `\n` separates paragraphs.
+- `plain` on facts (the procedure steps of art-009/010/011, via the `steps()`
+  helper's optional fifth tuple element) — the step in plain words; the statement
+  stays the technical record.
+- `advice` and `plain_reason` on procedure applications (papp-006 carries
+  "Check the redirect before you use this" / "sign-in still pointed to the old
+  service"). `POST /procedures/:id/apply` accepts both, trimmed, ≤200 chars,
+  only on failed or abandoned runs, and writes the registered applications
+  fixture, so `POST /api/__mock/reset` undoes a recorded run.
+- `guide` on `GET /items/:id` for L2 is **derived, never stored**:
+  `guideFor(artifactId)` builds `approach` (`plain ?? statement`), `based_on`
+  (cluster ids → clusters, `repo_label` from the one `repoDisplayName` rule
+  the facets use) and `run_warning` (the latest application in
+  `listApplications` order when it failed or was abandoned) on every read, so
+  recording a successful run clears the warning with nothing to invalidate.
+- Compaction-minted artifacts and facts write `when_this_helps: null` and
+  `plain: null`; nothing offline invents plain language. The corpus still has
+  no Aurora read path — `schema/distillation_schema.sql` carries the columns
+  as DDL only.
+
 ## The mock agent stream is paced
 
 `mockAgentCore.invokeAgentStreaming` (`providers/agentcore.ts`) sleeps

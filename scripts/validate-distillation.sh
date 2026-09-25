@@ -83,6 +83,14 @@ grep -q "CanvasPaneLayout" "$PAGES/ActivityTab.tsx" 2>/dev/null && ok "Activity:
 { grep -q "ExplorerLayout" "$PAGES/KnowledgeTab.tsx" && grep -q "ExplorerLayout" "$PAGES/ReviewTab.tsx" && grep -q "ContextColumn" "$PAGES/KnowledgeTab.tsx"; } 2>/dev/null \
   && ok "Knowledge + Review: explorer · record · ContextColumn" || fail "Knowledge/Review are not ExplorerLayout + ContextColumn"
 grep -q "Load more" "$PAGES/KnowledgeTab.tsx" 2>/dev/null && ok "explorer keeps cursor Load more" || fail "Knowledge explorer lost cursor Load more"
+# The guide record (docs/distillation-guide-record-spec.md): the rail picks
+# the view, so the explorer has no second view selector; Content leads with a
+# server-derived run-warning callout and keeps run markers off (they live on
+# the Runs tab only).
+grep -q 'Knowledge view' "$PAGES/KnowledgeTab.tsx" 2>/dev/null && fail "KnowledgeTab still has a 'Knowledge view' Select (the sub-nav rail chooses the view)" || ok "no Knowledge view selector beside the rail"
+{ grep -q "Banner" "$PAGES/KnowledgeRecord.tsx" && grep -q "run_warning" "$PAGES/KnowledgeRecord.tsx"; } 2>/dev/null \
+  && ok "record Content: run-warning callout (Banner over guide.run_warning)" || fail "KnowledgeRecord does not render guide.run_warning in a Banner"
+grep -q "stepMarkers" "$PAGES/KnowledgeRecord.tsx" 2>/dev/null && fail "KnowledgeRecord uses stepMarkers (run markers belong on the Runs tab only)" || ok "no run markers on record Content"
 { grep -q "can('ManageBots')" "$PAGES/ReviewTab.tsx" && grep -q "AccessNotice" "$PAGES/ReviewTab.tsx"; } 2>/dev/null \
   && ok "Review: verdicts gated on ManageBots, read-only notice otherwise" || fail "ReviewTab does not gate verdicts on can('ManageBots') with an AccessNotice"
 { grep -q "RichChatComposer" "$PAGES/ExplainComposer.tsx" && grep -q "/iq/invoke" "$PAGES/ExplainComposer.tsx"; } 2>/dev/null \
@@ -122,6 +130,12 @@ if [ -f "$mock" ]; then
   [ "$np" -ge 3 ] && ok "≥ 3 procedures in mock ($np)" || fail "mock has $np procedures (need ≥ 3)"
   [ "$napp" -ge 5 ] && ok "≥ 5 procedure applications in mock ($napp)" || fail "mock has $napp procedure applications (need ≥ 5)"
   grep -q "isProceduralChunk" middleware/src/providers/distillation.ts && grep -q "procedureHealth" middleware/src/providers/distillation.ts && ok "procedure minting + health rules present" || fail "isProceduralChunk / procedureHealth missing from the provider"
+  # Plain-language copy is data: seeded records carry when_this_helps, and the
+  # guide projection (approach / based_on / run_warning) is derived server-side.
+  # a string value, inline or on the next line — not null
+  nwh=$(grep -E '^\s+when_this_helps:' "$mock" | grep -vcE 'null|string')
+  [ "$nwh" -ge 3 ] && ok "≥ 3 seeded when_this_helps in mock ($nwh)" || fail "mock has $nwh seeded when_this_helps (need ≥ 3)"
+  grep -q "export async function guideFor" middleware/src/providers/distillation.ts && ok "provider derives the guide view (guideFor)" || fail "guideFor missing from the provider (guide must be server-derived)"
 else fail "middleware/src/mock/distillation.ts missing"; fi
 
 # ─────────────────────────────────────────────────────────────────────────────
