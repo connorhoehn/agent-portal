@@ -96,6 +96,29 @@ sessionRouter.get('/me', (req, res) => {
   res.json(publicView(session));
 });
 
+// Which org-graph person this session's account is connected to
+// (app_users.person_id), if any.
+//
+// Why a separate read rather than a field on /me: "Mine" views (initiatives,
+// sprints) resolve through this link server-side, and an unlinked account gets
+// an empty list — indistinguishable, to the page, from a linked person who
+// simply owns nothing. The two need different copy and different remedies
+// ("connect your profile" vs "nobody has listed you yet"), so the page has to
+// ask. /me is polled and re-minted on every switch; this is a directory read
+// that can fail on its own without taking the session down with it.
+//
+// `demo-user` (the cookie-less dev persona) has no app_users row and reads as
+// unlinked, which is the truth. A masquerade reads the IMPERSONATED account's
+// link, since that is whose "Mine" the operator is looking at. The name is not
+// carried here: GET /api/graph/people/:id already owns person lookups.
+sessionRouter.get('/person', asyncHandler(async (req, res) => {
+  const session = sessionOrNull(req);
+  if (!session) { unauthenticated(res); return; }
+  const user = await getUser(session.sub);
+  const personId = user?.personId ?? null;
+  res.json({ linked: personId != null, personId });
+}));
+
 // Every UI-gated Cedar action evaluated for the current session, through the
 // exact same path requireAction uses (isAllowed → evaluate + decision cache),
 // so a `true` here means the corresponding route would pass its guard. The
