@@ -237,7 +237,7 @@ python3.11 -m venv .venv-synth && .venv-synth/bin/pip install -r schema/synth/re
 ## Project dependencies
 
 - **ui-components** (`~/projects/ui-components`): `@connorhoehnslalom/ui-components`,
-  installed at **2.389.0** (sha `4ec60502`, verified 2026-09-24 with the two settling
+  installed at **2.389.4** (sha `871c13a5`, verified 2026-09-24 with the two settling
   commands below). 2.385 added `@tiptap/extension-mention` to what the rich
   composer imports; it is an *optional* peer, so npm does not install it and Vite
   fails at runtime with "Could not resolve @tiptap/extension-mention" — the portal
