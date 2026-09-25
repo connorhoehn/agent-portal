@@ -122,10 +122,14 @@ const SPRINT_GROUPS = [
   { id: 'done', title: 'Done', defaultOpen: false },
 ] as const;
 
+/** "Observability Platform · 0 / 21 pts". The short unit keeps the line
+ *  inside the 264px rail (with "points", "Real-time Analytics Pipeline" cut
+ *  at 215px); the full line rides along as the hover title in case a longer
+ *  initiative name still clips. */
 function sprintSubline(s: Sprint): string {
   const parts: string[] = [];
   if (s.orgProjectName) parts.push(s.orgProjectName);
-  if (s.pointsTotal > 0) parts.push(`${s.pointsDone} / ${s.pointsTotal} points`);
+  if (s.pointsTotal > 0) parts.push(`${s.pointsDone} / ${s.pointsTotal} pts`);
   return parts.join(' · ');
 }
 
@@ -254,7 +258,7 @@ export function useInitiativeListRail(opts: InitiativeListRailOptions = {}): Ini
         id: s.id,
         groupId: SPRINT_GROUPS.some((g) => g.id === s.status) ? s.status : 'active',
         title: s.name,
-        subline: sprintSubline(s) || undefined,
+        ...(sprintSubline(s) ? { subline: <T title={sprintSubline(s)}>{sprintSubline(s)}</T> } : {}),
       }));
       body = (
         <GroupedList
