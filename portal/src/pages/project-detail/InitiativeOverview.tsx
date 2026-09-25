@@ -1,27 +1,33 @@
-// The initiative's Overview tab (mockup variant 1, O6–O9): the inline stat
-// strip, "What needs attention", "Plan next" and "How to move this forward".
+// The initiative's Overview tab (v2, docs/design/initiative-v2-plan.md S1,
+// A1–A2, U1–U2): one stats line under the tabs, "Needs attention N" as toned
+// rows, and "Up next" with "View all N →". v1's "How to move this forward"
+// is gone (V7): the composer's placeholder and prefill carry that job.
 //
 // Every number and every sentence is read off rows by `overviewModel` — this
 // file only maps that model onto library composites. The header above it and
 // the composer under it belong to the page (ScopeHeader, InitiativeComposer).
 
+import type { ReactNode } from 'react';
 import {
   ActionRowList,
-  Banner,
-  DetailSection,
-  StatStrip,
-  type StatStripItem,
+  ActionRowPerson,
+  type ActionRowColumn,
+  type ActionRowItem,
 } from '@connorhoehnslalom/ui-components';
-import { ArrowRightIcon, Button, Inline, LoadingState, Stack, T } from '@connorhoehnslalom/ui-components/shared';
-import { UnavailableNotice } from '../../components/UnavailableNotice';
 import {
-  ATTENTION_NONE,
-  MOVE_FORWARD_BODY,
-  MOVE_FORWARD_TITLE,
-  type AttentionItem,
-  type OverviewModel,
-  type OverviewStat,
-} from './overviewModel';
+  ArrowRightIcon,
+  Button,
+  Chip,
+  Inline,
+  LoadingState,
+  PageSection,
+  Stack,
+  StatStrip,
+  T,
+  type StatStripItem,
+} from '@connorhoehnslalom/ui-components/shared';
+import { UnavailableNotice } from '../../components/UnavailableNotice';
+import { ATTENTION_NONE, type OverviewModel, type OverviewStat } from './overviewModel';
 
 function statItem(s: OverviewStat): StatStripItem {
   return {
@@ -31,41 +37,17 @@ function statItem(s: OverviewStat): StatStripItem {
   };
 }
 
-/** "Open work →", "See all 11 work items →": a quiet link-styled action. */
-function ArrowAction({ label, onClick, testId }: { label: string; onClick: () => void; testId?: string }) {
-  return (
-    <Button variant="link" onClick={onClick} data-testid={testId}>
-      <Inline gap="xs" align="center">
-        {label}
-        <ArrowRightIcon size={16} />
-      </Inline>
-    </Button>
-  );
-}
+/** Person ┆ points, declared once so the cells line up down both lists. */
+const COLUMNS: ActionRowColumn[] = [
+  { id: 'person', width: 'xl', label: 'Assignee' },
+  { id: 'points', width: 'xs', label: 'Points' },
+];
 
-function AttentionCallout({ item, onOpen }: { item: AttentionItem; onOpen: (href: string) => void }) {
-  return (
-    <Banner
-      layout="callout"
-      variant="warning"
-      accent="bar"
-      size="lg"
-      title={item.title}
-      meta={(
-        <Inline gap="xs" align="center" wrap>
-          {item.meta.map((m, i) => (
-            <T key={m.label} className={m.tone === 'warning' ? 'text-warning' : undefined}>
-              {i > 0 ? `· ${m.label}` : m.label}
-            </T>
-          ))}
-        </Inline>
-      )}
-      action={<ArrowAction label={item.actionLabel} onClick={() => onOpen(item.href)} testId="overview-attention-open" />}
-      data-testid="overview-attention"
-    >
-      {item.body}
-    </Banner>
-  );
+function cells(assigneeName: string | null, points: string | null): Record<string, ReactNode> {
+  return {
+    person: assigneeName ? <ActionRowPerson name={assigneeName} /> : <T className="text-text-secondary">Unassigned</T>,
+    points: points ?? <T className="text-text-secondary">Unsized</T>,
+  };
 }
 
 export function InitiativeOverview({
@@ -78,9 +60,14 @@ export function InitiativeOverview({
   onOpen: (href: string) => void;
   onRetry?: () => void;
 }) {
+  const hrefOf = (items: Array<{ id: string; href: string }>) => (row: ActionRowItem) => {
+    const hit = items.find((r) => r.id === row.id);
+    if (hit) onOpen(hit.href);
+  };
+
   return (
-    <Stack gap="lg" className="px-6 pb-6 pt-1" data-testid="initiative-overview">
-      <StatStrip variant="inline" items={model.stats.map(statItem)} aria-label="Initiative progress" data-testid="overview-stats" />
+    <Stack gap="xl" className="px-6 pb-6 pt-5" data-testid="initiative-overview">
+      <StatStrip variant="line" items={model.stats.map(statItem)} aria-label="Initiative progress" data-testid="overview-stats" />
 
       {model.state === 'loading' && <LoadingState label="Loading work…" />}
       {model.state === 'error' && (
@@ -95,35 +82,56 @@ export function InitiativeOverview({
       )}
       {model.state === 'ready' && (
         <>
-          <DetailSection first variant="heading" size="lg" title="What needs attention" data-testid="overview-attention-section">
-            {model.attention
-              ? <AttentionCallout item={model.attention} onOpen={onOpen} />
-              : <T className="text-text-secondary">{ATTENTION_NONE}</T>}
-          </DetailSection>
+          <PageSection
+            size="md"
+            title="Needs attention"
+            // The count is the rows below it, never a stored total.
+            count={model.attention.length}
+            data-testid="overview-attention-section"
+          >
+            {model.attention.length > 0 ? (
+              <ActionRowList
+                aria-label="Needs attention"
+                tone="warning"
+                accent="bar"
+                action="Open"
+                columns={COLUMNS}
+                items={model.attention.map((a) => ({
+                  id: a.id,
+                  title: a.title,
+                  leading: <Chip tone="danger" size="md">Blocked</Chip>,
+                  ...(a.reason ? { description: a.reason } : {}),
+                  cells: cells(a.assigneeName, a.points),
+                }))}
+                onOpen={hrefOf(model.attention)}
+                data-testid="overview-attention"
+              />
+            ) : (
+              <T className="text-text-secondary">{ATTENTION_NONE}</T>
+            )}
+          </PageSection>
 
-          <DetailSection variant="heading" size="lg" title="Plan next" data-testid="overview-plan-next">
+          <PageSection
+            size="md"
+            title="Up next"
+            actions={model.viewAll ? (
+              <Button variant="link" onClick={() => onOpen(model.viewAll!.href)} data-testid="overview-view-all">
+                <Inline gap="xs" align="center">
+                  {model.viewAll.label}
+                  <ArrowRightIcon size={16} />
+                </Inline>
+              </Button>
+            ) : undefined}
+            data-testid="overview-up-next"
+          >
             <ActionRowList
-              aria-label="Plan next"
-              items={model.planNext.map((r) => ({
-                id: r.id,
-                title: r.title,
-                ...(r.description ? { description: r.description } : {}),
-                meta: r.meta,
-              }))}
-              onOpen={(row) => {
-                const hit = model.planNext.find((r) => r.id === row.id);
-                if (hit) onOpen(hit.href);
-              }}
+              aria-label="Up next"
+              columns={COLUMNS}
+              items={model.upNext.map((r) => ({ id: r.id, title: r.title, cells: cells(r.assigneeName, r.points) }))}
+              onOpen={hrefOf(model.upNext)}
               emptyLabel="Nothing is up next."
-              footer={model.seeAll
-                ? <ArrowAction label={model.seeAll.label} onClick={() => onOpen(model.seeAll!.href)} testId="overview-see-all" />
-                : undefined}
             />
-          </DetailSection>
-
-          <DetailSection variant="heading" size="lg" title={MOVE_FORWARD_TITLE} description={MOVE_FORWARD_BODY}>
-            {null}
-          </DetailSection>
+          </PageSection>
         </>
       )}
     </Stack>

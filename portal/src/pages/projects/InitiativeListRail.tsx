@@ -1,6 +1,9 @@
-// The Initiatives explorer column (F3–F10, M1–M2): "Initiatives 14" with ⋯
-// and «, tabs Initiatives | Sprints, Everyone | Mine, "Find an initiative…",
-// status groups of rows ("Nora DaSilva · 2 agents"), and a footer.
+// The Initiatives explorer column (v2, docs/design/initiative-v2-plan.md
+// R1–R7): "INITIATIVES 11" with ⋯ and «, "Find an initiative…" directly under
+// it, the scope list "All initiatives / My initiatives / Sprints", then status
+// groups ("IN PROGRESS … 9") of title-only rows, and a footer. There is no +:
+// nothing creates an initiative by hand (they come from ingestion), so a +
+// would be a button with no action (V2).
 //
 // A hook rather than a component because the frame's rail is several slots
 // (title, count, actions, header, body, footer) and because the list route's
@@ -25,11 +28,11 @@ import {
   GroupedList,
   LoadingState,
   MoreIcon,
+  RailNavList,
   SearchInput,
-  SegmentedControl,
   Stack,
   T,
-  Tabs,
+  type RailNavListItem,
   type DropdownMenuSection,
   type GroupedListRow,
 } from '@connorhoehnslalom/ui-components/shared';
@@ -60,8 +63,8 @@ export type InitiativeLens = 'initiatives' | 'sprints';
 /** The list read's page size; a full page means "there may be more". */
 export const INITIATIVE_LIST_LIMIT = 100;
 
-/** Agents start and finish runs on the order of minutes, so the "· 2 agents"
- *  sublines refresh themselves rather than waiting for a reload. */
+/** Initiatives change status (and so group) on the order of minutes, so the
+ *  list refreshes itself rather than waiting for a reload. */
 const POLL_MS = 15_000;
 const SEARCH_DEBOUNCE_MS = 250;
 
@@ -178,14 +181,19 @@ export function useInitiativeListRail(opts: InitiativeListRailOptions = {}): Ini
   }
   const suffix = keep.toString() ? `?${keep.toString()}` : '';
 
-  const switchLens = (next: string) => {
-    if (next === lens) return;
+  // One URL write per choice: leaving the Sprints lens and picking a scope
+  // are the same navigation, so they must not race as two updates.
+  const selectView = (next: 'all' | 'mine' | 'sprints') => {
     if (!opts.sprints) {
-      navigate(next === 'sprints' ? '/iq/projects?lens=sprints' : `/iq/projects${suffix}`);
+      // The detail route has no Sprints lens of its own; that view lives on
+      // the list route.
+      if (next === 'sprints') navigate('/iq/projects?lens=sprints');
+      else setScope(next);
       return;
     }
     const params = new URLSearchParams(searchParams);
-    if (next === 'sprints') params.set('lens', 'sprints'); else params.delete('lens');
+    if (next === 'sprints') params.set('lens', 'sprints');
+    else { params.delete('lens'); params.set('scope', next); }
     setSearchParams(params, { replace: true });
   };
 
@@ -205,35 +213,25 @@ export function useInitiativeListRail(opts: InitiativeListRailOptions = {}): Ini
     },
   ];
 
+  const navItems: RailNavListItem[] = [
+    { id: 'all', label: 'All initiatives', current: lens === 'initiatives' && scope === 'all', onSelect: () => selectView('all') },
+    { id: 'mine', label: 'My initiatives', current: lens === 'initiatives' && scope === 'mine', onSelect: () => selectView('mine') },
+    { id: 'sprints', label: 'Sprints', current: lens === 'sprints', onSelect: () => selectView('sprints') },
+  ];
+
   const header = (
     <Stack gap="md">
-      <Tabs
-        variant="underline"
-        size="md"
-        value={lens}
-        onValueChange={switchLens}
-        items={[{ id: 'initiatives', label: 'Initiatives' }, { id: 'sprints', label: 'Sprints' }]}
-        aria-label="Initiatives lens"
-      />
       {lens === 'initiatives' ? (
-        <>
-          <SegmentedControl
-            fullWidth
-            value={scope}
-            onChange={(v) => setScope(v as InitiativeScope)}
-            options={[{ value: 'all', label: 'Everyone' }, { value: 'mine', label: 'Mine' }]}
-            aria-label="Whose initiatives"
-          />
-          <SearchInput
-            size="md"
-            value={searchText}
-            onChange={onSearchChange}
-            placeholder="Find an initiative…"
-            aria-label="Find an initiative"
-            className="w-full"
-          />
-        </>
+        <SearchInput
+          size="md"
+          value={searchText}
+          onChange={onSearchChange}
+          placeholder="Find an initiative…"
+          aria-label="Find an initiative"
+          className="w-full"
+        />
       ) : null}
+      <RailNavList items={navItems} aria-label="Initiative views" data-testid="initiative-rail-views" />
     </Stack>
   );
 
@@ -262,7 +260,8 @@ export function useInitiativeListRail(opts: InitiativeListRailOptions = {}): Ini
         <GroupedList
           size="md"
           currentStyle="bar"
-          groupCountStyle="plain"
+          groupHeading="label"
+          groupCountAlign="end"
           hideEmptyGroups
           currentId={sp.openId}
           groups={SPRINT_GROUPS.map((g) => ({ ...g, count: rows.filter((r) => r.groupId === g.id).length }))}
@@ -325,15 +324,14 @@ export function useInitiativeListRail(opts: InitiativeListRailOptions = {}): Ini
           key={scope}
           size="md"
           currentStyle="bar"
-          groupCountStyle="plain"
+          groupHeading="label"
+          groupCountAlign="end"
+          rowStyle="plain"
           currentId={opts.currentId ?? null}
           groups={model.groups.map((g) => ({ id: g.id, title: g.title, count: g.count, defaultOpen: g.defaultOpen }))}
-          rows={model.groups.flatMap((g) => g.rows.map((r) => ({
-            id: r.id,
-            groupId: r.groupId,
-            title: r.title,
-            ...(r.subline ? { subline: r.subline } : {}),
-          })))}
+          // Title-only rows (V6). GroupedList puts the full name in the
+          // title's `title=`, so a name clipped at 264px stays readable.
+          rows={model.groups.flatMap((g) => g.rows.map((r) => ({ id: r.id, groupId: r.groupId, title: r.title })))}
           onOpenRow={(row) => {
             const href = hrefOf.get(row.id);
             if (href) navigate(`${href}${suffix}`);

@@ -1,5 +1,7 @@
-// The Initiatives explorer rail's model (F3–F10): status groups, row
-// sublines, the header count and the footer. No React; unit-tested alone.
+// The Initiatives explorer rail's model (F3–F10, v2 R5–R7): status groups of
+// title-only rows, the header count and the footer. No React; unit-tested
+// alone. v2 dropped the "Owner · N agents" subline (V6): running agents stay
+// visible in the Overview's stats line and the Everyone table.
 //
 // Honest numbers: every count is the length of rows we hold. The list read is
 // a capped page (`limit`), so when it came back full the count reads "N+" —
@@ -34,19 +36,6 @@ export function groupIdOf(status: string | null | undefined): string {
   return INITIATIVE_GROUPS.find((g) => g.statuses.includes(s))?.id ?? OTHER.id;
 }
 
-/**
- * "Nora DaSilva · 2 agents" / "Nora DaSilva · Idle". A null run count is
- * unknown, so the line says only the owner — never "0 agents" and never
- * "Idle" on a number we do not have.
- */
-export function initiativeSubline(p: Pick<ProjectSummary, 'ownerName' | 'activeAgentRuns'>): string | null {
-  const parts: string[] = [];
-  if (p.ownerName) parts.push(p.ownerName);
-  const n = p.activeAgentRuns;
-  if (n != null) parts.push(n > 0 ? `${n} ${n === 1 ? 'agent' : 'agents'}` : 'Idle');
-  return parts.length > 0 ? parts.join(' · ') : null;
-}
-
 /** "14", or "100+" when the capped page came back full. */
 export function countLabel(n: number, capped: boolean): string {
   return capped ? `${n}+` : String(n);
@@ -56,7 +45,6 @@ export interface InitiativeListRow {
   id: string;
   groupId: string;
   title: string;
-  subline: string | null;
   href: string;
 }
 
@@ -123,7 +111,6 @@ export function buildInitiativeList(input: InitiativeListInput): InitiativeListM
           id: p.id,
           groupId: g.id,
           title: p.name,
-          subline: initiativeSubline(p),
           href: `/iq/projects/${encodeURIComponent(p.id)}`,
         }));
       const holdsCurrent = input.currentId != null && rows.some((r) => r.id === input.currentId);
@@ -144,7 +131,7 @@ export function buildInitiativeList(input: InitiativeListInput): InitiativeListM
 /** The rail's own empty copy (M1), per scope. */
 export function railEmptyCopy(scope: 'all' | 'mine'): { title: string; body: string; action: { label: string } | null } {
   if (scope === 'mine') {
-    return { title: 'Nothing linked yet', body: 'Try Everyone to browse the workspace.', action: { label: 'Show everyone' } };
+    return { title: 'Nothing linked yet', body: 'Try All initiatives to browse the workspace.', action: { label: 'Show all initiatives' } };
   }
   return { title: 'No initiatives yet', body: 'Initiatives appear here once ingestion creates them.', action: null };
 }

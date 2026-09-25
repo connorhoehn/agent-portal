@@ -81,7 +81,7 @@ export function buildMine(input: MineInput): MineModel {
     return {
       state: 'unlinked',
       copy: copy([
-        "You can still browse your team's work in Everyone.",
+        "You can still browse your team's work in All initiatives.",
         'If you expected to see your initiatives here, check your profile connection.',
       ]),
     };
@@ -94,7 +94,7 @@ export function buildMine(input: MineInput): MineModel {
       who
         ? `You are connected as ${who}, but no initiative lists you as an owner or contributor.`
         : 'Your account is connected to your team profile, but no initiative lists you as an owner or contributor.',
-      "You can still browse your team's work in Everyone.",
+      "You can still browse your team's work in All initiatives.",
     ]),
   };
 }

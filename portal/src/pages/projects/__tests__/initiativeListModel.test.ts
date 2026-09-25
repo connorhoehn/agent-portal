@@ -1,12 +1,12 @@
 // Run with:  cd portal && node --test 'src/pages/projects/__tests__/*.test.ts'
 //
-// The explorer rail: groups and counts from rows, sublines that never invent
-// "0 agents", "N+" on a capped page, and a failed read as a state.
+// The explorer rail: groups and counts from rows, title-only rows (v2 V6),
+// "N+" on a capped page, and a failed read as a state.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildInitiativeList, countLabel, initiativeSubline, railEmptyCopy } from '../initiativeListModel.ts';
+import { buildInitiativeList, countLabel, railEmptyCopy } from '../initiativeListModel.ts';
 import type { ProjectSummary } from '../types.ts';
 
 function p(id: string, status: string, extra: Partial<ProjectSummary> = {}): ProjectSummary {
@@ -21,12 +21,12 @@ const rows: ProjectSummary[] = [
   p('Legacy', 'completed', { id: 'p-legacy' }),
 ];
 
-test('sublines: "Owner · N agents" / "· Idle"; an unknown count shows the owner only', () => {
-  assert.equal(initiativeSubline({ ownerName: 'Nora DaSilva', activeAgentRuns: 2 }), 'Nora DaSilva · 2 agents');
-  assert.equal(initiativeSubline({ ownerName: 'Hiro Mancini', activeAgentRuns: 1 }), 'Hiro Mancini · 1 agent');
-  assert.equal(initiativeSubline({ ownerName: 'Mia Singh', activeAgentRuns: 0 }), 'Mia Singh · Idle');
-  assert.equal(initiativeSubline({ ownerName: 'Ben', activeAgentRuns: null }), 'Ben');
-  assert.equal(initiativeSubline({ ownerName: null, activeAgentRuns: undefined }), null);
+test('rows are title-only: v2 dropped the "Owner · N agents" subline (V6)', () => {
+  const m = buildInitiativeList({ rows, scope: 'all' });
+  assert.equal(m.state, 'ready');
+  if (m.state !== 'ready') return;
+  const row = m.groups[0].rows.find((r) => r.id === 'p-observability');
+  assert.deepEqual(Object.keys(row ?? {}).sort(), ['groupId', 'href', 'id', 'title']);
 });
 
 test('groups by status with counts from rows: In progress open, the rest collapsed', () => {
@@ -77,5 +77,5 @@ test('empty Mine reads "Personal view"; a failed read is an error, never empty c
   assert.equal(failed.state, 'error');
   assert.equal(failed.footer, null);
   assert.equal(buildInitiativeList({ rows: undefined, scope: 'all' }).state, 'loading');
-  assert.deepEqual(railEmptyCopy('mine'), { title: 'Nothing linked yet', body: 'Try Everyone to browse the workspace.', action: { label: 'Show everyone' } });
+  assert.deepEqual(railEmptyCopy('mine'), { title: 'Nothing linked yet', body: 'Try All initiatives to browse the workspace.', action: { label: 'Show all initiatives' } });
 });

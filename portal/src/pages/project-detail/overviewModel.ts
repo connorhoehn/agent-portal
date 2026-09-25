@@ -1,10 +1,11 @@
-// The initiative Overview tab's model (mockup variant 1): the stat strip,
-// "What needs attention" and "Plan next". No React; unit-tested alone.
+// The initiative Overview tab's model (v2, docs/design/initiative-v2-plan.md
+// S1, A1–A2, U1–U2): the one-line stats, "Needs attention N" and "Up next".
+// No React; unit-tested alone.
 //
 // Everything is read off rows the page already fetched — the project detail
 // and its /work tree. The ordering is the Work list's own "By priority" order
-// (workRows(tree, 'priority', '')) so "Plan next" is exactly the top of the
-// list that "See all N work items" opens, not a second ranking (D2).
+// (workRows(tree, 'priority', '')) so "Up next" is exactly the top of the
+// list that "View all N" opens, not a second ranking (D2).
 //
 // Honest numbers: a count is the length of rows we hold; a rollup the server
 // could not produce (null) renders as unknown, never as 0; and a failed /work
@@ -28,6 +29,11 @@ export function pointsLabel(n: number): string {
   return `${n} ${plural(n, 'point')}`;
 }
 
+/** The row column's short form: "5 pts", "1 pt". */
+export function ptsLabel(n: number): string {
+  return `${n} ${plural(n, 'pt')}`;
+}
+
 /** First name for prose ("what Eli needs"); null when there is no name. */
 export function firstName(name: string | null | undefined): string | null {
   const first = name?.trim().split(/\s+/)[0];
@@ -36,7 +42,7 @@ export function firstName(name: string | null | undefined): string | null {
 
 // ─── Stat strip ──────────────────────────────────────────────────────────────
 
-/** One cell of the inline stat strip: a bold value, then its label. */
+/** One cluster of the stats line: a bold value, then its label. */
 export interface OverviewStat {
   id: 'points' | 'agents' | 'spend';
   /** The bold part — "18", "2", "$1.73". `—` when the number is unknown. */
@@ -62,13 +68,14 @@ function agentsStat(runs: number | null | undefined): OverviewStat {
   return { id: 'agents', value: String(runs), label: `${plural(runs, 'agent')} running`, muted: runs === 0 };
 }
 
+/** "$1.73 of $95 spent"; with no allocation, just "$1.73 spent". */
 function spendStat(spent: number | null | undefined, allocated: number | null | undefined): OverviewStat {
   if (spent == null) return { id: 'spend', value: '—', label: 'spent', muted: true };
-  const label = allocated != null && allocated > 0 ? `spent of ${money(allocated)} allocated` : 'spent · no allocation';
+  const label = allocated != null && allocated > 0 ? `of ${money(allocated)} spent` : 'spent';
   return { id: 'spend', value: money(spent), label };
 }
 
-/** The three cells: points delivered, agents running, spent of allocated.
+/** The three clusters: points delivered, agents running, spent of allocated.
  *  `tree` is null when /work has not loaded or failed. */
 export function overviewStats(project: ProjectDetail, tree: WorkItemTree[] | null): OverviewStat[] {
   return [
@@ -90,22 +97,20 @@ export function headerStatsLine(project: ProjectDetail, tree: WorkItemTree[] | n
   return parts.length > 0 ? parts.join(' · ') : null;
 }
 
-// ─── What needs attention ────────────────────────────────────────────────────
+// ─── Needs attention ─────────────────────────────────────────────────────────
 
-export interface AttentionMetaPart {
-  label: string;
-  /** `warning` paints the "Blocked" word; plain parts carry no tone. */
-  tone?: 'warning';
-}
-
+/** One blocked item: "Blocked" · title / reason · assignee ┆ points ┆ Open →. */
 export interface AttentionItem {
   id: string;
   title: string;
-  /** summary + blocked reason, from the row; the description when neither was written. */
-  body: string | null;
-  /** "Blocked · Eli Garcia · 2 points". */
-  meta: AttentionMetaPart[];
-  actionLabel: string;
+  /** Why it is blocked — the short `blockedReason`; the summary, then the
+   *  description, when no reason was written. Null when there is nothing. */
+  reason: string | null;
+  /** Null when unassigned: the person column stays empty rather than
+   *  claiming someone. */
+  assigneeName: string | null;
+  /** "2 pts"; null when unsized. */
+  points: string | null;
   /** Opens the item on the Work tab. */
   href: string;
 }
@@ -118,45 +123,41 @@ export function workItemHref(projectId: string, itemId: string): string {
 }
 
 function attentionOf(projectId: string, row: FlatWorkItem): AttentionItem {
-  const reason = [row.summary, row.blockedReason].map((s) => s?.trim()).filter(Boolean).join(' ');
-  const meta: AttentionMetaPart[] = [{ label: 'Blocked', tone: 'warning' }];
-  if (row.assigneeName) meta.push({ label: row.assigneeName });
-  if (row.storyPoints != null) meta.push({ label: pointsLabel(row.storyPoints) });
+  const reason = [row.blockedReason, row.summary, row.description].map((s) => s?.trim()).find(Boolean) ?? null;
   return {
     id: row.id,
     title: row.title,
-    body: reason || row.description?.trim() || null,
-    meta,
-    actionLabel: 'Open work',
+    reason,
+    assigneeName: row.assigneeName ?? null,
+    points: row.storyPoints != null ? ptsLabel(row.storyPoints) : null,
     href: workItemHref(projectId, row.id),
   };
 }
 
-// ─── Plan next ───────────────────────────────────────────────────────────────
+// ─── Up next ─────────────────────────────────────────────────────────────────
 
-export interface PlanNextRow {
+/** Title only (U2); the person and points sit in the row's columns. */
+export interface UpNextRow {
   id: string;
   title: string;
-  /** The row's one-sentence summary; null when none was written (no invented copy). */
-  description: string | null;
-  /** "Layla Hassan · 5 points". */
-  meta: string;
+  /** Null when unassigned — the column reads "Unassigned", never a guess. */
+  assigneeName: string | null;
+  /** "5 pts"; null when unsized. */
+  points: string | null;
   href: string;
 }
 
-function planNextOf(projectId: string, row: FlatWorkItem): PlanNextRow {
-  const meta = [row.assigneeName ?? 'Unassigned'];
-  if (row.storyPoints != null) meta.push(pointsLabel(row.storyPoints));
+function upNextOf(projectId: string, row: FlatWorkItem): UpNextRow {
   return {
     id: row.id,
     title: row.title,
-    description: row.summary?.trim() || null,
-    meta: meta.join(' · '),
+    assigneeName: row.assigneeName ?? null,
+    points: row.storyPoints != null ? ptsLabel(row.storyPoints) : null,
     href: workItemHref(projectId, row.id),
   };
 }
 
-export const PLAN_NEXT_LIMIT = 3;
+export const UP_NEXT_LIMIT = 3;
 
 // ─── The whole tab ───────────────────────────────────────────────────────────
 
@@ -175,12 +176,13 @@ export type OverviewModel =
       stats: OverviewStat[];
       /** Every story and bug — the Work tab's count. */
       workCount: number;
-      /** The first blocked item still to do, in Work order; null when nothing is blocked. */
-      attention: AttentionItem | null;
-      /** Up to three Next-up items after the attention item. */
-      planNext: PlanNextRow[];
-      /** "See all 11 work items"; null when there is no work at all. */
-      seeAll: { label: string; href: string } | null;
+      /** Every blocked item still to do, in Work order — its length is the
+       *  "Needs attention N" count. Empty when nothing is blocked. */
+      attention: AttentionItem[];
+      /** Up to three open items that are not already in attention. */
+      upNext: UpNextRow[];
+      /** "View all 11" → the Work tab; null when there is no work at all. */
+      viewAll: { label: string; href: string } | null;
     };
 
 export function buildOverview(project: ProjectDetail, work: WorkRead): OverviewModel {
@@ -191,31 +193,29 @@ export function buildOverview(project: ProjectDetail, work: WorkRead): OverviewM
 
   const tree = work.tree;
   const rows = workRows(tree, 'priority', '');
-  const blocked = rows.find((r) => isBlocked(r) && (r.status === 'open' || r.status === 'in_progress'));
-  const attention = blocked ? attentionOf(project.id, blocked) : null;
-  const planNext = rows
-    .filter((r) => r.status === 'open' && r.id !== attention?.id)
-    .slice(0, PLAN_NEXT_LIMIT)
-    .map((r) => planNextOf(project.id, r));
+  const attention = rows
+    .filter((r) => isBlocked(r) && (r.status === 'open' || r.status === 'in_progress'))
+    .map((r) => attentionOf(project.id, r));
+  const flagged = new Set(attention.map((a) => a.id));
+  const upNext = rows
+    .filter((r) => r.status === 'open' && !flagged.has(r.id))
+    .slice(0, UP_NEXT_LIMIT)
+    .map((r) => upNextOf(project.id, r));
   const n = rows.length;
   return {
     state: 'ready',
     stats: overviewStats(project, tree),
     workCount: n,
     attention,
-    planNext,
-    seeAll: n > 0
+    upNext,
+    viewAll: n > 0
       ? {
-          label: n === 1 ? 'See 1 work item' : `See all ${n} work items`,
+          label: `View all ${n}`,
           href: `/iq/projects/${encodeURIComponent(project.id)}?tab=work`,
         }
       : null,
   };
 }
-
-/** The "How to move this forward" sentence. */
-export const MOVE_FORWARD_TITLE = 'How to move this forward';
-export const MOVE_FORWARD_BODY = 'Open a work item to refine its brief, discuss tradeoffs, or review an agent run.';
 
 /** "Nora DaSilva · Owner   Layla Hassan, Eli Garcia · SMEs" as two groups;
  *  a group with nobody in it is left out. */

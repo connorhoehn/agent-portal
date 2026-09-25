@@ -21,7 +21,7 @@ test('unlinked: the mockup copy, Browse all + Check profile, and how the view wo
   if (m.state !== 'unlinked') throw new Error(m.state);
   assert.equal(m.copy.heading, 'No initiatives are linked to you yet.');
   assert.deepEqual(m.copy.lines, [
-    "You can still browse your team's work in Everyone.",
+    "You can still browse your team's work in All initiatives.",
     'If you expected to see your initiatives here, check your profile connection.',
   ]);
   assert.equal(m.copy.primary.label, 'Browse all initiatives');

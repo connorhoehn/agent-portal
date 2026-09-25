@@ -94,7 +94,9 @@ function ProjectsPage() {
 
   const header = (title: string, description: string) => (
     <ScopeHeader
-      titleSize="lg"
+      // v2's type scale (V1): the 22px title and the 15px summary.
+      titleSize="md"
+      descriptionSize="sm"
       title={title}
       description={description}
       className="border-b border-border"

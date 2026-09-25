@@ -3,8 +3,8 @@
 // initiative's header band (ScopeHeader) over it and the docked composer
 // under it.
 //
-//   Overview (default)  the initiative list in the rail; the stat strip,
-//                       "What needs attention", "Plan next" (InitiativeOverview).
+//   Overview (default)  the initiative list in the rail; the stats line,
+//                       "Needs attention", "Up next" (InitiativeOverview).
 //   Work                the work list in the rail ("‹ Initiatives", "Work 11",
 //                       an initiative switcher); the open item (WorkItemDetail)
 //                       in the pane, its run draft folded into "Run setup".
@@ -426,7 +426,10 @@ function ProjectDetailPage() {
   const header = (
     <ScopeHeader
       title={project.name}
-      titleSize="lg"
+      // v2 (H1, H5): the 22px title and 15px tabs on both tabs; the Work tab
+      // keeps its condensed header (stats below the title, no description).
+      titleSize="md"
+      tabSize="md"
       status={statusLabel ? { label: statusLabel, tone: project.status === 'archived' ? 'neutral' : 'info' } : null}
       // The Overview carries the numbers in its stat strip; the condensed
       // header over a work item keeps them on one line under the title.
@@ -437,8 +440,10 @@ function ProjectDetailPage() {
             spentUsd: project.agentSpendUsd ?? null,
           }
         : {
+            // The summary's second paragraph ("Focus: …") is its own line (V3, H2).
             description: project.summary ?? undefined,
-            peopleStyle: 'names' as const,
+            descriptionSize: 'sm' as const,
+            peopleStyle: 'inline' as const,
             people,
           })}
       linkStyle="button"
@@ -647,6 +652,7 @@ function ProjectDetailPage() {
   const railSlots = onWork
     ? {
         railTitle: 'Work',
+        railKind: 'work' as const,
         ...(treeRead && !workFailure ? { railCount: allRows.length } : {}),
         railBack: { label: 'Initiatives', onClick: () => navigate('/iq/projects') },
         railActions: (

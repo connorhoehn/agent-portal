@@ -26,13 +26,13 @@ import { Stack } from '@connorhoehnslalom/ui-components/shared';
 export interface ExplorerRailSlots {
   /** "Initiatives", "Work". */
   railTitle: string;
-  /** The plain count after the title. Omit when it is unknown or capped. */
+  /** The count chip after the title. Omit when it is unknown or capped. */
   railCount?: number;
   /** "‹ Initiatives" above the title (the Work list). */
   railBack?: WorkspaceRailBack | null;
   /** Controls in the title row — the ⋯ menu, an initiative switcher. */
   railActions?: ReactNode;
-  /** Under the title: tabs, the scope toggle, search. */
+  /** Under the title: search, then the scope nav list. */
   railHeader?: ReactNode;
   /** The scrolling body. */
   rail: ReactNode;
@@ -42,6 +42,16 @@ export interface ExplorerRailSlots {
   collapsible?: boolean;
   /** What the rail holds, for the fold controls' names. */
   railLabel?: string;
+  /**
+   * `list` (default): the v2 initiative list — 264px, the 13px caption
+   * heading ("INITIATIVES 11") and its count in a chip (plan R1–R2).
+   * `work`: the Work list keeps v1's 368px column and "Work 11" heading. Its
+   * rows are two lines with a Blocked tag and "Bug · Eli Garcia · 2 points";
+   * at 264px the titles clipped after two words and the switcher pushed the
+   * heading out, so the v2 width would be a regression there (plan V1 allows
+   * the Work tab to keep its structure).
+   */
+  railKind?: 'list' | 'work';
 }
 
 export interface InitiativesExplorerProps extends ExplorerRailSlots {
@@ -62,7 +72,7 @@ function readFolded(): boolean {
 
 export function InitiativesExplorer({
   railTitle, railCount, railBack, railActions, railHeader, rail, railFooter,
-  collapsible = false, railLabel = 'initiatives',
+  collapsible = false, railLabel = 'initiatives', railKind = 'list',
   paneHeader, children, composer, 'data-testid': testId,
 }: InitiativesExplorerProps) {
   const [folded, setFolded] = useState(readFolded);
@@ -79,9 +89,9 @@ export function InitiativesExplorer({
       <Stack gap="none" className="h-full min-h-0 bg-surface" data-shell-flush>
         <ExplorerLayout
           className="min-h-0 flex-1"
-          railWidth="lg"
-          railHeading="prominent"
-          railCountStyle="plain"
+          railWidth={railKind === 'work' ? 'lg' : 'ms'}
+          railHeading={railKind === 'work' ? 'prominent' : 'caption'}
+          railCountStyle={railKind === 'work' ? 'plain' : 'chip'}
           railTitle={railTitle}
           {...(railCount != null ? { railCount } : {})}
           railBack={railBack ?? null}
