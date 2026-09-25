@@ -99,7 +99,7 @@ export function InitiativeOverview({
                 items={model.attention.map((a) => ({
                   id: a.id,
                   title: a.title,
-                  leading: <Chip tone="danger" size="md">Blocked</Chip>,
+                  leading: <Chip tone="danger" size="md" outline>Blocked</Chip>,
                   ...(a.reason ? { description: a.reason } : {}),
                   cells: cells(a.assigneeName, a.points),
                 }))}
