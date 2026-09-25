@@ -11,6 +11,7 @@ import { useFetch } from '../hooks/useFetch';
 import { useGatewayInfo } from '../hooks/useGatewayInfo';
 import { useSession } from '../lib/auth';
 import { Can } from '../lib/capabilities';
+import { ProfileSection } from './settings/ProfileSection';
 
 
 interface Health {
@@ -70,6 +71,12 @@ export function SettingsPage() {
   return (
     <PageSection title="Settings">
       <Stack gap="lg" className="max-w-[680px]">
+
+        {/* 0. Profile — who you are signed in as and whether that account is
+            connected to a team profile. First, because it is the only
+            section another page links into (/settings#profile, from the
+            Initiatives Mine view's "Check profile"). */}
+        <ProfileSection />
 
         {/* 1. Appearance */}
         <Card padding="md">
