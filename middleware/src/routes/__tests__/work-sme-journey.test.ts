@@ -159,7 +159,7 @@ describe('POST /api/work/jobs — what the job serves', () => {
     expect(res.status).toBe(201);
     expect((res.body as Job).payload).toMatchObject({
       workItemId: 'wi-obs-e2-s2',
-      workItemTitle: 'Multi-window burn-rate alerts (fast + slow burn)',
+      workItemTitle: 'Multi-window burn-rate alerts',
       initiativeId: 'p-observability',
       initiativeName: 'Observability Platform',
     });

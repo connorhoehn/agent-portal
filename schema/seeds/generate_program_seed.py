@@ -36,6 +36,10 @@ INITIATIVES = [
         id='p-observability', slug='obs', repo='orgiq-observability', tier='flagship',
         owner='p-004', smes=['p-008', 'p-011'],
         sponsor='p-002',
+        # The one-line pitch the initiative header shows (projects.summary).
+        # Only this initiative carries one distinct from `description`; every
+        # other initiative's summary is its description, as before.
+        summary='Collect telemetry, reduce alert noise, and control retention costs.',
         description='Unified telemetry: OpenTelemetry collection, SLO/error-budget '
                     'alerting, and cost-aware retention across every service.',
         epics=[
@@ -45,22 +49,22 @@ INITIATIVES = [
                 ('story', 'Roll out collector fleet with gateway + agent topology', 'done', 'critical', 8, ['otel', 'infra'], 's1'),
                 ('story', 'Tail-sampling policy: errors + p99 latency always kept', 'done', 'high', 5, ['otel', 'sampling'], 's1'),
                 ('story', 'Span-metrics connector feeding RED dashboards', 'in_progress', 'high', 8, ['otel', 'metrics'], 's3'),
-                ('story', 'Decommission legacy StatsD bridge service-by-service', 'open', 'medium', 5, ['decom'], 's3'),
+                ('story', 'Decommission the legacy StatsD bridge', 'open', 'medium', 5, ['decom'], 's3'),
                 ('bug', 'Collector OOMs under burst ingest when queue is unbounded', 'in_progress', 'critical', 3, ['otel', 'stability'], 's3'),
              ]),
             ('e2', 'SLOs and error budgets', 'high', 'in_progress',
              'Every tier-1 service has an SLO, a burn-rate alert, and an owner.',
              [
                 ('story', 'SLO definitions in the service catalog with owners', 'done', 'high', 5, ['slo'], 's2'),
-                ('story', 'Multi-window burn-rate alerts (fast + slow burn)', 'in_review', 'high', 5, ['slo', 'alerting'], 's2'),
+                ('story', 'Multi-window burn-rate alerts', 'in_review', 'high', 5, ['slo', 'alerting'], 's2'),
                 ('story', 'Error-budget dashboard per team', 'open', 'medium', 3, ['slo', 'dashboards'], 's3'),
-                ('bug', 'Alert dedup storm when a shared dependency degrades', 'open', 'high', 2, ['alerting', 'blocked'], 's3'),
+                ('bug', 'Stop duplicate alerts during a dependency outage', 'open', 'high', 2, ['alerting', 'blocked'], 's3'),
              ]),
             ('e3', 'Cost-aware telemetry', 'medium', 'open',
              'Telemetry spend is budgeted like compute: cardinality and retention have owners.',
              [
-                ('story', 'Metric cardinality budgets with CI enforcement', 'open', 'medium', 5, ['finops', 'metrics'], None),
-                ('story', 'Tiered log sampling: debug sampled, audit always kept', 'open', 'medium', 3, ['finops', 'logs'], None),
+                ('story', 'Metric cardinality budgets', 'open', 'medium', 5, ['finops', 'metrics'], None),
+                ('story', 'Tiered log sampling', 'open', 'medium', 3, ['finops', 'logs'], None),
              ]),
         ],
         sprints=[
@@ -497,6 +501,60 @@ CRITERIA = [
     ]),
 ]
 
+# Work-item briefs: the copy the initiative Overview and a work item's Brief
+# read as DATA rather than as portal literals (docs/design/initiative-variants-
+# spec.md). Keyed by work-item id; every key is optional and a missing one
+# writes NULL, so the UPDATE below states the whole brief and a re-run converges
+# instead of layering.
+#
+#   summary          one sentence — a Plan-next row's description, and the
+#                    first half of the "What needs attention" callout body
+#   description      "Why this matters" on the Brief
+#   blocked_reason   why a `blocked`-labelled item cannot move; the second half
+#                    of the attention body. Only meaningful on a blocked item.
+#   next_step        the Brief's Next-step callout title
+#   next_step_detail the callout's body line
+#
+# Emitted as UPDATEs after the inserts, not as extra INSERT columns, for two
+# reasons. The inserts are ON CONFLICT DO NOTHING, so an existing cluster would
+# never pick new copy up; and the titles these rows carry changed with the copy
+# (the child tuples above), which only an UPDATE can land on a seeded row. No
+# RNG call is made for any of this — the RNG sequence drives every assignee,
+# date and cost above, and one extra draw would reshuffle the whole seed.
+#
+# Semicolons are kept out of this copy on purpose: schema/apply-work-items.sh
+# splits statements on `;` at paren depth 0 and would cut a string in two.
+BRIEFS: dict[str, dict[str, str]] = {
+    'wi-obs-e2-b4': dict(
+        summary='One failing dependency can trigger forty pages.',
+        description='When one shared dependency fails, it can trigger forty separate pages. '
+                    'Fixing this should help the on-call engineer identify the root problem '
+                    'without sorting through duplicate alerts.',
+        blocked_reason='Eli needs the dependency map before this bug can be planned.',
+        next_step='Confirm the dependency map with Eli Garcia.',
+        next_step_detail='The team needs this before choosing how to group duplicate alerts.',
+    ),
+    'wi-obs-e1-s4': dict(
+        summary='Move remaining service metrics to OpenTelemetry.',
+    ),
+    'wi-obs-e2-s3': dict(
+        summary="Make each team's remaining error budget visible.",
+        description='One panel per team: budget remaining, burn over the window, and who owns the service.',
+    ),
+    'wi-obs-e3-s1': dict(
+        summary='Define limits before new metrics increase storage costs.',
+    ),
+    'wi-obs-e2-s2': dict(
+        description='Fast burn pages, slow burn tickets. Thresholds derived from the SLO, not hand-picked.',
+    ),
+    'wi-obs-e3-s2': dict(),
+}
+BRIEF_FIELDS = ('summary', 'description', 'blocked_reason', 'next_step', 'next_step_detail')
+
+# Every child's title as emitted, filled while the inserts are written, so a
+# brief's UPDATE restates the same title the INSERT carries.
+TITLES: dict[str, str] = {}
+
 
 def q(s: str) -> str:
     return s.replace("'", "''")
@@ -557,7 +615,7 @@ def main() -> None:
 
         emit(
             f"UPDATE projects SET description = '{q(ini['description'])}', "
-            f"summary = '{q(ini['description'])}', "
+            f"summary = '{q(ini.get('summary', ini['description']))}', "
             f"github_url = '{GH}/{ini['repo']}', owner_id = '{ini['owner']}', "
             f"sponsor_person_id = '{ini['sponsor']}' "
             f"WHERE id = '{pid}'"
@@ -632,6 +690,7 @@ def main() -> None:
             )
             for ci, (ctype, ctitle, cstatus, cpri, pts, labels, skey) in enumerate(children, start=1):
                 cid = f'wi-{slug}-{ekey}-{"b" if ctype == "bug" else "s"}{ci}'
+                TITLES[cid] = ctitle
                 assignee = RNG.choice([ini['owner']] + ini['smes'])
                 labels_sql = "ARRAY[" + ','.join(f"'{lb}'" for lb in labels) + "]" if labels else 'NULL'
                 sprint_sql = f"'{sprint_ids[skey]}'" if skey and skey in sprint_ids else 'NULL'
@@ -752,6 +811,21 @@ def main() -> None:
             # against a repository that does not exist. The completed history
             # above is what shows the loop and the maintenance baseline; the
             # queue fills for real once a bot is un-paused.
+
+    # Work-item briefs and the titles that changed with them (see BRIEFS).
+    L.append('')
+    L.append('-- Work-item briefs: title, summary, why-this-matters, blocked reason, next step.')
+    for wid, brief in BRIEFS.items():
+        unknown = set(brief) - set(BRIEF_FIELDS)
+        if unknown:
+            raise SystemExit(f'BRIEFS[{wid!r}] has unknown fields: {sorted(unknown)}')
+        if wid not in TITLES:
+            raise SystemExit(f'BRIEFS names {wid!r}, which no initiative seeds')
+        sets = [f"title = '{q(TITLES[wid])}'"] + [
+            f"{field} = '{q(brief[field])}'" if brief.get(field) else f'{field} = NULL'
+            for field in BRIEF_FIELDS
+        ]
+        emit(f"UPDATE work_items SET {', '.join(sets)} WHERE id = '{wid}'")
 
     # Link logins to their org-graph personas.
     #

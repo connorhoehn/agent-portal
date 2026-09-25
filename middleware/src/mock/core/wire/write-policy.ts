@@ -1135,6 +1135,17 @@ export const WRITE_SPECS: readonly WriteSpec[] = [
     },
   },
   {
+    // Its DELETE twin (unlink) stays refused under `destructive` by default:
+    // it clears a column rather than a row and is restorable, but
+    // RESTORABLE_DELETES is for deletes someone has proved in a replay, and
+    // this one has not been replayed yet.
+    route: 'PUT /api/graph/work-items/:id/decisions/:decisionId',
+    persona: 'orgiq/admin',
+    safe: 'Sets `workItemId` on one row of the registered `graph-decisions` fixture (mock/decisions.ts) — reset puts the seeded link back. No AWS, no fs, no timer, no row added or removed. A refused link (another initiative, org-wide, already linked elsewhere) writes nothing and answers 409.',
+    bodyFrom: 'routes/work-items.ts: the route takes NO body (any key is a 400); both ids are path params the sweep resolves from the server. Whether the resolved pair shares an initiative is not knowable in advance, so the 404/409 refusal shapes are pinned alongside the 200.',
+    alsoAccept: [404, 409],
+  },
+  {
     route: 'PATCH /api/graph/projects/:id',
     persona: 'orgiq/admin',
     safe: "`updateProjectOwner` is mock-branched and answers 503 without touching anything, so this pins the refusal shape rather than the success one.",

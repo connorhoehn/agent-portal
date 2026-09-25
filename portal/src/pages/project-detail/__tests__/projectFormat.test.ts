@@ -164,7 +164,7 @@ function flatNode(over: Partial<WorkItemTree> & Pick<WorkItemTree, 'id' | 'title
 const EPICS: WorkItemTree[] = [
   flatNode({ id: 'e1', title: 'SLOs', type: 'epic', children: [
     flatNode({ id: 's1', title: 'Error-budget dashboard', type: 'story', assigneeId: 'p-004', assigneeName: 'Nora', labels: ['runbook'] }),
-    flatNode({ id: 'b1', title: 'Alert dedup storm', type: 'bug', status: 'in_progress', assigneeId: 'p-011', assigneeName: 'Eli' }),
+    flatNode({ id: 'b1', title: 'Stop duplicate alerts', type: 'bug', status: 'in_progress', assigneeId: 'p-011', assigneeName: 'Eli' }),
   ] }),
   flatNode({ id: 'e2', title: 'Control Plane', type: 'epic', children: [
     flatNode({ id: 's2', title: 'Node upgrade', type: 'story', status: 'done', assigneeId: 'p-004', assigneeName: 'Nora' }),
@@ -191,7 +191,7 @@ test('filterWorkItems: every facet tolerates the "all" sentinel', () => {
 
 test('search covers what people actually type — title, epic, assignee, labels', () => {
   const flat = flattenWorkItems(EPICS);
-  assert.deepEqual(filterWorkItems(flat, { q: 'dedup' }).map((i) => i.id), ['b1']);
+  assert.deepEqual(filterWorkItems(flat, { q: 'duplicate' }).map((i) => i.id), ['b1']);
   assert.deepEqual(filterWorkItems(flat, { q: 'control plane' }).map((i) => i.id), ['s2']);
   assert.deepEqual(filterWorkItems(flat, { q: 'eli' }).map((i) => i.id), ['b1']);
   assert.deepEqual(filterWorkItems(flat, { q: 'runbook' }).map((i) => i.id), ['s1']);
@@ -239,7 +239,7 @@ test('an item link resolves against the UNFILTERED backlog', () => {
   const all = flattenWorkItems(EPICS);
   const visible = filterWorkItems(all, { status: 'done' });
   assert.equal(visible.find((i) => i.id === 'b1'), undefined);
-  assert.equal(all.find((i) => i.id === 'b1')?.title, 'Alert dedup storm');
+  assert.equal(all.find((i) => i.id === 'b1')?.title, 'Stop duplicate alerts');
 });
 
 test('every row carries the ids needed to cite it', () => {

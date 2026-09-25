@@ -56,6 +56,19 @@ export interface WorkItem {
   labels: string[];
   storyPoints: number | null;
   /**
+   * The item's brief (schema/orgiq_work_items_schema.sql). Copy the
+   * initiative Overview and the work item's Brief render as data, never as
+   * portal literals: `summary` is a Plan-next row's one-line description and
+   * the first half of the "What needs attention" body, `blockedReason` its
+   * second half, `nextStep`/`nextStepDetail` the Brief's Next-step callout.
+   * Null when the item has none — and null for every item on a cluster that
+   * has not applied the columns yet (see `briefColumnsAvailable`).
+   */
+  summary: string | null;
+  blockedReason: string | null;
+  nextStep: string | null;
+  nextStepDetail: string | null;
+  /**
    * Sprint membership (`work_items.sprint_id`) and the dollar estimate
    * (`work_items.estimated_cost_usd`) — the two axes the program operating
    * model plans against (docs/program-operating-model.md). Both columns have
@@ -305,6 +318,44 @@ async function appUsersAvailable(): Promise<boolean> {
 /** Test seam: forget the probe so the next call re-asks. */
 export function resetAppUsersProbe(): void { _appUsers = null; }
 
+// ─── Brief columns (summary / blocked_reason / next_step / next_step_detail) ──
+//
+// Same reasoning as the app_users probe above: the middleware ships ahead of
+// the schema, and an unconditional `wi.summary` on a cluster that has not run
+// the ALTER in orgiq_work_items_schema.sql fails with `column ... does not
+// exist` — which safeExec does NOT swallow (it only swallows a missing
+// RELATION), so the whole Work tab would 500. A missing column must cost the
+// field, never the board. All four or none: they ship in one ALTER.
+
+const BRIEF_COLUMN_NAMES = ['summary', 'blocked_reason', 'next_step', 'next_step_detail'] as const;
+let _briefColumns: boolean | null = null;
+
+async function briefColumnsAvailable(): Promise<boolean> {
+  if (config.mock.aurora) return true;
+  if (_briefColumns !== null) return _briefColumns;
+  try {
+    const rows = await exec(
+      `SELECT column_name FROM information_schema.columns
+        WHERE table_name = 'work_items'
+          AND column_name IN (${BRIEF_COLUMN_NAMES.map((c) => `'${c}'`).join(', ')})`,
+    );
+    _briefColumns = rows.length === BRIEF_COLUMN_NAMES.length;
+  } catch {
+    _briefColumns = false;
+  }
+  return _briefColumns;
+}
+
+/** Test seam: forget the brief-columns probe so the next call re-asks. */
+export function resetBriefColumnsProbe(): void { _briefColumns = null; }
+
+/** The brief columns, or nothing when the cluster lacks them (rowToWorkItem reads null). */
+function briefColumns(withBrief: boolean): string {
+  return withBrief
+    ? `, ${BRIEF_COLUMN_NAMES.map((c) => `wi.${c}`).join(', ')}`
+    : '';
+}
+
 /** The name columns, or nothing when identity_schema is not on this cluster. */
 function nameColumns(withNames: boolean): string {
   return withNames
@@ -379,8 +430,9 @@ async function dbSearchWorkItems(opts: SearchWorkItemsOpts): Promise<WorkItem[]>
   const where = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
 
   const withNames = await appUsersAvailable();
+  const withBrief = await briefColumnsAvailable();
   const sql = `
-    SELECT ${ITEM_COLUMNS}${nameColumns(withNames)}
+    SELECT ${ITEM_COLUMNS}${nameColumns(withNames)}${briefColumns(withBrief)}
     ${ITEM_FROM}${nameJoins(withNames)}
     ${where}
     ORDER BY wi.updated_at DESC
@@ -398,8 +450,9 @@ const PROJECT_WORK_ITEMS_LIMIT = 500;
 
 async function dbGetProjectWorkItems(projectId: string, limit: number = PROJECT_WORK_ITEMS_LIMIT): Promise<WorkItem[]> {
   const withNames = await appUsersAvailable();
+  const withBrief = await briefColumnsAvailable();
   const sql = `
-    SELECT ${ITEM_COLUMNS}${nameColumns(withNames)}
+    SELECT ${ITEM_COLUMNS}${nameColumns(withNames)}${briefColumns(withBrief)}
     ${ITEM_FROM}${nameJoins(withNames)}
     WHERE wi.project_id = :pid
     ORDER BY wi.type DESC, wi.created_at ASC
@@ -416,8 +469,9 @@ async function dbGetPersonWorkItems(personId: string, opts: { status?: string; l
   if (opts.status) params.push(strParam('status', opts.status));
 
   const withNames = await appUsersAvailable();
+  const withBrief = await briefColumnsAvailable();
   const sql = `
-    SELECT ${ITEM_COLUMNS}${nameColumns(withNames)}
+    SELECT ${ITEM_COLUMNS}${nameColumns(withNames)}${briefColumns(withBrief)}
     ${ITEM_FROM}${nameJoins(withNames)}
     WHERE wi.assignee_id = :pid ${extra}
     ORDER BY wi.updated_at DESC
@@ -447,7 +501,11 @@ async function dbGetProjectDecisions(projectId: string, limit: number = PROJECT_
     LIMIT :lim
   `;
   const rows = await safeExec(sql, [strParam('pid', projectId), intParam('lim', Math.max(1, Math.min(limit, PROJECT_DECISIONS_LIMIT)))]);
-  return rows.map((r) => ({
+  return rows.map(rowToProjectDecision);
+}
+
+function rowToProjectDecision(r: Record<string, unknown>): ProjectDecision {
+  return {
     id: String(r['id'] ?? ''),
     topic: String(r['topic'] ?? ''),
     summary: r['summary'] != null ? String(r['summary']) : null,
@@ -456,7 +514,35 @@ async function dbGetProjectDecisions(projectId: string, limit: number = PROJECT_
     escalatedAt: r['escalated_at'] != null ? String(r['escalated_at']) : null,
     workItemId: r['work_item_id'] != null ? String(r['work_item_id']) : null,
     workItemTitle: r['work_item_title'] != null ? String(r['work_item_title']) : null,
-  }));
+  };
+}
+
+/** One decision in the Decisions-tab shape, or null when there is no such row. */
+async function dbGetProjectDecision(decisionId: string): Promise<ProjectDecision | null> {
+  const rows = await safeExec(
+    `SELECT d.id, d.topic, d.summary, d.status, d.required_role, d.escalated_at,
+            d.work_item_id, wi.title AS work_item_title
+       FROM decisions d
+       LEFT JOIN work_items wi ON wi.id = d.work_item_id
+      WHERE d.id = :did`,
+    [strParam('did', decisionId)],
+  );
+  return rows[0] ? rowToProjectDecision(rows[0]) : null;
+}
+
+/** The three columns the link decision reads. */
+async function dbDecisionLinkRow(decisionId: string): Promise<DecisionLinkRow | null> {
+  const rows = await safeExec(
+    `SELECT id, project_id, work_item_id FROM decisions WHERE id = :did`,
+    [strParam('did', decisionId)],
+  );
+  const r = rows[0];
+  if (!r) return null;
+  return {
+    id: String(r['id'] ?? ''),
+    projectId: r['project_id'] != null ? String(r['project_id']) : null,
+    workItemId: r['work_item_id'] != null ? String(r['work_item_id']) : null,
+  };
 }
 
 /** `ARRAY['a','b']` with single quotes doubled; `ARRAY[]::TEXT[]` when empty. */
@@ -511,6 +597,8 @@ async function dbCreateWorkItem(data: CreateWorkItemInput): Promise<WorkItem> {
       status: data.status ?? 'open', priority: data.priority ?? 'medium',
       assigneeId: data.assigneeId ?? null, assigneeName: null, assigneeDept: null,
       labels: data.labels ?? [], storyPoints: data.storyPoints ?? null,
+      // A new item has no brief until someone writes one.
+      summary: null, blockedReason: null, nextStep: null, nextStepDetail: null,
       sprintId: data.sprintId ?? null, estimatedCostUsd: data.estimatedCostUsd ?? null,
       // A just-created item has no authorized estimate. Nobody has dispatched
       // it, so nobody has stood behind a forecast for it.
@@ -665,6 +753,10 @@ function rowToWorkItem(r: Record<string, unknown>): WorkItem {
     assigneeDept: r['assignee_dept'] != null ? String(r['assignee_dept']) : null,
     labels,
     storyPoints: r['story_points'] != null ? Number(r['story_points']) : null,
+    summary: r['summary'] != null ? String(r['summary']) : null,
+    blockedReason: r['blocked_reason'] != null ? String(r['blocked_reason']) : null,
+    nextStep: r['next_step'] != null ? String(r['next_step']) : null,
+    nextStepDetail: r['next_step_detail'] != null ? String(r['next_step_detail']) : null,
     sprintId: r['sprint_id'] != null ? String(r['sprint_id']) : null,
     // NUMERIC arrives from the Data API as a string; Number() is the same
     // treatment story_points already gets.
@@ -925,6 +1017,135 @@ export async function getProjectDecisions(projectId: string, limit: number = PRO
   return mockProjectDecisions(projectId).slice(0, limit);
 }
 
+// ─── Decision ↔ work-item links ───────────────────────────────────────────────
+//
+// `decisions.work_item_id` names the work a decision blocks or shapes — the
+// Brief's "Dependencies and decisions" row and the Decisions tab's item column
+// both read it. Until this, only schema/seed_program.sql could write it, so a
+// decision raised mid-sprint could never be attached to the item it held up.
+
+/** The part of a `decisions` row the link rule reads. */
+export interface DecisionLinkRow {
+  id: string;
+  projectId: string | null;
+  workItemId: string | null;
+}
+
+export type DecisionLinkDecision =
+  | { kind: 'allow' }
+  | { kind: 'refuse'; status: 409; error: string };
+
+/**
+ * May `decision` be linked to `item`? Pure, so the rule reads without a
+ * database — the same shape as `decideStatusTransition`.
+ *
+ * A decision links only to work on ITS OWN initiative: the Decisions tab lists
+ * a decision by `project_id`, so a link across initiatives would put the item
+ * on one page and the decision on another, and neither would show the other.
+ * An org-wide decision (`project_id` NULL) has no initiative to match. And a
+ * decision already linked to a DIFFERENT item is a 409, not a silent re-point:
+ * `work_item_id` is one column, so re-pointing would quietly unlink it from
+ * the work that named it first. Linking to the item it already names is
+ * idempotent.
+ */
+export function decideDecisionLink(
+  item: Pick<WorkItem, 'id' | 'projectId'>,
+  decision: DecisionLinkRow,
+): DecisionLinkDecision {
+  if (decision.projectId === null) {
+    return {
+      kind: 'refuse', status: 409,
+      error: `decision ${decision.id} is org-wide — it was not raised against an initiative, so it cannot be linked to one initiative's work`,
+    };
+  }
+  if (decision.projectId !== item.projectId) {
+    return {
+      kind: 'refuse', status: 409,
+      error: `decision ${decision.id} belongs to ${decision.projectId}, but ${item.id} is work on ${item.projectId} — a decision links only to its own initiative's work`,
+    };
+  }
+  if (decision.workItemId !== null && decision.workItemId !== item.id) {
+    return {
+      kind: 'refuse', status: 409,
+      error: `decision ${decision.id} is already linked to ${decision.workItemId} — unlink it there first`,
+    };
+  }
+  return { kind: 'allow' };
+}
+
+export type DecisionLinkResult =
+  | { kind: 'ok'; decision: ProjectDecision }
+  | { kind: 'not-found' }
+  | { kind: 'refused'; status: 409; error: string };
+
+/**
+ * Link `decisionId` to `item` (`decisions.work_item_id = item.id`). The route
+ * has already read the item; this reads the decision, applies
+ * `decideDecisionLink`, and writes.
+ *
+ * On Aurora the write re-states the rule in its WHERE clause, so a decision
+ * linked elsewhere between the read and the write is refused on the second
+ * read rather than overwritten.
+ */
+export async function linkDecisionToWorkItem(
+  item: Pick<WorkItem, 'id' | 'projectId'>,
+  decisionId: string,
+): Promise<DecisionLinkResult> {
+  if (!config.mock.aurora) {
+    const row = await dbDecisionLinkRow(decisionId);
+    if (!row) return { kind: 'not-found' };
+    const verdict = decideDecisionLink(item, row);
+    if (verdict.kind === 'refuse') return { kind: 'refused', status: verdict.status, error: verdict.error };
+    const written = await safeExec(
+      `UPDATE decisions SET work_item_id = :wid
+        WHERE id = :did AND project_id = :pid
+          AND (work_item_id IS NULL OR work_item_id = :wid)
+        RETURNING id`,
+      [strParam('wid', item.id), strParam('did', decisionId), strParam('pid', item.projectId)],
+    );
+    if (written.length === 0) {
+      const now = await dbDecisionLinkRow(decisionId);
+      if (!now) return { kind: 'not-found' };
+      const again = decideDecisionLink(item, now);
+      return again.kind === 'refuse'
+        ? { kind: 'refused', status: again.status, error: again.error }
+        : { kind: 'refused', status: 409, error: `decision ${decisionId} changed while it was being linked — retry` };
+    }
+    const decision = await dbGetProjectDecision(decisionId);
+    return decision ? { kind: 'ok', decision } : { kind: 'not-found' };
+  }
+  const row = decisionRows.rows().find((d) => d.id === decisionId);
+  if (!row) return { kind: 'not-found' };
+  const verdict = decideDecisionLink(item, row);
+  if (verdict.kind === 'refuse') return { kind: 'refused', status: verdict.status, error: verdict.error };
+  // The registered `graph-decisions` fixture's own row: POST /api/__mock/reset
+  // puts the seeded link back.
+  row.workItemId = item.id;
+  const decision = mockProjectDecisions(item.projectId).find((d) => d.id === decisionId);
+  return decision ? { kind: 'ok', decision } : { kind: 'not-found' };
+}
+
+/**
+ * Clear the link, but only when `decisionId` is linked to THIS item — a DELETE
+ * addressed through one item must never unlink a decision from another.
+ * Returns false when there is no such decision or it is not linked here.
+ */
+export async function unlinkDecisionFromWorkItem(workItemId: string, decisionId: string): Promise<boolean> {
+  if (!config.mock.aurora) {
+    const rows = await safeExec(
+      `UPDATE decisions SET work_item_id = NULL
+        WHERE id = :did AND work_item_id = :wid
+        RETURNING id`,
+      [strParam('did', decisionId), strParam('wid', workItemId)],
+    );
+    return rows.length > 0;
+  }
+  const row = decisionRows.rows().find((d) => d.id === decisionId && d.workItemId === workItemId);
+  if (!row) return false;
+  row.workItemId = null;
+  return true;
+}
+
 export async function createWorkItem(data: CreateWorkItemInput): Promise<WorkItem> {
   if (!config.mock.aurora) {
     return dbCreateWorkItem(data);
@@ -952,6 +1173,10 @@ export async function createWorkItem(data: CreateWorkItemInput): Promise<WorkIte
     assigneeDept: null,
     labels: data.labels ?? [],
     storyPoints: data.storyPoints ?? null,
+    summary: null,
+    blockedReason: null,
+    nextStep: null,
+    nextStepDetail: null,
     sprintId: data.sprintId ?? null,
     estimatedCostUsd: data.estimatedCostUsd ?? null,
     // Same as the Aurora path: a new item has no estimator.
@@ -1176,8 +1401,9 @@ export async function getWorkItem(id: string): Promise<WorkItem | null> {
     return item ? { ...item } : null;
   }
   const withNames = await appUsersAvailable();
+  const withBrief = await briefColumnsAvailable();
   const sql = `
-    SELECT ${ITEM_COLUMNS}${nameColumns(withNames)}
+    SELECT ${ITEM_COLUMNS}${nameColumns(withNames)}${briefColumns(withBrief)}
     ${ITEM_FROM}${nameJoins(withNames)}
     WHERE wi.id = :id
   `;

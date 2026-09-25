@@ -547,17 +547,32 @@ export const PARITY_ENTITIES: Array<ParityEntity<any>> = [
         equals: setExactlyWhenTheSeedSetsIt,
       },
       /**
+       * The brief (schema/orgiq_work_items_schema.sql): copy the initiative
+       * Overview and a work item's Brief render verbatim — the attention
+       * callout, a Plan-next row, the Next-step callout. The seed writes it
+       * with UPDATEs after the inserts (generate_program_seed.py BRIEFS), and
+       * absent means NULL, so every other row must be null in the mock too.
+       */
+      { seed: 'summary', mock: (i: { summary: string | null }) => i.summary },
+      { seed: 'blocked_reason', mock: (i: { blockedReason: string | null }) => i.blockedReason },
+      { seed: 'next_step', mock: (i: { nextStep: string | null }) => i.nextStep },
+      { seed: 'next_step_detail', mock: (i: { nextStepDetail: string | null }) => i.nextStepDetail },
+      /**
        * The seed omits `description` on most story/bug rows (the column is not
-       * even in their INSERT column list), and the mock writes prose for six of
-       * them. Text, not a number — but it is text the item detail renders as
-       * though the seed said it, so the six are named rather than waved through
-       * as a class. A seventh invented description fails here.
+       * even in their INSERT column list), and the mock writes prose for three
+       * of them. Text, not a number — but it is text the item detail renders as
+       * though the seed said it, so the three are named rather than waved
+       * through as a class. A fourth invented description fails here.
+       *
+       * There were six. The three wi-obs-* ones are now SEEDED — the
+       * generator's BRIEFS UPDATEs write them, and sql-seed.ts overlays an
+       * UPDATE onto the row it names — so they are compared, not excused.
        */
       {
         seed: 'description',
         mock: (i: { description: string | null }) => i.description,
         knownDrift: Object.fromEntries(
-          ['wi-obs-e2-s2', 'wi-obs-e2-s3', 'wi-obs-e2-b4', 'wi-auth-e1-s3', 'wi-auth-e2-s2', 'wi-auth-e2-b3']
+          ['wi-auth-e1-s3', 'wi-auth-e2-s2', 'wi-auth-e2-b3']
             .map((id) => [id, 'the mock adds narrative the seed does not carry (the seed omits `description` on this row entirely). Accepted because the text is consistent with the item and nothing derives from it — but it is the mock speaking, not the seed.']),
         ),
       },

@@ -103,7 +103,7 @@ describe('the board (work-items)', () => {
     // schema/seed_program.sql owns.
     const seeded = await getWorkItem('wi-obs-e3-s1');
     expect(seeded).toMatchObject({
-      title: 'Metric cardinality budgets with CI enforcement', priority: 'medium',
+      title: 'Metric cardinality budgets', priority: 'medium',
     });
 
     freeze('2026-09-06T11:22:33.000Z');
@@ -116,7 +116,7 @@ describe('the board (work-items)', () => {
     workItems.reset('default');
 
     expect(await getWorkItem('wi-obs-e3-s1')).toMatchObject({
-      title: 'Metric cardinality budgets with CI enforcement',
+      title: 'Metric cardinality budgets',
       priority: 'medium',
       // The seeded stamp is an offset from MOCK_EPOCH, not a wall-clock
       // instant, so it comes back exactly as the seed spells it — this row's
