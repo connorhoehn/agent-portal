@@ -464,6 +464,12 @@ function ProjectDetailPage() {
       ]}
       activeTab={tab}
       onTabChange={setTab}
+      // ScopeHeader's tab strip sits on its host's bottom rule (-mb-px); in
+      // ExplorerLayout.paneHeader there is no host rule, so the header draws
+      // its own — the library's "Initiative overview" story composes it the
+      // same way. Without it the selected tab's underline is painted over by
+      // the pane body and no tab reads as current.
+      className="border-b border-border"
       data-testid="initiative-header"
     />
   );

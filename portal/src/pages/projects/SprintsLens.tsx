@@ -207,12 +207,16 @@ export function SprintsLens({ view, lens }: { view: 'grid' | 'list'; lens: Sprin
             label: 'Needs attention',
             value: needsAttention,
             ...(needsAttention > 0 ? { tone: 'danger' as const } : {}),
-            hint: needsAttention > 0 ? 'behind window or over envelope' : 'all on track',
+            // The pane beside the explorer rail gives each cell ~153px of hint;
+            // the long form lives in the tooltip rather than being cut.
+            hint: needsAttention > 0 ? 'late or over envelope' : 'all on track',
+            ...(needsAttention > 0 ? { title: 'Behind its window or over its envelope' } : {}),
           },
           {
             label: 'Points',
             value: `${totals.pointsDone} / ${totals.pointsTotal}`,
-            hint: 'delivered vs committed',
+            hint: 'done / committed',
+            title: 'Points delivered vs points committed',
           },
           {
             label: 'Spend in windows',
@@ -229,6 +233,8 @@ export function SprintsLens({ view, lens }: { view: 'grid' | 'list'; lens: Sprin
             label: 'My envelope',
             value: envelopes.value,
             hint: envelopes.hint,
+            // Names the initiative, so it can outrun the cell: whole on hover.
+            title: typeof envelopes.hint === 'string' ? envelopes.hint : undefined,
             ...(envelopes.tone ? { tone: envelopes.tone } : {}),
             ...(envelopes.openable ? { onSelect: () => setEnvelopesOpen(true) } : {}),
           }] : []),

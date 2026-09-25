@@ -193,7 +193,9 @@ function ProjectsPage() {
                 label: `Spend · ${SPEND_MONTH.split(' ')[0]}`,
                 value: usd(totals.spendUsd),
                 ...(totals.allocatedUsd > 0 && totals.spendUsd > totals.allocatedUsd ? { tone: 'danger' as const } : {}),
-                hint: totals.allocatedUsd > 0 ? `of ${usd(totals.allocatedUsd)} allocated` : 'no allocations',
+                // "of $431.00 allocated" needed 108px in the 104px cell and was cut with
+                // no title; the "of" carried nothing the label does not already say.
+                hint: totals.allocatedUsd > 0 ? `${usd(totals.allocatedUsd)} allocated` : 'no allocations',
               },
             ]}
           />

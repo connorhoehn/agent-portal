@@ -112,5 +112,5 @@ test('rows carry a kind label and a red Blocked tag; text meta drops the Bug chi
   assert.equal(textRow.kindLabel, 'Bug');
   // A finished item's leftover label is history, not a live tag.
   assert.equal(toWorkListItem({ ...bug, status: 'done' }, undefined, false).tag, null);
-  assert.equal(toWorkListItem(workRows(tree, 'priority', '')[1]!, undefined, false).kindLabel, 'Story');
+  assert.equal(toWorkListItem(workRows(tree, 'priority', '')[1]!, undefined, false).kindLabel, undefined); // a story names no kind
 });

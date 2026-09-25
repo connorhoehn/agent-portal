@@ -152,7 +152,10 @@ export function toWorkListItem(
     owner: item.assigneeId && item.assigneeName ? { id: item.assigneeId, name: item.assigneeName } : null,
     chips,
     signal,
-    kindLabel: kindLabel(item),
+    // A story is the default kind of work, so its row names only the owner
+    // and points ("Layla Hassan · 5 points"); a bug or an epic says what it is
+    // ("Bug · Eli Garcia · 2 points") — the same rule the chip layout followed.
+    kindLabel: item.type === 'story' ? undefined : kindLabel(item),
     tag: isBlocked(item) && item.status !== 'done' && item.status !== 'cancelled'
       ? { label: 'Blocked', tone: 'danger' }
       : null,

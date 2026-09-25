@@ -4,7 +4,6 @@ import {
   DataTable,
   Inline,
   ProgressBar,
-  Spinner,
   Stack,
   StatusDot,
   type DataTableColumn,
@@ -54,9 +53,12 @@ export function ProjectTable({
           >
             {p.name}
           </Link>
-          <T as="div" className="font-mono text-[10px] text-text-tertiary truncate">
+          {/* The key only: the repository path made this the widest column
+              and pushed Spend and Updated out of the 1,026px pane beside the
+              explorer rail (horizontal scroll at 1642px). The path stays one
+              hover away here and is the Repository button on the detail page. */}
+          <T as="div" className="font-mono text-[10px] text-text-tertiary truncate" title={p.repoFullName ?? undefined}>
             {deriveProjectKey(p.id, p.name)}
-            {p.repoFullName ? ` · ${p.repoFullName}` : ''}
           </T>
         </Stack>
       ),
@@ -87,20 +89,9 @@ export function ProjectTable({
         );
       },
     },
-    {
-      key: 'activeAgentRuns', header: 'Active', sortable: true,
-      compare: (a, b) => (a.activeAgentRuns ?? 0) - (b.activeAgentRuns ?? 0),
-      render: (p) => (p.activeAgentRuns ?? 0) > 0 ? (
-        <Inline gap="xs" wrap={false}>
-          <Spinner size="sm" color="var(--color-success)" aria-label="Agents working now" />
-          <T className="text-[12px] font-medium text-text-secondary whitespace-nowrap">
-            {p.activeAgentRuns} agent{p.activeAgentRuns === 1 ? '' : 's'}
-          </T>
-        </Inline>
-      ) : (
-        <T className="text-[11px] text-text-tertiary">idle</T>
-      ),
-    },
+    // No "Active" column: the explorer rail beside this table already reads
+    // "Nora DaSilva · 2 agents" / "· Idle" for every row, and the column was
+    // what pushed Spend and Updated past the pane's edge at 1642px.
     {
       key: 'progress', header: 'Progress', sortable: true,
       compare: (a, b) => (pointsFraction(a) ?? -1) - (pointsFraction(b) ?? -1),
