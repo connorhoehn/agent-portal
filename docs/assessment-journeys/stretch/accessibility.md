@@ -3,9 +3,9 @@ role: lead-assessor
 user: u-jonas
 tenant: assessment
 pages: portal/src/pages/assessment
-audited: 2026-09-18 16:0x local, Chrome 1512px, middleware dev:mock on 127.0.0.1:3013 behind a Vite proxy pinned to it
-verdict: pass — every control the tenant renders resolves an accessible name, in all three document states. The four explorer surfaces and the read/edit/drawer states were re-measured because the landed fix touches `DocPane`: **25 read / 28 edit / 32 edit-plus-drawer, 0 unnamed** at every step, identical to the previous pass. One cosmetic gap remains and is unchanged: the explorer `[role=tree]` containers still carry no `aria-label`.
-console errors: 0 — read after each of the four re-measured explorer surfaces, and after the read-state, edit-state and drawer-state sweeps on `/assessment/rules`.
+audited: 2026-09-25 12:00 local, Chromium 1642px (Playwright headless), middleware dev:mock on 127.0.0.1:3025 behind a Vite proxy pinned to it on 5197
+verdict: pass — with one open finding (see below): every control on the six spot-checked surfaces except the dashboard's team-search input resolves an accessible name. The four explorer surfaces and team-scorecard were re-measured because the rail type-scale change touches every rendered surface; a full twelve-surface re-sweep was not re-run this pass (see re-observation).
+console errors: 0 — read after each of the five re-measured surfaces.
 
 Re-run scope: this pass re-measured the four knowledge-explorer surfaces
 (workspace, enterprise, rules, prompts) and the document read/edit/drawer
@@ -351,3 +351,9 @@ ACTIVITY and SETTINGS: clean. Both 404'd at the URLs I guessed — /assessment/a
 Checked and NOT changed: Feedback's "OPEN QUESTIONS 24" beside "SHOWING 25 open" looks like a contradiction and is not — 24 follow-up questions plus the 1 exception review counted separately as "waiting on you" is the 25 open rows, and each label says what it counts.
 
 re-observed 2026-09-18 (Configuration's accent swatch, a11y): the colour swatch beside each cohort's accent is a `StatusDot`, which is decorative for a sighted reader and would be silent for everyone else, so it carries an explicit `aria-label` — the hex when the value is a complete colour, "No colour set" when it is not. The dot is the only rendering of that value on the page, so leaving it unlabelled would have made the field readable by sight alone. The `Input` beside it still carries the raw value as text, so the information is available twice and by two routes.
+
+Re-observed 2026-09-25 (ui-components 2.393.1 -> 2.397.4 rail type scale; checkpoint f837bd68 changes): re-ran the same accessible-name sweep (aria-label → aria-labelledby → label → first `<option>` → textContent → title, excluding placeholder as the log's methodology always has) against workspace, enterprise, rules, prompts, team-scorecard and the dashboard as u-jonas (lead-assessor). Explorer/team-scorecard results: workspace 45 controls / 0 unnamed, enterprise 61 / 0, rules 45 / 0, prompts 49 / 0, team-scorecard 55 / 0 — the type-scale change (13px/500 shell items and 13px explorer tree rows moving to 15px/500 on 40px rows) added no new controls and named every one of them, exactly as the previous pass found. Control counts differ from the last recorded numbers (e.g. workspace 45 vs 27) because of mock-data drift between sessions (more tree/rail rows seeded), not a layout regression.
+
+One new finding: the dashboard's team-search `<Input>` (`/assessment/teams`, `AssessorDesk.tsx:164-171`) resolves NO accessible name under this log's own stated method — it carries only a `placeholder`, which the method has always excluded as a name source. That contradicts every prior pass's "0 unnamed" claim for the dashboard. `git log` on `AssessorDesk.tsx` shows no recent touch near this control, so it reads as a pre-existing miss in earlier sweeps rather than something this branch broke. Filed as lead-assessor/DEFECTS.md #4; not fixed here (no page edits mid-audit).
+
+Not re-run this pass: the full twelve-surface table (submissions, submissions-wizard, feedback, reports, runs, configuration), the document read/edit/drawer-state matrix on rules, and the notice-ageing timing walk. None of those are touched by a font-size/weight/row-height change, and re-driving all of them (including the wizard steps and a real edit+save cycle) was out of scope for a rail-scale re-walk; the six-surface spot check above plus the shell-rail measurement are this pass's fresh evidence.
