@@ -6,9 +6,10 @@ import assert from 'node:assert/strict';
 import {
   compactAge, explorerGroups, explorerRows, explainPrompt, filterLoaded, itemTypeLabel, loadedLabel,
   recencyGroup, recordCrumbs, recordHistory, recordStatus, searchScopeNote, shortRepo, technicalDetails,
-  withoutStepsSection,
+  withoutStepsSection, approachHint, approachSteps, basedOnRows, guidePrompt, DEFAULT_GUIDE_CONTEXT,
+  EXPLAIN_GUIDE_INSTRUCTION, GUIDE_CONTEXT_LABEL, GUIDE_CONTEXT_OPTIONS, PLAN_PREFILL,
 } from '../knowledgeModel.ts';
-import type { Item } from '../types.ts';
+import type { GuideView, Item } from '../types.ts';
 
 const NOW = Date.parse('2026-09-24T12:00:00Z');
 
@@ -98,4 +99,88 @@ test('the composer prompt names its subject and asks for an explanation only', (
   assert.match(p, /Explain this record/);
   assert.match(p, /\(art-001\)/);
   assert.match(p, /do not change anything/);
+});
+
+// ── Guide record ─────────────────────────────────────────────────────────
+
+const GUIDE_VIEW: GuideView = {
+  approach: [
+    { step_id: 'fact-020', ordinal: 3, text: 'Switch one customer and verify sign-in.' },
+    { step_id: 'fact-018', ordinal: 1, text: 'Keep the existing sign-in available as a fallback.' },
+    { step_id: 'fact-019', ordinal: 2, text: 'Check that active sessions stay signed in.' },
+    { step_id: 'fact-021', ordinal: 4, text: 'Restore the previous sign-in if the checks fail.' },
+  ],
+  based_on: [
+    { id: 'cl-010', kind: 'cluster', title: 'Retire the SAML shim tenant by tenant', repo: 'connorhoehnslalom/orgiq-auth-service', repo_label: 'auth-service' },
+    { id: 'cl-099', kind: 'cluster', title: 'No repo pattern', repo: null, repo_label: null },
+  ],
+  run_warning: {
+    run_id: 'papp-006', outcome: 'failed', at: '2026-09-23T10:00:00Z', failed_at_ordinal: 3,
+    title: 'Check the redirect before you use this',
+    body: 'The last attempt stopped at step 3 because sign-in still pointed to the old service.',
+  },
+};
+const SUBJECT = {
+  id: 'art-010', title: 'Cut one tenant over from SAML to Cognito',
+  when_this_helps: 'Planning to move a sign-in?\nIt brings together steps.',
+};
+
+test('guide context options: three, labelled, guide by default', () => {
+  assert.equal(DEFAULT_GUIDE_CONTEXT, 'guide');
+  assert.deepEqual(GUIDE_CONTEXT_OPTIONS.map((o) => o.label), ['This guide', 'This guide + sources', 'No context']);
+  assert.deepEqual(GUIDE_CONTEXT_OPTIONS.map((o) => o.value), ['guide', 'guide+sources', 'none']);
+  assert.equal(GUIDE_CONTEXT_LABEL['guide+sources'], 'This guide + sources');
+});
+
+test('plan prefill ends ready for the reader to type their project', () => {
+  assert.equal(PLAN_PREFILL, 'Draft a plan for my project using this guide. My project: ');
+});
+
+test('approachSteps orders by ordinal, carries no status; hint counts them', () => {
+  const steps = approachSteps(GUIDE_VIEW);
+  assert.deepEqual(steps.map((s) => s.id), ['fact-018', 'fact-019', 'fact-020', 'fact-021']);
+  assert.equal(steps[0].title, 'Keep the existing sign-in available as a fallback.');
+  assert.equal(steps.some((s) => 'status' in s), false);
+  assert.deepEqual(approachSteps(undefined), []);
+  assert.equal(approachHint(steps.length), '4 steps');
+  assert.equal(approachHint(1), '1 step');
+});
+
+test('basedOnRows: "Source pattern · <repo_label>", opening the pattern', () => {
+  const rows = basedOnRows(GUIDE_VIEW);
+  assert.equal(rows[0].title, 'Retire the SAML shim tenant by tenant');
+  assert.equal(rows[0].kindLabel, 'Source pattern');
+  assert.equal(rows[0].meta, 'Source pattern · auth-service');
+  assert.equal(rows[0].href, '/iq/distillation/knowledge?view=patterns&item=cl-010');
+  assert.equal(rows[1].meta, 'Source pattern', 'no repo, no dangling separator');
+  assert.deepEqual(basedOnRows(null), []);
+});
+
+test('guidePrompt "guide": title, id, when-this-helps, numbered approach, the guard', () => {
+  const p = guidePrompt('Explain it', SUBJECT, GUIDE_VIEW, 'guide');
+  assert.ok(p.startsWith('Explain it\n\nAbout the distillation guide "Cut one tenant over from SAML to Cognito" (art-010).'));
+  assert.match(p, /When this helps: Planning to move a sign-in\? It brings together steps\./);
+  assert.match(p, /Approach:\n1\. Keep the existing sign-in available as a fallback\.\n2\. Check/);
+  assert.match(p, /4\. Restore the previous sign-in if the checks fail\./);
+  assert.ok(!p.includes('Based on'), 'sources only with guide+sources');
+  assert.ok(!p.includes('Last run'));
+  assert.ok(p.endsWith('Explain only; do not change anything.'));
+  assert.equal(guidePrompt('Explain it', SUBJECT, GUIDE_VIEW), p, 'guide is the default');
+});
+
+test('guidePrompt "guide+sources" adds the patterns and the run warning', () => {
+  const p = guidePrompt('x', SUBJECT, GUIDE_VIEW, 'guide+sources');
+  assert.match(p, /Based on: "Retire the SAML shim tenant by tenant" \(auth-service\), "No repo pattern"/);
+  assert.match(p, /Last run: Check the redirect before you use this — The last attempt stopped at step 3/);
+  assert.ok(p.endsWith('Explain only; do not change anything.'));
+});
+
+test('guidePrompt "none" carries no record, keeps the guard; blank falls back to explain', () => {
+  assert.equal(guidePrompt(' plan my thing ', SUBJECT, GUIDE_VIEW, 'none'), 'plan my thing\n\nExplain only; do not change anything.');
+  assert.ok(guidePrompt('  ', SUBJECT, GUIDE_VIEW).startsWith(EXPLAIN_GUIDE_INSTRUCTION));
+});
+
+test('guidePrompt without a guide view (older middleware, non-procedure) still names the record', () => {
+  const p = guidePrompt('q', { id: 'art-001', title: 'T', kind: 'runbook' }, undefined, 'guide+sources');
+  assert.equal(p, 'q\n\nAbout the distillation runbook "T" (art-001).\nExplain only; do not change anything.');
 });

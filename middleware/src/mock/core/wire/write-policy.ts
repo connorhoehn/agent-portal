@@ -1466,7 +1466,7 @@ export const WRITE_SPECS: readonly WriteSpec[] = [
     route: 'POST /api/distillation/procedures/:id/apply',
     persona: 'orgiq/admin',
     safe: 'Appends a run to the registered `distillation-procedure-applications` fixture; reset drops it and the procedure’s counted health goes back to the seed. No AWS, no model, no timer. The `:id` is drawn from GET /api/distillation/procedures, which lists only procedure artifacts, so the 404 branch (a non-procedure id) is never what gets captured.',
-    bodyFrom: "routes/distillation.ts: `outcome` ∈ {'succeeded','failed','abandoned'}; `failed_at_step_id` is required for `failed` and must be null for `succeeded`, so a succeeded body carries no step and needs no second lookup.",
+    bodyFrom: "routes/distillation.ts: `outcome` ∈ {'succeeded','failed','abandoned'}; `failed_at_step_id` is required for `failed` and must be null for `succeeded`, so a succeeded body carries no step and needs no second lookup. `advice` / `plain_reason` (optional strings, trimmed, ≤200 chars) are accepted only on a failed or abandoned run — a succeeded body must omit them — so the replayed succeeded body carries neither; the captured response still pins both keys, as null.",
     build: ok({ outcome: 'succeeded' }),
   },
   {

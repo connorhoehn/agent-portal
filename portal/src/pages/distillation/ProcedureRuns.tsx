@@ -1,12 +1,15 @@
-// A procedure's steps and its Runs tab (spec §1 "procedure"; the Overview
-// mockup's Runs tab): the ordered steps rendered once with the latest run's
-// marker on each, the latest-run callout, the run history, and — for
+// A procedure's Runs tab (spec §1 "procedure"; the Overview mockup's Runs
+// tab): the latest-run callout, the ordered steps with a run's marker on each
+// (the latest, or the run a "View run" link named — `?run=`), the run
+// history, and — for
 // ManageBots — "Record a run" (POST /procedures/:id/apply, the one write on a
 // Knowledge record).
 //
 // Steps are the procedure's ordered facts (lineage `fact` nodes with an
 // ordinal); run outcomes come from GET /procedures/:id/runs. Both are folded
-// by procedureRunsModel.ts.
+// by procedureRunsModel.ts. Run markers live ONLY here: the Content tab shows
+// the approach as neutral numbered steps and names a failed latest run in one
+// callout (docs/distillation-guide-record-spec.md).
 import { useMemo, useState } from 'react';
 import { ProcedureSteps, WorkActivityList, type WorkActivityEvent } from '@connorhoehnslalom/ui-components';
 import {
@@ -15,7 +18,7 @@ import {
 import { useFetch } from '../../hooks/useFetch';
 import { stepsFromLineage } from './distillationFormat';
 import {
-  latestRunCallout, runHistoryRows, stepMarkers, type ProcedureStepDef,
+  chosenRun, latestRun, latestRunCallout, runHistoryRows, stepMarkers, type ProcedureStepDef,
 } from './procedureRunsModel';
 import type { ApplicationOutcome, Lineage, ProcedureRunsResponse } from './types';
 
@@ -35,7 +38,14 @@ export function useProcedure(artifactId: string | null): ProcedureData {
     artifactId ? `/api/distillation/procedures/${encodeURIComponent(artifactId)}/runs` : null, 0,
   );
   const steps = useMemo<ProcedureStepDef[]>(
-    () => (lineage.data ? stepsFromLineage(lineage.data).map((s) => ({ id: s.id, title: s.label, ordinal: s.ordinal })) : []),
+    // The plain wording when the fact has one (the same text the Content
+    // tab's approach shows), else the fact's statement.
+    () => (lineage.data
+      ? stepsFromLineage(lineage.data).map((s) => {
+        const plain = s.meta?.['plain'];
+        return { id: s.id, title: typeof plain === 'string' && plain ? plain : s.label, ordinal: s.ordinal };
+      })
+      : []),
     [lineage.data],
   );
   return {
@@ -47,9 +57,12 @@ export function useProcedure(artifactId: string | null): ProcedureData {
   };
 }
 
-/** The steps once, each with the latest run's outcome when there is one. */
-export function ProcedureStepList({ data, title = 'What to do' }: { data: ProcedureData; title?: string }) {
-  const steps = useMemo(() => stepMarkers(data.steps, data.runs), [data.steps, data.runs]);
+/** The steps once, each with the chosen run's outcome (the latest when none
+ *  is named). */
+function ProcedureStepList({ data, runId }: { data: ProcedureData; runId: string | null }) {
+  const steps = useMemo(() => stepMarkers(data.steps, data.runs, runId), [data.steps, data.runs, runId]);
+  const chosen = chosenRun(data.runs, runId);
+  const title = chosen && chosen !== latestRun(data.runs) ? 'Steps in the chosen run' : 'Steps in the latest run';
   return (
     <DetailSection first title={title}>
       <ProcedureSteps
@@ -144,7 +157,13 @@ const OUTCOME_TEXT = {
 } as const;
 
 /** The Runs tab: latest-run callout, steps with statuses, history, record. */
-export function ProcedureRunsTab({ artifactId, data, canRecord }: { artifactId: string; data: ProcedureData; canRecord: boolean }) {
+export function ProcedureRunsTab({ artifactId, data, canRecord, runId }: {
+  artifactId: string;
+  data: ProcedureData;
+  canRecord: boolean;
+  /** The run a link named (`?run=`); null shows the latest. */
+  runId: string | null;
+}) {
   const callout = useMemo(() => latestRunCallout(data.steps, data.runs), [data.steps, data.runs]);
   const events = useMemo<WorkActivityEvent[]>(
     () => runHistoryRows(data.steps, data.runs).map((r) => ({
@@ -160,7 +179,7 @@ export function ProcedureRunsTab({ artifactId, data, canRecord }: { artifactId: 
   return (
     <Stack gap="md">
       {callout && <InlineAlert tone={CALLOUT_TONE[callout.tone]}>{callout.text}</InlineAlert>}
-      <ProcedureStepList data={data} title="Steps in the latest run" />
+      <ProcedureStepList data={data} runId={runId} />
       <WorkActivityList
         title="Run history"
         events={events}

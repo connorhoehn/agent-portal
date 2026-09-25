@@ -81,11 +81,24 @@ function runKey(run: ProcedureRun, i: number): string {
   return run.id ?? `${run.at}#${i}`;
 }
 
-/** Steps with the latest run's outcome on each; no statuses when never run.
- *  The run's note sits under the step it failed on. */
-export function stepMarkers(steps: ProcedureStepDef[], runs: ProcedureRun[]): ProcedureStepMarker[] {
+/** The run a Runs-tab URL names (`?run=`), matched by the same key the
+ *  history rows carry; the latest run when none is named or the named one is
+ *  gone (a stale link still shows something true). */
+export function chosenRun(runs: ProcedureRun[], runId?: string | null): ProcedureRun | null {
+  const sorted = sortRuns(runs);
+  if (runId) {
+    const i = sorted.findIndex((r, j) => runKey(r, j) === runId);
+    if (i !== -1) return sorted[i];
+  }
+  return sorted[0] ?? null;
+}
+
+/** Steps with a run's outcome on each — the latest run, or `runId` when the
+ *  reader chose one; no statuses when never run. The run's note sits under
+ *  the step it failed on. */
+export function stepMarkers(steps: ProcedureStepDef[], runs: ProcedureRun[], runId?: string | null): ProcedureStepMarker[] {
   const ordered = orderedSteps(steps);
-  const run = latestRun(runs);
+  const run = chosenRun(runs, runId);
   return ordered.map((s) => {
     const marker: ProcedureStepMarker = { id: s.id, title: s.title };
     if (s.body) marker.body = s.body;

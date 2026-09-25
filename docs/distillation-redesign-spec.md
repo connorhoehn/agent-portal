@@ -26,34 +26,65 @@ Destinations (groups in the module's vertical sub-nav rail; each group lists its
 The rail (`SubNavLayout`, titled "Distillation") shows Knowledge → Guides &
 findings / Patterns / Run notes with tier counts, Review → Pending / Reviewed
 with counts, and Activity → Runs (amber/red when any tier is behind or
-stalled) / Tier graph. The content header shows the destination title, a
-repository selector, and "Open Library ↗". Counts come from live data, never
-literals. (Revised 2026-09-24: the first build used horizontal header tabs;
-the mockups draw a vertical sub-nav.)
+stalled) / Tier graph. Review and Activity keep a content header
+(`ScopeHeader`: destination title, repository selector, "Open Library ↗").
+Knowledge has **no title band**: the crumb "Build › Distillation › Knowledge",
+the repository selector and Open Library sit in a crumb band at the top of the
+record pane (`ExplorerLayout paneHeader` + `ScopeHeader variant="crumbs"`).
+Counts come from live data, never literals. (Revised 2026-09-24: the first
+build used horizontal header tabs; the mockups draw a vertical sub-nav. Revised
+again 2026-09-24 for the guide-record mockup,
+`docs/distillation-guide-record-mockup.png`.)
 
-**Knowledge** — explorer column: search (scoped to the current view, and says
-so), view selector "Guides & findings 11 / Patterns 22 / Run notes 304",
-filter popover (repo, initiative, type/kind, lifecycle), a grouped list
-("Recently updated", …) of icon + title + quiet line (type · lifecycle · age),
-cursor **Load more** in the footer with "N of M loaded" (M only when the server
-reports a total). Record pane: crumbs (view / type), title, status + updated
-line, tabs **Content | History** (+ **Runs** for procedures), header actions
-**Sources N** (opens the inspector) and **Open in Library ↗** (only when linked).
-Content renders once:
-- guide/finding: markdown body, then **What the source run found** (the
-  cluster claim), then collapsible **Technical details** (ids, versions,
-  timestamps, classification).
-- procedure: ordered steps once, each with its latest outcome marker when runs
-  exist; the Overview mockup's **Runs** tab = latest-run callout ("Latest run
-  stopped at step 3 — <note>"), step list with ✓ / ! / ○, run history list,
-  and "Record a run" for `ManageBots`.
+**Knowledge** — explorer column: pane title "Knowledge" (prominent), a scope
+row "GUIDES & FINDINGS" with the live tier count in a pill, search (scoped to
+the current view, and says so) with the filter popover (repo, initiative,
+type/kind, lifecycle) on the same row. **No view selector** — the sub-nav rail
+already chooses Guides & findings / Patterns / Run notes. A grouped list with
+caps group labels ("RECENTLY UPDATED 4", …) of flat rows, title + quiet line
+(type · lifecycle · age) and **no row icon**; the current row has a tint and a
+left bar. Cursor **Load more** in the footer with "N of M loaded" (M only when
+the server reports a total). Record pane: title (large) + status pill +
+"Updated …" line — no kind mark and no crumb above the title; tabs **Content |
+History** (+ **Runs N** for procedures, carried in the URL as `tab`/`run`);
+**Sources N** at the right end of the tab row (plus **Open in Library ↗** when
+linked). The Sources inspector is rendered only while `panel=sources`; there is
+no collapsed strip. Content renders once, plain language first:
+- **When this helps** — the record's `when_this_helps` paragraph(s). When it
+  is null (e.g. a compaction-minted record) the summary / markdown lead is
+  shown instead.
+- **Use it in your work** — "Draft a plan for my project" (prefills the
+  composer, caret at the end, sends nothing) and "Explain this guide" (goes to
+  `/iq/invoke`, which auto-sends), with "You review the plan before doing the
+  work."
+- **Run-warning callout** (procedures) — `guide.run_warning`, derived on the
+  server from the latest application when it failed or was abandoned: amber
+  `Banner layout="callout"`, title, "The last attempt stopped at step N
+  because …", **View run →** (opens Runs on that run). It is the only place a
+  run outcome appears on Content.
+- **The approach · N steps** (procedures) — `guide.approach`, neutral numbered
+  steps in plain words (`fact.plain ?? statement`). **No ✓ / ! / ○ markers and
+  no failure note on Content**; guides that are not procedures show their
+  markdown body here instead.
+- **Based on** — `guide.based_on`: one row per source pattern (document tile,
+  title, "Source pattern · <repo>", chevron); the whole row opens that pattern
+  in Patterns and Back returns.
+- **Technical details** (collapsed) — ids, versions, timestamps,
+  classification, and any leftover procedure markdown (e.g. "## Why").
+Runs tab (procedures): the latest-run callout ("Latest run stopped at step 3 —
+<note>"), the step list **with** ✓ / ! / ○ markers for the latest (or the
+`run` in the URL), run history, and "Record a run" for `ManageBots`. Markers
+live only here.
 - pattern (L1): the concrete claim, confidence, member notes list.
 - run note (L0): session, repo, time, kind (gotcha/worked/failed), body.
 Sources inspector: **List** (default; source cards with kind icon, title,
 age, excerpt, open) and **Graph** (the item's actual lineage, list equivalent
 kept); following a source opens that record in Knowledge and Back returns.
-Docked agent composer at the bottom of the record pane, context chip = the
-record, Agent mode only explains (no writes).
+Docked agent composer at the bottom of the record pane — light surface
+(`backdropTone="none"`), "Agent ▾", a "This guide ▾" context menu (This guide /
+This guide + sources / No context — no ×), placeholder "Describe your project
+or ask about this guide…"; Agent mode only explains (no writes). Review uses
+the same light composer.
 
 **Review** — queue column: tabs Pending N / Reviewed, search, rows with the
 **resolved target title**, type, source count, sampled age (never a bare

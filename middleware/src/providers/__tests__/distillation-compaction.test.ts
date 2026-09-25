@@ -219,7 +219,7 @@ describe('procedureHealth', () => {
 
   const view = (over: Partial<Omit<ProcedureView, 'health'>> = {}): Omit<ProcedureView, 'health'> => ({
     artifact: {
-      id: 'art-t', type: 'procedure', title: 't', summary: '', body_markdown: '', cluster_ids: [], facts: [],
+      id: 'art-t', type: 'procedure', title: 't', summary: '', when_this_helps: null, body_markdown: '', cluster_ids: [], facts: [],
       library_item_id: null, owner: 'Vera Green', classification: 'internal', confidence: 0.9,
       status: 'published', reviewed_by: null, reviewed_at: null, last_used_at: null,
       created_by_compaction_id: 'comp-t', created_at: hoursBefore(10), updated_at: hoursBefore(10),

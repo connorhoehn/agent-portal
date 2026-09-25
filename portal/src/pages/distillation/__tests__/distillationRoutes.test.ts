@@ -12,8 +12,28 @@ import {
 test('parseKnowledge defaults to guides with nothing open', () => {
   assert.deepEqual(parseKnowledge(''), {
     view: 'guides', item: null, panel: null, sourceView: 'list',
-    repo: null, initiative: null, q: null, kind: null, lifecycle: null,
+    repo: null, initiative: null, q: null, kind: null, lifecycle: null, tab: 'content', run: null,
   });
+});
+
+test('record tab: content is the default and omitted; run lives only on the Runs tab', () => {
+  assert.equal(parseKnowledge('item=art-010&tab=history').tab, 'history');
+  assert.equal(parseKnowledge('item=art-010&tab=bogus').tab, 'content');
+  assert.deepEqual(
+    (({ tab, run }) => ({ tab, run }))(parseKnowledge('item=art-010&tab=runs&run=papp-006')),
+    { tab: 'runs', run: 'papp-006' },
+  );
+  assert.equal(parseKnowledge('item=art-010&tab=history&run=papp-006').run, null, 'a run off the Runs tab is ignored');
+  assert.equal(knowledgeHref({ item: 'art-010', tab: 'content' }), '/iq/distillation/knowledge?item=art-010');
+  assert.equal(knowledgeHref({ item: 'art-010', tab: 'history', run: 'papp-006' }), '/iq/distillation/knowledge?item=art-010&tab=history');
+  const href = knowledgeHref({ item: 'art-010', tab: 'runs', run: 'papp-006' });
+  assert.equal(href, '/iq/distillation/knowledge?item=art-010&tab=runs&run=papp-006');
+  const back = parseKnowledge(href.split('?')[1]);
+  assert.equal(back.tab, 'runs');
+  assert.equal(back.run, 'papp-006');
+  // Opening another record resets the tab: null means default, like every field.
+  assert.equal(knowledgeHref({ ...back, item: 'art-009', tab: null, run: null }), '/iq/distillation/knowledge?item=art-009');
+  assert.equal(knowledgeItemHref('art-010', 'L2', { tab: 'runs', run: 'papp-006' }), '/iq/distillation/knowledge?item=art-010&tab=runs&run=papp-006');
 });
 
 test('parseKnowledge reads every param and rejects unknown enum values', () => {

@@ -33,7 +33,7 @@ import { relativeTime } from '../../lib/relativeTime';
 import { toastError, toastSuccess } from '../../lib/toastStore';
 import { sendJson } from '../../lib/writeJson';
 import { knowledgeItemHref, parseReview, reviewHref, type ReviewState } from './distillationRoutes';
-import { ExplainComposer } from './ExplainComposer';
+import { RecordExplainComposer } from './ExplainComposer';
 import { compactAge, shortRepo } from './knowledgeModel';
 import {
   applyOptimisticVerdict, nextSampleAfterVerdict, queueCounts, queueRows, rollbackVerdict, toQueueRow,
@@ -128,7 +128,7 @@ function Claim({
       label="Review claim"
       data-testid="review-claim"
       footer={(
-        <ExplainComposer
+        <RecordExplainComposer
           subject={{ kind: row.typeLabel.toLowerCase(), id: row.targetId, title: row.title }}
           referenceLabel="This review"
           placeholder="Show the evidence for this finding…"

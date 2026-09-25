@@ -14,8 +14,8 @@
 import { parsePgTimestamp } from '../../lib/pgTimestamp.ts';
 import { ARTIFACT_STATUS_LABEL, ARTIFACT_TYPE_LABEL } from './distillationFormat.ts';
 import { recordFileKind, type RecordFileKind } from './sourcesModel.ts';
-import type { KnowledgeView } from './distillationRoutes.ts';
-import type { Item } from './types.ts';
+import { knowledgeItemHref, type KnowledgeView } from './distillationRoutes.ts';
+import type { GuideView, Item } from './types.ts';
 
 // ── Vocabulary ───────────────────────────────────────────────────────────
 
@@ -341,9 +341,119 @@ export function technicalDetails(item: Item): DetailRow[] {
   return rows;
 }
 
+/** The guard every composer prompt ends with. */
+const EXPLAIN_ONLY = 'Explain only; do not change anything.';
+
 /** The composer's prepared question for the Ask page: the reader's words plus
  *  which record they are asking about. Explains only — nothing here writes. */
 export function explainPrompt(question: string, subject: { kind: string; id: string; title: string }): string {
   const q = question.trim() || 'Explain this record and the evidence behind it.';
-  return `${q}\n\nAbout the distillation ${subject.kind} "${subject.title}" (${subject.id}). Explain only; do not change anything.`;
+  return `${q}\n\nAbout the distillation ${subject.kind} "${subject.title}" (${subject.id}). ${EXPLAIN_ONLY}`;
+}
+
+// ── Guide record: use it in your work (plan §2 "Composer behaviour") ─────
+
+/** What the composer's "This guide ▾" menu attaches to a prompt. */
+export type GuideContext = 'guide' | 'guide+sources' | 'none';
+
+export const DEFAULT_GUIDE_CONTEXT: GuideContext = 'guide';
+
+export const GUIDE_CONTEXT_LABEL: Record<GuideContext, string> = {
+  guide: 'This guide',
+  'guide+sources': 'This guide + sources',
+  none: 'No context',
+};
+
+/** The menu's items, in menu order. */
+export const GUIDE_CONTEXT_OPTIONS: ReadonlyArray<{ value: GuideContext; label: string }> =
+  (['guide', 'guide+sources', 'none'] as const).map((value) => ({ value, label: GUIDE_CONTEXT_LABEL[value] }));
+
+/** "Draft a plan for my project" prefills this (caret at the end) and waits
+ *  for the reader to name their project — it never sends on its own. */
+export const PLAN_PREFILL = 'Draft a plan for my project using this guide. My project: ';
+
+/** "Explain this guide" sends this straight away. */
+export const EXPLAIN_GUIDE_INSTRUCTION = 'Explain this guide in plain language — when to use it and how.';
+
+
+export interface GuideSubject {
+  id: string;
+  title: string;
+  /** "guide" unless said otherwise — the noun in "About the distillation …". */
+  kind?: string;
+  when_this_helps?: string | null;
+}
+
+/** The approach in ordinal order, shaped for `ProcedureSteps` with no status
+ *  — the Content tab shows neutral numbers; run outcomes live on Runs. */
+export function approachSteps(guide: GuideView | null | undefined): Array<{ id: string; title: string }> {
+  if (!guide) return [];
+  return guide.approach
+    .map((s, i) => ({ s, i }))
+    .sort((a, b) => a.s.ordinal - b.s.ordinal || a.i - b.i)
+    .map(({ s }) => ({ id: s.step_id, title: s.text }));
+}
+
+/** "4 steps" — counted from the steps shown, never a stored number. */
+export function approachHint(count: number): string {
+  return `${count} ${count === 1 ? 'step' : 'steps'}`;
+}
+
+export interface BasedOnRow {
+  id: string;
+  title: string;
+  kindLabel: string;
+  /** "Source pattern · auth-service", or just the kind when there is no repo. */
+  meta: string;
+  /** The document tile the mockup draws for a source pattern. */
+  fileKind: RecordFileKind;
+  /** Opens the pattern in Knowledge → Patterns. */
+  href: string;
+}
+
+export const SOURCE_PATTERN_LABEL = 'Source pattern';
+
+/** "Based on" rows, in the server's order. */
+export function basedOnRows(guide: GuideView | null | undefined): BasedOnRow[] {
+  if (!guide) return [];
+  return guide.based_on.map((b) => ({
+    id: b.id,
+    title: b.title,
+    kindLabel: SOURCE_PATTERN_LABEL,
+    meta: b.repo_label ? `${SOURCE_PATTERN_LABEL} · ${b.repo_label}` : SOURCE_PATTERN_LABEL,
+    fileKind: 'page',
+    href: knowledgeItemHref(b.id, 'L1'),
+  }));
+}
+
+/**
+ * The prompt a guide's composer sends to the Ask page: the reader's words,
+ * then what the context menu attaches —
+ *   guide          title + id, when this helps, the numbered approach
+ *   guide+sources  … plus the patterns it is based on and the run warning
+ *   none           nothing about the record
+ * — and always the "Explain only" guard, because nothing here may write.
+ */
+export function guidePrompt(
+  instruction: string,
+  subject: GuideSubject,
+  guide: GuideView | null | undefined,
+  context: GuideContext = DEFAULT_GUIDE_CONTEXT,
+): string {
+  const q = instruction.trim() || EXPLAIN_GUIDE_INSTRUCTION;
+  if (context === 'none') return `${q}\n\n${EXPLAIN_ONLY}`;
+
+  const lines: string[] = [`About the distillation ${subject.kind ?? 'guide'} "${subject.title}" (${subject.id}).`];
+  const when = subject.when_this_helps?.trim();
+  if (when) lines.push(`When this helps: ${when.split('\n').map((l) => l.trim()).filter(Boolean).join(' ')}`);
+  const steps = approachSteps(guide);
+  if (steps.length) lines.push('Approach:', ...steps.map((s, i) => `${i + 1}. ${s.title}`));
+  if (context === 'guide+sources' && guide) {
+    if (guide.based_on.length) {
+      lines.push(`Based on: ${guide.based_on.map((b) => `"${b.title}"${b.repo_label ? ` (${b.repo_label})` : ''}`).join(', ')}`);
+    }
+    if (guide.run_warning) lines.push(`Last run: ${guide.run_warning.title} — ${guide.run_warning.body}`);
+  }
+  lines.push(EXPLAIN_ONLY);
+  return `${q}\n\n${lines.join('\n')}`;
 }

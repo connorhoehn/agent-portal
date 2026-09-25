@@ -1,33 +1,40 @@
 // Distillation → Knowledge (spec §1): explorer · record · optional Sources.
 //
-//   rail    SearchInput (scoped to the view, and saying so) · view Select
-//           "Guides & findings 11 / Patterns 22 / Run notes 304" · filter
-//           popover (WorkListFilters over GET /facets) · GroupedList rows ·
-//           footer "N of M loaded" + cursor Load more
-//   pane    KnowledgeRecord on EditorShell, with the explain-only composer
-//   aside   ContextColumn → SourcesPanel (List | Graph)
+//   rail    "Knowledge" (prominent) · scope label + live tier count
+//           ("GUIDES & FINDINGS 11") · SearchInput + filter popover on one
+//           row (WorkListFilters over GET /facets), the scope hint under it ·
+//           GroupedList rows (caps group labels, no row icons, barred
+//           current row) · footer "N of M loaded" + cursor Load more. No
+//           view selector: the module's sub-nav already chooses the view.
+//   pane    the module crumbs + repository selector + Open Library (a
+//           crumbs-only ScopeHeader in the pane header), then
+//           KnowledgeRecord on EditorShell with the explain-only composer
+//   aside   ContextColumn → SourcesPanel (List | Graph), only while Sources
+//           is open — closing it removes the column rather than leaving a
+//           strip (docs/distillation-guide-record-spec.md)
 //
 // All state lives in the URL (distillationRoutes.parseKnowledge), so every
 // migrated link lands with its selection and filters, and following a source
 // pushes history — Back returns to the record and filters you left.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router';
+import { useLocation, useNavigate, useOutletContext } from 'react-router';
 import {
-  ContextColumn, ExplorerLayout, WorkListFilters, type ContextColumnState, type WorkListFilterFacet,
+  ContextColumn, ExplorerLayout, RailSectionHeader, ScopeHeader, WorkListFilters, type ContextColumnState,
+  type WorkListFilterFacet,
 } from '@connorhoehnslalom/ui-components';
 import {
-  Button, EmptyState, FileKindMark, FilterPopover, GroupedList, Inline, LinkIcon, LoadingState, SearchInput,
-  Select, Stack, T,
+  Button, EmptyState, FilterPopover, GroupedList, Inline, LinkIcon, LoadingState, SearchInput, Stack, T,
 } from '@connorhoehnslalom/ui-components/shared';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { useDistillationChannel } from '../../hooks/useDistillationChannel';
 import { useFetch } from '../../hooks/useFetch';
+import type { DistillationOutletContext } from './DistillationModule';
 import {
-  knowledgeHref, levelForView, parseKnowledge, viewForLevel, type KnowledgeState, type KnowledgeView,
+  knowledgeHref, levelForView, parseKnowledge, viewForLevel, type KnowledgePatch, type KnowledgeView,
 } from './distillationRoutes';
 import { KnowledgeRecord } from './KnowledgeRecord';
 import {
-  LIFECYCLE_OPTIONS, VIEWS, VIEW_LABEL, VIEW_NOUN, explorerGroups, explorerRows, loadedLabel, searchPlaceholder,
+  LIFECYCLE_OPTIONS, VIEW_LABEL, VIEW_NOUN, explorerGroups, explorerRows, loadedLabel, searchPlaceholder,
   searchScopeNote,
 } from './knowledgeModel';
 import { SourcesPanel, useItemSources } from './SourcesPanel';
@@ -52,12 +59,13 @@ function single(sel: string[]): string | null {
 export default function KnowledgeTab() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { scope } = useOutletContext<DistillationOutletContext>();
   const state = parseKnowledge(location.search);
   const stateRef = useRef(state);
   stateRef.current = state;
   const level = levelForView(state.view);
 
-  const go = useCallback((patch: Partial<KnowledgeState>, opts: { push?: boolean } = {}) => {
+  const go = useCallback((patch: KnowledgePatch, opts: { push?: boolean } = {}) => {
     navigate(knowledgeHref({ ...stateRef.current, ...patch }), { replace: !opts.push });
   }, [navigate]);
 
@@ -175,26 +183,24 @@ export default function KnowledgeTab() {
   ];
   const activeFilters = [state.repo, state.initiative, state.kind, state.view === 'guides' ? state.lifecycle : null].filter(Boolean).length;
 
+  const viewCount = tierCounts[state.view];
   const railHeader = (
-    <Stack gap="xs" className="px-3 pb-2">
-      <SearchInput
-        value={query}
-        onChange={setQuery}
-        placeholder={searchPlaceholder(state.view)}
-        aria-label={searchPlaceholder(state.view)}
-        size="sm"
-        data-testid="knowledge-search"
+    <Stack gap="xs" className="pb-2">
+      <RailSectionHeader
+        label={VIEW_LABEL[state.view]}
+        presentational={false}
+        className="px-0"
+        {...(viewCount != null ? { count: viewCount } : {})}
+        data-testid="knowledge-scope"
       />
-      <T className="text-[11px] text-text-tertiary">{searchScopeNote(state.view, state.repo)}</T>
       <Inline gap="xs" align="center" wrap={false}>
-        <Select
-          aria-label="Knowledge view"
-          size="sm"
-          wrapperClassName="min-w-0 flex-1"
-          value={state.view}
-          onChange={(e) => go({ view: e.target.value as KnowledgeView, item: null, kind: null, lifecycle: null, q: null })}
-          options={VIEWS.map((v) => ({ value: v, label: tierCounts[v] != null ? `${VIEW_LABEL[v]} ${tierCounts[v]}` : VIEW_LABEL[v] }))}
-          data-testid="knowledge-view"
+        <SearchInput
+          value={query}
+          onChange={setQuery}
+          placeholder={searchPlaceholder(state.view)}
+          aria-label={searchPlaceholder(state.view)}
+          className="min-w-0 flex-1"
+          data-testid="knowledge-search"
         />
         <FilterPopover
           trigger="icon"
@@ -212,6 +218,7 @@ export default function KnowledgeTab() {
           </Stack>
         </FilterPopover>
       </Inline>
+      <T className="text-[12px] text-text-tertiary">{searchScopeNote(state.view, state.repo)}</T>
     </Stack>
   );
 
@@ -238,17 +245,18 @@ export default function KnowledgeTab() {
   ) : (
     <GroupedList
       size="sm"
+      groupHeading="label"
+      currentStyle="bar"
       groups={explorerGroups(rows).map((g) => ({ id: g.id, title: g.title, count: g.count }))}
       rows={rows.map((r) => ({
         id: r.id,
         groupId: r.groupId,
-        icon: <FileKindMark kind={r.fileKind} size="sm" variant="glyph" />,
         title: r.title,
         subline: r.subline,
         ariaLabel: r.ariaLabel,
       }))}
       currentId={state.item}
-      onOpenRow={(row) => go({ item: row.id })}
+      onOpenRow={(row) => go({ item: row.id, tab: null, run: null })}
       storageKey={`distillation.knowledge.${state.view}.groups`}
       data-testid="knowledge-list"
     />
@@ -267,7 +275,7 @@ export default function KnowledgeTab() {
     </Inline>
   );
 
-  const aside = state.item || state.panel === 'sources' ? (
+  const aside = state.panel === 'sources' ? (
     <ContextColumn
       state={columnState}
       onStateChange={(next) => {
@@ -324,6 +332,10 @@ export default function KnowledgeTab() {
         sourceCount={sources.data?.sources ? sources.data.sources.length : null}
         onOpenSources={() => go({ panel: 'sources' }, { push: true })}
         onOpen={openHref}
+        tab={state.tab}
+        runId={state.run}
+        onTabChange={(tab) => go({ tab, run: null })}
+        onViewRun={(run) => go({ tab: 'runs', run }, { push: true })}
       />
     );
   }
@@ -332,10 +344,20 @@ export default function KnowledgeTab() {
     <ExplorerLayout
       railWidth="ml"
       railTitle="Knowledge"
+      railHeading="prominent"
       railLabel="knowledge explorer"
       railHeader={railHeader}
       rail={railBody}
       railFooter={railFooter}
+      paneHeader={(
+        <ScopeHeader
+          variant="crumbs"
+          breadcrumbs={scope.breadcrumbs}
+          controls={scope.controls}
+          link={scope.link}
+          data-testid="distillation-header"
+        />
+      )}
       panePadding="none"
       asidePlacement="beside"
       aside={aside}

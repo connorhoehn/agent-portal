@@ -8,7 +8,7 @@
 // App.tsx call `migrateDistillationUrl` and nothing else.
 //
 // Serialisation omits defaults (`view=guides`, `sourceView=list`,
-// `tab=pending`, `view=runs`) so the canonical URL for a surface is short and
+// `tab=pending`, `view=runs`, Knowledge's record `tab=content`) so the canonical URL for a surface is short and
 // two links to the same state compare equal.
 //
 // Filter names beyond the spec's list: the Knowledge filter popover carries
@@ -26,6 +26,10 @@ export type SourceView = 'list' | 'graph';
 export type ReviewTab = 'pending' | 'decided';
 export type ActivityView = 'runs' | 'graph';
 export type TierLevel = 'L0' | 'L1' | 'L2';
+/** The open record's tab. Runs exists only for procedures; the page decides
+ *  that — the URL just carries the choice. */
+export type RecordTab = 'content' | 'history' | 'runs';
+export const RECORD_TABS: readonly RecordTab[] = ['content', 'history', 'runs'];
 
 export interface KnowledgeState {
   view: KnowledgeView;
@@ -40,7 +44,17 @@ export interface KnowledgeState {
   kind: string | null;
   /** Artifact lifecycle: draft | published | retired. */
   lifecycle: string | null;
+  /** The record's tab; 'content' (the default) is omitted from the URL. */
+  tab: RecordTab;
+  /** A procedure run (application id) chosen on the Runs tab — what the
+   *  Content tab's "View run" links to. Only kept while `tab` is 'runs'. */
+  run: string | null;
 }
+
+/** What `knowledgeHref` accepts: any part of the state, where `tab: null`
+ *  (like every other field's null) means "back to the default". Lets a page
+ *  reset the record tab when it opens another item. */
+export type KnowledgePatch = Partial<Omit<KnowledgeState, 'tab'>> & { tab?: RecordTab | null };
 
 export interface ReviewState {
   tab: ReviewTab;
@@ -106,7 +120,13 @@ export function parseKnowledge(search: SearchInput): KnowledgeState {
     q: str(p, 'q'),
     kind: str(p, 'kind'),
     lifecycle: str(p, 'lifecycle'),
+    ...recordTab(p),
   };
+}
+
+function recordTab(p: URLSearchParams): { tab: RecordTab; run: string | null } {
+  const tab = oneOf(str(p, 'tab'), RECORD_TABS, 'content');
+  return { tab, run: tab === 'runs' ? str(p, 'run') : null };
 }
 
 export function parseReview(search: SearchInput): ReviewState {
@@ -142,7 +162,7 @@ function build(path: string, entries: Array<[string, string | null | undefined]>
   return qs ? `${path}?${qs}` : path;
 }
 
-export function knowledgeHref(state: Partial<KnowledgeState> = {}): string {
+export function knowledgeHref(state: KnowledgePatch = {}): string {
   return build(`${DISTILLATION_BASE}/knowledge`, [
     ['view', state.view && state.view !== 'guides' ? state.view : null],
     ['item', state.item],
@@ -154,6 +174,9 @@ export function knowledgeHref(state: Partial<KnowledgeState> = {}): string {
     ['kind', state.kind],
     ['lifecycle', state.lifecycle],
     ['q', state.q],
+    ['tab', state.tab && state.tab !== 'content' ? state.tab : null],
+    // A chosen run only means something on the Runs tab.
+    ['run', state.tab === 'runs' ? state.run : null],
   ]);
 }
 
@@ -179,7 +202,7 @@ export function activityHref(state: Partial<ActivityState> = {}): string {
 }
 
 /** Link to one record in Knowledge, in the view its tier lives in. */
-export function knowledgeItemHref(id: string, level: TierLevel = 'L2', extra: Partial<KnowledgeState> = {}): string {
+export function knowledgeItemHref(id: string, level: TierLevel = 'L2', extra: KnowledgePatch = {}): string {
   return knowledgeHref({ ...extra, view: viewForLevel(level), item: id });
 }
 

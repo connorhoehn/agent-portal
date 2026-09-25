@@ -187,6 +187,20 @@ describe('GET /api/distillation/items/:id', () => {
     const res = await request(buildApp()).get('/api/distillation/items/art-does-not-exist');
     expect(res.status).toBe(404);
   });
+
+  it('an L2 record carries the derived guide; an L1 pattern carries none', async () => {
+    const app = buildApp();
+    const art = await request(app).get('/api/distillation/items/art-010');
+    expect(art.status).toBe(200);
+    expect(art.body.when_this_helps).toMatch(/^Planning to move a customer's sign-in to Cognito\?/);
+    expect(art.body.guide.approach).toHaveLength(4);
+    expect(art.body.guide.based_on[0]).toMatchObject({ id: 'cl-010', repo_label: 'auth-service' });
+    expect(art.body.guide.run_warning.body)
+      .toBe('The last attempt stopped at step 3 because sign-in still pointed to the old service.');
+    const cl = await request(app).get('/api/distillation/items/cl-010');
+    expect(cl.status).toBe(200);
+    expect(cl.body).not.toHaveProperty('guide');
+  });
 });
 
 describe('GET /api/distillation/items/:id/lineage', () => {
@@ -488,6 +502,32 @@ describe('POST /api/distillation/procedures/:id/apply', () => {
   it('404s on a non-procedure id', async () => {
     const res = await request(buildApp()).post('/api/distillation/procedures/art-001/apply').send({ outcome: 'succeeded' });
     expect(res.status).toBe(404);
+  });
+
+  it('400s advice on a succeeded run, and a non-string plain_reason', async () => {
+    const app = buildApp();
+    const onSuccess = await request(app).post('/api/distillation/procedures/art-010/apply')
+      .send({ outcome: 'succeeded', advice: 'Check the redirect' });
+    expect(onSuccess.status).toBe(400);
+    expect(onSuccess.body.error).toMatch(/advice/);
+    const notString = await request(app).post('/api/distillation/procedures/art-010/apply')
+      .send({ outcome: 'abandoned', plain_reason: 42 });
+    expect(notString.status).toBe(400);
+  });
+
+  it('a failed run with advice and plain_reason becomes the guide’s run warning', async () => {
+    const app = buildApp();
+    const res = await request(app).post('/api/distillation/procedures/art-011/apply').send({
+      outcome: 'failed', failed_at_step_id: 'fact-023',
+      advice: 'Name the initiative before the meeting', plain_reason: 'the proposal did not say who pays',
+    });
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({ advice: 'Name the initiative before the meeting', plain_reason: 'the proposal did not say who pays' });
+    const item = await request(app).get('/api/distillation/items/art-011');
+    expect(item.body.guide.run_warning).toMatchObject({
+      run_id: res.body.id, title: 'Name the initiative before the meeting',
+      body: 'The last attempt stopped at step 2 because the proposal did not say who pays.',
+    });
   });
 
   it('400s an abandoned run that names a step — only a failed run stops ON a step', async () => {

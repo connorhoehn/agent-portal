@@ -126,6 +126,13 @@ export interface ArtifactRow {
   type: ArtifactType;
   title: string;
   summary: string;
+  /** Plain-language "when this helps" for a reader deciding whether the
+   *  record applies to their work — who it is for and what it gets them, no
+   *  jargon. Paragraphs are separated by `\n`. STORED prose written by a
+   *  person, never derived: a compaction-minted artifact carries null, which
+   *  is the honest state (nothing in the machine writes plain language), and
+   *  the portal falls back to `summary` for it. */
+  when_this_helps: string | null;
   body_markdown: string;
   cluster_ids: string[];
   /** Fact ids — resolve each via factLineage/getItem, never inlined here, so
@@ -172,6 +179,11 @@ export interface Fact {
   id: string;
   artifact_id: string;
   statement: string;
+  /** The same claim in plain words, for the guide's "The approach" list
+   *  (`statement` keeps the precise, evidence-shaped wording). Null when
+   *  nobody has written one — every compaction-minted fact — and a reader
+   *  then sees `statement`. */
+  plain: string | null;
   subject: string;
   predicate: string;
   object: string;
@@ -222,6 +234,15 @@ export interface ProcedureApplication {
    *  stopped on; null when it succeeded. */
   failed_at_step_id: string | null;
   note: string | null;
+  /** A short heading telling the next person what to check before they use
+   *  the procedure ("Check the redirect before you use this"). Only a failed
+   *  or abandoned run carries one; the guide's run warning falls back to a
+   *  generic title when it is null. */
+  advice: string | null;
+  /** Why the run stopped, in plain words, phrased to follow "because"
+   *  ("sign-in still pointed to the old service"). `note` stays the
+   *  operator's technical record; this is what the guide's warning reads. */
+  plain_reason: string | null;
 }
 
 /**
@@ -893,7 +914,7 @@ function seedClusters(groups: ObservationGroups): Cluster[] {
     },
     {
       id: 'cl-010',
-      title: 'Retire the SAML shim tenant by tenant, not in one cutover',
+      title: 'Retire the SAML shim tenant by tenant',
       summary: 'Tenant-by-tenant migration with zero forced logouts, and a per-tenant flag to fall back to SAML, limits a cutover bug’s blast radius to one tenant instead of all of them.',
       kind: 'convention', repo: REPO.AUTH, initiative_id: INITIATIVE.AUTH,
       tags: ['auth', 'migration'],
@@ -1016,6 +1037,8 @@ function seedArtifacts(): ArtifactRow[] {
       type: 'runbook',
       title: 'Rerun-and-diff triage for a flaky collector-fleet test',
       summary: 'Before quarantining a test as flaky, rerun it twice and diff the outcomes — parallel-CI port contention and a genuine regression look identical from a single failure.',
+      when_this_helps:
+        'Seeing a collector-fleet test fail in CI when it passes on your machine? Use this before you mark it flaky: two quick reruns tell a real bug apart from CI noise.',
       body_markdown:
         '## Symptom\nA collector-fleet integration test fails intermittently in CI but passes every time locally.\n\n' +
         '## Triage\n1. Rerun the failing test twice in isolation.\n2. Diff the two outcomes against the original failure.\n3. If all three agree, it is not port contention — treat it as a real regression, not a flake.\n\n' +
@@ -1034,6 +1057,8 @@ function seedArtifacts(): ArtifactRow[] {
       type: 'runbook',
       title: 'Recover a cold Aurora Data API with a warm SELECT 1 and retry',
       summary: 'The first Data API call after idle fails with HttpEndpointNotEnabled; warm the endpoint with a throwaway query, then retry transient errors on a bounded backoff.',
+      when_this_helps:
+        'Getting an error on the first database call after the cluster has been idle? Use this to wake the database up and retry safely, without hiding real errors.',
       body_markdown:
         '## Symptom\n`HttpEndpointNotEnabledException` (or a sibling resume/scale transient) on the first Data API call after a cold start or rebuild.\n\n' +
         '## Fix\n1. Issue a throwaway `SELECT 1` to warm the endpoint.\n2. Retry the real call up to 6 times with a 3-second backoff, transient errors only.\n3. Let a genuine SQL error (e.g. `already exists`) raise immediately — do not retry it.',
@@ -1051,6 +1076,8 @@ function seedArtifacts(): ArtifactRow[] {
       type: 'insight',
       title: 'Collector-fleet Fargate tasks are ARM64',
       summary: 'An image built on Apple Silicon is ARM64; a Fargate task definition that doesn’t pin runtimePlatform still defaults to x86_64 and dies with exec format error.',
+      when_this_helps:
+        'Deploying a container you built on a Mac to Fargate? Read this first. It explains why the task can crash on start and the one setting that prevents it.',
       body_markdown:
         'The middleware and collector-fleet images are built on Apple Silicon. Fargate defaults task definitions to x86_64 unless `runtimePlatform` explicitly pins ARM64 — the mismatch only surfaces as `exec format error` at container start, and looks like a crash loop rather than an architecture mismatch. ARM64 is also the cheaper Fargate option, so pinning it is free.',
       cluster_ids: ['cl-020'],
@@ -1067,6 +1094,8 @@ function seedArtifacts(): ArtifactRow[] {
       type: 'decision',
       title: 'Gate auth diffs on the CSRF evaluator before merge',
       summary: 'Run every auth-service PR diff through the CSRF-risk evaluator as a required check, not an advisory comment — the diff is always fenced as untrusted input.',
+      when_this_helps:
+        'Changing sign-in or session code in the auth service? This explains why your pull request has to pass the CSRF check before it can merge, and what that check looks at.',
       body_markdown:
         '## Decision\nEvery diff touching `orgiq-auth-service` runs through `lib-csrf-check` as a required PR check.\n\n' +
         '## Rationale\nAn earlier advisory-only comment did not stop a CSRF-weakening change from merging. A required check does.\n\n' +
@@ -1085,6 +1114,8 @@ function seedArtifacts(): ArtifactRow[] {
       type: 'convention',
       title: 'Scan every ingested document for PII before it reaches the knowledge base',
       summary: 'Run the PII evaluator pre-ingestion so a flagged document never gets embedded; the evaluator flags, a human decides — it never auto-redacts.',
+      when_this_helps:
+        'Adding documents to the knowledge base? This explains why each one is checked for personal information first, and why a person, not the tool, decides what to remove.',
       body_markdown:
         'Every document heading into the Bedrock Knowledge Base first passes `lib-pii-scan`. Scanning after ingestion was tried and rejected: by then the document was already embedded and indexed. The evaluator runs at internal tier (the ingestion pipeline is its only caller) and only flags — redaction decisions stay with a human reviewer.',
       cluster_ids: ['cl-022'],
@@ -1101,6 +1132,8 @@ function seedArtifacts(): ArtifactRow[] {
       type: 'runbook',
       title: 'Decommission StatsD service by service without breaking dashboards',
       summary: 'Dual-write StatsD and OTel per service until its OTel dashboards are trusted, then remove the emitter behind a checklist that re-points every alert first.',
+      when_this_helps:
+        'Moving a service\'s metrics off StatsD? Use this to switch one service at a time without losing dashboards or alerts along the way.',
       body_markdown:
         '## Steps\n1. Keep the service dual-writing to StatsD and OTel.\n2. Validate the OTel-derived dashboards against the StatsD numbers for at least one sprint.\n3. Re-point every alert that still references the StatsD metric.\n4. Remove the StatsD emitter for that service only.\n\nAwaiting review before this leaves draft — the checklist step is new and hasn’t been exercised on a second service yet.',
       cluster_ids: ['cl-005'],
@@ -1117,6 +1150,8 @@ function seedArtifacts(): ArtifactRow[] {
       type: 'convention',
       title: 'Bump session_epoch on every tenant/role switch',
       summary: 'A stateless session cookie can’t be revoked directly; bumping a stored epoch, checked on the periodic grants refresh, closes the replay window to about 120 seconds.',
+      when_this_helps:
+        'Working on tenant or role switching? This explains how older sign-in cookies stop working about two minutes after someone switches, and why masquerade is the one exception.',
       body_markdown:
         'Every tenant/role switch and `revoke-others` call bumps `session_epoch` on `app_users`. `sessionMiddleware`’s periodic grants refresh compares the cookie’s epoch against the stored one and drops anything below it. Masquerade is the deliberate exception: it carries the target user’s epoch rather than bumping it, so masquerading into an account doesn’t kick that user out of their own live sessions.\n\nStill draft: needs a second reviewer before it generalizes past the auth-migration initiative.',
       cluster_ids: ['cl-008'],
@@ -1133,6 +1168,8 @@ function seedArtifacts(): ArtifactRow[] {
       type: 'insight',
       title: 'OpenSearch Serverless and Aurora Serverless v2 both bill a floor at zero traffic',
       summary: 'Neither service scales to zero: OpenSearch bills a 2 OCU minimum and Aurora Serverless v2 bills a 0.5 ACU minimum (~$45/mo), continuously, regardless of load.',
+      when_this_helps:
+        null,
       body_markdown:
         'Retired: superseded by two narrower artifacts (`skill-cold-start-aurora` covers the Aurora cold-start behavior; the OpenSearch floor is now tracked directly in the FinOps dashboard rather than as a standalone insight). Kept for lineage — the original showback case cited this combined artifact before it was split.',
       cluster_ids: ['cl-017', 'cl-018'],
@@ -1155,6 +1192,8 @@ function seedArtifacts(): ArtifactRow[] {
       type: 'procedure',
       title: 'Bring SSO up on a new origin without breaking the picker',
       summary: 'Cognito refuses a non-localhost http callback outright, so a new origin comes up in a fixed order: callback unset (picker stays), local dev on a localhost callback, HTTPS front door, then the callback set and ssoEnabled confirmed.',
+      when_this_helps:
+        'Turning on single sign-on for a new web address? Follow this order so people can keep signing in while the secure address is set up.\nIt brings together what worked each time sign-on was brought up on a new address.',
       body_markdown:
         '## Steps\n1. Leave `COGNITO_CALLBACK_URL` unset so the picker keeps working.\n2. Point local dev at a `localhost` callback — Cognito exempts it from the HTTPS rule.\n3. Put an HTTPS front door up on the new origin.\n4. Set the callback and confirm `GET /api/auth/config` reports `ssoEnabled`.\n\n' +
         '## Why\n- Cognito rejects a non-localhost http callback before any app code runs, so setting it early takes the whole login path down rather than degrading it.',
@@ -1172,6 +1211,8 @@ function seedArtifacts(): ArtifactRow[] {
       type: 'procedure',
       title: 'Cut one tenant over from SAML to Cognito',
       summary: 'One tenant at a time, behind a per-tenant flag that keeps the SAML shim reachable, with zero forced logouts as the hard requirement and a flip back as the rollback.',
+      when_this_helps:
+        'Planning to move a customer\'s sign-in to Cognito? Use this guide to plan a gradual switch, keep people signed in, and preserve a way to roll back.\nIt brings together steps and lessons from an earlier migration.',
       body_markdown:
         '## Steps\n1. Flag the tenant’s SAML shim rather than deleting it.\n2. Confirm no active session is forced out by the flip.\n3. Flip the tenant on its own schedule, never in a flag-day cutover.\n4. Flip back to SAML if login misbehaves.\n\n' +
         'Still draft: the second run stopped on step 3 (the hosted-UI redirect still resolved to the old domain) and the flip-back step has not been exercised as a rollback of that failure yet.',
@@ -1189,6 +1230,8 @@ function seedArtifacts(): ArtifactRow[] {
       type: 'procedure',
       title: 'Propose an idle-capacity teardown that gets approved',
       summary: 'A teardown case is approved in one meeting when the spend is attributed to the initiative that owns it and the proposal names both the floor removed and the initiative billed — never from a vague "it’s expensive".',
+      when_this_helps:
+        'Want to shut down idle infrastructure that is costing money? Use this to write a proposal that gets approved in one meeting, by showing who pays for it and how much.',
       body_markdown:
         '## Steps\n1. Attribute the spend to the owning initiative — no shared bucket.\n2. Name the floor removed and the initiative billed in the proposal itself.\n3. Bring the dollar figure to the meeting.\n\n' +
         '## Why\n- Nobody signs off on tearing down a cluster from "it’s expensive"; the attributed figure is what got the last one decided in one meeting.',
@@ -1216,6 +1259,7 @@ function seedFacts(groups: ObservationGroups): Fact[] {
       id: 'fact-001',
       artifact_id: 'art-001',
       statement: 'Rerunning a suspected-flaky collector test twice and diffing outcomes separates a real regression from CI port contention.',
+      plain: null,
       subject: 'a flaky collector-fleet test', predicate: 'is triaged by', object: 'a rerun-and-diff check',
       evidence_observation_ids: obsIds(groups.C19, 1, 2),
       confidence: 0.91,
@@ -1225,6 +1269,7 @@ function seedFacts(groups: ObservationGroups): Fact[] {
       id: 'fact-002',
       artifact_id: 'art-001',
       statement: 'Quarantining a flaky test without diff evidence can hide a real regression.',
+      plain: null,
       subject: 'a quarantined flaky test with no diff evidence', predicate: 'can hide', object: 'a real regression',
       evidence_observation_ids: obsIds(groups.C19, 2),
       confidence: 0.83,
@@ -1234,6 +1279,7 @@ function seedFacts(groups: ObservationGroups): Fact[] {
       id: 'fact-003',
       artifact_id: 'art-002',
       statement: 'The first Data API call to a cold 0.5-ACU Aurora cluster fails with HttpEndpointNotEnabled.',
+      plain: null,
       subject: 'the first Data API call after idle', predicate: 'fails with', object: 'HttpEndpointNotEnabledException',
       evidence_observation_ids: obsIds(groups.C21, 0),
       confidence: 0.95,
@@ -1243,6 +1289,7 @@ function seedFacts(groups: ObservationGroups): Fact[] {
       id: 'fact-004',
       artifact_id: 'art-002',
       statement: 'A warm-up SELECT 1 followed by a 6x3s retry reliably clears the Aurora cold-start race.',
+      plain: null,
       subject: 'a warm SELECT 1 plus 6x3s retry', predicate: 'clears', object: 'the Aurora cold-start race',
       evidence_observation_ids: obsIds(groups.C21, 1),
       confidence: 0.93,
@@ -1252,6 +1299,7 @@ function seedFacts(groups: ObservationGroups): Fact[] {
       id: 'fact-005',
       artifact_id: 'art-003',
       statement: 'An x86_64 image deployed to a Fargate task without runtimePlatform pinned to ARM64 fails at container start with exec format error.',
+      plain: null,
       subject: 'an x86_64 image on an unpinned Fargate task', predicate: 'fails with', object: 'exec format error',
       evidence_observation_ids: obsIds(groups.C20, 0, 1),
       confidence: 0.94,
@@ -1261,6 +1309,7 @@ function seedFacts(groups: ObservationGroups): Fact[] {
       id: 'fact-006',
       artifact_id: 'art-004',
       statement: 'An LLM evaluator run as a required PR check catches CSRF-weakening diffs that an advisory-only comment did not stop.',
+      plain: null,
       subject: 'the CSRF evaluator as a required check', predicate: 'catches', object: 'CSRF-weakening diffs before merge',
       evidence_observation_ids: obsIds(groups.C11, 0, 1),
       confidence: 0.9,
@@ -1270,6 +1319,7 @@ function seedFacts(groups: ObservationGroups): Fact[] {
       id: 'fact-007',
       artifact_id: 'art-004',
       statement: 'The evaluator’s diff input must be treated as untrusted data, never as instructions the model follows.',
+      plain: null,
       subject: 'the PR diff passed to the evaluator', predicate: 'must be treated as', object: 'untrusted, fenced data',
       evidence_observation_ids: obsIds(groups.C11, 2),
       confidence: 0.88,
@@ -1279,6 +1329,7 @@ function seedFacts(groups: ObservationGroups): Fact[] {
       id: 'fact-008',
       artifact_id: 'art-005',
       statement: 'Scanning a document for PII before ingestion prevents a flagged document from ever being embedded into the knowledge base.',
+      plain: null,
       subject: 'a PII scan before ingestion', predicate: 'prevents', object: 'a flagged document reaching the KB',
       evidence_observation_ids: obsIds(groups.C22, 0),
       confidence: 0.89,
@@ -1288,6 +1339,7 @@ function seedFacts(groups: ObservationGroups): Fact[] {
       id: 'fact-009',
       artifact_id: 'art-006',
       statement: 'Dual-writing to StatsD and OTel during the transition window gives on-call a fallback dashboard.',
+      plain: null,
       subject: 'a StatsD/OTel dual-write window', predicate: 'gives on-call', object: 'a fallback dashboard during cutover',
       evidence_observation_ids: obsIds(groups.C5, 1),
       confidence: 0.85,
@@ -1297,6 +1349,7 @@ function seedFacts(groups: ObservationGroups): Fact[] {
       id: 'fact-010',
       artifact_id: 'art-007',
       statement: 'Bumping session_epoch on a tenant/role switch invalidates any cookie minted before it within one grants-refresh cycle.',
+      plain: null,
       subject: 'a session_epoch bump', predicate: 'invalidates', object: 'pre-switch cookies within about 120 seconds',
       evidence_observation_ids: obsIds(groups.C8, 0, 1),
       confidence: 0.92,
@@ -1306,6 +1359,7 @@ function seedFacts(groups: ObservationGroups): Fact[] {
       id: 'fact-011',
       artifact_id: 'art-008',
       statement: 'OpenSearch Serverless bills its 2 OCU floor even with zero search traffic.',
+      plain: null,
       subject: 'OpenSearch Serverless', predicate: 'bills', object: 'a 2 OCU floor regardless of traffic',
       evidence_observation_ids: obsIds(groups.C17, 0),
       confidence: 0.96,
@@ -1315,6 +1369,7 @@ function seedFacts(groups: ObservationGroups): Fact[] {
       id: 'fact-012',
       artifact_id: 'art-008',
       statement: 'Aurora Serverless v2 never scales below its 0.5 ACU floor, billing roughly $45/month even idle.',
+      plain: null,
       subject: 'Aurora Serverless v2', predicate: 'bills', object: 'a 0.5 ACU floor (~$45/mo) even idle',
       evidence_observation_ids: obsIds(groups.C18, 0),
       confidence: 0.96,
@@ -1326,30 +1381,42 @@ function seedFacts(groups: ObservationGroups): Fact[] {
     // ordinals run 1..n with no gap inside one artifact, and a supporting
     // claim on the same artifact keeps `ordinal: null` and `supports`.
     ...steps('art-009', [
-      ['fact-013', 'Leave COGNITO_CALLBACK_URL unset so the picker keeps working', obsIds(groups.C9, 1), 0.86],
-      ['fact-014', 'Point local dev at a localhost callback, which Cognito exempts from the HTTPS rule', obsIds(groups.C9, 2), 0.88],
-      ['fact-015', 'Put an HTTPS front door up on the new origin', obsIds(groups.C9, 0), 0.84],
-      ['fact-016', 'Set the callback and confirm ssoEnabled from GET /api/auth/config', obsIds(groups.C9, 0), 0.82],
+      ['fact-013', 'Leave COGNITO_CALLBACK_URL unset so the picker keeps working', obsIds(groups.C9, 1), 0.86,
+        'Leave single sign-on off so people can still pick their account.'],
+      ['fact-014', 'Point local dev at a localhost callback, which Cognito exempts from the HTTPS rule', obsIds(groups.C9, 2), 0.88,
+        'Test locally first, on a localhost address that Cognito allows.'],
+      ['fact-015', 'Put an HTTPS front door up on the new origin', obsIds(groups.C9, 0), 0.84,
+        'Set up a secure (HTTPS) address for the new site.'],
+      ['fact-016', 'Set the callback and confirm ssoEnabled from GET /api/auth/config', obsIds(groups.C9, 0), 0.82,
+        'Turn single sign-on on and confirm the app reports it as enabled.'],
     ]),
     {
       id: 'fact-017',
       artifact_id: 'art-009',
       statement: 'Cognito rejects a non-localhost http callback URL before any application code runs.',
+      plain: null,
       subject: 'a non-localhost http callback', predicate: 'is rejected by', object: 'Cognito, before the BFF sees the request',
       evidence_observation_ids: obsIds(groups.C9, 0),
       confidence: 0.9,
       ordinal: null,
     },
     ...steps('art-010', [
-      ['fact-018', 'Flag the tenant’s SAML shim instead of deleting it', obsIds(groups.C10, 2), 0.87],
-      ['fact-019', 'Confirm no active session is forced out by the flip', obsIds(groups.C10, 1), 0.85],
-      ['fact-020', 'Flip the tenant on its own schedule, never in one flag-day cutover', obsIds(groups.C10, 0), 0.85],
-      ['fact-021', 'Flip back to SAML if login misbehaves', obsIds(groups.C10, 2), 0.83],
+      ['fact-018', 'Flag the tenant’s SAML shim instead of deleting it', obsIds(groups.C10, 2), 0.87,
+        'Keep the existing sign-in available as a fallback.'],
+      ['fact-019', 'Confirm no active session is forced out by the flip', obsIds(groups.C10, 1), 0.85,
+        'Check that active sessions stay signed in.'],
+      ['fact-020', 'Flip the tenant on its own schedule, never in one flag-day cutover', obsIds(groups.C10, 0), 0.85,
+        'Switch one customer and verify sign-in.'],
+      ['fact-021', 'Flip back to SAML if login misbehaves', obsIds(groups.C10, 2), 0.83,
+        'Restore the previous sign-in if the checks fail.'],
     ]),
     ...steps('art-011', [
-      ['fact-022', 'Attribute the spend to the owning initiative — no shared bucket', obsIds(groups.C16, 1), 0.89],
-      ['fact-023', 'Name the floor removed and the initiative billed in the proposal', obsIds(groups.C16, 2), 0.87],
-      ['fact-024', 'Bring the dollar figure to the meeting', obsIds(groups.C16, 0), 0.9],
+      ['fact-022', 'Attribute the spend to the owning initiative — no shared bucket', obsIds(groups.C16, 1), 0.89,
+        'Charge the cost to the initiative that owns it, not a shared budget.'],
+      ['fact-023', 'Name the floor removed and the initiative billed in the proposal', obsIds(groups.C16, 2), 0.87,
+        'Say in the proposal what gets removed and who is billed for it.'],
+      ['fact-024', 'Bring the dollar figure to the meeting', obsIds(groups.C16, 0), 0.9,
+        'Bring the dollar amount to the meeting.'],
     ]),
   ];
 }
@@ -1358,12 +1425,13 @@ function seedFacts(groups: ObservationGroups): Fact[] {
  *  so a step cannot be numbered twice or skip a number by proofreading. */
 function steps(
   artifactId: string,
-  rows: Array<[id: string, statement: string, evidence: string[], confidence: number]>,
+  rows: Array<[id: string, statement: string, evidence: string[], confidence: number, plain?: string]>,
 ): Fact[] {
-  return rows.map(([id, statement, evidence, confidence], i) => ({
+  return rows.map(([id, statement, evidence, confidence, plain], i) => ({
     id,
     artifact_id: artifactId,
     statement,
+    plain: plain ?? null,
     subject: statement, predicate: 'step_of', object: artifactId,
     evidence_observation_ids: evidence,
     confidence,
@@ -1510,12 +1578,14 @@ function seedProcedureApplications(): ProcedureApplication[] {
   const applied = (
     procedureId: string, session: string, box: string, hAgo: number,
     outcome: ApplicationOutcome, failedAtStepId: string | null, note: string | null,
+    plain: { advice: string; reason: string } | null = null,
   ): ProcedureApplication => {
     seq += 1;
     return {
       id: `papp-${String(seq).padStart(3, '0')}`,
       procedure_id: procedureId, session_id: session, box_id: box, repo: REPO.AUTH,
       applied_at: clock.hoursAgo(hAgo), outcome, failed_at_step_id: failedAtStepId, note,
+      advice: plain?.advice ?? null, plain_reason: plain?.reason ?? null,
     };
   };
   return [
@@ -1525,7 +1595,10 @@ function seedProcedureApplications(): ProcedureApplication[] {
     applied('art-009', 'sess-auth-04', 'box-auth-04', 1, 'succeeded', null, null),
     applied('art-010', 'sess-auth-05', 'box-auth-05', 6, 'succeeded', null, null),
     applied('art-010', 'sess-auth-06', 'box-auth-06', 1.5, 'failed', 'fact-020',
-      'flag flipped but the hosted-UI redirect still resolved to the old domain'),
+      'flag flipped but the hosted-UI redirect still resolved to the old domain',
+      // The same failure for the next reader of the guide: `note` stays the
+      // operator's record, these two are what the guide's run warning reads.
+      { advice: 'Check the redirect before you use this', reason: 'sign-in still pointed to the old service' }),
   ];
 }
 
@@ -1711,6 +1784,9 @@ function largeArtifacts(): ArtifactRow[] {
       type: LARGE_TYPES[i % LARGE_TYPES.length]!,
       title: `Load-corpus artifact ${a}: what the fleet learned about ${largeRepo(i).repo.split('/').pop()}`,
       summary: `Distilled from ${clusterIds.length} generated clusters — present so the artifact list, its filters and the lineage graph have volume to render.`,
+      // Load volume, not a guide anyone wrote for a reader — the same null a
+      // compaction-minted artifact carries.
+      when_this_helps: null,
       body_markdown: `## Generated\nOne of the high-volume world's artifacts, distilled from ${clusterIds.join(' and ')}.`,
       cluster_ids: clusterIds,
       facts: Array.from({ length: LARGE.clustersPerArtifact }, (_, f) => `fact-L${pad(i * LARGE.clustersPerArtifact + f + 1, 2)}`),
@@ -1740,6 +1816,7 @@ function largeFacts(): Fact[] {
       id: `fact-L${pad(i + 1, 2)}`,
       artifact_id: `art-L${artifactIndex + 1}`,
       statement: `Load-corpus fact ${i + 1}: the generated cluster it cites is evidenced by its own observations.`,
+      plain: null,
       subject: `cl-L${pad(clusterIndex + 1, 2)}`,
       predicate: 'supports',
       object: `art-L${artifactIndex + 1}`,

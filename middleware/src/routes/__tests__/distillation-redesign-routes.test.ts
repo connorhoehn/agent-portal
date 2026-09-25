@@ -87,7 +87,9 @@ describe('GET /api/distillation/facets', () => {
       }
     }
     const obs = res.body.repos.find((r: { value: string }) => r.value === 'connorhoehnslalom/orgiq-observability');
-    expect(obs.label).toBe('orgiq-observability');
+    // repoDisplayName: last segment, `orgiq-` dropped — the same label a
+    // guide's based_on row shows for the repo.
+    expect(obs.label).toBe('observability');
     const items = await request(buildApp()).get(`/api/distillation/items?level=L2&repo=${encodeURIComponent(obs.value)}&limit=200`);
     expect(items.body.total).toBe(obs.count);
     const initiative = res.body.initiatives.find((i: { value: string }) => i.value === 'p-observability');
