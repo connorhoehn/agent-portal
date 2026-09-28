@@ -169,6 +169,7 @@ def main():
 
     schema_files = [
         'orgiq_schema.sql',
+        'search_workspace_schema.sql',
         'identity_schema.sql',
         'observability_schema.sql',
         'observability_authz_schema.sql',

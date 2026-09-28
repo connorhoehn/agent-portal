@@ -577,3 +577,16 @@ describe('POST /api/distillation/procedures/:id/apply', () => {
     expect(after.body.health.status).toBe('unproven');
   });
 });
+
+
+describe('GET /api/distillation/relationships/:kind/:id', () => {
+  it('is readable without ManageBots and rejects missing records and unknown kinds', async () => {
+    gateOpen.value = false;
+    const app = buildApp();
+    const valid = await request(app).get('/api/distillation/relationships/promotion/promo-aurora-cold-start');
+    expect(valid.status).toBe(200);
+    expect(Array.isArray(valid.body.links)).toBe(true);
+    expect((await request(app).get('/api/distillation/relationships/promotion/missing')).status).toBe(404);
+    expect((await request(app).get('/api/distillation/relationships/unknown/art-001')).status).toBe(400);
+  });
+});

@@ -4,13 +4,14 @@ import { asyncHandler } from '../lib/async-handler.js';
 import { normalizeRuntimeSessionId } from '../lib/runtime-session.js';
 import { agentStreamMiddleware, type AgentStream } from '@connorhoehnslalom/realtime-modules/agent-streaming';
 import type { Request as ExpressRequest } from 'express';
-import { agentcore, aurora } from '../providers/index.js';
+import { agentcore } from '../providers/index.js';
 import { detectIntervention, recordInvocation, snippet } from '../lib/invocations.js';
 import { listEvents, recordTurn, type StoredToolCall } from '../providers/memory.js';
 import { maybeGenerateTitle } from '../lib/session-titles.js';
 import { requireAction, requireTenant, isAllowed, resolveSession } from '../lib/authz.js';
 import { annotateToolResult } from '../lib/answer-sources.js';
 import { degradedFields } from '../lib/upstream.js';
+import { parseSearchSelection, numberSearchRecords, searchContextMessage } from '../lib/search-context.js';
 
 export const agentsRouter = Router();
 
@@ -113,14 +114,15 @@ function agentTenant(agentId: string): 'assessment' | 'orgiq' | null {
   // The assessment scorer/drafter also gate tenant in-process
   // (agents/_shared/tenant_guard.py); this is the route-layer floor that
   // keeps an orgiq session from ever reaching them.
-  if (/(^|-)assessment-/.test(agentId)) return 'assessment';
-  if (/supervisor/.test(agentId)) return null; // serves all tenants
+  const normalized = agentId.toLowerCase().replace(/_/g, '-');
+  if (/(^|-)assessment-/.test(normalized)) return 'assessment';
+  if (/supervisor/.test(normalized)) return null; // serves all tenants
   return 'orgiq';
 }
 
 function requireAgentTenant(req: import('express').Request, res: import('express').Response, next: import('express').NextFunction): void {
   const agentId = String(req.params['agentId'] ?? '');
-  const session = req.session;
+  const session = resolveSession(req);
   const required = agentTenant(agentId);
   if (session && required && session.tenant !== required && session.role !== 'admin') {
     res.status(403).json({ error: 'Forbidden', requiredTenant: required, agentId });
@@ -177,40 +179,26 @@ async function requireAgentCapability(
   }
 }
 
-agentsRouter.post('/:agentId/invoke', requireAction('Search'), requireAgentTenant, requireAgentCapability, agentStreamMiddleware(async (req: ExpressRequest, stream: AgentStream, signal: AbortSignal) => {
+agentsRouter.post('/:agentId/invoke', requireAction('Search'), requireAgentTenant, requireAgentCapability, asyncHandler(async (req, _res, next) => { parseSearchSelection(req.body?.selection); next(); }), agentStreamMiddleware(async (req: ExpressRequest, stream: AgentStream, signal: AbortSignal) => {
   const agentId = String(req.params['agentId'] ?? '');
   const { message, sessionId, actorId, selection } = req.body as {
     message?: string;
     sessionId?: string;
     actorId?: string;
-    selection?: { peopleIds?: string[] };
+    selection?: unknown;
   };
   const rawUserMessage = message ?? '';
   const canonicalSessionId = deriveSessionId(req);
 
-  // Selection enrichment — prepend people context if the explore page sent IDs.
-  let userMessage = rawUserMessage;
-  const selectedIds = selection?.peopleIds ?? [];
-  if (selectedIds.length > 0) {
-    try {
-      const snap = await aurora.fetchGraph();
-      const byId = new Map(snap.nodes.map((p) => [p.id, p]));
-      const lines = selectedIds
-        .map((id) => byId.get(id))
-        .filter((p): p is NonNullable<typeof p> => Boolean(p))
-        .map((p) => `- ${p.name} (id=${p.id}) — ${p.title}, ${p.department}, skills: ${p.skills.slice(0, 6).join(', ') || '(none)'}`);
-      if (lines.length > 0) {
-        userMessage = [
-          `Some context about ${lines.length} people I want to ask about:`,
-          ...lines,
-          ``,
-          rawUserMessage,
-        ].join('\n');
-      }
-    } catch (err) {
-      console.warn('[agents] selection enrichment failed:', (err as Error).message);
-    }
-  }
+  // Only server-resolved records enter context. Existing runtime capabilities
+  // still determine what this agent may execute; selection grants no authority.
+  const refs = parseSearchSelection(selection);
+  const principal = resolveSession(req);
+  const { resolveSearchContext } = refs.length ? await import('../providers/search.js') : { resolveSearchContext: null };
+  const context = refs.length && principal && resolveSearchContext
+    ? await resolveSearchContext(principal, refs) : { records: [], edges: [] };
+  const contextRecords = numberSearchRecords(context.records);
+  const userMessage = searchContextMessage(rawUserMessage, contextRecords, context.edges);
 
   const startedAt = new Date();
   const agentName = await resolveAgentName(agentId);
@@ -263,6 +251,16 @@ agentsRouter.post('/:agentId/invoke', requireAction('Search'), requireAgentTenan
   // behind it. These ride along on the Memory event (capped in
   // lib/turn-tool-calls) and restore into the shape the live stream produces.
   const turnToolCalls = new Map<string, StoredToolCall>();
+  if (contextRecords.length > 0) {
+    const id = randomUUID();
+    const result = JSON.stringify({ records: contextRecords, edges: context.edges });
+    const args = JSON.stringify({ records: refs });
+    stream.toolCallStart(id, 'search_context');
+    stream.toolCallArgs(id, args);
+    stream.toolCallEnd(id);
+    stream.toolCallResult(randomUUID(), id, result);
+    turnToolCalls.set(id, { id, name: 'search_context', args, result });
+  }
 
   try {
     for await (const event of agentcore.invokeAgentStreaming(agentId, invokePayload)) {
@@ -377,7 +375,7 @@ agentsRouter.post('/:agentId/invoke', requireAction('Search'), requireAgentTenan
       void recordTurn({
         sessionId: canonicalSessionId,
         ...(actorId ? { actorId } : {}),
-        userMessage,
+        userMessage: rawUserMessage,
         assistantMessage: fullText,
         toolCalls: Array.from(turnToolCalls.values()),
       });
@@ -412,7 +410,7 @@ agentsRouter.post('/:agentId/invoke', requireAction('Search'), requireAgentTenan
     void recordTurn({
       sessionId: canonicalSessionId,
       ...(actorId ? { actorId } : {}),
-      userMessage,
+      userMessage: rawUserMessage,
       assistantMessage: fullText,
       toolCalls: Array.from(turnToolCalls.values()),
     });

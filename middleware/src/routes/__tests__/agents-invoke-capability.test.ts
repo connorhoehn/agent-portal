@@ -146,3 +146,28 @@ describe('POST /api/agents/:agentId/invoke — ManageIngest gate on write agents
     expect(res.body).toMatchObject({ error: 'Forbidden', action: 'Search' });
   });
 });
+
+it('rejects invalid selected references before opening a stream', async () => {
+  allowOnly('Search');
+  const res = await request(buildApp()).post('/api/agents/orgiq-supervisor/invoke')
+    .send({ message: 'hi', selection: { records: [{ type: 'administrator', id: 'a' }] } });
+  expect(res.status).toBe(400);
+  expect(res.body.error).toMatch(/selected record/);
+});
+it('selected records cannot grant write-agent authority', async () => {
+  allowOnly('Search');
+  const res = await request(buildApp()).post('/api/agents/orgiq-graph-builder/invoke')
+    .send({ message: 'hi', selection: { records: [{ type: 'knowledge', id: 'published-guide' }] } });
+  expect(res.status).toBe(403);
+  expect(res.body.action).toBe('ManageIngest');
+});
+
+it.each(['orgiq-assessment-scorer', 'orgiq_assessment_scorer', 'orgiq-assessment-drafter', 'orgiq_assessment_drafter'])('an explicit orgiq specialist choice cannot invoke cross-tenant %s', async agentId => {
+  allowOnly('Search', 'ManageIngest');
+  const app = express(); app.use(express.json());
+  app.use((req, _res, next) => { req.session = { sub: 'orgiq-member', role: 'member', tenant: 'orgiq', grants: { orgiq: ['member'] }, iat: 1 }; next(); });
+  app.use('/api/agents', agentsRouter); app.use(errorHandler);
+  const response = await request(app).post(`/api/agents/${agentId}/invoke`).send({ message: 'hello' });
+  expect(response.status).toBe(403);
+  expect(response.body).toMatchObject({ requiredTenant: 'assessment', agentId });
+});

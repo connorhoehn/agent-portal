@@ -10,7 +10,9 @@ import { errorHandler } from './lib/async-handler.js';
 import { sessionMiddleware, setGrantsResolver } from './lib/session.js';
 import { getUser as getIdentityUser } from './providers/identity.js';
 import { agentsRouter } from './routes/agents.js';
+import { savedSearchesRouter } from './routes/saved-searches.js';
 import { graphRouter } from './routes/graph.js';
+import { searchRouter } from './routes/search.js';
 import { rosterRouter } from './routes/roster.js';
 import { scoresRouter } from './routes/scores.js';
 import { decisionsRouter } from './routes/decisions.js';
@@ -166,6 +168,7 @@ app.use('/api/agents', requireSession('ViewAgents'), agentsRouter);
 // resolve without going through the gated graph router.
 // Org-graph surfaces are orgiq-tenant data: sessions parked in another tenant
 // are rejected here (the cross-tenant admin role passes any tenant guard).
+app.use('/api/search', searchRouter);
 app.use('/api/graph/decisions', requireTenant('orgiq'), decisionsRouter);
 app.use('/api/graph/projects', requireTenant('orgiq'), projectsRouter);
 // Design reviews — the ADR threads that gate initiative designs. Session
@@ -198,6 +201,7 @@ app.use('/api/distillation', requireTenant('orgiq'), requireSession('ViewDistill
 // are tenant-open; the router gates its POST/PATCH per-route on
 // DispatchAgentRun so board writes need the marketplace authority, not
 // merely a seat in the tenant.
+app.use('/api/saved-searches', savedSearchesRouter);
 app.use('/api/graph', requireTenant('orgiq'), workItemsRouter);
 // The org roster + relationship graph is the org-chart surface: tenant-scoped
 // AND gated on ViewOrgChart (every orgiq role holds it; a grantless anonymous

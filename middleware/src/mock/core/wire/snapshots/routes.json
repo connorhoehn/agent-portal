@@ -168,17 +168,17 @@
     {
       "method": "GET",
       "path": "/api/agents",
-      "source": "src/routes/agents.ts:40"
+      "source": "src/routes/agents.ts:41"
     },
     {
       "method": "POST",
       "path": "/api/agents/:agentId/invoke",
-      "source": "src/routes/agents.ts:180"
+      "source": "src/routes/agents.ts:182"
     },
     {
       "method": "GET",
       "path": "/api/agents/:agentId/metrics",
-      "source": "src/routes/agents.ts:45"
+      "source": "src/routes/agents.ts:46"
     },
     {
       "method": "GET",
@@ -938,127 +938,132 @@
     {
       "method": "GET",
       "path": "/api/distillation/artifacts",
-      "source": "src/routes/distillation.ts:211"
+      "source": "src/routes/distillation.ts:221"
     },
     {
       "method": "POST",
       "path": "/api/distillation/artifacts/:id/publish",
-      "source": "src/routes/distillation.ts:228"
+      "source": "src/routes/distillation.ts:238"
     },
     {
       "method": "POST",
       "path": "/api/distillation/compact",
-      "source": "src/routes/distillation.ts:117"
+      "source": "src/routes/distillation.ts:127"
     },
     {
       "method": "GET",
       "path": "/api/distillation/compactions",
-      "source": "src/routes/distillation.ts:91"
+      "source": "src/routes/distillation.ts:101"
     },
     {
       "method": "GET",
       "path": "/api/distillation/compactions/:id",
-      "source": "src/routes/distillation.ts:131"
+      "source": "src/routes/distillation.ts:141"
     },
     {
       "method": "GET",
       "path": "/api/distillation/facets",
-      "source": "src/routes/distillation.ts:164"
-    },
-    {
-      "method": "GET",
-      "path": "/api/distillation/facts/:id/lineage",
-      "source": "src/routes/distillation.ts:236"
-    },
-    {
-      "method": "GET",
-      "path": "/api/distillation/ingest",
-      "source": "src/routes/distillation.ts:86"
-    },
-    {
-      "method": "GET",
-      "path": "/api/distillation/items",
-      "source": "src/routes/distillation.ts:144"
-    },
-    {
-      "method": "GET",
-      "path": "/api/distillation/items/:id",
       "source": "src/routes/distillation.ts:174"
     },
     {
       "method": "GET",
+      "path": "/api/distillation/facts/:id/lineage",
+      "source": "src/routes/distillation.ts:246"
+    },
+    {
+      "method": "GET",
+      "path": "/api/distillation/ingest",
+      "source": "src/routes/distillation.ts:96"
+    },
+    {
+      "method": "GET",
+      "path": "/api/distillation/items",
+      "source": "src/routes/distillation.ts:154"
+    },
+    {
+      "method": "GET",
+      "path": "/api/distillation/items/:id",
+      "source": "src/routes/distillation.ts:184"
+    },
+    {
+      "method": "GET",
       "path": "/api/distillation/items/:id/lineage",
-      "source": "src/routes/distillation.ts:203"
+      "source": "src/routes/distillation.ts:213"
     },
     {
       "method": "GET",
       "path": "/api/distillation/items/:id/sources",
-      "source": "src/routes/distillation.ts:187"
+      "source": "src/routes/distillation.ts:197"
     },
     {
       "method": "GET",
       "path": "/api/distillation/levels",
-      "source": "src/routes/distillation.ts:75"
+      "source": "src/routes/distillation.ts:85"
     },
     {
       "method": "GET",
       "path": "/api/distillation/library/:libraryItemId/provenance",
-      "source": "src/routes/distillation.ts:280"
+      "source": "src/routes/distillation.ts:290"
     },
     {
       "method": "GET",
       "path": "/api/distillation/procedures",
-      "source": "src/routes/distillation.ts:295"
+      "source": "src/routes/distillation.ts:305"
     },
     {
       "method": "GET",
       "path": "/api/distillation/procedures/:id",
-      "source": "src/routes/distillation.ts:301"
+      "source": "src/routes/distillation.ts:311"
     },
     {
       "method": "GET",
       "path": "/api/distillation/procedures/:id/applications",
-      "source": "src/routes/distillation.ts:309"
+      "source": "src/routes/distillation.ts:319"
     },
     {
       "method": "POST",
       "path": "/api/distillation/procedures/:id/apply",
-      "source": "src/routes/distillation.ts:334"
+      "source": "src/routes/distillation.ts:344"
     },
     {
       "method": "GET",
       "path": "/api/distillation/procedures/:id/runs",
-      "source": "src/routes/distillation.ts:318"
+      "source": "src/routes/distillation.ts:328"
+    },
+    {
+      "method": "GET",
+      "path": "/api/distillation/relationships/:kind/:id",
+      "source": "src/routes/distillation.ts:69"
     },
     {
       "method": "GET",
       "path": "/api/distillation/replication",
-      "source": "src/routes/distillation.ts:81"
+      "source": "src/routes/distillation.ts:91"
     },
     {
       "method": "GET",
-      "path": "/api/distillation/review",
-      "source": "src/routes/distillation.ts:245"
-    },
-    {
-      "method": "POST",
       "path": "/api/distillation/review",
       "source": "src/routes/distillation.ts:255"
     },
     {
       "method": "POST",
+      "path": "/api/distillation/review",
+      "source": "src/routes/distillation.ts:265"
+    },
+    {
+      "method": "POST",
       "path": "/api/distillation/review/:id",
-      "source": "src/routes/distillation.ts:268"
+      "source": "src/routes/distillation.ts:278"
     },
     {
       "method": "GET",
       "path": "/api/distillation/sampling",
-      "source": "src/routes/distillation.ts:104"
+      "source": "src/routes/distillation.ts:114"
     },
     {
       "method": "GET",
       "path": "/api/distillation/sessions/:id",
-      "source": "src/routes/distillation.ts:195"
+      "source": "src/routes/distillation.ts:205"
     },
     {
       "method": "GET",
@@ -1293,7 +1298,7 @@
     {
       "method": "GET",
       "path": "/api/health",
-      "source": "src/index.ts:147"
+      "source": "src/index.ts:149"
     },
     {
       "method": "GET",
@@ -2302,6 +2307,26 @@
     },
     {
       "method": "GET",
+      "path": "/api/saved-searches",
+      "source": "src/routes/saved-searches.ts:47"
+    },
+    {
+      "method": "POST",
+      "path": "/api/saved-searches",
+      "source": "src/routes/saved-searches.ts:48"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/saved-searches/:id",
+      "source": "src/routes/saved-searches.ts:54"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/saved-searches/:id",
+      "source": "src/routes/saved-searches.ts:49"
+    },
+    {
+      "method": "GET",
       "path": "/api/scores/:personId",
       "source": "src/routes/scores.ts:107"
     },
@@ -2394,6 +2419,16 @@
       "method": "DELETE",
       "path": "/api/sdlc/policies/:id",
       "source": "src/routes/sdlc.ts:65"
+    },
+    {
+      "method": "GET",
+      "path": "/api/search",
+      "source": "src/routes/search.ts:8"
+    },
+    {
+      "method": "GET",
+      "path": "/api/search/records",
+      "source": "src/routes/search.ts:22"
     },
     {
       "method": "GET",
@@ -2618,7 +2653,7 @@
     {
       "method": "GET",
       "path": "/health",
-      "source": "src/index.ts:146"
+      "source": "src/index.ts:148"
     },
     {
       "method": "DELETE",

@@ -1,7 +1,7 @@
 {
-  "capturedAt": "2026-09-25T03:32:24.518Z",
-  "serverHandlerSha": "ec3fec49a2385d004442efb9a9d41842de288e21bf4005f323f780967b625093",
-  "baseUrl": "http://127.0.0.1:3022",
+  "capturedAt": "2026-09-28T20:31:11.188Z",
+  "serverHandlerSha": "d50fe2086ef974b86319c95405e82f0a9f6d54ca9109db3afd4f93e73028b5c3",
+  "baseUrl": "http://127.0.0.1:3001",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
     "agentcore",
@@ -169,6 +169,12 @@
       }
     },
     "DELETE /api/observability/harness/cases/:id": {
+      "refused": {
+        "rule": "destructive",
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The only exceptions are deletes somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
+      }
+    },
+    "DELETE /api/saved-searches/:id": {
       "refused": {
         "rule": "destructive",
         "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The only exceptions are deletes somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
@@ -557,6 +563,12 @@
       "values": {},
       "sent": []
     },
+    "PATCH /api/saved-searches/:id": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
+    },
     "PATCH /api/sprints/:sprintId/items": {
       "persona": "orgiq/admin",
       "status": 200,
@@ -728,6 +740,7 @@
           "prompt-eval-cases",
           "prompt-eval-runs",
           "prompt-versions",
+          "saved-searches",
           "scores",
           "sdlc-change-gates",
           "sdlc-change-reviews",
@@ -2584,16 +2597,7 @@
       ]
     },
     "POST /api/observability/quality/feedback": {
-      "persona": "orgiq/admin",
-      "status": 200,
-      "shape": {
-        "$": "object",
-        "invocationId": "string",
-        "label": "string",
-        "note": "string",
-        "ok": "boolean"
-      },
-      "values": {},
+      "skipped": "HTTP 404: invocation not found (orgiq/admin)",
       "sent": [
         "invocationId",
         "label",
@@ -2714,6 +2718,12 @@
         "action",
         "experienceId"
       ]
+    },
+    "POST /api/saved-searches": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
     },
     "POST /api/scores/analysis": {
       "skipped": "HTTP 503: Aurora is mocked — no scores to analyse (orgiq/admin)",

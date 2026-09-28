@@ -11,6 +11,7 @@
 // authority as standing up a fleet mission: ManageBots.
 
 import { Router } from 'express';
+import { assetRelationships } from '../providers/asset-relationships.js';
 import { asyncHandler, NotFoundError, ValidationError } from '../lib/async-handler.js';
 import { requireAction, resolveSession } from '../lib/authz.js';
 import {
@@ -63,6 +64,15 @@ function enumOrUndefined<T extends string>(raw: unknown, field: string, allowed:
 }
 
 export const distillationRouter: Router = Router();
+
+// Cross-surface links retain the source records and their own approval gates.
+distillationRouter.get('/relationships/:kind/:id', asyncHandler(async (req, res) => {
+  const kind = String(req.params['kind']);
+  if (kind !== 'knowledge' && kind !== 'library' && kind !== 'promotion') throw new ValidationError('unknown relationship kind');
+  const links = await assetRelationships(kind, String(req.params['id']));
+  if (!links) throw new NotFoundError('record not found');
+  res.json({ links });
+}));
 
 const manageGate = requireAction('ManageBots');
 

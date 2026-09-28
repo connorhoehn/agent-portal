@@ -129,7 +129,26 @@ function capOne(tc: StoredToolCall): StoredToolCall {
   }
 
   if (typeof tc.result === 'string' && tc.result) {
-    if (tc.result.length <= MAX_RESULT_CHARS) {
+    if (tc.name === 'search_context' && tc.result.length > MAX_RESULT_CHARS) {
+      // Structured record citations must survive restoration as valid JSON with
+      // stable numbers. Keep their existing IDs/links; omit bulky excerpts.
+      try {
+        const parsed = JSON.parse(tc.result) as { records: Array<Record<string, unknown>>; edges?: Array<{ source: string; target: string }> };
+        const records = parsed.records.map(({ description: _description, ...record }) => record);
+        let kept = records;
+        const serialize = () => {
+          const keys = new Set(kept.map(record => `${record['type']}:${record['id']}`));
+          return JSON.stringify({ records: kept, edges: (parsed.edges ?? []).filter(edge => keys.has(edge.source) && keys.has(edge.target)), omitted: records.length - kept.length });
+        };
+        let json = serialize();
+        while (json.length > 48_000 && kept.length) {
+          kept = kept.slice(0, -1);
+          json = serialize();
+        }
+        out.result = json;
+        out.truncated = true;
+      } catch { out.result = JSON.stringify({ records: [], edges: [], unavailable: true }); out.truncated = true; }
+    } else if (tc.result.length <= MAX_RESULT_CHARS) {
       out.result = tc.result;
     } else {
       const docs = distillRetrievalResult(tc.result);
