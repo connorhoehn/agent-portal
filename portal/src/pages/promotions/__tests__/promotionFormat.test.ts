@@ -64,8 +64,8 @@ test('nextStep: a drifted candidate names the drift before the normal approval p
 
 test('nextStep: terminal states read as done, not as a call to action', () => {
   assert.match(nextStep(candidate({ status: 'dismissed' })), /not going forward/);
-  assert.match(nextStep(candidate({ status: 'promoted', proposedKind: 'skill' })), /running unattended/);
-  assert.match(nextStep(candidate({ status: 'promoted', proposedKind: 'insight' })), /library as an insight/);
+  assert.match(nextStep(candidate({ status: 'promoted', proposedKind: 'skill' })), /before enabling execution/);
+  assert.match(nextStep(candidate({ status: 'promoted', proposedKind: 'insight' })), /Agent library as an insight/);
 });
 
 // ─── isTerminalStatus / allowedActions ───────────────────────────────────────

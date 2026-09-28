@@ -34,7 +34,7 @@ test('source rows: kind label, fallback title, link into Knowledge', () => {
 test('sourceHref for a guide and an unknown kind', () => {
   assert.equal(sourceHref({ id: 'art-1', kind: 'artifact' }), '/iq/distillation/knowledge?item=art-1');
   assert.equal(sourceHref({ id: 'x', kind: 'mystery' }), null);
-  assert.equal(sourceKindLabel('library_item'), 'Library asset');
+  assert.equal(sourceKindLabel('library_item'), 'Agent library asset');
 });
 
 test('sources graph: the item on the right, each distinct source → item', () => {

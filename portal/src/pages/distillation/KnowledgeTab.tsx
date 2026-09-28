@@ -30,7 +30,7 @@ import { useDistillationChannel } from '../../hooks/useDistillationChannel';
 import { useFetch } from '../../hooks/useFetch';
 import type { DistillationOutletContext } from './DistillationModule';
 import {
-  knowledgeHref, levelForView, parseKnowledge, viewForLevel, type KnowledgePatch, type KnowledgeView,
+  knowledgeHref, levelForView, parseKnowledge, viewForLevel, type KnowledgePatch,
 } from './distillationRoutes';
 import { KnowledgeRecord } from './KnowledgeRecord';
 import {
@@ -41,15 +41,6 @@ import { SourcesPanel, useItemSources } from './SourcesPanel';
 import { tierCount } from './tierFlowModel';
 import type { FacetsResponse, Item, TierLevelsResponse } from './types';
 import { useKnowledgeItems } from './useKnowledgeItems';
-
-const LAST_ITEM_KEY = 'orgiq.distillation.knowledge.last';
-
-function readLast(): Partial<Record<KnowledgeView, string>> {
-  try { return JSON.parse(sessionStorage.getItem(LAST_ITEM_KEY) ?? '{}') as Partial<Record<KnowledgeView, string>>; } catch { return {}; }
-}
-function writeLast(v: Partial<Record<KnowledgeView, string>>) {
-  try { sessionStorage.setItem(LAST_ITEM_KEY, JSON.stringify(v)); } catch { /* session-only nicety */ }
-}
 
 /** A single-select facet on the multi-select filter panel: the newest pick wins. */
 function single(sel: string[]): string | null {
@@ -97,21 +88,8 @@ export default function KnowledgeTab() {
     [feed.items, clientFilters.kind, clientFilters.lifecycle, nowMs],
   );
 
-  // ── Selection: ?item=, restored per view, first valid row on entry ──────
-  const lastRef = useRef(readLast());
-  useEffect(() => {
-    if (!state.item) return;
-    lastRef.current = { ...lastRef.current, [state.view]: state.item };
-    writeLast(lastRef.current);
-  }, [state.item, state.view]);
-  useEffect(() => {
-    // An open Sources panel with nothing selected is the lineage deep link's
-    // "choose an item" prompt — do not pick one for the reader.
-    if (state.item || state.panel === 'sources' || feed.loading || rows.length === 0) return;
-    const remembered = lastRef.current[state.view];
-    const pick = remembered && rows.some((r) => r.id === remembered) ? remembered : rows[0].id;
-    go({ item: pick });
-  }, [state.item, state.panel, state.view, feed.loading, rows, go]);
+  // Selection belongs to the URL. Returning to a parent must leave the
+  // record closed instead of immediately selecting it again.
 
   const record = useFetch<Item>(state.item ? `/api/distillation/items/${encodeURIComponent(state.item)}` : null, 0);
   const item = record.data && record.data.id === state.item ? record.data : null;
@@ -258,7 +236,7 @@ export default function KnowledgeTab() {
         ariaLabel: r.ariaLabel,
       }))}
       currentId={state.item}
-      onOpenRow={(row) => go({ item: row.id, tab: null, run: null })}
+      onOpenRow={(row) => go({ item: row.id, tab: null, run: null }, { push: true })}
       storageKey={`distillation.knowledge.${state.view}.groups`}
       data-testid="knowledge-list"
     />
@@ -346,7 +324,7 @@ export default function KnowledgeTab() {
     <ExplorerLayout
       railWidth="ml"
       railTitle="Knowledge"
-      railHeading="prominent"
+      railHeading="caption"
       railLabel="knowledge explorer"
       railHeader={railHeader}
       rail={railBody}
@@ -354,7 +332,15 @@ export default function KnowledgeTab() {
       paneHeader={(
         <ScopeHeader
           variant="crumbs"
-          breadcrumbs={scope.breadcrumbs}
+          breadcrumbs={state.item ? [...scope.breadcrumbs.slice(0, -1), {
+            label: 'Knowledge',
+            href: knowledgeHref({ ...state, item: null, tab: null, run: null, panel: null }),
+            onClick: (event) => {
+              if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+              event.preventDefault();
+              go({ item: null, tab: null, run: null, panel: null }, { push: true });
+            },
+          }, { label: item?.title ?? 'Record' }] : scope.breadcrumbs}
           controls={scope.controls}
           link={scope.link}
           data-testid="distillation-header"

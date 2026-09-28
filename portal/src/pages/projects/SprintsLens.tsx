@@ -2,18 +2,17 @@
 //
 // Sprints are not a separate place — a sprint is one initiative's iteration,
 // so this renders inside /iq/projects (?lens=sprints) as a second zoom on the
-// same program wall. The standalone /iq/sprints page this replaces stacked
-// KPI tiles, a card grid, AND a full work board on one scroll; here the list
-// is the page and the board opens in a drawer for the sprint you pick.
+// same program wall. Selecting a sprint keeps its parent rails visible and
+// opens the board inline; its URL selection survives Back and refresh.
 //
 // Deeper planning (PI planning, capacity) is deliberately out of scope — that
 // is a future tool, not more stacking on this page.
 
 import { useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router';
 import {
   Button,
   CatalogGrid,
-  Drawer,
   EmptyState,
   LoadingState,
   SegmentedControl,
@@ -24,6 +23,7 @@ import {
   ToolbarLabel,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
+import { useUrlState } from '../../lib/useUrlState';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { useSession } from '../../lib/auth';
 import { useCapabilities } from '../../lib/capabilities';
@@ -60,9 +60,22 @@ export function useSprintsLens(enabled = true) {
   // are asked the question — and the read is self-scoped, so it needs no action.
   const canDispatch = can('DispatchAgentRun');
 
-  const [scope, setScope] = useState<'mine' | 'all'>(canRequestAll ? 'all' : 'mine');
-  const [activeOnly, setActiveOnly] = useState(true);
-  const [openId, setOpenId] = useState<string | null>(null);
+  const [params, setParams] = useSearchParams();
+  const scope = canRequestAll && params.get('sprintScope') !== 'mine' ? 'all' : 'mine';
+  const activeOnly = params.get('sprintWindow') !== 'any';
+  const setScope = (next: 'mine' | 'all') => setParams((prev) => {
+    const p = new URLSearchParams(prev);
+    p.set('sprintScope', next);
+    p.delete('sprint');
+    return p;
+  });
+  const setActiveOnly = (next: boolean) => setParams((prev) => {
+    const p = new URLSearchParams(prev);
+    p.set('sprintWindow', next ? 'active' : 'any');
+    p.delete('sprint');
+    return p;
+  });
+  const [openId, setOpenId] = useUrlState<string | null>('sprint', (raw) => raw, (value) => value, { replace: false });
   const [newSprintOpen, setNewSprintOpen] = useState(false);
   const [envelopesOpen, setEnvelopesOpen] = useState(false);
 
@@ -74,6 +87,15 @@ export function useSprintsLens(enabled = true) {
     scope, setScope, activeOnly, setActiveOnly, openId, setOpenId,
     newSprintOpen, setNewSprintOpen, envelopesOpen, setEnvelopesOpen,
     data, isLoading, error, refresh,
+    onCreated: (created: Sprint) => {
+      setParams((prev) => {
+        const p = new URLSearchParams(prev);
+        if (created.status !== 'active') p.set('sprintWindow', 'any');
+        p.set('sprint', created.id);
+        return p;
+      });
+      refresh();
+    },
   };
 }
 
@@ -85,7 +107,7 @@ export function SprintsLens({ view, lens }: { view: 'grid' | 'list'; lens: Sprin
     canRequestAll, canManageSprints, canManageBudgets, canDispatch,
     scope, setScope, activeOnly, setActiveOnly, openId, setOpenId,
     newSprintOpen, setNewSprintOpen, envelopesOpen, setEnvelopesOpen,
-    data, isLoading, error, refresh,
+    data, isLoading, error, refresh, onCreated,
   } = lens;
 
   // "How much of my sprint envelope is left" — the number `decideEnvelope`
@@ -111,15 +133,9 @@ export function SprintsLens({ view, lens }: { view: 'grid' | 'list'; lens: Sprin
   const totals = useMemo(() => sprintTotals(sprints), [sprints]);
   const needsAttention = useMemo(() => atRiskCount(sprints), [sprints]);
 
-  // The drawer tracks the live list — a refetch that drops the open sprint
+  // The detail tracks the live list — a refetch that drops the open sprint
   // (scope switch, filter change) closes it rather than showing stale data.
   const open = sprints.find((s) => s.id === openId) ?? null;
-
-  const handleCreated = (created: Sprint) => {
-    if (activeOnly && created.status !== 'active') setActiveOnly(false);
-    setOpenId(created.id);
-    refresh();
-  };
 
   if (error) {
     return (
@@ -186,7 +202,7 @@ export function SprintsLens({ view, lens }: { view: 'grid' | 'list'; lens: Sprin
 
   return (
     <Stack gap="md">
-      <NewSprintModal open={newSprintOpen} onClose={() => setNewSprintOpen(false)} onCreated={handleCreated} />
+      <NewSprintModal open={newSprintOpen} onClose={() => setNewSprintOpen(false)} onCreated={onCreated} />
 
       {/* The per-envelope breakdown behind the "My envelope" tile. */}
       <EnvelopeDrawer
@@ -195,7 +211,7 @@ export function SprintsLens({ view, lens }: { view: 'grid' | 'list'; lens: Sprin
         data={envelopeData}
       />
 
-      <StatStrip
+      {!open && <StatStrip
         aria-label="Sprint rollup"
         items={[
           {
@@ -239,11 +255,21 @@ export function SprintsLens({ view, lens }: { view: 'grid' | 'list'; lens: Sprin
             ...(envelopes.openable ? { onSelect: () => setEnvelopesOpen(true) } : {}),
           }] : []),
         ]}
-      />
+      />}
 
       {filters}
 
-      {sprints.length === 0 ? (
+      {open ? (
+        <SprintDetail
+          key={open.id}
+          s={open}
+          personId={personId}
+          canManageSprints={canManageSprints}
+          canManageBudgets={canManageBudgets}
+          onChanged={refresh}
+          frameless
+        />
+      ) : sprints.length === 0 ? (
         <EmptyState
           title={scope === 'mine' ? 'No sprints of yours' : 'No sprints'}
           description={
@@ -271,26 +297,6 @@ export function SprintsLens({ view, lens }: { view: 'grid' | 'list'; lens: Sprin
         </CatalogGrid>
       )}
 
-      {/* The board, on demand — not a second page stacked under the list. */}
-      <Drawer
-        open={open != null}
-        onClose={() => setOpenId(null)}
-        aria-label={open?.name ?? 'Sprint detail'}
-        width={880}
-      >
-        {open ? (
-          // frameless: the detail's own DetailHeader is the drawer's header —
-          // a Drawer title above it would say the sprint's name twice.
-          <SprintDetail
-            s={open}
-            personId={personId}
-            canManageSprints={canManageSprints}
-            canManageBudgets={canManageBudgets}
-            onChanged={refresh}
-            frameless
-          />
-        ) : null}
-      </Drawer>
     </Stack>
   );
 }

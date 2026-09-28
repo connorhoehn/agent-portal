@@ -1,5 +1,6 @@
-import { NavLink, Outlet, useLocation } from 'react-router';
-import { Inline, Stack, SubNavLayout, activeNavItemClassName, inactiveNavItemClassName } from '@connorhoehnslalom/ui-components/shared';
+import { BuildSectionLayout } from '../../components/shell/BuildSectionLayout';
+import { Outlet, useLocation } from 'react-router';
+import { Inline, Stack } from '@connorhoehnslalom/ui-components/shared';
 import { KBHealthBadge } from '../../components/kb/KBHealthBadge.js';
 import { useAutomateSpec } from '../work/automateNav';
 
@@ -24,34 +25,7 @@ function AdminLayout() {
   const inAutomate = pathname.startsWith('/admin/bots') || pathname.startsWith('/admin/changes');
 
   if (inAutomate) {
-    return (
-      <SubNavLayout
-        title={automate.title}
-        items={automate.items}
-        storageKey={automate.storageKey}
-        contentAs="section"
-        contentLabel="Automate"
-        renderNavItem={(item, children) => {
-          // startsWith matching (unlike IqLayout's exact match) so
-          // /admin/bots/:id and /admin/changes/:id keep their parent lit —
-          // but '/iq/work' itself must stay exact or it would swallow
-          // /iq/work/queue and /iq/work/findings.
-          const isActive = item.path === '/iq/work'
-            ? pathname === '/iq/work'
-            : pathname.startsWith(item.path);
-          return (
-            <NavLink
-              to={item.path}
-              className={isActive ? activeNavItemClassName : inactiveNavItemClassName}
-            >
-              {children}
-            </NavLink>
-          );
-        }}
-      >
-        <Outlet />
-      </SubNavLayout>
-    );
+    return <BuildSectionLayout title={automate.title} items={automate.items} storageKey={automate.storageKey}><Outlet /></BuildSectionLayout>;
   }
 
   return (

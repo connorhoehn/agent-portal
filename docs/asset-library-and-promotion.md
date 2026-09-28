@@ -9,6 +9,32 @@ prompt a person runs with inputs, an evaluator a pipeline calls with no human
 in it, or a skill the model discovers for itself, and those are most of the
 real use cases.
 
+## Org navigation and review
+
+Build → **Distillation** contains observations (Run notes), patterns and guides.
+Its **Review** area keeps knowledge verdicts separate from **Asset promotions**,
+where candidates retain observations, approval, dry-run results and dismissed
+history. Publishing a guide changes its knowledge lifecycle only; it does not
+activate a skill or authorize an unattended run.
+
+Build → **Agent library** is the reusable asset catalog, including manually
+written assets, inputs, versions, evaluations and usage. `/iq/library` and
+`/iq/library/:assetId` remain stable. Legacy `/iq/promotions` and
+`/iq/promotions/:candidateId` redirect to `/iq/distillation/review?view=promotions`,
+retaining filters, identifiers, extra query parameters and fragments.
+
+`GET /api/distillation/relationships/:kind/:id` joins knowledge, library and
+promotion records by existing identifiers. Publication links use
+`library_item_id`; review links use sample/target IDs. Shared observation IDs
+are labeled as shared evidence, never as proof that one asset published another.
+Unlinked legacy promotion records stay explicitly unlinked. The existing
+promotion provider remains fixture-backed; this consolidation does not invent
+catalog records or activation state for it.
+
+Design discussions, questions, approvals and decision records remain in Designs
+on their initiatives. A linked approved design decision can be referenced as
+evidence; the discussion is not copied into the knowledge catalog.
+
 ## Two declared properties
 
 Every asset declares two things, and almost everything else follows from them.

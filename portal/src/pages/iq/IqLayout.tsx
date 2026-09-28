@@ -1,4 +1,5 @@
-import { Link, Outlet, useLocation } from 'react-router';
+import { BuildSectionLayout } from '../../components/shell/BuildSectionLayout';
+import { Link, Outlet, useLocation, useNavigate } from 'react-router';
 import { SubNavLayout, activeNavItemClassName, inactiveNavItemClassName } from '@connorhoehnslalom/ui-components/shared';
 import { useIqSubNav } from './iqSubNavCatalog';
 
@@ -10,10 +11,32 @@ import { useIqSubNav } from './iqSubNavCatalog';
 
 function IqLayout() {
   const { pathname, search } = useLocation();
+  const navigate = useNavigate();
   const spec = useIqSubNav(pathname);
 
   if (!spec) {
     return <Outlet />;
+  }
+
+  if (pathname.startsWith('/iq/work') || pathname.startsWith('/iq/local-compute')) {
+    return <BuildSectionLayout title={spec.title} items={spec.items} storageKey={spec.storageKey}><Outlet /></BuildSectionLayout>;
+  }
+
+  if (pathname === '/iq/explore') {
+    const entities = new URLSearchParams(search).get('entities') ?? 'all';
+    const view = spec.items.find((item) => new URLSearchParams(item.path.split('?')[1]).get('entities') === entities);
+    return <BuildSectionLayout title={spec.title} items={spec.items} storageKey={spec.storageKey} contentPadding="none"
+      breadcrumbs={[
+        { label: 'Org' },
+        { label: 'Explore', href: '/iq/explore', onClick: (event) => {
+          if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+          event.preventDefault();
+          navigate('/iq/explore');
+        } },
+        { label: view?.label ?? 'All' },
+      ]}>
+      <Outlet key={entities} />
+    </BuildSectionLayout>;
   }
 
   return (

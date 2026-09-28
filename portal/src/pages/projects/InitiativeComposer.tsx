@@ -20,7 +20,8 @@
 
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { ChevronIcon, DropdownMenu, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { ChevronIcon, DropdownMenu } from '@connorhoehnslalom/ui-components/shared';
+import { ComposerDockPlacementContext, FloatingComposerDock } from '@connorhoehnslalom/ui-components/doc-editor';
 import {
   RichChatComposer,
   type ComposerMode,
@@ -36,6 +37,8 @@ import {
 } from '../project-detail/composerPrompts';
 
 export interface InitiativeComposerProps {
+  /** Use the shared document-view toolbar in full-width initiative details. */
+  presentation?: 'compact' | 'document';
   /** What the composer is about: the initiatives list, one initiative, or one work item. */
   subject: ComposerSubject;
   /**
@@ -71,7 +74,7 @@ export function InitiativeComposer(props: InitiativeComposerProps) {
 }
 
 function DockedComposer({
-  subject, setup, onChat, chatUnavailableReason, 'data-testid': testId,
+  subject, setup, onChat, chatUnavailableReason, presentation = 'compact', 'data-testid': testId,
 }: Omit<InitiativeComposerProps, 'setup'> & { setup: ComposerSetup }) {
   const navigate = useNavigate();
   const [mode, setMode] = useState<ComposerMode>('agent');
@@ -97,17 +100,24 @@ function DockedComposer({
   const chatOff = chatUnavailableReason ?? 'This view has no discussion thread — ask the agent instead';
 
   return (
-    <Stack gap="none" className="px-5 pb-4 pt-2" data-testid={testId ?? 'initiative-composer'}>
+    <ComposerDockPlacementContext.Provider value="pinned">
+    <FloatingComposerDock
+      label="Initiative composer"
+      data-testid={testId ?? 'initiative-composer'}
+      className="bg-surface pt-3 [--dock-inset:1.5rem]"
+      composer={
       <RichChatComposer
         key={seed}
         mode={mode}
         onModeChange={setMode}
         modeControl="menu"
-        layout="wide"
-        toolbar="basic"
+        layout="auto"
+        toolbar={presentation === 'document' ? 'editor' : 'compact'}
+        density={presentation === 'document' ? 'comfortable' : 'compact'}
+        modeShortcuts
+        modeTriggers
         backdropTone="none"
         allowAttachments
-        referencesPlacement="start"
         references={references}
         onRemoveReference={() => setWithContext(false)}
         disabledModes={onChat ? ['terminal'] : ['chat', 'terminal']}
@@ -119,9 +129,9 @@ function DockedComposer({
         commands={commands}
         toolbarExtras={(
           <DropdownMenu
-            trigger={<>Workflow <ChevronIcon dir="down" size={14} /></>}
+            trigger={<span className="inline-flex items-center gap-2">Workflow <ChevronIcon dir="down" size={14} /></span>}
             triggerLabel="Workflow"
-            triggerVariant="link"
+            triggerClassName="h-7 px-2 text-xs font-medium text-text-secondary"
             sections={[{
               items: workflows.map((w) => ({
                 label: w.label,
@@ -149,6 +159,7 @@ function DockedComposer({
           return true;
         }}
       />
-    </Stack>
+    } />
+    </ComposerDockPlacementContext.Provider>
   );
 }

@@ -17,27 +17,27 @@ export const HOOK_EVENT_LABEL: Record<HookEvent, string> = {
 };
 
 export const SKILL_STATUS_LABEL: Record<SkillStatus, string> = {
-  current: 'current', stale: 'stale', missing: 'missing',
+  current: 'Up to date', stale: 'Update available', missing: 'Not in library',
 };
 
-/** stale = the library moved past this bundled skill; missing = the library
- *  no longer has it at all, so a chip that reads "missing" is worse than
- *  "stale", not the same shade of bad. */
-export function skillStatusTone(status: SkillStatus): 'success' | 'warning' | 'danger' {
-  return status === 'current' ? 'success' : status === 'stale' ? 'warning' : 'danger';
+/** A newer or unlisted library version does not prove a pinned skill broken. */
+export function skillStatusTone(status: SkillStatus): 'success' | 'info' | 'neutral' {
+  return status === 'current' ? 'success' : status === 'stale' ? 'info' : 'neutral';
 }
 
-/** "2 skills stale · 1 missing" — the one-line answer to "why does my
- *  session not know about X". Says nothing when the bundle is fully current,
- *  rather than "0 stale · 0 missing". */
+/** Neutral update availability, not an operational-health warning. */
 export function driftLine(bundle: Pick<SessionBundle, 'skills'>): string | null {
   const stale = bundle.skills.filter((s) => s.status === 'stale').length;
   const missing = bundle.skills.filter((s) => s.status === 'missing').length;
   if (stale === 0 && missing === 0) return null;
   const parts: string[] = [];
-  if (stale > 0) parts.push(`${stale} skill${stale === 1 ? '' : 's'} stale`);
-  if (missing > 0) parts.push(`${missing} missing`);
+  if (stale > 0) parts.push(`${stale} update${stale === 1 ? '' : 's'} available`);
+  if (missing > 0) parts.push(`${missing} not in library`);
   return parts.join(' · ');
+}
+
+export function versionLabel(version: string): string {
+  return `v${version.replace(/^v/i, '')}`;
 }
 
 /** A SessionStart hook whose command isn't pinned to a fixed script/version —

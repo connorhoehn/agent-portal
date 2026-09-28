@@ -19,7 +19,7 @@ function tiers(over: Partial<Record<'L0' | 'L1' | 'L2', Partial<TierLevel>>> = {
 test('strip: four items and three labelled connectors, in order', () => {
   const m = tierFlowModel(tiers(), 6, { nowMs: NOW });
   assert.deepEqual(m.items.map((i) => [i.id, i.label, i.value]), [
-    ['L0', 'Run notes', 304], ['L1', 'Patterns', 22], ['L2', 'Guides & findings', 11], ['library', 'Library', 6],
+    ['L0', 'Run notes', 304], ['L1', 'Patterns', 22], ['L2', 'Guides & findings', 11], ['library', 'Agent library', 6],
   ]);
   assert.deepEqual(m.connectors.map((c) => c.label), ['Compact', 'Compact', 'Publish']);
   assert.equal(m.items[0].href, '/iq/distillation/knowledge?view=notes');
@@ -92,7 +92,7 @@ test('no verdict at all is unknown — not healthy, not a warning', () => {
   const m = tierFlowModel(bare, null, { nowMs: NOW });
   assert.deepEqual(m.items.map((i) => i.verdict), ['unknown', 'unknown', 'unknown', 'unknown']);
   assert.deepEqual(m.items.map((i) => i.value), [5, null, 2, null], 'legacy items read; missing stays null');
-  assert.equal(m.items[3].ariaLabel, 'Library, linked count unknown');
+  assert.equal(m.items[3].ariaLabel, 'Agent library, linked count unknown');
   assert.equal(m.dot, null);
 });
 

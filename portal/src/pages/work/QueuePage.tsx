@@ -4,7 +4,7 @@
 // short rows you click to get a confirmation modal, not a wall of cards.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router';
+import { Link, useNavigate, useSearchParams } from 'react-router';
 import {
   Button,
   Card,
@@ -50,7 +50,12 @@ export default function QueuePage() {
   const { can, ready } = useCapabilities();
   const canManage = ready && can('ManageDevbox');
 
-  const [filter, setFilter] = useState('all');
+  const [params, setParams] = useSearchParams();
+  const filter = params.get('status') ?? 'all';
+  const setFilter = (status: string) => { const next = new URLSearchParams(params); next.set('status', status); setParams(next); };
+  useEffect(() => {
+    if (params.get('compose') === '1' && canManage) document.getElementById('new-run')?.scrollIntoView({ block: 'start' });
+  }, [params, canManage]);
   const [assigning, setAssigning] = useState<WorkSuggestion | null>(null);
   const [composerBusy, setComposerBusy] = useState(false);
 
@@ -273,7 +278,7 @@ export default function QueuePage() {
   ];
 
   return (
-    <PageSection title="Queue" actions={<GraphUpdatesLink />}>
+    <PageSection title="Runs" actions={<GraphUpdatesLink />}>
       <AssignJobModal
         suggestion={assigning}
         onClose={() => setAssigning(null)}
@@ -377,17 +382,17 @@ export default function QueuePage() {
 
       {/* ── Freeform — for work that is not on any board ── */}
       {canManage && (
-        <TaskComposer
+        <div id="new-run"><TaskComposer
           className="mt-6"
-          title="Or write a job from scratch"
+          title="New run"
           description="An idle computer picks it up within ~10 seconds and works in a microVM with a persistent workspace and git."
           titlePlaceholder="Title — e.g. 'Document the Cedar policy migration'"
           promptPlaceholder="What should the worker do?"
           hint="Runs on the first idle computer · ⌘⏎"
-          submitLabel="Queue job"
+          submitLabel="Queue run"
           busy={composerBusy}
           onSubmit={({ title, prompt }) => void enqueueFreeform(title, prompt)}
-        />
+        /></div>
       )}
     </PageSection>
   );

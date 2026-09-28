@@ -194,7 +194,7 @@ export function JobStatusPill({ status }: { status: string }) {
   const c = runStateChip(status);
   return (
     <Chip tone={c.tone} solid={c.solid} size="xs" className="shrink-0 whitespace-nowrap">
-      {c.label}
+      {status === 'done' ? 'Completed' : c.label}
     </Chip>
   );
 }

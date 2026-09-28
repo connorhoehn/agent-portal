@@ -12,6 +12,7 @@
 // A verdict is optimistic (reviewQueueModel): the counts move, the next
 // pending sample opens, the decided one lands under Reviewed; a failed write
 // rolls the sample back and reopens it. `?sample=` is the selection.
+import PromotionsPage from '../promotions/PromotionsPage';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useOutletContext } from 'react-router';
 import {
@@ -231,6 +232,12 @@ function Claim({
 
 export default function ReviewTab() {
   const location = useLocation();
+  return new URLSearchParams(location.search).get('view') === 'promotions'
+    ? <PromotionsPage /> : <KnowledgeReview />;
+}
+
+function KnowledgeReview() {
+  const location = useLocation();
   const navigate = useNavigate();
   const state = parseReview(location.search);
   const stateRef = useRef(state);
@@ -346,6 +353,7 @@ export default function ReviewTab() {
     <GroupedList
       // md: the rail scale every other rail draws (ui-components 2.397.0).
       size="md"
+      currentStyle="bar"
       groupHeading="label"
       groups={[{ id: state.tab, title: state.tab === 'pending' ? 'Pending' : 'Reviewed', count: rows.length }]}
       rows={rows.map((r) => ({
@@ -377,8 +385,9 @@ export default function ReviewTab() {
 
   return (
     <ExplorerLayout
-      railWidth="ml"
-      railTitle="Review"
+      railWidth="ms"
+      railTitle="Knowledge review"
+      railHeading="caption"
       railLabel="review queue"
       railHeader={railHeader}
       rail={railBody}

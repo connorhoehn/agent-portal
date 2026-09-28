@@ -1,3 +1,5 @@
+import { knowledgeItemHref } from '../distillation/distillationRoutes';
+import { AssetRelationships } from '../distillation/AssetRelationships';
 // One asset, in the drawer: what it takes, where it came from, and what sits
 // next to it.
 //
@@ -98,7 +100,7 @@ export function AssetDrawer({ id, onOpenAsset }: { id: string; onOpenAsset: (id:
               <Card key={t.id} padding="none" className="px-3 py-2">
                 <Inline gap="xs" wrap={false}>
                   <Chip tone="neutral" size="xs">{t.kind}</Chip>
-                  <T className="min-w-0 truncate text-[12px] text-text-secondary" title={t.title}>{t.title}</T>
+                  <Link to={knowledgeItemHref(t.id, 'L0')} className="min-w-0 truncate text-[12px] text-primary hover:underline" title={t.title}>{t.title}</Link>
                   <T className="flex-1" />
                   <T className="text-[10px] tabular-nums text-text-tertiary">{Math.round(t.weight * 100)}%</T>
                 </Inline>
@@ -110,6 +112,7 @@ export function AssetDrawer({ id, onOpenAsset }: { id: string; onOpenAsset: (id:
       )}
 
       <DistillationProvenance libraryItemId={a.id} />
+      <AssetRelationships kind="library" id={a.id} />
 
       {/* The gate, as a checklist. A tier is a promise about blast radius, so
           the page shows what that promise costs rather than one verdict. */}

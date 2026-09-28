@@ -62,6 +62,7 @@ function ExplainComposerInner<C extends string>(
     <FloatingComposerDock
       label="Ask about this record"
       data-testid="distillation-composer"
+      className="bg-surface pt-3"
       composer={(
         <RichChatComposer
           key={subject.id}
@@ -75,8 +76,11 @@ function ExplainComposerInner<C extends string>(
             chat: 'Distillation has no discussion thread — ask the agent instead',
             terminal: 'A record has no terminal',
           }}
-          layout="wide"
+          layout="auto"
           toolbar="compact"
+          density="compact"
+          modeShortcuts
+          modeTriggers
           submitLabel={{ agent: 'Ask' }}
           modePlaceholders={{ agent: placeholder }}
           allowAttachments={false}

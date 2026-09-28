@@ -640,11 +640,12 @@ function ExplorePage() {
   const hasMessages = messages.length > 0 || isStreaming;
 
   return (
-    <Stack gap="none" className="h-full min-h-0">
+    <Stack gap="none" className="h-full min-h-0 min-w-0" data-testid="explore-workspace">
       {/* ── Toolbar ─────────────────────────────────────────────────────── */}
       <Toolbar
         wrap
         aria-label="Explore controls"
+        className="shrink-0 px-6 py-2"
         end={
           <>
             {selectedIds.size > 0 && (

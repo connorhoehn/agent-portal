@@ -5,9 +5,8 @@
 //
 //   Overview (default)  the initiative list in the rail; the stats line,
 //                       "Needs attention", "Up next" (InitiativeOverview).
-//   Work                the work list in the rail ("‹ Initiatives", "Work 11",
-//                       an initiative switcher); the open item (WorkItemDetail)
-//                       in the pane, its run draft folded into "Run setup".
+//   Work                a grouped table, replaced by the selected item's
+//                       detail without adding another navigation column.
 //   Decisions, Agents, Contributors — the initiative list in the rail.
 //
 // `?item=` without `?tab=` lands on Work, so every deep link to a work item
@@ -20,7 +19,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import {
   ScopeHeader,
-  WorkListView,
+  WorkTableView,
   type ScopeHeaderPeopleGroup,
 } from '@connorhoehnslalom/ui-components';
 import {
@@ -30,10 +29,10 @@ import {
   LoadingState,
   Modal,
   PageSection,
-  Select,
   Stack,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../hooks/useFetch';
+import { useDebouncedSearch } from '../hooks/useDebouncedSearch';
 import { useUrlState } from '../lib/useUrlState';
 import { useCapabilities } from '../lib/capabilities';
 import { useSession } from '../lib/auth';
@@ -45,6 +44,7 @@ import { useInitiativeAgentActivity } from '../components/marketplace/Initiative
 import type { BotRun } from './bots/BotsPage';
 import { InitiativesExplorer } from './projects/InitiativesExplorer';
 import { useInitiativeListRail } from './projects/InitiativeListRail';
+import { initiativeBreadcrumbs, initiativeHref } from './projects/initiativeNavigation';
 import { InitiativeComposer } from './projects/InitiativeComposer';
 import { AddNoteDialog, LinkDecisionDialog } from './project-detail/BriefDialogs';
 import { ContributorModal } from './project-detail/ContributorModal';
@@ -65,7 +65,6 @@ import {
   WORK_SORT_OPTIONS,
   activeFilterCount,
   ownerOptions,
-  pickCurrent,
   toWorkListItem,
   workRows,
   type WorkFilterState,
@@ -74,7 +73,6 @@ import {
 import {
   hasActiveGrantOnInitiative,
   runsByWorkItem,
-  sumForestPoints,
 } from './project-detail/projectFormat';
 import {
   dropFromTree,
@@ -189,13 +187,14 @@ function ProjectDetailPage() {
   const setTab = useCallback((next: string) => {
     setSearchParams((prev) => {
       const p = new URLSearchParams(prev);
-      if (next === 'overview') { p.delete('tab'); p.delete('item'); p.delete('view'); }
+      if (next !== 'work') { p.delete('item'); p.delete('view'); p.delete('wq'); }
+      if (next === 'overview') p.delete('tab');
       else p.set('tab', next);
       return p;
-    }, { replace: true });
+    });
   }, [setSearchParams]);
-  // ?item= — the work item open in the pane. A stale id falls back to the
-  // first item up next (pickCurrent), so the link never lands empty.
+  // A list-level Work breadcrumb clears the selection. Never auto-open a
+  // different item after navigating up the hierarchy.
   const wantedItem = searchParams.get('item');
   const openItem = useCallback((itemId: string) => {
     setSearchParams((prev) => {
@@ -203,12 +202,13 @@ function ProjectDetailPage() {
       p.set('tab', 'work');
       p.set('item', itemId);
       return p;
-    }, { replace: true });
+    });
   }, [setSearchParams]);
 
   const [sort, setSort] = useState<WorkSort>('priority');
   // ?wq= — the work search. Not ?q=: the initiative list rail owns that one.
   const [query, setQuery] = useUrlState<string>('wq', (raw) => raw ?? '', (v) => (v ? v : null));
+  const workSearch = useDebouncedSearch(query, setQuery);
   const [filters, setFilters] = useState<WorkFilterState>(NO_FILTERS);
   // ?view= — the open item's tab (brief | comments | history).
   const [detailTab, setDetailTab] = useUrlState<DetailTab>(
@@ -228,8 +228,7 @@ function ProjectDetailPage() {
   // What "New work item" creates: a story under an epic, or a new epic.
   const [creating, setCreating] = useState<{ parentId: string | null; parentTitle: string | null } | null>(null);
 
-  // The initiative list: the rail on every tab but Work, and the Work rail's
-  // switcher options. One shared read either way.
+  // The initiative list stays visible on every tab, including Work.
   const listRail = useInitiativeListRail({ currentId: id ?? null, defaultScope: 'all' });
 
   const { data: project, isLoading: projLoading, error: projError } =
@@ -273,7 +272,7 @@ function ProjectDetailPage() {
   // backlog, so typing a search never swaps the item you are reading.
   const allRows = useMemo(() => workRows(workTree, sort, ''), [workTree, sort]);
   const visibleRows = useMemo(() => workRows(workTree, sort, query, filters), [workTree, sort, query, filters]);
-  const current = tab === 'work' ? pickCurrent(allRows, wantedItem) : null;
+  const current = tab === 'work' && wantedItem ? allRows.find((row) => row.id === wantedItem) ?? null : null;
   const thread = useWorkItemThread(current?.id ?? null);
 
   const patchItem = useCallback((itemId: string, fields: WorkItemPatch): Promise<boolean> => {
@@ -420,32 +419,19 @@ function ProjectDetailPage() {
     : null;
   const firstEpic = workTree.find((n) => n.type === 'epic') ?? null;
   const onWork = tab === 'work';
-  const points = sumForestPoints(workTree);
   const decisionsRead = { data: decisions ?? null, error: decisionsError ?? decisionsDegraded ?? null };
 
   const header = (
     <ScopeHeader
       title={project.name}
-      // v2 (H1, H5): the 22px title and 15px tabs on both tabs; the Work tab
-      // keeps its condensed header (stats below the title, no description).
-      titleSize="md"
+      // Keep the project header stable as descendants open underneath it.
+      titleSize="lg"
       tabSize="md"
       status={statusLabel ? { label: statusLabel, tone: project.status === 'archived' ? 'neutral' : 'info' } : null}
-      // The Overview carries the numbers in its stat strip; the condensed
-      // header over a work item keeps them on one line under the title.
-      {...(onWork
-        ? {
-            statsPlacement: 'below' as const,
-            progress: treeRead ? { done: points.done, total: points.total } : null,
-            spentUsd: project.agentSpendUsd ?? null,
-          }
-        : {
-            // The summary's second paragraph ("Focus: …") is its own line (V3, H2).
-            description: project.summary ?? undefined,
-            descriptionSize: 'sm' as const,
-            peopleStyle: 'inline' as const,
-            people,
-          })}
+      description={project.summary ?? undefined}
+      descriptionSize="sm"
+      peopleStyle="inline"
+      people={people}
       linkStyle="button"
       link={repoHref ? { label: 'Repository', href: repoHref } : null}
       menu={[{
@@ -500,6 +486,7 @@ function ProjectDetailPage() {
   }
   const composer = (
     <InitiativeComposer
+      presentation="document"
       subject={subject}
       {...(composerSetup ? { setup: composerSetup } : {})}
       {...(onWork && current && canDispatch
@@ -511,32 +498,19 @@ function ProjectDetailPage() {
     />
   );
 
-  // ─── Work: rail and pane ───────────────────────────────────────────────────
-  const initiativeOptions = (() => {
-    const rows = listRail.list.data ?? [];
-    const opts = rows.map((p) => ({ value: p.id, label: p.name }));
-    return opts.some((o) => o.value === project.id) ? opts : [{ value: project.id, label: project.name }, ...opts];
-  })();
-
-  const workRail = (
-    <WorkListView
-      chrome="embedded"
-      toolbarLayout="inline"
-      sortStyle="menu"
-      metaStyle="text"
-      pointsLabel="points"
-      signalDisplay="meta"
-      currentStyle="bar"
-      groupCountStyle="plain"
+  // ─── Work: full-width backlog ──────────────────────────────────────────────
+  const workTable = (
+    <WorkTableView
       searchPlaceholder="Find work…"
-      groups={WORK_GROUPS}
-      items={visibleRows.map((r) => toWorkListItem(r, marketRuns[r.id], pendingIds.has(r.id), { metaStyle: 'text' }))}
+      groups={WORK_GROUPS.map((group) => group.id === 'in_progress' ? { ...group, defaultOpen: true } : group)}
+      groupColors={{ done: 'var(--color-success)' }}
+      items={visibleRows.map((r) => ({ ...toWorkListItem(r, marketRuns[r.id], pendingIds.has(r.id), { metaStyle: 'text' }), kindLabel: r.type === 'bug' ? 'Bug' : 'Story' }))}
       count={allRows.length}
       currentId={current?.id ?? null}
-      query={query}
-      onQueryChange={setQuery}
+      query={workSearch.searchText}
+      onQueryChange={workSearch.onSearchChange}
       sort={sort}
-      sortOptions={WORK_SORT_OPTIONS}
+      sortOptions={WORK_SORT_OPTIONS.map((option) => ({ ...option, label: option.label.replace(/^By /, '').replace(/^./, (letter) => letter.toUpperCase()) }))}
       onSortChange={(v) => setSort(v as WorkSort)}
       filterFacets={[
         {
@@ -588,7 +562,6 @@ function ProjectDetailPage() {
         : canDispatch
           ? "No work yet — ingest this initiative's documents or add an epic"
           : "No work yet — it arrives when this initiative's documents are ingested"}
-      storageKey={`initiative.${id}.work-groups`}
       data-testid="initiative-work-list"
     />
   );
@@ -646,36 +619,19 @@ function ProjectDetailPage() {
     />
   ) : (
     <EmptyState
-      title={workLoading ? 'Loading work…' : 'Nothing to open'}
-      body={workLoading ? undefined : 'Pick a work item from the list, or add one.'}
+      size="sm"
+      title={workLoading ? 'Loading work…' : wantedItem ? 'Work item unavailable' : 'Select a work item'}
+      body={workLoading ? undefined : wantedItem ? 'This item is not in the current work list. Choose another item from the rail.' : 'Choose an item from the Work list to see its brief, discussion, and activity.'}
     />
   );
-
-  const railSlots = onWork
-    ? {
-        railTitle: 'Work',
-        railKind: 'work' as const,
-        ...(treeRead && !workFailure ? { railCount: allRows.length } : {}),
-        railBack: { label: 'Initiatives', onClick: () => navigate('/iq/projects') },
-        railActions: (
-          <Select
-            size="sm"
-            value={project.id}
-            options={initiativeOptions}
-            onChange={(e) => navigate(`/iq/projects/${encodeURIComponent(e.target.value)}?tab=work`)}
-            aria-label="Switch initiative"
-            data-testid="work-initiative-switcher"
-          />
-        ),
-        rail: workRail,
-        railLabel: 'work list',
-      }
-    : listRail.slots;
 
   return (
     <>
       <InitiativesExplorer
-        {...railSlots}
+        {...listRail.slots}
+        combinedNavigation
+        breadcrumbs={initiativeBreadcrumbs({ search: searchParams, scope: listRail.scope, project, tab: wantedItem ? tab : 'overview', item: current?.title })
+          .filter((crumb) => crumb.label !== 'All initiatives' && crumb.label !== 'My initiatives')}
         paneHeader={header}
         composer={composer}
         data-testid="initiative-workspace"
@@ -683,11 +639,23 @@ function ProjectDetailPage() {
         {tab === 'overview' && (
           <InitiativeOverview
             model={buildOverview(project, { tree: treeRead, error: workFailure ?? null, loading: workLoading })}
-            onOpen={(href) => navigate(href)}
+            onOpen={(href) => {
+              const [path, childSearch] = href.split('?');
+              const params = new URLSearchParams(initiativeHref(project.id, searchParams, listRail.scope).split('?')[1]);
+              new URLSearchParams(childSearch).forEach((value, key) => params.set(key, value));
+              navigate(`${path}?${params}`);
+            }}
             onRetry={refreshWork}
           />
         )}
-        {onWork && workPane}
+        {onWork && (wantedItem ? <Stack gap="none" className="min-w-0">
+          <div className="px-6 pt-3"><Button size="sm" variant="ghost" onClick={() => setSearchParams((prev) => {
+            const params = new URLSearchParams(prev);
+            params.delete('item'); params.delete('view');
+            return params;
+          })}>← Back to work</Button></div>
+          {workPane}
+        </Stack> : workTable)}
         {!onWork && tab !== 'overview' && (
           <Stack gap="md" className="p-6">
             {tab === 'decisions' && <DecisionQueue decisions={decisions ?? []} />}

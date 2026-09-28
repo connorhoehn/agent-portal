@@ -3,11 +3,12 @@
 // mid-hierarchy: Bots and Changes are children of Automate now, not top-level
 // doors, and clicking them keeps you inside the same frame.
 //
-// The grouping is the loop itself: RUN (overview → queue → findings/DLQ),
-// CONFIGURE (the bot missions that feed the queue), REVIEW (the
-// human-in-the-loop gate everything ships through).
+// Keep operational views compact; configuration and code review retain
+// their existing role gates.
 
 import type { SubNavItem } from '@connorhoehnslalom/ui-components/shared';
+import { useFetch } from '../../hooks/useFetch';
+import type { Summary } from './workShared';
 import { useSession } from '../../lib/auth';
 
 export interface AutomateSpec {
@@ -17,27 +18,13 @@ export interface AutomateSpec {
 }
 
 const RUN_ITEMS: SubNavItem[] = [
-  { path: '/iq/work',          label: 'Overview', hint: 'The loop at a glance + what needs you', group: 'Run' },
-  { path: '/iq/work/queue',    label: 'Queue',    hint: 'Jobs in flight + work ready to assign', group: 'Run' },
-  { path: '/iq/work/findings', label: 'Findings', hint: 'Sweep findings + failed jobs', group: 'Run' },
+  { path: '/iq/work', label: 'Inbox' },
+  { path: '/iq/work/queue', label: 'Runs' },
+  { path: '/iq/work/findings', label: 'Findings' },
+  { path: '/iq/work/changes', label: 'Changes' },
 ];
-
-const BOTS_ITEM: SubNavItem = {
-  path: '/admin/bots', label: 'Bots', hint: 'The standing missions that feed the queue', group: 'Configure',
-};
-
-// What reached the org graph. It always lived inside the Automate frame
-// (breadcrumb Build › Automate › Graph updates, a palette entry, a link from
-// the Queue page) but had no rail row, so it opened with nothing lit beside
-// a row named "Changes" that is the code-review queue — a different page.
-// Readable by every signed-in role, like the Run pages.
-const GRAPH_UPDATES_ITEM: SubNavItem = {
-  path: '/iq/work/changes', label: 'Graph updates', hint: 'What reached the org graph', group: 'Review',
-};
-
-const CHANGES_ITEM: SubNavItem = {
-  path: '/admin/changes', label: 'Changes', hint: 'Human review of what the bots shipped', group: 'Review',
-};
+const BOTS_ITEM: SubNavItem = { path: '/admin/bots', label: 'Automations' };
+const CHANGES_ITEM: SubNavItem = { path: '/admin/changes', label: 'Code review' };
 
 /** Roles that reach the Bots surface — mirrors the /admin/bots route gate
  *  (and Cedar's ManageBots). Exported so QueuePulse's roster rows link into
@@ -58,12 +45,13 @@ export const DEVBOX_ROLES = ['hr-admin', 'sme', 'admin'];
 export function useAutomateSpec(): AutomateSpec {
   const { session } = useSession();
   const role = session?.role ?? '';
+  const { data, error, degraded } = useFetch<Summary>(session?.tenant === 'orgiq' ? '/api/work/summary' : null, 15_000, { share: true });
+  const counts = !error && !degraded ? data : null;
   return {
     title: 'Automate',
     items: [
-      ...RUN_ITEMS,
+      ...RUN_ITEMS.map((item) => ({ ...item, ...(counts && item.path === '/iq/work' ? { count: (counts.consults?.pending ?? 0) + (counts.jobs.awaiting_review ?? 0) + (counts.proposals.pending ?? 0) } : {}), ...(counts && item.path === '/iq/work/findings' ? { count: counts.findings.open } : {}) })),
       ...(BOTS_ROLES.includes(role) ? [BOTS_ITEM] : []),
-      GRAPH_UPDATES_ITEM,
       ...(CHANGES_ROLES.includes(role) ? [CHANGES_ITEM] : []),
     ],
     storageKey: 'automate-subnav',

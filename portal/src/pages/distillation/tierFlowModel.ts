@@ -161,13 +161,13 @@ export function tierFlowModel(
   });
   items.push({
     id: 'library',
-    label: 'Library',
+    label: 'Agent library',
     level: null,
     value: libraryLinked,
     status: libraryLinked == null ? undefined : { label: 'linked', tone: 'neutral' },
     verdict: 'unknown',
     href: '/iq/library',
-    ariaLabel: libraryLinked == null ? 'Library, linked count unknown' : `Library, ${libraryLinked} linked`,
+    ariaLabel: libraryLinked == null ? 'Agent library, linked count unknown' : `Library, ${libraryLinked} linked`,
   });
 
   // An edge's health is its destination tier's inbound verdict.

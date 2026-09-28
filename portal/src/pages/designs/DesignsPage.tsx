@@ -3,18 +3,16 @@
 // human, what has been ratified into the knowledge base.
 
 import { useMemo } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router';
+import { Link, useNavigate, useSearchParams, useParams } from 'react-router';
+import { StackedCatalogLayout } from '../../components/shell/StackedCatalogLayout';
+import DesignThreadPage from './DesignThreadPage';
 import {
   Chip,
   DataTable,
   EmptyState,
-  FilterChip,
   LoadingState,
   PageSection,
   Stack,
-  Toolbar,
-  ToolbarGroup,
-  ToolbarLabel,
   type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
@@ -35,9 +33,10 @@ const FILTERS: Array<{ value: string; label: string }> = [
 
 export default function DesignsPage() {
   const navigate = useNavigate();
+  const { id } = useParams();
   const [searchParams] = useSearchParams();
   const initiative = searchParams.get('initiative') ?? '';
-  const [filter, setFilter] = useUrlState<string>(
+  const [filter] = useUrlState<string>(
     'status',
     (raw) => (raw && FILTERS.some((f) => f.value === raw) ? raw : 'all'),
     (v) => (v === 'all' ? null : v),
@@ -58,7 +57,7 @@ export default function DesignsPage() {
               a bare <tr onClick> with no keyboard access, so this is the one
               focusable, Enter-activatable control in the row. */}
           <Link
-            to={`/iq/designs/${r.id}`}
+            to={`/iq/designs/${r.id}?${searchParams}`}
             onClick={(e) => e.stopPropagation()}
             className="block text-[13px] font-semibold text-text-primary no-underline hover:underline truncate"
           >
@@ -100,25 +99,19 @@ export default function DesignsPage() {
   ];
 
   return (
+    <StackedCatalogLayout
+      title="Designs" basePath="/iq/designs" listTitle={filter === 'all' ? 'All designs' : FILTERS.find((f) => f.value === filter)?.label ?? 'Designs'}
+      items={FILTERS.map((f) => ({ path: `/iq/designs?${new URLSearchParams({ status: f.value, ...(initiative ? { initiative } : {}) })}`, label: f.label === 'All' ? 'All designs' : f.label, group: 'Status', active: filter === f.value }))}
+      rows={reviews.map((review) => ({ id: review.id, title: review.title, subline: STATUS_LABEL[review.status] }))}
+      selectedId={id} selectedTitle={data?.reviews.find((review) => review.id === id)?.title}
+      onSelect={(next) => navigate(`/iq/designs/${encodeURIComponent(next)}?${searchParams}`)}
+      railNotice={designsFailure ? <UnavailableNotice error={designsFailure} what="designs" source="Design reviews" onRetry={refresh} /> : isLoading && !data ? <LoadingState label="Loading designs…" /> : reviews.length === 0 ? <EmptyState size="sm" title="No designs in this view" /> : undefined}
+    >
+    {id ? <DesignThreadPage key={id} /> :
     <PageSection
       title="Designs"
       description="Agents restate the problem, iterate a plan, and raise questions when intent is unclear; people answer and sign off. An approved design is an ADR — logged to the knowledge base, and a gate for the designs built on it."
     >
-      <Toolbar size="md" wrap aria-label="Design filters">
-        <ToolbarGroup aria-label="Status">
-          <ToolbarLabel>Status</ToolbarLabel>
-          {FILTERS.map((f) => (
-            <FilterChip key={f.value} active={filter === f.value} onClick={() => setFilter(f.value)} size="sm">
-              {f.label}
-            </FilterChip>
-          ))}
-        </ToolbarGroup>
-        {initiative ? (
-          <ToolbarGroup divided>
-            <ToolbarLabel>Initiative: {initiative}</ToolbarLabel>
-          </ToolbarGroup>
-        ) : null}
-      </Toolbar>
 
       {designsFailure ? (
         <UnavailableNotice
@@ -148,11 +141,12 @@ export default function DesignsPage() {
           data={reviews}
           columns={columns}
           keyField={(r) => r.id}
-          onRowClick={(r) => navigate(`/iq/designs/${r.id}`)}
+          onRowClick={(r) => navigate(`/iq/designs/${r.id}?${searchParams}`)}
           pageSize={25}
           emptyMessage="No design reviews"
         />
       )}
-    </PageSection>
+    </PageSection>}
+    </StackedCatalogLayout>
   );
 }

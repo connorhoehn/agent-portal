@@ -1,0 +1,25 @@
+.search-connections:fullscreen { padding: 1rem; height: 100%; }
+.search-connection-node { width: 180px; height: 116px; }
+.search-connection-button { width: 100%; height: 100%; padding: 4px 8px; white-space: normal; border-radius: 8px; border: 0; }
+.search-connection-button[aria-pressed="true"] { background: transparent; }
+.search-connection-button:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+.search-connection-mark { position: relative; width: 48px; height: 48px; flex-shrink: 0; border: 1px solid currentColor; border-radius: 50%; }
+.search-connection-person { color: var(--color-primary); background: var(--color-primary-soft); }
+.search-connection-initiative { color: var(--color-brand); background: var(--color-brand-soft); }
+.search-connection-work { color: var(--color-success); background: var(--color-success-bg); }
+.search-connection-decision { color: var(--color-warning); background: var(--color-warning-bg); }
+.search-connection-knowledge { color: var(--color-info); background: var(--color-info-bg); }
+.search-connection-asset { color: var(--color-text-secondary); background: var(--color-surface-hover); }
+.search-connection-mark.is-selected { box-shadow: 0 0 0 3px var(--color-surface), 0 0 0 4px var(--color-primary); }
+.search-connection-check { position: absolute; top: -5px; right: -5px; border-radius: 50%; width: 17px; height: 17px; background: var(--color-primary); color: var(--color-on-brand, white); font-size: 11px; line-height: 17px; }
+.search-connection-handle { opacity: 0; pointer-events: none; }
+.search-connection-handle.react-flow__handle-left { top: 28px; left: calc(50% - 24px); }
+.search-connection-handle.react-flow__handle-right { top: 28px; right: calc(50% - 24px); }
+.search-connection-legend-dot { width: 8px; height: 8px; border-radius: 50%; border: 1px solid currentColor; }
+.search-connection-canvas { --xy-edge-stroke: var(--color-text-tertiary); --xy-edge-label-color: var(--color-text-secondary); --xy-edge-label-background-color: var(--color-surface); --xy-background-color: var(--color-surface); --xy-controls-button-background-color: var(--color-surface); }
+.search-connection-canvas .react-flow__edge-text { font-size: 11px; fill: var(--color-text-secondary); }
+.search-connection-canvas .react-flow__edge-textbg { fill: var(--color-surface); }
+.search-connection-canvas .react-flow__edge-path { stroke-width: 1; }
+.search-connection-related-edge .react-flow__edge-path { stroke-dasharray: 4 4; }
+.search-connection-canvas .react-flow__panel.bottom.left { max-width: calc(100% - 260px); }
+@media (max-width: 800px) { .search-connection-canvas .react-flow__panel.bottom.left { display: none; } }

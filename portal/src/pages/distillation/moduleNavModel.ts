@@ -9,13 +9,13 @@
 // entry of a group at once.
 
 import {
-  activityHref, knowledgeHref, parseActivity, parseKnowledge, parseReview, reviewHref, tabForPath,
+  promotionReviewHref, activityHref, knowledgeHref, parseActivity, parseKnowledge, parseReview, reviewHref, tabForPath,
   type ActivityView, type KnowledgeView, type ReviewTab,
 } from './distillationRoutes.ts';
 
 export type ModuleNavId =
   | 'guides' | 'patterns' | 'notes'
-  | 'pending' | 'decided'
+  | 'pending' | 'decided' | 'promotions'
   | 'runs' | 'graph';
 
 export interface ModuleNavEntry {
@@ -33,6 +33,7 @@ export interface ModuleNavCounts {
   L0?: number | null;
   L1?: number | null;
   L2?: number | null;
+  promotions?: number | null;
   pending?: number | null;
   decided?: number | null;
   /** The Activity health dot: a tier behind or stalled. */
@@ -50,13 +51,14 @@ export function moduleNav(counts: ModuleNavCounts, repo: string | null, canRevie
     { id: 'patterns', group: 'Knowledge', label: 'Patterns', hint: 'Related run notes combined into one claim', path: k('patterns'), ...(has(counts.L1) ? { count: counts.L1 } : {}) },
     { id: 'notes', group: 'Knowledge', label: 'Run notes', hint: 'What happened in one agent session', path: k('notes'), ...(has(counts.L0) ? { count: counts.L0 } : {}) },
     {
-      id: 'pending', group: 'Review', label: 'Pending', path: r('pending'),
+      id: 'pending', group: 'Review', label: 'Knowledge pending', path: r('pending'),
       hint: canReview ? 'Check sampled findings against their sources' : 'Sampled findings and their evidence (read-only for your role)',
       ...(has(counts.pending) ? { count: counts.pending } : {}),
     },
-    { id: 'decided', group: 'Review', label: 'Reviewed', hint: 'Verdicts already recorded', path: r('decided'), ...(has(counts.decided) ? { count: counts.decided } : {}) },
+    { id: 'decided', group: 'Review', label: 'Knowledge reviewed', hint: 'Verdicts already recorded', path: r('decided'), ...(has(counts.decided) ? { count: counts.decided } : {}) },
+    { id: 'promotions', group: 'Review', label: 'Asset promotions', hint: 'Review insights, runbooks and skills; skills require approval and a passing dry run', path: promotionReviewHref(new URLSearchParams(repo ? { repo } : {})), ...(has(counts.promotions) ? { count: counts.promotions } : {}) },
     { id: 'runs', group: 'Activity', label: 'Runs', hint: 'Compaction history and the run inspector', path: a('runs'), ...(counts.health ? { accent: counts.health } : {}) },
-    { id: 'graph', group: 'Activity', label: 'Tier graph', hint: 'Run notes → patterns → guides → Library', path: a('graph') },
+    { id: 'graph', group: 'Activity', label: 'Tier graph', hint: 'Run notes → patterns → guides → Agent library', path: a('graph') },
   ];
 }
 
@@ -64,7 +66,7 @@ export function moduleNav(counts: ModuleNavCounts, repo: string | null, canRevie
 export function activeNavId(pathname: string, search: string): ModuleNavId | null {
   const tab = tabForPath(pathname);
   if (tab === 'knowledge') return parseKnowledge(search).view;
-  if (tab === 'review') return parseReview(search).tab;
+  if (tab === 'review') return new URLSearchParams(search).get('view') === 'promotions' ? 'promotions' : parseReview(search).tab;
   if (tab === 'activity') return parseActivity(search).view;
   return null;
 }

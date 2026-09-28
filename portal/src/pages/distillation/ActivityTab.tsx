@@ -59,7 +59,7 @@ function TierNode({ node, selected }: { node: TierCanvasNode; selected: boolean 
         hint={(
           <Stack gap="xs">
             {d.status && <StatusPill tone={d.status.tone === 'danger' ? 'error' : d.status.tone === 'warning' ? 'warning' : d.status.tone === 'info' ? 'info' : 'neutral'} label={d.status.label} size="sm" />}
-            <T className="text-[12px] text-primary">{node.kind === 'library' ? 'Open Library →' : `Browse ${d.title.toLowerCase()} →`}</T>
+            <T className="text-[12px] text-primary">{node.kind === 'library' ? 'Open Agent library →' : `Browse ${d.title.toLowerCase()} →`}</T>
           </Stack>
         )}
       />

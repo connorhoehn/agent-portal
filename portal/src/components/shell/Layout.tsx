@@ -103,35 +103,18 @@ const NAV_ITEMS: NavItem[] = [
   // is what it LEARNED — the run log of the pipeline that turns session
   // observations into reusable runbooks and skills.
   { path: '/iq/distillation/knowledge', label: 'Distillation', tenant: 'orgiq',   group: 'Build' },
+  { path: '/iq/library', label: 'Agent library', tenant: 'orgiq', group: 'Build' },
   { path: '/iq/local-compute', label: 'Local compute', tenant: 'orgiq', group: 'Build' },
-  { path: '/iq/invoke',     label: 'Ask',         tenant: 'orgiq',     group: 'Org' },
-  { path: '/iq/explore',    label: 'Explore',     tenant: 'orgiq',     group: 'Org' },
+  { path: '/iq/search',     label: 'Search',         tenant: 'orgiq',     group: 'Org' },
   // Ask is also the "find help" surface: its empty state offers questions
   // from your own work, and answers grow an evidence rail (people + matched
   // skills + documents, score-free) via /api/graph/help. Scores stays the
   // separate HR analytics view — ViewLeaderboard tier, leadership only; an
   // ungated nav item just handed every SME a 403'd leaderboard.
   { path: '/iq/scores',     label: 'Scores',      tenant: 'orgiq',     group: 'Org', requireRoles: ['org-leader', 'hr-admin'] },
-  // DESIGN — before anything runs. Designs: the ADR threads where agents
-  // ideate a plan on an initiative, people resolve intent and sign off, and
-  // the approved decision gates other designs + feeds the knowledge base.
-  // Rail order follows the loop: the decision that gates the work (Designs),
-  // then what is earning its way in (Promotions), then the approved catalog
-  // (Library). Leading with the catalog put the decision third.
-  { path: '/iq/designs',    label: 'Designs',     tenant: 'orgiq',     group: 'Design' },
-  // What the fleet learned, waiting to become reusable: observations clustered
-  // into patterns, promoted by a human into insights, runbooks and skills.
-  { path: '/iq/promotions', label: 'Promotions',  tenant: 'orgiq',     group: 'Design' },
-  // The Design catalog: everything the fleet is instructed by. Filtered to
-  // kind=skill it is the skill browser — a skill and a prompt differ in who
-  // invokes them, which is a facet, not a separate product.
-  { path: '/iq/library',    label: 'Library',     tenant: 'orgiq',     group: 'Design' },
-  // No standalone "Prompts" door: /iq/prompt-ops ("What is deployed") already
-  // sits inside the Library's rail, and a second top-level entry to the same
-  // page is the duplication this IA keeps removing everywhere else. The
-  // Library is the front door; prompt work lives behind it.
+  // Initiative design discussions remain separate from reusable assets.
+  { path: '/iq/designs', label: 'Designs', tenant: 'orgiq', group: 'Design' },
   // Release: the session bundle every devbox Claude Code session boots with.
-  { path: '/iq/release',    label: 'Session config', tenant: 'orgiq',  group: 'Release' },
   // The assessment tenant is a different product with a different map: not
   // the SDLC arc but the assessment programme's own — ASSESS (the intake and
   // scoring cockpit) → ANALYZE (what the scores say across teams) →
@@ -171,10 +154,8 @@ const PLATFORM_ITEMS: NavItem[] = [
   // (pages/work/automateNav.tsx), not top-level destinations.
   // 'Codebases', not 'Projects': /iq/projects is already the org's initiatives —
   // epics, features, the people who own them. This is the code that delivers them.
-  // RELEASE — what ships to the fleet itself. Session config is the first
-  // citizen: the SessionStart hook and bundled skills every Claude Code devbox
-  // session boots with. The GitHub pipeline surfaces join this group when they
-  // arrive; change review lives under Automate (it is the loop's human gate).
+  // Session configuration lives beneath Local compute, not in a separate
+  // Release group. Change review lives under Automate.
   // 'Computers', not 'Devbox': the page is a fleet of microVMs agents work in,
   // and the top-level menu reads as a place, not a single box.
   //
@@ -426,7 +407,8 @@ export function Layout() {
             railLabel={`${tenantLabel} navigation`}
             renderNavItem={(item, children) => (
               <NavLink
-                to={item.path}
+                to={item.path === '/iq/distillation/knowledge' ? `${item.path}?nav=distillation`
+                  : ['/iq/projects', '/iq/designs', '/iq/library'].includes(item.path) ? `${item.path}?nav=section` : item.path}
                 // className, not the inline `style` the composite's own doc
                 // comment used to force: ui-components 2.275.1 exports the
                 // class-name equivalents of `activeNavItemStyle`, so the whole

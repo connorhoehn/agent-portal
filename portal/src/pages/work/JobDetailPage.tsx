@@ -13,17 +13,20 @@
 // hold a run you review an hour later. The transcript can.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useParams, useNavigate } from 'react-router';
+import { Link, useParams, useNavigate, useSearchParams } from 'react-router';
 import {
-  Button, Card, Chip, ConfirmDialog, EmptyState, ErrorState, Inline, LoadingState, MetaLine, PageSection,
-  SectionLabel, Stack, ToolCallStrip, Toolbar,
+  Button, Chip, ConfirmDialog, EmptyState, ErrorState, Inline, LoadingState, PageSection,
+  Stack, PageHeader, StatStrip, Tabs, Disclosure, ChatComposer,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch';
 import { crumbLabel, useCrumbLabel } from '../../lib/crumbLabels';
 import { absoluteTime, durationLabel } from '../../lib/relativeTime';
 import { toastPending, toastSuccess, toastError } from '../../lib/toastStore';
-import { JobStatusPill, LIVE_STATUSES, T, money, toToolCallStripItems, type JobToolCall } from './workShared';
+import { JobStatusPill, LIVE_STATUSES, T, type JobToolCall } from './workShared';
+import { usd } from '../../lib/format';
+import { BOTS_ROLES, DEVBOX_ROLES } from './automateNav';
+import { useSession } from '../../lib/auth';
 import { KeyValue } from '../../components/KeyValue';
 import { isNotFoundFetchError } from './jobFetchStatus';
 
@@ -103,6 +106,10 @@ const WATCHDOG_EVERY_MS = 10_000;
 export default function JobDetailPage() {
   const { jobId = '' } = useParams();
   const navigate = useNavigate();
+  const { session } = useSession();
+  const [params, setParams] = useSearchParams();
+  const tab = ['summary', 'activity', 'outputs', 'changes'].includes(params.get('tab') ?? '') ? params.get('tab')! : 'summary';
+  const changeTab = (value: string) => { const next = new URLSearchParams(params); next.set('tab', value); setParams(next); };
   // Cancel/review ride /api/work (ManageDevbox).
   const { can, ready } = useCapabilities();
   const canManage = ready && can('ManageDevbox');
@@ -116,12 +123,13 @@ export default function JobDetailPage() {
   // What this job produced downstream: graph proposals carry the jobId that
   // raised them, so the job page can point at its own output instead of
   // ending at a transcript.
-  const { data: proposalsData } = useFetch<{ proposals: Array<{ id: string; jobId: string | null }> }>(
+  const { data: proposalsData, error: proposalsError, degraded: proposalsDegraded, isLoading: proposalsLoading, refresh: refreshProposals } = useFetch<{ proposals: Array<{ id: string; jobId: string | null; kind: string; status: string; rationale: string | null }> }>(
     jobId ? '/api/work/proposals' : null, 30_000);
   const proposalCount = (proposalsData?.proposals ?? []).filter((p) => p.jobId === jobId).length;
 
   const [live, setLive] = useState<ActivityEntry[]>([]);
   const [tailState, setTailState] = useState<'idle' | 'open' | 'retrying' | 'unavailable'>('idle');
+  const [question, setQuestion] = useState('');
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -256,8 +264,8 @@ export default function JobDetailPage() {
           <EmptyState
             title="Job not found"
             description={<>No job with id <code>{jobId}</code> — it may have been pruned.</>}
-            actionLabel="← Back to queue"
-            onAction={() => navigate('/iq/work')}
+            actionLabel="← Back to runs"
+            onAction={() => navigate('/iq/work/queue')}
           />
         </PageSection>
       );
@@ -283,189 +291,96 @@ export default function JobDetailPage() {
 
   const prompt = String(job.payload['prompt'] ?? '');
 
+  const changes = (proposalsData?.proposals ?? []).filter((proposal) => proposal.jobId === job.id);
+  const tools = job.result?.toolCallList ?? [];
+  const activityUnavailable = !isLive && activity.length === 0 && job.status !== 'queued';
+  const canOpenAutomation = BOTS_ROLES.includes(session?.role ?? '');
+  const canOpenWorker = DEVBOX_ROLES.includes(session?.role ?? '');
+  const toolResults = tools.length > 0 ? <PageSection size="md" title="Recorded tool results">
+    <Stack gap="none" className="border-t border-border">
+      {tools.map((tool, i) => <Inline key={`${i}-${tool.name}`} gap="md" className="border-b border-border py-2 text-[13px]">
+        <span className={tool.done ? 'text-success' : 'text-text-tertiary'} aria-label={tool.done ? 'Completed' : 'Not completed'}>{tool.done ? '✓' : '○'}</span>
+        <code className="text-[12px]">{tool.name}</code>
+      </Inline>)}
+    </Stack>
+  </PageSection> : null;
+  const unavailable = activityUnavailable ? <PageSection size="md" title="Activity unavailable">
+    <T className="text-[13px] text-text-tertiary">This run predates activity recording, or its worker log has expired.</T>
+  </PageSection> : null;
+
   return (
-    <PageSection title={job.title}>
-      <Inline align="center" justify="between" wrap gap="sm" className="mb-5">
-        <Inline align="center" wrap gap="sm">
-          <Button variant="ghost" size="sm" onClick={() => navigate('/iq/work')}>← Work</Button>
-          <JobStatusPill status={job.status} />
-          {job.boxId && (
-            <Link
-              to={`/admin/devbox?box=${encodeURIComponent(job.boxId)}`}
-              className="text-[12px] text-primary no-underline hover:underline"
-            >
-              worker {job.boxId} →
-            </Link>
-          )}
-          <T className="text-[11px] text-text-tertiary">
-            attempt {job.attempts} of {job.maxAttempts} · queued by {job.createdBy ?? 'unknown'}
+    <Stack gap="lg" data-testid="run-detail">
+      <PageHeader title={job.title} size="lg" badge={<JobStatusPill status={job.status} />}
+        back={{ label: '← Back to runs', to: '/iq/work/queue', onClick: (e) => { if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return; e.preventDefault(); navigate('/iq/work/queue'); } }}
+        description={`${job.botName ? `${job.botTrigger === 'cron' ? 'Scheduled' : 'Dispatched'} by ${job.botName}` : `Queued by ${job.createdBy ?? 'unknown'}`} · Attempt ${job.attempts} of ${job.maxAttempts}`}
+        actions={<Inline gap="sm">
+          {job.botId && canOpenAutomation && <Button size="sm" variant="secondary" onClick={() => navigate(`/admin/bots/${encodeURIComponent(job.botId!)}`)}>Open automation ↗</Button>}
+          {canManage && (job.status === 'queued' || job.status === 'claimed') && <Button size="sm" variant="secondary" onClick={() => setConfirmCancel(true)}>Cancel</Button>}
+          {canManage && job.status === 'awaiting_review' && <>
+            <Button size="sm" variant="primary" onClick={() => void review('accept')}>Accept</Button>
+            <Button size="sm" variant="secondary" onClick={() => void review('reject')}>Reject</Button>
+          </>}
+        </Inline>} />
+      <StatStrip frameless aria-label="Run metrics" items={[
+        { label: 'Duration', value: durationLabel(job.result?.durationMs) },
+        { label: 'Cost', value: job.result?.costUsd == null ? '—' : usd(job.result.costUsd, { precision: 2 }) },
+        { label: 'Turns', value: job.result?.turns ?? '—' },
+        { label: 'Trigger', value: job.botTrigger === 'cron' ? 'Scheduled' : job.botTrigger ?? 'Manual' },
+      ]} />
+      <Tabs value={tab} onValueChange={changeTab} aria-label="Run details" items={[
+        { id: 'summary', label: 'Summary' }, { id: 'activity', label: 'Activity' },
+        { id: 'outputs', label: 'Outputs' }, { id: 'changes', label: 'Changes', badge: proposalCount || undefined },
+      ]} />
+      {tab === 'summary' && <Stack gap="lg">
+        <PageSection size="md" title="Outcome">
+          <T wrap className={`text-[14px] ${job.error ? 'text-danger' : 'text-text-primary'}`}>
+            {job.error ?? job.result?.summary ?? (job.status === 'queued' ? 'Waiting for a worker.' : isLive ? 'This run is in progress.' : 'No outcome recorded.')}
           </T>
-          {/* Provenance: a standing mission put this here, not a person. */}
-          {job.botId && job.botName && (
-            <Link
-              to={`/admin/bots/${job.botId}`}
-              className="text-[12px] text-primary no-underline hover:underline"
-              title={`${job.botTrigger ?? 'manual'} trigger`}
-            >
-              {job.botTrigger === 'cron' ? 'scheduled by' : 'dispatched by'} {job.botName} →
-            </Link>
-          )}
-          {/* Provenance: this job exists because a sweep found something. */}
-          {typeof job.payload['findingId'] === 'string' && (
-            <Link
-              to="/iq/work"
-              title="This job was promoted from a sweep finding"
-              className="text-[11px] text-text-tertiary no-underline hover:text-primary hover:underline"
-            >
-              from a finding
-            </Link>
-          )}
-          {proposalCount > 0 && (
-            <Link
-              to={`/iq/work/changes?job=${job.id}`}
-              className="text-[12px] text-primary no-underline hover:underline"
-            >
-              {proposalCount} graph proposal{proposalCount === 1 ? '' : 's'} →
-            </Link>
-          )}
-        </Inline>
-        <Inline gap="sm">
-          {canManage && (job.status === 'queued' || job.status === 'claimed') && (
-            <Button variant="secondary" size="sm" onClick={() => setConfirmCancel(true)}>Cancel</Button>
-          )}
-          {canManage && job.status === 'awaiting_review' && (
-            <>
-              <Button variant="primary" size="sm" onClick={() => void review('accept')}>Accept</Button>
-              <Button variant="secondary" size="sm" onClick={() => void review('reject')}>Reject</Button>
-            </>
-          )}
-        </Inline>
-      </Inline>
-
-      {/* ── The ask ── */}
-      <Card padding="none" className="mb-5 overflow-hidden">
-        <Toolbar size="sm"><SectionLabel>The ask</SectionLabel></Toolbar>
-        <T as="div" wrap className="px-3.5 py-3 text-[12.5px] leading-relaxed text-text-secondary whitespace-pre-wrap">
-          {prompt || 'No prompt recorded.'}
-        </T>
-      </Card>
-
-      {/* ── Activity ── */}
-      <Card padding="none" className="mb-5 overflow-hidden">
-        <Toolbar
-          size="sm"
-          end={activity.length > 0 ? <T className="text-[11px] text-text-tertiary">{activity.length} entries</T> : undefined}
-        >
-          <SectionLabel>Activity</SectionLabel>
-          {isLive ? (
-            tailState === 'unavailable' ? (
-              <T className="text-[11px] text-warning">
-                worker log unavailable — this box is no longer registered
-              </T>
-            ) : (
-              <Inline gap="xs" align="center" className="text-[11px] text-primary">
-                <T className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-                {tailState === 'retrying' ? 'reconnecting…' : 'live'}
-              </Inline>
-            )
-          ) : (
-            <T className="text-[11px] text-text-tertiary">
-              {activity.length > 0 ? 'recorded transcript' : 'no activity recorded'}
-            </T>
-          )}
-        </Toolbar>
-
-        <Stack gap="none" ref={scrollRef} className="max-h-[420px] overflow-auto">
-          {activity.length === 0 ? (
-            <T as="div" wrap className="px-3.5 py-8 text-center text-[12.5px] text-text-tertiary">
-              {job.status === 'queued'
-                ? 'Waiting for an idle worker — dispatch runs every ~10s.'
-                : isLive && tailState === 'unavailable'
-                  ? 'The worker that had this job is gone (usually a middleware restart). It will be requeued and picked up again.'
-                  : isLive
-                    ? 'Worker has started; first output usually lands within a few seconds.'
-                    : 'This run predates activity recording, or its worker log has rolled.'}
-            </T>
-          ) : activity.map((e, i) => (
-            <Inline key={`${e.ts}-${i}`} gap="sm" className="px-3.5 py-2 border-b border-border last:border-b-0 min-w-0">
-              {e.t === 'tool' ? (
-                <>
-                  <Chip tone="accent" size="xs" className="shrink-0 h-fit">{e.name}</Chip>
-                  <T as="div" className="text-[11.5px] text-text-secondary font-mono break-all min-w-0 flex-1">
-                    {e.detail}
-                  </T>
-                </>
-              ) : e.t === 'error' ? (
-                <>
-                  <Chip tone="danger" size="xs" className="shrink-0 h-fit">error</Chip>
-                  <T as="div" className="text-[12px] text-danger min-w-0 flex-1">{e.detail}</T>
-                </>
-              ) : (
-                <>
-                  <Chip tone="neutral" size="xs" className="shrink-0 h-fit">says</Chip>
-                  <T as="div" wrap className="text-[12.5px] text-text-primary leading-relaxed whitespace-pre-wrap min-w-0 flex-1">
-                    {e.detail}
-                  </T>
-                </>
-              )}
-            </Inline>
-          ))}
+          {activityUnavailable && job.result && <T className="mt-1 text-[12px] text-text-tertiary">The recorded result is shown below. Detailed activity is unavailable for this run.</T>}
+        </PageSection>
+        <PageSection size="md" title="Task"><T wrap className="text-[14px] text-text-secondary whitespace-pre-wrap">{prompt || 'No prompt recorded.'}</T></PageSection>
+        {toolResults}
+        {unavailable}
+        <PageSection size="md" title="Timing">
+          <Stack gap="xs" className="max-w-lg">
+            {([['Queued', job.createdAt], ['Claimed', job.claimedAt], ['Started', job.startedAt], ['Finished', job.finishedAt]] as const).filter(([, at]) => at).map(([label, at]) => <KeyValue key={label} layout="row" labelWidth="w-28" label={label} value={absoluteTime(at)} />)}
+          </Stack>
+        </PageSection>
+        <Disclosure summary="Technical details" variant="plain" density="compact">
+          <Stack gap="sm">
+            <KeyValue label="Run ID" value={job.id} /><KeyValue label="Kind" value={job.kind} />
+            <KeyValue label="Priority" value={String(job.priority)} />
+            <KeyValue label="Session" value={job.sessionId ?? '—'} />
+            {job.boxId && (canOpenWorker ? <Link to={`/admin/devbox?box=${encodeURIComponent(job.boxId)}`} className="text-primary text-[13px] hover:underline">Worker {job.boxId} ↗</Link> : <KeyValue label="Worker" value={job.boxId} />)}
+            {typeof job.payload.findingId === 'string' && <Link to="/iq/work/findings" className="text-primary text-[13px] hover:underline">Source finding: {job.payload.findingId}</Link>}
+          </Stack>
+        </Disclosure>
+      </Stack>}
+      {tab === 'activity' && <Stack gap="sm">
+        {isLive && <T className="text-[13px] text-text-secondary">{tailState === 'unavailable' ? 'Worker log unavailable' : tailState === 'retrying' ? 'Reconnecting…' : 'Live activity'}</T>}
+        {unavailable}
+        <Stack ref={scrollRef} gap="none" className="max-h-[520px] overflow-auto">
+          {activity.map((entry, i) => <Inline key={`${entry.ts}-${i}`} align="start" gap="sm" className="border-b border-border py-3">
+            <Chip size="xs" tone={entry.t === 'error' ? 'danger' : 'neutral'}>{entry.name ?? entry.t}</Chip>
+            <T wrap className="min-w-0 text-[13px] whitespace-pre-wrap break-words">{entry.detail}</T>
+          </Inline>)}
+          {!activity.length && !activityUnavailable && <T className="text-[13px] text-text-tertiary">{job.status === 'queued' ? 'Waiting for an idle worker.' : 'Waiting for the first output…'}</T>}
         </Stack>
-      </Card>
-
-      {/* ── Outcome ── */}
-      {(job.result || job.error) && (
-        <Card padding="none" className="mb-5 overflow-hidden">
-          <Toolbar size="sm"><SectionLabel>Outcome</SectionLabel></Toolbar>
-          {job.error && (
-            <T as="div" wrap className="px-3.5 py-3 border-b border-border text-[12.5px] text-danger">{job.error}</T>
-          )}
-          {job.result?.summary && (
-            <T as="div" wrap className="px-3.5 py-3 border-b border-border text-[12.5px] text-text-primary leading-relaxed whitespace-pre-wrap">
-              {job.result.summary}
-            </T>
-          )}
-          {job.result?.toolCallList && job.result.toolCallList.length > 0 && (
-            <ToolCallStrip
-              className="px-3.5 pt-2.5"
-              toolCalls={toToolCallStripItems(job.result.toolCallList)}
-            />
-          )}
-          <MetaLine
-            size="xs"
-            className="px-3.5 py-2.5"
-            items={[
-              `${job.result?.turns ?? 0} turns`,
-              durationLabel(job.result?.durationMs),
-              money(job.result?.costUsd),
-            ]}
-          />
-        </Card>
-      )}
-
-      {/* ── Timeline ── */}
-      <Card padding="md">
-        <SectionLabel as="div" className="mb-2">
-          Timeline
-        </SectionLabel>
-        <Stack gap="xs" className="max-w-md">
-          <KeyValue layout="row" labelWidth="w-20" label="Queued" value={absoluteTime(job.createdAt)} />
-          <KeyValue layout="row" labelWidth="w-20" label="Claimed" value={absoluteTime(job.claimedAt)} />
-          <KeyValue layout="row" labelWidth="w-20" label="Started" value={absoluteTime(job.startedAt)} />
-          <KeyValue layout="row" labelWidth="w-20" label="Finished" value={absoluteTime(job.finishedAt)} />
-        </Stack>
-      </Card>
-
-      <ConfirmDialog
-        open={confirmCancel}
-        tone="destructive"
-        title="Cancel this job?"
-        body={`This job is currently ${job.status}. Cancelling stops it and cannot be undone.`}
-        confirmLabel={cancelling ? 'Cancelling…' : 'Cancel job'}
-        confirmDisabled={cancelling}
-        onConfirm={() => void cancel()}
-        onCancel={() => setConfirmCancel(false)}
-      />
-    </PageSection>
+      </Stack>}
+      {tab === 'outputs' && <Stack gap="lg">
+        {job.result?.summary && <PageSection size="md" title="Recorded result"><T wrap className="text-[14px] whitespace-pre-wrap">{job.result.summary}</T></PageSection>}
+        {toolResults}
+        {!job.result?.summary && !tools.length && <EmptyState size="sm" title="No outputs recorded" />}
+      </Stack>}
+      {tab === 'changes' && <Stack gap="sm">
+        {proposalsError || proposalsDegraded ? <ErrorState title="Run changes unavailable" body={proposalsError || proposalsDegraded || 'Run changes are unavailable.'} actionLabel="Retry" onAction={refreshProposals} /> : proposalsLoading && !proposalsData ? <LoadingState /> : changes.length ? changes.map((change) => <Link key={change.id} to={`/iq/work/changes?job=${encodeURIComponent(job.id)}`} className="border-b border-border py-3 text-[13px] text-primary hover:underline">{change.kind} · {change.status}{change.rationale ? ` — ${change.rationale}` : ''}</Link>) : <EmptyState size="sm" title="No graph changes recorded" />}
+      </Stack>}
+      <ChatComposer value={question} onChange={setQuestion} placeholder="Ask about this run…" aria-label="Ask about this run" submitAriaLabel="Ask about this run"
+        onSubmit={() => { if (question.trim()) navigate(`/iq/invoke?${new URLSearchParams({ prompt: `${question.trim()}\n\nRun: ${job.title} (${job.id})\nStatus: ${job.status}\nTask: ${prompt}\nRecorded outcome: ${job.result?.summary ?? job.error ?? 'Not recorded'}` })}`); }} />
+      <ConfirmDialog open={confirmCancel} tone="destructive" title="Cancel this run?"
+        body={`This run is currently ${job.status}. Cancelling stops it and cannot be undone.`}
+        confirmLabel={cancelling ? 'Cancelling…' : 'Cancel run'} confirmDisabled={cancelling}
+        onConfirm={() => void cancel()} onCancel={() => setConfirmCancel(false)} />
+    </Stack>
   );
 }

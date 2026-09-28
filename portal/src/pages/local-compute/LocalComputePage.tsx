@@ -34,7 +34,7 @@ import {
   type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
 import { LogStream, type LogLine } from '@connorhoehnslalom/ui-components/shared';
-import { Link as RouterLink } from 'react-router';
+import { Link as RouterLink, useSearchParams } from 'react-router';
 import { RunLog } from './RunLog';
 import { CapabilityBrief, ModelChips } from './ModelCapability';
 import { NoSuggestions } from './SuggestedWork';
@@ -180,8 +180,13 @@ export default function LocalComputePage() {
   const [sendError, setSendError] = useState<string | null>(null);
   const toast = useToastOptional();
 
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
-  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+  const [params, setParams] = useSearchParams();
+  const view = params.get('view') === 'runs' ? 'runs' : 'machines';
+  const selectedNodeId = params.get('machine');
+  const selectedRunId = params.get('run');
+  const setSelection = (key: string, value: string | null) => setParams((previous) => { const next = new URLSearchParams(previous); if (value) next.set(key, value); else next.delete(key); return next; });
+  const setSelectedNodeId = (id: string | null) => setSelection('machine', id);
+  const setSelectedRunId = (id: string | null) => setSelection('run', id);
   // The accept-jobs switch, while its PATCH is in flight: the row shows the
   // requested state immediately rather than the 15s-poll-old one, and a
   // failure snaps it back and says why. Keyed by node so two machines can be
@@ -571,6 +576,11 @@ export default function LocalComputePage() {
       ),
     },
   ];
+
+  if (view === 'runs') return <PageSection title="Runs" description="Work handed to your paired machines.">
+    {runsFailure ? <UnavailableNotice error={runsFailure} what="run history" source="Local compute runs" onRetry={refreshRuns} /> : <DataTable data={runs} keyField={(run) => run.id} columns={runColumns} frameless pageSize={20} onRowClick={(run) => setSelectedRunId(run.id)} emptyMessage="No runs yet" />}
+    {selectedRunId && <DetailSection title="Run log" actions={<Button size="sm" variant="ghost" onClick={() => setSelectedRunId(null)}>Close</Button>}><RunLog key={selectedRunId} jobId={selectedRunId} /></DetailSection>}
+  </PageSection>;
 
   return (
     <PageSection

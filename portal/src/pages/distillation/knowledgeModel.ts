@@ -312,7 +312,7 @@ export function technicalDetails(item: Item): DetailRow[] {
       { label: 'Patterns', value: item.cluster_ids.join(', ') || '—', mono: true },
       { label: 'Facts', value: String(item.facts.length) },
       { label: 'Compaction', value: item.created_by_compaction_id, mono: true },
-      { label: 'Library item', value: item.library_item_id ?? '—', mono: true },
+      { label: 'Agent library asset', value: item.library_item_id ?? '—', mono: true },
       { label: 'Created', value: item.created_at, mono: true },
       { label: 'Updated', value: item.updated_at, mono: true },
     );

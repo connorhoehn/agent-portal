@@ -106,7 +106,7 @@ export default function PromptOpsHomePage() {
                 Authoring, testing and rolling out prompts — Studio, Versions, Evals and
                 Rollout — is limited to the org-leader and HR Admin roles.{' '}
                 <Link to="/iq/library" className="font-semibold text-primary no-underline hover:underline">
-                  Browse the library
+                  Browse Agent library
                 </Link>{' '}
                 instead, or switch role from the identity menu, top right.
               </>

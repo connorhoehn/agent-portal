@@ -1,9 +1,10 @@
+import { AssetRelationships } from './AssetRelationships';
 // The Knowledge record pane (spec §1; the guide record mockup,
 // docs/distillation-guide-record-spec.md): one guide / pattern / run note on
 // the library's EditorShell — a record headline (titleSize lg: the page's
 // title, no kind mark or crumb above it; the module crumbs sit at the top of
 // the pane), status + updated line, Content | History (+ Runs for a
-// procedure) with Sources N and Open in Library ↗ (only when linked) at the
+// procedure) with Sources N and Open in Agent library ↗ (only when linked) at the
 // right of the tab row, and the docked explain-only composer.
 //
 // Each tier renders its content ONCE:
@@ -334,7 +335,7 @@ export function KnowledgeRecord({
           </Button>
           {libraryId && (
             <Button size="sm" variant="secondary" onClick={() => onOpen(`/iq/library/${encodeURIComponent(libraryId)}`)}>
-              Open in Library ↗
+              Open in Agent library ↗
             </Button>
           )}
         </Inline>
@@ -377,6 +378,7 @@ export function KnowledgeRecord({
             {item.level === 'L1' && <PatternContent item={item} onOpen={onOpen} />}
             {item.level === 'L0' && <NoteContent item={item} onOpen={onOpen} />}
             {item.level !== 'L2' && <TechnicalDetailsBlock item={item} />}
+            {item.level === 'L2' && <AssetRelationships kind="knowledge" id={item.id} />}
           </>
         )}
         {activeTab === 'history' && (

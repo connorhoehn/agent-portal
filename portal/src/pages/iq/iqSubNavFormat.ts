@@ -21,7 +21,7 @@ import type { SubNavItem } from '@connorhoehnslalom/ui-components/shared';
 // (DEFECTS.md #10).
 export const PROMPT_MGMT_PLATFORM_GROUPS = new Set(['Ops', 'Author', 'Ship']);
 export const PROMPT_MGMT_ITEMS: SubNavItem[] = [
-  { path: '/iq/library',              label: 'Library',         hint: 'Every prompt, evaluator, skill and insight', group: 'Browse' },
+  { path: '/iq/library',              label: 'Agent library',         hint: 'Every prompt, evaluator, skill and insight', group: 'Browse' },
   { path: '/iq/prompt-ops',           label: 'What is deployed', hint: 'Live prompts + what to do next',    group: 'Ops' },
   { path: '/iq/prompts',              label: 'Studio',          hint: 'Author, type the contract, test',    group: 'Author' },
   { path: '/iq/history',              label: 'Versions',        hint: 'Version log, diffs, past experiments', group: 'Author' },

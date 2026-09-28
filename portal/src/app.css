@@ -501,6 +501,59 @@ tbody tr:focus-within .row-reveal,
 [data-shell-nav] > div > main:has([data-shell-flush]) .shell-breadcrumbs {
   display: none;
 }
+/* Distillation's nested workspace owns its spacing and scrolling. */
+[data-shell-nav] [data-testid="distillation-module"] section[aria-label="Distillation"].flex-1.min-w-0.overflow-auto.p-6,
+[data-shell-nav] [data-initiative-stack] section[aria-label="Initiatives workspace"].flex-1.min-w-0.overflow-auto.p-6,
+[data-shell-nav] [data-testid="stacked-catalog"] section.flex-1.min-w-0.overflow-auto.p-6 {
+  padding: 0;
+  overflow: hidden;
+  min-height: 0;
+}
+[data-testid="distillation-knowledge-pane"] {
+  overflow: hidden;
+}
+[data-testid="knowledge-record"] {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+[data-testid="distillation-knowledge-rail-header"],
+[data-initiative-stack] [data-testid="explorer-layout-rail-header"],
+[data-testid="initiative-work-explorer-rail-header"],
+[data-testid="catalog-explorer-rail-header"],
+[data-testid="distillation-promotions-rail-header"],
+[data-testid="distillation-review-rail-header"] {
+  height: auto;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--color-border);
+}
+[data-testid="distillation-knowledge-rail-title"],
+[data-initiative-stack] [data-testid="explorer-layout-rail-title"],
+[data-testid="initiative-work-explorer-rail-title"],
+[data-testid="catalog-explorer-rail-title"],
+[data-testid="distillation-promotions-rail-title"],
+[data-testid="distillation-review-rail-title"] {
+  font-size: 11px;
+  line-height: 1.5;
+  letter-spacing: 0.05em;
+  color: var(--color-text-tertiary);
+}
+/* Keep the trail in normal flow when another rail narrows the record pane. */
+:is([data-testid="distillation-module"], [data-testid="stacked-catalog"], [data-initiative-stack]) [data-variant="crumbs"] {
+  flex-wrap: wrap;
+  row-gap: 0.5rem;
+}
+:is([data-testid="distillation-module"], [data-testid="stacked-catalog"], [data-initiative-stack]) [data-variant="crumbs"] > div:first-child {
+  flex: 1 1 20rem;
+  height: auto;
+  min-height: 1.25rem;
+  align-items: flex-start;
+}
+:is([data-testid="distillation-module"], [data-testid="stacked-catalog"], [data-initiative-stack]) [data-variant="crumbs"] [data-hang] {
+  margin: 0 0 0 auto;
+  max-width: 100%;
+  flex-wrap: wrap;
+}
 .shell-header {
   position: relative;
   background: var(--color-surface);
@@ -528,3 +581,31 @@ tbody tr:focus-within .row-reveal,
     box-shadow: none;
   }
 }
+
+/* Build pages retain a full-height module menu beside lists and records. */
+[data-shell-nav] [data-testid="build-section"] section.flex-1.min-w-0.overflow-auto.p-6 {
+  padding: 0;
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* A catalog row keeps all five fields visible beside the stacked menus. */
+[data-testid="agent-library-table"] table { table-layout: fixed; width: 100%; }
+[data-testid="agent-library-table"] th { background: var(--color-surface); }
+[data-testid="agent-library-table"] td { overflow: hidden; }
+
+/* Ask uses the same flush module rail while its transcript scrolls independently. */
+[data-shell-nav] [data-testid="ask-workspace"] section[aria-label="Conversation"].flex-1.min-w-0.overflow-auto.p-6 {
+  padding: 0;
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* Search keeps one conversation mounted across its three views. */
+[data-shell-nav] [data-testid="search-workspace"] section[aria-label="Search workspace"].flex-1.min-w-0.overflow-auto.p-6 {
+  padding: 0;
+  overflow: hidden;
+  min-height: 0;
+}
+.search-composer textarea { min-height: 48px; }
+.search-composer > div { border-top: 0; }

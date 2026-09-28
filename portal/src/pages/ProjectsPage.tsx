@@ -2,6 +2,7 @@ import { Fragment, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { ScopeHeader } from '@connorhoehnslalom/ui-components';
 import {
+  Button,
   EmptyState,
   LoadingState,
   Stack,
@@ -13,6 +14,7 @@ import { useCapabilities } from '../lib/capabilities';
 import { InitiativesExplorer } from './projects/InitiativesExplorer';
 import { useInitiativeListRail } from './projects/InitiativeListRail';
 import { InitiativeComposer } from './projects/InitiativeComposer';
+import { initiativeBreadcrumbs, initiativeHref } from './projects/initiativeNavigation';
 import { ProjectTable } from './projects/ProjectTable';
 import { SprintsLens, useSprintsLens } from './projects/SprintsLens';
 import { MINE_DESCRIPTION, MINE_TITLE, buildMine, type MineEmptyCopy } from './projects/mineModel';
@@ -89,7 +91,7 @@ function ProjectsPage() {
     [rows, list.statusFilter, list.query, list.sort],
   );
   const totals = useMemo(() => programTotals(rows ?? []), [rows]);
-  const openProject = (p: ProjectSummary) => navigate(`/iq/projects/${encodeURIComponent(p.id)}`);
+  const openProject = (p: ProjectSummary) => navigate(initiativeHref(p.id, searchParams, scope));
   const refreshAll = () => { list.list.refresh(); person.refresh(); personDetail.refresh(); };
 
   const header = (title: string, description: string) => (
@@ -114,7 +116,7 @@ function ProjectsPage() {
   );
 
   const table = visible.length > 0 ? (
-    <ProjectTable projects={visible} onOpen={openProject} />
+    <ProjectTable projects={visible} onOpen={openProject} hrefOf={(p) => initiativeHref(p.id, searchParams, scope)} />
   ) : (
     <EmptyState
       title="No matching initiatives"
@@ -210,6 +212,10 @@ function ProjectsPage() {
   return (
     <InitiativesExplorer
       {...list.slots}
+      breadcrumbs={initiativeBreadcrumbs({
+        search: searchParams, scope, sprints: lens === 'sprints',
+        sprint: lens === 'sprints' ? sprints.data?.sprints.find((s) => s.id === sprints.openId)?.name : undefined,
+      })}
       paneHeader={paneHeader}
       composer={<InitiativeComposer subject={{ kind: 'initiatives', rows }} />}
       data-testid="initiatives-page"
@@ -233,21 +239,22 @@ function MineEmpty({
     <Stack gap="none" className="pt-9">
       <EmptyState
         align="start"
-        size="lg"
-        actionsDirection="row"
+        size="sm"
         testId="mine-empty"
         title={copy.heading}
         description={<Lines lines={copy.lines} />}
-        actions={[
-          { label: copy.primary.label, variant: 'primary', onClick: onEveryone },
-          { label: copy.secondary.label, variant: 'secondary', onClick: onProfile },
-        ]}
-        details={{
-          title: copy.details.title,
-          body: <Lines lines={copy.details.lines} />,
-          action: { label: copy.details.action.label, variant: 'link', onClick: onRefresh },
-        }}
+        action={(
+          <div className="flex flex-wrap items-center gap-2">
+            <Button size="sm" onClick={onEveryone}>{copy.primary.label}</Button>
+            <Button size="sm" variant="secondary" onClick={onProfile}>{copy.secondary.label}</Button>
+          </div>
+        )}
       />
+      <Stack gap="sm" className="mt-5 border-t border-border pt-5 text-[13px] leading-5 text-text-secondary">
+        <h2 className="text-[14px] font-semibold text-text-primary">{copy.details.title}</h2>
+        <div><Lines lines={copy.details.lines} /></div>
+        <Button size="sm" variant="ghost" className="self-start" onClick={onRefresh}>{copy.details.action.label}</Button>
+      </Stack>
     </Stack>
   );
 }

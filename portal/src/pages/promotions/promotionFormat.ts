@@ -122,8 +122,8 @@ export function nextStep(c: Pick<PromotionCandidate, 'status' | 'proposedKind' |
   if (c.status === 'dismissed') return 'Dismissed — not going forward.';
   if (c.status === 'promoted') {
     return c.proposedKind === 'skill'
-      ? 'Promoted — now running unattended as a skill.'
-      : `Promoted — now in the library as ${c.proposedKind === 'insight' ? 'an insight' : 'a runbook'}.`;
+      ? 'Promoted — review release readiness in Agent library before enabling execution.'
+      : `Promoted — approved for Agent library as ${c.proposedKind === 'insight' ? 'an insight' : 'a runbook'}.`;
   }
   if (c.driftedFrom && c.status === 'candidate') {
     return 'Sent back from a skill by drift detection — review what changed before re-promoting.';
@@ -134,6 +134,6 @@ export function nextStep(c: Pick<PromotionCandidate, 'status' | 'proposedKind' |
   if (c.dryRunPassed === false) return 'Dry run failed — fix the procedure and rerun before promoting.';
   if (c.dryRunPassed === true) return 'Dry run passed — promote to ship it as a skill.';
   return c.status === 'approved'
-    ? 'Approved — waiting on a passing dry run before it can run unattended.'
-    : 'Approve, then run a dry run — a skill needs both before it runs unattended.';
+    ? 'Approved — waiting on a passing dry run before promotion.'
+    : 'Approve, then run a dry run — a skill needs both before promotion.';
 }

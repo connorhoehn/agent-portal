@@ -68,12 +68,13 @@ export function resolveBreadcrumbs(pathname: string): Crumb[] {
 
   if (root === 'iq') {
     switch (a) {
+      case 'search': return [{ label: 'Org' }, { label: 'Search' }];
       case 'work':
-        if (!b) return [{ label: 'Build' }, { label: 'Automate' }];
-        if (b === 'changes') return [{ label: 'Build' }, { label: 'Automate', path: '/iq/work' }, { label: 'Graph updates' }];
-        if (b === 'queue') return [{ label: 'Build' }, { label: 'Automate', path: '/iq/work' }, { label: 'Queue' }];
+        if (!b) return [{ label: 'Build' }, { label: 'Automate', path: '/iq/work' }, { label: 'Inbox' }];
+        if (b === 'changes') return [{ label: 'Build' }, { label: 'Automate', path: '/iq/work' }, { label: 'Changes' }];
+        if (b === 'queue') return [{ label: 'Build' }, { label: 'Automate', path: '/iq/work' }, { label: 'Runs' }];
         if (b === 'findings') return [{ label: 'Build' }, { label: 'Automate', path: '/iq/work' }, { label: 'Findings' }];
-        return [{ label: 'Build' }, { label: 'Automate', path: '/iq/work' }, { label: `Job ${shortId(b)}`, id: b }];
+        return [{ label: 'Build' }, { label: 'Automate', path: '/iq/work' }, { label: 'Runs', path: '/iq/work/queue' }, { label: `Run ${shortId(b)}`, id: b }];
       case 'projects':
         if (!b) return [{ label: 'Plan' }, { label: 'Initiatives' }];
         return [{ label: 'Plan' }, { label: 'Initiatives', path: '/iq/projects' }, { label: initiativeName(b) }];
@@ -81,10 +82,10 @@ export function resolveBreadcrumbs(pathname: string): Crumb[] {
         if (!b) return [{ label: 'Design' }, { label: 'Designs' }];
         return [{ label: 'Design' }, { label: 'Designs', path: '/iq/designs' }, { label: shortId(b), id: b }];
       case 'library':
-        if (!b) return [{ label: 'Design' }, { label: 'Library' }];
-        return [{ label: 'Design' }, { label: 'Library', path: '/iq/library' }, { label: shortId(b), id: b }];
-      case 'promotions': return [{ label: 'Design' }, { label: 'Promotions' }];
-      case 'release': return [{ label: 'Release' }, { label: 'Session config' }];
+        if (!b) return [{ label: 'Build' }, { label: 'Agent library' }];
+        return [{ label: 'Build' }, { label: 'Agent library', path: '/iq/library' }, { label: shortId(b), id: b }];
+      case 'promotions': return [{ label: 'Build' }, { label: 'Distillation', path: '/iq/distillation/knowledge' }, { label: 'Review', path: '/iq/distillation/review' }, { label: 'Asset promotions' }];
+      case 'release': return [{ label: 'Build' }, { label: 'Local compute', path: '/iq/local-compute' }, { label: 'Configuration' }];
       case 'sprints': return [{ label: 'Plan' }, { label: 'Initiatives', path: '/iq/projects' }, { label: 'Sprints' }];
       case 'invoke': return [{ label: 'Org' }, { label: 'Ask' }];
       case 'explore': return [{ label: 'Org' }, { label: 'Explore' }];
@@ -96,15 +97,17 @@ export function resolveBreadcrumbs(pathname: string): Crumb[] {
         return [{ label: 'Operate' }, { label: 'Architecture', path: '/iq/agents' }, { label: b, id: b }];
       // Prompt management is the Library's rail (Design); the rail lights
       // Library on these pages, so the crumb says the same.
-      case 'prompt-ops': return [{ label: 'Design' }, { label: 'Library', path: '/iq/library' }, { label: 'What is deployed' }];
+      case 'prompt-ops': return [{ label: 'Build' }, { label: 'Agent library', path: '/iq/library' }, { label: 'What is deployed' }];
       case 'distillation': {
         const page = b ?? 'knowledge';
         return [{ label: 'Build' }, { label: 'Distillation', path: '/iq/distillation/knowledge' }, { label: DISTILLATION_LABELS[page] ?? page }];
       }
-      case 'local-compute': return [{ label: 'Build' }, { label: 'Local compute' }];
+      case 'local-compute': return b === 'configuration'
+        ? [{ label: 'Build' }, { label: 'Local compute', path: '/iq/local-compute' }, { label: 'Configuration' }]
+        : [{ label: 'Build' }, { label: 'Local compute' }];
       default:
         if (a && PROMPT_PAGES[a]) {
-          return [{ label: 'Design' }, { label: 'Library', path: '/iq/library' }, { label: 'Prompts', path: '/iq/prompt-ops' }, { label: PROMPT_PAGES[a] }];
+          return [{ label: 'Build' }, { label: 'Agent library', path: '/iq/library' }, { label: 'Prompts', path: '/iq/prompt-ops' }, { label: PROMPT_PAGES[a] }];
         }
         return [];
     }

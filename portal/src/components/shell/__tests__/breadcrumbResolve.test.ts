@@ -24,9 +24,16 @@ test('every rail path resolves to a section and a page', () => {
   }
 });
 
+test('configuration lives beneath Local compute, including its legacy address', () => {
+  for (const path of ['/iq/local-compute/configuration', '/iq/release']) {
+    assert.deepEqual(resolveBreadcrumbs(path).map((c) => c.label), ['Build', 'Local compute', 'Configuration']);
+    assert.equal(resolveBreadcrumbs(path)[1]?.path, '/iq/local-compute');
+  }
+});
+
 test('the Design rail pages sit under Design, and a library asset gets a third crumb', () => {
-  assert.deepEqual(resolveBreadcrumbs('/iq/library').map((c) => c.label), ['Design', 'Library']);
-  assert.deepEqual(resolveBreadcrumbs('/iq/promotions').map((c) => c.label), ['Design', 'Promotions']);
+  assert.deepEqual(resolveBreadcrumbs('/iq/library').map((c) => c.label), ['Build', 'Agent library']);
+  assert.deepEqual(resolveBreadcrumbs('/iq/promotions').map((c) => c.label), ['Build', 'Distillation', 'Review', 'Asset promotions']);
   assert.equal(resolveBreadcrumbs('/iq/library/lib-stakeholder-email')[1]!.path, '/iq/library');
 });
 

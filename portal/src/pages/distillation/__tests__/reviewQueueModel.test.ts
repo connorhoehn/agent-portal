@@ -98,7 +98,7 @@ test('verdict on an unknown id is a no-op with nothing to roll back', () => {
 
 test('labels', () => {
   assert.equal(reviewTypeLabel('procedure'), 'Procedure');
-  assert.equal(reviewTypeLabel('library_item'), 'Library item');
+  assert.equal(reviewTypeLabel('library_item'), 'Agent library asset');
   assert.equal(reviewTypeLabel(null), 'Item');
   assert.equal(sourceCountLabel(1), '1 source');
   assert.equal(sourceCountLabel(0), '0 sources');

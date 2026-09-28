@@ -286,3 +286,17 @@ export function migrateDistillationUrl(pathname: string, search: SearchInput = '
 
 /** Every legacy sub-path App.tsx must register a redirect for. */
 export const LEGACY_DISTILLATION_PATHS = ['overview', 'tiers', 'artifacts', 'lineage', 'compactions'] as const;
+
+/** Asset promotion keeps its own workflow state within the Review area. */
+export function promotionReviewHref(search: string | URLSearchParams = '', item?: string): string {
+  const p = new URLSearchParams(search);
+  p.set('view', 'promotions');
+  if (item) p.set('item', item);
+  return `${DISTILLATION_BASE}/review?${p}`;
+}
+
+export function migratePromotionsUrl(pathname: string, search = '', hash = ''): string | null {
+  const match = pathname.match(/^\/iq\/promotions(?:\/([^/]+))?\/?$/);
+  if (!match) return null;
+  return promotionReviewHref(search, match[1] ? decodeURIComponent(match[1]) : undefined) + hash;
+}

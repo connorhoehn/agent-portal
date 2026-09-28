@@ -6,22 +6,20 @@
 // the archive.
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 import {
-  Button, Card, Chip, ConsultCard, Inline, InlineAlert, PageSection, SectionLabel, Stack, StatCard, StatStrip,
-  ToolCallStrip, Toolbar,
+  Button, Card, Chip, ConsultCard, Inline, InlineAlert, PageSection, SectionLabel, Stack, StatStrip,
+  ToolCallStrip, Toolbar, DataTable, PageHeader, Disclosure, type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';
-import { useSession } from '../../lib/auth';
-import { relativeTime } from '../../lib/relativeTime';
+import { durationLabel, relativeTime } from '../../lib/relativeTime';
 import { toastError, toastPending, toastSuccess } from '../../lib/toastStore';
 import { sendJson, writeJson } from '../../lib/writeJson';
 import { usd } from '../../lib/format';
-import { DEVBOX_ROLES } from './automateNav';
 import { QueuePulse } from './QueuePulse';
 import {
-  BotOrigin, GraphUpdatesLink, PROPOSAL_LABELS, ServesItem, T, money, toToolCallStripItems,
+  BotOrigin, JobStatusPill, PROPOSAL_LABELS, ServesItem, T, money, toToolCallStripItems,
   type Job, type LabConsult, type Proposal, type Summary,
 } from './workShared';
 
@@ -35,10 +33,9 @@ interface RediscoveryStats {
 }
 
 export default function WorkHomePage() {
+  const navigate = useNavigate();
   const { can, ready } = useCapabilities();
   const canManage = ready && can('ManageDevbox');
-  const { session } = useSession();
-  const canOpenDevbox = !!session && DEVBOX_ROLES.includes(session.role);
 
   const { data: summary, error: summaryError, degraded: summaryDegraded, refresh: refreshSummary } = useFetch<Summary>('/api/work/summary', 8_000);
   const summaryFailure = summaryError ?? summaryDegraded;
@@ -46,7 +43,7 @@ export default function WorkHomePage() {
   // RUNNING agent blocked on a human, which outranks everything else here.
   const { data: consultData, refresh: refreshConsults } =
     useFetch<{ consults: LabConsult[] }>('/api/lab/consults?status=pending', 8_000);
-  const { data: jobsData, refresh: refreshJobs } = useFetch<{ jobs: Job[] }>('/api/work/jobs?limit=50', 8_000);
+  const { data: jobsData, error: jobsError, isLoading: jobsLoading, refresh: refreshJobs } = useFetch<{ jobs: Job[] }>('/api/work/jobs?limit=50', 8_000);
   const { data: proposalsData, refresh: refreshProposals } = useFetch<{ proposals: Proposal[] }>('/api/work/proposals?status=pending', 20_000);
   // Slower cadence than the rest of the board — this number moves on the
   // scale of decisions made, not queue churn.
@@ -131,12 +128,21 @@ export default function WorkHomePage() {
   const active = (s?.jobs['running'] ?? 0) + (s?.jobs['claimed'] ?? 0);
   const needsReview = s?.jobs['awaiting_review'] ?? 0;
   const pendingProposals = s?.proposals['pending'] ?? 0;
-  const consultCount = pendingConsults.length || (s?.consults?.pending ?? 0);
-  const failedCount = jobs.filter((j) => j.status === 'failed' || j.status === 'cancelled').length;
-  const needsYou = needsReview + pendingProposals + consultCount;
+
+  const recent = jobs.filter((job) => job.finishedAt).sort((a, b) => b.finishedAt!.localeCompare(a.finishedAt!)).slice(0, 4);
+  const recentColumns: DataTableColumn<Job>[] = [
+    { key: 'title', header: 'Run', render: (job) => <Link to={`/iq/work/${encodeURIComponent(job.id)}`} className="text-[13px] text-text-primary hover:text-primary hover:underline">{job.title}</Link> },
+    { key: 'status', header: 'Result', render: (job) => <JobStatusPill status={job.status} /> },
+    { key: 'finishedAt', header: 'Finished', render: (job) => <T className="text-[13px] text-text-secondary">{relativeTime(job.finishedAt!)}</T> },
+    { key: 'duration', header: 'Duration', render: (job) => <T className="text-[13px] text-text-secondary">{durationLabel(job.result?.durationMs)}</T> },
+    { key: 'open', header: '', render: () => <span aria-hidden>›</span> },
+  ];
 
   return (
-    <PageSection title="Automate" actions={<GraphUpdatesLink />}>
+    <Stack gap="lg" data-testid="automate-inbox">
+      <PageHeader size="lg" title="Inbox" description="Questions and approvals waiting for you."
+        actions={canManage ? <Button variant="primary" onClick={() => navigate('/iq/work/queue?compose=1#new-run')}>New run</Button> : undefined} />
+      <PageSection size="md" title="Needs your attention">
       {/* A failed load renders as zeros everywhere below — "0 workers, 0 needs
           you" reads exactly like a healthy, idle system. Say so plainly.
           `summaryFailure` (transport error OR the wire's `degraded` marker) —
@@ -159,8 +165,7 @@ export default function WorkHomePage() {
       {/* ── Agent questions first: a pending consult is a RUNNING computer
           blocked on a person. ── */}
       {pendingConsults.length > 0 && (
-        <Card padding="none" className="mb-5 overflow-hidden border-warning/40">
-          <Toolbar size="sm"><SectionLabel className="text-warning">Agents waiting on you</SectionLabel></Toolbar>
+        <Stack gap="none" className="mb-5">
           <Stack gap="sm" className="p-3.5">
             {pendingConsults.map((c) => (
               <ConsultCard
@@ -175,7 +180,7 @@ export default function WorkHomePage() {
               />
             ))}
           </Stack>
-        </Card>
+        </Stack>
       )}
 
       {/* ── Needs review: the human-in-the-loop lane ── */}
@@ -277,83 +282,25 @@ export default function WorkHomePage() {
         </InlineAlert>
       )}
 
-      {/* ── The queue's pulse: depth, the bots pulling from it, drain ETA ── */}
-      <QueuePulse
-        summary={s ? { jobs: s.jobs, busyBoxes: s.busyBoxes } : null}
-        jobs={jobs}
-        degraded={!!summaryFailure}
-      />
-
-      {/* ── The three door-to-a-lane numbers in one dense StatStrip row —
-          the review lane above is the page, not this. Rediscovery avoided
-          gets its own StatCard below: it is a trend over the window, not a
-          door, and it is the one number here with a shape worth a sparkline. ── */}
-      <StatStrip
-        aria-label="Automate summary"
-        className="mt-3"
-        items={[
-          {
-            label: 'Needs you',
-            value: summaryFailure ? '—' : needsYou,
-            tone: !summaryFailure && needsYou > 0 ? 'danger' : 'default',
-            hint: summaryFailure
-              ? 'unknown'
-              // Short enough to fit the tile at the shell's narrowest content
-              // width — the long form clipped to "0 for review · 0 graph…".
-              : `${needsReview} review · ${pendingProposals} graph · ${consultCount} question${consultCount === 1 ? '' : 's'}`,
-          },
-          {
-            label: 'Workers',
-            value: summaryFailure ? '—' : active,
-            href: '/iq/work/queue',
-            hint: summaryFailure
-              ? 'unknown'
-              : active > 0
-                ? `busy: ${(s?.busyBoxes ?? []).join(', ') || '—'}`
-                : 'all idle · next job within ~10s',
-          },
-          {
-            label: 'Findings + failed jobs',
-            value: summaryFailure ? '—' : (s?.findings.open ?? 0) + failedCount,
-            tone: !summaryFailure && ((s?.findings.critical ?? 0) > 0 || failedCount > 0) ? 'danger' : 'default',
-            href: '/iq/work/findings',
-            hint: summaryFailure
-              ? 'unknown'
-              : `${s?.findings.open ?? 0} open finding${(s?.findings.open ?? 0) === 1 ? '' : 's'} · ${failedCount} failed job${failedCount === 1 ? '' : 's'}`,
-          },
-        ]}
-      />
-
-      <StatCard
-        className="mt-3 max-w-xs"
-        label="Rediscovery avoided"
-        value={rediscovery ? usd(rediscovery.usdAvoided) : '—'}
-        {...(rediscovery && rediscovery.usdAvoidedSeries.some((v) => v > 0)
-          ? { sparklineData: rediscovery.usdAvoidedSeries }
-          : {})}
-        hint={rediscovery
-          ? `${rediscovery.shortCircuits} short-circuits · ${rediscovery.dismissals} dismissed · ${rediscovery.windowDays}d`
-          : 'unknown'}
-      />
-
-      {/* `T`'s wrap mode is built on the flex-row `Inline` primitive, which
-          wraps each contiguous run of JSX text in its own anonymous
-          block-level flex item (CSS Flexbox §4) — a plain space at the seam
-          next to an inline <Link>/<T> then lands as leading/trailing
-          whitespace of that block's own line box and paints with zero
-          width, so "the" and "queue" visually touch ("thequeue"). A
-          non-breaking space at each seam is real, non-collapsible content
-          instead of trimmable whitespace, so it always renders. */}
-      <T as="div" wrap className="text-[12px] text-text-tertiary mt-3 mb-5 leading-relaxed">
-        {'Bots and people put work on the'}{' '}
-        <Link to="/iq/work/queue" className="text-primary no-underline hover:underline">queue</Link>
-        {', computers in the'}{' '}
-        {canOpenDevbox
-          ? <Link to="/admin/devbox" className="text-primary no-underline hover:underline">Computer Lab</Link>
-          : <T title="Not visible to this role">Computer Lab</T>}
-        {' '}
-        {'drain it, and anything that would change the org graph or ship code waits at the top of this page for a person.'}
-      </T>
-    </PageSection>
+      {!summaryFailure && (needsReview === 0 && pendingProposals === 0) && pendingConsults.length > 0 && <T className="text-[13px] text-text-tertiary">✓ No pending approvals or proposed changes.</T>}
+      </PageSection>
+      <PageSection size="md" title="Current queue" className="border-t border-b border-border py-5"
+        actions={<Link to="/iq/work/queue" className="text-[13px] text-primary hover:underline">View runs →</Link>}>
+        <StatStrip frameless aria-label="Current queue" items={[
+          { label: 'Queued', value: summaryFailure || !s ? '—' : s.jobs.queued ?? 0 },
+          { label: 'Running', value: summaryFailure || !s ? '—' : active },
+          { label: 'Waiting for review', value: summaryFailure || !s ? '—' : needsReview },
+          { label: 'Failed', value: summaryFailure || !s ? '—' : s.jobs.failed ?? 0 },
+        ]} />
+      </PageSection>
+      <PageSection size="md" title="Recent runs" actions={<Link to="/iq/work/queue" className="text-[13px] text-primary hover:underline">All runs →</Link>}>
+        {jobsError ? <InlineAlert tone="error">{jobsError}</InlineAlert> : <DataTable data={recent} columns={recentColumns} keyField={(job) => job.id} onRowClick={(job) => navigate(`/iq/work/${encodeURIComponent(job.id)}`)} frameless loading={jobsLoading && !jobsData} emptyMessage="No completed runs yet" />}
+      </PageSection>
+      <Link to="/iq/work/findings" className="text-[13px] text-primary hover:underline">{s && !summaryFailure ? `${s.findings.open} open findings` : 'View findings'} →</Link>
+      <Disclosure summary="Queue operations" variant="plain" density="compact">
+        <QueuePulse summary={s ? { jobs: s.jobs, busyBoxes: s.busyBoxes } : null} jobs={jobs} degraded={!!summaryFailure} />
+        {rediscovery && <T className="mt-3 text-[12px] text-text-tertiary">Rediscovery avoided {usd(rediscovery.usdAvoided)} · {rediscovery.shortCircuits} short-circuits · {rediscovery.windowDays}d</T>}
+      </Disclosure>
+    </Stack>
   );
 }

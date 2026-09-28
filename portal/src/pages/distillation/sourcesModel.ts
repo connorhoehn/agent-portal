@@ -66,7 +66,7 @@ const RANK: Record<GraphNodeKind, number> = {
 
 const KIND_LABEL: Record<string, string> = {
   session: 'Session', observation: 'Run note', cluster: 'Pattern', artifact: 'Guide',
-  fact: 'Fact', application: 'Run', library_item: 'Library asset',
+  fact: 'Fact', application: 'Run', library_item: 'Agent library asset',
 };
 
 export function sourceKindLabel(kind: string): string {

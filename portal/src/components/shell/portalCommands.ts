@@ -103,13 +103,13 @@ const PAGES: PageEntry[] = [
     keywords: ['finding', 'sweep', 'signal', 'dlq', 'dead letter', 'failure'] },
   { label: 'Initiatives',        hint: 'Epics, decisions, contributors',      path: '/iq/projects',                                tenant: 'orgiq',  group: 'Plan',
     keywords: ['initiative', 'project', 'program', 'sprint', 'epic'] },
-  { label: 'Library',            hint: 'Every prompt, evaluator, skill and insight', path: '/iq/library',                          tenant: 'orgiq',  group: 'Design',
+  { label: 'Agent library',            hint: 'Every prompt, evaluator, skill and insight', path: '/iq/library',                          tenant: 'orgiq',  group: 'Build',
     keywords: ['artifact', 'asset', 'library item', 'prompt', 'evaluator', 'skill', 'insight'] },
-  { label: 'Promotions',         hint: 'Candidate skills awaiting approval',  path: '/iq/promotions',                              tenant: 'orgiq',  group: 'Design',
+  { label: 'Review asset promotions',         hint: 'Candidate skills awaiting approval',  path: '/iq/distillation/review?view=promotions',          tenant: 'orgiq',  group: 'Build',
     keywords: ['promotion', 'candidate', 'skill', 'approve', 'artifact'] },
   { label: 'Designs',            hint: 'Design threads and sign-off',         path: '/iq/designs',                                 tenant: 'orgiq',  group: 'Design',
     keywords: ['design', 'adr', 'decision', 'thread', 'sign-off', 'review'] },
-  { label: 'Session config',     hint: 'The skill bundle agents start with',  path: '/iq/release',                                 tenant: 'orgiq',  group: 'Release',
+  { label: 'Local compute configuration', hint: 'Session settings and bundled skill versions', path: '/iq/local-compute/configuration', tenant: 'orgiq', group: 'Build',
     keywords: ['release', 'session', 'config', 'skill bundle', 'hooks'] },
   { label: 'Budgets',            hint: 'Agent spend vs allocation',           path: '/admin/budgets',                              tenant: 'admin',  group: 'Plan',    roles: BUDGETS,
     keywords: ['budget', 'spend', 'allocation', 'money', 'grant', 'envelope'] },
@@ -130,10 +130,8 @@ const PAGES: PageEntry[] = [
   { label: 'Distillation activity',    hint: 'Tier flow, compaction runs, tier graph', path: '/iq/distillation/activity',       tenant: 'orgiq',  group: 'Build',
     keywords: ['distillation', 'activity', 'compaction', 'job', 'run', 'tier', 'health', 'ingest', 'overview'] },
   // ── Org — organizational intelligence ──
-  { label: 'Ask',                hint: 'Ask the org-search agent',            path: '/iq/invoke',                                  tenant: 'orgiq',  group: 'Org',
-    keywords: ['ask', 'search', 'chat', 'agent', 'help'] },
-  { label: 'Explore',            hint: 'Force-directed org graph',            path: '/iq/explore',                                 tenant: 'orgiq',  group: 'Org',
-    keywords: ['explore', 'graph', 'force-directed', 'org graph'] },
+  { label: 'Search', hint: 'Find records, ask questions, explore connections', path: '/iq/search', tenant: 'orgiq', group: 'Org',
+    keywords: ['ask', 'search', 'chat', 'agent', 'help', 'explore', 'graph', 'connections'] },
   { label: 'Scores',             hint: 'Per-person influence leaderboard',    path: '/iq/scores',                                  tenant: 'orgiq',  group: 'Org', roles: PLATFORM,
     keywords: ['score', 'leaderboard', 'influence'] },
   { label: 'Score cohorts',      hint: 'Scores grouped by team',              path: '/iq/scores/cohorts',                          tenant: 'orgiq',  group: 'Org', roles: PLATFORM,
@@ -357,6 +355,7 @@ export function usePortalCommands(): Command[] {
  */
 export function usePortalDynamicCommands(): (query: string) => Command[] {
   const navigate = useNavigate();
+  const { session } = useSession();
   // Optional: the palette is mounted inside ComputeHost, but a test or a
   // story may render the shell without it, and losing the terminal commands is
   // better than throwing on a missing provider.
@@ -393,7 +392,11 @@ export function usePortalDynamicCommands(): (query: string) => Command[] {
       if (shellCommands.length) return shellCommands;
     }
 
-    if (!UUID_RE.test(q)) return [];
+    if (!UUID_RE.test(q)) return q && session?.tenant === 'orgiq' ? [{
+      id: `workspace-search:${q}`, label: `Search workspace: ${q}`, group: 'Search',
+      hint: 'Results, answers, and connections', keywords: [q, 'search'],
+      run: () => { navigate(`/iq/search?${new URLSearchParams({ q, tab: 'results' })}`); },
+    }] : [];
     const prefix = q.slice(0, 8);
     return [
       {
@@ -406,5 +409,5 @@ export function usePortalDynamicCommands(): (query: string) => Command[] {
         run: () => { navigate(`/admin/observability/invocations/${q}`); },
       },
     ];
-  }, [navigate, boxes]);
+  }, [navigate, boxes, session?.tenant]);
 }

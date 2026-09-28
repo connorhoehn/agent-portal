@@ -33,9 +33,11 @@ const time = (iso: string | null | undefined) => (iso ? new Date(iso).getTime() 
 export function ProjectTable({
   projects,
   onOpen,
+  hrefOf = (project) => `/iq/projects/${encodeURIComponent(project.id)}`,
 }: {
   projects: ProjectSummary[];
   onOpen: (project: ProjectSummary) => void;
+  hrefOf?: (project: ProjectSummary) => string;
 }) {
   const columns: DataTableColumn<ProjectSummary>[] = [
     {
@@ -47,7 +49,7 @@ export function ProjectTable({
               focusable, Enter-activatable control in the row — same pattern
               as `work/QueuePage.tsx`. */}
           <Link
-            to={`/iq/projects/${p.id}`}
+            to={hrefOf(p)}
             onClick={(e) => e.stopPropagation()}
             className="block text-[13px] font-semibold text-text-primary no-underline hover:underline truncate"
           >

@@ -336,7 +336,7 @@ export const REVIEW_VERDICT_TONE: Record<ReviewVerdict, 'neutral' | 'success' | 
 
 export const LINEAGE_NODE_LABEL: Record<LineageNodeKind, string> = {
   observation: 'Observation', session: 'Session', cluster: 'Cluster',
-  artifact: 'Artifact', fact: 'Fact', library_item: 'Library item', application: 'Application',
+  artifact: 'Artifact', fact: 'Fact', library_item: 'Agent library asset', application: 'Application',
 };
 
 export const LINEAGE_NODE_ICON: Record<LineageNodeKind, string> = {
@@ -647,11 +647,11 @@ export function compactionFlowModel(
     {
       id: 'library',
       kind: 'library',
-      label: 'Library',
+      label: 'Agent library',
       count: publishedCount,
       x: 3 * COMPACTION_FLOW_COLUMN_WIDTH,
       y: 0,
-      ariaLabel: `Library, ${publishedCount} published`,
+      ariaLabel: `Agent library, ${publishedCount} published`,
       navigateTo: '/iq/library',
     },
   ];
@@ -791,24 +791,24 @@ export function processFlowModel(input: ProcessFlowInputs): CompactionFlowModel 
       navigateTo: reviewHref(),
     },
     {
-      id: 'library', kind: 'library', label: 'Library', count: input.publishedCount,
+      id: 'library', kind: 'library', label: 'Agent library', count: input.publishedCount,
       x: col(4), y: row(0.5),
-      ariaLabel: `Library, ${plural(input.publishedCount, 'published runbook')}`,
+      ariaLabel: `Agent library, ${plural(input.publishedCount, 'published runbook')}`,
       navigateTo: '/iq/library',
     },
     {
-      id: 'promotions', kind: 'promotions', label: 'Promotions', count: input.candidates,
+      id: 'promotions', kind: 'promotions', label: 'Asset promotions', count: input.candidates,
       x: col(4), y: row(2.5),
-      ariaLabel: `Promotions, ${plural(input.candidates, 'candidate skill')} awaiting approval`,
-      navigateTo: '/iq/promotions',
+      ariaLabel: `Asset promotions, ${plural(input.candidates, 'candidate skill')} awaiting approval`,
+      navigateTo: '/iq/distillation/review?view=promotions',
     },
     {
-      id: 'session', kind: 'session', label: 'Session config', count: input.bundleSkills ?? 0,
+      id: 'session', kind: 'session', label: 'Configuration', count: input.bundleSkills ?? 0,
       x: col(5), y: row(0.5),
       ariaLabel: input.bundleSkills == null
-        ? 'Session config, live bundle unknown'
-        : `Session config, ${plural(input.bundleSkills, 'skill')} every agent boots with`,
-      navigateTo: '/iq/release',
+        ? 'Configuration, preview unavailable'
+        : `Configuration preview, ${plural(input.bundleSkills, 'skill')} in the example bundle`,
+      navigateTo: '/iq/local-compute/configuration',
     },
   ];
 

@@ -17,10 +17,14 @@ import {
   SectionLabel,
   Select,
   Stack,
+  SubNavLayout,
+  activeNavItemClassName,
+  inactiveNavItemClassName,
   SuggestionCard,
   ThinkingBlock,
   WorkflowStepper,
 } from '@connorhoehnslalom/ui-components/shared';
+import { ScopeHeader, ViewportFillRegion } from '@connorhoehnslalom/ui-components';
 import { ChatPanel } from '@connorhoehnslalom/ui-components/social';
 import { useFetch } from '../hooks/useFetch';
 import { useUrlState } from '../lib/useUrlState';
@@ -45,6 +49,9 @@ import { coalesceAssistantMessages } from '../components/chat/coalesceMessages';
 import { collapseFailedTurn } from '../components/chat/collapseFailedTurn';
 import { FeedbackControl } from '../components/chat/FeedbackControl';
 import { describeTurnError } from '../components/chat/turnError';
+import { SearchEvidence } from './search/SearchEvidence';
+import { readSearchEvidence, linkSearchCitations } from './search/searchModel';
+import type { SearchRef } from './search/searchTypes';
 import { UnavailableNotice } from '../components/UnavailableNotice';
 
 // Feature flag: set VITE_ORGIQ_CHAT_ENABLED=true to show the session chat sidebar.
@@ -174,7 +181,29 @@ interface SessionSummary {
 const WRITE_AGENT_RE = /(graph[-_]builder|ingestion|scoring)/;
 const isWriteAgent = (agentId: string): boolean => WRITE_AGENT_RE.test(agentId.toLowerCase());
 
-function InvokePage() {
+export interface SearchConversationAPI {
+  transcript: ReactNode;
+  messages: AgentMessage[];
+  sessions: SessionSummary[];
+  sessionsUnavailable: boolean;
+  historyUnavailable: boolean;
+  isStreaming: boolean;
+  streamingText: string;
+  sessionId: string | null;
+  input: string;
+  setInput: (value: string) => void;
+  send: (text: string, refs?: SearchRef[], agentId?: string) => void;
+  newSession: () => void;
+  agents: AgentDef[];
+  agentId: string;
+  selectAgent: (id: string) => void;
+}
+
+function InvokePage({ renderWorkspace, contextRefs = [], onSubmitted }: {
+  renderWorkspace?: (api: SearchConversationAPI) => ReactNode;
+  contextRefs?: SearchRef[];
+  onSubmitted?: (query: string) => void;
+} = {}) {
   const { roster: peers } = usePresence('invoke');
   // `/api/agents` answers `{ agents, degraded?, error? }` — an object, not a
   // bare array, so that a failed ListAgentRuntimes can say so instead of
@@ -235,6 +264,10 @@ function InvokePage() {
   // closure handed to the hook once — always reads the LATEST cache rather
   // than whatever was captured at mount.
   const localSessionsRef = useRef<Record<string, SessionSummary>>({});
+  const sentAgentRef = useRef<string | null>(null);
+  const sentContextRef = useRef<SearchRef[] | null>(null);
+  const contextRef = useRef(contextRefs);
+  contextRef.current = contextRefs;
   const {
     messages,
     isStreaming,
@@ -251,7 +284,11 @@ function InvokePage() {
     // See agentInvokeFetch above: reads the real response body on failure so
     // a 503/403/etc. reports its actual status and the server's own detail,
     // instead of the library's bare `Stream failed: ${status}`.
-    fetch: agentInvokeFetch,
+    fetch: (input, init) => agentInvokeFetch(sentAgentRef.current ? `/api/agents/${encodeURIComponent(sentAgentRef.current)}/invoke` : input, init),
+    buildBody: (message, { sessionId: activeSessionId }) => ({
+      message, ...(activeSessionId ? { sessionId: activeSessionId } : {}),
+      ...((sentContextRef.current ?? contextRef.current).length ? { selection: { records: sentContextRef.current ?? contextRef.current } } : {}),
+    }),
     // Shared canonical fetcher (lib/chatSessions). keepThinking because this
     // page renders <thinking> blocks as collapsible ThinkingBlock sections.
     // On failure we record WHY and re-throw: re-throwing leaves whatever was
@@ -324,8 +361,9 @@ function InvokePage() {
   // so a manual reload doesn't keep re-loading the same session over fresh state.
   useEffect(() => {
     const sid = searchParams.get('session');
-    if (!sid) return;
+    if (!sid || sid === sessionId) return;
     void loadSession(sid);
+    if (renderWorkspace) return;
     const next = new URLSearchParams(searchParams);
     next.delete('session');
     setSearchParams(next, { replace: true });
@@ -360,6 +398,7 @@ function InvokePage() {
     forgetSession('invoke'); // agent changed — don't resume a different agent's session
     const next = new URLSearchParams(searchParams);
     next.delete('agentId');
+    next.set('agent', match?.id ?? aid);
     setSearchParams(next, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams.get('agentId'), agents, agentsError]);
@@ -372,15 +411,26 @@ function InvokePage() {
   // instead of a fresh one (transcript restored from AgentCore Memory). A
   // ?prompt= deep-link is a fresh question, so it wins over resuming too.
   useEffect(() => {
-    if (searchParams.get('session') || searchParams.get('prompt') || searchParams.get('agentId')) return; // deep-link wins
+    if (searchParams.get('session') || searchParams.get('prompt') || searchParams.get('agentId') || renderWorkspace) return; // deep-link wins
     const saved = recallSession('invoke');
     if (saved) void loadSession(saved);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Persist the active session whenever the hook mints or switches one.
+  // The URL is read from `window.location`, not `searchParams`: react-router's
+  // functional `setSearchParams` hands back the params of the render that made
+  // the callback, and this effect runs in the render where the hook minted the
+  // session — before the navigation `onSubmitted` just issued (`q`, `tab=answer`)
+  // has landed in `searchParams`. Building from that stale copy replaced the
+  // URL with `?session=…` alone, so a question sent from the Results view
+  // stayed on Results with its answer hidden.
   useEffect(() => {
     if (sessionId) rememberSession('invoke', sessionId);
+    if (renderWorkspace && sessionId) {
+      const next = new URLSearchParams(window.location.search);
+      if (!next.get('session')) { next.set('session', sessionId); setSearchParams(next, { replace: true }); }
+    }
   }, [sessionId]);
 
   useEffect(() => {
@@ -408,13 +458,16 @@ function InvokePage() {
   // `?prompt=` deep link or an "Ask about them" chip — an enabled control
   // that fired no request — and left `collapseFailedTurn` inert on those
   // turns too, since it reads the same ref.
-  const send = useCallback((text: string) => {
+  const send = useCallback((text: string, refs?: SearchRef[], agentId?: string) => {
     const trimmed = text.trim();
     if (!trimmed || isStreaming) return;
+    sentAgentRef.current = agentId ?? (renderWorkspace ? selectedId : null);
+    sentContextRef.current = refs ?? contextRef.current;
+    onSubmitted?.(trimmed);
     lastTurnRef.current = trimmed;
     setRetried(false);
     void sendMessage(trimmed);
-  }, [isStreaming, sendMessage]);
+  }, [isStreaming, sendMessage, onSubmitted, renderWorkspace, selectedId]);
 
   const handleSend = () => {
     if (!input.trim() || isStreaming) return;
@@ -562,6 +615,7 @@ function InvokePage() {
     const next = new URLSearchParams(searchParams);
     next.delete('prompt');
     next.delete('focus');
+    if (renderWorkspace) { next.set('q', p); next.set('tab', 'answer'); }
     setSearchParams(next, { replace: true });
     void sendMessage(resolved);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -616,102 +670,7 @@ function InvokePage() {
     send(s);
   }, [send]);
 
-  return (
-    <Inline gap="none" wrap={false} align="stretch" className="h-full min-h-0">
-      {/* Session sidebar */}
-      <Stack gap="none" className="w-[220px] shrink-0 border-r border-border">
-        <Stack gap="sm" className="px-4 py-3 border-b border-border">
-          <Inline justify="between" align="center" gap="sm">
-            <SectionLabel>Sessions</SectionLabel>
-            <PresenceAvatarGroup peers={peers} />
-          </Inline>
-          <Inline align="center" gap="xs">
-            {/* Agent selector — only shown when multiple agents are available */}
-            {visibleAgents && visibleAgents.length > 1 && (
-              <Select
-                value={selectedId}
-                onChange={e => {
-                  setSelectedId(e.target.value);
-                  // sessions are agent-scoped — don't resume across agents
-                  startNewSession();
-                }}
-                aria-label="Select agent"
-                size="sm"
-                className="flex-1 min-w-0"
-                options={visibleAgents.map(a => ({ value: a.id, label: a.name }))}
-              />
-            )}
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={startNewSession}
-              title="New session"
-              className="whitespace-nowrap"
-            >
-              + New
-            </Button>
-          </Inline>
-        </Stack>
-        <Stack gap="none" className="flex-1 overflow-y-auto py-2">
-          {sessionsUnavailable && (
-            <Stack gap="xs" role="status" className="px-4 py-3">
-              <T className="text-[11px] font-semibold text-text-secondary">Conversations unavailable</T>
-              <T className="text-[11px] text-text-tertiary">
-                {sessionsNeedAuth
-                  ? 'Your session expired — sign in to see your conversations.'
-                  : `Couldn’t load the session list (${sessionListError}).`}
-              </T>
-              <Button size="sm" variant="secondary" onClick={() => refreshSessions()}>
-                Retry
-              </Button>
-            </Stack>
-          )}
-          {/* `memoryUnavailable` is the difference between "you have not chatted
-              yet" and "no transcript can be read or written at all", and this
-              rail used to spell both the same way. Under dev:mock MEMORY_ID is
-              unset, so `recordTurn` writes nothing — which made the old copy's
-              instruction ("send a message to start one") send the reader off to
-              do something that silently no-ops. observability/SessionsPage.tsx
-              already reads this field and says so; this is the same treatment,
-              and the server has always put the sentence on the wire. */}
-          {!sessionsUnavailable && sessions.length === 0 && (
-            <T className="block px-4 py-3 text-[11px] text-text-tertiary">
-              {sessionList?.memoryUnavailable
-                ? `${sessionList.memoryUnavailable}. This is not a claim that you have never chatted — nothing can be read or started here until Memory is configured.`
-                : 'No sessions yet — send a message to start one.'}
-            </T>
-          )}
-          {sessions.map(s => {
-            const selected = s.sessionId === sessionId;
-            return (
-              <Button
-                key={s.sessionId}
-                variant="ghost"
-                onClick={() => loadSession(s.sessionId)}
-                aria-current={selected ? 'page' : undefined}
-                className={`block w-full rounded-none justify-start text-left px-3.5 py-2 border-l-[3px] ${
-                  selected ? 'bg-surface-hover border-l-primary' : 'border-l-transparent'
-                }`}
-              >
-                <Stack gap="none" className="w-full items-start min-w-0">
-                  <T className="block w-full text-[12px] font-medium truncate">
-                    {s.title || <T className="text-text-tertiary italic">Untitled session</T>}
-                  </T>
-                  <T className="text-[10px] text-text-tertiary">
-                    {new Date(s.createdAt).toLocaleString()}
-                  </T>
-                </Stack>
-              </Button>
-            );
-          })}
-        </Stack>
-      </Stack>
-
-      {/* Chat area */}
-      {/* min-h-0 on both: without it the flex column grows to its content
-          and the transcript's first turn scrolls up out of the scroll
-          container instead of scrolling inside it. */}
-      <Stack gap="none" className="flex-1 min-h-0 p-6 min-w-0">
+  const transcript = (
         <Stack
           gap="md"
           role="log"
@@ -831,13 +790,14 @@ function InvokePage() {
                   // plain-text summary line below the bubble.
                   toolCalls={(msg.toolCalls ?? []).map(tc => ({
                     id: tc.id,
-                    name: friendlyToolName(tc.name),
+                    name: tc.name === 'search_context' ? 'Search context' : friendlyToolName(tc.name),
                     done: Boolean(tc.result),
                   }))}
-                  agentName={selectedAgent?.name ?? 'Agent'}
-                  renderMarkdown={(content) => renderMessageContent(content, false)}
+                  agentName={renderWorkspace ? 'Org Assistant' : selectedAgent?.name ?? 'Agent'}
+                  renderMarkdown={(content) => renderMessageContent(renderWorkspace ? linkSearchCitations(content, readSearchEvidence(msg.toolCalls)) : content, false)}
                 />
-                <SourceChips sources={sources} {...(provenance ? { provenance } : {})} />
+                {renderWorkspace && msg.role === 'assistant' && <SearchEvidence toolCalls={msg.toolCalls} />}
+                {(!renderWorkspace || sources.some(source => source.kind !== 'graph') || !readSearchEvidence(msg.toolCalls).length) && <SourceChips sources={sources} {...(provenance ? { provenance } : {})} />}
                 {msg.role === 'assistant' && (
                   <FeedbackControl invocationId={answerInvocationId(msg)} />
                 )}
@@ -866,12 +826,12 @@ function InvokePage() {
               content={extractSources(streamingText).cleaned}
               toolCalls={activeToolCalls.map(tc => ({
                 id: tc.id,
-                name: friendlyToolName(tc.name),
+                name: tc.name === 'search_context' ? 'Search context' : friendlyToolName(tc.name),
                 done: tc.done,
                 args: tc.args,
               }))}
               streaming
-              agentName={selectedAgent?.name ?? 'Agent'}
+              agentName={renderWorkspace ? 'Org Assistant' : selectedAgent?.name ?? 'Agent'}
               renderMarkdown={(content) => renderMessageContent(content, true)}
             />
           )}
@@ -894,6 +854,96 @@ function InvokePage() {
           )}
           <div ref={bottomRef} />
         </Stack>
+  );
+  if (renderWorkspace) return renderWorkspace({
+    transcript, messages: displayMessages, sessions, sessionsUnavailable,
+    historyUnavailable: Boolean(sessionList?.memoryUnavailable),
+    isStreaming, streamingText, sessionId: sessionId ?? null, input, setInput, send,
+    newSession: startNewSession, agents: visibleAgents ?? [], agentId: selectedId,
+    selectAgent: id => { setSelectedId(id); startNewSession(); },
+  });
+
+  return (
+    <ViewportFillRegion bottomGap={0} data-testid="ask-workspace">
+      <Stack gap="none" className="h-full min-h-0 bg-surface" data-shell-flush>
+        <SubNavLayout
+          title="Ask"
+          storageKey="ask-sessions"
+          railLabel="Ask navigation"
+          contentAs="section"
+          contentLabel="Conversation"
+          items={sessions.map(s => ({
+            path: `/iq/invoke?session=${encodeURIComponent(s.sessionId)}`,
+            label: s.title || 'Untitled session',
+            hint: new Date(s.createdAt).toLocaleString(),
+          }))}
+          railHeader={
+              <Stack gap="sm">
+                <Inline justify="between" align="center" gap="sm">
+                  <SectionLabel>Conversations</SectionLabel>
+                  <PresenceAvatarGroup peers={peers} />
+                </Inline>
+                <Stack gap="sm">
+                  {/* Agent selector — only shown when multiple agents are available */}
+                  {visibleAgents && visibleAgents.length > 1 && (
+                    <Select
+                      value={selectedId}
+                      onChange={e => {
+                        setSelectedId(e.target.value);
+                        // sessions are agent-scoped — don't resume across agents
+                        startNewSession();
+                      }}
+                      aria-label="Select agent"
+                      size="sm"
+                      className="w-full min-w-0"
+                      options={visibleAgents.map(a => ({ value: a.id, label: a.name }))}
+                    />
+                  )}
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={startNewSession}
+                    title="New session"
+                    className="whitespace-nowrap"
+                  >
+                    New session
+                  </Button>
+                </Stack>
+                {sessionsUnavailable && (
+                  <Stack gap="xs" role="status">
+                    <T className="text-xs text-text-secondary">{sessionsNeedAuth
+                      ? 'Sign in to see your conversations.'
+                      : 'Conversations unavailable.'}</T>
+                    <Button size="sm" variant="secondary" onClick={() => refreshSessions()}>Retry</Button>
+                  </Stack>
+                )}
+                {!sessionsUnavailable && sessions.length === 0 && (
+                  <T className="text-xs text-text-tertiary">
+                    {sessionList?.memoryUnavailable
+                      ? 'Session history is unavailable until memory is configured.'
+                      : 'No sessions yet.'}
+                  </T>
+                )}
+              </Stack>
+          }
+          renderNavItem={(item, body) => {
+            const selected = new URLSearchParams(item.path.split('?')[1]).get('session') === sessionId;
+            return <Link to={item.path} aria-current={selected ? 'page' : undefined}
+              className={selected ? activeNavItemClassName : inactiveNavItemClassName}>{body}</Link>;
+          }}
+        >
+          <Stack gap="none" className="h-full min-h-0 min-w-0">
+            <ScopeHeader variant="crumbs" breadcrumbs={[
+              { label: 'Org' }, { label: 'Ask' },
+              { label: sessions.find(s => s.sessionId === sessionId)?.title || (sessionId ? 'Conversation' : 'New session') },
+            ]} />
+            <Inline gap="none" wrap={false} align="stretch" className="flex-1 min-h-0">
+      {/* Chat area */}
+      {/* min-h-0 on both: without it the flex column grows to its content
+          and the transcript's first turn scrolls up out of the scroll
+          container instead of scrolling inside it. */}
+      <Stack gap="none" className="flex-1 min-h-0 px-6 pb-6 min-w-0">
+        {transcript}
 
         {/* People in this answer — the org-graph names the response actually
             mentioned, each a jump into the graph, with the context (title ·
@@ -1012,7 +1062,11 @@ function InvokePage() {
           </Stack>
         </Stack>
       )}
-    </Inline>
+            </Inline>
+          </Stack>
+        </SubNavLayout>
+      </Stack>
+    </ViewportFillRegion>
   );
 }
 

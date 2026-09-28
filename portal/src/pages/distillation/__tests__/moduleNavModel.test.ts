@@ -8,7 +8,7 @@ import { activeNavId, destinationTitle, moduleNav } from '../moduleNavModel.ts';
 test('three groups, each listing its views, with the scope carried on every link', () => {
   const nav = moduleNav({ L0: 97, L1: 22, L2: 11, pending: 6, decided: 21, health: 'danger' }, 'orgiq-observability', true);
   assert.deepEqual([...new Set(nav.map((e) => e.group))], ['Knowledge', 'Review', 'Activity']);
-  assert.deepEqual(nav.map((e) => e.label), ['Guides & findings', 'Patterns', 'Run notes', 'Pending', 'Reviewed', 'Runs', 'Tier graph']);
+  assert.deepEqual(nav.map((e) => e.label), ['Guides & findings', 'Patterns', 'Run notes', 'Knowledge pending', 'Knowledge reviewed', 'Asset promotions', 'Runs', 'Tier graph']);
   assert.ok(nav.every((e) => e.path.includes('repo=orgiq-observability')));
   assert.equal(nav.find((e) => e.id === 'patterns')!.path, '/iq/distillation/knowledge?view=patterns&repo=orgiq-observability');
   assert.equal(nav.find((e) => e.id === 'guides')!.count, 11);

@@ -43,7 +43,7 @@ test('counts and doors come from the inputs', () => {
   assert.equal(byId.L0!.count, 149);
   assert.equal(byId.review!.count, 9);
   assert.equal(byId.promotions!.count, 2);
-  assert.equal(byId.session!.navigateTo, '/iq/release');
+  assert.equal(byId.session!.navigateTo, '/iq/local-compute/configuration');
   assert.equal(byId.sweeps!.navigateTo, '/iq/work/findings');
 });
 
@@ -60,7 +60,7 @@ test('a running merge animates its edge instead of breathing', () => {
   const l0l1 = m.edges.find((e) => e.id === 'L0-L1')!;
   assert.equal(l0l1.running, true);
   assert.equal(l0l1.breathing, false);
-  assert.equal(m.nodes.find((n) => n.id === 'session')!.ariaLabel, 'Session config, live bundle unknown');
+  assert.equal(m.nodes.find((n) => n.id === 'session')!.ariaLabel, 'Configuration, preview unavailable');
 });
 
 // Defect #10: NODE_WIDTH is 168 (CompactionFlowFrame.tsx) and a merge-edge

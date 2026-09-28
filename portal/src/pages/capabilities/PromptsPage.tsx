@@ -4,6 +4,7 @@
 // owns only which prompt is selected, which version, and which panel is
 // mounted; every panel, control and derivation lives in ./prompts/.
 
+import { useSearchParams, useNavigate } from 'react-router';
 import { useEffect, useState } from 'react';
 import { EmptyState, ErrorState } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
@@ -27,7 +28,9 @@ function PromptsPage() {
   const { prompts, loading, error, refresh } = usePromptList();
   const [search, setSearch] = useState('');
   const [selection, setSelection] = useState<Selection | null>(null);
-  const [mode, setMode] = useState<PanelMode>('view');
+  const [params] = useSearchParams();
+  const navigate = useNavigate();
+  const [mode, setMode] = useState<PanelMode>(params.get('mode') === 'create' ? 'create' : 'view');
   // Bumped after a publish or draft save so the version dropdown and detail
   // remount against the new server state rather than a cached response.
   const [versionKey, setVersionKey] = useState(0);
@@ -120,9 +123,9 @@ function PromptsPage() {
           />
         )}
 
-        {mode === 'create' && (
+        {mode === 'create' && canManage && (
           <CreatePanel
-            onCancel={() => { if (selection) setMode('view'); }}
+            onCancel={() => { if (params.get('mode') === 'create') navigate('/iq/library'); else setMode('view'); }}
             onCreated={(promptId, promptArn, promptName) => {
               refresh();
               setSelection({ promptId, promptName, promptArn, version: 'DRAFT' });

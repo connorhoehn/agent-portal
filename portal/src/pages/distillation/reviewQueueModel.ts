@@ -45,6 +45,7 @@ const TYPE_LABEL: Record<string, string> = {
   decision: 'Decision',
   procedure: 'Procedure',
   finding: 'Finding',
+  library_item: 'Agent library asset',
 };
 
 export function reviewTypeLabel(kind: string | null | undefined): string {

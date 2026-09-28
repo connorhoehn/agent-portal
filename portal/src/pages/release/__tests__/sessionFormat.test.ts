@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { driftLine, publishBlockedReason, skillStatusTone, STATUS_TONE, HOOK_EVENT_LABEL } from '../sessionFormat.ts';
+import { driftLine, publishBlockedReason, skillStatusTone, STATUS_TONE, HOOK_EVENT_LABEL, versionLabel } from '../sessionFormat.ts';
 import type { SessionBundle, BundledSkill, SessionHook } from '../types.ts';
 
 function skill(over: Partial<BundledSkill> & Pick<BundledSkill, 'id' | 'status'>): BundledSkill {
@@ -30,17 +30,22 @@ test('driftLine counts stale and missing separately, in that order', () => {
   const skills = [
     skill({ id: 'a', status: 'stale' }), skill({ id: 'b', status: 'stale' }), skill({ id: 'c', status: 'missing' }),
   ];
-  assert.equal(driftLine({ skills }), '2 skills stale · 1 missing');
+  assert.equal(driftLine({ skills }), '2 updates available · 1 not in library');
 });
 
 test('driftLine singularizes one stale skill', () => {
-  assert.equal(driftLine({ skills: [skill({ id: 'a', status: 'stale' })] }), '1 skill stale');
+  assert.equal(driftLine({ skills: [skill({ id: 'a', status: 'stale' })] }), '1 update available');
 });
 
-test('skillStatusTone ranks missing worse than stale', () => {
+test('newer and unlisted library versions do not imply a broken installation', () => {
   assert.equal(skillStatusTone('current'), 'success');
-  assert.equal(skillStatusTone('stale'), 'warning');
-  assert.equal(skillStatusTone('missing'), 'danger');
+  assert.equal(skillStatusTone('stale'), 'info');
+  assert.equal(skillStatusTone('missing'), 'neutral');
+});
+
+test('versions have exactly one v prefix', () => {
+  assert.equal(versionLabel('12'), 'v12');
+  assert.equal(versionLabel('v12'), 'v12');
 });
 
 test('publishBlockedReason refuses an unpinned SessionStart command before any round trip', () => {

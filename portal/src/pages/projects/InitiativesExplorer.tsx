@@ -1,60 +1,48 @@
-// The Initiatives frame (F1–F2, F11): the explorer column on the left, one
-// pane on the right with its own header band and a docked composer under it.
-// Both /iq/projects and /iq/projects/:id mount this — the list route with the
-// initiative list in the rail, the detail route with the initiative list on
-// Overview and its Work list on the Work tab. The frame knows nothing about
-// either; each route hands it rail slots (`ExplorerRailSlots`), a pane header,
-// the pane body and a composer.
-//
-// It owns two things only: the viewport fill (the page is `data-shell-flush`,
-// so the shell drops its padding ring and crumb row) and the rail's « fold,
-// which is a device preference remembered across both routes.
+// Stable hierarchy: Initiative views → initiative/sprint list → content.
+// Project tabs retain their parents; Work adds its own list inside the pane.
+// The section parent closes descendants; URL-backed breadcrumbs reopen them.
 
 import { useCallback, useState, type ReactNode } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router';
 import {
   ExplorerLayout,
+  ScopeHeader,
   ViewportFillRegion,
   type WorkspaceRailBack,
 } from '@connorhoehnslalom/ui-components';
-import { Stack } from '@connorhoehnslalom/ui-components/shared';
+import { Breadcrumbs, EmptyState, RailNavList, Stack, SubNavLayout, activeNavItemClassName, inactiveNavItemClassName } from '@connorhoehnslalom/ui-components/shared';
+import { initiativeBreadcrumbs, initiativeListHref, type InitiativeCrumb } from './initiativeNavigation';
 
 /**
- * Everything the explorer column shows. A route builds one of these — the
- * initiative list (`useInitiativeListRail`) or its own (the Work list) — and
- * spreads it into the frame.
+ * Slots for the initiative/sprint list, shared by list and detail routes.
  */
 export interface ExplorerRailSlots {
-  /** "Initiatives", "Work". */
+  scope?: 'all' | 'mine';
+  lens?: 'initiatives' | 'sprints';
+  /** "All initiatives", "My initiatives", or "Sprints". */
   railTitle: string;
   /** The count chip after the title. Omit when it is unknown or capped. */
   railCount?: number;
-  /** "‹ Initiatives" above the title (the Work list). */
+  /** Optional parent link above the title. */
   railBack?: WorkspaceRailBack | null;
-  /** Controls in the title row — the ⋯ menu, an initiative switcher. */
+  /** Controls in the title row, such as the sort/filter menu. */
   railActions?: ReactNode;
-  /** Under the title: search, then the scope nav list. */
+  /** Search under the list title. Views belong to the parent navigation. */
   railHeader?: ReactNode;
   /** The scrolling body. */
   rail: ReactNode;
   /** The fixed footer: "14 initiatives", "Personal view". */
   railFooter?: ReactNode;
-  /** Offer the « fold. The Work list does not (it has a back link instead). */
+  /** Offer the « fold. */
   collapsible?: boolean;
   /** What the rail holds, for the fold controls' names. */
   railLabel?: string;
-  /**
-   * `list` (default): the v2 initiative list — 264px, the 13px caption
-   * heading ("INITIATIVES 11") and its count in a chip (plan R1–R2).
-   * `work`: the Work list keeps v1's 368px column and "Work 11" heading. Its
-   * rows are two lines with a Blocked tag and "Bug · Eli Garcia · 2 points";
-   * at 264px the titles clipped after two words and the switcher pushed the
-   * heading out, so the v2 width would be a regression there (plan V1 allows
-   * the Work tab to keep its structure).
-   */
-  railKind?: 'list' | 'work';
 }
 
 export interface InitiativesExplorerProps extends ExplorerRailSlots {
+  /** Keep views and initiative rows together, as in the initiative detail mockup. */
+  combinedNavigation?: boolean;
+  breadcrumbs?: InitiativeCrumb[];
   /** The band over the pane: `ScopeHeader` (title, pill, tabs). */
   paneHeader?: ReactNode;
   /** The pane body. It scrolls; the header and composer do not. */
@@ -72,9 +60,25 @@ function readFolded(): boolean {
 
 export function InitiativesExplorer({
   railTitle, railCount, railBack, railActions, railHeader, rail, railFooter,
-  collapsible = false, railLabel = 'initiatives', railKind = 'list',
-  paneHeader, children, composer, 'data-testid': testId,
+  collapsible = false, railLabel = 'initiatives',
+  paneHeader, children, composer, scope = 'all', lens = 'initiatives', breadcrumbs, combinedNavigation = false, 'data-testid': testId,
 }: InitiativesExplorerProps) {
+  const navigate = useNavigate();
+  const [search] = useSearchParams();
+  const atSection = search.get('nav') === 'section';
+  const views = [
+    { path: initiativeListHref(search, 'all'), label: 'All initiatives', active: lens === 'initiatives' && scope === 'all' },
+    { path: initiativeListHref(search, 'mine'), label: 'My initiatives', active: lens === 'initiatives' && scope === 'mine' },
+    { path: initiativeListHref(search, scope, true), label: 'Sprints', active: lens === 'sprints' },
+  ];
+  const trail = (breadcrumbs ?? initiativeBreadcrumbs({ search, scope, sprints: lens === 'sprints' })).map((crumb) => ({
+    ...crumb,
+    ...(crumb.href ? { onClick: (event: React.MouseEvent) => {
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+      event.preventDefault();
+      navigate(crumb.href!);
+    } } : {}),
+  }));
   const [folded, setFolded] = useState(readFolded);
   const toggle = useCallback(() => {
     setFolded((was) => {
@@ -86,12 +90,48 @@ export function InitiativesExplorer({
 
   return (
     <ViewportFillRegion bottomGap={0} data-testid={testId ?? 'initiatives-explorer'}>
-      <Stack gap="none" className="h-full min-h-0 bg-surface" data-shell-flush>
+      <Stack gap="none" className="h-full min-h-0 min-w-0 bg-surface" data-shell-flush data-initiative-stack={combinedNavigation ? undefined : true}>
+        {combinedNavigation ? (
+          <ExplorerLayout
+            className="min-h-0 min-w-0 flex-1"
+            railWidth="ms"
+            railHeading="caption"
+            railCountStyle="plain"
+            railTitle="Initiatives"
+            railCount={railCount}
+            railActions={railActions}
+            railLabel="initiatives"
+            railHeader={<Stack gap="md">
+              <RailNavList aria-label="Initiative views" currentStyle="tint" items={views.map((view) => ({
+                id: view.path, href: view.path, label: view.label, current: view.active,
+                onNavigate: (event) => {
+                  if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+                  event.preventDefault(); navigate(view.path);
+                },
+              }))} />
+              {railHeader}
+            </Stack>}
+            rail={rail}
+            railFooter={railFooter}
+            panePadding="none"
+            paneHeader={<><Breadcrumbs items={trail} separator="›" className="px-6 pt-3 pb-1" data-testid="initiative-breadcrumbs" />{paneHeader}</>}
+            paneFooter={composer}
+          >{children}</ExplorerLayout>
+        ) : (
+        <SubNavLayout title="Initiatives" items={views} railLabel="Initiative views" contentAs="section" contentLabel="Initiatives workspace"
+          renderNavItem={(item, body) => {
+            const active = !atSection && views.find((view) => view.path === item.path)?.active;
+            return <Link to={item.path} aria-current={active ? 'page' : undefined} className={active ? activeNavItemClassName : inactiveNavItemClassName}>{body}</Link>;
+          }}>
+        {atSection ? <Stack gap="none" className="h-full min-h-0">
+          <ScopeHeader breadcrumbs={[{ label: 'Plan' }, { label: 'Initiatives' }]} title="Initiatives" />
+          <EmptyState size="sm" title="Browse initiatives" description="Choose All initiatives, My initiatives, or Sprints to open its list." />
+        </Stack> : (
         <ExplorerLayout
           className="min-h-0 flex-1"
-          railWidth={railKind === 'work' ? 'lg' : 'ms'}
-          railHeading={railKind === 'work' ? 'prominent' : 'caption'}
-          railCountStyle={railKind === 'work' ? 'plain' : 'chip'}
+          railWidth="ms"
+          railHeading="caption"
+          railCountStyle="chip"
           railTitle={railTitle}
           {...(railCount != null ? { railCount } : {})}
           railBack={railBack ?? null}
@@ -103,11 +143,14 @@ export function InitiativesExplorer({
           rail={rail}
           panePadding="none"
           asidePlacement="beside"
-          paneHeader={paneHeader}
+          paneHeader={<><Breadcrumbs items={trail} separator="›" className="px-6 pt-2 pb-1" data-testid="initiative-breadcrumbs" />{paneHeader}</>}
           paneFooter={composer}
         >
           {children}
         </ExplorerLayout>
+        )}
+        </SubNavLayout>
+        )}
       </Stack>
     </ViewportFillRegion>
   );

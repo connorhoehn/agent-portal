@@ -18,7 +18,7 @@
 
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router';
-import { DropdownMenu, type DropdownMenuItem } from '@connorhoehnslalom/ui-components/shared';
+import { ChevronIcon, DropdownMenu, type DropdownMenuItem } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch';
 import { useSession } from '../../lib/auth';
@@ -65,8 +65,9 @@ export function ActiveRunsBadge() {
       // The work item is what the operator dispatched and what they will
       // recognise; the id is the fallback for a run with no item behind it
       // (a bot firing), which is still a live cost centre worth listing.
-      label: `${run.workItemTitle ?? run.workItemId ?? run.trigger} · ${relativeTime(run.startedAt)}`,
-      icon: '▶',
+      label: run.workItemTitle ?? run.workItemId ?? run.trigger,
+      description: `Started ${relativeTime(run.startedAt)} · ${mayOpenLab && boxId ? 'Open computer & logs' : 'Open work item'}`,
+      icon: <span aria-hidden="true" className="inline-block size-2 rounded-full bg-success" />,
       onSelect: () => {
         // Straight to the box that is doing the work — that is where the logs
         // are — but only for a role the lab will actually admit.
@@ -91,12 +92,20 @@ export function ActiveRunsBadge() {
 
   return (
     <DropdownMenu
-      trigger={`▶ ${runs.length}`}
+      trigger={(
+        <span className="inline-flex items-center gap-1.5">
+          <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-success" />
+          <span>{runs.length} running</span>
+          <ChevronIcon dir="down" size={12} aria-hidden="true" />
+        </span>
+      )}
+      triggerClassName="px-2 py-1 text-xs leading-4 font-medium text-text-secondary"
       triggerLabel={`${runs.length} agent run${runs.length === 1 ? '' : 's'} in progress`}
       triggerTitle={mayOpenLab
         ? 'Running now — select one to open its computer and tail the logs'
         : 'Running now — select one to open the work item it is delivering'}
       align="end"
+      className="w-[min(28rem,calc(100vw-2rem))] [&_[role=menuitem]]:whitespace-normal"
       sections={[{ label: 'Running now', items }]}
       data-testid="active-runs-badge"
     />

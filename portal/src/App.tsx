@@ -47,8 +47,8 @@ const BotDetailPage = lazy(() => import('./pages/bots/BotDetailPage'));
 const ChangesPage = lazy(() => import('./pages/admin/ChangesPage'));
 const ChangeReviewPage = lazy(() => import('./pages/admin/ChangeReviewPage'));
 const KBDetailPage = lazy(() => import('./pages/admin/KBDetailPage.js'));
-const InvokePage = lazy(() => import('./pages/InvokePage'));
-const ExplorePage = lazy(() => import('./pages/ExplorePage'));
+const SearchPage = lazy(() => import('./pages/search/SearchPage'));
+const LegacySearchRedirect = lazy(() => import('./pages/search/LegacySearchRedirect'));
 const CanaryPage = lazy(() => import('./pages/CanaryPage'));
 const PromptStudioPage = lazy(() => import('./pages/capabilities/PromptsPage'));
 const PromptHistoryPage = lazy(() => import('./pages/iq/PromptHistoryPage'));
@@ -57,13 +57,12 @@ const WorkHomePage = lazy(() => import('./pages/work/WorkHomePage'));
 const WorkQueuePage = lazy(() => import('./pages/work/QueuePage'));
 const DesignsPage = lazy(() => import('./pages/designs/DesignsPage'));
 const LibraryPage = lazy(() => import('./pages/library/LibraryPage'));
-const PromotionsPage = lazy(() => import('./pages/promotions/PromotionsPage'));
-const SessionConfigPage = lazy(() => import('./pages/release/SessionConfigPage'));
+const PromotionsLegacyRedirect = lazy(() => import('./pages/promotions/LegacyRedirect'));
+const SessionConfigPage = lazy(() => import('./pages/local-compute/ConfigurationPage'));
 const DistillationModule = lazy(() => import('./pages/distillation/DistillationModule'));
 const DistillationKnowledgeTab = lazy(() => import('./pages/distillation/KnowledgeTab'));
 const DistillationReviewTab = lazy(() => import('./pages/distillation/ReviewTab'));
 const DistillationActivityTab = lazy(() => import('./pages/distillation/ActivityTab'));
-const DesignThreadPage = lazy(() => import('./pages/designs/DesignThreadPage'));
 const WorkFindingsPage = lazy(() => import('./pages/work/FindingsPage'));
 const JobDetailPage = lazy(() => import('./pages/work/JobDetailPage'));
 const GraphChangesPage = lazy(() => import('./pages/work/GraphChangesPage'));
@@ -180,8 +179,8 @@ export function App() {
     <Routes>
       {/* ── Backwards-compat redirects (outside Layout so they catch bare paths) ── */}
       <Route path="agents" element={<Navigate to="/iq/agents" replace />} />
-      <Route path="search" element={<Navigate to="/iq/invoke" replace />} />
-      <Route path="invoke" element={<Navigate to="/iq/invoke" replace />} />
+      <Route path="search" element={<Page element={<LegacySearchRedirect />} />} />
+      <Route path="invoke" element={<Page element={<LegacySearchRedirect />} />} />
       <Route path="scores" element={<Navigate to="/iq/scores" replace />} />
       <Route path="scores/cohorts" element={<Navigate to="/iq/scores/cohorts" replace />} />
       <Route path="scores/compare" element={<Navigate to="/iq/scores/compare" replace />} />
@@ -189,8 +188,8 @@ export function App() {
       <Route path="decisions/:id" element={<Navigate to="/iq/projects" replace />} />
       <Route path="projects" element={<Navigate to="/iq/projects" replace />} />
       <Route path="projects/:id" element={<Navigate to="/iq/projects" replace />} />
-      <Route path="explore" element={<Navigate to="/iq/explore" replace />} />
-      <Route path="graph" element={<Navigate to="/iq/explore" replace />} />
+      <Route path="explore" element={<Page element={<LegacySearchRedirect />} />} />
+      <Route path="graph" element={<Page element={<LegacySearchRedirect />} />} />
       <Route path="code-interpreter" element={<Navigate to="/admin/capabilities/code-interpreter" replace />} />
       <Route path="knowledge-base" element={<Navigate to="/admin/knowledge" replace />} />
       <Route path="observability/*" element={<Navigate to="/admin/observability" replace />} />
@@ -269,10 +268,10 @@ export function App() {
               <Page element={<AgentDetailPage />} />
             </RequireRole>
           } />
-          <Route path="search" element={<Navigate to="/iq/invoke" replace />} />
-          <Route path="invoke" element={<Page element={<InvokePage />} />} />
+          <Route path="search" element={<Page element={<SearchPage />} />} />
+          <Route path="invoke" element={<Page element={<LegacySearchRedirect />} />} />
           {/* Find Help folded into Ask — the chat is the org search. */}
-          <Route path="help" element={<Navigate to="/iq/invoke" replace />} />
+          <Route path="help" element={<Page element={<LegacySearchRedirect />} />} />
           {/* Scores is leadership-only in the rail and the palette; the routes
               were open, so /scores → /iq/scores walked any role into a raw
               API 403. Same guard as Architecture and Prompt Studio. */}
@@ -298,7 +297,7 @@ export function App() {
           {/* Sprints merged into Initiatives as a lens — one program surface,
               two zooms. The old URL keeps working. */}
           <Route path="sprints" element={<Navigate to="/iq/projects?lens=sprints" replace />} />
-          <Route path="explore" element={<Page element={<ExplorePage />} />} />
+          <Route path="explore" element={<Page element={<LegacySearchRedirect />} />} />
           {/* The demo page duplicated /admin/capabilities/code-interpreter
               (same execute endpoint) and had no inbound link anywhere. */}
           <Route path="code-interpreter" element={<Navigate to="/admin/capabilities/code-interpreter" replace />} />
@@ -323,10 +322,11 @@ export function App() {
           <Route path="library/:assetId" element={<Page element={<LibraryPage />} />} />
           {/* The ladder's inbox — what the fleet learned, waiting to become
               a reusable asset. */}
-          <Route path="promotions" element={<Page element={<PromotionsPage />} />} />
+          <Route path="promotions" element={<Page element={<PromotionsLegacyRedirect />} />} />
+          <Route path="promotions/:candidateId" element={<Page element={<PromotionsLegacyRedirect />} />} />
           {/* Release: what the Claude Code sessions themselves are shipped —
               hooks, bundled skills, config. */}
-          <Route path="release" element={<Page element={<SessionConfigPage />} />} />
+          <Route path="release" element={<Navigate to="/iq/local-compute/configuration" replace />} />
           {/* The shared-memory pipeline: L0 run notes compacting into L1
               patterns and L2 guides. One module frame, three destinations
               (docs/distillation-redesign-spec.md §1): Knowledge, Review,
@@ -344,8 +344,9 @@ export function App() {
             <Route path="compactions" element={<DistillationLegacyRedirect />} />
           </Route>
           <Route path="local-compute" element={<Page element={<LocalComputePage />} />} />
+          <Route path="local-compute/configuration" element={<Page element={<SessionConfigPage />} />} />
           <Route path="designs" element={<Page element={<DesignsPage />} />} />
-          <Route path="designs/:id" element={<Page element={<DesignThreadPage />} />} />
+          <Route path="designs/:id" element={<Page element={<DesignsPage />} />} />
           <Route path="work" element={<Page element={<WorkHomePage />} />} />
           <Route path="work/queue" element={<Page element={<WorkQueuePage />} />} />
           <Route path="work/findings" element={<Page element={<WorkFindingsPage />} />} />

@@ -44,11 +44,11 @@ const SCORES_ITEMS: SubNavItem[] = [
 // second, stale main nav), and Force/Radial are a rendering choice, not a
 // place — they moved into the page's own toolbar as a toggle.
 const EXPLORE_ITEMS: SubNavItem[] = [
-  { path: 'explore?entities=people',    label: 'People',   group: 'Show' },
-  { path: 'explore?entities=skills',    label: 'Skills',   group: 'Show' },
-  { path: 'explore?entities=projects',  label: 'Projects', group: 'Show' },
-  { path: 'explore?entities=hierarchy', label: 'Hierarchy', group: 'Show' },
-  { path: 'explore?entities=all',       label: 'All',      group: 'Show' },
+  { path: '/iq/explore?entities=people',    label: 'People',   group: 'Show' },
+  { path: '/iq/explore?entities=skills',    label: 'Skills',   group: 'Show' },
+  { path: '/iq/explore?entities=projects',  label: 'Projects', group: 'Show' },
+  { path: '/iq/explore?entities=hierarchy', label: 'Hierarchy', group: 'Show' },
+  { path: '/iq/explore?entities=all',       label: 'All',      group: 'Show' },
 ];
 
 // ── Hook ───────────────────────────────────────────────────────────────────
@@ -82,9 +82,19 @@ export function useIqSubNav(pathname: string): IqSubNavSpec | null {
     : EXPLORE_ITEMS;
   // The Automate family — overview, queue, findings, and (via AdminLayout)
   // bots + changes share this one rail.
+  if (pathname.startsWith('/iq/search') || pathname.startsWith('/iq/invoke') || pathname.startsWith('/iq/explore')) return null;
   if (pathname.startsWith('/iq/work')) return automateSpec;
 
-  if (pathname.startsWith('/iq/library') || pathname.startsWith('/iq/prompt-ops') || pathname.startsWith('/iq/prompts') || pathname.startsWith('/iq/history') || pathname.startsWith('/iq/diff') || pathname.startsWith('/iq/evaluations')) {
+  if (pathname.startsWith('/iq/library')) return null; // The catalog owns its stacked menu.
+  if (pathname.startsWith('/iq/local-compute')) return {
+    title: 'Local compute', storageKey: 'local-compute-nav', items: [
+      { path: '/iq/local-compute?view=machines', label: 'Machines' },
+      { path: '/iq/local-compute?view=runs', label: 'Runs' },
+      { path: '/iq/local-compute/configuration', label: 'Configuration' },
+    ],
+  };
+
+  if (pathname.startsWith('/iq/prompt-ops') || pathname.startsWith('/iq/prompts') || pathname.startsWith('/iq/history') || pathname.startsWith('/iq/diff') || pathname.startsWith('/iq/evaluations')) {
     // A role that only sees Browse gets a one-row rail titled "Prompt
     // Management" whose only link is the page it is on — 200px of chrome
     // for a self-link. No rail at all: the Library renders full-width.

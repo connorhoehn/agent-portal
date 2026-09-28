@@ -28,11 +28,9 @@ import {
   GroupedList,
   LoadingState,
   MoreIcon,
-  RailNavList,
   SearchInput,
   Stack,
   T,
-  type RailNavListItem,
   type DropdownMenuSection,
   type GroupedListRow,
 } from '@connorhoehnslalom/ui-components/shared';
@@ -56,6 +54,7 @@ import {
 } from './projectFormat';
 import type { ProjectSummary } from './types';
 import type { Sprint, SprintsResponse } from '../sprints/types';
+import { initiativeHref, initiativeListHref } from './initiativeNavigation';
 
 export type InitiativeScope = 'all' | 'mine';
 export type InitiativeLens = 'initiatives' | 'sprints';
@@ -140,7 +139,7 @@ export function useInitiativeListRail(opts: InitiativeListRailOptions = {}): Ini
   const lens: InitiativeLens = opts.sprints && searchParams.get('lens') === 'sprints' ? 'sprints' : 'initiatives';
 
   const isLeader = LEADER_ROLES.has(session?.role ?? '');
-  const [scope, setScope] = useUrlState<InitiativeScope>(
+  const [scope] = useUrlState<InitiativeScope>(
     'scope',
     (raw) => (raw === 'all' || raw === 'mine' ? raw : (opts.defaultScope ?? (isLeader ? 'all' : 'mine'))),
     (v) => v,
@@ -175,30 +174,15 @@ export function useInitiativeListRail(opts: InitiativeListRailOptions = {}): Ini
     currentId: opts.currentId ?? null,
   }), [data, failure, scope, query, statusFilter, sort, opts.currentId]);
 
-  const clearFilters = () => { cancelPending(); setStatusFilter('all'); setQuery(''); };
-
-  // Rows carry scope and search along, so opening one keeps the column as it was.
-  const keep = new URLSearchParams();
-  for (const k of ['scope', 'q', 'status', 'sort']) {
-    const v = searchParams.get(k);
-    if (v) keep.set(k, v);
-  }
-  const suffix = keep.toString() ? `?${keep.toString()}` : '';
-
-  // One URL write per choice: leaving the Sprints lens and picking a scope
-  // are the same navigation, so they must not race as two updates.
-  const selectView = (next: 'all' | 'mine' | 'sprints') => {
-    if (!opts.sprints) {
-      // The detail route has no Sprints lens of its own; that view lives on
-      // the list route.
-      if (next === 'sprints') navigate('/iq/projects?lens=sprints');
-      else setScope(next);
-      return;
-    }
-    const params = new URLSearchParams(searchParams);
-    if (next === 'sprints') params.set('lens', 'sprints');
-    else { params.delete('lens'); params.set('scope', next); }
-    setSearchParams(params, { replace: true });
+  const setScope = (next: InitiativeScope) => navigate(initiativeListHref(searchParams, next));
+  const clearFilters = () => {
+    cancelPending();
+    setSearchParams((prev) => {
+      const params = new URLSearchParams(prev);
+      params.delete('q');
+      params.delete('status');
+      return params;
+    }, { replace: true });
   };
 
   const statusOptions = visibleStatusOptions(data ?? []);
@@ -217,12 +201,6 @@ export function useInitiativeListRail(opts: InitiativeListRailOptions = {}): Ini
     },
   ];
 
-  const navItems: RailNavListItem[] = [
-    { id: 'all', label: 'All initiatives', current: lens === 'initiatives' && scope === 'all', onSelect: () => selectView('all') },
-    { id: 'mine', label: 'My initiatives', current: lens === 'initiatives' && scope === 'mine', onSelect: () => selectView('mine') },
-    { id: 'sprints', label: 'Sprints', current: lens === 'sprints', onSelect: () => selectView('sprints') },
-  ];
-
   const header = (
     <Stack gap="md">
       {lens === 'initiatives' ? (
@@ -235,7 +213,6 @@ export function useInitiativeListRail(opts: InitiativeListRailOptions = {}): Ini
           className="w-full"
         />
       ) : null}
-      <RailNavList items={navItems} aria-label="Initiative views" data-testid="initiative-rail-views" />
     </Stack>
   );
 
@@ -299,13 +276,11 @@ export function useInitiativeListRail(opts: InitiativeListRailOptions = {}): Ini
       const copy = railEmptyCopy(scope);
       body = (
         <Padded>
-          <EmptyState
-            align="start"
-            title={copy.title}
-            description={copy.body}
-            testId="initiative-rail-empty"
-            {...(copy.action ? { actions: [{ label: `${copy.action.label} →`, variant: 'link' as const, onClick: () => setScope('all') }] } : {})}
-          />
+          <Stack gap="xs" data-testid="initiative-rail-empty">
+            <T className="text-[13px] font-medium leading-5">{copy.title}</T>
+            <T wrap className="text-[13px] leading-5 text-text-secondary">{copy.body}</T>
+            {copy.action && <button type="button" className="self-start text-left text-[13px] font-medium leading-5 text-primary hover:underline focus-visible:outline-2 focus-visible:outline-primary" onClick={() => setScope('all')}>{copy.action.label} →</button>}
+          </Stack>
         </Padded>
       );
     } else if (model.state === 'no-match') {
@@ -314,13 +289,13 @@ export function useInitiativeListRail(opts: InitiativeListRailOptions = {}): Ini
           <EmptyState
             align="start"
             title={RAIL_NO_MATCH.title}
+            size="sm"
             description={RAIL_NO_MATCH.body}
             actions={[{ label: 'Clear search and filters', variant: 'link', onClick: clearFilters }]}
           />
         </Padded>
       );
     } else {
-      const hrefOf = new Map(model.groups.flatMap((g) => g.rows.map((r) => [r.id, r.href] as const)));
       body = (
         <GroupedList
           // Remount when the scope changes so each scope starts from its own
@@ -337,8 +312,7 @@ export function useInitiativeListRail(opts: InitiativeListRailOptions = {}): Ini
           // title's `title=`, so a name clipped at 264px stays readable.
           rows={model.groups.flatMap((g) => g.rows.map((r) => ({ id: r.id, groupId: r.groupId, title: r.title })))}
           onOpenRow={(row) => {
-            const href = hrefOf.get(row.id);
-            if (href) navigate(`${href}${suffix}`);
+            navigate(initiativeHref(row.id, searchParams, scope));
           }}
           data-testid="initiative-rail-list"
         />
@@ -347,7 +321,9 @@ export function useInitiativeListRail(opts: InitiativeListRailOptions = {}): Ini
   }
 
   const slots: ExplorerRailSlots = {
-    railTitle: 'Initiatives',
+    scope,
+    lens,
+    railTitle: lens === 'sprints' ? 'Sprints' : scope === 'all' ? 'All initiatives' : 'My initiatives',
     ...(lens === 'initiatives' && count != null ? { railCount: count } : {}),
     railActions: lens === 'initiatives' ? (
       <DropdownMenu
@@ -362,7 +338,7 @@ export function useInitiativeListRail(opts: InitiativeListRailOptions = {}): Ini
     rail: body,
     railFooter: footer ? <T className="text-[13px] text-text-secondary" data-testid="initiative-rail-footer">{footer}</T> : undefined,
     collapsible: true,
-    railLabel: 'initiatives',
+    railLabel: lens === 'sprints' ? 'sprints' : 'initiatives',
   };
 
   return {
