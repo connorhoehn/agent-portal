@@ -179,3 +179,52 @@ SFU still verify only Cognito tokens (locally `SKIP_AUTH` / `LVS_AUTH_BYPASS`),
 platform-api still treats any non-document lobby as ad hoc, chat/presence
 channels are not tenant-scoped, and the router is single-process (Redis holds
 call state, not cross-replica fan-out).
+
+## Verified tokens, no bypasses (2026-09-29)
+
+The same two-person walk with **every auth bypass off**: platform-api verifies
+the OrgIQ realtime token itself and calls the SFU as a service, so neither
+`SKIP_AUTH` nor `LVS_AUTH_BYPASS` is set, and the Cognito pool id is a fake
+one that verifies nothing. Upstream: platform-api `416df6d9`, live-video-streaming
+`cc28d028` (deploy plan §8).
+
+| piece | where | notes |
+|---|---|---|
+| middleware + gateway | a second one on `:3011` (dev:mock env, no watch) | `REALTIME_JWT_SECRET` unset → the dev secret |
+| platform-api | clone container `orgiq-verify-platform-api` on `:23003` | new image; `SKIP_AUTH=false`, `REALTIME_JWT_SECRET=orgiq-dev-realtime`, `VIDEO_SERVICE_TOKEN=local-dev-lvs-service-token`, `VIDEO_API_URL=http://host.docker.internal:23901` |
+| SFU | the new LVS working tree on the **host**, `:23901` (web `:22020`), RTC `41000-41001`/`41010-41011` | `LVS_AUTH_BYPASS=false`, `LVS_SERVICE_TOKEN` as above, `COGNITO_USER_POOL_ID=us-east-1_localdev000` |
+| Redis, DynamoDB | clone containers (own compose project `orgiq-verify`) | |
+| portal | a Vite on `:5186` | `API_PROXY_TARGET=http://127.0.0.1:3011 VITE_GATEWAY_URL=http://localhost:3011 VITE_PLATFORM_API_URL=http://localhost:23003 VITE_VIDEO_ENDPOINT=http://localhost:23901` |
+
+The clones came from this repo's `social` profile with a throwaway override
+file (own project name, container names, ports and image tags) and
+`SOCIAL_PLATFORM_SKIP_AUTH=false SOCIAL_LVS_AUTH_BYPASS=false`; the shared
+`orgiq-social-*` containers were left alone.
+
+**Refused by platform-api** (`POST /api/video/sessions`, tokens minted with
+`jose` like the middleware's): wrong secret → 401 `Invalid token`; expired →
+401 `Token expired`; `tokenKind: 'cognito'` → 401 `Invalid token`; no bearer →
+401. Each refusal logs `OrgIQ realtime token refused` with the reason (`invalid
+signature`, `jwt expired`, `not an orgiq realtime token`). A valid token for
+`assessment:dm:u-nora:u-vera` (another tenant) or `orgiq:dm:u-nora:u-theo`
+(not a participant) → 404 `Session not found`; for `orgiq:dm:u-nora:u-vera` →
+201. The same valid user token sent straight to the SFU's `POST /api/sessions`
+→ 401 `auth_failed`.
+
+**The walk.** `CALL_BASE_URL=http://localhost:5186 CALL_SFU_URL=http://localhost:23901 npx playwright test e2e/initiative-call.spec.ts`:
+ring → accept → both docks "2 people" with a playing `<video>` on each side →
+Leave ends it for both; and the decline case. Passed twice in a row.
+
+**No user bearer reached the SFU.** Over those runs its log has 64 ×
+`service token accepted (no user bearer)` (20 on `POST /api/sessions`, 20 on
+`/join`, 24 on `/end`), **zero** `Cognito JWT verification failed` and zero
+`LVS_AUTH_BYPASS active` lines; the only Cognito attempt in the whole session
+was the deliberate direct probe above, against the earlier container SFU.
+
+**What did not work: the container SFU.** With `orgiq-verify-sfu` in colima,
+both sides reached "Connecting…" and stayed there: the SFU logged ICE
+connected, then `ICE connectivity lost` about two seconds later, for every
+transport. Auth was fine (the same service-token lines). Moving the same code
+to the host fixed it, which is the colima UDP-forwarding risk the local-stack
+guide describes. The first host run also failed once with "Execution context
+was destroyed" while probing video, then passed twice; not reproduced.

@@ -254,12 +254,13 @@ export class SocialStack extends cdk.Stack {
 
     // ── Secrets ────────────────────────────────────────────────────────────
     // Imported by NAME so no export freezes: the realtime JWT (minted by
-    // OrgIQ-MiddlewareService) and the two SFU secrets (minted by
+    // OrgIQ-MiddlewareService) and the three SFU secrets (minted by
     // OrgIQ-SocialMedia, which deploys first).
     const realtimeJwt = secretsmanager.Secret.fromSecretNameV2(this, 'RealtimeJwtSecret', props.realtimeJwtSecretName);
     const sfuNames = sfuSecretNames(prefix);
     const sfuAdmin = secretsmanager.Secret.fromSecretNameV2(this, 'SfuAdminToken', sfuNames.adminToken);
     const sfuWebhook = secretsmanager.Secret.fromSecretNameV2(this, 'SfuWebhookSecret', sfuNames.webhook);
+    const sfuService = secretsmanager.Secret.fromSecretNameV2(this, 'SfuServiceToken', sfuNames.serviceToken);
     const serviceAuth = new secretsmanager.Secret(this, 'SocialServiceAuthSecret', {
       secretName: `${prefix}-social-service-auth-secret`,
       description: 'SERVICE_AUTH_SECRET for platform-api service-to-service envelopes',
@@ -371,6 +372,9 @@ export class SocialStack extends cdk.Stack {
         LVS_ADMIN_TOKEN: ecs.Secret.fromSecretsManager(sfuAdmin),
         // …and the SFU's WEBHOOK_HMAC_SECRET.
         LVS_WEBHOOK_SECRET: ecs.Secret.fromSecretsManager(sfuWebhook),
+        // The SFU's LVS_SERVICE_TOKEN: platform-api calls LVS's session
+        // lifecycle as itself, so no user bearer reaches the SFU.
+        VIDEO_SERVICE_TOKEN: ecs.Secret.fromSecretsManager(sfuService),
         SERVICE_AUTH_SECRET: ecs.Secret.fromSecretsManager(serviceAuth),
       },
       logging: ecs.LogDrivers.awsLogs({ logGroup, streamPrefix: 'platform-api' }),

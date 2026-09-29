@@ -189,6 +189,20 @@ Docker here is colima, not Docker Desktop, that same risk applies:
 
 ## Identity: what these services accept today
 
+**Update 2026-09-29: calls need no bypass.** platform-api verifies the OrgIQ
+realtime token itself (`REALTIME_JWT_SECRET`, compose default
+`orgiq-dev-realtime` = the middleware's dev secret, override
+`SOCIAL_REALTIME_JWT_SECRET`) and calls the SFU's session routes with a service
+token (`VIDEO_SERVICE_TOKEN` = the SFU's `LVS_SERVICE_TOKEN`, both
+`SOCIAL_LVS_SERVICE_TOKEN`, default `local-dev-lvs-service-token`). Run
+without the bypasses with `SOCIAL_PLATFORM_SKIP_AUTH=false
+SOCIAL_LVS_AUTH_BYPASS=false`; they still default to `true` because the other
+platform-api surfaces and the documents path were not re-walked without them.
+Even with `SKIP_AUTH=true`, an HS256 bearer is verified when the secret is set,
+so a forged OrgIQ token is a 401 rather than decoded. Walked in
+[the first call § Verified tokens](social-calls-first-call.md#verified-tokens-no-bypasses-2026-09-29).
+The rest of this section describes the bypass mode.
+
 All three run with their auth **bypassed**: `SKIP_AUTH=true` on the gateway
 and platform-api, and `LVS_AUTH_BYPASS=true` on the SFU. Each one refuses
 that setting under `NODE_ENV=production`. In this mode:

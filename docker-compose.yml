@@ -90,8 +90,10 @@ services:
   # the same way realtime-examples' Tiltfile and docker-compose.local.yml do.
   # Nothing below starts without the profile, and every port binds loopback.
   # Guide: docs/social-calls-local-stack.md. Variables: .env.social.example.
-  # All three app services run with SKIP_AUTH / LVS_AUTH_BYPASS — dev only;
-  # the guide says what production needs instead.
+  # The app services default to SKIP_AUTH / LVS_AUTH_BYPASS — dev only. Calls
+  # do not need either: platform-api verifies the OrgIQ realtime token and
+  # calls the SFU with a service token (SOCIAL_PLATFORM_SKIP_AUTH=false,
+  # SOCIAL_LVS_AUTH_BYPASS=false turn them off; see the guide).
 
   social-redis:
     profiles: ["social"]
@@ -246,7 +248,15 @@ services:
     environment:
       - NODE_ENV=development
       - PORT=3001
-      - SKIP_AUTH=true
+      # Calls no longer need the bypass: platform-api verifies the OrgIQ
+      # realtime token (HS256, REALTIME_JWT_SECRET below) itself. It stays the
+      # default for the other platform-api surfaces this profile serves;
+      # SOCIAL_PLATFORM_SKIP_AUTH=false runs without it.
+      - SKIP_AUTH=${SOCIAL_PLATFORM_SKIP_AUTH:-true}
+      # The secret the middleware's token bridge signs with — its dev
+      # fallback by default. A forged/expired OrgIQ token is refused (401)
+      # even while SKIP_AUTH is on.
+      - REALTIME_JWT_SECRET=${SOCIAL_REALTIME_JWT_SECRET:-orgiq-dev-realtime}
       - COGNITO_REGION=${SOCIAL_COGNITO_REGION:-us-east-1}
       - COGNITO_USER_POOL_ID=${SOCIAL_COGNITO_USER_POOL_ID:-us-east-1_localdev000}
       - REDIS_ENDPOINT=social-redis
@@ -266,6 +276,9 @@ services:
       - VIDEO_API_URL=${SOCIAL_VIDEO_API_URL:-http://social-sfu:3901}
       - VIDEO_PUBLIC_URL=${SOCIAL_VIDEO_PUBLIC_URL:-http://localhost:3901}
       - VIDEO_ADMIN_TOKEN=${SOCIAL_LVS_ADMIN_TOKEN:-admin}
+      # platform-api calls the SFU's session lifecycle as a service with this
+      # (the SFU's LVS_SERVICE_TOKEN); the caller's bearer is never forwarded.
+      - VIDEO_SERVICE_TOKEN=${SOCIAL_LVS_SERVICE_TOKEN:-local-dev-lvs-service-token}
       - LVS_WEBHOOK_SECRET=${SOCIAL_LVS_WEBHOOK_SECRET:-dev-lvs-webhook-secret}
       - LVS_WEBHOOK_BOOTSTRAP_URL=${SOCIAL_LVS_WEBHOOK_BOOTSTRAP_URL:-http://social-platform-api:3001/hooks/lvs/recording}
       - VIDEO_SESSION_STALE_MS=${SOCIAL_VIDEO_SESSION_STALE_MS:-}
@@ -321,7 +334,10 @@ services:
       - NODE_ENV=development
       - PORT=3901
       - ADMIN_TOKEN=${SOCIAL_LVS_ADMIN_TOKEN:-admin}
-      - LVS_AUTH_BYPASS=true
+      # SOCIAL_LVS_AUTH_BYPASS=false: /api/sessions takes only platform-api's
+      # service token (LVS_SERVICE_TOKEN) or a real Cognito token.
+      - LVS_AUTH_BYPASS=${SOCIAL_LVS_AUTH_BYPASS:-true}
+      - LVS_SERVICE_TOKEN=${SOCIAL_LVS_SERVICE_TOKEN:-local-dev-lvs-service-token}
       - COGNITO_REGION=${SOCIAL_COGNITO_REGION:-us-east-1}
       - COGNITO_USER_POOL_ID=${SOCIAL_COGNITO_USER_POOL_ID:-us-east-1_localdev000}
       - WEBHOOK_HMAC_SECRET=${SOCIAL_LVS_WEBHOOK_SECRET:-dev-lvs-webhook-secret}

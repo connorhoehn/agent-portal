@@ -21,10 +21,11 @@ export const SFU_PORTS = {
 } as const;
 
 /** Secrets the SFU owns; OrgIQ-Social imports them by these names. */
-export function sfuSecretNames(prefix: string): { adminToken: string; webhook: string } {
+export function sfuSecretNames(prefix: string): { adminToken: string; webhook: string; serviceToken: string } {
   return {
     adminToken: `${prefix}-social-sfu-admin-token`,
     webhook: `${prefix}-social-sfu-webhook-secret`,
+    serviceToken: `${prefix}-social-sfu-service-token`,
   };
 }
 
@@ -33,8 +34,10 @@ export interface SocialMediaStackProps extends cdk.StackProps {
   /** The OrgIQ-MiddlewareService VPC — the SFU sits in one of its public subnets. */
   readonly vpc: ec2.IVpc;
   /**
-   * The OrgIQ Cognito pool. LVS verifies forwarded user bearers against it on
-   * /api/sessions until platform-api calls it as a service (plan §2, option A).
+   * The OrgIQ Cognito pool. Optional since platform-api calls LVS's
+   * /api/sessions lifecycle as a service (`LVS_SERVICE_TOKEN`, below): a
+   * Cognito id_token presented directly to the SFU is still verified against
+   * it when set.
    */
   readonly cognitoUserPoolId?: string;
 }
@@ -72,6 +75,7 @@ export class SocialMediaStack extends cdk.Stack {
   public readonly privateIp: string;
   public readonly adminTokenSecret: secretsmanager.Secret;
   public readonly webhookSecret: secretsmanager.Secret;
+  public readonly serviceTokenSecret: secretsmanager.Secret;
 
   constructor(scope: Construct, id: string, props: SocialMediaStackProps) {
     super(scope, id, props);
@@ -110,6 +114,16 @@ export class SocialMediaStack extends cdk.Stack {
     this.webhookSecret = new secretsmanager.Secret(this, 'SfuWebhookSecret', {
       secretName: names.webhook,
       description: 'LVS WEBHOOK_HMAC_SECRET = platform-api LVS_WEBHOOK_SECRET',
+      generateSecretString: { excludePunctuation: true, passwordLength: 48 },
+    });
+    // platform-api calls LVS's session lifecycle (/api/sessions, /join, /end,
+    // /refresh-token) as a SERVICE with this token instead of forwarding its
+    // user's bearer (live-video-streaming cognito-auth.js, platform-api
+    // lib/lvsServiceAuth.ts). Separate from ADMIN_TOKEN, which also opens the
+    // SFU's debug and cluster surfaces.
+    this.serviceTokenSecret = new secretsmanager.Secret(this, 'SfuServiceToken', {
+      secretName: names.serviceToken,
+      description: 'LVS LVS_SERVICE_TOKEN = platform-api VIDEO_SERVICE_TOKEN',
       generateSecretString: { excludePunctuation: true, passwordLength: 48 },
     });
 
@@ -153,7 +167,7 @@ export class SocialMediaStack extends cdk.Stack {
     const role = new iam.Role(this, 'SfuInstanceRole', {
       roleName: `${prefix}-social-sfu-instance-role`,
       assumedBy: new iam.ServicePrincipal('ec2.amazonaws.com'),
-      description: 'orgiq-lvs-sfu host: ECR pull, its two secrets, SSM Session Manager',
+      description: 'orgiq-lvs-sfu host: ECR pull, its three secrets, SSM Session Manager',
       managedPolicies: [
         // Shell access without an SSH port — nothing listens on 22.
         iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonSSMManagedInstanceCore'),
@@ -162,6 +176,7 @@ export class SocialMediaStack extends cdk.Stack {
     repo.grantPull(role);
     this.adminTokenSecret.grantRead(role);
     this.webhookSecret.grantRead(role);
+    this.serviceTokenSecret.grantRead(role);
 
     // ── Elastic IP ─────────────────────────────────────────────────────────
     // Allocated before the instance so its address can be written into the
@@ -218,6 +233,7 @@ export class SocialMediaStack extends cdk.Stack {
       `aws ecr get-login-password --region ${this.region} | docker login --username AWS --password-stdin ${registry}`,
       `ADMIN_TOKEN=$(aws secretsmanager get-secret-value --region ${this.region} --secret-id ${this.adminTokenSecret.secretArn} --query SecretString --output text)`,
       `WEBHOOK_HMAC_SECRET=$(aws secretsmanager get-secret-value --region ${this.region} --secret-id ${this.webhookSecret.secretArn} --query SecretString --output text)`,
+      `LVS_SERVICE_TOKEN=$(aws secretsmanager get-secret-value --region ${this.region} --secret-id ${this.serviceTokenSecret.secretArn} --query SecretString --output text)`,
       'umask 077',
       '{',
       ...env.map(([k, v]) => `  echo "${k}=${v}"`),
@@ -225,6 +241,7 @@ export class SocialMediaStack extends cdk.Stack {
       '  echo "MESH_ANNOUNCED_IP=$PRIVATE_IP"',
       '  echo "ADMIN_TOKEN=$ADMIN_TOKEN"',
       '  echo "WEBHOOK_HMAC_SECRET=$WEBHOOK_HMAC_SECRET"',
+      '  echo "LVS_SERVICE_TOKEN=$LVS_SERVICE_TOKEN"',
       '} > /run/lvs-sfu.env',
       'docker rm -f lvs-sfu >/dev/null 2>&1 || true',
       `exec docker run --name lvs-sfu --network host --ulimit nofile=65536:65536 --env-file /run/lvs-sfu.env ${imageRef}`,
