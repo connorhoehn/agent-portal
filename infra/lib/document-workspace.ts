@@ -1,5 +1,6 @@
 import * as cdk from 'aws-cdk-lib';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
+import * as iam from 'aws-cdk-lib/aws-iam';
 import * as ecs from 'aws-cdk-lib/aws-ecs';
 import * as ecr from 'aws-cdk-lib/aws-ecr';
 import * as efs from 'aws-cdk-lib/aws-efs';
@@ -102,6 +103,51 @@ export function attachDocumentWorkspace(scope: cdk.Stack, props: {
     gatewayServiceAuthSecret: gatewaySecret, videoWebhookSecret: secret('DocumentVideoWebhookSecret'), videoAdminSecret: secret('DocumentVideoAdminSecret'),
     cognito: { region: scope.region, userPoolId: props.cognitoUserPoolId },
   });
+  // platform-api refuses to serve in production until five TTL preflights pass
+  // (`ddb-outbox-ttl`, `ddb-video-sessions-ttl`, `ddb-pipeline-runs-ttl`,
+  // `ddb-pipeline-audit-ttl`, `ddb-pipeline-dlq-ttl` — src/index.ts). Each calls
+  // an ensure*TTL() that DESCRIBES and then UPDATES the table's TTL config.
+  //
+  // Neither half is covered by what the library grants. `dynamodb-schemas.json`
+  // sets `ttlAttribute` on only six of its 52 tables and none of these five, so
+  // ApplicationTables creates them with TTL OFF and the app is the only thing
+  // that can turn it on — but DocumentWorkspaceServices grants
+  // DescribeTimeToLive on just three of the five and UpdateTimeToLive on none.
+  // grantReadWriteData does not cover either action.
+  //
+  // The failure is loud but late, and it fails the whole deploy:
+  //   [startup] FATAL: ddb-pipeline-audit-ttl ping failed in prod.
+  //             Refusing to accept connections.
+  // The task never goes healthy, `circuitBreaker: { rollback: true }` rolls the
+  // service back, and the stack update fails with it.
+  //
+  // Granted here rather than upstream because the library's comment ("bootstrap
+  // reads TTL state; provisioning owns TTL changes") describes an arrangement
+  // its own manifest does not implement. If the manifest ever does set
+  // ttlAttribute on these five, drop UpdateTimeToLive and keep the describes.
+  for (const name of ['social-outbox', 'document-video-sessions', 'pipeline-runs', 'pipeline-audit', 'pipeline-dlq']) {
+    workspace.platform.taskDefinition.taskRole.addToPrincipalPolicy(new iam.PolicyStatement({
+      actions: ['dynamodb:DescribeTimeToLive', 'dynamodb:UpdateTimeToLive'],
+      resources: [tables.get(name).tableArn],
+    }));
+  }
+  // `ensureOutboxTTL()` does not only touch TTL: it also calls
+  // `ensureOutboxPendingIndex()`, which adds the drainer's `pending-index` GSI
+  // with an additive UpdateTable. The manifest gives social-outbox only
+  // `status-index`, so that index never exists until the app makes it — and
+  // grantReadWriteData does not include UpdateTable.
+  //
+  // platform-api's own comment says the index "never gates boot" because the
+  // drainer walks the table until it is ACTIVE. That is true of a SLOW index and
+  // false of a FORBIDDEN one: the AccessDenied escapes ensureOutboxTTL() into
+  // assertRequiredInProd, which is a boot gate, so the whole service dies with
+  //   [startup] FATAL: ddb-outbox-ttl ping failed in prod.
+  // Scoped to this one table because it is the only index the app self-creates.
+  workspace.platform.taskDefinition.taskRole.addToPrincipalPolicy(new iam.PolicyStatement({
+    actions: ['dynamodb:UpdateTable'],
+    resources: [tables.get('social-outbox').tableArn],
+  }));
+
   const container = middleware.taskDefinition.defaultContainer!;
   container.addEnvironment('DOCUMENT_GATEWAY_INTERNAL_URL', workspace.gatewayUrl.replace(/^http:/, 'ws:'));
   container.addEnvironment('DOCUMENT_GATEWAY_PUBLIC_URL', `${origin.origin.replace(/^https:/, 'wss:')}/document-realtime`);

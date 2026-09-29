@@ -51,6 +51,33 @@ test('opt-in document workspace uses the exported backend composition with scope
   assert.ok(!allPolicies.includes('dynamodb:CreateTable'));
 });
 
+// Regression for a deploy-breaking omission rather than a style preference:
+// platform-api runs five TTL preflights at startup and refuses connections in
+// production when any fails, so a missing grant does not degrade the service,
+// it rolls the whole stack update back through the service circuit breaker.
+test('the platform role can describe AND update TTL on every table it preflights', () => {
+  const template = Template.fromStack(middlewareServiceStack(context, props));
+  const tables = template.findResources('AWS::DynamoDB::Table');
+  const logicalIdFor = (suffix: string) => Object.entries(tables)
+    .find(([, t]) => String(t.Properties.TableName).endsWith(suffix))?.[0];
+  // Every statement attached to a platform task role, across the default policy
+  // AND the overflow managed policy CDK spills into once the default is full.
+  const statements = Object.entries(template.toJSON().Resources)
+    .filter(([id, r]: [string, any]) => /platformTaskTaskRole/.test(id)
+      && ['AWS::IAM::Policy', 'AWS::IAM::ManagedPolicy'].includes(r.Type))
+    .flatMap(([, r]: [string, any]) => r.Properties.PolicyDocument.Statement);
+
+  for (const suffix of ['social-outbox', 'document-video-sessions', 'pipeline-runs', 'pipeline-audit', 'pipeline-dlq']) {
+    const logicalId = logicalIdFor(suffix);
+    assert.ok(logicalId, `no table ends with ${suffix}`);
+    for (const action of ['dynamodb:DescribeTimeToLive', 'dynamodb:UpdateTimeToLive']) {
+      const granted = statements.some((s: any) => [].concat(s.Action ?? []).includes(action as never)
+        && JSON.stringify([].concat(s.Resource ?? [])).includes(logicalId!));
+      assert.ok(granted, `${action} not granted on ${suffix}`);
+    }
+  }
+});
+
 test('document services remain disabled unless explicitly requested', () => {
   const template = Template.fromStack(middlewareServiceStack({}, props));
   template.resourceCountIs('AWS::ECS::Service', 1);
