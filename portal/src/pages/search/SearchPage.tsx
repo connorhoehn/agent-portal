@@ -316,6 +316,7 @@ function SearchWorkspace({ api }: {api: SearchConversationAPI}) {
       onRemoveReference={key=>key===scopeKey&&!attached.some(r=>recordKey(r)===key)?update({scope:null,offset:null}):update({context:attached.filter(r=>recordKey(r)!==key).map(recordKey).join(',')||null})}
       onSearchContext={async q=>(await readJSON<SearchResponse>(`/api/search?${new URLSearchParams({q,limit:'8'})}`)).results}
       contextSuggestions={data?.results??[]}
+      knownPeople={orgGraph.data?.nodes.map(n=>({id:n.id,name:n.name}))??[]}
       onAddReference={record=>update({context:[...new Set([...attached.map(recordKey),recordKey(record)])].join(',')})}
       workflows={workflows} onWorkflow={row=>{if(!row.disabled){api.setInput(row.prompt);focusComposer();}}}
     />

@@ -33,6 +33,9 @@ export interface SearchComposerProps {
   onRemoveReference: (key: string) => void;
   onSearchContext: (query: string) => void | Promise<SearchRecord[]>;
   contextSuggestions: SearchRecord[];
+  /** Names for selected people that no result carries (the people view has no
+   *  query): the org graph's roster, used for names only, never as people. */
+  knownPeople?: { id: string; name: string }[];
   onAddReference: (record: SearchRecord) => void;
   /** Workflow ⌄ rows and their /commands (searchWorkflows). */
   workflows?: SearchWorkflowRow[];
@@ -65,7 +68,7 @@ function markdownOf(html: string): string {
   }
   return Array.from(body.childNodes).map(render).join('').trim();
 }
-export function SearchComposer({ value, onChange, onSubmit, disabled, agents, references, onRemoveReference, onSearchContext, contextSuggestions, onAddReference, workflows = [], onWorkflow }: SearchComposerProps) {
+export function SearchComposer({ value, onChange, onSubmit, disabled, agents, references, onRemoveReference, onSearchContext, contextSuggestions, knownPeople = [], onAddReference, workflows = [], onWorkflow }: SearchComposerProps) {
   const editorRef = useRef<RichChatComposerHandle>(null);
   const [draft, setDraft] = useState<RichChatDraft>(() => draftOf(value));
   const [error, setError] = useState('');
@@ -85,8 +88,10 @@ export function SearchComposer({ value, onChange, onSubmit, disabled, agents, re
   // references (2026-09-29: a person selected on the graph but not attached
   // showed as a raw `p-051` in the Start call tooltip).
   const resultPeople = contextSuggestions.filter(r => r.type === 'person').map(r => `${r.id}=${r.title}`).join('|');
-  const people = useMemo(() => peopleFromRecordKeys(selection.split(',').filter(Boolean), references, contextSuggestions),
-    [selection, personRefs, resultPeople]); // keyed on the people, not the array identity
+  const rosterPeople = knownPeople.map(p => `${p.id}=${p.name}`).join('|');
+  const people = useMemo(() => peopleFromRecordKeys(selection.split(',').filter(Boolean), references,
+    [...contextSuggestions, ...knownPeople.map(p => ({ type: 'person', id: p.id, title: p.name }))]),
+    [selection, personRefs, resultPeople, rosterPeople]); // keyed on the people, not the array identity
   const named = people.filter(p => p.name !== p.personId).map(p => p.name);
   const call = usePeopleCall({
     people,
