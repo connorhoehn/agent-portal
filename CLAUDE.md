@@ -327,6 +327,25 @@ yet. Provision the repo, then un-pause the bot. ⚠️ The retired `seed_work_it
 `schema/seeds/work_items_*.sql` family targeted a `proj-*` project family that
 no seed ever created — those files are gone; don't resurrect those ids.
 
+🔒 **Every GitHub repo generated for an initiative MUST be created private, and
+"private" is the default to assert, not a preference to ask about.** Fourteen
+`orgiq-*` repos (`orgiq-auth-service`, `orgiq-rag-search`, `orgiq-zero-trust`,
+`orgiq-llm-platform`, `orgiq-finops`, `orgiq-compliance`, `orgiq-data-lake`,
+`orgiq-feature-store`, `orgiq-stream-analytics`, `orgiq-inference-platform`,
+`orgiq-observability`, `orgiq-mobile-app`, `orgiq-design-system`,
+`orgiq-design-system-api`) were provisioned **public** in
+`github.com/connorhoehnslalom` and stayed that way until 2026-09-29, when they
+were flipped private. Nothing in this repo creates them, which is exactly why the
+default went unchecked: the provisioning lives outside the tree, so no code
+review here ever saw a visibility flag. These repos are the targets cron
+maintenance bots and dispatched work items push commits to, so a public one
+publishes generated code, branch names and commit messages describing internal
+initiatives. Visibility is also not fully reversible — anything public may
+already be cached, forked or indexed. Check with
+`gh repo list <owner> --visibility public` after provisioning rather than
+trusting the creating call's default, and pass `--private` (or `private: true`)
+explicitly.
+
 ## The docs map
 
 Long-form design lives in `docs/`. Several features follow a **goal-doc +
