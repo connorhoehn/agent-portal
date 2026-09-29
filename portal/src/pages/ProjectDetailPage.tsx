@@ -26,6 +26,7 @@ import {
   Button,
   EmptyState,
   ErrorState,
+  Inline,
   LoadingState,
   Modal,
   PageSection,
@@ -46,6 +47,7 @@ import { InitiativesExplorer } from './projects/InitiativesExplorer';
 import { useInitiativeListRail } from './projects/InitiativeListRail';
 import { initiativeBreadcrumbs, initiativeHref } from './projects/initiativeNavigation';
 import { InitiativeComposer } from './projects/InitiativeComposer';
+import { useInitiativeCall } from './projects/InitiativeCall';
 import { AddNoteDialog, LinkDecisionDialog } from './project-detail/BriefDialogs';
 import { ContributorModal } from './project-detail/ContributorModal';
 import { ContributorsTable } from './project-detail/ContributorsTable';
@@ -376,6 +378,24 @@ function ProjectDetailPage() {
       : n)));
   }, [rawTree]);
 
+  // The call (docs/social-calls-plan.md step 5): owner + SMEs, overrides
+  // applied, computed before the early returns because it is a hook.
+  const callOwnerId = ownerOverride ? ownerOverride.ownerId : project?.ownerId ?? null;
+  const callOwnerName = ownerOverride ? ownerOverride.ownerName : project?.ownerName ?? null;
+  const callOwner = useMemo(
+    () => (callOwnerId ? { personId: callOwnerId, name: callOwnerName ?? callOwnerId } : null),
+    [callOwnerId, callOwnerName],
+  );
+  const callSmes = useMemo(() => (project?.contributors ?? [])
+    .filter((c) => ((c.personId in roleOverrides ? roleOverrides[c.personId] : c.role) ?? '').toLowerCase() === 'sme' && c.personId !== callOwnerId)
+    .map((c) => ({ personId: c.personId, name: c.name })), [project, roleOverrides, callOwnerId]);
+  const initiativeCall = useInitiativeCall({
+    project: project ? { id: project.id, name: project.name } : null,
+    owner: callOwner,
+    smes: callSmes,
+    onOpenPeople: () => setTab('contributors'),
+  });
+
   if (projLoading) {
     return <PageSection title="Initiative"><LoadingState label="Loading initiative…" /></PageSection>;
   }
@@ -434,6 +454,17 @@ function ProjectDetailPage() {
       people={people}
       linkStyle="button"
       link={repoHref ? { label: 'Repository', href: repoHref } : null}
+      // Scoped entry into Search: a link, not a mode — the Search header draws
+      // "In: <name> ×" and "Search entire workspace" from the `scope` param.
+      controls={
+        <Inline gap="sm">
+          <Button size="sm" variant="secondary" data-testid="initiative-search-link"
+            onClick={() => navigate(`/iq/search?scope=${encodeURIComponent(project.id)}`)}>
+            Search in this initiative
+          </Button>
+          {initiativeCall.startButton}
+        </Inline>
+      }
       menu={[{
         // Creating work is dispatch-gated server-side (POST /work-items), so
         // a role without it is not offered the menu entries.
@@ -488,6 +519,7 @@ function ProjectDetailPage() {
     <InitiativeComposer
       presentation="document"
       subject={subject}
+      dock={initiativeCall.dock}
       {...(composerSetup ? { setup: composerSetup } : {})}
       {...(onWork && current && canDispatch
         ? { onChat: (msg: { text: string }) => thread.postComment(msg.text) }

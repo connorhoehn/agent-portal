@@ -49,7 +49,6 @@ import { coalesceAssistantMessages } from '../components/chat/coalesceMessages';
 import { collapseFailedTurn } from '../components/chat/collapseFailedTurn';
 import { FeedbackControl } from '../components/chat/FeedbackControl';
 import { describeTurnError } from '../components/chat/turnError';
-import { SearchEvidence } from './search/SearchEvidence';
 import { readSearchEvidence, linkSearchCitations } from './search/searchModel';
 import type { SearchRef } from './search/searchTypes';
 import { UnavailableNotice } from '../components/UnavailableNotice';
@@ -199,12 +198,15 @@ export interface SearchConversationAPI {
   selectAgent: (id: string) => void;
 }
 
-function InvokePage({ renderWorkspace, contextRefs = [], onSubmitted }: {
+function InvokePage({ renderWorkspace, renderAnswerEvidence, contextRefs = [], onSubmitted }: {
   renderWorkspace?: (api: SearchConversationAPI) => ReactNode;
+  /** Search: the cited records drawn under an assistant message. */
+  renderAnswerEvidence?: (toolCalls?: Array<{ name: string; result?: string }>) => ReactNode;
   contextRefs?: SearchRef[];
   onSubmitted?: (query: string) => void;
 } = {}) {
-  const { roster: peers } = usePresence('invoke');
+  // Tenant-prefixed: the BFF gateway refuses any channel outside `<tenant>:` (2026-09-29).
+  const { roster: peers } = usePresence('orgiq:invoke');
   // `/api/agents` answers `{ agents, degraded?, error? }` — an object, not a
   // bare array, so that a failed ListAgentRuntimes can say so instead of
   // arriving as an empty fleet. Here the fleet only fills a selector; the
@@ -796,7 +798,7 @@ function InvokePage({ renderWorkspace, contextRefs = [], onSubmitted }: {
                   agentName={renderWorkspace ? 'Org Assistant' : selectedAgent?.name ?? 'Agent'}
                   renderMarkdown={(content) => renderMessageContent(renderWorkspace ? linkSearchCitations(content, readSearchEvidence(msg.toolCalls)) : content, false)}
                 />
-                {renderWorkspace && msg.role === 'assistant' && <SearchEvidence toolCalls={msg.toolCalls} />}
+                {renderWorkspace && msg.role === 'assistant' && renderAnswerEvidence?.(msg.toolCalls)}
                 {(!renderWorkspace || sources.some(source => source.kind !== 'graph') || !readSearchEvidence(msg.toolCalls).length) && <SourceChips sources={sources} {...(provenance ? { provenance } : {})} />}
                 {msg.role === 'assistant' && (
                   <FeedbackControl invocationId={answerInvocationId(msg)} />

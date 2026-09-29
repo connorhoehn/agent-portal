@@ -18,15 +18,9 @@
 // keyed by subject (`setup.draftKey`), so moving to another item never carries
 // one item's text into the next.
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router';
-import { ChevronIcon, DropdownMenu } from '@connorhoehnslalom/ui-components/shared';
-import { ComposerDockPlacementContext, FloatingComposerDock } from '@connorhoehnslalom/ui-components/doc-editor';
-import {
-  RichChatComposer,
-  type ComposerMode,
-  type RichChatDraft,
-} from '@connorhoehnslalom/ui-components/social/rich-composer';
+import { AgentComposerDock } from '@connorhoehnslalom/ui-components/social/rich-composer';
 import {
   askHref,
   composerCommands,
@@ -54,15 +48,9 @@ export interface InitiativeComposerProps {
   onChat?: (message: { text: string; html: string }) => boolean | Promise<boolean>;
   /** Why Chat is off. Default: the subject has no discussion thread. */
   chatUnavailableReason?: string;
+  /** Pinned to the composer's top edge: the call shelf (`CallDock`) while a call is on. */
+  dock?: ReactNode;
   'data-testid'?: string;
-}
-
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
-
-function draftOf(text: string): RichChatDraft {
-  return { html: text ? `<p>${escapeHtml(text)}</p>` : '', files: [] };
 }
 
 export function InitiativeComposer(props: InitiativeComposerProps) {
@@ -74,22 +62,17 @@ export function InitiativeComposer(props: InitiativeComposerProps) {
 }
 
 function DockedComposer({
-  subject, setup, onChat, chatUnavailableReason, presentation = 'compact', 'data-testid': testId,
+  subject, setup, onChat, chatUnavailableReason, dock, presentation = 'compact', 'data-testid': testId,
 }: Omit<InitiativeComposerProps, 'setup'> & { setup: ComposerSetup }) {
   const navigate = useNavigate();
-  const [mode, setMode] = useState<ComposerMode>('agent');
   const [withContext, setWithContext] = useState(true);
-  const [draft, setDraft] = useState<RichChatDraft>(() => draftOf(setup.draft));
-  // A workflow pick replaces the draft; the editor takes a new draft on mount,
-  // so the pick bumps this to remount it with the command in place.
-  const [seed, setSeed] = useState(0);
 
   const commands = useMemo(() => composerCommands(subject), [subject]);
   // The menu and the slash list are the same three workflows. One that does
   // not apply here is a disabled menu row whose reason is its second line and
-  // tooltip (DropdownMenuItem.disabledReason, 2.390.4) — it cannot be picked.
-  // A command typed by hand still meets the same rule: `askHref` builds
-  // nothing for a workflow that does not apply, so Send refuses it.
+  // tooltip — it cannot be picked. A command typed by hand still meets the
+  // same rule: `askHref` builds nothing for a workflow that does not apply, so
+  // Send refuses it. A pick seeds `/<id> ` (the dock's default).
   const workflows = useMemo(() => workflowMenuRows(subject), [subject]);
 
   const references = useMemo(
@@ -100,66 +83,30 @@ function DockedComposer({
   const chatOff = chatUnavailableReason ?? 'This view has no discussion thread — ask the agent instead';
 
   return (
-    <ComposerDockPlacementContext.Provider value="pinned">
-    <FloatingComposerDock
+    <AgentComposerDock
+      presentation={presentation}
       label="Initiative composer"
       data-testid={testId ?? 'initiative-composer'}
-      className="bg-surface pt-3 [--dock-inset:1.5rem]"
-      composer={
-      <RichChatComposer
-        key={seed}
-        mode={mode}
-        onModeChange={setMode}
-        modeControl="menu"
-        layout="auto"
-        toolbar={presentation === 'document' ? 'editor' : 'compact'}
-        density={presentation === 'document' ? 'comfortable' : 'compact'}
-        modeShortcuts
-        modeTriggers
-        backdropTone="none"
-        allowAttachments
-        references={references}
-        onRemoveReference={() => setWithContext(false)}
-        disabledModes={onChat ? ['terminal'] : ['chat', 'terminal']}
-        modeUnavailableReasons={{
-          chat: chatOff,
-          terminal: 'Initiatives have no terminal',
-        }}
-        modePlaceholders={{ agent: setup.placeholder }}
-        commands={commands}
-        toolbarExtras={(
-          <DropdownMenu
-            trigger={<span className="inline-flex items-center gap-2">Workflow <ChevronIcon dir="down" size={14} /></span>}
-            triggerLabel="Workflow"
-            triggerClassName="h-7 px-2 text-xs font-medium text-text-secondary"
-            sections={[{
-              items: workflows.map((w) => ({
-                label: w.label,
-                description: w.description,
-                disabled: w.disabled,
-                disabledReason: w.disabledReason,
-                onSelect: () => {
-                  setDraft(draftOf(`/${w.id} `));
-                  setSeed((n) => n + 1);
-                },
-              })),
-            }]}
-          />
-        )}
-        draft={draft}
-        onDraftChange={(d) => setDraft(d)}
-        onSend={async (msg) => {
-          if (mode === 'chat') {
-            if (!onChat || !msg.text.trim()) return false;
-            return onChat({ text: msg.text, html: msg.html });
-          }
-          const href = askHref(msg.text, subject, withContext);
-          if (!href) return false;
-          navigate(href);
-          return true;
-        }}
-      />
-    } />
-    </ComposerDockPlacementContext.Provider>
+      dock={dock}
+      references={references}
+      onRemoveReference={() => setWithContext(false)}
+      disabledModes={onChat ? ['terminal'] : ['chat', 'terminal']}
+      modeUnavailableReasons={{ chat: chatOff, terminal: 'Initiatives have no terminal' }}
+      modePlaceholders={{ agent: setup.placeholder }}
+      commands={commands}
+      workflows={workflows}
+      defaultDraft={setup.draft}
+      draftKey={setup.draftKey}
+      onSend={async (msg, { mode }) => {
+        if (mode === 'chat') {
+          if (!onChat || !msg.text.trim()) return false;
+          return onChat({ text: msg.text, html: msg.html });
+        }
+        const href = askHref(msg.text, subject, withContext);
+        if (!href) return false;
+        navigate(href);
+        return true;
+      }}
+    />
   );
 }

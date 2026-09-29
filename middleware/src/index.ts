@@ -4,6 +4,7 @@ import { browserOrigin } from './lib/browser-origin.js';
 import cookieParser from 'cookie-parser';
 import { rejectUnsupportedUpgrades } from './lib/unsupported-upgrades.js';
 import { attachDistillationRealtime, REALTIME_PATH } from './lib/distillation-realtime.js';
+import { attachRealtimeGateway, realtimeGatewayEnabled, realtimeGatewayStatus, REALTIME_GATEWAY_PATH } from './lib/realtime-gateway.js';
 import { startCompactionConsumer, startCompactionScheduler, startReplicaSync } from './providers/distillation.js';
 import { config } from './config.js';
 import { errorHandler } from './lib/async-handler.js';
@@ -142,6 +143,8 @@ function healthHandler(_req: express.Request, res: express.Response): void {
       region: config.region,
       awsCredentials: creds,
       datastore,
+      // lib/realtime-gateway.ts: whether /ws is served, and where call state lives.
+      realtime: realtimeGatewayStatus(),
     });
   });
 }
@@ -477,12 +480,18 @@ const server = app.listen(config.port, '0.0.0.0', () => {
   console.log(`orgiq-middleware listening on :${config.port} (${mockSuffix})`);
 });
 
-// This BFF serves SSE, not the gateway protocol — with one exception:
-// realtime-modules on REALTIME_PATH, which pushes the distillation channels
-// (distill:levels / distill:jobs / distill:review) to a signed-in orgiq
-// session. Every other upgrade is still refused before a socket is accepted.
+// This BFF serves SSE plus two realtime-modules WebSocket paths:
+// REALTIME_PATH pushes the distillation channels (distill:levels / distill:jobs
+// / distill:review) to a signed-in orgiq session (cookie auth), and — when
+// REALTIME_GATEWAY is on (default outside production) — REALTIME_GATEWAY_PATH
+// (/ws) is the chat/presence/calls gateway, authenticated by the realtime
+// token over `Sec-WebSocket-Protocol` (lib/realtime-gateway.ts). Every other
+// upgrade is still refused before a socket is accepted.
 attachDistillationRealtime(server);
-rejectUnsupportedUpgrades(server, { allowPaths: [REALTIME_PATH] });
+const gatewayOn = realtimeGatewayEnabled();
+if (gatewayOn) attachRealtimeGateway(server);
+else console.log('[realtime-gateway] off (REALTIME_GATEWAY) — /ws upgrades are refused');
+rejectUnsupportedUpgrades(server, { allowPaths: gatewayOn ? [REALTIME_PATH, REALTIME_GATEWAY_PATH] : [REALTIME_PATH] });
 
 // Distillation's background work: the compaction consumer (claims passes off
 // distill-compact-l1|l2 — message-queue, or in process under MOCK_QUEUE), the

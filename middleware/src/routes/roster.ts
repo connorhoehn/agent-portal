@@ -23,6 +23,7 @@ import { asyncHandler } from '../lib/async-handler.js';
 import { config } from '../config.js';
 import { exec } from '../providers/aurora.js';
 import { mockPeople } from '../mock/people.js';
+import { listUsers } from '../providers/identity.js';
 
 export interface RosterEntry {
   id: string;
@@ -50,6 +51,33 @@ function clampRosterLimit(raw: unknown): number {
 rosterRouter.get('/', asyncHandler(async (req, res) => {
   const limit = clampRosterLimit(req.query['limit']);
   res.json({ people: await listRoster(limit) });
+}));
+
+// GET /api/roster/users?personIds=p-002,p-004 → { users, unlinked }
+//
+// Org people → the app_users who sign in as them, for the initiative call
+// (docs/social-calls-plan.md step 5): a call rings USER ids (the realtime
+// token's `sub`), while an initiative's owner and SMEs are PERSON ids. Only
+// users holding a grant in the caller's current tenant are returned, so a
+// person linked to a user in another tenant reads as unlinked here. A person
+// with no linked user is listed in `unlinked` so the page can say who it
+// cannot ring. Same bare session floor as the roster (mounted in index.ts).
+export interface RosterUser { personId: string; userId: string; displayName: string }
+const MAX_PERSON_IDS = 50;
+
+rosterRouter.get('/users', asyncHandler(async (req, res) => {
+  const raw = String(req.query['personIds'] ?? '');
+  const personIds = [...new Set(raw.split(',').map((s) => s.trim()).filter(Boolean))].slice(0, MAX_PERSON_IDS);
+  const tenant = req.session?.tenant ?? null;
+  const users = personIds.length ? await listUsers() : [];
+  const out: RosterUser[] = [];
+  const unlinked: string[] = [];
+  for (const personId of personIds) {
+    const u = users.find((x) => x.personId === personId && (!tenant || (x.grants[tenant]?.length ?? 0) > 0));
+    if (u) out.push({ personId, userId: u.id, displayName: u.displayName });
+    else unlinked.push(personId);
+  }
+  res.json({ users: out, unlinked });
 }));
 
 async function listRoster(limit: number): Promise<RosterEntry[]> {

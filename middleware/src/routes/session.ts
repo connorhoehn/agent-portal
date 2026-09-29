@@ -24,7 +24,9 @@ import {
   demoScopedGrants,
   switchableGrants,
 } from '../lib/session.js';
-import { isAllowed, CAPABILITY_ACTIONS } from '../lib/authz.js';
+import { isAllowed, CAPABILITY_ACTIONS, requireSession, resolveSession } from '../lib/authz.js';
+import { config } from '../config.js';
+import { realtimeClaims, realtimeSigningSecret, signRealtimeToken } from '../lib/realtime-token.js';
 import { eventFromSession, logAuthz } from '../lib/audit.js';
 import { rateLimit } from '../lib/rate-limit.js';
 import { cognitoEnabled } from '../lib/oidc.js';
@@ -154,6 +156,33 @@ sessionRouter.get('/capabilities', asyncHandler(async (req, res) => {
     tenant: session.tenant,
     degraded,
     actions: Object.fromEntries(entries) as Record<string, boolean>,
+  });
+}));
+
+// The realtime token bridge (docs/social-calls-plan.md step 3): a 10-minute
+// HS256 JWT for the websocket-gateway connect and platform-api's video-session
+// calls, which cannot read this BFF's httpOnly cookie. It carries the
+// EFFECTIVE identity — the impersonated user while masquerading, with the real
+// operator in `act`, exactly like the cookie — and the tenant the session is
+// in now, so a tenant switch followed by a re-fetch moves the token with it.
+// The claim shape and secret contract live in lib/realtime-token.ts.
+sessionRouter.get('/realtime-token', requireSession('RealtimeToken'), asyncHandler(async (req, res) => {
+  const session = resolveSession(req)!;
+  const secret = realtimeSigningSecret();
+  if (!secret) { res.status(503).json({ error: 'realtime token signing unavailable' }); return; }
+  // email / external_sub are a directory read; a miss (demo-user, picker-only
+  // account, Aurora blip) just leaves those claims off rather than failing.
+  const user = await getUser(session.sub).catch(() => null);
+  const { token, expiresAt } = await signRealtimeToken(
+    realtimeClaims(session, { externalSub: user?.externalSub, email: user?.email }), secret);
+  const gatewayUrl = config.realtime?.gatewayUrl;
+  const platformApiUrl = config.realtime?.platformApiUrl;
+  res.set('Cache-Control', 'no-store');
+  res.json({
+    token,
+    expiresAt,
+    ...(gatewayUrl ? { gatewayUrl } : {}),
+    ...(platformApiUrl ? { platformApiUrl } : {}),
   });
 }));
 

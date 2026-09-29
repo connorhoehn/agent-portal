@@ -23,6 +23,7 @@
 // node:test pins these exact keys so a rename in a source module is caught.
 
 import { clearContextChosen } from './contextChoice.ts';
+import { clearRealtimeToken } from './realtimeToken.ts';
 
 /** Exact localStorage keys that cache tenant/user-scoped data. */
 const LOCAL_KEYS: readonly string[] = [
@@ -82,6 +83,8 @@ export function clearTenantScopedCaches(): void {
       }
     } catch { /* localStorage unreadable — ignore */ }
   }
+  // In-memory: the realtime gateway token names the pre-switch identity.
+  try { clearRealtimeToken(); } catch { /* ignore */ }
   // sessionStorage: the per-sub "context chosen" marker owns its own clear...
   try { clearContextChosen(); } catch { /* ignore */ }
   // ...plus the flat sessionStorage keys above.

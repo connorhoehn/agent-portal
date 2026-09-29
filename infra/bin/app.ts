@@ -18,6 +18,9 @@ import { SpanProjectorStack } from '../lib/span-projector-stack';
 import { PromptCanaryStack } from '../lib/prompt-canary-stack';
 import { MiddlewareServiceStack } from '../lib/middleware-service-stack';
 import { DevboxStack } from '../lib/devbox-stack';
+import { SocialImagesStack } from '../lib/social-images-stack';
+import { SocialMediaStack } from '../lib/social-media-stack';
+import { SocialStack } from '../lib/social-stack';
 
 const app = new cdk.App();
 
@@ -442,5 +445,79 @@ middlewareService.addDependency(authorization);
 middlewareService.addDependency(agentCoreMemory);
 middlewareService.addDependency(knowledgeBase);
 middlewareService.addDependency(guardrails);
+
+// -------------------------------------------------------------------
+// Stacks 16-18: Social calls (docs/social-calls-deploy-plan.md). All opt-in —
+// none is in the app unless its flag is set, so `deploy.sh`'s default fleet is
+// unchanged.
+//
+//   deploySocialImages=true  OrgIQ-SocialImages — three RETAIN ECR repos
+//   deploySocialMedia=true   OrgIQ-SocialMedia  — the SFU on EC2 + Elastic IP
+//                            (sfuAllowCidr, sfuImageDigest, socialPortalOrigin)
+//   deploySocial=true        OrgIQ-Social       — platform-api, Redis, tables
+//                            (deploySocialService, platformApiImageDigest,
+//                             socialPlatformHost, socialSfuHost, tableSuffix, …)
+//
+// The images stack joins the app whenever any social flag is set so `--all`
+// orders it first; the service stacks import its repos BY NAME, so there is
+// no export to freeze. OrgIQ-Social wires to the SFU only when
+// OrgIQ-SocialMedia is in the same app (pass both flags on its deploy).
+// -------------------------------------------------------------------
+const ctxFlag = (key: string): boolean => {
+  const v = app.node.tryGetContext(key);
+  return v === true || v === 'true';
+};
+const deploySocialMedia = ctxFlag('deploySocialMedia');
+const deploySocial = ctxFlag('deploySocial');
+const deploySocialImages = ctxFlag('deploySocialImages') || deploySocialMedia || deploySocial;
+
+const socialImages = deploySocialImages
+  ? new SocialImagesStack(app, 'OrgIQ-SocialImages', {
+    env,
+    prefix,
+    description: 'OrgIQ Social images: ECR repos for the gateway, platform-api and the SFU (RETAIN)',
+  })
+  : undefined;
+
+const socialMedia = deploySocialMedia
+  ? new SocialMediaStack(app, 'OrgIQ-SocialMedia', {
+    env,
+    prefix,
+    vpc: middlewareService.vpc,
+    cognitoUserPoolId: authentication.userPoolId,
+    description: 'OrgIQ Social media: the mediasoup SFU on EC2 with an Elastic IP (allowlisted ingress)',
+  })
+  : undefined;
+if (socialMedia) {
+  socialMedia.addDependency(middlewareService);
+  if (socialImages) socialMedia.addDependency(socialImages);
+}
+
+if (deploySocial) {
+  const social = new SocialStack(app, 'OrgIQ-Social', {
+    env,
+    prefix,
+    vpc: middlewareService.vpc,
+    cluster: middlewareService.cluster,
+    listener: middlewareService.listener,
+    loadBalancerSecurityGroupId: middlewareService.loadBalancerSecurityGroupId,
+    middlewareSecurityGroupId: middlewareService.serviceSecurityGroupId,
+    realtimeJwtSecretName: middlewareService.realtimeJwtSecretName,
+    cognitoUserPoolId: authentication.userPoolId,
+    cognitoClientId: authentication.userPoolClientId,
+    ...(socialMedia && {
+      sfu: {
+        privateIp: socialMedia.privateIp,
+        instanceId: socialMedia.instance.instanceId,
+        securityGroupId: socialMedia.securityGroup.securityGroupId,
+      },
+    }),
+    description: 'OrgIQ Social: platform-api on Fargate, Redis, and the call-path DynamoDB tables',
+  });
+  social.addDependency(middlewareService);
+  social.addDependency(authentication);
+  if (socialImages) social.addDependency(socialImages);
+  if (socialMedia) social.addDependency(socialMedia);
+}
 
 app.synth();

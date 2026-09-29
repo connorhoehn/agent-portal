@@ -128,13 +128,18 @@ describe('distill channels', () => {
     }
   });
 
-  it('refuses a subscription outside distill:* (no ack)', async () => {
+  it('refuses a subscription outside distill:* (no subscribed ack; since realtime-modules 0.98.6 a refusal frame)', async () => {
     const conn = await connect({ cookie: await cookieFor({}) });
     if ('refused' in conn) throw new Error('refused');
     conn.ws.send(JSON.stringify({ service: 'subscribe', action: 'subscribe', channel: 'chat:general' }));
     conn.ws.send(JSON.stringify({ service: 'subscribe', action: 'subscribe', channel: DISTILL_CHANNELS.jobs }));
     await until(() => conn.frames.some((f) => f.channel === DISTILL_CHANNELS.jobs));
-    expect(conn.frames.some((f) => f.channel === 'chat:general')).toBe(false);
+    // 0.98.6 answers a refused subscribe with an error frame that names the
+    // channel (`AUTHZ_CHANNEL_DENIED`); what must never arrive is a
+    // subscribed ack or data for it.
+    const foreign = conn.frames.filter((f) => f.channel === 'chat:general');
+    expect(foreign.every((f) => f['type'] === 'error')).toBe(true);
+    expect(foreign.some((f) => f['type'] !== 'error')).toBe(false);
     conn.ws.close();
   });
 });

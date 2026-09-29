@@ -99,3 +99,37 @@ describe('GET /api/roster (mock path)', () => {
     expect(res.body.people).toHaveLength(2);
   });
 });
+
+describe('GET /api/roster/users (person → user, for the initiative call)', () => {
+  function appAs(tenant: string | null) {
+    const app = express();
+    app.use((req, _res, next) => {
+      if (tenant) (req as unknown as { session: unknown }).session = { sub: 'u-vera', tenant, role: 'org-leader' };
+      next();
+    });
+    app.use('/api/roster', rosterRouter);
+    app.use(errorHandler);
+    return app;
+  }
+
+  it('maps linked persons to their user ids and lists the rest as unlinked', async () => {
+    // Aurora is unconfigured in this test's config, so identity serves its seed mirror.
+    const res = await request(appAs('orgiq')).get('/api/roster/users?personIds=p-002,p-004,p-051');
+    expect(res.status).toBe(200);
+    expect(res.body.users).toEqual([
+      { personId: 'p-002', userId: 'u-vera', displayName: 'Vera Green' },
+      { personId: 'p-004', userId: 'u-nora', displayName: 'Nora DaSilva' },
+    ]);
+    expect(res.body.unlinked).toEqual(['p-051']);
+  });
+
+  it('treats a user without a grant in the current tenant as unlinked', async () => {
+    const res = await request(appAs('assessment')).get('/api/roster/users?personIds=p-004');
+    expect(res.body).toEqual({ users: [], unlinked: ['p-004'] });
+  });
+
+  it('answers an empty list for no person ids, without reading users', async () => {
+    const res = await request(appAs('orgiq')).get('/api/roster/users');
+    expect(res.body).toEqual({ users: [], unlinked: [] });
+  });
+});

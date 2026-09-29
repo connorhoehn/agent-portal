@@ -122,6 +122,17 @@ export const config = {
     sessionSigningSecretArn: env('SESSION_SIGNING_SECRET_ARN'),
   },
 
+  // The realtime stack a call needs (websocket-gateway + platform-api; see
+  // docs/social-calls-plan.md). Both optional: GET /api/session/realtime-token
+  // echoes them so the portal learns where to connect, and omits them when
+  // unset. The token's signing secret (REALTIME_JWT_SECRET) is deliberately
+  // NOT captured here — lib/realtime-token.ts reads it live, the same way
+  // lib/service-auth.ts reads its secrets.
+  realtime: {
+    gatewayUrl: env('REALTIME_GATEWAY_URL') || undefined,
+    platformApiUrl: env('PLATFORM_API_URL') || undefined,
+  },
+
   // Cognito Hosted UI (OIDC) — the enterprise sign-in path. When these are set
   // the BFF exposes /api/auth/login → Cognito → /api/auth/callback and mints a
   // session from the federated identity. When unset, the user picker is the

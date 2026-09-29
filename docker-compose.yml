@@ -84,6 +84,288 @@ services:
     networks:
       - orgiq-network
 
+  # ── social profile: the stack a call needs ────────────────────────────────
+  # `docker compose --profile social up -d --build` builds from the SIBLING
+  # checkouts (../realtime-examples, ../platform-api, ../live-video-streaming)
+  # the same way realtime-examples' Tiltfile and docker-compose.local.yml do.
+  # Nothing below starts without the profile, and every port binds loopback.
+  # Guide: docs/social-calls-local-stack.md. Variables: .env.social.example.
+  # All three app services run with SKIP_AUTH / LVS_AUTH_BYPASS — dev only;
+  # the guide says what production needs instead.
+
+  social-redis:
+    profiles: ["social"]
+    image: redis:7-alpine
+    container_name: orgiq-social-redis
+    ports:
+      - "127.0.0.1:${SOCIAL_REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - orgiq-network
+
+  # In-memory DynamoDB Local (the pinned image realtime-examples' chart uses).
+  # A restart wipes every table; social-dynamodb-init recreates them.
+  social-dynamodb:
+    profiles: ["social"]
+    image: amazon/dynamodb-local:3.3.1@sha256:ff89bd48ff32cd8d9be5fee8873b65b8854dc408f1afe881be6eb00247bc0dab
+    container_name: orgiq-social-dynamodb
+    command: ["-jar", "DynamoDBLocal.jar", "-inMemory", "-sharedDb"]
+    ports:
+      - "127.0.0.1:${SOCIAL_DYNAMODB_PORT:-8000}:8000"
+    networks:
+      - orgiq-network
+
+  # Builds orgiq-social-gateway:local once so the init job and the gateway
+  # share one image, then exits.
+  social-gateway-image:
+    profiles: ["social"]
+    build:
+      context: ../realtime-examples
+      dockerfile: Dockerfile
+      target: server-runtime
+      ssh:
+        - default
+    image: orgiq-social-gateway:local
+    container_name: orgiq-social-gateway-image
+    command: ["node", "-e", "0"]
+    restart: "no"
+
+  # One-shot: creates the tables in realtime-examples'
+  # infra/dynamodb-schemas.json (document-video-sessions among them) with that
+  # repo's own idempotent initializer, inside the gateway image because it
+  # already carries @aws-sdk/client-dynamodb.
+  social-dynamodb-init:
+    profiles: ["social"]
+    image: orgiq-social-gateway:local
+    pull_policy: never
+    container_name: orgiq-social-dynamodb-init
+    command: ["node", "/seed/scripts/init-dynamodb.cjs"]
+    environment:
+      - NODE_PATH=/app/node_modules
+      - DYNAMODB_ENDPOINT=http://social-dynamodb:8000
+      - DDB_TABLE_PREFIX=
+      - AWS_REGION=us-east-1
+    volumes:
+      - ../realtime-examples/scripts/init-dynamodb.cjs:/seed/scripts/init-dynamodb.cjs:ro
+      - ../realtime-examples/infra/dynamodb-schemas.json:/seed/infra/dynamodb-schemas.json:ro
+    depends_on:
+      social-dynamodb:
+        condition: service_started
+      social-gateway-image:
+        condition: service_completed_successfully
+    restart: "no"
+    networks:
+      - orgiq-network
+
+  # websocket-gateway = realtime-examples' server (src/server.ts). Optional
+  # since 2026-09-29: the middleware serves /ws itself (REALTIME_GATEWAY=on,
+  # its default outside production), verifying the realtime token and
+  # tenant-scoping lobbies, which this container does not. Point the portal's
+  # VITE_GATEWAY_URL here only to compare against realtime-examples' server.
+  social-gateway:
+    profiles: ["social"]
+    image: orgiq-social-gateway:local
+    pull_policy: never
+    container_name: orgiq-social-gateway
+    ports:
+      - "127.0.0.1:${SOCIAL_GATEWAY_PORT:-18080}:8080"
+    environment:
+      - NODE_ENV=development
+      - LOG_LEVEL=${SOCIAL_LOG_LEVEL:-info}
+      - PORT=8080
+      - ENABLED_SERVICES=${SOCIAL_GATEWAY_SERVICES:-chat,presence,cursor,reaction,crdt,call,room,activity,social,subscribe,notification}
+      - WSG_PRESENCE_REGISTRY_ENABLED=true
+      - WSG_PRESENCE_REGISTRY_AUTHORITATIVE=true
+      - SKIP_AUTH=true
+      - COGNITO_REGION=${SOCIAL_COGNITO_REGION:-us-east-1}
+      - COGNITO_USER_POOL_ID=${SOCIAL_COGNITO_USER_POOL_ID:-us-east-1_localdev000}
+      - REDIS_ENDPOINT=social-redis
+      - REDIS_PORT=6379
+      - REDIS_URL=redis://social-redis:6379
+      - DYNAMODB_ENDPOINT=http://social-dynamodb:8000
+      - LOCALSTACK_ENDPOINT=http://social-dynamodb:8000
+      - DDB_TABLE_PREFIX=
+      - DIRECT_DYNAMO_WRITE=true
+      - DYNAMODB_CRDT_TABLE=crdt-snapshots
+      - SNAPSHOT_INTERVAL_MS=30000
+      - PIPELINE_PUBSUB_MODE=redis
+      - AWS_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=localbootstrap
+      - AWS_SECRET_ACCESS_KEY=localbootstrap
+      - PLATFORM_API_URL=http://social-platform-api:3001
+      - SERVICE_AUTH_SECRET=${SOCIAL_SERVICE_AUTH_SECRET:-local-dev-service-auth-secret}
+      - SERVICE_AUTH_SERVICE_ID=realtime-examples
+      - HOME=/home/websocket
+      # Assessment document grants (docs/assessment-documents-parity-plan.md,
+      # Phase 0). Empty by default = unchanged behaviour: no grant verifier on
+      # the gateway, open dev fixture auth on platform-api. `node
+      # scripts/social-documents.mjs up` fills them with a local Ed25519 pair
+      # whose private half only the middleware holds.
+      - DOCUMENT_TENANT_ID=${SOCIAL_DOCUMENT_TENANT_ID:-}
+      - DOCUMENT_GRANT_ISSUER=${SOCIAL_DOCUMENT_GRANT_ISSUER:-}
+      - DOCUMENT_GRANT_KEY_ID=${SOCIAL_DOCUMENT_GRANT_KEY_ID:-}
+      - DOCUMENT_GRANT_PUBLIC_KEY=${SOCIAL_DOCUMENT_GRANT_PUBLIC_KEY:-}
+      - DOCUMENT_SESSION_EPOCH_URL=${SOCIAL_DOCUMENT_SESSION_EPOCH_URL:-}
+      - DOCUMENT_POLICY_SECRET=${SOCIAL_DOCUMENT_POLICY_SECRET:-}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      social-redis:
+        condition: service_healthy
+      social-dynamodb-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    restart: unless-stopped
+    networks:
+      - orgiq-network
+
+  # platform-api — video sessions and participant tokens
+  # (src/routes/videoSessions.ts). Its Dockerfile COPYs `platform-api/…`
+  # paths, so the context is the directory holding the checkouts, exactly as
+  # realtime-examples' Tiltfile and docker-compose.local.yml build it.
+  social-platform-api:
+    profiles: ["social"]
+    build:
+      context: ..
+      dockerfile: platform-api/Dockerfile
+      ssh:
+        - default
+    image: orgiq-social-platform-api:local
+    container_name: orgiq-social-platform-api
+    ports:
+      - "127.0.0.1:${SOCIAL_PLATFORM_API_PORT:-13001}:3001"
+    environment:
+      - NODE_ENV=development
+      - PORT=3001
+      - SKIP_AUTH=true
+      - COGNITO_REGION=${SOCIAL_COGNITO_REGION:-us-east-1}
+      - COGNITO_USER_POOL_ID=${SOCIAL_COGNITO_USER_POOL_ID:-us-east-1_localdev000}
+      - REDIS_ENDPOINT=social-redis
+      - REDIS_PORT=6379
+      - REDIS_URL=redis://social-redis:6379
+      - DYNAMODB_ENDPOINT=http://social-dynamodb:8000
+      - DDB_TABLE_PREFIX=
+      - LOCAL_DDB_ENDPOINT=
+      - LOCAL_TTL_SWEEP=true
+      - AWS_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=localbootstrap
+      - AWS_SECRET_ACCESS_KEY=localbootstrap
+      - SERVICE_AUTH_SECRET=${SOCIAL_SERVICE_AUTH_SECRET:-local-dev-service-auth-secret}
+      - SERVICE_AUTH_SERVICE_ID=platform-api
+      - GATEWAY_WS_URL=ws://social-gateway:8080
+      - NODE_PATH=/app/node_modules
+      - VIDEO_API_URL=${SOCIAL_VIDEO_API_URL:-http://social-sfu:3901}
+      - VIDEO_PUBLIC_URL=${SOCIAL_VIDEO_PUBLIC_URL:-http://localhost:3901}
+      - VIDEO_ADMIN_TOKEN=${SOCIAL_LVS_ADMIN_TOKEN:-admin}
+      - LVS_WEBHOOK_SECRET=${SOCIAL_LVS_WEBHOOK_SECRET:-dev-lvs-webhook-secret}
+      - LVS_WEBHOOK_BOOTSTRAP_URL=${SOCIAL_LVS_WEBHOOK_BOOTSTRAP_URL:-http://social-platform-api:3001/hooks/lvs/recording}
+      - VIDEO_SESSION_STALE_MS=${SOCIAL_VIDEO_SESSION_STALE_MS:-}
+      # Assessment document grants (docs/assessment-documents-parity-plan.md,
+      # Phase 0). Empty by default = unchanged behaviour: no grant verifier on
+      # the gateway, open dev fixture auth on platform-api. `node
+      # scripts/social-documents.mjs up` fills them with a local Ed25519 pair
+      # whose private half only the middleware holds.
+      - DOCUMENT_TENANT_ID=${SOCIAL_DOCUMENT_TENANT_ID:-}
+      - DOCUMENT_GRANT_ISSUER=${SOCIAL_DOCUMENT_GRANT_ISSUER:-}
+      - DOCUMENT_GRANT_KEY_ID=${SOCIAL_DOCUMENT_GRANT_KEY_ID:-}
+      - DOCUMENT_GRANT_PUBLIC_KEY=${SOCIAL_DOCUMENT_GRANT_PUBLIC_KEY:-}
+      - DOCUMENT_SESSION_EPOCH_URL=${SOCIAL_DOCUMENT_SESSION_EPOCH_URL:-}
+      - DOCUMENT_POLICY_SECRET=${SOCIAL_DOCUMENT_POLICY_SECRET:-}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      social-redis:
+        condition: service_healthy
+      social-dynamodb-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:3001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    restart: unless-stopped
+    networks:
+      - orgiq-network
+
+  # LVS SFU (mediasoup). realtime-examples' Tiltfile runs this on the HOST
+  # (its `lvs-sfu` local_resource) because the colima VM's port forwarding
+  # was unreliable for mediasoup's UDP ports; this container is the
+  # one-command option, and the guide describes the host-SFU swap. RTC ports
+  # are published 1:1 because mediasoup announces the port it binds, and the
+  # announced IP is 127.0.0.1 so a browser on this machine reaches them.
+  # The build needs GH_TOKEN: the Dockerfile rewrites github: pins to HTTPS.
+  social-sfu:
+    profiles: ["social"]
+    build:
+      context: ../live-video-streaming
+      dockerfile: Dockerfile
+      secrets:
+        - gh-token
+    image: orgiq-social-sfu:local
+    container_name: orgiq-social-sfu
+    ports:
+      - "127.0.0.1:3901:3901"
+      - "127.0.0.1:40000-40001:40000-40001/udp"
+      - "127.0.0.1:40010-40011:40010-40011/tcp"
+    environment:
+      - NODE_ENV=development
+      - PORT=3901
+      - ADMIN_TOKEN=${SOCIAL_LVS_ADMIN_TOKEN:-admin}
+      - LVS_AUTH_BYPASS=true
+      - COGNITO_REGION=${SOCIAL_COGNITO_REGION:-us-east-1}
+      - COGNITO_USER_POOL_ID=${SOCIAL_COGNITO_USER_POOL_ID:-us-east-1_localdev000}
+      - WEBHOOK_HMAC_SECRET=${SOCIAL_LVS_WEBHOOK_SECRET:-dev-lvs-webhook-secret}
+      - WEBHOOK_FORMAT=bare
+      - SEED_NODES=
+      - IS_DASHBOARD=true
+      - CLUSTER_ENABLED=false
+      - POD_IP=127.0.0.1
+      - REDIS_URL=redis://social-redis:6379
+      - MEDIASOUP_WORKERS=2
+      - MEDIASOUP_RTC_PORT=40000
+      - MEDIASOUP_RTC_TCP_PORT=40010
+      - MEDIASOUP_RTC_TCP_PORT_PER_POD=false
+      - MEDIASOUP_ANNOUNCED_IP=${SOCIAL_MEDIASOUP_ANNOUNCED_IP:-127.0.0.1}
+      - MEDIASOUP_ANNOUNCED_IP_TCP=${SOCIAL_MEDIASOUP_ANNOUNCED_IP:-127.0.0.1}
+      - MESH_ANNOUNCED_IP=127.0.0.1
+      - ENABLE_UDP=true
+      - RECORDING_DIR=/var/lib/lvs-recordings
+      - RECORDING_MIN_FREE_GB=0.5
+      - AWS_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=localbootstrap
+      - AWS_SECRET_ACCESS_KEY=localbootstrap
+    volumes:
+      - social-lvs-recordings:/var/lib/lvs-recordings
+    depends_on:
+      social-redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:3901/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    restart: unless-stopped
+    networks:
+      - orgiq-network
+
 networks:
   orgiq-network:
     driver: bridge
+
+volumes:
+  social-lvs-recordings:
+
+secrets:
+  gh-token:
+    environment: GH_TOKEN

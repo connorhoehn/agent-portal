@@ -37,6 +37,10 @@ export default defineConfig(async () => ({
   optimizeDeps: {
     include: [
       '@connorhoehnslalom/realtime-modules/client',
+      // The /iq shell mounts the call host, so every /iq page imports it; left
+      // to discovery, the first load re-optimizes mid-session and renders the
+      // page against a second React copy ("Invalid hook call" in LVSProvider).
+      '@connorhoehnslalom/realtime-modules/client/video',
       '@connorhoehnslalom/realtime-modules/adapters/tiptap',
       'yjs', 'y-protocols/awareness', 'lib0/observable', '@tiptap/core', '@tiptap/react',
       'react', 'react-dom', 'react-dom/client', 'react/jsx-runtime', 'react/jsx-dev-runtime',

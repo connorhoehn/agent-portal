@@ -143,6 +143,27 @@ export class MiddlewareServiceStack extends cdk.Stack {
    */
   public readonly labCallbackSecretArn!: string;
 
+  // ── Handles the social stacks attach to ────────────────────────────────────
+  // OrgIQ-Social and OrgIQ-SocialMedia run in this VPC, on this cluster,
+  // behind this listener. Passing them as props makes CDK mint hash-named
+  // exports that freeze while imported (the KnowledgeBase gotcha) — accepted
+  // in docs/social-calls-deploy-plan.md because none of these ever change
+  // identity. The consequence: this stack cannot be torn down while the social
+  // stacks exist.
+  public readonly vpc: ec2.Vpc;
+  public readonly cluster: ecs.Cluster;
+  public readonly listener: elbv2.ApplicationListener;
+  /** The ALB's security group — the social stacks add their own rules to it. */
+  public readonly loadBalancerSecurityGroupId: string;
+  /** The middleware task's security group (Redis and platform-api admit it). */
+  public readonly serviceSecurityGroupId: string;
+  public readonly taskRoleArn: string;
+  /**
+   * Fixed name of the realtime token secret. Consumers import it with
+   * `Secret.fromSecretNameV2`, by name, so no export is created for it.
+   */
+  public readonly realtimeJwtSecretName: string;
+
   constructor(scope: Construct, id: string, props: MiddlewareServiceStackProps) {
     super(scope, id, props);
 
@@ -351,6 +372,32 @@ export class MiddlewareServiceStack extends cdk.Stack {
     this.assessmentRunCompleteSecretArn = assessmentRunCompleteSecret.secretArn;
     this.harnessRunnerSecretArn = harnessRunnerSecret.secretArn;
     this.labCallbackSecretArn = labCallbackSecret.secretArn;
+
+    // Secrets Manager — the realtime token secret (REALTIME_JWT_SECRET,
+    // middleware/src/lib/realtime-token.ts). The token bridge
+    // (GET /api/session/realtime-token) signs HS256 tokens with it, and the
+    // middleware's own realtime gateway (REALTIME_GATEWAY=on) and platform-api
+    // in OrgIQ-Social verify with it.
+    //
+    // UNLIKE the machine-callback secrets above, minting this closes nothing:
+    // unset in production the bridge 503s, set it issues tokens — so deploying
+    // it has no blackout window. Both consumers are ECS tasks, so both take it
+    // as an ECS container secret; nobody copies the value by hand. The fixed
+    // name is load-bearing: OrgIQ-Social imports it by NAME
+    // (`fromSecretNameV2`) so no CloudFormation export freezes on it.
+    // See docs/social-calls-deploy-plan.md §1.
+    const realtimeJwtSecretName = `${prefix}-realtime-jwt-secret`;
+    const realtimeJwtSecret = new secretsmanager.Secret(this, 'RealtimeJwtSecret', {
+      secretName: realtimeJwtSecretName,
+      description: 'HS256 signing secret for the realtime token bridge (REALTIME_JWT_SECRET); verified by the middleware gateway and platform-api',
+      generateSecretString: { excludePunctuation: true, passwordLength: 64 },
+    });
+    realtimeJwtSecret.grantRead(taskRole);
+    this.realtimeJwtSecretName = realtimeJwtSecretName;
+    new cdk.CfnOutput(this, 'RealtimeJwtSecretName', {
+      value: realtimeJwtSecretName,
+      description: 'Realtime token secret — consumers import it by this name, not by an export',
+    });
 
     // Exported so a future stack (or an operator script) can look these up
     // by stable name instead of hunting through the console. NOTE: these
@@ -627,6 +674,24 @@ export class MiddlewareServiceStack extends cdk.Stack {
     });
     repo.grantPull(executionRole);
 
+    // ── Realtime gateway (opt-in) ──────────────────────────────────────────
+    // `--context realtimeGateway=true` turns the middleware into its own
+    // websocket gateway: REALTIME_GATEWAY=on plus REDIS_URL for cross-task
+    // fan-out. Opt-in, not default, because the Redis it points at lives in
+    // OrgIQ-Social (Cloud Map `redis.<prefix>-social.local`), which deploys
+    // AFTER this stack — turning it on first would hand every task a Redis
+    // URL that does not resolve yet. Override the URL with
+    // `--context realtimeRedisUrl=redis://…` (e.g. ElastiCache later).
+    const realtimeFlag = this.node.tryGetContext('realtimeGateway');
+    const realtime = {
+      enabled: realtimeFlag === true || realtimeFlag === 'true',
+      redisUrl: (this.node.tryGetContext('realtimeRedisUrl') as string | undefined)
+        ?? `redis://redis.${prefix}-social.local:6379`,
+      gatewayUrl: this.node.tryGetContext('realtimeGatewayUrl') as string | undefined,
+      platformPublicUrl: this.node.tryGetContext('realtimePlatformPublicUrl') as string | undefined,
+      videoPublicUrl: this.node.tryGetContext('realtimeVideoPublicUrl') as string | undefined,
+    };
+
     // ── Container environment variables ────────────────────────────────────
     // All values that are resolvable at synth time go here as plain strings.
     // Secrets (ARNs only known at runtime) are injected separately below.
@@ -694,6 +759,19 @@ export class MiddlewareServiceStack extends cdk.Stack {
 
       // WebSocket gateway
       ...(props.websocketGatewayUrl && { WEBSOCKET_GATEWAY_URL: props.websocketGatewayUrl }),
+
+      // The middleware as its own realtime gateway (docs/social-calls-plan.md
+      // step 7) — see `realtime` above for why it is opt-in.
+      ...(realtime.enabled && {
+        REALTIME_GATEWAY: 'on',
+        REDIS_URL: realtime.redisUrl,
+      }),
+      // Browser-facing endpoints echoed by the token bridge. Deliberately not
+      // PLATFORM_API_URL: that one is the SERVER-side work-graph URL
+      // (work-graph/producer.ts), and in AWS the two are different hosts.
+      ...(realtime.gatewayUrl && { REALTIME_GATEWAY_URL: realtime.gatewayUrl }),
+      ...(realtime.platformPublicUrl && { REALTIME_PLATFORM_PUBLIC_URL: realtime.platformPublicUrl }),
+      ...(realtime.videoPublicUrl && { REALTIME_VIDEO_PUBLIC_URL: realtime.videoPublicUrl }),
     };
 
     // Cognito app-client secret injected as an ECS secret (pulled at task start
@@ -714,6 +792,8 @@ export class MiddlewareServiceStack extends cdk.Stack {
       // x-lab-auth only when it has the value, so the devbox runtime needs it
       // too — DevboxStack takes it as `labCallbackSecret`.
       LAB_CALLBACK_SECRET: ecs.Secret.fromSecretsManager(labCallbackSecret),
+      // The realtime token secret — no blackout window, see RealtimeJwtSecret.
+      REALTIME_JWT_SECRET: ecs.Secret.fromSecretsManager(realtimeJwtSecret),
     };
     if (props.gatewayServiceAuthSecretArn) {
       const gatewaySecretRef = secretsmanager.Secret.fromSecretCompleteArn(
@@ -874,6 +954,24 @@ export class MiddlewareServiceStack extends cdk.Stack {
       });
     }
 
+    // ── WebSocket upgrades ─────────────────────────────────────────────────
+    // The ALB forwards `Upgrade: websocket` natively; what it needs is time.
+    // The default idle timeout is 60 s, and a socket (or an SSE stream) that
+    // is quiet for longer is cut. 300 s is set unconditionally now — it used
+    // to be set only when the document workspace deployed — and it is
+    // ALB-wide, which also lengthens the middleware's SSE allowance.
+    fargateService.loadBalancer.setAttribute('idle_timeout.timeout_seconds', '300');
+    // HTTP/1.1 to the target, explicitly: the WebSocket upgrade is an
+    // HTTP/1.1 mechanism, and an HTTP2/gRPC target group cannot carry it.
+    // HTTP1 is the default today; pinning it keeps a later "optimisation"
+    // from silently breaking every socket. The ALB keeps HTTP/1.1
+    // connections to targets alive on its own; there is no setting for it.
+    (fargateService.targetGroup.node.defaultChild as elbv2.CfnTargetGroup).protocolVersion = 'HTTP1';
+    // No sticky sessions, on purpose: cross-task fan-out goes over Redis
+    // pub/sub (realtime-examples' own ALB helper is "destickified" for the
+    // same reason), so a socket may land on any task.
+    fargateService.targetGroup.setAttribute('stickiness.enabled', 'false');
+
     // ── Health check ──────────────────────────────────────────────────────
     fargateService.targetGroup.configureHealthCheck({
       path: '/health',
@@ -917,6 +1015,14 @@ export class MiddlewareServiceStack extends cdk.Stack {
     }
 
     this.loadBalancerDnsName = fargateService.loadBalancer.loadBalancerDnsName;
+    this.vpc = vpc;
+    this.cluster = cluster;
+    this.listener = fargateService.listener;
+    this.loadBalancerSecurityGroupId =
+      fargateService.loadBalancer.connections.securityGroups[0]!.securityGroupId;
+    this.serviceSecurityGroupId =
+      fargateService.service.connections.securityGroups[0]!.securityGroupId;
+    this.taskRoleArn = taskRole.roleArn;
 
     // ── Outputs ──────────────────────────────────────────────────────────
     new cdk.CfnOutput(this, 'MiddlewareEcrRepoUri', {

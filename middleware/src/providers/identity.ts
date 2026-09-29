@@ -30,6 +30,11 @@ export interface UserInfo {
   /** Session-invalidation generation (app_users.session_epoch), default 0.
    * Bumped by bumpSessionEpoch on a tenant/role switch or sign-out-others. */
   epoch: number;
+  /** The IdP subject (app_users.external_sub) once the user has signed in via
+   * SSO; absent for fallback/seed users and picker-only accounts. Read by the
+   * realtime token bridge (routes/session.ts) so a gateway can correlate the
+   * OrgIQ identity with the Cognito one. */
+  externalSub?: string | null;
 }
 
 // ── Fallback seed mirror (matches schema/identity_schema.sql) ────────────────
@@ -176,10 +181,10 @@ export async function getUser(userId: string, options: { authoritative?: boolean
   }
   try {
     const rows = await exec(
-      `SELECT id, display_name, email, person_id, session_epoch FROM app_users WHERE id = :id`,
+      `SELECT id, display_name, email, person_id, session_epoch, external_sub FROM app_users WHERE id = :id`,
       [str('id', userId)]);
     if (rows.length === 0) return options.authoritative ? null : FALLBACK_USERS.find(u => u.id === userId) ?? null;
-    const [id, displayName, email, personId, epoch] = rows[0]!;
+    const [id, displayName, email, personId, epoch, externalSub] = rows[0]!;
     const grantRows = await exec(
       `SELECT user_id, tenant_id, role FROM user_tenant_roles WHERE user_id = :id ORDER BY granted_at, tenant_id, role`,
       [str('id', userId)]);
@@ -190,6 +195,7 @@ export async function getUser(userId: string, options: { authoritative?: boolean
       personId: (personId as string | null) ?? null,
       grants: groupGrants(grantRows).get(id as string) ?? {},
       epoch: (epoch as number | null) ?? 0,
+      externalSub: (externalSub as string | null | undefined) ?? null,
     };
   } catch (error) {
     if (options.authoritative) throw error;

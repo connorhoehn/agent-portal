@@ -2,6 +2,7 @@ import { BuildSectionLayout } from '../../components/shell/BuildSectionLayout';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router';
 import { SubNavLayout, activeNavItemClassName, inactiveNavItemClassName } from '@connorhoehnslalom/ui-components/shared';
 import { useIqSubNav } from './iqSubNavCatalog';
+import { InitiativeCallHost } from '../projects/InitiativeCallHost';
 
 // Reproduces SubNavLayout's own default active/inactive nav-item look (see
 // the library's `renderNavItem` doc comment, and its `activeNavItemStyle`
@@ -9,7 +10,14 @@ import { useIqSubNav } from './iqSubNavCatalog';
 
 // See Layout.tsx for why these come from the library rather than local copies.
 
+// The orgiq shell hosts the tenant's call: one conversation call for every
+// /iq page, incoming rings on any of them, LVS media when configured
+// (projects/InitiativeCallHost.tsx).
 function IqLayout() {
+  return <InitiativeCallHost><IqLayoutFrame /></InitiativeCallHost>;
+}
+
+function IqLayoutFrame() {
   const { pathname, search } = useLocation();
   const navigate = useNavigate();
   const spec = useIqSubNav(pathname);
