@@ -20,7 +20,6 @@ import {
   DataTable,
   EmptyState,
   Inline,
-  PageHeader,
   SearchInput,
   Stack,
   type DataTableColumn,
@@ -150,6 +149,8 @@ export default function LibraryPage() {
   return (
     <StackedCatalogLayout
       catalogOverview title="Agent library" group="Build" basePath="/iq/library" listTitle={kind === 'all' ? 'All assets' : KIND_LABEL[kind]}
+      overviewDescription="Reusable instructions and tools for your agents."
+      overviewActions={canAuthor ? <Button variant="primary" size="sm" onClick={() => navigate('/iq/prompts?mode=create')}>New asset</Button> : undefined}
       items={[
         ...[{ value: 'all', count: undefined }, ...kindOptions].map((option) => ({
           path: `/iq/library?${new URLSearchParams({ kind: option.value, tier, status, ...(query ? { q: query } : {}) })}`,
@@ -165,11 +166,6 @@ export default function LibraryPage() {
     >
     {openId ? <AssetDrawer key={openId} id={openId} onOpenAsset={setOpenId} /> :
     <Stack gap="none">
-    <PageHeader size="lg"
-      title="Agent library"
-      description="Reusable instructions and tools for your agents."
-      actions={canAuthor ? <Button variant="primary" onClick={() => navigate('/iq/prompts?mode=create')}>New asset</Button> : undefined}
-    />
 
       <Inline gap="sm" wrap align="center" className="border-t border-border py-4 mb-2" data-testid="library-filters">
         <SearchInput size="sm" value={searchText} onChange={onSearchChange} placeholder="Search assets…" aria-label="Search assets" className="w-64 max-w-full" />

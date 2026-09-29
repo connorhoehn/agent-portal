@@ -7,9 +7,15 @@ import { EmptyState, GroupedList, Stack, SubNavLayout, activeNavItemClassName, i
  * section navigation, record list, then the selected record. */
 export function StackedCatalogLayout({
   title, group = 'Design', basePath, items, rows, selectedId, selectedTitle, listTitle,
-  onSelect, railHeader, railNotice, children, catalogOverview = false,
+  onSelect, railHeader, railNotice, children, catalogOverview = false, overviewDescription, overviewActions,
 }: {
   catalogOverview?: boolean;
+  /** The overview's header blurb and actions (2026-09-29): drawn in the layout's
+   *  `ScopeHeader` so the title is the one every stacked page uses — a page that
+   *  drew its own `PageHeader size="lg"` under the crumbs sat at 28px/700 beside
+   *  siblings at 22px/600. */
+  overviewDescription?: string;
+  overviewActions?: ReactNode;
   title: string;
   group?: string;
   basePath: string;
@@ -45,7 +51,9 @@ export function StackedCatalogLayout({
       ...(selectedId ? [crumb(listTitle, listHref), { label: selectedTitle ?? 'Record' }] : [{ label: listTitle }])]),
   ];
   const content = catalogOverview && !selectedId ? <Stack gap="none" className="h-full min-h-0">
-    <ScopeHeader variant="crumbs" breadcrumbs={[{ label: group }, { label: title }]} />
+    <ScopeHeader breadcrumbs={[{ label: group }, { label: title }]} title={title}
+      {...(overviewDescription ? { description: overviewDescription } : {})}
+      {...(overviewActions ? { controls: overviewActions } : {})} />
     <div className="min-h-0 flex-1 overflow-auto px-6 pb-6" data-testid="catalog-overview">{children}</div>
   </Stack> : atSection ? <Stack gap="none" className="h-full min-h-0">
             <ScopeHeader title={title} breadcrumbs={breadcrumbs} />
