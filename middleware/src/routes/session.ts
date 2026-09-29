@@ -177,12 +177,14 @@ sessionRouter.get('/realtime-token', requireSession('RealtimeToken'), asyncHandl
     realtimeClaims(session, { externalSub: user?.externalSub, email: user?.email }), secret);
   const gatewayUrl = config.realtime?.gatewayUrl;
   const platformApiUrl = config.realtime?.platformApiUrl;
+  const videoUrl = config.realtime?.videoUrl;
   res.set('Cache-Control', 'no-store');
   res.json({
     token,
     expiresAt,
     ...(gatewayUrl ? { gatewayUrl } : {}),
     ...(platformApiUrl ? { platformApiUrl } : {}),
+    ...(videoUrl ? { videoUrl } : {}),
   });
 }));
 

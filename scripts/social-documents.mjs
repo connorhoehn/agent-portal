@@ -48,6 +48,10 @@ const composeEnv = { ...process.env,
   SOCIAL_DOCUMENT_GRANT_KEY_ID: saved.keyId, SOCIAL_DOCUMENT_GRANT_PUBLIC_KEY: saved.publicKey,
   SOCIAL_DOCUMENT_POLICY_SECRET: saved.policySecret,
   SOCIAL_DOCUMENT_SESSION_EPOCH_URL: `http://host.docker.internal:${bffPort}/internal/document-grants/session`,
+  // platform-api reaches the SFU on the host by default: this profile runs no
+  // `social-sfu` container (media through it is unproven), and the compose
+  // default `http://social-sfu:3901` made every call 502 ("Lost the call").
+  SOCIAL_VIDEO_API_URL: process.env.SOCIAL_VIDEO_API_URL || 'http://host.docker.internal:3901',
 };
 const middlewareEnv = {
   DOCUMENT_GRANT_ISSUER: saved.issuer, DOCUMENT_GRANT_KEY_ID: saved.keyId,
@@ -55,6 +59,13 @@ const middlewareEnv = {
   DOCUMENT_GATEWAY_PUBLIC_URL: `ws://127.0.0.1:${gatewayPort}`,
   DOCUMENT_GATEWAY_INTERNAL_URL: `ws://127.0.0.1:${gatewayPort}`,
   DOCUMENT_PLATFORM_INTERNAL_URL: `http://127.0.0.1:${platformPort}`,
+  // The endpoints the realtime token response carries for the browser: the
+  // BFF is its own gateway, platform-api is the compose port, video is the
+  // SFU (the host one by default — the compose profile runs none). The
+  // portal then needs no VITE_* URLs (deploy plan §5); the env still wins.
+  REALTIME_GATEWAY_URL: process.env.REALTIME_GATEWAY_URL || `http://localhost:${bffPort}`,
+  REALTIME_PLATFORM_PUBLIC_URL: process.env.REALTIME_PLATFORM_PUBLIC_URL || `http://localhost:${platformPort}`,
+  REALTIME_VIDEO_PUBLIC_URL: process.env.REALTIME_VIDEO_PUBLIC_URL || process.env.SOCIAL_VIDEO_PUBLIC_URL || 'http://localhost:3901',
 };
 const services = ['social-redis', 'social-dynamodb', 'social-gateway-image', 'social-dynamodb-init',
   'social-gateway', 'social-platform-api'];

@@ -128,9 +128,14 @@ export const config = {
   // unset. The token's signing secret (REALTIME_JWT_SECRET) is deliberately
   // NOT captured here — lib/realtime-token.ts reads it live, the same way
   // lib/service-auth.ts reads its secrets.
+  // The browser-facing endpoints the realtime token response carries (the
+  // portal reads them instead of build-time VITE_* URLs, deploy plan §5).
+  // REALTIME_PLATFORM_PUBLIC_URL is the public platform-api origin; the
+  // older PLATFORM_API_URL is the server-side URL and only a fallback.
   realtime: {
     gatewayUrl: env('REALTIME_GATEWAY_URL') || undefined,
-    platformApiUrl: env('PLATFORM_API_URL') || undefined,
+    platformApiUrl: env('REALTIME_PLATFORM_PUBLIC_URL') || env('PLATFORM_API_URL') || undefined,
+    videoUrl: env('REALTIME_VIDEO_PUBLIC_URL') || undefined,
   },
 
   // Cognito Hosted UI (OIDC) — the enterprise sign-in path. When these are set

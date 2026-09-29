@@ -28,7 +28,7 @@ jest.mock('../../config.js', () => ({
       userPoolId: '', clientId: '', clientSecret: '', domain: '', callbackUrl: '',
       postLoginUrl: '/', logoutRedirectUrl: '/',
     },
-    realtime: { gatewayUrl: undefined, platformApiUrl: undefined },
+    realtime: { gatewayUrl: undefined, platformApiUrl: undefined, videoUrl: undefined },
   },
 }));
 jest.mock('aws-jwt-verify', () => ({
@@ -111,6 +111,7 @@ beforeEach(() => {
   process.env['REALTIME_JWT_SECRET'] = SECRET;
   realtime['gatewayUrl'] = undefined;
   realtime['platformApiUrl'] = undefined;
+  realtime['videoUrl'] = undefined;
 });
 afterEach(() => {
   delete process.env['REALTIME_JWT_SECRET'];
@@ -145,15 +146,18 @@ describe('GET /api/session/realtime-token', () => {
     // Unset URLs are omitted, not sent as empty strings.
     expect(res.body).not.toHaveProperty('gatewayUrl');
     expect(res.body).not.toHaveProperty('platformApiUrl');
+    expect(res.body).not.toHaveProperty('videoUrl');
   });
 
-  it('echoes the gateway and platform-api URLs when configured', async () => {
+  it('echoes the gateway, platform-api and video URLs when configured (the portal reads them instead of VITE_* URLs)', async () => {
     realtime['gatewayUrl'] = 'ws://localhost:18080';
     realtime['platformApiUrl'] = 'http://localhost:13001';
+    realtime['videoUrl'] = 'http://localhost:3901';
     const res = await request(appAs(MEMBER)).get('/api/session/realtime-token');
     expect(res.status).toBe(200);
     expect(res.body.gatewayUrl).toBe('ws://localhost:18080');
     expect(res.body.platformApiUrl).toBe('http://localhost:13001');
+    expect(res.body.videoUrl).toBe('http://localhost:3901');
   });
 
   it('a token signed with another secret does not verify', async () => {
