@@ -14,6 +14,8 @@ import request from '../../test-support/http.js';
 import { assessmentDocumentSourceRouter } from '../assessment-document-source.js';
 import { getKnowledgeDoc } from '../../providers/assessment.js';
 import { publishSourcePage, readSourceAsset } from '../../providers/document-source.js';
+import { createDocumentDraft } from '../../providers/document-drafts.js';
+import { DRAFT_MARKDOWN_MAX } from '../assessment-document-source.js';
 import type { Session } from '../../lib/session.js';
 const viewer: Session = { sub: 'reader', role: 'assessor', tenant: 'assessment', grants: { assessment: ['assessor'] }, iat: 1 };
 function app(session = viewer) {
@@ -48,4 +50,15 @@ it('serves source assets with private response headers', async () => {
   expect(res.status).toBe(200); expect(res.headers['cache-control']).toBe('private, no-store');
   expect(res.headers['x-content-type-options']).toBe('nosniff');
   expect(readSourceAsset).toHaveBeenCalledWith('page:100002', 'diagram.png');
+});
+it('doc/create takes an uploaded body as a string within the ceiling, and nothing else', async () => {
+  const lead: Session = { ...viewer, role: 'lead-assessor' };
+  jest.mocked(createDocumentDraft).mockResolvedValue({ ok: true, id: 'draft:x', documentId: 'uuid', title: 'Notes' });
+  const ok = await request(app(lead)).post('/api/assessment/knowledge/doc/create').send({ title: 'Notes', sectionKey: 'workspace_drafts', markdown: '# Notes' });
+  expect(ok.status).toBe(201);
+  expect(createDocumentDraft).toHaveBeenCalledWith({ title: 'Notes', sectionKey: 'workspace_drafts', markdown: '# Notes' }, lead);
+  for (const markdown of [42, 'x'.repeat(DRAFT_MARKDOWN_MAX + 1)]) {
+    expect((await request(app(lead)).post('/api/assessment/knowledge/doc/create').send({ title: 'Notes', sectionKey: 'workspace_drafts', markdown })).status).toBe(400);
+  }
+  expect(createDocumentDraft).toHaveBeenCalledTimes(1);
 });

@@ -8,9 +8,142 @@ u-asha, u-jonas, u-farah — never Demo User.
 
 ## Open
 
-_None._
+
+### 2026-09-29 — a refused presence request gets no `AUTHZ_CHANNEL_DENIED` reply (low; signalling only)
+
+Found 10:10 while closing the entry below. Under 0.98.6 a refused chat request is answered `{type:'error', code:'AUTHZ_CHANNEL_DENIED', kind, channel}`, but a refused presence request is not:
+   - an orgiq socket's presence **subscribe** on `assessment:knowledge:confluence-eng` gets no frame at all;
+   - its **`set`** gets an ordinary `set` ack with the channel silently removed (`channels: []`).
+
+Nothing leaks, since no roster and no fan-out. The cause is that the middleware still wires `presence({ authorizeChannel: presenceAuthorize })` (`middleware/src/lib/realtime-gateway.ts`), and the presence service consults that hook first. On refusal it returns silently in `handleSubscribePresence`, and skips the channel in `permittedSetChannels`, before the router check that would send `AUTHZ_CHANNEL_DENIED`. A client therefore cannot tell “refused” from “no one here”.
+
+Owner: middleware. Now that 0.98.6 makes the router the single check, drop the redundant presence hook so the router's reply reaches the client. Alternatively realtime-modules could have a hook refusal reply the same way.
 
 ## Closed
+
+### 2026-09-29 — an orgiq session could appear in an assessment presence roster — **Closed 2026-09-29 10:11**
+
+Found 09:37 while re-verifying lead-assessor/DEFECTS.md #9, with the gateway's channel guard working as designed. u-theo (orgiq member, realtime token `org: "orgiq"`) opened a socket on `ws://localhost:3001/ws`:
+
+   - He sent `{service:'presence', action:'subscribe', channel:'assessment:knowledge:confluence-eng'}`. The middleware logged `refused subscribe on channel 'presence:assessment:knowledge:confluence-eng' for user 'u-theo' (org 'orgiq')`, so the router did refuse. The presence service still answered `subscribed` with the channel's roster, which held u-farah's entry (her client id and metadata).
+   - His `set` of presence `online` with `channels:['assessment:knowledge:confluence-eng']` then reached u-jonas, who was subscribed, as a `presence` `update` (“Theo intruder” on the running process; as “Theo Chang” on the 0.98.5 side instance, which stamps the name but still delivers it).
+
+   Why, read from the installed 0.98.5 dist:
+   - `PresenceService.handleSubscribePresence` awaits `messageRouter.subscribeToChannel(clientId, 'presence:' + channel)` but ignores its `false` return (the router's own comment says services should “suppress local sub + joined ack”), then sends the roster anyway.
+   - `broadcastPresenceUpdate` calls `sendToChannel('presence:' + ch, message, clientId)` with no `publisherClientId`, so the router's publish-side `authorize` never runs for a presence `set`.
+
+   Chat is not affected: its join and send are refused. The rail would show an orgiq user as online in an assessment source once #7 is fixed. Every REST gate, the routes, the tile and the nav are unchanged, (superseded 09:56: see the re-verification below. The five outside-role logs and demo-user.md now carry `verdict: fail` for this leak.)
+
+   Owner: realtime-modules. The presence service should honour the router's refusal on subscribe, and pass the setter as `publisherClientId` (or drop unauthorized channels) on `set`. The middleware can close the roster read now by also wiring the presence service's own `authorizeChannel` hook (`presence({ authorizeChannel })`, which sees the bare channel name). That hook does not gate `set`.
+
+   **Re-verified 2026-09-29 09:50–09:56, after the restart:** the :3001 middleware restarted at 09:49:07 and now loads realtime-modules 0.98.5 (health `ok`), with the gateway passing `presence({ authorizeChannel })` from the router's client context.
+   - **The read half is closed.** u-theo's presence subscribe on `assessment:knowledge:confluence-eng` now gets no `subscribed` frame and no roster. The middleware logs `refused presence on channel 'assessment:knowledge:confluence-eng' for client '…' (org 'orgiq')`.
+   - **The write half is still open, and is now visible in the UI.** u-theo's `set` with `channels:['assessment:knowledge:confluence-eng']` still reached u-jonas as an `update` stamped “Theo Chang”. With u-farah and u-jonas both on Rubric Overview, now that the rail joins the section channel (lead-assessor/DEFECTS.md #7), Jonas's Engineering Space (Confluence) row grew a third avatar, **TC Theo Chang**, next to FO and JL (`presence-cross-tenant-rail.jpg`). It went away when Theo's socket closed.
+
+   Every outside persona reproduces it: each signed in, took its realtime token, subscribed and then `set` on the channel while u-jonas watched it on his own socket.
+
+   | persona | token org | subscribe reply | what u-jonas received |
+   |---|---|---|---|
+   | member | orgiq | no roster (only its own connect-time `set`, `channels: []`) | u-theo offline Theo Chang, u-theo online Theo Chang |
+   | sme | orgiq | no roster (only its own connect-time `set`, `channels: []`) | u-nora offline Nora DaSilva, u-nora online Nora DaSilva |
+   | program-owner | orgiq | no roster (only its own connect-time `set`, `channels: []`) | u-mia offline Mia Singh, u-mia online Mia Singh |
+   | org-leader | orgiq | no roster (only its own connect-time `set`, `channels: []`) | u-vera offline Vera Green, u-vera online Vera Green |
+   | hr-admin | orgiq | no roster (only its own connect-time `set`, `channels: []`) | u-rachel offline Rachel Kowalski, u-rachel online Rachel Kowalski |
+   | demo-sme | orgiq | no roster (only its own connect-time `set`, `channels: []`) | demo-user offline Demo User, demo-user online Demo User |
+
+   Reported to realtime-modules as the library half: `broadcastPresenceUpdate` passes no `publisherClientId`, so the router's publish `authorize` never runs for a presence `set`. The gateway's presence `authorizeChannel` hook covers subscribe only, so the middleware cannot close this half from its side without changing the library contract. Owner: realtime-modules.
+
+**Closed 2026-09-29 10:09–10:11, re-verified on :3001:** both servers restarted at 10:08 (middleware 10:08:27, Vite 10:08:32) onto realtime-modules 0.98.6 (`node -p` reads 0.98.6 in portal/ and middleware/), in which the router is the single channel check.
+
+Setup: u-farah and u-jonas were on Rubric Overview (`/assessment/workspace?doc=page%3A100002`), and Jonas also held a raw socket subscribed to `assessment:knowledge:confluence-eng`. Each outside persona then took its own realtime token (org `orgiq`) and sent, in order: a presence subscribe on that channel; a presence `set` with `channels:['assessment:knowledge:confluence-eng']`; then chat `history`, `join`, `members` and `send` on `assessment:doc:page:100002`.
+
+   | persona | presence subscribe reply | presence `set` reply | reached Jonas | chat history | chat join | chat members | chat send |
+   |---|---|---|---|---|---|---|---|
+   | member (u-theo) | none | `set` ack with `channels: []` | nothing | `AUTHZ_CHANNEL_DENIED` (subscribe) | `AUTHZ_CHANNEL_DENIED` (subscribe) | `AUTHZ_CHANNEL_DENIED` (subscribe) | `AUTHZ_CHANNEL_DENIED` (publish) |
+   | sme (u-nora) | none | `set` ack with `channels: []` | nothing | `AUTHZ_CHANNEL_DENIED` (subscribe) | `AUTHZ_CHANNEL_DENIED` (subscribe) | `AUTHZ_CHANNEL_DENIED` (subscribe) | `AUTHZ_CHANNEL_DENIED` (publish) |
+   | program-owner (u-mia) | none | `set` ack with `channels: []` | nothing | `AUTHZ_CHANNEL_DENIED` (subscribe) | `AUTHZ_CHANNEL_DENIED` (subscribe) | `AUTHZ_CHANNEL_DENIED` (subscribe) | `AUTHZ_CHANNEL_DENIED` (publish) |
+   | org-leader (u-vera) | none | `set` ack with `channels: []` | nothing | `AUTHZ_CHANNEL_DENIED` (subscribe) | `AUTHZ_CHANNEL_DENIED` (subscribe) | `AUTHZ_CHANNEL_DENIED` (subscribe) | `AUTHZ_CHANNEL_DENIED` (publish) |
+   | hr-admin (u-rachel) | none | `set` ack with `channels: []` | nothing | `AUTHZ_CHANNEL_DENIED` (subscribe) | `AUTHZ_CHANNEL_DENIED` (subscribe) | `AUTHZ_CHANNEL_DENIED` (subscribe) | `AUTHZ_CHANNEL_DENIED` (publish) |
+   | demo-sme (demo-user) | none | `set` ack with `channels: []` | nothing | `AUTHZ_CHANNEL_DENIED` (subscribe) | `AUTHZ_CHANNEL_DENIED` (subscribe) | `AUTHZ_CHANNEL_DENIED` (subscribe) | `AUTHZ_CHANNEL_DENIED` (publish) |
+
+What changed:
+   - **Presence.** No outsider's `set` reached Jonas (0 `update` frames across all six). The `set` is acknowledged with the channel removed (`channels: []`), so nothing is stored or fanned out.
+   - **The rail.** Jonas's and Farah's Engineering Space (Confluence) rows read **FO JL** before, during and after the six probes (`presence-cross-tenant-rail.jpg`), where the 09:50 pass showed a third avatar, TC Theo Chang.
+   - **Chat history.** An outsider's `history` read, which was unchecked before 0.98.6, is now refused with `AUTHZ_CHANNEL_DENIED` (`kind: "subscribe"`).
+   - **Middleware log.** Each persona logged `refused presence on channel 'assessment:knowledge:confluence-eng'` twice (subscribe and set), `refused subscribe on channel 'assessment:doc:page:100002'` three times (history, join, members), and `refused publish` once (send). 0 outsider text in either assessment Chat panel.
+   - **The assessment side still works.** Farah's presence `set` reached Jonas as `u-farah` / “Farah Osei”, with her forged `displayName: "forged"` replaced by the token's name. Chat went Farah→Jonas in 224 ms and Jonas→Farah in 156 ms, with 0 console or page errors in either tab.
+
+Confidentiality closed; one signalling gap remains, filed below.
+
+
+### 2026-09-29 — a gateway chat message carried a client-chosen sender name — **Closed 2026-09-29 09:51**
+
+The half of the 2026-09-29 conversation defect that the tenant scoping below does not close. The BFF gateway's chat service stores whatever the sender puts in `metadata.displayName` and every panel renders it as the author name, so a signed-in user can post into a conversation they may join under someone else's name. After the channel fix this is confined to the caller's own tenant (an orgiq session can no longer reach an assessment channel at all), but inside it the spoof still works: at 09:12 three socket probes sent as u-asha, u-jonas and u-farah with `metadata.displayName: "isolation re-probe"` render in Rubric Overview's Chat panel as “IR · isolation re-probe”, not as the three real names (`chat-cross-tenant-refused.jpg`, u-jonas's panel, shows them). The user id on each stored message is correct (`userId` comes from the verified token) — only the display name is unbound.
+
+Owner: realtime-modules (the chat service should stamp the display name from the authenticated connection, not the message metadata) — the library session is shipping it as **0.98.5**; the BFF then needs to put the name into the realtime token it mints. Re-verify after that pin moves: send with a forged `metadata.displayName` and read the name the other panel shows.
+
+**Re-verified 2026-09-29 09:36–09:41: still open on the running middleware; the pinned library does fix it, but it is not loaded yet.** Both `middleware/package.json` and `portal/package.json` pin `fde7ad33…` and `node -p "require('./node_modules/@connorhoehnslalom/realtime-modules/package.json').version"` reads `0.98.5` in both packages. But the :3001 middleware process (pid 78909) was started at 09:31:04 by `tsx watch` for the `realtime-gateway.ts` edit, and `middleware/node_modules/@connorhoehnslalom/realtime-modules` was reinstalled at 09:33:08 — `tsx watch` does not watch `node_modules`, so the running gateway still executes the previous pin (`99eb8c3b`) in memory even though `package.json` and the installed files say 0.98.5.
+
+   - **Chat send.** A socket authenticated as u-jonas (token `displayName: "Jonas Lindqvist"`) joined `assessment:doc:page:100002` and sent a message. The frame claimed `userId: "u-farah"` and `displayName: "Farah Osei"`, with `metadata.displayName: "Farah Osei"` and a forged `metadata.avatarUrl`. Farah's socket received it with `userId: "u-jonas"` (from the token) but `metadata: {displayName: "Farah Osei", userId: "u-farah", avatarUrl: "https://forged.example/f.png"}`, which is the frame's copy.
+   - **The panel.** u-farah's Chat panel on Rubric Overview rendered the message as “FO · Farah Osei” (`chat-sender-spoof.jpg`). Every viewer's browser also fetched the forged `avatarUrl`: 2 `ERR_NAME_NOT_RESOLVED` console errors per tab. That is a second face of the same bug, since a client-chosen avatar URL makes other people's browsers request an arbitrary host.
+   - **Chat edit.** An `edit` of that message carrying `metadata.displayName: "Farah Osei"` went through, and the stored metadata kept the forged name.
+   - **Presence set.** u-farah's `set` claimed `metadata.displayName: "Jonas Lindqvist (forged by Farah)"` and `metadata.userId: "u-jonas"`. Jonas received it as-is, with no top-level `userId` on the entry.
+   - **The installed code, in isolation.** To separate the library from the stale process, the same probes were run against a throwaway instance on 127.0.0.1:3097. That instance was `attachRealtimeGateway` from `middleware/src/lib/realtime-gateway.ts`, with the installed 0.98.5 `realtime-modules`, run by the middleware's own `tsx` and stopped afterwards. The results:
+     - chat send and edit came out with `userId: "u-jonas"` and `metadata: {displayName: "Jonas Lindqvist"}`: the forged name, userId and avatarUrl were all dropped;
+     - Farah's forged presence `set` reached Jonas as `userId: "u-farah"`, `metadata: {userId: "u-farah", displayName: "Farah Osei"}`.
+
+     So no BFF change is needed beyond what is in the tree. The token already carries `displayName`, and the gateway's auth context passes it through.
+
+   The spoofed probe messages were deleted afterwards from u-jonas's socket, so the panel shows tombstones. **To close:** restart the :3001 middleware so it loads 0.98.5, then repeat the u-jonas → “Farah Osei” send and read Farah's panel. Owner: whoever runs the shared dev stack (a restart); no code owner remains.
+
+**Closed 2026-09-29 09:50–09:51, re-verified on :3001 after the restart.** Since then, the :3001 middleware restarted at 09:49:07 and now loads realtime-modules 0.98.5 (health `ok`), with the gateway passing `presence({ authorizeChannel })` from the router's client context.
+   - **Chat send.** A socket authenticated as u-jonas joined `assessment:doc:page:100002` and sent a message. The frame claimed `userId: "u-farah"`, `displayName: "Farah Osei"`, `metadata.displayName: "Farah Osei"`, and a forged `metadata.avatarUrl`. Farah's socket received it with `userId: "u-jonas"` and `metadata: {displayName: "Jonas Lindqvist"}`: the forged name, userId and avatarUrl were all dropped.
+   - **Chat edit.** An `edit` carrying `metadata.displayName: "Farah Osei"` came back unchanged: `{displayName: "Jonas Lindqvist"}`.
+   - **Presence set.** Farah's `set` claimed `displayName: "Jonas Lindqvist (forged by Farah)"` and `userId: "u-jonas"`. Jonas received it as `userId: "u-farah"`, `metadata: {userId: "u-farah", displayName: "Farah Osei"}`.
+   - **The panel.** With both Chat panels open on Rubric Overview, a live forged send from u-jonas rendered in Farah's panel as “Jonas Lindqvist: Live spoof …”. The earlier probe message, stored before the restart, also reads “JL Jonas Lindqvist” (`chat-sender-spoof.jpg`). Both tabs made 0 requests to the forged avatar host, and logged 0 console or page errors.
+   - **Cleanup.** The probe messages were deleted afterwards.
+
+   No owner remains.
+
+### 2026-09-29 — orgiq roles could read and write an assessment document's conversation — **Closed 2026-09-29 09:12–09:15** (the cross-tenant read/write half; the sender-name half closed 2026-09-29 09:51, above).
+
+   Fixed in the middleware: `middleware/src/lib/realtime-gateway.ts` now passes `authorize: authorizeChannel` to `attachRealtime`, and `channelGuard` applies the call-lobby rule to every chat and presence channel — the channel must start with the caller's own `<tenant>:` prefix, and a `<tenant>:dm:<ids>` channel only admits a participant. Re-verified headless against dev:mock:social on :3001 (middleware restarted 09:06, after the 09:04 edit), same method as the report below — each persona signed in with `POST /api/session/login` (+ `/role`), `GET /api/session/realtime-token`, a browser WebSocket to `ws://localhost:3001/ws` with `bearer-token-v1, <token>`, `{service:'chat', action:'join', channel:'assessment:doc:page:100002'}`, then a `send` on the same channel:
+
+| persona | grants | token | join | history | send |
+|---|---|---|---|---|---|
+| u-theo (member) | {"orgiq": ["member"]} | 200 | none (refused) | 0 | “You must join the channel before sending messages” |
+| u-nora (sme) | {"orgiq": ["sme"]} | 200 | none (refused) | 0 | “You must join the channel before sending messages” |
+| u-mia (program-owner) | {"orgiq": ["program-owner", "member"]} | 200 | none (refused) | 0 | “You must join the channel before sending messages” |
+| u-vera (org-leader) | {"orgiq": ["org-leader", "member"]} | 200 | none (refused) | 0 | “You must join the channel before sending messages” |
+| u-rachel (hr-admin) | {"orgiq": ["hr-admin", "org-leader"]} | 200 | none (refused) | 0 | “You must join the channel before sending messages” |
+| demo-user (entered as Org · SME) | {"orgiq": ["sme"]} | 200 | none (refused) | 0 | “You must join the channel before sending messages” |
+
+   For each of the six the middleware logged `[realtime-gateway] refused subscribe on channel 'assessment:doc:page:100002' for user '<id>' (org 'orgiq')`. The socket itself stays open (presence and session frames still arrive), which is right — the token is valid for its own tenant.
+
+   The UI end, with both assessment panels live: u-farah (program-lead) and u-jonas (lead-assessor) each on `/assessment/workspace?doc=page%3A100002` with the Chat panel open; u-theo then joined and sent “Intruder … from u-theo” with `metadata.displayName: "Farah Osei"` — refused, and the text appears in neither panel (0 matches in each; `chat-cross-tenant-refused.jpg` is Jonas's panel afterwards). The 08:45 leaked message (“Isolation probe: an orgiq member (u-theo) wrote this…”) is gone too, because the mock gateway's store is in memory and the middleware restarted. The assessment side still works: all three assessment roles join the channel and get its history over the socket; Farah's message from the composer dock appeared in her own panel and in Jonas's already-open panel with no reload, and Jonas's reply from the panel's composer appeared in Farah's. 0 console/page errors in either assessment tab. The five outside-role logs and demo-user.md are back to `verdict: pass`.
+
+   One side effect found while verifying, filed as lead-assessor/DEFECTS.md #9 (owner middleware): the router is asked about the name a service subscribes to, and the presence service subscribes to `presence:<channel>`, so the guard now also refuses an assessment user's presence on `assessment:knowledge:<section>` (`refused subscribe on channel 'presence:assessment:knowledge:confluence-eng' for user 'u-jonas' (org 'assessment')`). It does not reopen anything here — it fails closed.
+
+   The original report:
+
+   Found re-walking the isolation logs after the assessment document pages were rebuilt on `EditorShell`. The new composer dock and Chat panel (`portal/src/pages/assessment/knowledge/DocumentConversation.tsx`) put each document's conversation on a chat channel of the BFF's own realtime gateway — `assessment:doc:<docId>` (`conversationChannelForDoc`) — and that gateway's chat channels are not tenant-scoped (`middleware/src/lib/realtime-gateway.ts` scopes only call lobbies; the parity goal says so: "No middleware change: the BFF gateway's chat channels are not tenant-scoped"). The realtime token is minted for every signed-in session regardless of tenant, so the channel is open to the other tenant.
+
+   Evidence, headless Playwright against dev:mock:social on :3001, each persona signed in with the sanctioned `POST /api/session/login` (+ `/role`), then `GET /api/session/realtime-token` (200 for all) and a browser WebSocket to `ws://localhost:3001/ws` with `bearer-token-v1, <token>`, sending `{service:'chat', action:'join', channel:'assessment:doc:page:100002'}`:
+
+   | persona | grants | join | history returned |
+   |---|---|---|---|
+   | u-theo (member) | {orgiq:[member]} | joined | 4 messages by u-asha, u-jonas, u-farah, u-operator |
+   | u-nora (sme) | {orgiq:[sme]} | joined | 5 |
+   | u-mia (program-owner) | {orgiq:[program-owner,member]} | joined | 5 |
+   | u-vera (org-leader) | {orgiq:[org-leader,member]} | joined | 5 |
+   | u-rachel (hr-admin) | {orgiq:[hr-admin,org-leader]} | joined | 5 |
+   | demo-user entered as Org · SME | {orgiq:[sme]} | joined | 5 |
+
+   Write, once, as u-theo: a `send` on the same channel was echoed back and now shows in the assessment users' Chat panel for Rubric Overview as "IP · isolation probe · Isolation probe: an orgiq member (u-theo) wrote this into an assessment document conversation" (`isolation/chat-cross-tenant-leak.jpg`, taken as u-jonas). Note the display name there is whatever the sender put in `metadata.displayName` — the gateway does not bind it to the session, so an outsider can post under an assessment user's name.
+
+   Every REST-level isolation fact still holds for these personas (`/api/assessment/teams`, `/api/assessment/knowledge/tree` and `POST /api/assessment/knowledge/canvas` all 403; the routes redirect; no tile, no nav). The five outside-role logs and demo-user.md carry `verdict: fail` for this leak.
+
+   Owner: middleware (`lib/realtime-gateway.ts` — refuse chat joins/sends on `<tenant>:` channels outside the caller's tenant, as it already does for call lobbies, and take the sender name from the verified token) — the portal half (`DocumentConversation.tsx`) should not ship a tenant-private conversation on an unscoped channel until then.
 
 1. **An assessment role typing an orgiq URL lands on a blank page inside the
    orgiq URL space, not on their own home.** — **Closed 2026-09-07 23:44 EDT.**

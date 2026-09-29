@@ -3,9 +3,9 @@ role: lead-assessor
 user: u-jonas
 tenant: assessment
 pages: portal/src/pages/assessment
-audited: 2026-09-25 12:00 local, Chromium 1642px (Playwright headless), middleware dev:mock on 127.0.0.1:3025 behind a Vite proxy pinned to it on 5197
-verdict: pass — with one open finding (see below): every control on the six spot-checked surfaces except the dashboard's team-search input resolves an accessible name. The four explorer surfaces and team-scorecard were re-measured because the rail type-scale change touches every rendered surface; a full twelve-surface re-sweep was not re-run this pass (see re-observation).
-console errors: 0 — read after each of the five re-measured surfaces.
+audited: 2026-09-29 09:58 local, Chromium 1642×958 (Playwright headless), middleware dev:mock:social on :3001 (restarted 09:49 onto realtime-modules 0.98.5), Vite :5183, as u-jonas / lead-assessor
+verdict: pass — with the same two open findings, both unnamed search inputs (dashboard, DEFECTS #4; feedback, DEFECTS #6): all twelve surfaces re-swept after the knowledge-explorer changes (WrappedChatPanel, prompts rename gate), and the four document surfaces still name every control (workspace 58, enterprise 63, rules 50, prompts 57 — 0 unnamed each; 68 / 0 in the Rules edit state).
+console errors: 0 on all twelve surfaces, read after each navigation and after the dialog/menu checks.
 
 Re-run scope: this pass re-measured the four knowledge-explorer surfaces
 (workspace, enterprise, rules, prompts) and the document read/edit/drawer
@@ -30,18 +30,18 @@ races the router and reads the previous route.
 
 | surface | url | controls | unnamed | notes | verdict |
 |---|---|---|---|---|---|
-| dashboard | `/assessment/teams` | 28 | 0 | cohort tiles, table rows, "+ New team" all named via text | pass |
-| team-scorecard | `/assessment/teams/TEAM-001` | 50 | 0 | see master-detail detail below | pass |
-| submissions | `/assessment/submissions` | 34 | 0 | table + search + row actions all named; the revision-history drawer's ✕ carries `aria-label="Close"` rather than visible text, which the sweep resolves correctly | pass |
-| submissions-wizard | `/assessment/submissions?view=add`, step 1 (Drop file) | 25 | 0 | stepper items, dropzone, Parse/Back/Next all named; the three disabled buttons are still named | pass |
-| feedback | `/assessment/feedback` | 224 | 0 | the largest surface in the tenant and it stays clean | pass |
-| reports | `/assessment/reports` | 24 | 0 | | pass |
-| runs | `/assessment/runs` | 46 | 0 | ledger rows + per-command "Run" buttons + the team `<select>`, whose visible "Choose a team…" default option acts as its name | pass |
-| configuration | `/assessment/configuration` | 26 | 0 | as lead-assessor: read-only banner, every field disabled but still carrying a text `<label>` | pass |
-| workspace | `/assessment/workspace?doc=page:100002` | 27 | 0 | **(re-measured 05:03)** unchanged; see tree detail below | pass |
-| enterprise | `/assessment/enterprise?doc=ec:standards/ci-cd-standards.md` | 36 | 0 | **(re-measured 05:03)** unchanged; four icon-only directory chevrons, all named | pass |
-| rules | `/assessment/rules?doc=rule:scoring-guardrails.md` | 25 | 0 | **(re-measured 05:03)** unchanged from the previous pass's 25 | pass |
-| prompts | `/assessment/prompts?doc=prompt:classify-transcript.md` | 28 | 0 | **(re-measured 05:03)** unchanged | pass |
+| dashboard | `/assessment/teams` | 25 | 1 | **(re-measured 2026-09-29)** the team-search input is unnamed — lead-assessor/DEFECTS.md #4, still open | fail |
+| team-scorecard | `/assessment/teams/TEAM-001` | 55 | 0 | **(re-measured 2026-09-29)** see master-detail detail below | pass |
+| submissions | `/assessment/submissions` | 27 | 0 | **(re-measured 2026-09-29)** table + search + row actions all named; the revision-history drawer's ✕ carries `aria-label="Close"` rather than visible text, which the sweep resolves correctly | pass |
+| submissions-wizard | `/assessment/submissions?view=add`, step 1 (Drop file) | 27 | 0 | **(re-measured 2026-09-29)** stepper items, dropzone, Parse/Back/Next all named; the three disabled buttons are still named | pass |
+| feedback | `/assessment/feedback` | 43 | 1 | **(re-measured 2026-09-29)** the question-search input is unnamed (it carries only hint text) — lead-assessor/DEFECTS.md #6 | fail |
+| reports | `/assessment/reports` | 33 | 0 | **(re-measured 2026-09-29)** | pass |
+| runs | `/assessment/runs` | 28 | 0 | **(re-measured 2026-09-29)** ledger rows + per-command "Run" buttons + the team `<select>`, whose visible "Choose a team…" default option acts as its name | pass |
+| configuration | `/assessment/configuration` | 28 | 0 | **(re-measured 2026-09-29)** as lead-assessor: read-only banner, every field disabled but still carrying a text `<label>` | pass |
+| workspace | `/assessment/workspace?doc=page:100002` | 58 | 0 | **(re-measured 2026-09-29, EditorShell)** rail views, source folders, row ⋯ menus, the five shell tabs, the ⋯ head menu, the composer dock and context strip — all named | pass |
+| enterprise | `/assessment/enterprise?doc=ec:standards/ci-cd-standards.md` | 63 | 0 | **(re-measured 2026-09-29, EditorShell)** as workspace, plus the RELATED links and the directory chevrons (“Expand”/“Collapse”) | pass |
+| rules | `/assessment/rules?doc=rule:scoring-guardrails.md` | 50 | 0 | **(re-measured 2026-09-29, EditorShell)** 68 / 0 with Edit document pressed (toolbar card and ruler included) | pass |
+| prompts | `/assessment/prompts?doc=prompt:classify-transcript.md` | 57 | 0 | **(re-measured 2026-09-29, EditorShell)** read-only canvas; the rail ⋯ menus are named “Actions for <prompt>” | pass |
 
 Zero unnamed interactive controls on any of the twelve surfaces, across 573
 checked live nodes. Every icon-only control resolved a name through
@@ -107,10 +107,10 @@ or index from the end.
 
 | surface | `[role=tree]` | treeitems | `aria-level` | `aria-expanded` on directories | roving `tabindex="0"` | tree has `aria-label` |
 |---|---|---|---|---|---|---|
-| workspace | yes | 5 | all 5 (`1,2,2,2,1`) | 2 nodes, reading `true` and `false` | exactly 1 | **no** |
-| rules | yes | 3 (flat) | all 3 | n/a — no directories | exactly 1 | **no** |
-| prompts | yes | 9 (flat) | all 9 (`1`×9) | n/a — no directories | exactly 1 | **no** |
-| enterprise | yes | 6 loaded, 10 expanded | all 6 (`1,2,2,1,1,1`) | all 4 directories — "Standards" `true`, Process/Organization/Tooling `false` | exactly 1 | **no** |
+| workspace | yes | 58 | 0 | **(re-measured 2026-09-29, EditorShell)** rail views, source folders, row ⋯ menus, the five shell tabs, the ⋯ head menu, the composer dock and context strip — all named | pass | **no** |
+| rules | yes | 50 | 0 | **(re-measured 2026-09-29, EditorShell)** 68 / 0 with Edit document pressed (toolbar card and ruler included) | pass | **no** |
+| prompts | yes | 57 | 0 | **(re-measured 2026-09-29, EditorShell)** read-only canvas; the rail ⋯ menus are named “Actions for <prompt>” | pass | **no** |
+| enterprise | yes | 63 | 0 | **(re-measured 2026-09-29, EditorShell)** as workspace, plus the RELATED links and the directory chevrons (“Expand”/“Collapse”) | pass | **no** |
 
 All four document-explorer surfaces implement real `tree`/`treeitem` semantics
 with `aria-level` and correct roving tabindex, and both surfaces with nesting
@@ -357,3 +357,13 @@ Re-observed 2026-09-25 (ui-components 2.393.1 -> 2.397.4 rail type scale; checkp
 One new finding: the dashboard's team-search `<Input>` (`/assessment/teams`, `AssessorDesk.tsx:164-171`) resolves NO accessible name under this log's own stated method — it carries only a `placeholder`, which the method has always excluded as a name source. That contradicts every prior pass's "0 unnamed" claim for the dashboard. `git log` on `AssessorDesk.tsx` shows no recent touch near this control, so it reads as a pre-existing miss in earlier sweeps rather than something this branch broke. Filed as lead-assessor/DEFECTS.md #4; not fixed here (no page edits mid-audit).
 
 Not re-run this pass: the full twelve-surface table (submissions, submissions-wizard, feedback, reports, runs, configuration), the document read/edit/drawer-state matrix on rules, and the notice-ageing timing walk. None of those are touched by a font-size/weight/row-height change, and re-driving all of them (including the wizard steps and a real edit+save cycle) was out of scope for a rail-scale re-walk; the six-surface spot check above plus the shell-rail measurement are this pass's fresh evidence.
+
+Re-observed 2026-09-29 (the assessment document pages rebuilt on EditorShell — the reason every page under `portal/src/pages/assessment` restaled this log): a full twelve-surface re-sweep with the method unchanged, not a spot check. Counts in the table above are this pass's; they differ from earlier passes because the explorer surfaces now carry the shell's tabs, the ⋯ head menu, the rail's views and row menus, and the composer dock.
+Tree ARIA on the rebuilt rail (one `[role=tree]` per surface now — sources are folders inside it rather than one tree per section): workspace 10 treeitems, all with aria-level, aria-expanded on the 4 folders (true,true,true,false), exactly 1 roving tabindex=0; enterprise 7 / 1 (true,true,false,false,false); rules 5 / 1; prompts 10 / 1. The tree still has no aria-label of its own, as before.
+Dialogs and menus new to these pages: New page is `dialog` / aria-modal=true, named “New page”, focus lands on the “Page title” input, Escape closes it (True) and focus returns to “New page”. The document head ⋯ opens a `menu` with focus on its first item, Escape closes it (True) and focus returns to “More actions”. The Submit for review / Approve / Finalize confirmations (driven on the Workspace logs) name their action in the title and Finalize keeps its confirm disabled until FINALIZE is typed.
+Findings: dashboard team search still unnamed (DEFECTS #4, open since 2026-09-25); the Feedback page's question search is unnamed the same way (DEFECTS #6) — not new code, it simply was not re-swept on 2026-09-25. Nothing unnamed on the four rebuilt document surfaces.
+
+Re-observed 2026-09-29 09:22, second pass (knowledge explorer changed again — the Chat panel is now the library's WrappedChatPanel and the prompts rail no longer gets onRename): full twelve-surface re-sweep, same method; the counts in the table are this pass's. Workspace reads 58 controls where the 08:48 pass read 62 because the middleware restart emptied the mock's Workspace drafts folder, not because anything lost a name. Tree ARIA unchanged in shape: workspace 8 treeitems / 1 roving tab stop, enterprise 7 / 1, rules 5 / 1, prompts 10 / 1, every item with aria-level; the tree still has no aria-label. New page dialog: aria-modal=true, named “New page”, focus on “Page title”, Escape closes (True), focus back on “New page”. Head ⋯: menu opens with focus on its first item, Escape closes (True), focus back on “More actions”. The Chat panel (opened on the workspace walks) is the library's `chat-panel` with a live-region announcer (`chat-panel-announcer`) and a named composer; nothing in it resolved unnamed. Findings unchanged: dashboard team search (#4) and feedback question search (#6) are the only unnamed controls.
+
+Re-observed 2026-09-29 09:58 (freshness; `portal/src/pages/assessment/knowledge/DocumentRail.tsx` changed: `SectionPresence` now joins the presence channel of the section holding the open document (`usePresence(channel, { join })`, lead-assessor/DEFECTS.md #7)): the same sweep script was re-run over all twelve surfaces as u-jonas. Controls/unnamed per surface: dashboard 25/1, team-scorecard 55/0, submissions 27/0, submissions-wizard 27/0, feedback 43/1, reports 33/0, runs 28/0, configuration 28/0, workspace 55/0, enterprise 63/0, rules 50/0, prompts 57/0. The same two findings remain: the dashboard and feedback search inputs (DEFECTS #4, #6). The rail's new presence group is named (`aria-label="Online users"`), so the explorer pages still read 0 unnamed. The New page dialog is modal, labelled “New page”, focuses “Page title”, closes on Escape and restores focus. The ⋯ menu opens, closes, and returns focus to “More actions”. Edit state: 68 controls, 0 unnamed. 0 console errors on every surface.
+

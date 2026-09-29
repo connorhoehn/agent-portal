@@ -1,9 +1,12 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { ExplorerLayout, ContextColumn, ViewportFillRegion, type ContextColumnState } from '@connorhoehnslalom/ui-components';
-import { Inline, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { ChatIcon, Inline, Stack } from '@connorhoehnslalom/ui-components/shared';
 
-type PanelId = 'outline' | 'comments' | 'activity' | 'history' | 'reviews';
+// Comments, Versions and Reviews are editor tabs (DocumentShell); the column
+// keeps what belongs beside the page rather than instead of it: the outline,
+// the page's conversation (the composer dock posts into it) and its activity.
+export type PanelId = 'outline' | 'chat' | 'activity';
 const DocumentContext = createContext<{ open: (id: PanelId) => void; active: PanelId; host: HTMLElement | null } | null>(null);
 export const useDocumentContext = () => useContext(DocumentContext);
 
@@ -20,9 +23,11 @@ export interface ExplorerFrameProps {
   children: ReactNode;
   aside?: ReactNode;
   title?: string;
+  /** "DOCUMENTS 12" — the rail group label and its count (`WorkspaceRail heading="label"`). */
+  count?: number;
 }
 
-export function ExplorerFrame({ rail, railHeader, railActions, children, aside, title = 'Documents' }: ExplorerFrameProps) {
+export function ExplorerFrame({ rail, railHeader, railActions, children, aside, title = 'Documents', count }: ExplorerFrameProps) {
   const [collapsed, setCollapsed] = useState(() => {
     try { return localStorage.getItem('assessment.documentRail.collapsed') === 'true'; }
     catch { return false; }
@@ -45,6 +50,8 @@ export function ExplorerFrame({ rail, railHeader, railActions, children, aside, 
         <ExplorerLayout
           rail={rail}
           railTitle={title}
+          railHeading="label"
+          {...(count !== undefined ? { railCount: count } : {})}
           railHeader={railHeader}
           railActions={railActions}
           railLabel="document library"
@@ -60,10 +67,8 @@ export function ExplorerFrame({ rail, railHeader, railActions, children, aside, 
             label="Document context" activeId={active} onActivate={(id) => open(id as PanelId)}
             panels={[
               { id: 'outline', label: 'Outline', icon: '☷', content: dock },
-              { id: 'comments', label: 'Comments', icon: '☰', content: dock },
+              { id: 'chat', label: 'Chat', icon: <ChatIcon size={16} />, content: dock },
               { id: 'activity', label: 'Activity', icon: '◷', content: aside },
-              { id: 'history', label: 'Versions', icon: '↶', content: dock },
-              { id: 'reviews', label: 'Reviews', icon: '✓', content: dock },
             ]} /> : null}
           </Inline>
         </ExplorerLayout>

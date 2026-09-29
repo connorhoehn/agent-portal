@@ -66,6 +66,12 @@ const TARGET = 'ec:standards/security-baseline.md';
 afterEach(() => { knowledgeSectionsFixture.reset(); });
 
 describe('POST /knowledge/doc/rename', () => {
+  it('refuses to rename a prompt: they are read-only fleet instructions (2026-09-29 regression)', async () => {
+    const res = await rename({ id: 'prompt:draw-diagram.md', title: 'Renamed prompt' });
+    expect(res.status).toBe(409);
+    expect(String(res.body.error)).toMatch(/read-only/);
+  });
+
   it('changes the title and leaves the id alone', async () => {
     const res = await rename({ id: TARGET, title: 'Security Baseline (2026)' });
     expect(res.status).toBe(200);

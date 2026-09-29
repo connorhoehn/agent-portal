@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Button, Card, Chip, DataTable, DetailHeader, InlinePlaceholder, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { Button, Card, Chip, DataTable, DetailHeader, InlinePlaceholder, Stack, type BreadcrumbItem } from '@connorhoehnslalom/ui-components/shared';
 import { useSession } from '../../../lib/auth';
 import { relativeTime } from '../../../lib/relativeTime';
 import { CLASSIFICATION_LABEL } from './knowledgeFormat';
@@ -50,6 +50,10 @@ export interface DocPaneProps {
   sseGapped: boolean;
   /** Refetch the explorer after a source operation changes its tree. */
   onTreeChanged: () => void;
+  /** Where the page lives, drawn inline on the editor's title row. */
+  path: BreadcrumbItem[];
+  /** The page's source section, for the History tab's persisted activity. */
+  sectionKey: string | null;
 }
 
 function getTabId(): string {

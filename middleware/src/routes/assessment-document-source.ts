@@ -6,14 +6,19 @@ import { DocumentSourceError, previewSourceChanges, publishSourcePage, pullSourc
 
 export const assessmentDocumentSourceRouter = Router();
 assessmentDocumentSourceRouter.use('/source', requireTenant('assessment'), requireAction('ViewAssessment'));
+/** An uploaded draft body's ceiling, in characters — well inside express.json's 100 KB default once escaped. */
+export const DRAFT_MARKDOWN_MAX = 65_536;
 assessmentDocumentSourceRouter.post('/doc/create', requireTenant('assessment'), requireAction('ManageKnowledge'), async (req, res) => {
   if (!req.session) { res.status(401).json({ error: 'Sign in to create documents' }); return; }
   const input = req.body;
   if (!input || typeof input !== 'object' || Array.isArray(input)
-    || Object.keys(input).some(key => !['title', 'sectionKey', 'parentId', 'sourceParentId'].includes(key))
+    || Object.keys(input).some(key => !['title', 'sectionKey', 'parentId', 'sourceParentId', 'markdown'].includes(key))
     || typeof input.title !== 'string' || typeof input.sectionKey !== 'string'
     || (input.parentId !== undefined && input.parentId !== null && typeof input.parentId !== 'string')
-    || (input.sourceParentId !== undefined && typeof input.sourceParentId !== 'string')) {
+    || (input.sourceParentId !== undefined && typeof input.sourceParentId !== 'string')
+    // An uploaded file's body (the documents list's Upload): created WITH the
+    // draft so the canvas seeds from it on first open.
+    || (input.markdown !== undefined && (typeof input.markdown !== 'string' || input.markdown.length > DRAFT_MARKDOWN_MAX))) {
     res.status(400).json({ error: 'Invalid draft fields' }); return;
   }
   try { res.status(201).json(await createDocumentDraft(input, req.session)); }

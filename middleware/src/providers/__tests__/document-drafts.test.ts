@@ -61,3 +61,14 @@ it('accepts a replay whose exact remote association and revision were already re
  expect(await recordDraftPublication('draft:11111111-1111-4111-8111-111111111111','uuid','123','old','new')).toBe(true);
  expect(advanceDocumentSourceRevision).toHaveBeenLastCalledWith('uuid','new','new',tx);
 });
+it('an uploaded body is stored with the draft and names its mapping revision',async()=>{
+ const result=await createDocumentDraft({title:'Uploaded',sectionKey:'enterprise_context',markdown:'# Uploaded\n\nBody'},session);
+ const docInsert=tx.mock.calls.find(call=>String(call[0]).includes('INSERT INTO assessment_knowledge_docs'));
+ expect(docInsert?.[1]).toEqual(expect.arrayContaining([{name:'markdown',value:{stringValue:'# Uploaded\n\nBody'}}]));
+ expect(ensureDocumentMapping).toHaveBeenCalledWith(result.id,'hash','creator',tx);
+});
+it('a blank page stores an empty body',async()=>{
+ await createDocumentDraft({title:'Blank',sectionKey:'enterprise_context'},session);
+ const docInsert=tx.mock.calls.find(call=>String(call[0]).includes('INSERT INTO assessment_knowledge_docs'));
+ expect(docInsert?.[1]).toEqual(expect.arrayContaining([{name:'markdown',value:{stringValue:''}}]));
+});

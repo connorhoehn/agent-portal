@@ -9,6 +9,7 @@
 // directly by __tests__/knowledgeFormat.test.ts.
 
 import { relativeTime } from '../../../lib/relativeTime.ts';
+import { parsePgTimestamp } from '../../../lib/pgTimestamp.ts';
 import type {
   ActivityRun,
   ActivityRunStatus,
@@ -107,6 +108,63 @@ export function nodePath(nodes: KnowledgeNode[], id: string | null): KnowledgeNo
     current = current.parent_id ? byId.get(current.parent_id) : undefined;
   }
   return path;
+}
+
+// ─── The documents rail (DocumentRail.tsx) ─────────────────────────────────
+// realtime-examples' Documents rail draws one tree with folders at its root.
+// Here each source section is that folder, so its rows carry a synthetic id
+// the move endpoints must never see: a drop onto a section's root is a move to
+// `parentId: null` inside that section.
+
+export const SECTION_FOLDER_PREFIX = 'section:';
+export function sectionFolderId(sectionKey: string): string {
+  return `${SECTION_FOLDER_PREFIX}${sectionKey}`;
+}
+export function sectionKeyOfFolder(id: string | null): string | null {
+  return id?.startsWith(SECTION_FOLDER_PREFIX) ? id.slice(SECTION_FOLDER_PREFIX.length) : null;
+}
+/** The rail tree's drop parent → the parent the move endpoints take (null = the section root). */
+export function moveParentForRail(targetParentId: string | null): string | null {
+  return targetParentId === null || sectionKeyOfFolder(targetParentId) !== null ? null : targetParentId;
+}
+/** Documents in a section — what its folder row counts ("Engineering Space 4"). */
+export function sectionDocumentCount(section: KnowledgeSection): number {
+  return section.nodes.filter((node) => !isFolderNode(node)).length;
+}
+/**
+ * The rail's Recent view: the documents changed most recently, newest first.
+ * Derived from the tree's own `updated_at`, so it is the same for every
+ * viewer — the tree carries no per-person read history to do better.
+ */
+export function recentDocuments(sections: KnowledgeSection[], limit = 8): KnowledgeNode[] {
+  return flatNodes(sections)
+    .filter((node) => !isFolderNode(node) && node.viewable !== false && !!node.updated_at)
+    .sort((a, b) => (Date.parse(b.updated_at!) || 0) - (Date.parse(a.updated_at!) || 0))
+    .slice(0, limit);
+}
+/**
+ * The rail's age column, the reference rail's shape: "now", "12m", "5h", "4d",
+ * "3mo", "2y". Unlike `relativeTime` it never turns into a calendar date — a
+ * 36px rail row has room for three characters.
+ */
+export function compactAge(iso: string | null | undefined, now: number = Date.now()): string {
+  if (!iso) return '';
+  const then = parsePgTimestamp(iso);
+  if (then === null) return '';
+  const minutes = Math.max(0, Math.floor((now - then.getTime()) / 60_000));
+  if (minutes < 1) return 'now';
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d`;
+  if (days < 365) return `${Math.floor(days / 30)}mo`;
+  return `${Math.floor(days / 365)}y`;
+}
+/** Upload: a Markdown file's first `# ` heading names the draft, else its file name. */
+export function uploadTitle(fileName: string, markdown: string): string {
+  const heading = /^#[ \t]+(.+?)[ \t#]*$/m.exec(markdown)?.[1]?.trim();
+  return (heading || fileName.replace(/\.(md|markdown|txt)$/i, '').trim() || 'Untitled').slice(0, 240);
 }
 
 export const CLASSIFICATION_LABEL: Record<string, string> = {
@@ -308,6 +366,38 @@ export function channelForDoc(docId: string): string {
   return `assessment:doc:${docId}`;
 }
 
+/**
+ * The document's conversation on the BFF gateway (the composer dock and the
+ * Chat panel). The chat service caps a channel name at 50 characters, which a
+ * `draft:<uuid>` id overflows, so a long or non-slug id is hashed — the same
+ * rule realtime-examples' `roomFeedChannel` applies to long lobby names. A
+ * silently truncated name would read and post into somebody else's thread.
+ */
+export const CHAT_CHANNEL_MAX = 50;
+export function conversationChannelForDoc(docId: string): string {
+  const plain = channelForDoc(docId);
+  if (plain.length <= CHAT_CHANNEL_MAX && /^[A-Za-z0-9:_-]+$/.test(plain)) return plain;
+  // cyrb53: a 53-bit string hash, stable across browsers and sessions.
+  let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+  for (let i = 0; i < docId.length; i++) {
+    const ch = docId.charCodeAt(i);
+    h1 = Math.imul(h1 ^ ch, 2654435761);
+    h2 = Math.imul(h2 ^ ch, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return `assessment:doc:h:${(4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36)}`;
+}
+
+/** A presence roster as `PresenceAvatars` users — the rail's per-source "who is here". */
+export function presenceAvatarUsers(roster: ReadonlyArray<{ clientId: string; status?: string; metadata?: Record<string, unknown> }>): Array<{ id: string; name: string; idle?: boolean }> {
+  return roster.map((entry) => {
+    const meta = entry.metadata ?? {};
+    const name = [meta['displayName'], meta['name'], meta['userId']].find((value): value is string => typeof value === 'string' && value.length > 0);
+    return { id: entry.clientId, name: name ?? 'Someone', ...(entry.status && entry.status !== 'online' ? { idle: true } : {}) };
+  });
+}
+
 /** One tree section's realtime channel — just a presence headcount
  *  ("N viewing") on the section's rail header. */
 export function channelForSection(sectionKey: string): string {
@@ -444,16 +534,6 @@ export function summarizeReactions(reactions: Reaction[], targetId: string, curr
 // `ConnectionPill` — none of which reach Tiptap) plus these two adapters,
 // which reproduce the wrapper's own adaptation logic by hand.
 
-/** Mirrors integrations/realtime-modules's internal adaptChatMessage: the
- *  realtime-modules ChatMessage (message/metadata) onto ChatPanel's own
- *  shape (content/displayName/avatarUrl). */
-export function adaptChatMessageForPanel(m: RMChatMessage): {
-  id: string; clientId: string; content: string; timestamp: string; displayName?: string; avatarUrl?: string;
-} {
-  const displayName = typeof m.metadata?.['displayName'] === 'string' ? (m.metadata['displayName'] as string) : undefined;
-  const avatarUrl = typeof m.metadata?.['avatarUrl'] === 'string' ? (m.metadata['avatarUrl'] as string) : undefined;
-  return { id: m.id, clientId: m.clientId, content: m.message, timestamp: m.timestamp, displayName, avatarUrl };
-}
 
 const ACTIVITY_EVENT_LABEL: Record<string, string> = {
   'knowledge.pulled': 'synced',

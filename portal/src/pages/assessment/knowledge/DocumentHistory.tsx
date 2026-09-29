@@ -3,7 +3,6 @@ import { CanvasDocumentView, VersionHistoryPanel } from '@connorhoehnslalom/ui-c
 import { useVersionHistory } from '@connorhoehnslalom/ui-components/hooks';
 import { Button, ConfirmDialog, InlineAlert, LoadingState, Modal, Stack } from '@connorhoehnslalom/ui-components/shared';
 import { useCanvasDocument, useGateway } from '@connorhoehnslalom/realtime-modules/client';
-import { DocumentContextPanel } from './ExplorerFrame';
 import type * as Y from 'yjs';
 
 function BinaryVersionPreview({ ydoc, extensions }: { ydoc: Y.Doc; extensions: ComponentProps<typeof CanvasDocumentView>['extensions'] }) {
@@ -13,8 +12,9 @@ function BinaryVersionPreview({ ydoc, extensions }: { ydoc: Y.Doc; extensions: C
     : <InlineAlert tone="warning">This historical snapshot predates rich document migration. Restore is unavailable for this version.</InlineAlert>;
 }
 
-export function DocumentHistory({ documentId, open, onClose, extensions, onSave, onRestore, pending }: {
-  documentId: string; open: boolean; onClose: () => void;
+/** The Versions tab: named and automatic snapshots over the gateway channel. */
+export function DocumentHistory({ documentId, onClose, extensions, onSave, onRestore, pending }: {
+  documentId: string; onClose: () => void;
   extensions: ComponentProps<typeof CanvasDocumentView>['extensions'];
   onSave?: (name: string) => Promise<void>; onRestore?: (timestamp: number) => Promise<void>; pending: boolean;
 }) {
@@ -23,7 +23,7 @@ export function DocumentHistory({ documentId, open, onClose, extensions, onSave,
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirmRestore, setConfirmRestore] = useState(false);
-  useEffect(() => { if (open && gateway.connectionState === 'connected') history.fetchVersions(); }, [open, gateway.connectionState, history.fetchVersions]);
+  useEffect(() => { if (gateway.connectionState === 'connected') history.fetchVersions(); }, [gateway.connectionState, history.fetchVersions]);
   async function save(name: string) {
     if (!onSave || pending || busy) return;
     setBusy(true); setError(null);
@@ -39,13 +39,15 @@ export function DocumentHistory({ documentId, open, onClose, extensions, onSave,
     finally { setBusy(false); setConfirmRestore(false); }
   }
   return <>
-    <DocumentContextPanel id="history">
+    <Stack gap="sm" className="h-full min-h-0 flex-1" data-testid="document-versions">
       {error && <InlineAlert tone="error">{error}</InlineAlert>}
       <VersionHistoryPanel versions={history.versions} loading={history.loading} previewTimestamp={history.previewTimestamp}
         onFetch={history.fetchVersions} onPreview={history.previewVersion} onClearPreview={history.clearPreview} onClose={onClose}
         onSaveVersion={onSave && !pending && !busy ? name => void save(name) : undefined}
-        onClearCompare={history.clearCompare} compareSections={null} compareTimestamp={null} currentSections={[]} />
-    </DocumentContextPanel>
+        onClearCompare={history.clearCompare} compareSections={null} compareTimestamp={null} currentSections={[]}
+        // Inline in the Versions tab (ui-components 2.407.16+), not a slide-out over the window.
+        docked />
+    </Stack>
     <Modal open={history.previewTimestamp !== null} onClose={() => { if (!busy) history.clearPreview(); }} title="Saved document version" maxWidth={1200}
       footer={<>
         <Button variant="ghost" disabled={busy} onClick={history.clearPreview}>Close preview</Button>

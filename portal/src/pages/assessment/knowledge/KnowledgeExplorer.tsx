@@ -2,30 +2,26 @@
 // The library owns pane layout and rich editing. The gateway owns canvas
 // content; the BFF retains source-bound comments, reactions and sync actions.
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import {
   ActivityFeed,
   Breadcrumbs,
   Button,
-  Chip,
+  DropdownMenu,
   EmptyState,
   ErrorState,
   Inline,
   InlinePlaceholder,
-  SearchInput,
   LoadingState,
+  MoreIcon,
+  PlusIcon,
   RailSection,
   Stack,
-  T,
   Toolbar,
   VisuallyHidden,
   IconButton,
 } from '@connorhoehnslalom/ui-components/shared';
-import { RailSectionHeader } from '@connorhoehnslalom/ui-components/social';
-import { ConversationShelf } from '@connorhoehnslalom/ui-components';
-import { usePresence } from '@connorhoehnslalom/realtime-modules/client';
-import { relativeTime } from '../../../lib/relativeTime';
 import { useFetch } from '../../../hooks/useFetch';
 import { useCapabilities } from '../../../lib/capabilities';
 import { sendJson } from '../../../lib/writeJson';
@@ -33,34 +29,38 @@ import { DocPane, FolderPane } from './DocPane';
 import { ActivityBar } from './ActivityBar';
 import { DocumentLibrary } from './DocumentLibrary';
 import { DocumentNavigationProvider, useDocumentNavigation } from './DocumentNavigation';
+import { DocumentRail, useSectionPulls, type QuickView } from './DocumentRail';
 import { ExplorerFrame } from './ExplorerFrame';
-import { KeyboardTreeView } from './KeyboardTreeView';
-import { RenameNodeDialog, RowActionsMenu } from './RenameNodeDialog';
+import { RenameNodeDialog } from './RenameNodeDialog';
 import { NewDraftDialog, type DraftDestination } from './NewDraftDialog';
 import { useAssessmentEvents } from './useAssessmentEvents';
 import {
   MODE_LABEL,
   RELATED_LINKS,
   activityForSection,
-  channelForSection,
   findNode,
   firstViewableLeaf,
   flatNodes,
   isFolderNode,
+  moveParentForRail,
   nodePath,
   parseActivityRuns,
   pulledEventsForSection,
+  sectionDocumentCount,
   sectionForNode,
   sectionsForMode,
   toActivityFeedItems,
+  uploadTitle,
 } from './knowledgeFormat';
 import type {
-  AssessmentSSEEvent,
   KnowledgeMode,
-  KnowledgeNode,
   KnowledgeSection,
   KnowledgeTreeResponse,
 } from './types';
+
+/** An uploaded file larger than this is refused before it is read — under the
+ *  BFF's draft-body ceiling (DRAFT_MARKDOWN_MAX, 64K characters) with room to escape. */
+const UPLOAD_MAX_BYTES = 48 * 1024;
 
 // ─── Which single thing the main pane shows ─────────────────────────────────
 // Mirrors the source's MainView: exactly one of a selected doc or the
@@ -71,136 +71,6 @@ import type {
 // always-empty list.
 
 type MainView = { kind: 'node' } | { kind: 'activity'; sectionKey: string };
-
-const ACTIVITY_ID = (sectionKey: string) => `${sectionKey}::activity`;
-
-interface UiTreeNode {
-  id: string;
-  title: string;
-  parentId: string | null;
-  isDir?: boolean;
-  badge?: ReactNode;
-}
-
-function sectionTreeNodes(
-  section: KnowledgeSection, activityCount: number, view: MainView,
-  moveStatus: Record<string, 'pending' | 'moved'> = {},
-): UiTreeNode[] {
-  const base: UiTreeNode[] = section.nodes.map((n) => ({
-    id: n.id, title: n.title, parentId: n.parent_id, isDir: n.is_dir,
-    // TreeView draws `pending` translucent + aria-busy and flashes `moved`
-    // when it lands. The library is explicit that it cannot know when a server
-    // answered, so the host owns both edges of that window.
-    ...(moveStatus[n.id] ? { status: moveStatus[n.id] } : {}),
-  }));
-  if (section.kind !== 'synced') return base;
-  const activityActive = view.kind === 'activity' && view.sectionKey === section.key;
-  return [
-    ...base,
-    {
-      id: ACTIVITY_ID(section.key), title: 'Activity', parentId: null,
-      badge: <Chip size="xs" mono tone={activityActive ? 'info' : 'neutral'}>{activityCount}</Chip>,
-    },
-  ];
-}
-
-function selectedTreeIdFor(section: KnowledgeSection, selectedNodeId: string | null, view: MainView): string | null {
-  if (view.kind === 'activity' && view.sectionKey === section.key) return ACTIVITY_ID(section.key);
-  if (view.kind === 'node' && selectedNodeId && section.nodes.some((n) => n.id === selectedNodeId)) return selectedNodeId;
-  return null;
-}
-
-// ─── Section rail extras: presence headcount + Pull control ────────────────
-// RailSection's `title` is a plain string (no slot for a badge or button
-// next to it — see the report), so these render as the first row of the
-// section's own children instead of inline with the title text.
-
-function SectionPresenceBadge({ sectionKey }: { sectionKey: string }) {
-  const { roster } = usePresence(channelForSection(sectionKey));
-  if (roster.length === 0) return null;
-  return <Chip size="xs" tone="neutral">{roster.length} viewing</Chip>;
-}
-
-/**
- * How long to keep saying "Pulling…" before admitting we have not heard back.
- *
- * The route answers 202 and the real work lands later as a `knowledge.pulled`
- * event, so the only thing that ends the spinner is an event arriving. If one
- * never does — the gateway is down, the event was dropped, or the server's own
- * deferred touch returned without publishing (the Aurora path bails on
- * `if (!updated) return`) — the button stayed disabled and said "Pulling…"
- * forever, which is a claim that work is in progress that nobody can support.
- * After the deadline it stops claiming that and says what is actually known:
- * the pull was accepted, the result never came back.
- */
-const PULL_DEADLINE_MS = 30_000;
-
-function SectionPullControl({ sectionKey, sseEvents, onTreeChanged, section }: {
-  sectionKey: string; sseEvents: AssessmentSSEEvent[]; onTreeChanged: () => void;
-  section: KnowledgeSection;
-}) {
-  const { can, ready } = useCapabilities();
-  const [pulling, setPulling] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [silent, setSilent] = useState(false);
-  const requestedAtRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    if (!pulling || !requestedAtRef.current) return;
-    const landed = pulledEventsForSection(sseEvents, sectionKey).some((e) => e.ts >= requestedAtRef.current!);
-    if (landed) {
-      setPulling(false);
-      onTreeChanged();
-    }
-  }, [sseEvents, pulling, sectionKey, onTreeChanged]);
-
-  // The deadline. Refetch once on the way out: the pull may well have landed
-  // and only its event gone missing, in which case the tree is the evidence.
-  useEffect(() => {
-    if (!pulling) return;
-    const id = window.setTimeout(() => {
-      setPulling(false);
-      setSilent(true);
-      onTreeChanged();
-    }, PULL_DEADLINE_MS);
-    return () => window.clearTimeout(id);
-  }, [pulling, onTreeChanged]);
-
-  if (!ready || !can('ManageKnowledge')) return null;
-
-  const handlePull = async () => {
-    setError(null);
-    setSilent(false);
-    requestedAtRef.current = new Date().toISOString();
-    setPulling(true);
-    try {
-      await sendJson('/api/assessment/knowledge/pull', 'POST', { section: sectionKey });
-    } catch (err) {
-      setPulling(false);
-      setError(err instanceof Error ? err.message : 'Failed to pull.');
-    }
-  };
-
-  return (
-    <Inline gap="xs" align="center" wrap>
-      {/* What this section actually is, which the rail never said: which remote
-          owns it and when it last moved. `last_pulled_at` is derived from the
-          newest node, so it cannot claim a sync that touched nothing. */}
-      <T className="text-[11px] text-text-tertiary">
-        {section.last_pulled_at ? `pulled ${relativeTime(section.last_pulled_at)}` : 'never pulled'}
-      </T>
-      <Button variant="ghost" size="sm" disabled={pulling} onClick={() => void handlePull()}>
-        {pulling ? 'Pulling…' : 'Pull'}
-      </Button>
-      {error && <T role="alert" className="text-[11px] text-danger">{error}</T>}
-      {silent && !error && (
-        <T role="status" className="text-[11px] text-warning">
-          accepted, but no result came back — the tree may not have changed
-        </T>
-      )}
-    </Inline>
-  );
-}
 
 // ─── The explorer ─────────────────────────────────────────────────────────
 
@@ -215,40 +85,35 @@ function KnowledgeExplorerContent({ mode }: KnowledgeExplorerProps) {
   const navigation = useDocumentNavigation();
   const [searchParams, setSearchParams] = useSearchParams();
   const [view, setView] = useState<MainView>({ kind: 'node' });
-  const [query, setQuery] = useState('');
-  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
-  const [treeExpansion, setTreeExpansion] = useState<Record<string, string[]>>(() => {
-    try {
-      const value: unknown = JSON.parse(localStorage.getItem('assessment.documentTree.expansion') ?? '{}');
-      return value && typeof value === 'object' && !Array.isArray(value)
-        ? Object.fromEntries(Object.entries(value).filter(([, ids]) => Array.isArray(ids) && ids.every(id => typeof id === 'string'))) : {};
-    } catch { return {}; }
-  });
-  useEffect(() => {
-    try { localStorage.setItem('assessment.documentTree.expansion', JSON.stringify(treeExpansion)); } catch { /* Session preference only. */ }
-  }, [treeExpansion]);
+  const [quickView, setQuickView] = useState<QuickView | null>(null);
   const sse = useAssessmentEvents();
 
   const treeFetch = useFetch<KnowledgeTreeResponse>('/api/assessment/knowledge/tree');
   const { can: canDo } = useCapabilities();
+  const pulls = useSectionPulls(sse.events, treeFetch.refresh);
 
   // Preserve the accelerator's sibling/child placement. The shared tree
   // resolves drop positions; local and configured source trees use their
-  // own authoritative move endpoint. Synthetic activity rows are never moved.
+  // own authoritative move endpoint. Synthetic rows — a source's folder, its
+  // Activity — are never moved, and a drop on a source's folder is a move to
+  // that section's root (moveParentForRail).
   const [moveStatus, setMoveStatus] = useState<Record<string, 'pending' | 'moved'>>({});
   const [moveError, setMoveError] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<{ id: string; title: string } | null>(null);
   const [creating, setCreating] = useState<DraftDestination | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
-  // Rename goes through the row's trailing menu because `TreeViewProps` has no
-  // `onRename` — see RenameNodeDialog.tsx. The dialog surfaces the refusal
-  // itself, so this only has to refetch on success.
+  // Rename goes through the row's ⋯ (or a double-click) because `TreeViewProps`
+  // has no `onRename` — see RenameNodeDialog.tsx. The dialog surfaces the
+  // refusal itself, so this only has to refetch on success.
   async function handleRename(id: string, title: string) {
     await sendJson('/api/assessment/knowledge/doc/rename', 'POST', { id, title });
     await treeFetch.refresh();
   }
 
-  async function handleReorder(id: string, targetParentId: string | null, position: number) {
+  async function handleReorder(id: string, railParentId: string | null, position: number) {
+    const targetParentId = moveParentForRail(railParentId);
     setMoveError(null);
     setMoveStatus((m) => ({ ...m, [id]: 'pending' }));
     try {
@@ -278,15 +143,16 @@ function KnowledgeExplorerContent({ mode }: KnowledgeExplorerProps) {
 
   const sections = useMemo(() => sectionsForMode(treeFetch.data?.sections ?? [], mode), [treeFetch.data, mode]);
   const nodes = useMemo(() => flatNodes(sections), [sections]);
-  const sectionNodes = useMemo(() => new Map(sections.map(section => [section.key, sectionTreeNodes(
-    section, activityForSection(section, activityRuns).length + pulledEventsForSection(sse.events, section.key).length, view, moveStatus,
-  )])), [sections, activityRuns, sse.events, view, moveStatus]);
+  const activityCount = useCallback((section: KnowledgeSection) => activityForSection(section, activityRuns).length
+    + pulledEventsForSection(sse.events, section.key).length, [activityRuns, sse.events]);
   const libraryOpen = searchParams.get('view') === 'library';
   const selectedId = searchParams.get('doc');
   const selectedNode = findNode(nodes, selectedId);
-  const draftSectionKey = mode === 'workspace' ? 'workspace_drafts' : sections.find(section => section.kind === 'local')?.key;
+  const draftSection = mode === 'workspace' ? sections.find(section => section.key === 'workspace_drafts') ?? { key: 'workspace_drafts', title: 'Workspace drafts' } : sections.find(section => section.kind === 'local');
+  const draftSectionKey = draftSection?.key;
   const mayCreate = mode !== 'prompts' && canDo('ManageKnowledge') && !!draftSectionKey;
   const createDraft = (destination: DraftDestination) => navigation?.navigate(() => setCreating(destination));
+  const sourceConfigured = treeFetch.data?.sourceConfigured === true;
 
   // Default to the first viewable leaf once the tree loads, if the URL
   // didn't already name a document — landing on a folder or a hidden binary
@@ -296,7 +162,7 @@ function KnowledgeExplorerContent({ mode }: KnowledgeExplorerProps) {
     if (appliedDefaultRef.current) return;
     if (!treeFetch.data) return;
     appliedDefaultRef.current = true;
-    if (searchParams.get('doc')) return;
+    if (searchParams.get('doc') || searchParams.get('view')) return;
     const leaf = firstViewableLeaf(nodes);
     if (!leaf) return;
     const next = new URLSearchParams(searchParams);
@@ -318,41 +184,50 @@ function KnowledgeExplorerContent({ mode }: KnowledgeExplorerProps) {
     setSearchParams(next); setView({ kind: 'node' });
   });
 
-  const handleTreeSelect = (section: KnowledgeSection, id: string) => {
-    if (id === ACTIVITY_ID(section.key)) {
-      navigation?.navigate(() => {
-      const next = new URLSearchParams(searchParams);
-      next.delete('view');
-      setSearchParams(next);
-      setView({ kind: 'activity', sectionKey: section.key });
-      });
-      return;
+  const openActivity = (sectionKey: string) => navigation?.navigate(() => {
+    const next = new URLSearchParams(searchParams);
+    next.delete('view');
+    setSearchParams(next);
+    setView({ kind: 'activity', sectionKey });
+  });
+
+  // Upload: each Markdown / text file becomes a draft in the draft section,
+  // its first heading the title. The draft is created WITH its body, so the
+  // canvas seeds from it on first open (a create-then-save would change the
+  // source under the pending import and be refused).
+  async function uploadFiles(files: File[]) {
+    if (!draftSectionKey) return;
+    setUploadError(null);
+    setUploading(true);
+    let last: string | null = null;
+    const refused: string[] = [];
+    try {
+      for (const file of files) {
+        if (file.size > UPLOAD_MAX_BYTES) { refused.push(`${file.name} is larger than ${UPLOAD_MAX_BYTES / 1024} KB`); continue; }
+        const markdown = await file.text();
+        try {
+          const result = await sendJson<{ ok: boolean; id: string }>('/api/assessment/knowledge/doc/create', 'POST', { title: uploadTitle(file.name, markdown), sectionKey: draftSectionKey, markdown });
+          if (result.id) last = result.id;
+        } catch (err) { refused.push(`${file.name}: ${err instanceof Error ? err.message : 'the draft could not be created'}`); }
+      }
+    } finally {
+      setUploading(false);
+      if (refused.length) setUploadError(refused.join('; '));
+      await treeFetch.refresh();
+      if (last && refused.length === 0) handleSelectNode(last);
     }
-    handleSelectNode(id);
-  };
+  }
 
   const modeLabel = MODE_LABEL[mode];
   const ancestors = view.kind === 'node' ? nodePath(nodes, selectedId) : [];
   const crumbs: { label: string; onClick?: () => void }[] = [
     ...(view.kind === 'activity' ? [{ label: 'Activity' }] : ancestors.map((n, index) => ({ label: n.title, ...(index < ancestors.length - 1 ? { onClick: () => handleSelectNode(n.id) } : {}) }))),
   ];
-
-  const matches = nodes.filter((node) => node.title.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
+  const documentTotal = sections.reduce((sum, section) => sum + sectionDocumentCount(section), 0);
+  const mayMove = canDo('ManageKnowledge') && mode !== 'prompts';
 
   const rail = (
     <>
-      <RailSection title="Views">
-        {/* md, and the tree's md below: 15px rows, the one rail scale the
-            shell rail beside this explorer draws (ui-components 2.397.0). */}
-        <ConversationShelf size="md" items={[{ id: 'library', label: 'All documents', count: nodes.filter((node) => !node.is_dir).length }]}
-          activeId={libraryOpen ? 'library' : null} onSelect={openLibrary} />
-      </RailSection>
-      <Stack gap="sm" className="px-3">
-        {query.trim() && <Stack gap="xs">
-          <T className="text-xs text-text-secondary">{matches.length} results</T>
-          {matches.map((node) => <Button key={node.id} variant="ghost" size="sm" className="justify-start border-0" onClick={() => { handleSelectNode(node.id); setQuery(''); }}>{node.title}</Button>)}
-        </Stack>}
-      </Stack>
       <RenameNodeDialog
         node={renaming}
         onClose={() => setRenaming(null)}
@@ -372,74 +247,26 @@ function KnowledgeExplorerContent({ mode }: KnowledgeExplorerProps) {
       )}
       {treeFetch.isLoading && <LoadingState label="Loading…" />}
       {treeFetch.error && <ErrorState title="Couldn't load the document library" body={treeFetch.error} />}
-      {!treeFetch.isLoading && !treeFetch.error && sections.length === 0 && (
-        <RailSection title={modeLabel}>
-          <InlinePlaceholder>Nothing here yet.</InlinePlaceholder>
-        </RailSection>
+      {!treeFetch.isLoading && !treeFetch.error && (
+        <DocumentRail
+          sections={sections}
+          selectedId={view.kind === 'node' ? selectedId : null}
+          activitySectionKey={view.kind === 'activity' ? view.sectionKey : null}
+          libraryOpen={libraryOpen}
+          quickView={quickView}
+          onQuickView={setQuickView}
+          onOpenLibrary={openLibrary}
+          onOpenDocument={handleSelectNode}
+          onOpenActivity={openActivity}
+          activityCount={activityCount}
+          moveStatus={moveStatus}
+          sourceConfigured={sourceConfigured}
+          pulls={pulls}
+          {...(mayCreate ? { onCreate: createDraft } : {})}
+          {...(mode !== 'prompts' && canDo('ManageKnowledge') ? { onRename: setRenaming } : {})}
+          {...(mayMove ? { onReorder: handleReorder } : {})}
+        />
       )}
-      {!query.trim() && !treeFetch.isLoading && !treeFetch.error && sections.map((section) => {
-        return (
-          <Stack key={section.key} gap="xs" className="border-b border-border px-3 py-2">
-            <RailSectionHeader label={`${section.title} · ${section.nodes.filter(node => !isFolderNode(node)).length}`}
-              collapsed={!!collapsedSections[section.key]} presentational={false}
-              onToggleCollapse={collapsed => setCollapsedSections(value => ({ ...value, [section.key]: collapsed }))}
-              controls={`knowledge-section-${section.key}`} />
-            {!collapsedSections[section.key] && <Stack gap="xs" id={`knowledge-section-${section.key}`}>
-              <Inline gap="xs" align="center">
-                <Chip size="xs" tone="neutral">{section.provider ?? (section.kind === 'local' ? 'Local documents' : 'Synced source')}</Chip>
-              </Inline>
-              <Inline justify="between" align="center">
-                <SectionPresenceBadge sectionKey={section.key} />
-                {section.kind === 'synced' && treeFetch.data?.sourceConfigured === true && (
-                  <SectionPullControl section={section} sectionKey={section.key} sseEvents={sse.events} onTreeChanged={treeFetch.refresh} />
-                )}
-              </Inline>
-              {section.nodes.length === 0 ? (
-                <InlinePlaceholder>Nothing here yet.</InlinePlaceholder>
-              ) : (
-                <KeyboardTreeView
-                  size="md"
-                  data-testid={`section-tree-${section.key}`}
-                  nodes={sectionNodes.get(section.key) ?? []}
-                  selectedId={selectedTreeIdFor(section, selectedId, view)}
-                  expanded={treeExpansion[section.key] ?? []}
-                  onToggle={(id, expanded) => setTreeExpansion(value => ({ ...value, [section.key]: expanded
-                    ? [...new Set([...(value[section.key] ?? []), id])]
-                    : (value[section.key] ?? []).filter(open => open !== id) }))}
-                  onSelect={(id: string) => handleTreeSelect(section, id)}
-                  onReorder={canDo('ManageKnowledge') && mode !== 'prompts' && (section.kind === 'local' || treeFetch.data?.sourceConfigured === true) ? handleReorder : undefined}
-                  canDragNode={n => !n.id.endsWith('::activity') && (section.kind !== 'synced' || n.parentId !== null)}
-                  canDropNode={(_dragged, target, position) => !target.id.endsWith('::activity') && (section.kind === 'synced'
-                    ? position === 'into' || target.parentId !== null
-                    : position !== 'into' || !!target.isDir)}
-                  renderTrailing={(n: UiTreeNode) => {
-                    const target = section.nodes.find(node => node.id === n.id);
-                    if (!target || !mayCreate) return null;
-                    return <Inline gap="none" wrap={false}>
-                      {section.kind === 'local' && <RowActionsMenu title={n.title} onRename={() => setRenaming({ id: n.id, title: n.title })} />}
-                      {(section.kind === 'synced' ? treeFetch.data?.sourceConfigured === true : target.is_dir) && <IconButton className="doc-tree-rename" variant="ghost" size="sm" icon="+"
-                        aria-label={`Add child draft to ${n.title}`} title="Add child draft" tabIndex={-1}
-                        onClick={event => { event.stopPropagation(); createDraft(section.kind === 'synced'
-                          ? { sectionKey: 'workspace_drafts', sourceParentId: n.id, parentTitle: n.title }
-                          : { sectionKey: section.key, parentId: n.id, parentTitle: n.title }); }} />}
-                    </Inline>;
-                  }}
-                  {...(section.kind === 'local' && canDo('ManageKnowledge')
-                    ? {
-                        // Double-click the row. Same gate as the pencil beside
-                        // it, so a viewer who cannot rename gets neither.
-                        onRenameNode: (nodeId: string) => {
-                          const target = section.nodes.find((n) => n.id === nodeId);
-                          if (target) setRenaming({ id: target.id, title: target.title });
-                        },
-                      }
-                    : {})}
-                />
-              )}
-            </Stack>}
-          </Stack>
-        );
-      })}
       {mode === 'enterprise' && !treeFetch.isLoading && !treeFetch.error && (
         <RailSection title="Related">
           <Stack gap="xs">
@@ -475,27 +302,35 @@ function KnowledgeExplorerContent({ mode }: KnowledgeExplorerProps) {
   return (
     <ExplorerFrame
       rail={rail}
-      title={modeLabel}
-      railHeader={<SearchInput aria-label="Find a document" placeholder="Find a document…" value={query} onChange={setQuery} onClear={() => setQuery('')} />}
+      title={mode === 'workspace' ? 'Documents' : modeLabel}
+      count={documentTotal}
       railActions={<Inline gap="none" wrap={false}>
-        {mayCreate && <IconButton aria-label="New page" title="New page" variant="ghost" size="sm" icon="+" onClick={() => createDraft({ sectionKey: draftSectionKey! })} />}
-        <IconButton aria-label="Refresh library" title="Refresh library" variant="ghost" size="sm" icon="↻" disabled={treeFetch.isLoading} onClick={() => void treeFetch.refresh()} />
+        {mayCreate && <IconButton aria-label="New page" title="New page" variant="ghost" size="sm" icon={<PlusIcon />} onClick={() => createDraft({ sectionKey: draftSectionKey! })} data-testid="new-page-btn" />}
+        <DropdownMenu trigger={<MoreIcon />} triggerLabel="More for the documents list" triggerTitle="More" triggerTestId="document-rail-menu"
+          triggerClassName="border-transparent" align="end"
+          sections={[{ items: [
+            { label: 'All documents', trailing: String(documentTotal), onSelect: openLibrary },
+            { label: 'Refresh library', onSelect: () => void treeFetch.refresh() },
+          ] }]} />
       </Inline>}
       aside={!libraryOpen && view.kind === 'node' && isPage && selectedNode
         ? <ActivityBar node={selectedNode} sectionKey={selectedSectionKey} sseEvents={sse.events} />
         : undefined}
     >
       {/* Document pages use their own visible heading; other views still name the workspace. */}
-      {(libraryOpen || view.kind !== 'node' || !isPage) && <VisuallyHidden as="h1">{modeLabel}</VisuallyHidden>}
+      {(view.kind !== 'node' || !isPage) && !libraryOpen && <VisuallyHidden as="h1">{modeLabel}</VisuallyHidden>}
       <NewDraftDialog destination={creating} onClose={() => setCreating(null)} onCreated={id => { treeFetch.refresh(); handleSelectNode(id); }} />
-      {(!isPage || libraryOpen || crumbs.length > 1) && <Toolbar aria-label="Document navigation" wrap className="px-6 py-3">
-        {(!isPage || libraryOpen) && <Button variant="ghost" size="sm" className="border-0" onClick={openLibrary}>Documents</Button>}
-        {!libraryOpen && <Breadcrumbs items={isPage ? crumbs.slice(0, -1) : crumbs} />}
+      {/* A page carries its trail on the editor's own title row (DocumentShell); the list its PageHeader. */}
+      {!isPage && !libraryOpen && <Toolbar aria-label="Document navigation" wrap className="px-6 py-3">
+        <Button variant="ghost" size="sm" className="border-0" onClick={openLibrary}>Documents</Button>
+        <Breadcrumbs items={crumbs} />
       </Toolbar>}
 
       {libraryOpen && (treeFetch.isLoading ? <LoadingState label="Loading document library…" />
         : treeFetch.error ? <ErrorState title="Couldn't load the document library" body={treeFetch.error} />
-        : <Stack className="p-6"><DocumentLibrary sections={sections} onSelect={handleSelectNode} /></Stack>)}
+        : <DocumentLibrary sections={sections} onSelect={handleSelectNode}
+            {...(mayCreate ? { onNewPage: () => createDraft({ sectionKey: draftSectionKey! }), onUpload: uploadFiles, draftSectionTitle: draftSection?.title } : {})}
+            uploading={uploading} uploadError={uploadError} onDismissUploadError={() => setUploadError(null)} />)}
 
       {!libraryOpen && view.kind === 'activity' && activityPane}
 
@@ -511,7 +346,8 @@ function KnowledgeExplorerContent({ mode }: KnowledgeExplorerProps) {
         ) : selectedNode.viewable === false ? (
           <EmptyState title={selectedNode.title} body="This file isn't viewable here." description={selectedNode.id} />
         ) : (
-          <DocPane node={selectedNode} mode={mode} onBack={openLibrary} sourceConfigured={treeFetch.data?.sourceConfigured === true} sseEvents={sse.events} sseConnected={sse.connected} sseGapped={sse.gapped} onTreeChanged={treeFetch.refresh} />
+          <DocPane node={selectedNode} mode={mode} onBack={openLibrary} sourceConfigured={sourceConfigured} sseEvents={sse.events} sseConnected={sse.connected} sseGapped={sse.gapped} onTreeChanged={treeFetch.refresh}
+            path={[{ label: 'Documents', onClick: openLibrary }, ...crumbs.slice(0, -1)]} sectionKey={selectedSectionKey} />
         )
       )}
     </ExplorerFrame>

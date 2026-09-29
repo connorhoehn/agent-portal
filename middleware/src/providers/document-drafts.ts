@@ -8,7 +8,9 @@ import { withTransaction } from './aurora.js';
 import { advanceDocumentSourceRevision, documentSourceRevision, ensureDocumentMapping } from './document-mapping.js';
 import { DocumentSourceError, readSourceTree, sourceConfigured } from './document-source.js';
 import { assessmentBroker } from '../lib/assessment-broker.js';
-export interface CreateDocumentDraft { title:string;sectionKey:string;parentId?:string|null;sourceParentId?:string }
+export interface CreateDocumentDraft { title:string;sectionKey:string;parentId?:string|null;sourceParentId?:string;
+  /** An uploaded file's body; absent for a blank page. The mapping's source revision is taken from it, so the canvas import seeds this text. */
+  markdown?:string }
 const str=(name:string,value:string|null)=>({name,value:value===null?{isNull:true as const}:{stringValue:value}});
 export async function createDocumentDraft(input:CreateDocumentDraft,session:Session) {
   if(session.tenant!=='assessment'||!await isAllowed(session,'ManageKnowledge')) throw new DocumentSourceError(403,'Draft creation is not authorized');
@@ -21,7 +23,8 @@ export async function createDocumentDraft(input:CreateDocumentDraft,session:Sess
     if(!parent || !(await readSourceTree()).nodes.some(node=>node.page_id===parent)) throw new DocumentSourceError(400,'Source parent is outside the configured tree');
   }
   const id=`draft:${randomUUID()}`; const now=config.mock.aurora ? clock.nowIso() : new Date().toISOString();
-  const doc:KnowledgeDoc={id,title,classification:'internal',markdown:'',editable:true,path:`drafts/${id.slice(6)}.md`,updated_at:now,source_parent_id:input.sourceParentId ?? null,published_page_id:null};
+  const markdown=input.markdown ?? '';
+  const doc:KnowledgeDoc={id,title,classification:'internal',markdown,editable:true,path:`drafts/${id.slice(6)}.md`,updated_at:now,source_parent_id:input.sourceParentId ?? null,published_page_id:null};
   const parentId=input.parentId ?? null;
   let documentId:string;
   if(config.mock.aurora) {
@@ -43,7 +46,7 @@ export async function createDocumentDraft(input:CreateDocumentDraft,session:Sess
       await tx(`INSERT INTO assessment_knowledge_nodes (id,section_key,parent_id,title,is_dir,classification,editable,viewable,position,updated_at)
         VALUES (:id,:section,:parent,:title,FALSE,'internal',TRUE,TRUE,(SELECT COALESCE(MAX(position),-1)+1 FROM assessment_knowledge_nodes WHERE section_key=:section AND parent_id IS NOT DISTINCT FROM :parent),CAST(:now AS timestamptz))`,[str('id',id),str('section',input.sectionKey),str('parent',parentId),str('title',title),str('now',now)]);
       await tx(`INSERT INTO assessment_knowledge_docs (id,title,classification,path,markdown,editable,updated_at,source_parent_id,published_page_id)
-        VALUES (:id,:title,'internal',:path,'',TRUE,CAST(:now AS timestamptz),:sourceParent,NULL)`,[str('id',id),str('title',title),str('path',doc.path),str('now',now),str('sourceParent',doc.source_parent_id ?? null)]);
+        VALUES (:id,:title,'internal',:path,:markdown,TRUE,CAST(:now AS timestamptz),:sourceParent,NULL)`,[str('id',id),str('title',title),str('path',doc.path),str('markdown',markdown),str('now',now),str('sourceParent',doc.source_parent_id ?? null)]);
       return (await ensureDocumentMapping(id,documentSourceRevision(doc.markdown),session.sub,tx)).document_id;
     });
   }

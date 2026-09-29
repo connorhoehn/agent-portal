@@ -13,7 +13,6 @@ import {
   activityEventToFeedItem,
   activityForNode,
   activityForSection,
-  adaptChatMessageForPanel,
   channelForDoc,
   channelForSection,
   commentsForDoc,
@@ -51,7 +50,7 @@ import {
 } from '../knowledge/knowledgeFormat.ts';
 import type { ActivityRun, AssessmentSSEEvent, CommentListItem, KnowledgeNode, KnowledgeSection, PresenceViewer } from '../knowledge/types.ts';
 import type { OwnSaveState } from '../knowledge/knowledgeFormat.ts';
-import type { ActivityEvent, ChatMessage as RMChatMessage, Reaction } from '@connorhoehnslalom/realtime-modules/client';
+import type { ActivityEvent, Reaction } from '@connorhoehnslalom/realtime-modules/client';
 
 /** Minimal node — only the fields the derivations read. */
 function node(partial: Partial<KnowledgeNode> & { id: string; title: string }): KnowledgeNode {
@@ -365,18 +364,6 @@ test('summarizeReactions aggregates by emoji, scoped to one target, flagging the
   // No current viewer -> nothing is ever "mine".
   const noViewer = summarizeReactions(reactions, 'doc-1', null);
   assert.ok(noViewer.every((r) => r.mine === false));
-});
-
-test('adaptChatMessageForPanel maps message/metadata onto content/displayName/avatarUrl', () => {
-  const msg: RMChatMessage = {
-    id: 'm1', clientId: 'u1', channel: 'c', message: 'hello', timestamp: 't1',
-    metadata: { displayName: 'Jonas', avatarUrl: 'https://x/y.png' },
-  };
-  assert.deepEqual(adaptChatMessageForPanel(msg), {
-    id: 'm1', clientId: 'u1', content: 'hello', timestamp: 't1', displayName: 'Jonas', avatarUrl: 'https://x/y.png',
-  });
-  const bare: RMChatMessage = { id: 'm2', clientId: 'u2', channel: 'c', message: 'hi', timestamp: 't2' };
-  assert.deepEqual(adaptChatMessageForPanel(bare), { id: 'm2', clientId: 'u2', content: 'hi', timestamp: 't2', displayName: undefined, avatarUrl: undefined });
 });
 
 test('activityEventToFeedItem labels known event types and falls back to the raw type', () => {
@@ -760,4 +747,84 @@ test('the editor preview renders exactly what the reader will get', () => {
   assert.ok(!forPreview.includes('```json'), 'the json fence was not defused');
   assert.ok(forPreview.includes('```'), 'the fence itself should remain, only its language goes');
   assert.ok(forPreview.includes('Body text.'), 'the body was lost');
+});
+
+// ─── The documents rail and the document conversation (parity phases 3–4) ──
+import {
+  compactAge as railAge,
+  conversationChannelForDoc,
+  CHAT_CHANNEL_MAX,
+  moveParentForRail,
+  recentDocuments,
+  sectionDocumentCount,
+  sectionFolderId,
+  sectionKeyOfFolder,
+  uploadTitle,
+} from '../knowledge/knowledgeFormat.ts';
+
+test('section folders: a drop on a section root moves to parentId null, never to the synthetic id', () => {
+  assert.equal(sectionFolderId('confluence-eng'), 'section:confluence-eng');
+  assert.equal(sectionKeyOfFolder('section:confluence-eng'), 'confluence-eng');
+  assert.equal(sectionKeyOfFolder('page:100002'), null);
+  assert.equal(moveParentForRail('section:workspace_drafts'), null);
+  assert.equal(moveParentForRail(null), null);
+  assert.equal(moveParentForRail('page:100001'), 'page:100001');
+});
+
+test('sectionDocumentCount counts documents, not content-less folders', () => {
+  const section: KnowledgeSection = { key: 's', title: 'S', kind: 'local', nodes: [
+    { id: 'ec:dir', title: 'Dir', parent_id: null, is_dir: true },
+    { id: 'ec:dir/a.md', title: 'A', parent_id: 'ec:dir', is_dir: false },
+    { id: 'page:1', title: 'Page folder', parent_id: null, is_dir: true, page_id: '1' },
+  ] };
+  assert.equal(sectionDocumentCount(section), 2);
+});
+
+test('recentDocuments: newest first, documents only, capped', () => {
+  const sections: KnowledgeSection[] = [{ key: 's', title: 'S', kind: 'local', nodes: [
+    { id: 'old', title: 'Old', parent_id: null, is_dir: false, updated_at: '2026-09-01T00:00:00Z' },
+    { id: 'dir', title: 'Dir', parent_id: null, is_dir: true, updated_at: '2026-09-29T00:00:00Z' },
+    { id: 'new', title: 'New', parent_id: null, is_dir: false, updated_at: '2026-09-28T00:00:00Z' },
+    { id: 'bin', title: 'Bin', parent_id: null, is_dir: false, viewable: false, updated_at: '2026-09-29T00:00:00Z' },
+    { id: 'undated', title: 'Undated', parent_id: null, is_dir: false },
+  ] }];
+  assert.deepEqual(recentDocuments(sections).map((n) => n.id), ['new', 'old']);
+  assert.deepEqual(recentDocuments(sections, 1).map((n) => n.id), ['new']);
+});
+
+test('compactAge: the rail\'s short age column', () => {
+  assert.equal(railAge(null), '');
+  assert.equal(railAge(new Date().toISOString()), 'now');
+  const now = Date.parse('2026-09-29T12:00:00Z');
+  assert.equal(railAge('2026-09-29T11:48:00Z', now), '12m');
+  assert.equal(railAge('2026-09-29T07:00:00Z', now), '5h');
+  assert.equal(railAge('2026-09-20T12:00:00Z', now), '9d', 'never a calendar date');
+  assert.equal(railAge('2026-06-01T12:00:00Z', now), '4mo');
+  assert.equal(railAge('2026-09-29 11:00:00+00', now), '1h', 'a Postgres timestamptz string');
+});
+
+test('conversationChannelForDoc: plain when it fits the chat service, hashed and stable when it does not', () => {
+  assert.equal(conversationChannelForDoc('page:100002'), 'assessment:doc:page:100002');
+  const draft = 'draft:6f1c1f8e-2b7a-4f7e-9a53-0d3c1b2a4e5f';
+  const hashed = conversationChannelForDoc(draft);
+  assert.match(hashed, /^assessment:doc:h:[0-9a-z]+$/);
+  assert.ok(hashed.length <= CHAT_CHANNEL_MAX);
+  assert.equal(conversationChannelForDoc(draft), hashed, 'stable across calls');
+  assert.notEqual(conversationChannelForDoc('draft:6f1c1f8e-2b7a-4f7e-9a53-0d3c1b2a4e60'), hashed);
+  // A path id (`/`, `.`) is not a legal channel character either.
+  assert.match(conversationChannelForDoc('ec:organization/raci.md'), /^assessment:doc:h:/);
+});
+
+test('uploadTitle: first heading, else the file name', () => {
+  assert.equal(uploadTitle('notes.md', 'intro\n\n# Rubric notes ##\n\nbody'), 'Rubric notes');
+  assert.equal(uploadTitle('Team plan.markdown', 'no heading'), 'Team plan');
+  assert.equal(uploadTitle('.md', ''), 'Untitled');
+});
+
+test('presenceAvatarUsers names each peer from its presence metadata', async () => {
+  const { presenceAvatarUsers } = await import('../knowledge/knowledgeFormat.ts');
+  assert.deepEqual(presenceAvatarUsers([
+    { clientId: 'c1', status: 'online', metadata: { displayName: 'Farah Osei' } },
+    { clientId: 'c2', status: 'away', metadata: {} },
+  ]), [{ id: 'c1', name: 'Farah Osei' }, { id: 'c2', name: 'Someone', idle: true }]);
 });
