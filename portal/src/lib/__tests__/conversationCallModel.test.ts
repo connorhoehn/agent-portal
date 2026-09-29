@@ -13,8 +13,7 @@ import {
   callTargets,
   peopleFromSearchChannel,
   searchCallChannel,
-  uniquePeople,
-} from '../conversationCallModel.ts';
+  uniquePeople, peopleFromRecordKeys } from '../conversationCallModel.ts';
 
 test('searchCallChannel is order- and duplicate-insensitive, null with nobody', () => {
   assert.equal(searchCallChannel(['p-004', 'p-002', 'p-004']), 'search:p-002,p-004');
@@ -66,4 +65,21 @@ test('peopleFromRecordKeys: selected people then attached ones, named when a rec
     { personId: 'p-002', name: 'Vera Green' },
     { personId: 'p-051', name: 'Nora Chang' },
   ]);
+});
+
+test('callTargets: only yourself selected reports selfOnly, not "nobody has a sign-in"', () => {
+  const users = [{ personId: 'p-1', userId: 'u-me', displayName: 'Me' }, { personId: 'p-2', userId: 'u-you', displayName: 'You' }];
+  const selfOnly = callTargets([{ personId: 'p-1', name: 'Me' }], users, 'u-me');
+  assert.equal(selfOnly.targets.length, 0);
+  assert.equal(selfOnly.selfOnly, true);
+  const withOther = callTargets([{ personId: 'p-1', name: 'Me' }, { personId: 'p-2', name: 'You' }], users, 'u-me');
+  assert.equal(withOther.selfOnly, false);
+  assert.equal(withOther.targets.length, 1);
+  const unlinked = callTargets([{ personId: 'p-1', name: 'Me' }, { personId: 'p-9', name: 'Ghost' }], users, 'u-me');
+  assert.equal(unlinked.selfOnly, false); // someone was skipped for a real reason
+});
+
+test('peopleFromRecordKeys: search results supply names without becoming people', () => {
+  const people = peopleFromRecordKeys(['person:p-051'], [], [{ type: 'person', id: 'p-051', title: 'Nora Chang' }, { type: 'person', id: 'p-999', title: 'Not selected' }]);
+  assert.deepEqual(people, [{ personId: 'p-051', name: 'Nora Chang' }]);
 });

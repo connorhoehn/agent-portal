@@ -81,8 +81,12 @@ export function SearchComposer({ value, onChange, onSubmit, disabled, agents, re
   const [params, setParams] = useSearchParams();
   const selection = params.get('selection') ?? '';
   const personRefs = references.filter(r => r.type === 'person').map(r => `${r.id}=${r.title}`).join('|');
-  const people = useMemo(() => peopleFromRecordKeys(selection.split(',').filter(Boolean), references),
-    [selection, personRefs]); // keyed on the people, not the array identity
+  // Names for selected people come from the results as well as the attached
+  // references (2026-09-29: a person selected on the graph but not attached
+  // showed as a raw `p-051` in the Start call tooltip).
+  const resultPeople = contextSuggestions.filter(r => r.type === 'person').map(r => `${r.id}=${r.title}`).join('|');
+  const people = useMemo(() => peopleFromRecordKeys(selection.split(',').filter(Boolean), references, contextSuggestions),
+    [selection, personRefs, resultPeople]); // keyed on the people, not the array identity
   const named = people.filter(p => p.name !== p.personId).map(p => p.name);
   const call = usePeopleCall({
     people,

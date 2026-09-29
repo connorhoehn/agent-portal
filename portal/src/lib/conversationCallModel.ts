@@ -19,6 +19,8 @@ export interface CallTargets {
   targets: CallTarget[];
   /** People with no user in this tenant — named in the UI, not rung. */
   skipped: CallPerson[];
+  /** Every callable person selected was the caller: nobody else to ring. */
+  selfOnly: boolean;
 }
 
 /** People in order; a person listed twice (or with no id) counts once. */
@@ -38,19 +40,23 @@ export function callTargets(
   users: RosterUser[] | null,
   selfUserId: string | null,
 ): CallTargets {
-  if (!users) return { targets: [], skipped: [] };
+  if (!users) return { targets: [], skipped: [], selfOnly: false };
   const byPerson = new Map(users.map((u) => [u.personId, u]));
   const targets: CallTarget[] = [];
   const skipped: CallPerson[] = [];
   const rung = new Set<string>();
+  let self = false;
   for (const p of people) {
     const u = byPerson.get(p.personId);
     if (!u) { skipped.push(p); continue; }
-    if (u.userId === selfUserId || rung.has(u.userId)) continue;
+    if (u.userId === selfUserId) { self = true; continue; }
+    if (rung.has(u.userId)) continue;
     rung.add(u.userId);
     targets.push({ userId: u.userId, displayName: u.displayName || p.name });
   }
-  return { targets, skipped };
+  // 2026-09-29: with only yourself selected the reason used to say "nobody
+  // here has a sign-in", which is untrue — you do.
+  return { targets, skipped, selfOnly: self && targets.length === 0 && skipped.length === 0 };
 }
 
 /** "Maya Patel has no OrgIQ sign-in, so the call will not ring them." */
@@ -139,8 +145,10 @@ export function callChannelHref(channel: string | null | undefined): string | nu
 export function peopleFromRecordKeys(
   keys: string[],
   records: { type: string; id: string; title: string }[],
+  /** Records that only supply names (search results): never added as people. */
+  known: { type: string; id: string; title: string }[] = [],
 ): CallPerson[] {
-  const names = new Map(records.filter((r) => r.type === 'person').map((r) => [r.id, r.title]));
+  const names = new Map([...known, ...records].filter((r) => r.type === 'person').map((r) => [r.id, r.title]));
   const ids = [
     ...keys.filter((k) => k.startsWith('person:')).map((k) => k.slice('person:'.length)),
     ...records.filter((r) => r.type === 'person').map((r) => r.id),

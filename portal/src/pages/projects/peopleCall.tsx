@@ -65,7 +65,7 @@ export function usePeopleCall({
     host && channel && personIds ? `/api/roster/users?personIds=${encodeURIComponent(personIds)}` : null,
   );
   const selfId = host?.self?.userId ?? null;
-  const { targets, skipped } = useMemo(
+  const { targets, skipped, selfOnly } = useMemo(
     () => callTargets(people, mapping?.users ?? null, selfId),
     [people, mapping, selfId],
   );
@@ -88,7 +88,7 @@ export function usePeopleCall({
     signedIn: !!host.self,
     usersLoaded: !!mapping,
     targets,
-    nobodyReason,
+    nobodyReason: selfOnly ? 'You are the only person selected — pick someone else to call' : nobodyReason,
   });
   // The shell's call is this page's when the bound lobby is this page's (or,
   // for a callee, the ring carried this page's channel).
@@ -100,7 +100,11 @@ export function usePeopleCall({
   const startButton = (
     <Button
       size="sm"
-      variant="secondary"
+      variant="ghost"
+      // The composer's dock family (2026-09-29): its own controls (Workflow ▾,
+      // the mode pill) are 28px, 12px/500, transparent; a filled 26px
+      // 12px/400 button beside them read as a different family.
+      className="h-7 text-[12px] font-medium"
       data-testid={startTestId}
       disabled={!availability.ok || inCall}
       title={!availability.ok ? availability.reason

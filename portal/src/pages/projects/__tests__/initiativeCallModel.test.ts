@@ -36,7 +36,7 @@ test('rings linked people except yourself; unlinked people are skipped, not rung
 });
 
 test('nothing is decided before the user mapping arrives', () => {
-  assert.deepEqual(initiativeCallTargets([vera, nora], null, 'u-vera'), { targets: [], skipped: [] });
+  assert.deepEqual(initiativeCallTargets([vera, nora], null, 'u-vera'), { targets: [], skipped: [], selfOnly: false });
 });
 
 test('the skipped notice names each person', () => {
