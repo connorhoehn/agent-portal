@@ -18,6 +18,7 @@
 // workspace behind, not a soft in-place toggle.
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { ChoiceList, ChoiceRow } from '@connorhoehnslalom/ui-components';
 import {
   Avatar,
   Button,
@@ -398,52 +399,25 @@ export default function SelectContextPage() {
                     {TENANT_META[tenant]?.blurb}
                   </T>
 
-                  <Stack gap="none" className="mt-2">
+                  {/* Library rows (ChoiceList/ChoiceRow, 2026-09-29): a title
+                      and a one-line hint per role. These were two-line labels
+                      inside a `Button`, and the library's one-box-per-size
+                      button (h-9 since 2.407.14) clipped the hint. */}
+                  <ChoiceList className="mt-2" data-testid={`select-roles-${tenant}`}>
                     {roles.map(role => {
                       const isCurrent = isCurrentAccount && currentRole === role;
                       return (
-                        <Button
+                        <ChoiceRow
                           key={role}
-                          variant="ghost"
-                          aria-current={isCurrent ? 'true' : undefined}
-                          aria-label={`Enter ${tenantLabel(tenant)} as ${roleLabel(role)}${isCurrent ? ' (current workspace)' : ''}`}
-                          onClick={() => void choose(tenant, role)}
-                          className={[
-                            // Only a TOP rule is wanted, to separate stacked
-                            // role rows. `border-t` alone does not achieve
-                            // that: the library's `ghost` variant already
-                            // sets `border border-border` on all four sides
-                            // (it is `secondary` with a transparent fill, not
-                            // a chromeless button), so the row drew a full
-                            // box. The other three sides have to be turned
-                            // off explicitly. Queued for a borderless variant.
-                            'group block w-full rounded-none justify-start border-x-0 border-b-0 border-t border-[var(--color-border)] px-4 py-2.5 text-left',
-                            'transition-colors hover:bg-[var(--color-surface-hover)]',
-                            isCurrent ? 'bg-[var(--color-primary-soft)]' : '',
-                          ].join(' ')}
-                        >
-                          <Inline align="center" gap="sm">
-                            <Stack gap="none" className="min-w-0 flex-1">
-                              <T className="block text-[13px] font-semibold text-[var(--color-text-primary)]">
-                                {roleLabel(role)}
-                              </T>
-                              <T className="block truncate text-[11.5px] text-[var(--color-text-secondary)]">
-                                {ROLE_META[role]?.hint ?? role}
-                              </T>
-                            </Stack>
-                            <Inline
-                              as="span"
-                              aria-hidden
-                              gap="none"
-                              className="shrink-0 text-sm text-[var(--color-text-tertiary)] transition-transform group-hover:translate-x-0.5 group-focus-visible:translate-x-0.5"
-                            >
-                              →
-                            </Inline>
-                          </Inline>
-                        </Button>
+                          title={roleLabel(role)}
+                          description={ROLE_META[role]?.hint ?? role}
+                          selected={isCurrent}
+                          onSelect={() => void choose(tenant, role)}
+                          data-testid={`select-role-${tenant}-${role}`}
+                        />
                       );
                     })}
-                  </Stack>
+                  </ChoiceList>
                 </Card>
               );
             })}
