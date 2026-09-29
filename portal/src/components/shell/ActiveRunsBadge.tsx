@@ -21,8 +21,8 @@ import { useNavigate } from 'react-router';
 import { ChevronIcon, DropdownMenu, type DropdownMenuItem } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch';
-import { useSession } from '../../lib/auth';
 import { relativeTime } from '../../lib/relativeTime';
+import { useOrgiqShellPolls, useRefreshSessionOnDeny } from './orgiqShellPolls';
 
 interface WireRun {
   id: string;
@@ -49,14 +49,15 @@ export function ActiveRunsBadge() {
   // started it could not open.
   const { can } = useCapabilities();
   const mayOpenLab = can('ManageDevbox');
-  // `/api/bots/*` is requireTenant('orgiq') — gate the fetch on tenant
-  // BEFORE it fires rather than letting an assessment session 403 on every
-  // poll and swallow it as `error`. Same pattern as Layout's `work/summary`.
-  const { session } = useSession();
-  const { data } = useFetch<{ runs: WireRun[] }>(
-    session?.tenant === 'orgiq' ? '/api/bots/active-runs' : null,
+  // `/api/bots/*` is requireTenant('orgiq') — gate the fetch BEFORE it fires
+  // rather than letting an assessment session 403 on every poll and swallow
+  // it as `error` (orgiqShellPolls.ts says why the tenant alone is not enough).
+  const orgiq = useOrgiqShellPolls();
+  const { data, error } = useFetch<{ runs: WireRun[] }>(
+    orgiq ? '/api/bots/active-runs' : null,
     POLL_MS,
   );
+  useRefreshSessionOnDeny(error);
   const runs = useMemo(() => data?.runs ?? [], [data]);
 
   const items = useMemo<DropdownMenuItem[]>(() => runs.map((run) => {

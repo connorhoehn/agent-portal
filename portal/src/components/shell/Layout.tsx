@@ -38,6 +38,7 @@ import { MasqueradeMenu } from './MasqueradeMenu';
 import { GatewayStatusBadge } from './GatewayStatusBadge';
 import { ActiveRunsBadge } from './ActiveRunsBadge';
 import { LocalComputeBadge } from './LocalComputeBadge';
+import { useOrgiqShellPolls, useRefreshSessionOnDeny } from './orgiqShellPolls';
 import { usePortalCommands, usePortalDynamicCommands, groupRank } from './portalCommands';
 import { DevboxQuickSwitch, type PaletteScope } from './DevboxQuickSwitch';
 import { brandMarkUri, gradientStops } from './brandMark';
@@ -196,9 +197,12 @@ export function Layout() {
   const { session } = useSession();
   const { data: health } = useFetch<Health>('/api/health', 30_000);
   // /api/work is orgiq-only (requireTenant('orgiq')); polling it from an
-  // out-of-tenant session logged a DENY in the authz audit every 15s.
-  const { data: work } = useFetch<WorkSummary>(
-    session?.tenant === 'orgiq' ? '/api/work/summary' : null, 15_000);
+  // out-of-tenant session logged a DENY in the authz audit every 15s. Gated on
+  // the capability probe too, not the session alone (orgiqShellPolls.ts).
+  const orgiqPolls = useOrgiqShellPolls();
+  const { data: work, error: workError } = useFetch<WorkSummary>(
+    orgiqPolls ? '/api/work/summary' : null, 15_000);
+  useRefreshSessionOnDeny(workError);
   const { pathname } = useLocation();
   const navigate = useNavigate();
 
@@ -387,10 +391,10 @@ export function Layout() {
                   "Open Computer Lab" action leading out of the tenant. The
                   server filters these nodes by OWNER, which is not the same
                   question as which workspace you are standing in. */}
-              {/* What the fleet is running right now. Not tenant-guarded like
-                  LocalComputeBadge: the runs are the caller's own org work
-                  either way, and losing track of a live run is the failure
-                  this exists to prevent. Renders nothing when nothing runs. */}
+              {/* What the fleet is running right now. Renders nothing when
+                  nothing runs. Its poll is orgiq-only (`/api/bots` is
+                  requireTenant('orgiq')), so in the assessment shell it
+                  never fetches and never renders. */}
               <ActiveRunsBadge />
               {session?.tenant === 'orgiq' && <LocalComputeBadge />}
               <GatewayStatusBadge />

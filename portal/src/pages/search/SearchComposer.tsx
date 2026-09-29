@@ -5,13 +5,23 @@
 // templates; `/agent <name>` picks an agent explicitly, anything else routes to
 // the supervisor. `#` attaches records as context. Attachments stay in the
 // draft and are not forwarded (as on the initiative composer).
+//
+// Calls (docs/social-calls-plan.md step 6): with people in the selection
+// (`?selection=person:…`, e.g. picked on the connections tab) or attached as
+// context, the dock row offers Start call — the initiative composer's
+// usePeopleCall, ringing those people's OrgIQ sign-ins in the dm lobby of you +
+// them. While that call is on, the row is the call shelf; a ring anywhere in
+// /iq is answered by the shell's toast (InitiativeCallHost in IqLayout).
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Stack } from '@connorhoehnslalom/ui-components/shared';
+import { useSearchParams } from 'react-router';
+import { Inline, Stack } from '@connorhoehnslalom/ui-components/shared';
 import { AgentComposerDock, type RichChatComposerHandle, type RichChatDraft } from '@connorhoehnslalom/ui-components/social/rich-composer';
 import { recordKey, SEARCH_LABELS, type SearchRecord } from './searchTypes';
 import { parseSearchCommand, type SearchAgent } from './searchCommands';
 import { searchWorkflowCommands, searchWorkflowIn, type SearchWorkflowRow } from './searchWorkflows';
+import { usePeopleCall } from '../projects/peopleCall';
+import { peopleFromRecordKeys, searchCallChannel } from '../../lib/conversationCallModel';
 
 export interface SearchComposerProps {
   value: string;
@@ -68,6 +78,24 @@ export function SearchComposer({ value, onChange, onSubmit, disabled, agents, re
   const commands = useMemo(() => [{ trigger: '/agent', label: 'Ask a specific agent', description: 'Choose an available agent for this message.',
     argument: { placeholder: 'Choose an agent', search: (query: string) => agents.filter(agent => `${agent.name} ${agent.id}`.toLowerCase().includes(query.toLowerCase())).map(agent => ({ id: agent.id, label: agent.name, hint: agent.id })) },
   }, ...searchWorkflowCommands(workflows)], [agents, workflows]);
+  const [params, setParams] = useSearchParams();
+  const selection = params.get('selection') ?? '';
+  const personRefs = references.filter(r => r.type === 'person').map(r => `${r.id}=${r.title}`).join('|');
+  const people = useMemo(() => peopleFromRecordKeys(selection.split(',').filter(Boolean), references),
+    [selection, personRefs]); // keyed on the people, not the array identity
+  const named = people.filter(p => p.name !== p.personId).map(p => p.name);
+  const call = usePeopleCall({
+    people,
+    channel: searchCallChannel(people.map(p => p.personId)),
+    title: named.length ? named.join(', ') : 'Call from Search',
+    nobodyReason: 'Nobody selected here has an OrgIQ sign-in to call',
+    onOpenPeople: () => setParams(prev => { const next = new URLSearchParams(prev); next.set('tab', 'connections'); return next; }),
+    startTestId: 'search-start-call',
+    dockTestId: 'search-call-dock',
+  });
+  const dock = call.dock ?? (people.length > 0 && call.startButton
+    ? <Inline justify="end" className="px-2 py-1" data-testid="search-call-row">{call.startButton}</Inline>
+    : null);
   const attachDraftReferences = () => {
     editorRef.current?.editor?.state.doc.descendants(node => {
       if (node.type.name !== 'docref') return;
@@ -78,7 +106,7 @@ export function SearchComposer({ value, onChange, onSubmit, disabled, agents, re
   };
   return <Stack gap="none" className="min-w-0">
     <AgentComposerDock presentation="document" label="Search composer" inputLabel="Search question" data-testid="search-composer" composerTestId="search-rich-composer"
-      composerRef={editorRef} allowEmoji={false} disabled={disabled}
+      composerRef={editorRef} allowEmoji={false} disabled={disabled} dock={dock}
       disabledModes={['chat', 'terminal']}
       modeUnavailableReasons={{ chat: 'Search has no discussion thread — ask the agent', terminal: 'Search has no terminal' }}
       modePlaceholders={{ agent: 'Search, or ask a question — # for context, /agent to choose an agent…' }}

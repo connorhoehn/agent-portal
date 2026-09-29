@@ -23,6 +23,7 @@ import { useSession } from '../../lib/auth';
 import {
   COMPUTER_LAB_PATH, LOCAL_COMPUTE_PATH, canOpenComputerLab,
 } from '../../lib/devboxAccess';
+import { useOrgiqShellPolls, useRefreshSessionOnDeny } from './orgiqShellPolls';
 
 interface WireSession {
   sessionId: string;
@@ -78,10 +79,12 @@ export function LocalComputeBadge() {
   const navigate = useNavigate();
   const { can, ready } = useCapabilities();
   const { session } = useSession();
-  // 401/403 (signed out, or a role without the read floor) surfaces as
-  // `error` and renders nothing — the header never nags about a feature the
-  // session can't reach.
-  const { data } = useFetch<{ nodes: WireNode[] }>('/api/local-compute/nodes', POLL_MS);
+  // `/api/local-compute/*` is requireTenant('orgiq'): the fetch is gated
+  // before it fires (orgiqShellPolls.ts), not left to 403 on every poll. A
+  // 401/403 that still gets through surfaces as `error` and renders nothing.
+  const orgiq = useOrgiqShellPolls();
+  const { data, error } = useFetch<{ nodes: WireNode[] }>(orgiq ? '/api/local-compute/nodes' : null, POLL_MS);
+  useRefreshSessionOnDeny(error);
   const nodes = useMemo(() => (data?.nodes ?? []).map(toMachineNode), [data]);
 
   return (

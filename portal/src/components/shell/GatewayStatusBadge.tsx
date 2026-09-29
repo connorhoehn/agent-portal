@@ -1,26 +1,23 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { createGatewayClient, gatewayEndpoints } from '../../lib/gatewayEndpoint.ts';
+import { useSession } from '../../lib/auth';
+import { useRealtimeEndpoints } from '../../lib/useRealtimeEndpoints';
 import type { ConnectionState } from '@connorhoehnslalom/realtime-modules/client/ws';
 import { useGateway } from '@connorhoehnslalom/realtime-modules/client/ws';
 import { Inline, StatusDot } from '@connorhoehnslalom/ui-components/shared';
 import { nextPollDelay, isDocumentHidden } from '../../hooks/pollSchedule';
 
-// VITE_GATEWAY_URL is exposed to the browser bundle by Vite at build time.
-// We avoid `import.meta.env` typing concerns (no vite-env.d.ts in this repo)
-// by reading via a typed-safe lookup. Missing configuration makes no requests.
-const CONFIGURED_GATEWAY_URL =
-  (import.meta as unknown as { env?: Record<string, string | undefined> })
-    .env?.VITE_GATEWAY_URL;
-const GATEWAY_URL = gatewayEndpoints(CONFIGURED_GATEWAY_URL)?.http;
-
+// The gateway's URL comes from the realtime-token response (`gatewayUrl`),
+// with VITE_GATEWAY_URL as a local override (lib/useRealtimeEndpoints.ts).
+// Unknown, the badge renders nothing and makes no requests.
+//
 // The bound `fetch` is load-bearing — see the long note in hooks/useGatewayInfo.
 // The library defaults to `globalThis.fetch`, keeps it as a class field and
 // calls it as `this.fetchImpl(...)`, which re-binds `this` away from `window`.
 // In a browser that throws before the request is sent, so this dot had been
 // painting red on every page of every deployment while nothing was wrong with
-// any gateway. `fetch` is the library's own injection seam; the underlying bug
-// is queued in docs/ui-components-queue.md.
-const client = createGatewayClient(CONFIGURED_GATEWAY_URL);
+// any gateway. `fetch` is the library's own injection seam (createGatewayClient
+// passes it); the underlying bug is queued in docs/ui-components-queue.md.
 
 type HttpStatus = 'unknown' | 'healthy' | 'unhealthy';
 
@@ -52,7 +49,8 @@ const POLL_MS = 30_000;
  * The HTTP poll and WS connection are independent; both are kept so structured
  * health data (uptime, node count) remains available without a live WS.
  *
- * Gateway base URL: `VITE_GATEWAY_URL`; no indicator or polling when unconfigured.
+ * Gateway base URL: the realtime token's `gatewayUrl` (VITE_GATEWAY_URL overrides);
+ * no indicator or polling when neither is known.
  *
  * Not `useFetch`: the gateway is a separate origin from the portal's `/api`
  * and this client's `request()` sends no `credentials`, so routing it
@@ -65,6 +63,16 @@ const POLL_MS = 30_000;
 export function GatewayStatusBadge() {
   const [httpStatus, setHttpStatus] = useState<HttpStatus>('unknown');
   const { connectionState } = useGateway();
+  const { session } = useSession();
+  const { gatewayUrl } = useRealtimeEndpoints(!!session);
+  // A malformed URL (gatewayEndpoints throws) hides the badge rather than the page.
+  const { gatewayHttp, client } = useMemo(() => {
+    try {
+      return { gatewayHttp: gatewayEndpoints(gatewayUrl ?? undefined)?.http ?? null, client: createGatewayClient(gatewayUrl ?? undefined) };
+    } catch {
+      return { gatewayHttp: null, client: null };
+    }
+  }, [gatewayUrl]);
 
   useEffect(() => {
     if (!client) return;
@@ -106,7 +114,7 @@ export function GatewayStatusBadge() {
       if (timeoutId) clearTimeout(timeoutId);
       document.removeEventListener('visibilitychange', onVisibilityChange);
     };
-  }, []);
+  }, [client]);
 
   if (!client) return null;
 
@@ -117,7 +125,7 @@ export function GatewayStatusBadge() {
       <StatusDot
         size="xs"
         color={HTTP_COLORS[httpStatus]}
-        title={`gateway HTTP (${GATEWAY_URL}): ${httpStatus}`}
+        title={`gateway HTTP (${gatewayHttp}): ${httpStatus}`}
         aria-label={`gateway HTTP status: ${httpStatus}`}
       />
       <StatusDot

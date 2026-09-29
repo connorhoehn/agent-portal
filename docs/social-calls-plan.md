@@ -159,8 +159,17 @@ wire contract and where state lives with two replicas).
    next fetch. A client should re-fetch before `expiresAt`; nothing in the
    portal calls it yet.
 
-   **Who verifies it — gateway settled 2026-09-29 (option a, as the
-   middleware's own `/ws`; see step 7); platform-api and the SFU not yet.**
+   **Who verifies it — settled 2026-09-29 (option a).** The gateway is the
+   middleware's own `/ws` (step 7). platform-api verifies it in
+   `requireAuth`/`optionalAuth` beside Cognito when `REALTIME_JWT_SECRET` is
+   set (platform-api `416df6d9`, `src/lib/orgiqRealtimeToken.ts`: HS256,
+   `iss`/`aud`/`exp`/`tokenKind`, `org` → `orgId`), and its `lobbyAccess.ts`
+   applies the middleware's `lobbyGuard` to OrgIQ callers. The SFU never sees
+   the user's token: platform-api calls LVS's session lifecycle with
+   `VIDEO_SERVICE_TOKEN`, which LVS accepts as `LVS_SERVICE_TOKEN`
+   (live-video-streaming `cc28d028`). Walked with no `SKIP_AUTH` and no
+   `LVS_AUTH_BYPASS` — [verified tokens](social-calls-first-call.md#verified-tokens-no-bypasses-2026-09-29).
+   The history below is what the options were.
    realtime-examples' websocket-gateway
    (`Sec-WebSocket-Protocol: bearer-token-v1, <jwt>`,
    `src/middleware/auth-middleware.ts`) and platform-api (`Authorization:
@@ -210,7 +219,8 @@ wire contract and where state lives with two replicas).
    0.98.0 sha once it exists (≥ 0.97.11 until then).
 
 5. **Initiative page — SHIPPED 2026-09-29** (`portal/src/pages/projects/InitiativeCall.tsx`,
-   `InitiativeCallHost.tsx` in the /iq shell, `IncomingCallToast.tsx`,
+   `InitiativeCallHost.tsx` in the /iq shell, the toast — since step 6 in
+   `lib/conversationCall.tsx` —
    `GET /api/roster/users` for person → user), walked with two users against
    the local stack including media: [the first call](social-calls-first-call.md).
    The dock sits on the initiative composer (`AgentComposerDock dock`), not a
@@ -220,9 +230,31 @@ wire contract and where state lives with two replicas).
    (`dm:` lobby of sorted user ids); incoming ring → `IncomingCallToast`
    → accept; Leave = hook leave + `POST /end`. Judge: a Playwright walk
    with two identities in one call against the local stack.
-6. **Search.** The same `ChatPanel` + dock around `AgentComposerDock` on
-   the Answer view (the `RecordGraphCard` sits in the transcript beside
-   it), calling the people in the selection.
+6. **Search — SHIPPED 2026-09-29** (not committed). The Search composer
+   (`portal/src/pages/search/SearchComposer.tsx`, an `AgentComposerDock`)
+   has the initiative composer's call: with people in the selection
+   (`?selection=person:…`, e.g. picked on the connections tab) or attached
+   as context, its dock row offers **Start call** (`search-start-call`),
+   ringing their OrgIQ sign-ins in `orgiq:dm:<sorted user ids>`
+   (`dmLobbyName`); while the call is on, the row is the shelf
+   (`search-call-dock`). The invite's channel is `search:<sorted person
+   ids>`, so the callee's Accept (the shell's toast, on any /iq page) opens
+   `/iq/search?tab=connections&selection=…` on the same people and answers
+   there. The mechanics are shared, not copied: `pages/projects/peopleCall.tsx`
+   (`usePeopleCall` — roster mapping, lobby binding, availability, Start call,
+   dock) serves both composers; the pure model moved to
+   `lib/conversationCallModel.ts` (`initiativeCallModel.ts` re-exports it, its
+   tests unchanged; `callChannelHref` decides where Accept goes). Dock + toast
+   are `lib/conversationCall.tsx` — composed locally with the props of the
+   library's `ConversationCallDock` / `IncomingCallToast`, built on
+   ui-components branch `feat/conversation-call-dock` (unreleased); after the
+   release the swap is that one module's body. Judge:
+   `portal/e2e/search-call.spec.ts` — two contexts, fake media, ring → accept
+   → both "2 people" → leave, and ring → decline (passed against the `:5184`
+   Vite with `VITE_PLATFORM_API_URL`; it skips, saying why, on a portal that
+   cannot place calls). Original step: the same `ChatPanel` + dock around
+   `AgentComposerDock` on the Answer view, calling the people in the
+   selection — the dock went on the composer instead, as on the initiative.
 7. **Cross-tenant.** Lobby names prefixed by tenant (`<tenant>:dm:<ids>`),
    presence directory scoped per tenant, platform-api's channel→org
    mapping made tenant-aware, the token bridge carrying every tenant the
@@ -259,9 +291,9 @@ wire contract and where state lives with two replicas).
    tenant-scoped (the portal's channel names carry no tenant prefix);
    presence directory per tenant; the router is the library's
    single-process `LocalRealtimeRouter`, so Redis shares call state but not
-   frame fan-out — one task until a Redis-backed router exists; platform-api's
-   tenant-aware ad hoc lobbies (`lobbyAccess.ts`) and its and the SFU's token
-   verifiers (deploy plan risk #2).
+   frame fan-out — one task until a Redis-backed router exists. (platform-api's
+   tenant-aware lobbies and the platform-api/SFU verifiers shipped
+   2026-09-29 — step 3.)
 
 ## Deploying it (see `docs/social-calls-deploy-plan.md`, 2026-09-28)
 

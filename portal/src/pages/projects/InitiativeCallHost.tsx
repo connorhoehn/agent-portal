@@ -5,24 +5,26 @@
 //     going while you move between pages (the dock is drawn by the initiative
 //     page; elsewhere the call carries on undocked);
 //   - incoming rings reach you on any /iq page (useIncomingConversationCalls →
-//     IncomingCallToast), and Accept binds the call to the ring's lobby, opens
-//     the initiative it is about and answers it;
-//   - media has an LVSProvider above it when VITE_VIDEO_ENDPOINT is set. Unset,
-//     there is no provider: signalling and the platform-api session still run,
+//     IncomingCallToast, lib/conversationCall.tsx), and Accept binds the call
+//     to the ring's lobby, opens what it is about (the initiative, or Search on
+//     the same people — callChannelHref) and answers it;
+//   - media has an LVSProvider above it when the SFU's URL is known (the
+//     realtime token's `videoUrl`, or VITE_VIDEO_ENDPOINT). Unknown, there is
+//     no provider: signalling and the platform-api session still run,
 //     and the dock shows initials instead of video.
 //
-// The call hook wants ONE lobby name. An initiative page `bind`s its lobby
-// (tenant-prefixed dm lobby of you + owner + SMEs) while nothing is in
-// progress; a ring being answered, or a call that is not idle, holds the
+// The call hook wants ONE lobby name. A page that can start a call `bind`s its
+// lobby (the tenant-prefixed dm lobby of you + the people it would ring: an
+// initiative's owner + SMEs, or the people selected on Search) while nothing
+// is in progress; a ring being answered, or a call that is not idle, holds the
 // binding so another page cannot pull the call out from under it.
 //
-// Tenant scoping here is the lobby PREFIX only. The gateway's
-// `calls({ lobbyGuard })` would refuse a lobby outside the caller's org, but
-// the gateway is realtime-examples' server, not ours, so nothing enforces it
-// yet (docs/social-calls-plan.md step 7).
+// Tenant scoping: the lobby is tenant-prefixed, and the middleware's own
+// gateway (`/ws`, `calls({ lobbyGuard })`) refuses a lobby outside the
+// caller's tenant (docs/social-calls-plan.md step 7).
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { useNavigate } from 'react-router';
+import { useLocation, useNavigate } from 'react-router';
 import {
   LVSProvider,
   useConversationCall,
@@ -33,14 +35,15 @@ import {
 import { useSession } from '../../lib/auth';
 import { useGatewayFrames } from '../../lib/gatewayFrames';
 import { realtimeTokenSource } from '../../lib/realtimeToken';
-import { IncomingCallToast } from './IncomingCallToast';
-import { initiativeFromChannel } from './initiativeCallModel';
+import { useRealtimeEndpoints } from '../../lib/useRealtimeEndpoints';
+import { IncomingCallToast } from '../../lib/conversationCall';
+import { callChannelHref } from '../../lib/conversationCallModel';
 
 export interface CallLobby {
   lobbyName: string;
-  /** What the dock's title says (the initiative's name). */
+  /** What the dock's title says (the initiative's name, the people on Search). */
   title: string;
-  /** Rides the invite so the callee's toast can open the initiative. */
+  /** Rides the invite so the callee's Accept can open what the call is about (callChannelHref). */
   channel: string | null;
 }
 
@@ -64,10 +67,6 @@ export function useInitiativeCallHost(): InitiativeCallHostValue | null {
   return useContext(Ctx);
 }
 
-const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {};
-const VIDEO_ENDPOINT = env.VITE_VIDEO_ENDPOINT?.trim() || null;
-const PLATFORM_API_ENV = env.VITE_PLATFORM_API_URL?.trim() || null;
-
 // The hook needs a lobby even while nothing is bound; discovery is off then,
 // so this name is never sent anywhere.
 const UNBOUND = '__unbound__';
@@ -76,35 +75,16 @@ const getIdToken = async (): Promise<string> => (await realtimeTokenSource.get()
 // per call with the participant token platform-api mints.
 const noToken = (): string => '';
 
-/**
- * The browser-facing platform-api URL. VITE_PLATFORM_API_URL wins: the
- * middleware's PLATFORM_API_URL (echoed by the realtime token) may be an
- * internal address the browser cannot reach (docs/social-calls-plan.md,
- * "Deploying it" risk 3). The token's value is the fallback.
- */
-function usePlatformApiUrl(signedIn: boolean): string | null {
-  const [fromToken, setFromToken] = useState<string | null>(null);
-  useEffect(() => {
-    if (PLATFORM_API_ENV || !signedIn) return;
-    let live = true;
-    realtimeTokenSource.get().then(
-      (t) => { if (live) setFromToken(t.platformApiUrl ?? null); },
-      () => { if (live) setFromToken(null); },
-    );
-    return () => { live = false; };
-  }, [signedIn]);
-  return PLATFORM_API_ENV ?? fromToken;
-}
-
-function CallHost({ children }: { children: ReactNode }) {
+function CallHost({ children, platformApiUrl }: { children: ReactNode; platformApiUrl: string | null }) {
   const { session } = useSession();
   const navigate = useNavigate();
+  const location = useLocation();
+  const here = `${location.pathname}${location.search}`;
   const frames = useGatewayFrames();
   const self = useMemo(
     () => (session ? { userId: session.sub, displayName: session.name || session.sub } : null),
     [session],
   );
-  const platformApiUrl = usePlatformApiUrl(!!session);
   const [lobby, setLobby] = useState<CallLobby | null>(null);
   const pendingRing = useRef<IncomingConversationCall | null>(null);
 
@@ -132,8 +112,8 @@ function CallHost({ children }: { children: ReactNode }) {
     onAccept: (ring) => {
       pendingRing.current = ring;
       setLobby({ lobbyName: ring.lobbyName, title: ring.callerName, channel: ring.channel });
-      const initiative = initiativeFromChannel(ring.channel);
-      if (initiative) navigate(`/iq/projects/${encodeURIComponent(initiative)}`);
+      const href = callChannelHref(ring.channel);
+      if (href && href !== here) navigate(href);
     },
   });
 
@@ -170,10 +150,23 @@ function CallHost({ children }: { children: ReactNode }) {
   );
 }
 
-/** The shell mount: LVS (when configured) around the call host. */
+/**
+ * The shell mount: LVS (when the SFU's URL is known) around the call host.
+ * Endpoints come from the realtime-token response (`useRealtimeEndpoints`),
+ * with VITE_PLATFORM_API_URL / VITE_VIDEO_ENDPOINT as local overrides. The
+ * video URL is latched: once LVS is mounted it stays mounted, so a token
+ * refresh can never pull the provider out from under a live call. (Arriving
+ * after the first render — a cold token — remounts the page once, before any
+ * call can exist.)
+ */
 export function InitiativeCallHost({ children }: { children: ReactNode }) {
-  const host = <CallHost>{children}</CallHost>;
-  return VIDEO_ENDPOINT
-    ? <LVSProvider baseUrl={VIDEO_ENDPOINT} getAuthToken={noToken}>{host}</LVSProvider>
+  const { session } = useSession();
+  const { platformApiUrl, videoUrl } = useRealtimeEndpoints(!!session);
+  const latched = useRef<string | null>(null);
+  if (videoUrl && !latched.current) latched.current = videoUrl;
+  const video = latched.current;
+  const host = <CallHost platformApiUrl={platformApiUrl}>{children}</CallHost>;
+  return video
+    ? <LVSProvider baseUrl={video} getAuthToken={noToken}>{host}</LVSProvider>
     : host;
 }
