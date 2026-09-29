@@ -4,10 +4,10 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { GatewayContext, useGateway } from '@connorhoehnslalom/realtime-modules/client';
 import { useGateway as useSocketGateway } from '@connorhoehnslalom/realtime-modules/client/ws';
-import { AuthenticatedGatewaySocket, OptionalGatewayProvider, offlineGateway, gatewayWebSocketUrl } from '../OptionalGatewayProvider.ts';
+import { AuthenticatedGatewaySocket, OptionalGatewayProvider, TokenResolvedGateway, offlineGateway, tokenGatewayUrl, gatewayWebSocketUrl } from '../OptionalGatewayProvider.ts';
 import type { RealtimeTokenSource } from '../../lib/realtimeToken.ts';
 
-test('missing/blank gateway renders an honest disconnected context without a socket provider', () => {
+test('no override and no gatewayUrl in the token renders an honest disconnected context without a socket provider', () => {
   function Probe() {
     const gateway = useGateway();
     assert.equal(gateway, offlineGateway);
@@ -16,8 +16,10 @@ test('missing/blank gateway renders an honest disconnected context without a soc
     return createElement('span', null, gateway.connectionState);
   }
   for (const url of [undefined, '', '  ']) {
-    assert.equal(OptionalGatewayProvider({ url, children: null }).type, GatewayContext.Provider);
-    assert.equal(renderToStaticMarkup(createElement(OptionalGatewayProvider, { url, children: createElement(Probe) })), '<span>disconnected</span>');
+    assert.equal(OptionalGatewayProvider({ url, children: null }).type, TokenResolvedGateway);
+    // A cached token without a gatewayUrl: resolved at first render, offline.
+    const tokens = stubSource('jwt-no-gateway');
+    assert.equal(renderToStaticMarkup(createElement(OptionalGatewayProvider, { url, tokens, children: createElement(Probe) })), '<span>disconnected</span>');
   }
 });
 test('configured gateways mount the authenticated library socket and normalize the WS path once', () => {
@@ -50,8 +52,8 @@ test('library lifecycle registration is inert, while real outbound work fails ex
   assert.throws(() => offlineGateway.reconnect(), /gateway is unavailable/);
 });
 
-function stubSource(token: string | null): RealtimeTokenSource & { gets: number } {
-  const t = token ? { token, expiresAt: '2099-01-01T00:00:00Z' } : null;
+function stubSource(token: string | null, extra: { gatewayUrl?: string } = {}): RealtimeTokenSource & { gets: number } {
+  const t = token ? { token, expiresAt: '2099-01-01T00:00:00Z', ...extra } : null;
   return {
     gets: 0,
     get() { this.gets += 1; return t ? Promise.resolve(t) : new Promise(() => {}); },
@@ -76,11 +78,33 @@ test('the socket is not mounted until the first token request settles', () => {
   assert.equal(html, '', 'no anonymous socket, no children rendered against it');
 });
 
-test('BFF-only mode never touches the token source', () => {
-  // OptionalGatewayProvider with no URL returns the offline context directly;
-  // AuthenticatedGatewaySocket (the only fetcher) is not in the tree.
-  for (const url of [undefined, '']) {
-    const el = OptionalGatewayProvider({ url, children: null });
-    assert.notEqual(el.type, AuthenticatedGatewaySocket);
-  }
+test('without an override the socket URL comes from the realtime token', () => {
+  function Probe() { return createElement('i', null, useSocketGateway().authToken ?? 'none'); }
+  assert.equal(tokenGatewayUrl({ gatewayUrl: 'https://rt.example.com' }), 'wss://rt.example.com/ws');
+  assert.equal(tokenGatewayUrl({ gatewayUrl: 'http://localhost:3001' }), 'ws://localhost:3001/ws');
+  assert.equal(tokenGatewayUrl({}), null);
+  const tokens = stubSource('jwt-from-bff', { gatewayUrl: 'https://rt.example.com' });
+  // The library socket is mounted (its context carries the token) without a
+  // VITE_GATEWAY_URL; the e2e spec asserts the handshake URL itself.
+  assert.equal(renderToStaticMarkup(createElement(OptionalGatewayProvider, { tokens, children: createElement(Probe) })), '<i>jwt-from-bff</i>');
+});
+
+test('a VITE_GATEWAY_URL override wins over the token gatewayUrl', () => {
+  const tokens = stubSource('jwt', { gatewayUrl: 'https://rt.example.com' });
+  const el = OptionalGatewayProvider({ url: 'http://localhost:3001', tokens, children: null });
+  assert.equal(el.type, AuthenticatedGatewaySocket);
+  assert.equal((el.props as { url?: string }).url, 'ws://localhost:3001/ws');
+});
+
+test('a malformed token gatewayUrl goes offline instead of throwing', () => {
+  function Probe() { return createElement('span', null, useGateway() === offlineGateway ? 'offline' : 'live'); }
+  assert.equal(tokenGatewayUrl({ gatewayUrl: 'file:///tmp/socket' }), null);
+  const tokens = stubSource('jwt', { gatewayUrl: 'file:///tmp/socket' });
+  assert.equal(renderToStaticMarkup(createElement(TokenResolvedGateway, { tokens, children: createElement(Probe) })), '<span>offline</span>');
+});
+
+test('nothing renders until the token request settles when no override is set', () => {
+  const tokens = stubSource(null);
+  const html = renderToStaticMarkup(createElement(OptionalGatewayProvider, { tokens, children: createElement('b', null, 'app') }));
+  assert.equal(html, '');
 });

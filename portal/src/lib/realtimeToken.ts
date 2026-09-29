@@ -9,6 +9,12 @@
 // every tenant/role switch and sign-out (lib/tenantCaches.ts) so a token
 // minted for the previous identity is never handed to the next socket.
 // Dependency-free on purpose: tenantCaches.ts imports it.
+//
+// The response also carries the browser-facing realtime endpoints
+// (`gatewayUrl`, `platformApiUrl`, `videoUrl`), taken from the middleware's
+// config at run time, so one portal bundle serves every environment. The
+// build-time `VITE_*` variables survive only as local overrides:
+// `realtimeEndpoints()` lets a non-blank override win over the token's value.
 
 export const REALTIME_TOKEN_URL = '/api/session/realtime-token';
 /** Treat a token as stale this long before its `expiresAt`. */
@@ -18,8 +24,33 @@ export interface RealtimeToken {
   token: string;
   /** ISO-8601, from the server. */
   expiresAt: string;
+  /** The realtime gateway (http(s) or ws(s); `/ws` is appended by the portal). */
   gatewayUrl?: string;
+  /** platform-api as the browser reaches it. */
   platformApiUrl?: string;
+  /** The LVS SFU as the browser reaches it (`LVSProvider baseUrl`). */
+  videoUrl?: string;
+}
+
+export interface RealtimeEndpoints {
+  gatewayUrl: string | null;
+  platformApiUrl: string | null;
+  videoUrl: string | null;
+}
+
+const ENDPOINT_KEYS = ['gatewayUrl', 'platformApiUrl', 'videoUrl'] as const;
+const nonBlank = (v: unknown): string | null => (typeof v === 'string' && v.trim() ? v.trim() : null);
+
+/**
+ * The endpoints to use: a non-blank local override (a `VITE_*` value) wins,
+ * else the token response's value, else null (that service is not deployed).
+ */
+export function realtimeEndpoints(
+  token: Partial<Pick<RealtimeToken, typeof ENDPOINT_KEYS[number]>> | null | undefined,
+  overrides: Partial<Record<typeof ENDPOINT_KEYS[number], string | undefined>> = {},
+): RealtimeEndpoints {
+  const pick = (k: typeof ENDPOINT_KEYS[number]) => nonBlank(overrides[k]) ?? nonBlank(token?.[k]);
+  return { gatewayUrl: pick('gatewayUrl'), platformApiUrl: pick('platformApiUrl'), videoUrl: pick('videoUrl') };
 }
 
 export interface RealtimeTokenSource {
@@ -57,12 +88,11 @@ export function createRealtimeTokenSource(opts: {
     if (typeof body.token !== 'string' || !body.token || typeof body.expiresAt !== 'string') {
       throw new Error('realtime token response is malformed');
     }
-    const token: RealtimeToken = {
-      token: body.token,
-      expiresAt: body.expiresAt,
-      ...(body.gatewayUrl ? { gatewayUrl: body.gatewayUrl } : {}),
-      ...(body.platformApiUrl ? { platformApiUrl: body.platformApiUrl } : {}),
-    };
+    const token: RealtimeToken = { token: body.token, expiresAt: body.expiresAt };
+    for (const key of ENDPOINT_KEYS) {
+      const value = nonBlank(body[key]);
+      if (value) token[key] = value;
+    }
     if (gen === generation) cached = token;
     return token;
   }

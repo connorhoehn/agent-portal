@@ -13,7 +13,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { Annotations, Match, Template } from 'aws-cdk-lib/assertions';
 import { MiddlewareServiceStack } from '../lib/middleware-service-stack';
-import { SocialImagesStack } from '../lib/social-images-stack';
+import { SOCIAL_IMAGE_REPOS, SocialImagesStack, type SocialImageKey } from '../lib/social-images-stack';
 import { SocialMediaStack } from '../lib/social-media-stack';
 import { SOCIAL_TABLES, SocialStack, socialTablePrefix } from '../lib/social-stack';
 import { ARNS, PREFIX, middlewareServiceStack, newApp } from './helpers/stacks';
@@ -162,6 +162,24 @@ describe('OrgIQ-SocialImages', () => {
       'orgiq-lvs-sfu-ecr-uri', 'orgiq-platform-api-ecr-uri', 'orgiq-social-gateway-ecr-uri',
     ]);
   });
+
+  test("deploy.sh's ECR orphan sweep knows all three RETAINed names", () => {
+    // A RETAINed name the sweep does not know blocks the next create with
+    // "already exists" — how OrgIQ-MiddlewareService once wedged a rebuild.
+    const deploySh = fs.readFileSync(path.join(__dirname, '..', 'scripts', 'deploy.sh'), 'utf8');
+    const list = /^ECR_REPOS=\(([\s\S]*?)^\)/m.exec(deploySh)?.[1] ?? '';
+    const entries = list.split('\n').filter((l) => !/^\s*#/.test(l)).join('\n');
+    for (const key of Object.keys(SOCIAL_IMAGE_REPOS) as SocialImageKey[]) {
+      assert.ok(entries.includes(`"\${PREFIX}-${SOCIAL_IMAGE_REPOS[key]}"`), `ECR_REPOS lacks \${PREFIX}-${SOCIAL_IMAGE_REPOS[key]}`);
+    }
+  });
+
+  test('the image build script pushes to exactly these repos (scripts/docker/social-images-build.mjs)', () => {
+    const script = fs.readFileSync(path.join(__dirname, '..', '..', 'scripts', 'docker', 'social-images-build.mjs'), 'utf8');
+    for (const [key, repo] of Object.entries(SOCIAL_IMAGE_REPOS)) {
+      assert.match(script, new RegExp(`key: '${key}', repo: '${repo}'`), `build script disagrees on ${key}`);
+    }
+  });
 });
 
 // ── OrgIQ-SocialMedia ──────────────────────────────────────────────────────
@@ -194,6 +212,21 @@ describe('OrgIQ-SocialMedia — the SFU', () => {
     assert.match(json, /--network host/);
     t.hasResourceProperties('AWS::SecretsManager::Secret', { Name: 'orgiq-social-sfu-admin-token' });
     t.hasResourceProperties('AWS::SecretsManager::Secret', { Name: 'orgiq-social-sfu-webhook-secret' });
+  });
+
+  test('mints the service token platform-api calls the SFU with, and the unit reads it into LVS_SERVICE_TOKEN', () => {
+    // LVS cognito-auth.js accepts `Bearer <LVS_SERVICE_TOKEN>` on /api/sessions,
+    // so platform-api never forwards a user bearer (deploy plan §8 Verifiers).
+    const [secretId] = Object.keys(t.findResources('AWS::SecretsManager::Secret', {
+      Properties: { Name: 'orgiq-social-sfu-service-token' },
+    }));
+    assert.ok(secretId, 'orgiq-social-sfu-service-token not minted');
+    const json = JSON.stringify(Object.values<any>(t.findResources('AWS::EC2::Instance'))[0].Properties.UserData);
+    assert.match(json, /LVS_SERVICE_TOKEN=\$\(aws secretsmanager get-secret-value/);
+    assert.ok(json.includes(`{"Ref":"${secretId}"}`), 'the unit must read the minted service-token secret');
+    assert.match(json, /echo \\"LVS_SERVICE_TOKEN=\$LVS_SERVICE_TOKEN\\"/);
+    const grants = JSON.stringify(t.findResources('AWS::IAM::Policy'));
+    assert.ok(grants.includes(`{"Ref":"${secretId}"}`), 'the instance role must be able to read it');
   });
 
   test('with no sfuAllowCidr: no 0.0.0.0/0 anywhere, no media ingress at all, and a synth warning', () => {
@@ -268,14 +301,16 @@ describe('OrgIQ-Social — platform-api, Redis, tables', () => {
   test('secrets: REALTIME_JWT_SECRET is read from the same named secret; video secrets are secrets, not env', () => {
     const c = platformTd().Properties.ContainerDefinitions[0];
     const secrets = Object.fromEntries((c.Secrets as any[]).map((s) => [s.Name, JSON.stringify(s.ValueFrom)]));
-    for (const name of ['REALTIME_JWT_SECRET', 'VIDEO_ADMIN_TOKEN', 'LVS_WEBHOOK_SECRET', 'SERVICE_AUTH_SECRET']) {
+    for (const name of ['REALTIME_JWT_SECRET', 'VIDEO_ADMIN_TOKEN', 'VIDEO_SERVICE_TOKEN', 'LVS_WEBHOOK_SECRET', 'SERVICE_AUTH_SECRET']) {
       assert.ok(secrets[name], `${name} missing`);
     }
     assert.match(secrets.REALTIME_JWT_SECRET!, /secret:orgiq-realtime-jwt-secret/);
     assert.match(secrets.VIDEO_ADMIN_TOKEN!, /secret:orgiq-social-sfu-admin-token/);
     assert.match(secrets.LVS_WEBHOOK_SECRET!, /secret:orgiq-social-sfu-webhook-secret/);
+    // The SFU's LVS_SERVICE_TOKEN under platform-api's name for it.
+    assert.match(secrets.VIDEO_SERVICE_TOKEN!, /secret:orgiq-social-sfu-service-token/);
     const envNames = (c.Environment as any[]).map((e) => e.Name);
-    for (const leaked of ['VIDEO_ADMIN_TOKEN', 'LVS_WEBHOOK_SECRET', 'REALTIME_JWT_SECRET']) {
+    for (const leaked of ['VIDEO_ADMIN_TOKEN', 'VIDEO_SERVICE_TOKEN', 'LVS_WEBHOOK_SECRET', 'REALTIME_JWT_SECRET']) {
       assert.ok(!envNames.includes(leaked), `${leaked} must not be plaintext env`);
     }
   });

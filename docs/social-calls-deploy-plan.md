@@ -360,8 +360,18 @@ compose profile proved:
 
 The compose profile builds from sibling *working trees*. For AWS, build from
 pinned commits the way `scripts/docker/document-workspace-build.mjs` does
-(`git archive` of a commit in `document-workspace-sources.json`). Extend that
-manifest with live-video-streaming and add a push step; it only builds today.
+(`git archive` of a commit in `document-workspace-sources.json`). **Done
+2026-09-29:** `scripts/docker/social-images-build.mjs` reads the manifest's
+`socialSources` block (realtime-examples, platform-api, live-video-streaming,
+full shas), archives each into its own build root under
+`.scratch/social-images/`, runs `docker buildx build --platform linux/arm64
+--provenance=false --sbom=false --push` with the contexts, targets and
+`--ssh`/`--secret` above, tags `:<commit12>` and `:latest`, and prints each
+pushed digest as `--context sfuImageDigest=…` / `platformApiImageDigest=…` /
+`gatewayImageDigest=…` (also written to `.scratch/social-images/report.json`).
+`--dry-run` prints the commands without git, Docker or AWS; `--only` picks
+images. It refuses account `264161986065` and warns on any account other than
+`647757222309`. Tests: `node --test scripts/docker/tests/*.test.mjs`.
 
 ## 5. Portal and middleware runtime config
 
@@ -379,8 +389,18 @@ then serves every environment, and the values follow the middleware's
 config. Today the response carries `gatewayUrl` and `platformApiUrl`. It
 needs a `videoUrl` as well, and `platformApiUrl` needs its own variable (see
 the top of this doc). Keep `VITE_GATEWAY_URL` as a local-dev override only.
-The local-stack guide says it should be `ws://localhost:18080`, while
-`portal/.env.local` currently holds `http://localhost:3001`.
+
+**Portal side done for the socket (2026-09-29):** with `VITE_GATEWAY_URL`
+unset, `OptionalGatewayProvider` resolves the socket URL from the token
+response's `gatewayUrl` (`TokenResolvedGateway`); set, the override wins.
+`realtimeToken.ts` also parses `videoUrl` and exports `realtimeEndpoints()`
+(override, else token, else null) for the call host. `portal/e2e/realtime-endpoints.spec.ts`
+stubs the token with a distinct `gatewayUrl` and asserts the handshake goes
+there with `bearer-token-v1, <token>`. Still reading build-time env only:
+`GatewayStatusBadge.tsx` and `useGatewayInfo.ts` (the `/health` badge) and
+`InitiativeCallHost.tsx`'s `VITE_VIDEO_ENDPOINT`. The middleware still
+returns no `videoUrl` and echoes `PLATFORM_API_URL` rather than
+`REALTIME_PLATFORM_PUBLIC_URL`.
 
 **HTTPS is a prerequisite, not polish.** wss from an HTTPS page, Cognito
 callbacks and `getUserMedia` all need it, which means a domain and an ACM
@@ -444,10 +464,10 @@ separate gateway service. The `orgiq-social-gateway` repo exists anyway.
 | `OrgIQ-Social` (`infra/lib/social-stack.ts`) | **code.** platform-api on Fargate ARM64 (Cloud Map `social-platform`, stop-before-start, `desiredCount 0` until `deploySocialService=true` + `platformApiImageDigest`), Redis container (`RedisService`), 23 on-demand RETAIN tables including `call-log` and `voicemail`, `tableSuffix` context. Host rules at priority 30 (`socialPlatformHost`) and 40 (`socialSfuHost` → SFU :3901). `deploySocial=true`. |
 | Middleware code | `videoUrl` in the token response; reading `REALTIME_PLATFORM_PUBLIC_URL` / `REALTIME_VIDEO_PUBLIC_URL`; the middleware gateway itself is **shipped** (2026-09-29, `middleware/src/lib/realtime-gateway.ts`: `/ws`, HS256 verify, `lobbyGuard`, Redis call state when `REDIS_URL` is set — see the plan's step 7). Note its router is single-process: Redis shares call state, not frame fan-out, so keep the middleware at one task while the gateway is on. The middleware task role has **no** grant on the `orgiq-social-*` tables yet; add one if its gateway persists chat. |
 | Upstream: gateway / platform-api / LVS | gateway: **none needed** — the middleware's `/ws` verifies the `orgiq-hs256` token and enforces tenant lobbies (2026-09-29). Still open: the same verifier in platform-api's `requireAuth`/`optionalAuth`, platform-api's tenant-aware ad hoc lobbies (`lobbyAccess.ts`), and platform-api calling LVS as a service instead of forwarding the user bearer. |
-| Upstream: realtime-examples | `call-log` and `voicemail` in `infra/dynamodb-schemas.json`; the infra pin moved off `2549856e` (its manifest is older than HEAD's). Then `social-stack.ts` can drop its table copy for `ApplicationTables`. |
-| Images/builds | **missing.** The three buildx builds and pushes by digest; social entries in `scripts/docker/document-workspace-sources.json` (or a sibling manifest) including live-video-streaming; the three repos in `deploy.sh` `ECR_REPOS`; the `orgiq-social-*` table and secret sweep in `deploy.sh`/`destroy.sh`. |
+| Upstream: realtime-examples | **still open upstream (checked 2026-09-29).** realtime-examples HEAD `423c91fd` (= `origin/main` as last fetched) lists 53 tables in `infra/dynamodb-schemas.json` (last changed in `6b9c9b61`), and neither `call-log` nor `voicemail` is among them; neither name appears anywhere under its `infra/` or `lib/`. So the infra pin stays at `2549856e` (1,087 commits behind HEAD) and `social-stack.ts` keeps its table copy. When upstream adds both tables: move the `realtime-examples` pin in `infra/package.json`, swap the copy for `ApplicationTables`, and keep the "table keys agree with the pinned manifest" test. |
+| Images/builds | **code (2026-09-29), not run against an account.** `scripts/docker/social-images-build.mjs` builds and pushes the three images ARM64 by digest from `socialSources` in `scripts/docker/document-workspace-sources.json` (realtime-examples `423c91fd`, platform-api `348f95de`, live-video-streaming `d9547941`) and prints the digest contexts; `--dry-run` verified, never built or pushed. `infra/scripts/deploy.sh` `ECR_REPOS` has `orgiq-social-gateway`, `orgiq-platform-api`, `orgiq-lvs-sfu`, which `infra/test/social-stacks.test.ts` pins against `SOCIAL_IMAGE_REPOS`. **Still missing:** the `orgiq-social-*` table and secret sweep in `deploy.sh`/`destroy.sh` (the tables carry deletion protection, so a sweep must turn that off first), and the three repos in `destroy.sh`'s billing sweep. |
 | DNS/TLS | **missing.** A hosted zone and an ACM certificate covering `platform.`, `sfu.` and the middleware host. The host rules take effect only once those names resolve to the ALB. |
-| Portal | **missing.** Hosting of any kind; reading endpoints from the token response instead of `VITE_GATEWAY_URL`. |
+| Portal | **endpoints: socket done; hosting missing.** The gateway socket URL comes from the token response when `VITE_GATEWAY_URL` is unset (`portal/src/components/OptionalGatewayProvider.ts`, `portal/src/lib/realtimeToken.ts`, unit tests, `portal/e2e/realtime-endpoints.spec.ts`). Still open: the `/health` badge (`GatewayStatusBadge.tsx`, `useGatewayInfo.ts`) and the call host's `VITE_VIDEO_ENDPOINT` should read `realtimeEndpoints()`; the middleware must return `videoUrl` (`REALTIME_VIDEO_PUBLIC_URL`) and use `REALTIME_PLATFORM_PUBLIC_URL` for `platformApiUrl`. No hosting of any kind (S3/CloudFront). |
 | Verifiers | **gateway half done locally**: the middleware `/ws` refuses a wrong-secret, expired, wrong-audience or non-`orgiq-hs256` token with 401 and a cross-tenant lobby with an error frame (`lib/__tests__/realtime-gateway.test.ts`, and the forged-frame walk in `social-calls-first-call.md`). **Missing:** a phase 2 check that a forged token is rejected by platform-api and the deployed middleware gateway, and that the SFU sees no forwarded user bearer. Until option A is merged upstream, platform-api in `NODE_ENV=production` verifies Cognito tokens only. |
 | TURN / recordings / ElastiCache | phase 4, unchanged. |
 
@@ -477,18 +497,13 @@ SOCIAL=(--context deploySocial=true --context socialPlatformHost=platform.$DOMAI
 
 # 1. The three repos, then build and push (local buildx, ARM64 — not CodeBuild).
 ./scripts/deploy.sh OrgIQ-SocialImages -e --context deploySocialImages=true
-REG=647757222309.dkr.ecr.us-east-1.amazonaws.com
-aws ecr get-login-password | docker login --username AWS --password-stdin $REG
-docker buildx build --platform linux/arm64 --target server-runtime --ssh default \
-  -t $REG/orgiq-social-gateway:latest --push ../../realtime-examples
-docker buildx build --platform linux/arm64 --ssh default -f ../../platform-api/Dockerfile \
-  -t $REG/orgiq-platform-api:latest --push ../..
-docker buildx build --platform linux/arm64 --secret id=gh-token,env=GH_TOKEN \
-  -t $REG/orgiq-lvs-sfu:latest --push ../../live-video-streaming
-SFU_DIGEST=$(aws ecr describe-images --repository-name orgiq-lvs-sfu \
-  --query 'sort_by(imageDetails,&imagePushedAt)[-1].imageDigest' --output text)
-PLATFORM_DIGEST=$(aws ecr describe-images --repository-name orgiq-platform-api \
-  --query 'sort_by(imageDetails,&imagePushedAt)[-1].imageDigest' --output text)
+#    From the pinned commits in scripts/docker/document-workspace-sources.json
+#    `socialSources`; needs SSH_AUTH_SOCK and GH_TOKEN. `--dry-run` first.
+node ../scripts/docker/social-images-build.mjs --dry-run
+node ../scripts/docker/social-images-build.mjs
+SFU_DIGEST=$(jq -r '.images[]|select(.key=="sfu").digest' ../.scratch/social-images/report.json)
+PLATFORM_DIGEST=$(jq -r '.images[]|select(.key=="platformApi").digest' ../.scratch/social-images/report.json)
+aws ecr describe-images --repository-name orgiq-lvs-sfu --image-ids imageDigest=$SFU_DIGEST  # must exist
 # (re-run the MEDIA=(…) line now that SFU_DIGEST is set)
 
 # 2. The SFU. The middleware goes in the same call because it gains the

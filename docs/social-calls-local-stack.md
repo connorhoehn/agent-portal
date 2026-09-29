@@ -57,8 +57,19 @@ cd middleware && npm run dev:mock     # :3001
 cd portal && npm run dev              # :5183
 ```
 
-The portal's `VITE_GATEWAY_URL` in `portal/.env.local` selects gateway mode.
-Restart Vite after changing it.
+Where the portal's socket goes (`portal/src/components/OptionalGatewayProvider.ts`):
+`VITE_GATEWAY_URL` in `portal/.env.local`, when set, is a local override and
+wins (restart Vite after changing it). Unset or blank, the portal takes
+`gatewayUrl` from `GET /api/session/realtime-token` (the middleware's
+`REALTIME_GATEWAY_URL`) at run time, which is how a deployed bundle works
+with no build-time URL. Neither set means no socket (offline context). The
+local middleware sets no `REALTIME_GATEWAY_URL` by default, so locally keep
+`VITE_GATEWAY_URL=http://localhost:3001` in `.env.local`, or start the
+middleware with `REALTIME_GATEWAY_URL=http://localhost:3001` and drop it.
+(The gateway status badge and `useGatewayInfo` still read only
+`VITE_GATEWAY_URL`; `/api/session/realtime-token` also carries
+`platformApiUrl`, which the call host already prefers when
+`VITE_PLATFORM_API_URL` is unset.)
 
 **The middleware is the gateway now (2026-09-29).** With `REALTIME_GATEWAY=on`
 (the default outside production) the middleware serves `ws://localhost:3001/ws`

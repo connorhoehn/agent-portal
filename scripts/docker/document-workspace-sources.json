@@ -8,5 +8,11 @@
     "ui-components": { "url": "git@github.com:connorhoehnslalom/ui-components.git", "commit": "79bdd2bae303d6a4b0bb9a8287d4b7be1eddc3c7" },
     "platform-api": { "url": "git@github.com:connorhoehnslalom/platform-api.git", "commit": "9c0c96f428d982ce88e4011ec37a3ca573b0b29e" },
     "realtime-examples": { "url": "git@github.com:connorhoehn/realtime-examples.git", "commit": "907991255b1426f3051d943dda853dc42313609b" }
+  },
+  "socialSources": {
+    "_comment": "The OrgIQ-SocialImages builds (scripts/docker/social-images-build.mjs). Kept apart from `sources` so the document-workspace build neither archives nor rebuilds them; the commits are the clean sibling HEADs on 2026-09-29, the trees the compose `social` profile builds from. Move a pin by editing the full 40-char sha.",
+    "realtime-examples": { "url": "git@github.com:connorhoehn/realtime-examples.git", "commit": "423c91fd4cbe2f542111de43955dc36ca008867a" },
+    "platform-api": { "url": "git@github.com:connorhoehnslalom/platform-api.git", "commit": "348f95de8912aa04a2984ad86aefe0c54fb32f64" },
+    "live-video-streaming": { "url": "git@github.com:connorhoehn/live-video-streaming.git", "commit": "d95479417cc313719c03e146fdf013bbc11da177" }
   }
 }

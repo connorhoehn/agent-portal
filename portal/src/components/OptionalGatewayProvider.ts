@@ -1,11 +1,13 @@
 import { gatewayEndpoints } from '../lib/gatewayEndpoint.ts';
-import { realtimeTokenSource, type RealtimeTokenSource } from '../lib/realtimeToken.ts';
+import { realtimeTokenSource, type RealtimeToken, type RealtimeTokenSource } from '../lib/realtimeToken.ts';
 import { Fragment, createElement, useCallback, useEffect, useState, type ReactNode } from 'react';
 import { GatewayContext, type GatewayContextValue } from '@connorhoehnslalom/realtime-modules/client';
 import { GatewaySocketProvider, useGateway } from '@connorhoehnslalom/realtime-modules/client/ws';
 
 const noop = (): void => {};
-const unavailable = (): never => { throw new Error('Realtime gateway is unavailable: configure VITE_GATEWAY_URL'); };
+const unavailable = (): never => {
+  throw new Error('Realtime gateway is unavailable: the middleware returned no gatewayUrl (REALTIME_GATEWAY_URL) and VITE_GATEWAY_URL is unset');
+};
 // Feature hooks in the pinned library register these subscriptions on mount,
 // even when disconnected. Registration is inert; publishing is never successful.
 function offlineSend(frame: Record<string, unknown>): void {
@@ -80,9 +82,56 @@ export function AuthenticatedGatewaySocket({ url, children, tokens = realtimeTok
   });
 }
 
-export function OptionalGatewayProvider({ url, children }: { url?: string; children: ReactNode }) {
-  const endpoint = gatewayWebSocketUrl(url);
-  return endpoint
-    ? createElement(AuthenticatedGatewaySocket, { url: endpoint, children })
+/** How long the endpoint lookup may hold the app back before it goes offline. */
+export const GATEWAY_RESOLVE_TIMEOUT_MS = 5_000;
+
+export function tokenGatewayUrl(t: Pick<RealtimeToken, 'gatewayUrl'>): string | null {
+  // A malformed URL from the server is an offline deployment, not a crash of
+  // the whole tree (gatewayEndpoints throws on it).
+  try { return gatewayWebSocketUrl(t.gatewayUrl); } catch { return null; }
+}
+
+type Resolution = { ready: false } | { ready: true; url: string | null };
+
+/**
+ * No build-time override: the gateway URL comes from the realtime-token
+ * response (`gatewayUrl`, the middleware's REALTIME_GATEWAY_URL), so a
+ * deployed bundle needs no VITE_GATEWAY_URL. Renders nothing until that
+ * request settles, like AuthenticatedGatewaySocket: switching the provider
+ * after first paint would remount the whole app. No gatewayUrl, a failed
+ * request (signed out: every sign-in hard-navigates, so this re-runs after
+ * it) or a timeout mounts the inert offline context.
+ */
+export function TokenResolvedGateway({ children, tokens = realtimeTokenSource, timeoutMs = GATEWAY_RESOLVE_TIMEOUT_MS }: {
+  children: ReactNode; tokens?: RealtimeTokenSource; timeoutMs?: number;
+}) {
+  const [res, setRes] = useState<Resolution>(() => {
+    const cached = tokens.peek();
+    return cached ? { ready: true, url: tokenGatewayUrl(cached) } : { ready: false };
+  });
+  useEffect(() => {
+    if (res.ready) return;
+    let live = true;
+    const settle = (url: string | null) => { if (live) { live = false; setRes({ ready: true, url }); } };
+    const timer = setTimeout(() => settle(null), timeoutMs);
+    tokens.get().then((t) => settle(tokenGatewayUrl(t)), () => settle(null)).finally(() => clearTimeout(timer));
+    return () => { live = false; clearTimeout(timer); };
+  }, [tokens, res.ready, timeoutMs]);
+  if (!res.ready) return null;
+  return res.url
+    ? createElement(AuthenticatedGatewaySocket, { url: res.url, tokens, children })
     : createElement(GatewayContext.Provider, { value: offlineGateway, children });
+}
+
+/**
+ * `url` is the local override (VITE_GATEWAY_URL); when set it wins. Unset or
+ * blank, the endpoint is learned at run time from the realtime token.
+ */
+export function OptionalGatewayProvider({ url, children, tokens }: {
+  url?: string; children: ReactNode; tokens?: RealtimeTokenSource;
+}) {
+  const override = gatewayWebSocketUrl(url);
+  return override
+    ? createElement(AuthenticatedGatewaySocket, { url: override, children, ...(tokens ? { tokens } : {}) })
+    : createElement(TokenResolvedGateway, { children, ...(tokens ? { tokens } : {}) });
 }

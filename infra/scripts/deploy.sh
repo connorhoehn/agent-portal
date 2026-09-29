@@ -185,6 +185,12 @@ ECR_REPOS=(
   "${PREFIX}-agent-base"
   "${PREFIX}-devbox"
   "${PREFIX}-middleware"
+  # OrgIQ-SocialImages (lib/social-images-stack.ts, SOCIAL_IMAGE_REPOS). RETAIN
+  # like the middleware repo, so a teardown leaves the names taken and the next
+  # create fails with "already exists" unless this sweep knows them.
+  "${PREFIX}-social-gateway"
+  "${PREFIX}-platform-api"
+  "${PREFIX}-lvs-sfu"
 )
 
 for repo in "${ECR_REPOS[@]}"; do
