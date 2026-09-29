@@ -4,7 +4,7 @@
 // of the pane — connecting, the live canvas and the reader fallback — renders
 // through this one frame, so the chrome never changes shape under the reader.
 import type { ReactNode } from 'react';
-import { EditorShell, type DocumentSaveState, type EditorShellTab } from '@connorhoehnslalom/ui-components/doc-editor';
+import { EditorShell, type DocumentSaveState, type EditorShellProps, type EditorShellTab } from '@connorhoehnslalom/ui-components/doc-editor';
 import type { BreadcrumbItem } from '@connorhoehnslalom/ui-components/shared';
 import { Stack } from '@connorhoehnslalom/ui-components/shared';
 
@@ -31,9 +31,14 @@ export interface DocumentShellProps {
   reviews?: ReactNode;
   /** The composer dock — EditorShell's last row, on the Editor tab only (the Comments tab has its own reply field). */
   composer?: ReactNode;
+  /** Who else is on the page (canvas awareness), in the byline — with jump-to and follow. */
+  participants?: EditorShellProps['participants'];
+  onParticipantClick?: (id: string) => void;
+  onFollowParticipant?: (id: string) => void;
+  followingParticipantId?: string | null;
 }
 
-export function DocumentShell({ title, path, tab, onTab, commentCount, statusPill, saveState, headActions, editor, comments, history, versions, reviews, composer }: DocumentShellProps) {
+export function DocumentShell({ title, path, tab, onTab, commentCount, statusPill, saveState, headActions, editor, comments, history, versions, reviews, composer, participants, onParticipantClick, onFollowParticipant, followingParticipantId }: DocumentShellProps) {
   const panels: Record<DocumentTab, ReactNode | undefined> = { editor, comments, versions, history, reviews };
   const tabs: EditorShellTab[] = DOCUMENT_TABS.map(id => ({
     id, label: TAB_LABEL[id],
@@ -44,6 +49,9 @@ export function DocumentShell({ title, path, tab, onTab, commentCount, statusPil
   return <EditorShell title={title} kind="page" path={path} label="Document editor"
     {...(statusPill ? { statusPill } : {})} {...(saveState ? { saveState } : {})}
     headActions={headActions} tabs={tabs} activeTab={active}
+    {...(participants?.length ? { participants } : {})}
+    {...(onParticipantClick ? { onParticipantClick } : {})}
+    {...(onFollowParticipant ? { onFollowParticipant, followingParticipantId: followingParticipantId ?? null } : {})}
     {...(composer && active === 'editor' ? { footer: composer } : {})}
     onTabChange={id => onTab((DOCUMENT_TABS as readonly string[]).includes(id) ? id as DocumentTab : 'editor')}
     surface={active === 'editor' ? 'workspace' : 'plain'} className="min-h-0 flex-1" data-testid="document-shell">

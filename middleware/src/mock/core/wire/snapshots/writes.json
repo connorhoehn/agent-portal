@@ -1,7 +1,7 @@
 {
-  "capturedAt": "2026-09-29T13:51:01.399Z",
-  "serverHandlerSha": "c33957764a615a93cc6a278137c8b17977d129794969ee131ab91668de6ecfd5",
-  "baseUrl": "http://127.0.0.1:3012",
+  "capturedAt": "2026-09-29T22:47:15.118Z",
+  "serverHandlerSha": "0546059cde658da4c70a4bd571768ad9f8ce0eda1e9f6e13561dc88338d3b042",
+  "baseUrl": "http://127.0.0.1:3018",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
     "agentcore",
@@ -29,6 +29,12 @@
       }
     },
     "DELETE /api/assessment/knowledge/doc/comment": {
+      "refused": {
+        "rule": "destructive",
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The only exceptions are deletes somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
+      }
+    },
+    "DELETE /api/assessment/knowledge/doc/workflows/comments/:commentId": {
       "refused": {
         "rule": "destructive",
         "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The only exceptions are deletes somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
@@ -218,6 +224,12 @@
       "refused": {
         "rule": "unclassified",
         "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
+    },
+    "PATCH /api/assessment/knowledge/doc/workflows/comments/:commentId": {
+      "refused": {
+        "rule": "document-service",
+        "reason": "Delegates to durable document or source services outside the resettable Aurora fixture. Capture must not seed, publish, restore or transition real documents; dedicated isolated integration tests cover these writes."
       }
     },
     "PATCH /api/assessment/knowledge/doc/workflows/review-requests/:requestKey": {
@@ -649,6 +661,7 @@
           "agent-projects",
           "assessment-archetypes",
           "assessment-configuration",
+          "assessment-document-comment-imports",
           "assessment-document-mappings",
           "assessment-evidence-log",
           "assessment-feedback",
@@ -658,6 +671,7 @@
           "assessment-knowledge-sections",
           "assessment-knowledge-versions",
           "assessment-motions",
+          "assessment-platform-document-comments",
           "assessment-provenance",
           "assessment-runs",
           "assessment-scores",
@@ -1052,6 +1066,12 @@
         "id",
         "stamp"
       ]
+    },
+    "POST /api/assessment/knowledge/doc/workflows/comments": {
+      "refused": {
+        "rule": "document-service",
+        "reason": "Delegates to durable document or source services outside the resettable Aurora fixture. Capture must not seed, publish, restore or transition real documents; dedicated isolated integration tests cover these writes."
+      }
     },
     "POST /api/assessment/knowledge/doc/workflows/ownership": {
       "refused": {

@@ -678,14 +678,15 @@ test('decideDocSaveGate allows a save when synced but genuinely empty — a deli
 // What is still worth pinning is that it does not regress to the gateway:
 // nothing in the bar may key on connectionState or clientId again.
 test('the reaction bar does not gate on the gateway — reactions are durable now', () => {
+  // The bar moved with the Comments tab onto platform-api threads (DocumentComments.tsx).
   const src = readFileSync(
-    join(import.meta.dirname, '..', 'knowledge', 'CanvasDocumentPane.tsx'), 'utf8',
+    join(import.meta.dirname, '..', 'knowledge', 'DocumentComments.tsx'), 'utf8',
   );
   const bar = src.slice(src.indexOf('<ReactionsBar'), src.indexOf('/>', src.indexOf('<ReactionsBar')));
   assert.ok(bar.length > 0, 'ReactionsBar is no longer rendered — re-read this test');
   assert.doesNotMatch(bar, /connectionState|gatewayReady|clientId/,
     'the reaction bar must not depend on the gateway: the BFF owns reactions');
-  assert.match(bar, /reactions=\{summarizeStoredReactions\(thread.reactions, node.id, session\?\.sub/,
+  assert.match(bar, /reactions=\{summarizeStoredReactions\(comments.reactions, (sourceId|thread\.id), userId/,
     'the bar renders the summaries derived from the durable rows');
 });
 

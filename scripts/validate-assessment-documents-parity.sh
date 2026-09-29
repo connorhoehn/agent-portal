@@ -9,6 +9,10 @@
 #   node scripts/social-documents.mjs up           # gateway :28080, platform-api :23001
 #   (cd middleware && npm run dev:mock:social)     # the middleware with the document env
 #   (cd portal && npm run dev)
+# The call half of the two-person journey also needs PLATFORM_API_URL on the
+# middleware and an SFU; without them it skips with the reason Call gives.
+# The comment import writes platform-api's table when the middleware has
+# DOCUMENT_COMMENT_IMPORT_TABLE (+ DOCUMENT_COMMENT_IMPORT_DYNAMODB_ENDPOINT locally).
 # PARITY_BASE_URL points the journey at a portal other than :5183.
 set -u
 cd "$(dirname "$0")/.."
@@ -149,6 +153,84 @@ awk '/^export function CanvasDocumentPane/,/^}/' "$PANE" | awk '/useDocumentConv
 grep -q "conversationChannelForDoc" portal/src/pages/assessment/__tests__/knowledgeFormat.test.ts && ok "channel length rule is tested" || fail "no test for conversationChannelForDoc"
 
 # ─────────────────────────────────────────────────────────────────────────────
+section "phase 4 — comments on platform-api threads (gap 4)"
+MW=middleware/src
+COMMENTS_TAB=$K/DocumentComments.tsx
+COMMENTS_HOOK=$K/useDocumentComments.ts
+MARGIN=$K/useCanvasComments.tsx
+MODEL=$K/documentCommentsModel.ts
+[ -f "$MW/providers/document-comments.ts" ] && ok "middleware providers/document-comments.ts exists" || fail "$MW/providers/document-comments.ts missing"
+for k in comments comment-create comment-update comment-delete; do
+  grep -q "kind: '$k'" "$MW/providers/document-workflows.ts" && ok "workflow bridge operation '$k'" || fail "document-workflows.ts has no '$k' operation"
+done
+grep -q "case 'comments': return \`/comments?limit=200" "$MW/providers/document-workflows.ts" && ok "comments are read 200 at a time and paged" || fail "document-workflows.ts does not page the comments read"
+for r in "get('/doc/workflows/comments'" "post('/doc/workflows/comments'" "patch('/doc/workflows/comments/:commentId'" "delete('/doc/workflows/comments/:commentId'"; do
+  grep -qF "$r" "$MW/routes/assessment-document-workflows.ts" && ok "BFF route $r" || fail "assessment-document-workflows.ts has no $r"
+done
+grep -q "fields(raw, \['text', 'parentCommentId', 'anchor', 'scope', 'sectionId'\])" "$MW/providers/document-comments.ts" \
+  && ok "the browser cannot name an author, document or grant (fixed field list)" || fail "document-comments.ts accepts unlisted comment fields"
+grep -q "scope must be document when supplied" "$MW/providers/document-comments.ts" && grep -q "document scope cannot also specify a section, anchor or parent" "$MW/providers/document-comments.ts" \
+  && ok "the dev:mock backend enforces platform-api's scope rules" || fail "document-comments.ts mock backend lost platform-api's scope rules"
+grep -q "Only the author may edit comment text" "$MW/providers/document-comments.ts" && ok "author-only edits (mock backend, as upstream)" || fail "document-comments.ts mock backend lets anyone edit"
+[ -f "$MW/mock/document-comments.ts" ] && grep -q "key: 'assessment-platform-document-comments'" "$MW/mock/document-comments.ts" && grep -q "key: 'assessment-document-comment-imports'" "$MW/mock/document-comments.ts" \
+  && ok "dev:mock platform comments + import ledger are registered fixtures" || fail "$MW/mock/document-comments.ts fixtures missing or unregistered"
+grep -q "workflows/comments': 'id=page%3A100002'" "$MW/mock/core/wire/capture.ts" && grep -q '"GET /api/assessment/knowledge/doc/workflows/comments"' "$MW/mock/core/wire/snapshots/wire.json" \
+  && ok "wire snapshot witnesses the comments route" || fail "the comments route is not in the wire capture"
+
+section "phase 4 — the one-time import (gap 4)"
+IMPORT=$MW/providers/document-comment-import.ts
+[ -f "$IMPORT" ] && ok "providers/document-comment-import.ts exists" || fail "$IMPORT missing"
+grep -q "CREATE TABLE IF NOT EXISTS assessment_document_comment_imports" schema/assessment_schema.sql && ok "schema: assessment_document_comment_imports ledger" || fail "schema/assessment_schema.sql has no import ledger"
+grep -q "commentId: c.id," "$IMPORT" && grep -q "userId: c.author," "$IMPORT" && grep -q "timestamp: isoTimestamp(c.created_at)" "$IMPORT" && grep -q "parentCommentId: parent" "$IMPORT" \
+  && ok "import preserves ids, authors, timestamps and replies" || fail "$IMPORT does not preserve id / author / timestamp / reply"
+grep -q "ConditionExpression: 'attribute_not_exists(commentId)'" "$IMPORT" && grep -q "ON CONFLICT (document_id) DO NOTHING" "$IMPORT" \
+  && ok "idempotent: conditional puts + ledger ON CONFLICT DO NOTHING" || fail "$IMPORT is not idempotent"
+grep -q "legacyThreadMoved" "$MW/providers/assessment.ts" && grep -q "code: 'comments_moved'" "$MW/routes/assessment.ts" \
+  && ok "legacy comment writes answer 409 once a thread has moved" || fail "legacy comment routes still write after the import"
+grep -q "extraTargets" "$MW/providers/assessment.ts" && grep -q "documentCommentTargetIds" "$MW/routes/assessment.ts" \
+  && ok "reactions stay in the BFF, keyed by the preserved comment ids (+ new platform ids)" || fail "reactions cannot target platform comments"
+grep -q "kc-rubric-01" "$MW/mock/assessment.ts" && ok "dev:mock seeds a legacy thread on page:100002 for the import to carry" || fail "no seeded legacy thread on page:100002"
+
+section "phase 4 — the Comments tab and the margin (gaps 4, 5)"
+grep -q "useDocumentComments(node.id, sseEvents)" "$PANE" && ! grep -q "useKnowledgeDocumentThread\|DocumentCommentThread" "$PANE" \
+  && ok "the pane reads platform-api threads, not the legacy BFF thread" || fail "$PANE still reads the legacy BFF thread"
+[ ! -f "$K/DocumentCommentThread.tsx" ] && [ ! -f "$K/useKnowledgeDocumentThread.ts" ] && ok "legacy thread components removed" || fail "legacy DocumentCommentThread / useKnowledgeDocumentThread still present"
+grep -q "/api/assessment/knowledge/doc/workflows/comments" "$COMMENTS_HOOK" && ! grep -qiE "authorization|bearer" "$COMMENTS_HOOK" \
+  && ok "comments go through the BFF; no bearer in the browser" || fail "$COMMENTS_HOOK does not use the BFF route, or sends a bearer"
+grep -q "import { CommentThreadNode } from '@connorhoehnslalom/ui-components/doc-editor'" "$COMMENTS_TAB" && grep -q "<CardHeader title={group.title} meta={\`\${group.open} open · \${group.threads.length} total\`}" "$COMMENTS_TAB" \
+  && ok "Comments tab: library CommentThreadNode in 'n open · m total' cards" || fail "$COMMENTS_TAB is not the reference's grouped CommentThreadNode cards"
+grep -q "title: 'On the page'" "$MODEL" && grep -q "title: 'Whole document'" "$MODEL" && ok "groups: On the page / Whole document" || fail "$MODEL groups missing"
+grep -q "<ReactionsBar" "$COMMENTS_TAB" && grep -q "actions={<ReactionsBar" "$COMMENTS_TAB" && ok "document and per-thread reactions on the tab" || fail "$COMMENTS_TAB lost reactions"
+grep -q "commentImportNotice" "$COMMENTS_TAB" && ok "the tab says when earlier comments have not moved" || fail "$COMMENTS_TAB never reports an unfinished import"
+grep -q "CommentHighlight.configure" "$MARGIN" && grep -q "setCommentHighlights" "$MARGIN" && grep -q "createAnchor" "$MARGIN" && grep -q "resolveAnchor" "$MARGIN" \
+  && ok "margin: CommentHighlight marks, createAnchor on a selection, resolveAnchor to place" || fail "$MARGIN lost the anchor/highlight wiring"
+grep -q "additional: \[highlight\]" "$PANE" && grep -q "gutterItems={margin.gutterItems}" "$PANE" && grep -q "onToggleGutter={toggleGutter}" "$PANE" \
+  && ok "the canvas carries the per-document highlight and the gutter cards" || fail "$PANE does not hand the gutter / highlight to CanvasDocumentView"
+grep -q "{margin.commentButton}" "$PANE" && ok "Comment on a selection is in the head (readers comment too)" || fail "$PANE: no Comment button in the head actions"
+
+section "phase 4 — participants in the byline (awareness)"
+[ -d "$LIB" ] && awk '/declare interface EditorShellProps/,/^}/' "$LIB/doc-editor.d.ts" | grep -q "onFollowParticipant?: (id: string) => void" \
+  && ok "installed EditorShell takes participants / onParticipantClick / onFollowParticipant" || fail "installed EditorShell has no participant props"
+grep -q "participants={people.participants} onParticipantClick={people.onParticipantClick}" "$PANE" && grep -q "onFollowParticipant={people.onFollowParticipant} followingParticipantId={people.following}" "$PANE" \
+  && ok "the pane hands awareness participants to the shell byline" || fail "$PANE does not pass participants to DocumentShell"
+grep -q "{...(participants?.length ? { participants } : {})}" "$SHELL" && ok "DocumentShell forwards them to EditorShell" || fail "$SHELL does not forward participants"
+grep -q "awareness.on('change'" "$K/useCanvasParticipants.ts" && grep -q "relativePositionToAbsolutePosition" "$K/useCanvasParticipants.ts" \
+  && ok "participants from canvas awareness; jump resolves their caret" || fail "useCanvasParticipants is not awareness-driven"
+grep -q "<FollowModeBar" "$PANE" && ok "following shows the library FollowModeBar" || fail "$PANE: no FollowModeBar while following"
+
+section "phase 4 — the in-document call (gap 8)"
+CALL=$K/useDocumentCall.tsx
+grep -q "useInitiativeCallHost" "$CALL" && grep -q "lib/conversationCallModel'" "$CALL" && grep -q "lib/conversationCall'" "$CALL" \
+  && ok "reuses the tenant call host, the shared call model and the library ConversationCallDock" || fail "$CALL does not reuse the shared call stack"
+! grep -qE "useConversationCall\(|useIncomingConversationCalls\(" "$K"/*.tsx "$K"/*.ts && ok "no second call hook on the page" || fail "a second useConversationCall under $K"
+grep -q "<VideoDockSlot docked canAccept" "$CALL" && grep -q "gutterLead={call.dock}" "$PANE" && ok "the call docks in the page margin (VideoDockSlot as gutterLead)" || fail "the call is not a VideoDockSlot in the gutter lead"
+grep -q "{...call.headerProps}" "$PANE" && grep -q "onToggleVideoCall" "$CALL" && ok "Call in the shared DocumentHeader" || fail "no Call control on the DocumentHeader"
+grep -q "return \`\${prefix}doc:" "$MODEL" && grep -q "documentCallLobby(lobbyPrefix(tenant)" "$CALL" && ok "lobby is <tenant>:doc:<doc>, tenant-prefixed" || fail "document call lobby is not tenant-prefixed <tenant>:doc:<doc>"
+grep -q "<InitiativeCallHost><DocumentCallNavigator /><Outlet /></InitiativeCallHost>" portal/src/pages/assessment/AssessmentLayout.tsx \
+  && ok "assessment routes mount the call host; Accept opens the document" || fail "AssessmentLayout does not host calls"
+grep -q "documentCommentsModel.test.ts" <(ls portal/src/pages/assessment/__tests__/) && ok "model tests: threads, groups, byline, lobby" || fail "no documentCommentsModel node tests"
+
+# ─────────────────────────────────────────────────────────────────────────────
 section "accelerator UX preserved (gap 15)"
 has "<SectionPullControl" "$RAIL" && has "/api/assessment/knowledge/pull" "$RAIL" && ok "space-level Pull (on the source folder row)" || fail "DocumentRail lost SectionPullControl / the pull route"
 has "onReorder: handleReorder" "$EXPLORER" && has "/api/assessment/knowledge/source/move" "$EXPLORER" && has "onReorder: props.onReorder, canDragNode, canDropNode" "$RAIL" \
@@ -159,20 +241,20 @@ has "mode !== 'prompts'" "$K/documentCanvasState.ts" && ok "prompts read-only" |
 # ─────────────────────────────────────────────────────────────────────────────
 if [ "$QUICK" = 0 ]; then
   section "middleware (document routers)"
-  if (cd middleware && npm test -- --testPathPattern 'assessment-canvas|assessment-document|document-workflows|document-source|document-canvas|internal-document|document-versions|document-mapping|document-drafts' >/dev/null 2>&1); then
-    ok "jest: canvas / workflow / source routers green"; else fail "middleware: document router jest failures"; fi
+  if (cd middleware && npm test -- --testPathPattern 'assessment-canvas|assessment-document|assessment-knowledge-comments|document-workflows|document-source|document-canvas|internal-document|document-versions|document-mapping|document-drafts|document-comments|document-comment-import' >/dev/null 2>&1); then
+    ok "jest: canvas / workflow / source / comments routers green"; else fail "middleware: document router jest failures"; fi
 
   section "journey (Playwright, 1672×941, configured canvas)"
   BASE=${PARITY_BASE_URL:-http://localhost:5183}
   if curl -fsS -o /dev/null --max-time 5 "$BASE/"; then
     if (cd portal && PARITY_BASE_URL="$BASE" node_modules/.bin/playwright test e2e/assessment-documents-parity.spec.ts --reporter=line >/tmp/assessment-documents-parity-journey.log 2>&1); then
-      ok "journey passed against $BASE (tabs, canvas, Edit draft toolbar + ruler; rail, views, list, dock → Chat round trip; no page errors)"
+      ok "journey passed against $BASE (tabs, canvas, Edit draft toolbar + ruler; rail, views, list, dock → Chat round trip; two people: byline, imported + new + anchored comments, resolve, call ring/accept; no page errors)"
     else
       fail "journey failed against $BASE — see /tmp/assessment-documents-parity-journey.log"
       tail -25 /tmp/assessment-documents-parity-journey.log | sed 's/^/      /'
     fi
   else fail "no portal at $BASE (start the document stack; see the header of this script)"; fi
-  for s in parity-journey-reader parity-journey-edit-draft parity-journey-comments parity-journey-history parity-journey-reviews parity-journey-versions parity-journey-rail-dock parity-journey-chat parity-journey-list; do
+  for s in parity-journey-reader parity-journey-edit-draft parity-journey-comments parity-journey-history parity-journey-reviews parity-journey-versions parity-journey-rail-dock parity-journey-chat parity-journey-list parity-journey-byline parity-journey-comments-threads parity-journey-comments-anchored parity-journey-call; do
     [ -s "docs/design/documents-parity/$s.png" ] && ok "screenshot $s.png" || fail "missing docs/design/documents-parity/$s.png"
   done
 fi

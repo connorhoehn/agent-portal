@@ -1,7 +1,7 @@
 {
-  "capturedAt": "2026-09-29T13:51:00.611Z",
-  "serverHandlerSha": "c33957764a615a93cc6a278137c8b17977d129794969ee131ab91668de6ecfd5",
-  "baseUrl": "http://127.0.0.1:3012",
+  "capturedAt": "2026-09-29T22:47:14.299Z",
+  "serverHandlerSha": "0546059cde658da4c70a4bd571768ad9f8ce0eda1e9f6e13561dc88338d3b042",
+  "baseUrl": "http://127.0.0.1:3018",
   "personas": [
     "orgiq/admin",
     "assessment/admin",
@@ -34,6 +34,7 @@
           "agent-projects",
           "assessment-archetypes",
           "assessment-configuration",
+          "assessment-document-comment-imports",
           "assessment-document-mappings",
           "assessment-evidence-log",
           "assessment-feedback",
@@ -43,6 +44,7 @@
           "assessment-knowledge-sections",
           "assessment-knowledge-versions",
           "assessment-motions",
+          "assessment-platform-document-comments",
           "assessment-provenance",
           "assessment-runs",
           "assessment-scores",
@@ -170,6 +172,7 @@
           "agent-projects",
           "assessment-archetypes",
           "assessment-configuration",
+          "assessment-document-comment-imports",
           "assessment-document-mappings",
           "assessment-evidence-log",
           "assessment-feedback",
@@ -179,6 +182,7 @@
           "assessment-knowledge-sections",
           "assessment-knowledge-versions",
           "assessment-motions",
+          "assessment-platform-document-comments",
           "assessment-provenance",
           "assessment-runs",
           "assessment-scores",
@@ -853,6 +857,26 @@
     },
     "GET /api/assessment/knowledge/doc/workflows": {
       "skipped": "HTTP 400 (orgiq/admin); HTTP 400 (assessment/admin); HTTP 403 (anonymous)"
+    },
+    "GET /api/assessment/knowledge/doc/workflows/comments": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "comments": "array",
+        "comments[]": "object(dictionary)",
+        "documentId": "string",
+        "import": "object",
+        "import.imported": "number",
+        "import.importedAt": "string",
+        "import.legacy": "number",
+        "import.state": "string"
+      },
+      "values": {
+        "import.state": [
+          "imported"
+        ]
+      }
     },
     "GET /api/assessment/knowledge/doc/workflows/review-requests": {
       "skipped": "HTTP 400 (orgiq/admin); HTTP 400 (assessment/admin); HTTP 403 (anonymous)"
@@ -4663,12 +4687,35 @@
         "nodes[].presence.lastSeenAt": "string",
         "nodes[].presence.nodeId": "string",
         "nodes[].presence.sessions": "array",
+        "nodes[].presence.sessions[]": "object",
+        "nodes[].presence.sessions[].branch": "string",
+        "nodes[].presence.sessions[].contextUsed": "number",
+        "nodes[].presence.sessions[].harness": "string",
+        "nodes[].presence.sessions[].intent": "string",
+        "nodes[].presence.sessions[].lastSeenAt": "string",
+        "nodes[].presence.sessions[].memory": "object",
+        "nodes[].presence.sessions[].memory.lastPushAt": "number",
+        "nodes[].presence.sessions[].memory.mode": "string",
+        "nodes[].presence.sessions[].memory.pullCursorAgeS": "number",
+        "nodes[].presence.sessions[].model": "string",
+        "nodes[].presence.sessions[].modelProvider": "string",
+        "nodes[].presence.sessions[].projectId": "string",
+        "nodes[].presence.sessions[].repo": "string",
+        "nodes[].presence.sessions[].sessionId": "string",
+        "nodes[].presence.sessions[].startedAt": "number",
+        "nodes[].presence.sessions[].touching": "array",
+        "nodes[].presence.sessions[].touching[]": "string",
+        "nodes[].presence.sessions[].worktree": "string",
         "nodes[].presence.status": "string",
         "nodes[].revokedAt": "null"
       },
       "values": {
+        "nodes[].presence.sessions[].memory.mode": [
+          "synced"
+        ],
         "nodes[].presence.status": [
-          "offline"
+          "offline",
+          "stale"
         ]
       }
     },
@@ -4718,7 +4765,8 @@
       "values": {
         "nodes[].presence.status": [
           "connected",
-          "offline"
+          "offline",
+          "stale"
         ]
       }
     },
@@ -5329,7 +5377,7 @@
         "points[].bucketStart": "string",
         "points[].count": "number",
         "points[].driftP95": "number",
-        "points[].judgeP50": "null|number",
+        "points[].judgeP50": "number",
         "windowHours": "number"
       },
       "values": {}
@@ -7467,7 +7515,8 @@
         "browser",
         "browser_spa",
         "fetch",
-        "sim"
+        "sim",
+        "synced"
       ]
     },
     "outcome": {
@@ -7532,6 +7581,7 @@
       "open": false,
       "values": [
         "behind",
+        "imported",
         "missing",
         "ok",
         "stalled"

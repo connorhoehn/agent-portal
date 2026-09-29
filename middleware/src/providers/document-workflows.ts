@@ -1,13 +1,19 @@
 import type { Session } from '../lib/session.js';
 import { getKnowledgeDoc } from './assessment.js';
-import { documentWorkflowAccess } from './document-canvas.js';
 
 export type WorkflowOperation =
   | { kind: 'lifecycle' | 'write-policy' | 'review-requests' | 'reviews'; method: 'GET' }
   | { kind: 'transition' | 'ownership' | 'request-review'; method: 'POST'; body: Record<string, unknown> }
   | { kind: 'update-review'; method: 'PATCH'; requestKey: string; body: Record<string, unknown> }
   | { kind: 'items'; method: 'GET'; sectionId: string }
-  | { kind: 'item-ack' | 'item-answer'; method: 'POST'; sectionId: string; itemId: string; body: Record<string, unknown> };
+  | { kind: 'item-ack' | 'item-answer'; method: 'POST'; sectionId: string; itemId: string; body: Record<string, unknown> }
+  // Document comments (platform-api routes/documentComments.ts). The grant's
+  // `comment` operation covers all four; author-only edits and the owner rule
+  // on delete stay platform-api's to enforce.
+  | { kind: 'comments'; method: 'GET'; cursor?: string }
+  | { kind: 'comment-create'; method: 'POST'; body: Record<string, unknown> }
+  | { kind: 'comment-update'; method: 'PATCH'; commentId: string; body: Record<string, unknown> }
+  | { kind: 'comment-delete'; method: 'DELETE'; commentId: string };
 
 export class DocumentWorkflowError extends Error {
   constructor(public readonly status: number, message: string) { super(message); }
@@ -33,6 +39,9 @@ function route(operation: WorkflowOperation): string {
     case 'update-review': return `/review-requests/${segment(operation.requestKey)}`;
     case 'items': return `/sections/${segment(operation.sectionId)}/items`;
     case 'item-ack': case 'item-answer': return `/sections/${segment(operation.sectionId)}/items/${segment(operation.itemId)}/${operation.kind === 'item-ack' ? 'ack' : 'answer'}`;
+    case 'comments': return `/comments?limit=200${operation.cursor ? `&cursor=${encodeURIComponent(operation.cursor)}` : ''}`;
+    case 'comment-create': return '/comments';
+    case 'comment-update': case 'comment-delete': return `/comments/${segment(operation.commentId)}`;
   }
 }
 
@@ -48,6 +57,9 @@ export async function performDocumentWorkflow(sourceId: string, session: Session
   }
   const source = await getKnowledgeDoc(sourceId);
   if (!source) throw new DocumentWorkflowError(404, 'Document not found');
+  // Loaded on use: the canvas module pulls in the Tiptap schema, and the
+  // assessment router reaches this bridge through the comments provider.
+  const { documentWorkflowAccess } = await import('./document-canvas.js');
   const access = await documentWorkflowAccess(source, session);
   if (!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(access.documentId)) {
     throw new DocumentWorkflowError(503, 'Document mapping is unavailable');

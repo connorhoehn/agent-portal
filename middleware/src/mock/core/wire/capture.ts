@@ -44,6 +44,10 @@ const QUERY_HINTS: Record<string, string> = {
   // Use the populated thread so root/reply fields are actually witnessed.
   'GET /api/assessment/knowledge/doc/comments': 'id=prompt%3Aclassify-transcript.md',
   'GET /api/assessment/knowledge/doc/reactions': 'id=ec%3Astandards%2Fci-cd-standards.md',
+  // Rubric Overview carries the seeded legacy thread, so the capture witnesses
+  // the one-time import's rows (scope, parentCommentId, importedFrom) and its
+  // `import` status in platform-api's comment shape.
+  'GET /api/assessment/knowledge/doc/workflows/comments': 'id=page%3A100002',
   'GET /api/graph/help': 'q=auth',
   'GET /api/scores/by-skill': 'skill=Kubernetes',
   'GET /api/scores/radar': 'personId=p-001',

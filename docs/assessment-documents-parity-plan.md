@@ -272,6 +272,14 @@ navigation chrome; Cedar gating (`ViewAssessment`, `ManageKnowledge`).
 | 14 | Canvas availability in dev | always on | 503 under `dev:mock` | Ship a `dev:mock` document env pointing at the social profile, or a documented mock canvas mode | middleware | no |
 | 15 | Draft/publish, Pull, drag of synced pages | not present | present | Preserve; not a gap to close | — | — |
 
+**Status 2026-09-29 (evening).** Rows 1–3, 5–7, 9, 10, 12 and 14 have
+shipped (see the goal doc). Row 4 shipped as recommended: comments are
+platform-api threads through the BFF grant, with a one-time import that keeps
+ids / authors / timestamps / replies and reactions left in the BFF keyed by
+those ids. Row 8 shipped on the tenant's existing call host (lobby
+`<tenant>:doc:<doc>`, docked in the page margin). Row 11 remains a decision;
+13 omitted (the share dialog is not an ACL).
+
 ## 4. Phased plan
 
 **Phase 0 — make the real editor show up locally.** Add a documented

@@ -63,3 +63,14 @@ it('offers only actual eligible assessment identities to the explicit document m
 it('does not expose the assignment directory to a document reader', async () => {
   await expect(listDocumentReviewers(source.id, session)).rejects.toMatchObject({ status: 403 }); expect(listUsers).not.toHaveBeenCalled();
 });
+
+it('reaches document comments as fixed operations under this document only', async () => {
+  global.fetch = jest.fn(async () => new Response(JSON.stringify({ comments: [] }), { status: 200 }));
+  await performDocumentWorkflow(source.id, session, { kind: 'comments', method: 'GET', cursor: 'abc=' });
+  expect(String(jest.mocked(fetch).mock.calls[0]![0])).toBe(`http://platform:3001/api/documents/${documentId}/comments?limit=200&cursor=abc%3D`);
+  await performDocumentWorkflow(source.id, session, { kind: 'comment-update', method: 'PATCH', commentId: '01J#x', body: { resolved: true } });
+  expect(String(jest.mocked(fetch).mock.calls[1]![0])).toBe(`http://platform:3001/api/documents/${documentId}/comments/01J%23x`);
+  global.fetch = jest.fn(async () => new Response(null, { status: 204 }));
+  expect(await performDocumentWorkflow(source.id, session, { kind: 'comment-delete', method: 'DELETE', commentId: '01J' })).toEqual({ status: 204, body: { documentId } });
+  await expect(performDocumentWorkflow(source.id, session, { kind: 'comment-delete', method: 'DELETE', commentId: '../lifecycle' })).rejects.toMatchObject({ status: 400 });
+});

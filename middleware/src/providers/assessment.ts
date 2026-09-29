@@ -19,6 +19,7 @@ import { config } from '../config.js';
 import { clock } from '../mock/core/index.js';
 import * as M from '../mock/assessment.js';
 import { assessmentBroker } from '../lib/assessment-broker.js';
+import { legacyThreadMoved } from './document-comment-import.js';
 import { NotFoundError } from '../lib/async-handler.js';
 import * as A from './assessment-aurora.js';
 import { sourceConfigured, readSourceTree, readSourcePage } from './document-source.js';
@@ -3375,7 +3376,14 @@ export async function publishKnowledgeDoc(id: string, actor = 'unknown'): Promis
  */
 export type CommentWriteResult =
   | { ok: true; id: string; body: string; edited_at?: string | null; deleted_at?: string | null }
-  | { ok: false; status: 400 | 403 | 404; reason: string };
+  | { ok: false; status: 400 | 403 | 404 | 409; reason: string };
+
+/**
+ * Once a document's legacy thread has been imported into platform-api
+ * (providers/document-comment-import.ts), this store is no longer read, so a
+ * write here would vanish from every reader. Refused, naming where to go.
+ */
+export const COMMENTS_MOVED = 'Comments on this document moved to its Comments tab (platform-api); this thread is read-only.';
 
 /**
  * Edit or soft-delete one comment.
@@ -3397,6 +3405,7 @@ export async function editKnowledgeComment(
   if (!body) return { ok: false, status: 400, reason: 'a comment body is required' };
   const found = await findComment(commentId);
   if (!found) return { ok: false, status: 404, reason: `comment "${commentId}" not found` };
+  if (await legacyThreadMoved(found.doc_id)) return { ok: false, status: 409, reason: COMMENTS_MOVED };
   if (found.author !== actor) return { ok: false, status: 403, reason: 'only the author can edit a comment' };
   if (found.deleted_at) return { ok: false, status: 400, reason: 'that comment was deleted' };
 
@@ -3415,6 +3424,7 @@ export async function deleteKnowledgeComment(
 ): Promise<CommentWriteResult> {
   const found = await findComment(commentId);
   if (!found) return { ok: false, status: 404, reason: `comment "${commentId}" not found` };
+  if (await legacyThreadMoved(found.doc_id)) return { ok: false, status: 409, reason: COMMENTS_MOVED };
   if (found.author !== actor) return { ok: false, status: 403, reason: 'only the author can delete a comment' };
   if (found.deleted_at) return { ok: true, id: commentId, body: found.body, deleted_at: found.deleted_at };
 
@@ -3441,10 +3451,13 @@ async function findComment(commentId: string): Promise<M.KnowledgeComment | null
  * page rather than the row — the alternative is a request per comment on a
  * thread that can be long.
  */
-export async function listKnowledgeReactions(docId: string): Promise<M.KnowledgeReaction[] | null> {
+export async function listKnowledgeReactions(docId: string, extraTargets: readonly string[] = []): Promise<M.KnowledgeReaction[] | null> {
   const comments = await listKnowledgeComments(docId);
   if (comments === null) return null;
-  const targets = [docId, ...comments.map((c) => c.id)];
+  // `extraTargets`: comments written on platform-api since the thread moved
+  // (routes pass providers/document-comments.ts documentCommentTargetIds).
+  // Imported comments keep their legacy ids, so their reactions still match.
+  const targets = [...new Set([docId, ...comments.map((c) => c.id), ...extraTargets])];
   if (!config.mock.aurora) return A.fetchKnowledgeReactions(targets);
   const wanted = new Set(targets);
   return M.knowledgeReactionsFixture.rows().filter((r) => wanted.has(r.target_id));
@@ -3463,7 +3476,7 @@ export type ReactionToggleResult =
  * reaction cannot attach to something that does not exist.
  */
 export async function toggleKnowledgeReaction(
-  docId: string, targetId: string, emoji: string, actor: string,
+  docId: string, targetId: string, emoji: string, actor: string, extraTargets: readonly string[] = [],
 ): Promise<ReactionToggleResult> {
   const trimmed = String(emoji ?? '').trim();
   if (!trimmed) return { ok: false, status: 400, reason: 'an emoji is required' };
@@ -3471,7 +3484,7 @@ export async function toggleKnowledgeReaction(
 
   const comments = await listKnowledgeComments(docId);
   if (comments === null) return { ok: false, status: 404, reason: `document "${docId}" not found` };
-  const valid = targetId === docId || comments.some((c) => c.id === targetId);
+  const valid = targetId === docId || comments.some((c) => c.id === targetId) || extraTargets.includes(targetId);
   if (!valid) return { ok: false, status: 404, reason: `"${targetId}" is not this document or one of its comments` };
 
   const now = new Date().toISOString();
@@ -3502,8 +3515,9 @@ export async function listKnowledgeComments(id: string): Promise<M.KnowledgeComm
 
 export async function createKnowledgeComment(
   id: string, body: string, actor = 'unknown', parentId: string | null = null,
-): Promise<{ ok: true } | { ok: false; reason: string } | null> {
+): Promise<{ ok: true } | { ok: false; reason: string; status?: 409 } | null> {
   if (!(await getKnowledgeDoc(id))) return null;
+  if (await legacyThreadMoved(id)) return { ok: false, status: 409, reason: COMMENTS_MOVED };
   const commentId = `comment-${stampNow()}-${hex(6)}`;
   const now = new Date().toISOString();
   if (!config.mock.aurora) {

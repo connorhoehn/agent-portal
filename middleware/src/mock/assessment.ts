@@ -9369,6 +9369,8 @@ export const knowledgeReactionsFixture = defineFixture<KnowledgeReaction>({
       { target_id: 'prompt:classify-transcript.md', emoji: '👍', actor: 'u-asha', created_at: daysAgo(3) },
       { target_id: 'prompt:classify-transcript.md', emoji: '👍', actor: 'u-jonas', created_at: daysAgo(3) },
       { target_id: 'kc-classify-01', emoji: '🎯', actor: 'u-farah', created_at: daysAgo(3) },
+      { target_id: 'kc-rubric-01', emoji: '👍', actor: 'u-farah', created_at: daysAgo(5) },
+      { target_id: 'page:100002', emoji: '🎯', actor: 'u-jonas', created_at: daysAgo(6) },
     ],
     empty: () => [],
     // A document whose reactions cannot be read is not a document nobody
@@ -9404,6 +9406,24 @@ export const knowledgeCommentsFixture = defineFixture<KnowledgeComment>({
         // in the seed is a comment nobody ever wrote, and the state is one
         // POST + one DELETE away for anyone who wants to see it.
         edited_at: daysAgo(3),
+      },
+      // A thread on the synced Rubric Overview page (page:100002) — the one the
+      // documents parity journey opens. It predates the move of document
+      // comments to platform-api, so it is what the one-time import carries
+      // across (providers/document-comment-import.ts): ids, authors, times and
+      // the reply edge survive, and the reaction below stays keyed by the same
+      // comment id.
+      {
+        parent_id: null, id: 'kc-rubric-01', doc_id: 'page:100002',
+        author: 'u-jonas',
+        body: 'The "Partially met" band needs an example — two teams scored the same evidence differently last cycle.',
+        created_at: daysAgo(6),
+      },
+      {
+        parent_id: 'kc-rubric-01', id: 'kc-rubric-02', doc_id: 'page:100002',
+        author: 'u-farah',
+        body: 'Agreed. I will add the release-gate example from the payments review to the draft.',
+        created_at: daysAgo(5),
       },
       {
         parent_id: null, id: 'kc-evidence-01', doc_id: 'rule:what-counts-as-evidence.md',

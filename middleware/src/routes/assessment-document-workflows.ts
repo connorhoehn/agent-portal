@@ -2,6 +2,7 @@ import { changeDocumentVersion, type DocumentVersionChange } from '../providers/
 import { Router, type Request } from 'express';
 import { requireAction, requireTenant } from '../lib/authz.js';
 import { DocumentWorkflowError, performDocumentWorkflow, listDocumentReviewers, type WorkflowOperation } from '../providers/document-workflows.js';
+import { createDocumentComment, deleteDocumentComment, listDocumentComments, updateDocumentComment, type DocumentCommentResult } from '../providers/document-comments.js';
 
 export const assessmentDocumentWorkflowsRouter = Router();
 assessmentDocumentWorkflowsRouter.use('/doc/workflows', requireTenant('assessment'), requireAction('ViewAssessment'));
@@ -60,3 +61,27 @@ assessmentDocumentWorkflowsRouter.post('/doc/workflows/versions/restore', handle
 }));
 
 assessmentDocumentWorkflowsRouter.get('/doc/workflows/reviewers', handle(() => ({ directory: true })));
+
+// Document comments on platform-api threads (providers/document-comments.ts).
+// The browser names the SOURCE id; the canonical document, the actor and the
+// credential are the BFF's. Reads carry the one-time legacy import's status.
+function handleComments(run: (req: Request, id: string, session: NonNullable<Request['session']>) => Promise<DocumentCommentResult>) {
+  return async (req: Request, res: import('express').Response) => {
+    res.setHeader('Cache-Control', 'no-store');
+    if (!req.session) { res.status(401).json({ error: 'Sign in to use document comments' }); return; }
+    const id = req.query['id'];
+    if (typeof id !== 'string' || !id || id.length > 1024) { res.status(400).json({ error: 'Document id required' }); return; }
+    try {
+      const result = await run(req, id, req.session);
+      if (result.status === 204) { res.status(204).end(); return; }
+      res.status(result.status).json(result.body);
+    } catch (error) {
+      if (error instanceof DocumentWorkflowError) { res.status(error.status).json({ error: error.message }); return; }
+      res.status(503).json({ error: 'Document comments are unavailable. Please retry.' });
+    }
+  };
+}
+assessmentDocumentWorkflowsRouter.get('/doc/workflows/comments', handleComments(async (_req, id, session) => ({ status: 200, body: { ...await listDocumentComments(id, session) } })));
+assessmentDocumentWorkflowsRouter.post('/doc/workflows/comments', handleComments((req, id, session) => createDocumentComment(id, session, req.body ?? {})));
+assessmentDocumentWorkflowsRouter.patch('/doc/workflows/comments/:commentId', handleComments((req, id, session) => updateDocumentComment(id, session, req.params['commentId'], req.body ?? {})));
+assessmentDocumentWorkflowsRouter.delete('/doc/workflows/comments/:commentId', handleComments((req, id, session) => deleteDocumentComment(id, session, req.params['commentId'])));

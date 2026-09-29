@@ -252,6 +252,32 @@ CREATE TABLE IF NOT EXISTS assessment_document_mappings (
   PRIMARY KEY (tenant_id, source_namespace, source_id)
 );
 
+-- One-time import of a document's legacy comment thread
+-- (assessment_knowledge_comments + the reactions keyed to it) into
+-- platform-api's document comments, where the Comments tab now reads
+-- (docs/assessment-documents-parity-goal.md, Phase 4). A row here means the
+-- document's thread has moved: the BFF writes it only after every legacy row
+-- is on platform-api under its ORIGINAL id, author and timestamp, and from
+-- then on the legacy comment write routes answer 409 instead of writing into
+-- a thread nobody reads. Reactions do not move — platform-api has none on
+-- document comments — they stay in assessment_knowledge_reactions, keyed by
+-- the same comment ids, which is why the import preserves ids at all.
+--
+-- The import runs lazily, the first time a document's comments are read
+-- through the BFF (providers/document-comment-import.ts): a document never
+-- opened has no platform identity to import into yet. Idempotent end to end:
+-- the platform writes are conditional puts on (documentId, commentId), and
+-- this row is ON CONFLICT DO NOTHING.
+CREATE TABLE IF NOT EXISTS assessment_document_comment_imports (
+  document_id uuid PRIMARY KEY,
+  source_id   text NOT NULL,
+  imported    integer NOT NULL CHECK (imported >= 0),
+  legacy      integer NOT NULL CHECK (legacy >= 0),
+  imported_at timestamptz NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_assessment_document_comment_imports_source
+  ON assessment_document_comment_imports(source_id);
+
 CREATE TABLE IF NOT EXISTS assessment_knowledge_sections (
   key       TEXT PRIMARY KEY,
   title     TEXT NOT NULL,

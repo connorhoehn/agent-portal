@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { CanvasDocumentView, DocumentHeader, DocumentLifecyclePill, DocumentOutline, useDocumentOutline, DocumentImageProvider, createAuthenticatedDocumentImage, WorkspaceDocumentHeaderNotices } from '@connorhoehnslalom/ui-components/doc-editor';
+import { CanvasDocumentView, DocumentHeader, DocumentLifecyclePill, DocumentOutline, useDocumentOutline, DocumentImageProvider, createAuthenticatedDocumentImage, WorkspaceDocumentHeaderNotices, FollowModeBar } from '@connorhoehnslalom/ui-components/doc-editor';
 import { Button, Chip, ErrorState, Inline, InlineAlert, LoadingState, Stack, Modal, FileUploadDrop, ConfirmDialog } from '@connorhoehnslalom/ui-components/shared';
-import { ReactionsBar } from '@connorhoehnslalom/ui-components/social';
+import { useLocation } from 'react-router';
 import { GatewaySocketProvider, useCanvasDocument, useGateway, useYjsDoc, useFileUpload } from '@connorhoehnslalom/realtime-modules/client';
 import { createCanvasExtensions, MacroNode, HeadingAnchor, MarkdownClipboard, Callout, CanvasTextAlign } from '@connorhoehnslalom/realtime-modules/adapters/tiptap';
 import { TextStyleKit } from '@tiptap/extension-text-style';
@@ -17,11 +17,14 @@ import { usePendingDocumentChanges } from './DocumentNavigation';
 import { DocumentContextPanel, useDocumentContext } from './ExplorerFrame';
 import { DocumentShell, type DocumentTab } from './DocumentShell';
 import { DocumentActivityFeed } from './ActivityBar';
-import { DocumentCommentThread } from './DocumentCommentThread';
+import { DocumentComments } from './DocumentComments';
 import { DocumentReader } from './DocumentReader';
-import { CLASSIFICATION_LABEL, summarizeStoredReactions, defuseJsonFences, stripFrontmatter, stripTitleHeading } from './knowledgeFormat';
+import { CLASSIFICATION_LABEL, defuseJsonFences, stripFrontmatter, stripTitleHeading } from './knowledgeFormat';
 import { documentCanvasSaveState, canEditDocumentCanvas } from './documentCanvasState';
-import { useKnowledgeDocumentThread } from './useKnowledgeDocumentThread';
+import { useDocumentComments, type DocumentCommentsState } from './useDocumentComments';
+import { useCanvasComments, useCommentHighlightExtension } from './useCanvasComments';
+import { useCanvasParticipants } from './useCanvasParticipants';
+import { useDocumentCall } from './useDocumentCall';
 import { useCanvasRecovery } from './useCanvasRecovery';
 import { useDocumentWorkflow } from './useDocumentWorkflow';
 import { SourcePublishControl } from './SourcePublishControl';
@@ -40,14 +43,17 @@ export interface DocumentCanvasGrant {
 
 // Supplied instances preserve the consumer's single ProseMirror graph. Both the
 // BFF seed schema and reference editor use this canonical runtime factory.
-const EXTENSIONS = createCanvasExtensions({ MacroNode, HeadingAnchor, MarkdownClipboard, Callout, CanvasTextAlign, TextStyleKit, Image: createAuthenticatedDocumentImage(Image), TableKit });
+const PARTS = { MacroNode, HeadingAnchor, MarkdownClipboard, Callout, CanvasTextAlign, TextStyleKit, Image: createAuthenticatedDocumentImage(Image), TableKit };
+const EXTENSIONS = createCanvasExtensions(PARTS);
 
 export function CanvasDocumentPane(props: DocPaneProps) {
-  const { node, sseEvents, sseConnected, sseGapped } = props;
+  const { node, sseEvents } = props;
   const { session } = useSession();
   const context = useDocumentContext();
   const doc = useFetch<KnowledgeDoc>(`/api/assessment/knowledge/doc?id=${encodeURIComponent(node.id)}`);
-  const thread = useKnowledgeDocumentThread(node.id, sseEvents, sseConnected, sseGapped);
+  // platform-api threads through the BFF (the legacy thread was imported once).
+  const comments = useDocumentComments(node.id, sseEvents);
+  const location = useLocation();
   const [grant, setGrant] = useState<DocumentCanvasGrant | null>(null);
   const [grantError, setGrantError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -85,13 +91,8 @@ export function CanvasDocumentPane(props: DocPaneProps) {
   const [tab, setTab] = useState<DocumentTab>('editor');
   const title = doc.data?.title ?? node.title;
   // Document-level reactions sit with the discussion, not in the head row.
-  const comments = <Stack gap="sm" className="min-h-0 flex-1">
-    <ReactionsBar reactions={summarizeStoredReactions(thread.reactions, node.id, session?.sub ?? null)} onReact={emoji => void thread.react(node.id, emoji)} />
-    {thread.error && <InlineAlert tone="error" onDismiss={thread.clearError}>{thread.error}</InlineAlert>}
-    <DocumentCommentThread key={node.id} title={title}
-      comments={thread.comments} reactions={thread.reactions} userId={session?.sub} userName={session?.name}
-      onSend={thread.send} onEdit={thread.edit} onDelete={thread.remove} onReact={(id, emoji) => void thread.react(id, emoji)} />
-  </Stack>;
+  const commentsTab = <DocumentComments key={node.id} sourceId={node.id} title={title} userId={session?.sub ?? ''}
+    comments={comments} onBackToPage={() => setTab('editor')} />;
   const history = <DocumentActivityFeed node={node} sectionKey={props.sectionKey} sseEvents={sseEvents} />;
   const outlineMenu = context ? [{ id: 'show-outline', label: 'Show outline', onSelect: () => context.open('outline') }] : [];
   // The page's conversation lives on the BFF gateway, so it is joined here —
@@ -99,11 +100,13 @@ export function CanvasDocumentPane(props: DocPaneProps) {
   const conversation = useDocumentConversation(node.id, session?.name ?? 'Reader');
   const composer = <DocumentComposerDock docId={node.id} title={title} conversation={conversation} />;
   const chatPanel = <DocumentChatPanel title={title} userId={session?.sub ?? ''} conversation={conversation} />;
-  const frame = { title, path: props.path, tab, onTab: setTab, commentCount: thread.comments.length, comments, history, composer };
+  const frame = { title, path: props.path, tab, onTab: setTab, commentCount: comments.openCount, comments: commentsTab, history, composer };
+  const href = `${location.pathname}?doc=${encodeURIComponent(node.id)}`;
 
   if (grant) return <>{chatPanel}<GatewaySocketProvider url={grant.gatewayUrl} token={grant.token} authProtocol="document-grant-v1" rest={null}>
     <ConnectedCanvas key={grant.documentId} grant={grant} mode={props.mode} sourceConfigured={props.sourceConfigured} accessValid={!grantError}
       userId={session?.sub ?? ''} tenant={session?.tenant ?? ''} userName={session?.name ?? 'Reader'} frame={frame} menuItems={outlineMenu}
+      comments={comments} href={href}
       accessNotice={grantError && <InlineAlert tone="warning"><Inline gap="sm" align="center" wrap>{grantError}
         <Button size="sm" variant="secondary" disabled={refreshing} onClick={() => void refreshGrant()}>Retry connection</Button>
       </Inline></InlineAlert>}
@@ -127,8 +130,9 @@ export function CanvasDocumentPane(props: DocPaneProps) {
 
 type ShellFrame = Pick<Parameters<typeof DocumentShell>[0], 'title' | 'path' | 'tab' | 'onTab' | 'commentCount' | 'comments' | 'history' | 'composer'>;
 
-function ConnectedCanvas({ grant, mode, sourceConfigured, accessValid, userId, tenant, userName, frame, menuItems, accessNotice, onWorkflowChanged, onPublished }: {
+function ConnectedCanvas({ grant, mode, sourceConfigured, accessValid, userId, tenant, userName, frame, menuItems, comments, href, accessNotice, onWorkflowChanged, onPublished }: {
   grant: DocumentCanvasGrant; mode: DocPaneProps['mode']; sourceConfigured: boolean; accessValid: boolean; userId: string; tenant: string; userName: string;
+  comments: DocumentCommentsState; href: string;
   frame: ShellFrame; menuItems: Array<{ id: string; label: string; onSelect: () => void }>; accessNotice: ReactNode;
   onWorkflowChanged: () => void; onPublished: () => void;
 }) {
@@ -167,6 +171,23 @@ function ConnectedCanvas({ grant, mode, sourceConfigured, accessValid, userId, t
     if (doc.persistenceState === 'saved' && doc.pendingUpdateCount === 0) recovery.acknowledged();
   }, [doc.persistenceState, doc.pendingUpdateCount, recovery.acknowledged]);
   const canvas = useCanvasDocument({ ydoc: doc.ydoc });
+  // This document's canvas: the shared schema plus its comment marks. Built
+  // once per document — ProseMirror reads its plugin list at construction.
+  const focusThread = useRef<(id: string) => void>(() => undefined);
+  const highlight = useCommentHighlightExtension(id => focusThread.current(id));
+  const extensions = useMemo(() => createCanvasExtensions({ ...PARTS, additional: [highlight] }), [highlight]);
+  const liveEditor = outlineEditor as unknown as Editor | null;
+  const margin = useCanvasComments({ editor: liveEditor, ydoc: doc.ydoc, comments, canComment: accessValid && !!userId });
+  focusThread.current = margin.focus;
+  const people = useCanvasParticipants(liveEditor, (doc.provider?.awareness ?? null) as Parameters<typeof useCanvasParticipants>[1], userId);
+  const [gutterVisible, setGutterVisible] = useState(() => {
+    try { return localStorage.getItem('assessment.document.gutter') !== 'hidden'; } catch { return true; }
+  });
+  const toggleGutter = () => setGutterVisible(value => {
+    try { localStorage.setItem('assessment.document.gutter', value ? 'hidden' : 'shown'); } catch { /* session-only preference */ }
+    return !value;
+  });
+  const call = useDocumentCall({ docId: grant.sourceId, href, title: grant.title, people: people.people, onOpenPeople: () => frame.onTab('editor') });
   usePendingDocumentChanges(grant.documentId, doc.pendingUpdateCount);
   const [editing, setEditing] = useState(false);
   const [wireError, setWireError] = useState<string | null>(null);
@@ -216,6 +237,7 @@ function ConnectedCanvas({ grant, mode, sourceConfigured, accessValid, userId, t
   const headActions = <DocumentHeader variant="actions" actionsLayout="menu" extraMenuItems={menuItems}
     meta={{ id: grant.documentId, title: grant.title, status: 'draft', sourceType: 'custom', sourceId: grant.sourceId, createdBy: '', createdAt: '', aiModel: '' }}
     mode={editable ? 'editor' : 'reader'} participants={[]} titleEditable={false}
+    {...call.headerProps}
     lifecycleStatus={lifecycle?.status} lifecycleTerminal={lifecycle?.status === 'finalized'}
     lifecycleActions={accessValid && doc.pendingUpdateCount === 0 ? workflow.data?.availableActions : []}
     lifecycleLoading={workflow.loading} lifecycleBusy={workflow.busy}
@@ -226,6 +248,7 @@ function ConnectedCanvas({ grant, mode, sourceConfigured, accessValid, userId, t
     onToggleHistory={() => frame.onTab('versions')}
     workflowActions={<Inline gap="sm" align="center" wrap>
       <Chip size="xs" tone="neutral">{sourceDraft && editing ? 'Local draft' : CLASSIFICATION_LABEL[grant.classification] ?? grant.classification}</Chip>
+      {margin.commentButton}
       {workflow.data?.canClaimOwnership && <Button size="sm" variant="secondary" disabled={workflow.busy || !accessValid} onClick={workflow.claim}>Take ownership</Button>}
       {sourceConfigured && sourceDraft && capabilities.ready && capabilities.can('ManageKnowledge') && <SourcePublishControl sourceId={grant.sourceId}
         disabled={!canEdit || !doc.synced || !online || doc.pendingUpdateCount > 0} changeSequence={changeSequence} onPublished={onPublished} />}
@@ -253,8 +276,11 @@ function ConnectedCanvas({ grant, mode, sourceConfigured, accessValid, userId, t
       <Button size="sm" variant="secondary" onClick={recovery.download}>Download recovery</Button>
     </Inline></InlineAlert>}
     {wireError && <InlineAlert tone="error">{wireError}</InlineAlert>}
+    {call.notice && <InlineAlert tone="info" onDismiss={call.clearNotice} data-testid="document-call-notice">{call.notice}</InlineAlert>}
   </>;
   const shell = (editor: ReactNode) => <DocumentShell {...frame} headActions={headActions} saveState={saveState}
+    participants={people.participants} onParticipantClick={people.onParticipantClick}
+    onFollowParticipant={people.onFollowParticipant} followingParticipantId={people.following}
     {...(lifecycle ? { statusPill: <DocumentLifecyclePill status={lifecycle.status} variant="tag" /> } : {})}
     editor={<>{notices}<Stack gap="none" className="min-h-0 flex-1" data-testid="document-canvas-slot">{editor}</Stack></>}
     versions={<DocumentHistory documentId={grant.documentId} onClose={() => frame.onTab('editor')}
@@ -272,10 +298,15 @@ function ConnectedCanvas({ grant, mode, sourceConfigured, accessValid, userId, t
   // card on the workspace grey, ruler on, zoom in the toolbar's overflow, and
   // the sheet sized to the shell's scroller (fitHeight="parent").
   return shell(<DocumentImageProvider loadImage={loadImage} requiresAuthentication={isProtectedImage}><CanvasDocumentView key={doc.docVersion} isCanvas body={canvas.body} ydoc={doc.ydoc} provider={doc.provider}
-    user={user} editable={editable} extensions={EXTENSIONS} showRuler showStatusBar={false} toolbarStyle="card" pageMargin="narrow" fitHeight="parent" paginate showOutline={!context}
+    user={user} editable={editable} extensions={extensions} showRuler showStatusBar={false} toolbarStyle="card" pageMargin="narrow" fitHeight="parent" paginate showOutline={!context}
     onInsertImage={editable ? () => { setImageError(null); setImageOpen(true); } : undefined}
+    gutterItems={margin.gutterItems} gutterLead={call.dock} gutterVisible={gutterVisible} onToggleGutter={toggleGutter}
+    onFocusGutterItem={margin.onFocusGutterItem} onHoverGutterItem={margin.onHoverGutterItem}
+    {...(people.following ? { belowRuler: <FollowModeBar followingUserId={people.following} participants={people.followBarParticipants}
+      onStopFollow={people.stopFollowing} appearance="bar" data-testid="document-follow-bar" /> } : {})}
     onEditorReady={editor => { editorRef.current = editor as Editor | null; setOutlineEditor(editor as Parameters<typeof useDocumentOutline>[0]); }} />
     <DocumentContextPanel id="outline"><DocumentOutline entries={outline.entries} activeId={outline.activeId} onSelect={outline.goTo} /></DocumentContextPanel>
+    {margin.composer}
     <ConfirmDialog open={confirmRecovery} onCancel={() => setConfirmRecovery(false)} title="Recover earlier changes?" tone="caution"
       body="This explicitly merges the recovered document with the current version. It can bring back content removed by a version restore. Download the recovery first if you want to keep a separate copy."
       confirmLabel="Recover changes" onConfirm={() => {

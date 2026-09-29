@@ -727,8 +727,10 @@ export const REFUSAL_RULES: readonly RefusalRule[] = [
   {
     id: 'document-service',
     because: 'Delegates to durable document or source services outside the resettable Aurora fixture. Capture must not seed, publish, restore or transition real documents; dedicated isolated integration tests cover these writes.',
-    applies: route => /^POST \/api\/assessment\/knowledge\/canvas$/.test(route)
-      || /^[A-Z]+ \/api\/assessment\/knowledge\/(source|doc\/workflows)\//.test(route),
+    // A DELETE under these paths (a document comment) is refused all the same,
+    // but as `destructive`: every DELETE carries that one label.
+    applies: route => !route.startsWith('DELETE ') && (/^POST \/api\/assessment\/knowledge\/canvas$/.test(route)
+      || /^[A-Z]+ \/api\/assessment\/knowledge\/(source|doc\/workflows)\//.test(route)),
   },
   {
     id: 'destructive',

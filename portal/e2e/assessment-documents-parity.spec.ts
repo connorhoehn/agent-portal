@@ -14,14 +14,16 @@ const OUT = '../docs/design/documents-parity';
 const DOC = 'page:100002';
 // The page's canvas — the composer dock under it is a ProseMirror too.
 const CANVAS = '.ProseMirror:not(.chat-composer-input)';
-test.use({ viewport: { width: 1672, height: 941 }, ...(process.env.PARITY_BASE_URL ? { baseURL: process.env.PARITY_BASE_URL } : {}) });
+// Fake camera/microphone for the in-document call (worker-scoped, so file-level).
+test.use({ viewport: { width: 1672, height: 941 }, ...(process.env.PARITY_BASE_URL ? { baseURL: process.env.PARITY_BASE_URL } : {}),
+  launchOptions: { args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'] } });
 
-async function signIn(page: Page) {
+async function signIn(page: Page, userId = 'u-farah') {
   await page.goto('/');
-  const status = await page.evaluate(async () => (await fetch('/api/session/login', {
+  const status = await page.evaluate(async (id) => (await fetch('/api/session/login', {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
-    body: JSON.stringify({ userId: 'u-farah' }),
-  })).status);
+    body: JSON.stringify({ userId: id }),
+  })).status, userId);
   expect(status, 'demo login').toBe(200);
 }
 
@@ -120,4 +122,106 @@ test('the rail, the All documents list and the document conversation match the r
   await expect(page.getByTestId('document-result-count')).toHaveText('1 result');
   await page.screenshot({ path: `${OUT}/parity-journey-list.png` });
   expect(errors, 'page errors').toEqual([]);
+});
+
+// Phase 4 (gaps 4, 7, 8): platform-api comment threads, the byline from canvas
+// awareness, and the in-document call — two people on one page. u-jonas lands
+// as assessor (read + comment, no edit); u-farah as lead-assessor.
+test.describe('two people on one document', () => {
+  test('comments on platform-api threads, participants in the byline, and a call rung from the document', async ({ browser, baseURL }) => {
+    test.setTimeout(180_000);
+    const people = await Promise.all(['u-farah', 'u-jonas'].map(async userId => {
+      const context = await browser.newContext({ viewport: { width: 1672, height: 941 }, baseURL, permissions: ['camera', 'microphone'] });
+      const page = await context.newPage();
+      const errors: string[] = [];
+      page.on('pageerror', error => errors.push(error.message));
+      await signIn(page, userId);
+      await page.goto(`/assessment/workspace?doc=${encodeURIComponent(DOC)}`);
+      await expect(page.getByTestId('document-shell')).toBeVisible({ timeout: 20_000 });
+      await expect(page.locator(CANVAS)).toBeVisible({ timeout: 20_000 });
+      return { page, errors, context };
+    }));
+    const [farah, jonas] = people as [typeof people[0], typeof people[0]];
+    const farahShell = farah.page.getByTestId('document-shell');
+    const jonasShell = jonas.page.getByTestId('document-shell');
+
+    // The byline: each sees the other from the canvas's awareness.
+    await expect(farahShell.getByTestId('presence-avatar').and(farahShell.getByLabel('Jonas Lindqvist'))).toBeVisible({ timeout: 15_000 });
+    await expect(jonasShell.getByTestId('presence-avatar').and(jonasShell.getByLabel('Farah Osei'))).toBeVisible({ timeout: 15_000 });
+    await farah.page.screenshot({ path: `${OUT}/parity-journey-byline.png` });
+
+    // The imported thread: the legacy Aurora comment keeps its author, words and reply.
+    await farahShell.getByRole('tab', { name: /^Comments/ }).click();
+    const tab = farah.page.getByTestId('document-comments');
+    const imported = tab.getByTestId('document-comment-thread-kc-rubric-01');
+    await expect(imported.getByText('Jonas Lindqvist').first()).toBeVisible();
+    await expect(imported.getByText(/The "Partially met" band needs an example/)).toBeVisible();
+    await expect(imported.getByText(/release-gate example from the payments review/)).toBeVisible();
+
+    // A document-wide comment from Farah reaches Jonas's Comments tab.
+    const whole = `Whole-document check ${Date.now()}`;
+    await tab.getByRole('textbox', { name: 'Comment on the whole document' }).fill(whole);
+    await tab.getByRole('button', { name: 'Post' }).click();
+    await expect(tab.getByText(whole)).toBeVisible();
+    await jonasShell.getByRole('tab', { name: /^Comments/ }).click();
+    await expect(jonas.page.getByTestId('document-comments').getByText(whole)).toBeVisible({ timeout: 20_000 });
+    await farah.page.screenshot({ path: `${OUT}/parity-journey-comments-threads.png` });
+
+    // Jonas (a reader) comments on a selection: the anchor pins it to the text, both see the mark and the margin card.
+    await jonasShell.getByRole('tab', { name: /^Editor/ }).click();
+    await farahShell.getByRole('tab', { name: /^Editor/ }).click();
+    await jonas.page.locator(CANVAS).getByText('Claimed level', { exact: true }).click({ clickCount: 3 });
+    const commentButton = jonas.page.getByTestId('canvas-comment-button');
+    await expect(commentButton).toBeEnabled();
+    await commentButton.click();
+    const pinned = `Pinned check ${Date.now()}`;
+    const composer = jonas.page.getByTestId('canvas-comment-composer');
+    await composer.getByRole('textbox', { name: 'Comment' }).fill(pinned);
+    await composer.getByRole('button', { name: 'Comment' }).click();
+    await expect(jonas.page.getByText(pinned)).toBeVisible();
+    await expect(farah.page.getByText(pinned)).toBeVisible({ timeout: 20_000 });
+    await expect(farah.page.locator(`${CANVAS} .canvas-comment`).first()).toBeVisible();
+    await farah.page.screenshot({ path: `${OUT}/parity-journey-comments-anchored.png` });
+
+    // It is a platform-api thread with an anchor, through the BFF (never a browser-held platform credential).
+    const pinnedId = await farah.page.evaluate(async ({ doc, text }) => {
+      const body = await (await fetch(`/api/assessment/knowledge/doc/workflows/comments?id=${encodeURIComponent(doc)}`, { credentials: 'include' })).json();
+      const row = body.comments.find((c: { text: string }) => c.text === text);
+      return row && row.anchor && row.userId === 'u-jonas' ? row.commentId as string : null;
+    }, { doc: DOC, text: pinned });
+    expect(pinnedId, 'the pinned comment is stored anchored, authored by Jonas').toBeTruthy();
+
+    // Resolve it from Farah's Comments tab; Jonas's tab shows the resolved banner.
+    await farahShell.getByRole('tab', { name: /^Comments/ }).click();
+    await farah.page.getByTestId(`document-comment-thread-${pinnedId}`).getByRole('button', { name: /Resolve/ }).click();
+    await expect(farah.page.getByTestId(`document-comment-thread-${pinnedId}`).getByTestId('comment-resolved-banner')).toBeVisible();
+    await jonasShell.getByRole('tab', { name: /^Comments/ }).click();
+    await expect(jonas.page.getByTestId(`document-comment-thread-${pinnedId}`).getByTestId('comment-resolved-banner')).toBeVisible({ timeout: 20_000 });
+    await jonasShell.getByRole('tab', { name: /^Editor/ }).click();
+    await farahShell.getByRole('tab', { name: /^Editor/ }).click();
+
+    // The call: Farah rings the people on the page; Jonas accepts; both have the docked call.
+    await farahShell.getByRole('button', { name: /^Call$/ }).click();
+    const notice = farah.page.getByTestId('document-call-notice');
+    const toast = jonas.page.getByTestId('incoming-call-toast');
+    await expect.poll(async () => await toast.isVisible() || await notice.isVisible(), { timeout: 20_000 }).toBe(true);
+    // A stack without platform-api / the realtime gateway says why on Call; the call half cannot run there.
+    if (await notice.isVisible()) test.skip(true, `Calls are not configured on this stack: ${await notice.innerText()}`);
+    await expect(toast).toContainText('Farah Osei is calling');
+    await jonas.page.getByTestId('incoming-call-accept').click();
+    await expect(jonas.page.getByTestId('document-call-slot')).toBeVisible({ timeout: 20_000 });
+    await expect(farah.page.getByTestId('document-call-slot')).toBeVisible({ timeout: 20_000 });
+    await expect(farahShell.getByRole('button', { name: 'Leave call' })).toBeVisible();
+    await expect(jonas.page.getByTestId('document-call-slot')).toContainText('2 people', { timeout: 20_000 });
+    await jonas.page.screenshot({ path: `${OUT}/parity-journey-call.png` });
+    // Leave: Jonas first, then Farah (the call may end for whoever is left alone).
+    await jonasShell.getByRole('button', { name: 'Leave call' }).click({ timeout: 5_000 });
+    await farahShell.getByRole('button', { name: 'Leave call' }).click({ timeout: 5_000 }).catch(() => undefined);
+    await expect(jonasShell.getByRole('button', { name: /^Call$/ })).toBeVisible({ timeout: 10_000 });
+
+    for (const person of people) {
+      expect(person.errors, 'page errors').toEqual([]);
+      await person.context.close();
+    }
+  });
 });

@@ -1,7 +1,16 @@
 jest.mock('../../providers/document-versions.js', () => ({ changeDocumentVersion: jest.fn() }));
 jest.mock('../../config.js', () => ({ config: { mock: { aurora: true }, auth: {} } }));
 jest.mock('../../providers/document-workflows.js', () => ({ ...jest.requireActual('../../providers/document-workflows.js'), performDocumentWorkflow: jest.fn() }));
-jest.mock('../../providers/assessment.js', () => ({}));
+jest.mock('../../providers/assessment.js', () => {
+  // Only what the comment routes read: the source and its legacy thread (the dev:mock fixture).
+  const fixtures = jest.requireActual('../../mock/assessment.js');
+  return {
+    getKnowledgeDoc: jest.fn(async (id: string) => id === 'page:100002' ? { id, title: 'Rubric Overview', classification: 'synced', markdown: '# Rubric', path: '', editable: false, updated_at: '' } : null),
+    listKnowledgeComments: jest.fn(async (id: string) => fixtures.knowledgeComments(id)),
+  };
+});
+jest.mock('../../providers/identity.js', () => ({ listUsers: jest.fn(async () => []) }));
+jest.mock('../../lib/assessment-broker.js', () => ({ assessmentBroker: { publish: jest.fn() } }));
 jest.mock('../../providers/document-canvas.js', () => ({}));
 jest.mock('../../lib/role-registry.js', () => ({ roleRegistry: () => [{ id: 'assessor', tenant: 'assessment', label: 'Assessor', summary: '', capabilities: ['ViewAssessment'] }] }));
 import express from 'express';
@@ -44,4 +53,29 @@ it('returns only the server acknowledged saved version', async () => {
   const result = await request(app()).post(`${url}/versions?id=page:1`).send({ name: 'Saved' });
   expect(result.status).toBe(200); expect(result.body).toEqual({ timestamp: 123, name: 'Saved' });
   expect(changeDocumentVersion).toHaveBeenCalledWith('page:1', session, { action: 'save', name: 'Saved' });
+});
+
+describe('document comments', () => {
+  it('lists through the BFF with no-store and never takes a document id from the browser', async () => {
+    const list = await request(app()).get(`${url}/comments?id=page%3A100002`);
+    expect(list.status).toBe(200); expect(list.headers['cache-control']).toBe('no-store');
+    expect(list.body.comments.map((c: { commentId: string }) => c.commentId)).toEqual(['kc-rubric-01', 'kc-rubric-02']);
+    expect(list.body.import).toMatchObject({ state: 'imported', imported: 2 });
+    expect((await request(app()).get(`${url}/comments`)).status).toBe(400);
+  });
+  it('rejects browser-supplied authority fields on a comment', async () => {
+    expect((await request(app()).post(`${url}/comments?id=page%3A100002`).send({ text: 'x', scope: 'document', userId: 'u-jonas' })).status).toBe(400);
+    expect((await request(app()).post(`${url}/comments?id=page%3A100002`).send({ text: 'x', scope: 'document', documentId: 'other' })).status).toBe(400);
+  });
+  it('creates, resolves and deletes; delete answers 204 with no body', async () => {
+    const created = await request(app()).post(`${url}/comments?id=page%3A100002`).send({ text: 'Route check', scope: 'document' });
+    expect(created.status).toBe(201); expect(created.body.comment).toMatchObject({ userId: 'alice', scope: 'document' });
+    const id = created.body.comment.commentId as string;
+    expect((await request(app()).patch(`${url}/comments/${id}?id=page%3A100002`).send({ resolved: true })).body.comment).toMatchObject({ resolved: true });
+    const removed = await request(app()).delete(`${url}/comments/${id}?id=page%3A100002`);
+    expect(removed.status).toBe(204); expect(removed.text).toBe('');
+  });
+  it('denies cross-tenant sessions', async () => {
+    expect((await request(app({ ...session, tenant: 'orgiq', role: 'member' })).get(`${url}/comments?id=page%3A100002`)).status).toBe(403);
+  });
 });

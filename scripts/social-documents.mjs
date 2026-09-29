@@ -66,6 +66,12 @@ const middlewareEnv = {
   REALTIME_GATEWAY_URL: process.env.REALTIME_GATEWAY_URL || `http://localhost:${bffPort}`,
   REALTIME_PLATFORM_PUBLIC_URL: process.env.REALTIME_PLATFORM_PUBLIC_URL || `http://localhost:${platformPort}`,
   REALTIME_VIDEO_PUBLIC_URL: process.env.REALTIME_VIDEO_PUBLIC_URL || process.env.SOCIAL_VIDEO_PUBLIC_URL || 'http://localhost:3901',
+  // The one-time import of Aurora document comments into platform-api's
+  // table (docs/assessment-documents-parity-goal.md): the profile's local
+  // DynamoDB publishes :8000; without these the Comments tab only counts the
+  // comments that have not moved.
+  DOCUMENT_COMMENT_IMPORT_TABLE: process.env.DOCUMENT_COMMENT_IMPORT_TABLE || 'document-comments',
+  DOCUMENT_COMMENT_IMPORT_DYNAMODB_ENDPOINT: process.env.DOCUMENT_COMMENT_IMPORT_DYNAMODB_ENDPOINT || 'http://127.0.0.1:8000',
 };
 const services = ['social-redis', 'social-dynamodb', 'social-gateway-image', 'social-dynamodb-init',
   'social-gateway', 'social-platform-api'];

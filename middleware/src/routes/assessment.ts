@@ -26,6 +26,7 @@ import { initSSE, writeSSE, endSSE } from '../lib/sse.js';
 import { assessmentBroker } from '../lib/assessment-broker.js';
 import * as provider from '../providers/assessment.js';
 import { isValidTeamId } from '../providers/assessment.js';
+import { documentCommentTargetIds } from '../providers/document-comments.js';
 import type { Cohort, MotionConfig, ScoringLogEntry } from '../mock/assessment.js';
 
 export const assessmentRouter: Router = Router();
@@ -756,7 +757,7 @@ assessmentRouter.get('/knowledge/doc/comments', viewGate, asyncHandler(async (re
 assessmentRouter.get('/knowledge/doc/reactions', viewGate, asyncHandler(async (req, res) => {
   const id = String(req.query['id'] ?? '');
   if (!id) throw new ValidationError('id is required');
-  const reactions = await provider.listKnowledgeReactions(id);
+  const reactions = await provider.listKnowledgeReactions(id, req.session ? await documentCommentTargetIds(id, req.session) : []);
   if (!reactions) throw new NotFoundError('document not found');
   res.json({ reactions });
 }));
@@ -768,6 +769,7 @@ assessmentRouter.post('/knowledge/doc/reaction', viewGate, asyncHandler(async (r
   if (typeof body.emoji !== 'string') throw new ValidationError('emoji is required');
   const result = await provider.toggleKnowledgeReaction(
     body.id, body.targetId, body.emoji, req.session?.sub ?? 'unknown',
+    req.session ? await documentCommentTargetIds(body.id, req.session) : [],
   );
   if (!result.ok) { res.status(result.status).json({ error: result.reason }); return; }
   res.json(result);
@@ -800,6 +802,7 @@ assessmentRouter.post('/knowledge/doc/comment', viewGate, asyncHandler(async (re
   if (body.parentId != null && (typeof body.parentId !== 'string' || !body.parentId.trim())) throw new ValidationError('Invalid reply parent');
   const result = await provider.createKnowledgeComment(body.id, body.body, req.session?.sub ?? 'unknown', (body.parentId as string | null | undefined) ?? null);
   if (!result) throw new NotFoundError('document not found');
+  if (!result.ok && result.status === 409) { res.status(409).json({ error: result.reason, code: 'comments_moved' }); return; }
   if (!result.ok) throw new ValidationError(result.reason);
   res.status(201).json(result);
 }));

@@ -148,6 +148,103 @@ response shapes; the accelerator's navigation / draft / publish UX survives
   `parity-journey-rail-dock.png`, `parity-journey-chat.png`,
   `parity-journey-list.png`.
 
+### Phase 4 (rest) — comments on platform-api threads, the byline, calls (gaps 4, 7, 8)
+
+**Comments are platform-api's document comments** (recommendation C), the
+threads realtime-examples' editor reads: document-wide (`scope: 'document'`)
+and anchored roots, replies, resolve / reopen.
+
+- **Through the BFF, never a browser-held platform credential.**
+  `GET/POST /api/assessment/knowledge/doc/workflows/comments?id=<source id>`
+  and `PATCH/DELETE …/comments/:commentId` (`routes/assessment-document-workflows.ts`
+  → `providers/document-comments.ts`) call platform-api with the BFF's own
+  document grant (`comment` operation, every assessment reader) through the
+  fixed-operation bridge (`providers/document-workflows.ts`: `comments`,
+  `comment-create`, `comment-update`, `comment-delete`; reads page 200 at a
+  time). The browser names only the source id; a body naming an author,
+  document or grant is a 400. Display names come from the identity store
+  (a grant carries no email, so platform-api would print `u-farah`).
+  Author-only edits and the owner rule on delete stay platform-api's.
+- **`dev:mock` without a platform-api** serves the same routes from a
+  registered fixture in platform-api's item shape
+  (`mock/document-comments.ts`, `assessment-platform-document-comments`),
+  under platform-api's own rules and error strings, so the tab works offline.
+  The wire capture witnesses the route on `page:100002`.
+- **One-time import of the legacy thread** (`providers/document-comment-import.ts`,
+  ledger `assessment_document_comment_imports` in `schema/assessment_schema.sql`,
+  its fixture `assessment-document-comment-imports` under `dev:mock`). Runs
+  lazily on a document's first comments read, create, resolve or delete — a
+  document never opened has no platform identity to import into. Ids, authors,
+  timestamps (Aurora `timestamptz` text normalised to ISO UTC), edits and the
+  reply edge are preserved; roots become document-wide threads (never an
+  invented anchor); a removed comment is carried only as a wordless tombstone
+  when live replies hang off it. It writes platform-api's `document-comments`
+  table directly with conditional puts — the public POST would mint new ids,
+  stamp "now" and take the author from the grant — named by
+  `DOCUMENT_COMMENT_IMPORT_TABLE` (+ `DOCUMENT_COMMENT_IMPORT_DYNAMODB_ENDPOINT`
+  for DynamoDB-local); unset, the tab says how many earlier comments have not
+  moved and nothing is written. After the import the legacy comment write
+  routes answer **409 `comments_moved`**. `dev:mock` seeds a legacy thread on
+  `page:100002` (`kc-rubric-01` + reply) for it to carry.
+- **Reactions mapping.** platform-api has no reactions on document comments,
+  so reactions stay in `assessment_knowledge_reactions`, keyed by the same
+  comment ids the import preserved; the reaction routes also accept the
+  document's platform comment ids (`documentCommentTargetIds`). Document
+  reactions sit at the top of the Comments tab, thread reactions on each
+  thread (`CommentThreadNode actions`).
+- **Comments tab** (`knowledge/DocumentComments.tsx`, as the reference's
+  `renderShellTab('comments')`): one `Card` per group — **On the page**
+  (anchored) / **Whole document** — with "n open · m total", each thread the
+  library `CommentThreadNode` (reply, resolve, reopen, quote header), a
+  whole-document composer, the open count on the tab.
+- **The margin** (`knowledge/useCanvasComments.tsx`, as the reference's
+  `useCanvasGutterItems` + `CanvasCommentComposer`): threads as
+  `CanvasDocumentView gutterItems` beside the text their anchor resolves to
+  (`resolveAnchor` / `pmRangesFromPlain`), document-wide ones stacked below the
+  last heading; the per-document `CommentHighlight` extension paints the
+  ranges (`additional` in `createCanvasExtensions`); **Comment** in the head
+  takes the selection's anchor at click (`createAnchor`) and posts it — in the
+  head, not the canvas toolbar, because a reader has no toolbar and commenting
+  is not editing. The margin shows/hides with the gutter toggle (remembered).
+- Replaced: `DocumentCommentThread.tsx` and `useKnowledgeDocumentThread.ts`.
+
+**Participants in the shell byline** (`knowledge/useCanvasParticipants.ts`):
+everyone else on the canvas from its awareness (one entry per person across
+tabs) as `EditorShell participants`; `onParticipantClick` scrolls to their caret
+(their awareness `cursor.head` resolved through the editor's ySync binding);
+`onFollowParticipant` follows it, with the library `FollowModeBar` under the
+ruler. Props verified against the installed `doc-editor.d.ts`.
+
+**In-document call** (`knowledge/useDocumentCall.tsx`): the tenant's one call
+host (`projects/InitiativeCallHost`, now mounted around the assessment routes
+by `AssessmentLayout`), the realtime token, the shared call model
+(`lib/conversationCallModel` `callAvailability`, `lobbyPrefix`) and the library
+dock (`lib/conversationCall` `ConversationCallDock`) — no second call stack.
+The lobby is **`<tenant>:doc:<doc>`** (`assessment:doc:page:100002`; long ids
+hashed like the chat channel), one per document; it rings the others on the
+page (awareness). **Call** / **Leave call** is the shared `DocumentHeader`'s
+call control; the live call docks in the page margin
+(`VideoDockSlot` as `CanvasDocumentView gutterLead`). The invite carries the
+document's URL, so Accept on any assessment page opens it
+(`AssessmentLayout` `DocumentCallNavigator`; only in-app `/assessment/…?doc=`
+paths). An unavailable call says why when pressed.
+
+**Journey:** the third test in `portal/e2e/assessment-documents-parity.spec.ts`,
+two contexts (u-farah lead-assessor, u-jonas assessor): each other in the
+byline; the imported thread with its author and reply; a whole-document
+comment reaching the other tab; Jonas (a reader) comments on a selection, both
+see the mark and card, the row is stored anchored and authored by him; Farah
+resolves it and Jonas sees the banner; Farah calls, Jonas's toast → Accept,
+both docked with "2 people". The call half skips with Call's own reason on a
+stack without platform-api. Screenshots `parity-journey-byline.png`,
+`-comments-threads.png`, `-comments-anchored.png`, `-call.png`.
+
+**Known limits.** `CommentThreadNode` has no edit/delete (the BFF routes
+support both; the reference offers neither); only thread-root reactions are
+shown (reply reactions stay stored); no @-mention list in threads yet; the
+library's `useDocumentComments` cannot be used until its transport seam ships
+(below), so `useDocumentComments.ts` is that transport meanwhile.
+
 ## Backlog (not asserted yet — add a check when a slice ships)
 
 1. **Toolbar in the shell's toolbar slot.** `CanvasDocumentView` draws its own
@@ -158,10 +255,17 @@ response shapes; the accelerator's navigation / draft / publish UX survives
 2. **Phase 2 — one pane assembly** in ui-components
    (`integrations/realtime-modules`): extension list, image provider,
    recovery, save state; consumed by both apps.
-3. **Phase 4 — the rest**: comments on platform-api threads
-   (`scope:'document'`, one-time import), optional `VideoDockSlot` calls
-   through the realtime token; participants in the shell byline from
-   awareness. (The Chat panel moved to `WrappedChatPanel` on 2026-09-29
-   once ui-components 2.407.20 shipped the scope-agnostic
-   `integrations/realtime` entry.)
-4. **Phase 5 — document types** (optional; otherwise record the omission).
+3. **Library comments transport.** ui-components branch
+   `feat/document-comments-transport` (commit `f721810b`, unreleased) gives
+   `useDocumentComments` `baseUrl` / `commentsPath` / `fetcher` and
+   `addDocumentComment`; once released and pinned, replace
+   `knowledge/useDocumentComments.ts` with it (`commentsPath` →
+   `/api/assessment/knowledge/doc/workflows/comments?id=…`, `fetcher` with
+   `credentials: 'include'`, and the platform `documentId` as its id so live
+   `doc:comment_*` events match). `useDocumentReviews` needs the same seam.
+4. **Local env for the import.** `scripts/social-documents.mjs` should export
+   `DOCUMENT_COMMENT_IMPORT_TABLE=document-comments` and
+   `DOCUMENT_COMMENT_IMPORT_DYNAMODB_ENDPOINT=http://127.0.0.1:8000` for
+   `dev:mock:social` (outside this slice's files); until then the tab reports
+   the earlier comments as not moved on that stack.
+5. **Phase 5 — document types** (optional; otherwise record the omission).
