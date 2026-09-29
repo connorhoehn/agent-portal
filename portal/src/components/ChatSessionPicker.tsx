@@ -4,7 +4,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useFetch } from '../hooks/useFetch';
-import { Button, Inline, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { Button, ChoiceList, ChoiceRow, Inline, Stack } from '@connorhoehnslalom/ui-components/shared';
 
 interface SessionSummary {
   sessionId: string;
@@ -48,7 +48,7 @@ export function ChatSessionPicker({ activeSessionId, onPick }: ChatSessionPicker
         size="sm"
         onClick={() => setOpen(o => !o)}
         aria-expanded={open}
-        aria-haspopup="listbox"
+        aria-haspopup="true"
         title={unavailable ? 'Previous conversations could not be loaded' : 'Previous conversations'}
         className="text-[11px] whitespace-nowrap"
       >
@@ -57,7 +57,6 @@ export function ChatSessionPicker({ activeSessionId, onPick }: ChatSessionPicker
       {open && (
         <Stack
           gap="none"
-          role="listbox"
           className="absolute top-[calc(100%+6px)] right-0 z-[130] w-[260px] max-h-[320px] overflow-y-auto bg-surface border border-border rounded-lg shadow-[0_4px_16px_rgba(0,0,0,0.10)] py-1"
         >
           {unavailable && (
@@ -74,41 +73,23 @@ export function ChatSessionPicker({ activeSessionId, onPick }: ChatSessionPicker
               </Inline>
             </Stack>
           )}
-          {sessions.map(s => {
-            const active = s.sessionId === activeSessionId;
-            return (
-              <Button
-                key={s.sessionId}
-                variant="ghost"
-                size="sm"
-                fullWidth
-                role="option"
-                aria-selected={active}
-                onClick={() => { onPick(s.sessionId); setOpen(false); }}
-                // `--color-primary-subtle` does not exist in this portal, so the
-                // #eef2ff fallback always won and this row stayed indigo under a
-                // non-orgiq tenant. `--color-primary-soft` is the token
-                // `[data-tenant]` actually overrides — same fix graphOverlay.tsx
-                // records.
-                className={[
-                  'flex flex-col items-start gap-px w-full px-3 py-1.5 border-none text-left',
-                  'text-text-primary text-[12px] cursor-pointer',
-                  active ? 'bg-[var(--color-primary-soft)]' : 'bg-transparent',
-                ].join(' ')}
-              >
-                <Inline
-                  as="span"
-                  gap="none"
-                  className={`max-w-full truncate ${active ? 'font-bold' : 'font-medium'}`}
-                >
-                  {s.title || 'Untitled conversation'}
-                </Inline>
-                <Inline as="span" gap="none" className="text-[10px] text-text-tertiary">
-                  {new Date(s.createdAt).toLocaleString()}
-                </Inline>
-              </Button>
-            );
-          })}
+          {sessions.length > 0 && (
+            // ChoiceRow: title + one-line timestamp. These were two-line
+            // labels in a ghost `Button`, which the one-box-per-size button
+            // (2.407.14) clips.
+            <ChoiceList data-testid="chat-session-list">
+              {sessions.map(s => (
+                <ChoiceRow
+                  key={s.sessionId}
+                  title={s.title || 'Untitled conversation'}
+                  description={new Date(s.createdAt).toLocaleString()}
+                  selected={s.sessionId === activeSessionId}
+                  onSelect={() => { onPick(s.sessionId); setOpen(false); }}
+                  data-testid={`chat-session-${s.sessionId}`}
+                />
+              ))}
+            </ChoiceList>
+          )}
         </Stack>
       )}
     </Stack>

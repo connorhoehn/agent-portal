@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Button, Card, CardHeader, Inline, InlineAlert, InlinePlaceholder, Input, MetaLine, SectionLabel, SegmentedControl, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { Button, Card, CardHeader, ChoiceList, ChoiceRow, Inline, InlineAlert, InlinePlaceholder, Input, MetaLine, SectionLabel, SegmentedControl, Stack } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../../lib/capabilities';
 import { useFetch } from '../../../hooks/useFetch';
 import { toastError } from '../../../lib/toastStore';
@@ -147,24 +147,17 @@ export function JourneyTab() {
             {resumable.length > 0 && (
               <Stack gap="sm">
                 <SectionLabel>Or resume an open session</SectionLabel>
-                <Stack gap="xs">
+                <ChoiceList data-testid="journey-resumable">
                   {resumable.map(s => (
-                    <Button
+                    <ChoiceRow
                       key={s.sessionId}
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => { setActiveSessionId(s.sessionId); refreshJourney(); }}
-                      fullWidth
-                    >
-                      {/* Button centres its content; the rail reads as a list,
-                          so the label is pushed left by a full-width row. */}
-                      <Inline gap="sm" justify="start" wrap={false} className="w-full">
-                        <T className="font-mono text-[11px]">{s.sessionId}</T>
-                        <T className="text-text-tertiary">{s.agentName}</T>
-                      </Inline>
-                    </Button>
+                      title={s.sessionId}
+                      description={s.agentName}
+                      onSelect={() => { setActiveSessionId(s.sessionId); refreshJourney(); }}
+                      data-testid={`journey-resume-${s.sessionId}`}
+                    />
                   ))}
-                </Stack>
+                </ChoiceList>
               </Stack>
             )}
           </Stack>

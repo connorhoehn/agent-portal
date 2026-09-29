@@ -1,4 +1,6 @@
-import { Button, Card, IconButton, Inline, InlinePlaceholder, MetaLine, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { Card, IconButton, Inline, InlinePlaceholder, MetaLine, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { ImageThumbnail } from '@connorhoehnslalom/ui-components';
+import { SelectableCard } from '@connorhoehnslalom/ui-components/shared';
 import type { JourneyStep } from './types';
 import { T } from '../Text';
 
@@ -58,21 +60,19 @@ export function JourneyCarousel({
 
       <Inline gap="xs" wrap={false} className="overflow-x-auto pb-1">
         {steps.map((s, i) => (
-          <Button
+          <SelectableCard
             key={s.index}
-            variant="ghost"
-            onClick={() => onIdx(i)}
+            padding="sm"
+            selected={i === idx}
+            onSelect={() => onIdx(i)}
             title={s.pageTitle || s.url}
             aria-label={`Step ${i + 1}: ${s.pageTitle || s.url}`}
-            aria-pressed={i === idx}
-            className={`!h-[50px] !w-20 !flex-none !overflow-hidden !rounded !bg-surface !p-0 ${
-              i === idx ? '!border-2 !border-primary' : '!border !border-border'
-            }`}
+            className="flex-none"
           >
             {s.imageDataUrl
-              ? <img src={s.imageDataUrl} alt="" className="h-full w-full object-cover" />
+              ? <ImageThumbnail src={s.imageDataUrl} alt="" size="sm" />
               : <T className="text-[9px] text-text-tertiary">{i + 1}</T>}
-          </Button>
+          </SelectableCard>
         ))}
       </Inline>
     </Stack>

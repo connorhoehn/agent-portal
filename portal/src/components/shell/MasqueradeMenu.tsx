@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import {
-  Button, Inline, InlineAlert, InlinePopover, MetaLine, SectionLabel, Stack, StatusDot,
+  Button, ChoiceList, ChoiceRow, Inline, InlineAlert, InlinePopover, MetaLine, SectionLabel, Stack, StatusDot,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useSession, type SessionRole } from '../../lib/auth';
 
@@ -136,20 +136,22 @@ export function MasqueradeMenu() {
               (tenant) is deliberately NOT offered here: the workspace boundary
               lives on /select, reached via "Switch workspace…" below. */}
           <SectionLabel className="px-2.5 pt-2 pb-1.5">Role in {tenantLabel(session.tenant)}</SectionLabel>
-          {session.availableRoles.map(role => {
-            const active = role === session.role;
-            return (
-              <MenuItem
-                key={role}
-                active={active}
-                busy={busy}
-                onClick={() => active ? close() : void run(() => setRole(role))}
-                title={roleLabel(role)}
-                hint={ROLE_HINTS[role] ?? ''}
-                dotColor={roleColor(role)}
-              />
-            );
-          })}
+          <ChoiceList data-testid="account-menu-roles">
+            {session.availableRoles.map(role => {
+              const active = role === session.role;
+              return (
+                <ChoiceRow
+                  key={role}
+                  title={roleLabel(role)}
+                  description={ROLE_HINTS[role] || undefined}
+                  selected={active}
+                  disabled={busy}
+                  onSelect={() => active ? close() : void run(() => setRole(role))}
+                  data-testid={`account-menu-role-${role}`}
+                />
+              );
+            })}
+          </ChoiceList>
 
           {/* People do not appear here.
 
@@ -199,52 +201,6 @@ export function MasqueradeMenu() {
         </>
       </InlinePopover>
     </Stack>
-  );
-}
-
-function MenuItem({ active, busy, onClick, title, hint, dotColor }: {
-  active: boolean;
-  busy: boolean;
-  onClick: () => void;
-  title: string;
-  hint: string;
-  dotColor: string;
-}) {
-  return (
-    // A ghost Button laid out as a stacked row. `dotColor` is the one runtime
-    // value — a per-role colour Tailwind cannot build a class from — and it
-    // rides on StatusDot, which owns the dot shape.
-    <Button
-      variant="ghost"
-      size="sm"
-      fullWidth
-      disabled={busy}
-      onClick={onClick}
-      className={[
-        // `border-0` is load-bearing. The library's `ghost` variant is
-        // `bg-transparent … border border-border` — the SAME border treatment
-        // as `secondary`, differing only in fill — so a ghost Button is not
-        // chromeless. In a popover every row then draws its own 1px box and
-        // the menu reads as a stack of outlined generic buttons rather than a
-        // list. Queued for a genuinely borderless variant; until then a menu
-        // row has to say so. Same for the two footer actions below.
-        'border-0 flex-col items-start gap-0.5 justify-start text-left px-2.5 py-2',
-        active ? 'bg-surface-hover' : '',
-      ].join(' ')}
-    >
-      <Inline as="span" gap="xs" wrap={false} className={`text-[13px] w-full ${active ? 'font-semibold' : 'font-normal'}`}>
-        <StatusDot aria-hidden color={dotColor} size="xs" />
-        {title}
-        {active && (
-          <Inline as="span" gap="none" className="ml-auto text-text-tertiary text-[10px]">active</Inline>
-        )}
-      </Inline>
-      {hint && (
-        <Inline as="span" gap="none" className="text-[11px] text-text-secondary pl-3.5">
-          {hint}
-        </Inline>
-      )}
-    </Button>
   );
 }
 

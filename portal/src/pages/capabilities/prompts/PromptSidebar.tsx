@@ -1,5 +1,7 @@
 import {
   Button,
+  ChoiceList,
+  ChoiceRow,
   InlineAlert,
   InlinePlaceholder,
   LoadingState,
@@ -8,7 +10,6 @@ import {
 } from '@connorhoehnslalom/ui-components/shared';
 import type { PromptLibraryEntry } from '../../../components/canary/types.js';
 import { friendlyLibraryError } from './libraryError';
-import { T } from '../Text';
 
 /** The prompt rail: search, the library list, and a manual refresh. */
 export function PromptSidebar({
@@ -49,61 +50,28 @@ export function PromptSidebar({
         {!loading && !error && prompts.length === 0 && (
           <InlinePlaceholder>No prompts found.</InlinePlaceholder>
         )}
-        {prompts.map(prompt => (
-          <PromptRow
-            key={prompt.id}
-            prompt={prompt}
-            active={selectedId === prompt.id}
-            onSelect={() => onSelect(prompt)}
-          />
-        ))}
+        {prompts.length > 0 && (
+          // Library rows: title + one-line description, the selected prompt
+          // reads as the checked one of several. These were two-line labels
+          // inside a `Button` with `!h-auto`, a local height override.
+          <ChoiceList data-testid="prompt-rail-list">
+            {prompts.map(prompt => (
+              <ChoiceRow
+                key={prompt.id}
+                title={prompt.name}
+                description={prompt.description || undefined}
+                selected={selectedId === prompt.id}
+                onSelect={() => onSelect(prompt)}
+                data-testid={`prompt-row-${prompt.id}`}
+              />
+            ))}
+          </ChoiceList>
+        )}
       </Stack>
 
       <Stack gap="none" className="flex-none p-3">
         <Button variant="secondary" fullWidth onClick={onRefresh}>Refresh library</Button>
       </Stack>
     </Stack>
-  );
-}
-
-/**
- * One row in the rail.
- *
- * Not `SelectableCard`: this is a flush list row with a hairline separator and
- * a 3px active rail, not a card in a grid, and SelectableCard's card chrome
- * would put a border around every entry.
- */
-function PromptRow({
-  prompt,
-  active,
-  onSelect,
-}: {
-  prompt: PromptLibraryEntry;
-  active: boolean;
-  onSelect: () => void;
-}) {
-  return (
-    <Button
-      variant="ghost"
-      fullWidth
-      onClick={onSelect}
-      aria-pressed={active}
-      className={`!h-auto !justify-start !rounded-none !border-0 !border-b !border-b-border !px-3.5 !py-2.5 !text-left ${
-        active
-          ? '!border-l-[3px] !border-l-primary !bg-[var(--color-primary-soft)] !pl-[11px]'
-          : '!bg-transparent hover:!bg-surface-hover'
-      }`}
-    >
-      <Stack gap="none" align="start" className="w-full">
-        <T className="block w-full truncate font-mono text-[12px] font-semibold leading-snug text-text-primary">
-          {prompt.name}
-        </T>
-        {prompt.description && (
-          <T className="mt-0.5 block w-full truncate text-[11px] leading-snug text-text-tertiary">
-            {prompt.description}
-          </T>
-        )}
-      </Stack>
-    </Button>
   );
 }

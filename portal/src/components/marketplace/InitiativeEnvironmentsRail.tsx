@@ -28,11 +28,11 @@ import { useEffect, useState } from 'react';
 import { readDegraded } from '../../lib/degraded';
 import { Link } from 'react-router';
 import {
-  Button,
   Card,
   Chip,
+  ChoiceList,
+  ChoiceRow,
   CodeBlock,
-  EntityCell,
   Inline,
   InlineAlert,
   Link as ExternalLink,
@@ -141,39 +141,20 @@ function EnvironmentRow({ env }: { env: Environment }) {
     return () => { cancelled = true; };
   }, [open, access, env.id]);
 
+  // A library disclosure row (ChoiceRow): name + one line (status, kind,
+  // cluster), the access/run detail opens beneath. It was a ghost `Button`
+  // holding a chip row, which the one-box-per-size button (2.407.14) cannot
+  // grow for when the rail is narrow enough to wrap it.
+  const summary = [env.status, env.kind, env.clusterName].filter(Boolean).join(' · ');
   return (
-    <Stack gap="none" className="border-b border-border last:border-b-0">
-      <Button
-        variant="ghost"
-        fullWidth
-        aria-expanded={open}
-        // `border-0`: the Stack above owns this row's separator
-        // (`border-b border-border last:border-b-0`), and the library's
-        // `ghost` variant carries `border border-border` on all four sides —
-        // so without this the disclosure row draws its own box inside the
-        // rail's rule. See the Button entry in docs/ui-components-queue.md.
-        className="border-0 !justify-start text-left px-3 py-2"
-        onClick={() => setOpen((v) => !v)}
-      >
-        <Inline gap="xs" align="center" className="w-full min-w-0">
-          <Chip tone={STATUS_TONE[env.status] ?? 'neutral'} size="xs" dot={env.status === 'provisioning' ? 'pulse' : 'static'}>
-            {env.status}
-          </Chip>
-          <EntityCell label={env.name} />
-          <Chip tone="neutral" size="xs" mono>{env.kind}</Chip>
-          {env.clusterName && (
-            <MetaLine
-              size="xs"
-              className="ml-auto font-mono truncate max-w-[140px]"
-              items={[<span key="c" title={env.clusterName}>{env.clusterName}</span>]}
-            />
-          )}
-          <MetaLine size="xs" className={env.clusterName ? '' : 'ml-auto'} items={[open ? '▾' : '▸']} />
-        </Inline>
-      </Button>
-
-      {open && (
-        <Stack gap="sm" className="px-3 pb-2.5">
+    <ChoiceRow
+      title={env.name}
+      description={summary}
+      open={open}
+      onOpenChange={setOpen}
+      data-testid={`environment-row-${env.id}`}
+    >
+      <Stack gap="sm" className="w-full">
           {retired ? (
             // Recorded so a postmortem can ask where something used to run —
             // not so somebody can shell into it. Cedar forbids Enter here, so
@@ -243,9 +224,8 @@ function EnvironmentRow({ env }: { env: Environment }) {
               ))}
             </Stack>
           )}
-        </Stack>
-      )}
-    </Stack>
+      </Stack>
+    </ChoiceRow>
   );
 }
 
@@ -275,7 +255,9 @@ export function EnvironmentsRailCard({ initiativeId }: { initiativeId: string | 
         <SectionLabel>ENVIRONMENTS</SectionLabel>
         <Chip tone="neutral" size="xs" mono className="ml-auto">{envs.length}</Chip>
       </Inline>
-      {envs.map((env) => <EnvironmentRow key={env.id} env={env} />)}
+      <ChoiceList>
+        {envs.map((env) => <EnvironmentRow key={env.id} env={env} />)}
+      </ChoiceList>
     </Card>
   );
 }

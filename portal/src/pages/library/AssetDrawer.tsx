@@ -16,7 +16,7 @@ import { AssetRelationships } from '../distillation/AssetRelationships';
 //                An unexplained similarity list is not actionable.
 
 import {
-  Button, Card, Chip, DetailSection, Inline, InlinePlaceholder, LoadingState, MetaLine, ProgressBar, Stack,
+  Card, Chip, ChoiceList, ChoiceRow, DetailSection, Inline, InlinePlaceholder, LoadingState, MetaLine, ProgressBar, Stack,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
@@ -181,27 +181,20 @@ export function AssetDrawer({ id, onOpenAsset }: { id: string; onOpenAsset: (id:
 
       {related.length > 0 && (
         <DetailSection title="Related" hint="closest by shared provenance, then tags">
-          <Stack gap="xs">
+          {/* ChoiceRow: name + one line (kind and why it is related). This was
+              a two-line label in a ghost `Button`, which the one-box-per-size
+              button (2.407.14) clips. */}
+          <ChoiceList data-testid="asset-related">
             {related.map((r) => (
-              <Button
+              <ChoiceRow
                 key={r.asset.id}
-                variant="ghost"
-                fullWidth
-                onClick={() => onOpenAsset(r.asset.id)}
-                className="cursor-pointer items-start rounded-md px-3 py-2 text-left font-normal transition-colors hover:border-primary/50"
-              >
-                <Stack gap="none" className="min-w-0 w-full">
-                  <Inline gap="xs" wrap={false}>
-                    <Chip tone={KIND_TONE[r.asset.kind]} size="xs">{KIND_LABEL[r.asset.kind]}</Chip>
-                    <T className="min-w-0 truncate text-[12px] font-medium text-text-primary">{r.asset.name}</T>
-                  </Inline>
-                  {/* The reason is the point: a neighbour you cannot explain is
-                      not a neighbour you can act on. */}
-                  <T as="div" className="mt-0.5 text-[11px] text-text-tertiary">{r.reason}</T>
-                </Stack>
-              </Button>
+                title={r.asset.name}
+                description={`${KIND_LABEL[r.asset.kind]} · ${r.reason}`}
+                onSelect={() => onOpenAsset(r.asset.id)}
+                data-testid={`asset-related-${r.asset.id}`}
+              />
             ))}
-          </Stack>
+          </ChoiceList>
         </DetailSection>
       )}
     </Stack>

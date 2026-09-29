@@ -8,7 +8,7 @@
 
 import { useState } from 'react';
 import {
-  Button, Chip, EntityCell, Inline, MetaLine, Stack, TableRow, TableTd,
+  Button, Chip, ChoiceRow, EntityCell, Inline, MetaLine, Stack, TableRow, TableTd,
 } from '@connorhoehnslalom/ui-components/shared';
 import { absoluteTime } from '../../lib/relativeTime';
 import type { ControllerAction, Decision } from './types.js';
@@ -174,57 +174,33 @@ function NodeDecisionRow({ decision: d }: { decision: Decision }): React.ReactEl
 
 function CardDecisionRow({ decision: d, index }: { decision: Decision; index: number }): React.ReactElement {
   const [expanded, setExpanded] = useState(index === 0); // newest starts expanded
+  const delta = d.deltaScore === undefined
+    ? ''
+    : ` · Δ ${d.deltaScore >= 0 ? '+' : ''}${d.deltaScore.toFixed(2)}`;
 
+  // A library disclosure row (ChoiceRow): title + one summary line, the
+  // reason and score detail open beneath. This was a three-line label inside
+  // a ghost `Button`, which the one-box-per-size button (2.407.14) clips.
   return (
-    <Button
-      variant="ghost"
-      size="sm"
-      fullWidth
-      onClick={() => setExpanded(v => !v)}
-      aria-expanded={expanded}
-      // Only a BOTTOM rule is wanted, separating stacked rail rows. The
-      // library's `ghost` variant already sets `border border-border` on all
-      // four sides, so `border-b` alone left the row drawing a full box
-      // inside the rail. See the Button entry in docs/ui-components-queue.md.
-      className="flex-col items-start gap-1 justify-start text-left px-3.5 py-2 border-x-0 border-t-0 border-b border-border rounded-none"
+    <ChoiceRow
+      title={`${ACTION_LABEL[d.action] ?? d.action} · ${absoluteTime(d.ts)}`}
+      description={`B ${d.from}% → ${d.to}%${delta}`}
+      open={expanded}
+      onOpenChange={setExpanded}
+      data-testid={`decision-row-${index}`}
     >
-      <Inline gap="sm" justify="between" wrap={false} className="w-full">
-        <Inline as="span" gap="none" className="text-[10.5px] text-text-tertiary tabular-nums">
-          {absoluteTime(d.ts)}
+      <Stack gap="xs" className="w-full">
+        <Inline as="span" gap="none" className="text-[11.5px] text-text-secondary italic leading-snug">
+          {d.reason}
         </Inline>
-        <Chip tone={ACTION_TONE[d.action]} size="xs">{d.action}</Chip>
-        <Inline as="span" gap="none" aria-hidden className="ml-auto text-[10px] text-text-tertiary">
-          {expanded ? '▲' : '▼'}
-        </Inline>
-      </Inline>
-      <Inline gap="xs" wrap={false} className="w-full text-[11px] text-text-secondary tabular-nums">
-        <Inline as="span" gap="none" className="font-medium">B {d.from}%</Inline>
-        <Inline as="span" gap="none" className="text-text-tertiary">→</Inline>
-        <Inline as="span" gap="none" className="font-medium">{d.to}%</Inline>
         {d.deltaScore !== undefined && (
-          <Inline as="span" gap="none" title="composite_b - composite_a"
-            className="ml-auto text-[10.5px] text-text-tertiary">
-            Δ {d.deltaScore >= 0 ? '+' : ''}{d.deltaScore.toFixed(2)}
+          <Inline as="span" gap="none" className="text-[10.5px] text-text-tertiary">
+            Score delta (composite_b − composite_a):{' '}
+            <b className="tabular-nums">{d.deltaScore >= 0 ? '+' : ''}{d.deltaScore.toFixed(4)}</b>
           </Inline>
         )}
-      </Inline>
-      {expanded && (
-        <Stack gap="xs" className="mt-1 w-full">
-          <Inline as="span" gap="none" className="text-[11.5px] text-text-secondary italic leading-snug">
-            {d.reason}
-          </Inline>
-          {d.deltaScore !== undefined && (
-            <Inline as="span" gap="none" className="text-[10.5px] text-text-tertiary">
-              Score delta (composite_b − composite_a):{' '}
-              <b className="tabular-nums">{d.deltaScore >= 0 ? '+' : ''}{d.deltaScore.toFixed(4)}</b>
-            </Inline>
-          )}
-          <Inline as="span" gap="none" className="text-[10px] text-text-tertiary tabular-nums">
-            {absoluteTime(d.ts)}
-          </Inline>
-        </Stack>
-      )}
-    </Button>
+      </Stack>
+    </ChoiceRow>
   );
 }
 

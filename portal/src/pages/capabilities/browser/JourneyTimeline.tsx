@@ -1,4 +1,4 @@
-import { Button, Inline, MetaLine, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { Inline, MetaLine, SelectableCard, Stack } from '@connorhoehnslalom/ui-components/shared';
 import type { JourneyStep } from './types';
 import { T } from '../Text';
 
@@ -14,13 +14,11 @@ export function JourneyTimeline({
   return (
     <Stack gap="sm" className="max-h-[480px] overflow-y-auto">
       {steps.map((step, i) => (
-        <Button
+        <SelectableCard
           key={step.index}
-          variant="secondary"
-          fullWidth
-          onClick={() => onJump(i)}
+          padding="sm"
+          onSelect={() => onJump(i)}
           aria-label={`Jump to step ${i + 1}`}
-          className="!h-auto !justify-start !p-2 !text-left"
         >
           <Inline gap="md" align="start" wrap={false} className="w-full">
             <Stack gap="none" align="center" justify="center" className="h-[76px] w-[120px] flex-none overflow-hidden rounded bg-surface-inset">
@@ -44,7 +42,7 @@ export function JourneyTimeline({
               )}
             </Stack>
           </Inline>
-        </Button>
+        </SelectableCard>
       ))}
     </Stack>
   );
