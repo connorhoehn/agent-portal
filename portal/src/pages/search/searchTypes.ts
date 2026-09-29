@@ -7,6 +7,11 @@ export interface SearchRecord extends SearchRef {
   status?: string;
   subtitle?: string;
   sourceRefs?: SearchRef[];
+  /** Why the record matched ("Title match", "Matched through initiative membership"…). */
+  matchReason?: string;
+  /** The query terms the record matched, for marking in the row. */
+  highlights?: string[];
+  updatedAt?: string;
 }
 export interface SearchEdge { id: string; source: string; target: string; label: string }
 export interface SearchResponse {
@@ -19,6 +24,7 @@ export interface SearchResponse {
   edges?: SearchEdge[];
 }
 export type SearchTab = 'results' | 'answer' | 'connections';
+export type SearchSort = 'relevance' | 'recent';
 export const SEARCH_TYPES: SearchRecordType[] = ['person', 'initiative', 'work', 'decision', 'knowledge', 'asset'];
 export const SEARCH_LABELS: Record<SearchRecordType | 'all', string> = {
   all: 'All results', person: 'People', initiative: 'Initiatives', work: 'Work', decision: 'Decisions', knowledge: 'Knowledge', asset: 'Agent library',

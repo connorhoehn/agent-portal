@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { config } from '../config.js';
 import { defineFixture } from '../mock/core/fixture.js';
 import { exec } from './aurora.js';
+import { clock } from '../mock/core/index.js';
 
 export interface SavedSearchInput {
   name: string;
@@ -41,7 +42,7 @@ export async function listSavedSearches(owner: SearchOwner): Promise<SavedSearch
   return (await exec(`SELECT ${columns} FROM saved_searches WHERE owner_sub = :owner AND tenant_id = :tenant ORDER BY updated_at DESC`, ownerParams(owner))).map(fromRow);
 }
 export async function createSavedSearch(owner: SearchOwner, input: SavedSearchInput): Promise<SavedSearch> {
-  const now = new Date().toISOString();
+  const now = clock.now().toISOString();
   const row: StoredSearch = { ...structuredClone(input), id: randomUUID(), createdAt: now, updatedAt: now, ownerSub: owner.sub, tenant: owner.tenant };
   if (config.mock.aurora) { savedSearchesFixture.rows().push(row); return publicRow(row); }
   const rows = await exec(`INSERT INTO saved_searches (id, owner_sub, tenant_id, payload)
@@ -54,7 +55,7 @@ export async function updateSavedSearch(owner: SearchOwner, id: string, patch: P
   if (config.mock.aurora) {
     const row = savedSearchesFixture.rows().find(value => value.id === id && owned(value, owner));
     if (!row) return null;
-    Object.assign(row, structuredClone(patch), { updatedAt: new Date().toISOString() });
+    Object.assign(row, structuredClone(patch), { updatedAt: clock.now().toISOString() });
     return publicRow(row);
   }
   const rows = await exec(`UPDATE saved_searches SET payload = payload || CAST(:payload AS jsonb), updated_at = now()

@@ -11,6 +11,7 @@ __pycache__/
 cdk.out/
 .env
 .env.aws
+.env.social
 .scratch/
 config.json
 resource_tracker.json
@@ -31,3 +32,7 @@ infra/deploy-*.log
 
 # Deterministic build artifacts exported from pinned library commits.
 .docker-libraries/
+
+# Playwright output from ad-hoc journey walks
+test-results/
+portal/test-results/

@@ -1,8 +1,17 @@
+// The Search composer (goal decision 6): the shared `AgentComposerDock` — the
+// same shell as the initiative pages — in its `document` presentation. Agent ⌄
+// is the only live mode; Chat and Terminal are listed with the reason they are
+// off. Workflow ⌄ rows and their `/ commands` are the `searchWorkflows` prompt
+// templates; `/agent <name>` picks an agent explicitly, anything else routes to
+// the supervisor. `#` attaches records as context. Attachments stay in the
+// draft and are not forwarded (as on the initiative composer).
+
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Banner } from '@connorhoehnslalom/ui-components/shared';
-import { RichChatComposer, type RichChatComposerHandle, type RichChatDraft } from '@connorhoehnslalom/ui-components/social/rich-composer';
+import { Stack } from '@connorhoehnslalom/ui-components/shared';
+import { AgentComposerDock, type RichChatComposerHandle, type RichChatDraft } from '@connorhoehnslalom/ui-components/social/rich-composer';
 import { recordKey, SEARCH_LABELS, type SearchRecord } from './searchTypes';
 import { parseSearchCommand, type SearchAgent } from './searchCommands';
+import { searchWorkflowCommands, searchWorkflowIn, type SearchWorkflowRow } from './searchWorkflows';
 
 export interface SearchComposerProps {
   value: string;
@@ -15,6 +24,9 @@ export interface SearchComposerProps {
   onSearchContext: (query: string) => void | Promise<SearchRecord[]>;
   contextSuggestions: SearchRecord[];
   onAddReference: (record: SearchRecord) => void;
+  /** Workflow ⌄ rows and their /commands (searchWorkflows). */
+  workflows?: SearchWorkflowRow[];
+  onWorkflow?: (row: SearchWorkflowRow) => void;
 }
 function draftOf(text: string): RichChatDraft {
   const escaped = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -43,9 +55,8 @@ function markdownOf(html: string): string {
   }
   return Array.from(body.childNodes).map(render).join('').trim();
 }
-export function SearchComposer({ value, onChange, onSubmit, disabled, agents, references, onRemoveReference, onSearchContext, contextSuggestions, onAddReference }: SearchComposerProps) {
+export function SearchComposer({ value, onChange, onSubmit, disabled, agents, references, onRemoveReference, onSearchContext, contextSuggestions, onAddReference, workflows = [], onWorkflow }: SearchComposerProps) {
   const editorRef = useRef<RichChatComposerHandle>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
   const [draft, setDraft] = useState<RichChatDraft>(() => draftOf(value));
   const [error, setError] = useState('');
   const lastText = useRef(value);
@@ -54,23 +65,9 @@ export function SearchComposer({ value, onChange, onSubmit, disabled, agents, re
   useEffect(() => {
     if (value !== lastText.current) { lastText.current = value; setDraft(draftOf(value)); setError(''); }
   }, [value]);
-  useEffect(() => {
-    const root = containerRef.current;
-    if (!root) return;
-    const labelEditor = () => {
-      const editor = root.querySelector('[contenteditable]');
-      editor?.setAttribute('aria-label', 'Search question');
-      editor?.setAttribute('role', 'textbox');
-      editor?.setAttribute('aria-multiline', 'true');
-    };
-    labelEditor();
-    const observer = new MutationObserver(labelEditor);
-    observer.observe(root, { childList: true, subtree: true });
-    return () => observer.disconnect();
-  }, []);
   const commands = useMemo(() => [{ trigger: '/agent', label: 'Ask a specific agent', description: 'Choose an available agent for this message.',
     argument: { placeholder: 'Choose an agent', search: (query: string) => agents.filter(agent => `${agent.name} ${agent.id}`.toLowerCase().includes(query.toLowerCase())).map(agent => ({ id: agent.id, label: agent.name, hint: agent.id })) },
-  }], [agents]);
+  }, ...searchWorkflowCommands(workflows)], [agents, workflows]);
   const attachDraftReferences = () => {
     editorRef.current?.editor?.state.doc.descendants(node => {
       if (node.type.name !== 'docref') return;
@@ -79,13 +76,20 @@ export function SearchComposer({ value, onChange, onSubmit, disabled, agents, re
       if (record && !references.some(ref => recordKey(ref) === key)) onAddReference(record);
     });
   };
-  return <div ref={containerRef} data-testid="search-composer" className="search-composer shrink-0 border-t border-border bg-surface px-4 py-3">
-    {error && <Banner variant="error" className="mb-2">{error}</Banner>}
-    <RichChatComposer ref={editorRef} data-testid="search-rich-composer" fixedMode="agent" modeControl="menu" hideModeMenu
-      backdropTone="none" layout="auto" toolbar="editor" density="compact" allowAttachments={false} allowEmoji={false}
-      disabled={disabled} draft={draft} commands={commands} submitLabel={{ agent: 'Send' }}
-      modePlaceholders={{ agent: 'Ask a question, use # for context, or /agent to choose an agent…' }}
-      maxInputHeight="min(10rem, 25dvh)" documentMenu={{ title: 'Add context', emptyLabel: 'No matching records' }}
+  return <Stack gap="none" className="min-w-0">
+    <AgentComposerDock presentation="document" label="Search composer" inputLabel="Search question" data-testid="search-composer" composerTestId="search-rich-composer"
+      composerRef={editorRef} allowEmoji={false} disabled={disabled}
+      disabledModes={['chat', 'terminal']}
+      modeUnavailableReasons={{ chat: 'Search has no discussion thread — ask the agent', terminal: 'Search has no terminal' }}
+      modePlaceholders={{ agent: 'Search, or ask a question — # for context, /agent to choose an agent…' }}
+      submitLabel={{ agent: 'Send' }} maxInputHeight="min(10rem, 25dvh)"
+      status={error ? { text: error, tone: 'danger', onDismiss: () => setError(''), 'data-testid': 'search-composer-error' } : null}
+      draft={draft} commands={commands}
+      workflows={workflows.map(({ id, label, description, disabled: off, disabledReason }) => ({ id, label, description, disabled: off, disabledReason }))}
+      // A pick puts the row's prompt (not `/<id> `) in the draft: the page sets
+      // its input and the controlled draft follows.
+      onWorkflow={id => { const row = workflows.find(w => w.id === id); if (row && !row.disabled) onWorkflow?.(row); }}
+      documentMenu={{ title: 'Add context', emptyLabel: 'No matching records' }}
       references={references.map(record => ({ id: recordKey(record), label: record.title }))}
       onRemoveReference={key => {
         const editor = editorRef.current?.editor;
@@ -112,7 +116,15 @@ export function SearchComposer({ value, onChange, onSubmit, disabled, agents, re
         const text = editorRef.current?.editor?.getText() ?? new DOMParser().parseFromString(next.html, 'text/html').body.textContent ?? '';
         lastText.current = text; onChange(text);
       }}
+      // The dock hands over what was TYPED (its Agent-mode `/agent ` prefix
+      // removed), so `/agent <name> …` here is always the user's own command.
       onSend={async message => {
+        const workflow = searchWorkflowIn(message.text, workflows);
+        if (workflow?.disabled) { setError(workflow.disabledReason ?? `${workflow.label} does not apply here.`); return false; }
+        if (workflow) {
+          const rest = message.text.trim().replace(/^\/[\w-]+\s*/, '').trim();
+          setError(''); return (await onSubmit(rest ? `${workflow.prompt}\n\n${rest}` : workflow.prompt)) !== false;
+        }
         const parsed = parseSearchCommand(message.text, agents, message.command?.argument?.id);
         if (parsed.error) { setError(parsed.error); return false; }
         if (!parsed.text?.trim()) return false;
@@ -124,5 +136,5 @@ export function SearchComposer({ value, onChange, onSubmit, disabled, agents, re
         const text = parsed.prefix ? (formatted.startsWith(parsed.prefix) ? formatted.slice(parsed.prefix.length).trim() : parsed.text) : formatted || parsed.text;
         setError(''); return (await onSubmit(text, parsed.agentId)) !== false;
       }} />
-  </div>;
+  </Stack>;
 }

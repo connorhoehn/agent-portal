@@ -9,7 +9,7 @@ test('Search keeps its session menu beside a restored conversation and starts a 
     { eventId: 'a1', role: 'ASSISTANT', text: 'Restored answer with evidence.' },
   ] } }));
   await page.goto('/iq/invoke');
-  const rail = page.getByRole('navigation', { name: 'Search navigation' });
+  const rail = page.getByTestId('search-explorer-rail');
   await expect(rail).toBeVisible();
   await rail.getByRole('link', { name: /Find an expert/ }).click();
   await expect(page.getByRole('log')).toContainText('Restored answer with evidence.');

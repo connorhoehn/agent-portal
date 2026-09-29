@@ -1,7 +1,7 @@
 {
-  "capturedAt": "2026-09-28T20:31:10.384Z",
-  "serverHandlerSha": "d50fe2086ef974b86319c95405e82f0a9f6d54ca9109db3afd4f93e73028b5c3",
-  "baseUrl": "http://127.0.0.1:3001",
+  "capturedAt": "2026-09-29T13:51:00.611Z",
+  "serverHandlerSha": "c33957764a615a93cc6a278137c8b17977d129794969ee131ab91668de6ecfd5",
+  "baseUrl": "http://127.0.0.1:3012",
   "personas": [
     "orgiq/admin",
     "assessment/admin",
@@ -2271,7 +2271,7 @@
         "boxes[].label": "string",
         "boxes[].lastActivityAt": "string",
         "boxes[].lastResult": "object",
-        "boxes[].lastResult.costUsd": "number",
+        "boxes[].lastResult.costUsd": "null|number",
         "boxes[].lastResult.durationMs": "number",
         "boxes[].lastResult.subtype": "string",
         "boxes[].lastResult.turns": "number",
@@ -2279,6 +2279,7 @@
         "boxes[].ownerId": "string",
         "boxes[].projectId": "string",
         "boxes[].sessionId": "string",
+        "boxes[].source": "string",
         "boxes[].spendUsd": "number",
         "boxes[].status": "string",
         "boxes[].stopsInMs": "number",
@@ -2287,6 +2288,7 @@
       "values": {
         "boxes[].status": [
           "error",
+          "idle",
           "running",
           "waiting"
         ]
@@ -2527,21 +2529,45 @@
         "items": "array",
         "items[]": "object",
         "items[].body": "string",
+        "items[].body_markdown": "string",
         "items[].box_id": "string",
+        "items[].classification": "string",
+        "items[].cluster_ids": "array",
+        "items[].cluster_ids[]": "string",
+        "items[].confidence": "number",
         "items[].created_at": "string",
+        "items[].created_by_compaction_id": "string",
+        "items[].facts": "array",
+        "items[].facts[]": "string",
         "items[].id": "string",
         "items[].initiative_id": "string",
         "items[].kind": "string",
+        "items[].last_used_at": "null|string",
         "items[].level": "string",
+        "items[].library_item_id": "null|string",
+        "items[].member_observation_ids": "array",
+        "items[].member_observation_ids[]": "string",
+        "items[].owner": "string",
         "items[].repo": "string",
+        "items[].reviewed_at": "null|string",
+        "items[].reviewed_by": "null|string",
         "items[].session_id": "string",
+        "items[].status": "string",
+        "items[].summary": "string",
         "items[].tags": "array",
         "items[].tags[]": "string",
         "items[].title": "string",
+        "items[].type": "string",
+        "items[].updated_at": "string",
+        "items[].when_this_helps": "string",
         "next_cursor": "string",
         "total": "number"
       },
       "values": {
+        "items[].classification": [
+          "confidential",
+          "internal"
+        ],
         "items[].kind": [
           "convention",
           "decision",
@@ -2550,7 +2576,16 @@
           "worked"
         ],
         "items[].level": [
-          "L0"
+          "L0",
+          "L1",
+          "L2"
+        ],
+        "items[].status": [
+          "draft",
+          "published"
+        ],
+        "items[].type": [
+          "procedure"
         ]
       }
     },
@@ -2733,10 +2768,12 @@
           "L2"
         ],
         "health[].status": [
+          "behind",
           "healthy",
           "stalled"
         ],
         "levels[].health.state": [
+          "behind",
           "ok",
           "stalled"
         ],
@@ -3745,6 +3782,9 @@
         "mocks.aurora": "boolean",
         "mocks.cloudwatch": "boolean",
         "mocks.guardrails": "boolean",
+        "realtime": "object",
+        "realtime.gateway": "string",
+        "realtime.store": "string",
         "region": "string",
         "service": "string",
         "status": "string"
@@ -4279,7 +4319,8 @@
       },
       "values": {
         "consults[].status": [
-          "expired"
+          "expired",
+          "pending"
         ]
       }
     },
@@ -4304,7 +4345,7 @@
       },
       "values": {
         "consult.status": [
-          "expired"
+          "pending"
         ]
       }
     },
@@ -4803,7 +4844,6 @@
         "events[].action": [
           "Login",
           "ManageIngest",
-          "Search",
           "ViewAssessment",
           "ViewIdentityAdmin",
           "ViewLeaderboard",
@@ -4814,8 +4854,7 @@
           "ALLOW"
         ],
         "events[].role": [
-          "admin",
-          "member"
+          "admin"
         ],
         "events[].tenant": [
           "orgiq"
@@ -5290,7 +5329,7 @@
         "points[].bucketStart": "string",
         "points[].count": "number",
         "points[].driftP95": "number",
-        "points[].judgeP50": "number",
+        "points[].judgeP50": "null|number",
         "windowHours": "number"
       },
       "values": {}
@@ -5584,33 +5623,45 @@
         "invocation.agentId": "string",
         "invocation.agentName": "string",
         "invocation.durationMs": "number",
-        "invocation.estCostUsd": "null",
+        "invocation.estCostUsd": "number",
         "invocation.guardrailAction": "null",
-        "invocation.humanLabel": "null",
+        "invocation.humanLabel": "string",
         "invocation.humanNote": "null",
-        "invocation.inputTokens": "null",
+        "invocation.inputTokens": "number",
         "invocation.invocationId": "string",
         "invocation.judgeCostUsd": "number",
         "invocation.judgeInputTokens": "number",
         "invocation.judgeOutputTokens": "number",
         "invocation.judgeRationale": "string",
         "invocation.judgeScore": "number",
-        "invocation.modelId": "null",
-        "invocation.outputTokens": "null",
+        "invocation.modelId": "string",
+        "invocation.outputTokens": "number",
         "invocation.parentInvocationId": "null",
         "invocation.piiDetected": "boolean",
         "invocation.promptSnippet": "string",
-        "invocation.promptVersion": "null",
+        "invocation.promptVersion": "string",
         "invocation.responseSnippet": "string",
-        "invocation.runtimeImageDigest": "null",
-        "invocation.schemaValid": "null",
-        "invocation.sessionId": "null",
-        "invocation.templateId": "null",
+        "invocation.runtimeImageDigest": "string",
+        "invocation.schemaValid": "boolean",
+        "invocation.sessionId": "string",
+        "invocation.templateId": "string",
         "invocation.totalCostUsd": "number",
         "invocation.ts": "string",
-        "invocation.userId": "null",
+        "invocation.userId": "string",
         "parent": "null",
-        "toolCalls": "array"
+        "toolCalls": "array",
+        "toolCalls[]": "object",
+        "toolCalls[].durationMs": "number",
+        "toolCalls[].errorMessage": "null",
+        "toolCalls[].errored": "boolean",
+        "toolCalls[].estCostUsd": "null",
+        "toolCalls[].inputSample": "string",
+        "toolCalls[].inputSize": "number",
+        "toolCalls[].outputSample": "string",
+        "toolCalls[].outputSize": "number",
+        "toolCalls[].startedAt": "string",
+        "toolCalls[].toolCallId": "string",
+        "toolCalls[].toolName": "string"
       },
       "values": {}
     },
@@ -5836,17 +5887,17 @@
         "points": "array",
         "points[]": "object",
         "points[].agentId": "string",
-        "points[].estCostUsd": "null|number",
+        "points[].estCostUsd": "number",
         "points[].humanLabel": "null|string",
-        "points[].inputTokens": "null|number",
+        "points[].inputTokens": "number",
         "points[].invocationId": "string",
         "points[].judgeCostUsd": "null|number",
         "points[].judgeRationale": "null|string",
         "points[].judgeScore": "null|number",
-        "points[].modelId": "null|string",
-        "points[].outputTokens": "null|number",
+        "points[].modelId": "string",
+        "points[].outputTokens": "number",
         "points[].promptVersion": "null|string",
-        "points[].schemaValid": "boolean|null",
+        "points[].schemaValid": "boolean",
         "points[].totalCostUsd": "number",
         "points[].ts": "string"
       },
@@ -6230,6 +6281,16 @@
       },
       "values": {}
     },
+    "GET /api/roster/users": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "unlinked": "array",
+        "users": "array"
+      },
+      "values": {}
+    },
     "GET /api/saved-searches": {
       "persona": "orgiq/admin",
       "status": 200,
@@ -6523,19 +6584,23 @@
         "edges[].label": "string",
         "edges[].source": "string",
         "edges[].target": "string",
-        "partial": "array",
-        "partial[]": "string",
         "query": "string",
         "related": "array",
-        "related[]": "object",
+        "related[]": "object|object(dictionary)",
+        "related[].description": "string",
         "related[].href": "string",
         "related[].id": "string",
+        "related[].sourceRefs": "array",
+        "related[].sourceRefs[]": "object",
+        "related[].sourceRefs[].id": "string",
+        "related[].sourceRefs[].type": "string",
         "related[].status": "string",
         "related[].subtitle": "string",
         "related[].title": "string",
         "related[].type": "string",
+        "related[].updatedAt": "string",
         "results": "array",
-        "results[]": "object",
+        "results[]": "object|object(dictionary)",
         "results[].description": "string",
         "results[].href": "string",
         "results[].id": "string",
@@ -6543,23 +6608,50 @@
         "results[].sourceRefs[]": "object",
         "results[].sourceRefs[].id": "string",
         "results[].sourceRefs[].type": "string",
+        "results[].status": "string",
         "results[].subtitle": "string",
         "results[].title": "string",
         "results[].type": "string",
+        "results[].updatedAt": "string",
         "total": "number"
       },
       "values": {
+        "related[].sourceRefs[].type": [
+          "initiative"
+        ],
         "related[].status": [
-          "in_progress"
+          "blocked",
+          "done",
+          "escalated",
+          "in_progress",
+          "in_review",
+          "open",
+          "resolved",
+          "retired"
         ],
         "related[].type": [
-          "initiative"
+          "decision",
+          "knowledge",
+          "person",
+          "work"
         ],
         "results[].sourceRefs[].type": [
           "initiative"
         ],
+        "results[].status": [
+          "approved",
+          "done",
+          "draft",
+          "in_progress",
+          "open",
+          "published",
+          "resolved"
+        ],
         "results[].type": [
-          "knowledge"
+          "decision",
+          "knowledge",
+          "person",
+          "work"
         ]
       }
     },
@@ -6797,6 +6889,16 @@
         "$": "object",
         "linked": "boolean",
         "personId": "null"
+      },
+      "values": {}
+    },
+    "GET /api/session/realtime-token": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "expiresAt": "string",
+        "token": "string"
       },
       "values": {}
     },
@@ -7187,6 +7289,9 @@
         "mocks.aurora": "boolean",
         "mocks.cloudwatch": "boolean",
         "mocks.guardrails": "boolean",
+        "realtime": "object",
+        "realtime.gateway": "string",
+        "realtime.store": "string",
         "region": "string",
         "service": "string",
         "status": "string"
@@ -7221,7 +7326,6 @@
         "BLOCK",
         "Login",
         "ManageIngest",
-        "Search",
         "ViewAssessment",
         "ViewIdentityAdmin",
         "ViewLeaderboard",
@@ -7388,7 +7492,6 @@
         "admin",
         "contributor",
         "decider",
-        "member",
         "org-leader",
         "owner",
         "sme"
@@ -7428,6 +7531,7 @@
     "state": {
       "open": false,
       "values": [
+        "behind",
         "missing",
         "ok",
         "stalled"
@@ -7456,6 +7560,8 @@
         "active",
         "approved",
         "awaiting_input",
+        "behind",
+        "blocked",
         "cancelled",
         "candidate",
         "changes_requested",
@@ -7476,6 +7582,7 @@
         "failed",
         "healthy",
         "ideating",
+        "idle",
         "in_progress",
         "in_review",
         "live",
@@ -7536,12 +7643,14 @@
         "knowledge",
         "longtext",
         "mentors",
+        "person",
         "procedure",
         "reports_to",
         "runbook",
         "sql",
         "story",
         "text",
+        "work",
         "worked"
       ]
     },

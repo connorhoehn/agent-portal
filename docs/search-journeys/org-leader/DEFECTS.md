@@ -1,0 +1,24 @@
+# Search workspace — org-leader (u-vera) defects, 2026-09-29 08:22 answer re-walk
+
+The answer surface was re-walked as Vera Green (org-leader) against dev:mock on ui-components 2.407.19, whose inline `ScopeHeader` title is `flex-1 min-w-[12rem]` (zero basis) and whose collapsed "Filters ▾" toggle carries the triggers' 1px border. Answer now passes. The other four logs are from the 08:04 walk on 2.407.15 (results pass, connections pass, people pass, scoped pass). 0 console errors and 0 HTTP responses ≥ 400 on the re-walk, at DPR 1 and DPR 2.
+
+## Open
+
+None.
+
+## History
+
+- Fixed by ui-components 2.407.19 (08:22 answer re-walk): (1) the crumbs no longer take a share of the shrink. Box against text width (Range), identical at DPR 1 and 2: long prompt "Search" 43.13/43.13 at 1672, 1536 and 1280 (it was 43.03 at 1672 and 42.81 at 1536, rendering "Sear…"); scoped long prompt "Search" 43.13/43.13 and "Auth Migration" 91.08/91.08 at 1672 and 1536 (it was 42.84 and 90.58, "Auth Migrati…"); results page default query "Search" 43.13/43.13 at 1280 (it was 42.97, the case results-header-1280.png recorded; that screenshot predates the fix). Scoped at 1280 the header runs the documented squeeze to its end — controls collapsed, title at its 192px floor, the middle crumb folded to "…", and only then "Auth Migration" truncated to 65.84 of 91.08 ("Auth Mi…", answer-long-title-scoped-1280.png); that is the contract's last resort, not the defect. (2) The collapsed "Filters ▾" toggle is 28px 13px/500 with a 1px solid --color-border border and a 6px radius, the same family as "Workspace ▾" / "+ Filter" / "Relevance ▾".
+- Fixed by ui-components 2.407.15 plus the portal's `searchTitle()` change (08:04 walk): (a) the title is no longer capped at half the trail — "Who can help finish Auth Migration?" is whole at 1672 (302 of 302px) on results, answer and connections; (b) a long prompt's whole text is on the h1's `title` attribute (all 170 characters, at every width, scoped and unscoped); (c) the first sentence is no longer cut to 72 characters by the portal, the header truncates it with "…"; (d) the collapsed "Filters ▾" toggle is 28px at 13px/500 (it was 18px at 14px/400); (e) the early collapse is gone — the long-prompt page stays inline at 1672 and 1536 on a fresh load, and the scoped page's collapse at 1536 is now forced by the 192px title floor rather than taken with room to spare.
+- Fixed by 2.407.10 (07:35 walk): the header controls are one family of 28px 13px/500 triggers on every surface: "Workspace ▾" / "In: Design System API ▾", "+ Filter" / "Type: Work ▾" / "Type: People ▾", and "Relevance ▾" / "Recent ▾". The crumbs are 13px/500 in secondary ink, the title is 18px/600 and the tabs are 14px/500. The In: menu's first item "Search entire workspace" and the footer link `search-scope-all` both clear the scope.
+- Fixed in ui-components 2.407.6 (confirmed 07:35): the inline header's collapse is no longer one-way.
+- Fixed in ui-components 2.407.4 (00:04 walk): the record graph's automatic fit shows the whole graph from 0.68, so Hierarchy and Radial open whole on the full canvas with nothing under the legend, the zoom group or Full screen. The inline header's chips no longer wrap; the Filters ▾ dialog is three one-line rows; ⋯ sits inside the row's padding.
+- Fixed in ui-components 2.407.3 (23:45 walk): with the conversation expanded, Radial opens selection-centred at 80% (10.4px). The inline header yields its controls into "Filters ▾" at 1280px; the crumbs no longer collapse to 0px.
+- Fixed in ui-components 2.407.1 (23:21 walk): the answer card's expanded Radial fits on 1098×270px. `FilterChip` forwards `aria-label`. The visible "Search entire workspace" link moved into the results footer.
+- Fixed in ui-components 2.406.3 (22:42 walk): the graph card's sr-only mark labels stay inside the card, so the document stays 941px after an answer. A record graph with no selection opens fitted to everything.
+- Decision 9 verified (22:16 walk): the header is one 48px band, and a bare composer message sets `q`, the title and the counts.
+- Fixed in ui-components 2.404.1 (21:13 walk): on the shortened canvas, Fit to view shows every record in every layout, and the selection stays clear of the overlays.
+- Fixed in ui-components 2.403.8 (20:53 walk): Fit to view no longer alternates, and the selection stays whole at every canvas size.
+- Fixed in ui-components 2.403.6/2.403.7 (20:32 walk): the expanded strip no longer covers the canvas, and the legend and zoom controls are hit-testable.
+- Fixed in ui-components 2.403.5 (19:54 walk): Force opens canvas-shaped with no record content under the overlays, the stray "*Sources: ," line is gone, and the people Radial layout fits all 56 at open.
+- Fixed at the 19:22 walk: the record graph re-fits on resize, edge labels show only on the selection's edges, the strip prints no `s3://` URLs, and the org-graph zoom controls no longer sit on nodes.

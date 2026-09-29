@@ -55,14 +55,19 @@ for c in ExplorerLayout RailSection RailNavList RecordResultList CitedRecordList
 done
 grep -q "SubNavLayout" "$PAGE" 2>/dev/null && fail "SearchPage.tsx still uses SubNavLayout (the Search rail is ExplorerLayout + RailNavList)" || ok "no SubNavLayout"
 grep -q "RichChatComposer" "$PAGES/SearchComposer.tsx" 2>/dev/null && ok "composer is RichChatComposer" || fail "SearchComposer.tsx is not on RichChatComposer"
-grep -q "allowAttachments={false}" "$PAGES/SearchComposer.tsx" 2>/dev/null && ok "composer does not advertise attachments" || fail "SearchComposer advertises attachments with no upload handler"
+grep -q "AgentComposerDock" "$PAGES/SearchComposer.tsx" 2>/dev/null && ok "SearchComposer hosts AgentComposerDock" || fail "SearchComposer.tsx does not host AgentComposerDock (the initiative composer shell, decision 6)"
+grep -q "AgentComposerDock" portal/src/pages/projects/InitiativeComposer.tsx 2>/dev/null && ok "InitiativeComposer hosts AgentComposerDock" || fail "InitiativeComposer.tsx does not host AgentComposerDock (one composer shell for both pages)"
+grep -qE "hideModeMenu|fixedMode" "$PAGES/SearchComposer.tsx" 2>/dev/null && fail "SearchComposer hides the Agent ⌄ mode menu (hideModeMenu/fixedMode)" || ok "Agent ⌄ mode menu visible on Search"
+{ [ -f "$PAGES/searchWorkflows.ts" ] && [ -f "$PAGES/__tests__/searchWorkflows.test.ts" ] && grep -q "searchWorkflows" "$PAGES/SearchComposer.tsx"; } 2>/dev/null && ok "Workflow ⌄ rows are pure searchWorkflows (tested)" || fail "searchWorkflows.ts + test missing or unused by SearchComposer"
+{ [ -f "$PAGES/connectionsModel.ts" ] && [ -f "$PAGES/__tests__/connectionsModel.test.ts" ] && grep -q "connectionsView" "$PAGE"; } 2>/dev/null && ok "Connections view chosen by connectionsView() (tested)" || fail "connectionsModel.connectionsView or its test is missing, or SearchPage does not use it (decision 8)"
+grep -q "focusIds" "$PAGE" 2>/dev/null && ok "a people selection focuses OrgGraph (focusIds)" || fail "SearchPage.tsx never passes focusIds to OrgGraph — a person selection must draw the org graph around that person"
 for gone in portal/src/pages/ExplorePage.tsx portal/src/components/org-graph portal/src/components/multi-entity-graph "$PAGES/SearchConnections.tsx" "$PAGES/SearchEvidence.tsx" "$PAGES/searchConnections.css"; do
   [ -e "$gone" ] && fail "legacy still present: $gone (ported to the library — delete it)" || ok "gone: ${gone#portal/src/}"
 done
 # The exports must resolve from the installed package, not from a local copy.
 LIB=portal/node_modules/@connorhoehnslalom/ui-components
 if [ -d "$LIB/dist" ]; then
-  for c in RecordResultList CitedRecordList RecordGraph OrgGraph Highlight; do
+  for c in RecordResultList CitedRecordList RecordGraph OrgGraph Highlight AgentComposerDock RecordGraphCard; do
     grep -qE "export .*\b$c\b" "$LIB/dist/index.d.ts" "$LIB/dist/shared.d.ts" 2>/dev/null && ok "installed library exports $c" || fail "installed ui-components does not export $c (release + bump the pin)"
   done
   grep -qE '"github:connorhoehnslalom/ui-components#[0-9a-f]{40}"' portal/package.json && ok "portal pins ui-components by full sha" || fail "portal/package.json ui-components pin is not a full 40-char github sha"
@@ -77,6 +82,9 @@ grep -q "export function searchMigration" "$PAGES/searchModel.ts" 2>/dev/null &&
 grep -qE "path: '/iq/search'" portal/src/components/shell/portalCommands.ts && ok "palette knows /iq/search" || fail "portalCommands.ts has no /iq/search entry"
 grep -qE "path: '/iq/search'" portal/src/components/shell/Layout.tsx && ok "shell rail targets /iq/search" || fail "Layout.tsx rail does not target /iq/search"
 grep -q "ScopeHeader" "$PAGE" 2>/dev/null && ok "crumbs on ScopeHeader" || fail "SearchPage.tsx has no ScopeHeader"
+grep -q 'variant="inline"' "$PAGE" 2>/dev/null && ok "one header row: ScopeHeader variant=inline (decision 9)" || fail "SearchPage.tsx does not use ScopeHeader variant=\"inline\" — crumbs, title, tabs and controls belong on one row (decision 9)"
+grep -qE "\bSearchInput\b" "$PAGE" 2>/dev/null && fail "SearchPage.tsx still draws a hero SearchInput — the composer issues queries (decision 9)" || ok "no hero search field; the composer issues queries"
+grep -q "RecordGraphCard" "$PAGE" 2>/dev/null && ok "Answer view carries RecordGraphCard" || fail "SearchPage.tsx does not use RecordGraphCard in the Answer view (decision 9)"
 for tab in results answer connections; do grep -q "'$tab'" "$PAGE" 2>/dev/null || fail "SearchPage.tsx has no '$tab' tab"; done
 ok "Results / Answer / Connections tabs named"
 grep -q "Search entire workspace" "$PAGE" 2>/dev/null && ok "scoped header offers 'Search entire workspace'" || fail "SearchPage.tsx has no 'Search entire workspace' for a scoped search"
@@ -132,7 +140,7 @@ done; done
 if [ -d "$JDIR" ]; then
   newest=$(ls -t $(find "$PAGES" -name '*.tsx') 2>/dev/null | head -1)
   stale=0; stale_names=""
-  for f in $(find "$JDIR" -name '*.md' ! -name 'PROTOCOL.md' 2>/dev/null); do
+  for f in $(find "$JDIR" -name '*.md' ! -name 'PROTOCOL.md' ! -name 'DEFECTS.md' 2>/dev/null); do
     [ -n "$newest" ] && [ "$newest" -nt "$f" ] && { stale=$((stale+1)); stale_names="$stale_names ${f#$JDIR/}"; }
   done
   [ "$stale" = 0 ] && ok "journey logs are newer than every search page" || fail "$stale journey logs predate a search page edit — re-walk them:$stale_names"

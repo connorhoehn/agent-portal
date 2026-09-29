@@ -101,22 +101,68 @@ connection path) and `portal/src/components/multi-entity-graph/` (~500).
    org-graph endpoints under `/api/graph`; Search stays a bounded read model
    over existing providers, as `docs/search-workspace.md` says.
 
-6. **The composer does not advertise what is not built.** The mockup's
-   Workflow ▾ and attach controls stay off (`allowAttachments={false}`, no
-   workflow menu) until something handles them — the contract in
-   `docs/search-workspace.md` already says so. `/agent <name>` and the
-   agent picker are the routing surface.
+6. **The composer is the initiative composer's shell, as a library composite.**
+   The user is building one agent composer across sessions — the one under
+   the Initiative Work page (`portal/src/pages/projects/InitiativeComposer.tsx`:
+   `FloatingComposerDock` + `RichChatComposer` with the Agent ⌄ mode menu, a
+   removable context chip, the B I code link attach toolbar, a Workflow ⌄
+   menu, `/ commands` and Send, `presentation="document"`). Search shipped a
+   stripped configuration of the same `RichChatComposer` (mode menu hidden,
+   compact density, no dock, no workflow menu) and the user rejected it on
+   2026-09-28: "the chat component is hand rolled and doesn't use the new
+   fancy one". So the shell moves INTO the library as `AgentComposerDock`
+   (dock + placement context + the mode/toolbar/workflow preset; the host
+   passes the words: placeholder, chips, workflow rows, commands, `onSend`),
+   and BOTH `InitiativeComposer` and `SearchComposer` become thin hosts of
+   it. Attachments follow the shared shell (the initiative composer allows
+   them and keeps files in the draft without forwarding them); Workflow ⌄
+   rows on Search are real prompt templates over the current selection,
+   scope and query (`searchWorkflows`, pure and tested), never decoration.
 
 7. **Scoped entry is a link, not a mode.** An initiative page offers
    "Search in this initiative" → `/iq/search?scope=<id>`; the header renders
    the "In: <name> ×" chip and "Search entire workspace" from the existing
    `scope` param. Nothing new in the URL contract.
 
+8. **A people selection is the org graph; the record graph needs edges.**
+   The old `/iq/explore?focus=<person>` drew the org graph narrowed to that
+   person and their relationships. After the rebuild the same link (now
+   `selection=person:<id>`) landed on `RecordGraph`, which had zero edges for
+   a lone person and filled the canvas with sixteen unrelated observations —
+   the user's screenshot of 2026-09-28 ("really broke my old org graph …
+   looks bad"). Rule, as a pure `connectionsView()` in
+   `pages/search/connectionsModel.ts`: Connections renders the **org graph**
+   when the type filter is People OR every selected key is a person and
+   there is no query — focused on the selection (selected people + their
+   neighbours, `OrgGraph` `focusIds`, "Show whole org" to widen); it renders
+   the **record graph** only when there are recorded edges among the
+   selection and its neighbours; otherwise it renders the empty state ("No
+   recorded connections — search, or select related records"). No graph
+   ever shows records that are not connected to the selection.
+
+9. **One header row; the composer issues queries; the chat view carries a
+   graph card.** User feedback 2026-09-28 (screenshot): the page spent
+   three rows — crumbs, a large title, a hero search field and a chip row —
+   before the tabs, on a surface whose graph is the thing people interact
+   with. Rule: `ScopeHeader variant="inline"` draws the breadcrumbs and the
+   title on ONE row with the Results / Answer / Connections tabs on the
+   right of that row and the compact controls (scope chip, "+ Filter",
+   sort) after them; there is no hero search field — the docked
+   `AgentComposerDock` is how a new query is issued (a bare message with
+   nothing attached or selected sets `q`; a message with context or a
+   selection is a question about it and leaves `q` alone), so the type
+   filter lives only in the SEARCH rail. The graph takes the height that
+   frees. Text and visual views are two faces of one search: in the Answer
+   view a `RecordGraphCard` under the assistant turn summarises the
+   current graph ("N records · M connections", the selection's avatars)
+   and can expand inline or open the full Connections view; in the
+   Connections view the assistant strip still expands the text.
+
 ## Ownership map (what the portal may import, and where it comes from)
 
 | panel element | library composite | status |
 |---|---|---|
-| two-rail frame | `ExplorerLayout`, `ScopeHeader` | shipped |
+| two-rail frame | `ExplorerLayout`, `ScopeHeader` (`variant="inline"`: crumbs + title + tabs + controls on one row) | **to build** (inline variant) |
 | SEARCH / SAVED / RECENT rail | `RailSection`, `RailNavList` (`currentStyle="tint"`, counts) | shipped (2.399.0) |
 | hero query field, clear, submit | `SearchInput` + `Button`/`IconButton` | shipped |
 | scope + filter chips | `FilterChip`, `FilterPopover`, `DropdownMenu` | shipped |
@@ -127,7 +173,8 @@ connection path) and `portal/src/components/multi-entity-graph/` (~500).
 | typed record graph | **`RecordGraph`** (`graph/`) | **to build** |
 | org graph, legend, chips, sliders, person card | **`OrgGraph`** and friends (`graph/org/`) | **to port** from `portal/src/components/org-graph` |
 | transcript | `MessageBubble` via `InvokePage` | shipped |
-| composer | `RichChatComposer` (`social/rich-composer`) | shipped |
+| composer (Search AND initiatives) | `AgentComposerDock` over `FloatingComposerDock` + `RichChatComposer` | shipped (2.403.0); on Search it also issues new queries |
+| graph card in the Answer view | **`RecordGraphCard`** (`search/`) | **to build** |
 
 ## Definition of done (what the validator checks)
 
@@ -139,7 +186,11 @@ connection path) and `portal/src/components/multi-entity-graph/` (~500).
   is gone once the graph is in the library.
 - `SearchPage.tsx` imports `ExplorerLayout`, `RailSection`, `RailNavList`,
   `RecordResultList`, `CitedRecordList`, `RecordGraph` and `OrgGraph` from
-  `@connorhoehnslalom/ui-components` and no longer imports `SubNavLayout`.
+  `@connorhoehnslalom/ui-components` and no longer imports `SubNavLayout`;
+  `SearchComposer.tsx` and `InitiativeComposer.tsx` both host
+  `AgentComposerDock` (no `hideModeMenu`, no `fixedMode`); the Connections
+  view is chosen by `connectionsModel.connectionsView()` (tested), and a
+  people selection focuses `OrgGraph`.
 - `ExplorePage.tsx`, `components/org-graph/`, `components/multi-entity-graph/`,
   `SearchConnections.tsx`, `SearchEvidence.tsx` and `searchConnections.css`
   no longer exist.
@@ -177,5 +228,14 @@ connection path) and `portal/src/components/multi-entity-graph/` (~500).
    scoped entry from the initiative pages; delete the legacy graph code and
    the page-local CSS; update `pages/search/__tests__` and
    `portal/e2e/search-workspace.spec.ts`.
-6. **Journeys, wave 3.** Walk the five surfaces as member and org-leader,
+6. **Wave 2b (user feedback 2026-09-28).** Library: `AgentComposerDock`,
+   `OrgGraph` focus narrowing, `RecordGraph` hover/selection affordance and
+   empty copy; release, bump. Portal: `connectionsModel.ts` +
+   `searchWorkflows.ts`, `SearchComposer` and `InitiativeComposer` on
+   `AgentComposerDock`, Connections routing per decision 8.
+7. **Wave 2c (user feedback 2026-09-28, header).** Library: `ScopeHeader`
+   inline variant, `RecordGraphCard`; release, bump. Portal: one-row
+   header with tabs + controls, hero field and chip row removed, composer
+   issues queries, graph card in the Answer view.
+8. **Journeys, wave 3.** Walk the five surfaces as member and org-leader,
    write the ten logs with screenshots, run the full validator.

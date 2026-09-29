@@ -3,7 +3,7 @@
 import { AppError } from '../lib/async-handler.js';
 import { isAllowed, type PrincipalRef } from '../lib/authz.js';
 import { aurora } from './index.js';
-import { listProjects, getProject } from './projects.js';
+import { listProjects, listProjectSummaries, getProject } from './projects.js';
 import { searchWorkItems, getWorkItem } from './work-items.js';
 import { listDesignReviews, getDesignThread, type DesignReview } from './design-reviews.js';
 import { listDecisions, getDecision } from './decisions.js';
@@ -16,13 +16,30 @@ export interface SearchRef { type: SearchRecordType; id: string }
 export interface SearchRecord extends SearchRef {
   title: string; description?: string; href: string; status?: string; subtitle?: string;
   sourceRefs?: SearchRef[];
+  /** ISO time the source last changed, only where the source records one. */
+  updatedAt?: string;
+  /** Why this row scored: one of MATCH_REASONS. Absent with no query and no scope. */
+  matchReason?: MatchReason;
+  /** Query terms (after stopwords) found in title/description/subtitle, in query order. */
+  highlights?: string[];
 }
+export const SEARCH_SORTS = ['relevance', 'recent'] as const;
+export type SearchSort = typeof SEARCH_SORTS[number];
+export const MATCH_REASONS = {
+  title: 'Title match',
+  text: 'Text match',
+  membership: 'Matched through initiative membership',
+  work: 'Matched through initiative work',
+  linked: 'Matched through a linked initiative',
+  scope: 'In scope',
+} as const;
+export type MatchReason = typeof MATCH_REASONS[keyof typeof MATCH_REASONS];
 export interface SearchEdge { id: string; source: string; target: string; label: string }
 export interface SearchResponse {
   query: string; results: SearchRecord[]; counts: Record<SearchRecordType | 'all', number>;
   total: number; related: SearchRecord[]; edges: SearchEdge[]; partial?: string[];
 }
-export interface SearchOptions { q?: string; type?: SearchRecordType | 'all'; scope?: string; limit?: number; offset?: number }
+export interface SearchOptions { q?: string; type?: SearchRecordType | 'all'; scope?: string; limit?: number; offset?: number; sort?: SearchSort }
 export const searchKey = (ref: SearchRef): string => `${ref.type}:${ref.id}`;
 const enc = encodeURIComponent;
 const STOPWORDS = new Set('a an and are as at be by can could do does for from has have help how i in is it me my of on or our please should that the their them there these they this to us was we what when where which who why will with would you your finish find show about'.split(' '));
@@ -30,9 +47,28 @@ function terms(q: string): string[] { return [...new Set(q.toLowerCase().match(/
 function score(record: SearchRecord, tokens: string[]): number {
   if (!tokens.length) return 1;
   const title = record.title.toLowerCase();
-  const text = `${record.title} ${record.description ?? ''} ${record.subtitle ?? ''}`.toLowerCase();
+  const text = textOf(record);
   const hits = tokens.filter(t => text.includes(t));
   return hits.length ? hits.length * 2 + tokens.filter(t => title.includes(t)).length * 4 + (tokens.every(t => title.includes(t)) ? 12 : 0) : 0;
+}
+const textOf = (record: SearchRecord): string => `${record.title} ${record.description ?? ''} ${record.subtitle ?? ''}`.toLowerCase();
+/** The text half of score(): which part of the record the query hit. */
+function textReason(record: SearchRecord, tokens: string[]): MatchReason | undefined {
+  if (!tokens.length) return undefined;
+  const title = record.title.toLowerCase();
+  if (tokens.some(t => title.includes(t))) return MATCH_REASONS.title;
+  const text = textOf(record);
+  return tokens.some(t => text.includes(t)) ? MATCH_REASONS.text : undefined;
+}
+/** Normalise a source timestamp to ISO; a zone-less string is UTC (Aurora's naive TIMESTAMPTZ). Never invents one. */
+function isoOrUndefined(raw: unknown): string | undefined {
+  if (raw == null) return undefined;
+  const text = String(raw).trim();
+  if (!text) return undefined;
+  const hasZone = /(?:Z|[+-]\d{2}:?\d{2})$/.test(text);
+  const isoish = text.includes('T') ? text : text.replace(' ', 'T');
+  const d = new Date(hasZone ? isoish : `${isoish}Z`);
+  return Number.isFinite(d.getTime()) ? d.toISOString() : undefined;
 }
 async function permissions(principal: PrincipalRef): Promise<{ people: boolean }> {
   if ((principal.tenant !== 'orgiq' && principal.role !== 'admin') || !(await isAllowed(principal, 'Search'))) {
@@ -47,13 +83,14 @@ function knowledgeRecord(item: DistillationItem): SearchRecord {
     href: `/iq/distillation/knowledge?view=${artifact ? 'guides' : item.level === 'L1' ? 'patterns' : 'notes'}&item=${enc(item.id)}`,
     subtitle: artifact ? item.type : item.level === 'L1' ? 'Pattern' : 'Observation',
     ...('status' in item ? { status: item.status } : {}),
+    updatedAt: isoOrUndefined(item.level === 'L0' ? item.created_at : item.updated_at),
     sourceRefs: 'initiative_id' in item ? [{ type: 'initiative', id: item.initiative_id }] : [],
   };
 }
 
 function designRecord(d: DesignReview): SearchRecord {
   return { type: 'decision', id: d.id, title: d.title, description: d.summary, status: d.status,
-    subtitle: `Approved design · ${d.orgProjectName}`, href: `/iq/designs/${enc(d.id)}`,
+    subtitle: `Approved design · ${d.orgProjectName}`, href: `/iq/designs/${enc(d.id)}`, updatedAt: isoOrUndefined(d.updatedAt),
     sourceRefs: [{ type: 'initiative', id: d.orgProjectId }] };
 }
 
@@ -78,6 +115,9 @@ export async function searchRecords(principal: PrincipalRef, opts: SearchOptions
   if (decisions.length >= 200) partial.push('Decisions source window is limited');
   if (knowledge.total > knowledge.items.length) partial.push('Knowledge source window is limited');
   if (assets.total > assets.assets.length) partial.push('Agent library source window is limited');
+  // Initiative prose is scored for every initiative, scoped or not, so widening
+  // the scope can never drop a summary match. One batched read, not one per row.
+  const summaries = await read('Initiative summaries', listProjectSummaries(projects.map(p => p.id)), new Map<string, string>());
   const records = new Map<string, SearchRecord>();
   const edges: SearchEdge[] = [];
   const add = (record: SearchRecord) => records.set(searchKey(record), record);
@@ -89,19 +129,19 @@ export async function searchRecords(principal: PrincipalRef, opts: SearchOptions
   const initiative = (id: string): SearchRef => ({ type: 'initiative', id });
   graph?.nodes.forEach(p => add({ type: 'person', id: p.id, title: p.name, description: p.skills.join(', '), subtitle: [p.title, p.department].filter(Boolean).join(' · '), href: `/iq/search?tab=connections&selection=${enc(`person:${p.id}`)}` }));
   projects.forEach(p => {
-    add({ type: 'initiative', id: p.id, title: p.name, status: p.status ?? undefined, subtitle: p.ownerName ? `Owner: ${p.ownerName}` : undefined, href: `/iq/projects/${enc(p.id)}` });
+    add({ type: 'initiative', id: p.id, title: p.name, description: summaries.get(p.id), status: p.status ?? undefined, subtitle: p.ownerName ? `Owner: ${p.ownerName}` : undefined, href: `/iq/projects/${enc(p.id)}`, updatedAt: isoOrUndefined(p.lastActivityAt ?? p.createdAt) });
     if (p.ownerId) edge(person(p.ownerId), initiative(p.id), 'owns');
   });
   work.forEach(w => {
     const ref: SearchRef = { type: 'work', id: w.id };
-    add({ ...ref, title: w.title, description: w.summary ?? w.description ?? undefined, status: w.blockedReason || w.labels?.includes('blocked') ? 'blocked' : w.status, subtitle: [w.projectName, w.assigneeName].filter(Boolean).join(' · '), href: `/iq/projects/${enc(w.projectId)}?tab=work&item=${enc(w.id)}`, sourceRefs: [initiative(w.projectId)] });
+    add({ ...ref, title: w.title, description: w.summary ?? w.description ?? undefined, status: w.blockedReason || w.labels?.includes('blocked') ? 'blocked' : w.status, subtitle: [w.projectName, w.assigneeName].filter(Boolean).join(' · '), href: `/iq/projects/${enc(w.projectId)}?tab=work&item=${enc(w.id)}`, sourceRefs: [initiative(w.projectId)], updatedAt: isoOrUndefined(w.updatedAt) });
     edge(initiative(w.projectId), ref, 'includes');
     if (w.assigneeId) edge(person(w.assigneeId), ref, 'assigned to');
     if (w.parentId) edge({ type: 'work', id: w.parentId }, ref, 'includes');
   });
   decisions.forEach(d => {
     const ref: SearchRef = { type: 'decision', id: d.id };
-    add({ ...ref, title: d.topic, description: d.summary ?? undefined, status: d.status, href: d.projectId ? `/iq/projects/${enc(d.projectId)}?tab=decisions&decision=${enc(d.id)}` : `/iq/search?type=decision&q=${enc(d.topic)}`, sourceRefs: d.projectId ? [initiative(d.projectId)] : [] });
+    add({ ...ref, title: d.topic, description: d.summary ?? undefined, status: d.status, href: d.projectId ? `/iq/projects/${enc(d.projectId)}?tab=decisions&decision=${enc(d.id)}` : `/iq/search?type=decision&q=${enc(d.topic)}`, sourceRefs: d.projectId ? [initiative(d.projectId)] : [], updatedAt: isoOrUndefined(d.decidedAt) });
     if (d.projectId) edge(initiative(d.projectId), ref, 'decision');
   });
   designs.forEach(d => {
@@ -122,7 +162,7 @@ export async function searchRecords(principal: PrincipalRef, opts: SearchOptions
       if (k.library_item_id) edge(record, { type: 'asset', id: k.library_item_id }, 'derived asset');
     }
   });
-  assets.assets.forEach(a => add({ type: 'asset', id: a.id, title: a.name, description: a.description, status: a.lifecycleStatus, subtitle: `${a.kind} · ${a.usedBy.length ? a.usedBy.join(', ') : 'Not used yet'}`, href: `/iq/library/${enc(a.id)}` }));
+  assets.assets.forEach(a => add({ type: 'asset', id: a.id, title: a.name, description: a.description, status: a.lifecycleStatus, subtitle: `${a.kind} · ${a.usedBy.length ? a.usedBy.join(', ') : 'Not used yet'}`, href: `/iq/library/${enc(a.id)}`, updatedAt: isoOrUndefined(a.updatedAt) }));
   assets.assets.forEach(a => { if (a.designReviewId) edge({ type: 'decision', id: a.designReviewId }, { type: 'asset', id: a.id }, 'ratifies'); });
   // Only load contribution roles for relevant initiatives, rather than issuing
   // a detail query per catalog row. Owners are already authoritative above.
@@ -132,7 +172,8 @@ export async function searchRecords(principal: PrincipalRef, opts: SearchOptions
     const detail = await read('Initiative contributors', getProject(p.id), null);
     if (!detail) return;
     const record = records.get(searchKey(initiative(p.id)));
-    if (record && detail.summary) record.description = detail.summary;
+    // Fallback only: the batched summary read above is the primary source.
+    if (record && !record.description && detail.summary) record.description = detail.summary;
     if (allowed.people) detail.contributors.forEach(c => edge(person(c.personId), initiative(p.id), c.role?.toLowerCase() === 'sme' ? 'SME' : c.role === 'owner' ? 'owns' : 'contributes to'));
   }));
   const validEdges = [...new Map(edges.filter(e => records.has(e.source) && records.has(e.target)).map(e => [e.id, e])).values()];
@@ -148,14 +189,38 @@ export async function searchRecords(principal: PrincipalRef, opts: SearchOptions
   }
   const available = [...records.values()].filter(r => !opts.scope || scoped.has(searchKey(r)));
   const scores = new Map(available.map(r => [searchKey(r), score(r, tokens)]));
+  // The reason a row scored is whichever component set its final score.
+  const reasons = new Map<string, MatchReason | undefined>(available.map(r => [searchKey(r), tokens.length ? textReason(r, tokens) : opts.scope ? MATCH_REASONS.scope : undefined]));
+  const lift = (key: string, value: number, reason: MatchReason) => {
+    if (value <= (scores.get(key) ?? 0)) return;
+    scores.set(key, value);
+    // Without a query every scoped row is simply in scope; edges only reorder them.
+    if (tokens.length) reasons.set(key, reason);
+  };
   // A named initiative is also a query for its recorded owners, contributors,
   // and work. Expansion follows real edges, never string-matched identities.
   const roots = new Set(matchingProjects.filter(p => !tokens.length || tokens.every(t => p.name.toLowerCase().includes(t))).map(p => searchKey(initiative(p.id))));
   validEdges.forEach(e => {
-    if (roots.has(e.source) && scores.has(e.target)) scores.set(e.target, Math.max(scores.get(e.target) ?? 0, e.target.startsWith('work:') ? (records.get(e.target)?.status === 'blocked' ? 18 : ['done', 'cancelled'].includes(records.get(e.target)?.status ?? '') ? 2 : 14) : 5));
-    if (roots.has(e.target) && scores.has(e.source)) scores.set(e.source, Math.max(scores.get(e.source) ?? 0, e.source.startsWith('person:') ? (e.label === 'owns' ? 22 : 20) : 5));
+    if (roots.has(e.source) && scores.has(e.target)) {
+      const isWork = e.target.startsWith('work:') && e.label === 'includes';
+      lift(e.target, e.target.startsWith('work:') ? (records.get(e.target)?.status === 'blocked' ? 18 : ['done', 'cancelled'].includes(records.get(e.target)?.status ?? '') ? 2 : 14) : 5, isWork ? MATCH_REASONS.work : MATCH_REASONS.linked);
+    }
+    if (roots.has(e.target) && scores.has(e.source)) {
+      const isPerson = e.source.startsWith('person:');
+      lift(e.source, isPerson ? (e.label === 'owns' ? 22 : 20) : 5, isPerson ? MATCH_REASONS.membership : MATCH_REASONS.linked);
+    }
   });
-  const matches = available.filter(r => (scores.get(searchKey(r)) ?? 0) > 0).sort((a, b) => (scores.get(searchKey(b)) ?? 0) - (scores.get(searchKey(a)) ?? 0) || a.title.localeCompare(b.title) || searchKey(a).localeCompare(searchKey(b)));
+  const byRelevance = (a: SearchRecord, b: SearchRecord) => (scores.get(searchKey(b)) ?? 0) - (scores.get(searchKey(a)) ?? 0) || a.title.localeCompare(b.title) || searchKey(a).localeCompare(searchKey(b));
+  // Recent: newest recorded change first; rows whose source records no time
+  // follow all dated rows; relevance breaks ties. Nothing is backfilled.
+  const byRecent = (a: SearchRecord, b: SearchRecord) => (a.updatedAt && b.updatedAt ? b.updatedAt.localeCompare(a.updatedAt) : a.updatedAt ? -1 : b.updatedAt ? 1 : 0) || byRelevance(a, b);
+  const annotate = (r: SearchRecord): SearchRecord => {
+    const reason = reasons.get(searchKey(r));
+    if (!tokens.length) return reason ? { ...r, matchReason: reason } : r;
+    const text = textOf(r);
+    return { ...r, ...(reason ? { matchReason: reason } : {}), highlights: tokens.filter(t => text.includes(t)) };
+  };
+  const matches = available.filter(r => (scores.get(searchKey(r)) ?? 0) > 0).sort(opts.sort === 'recent' ? byRecent : byRelevance).map(annotate);
   const counts = { all: matches.length, person: 0, initiative: 0, work: 0, decision: 0, knowledge: 0, asset: 0 };
   matches.forEach(r => counts[r.type]++);
   const filtered = matches.filter(r => !opts.type || opts.type === 'all' || r.type === opts.type);
@@ -163,7 +228,7 @@ export async function searchRecords(principal: PrincipalRef, opts: SearchOptions
   const visible = new Set(results.map(searchKey));
   const neighbors = new Set<string>();
   validEdges.forEach(e => { if (visible.has(e.source)) neighbors.add(e.target); if (visible.has(e.target)) neighbors.add(e.source); });
-  const related = available.filter(r => neighbors.has(searchKey(r)) && !visible.has(searchKey(r))).slice(0, 100);
+  const related = available.filter(r => neighbors.has(searchKey(r)) && !visible.has(searchKey(r))).slice(0, 100).map(r => (scores.get(searchKey(r)) ?? 0) > 0 ? annotate(r) : r);
   related.forEach(r => visible.add(searchKey(r)));
   return { query: opts.q ?? '', results, counts, total: filtered.length, related, edges: validEdges.filter(e => visible.has(e.source) && visible.has(e.target)), ...(partial.length ? { partial: [...new Set(partial)] } : {}) };
 }

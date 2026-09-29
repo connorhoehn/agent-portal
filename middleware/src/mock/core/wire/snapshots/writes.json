@@ -1,7 +1,7 @@
 {
-  "capturedAt": "2026-09-28T20:31:11.188Z",
-  "serverHandlerSha": "d50fe2086ef974b86319c95405e82f0a9f6d54ca9109db3afd4f93e73028b5c3",
-  "baseUrl": "http://127.0.0.1:3001",
+  "capturedAt": "2026-09-29T13:51:01.399Z",
+  "serverHandlerSha": "c33957764a615a93cc6a278137c8b17977d129794969ee131ab91668de6ecfd5",
+  "baseUrl": "http://127.0.0.1:3012",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
     "agentcore",
@@ -2597,7 +2597,16 @@
       ]
     },
     "POST /api/observability/quality/feedback": {
-      "skipped": "HTTP 404: invocation not found (orgiq/admin)",
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "invocationId": "string",
+        "label": "string",
+        "note": "string",
+        "ok": "boolean"
+      },
+      "values": {},
       "sent": [
         "invocationId",
         "label",

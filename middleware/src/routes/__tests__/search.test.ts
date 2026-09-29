@@ -5,6 +5,7 @@ jest.mock('../../lib/authz.js', () => ({
 }));
 jest.mock('../../providers/search.js', () => ({
   SEARCH_TYPES: ['person', 'initiative', 'work', 'decision', 'knowledge', 'asset'],
+  SEARCH_SORTS: ['relevance', 'recent'],
   resolveSearchContext: jest.fn(async (_p, refs) => ({ records: refs, edges: [] })),
   searchRecords: jest.fn(async (_p, opts) => ({ query: opts.q, results: [], total: 0, counts: {}, related: [], edges: [] })),
 }));
@@ -18,13 +19,19 @@ const app = express(); app.use('/api/search', searchRouter); app.use(errorHandle
 test('search is mounted behind the tenant boundary and Search authority', () => {
   expect(requireTenant).toHaveBeenCalledWith('orgiq'); expect(requireAction).toHaveBeenCalledWith('Search');
 });
-test.each(['type=unrecognized', 'limit=0', 'limit=101', 'limit=1.5', 'offset=-1', 'offset=nope'])('rejects unsupported query %s', async query => {
+test.each(['type=unrecognized', 'limit=0', 'limit=101', 'limit=1.5', 'offset=-1', 'offset=nope', 'sort=bogus', 'sort='])('rejects unsupported query %s', async query => {
   expect((await request(app).get(`/api/search?${query}`)).status).toBe(400);
 });
 test('passes initiative scope, type and pagination through', async () => {
   const response = await request(app).get('/api/search?q=Auth&type=person&scope=p-auth&limit=20&offset=10');
   expect(response.status).toBe(200);
-  expect(searchRecords).toHaveBeenLastCalledWith(expect.objectContaining({ tenant: 'orgiq' }), { q: 'Auth', type: 'person', scope: 'p-auth', limit: 20, offset: 10 });
+  expect(searchRecords).toHaveBeenLastCalledWith(expect.objectContaining({ tenant: 'orgiq' }), { q: 'Auth', type: 'person', scope: 'p-auth', limit: 20, offset: 10, sort: 'relevance' });
+});
+test('sort=recent reaches the provider; relevance is the default', async () => {
+  expect((await request(app).get('/api/search?q=Auth&sort=recent')).status).toBe(200);
+  expect(searchRecords).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({ sort: 'recent' }));
+  expect((await request(app).get('/api/search?q=Auth')).status).toBe(200);
+  expect(searchRecords).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({ sort: 'relevance' }));
 });
 test('workspace scope is the whole authorized workspace', async () => {
   expect((await request(app).get('/api/search?scope=workspace')).status).toBe(200);

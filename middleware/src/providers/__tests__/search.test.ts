@@ -1,6 +1,6 @@
 jest.mock('../../lib/authz.js', () => ({ isAllowed: jest.fn(async () => true) }));
 jest.mock('../index.js', () => ({ aurora: { fetchGraph: jest.fn(), fetchPersonGraph: jest.fn() } }));
-jest.mock('../projects.js', () => ({ listProjects: jest.fn(), getProject: jest.fn() }));
+jest.mock('../projects.js', () => ({ listProjects: jest.fn(), listProjectSummaries: jest.fn(), getProject: jest.fn() }));
 jest.mock('../work-items.js', () => ({ searchWorkItems: jest.fn(), getWorkItem: jest.fn() }));
 jest.mock('../design-reviews.js', () => ({ listDesignReviews: jest.fn(), getDesignThread: jest.fn() }));
 jest.mock('../decisions.js', () => ({ listDecisions: jest.fn(), getDecision: jest.fn() }));
@@ -8,7 +8,7 @@ jest.mock('../distillation.js', () => ({ listItems: jest.fn(), getItem: jest.fn(
 jest.mock('../prompt-library.js', () => ({ listAssets: jest.fn(), getAsset: jest.fn() }));
 import { isAllowed } from '../../lib/authz.js';
 import { aurora } from '../index.js';
-import { listProjects, getProject } from '../projects.js';
+import { listProjects, listProjectSummaries, getProject } from '../projects.js';
 import { searchWorkItems, getWorkItem } from '../work-items.js';
 import { listDesignReviews, getDesignThread } from '../design-reviews.js';
 import { listDecisions } from '../decisions.js';
@@ -25,6 +25,7 @@ beforeEach(() => {
     { id: 'nora', name: 'Nora Chang', title: 'Engineer', department: 'Design', skills: [] },
   ], edges: [] });
   mock(listProjects).mockResolvedValue([{ id: 'auth', name: 'Auth Migration', status: 'active', ownerId: 'vera', ownerName: 'Vera Green' }, { id: 'other', name: 'Other initiative' }]);
+  mock(listProjectSummaries).mockResolvedValue(new Map([['auth', 'Migrate identity']]));
   mock(getProject).mockImplementation(async id => id === 'auth' ? { id, name: 'Auth Migration', ownerName: 'Vera Green', summary: 'Migrate identity', contributors: [{ personId: 'nora', name: 'Nora Chang', role: 'sme' }] } : null);
   mock(searchWorkItems).mockResolvedValue([{ id: 'cutover', projectId: 'auth', projectName: 'Auth Migration', title: 'Tenant cutover', status: 'open', blockedReason: 'Needs decision', assigneeId: 'nora', assigneeName: 'Nora Chang' }]);
   mock(listDesignReviews).mockResolvedValue([]);
@@ -132,4 +133,78 @@ test('initiative context puts owners and blocked or open work before completed w
   expect(ids.indexOf('vera')).toBeLessThan(ids.indexOf('nora'));
   expect(ids.indexOf('blocked')).toBeLessThan(ids.indexOf('open'));
   expect(ids.indexOf('open')).toBeLessThan(ids.indexOf('done'));
+});
+
+test('matchReason says why each row scored: title, initiative membership, or initiative work', async () => {
+  const r = await searchRecords(principal, { q: 'Who can help finish Auth Migration?' });
+  const reason = (id: string) => r.results.find(x => x.id === id)?.matchReason;
+  expect(reason('auth')).toBe('Title match');
+  expect(reason('vera')).toBe('Matched through initiative membership');
+  expect(reason('nora')).toBe('Matched through initiative membership');
+  // Its subtitle names the initiative, but the includes edge is what ranked it.
+  expect(reason('cutover')).toBe('Matched through initiative work');
+  expect(reason('order')).toBe('Matched through a linked initiative');
+});
+test('a text-only hit is a Text match; no query and no scope carries no reason', async () => {
+  const r = await searchRecords(principal, { q: 'identity' });
+  expect(r.results.find(x => x.id === 'vera')).toMatchObject({ matchReason: 'Text match', highlights: ['identity'] });
+  const browse = await searchRecords(principal);
+  expect(browse.results.every(x => x.matchReason === undefined && x.highlights === undefined)).toBe(true);
+});
+test('scope-only browsing marks every row In scope', async () => {
+  const r = await searchRecords(principal, { scope: 'auth' });
+  expect(r.results.length).toBeGreaterThan(0);
+  expect(r.results.every(x => x.matchReason === 'In scope')).toBe(true);
+});
+test('highlights are the query terms present in the row, in query order, deduped', async () => {
+  const r = await searchRecords(principal, { q: 'migration auth AUTH' });
+  expect(r.results.find(x => x.id === 'auth')?.highlights).toEqual(['migration', 'auth']);
+  expect(r.results.find(x => x.id === 'cutover')?.highlights).toEqual(['migration', 'auth']);
+  expect(r.results.find(x => x.id === 'vera')?.highlights).toEqual([]);
+});
+test('sort=recent orders by source updatedAt, undated rows last, relevance as the tiebreak', async () => {
+  mock(listProjects).mockResolvedValue([{ id: 'auth', name: 'Auth Migration', status: 'active', ownerId: 'vera', ownerName: 'Vera Green', lastActivityAt: '2026-09-01 10:00:00', createdAt: '2026-01-01T00:00:00Z' }]);
+  mock(searchWorkItems).mockResolvedValue([{ id: 'cutover', projectId: 'auth', projectName: 'Auth Migration', title: 'Tenant cutover', status: 'open', updatedAt: '2026-09-20T12:00:00Z' }]);
+  mock(listDecisions).mockResolvedValue([{ id: 'order', topic: 'Choose cutover order', summary: '', status: 'open', projectId: 'auth', decidedAt: null }]);
+  mock(listItems).mockResolvedValue({ items: [], total: 0 });
+  mock(listAssets).mockResolvedValue({ assets: [], total: 0 });
+  const r = await searchRecords(principal, { q: 'Auth Migration', sort: 'recent' });
+  const ids = r.results.map(x => x.id);
+  expect(ids.slice(0, 2)).toEqual(['cutover', 'auth']);
+  // A zone-less Aurora timestamp is UTC, not local time.
+  expect(r.results[1]?.updatedAt).toBe('2026-09-01T10:00:00.000Z');
+  // Undated rows (people, the undecided decision) follow, in relevance order: owner before SME.
+  expect(ids.slice(2)).toEqual(['vera', 'nora', 'order']);
+  expect(r.results.slice(2).every(x => x.updatedAt === undefined)).toBe(true);
+  const relevance = await searchRecords(principal, { q: 'Auth Migration' });
+  expect(relevance.results[0]?.id).toBe('auth');
+});
+describe('widening the scope never drops a match (search-journeys member defect 6)', () => {
+  const keys = (r: { results: { type: string; id: string }[] }) => r.results.map(x => `${x.type}:${x.id}`);
+  test('an initiative matched only through its summary is found scoped and unscoped, for the same reason', async () => {
+    mock(listProjectSummaries).mockResolvedValue(new Map([['auth', 'Migrate identity'], ['other', 'Typed component contracts and versioned release channels.']]));
+    mock(getProject).mockImplementation(async id => id === 'other' ? { id, name: 'Other initiative', summary: 'Typed component contracts and versioned release channels.', contributors: [] } : null);
+    const unscoped = await searchRecords(principal, { q: 'component contracts' });
+    // Unscoped, the summary comes from the batched read, not a per-initiative detail read.
+    expect(getProject).not.toHaveBeenCalledWith('other');
+    const scoped = await searchRecords(principal, { q: 'component contracts', scope: 'other' });
+    for (const r of [unscoped, scoped]) {
+      const hit = r.results.find(x => x.type === 'initiative' && x.id === 'other');
+      expect(hit).toMatchObject({ matchReason: 'Text match', highlights: ['component', 'contracts'] });
+    }
+    expect(unscoped.counts.initiative).toBeGreaterThanOrEqual(scoped.counts.initiative);
+  });
+  test('the scoped result set is a subset of the unscoped one', async () => {
+    for (const q of ['cutover', 'identity', 'Auth Migration', 'origin']) {
+      const unscoped = new Set(keys(await searchRecords(principal, { q })));
+      const scoped = keys(await searchRecords(principal, { q, scope: 'auth' }));
+      expect(scoped.length).toBeGreaterThan(0);
+      expect(scoped.filter(k => !unscoped.has(k))).toEqual([]);
+    }
+  });
+  test('a failed summary read is reported as partial, not silently empty', async () => {
+    mock(listProjectSummaries).mockRejectedValue(new Error('boom'));
+    const r = await searchRecords(principal, { q: 'identity' });
+    expect(r.partial).toContain('Initiative summaries unavailable');
+  });
 });

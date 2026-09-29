@@ -253,8 +253,11 @@ function main() {
   }
 
   // Rail ↔ palette: the same gate, written twice.
+  // A palette jump may carry a query or hash (`/iq/distillation/review?view=promotions`);
+  // routes and rail rows are keyed by pathname, so match on that (2026-09-29).
+  const pathnameOf = (path) => path.replace(/[?#].*$/, '').replace(/\/+$/, '') || '/';
   for (const p of pages) {
-    const key = p.path.replace(/\/+$/, '') || '/';
+    const key = pathnameOf(p.path);
     const railEntry = rail.get(key);
     if (railEntry && railEntry.hasRoles && railEntry.roles) {
       // The cross-tenant `admin` passes every gate, and the palette documents
@@ -274,7 +277,7 @@ function main() {
   }
 
   for (const p of pages) {
-    const r = routes.get(p.path.replace(/\/+$/, '') || '/');
+    const r = routes.get(pathnameOf(p.path));
     if (!r) {
       process.stdout.write(JSON.stringify({
         rule: 'missing-route', label: p.label, path: p.path, line: p.line,

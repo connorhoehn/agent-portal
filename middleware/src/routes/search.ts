@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { asyncHandler, ValidationError } from '../lib/async-handler.js';
 import { requireAction, requireTenant, resolveSession } from '../lib/authz.js';
-import { SEARCH_TYPES, searchRecords, resolveSearchContext, type SearchRecordType, type SearchRef } from '../providers/search.js';
+import { SEARCH_TYPES, SEARCH_SORTS, searchRecords, resolveSearchContext, type SearchRecordType, type SearchRef, type SearchSort } from '../providers/search.js';
 
 export const searchRouter = Router();
 searchRouter.use(requireTenant('orgiq'), requireAction('Search'));
@@ -11,10 +11,13 @@ searchRouter.get('/', asyncHandler(async (req, res) => {
   const scope = String(req.query['scope'] ?? '').trim();
   if (q.length > 1000) throw new ValidationError('q must be 1000 characters or fewer');
   if (type !== 'all' && !SEARCH_TYPES.includes(type as SearchRecordType)) throw new ValidationError('Unknown search type');
+  // sort: 'relevance' (default, score order) | 'recent' (source updatedAt desc, undated last).
+  const sort = String(req.query['sort'] ?? 'relevance');
+  if (!SEARCH_SORTS.includes(sort as SearchSort)) throw new ValidationError('sort must be relevance or recent');
   const limit = Number(req.query['limit'] ?? 50), offset = Number(req.query['offset'] ?? 0);
   if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new ValidationError('limit must be an integer between 1 and 100');
   if (!Number.isInteger(offset) || offset < 0) throw new ValidationError('offset must be a nonnegative integer');
-  res.json(await searchRecords(resolveSession(req)!, { q, type: type as SearchRecordType | 'all', scope: !scope || scope === 'workspace' ? undefined : scope, limit, offset }));
+  res.json(await searchRecords(resolveSession(req)!, { q, type: type as SearchRecordType | 'all', scope: !scope || scope === 'workspace' ? undefined : scope, limit, offset, sort: sort as SearchSort }));
 }));
 
 // Resolve explicit graph/context selection even when it is outside the current

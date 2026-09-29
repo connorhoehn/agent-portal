@@ -528,6 +528,34 @@ export async function listProjects(opts: {
   });
 }
 
+/** projects.summary for many initiatives in ONE read, keyed by id — for
+    callers (search) that must see every initiative's prose without a detail
+    read per row. listProjects deliberately does not carry it: the column
+    arrives in a later migration than the rollups, and joining it there would
+    drop a pre-summary cluster to the legacy list shape. Ids without a summary
+    are absent; a pre-summary cluster yields an empty map, never a throw. */
+export async function listProjectSummaries(ids: string[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  const distinct = [...new Set(ids)].slice(0, 200);
+  if (!distinct.length) return out;
+  if (config.mock.aurora) {
+    distinct.forEach((id) => { const summary = findInitiative(id)?.summary; if (summary) out.set(id, summary); });
+    return out;
+  }
+  try {
+    const rows = await exec(
+      `SELECT p.id, p.summary FROM projects p
+        WHERE p.summary IS NOT NULL AND p.id IN (${distinct.map((_, i) => `:id${i}`).join(', ')})`,
+      distinct.map((id, i) => strParam(`id${i}`, id)),
+    );
+    rows.forEach((r) => { if (r['id'] != null && r['summary'] != null) out.set(String(r['id']), String(r['summary'])); });
+  } catch (err) {
+    // Same degradation getProject applies: a pre-summary schema has no prose.
+    if (!/does not exist/i.test((err as Error).message ?? '')) throw err;
+  }
+  return out;
+}
+
 export async function getProject(id: string): Promise<ProjectDetail | null> {
   if (config.mock.aurora) {
     const cast = findInitiative(id);
