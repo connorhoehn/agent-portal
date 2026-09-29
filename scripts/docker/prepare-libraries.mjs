@@ -27,8 +27,23 @@ for (const project of ['middleware', 'portal']) {
       continue;
     }
     const checkout = resolve(root, '..', repo);
-    // Read committed objects, never the sibling's working tree or its built dist.
-    execFileSync('git', ['-C', checkout, 'cat-file', '-e', `${commit}:dist/index.js`]);
+    // The sibling directory is keyed by repo NAME, but a pin identifies an
+    // owner TOO — and both owners are in play here: `connorhoehn/distributed-core`
+    // (the 0.4x line this repo pins) and `connorhoehnslalom/distributed-core` are
+    // different repositories that both land at `../distributed-core`, whichever
+    // was cloned first. Trusting the checkout's origin therefore reads the wrong
+    // history: eb6e4910 (v0.45.6) is absent from the slalom remote, which answers
+    // `upload-pack: not our ref` for it, so this step reported the pin as a
+    // vanished commit when it was simply asking the wrong server. Fetch the exact
+    // sha from the OWNER named in the lockfile before concluding anything.
+    const remote = `git@github.com:${owner}/${repo}.git`;
+    try {
+      execFileSync('git', ['-C', checkout, 'cat-file', '-e', `${commit}:dist/index.js`], { stdio: 'ignore' });
+    } catch {
+      execFileSync('git', ['-C', checkout, 'fetch', '--no-tags', remote, commit], { stdio: 'inherit' });
+      // Still read committed objects, never the working tree or its built dist.
+      execFileSync('git', ['-C', checkout, 'cat-file', '-e', `${commit}:dist/index.js`]);
+    }
     const temp = mkdtempSync(resolve(tmpdir(), 'orgiq-library-'));
     try {
       const archive = execFileSync('git', ['-C', checkout, 'archive', '--format=tar', commit], { maxBuffer: 256 * 1024 * 1024 });

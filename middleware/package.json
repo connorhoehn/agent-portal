@@ -48,7 +48,7 @@
     "ajv": "^8.20.0",
     "aws-jwt-verify": "^5.2.1",
     "cookie-parser": "^1.4.7",
-    "distributed-core": "github:connorhoehn/distributed-core#b6f38f57b781a8bf74ff9e31a35b6062f7193dc9",
+    "distributed-core": "github:connorhoehn/distributed-core#eb6e49104d30b0db074c0754b5bedf070402cb02",
     "cors": "^2.8.5",
     "express": "^5.1.0",
     "node-cron": "^3.0.3",
