@@ -18,14 +18,13 @@
 // message-queue CLAUDE.md URL convention.
 //
 // Auth: message-queue verifies `X-Service-Auth` with service-runtime's
-// `verifyServiceRequest` — an HMAC envelope over
-// `{protocol:'service-http-v1', audience, method, target, body}`. The pinned
-// service-runtime here (7b93fa32) predates `signServiceRequest`, so the
-// payload is built below and signed with the `signEnvelope` it does export.
-// The shape is copied from service-runtime's http-service-auth.js, not
-// invented; bumping the pin lets this collapse to one import.
+// `verifyServiceRequest`, an HMAC envelope bound to the request's audience,
+// method, target and exact body. `signServiceRequest` (service-runtime 0.4.0)
+// is the signing half of that same pair, so the payload shape is owned by the
+// library that defines it rather than restated here — a restatement is exactly
+// the thing that can drift out of step with the verifier and fail closed.
 
-import { SERVICE_AUTH_HEADER, signEnvelope } from '@connorhoehn/service-runtime';
+import { SERVICE_AUTH_HEADER, signServiceRequest } from '@connorhoehn/service-runtime';
 
 /** A leased message, as both backends hand it back. */
 export interface QueueMessage {
@@ -107,8 +106,10 @@ export class HttpMessageQueue implements MessageQueue {
   /** The `X-Service-Auth` value for one request, or none when unsigned. */
   authHeaders(method: string, target: string, body: string): Record<string, string> {
     if (!this.opts.secret) return {};
-    const payload = { protocol: 'service-http-v1', audience: this.audience, method: method.toUpperCase(), target, body };
-    return { [SERVICE_AUTH_HEADER]: signEnvelope(payload, { secret: this.opts.secret, serviceId: this.opts.serviceId }) };
+    return {
+      [SERVICE_AUTH_HEADER]: signServiceRequest({ method, target, body },
+        { secret: this.opts.secret, serviceId: this.opts.serviceId, audience: this.audience }),
+    };
   }
 
   private async call<T>(method: string, path: string, payload?: unknown, okStatuses: number[] = []): Promise<{ status: number; body: T }> {

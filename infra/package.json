@@ -13,7 +13,7 @@
   "dependencies": {
     "aws-cdk-lib": "^2.270.0",
     "constructs": "^10.4.0",
-    "realtime-examples": "github:connorhoehn/realtime-examples#2549856eaabdb307da2bc20c3853d21015e30cae"
+    "realtime-examples": "github:connorhoehn/realtime-examples#bea2572a14732122d3a22bd16c3526f8923ca7c2"
   },
   "devDependencies": {
     "aws-cdk": "^2.1143.0",

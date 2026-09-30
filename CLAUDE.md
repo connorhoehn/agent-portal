@@ -238,8 +238,10 @@ python3.11 -m venv .venv-synth && .venv-synth/bin/pip install -r schema/synth/re
 ## Project dependencies
 
 - **ui-components** (`~/projects/ui-components`): `@connorhoehnslalom/ui-components`,
-  installed at **2.407.40** (sha `e95120a8`, verified 2026-09-30 with the two settling
-  commands below; 2.407.9 carries the CallDock render fixes and `--dock-floor`). 2.385 added `@tiptap/extension-mention` to what the rich
+  installed at **2.407.42** (sha `39b56ee6`, verified 2026-09-30 with the two settling
+  commands below; .41/.42 fix the docked card's bare-trigger hiding and command chip,
+  no API change and no new peers; 2.407.9 carries the CallDock render fixes and
+  `--dock-floor`). 2.385 added `@tiptap/extension-mention` to what the rich
   composer imports; it is an *optional* peer, so npm does not install it and Vite
   fails at runtime with "Could not resolve @tiptap/extension-mention" — the portal
   now lists it directly. Check new optional peers after every bump. The portal pins it by **git sha** in `package.json`
@@ -360,6 +362,42 @@ python3.11 -m venv .venv-synth && .venv-synth/bin/pip install -r schema/synth/re
   input. v0.2.2 typechecks cleanly; the old `e4d7ba9` did not (71 errors, host and
   container), so an image built from the old lineage needed `tsc` to emit through
   failures. It no longer does.
+
+- **service-runtime** (`~/projects/service-runtime`): `@connorhoehn/service-runtime`,
+  pinned by sha in middleware at **0.4.0** (`7a0e3387`). It owns the `X-Service-Auth`
+  HMAC envelope both halves of every internal service hop use. 0.4.0 adds
+  `signServiceRequest` / `verifyServiceRequest` / `createServiceRequestHeaders`,
+  which bind the envelope to the request's audience, method, target and exact body.
+  ⚠️ 0.4.0 does **not** remove the deprecated root re-exports its own comments
+  threatened to ("removed in v0.4.0" → "legacy alias retained"), so the bump needs
+  no import migration — do not pre-emptively rewrite imports on the strength of a
+  deprecation note.
+
+- **realtime-examples** (no local clone by default): pinned in `infra/package.json`
+  at `bea2572a`. This is where `ApplicationTables` / `DocumentWorkspaceServices` /
+  `RedisService` come from — `import ... from 'realtime-examples/cdk/document-workspace'`
+  resolves through an `exports` map to `dist-cdk/`, and there is **no `cdk/`
+  directory in the repo**, so diffing `cdk/` between two commits silently reports
+  "no change" for any pin. Diff `dist-cdk/`, `lib/document-workspace-services.ts`
+  and `infra/dynamodb-schemas.json` instead. npm builds this dep from source
+  (its `prepare` script installs a full tree including native modules), so an
+  `npm install` in `infra/` after moving this pin runs for many minutes — it is
+  working, not wedged. The manifest is the authority on the table count the
+  document-workspace test asserts (53 owned tables + this stack's mq table = 54).
+
+  ⚠️ **A workaround for a stale pin must be re-examined when the pin moves, and
+  the code should derive the answer rather than restate it.** Two shipped on
+  2026-09-29 and both were obsolete by 2026-09-30: the platform task role's
+  `dynamodb:UpdateTable` grant (needed only while the manifest lacked
+  social-outbox's `pending-index`; platform-api's `ensureOutboxPendingIndex`
+  describes first and never writes when the GSI exists) and its blanket
+  `UpdateTimeToLive` on all five TTL-preflighted tables (`ensureTableTTL` returns
+  early when TTL is already `ENABLED`, and the manifest now provisions it for
+  pipeline-audit/`ttlEpoch` and pipeline-dlq/`ttl`). `infra/lib/document-workspace.ts`
+  now reads `timeToLiveSpecification` off the L1 and grants the write only where
+  TTL is absent, so the next bump narrows the grant by itself. The same applied in
+  `middleware/src/lib/mq-client.ts`, which restated service-runtime's signing
+  payload by hand because the old pin predated `signServiceRequest`.
 
 **Realtime integration task exception (user-authorized 2026-09-19):** the user
 explicitly requested fixes in the owning sibling repos while making the MQ/DC/

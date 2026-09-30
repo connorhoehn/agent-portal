@@ -1,10 +1,10 @@
 // lib/mq-client.ts — the message-queue HTTP client. Pinned against a fake
 // fetch: the exact routes and bodies message-queue's src/api/routes.ts serves,
-// the redrive policy's ARN shape, and an X-Service-Auth header that verifies
-// against the payload message-queue's verifyServiceRequest rebuilds
-// ({protocol:'service-http-v1', audience, method, target, body}).
+// the redrive policy's ARN shape, and an X-Service-Auth header checked with
+// service-runtime's own `verifyServiceRequest` — the same call message-queue
+// makes, so the assertion cannot pass against a payload only this file agrees on.
 
-import { SERVICE_AUTH_HEADER, verifyEnvelope } from '@connorhoehn/service-runtime';
+import { SERVICE_AUTH_HEADER, verifyServiceRequest } from '@connorhoehn/service-runtime';
 import { HttpMessageQueue, MessageQueueError } from '../mq-client.js';
 
 type Call = { url: string; method: string; headers: Record<string, string>; body: string };
@@ -65,17 +65,18 @@ describe('HttpMessageQueue', () => {
     const signed = new HttpMessageQueue({ baseUrl: 'http://mq:3000', serviceId: 'orgiq-middleware', secret: 's3cret', fetchImpl: impl });
     await signed.send('distill-compact-l1', 'x');
     const header = calls[0]!.headers[SERVICE_AUTH_HEADER]!;
-    const verdict = verifyEnvelope(header, {
-      secret: 's3cret',
-      allowedServices: ['orgiq-middleware'],
-      payload: { protocol: 'service-http-v1', audience: 'message-queue', method: 'POST', target: '/api/v1/queues/distill-compact-l1/messages', body: calls[0]!.body },
-    });
-    expect(verdict).toEqual({ ok: true, serviceId: 'orgiq-middleware' });
-    // A different body must not verify — the signature binds the payload.
-    expect(verifyEnvelope(header, {
-      secret: 's3cret', allowedServices: ['orgiq-middleware'],
-      payload: { protocol: 'service-http-v1', audience: 'message-queue', method: 'POST', target: '/api/v1/queues/distill-compact-l1/messages', body: '{}' },
-    }).ok).toBe(false);
+    const target = '/api/v1/queues/distill-compact-l1/messages';
+    const opts = { secret: 's3cret', allowedServices: ['orgiq-middleware'], audience: 'message-queue' };
+    // Verified with the same helper message-queue itself calls, rather than a
+    // restated payload literal — that is the whole point of the 0.4.0 pair.
+    expect(verifyServiceRequest(header, { method: 'POST', target, body: calls[0]!.body }, opts))
+      .toEqual({ ok: true, serviceId: 'orgiq-middleware' });
+    // The signature binds every field: a different body, method, target or
+    // audience must each fail, or the header would be replayable elsewhere.
+    expect(verifyServiceRequest(header, { method: 'POST', target, body: '{}' }, opts).ok).toBe(false);
+    expect(verifyServiceRequest(header, { method: 'PUT', target, body: calls[0]!.body }, opts).ok).toBe(false);
+    expect(verifyServiceRequest(header, { method: 'POST', target: '/api/v1/queues/other/messages', body: calls[0]!.body }, opts).ok).toBe(false);
+    expect(verifyServiceRequest(header, { method: 'POST', target, body: calls[0]!.body }, { ...opts, audience: 'event-catalog' }).ok).toBe(false);
 
     const unsigned = new HttpMessageQueue({ baseUrl: 'http://mq:3000', serviceId: 'orgiq-middleware', fetchImpl: impl });
     await unsigned.send('distill-compact-l1', 'x');

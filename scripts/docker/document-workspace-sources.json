@@ -3,7 +3,7 @@
   "redisImage": "redis@sha256:7aec734b2bb298a1d769fd8729f13b8514a41bf90fcdd1f38ec52267fbaa8ee6",
   "sources": {
     "managed-nosql-store": { "url": "git@github.com:connorhoehn/managed-nosql-store.git", "commit": "48bf83451ee58421da2a707a16bf56020faa4f89" },
-    "message-queue": { "url": "git@github.com:connorhoehnslalom/message-queue.git", "commit": "46fd5e01915d6c736717431fca6b79523073eaf8" },
+    "message-queue": { "url": "git@github.com:connorhoehnslalom/message-queue.git", "commit": "b93c6b7ff12ff39db52f56ef78c2abaf6b78b391" },
     "event-catalog": { "url": "git@github.com:connorhoehnslalom/event-catalog.git", "commit": "b0bff824021a97945be331225519845b0fadf918" },
     "ui-components": { "url": "git@github.com:connorhoehnslalom/ui-components.git", "commit": "79bdd2bae303d6a4b0bb9a8287d4b7be1eddc3c7" },
     "platform-api": { "url": "git@github.com:connorhoehnslalom/platform-api.git", "commit": "9c0c96f428d982ce88e4011ec37a3ca573b0b29e" },
