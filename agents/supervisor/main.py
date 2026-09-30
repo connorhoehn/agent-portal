@@ -635,7 +635,17 @@ async def _handle_streaming(payload: dict, input_text: str, role: str, tenant: s
         # which is not a str, so RunAgentInput's pydantic model rejects the
         # entire run. Absent and null have to behave identically here.
         thread_id = payload.get("sessionId") or "default"
-        run_id = payload.get("invocationId") or f"run-{time.time_ns()}"
+        # `runId` is the AG-UI run id the middleware minted for this stream
+        # (routes/agents.ts sends it; the portal already holds it). Using it
+        # here makes the adapter's RUN_STARTED, the portal's run and the trace
+        # bundle one id — the P1 join (docs/pipelines-tenant-goal.md).
+        run_id = (
+            payload.get("runId")
+            or payload.get("invocationId")
+            or f"run-{time.time_ns()}"
+        )
+        ctx.run_id = run_id
+        ctx.thread_id = thread_id
 
         # Convert history to AG-UI message format.
         # ag-ui-protocol >= 0.1.x requires an explicit `id` on every Message —
@@ -691,6 +701,10 @@ async def _handle_streaming(payload: dict, input_text: str, role: str, tenant: s
                     delta = _event_attr(event, "delta")
                     if isinstance(delta, str) and delta:
                         streamed_text.append(delta)
+                # The run's steps and attempts ride the trace bundle — every
+                # event the portal sees is folded in, synthesized STEP_* below
+                # included, so the recorded run is the streamed one.
+                ctx.observe_agui_event(event)
                 yield event
 
                 # Synthesize STEP_STARTED/STEP_FINISHED around each sub-agent
@@ -709,12 +723,16 @@ async def _handle_streaming(payload: dict, input_text: str, role: str, tenant: s
                     tool_call_id = _event_attr(event, "tool_call_id")
                     if step_name and tool_call_id:
                         active_steps[tool_call_id] = step_name
-                        yield _step_started_event(step_name)
+                        started = _step_started_event(step_name)
+                        ctx.observe_agui_event(started)
+                        yield started
                 elif etype == "TOOL_CALL_RESULT":
                     tool_call_id = _event_attr(event, "tool_call_id")
                     step_name = active_steps.pop(tool_call_id, None) if tool_call_id else None
                     if step_name:
-                        yield _step_finished_event(step_name)
+                        finished = _step_finished_event(step_name)
+                        ctx.observe_agui_event(finished)
+                        yield finished
             record_guardrail_action(oi_span, action=None, pii_detected=None)
     except Exception as exc:  # noqa: BLE001
         # Say it failed, then let it fail. The event is for the portal — a
@@ -726,10 +744,15 @@ async def _handle_streaming(payload: dict, input_text: str, role: str, tenant: s
         # by a stream that died mid-call, before the terminal RUN_ERROR, so
         # the portal's stepper doesn't hang on a step that will never
         # otherwise resolve.
+        # Not folded into ctx: the RUN_ERROR below closes these steps as
+        # `failed` in the recorded run — a step the stream abandoned did not
+        # complete, whatever the portal's stepper needs to stop spinning.
         for step_name in active_steps.values():
             yield _step_finished_event(step_name)
         active_steps.clear()
-        yield _run_error_event(stream_error)
+        run_error = _run_error_event(stream_error)
+        ctx.observe_agui_event(run_error)
+        yield run_error
         raise
     finally:
         duration_ms = int((time.monotonic() - t0) * 1000)

@@ -39,6 +39,7 @@
 // window the rows do not support.
 
 import { clock, defineFixture, type ScenarioName } from './core/index.js';
+import type { AgentStepRecord } from '../lib/pipeline-runs.js';
 
 // ─── sampling_config ────────────────────────────────────────────────────────
 
@@ -113,6 +114,11 @@ export interface SinkTraceRow {
   parent_invocation_id: string | null;
   user_id: string | null;
   session_id: string | null;
+  /** Pipelines P1 — the AG-UI run the bundle closed, its thread, its steps, its tenant. */
+  agui_run_id: string | null;
+  agui_thread_id: string | null;
+  steps: AgentStepRecord[] | null;
+  tenant: string | null;
   ts: string;
 }
 

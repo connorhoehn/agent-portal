@@ -759,6 +759,7 @@ export const realAgentCore: AgentCoreProvider = {
       input_text: payload.message,
       stream: true,
       ...(payload.sessionId ? { sessionId: payload.sessionId } : {}),
+      ...(payload.runId ? { runId: payload.runId } : {}),
       ...(payload.userId ? { userId: payload.userId } : {}),
       ...(payload.auth ? { auth: payload.auth } : {}),
       ...(payload.history?.length ? { history: payload.history } : {}),
@@ -1219,6 +1220,44 @@ function mockStepNameFor(toolName: string): string {
   return MOCK_SUB_AGENT_STEPS[toolName] ?? 'search';
 }
 
+/** The mock agent's trace bundle — the shape instrumentation.py builds, through the real sink. */
+async function emitMockTraceBundle(
+  agentId: string,
+  payload: { message: string; runId?: string; sessionId?: string; userId?: string; auth?: { tenant?: string } },
+  runId: string,
+  events: ReadonlyArray<{ type: string } & Record<string, unknown>>,
+  response: string,
+  toolNames: readonly string[],
+  durationMs: number,
+): Promise<void> {
+  try {
+    const [{ processTrace }, { AguiStepRecorder }] = await Promise.all([
+      import('../lib/trace-sink.js'), import('../lib/agent-runs-live.js'),
+    ]);
+    const recorder = new AguiStepRecorder();
+    for (const ev of events) recorder.observe(ev);
+    const agent = mockAgents.find((a) => a.id === agentId);
+    const model = agent?.model;
+    await processTrace({
+      invocationId: randomUUID(),
+      agentId,
+      agentName: agent?.name ?? agentId,
+      prompt: payload.message,
+      response,
+      durationMs,
+      ...(model ? { modelId: `amazon.${model}:0` } : {}),
+      runId,
+      ...(payload.sessionId ? { threadId: payload.sessionId, sessionId: payload.sessionId } : {}),
+      ...(payload.userId ? { userId: payload.userId } : {}),
+      ...(payload.auth?.tenant ? { tenant: payload.auth.tenant } : {}),
+      steps: recorder.snapshot(),
+      toolCalls: toolNames.map((toolName) => ({ toolName })),
+    });
+  } catch (err) {
+    console.warn('[mock-agentcore] trace bundle not recorded:', (err as Error).message);
+  }
+}
+
 export const mockAgentCore: AgentCoreProvider = {
   /**
    * The offline half of the degraded answer.
@@ -1290,10 +1329,17 @@ export const mockAgentCore: AgentCoreProvider = {
     };
   },
 
-  async *invokeAgentStreaming(_agentId, payload): AsyncGenerator<unknown> {
+  async *invokeAgentStreaming(agentId, payload): AsyncGenerator<unknown> {
     const m = selectMockResponse(payload.message, payload.structuredInput);
     const msgId = `mock-${Date.now()}`;
-    yield { type: 'RUN_STARTED', threadId: payload.sessionId ?? 'mock', runId: msgId };
+    // The run id the middleware minted rides the payload, exactly as it rides
+    // the real supervisor's RunAgentInput (pipelines P1) — so RUN_STARTED,
+    // the relayed run and the trace bundle below all name one run.
+    const runId = payload.runId ?? msgId;
+    const started = Date.now();
+    const runEvents: Array<{ type: string } & Record<string, unknown>> = [];
+    const emit = <T extends { type: string } & Record<string, unknown>>(ev: T): T => { runEvents.push(ev); return ev; };
+    yield emit({ type: 'RUN_STARTED', threadId: payload.sessionId ?? 'mock', runId });
     // The real supervisor (agents/supervisor/main.py) brackets each routed
     // sub-agent call with STEP_STARTED/STEP_FINISHED named after the sub-agent
     // (search / scoring / advisor), opened on TOOL_CALL_START and closed on
@@ -1311,14 +1357,14 @@ export const mockAgentCore: AgentCoreProvider = {
     for (const tc of m.toolCalls) {
       const id = randomUUID();
       const step = mockStepNameFor(tc.name);
-      yield { type: 'TOOL_CALL_START', toolCallId: id, toolCallName: tc.name };
-      yield { type: 'STEP_STARTED', stepName: step };
+      yield emit({ type: 'TOOL_CALL_START', toolCallId: id, toolCallName: tc.name });
+      yield emit({ type: 'STEP_STARTED', stepName: step });
       await mockStreamTick(pace * 4);
       yield { type: 'TOOL_CALL_ARGS', toolCallId: id, delta: typeof tc.args === 'string' ? tc.args : JSON.stringify(tc.args) };
       yield { type: 'TOOL_CALL_END', toolCallId: id };
       await mockStreamTick(pace * 12);
-      yield { type: 'TOOL_CALL_RESULT', toolCallId: id, content: tc.result };
-      yield { type: 'STEP_FINISHED', stepName: step };
+      yield emit({ type: 'TOOL_CALL_RESULT', toolCallId: id, content: tc.result });
+      yield emit({ type: 'STEP_FINISHED', stepName: step });
     }
     await mockStreamTick(pace * 4);
     yield { type: 'TEXT_MESSAGE_START', messageId: msgId, role: 'assistant' };
@@ -1329,6 +1375,11 @@ export const mockAgentCore: AgentCoreProvider = {
     }
     yield { type: 'TEXT_MESSAGE_END', messageId: msgId };
     yield { type: 'RUN_FINISHED' };
+    // What the real agent does next: post its trace bundle — the one that
+    // closes the run and becomes its `trace` artifact (agents/_shared/
+    // instrumentation.py `post_trace`; offline the sink writes the
+    // `trace-sink-traces` fixture). Never awaited by the stream, never fatal.
+    void emitMockTraceBundle(agentId, payload, runId, runEvents, m.response, m.toolCalls.map((tc) => tc.name), Date.now() - started);
   },
 
   async listCodeSessionsResult(): Promise<Upstream<CodeSession[]>> {

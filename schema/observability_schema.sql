@@ -48,6 +48,27 @@ CREATE INDEX IF NOT EXISTS invocation_traces_embedding_idx
   ON observability.invocation_traces
   USING ivfflat (output_embedding vector_cosine_ops) WITH (lists = 100);
 
+-- Pipelines P1 (docs/pipelines-tenant-goal.md): every fleet invocation is a
+-- pipeline Run. The trace bundle now names the AG-UI run it closes — `runId`
+-- from RUN_STARTED, the id the middleware minted and the portal holds — so the
+-- run and its trace finally share a key (they were disjoint before; see
+-- docs/program-operating-model.md, "Not built yet"). `steps` is the run's
+-- STEP_STARTED/STEP_FINISHED record, each with its TOOL_CALL_* attempts.
+-- `agui_run_id`, not `run_id`: that name is `test_runs`' primary key below.
+-- ADD COLUMN IF NOT EXISTS so an existing cluster converges on re-apply; the
+-- sink (lib/trace-sink.ts) falls back to the old column list until it has.
+ALTER TABLE observability.invocation_traces
+  ADD COLUMN IF NOT EXISTS agui_run_id    text,
+  ADD COLUMN IF NOT EXISTS agui_thread_id text,
+  ADD COLUMN IF NOT EXISTS steps          jsonb,
+  -- The invoking session's tenant (the payload's `auth.tenant`), so a Run's
+  -- context tenant comes from the trace, not a guess from the agent id.
+  ADD COLUMN IF NOT EXISTS tenant         text;
+
+CREATE INDEX IF NOT EXISTS invocation_traces_agui_run_idx
+  ON observability.invocation_traces (agui_run_id)
+  WHERE agui_run_id IS NOT NULL;
+
 CREATE TABLE IF NOT EXISTS observability.sampling_config (
   template_id text PRIMARY KEY,
   rate        numeric(3,2) NOT NULL CHECK (rate BETWEEN 0 AND 1),

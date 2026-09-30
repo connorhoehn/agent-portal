@@ -17,7 +17,7 @@ export type PipelineStepStatus = 'pending' | 'running' | 'awaiting_approval' | '
 export type DefinitionKind = 'runbook' | 'agent' | 'bot' | 'assessment-command' | 'compaction';
 export type ArtifactKind = 'change' | 'document' | 'scores' | 'trace' | 'transcript' | 'image';
 
-export interface RunSourceRef { table: string; id: string; status: string; role: 'primary' | 'trigger' }
+export interface RunSourceRef { table: string; id: string; status: string; role: 'primary' | 'trigger' | 'child' }
 
 export interface PipelineRun {
   id: string;
@@ -43,7 +43,21 @@ export interface PipelineRun {
     boxId?: string | null;
     trigger?: string | null;
     error?: string | null;
+    /** Agent runs (P1): the AG-UI run id, its thread (session), the agent. */
+    aguiRunId?: string | null;
+    threadId?: string | null;
+    agentId?: string | null;
   };
+}
+
+/** One attempt on a step. On an agent run it is a tool call (TOOL_CALL_START…RESULT). */
+export interface PipelineStepAttempt {
+  attempt: number;
+  status: PipelineStepStatus;
+  startedAt?: string | null;
+  finishedAt?: string | null;
+  label?: string;
+  toolCallId?: string;
 }
 
 export interface PipelineStep {
@@ -53,7 +67,7 @@ export interface PipelineStep {
   status: PipelineStepStatus;
   startedAt: string | null;
   finishedAt: string | null;
-  attempts: Array<{ attempt: number; status: PipelineStepStatus }>;
+  attempts: PipelineStepAttempt[];
   detail?: string | null;
 }
 
@@ -76,6 +90,28 @@ export interface RunListResponse {
   limit: number;
   offset: number;
   unavailable: Array<{ table: string; error: string }>;
+  /** Rows recorded but in no run — agent traces with no AG-UI run id. Counted, not dropped. */
+  unlinked?: { invocation_traces: number };
+}
+
+/** The honest line for traces no run claims, or null when there are none. */
+export function unlinkedNote(unlinked: RunListResponse['unlinked']): string | null {
+  const n = unlinked?.invocation_traces ?? 0;
+  if (n <= 0) return null;
+  return `${n} agent trace${n === 1 ? ' carries' : 's carry'} no run id (sub-agent or scheduled calls) — recorded, not shown as runs`;
+}
+
+/**
+ * What a step's attempts were. An agent run's attempts are named tool calls,
+ * so they read as the tools; any other run's are numbered retries, so the
+ * count is what matters.
+ */
+export function attemptItems(step: Pick<PipelineStep, 'attempts'>): Array<{ key: string; label: string; status: PipelineStepStatus }> {
+  if (!step.attempts.some((a) => a.label)) {
+    const last = step.attempts[step.attempts.length - 1];
+    return last ? [{ key: `n${last.attempt}`, label: `attempt ${last.attempt}`, status: last.status }] : [];
+  }
+  return step.attempts.map((a) => ({ key: a.toolCallId ?? `n${a.attempt}`, label: a.label ?? `attempt ${a.attempt}`, status: a.status }));
 }
 
 /** The Chip tones this model uses — a subset of the library's ChipTone. */
@@ -137,6 +173,7 @@ export function kindLabel(kind: string): string {
 const TABLE_LABEL: Record<string, string> = {
   agent_jobs: 'queue job', bot_runs: 'bot firing', agent_project_runs: 'governed run',
   assessment_runs: 'assessment run', distillation_compactions: 'compaction pass',
+  invocation_traces: 'agent trace',
 };
 export function sourceLabel(table: string): string {
   return TABLE_LABEL[table] ?? table;

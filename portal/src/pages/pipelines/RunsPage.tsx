@@ -1,7 +1,7 @@
 // /pipelines/runs — every run the tenant records, from every workspace
 // (docs/pipelines-tenant-goal.md §Pages). The projection over the jobs, bot
-// firings, governed runs, assessment commands and compaction passes that
-// already exist (middleware lib/pipeline-runs.ts), read from
+// firings, governed runs, assessment commands, compaction passes and — since
+// P1 — every agent invocation that carried an AG-UI run id, that already exist (middleware lib/pipeline-runs.ts), read from
 // GET /api/pipelines/runs.
 //
 // Table-first: one compact filter row (status · kind · workspace), then the
@@ -20,7 +20,7 @@ import { usd, showingLabel } from '../../lib/format';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { PipelineRunStatusChip } from '../../components/runs/PipelineRunParts';
 import {
-  KIND_FILTER_OPTIONS, STATUS_FILTER_OPTIONS, TENANT_FILTER_OPTIONS, kindLabel, runHref, runsQuery, sourceStatusNote,
+  KIND_FILTER_OPTIONS, STATUS_FILTER_OPTIONS, TENANT_FILTER_OPTIONS, kindLabel, runHref, runsQuery, sourceStatusNote, unlinkedNote,
   type PipelineRun, type RunListResponse,
 } from '../../lib/pipelineRuns';
 
@@ -64,7 +64,7 @@ export default function RunsPage() {
         <Select aria-label="Status" size="sm" className="w-44" value={status} onChange={(e) => setStatus(e.target.value)} options={STATUS_FILTER_OPTIONS} />
         <Select aria-label="Kind" size="sm" className="w-44" value={kind} onChange={(e) => setKind(e.target.value)} options={KIND_FILTER_OPTIONS} />
         <Select aria-label="Workspace" size="sm" className="w-44" value={contextTenant} onChange={(e) => setContextTenant(e.target.value)} options={TENANT_FILTER_OPTIONS} />
-        {data && <MetaLine size="xs" tone="tertiary" items={[showingLabel(runs.length, data.total, 'runs')]} />}
+        {data && <MetaLine size="xs" tone="tertiary" items={[showingLabel(runs.length, data.total, 'runs'), unlinkedNote(data.unlinked)]} />}
       </Inline>
       {data && data.unavailable.length > 0 && (
         <Banner variant="warning">

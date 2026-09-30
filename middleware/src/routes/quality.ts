@@ -13,7 +13,7 @@ import { exec } from '../providers/aurora.js';
 import { config } from '../config.js';
 import { mockQualityScores } from '../mock/observability-queries.js';
 import { clock } from '../mock/core/clock.js';
-import { mockSetHumanLabel } from '../mock/observability.js';
+import { mockSetHumanLabel, traceRows } from '../mock/observability.js';
 
 import { reasonLine } from '../lib/upstream.js';
 /**
@@ -159,16 +159,62 @@ const ALLOWED_LABELS = new Set(['good', 'bad', 'fixed']);
 qualityRouter.post('/feedback', requireAction('LabelFeedback'), asyncHandler(async (req, res) => {
   const body = (req.body ?? {}) as {
     invocationId?: string;
+    runId?: string;
     label?: string;
     note?: string;
   };
 
-  const invocationId = (body.invocationId ?? '').trim();
   const label = (body.label ?? '').trim();
   const note = typeof body.note === 'string' ? body.note.slice(0, 2000) : '';
+  const runId = typeof body.runId === 'string' ? body.runId.trim().slice(0, 200) : '';
 
+  // By RUN (pipelines P1). The Ask page holds the AG-UI run id of the answer
+  // it just streamed, not the trace uuid — the two were disjoint until the
+  // bundle began carrying `runId` (agui_run_id), which is what LabelFeedback
+  // was waiting on (docs/program-operating-model.md). A run resolves to its
+  // run's own trace — the earliest row with that run id, not a sub-agent's —
+  // and only among the CALLER'S OWN runs: a run id is an opaque id the member
+  // was handed on their own stream, and labelling by it must not reach anyone
+  // else's trace. Not found is a 404 that says the bundle may still be on its
+  // way (the CloudWatch poller lags ~30s), not a claim the run never happened.
+  if (!body.invocationId && runId) {
+    if (!ALLOWED_LABELS.has(label)) {
+      throw new ValidationError(`label must be one of: ${Array.from(ALLOWED_LABELS).join(', ')}`);
+    }
+    const sub = req.session?.sub ?? null;
+    if (!sub) throw new ValidationError('labelling by runId needs a signed-in session');
+    const notYet = 'no trace recorded for that run yet — the agent\'s trace bundle may still be on its way';
+    if (config.mock.aurora) {
+      const own = traceRows()
+        .filter((r) => r.agui_run_id === runId && r.user_id === sub)
+        .sort((a, b) => a.tsIso.localeCompare(b.tsIso))[0];
+      if (!own || !mockSetHumanLabel(own.invocation_id, label, note || null)) throw new NotFoundError(notYet);
+      res.json({ ok: true, invocationId: own.invocation_id, runId, label, note });
+      return;
+    }
+    const rows = await exec(
+      `UPDATE observability.invocation_traces
+          SET human_label = :label, human_note = :note
+        WHERE invocation_id = (
+          SELECT invocation_id FROM observability.invocation_traces
+           WHERE agui_run_id = :rid AND user_id = :sub
+           ORDER BY ts ASC LIMIT 1)
+       RETURNING invocation_id::text AS invocation_id`,
+      [
+        { name: 'rid', value: { stringValue: runId } },
+        { name: 'sub', value: { stringValue: sub } },
+        { name: 'label', value: { stringValue: label } },
+        note ? { name: 'note', value: { stringValue: note } } : { name: 'note', value: { isNull: true } },
+      ],
+    );
+    if (rows.length === 0) throw new NotFoundError(notYet);
+    res.json({ ok: true, invocationId: String(rows[0]!['invocation_id']), runId, label, note });
+    return;
+  }
+
+  const invocationId = (body.invocationId ?? '').trim();
   if (!invocationId) {
-    throw new ValidationError('invocationId is required');
+    throw new ValidationError('invocationId is required (or the runId of your own answer)');
   }
   // The UUID shape is a precondition of the live UPDATE's `:iid::uuid` bind,
   // not of the feature. Offline the ids are the invocation tail's

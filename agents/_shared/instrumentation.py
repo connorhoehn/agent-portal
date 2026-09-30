@@ -210,6 +210,21 @@ def _size_of(value: Any) -> int:
         return len(str(value))
 
 
+def _agui_type(event: Any) -> str:
+    """An AG-UI event's type as a plain string (enum member, str, or dict)."""
+    raw = event.get("type") if isinstance(event, dict) else getattr(event, "type", None)
+    return str(getattr(raw, "value", raw) or "")
+
+
+def _agui_attr(event: Any, *names: str) -> Any:
+    """First present attribute of an AG-UI event, tolerating both casings."""
+    for name in names:
+        value = event.get(name) if isinstance(event, dict) else getattr(event, name, None)
+        if value is not None:
+            return value
+    return None
+
+
 def _stringify(value: Any) -> str:
     if isinstance(value, str):
         return value
@@ -239,6 +254,21 @@ class TraceContext:
     # every Converse / ConverseStream call made during the invocation.
     bedrock_input_tokens: int = 0
     bedrock_output_tokens: int = 0
+    # The AG-UI run this invocation IS (docs/pipelines-tenant-goal.md, P1:
+    # "every fleet invocation is a run"). ``run_id`` is RUN_STARTED's run id —
+    # the same id the middleware minted, stamped on the stream the portal
+    # reads, and passed down as ``runId`` — so the trace bundle and the run
+    # finally share a key. Before this the AG-UI run id and the trace uuid
+    # were disjoint (docs/program-operating-model.md, "Not built yet"), which
+    # is what kept LabelFeedback inert.
+    run_id: str | None = None
+    thread_id: str | None = None
+    # The run's Steps, in the order they opened: one per STEP_STARTED, closed
+    # by the matching STEP_FINISHED, each carrying the TOOL_CALL_START…RESULT
+    # pairs that ran inside it as its attempts. Built by `observe_agui_event`.
+    steps: list[dict[str, Any]] = field(default_factory=list)
+    # tool_call_id -> attempt dict, for calls started but not yet resulted.
+    _inflight_calls: dict[str, dict[str, Any]] = field(default_factory=dict, repr=False)
 
     @classmethod
     def from_request_payload(cls, payload: Any) -> "TraceContext":
@@ -264,11 +294,122 @@ class TraceContext:
             or payload.get("session_id")
             or payload.get("runtimeSessionId")
         )
+        # The AG-UI run id, when the caller minted one (the middleware's
+        # invoke route sends ``runId``; RUN_STARTED confirms it later).
+        run_id = payload.get("runId") or payload.get("run_id")
+        thread_id = payload.get("threadId") or payload.get("thread_id")
         return cls(
             parent_invocation_id=parent if isinstance(parent, str) else None,
             user_id=user_id if isinstance(user_id, str) else None,
             session_id=session_id if isinstance(session_id, str) else None,
+            run_id=run_id if isinstance(run_id, str) and run_id else None,
+            thread_id=thread_id if isinstance(thread_id, str) and thread_id else None,
         )
+
+    # ── AG-UI run / step recording ──
+
+    def observe_agui_event(self, event: Any) -> None:
+        """Fold one AG-UI event into the run this context records.
+
+        * ``RUN_STARTED`` — the run id (and thread id) the stream announced.
+        * ``STEP_STARTED`` / ``STEP_FINISHED`` — a Step opens / closes.
+        * ``TOOL_CALL_START`` … ``TOOL_CALL_RESULT`` — one attempt on the step
+          that is open. The supervisor synthesises STEP_STARTED right *after*
+          the TOOL_CALL_START that routes to a sub-agent, so a step adopts
+          every call already in flight and unclaimed when it opens.
+        * ``RUN_ERROR`` — every open step and in-flight call ends ``failed``.
+
+        Tolerates pydantic events (enum or str ``type``) and plain dicts, in
+        either snake_case or camelCase. Never raises: recording a run must not
+        be able to break the stream it records.
+        """
+        try:
+            self._observe(event)
+        except Exception:  # noqa: BLE001 — observability never breaks the agent
+            log.debug("instrumentation: could not record AG-UI event", exc_info=True)
+
+    def _observe(self, event: Any) -> None:
+        etype = _agui_type(event)
+        if etype == "RUN_STARTED":
+            rid = _agui_attr(event, "run_id", "runId")
+            tid = _agui_attr(event, "thread_id", "threadId")
+            if isinstance(rid, str) and rid:
+                self.run_id = rid
+            if isinstance(tid, str) and tid:
+                self.thread_id = tid
+        elif etype == "STEP_STARTED":
+            name = _agui_attr(event, "step_name", "stepName") or "step"
+            step = {
+                "stepId": f"{name}-{len(self.steps) + 1}",
+                "name": str(name),
+                "status": "running",
+                "startedAt": _now_iso(),
+                "finishedAt": None,
+                "toolCalls": [],
+            }
+            for call in self._inflight_calls.values():
+                if not call.get("_claimed"):
+                    call["_claimed"] = True
+                    step["toolCalls"].append(call)
+            self.steps.append(step)
+        elif etype == "STEP_FINISHED":
+            name = _agui_attr(event, "step_name", "stepName") or "step"
+            for step in reversed(self.steps):
+                if step["name"] == str(name) and step["finishedAt"] is None:
+                    step["finishedAt"] = _now_iso()
+                    step["status"] = "completed"
+                    break
+        elif etype == "TOOL_CALL_START":
+            tcid = _agui_attr(event, "tool_call_id", "toolCallId")
+            if not isinstance(tcid, str) or not tcid:
+                return
+            call = {
+                "toolCallId": tcid,
+                "name": str(_agui_attr(event, "tool_call_name", "toolCallName") or "unknown"),
+                "status": "running",
+                "startedAt": _now_iso(),
+                "finishedAt": None,
+            }
+            self._inflight_calls[tcid] = call
+            open_step = self._open_step()
+            if open_step is not None:
+                call["_claimed"] = True
+                open_step["toolCalls"].append(call)
+        elif etype == "TOOL_CALL_RESULT":
+            tcid = _agui_attr(event, "tool_call_id", "toolCallId")
+            call = self._inflight_calls.pop(tcid, None) if isinstance(tcid, str) else None
+            if call is not None:
+                call["status"] = "completed"
+                call["finishedAt"] = _now_iso()
+        elif etype == "RUN_ERROR":
+            now = _now_iso()
+            for call in self._inflight_calls.values():
+                call["status"] = "failed"
+                call["finishedAt"] = now
+            self._inflight_calls.clear()
+            for step in self.steps:
+                if step["finishedAt"] is None:
+                    step["status"] = "failed"
+                    step["finishedAt"] = now
+
+    def _open_step(self) -> dict[str, Any] | None:
+        for step in reversed(self.steps):
+            if step["finishedAt"] is None:
+                return step
+        return None
+
+    def project_steps(self) -> list[dict[str, Any]]:
+        """The recorded steps in wire shape (``_claimed`` bookkeeping removed)."""
+        return [
+            {
+                **{k: v for k, v in step.items() if k != "toolCalls"},
+                "toolCalls": [
+                    {k: v for k, v in call.items() if not k.startswith("_")}
+                    for call in step["toolCalls"]
+                ],
+            }
+            for step in self.steps
+        ]
 
     # ── Tool-call buffering ──
 
@@ -385,6 +526,14 @@ class TraceContext:
             body["sessionId"] = self.session_id
         if self.tool_calls:
             body["toolCalls"] = list(self.tool_calls)
+        # P1 — the run this invocation is. `runId` is the key the middleware's
+        # projection (lib/pipeline-runs.ts) joins the trace to its Run on.
+        if self.run_id:
+            body["runId"] = self.run_id
+        if self.thread_id:
+            body["threadId"] = self.thread_id
+        if self.steps:
+            body["steps"] = self.project_steps()
         return body
 
 

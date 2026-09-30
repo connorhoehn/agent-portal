@@ -1,4 +1,4 @@
-// The run projection — five run-shaped tables read as one model
+// The run projection — six run-shaped tables read as one model
 // (docs/social-tenant-and-pipelines-research-2026-09-29.md §D.3,
 // docs/pipelines-tenant-goal.md §"The projection").
 //
@@ -17,6 +17,20 @@
 // `PipelineRunStatus` is pipeline-runtime's nine — the same vocabulary the
 // installed realtime-modules client carries as `RunItemStatus`
 // (dist/client/pipelines/catalog.d.ts), minus its platform-only `interrupted`.
+//
+// AGENT RUNS (P1, rule 2 — "every fleet invocation is a run"). The sixth
+// source is `observability.invocation_traces`. A trace whose bundle carried
+// the AG-UI `runId` (agents/_shared/instrumentation.py) is a Run of
+// `Definition { kind: 'agent' }`: RUN_STARTED opened it, each recorded
+// STEP_STARTED/STEP_FINISHED pair is a Step, each TOOL_CALL_START…RESULT inside
+// a step is an attempt on it, and the trace row itself is the Run's `'trace'`
+// Artifact. A trace with no `runId` (a sub-agent the supervisor called, a
+// scheduled invocation, a bundle from an image older than P1) is not dropped:
+// if its parent trace keys a Run it folds into that Run as a `child` source,
+// and otherwise it is COUNTED in `unlinked` — the honest "we recorded it, and
+// nothing says which run it was". A run the middleware relayed but whose
+// bundle has not arrived yet (the CloudWatch poller lags ~30s) is projected
+// from `liveAgentRuns` with status `running`, so it exists from RUN_STARTED.
 //
 // "ONCE" (goal doc, decided there). Every row of the five sources is named in
 // exactly one Run's `context.sources[]`. A `bot_runs` row with a `job_id` is
@@ -47,10 +61,12 @@ export type TriggerType = 'manual' | 'schedule' | 'webhook' | 'document-event';
 
 export type ArtifactKind = 'change' | 'document' | 'scores' | 'trace' | 'transcript' | 'image';
 
-/** The five run-shaped tables the projection reads (research §D.1). */
-export type SourceTable = 'agent_jobs' | 'bot_runs' | 'agent_project_runs' | 'assessment_runs' | 'distillation_compactions';
+/** The six run-shaped tables the projection reads (research §D.1). */
+export type SourceTable = 'agent_jobs' | 'bot_runs' | 'agent_project_runs' | 'assessment_runs' | 'distillation_compactions'
+  | 'invocation_traces';
 export const SOURCE_TABLES: readonly SourceTable[] = [
   'agent_jobs', 'bot_runs', 'agent_project_runs', 'assessment_runs', 'distillation_compactions',
+  'invocation_traces',
 ];
 
 /** The tenant whose data a Run is — the table decides it (research §D.3). */
@@ -61,7 +77,21 @@ const TENANT_OF: Record<SourceTable, ContextTenant> = {
   agent_project_runs: 'orgiq',
   distillation_compactions: 'orgiq',
   assessment_runs: 'assessment',
+  // The default only: an agent Run's tenant is the trace's own (see agentTenant).
+  invocation_traces: 'orgiq',
 };
+
+/**
+ * The tenant an agent run's data belongs to. The bundle's `tenant` (the
+ * session that invoked it, stamped by the agent from the payload's `auth`)
+ * wins; without one, the agent decides — the assessment scorer/drafter serve
+ * only the assessment tenant, every other agent the org tenant (the same rule
+ * `routes/agents.ts` `agentTenant()` enforces at invoke time).
+ */
+export function agentTenant(agentId: string, recorded?: string | null): ContextTenant {
+  if (recorded === 'orgiq' || recorded === 'assessment') return recorded;
+  return /(^|-)assessment-/.test(agentId.toLowerCase().replace(/_/g, '-')) ? 'assessment' : 'orgiq';
+}
 
 /** Event-catalog names this projection emits (event-catalog `pipeline*.ts`). */
 export const PIPELINE_EVENT_NAMES = [
@@ -155,12 +185,123 @@ export interface ChangeSource {
   prUrl?: string | null; filesChanged?: number;
 }
 
+/** One tool call on a recorded step — an attempt (instrumentation.py `observe_agui_event`). */
+export interface AgentToolCallRecord {
+  toolCallId: string;
+  name: string;
+  status: 'running' | 'completed' | 'failed';
+  startedAt: string | null;
+  finishedAt: string | null;
+}
+
+/** One STEP_STARTED…STEP_FINISHED the run recorded, with its TOOL_CALL_* attempts. */
+export interface AgentStepRecord {
+  stepId: string;
+  name: string;
+  status: 'running' | 'completed' | 'failed';
+  startedAt: string | null;
+  finishedAt: string | null;
+  toolCalls: AgentToolCallRecord[];
+}
+
+const MAX_STEPS = 50;
+const MAX_CALLS_PER_STEP = 50;
+const recordStatus = (v: unknown): AgentStepRecord['status'] => (v === 'completed' || v === 'failed' ? v : 'running');
+const shortStr = (v: unknown, max = 200): string | null => (typeof v === 'string' && v ? v.slice(0, max) : null);
+
+/**
+ * The bundle's `steps`, made safe to store and to project. A bundle is agent
+ * output that crossed a network (and, via the CloudWatch poller, a log line),
+ * so its shape is checked rather than trusted: at most 50 steps of at most 50
+ * attempts, bounded strings, the three statuses. Anything unreadable becomes
+ * null (nothing recorded) rather than a half-parsed step.
+ */
+export function normalizeAgentSteps(raw: unknown): AgentStepRecord[] | null {
+  let value = raw;
+  if (typeof value === 'string') {
+    try { value = JSON.parse(value); } catch { return null; }
+  }
+  if (!Array.isArray(value)) return null;
+  const out: AgentStepRecord[] = [];
+  for (const [i, s] of value.slice(0, MAX_STEPS).entries()) {
+    if (!s || typeof s !== 'object') continue;
+    const r = s as Record<string, unknown>;
+    const name = shortStr(r['name']) ?? 'step';
+    const calls = Array.isArray(r['toolCalls']) ? r['toolCalls'] : [];
+    out.push({
+      stepId: shortStr(r['stepId']) ?? `${name}-${i + 1}`,
+      name,
+      status: recordStatus(r['status']),
+      startedAt: shortStr(r['startedAt'], 40),
+      finishedAt: shortStr(r['finishedAt'], 40),
+      toolCalls: calls.slice(0, MAX_CALLS_PER_STEP).flatMap((c, j) => {
+        if (!c || typeof c !== 'object') return [];
+        const t = c as Record<string, unknown>;
+        return [{
+          toolCallId: shortStr(t['toolCallId']) ?? `${name}-${i + 1}-tc${j + 1}`,
+          name: shortStr(t['name']) ?? 'unknown',
+          status: recordStatus(t['status']),
+          startedAt: shortStr(t['startedAt'], 40),
+          finishedAt: shortStr(t['finishedAt'], 40),
+        }];
+      }),
+    });
+  }
+  return out;
+}
+
+/** `observability.invocation_traces` — one agent invocation's trace row. */
+export interface InvocationSource {
+  invocationId: string;
+  agentId: string;
+  agentName: string;
+  /** The AG-UI run id the bundle carried (`agui_run_id`); null = unlinked. */
+  aguiRunId: string | null;
+  threadId: string | null;
+  /** The recorded steps (`steps` jsonb); null when the bundle carried none. */
+  steps: AgentStepRecord[] | null;
+  parentInvocationId: string | null;
+  userId: string | null;
+  /** The bundle's tenant (`tenant`), when the invoking session stamped one. */
+  tenant?: string | null;
+  ts: string;
+  durationMs: number | null;
+  guardrailAction: string | null;
+  schemaValid: boolean | null;
+  totalCostUsd: number | null;
+  promptSnippet?: string | null;
+}
+
+/**
+ * A run the middleware relayed (routes/agents.ts) — open from RUN_STARTED,
+ * closed at RUN_FINISHED/RUN_ERROR — held until its bundle arrives. Not a
+ * table: lib/agent-runs-live.ts, in memory, so a run exists before its trace.
+ */
+export interface LiveAgentRunSource {
+  runId: string;
+  threadId: string | null;
+  agentId: string;
+  agentName: string;
+  userId: string | null;
+  tenant: string | null;
+  status: 'running' | 'completed' | 'failed';
+  startedAt: string;
+  finishedAt: string | null;
+  steps: AgentStepRecord[];
+  prompt: string | null;
+  error: string | null;
+}
+
 export interface RunSources {
   agentJobs: readonly JobSource[];
   botRuns: readonly BotRunSource[];
   agentProjectRuns: readonly ProjectRunSource[];
   assessmentRuns: readonly AssessmentRunSource[];
   compactions: readonly CompactionSource[];
+  /** `observability.invocation_traces` — agent runs (P1). */
+  invocations?: readonly InvocationSource[];
+  /** Relayed runs whose bundle has not arrived yet (not a table). */
+  liveAgentRuns?: readonly LiveAgentRunSource[];
   /** Optional: artifacts only. A change is not a run. */
   changes?: readonly ChangeSource[];
 }
@@ -172,8 +313,11 @@ export interface SourceRef {
   id: string;
   /** The row's own status, verbatim. */
   status: string;
-  /** `primary` keys the Run; `trigger` is a bot firing folded into it. */
-  role: 'primary' | 'trigger';
+  /**
+   * `primary` keys the Run; `trigger` is a bot firing folded into it; `child`
+   * is a sub-agent trace (no run id of its own) whose parent trace keys it.
+   */
+  role: 'primary' | 'trigger' | 'child';
 }
 
 export interface RunContext {
@@ -196,6 +340,10 @@ export interface RunContext {
   /** The trigger as the source spelled it (cron, pr_watch, marketplace, …). */
   trigger?: string | null;
   error?: string | null;
+  /** Agent runs: the AG-UI run id and thread (session) id. */
+  aguiRunId?: string | null;
+  threadId?: string | null;
+  agentId?: string | null;
 }
 
 export interface Run {
@@ -213,7 +361,11 @@ export interface Run {
   context: RunContext;
 }
 
-export interface StepAttempt { attempt: number; status: PipelineStepStatus; startedAt: string | null; finishedAt: string | null }
+export interface StepAttempt {
+  attempt: number; status: PipelineStepStatus; startedAt: string | null; finishedAt: string | null;
+  /** Agent runs: the tool call this attempt was (TOOL_CALL_START…RESULT). */
+  label?: string; toolCallId?: string;
+}
 
 export interface Step {
   runId: string;
@@ -252,6 +404,12 @@ export interface Projection {
   runs: Run[];
   steps: Map<string, Step[]>;
   artifacts: Artifact[];
+  /**
+   * Rows recorded but belonging to no Run — today only trace rows with no
+   * AG-UI run id and no linked parent. Counted, never dropped: every row read
+   * is either in exactly one Run's `context.sources` or in this count.
+   */
+  unlinked: { invocation_traces: number };
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -261,6 +419,10 @@ export function runIdFor(table: SourceTable, id: string): string {
   const prefix: Record<SourceTable, string> = {
     agent_jobs: 'job', bot_runs: 'bot-run', agent_project_runs: 'project-run',
     assessment_runs: 'assessment-run', distillation_compactions: 'compaction',
+    // Keyed on the AG-UI run id, not the trace uuid: the Run exists from
+    // RUN_STARTED (live), before any trace row does, and keeps its id when
+    // the bundle lands.
+    invocation_traces: 'agent-run',
   };
   return `${prefix[table]}:${id}`;
 }
@@ -536,8 +698,185 @@ export function projectRuns(src: RunSources): Projection {
     }
   }
 
+  const unlinked = projectAgentRuns(src, runs, steps, artifacts);
+
   runs.sort((a, b) => (b.startedAt ?? '').localeCompare(a.startedAt ?? ''));
-  return { runs, steps, artifacts };
+  // Newest first, like the runs — an artifact with no time sorts last. Stable,
+  // so artifacts of one run keep the order their run produced them in.
+  artifacts.sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''));
+  return { runs, steps, artifacts, unlinked: { invocation_traces: unlinked } };
+}
+
+// ─── Agent runs (P1) ────────────────────────────────────────────────────────
+
+/**
+ * The trace row's own outcome, as a status word, since `invocation_traces`
+ * has no status column. The honest stand-ins are the ones the error-rate
+ * rollups already use (CLAUDE.md, "Error rate ≠ answer quality"): a guardrail
+ * intervention is `blocked` (→ rejected), non-conforming output or a step the
+ * run recorded as failed is `failed`, anything else answered — `completed`.
+ */
+export function traceSourceStatus(t: Pick<InvocationSource, 'guardrailAction' | 'schemaValid' | 'steps'>): string {
+  if (t.guardrailAction && t.guardrailAction !== 'NONE') return 'blocked';
+  if (t.schemaValid === false) return 'failed';
+  if (t.steps?.some((s) => s.status === 'failed')) return 'failed';
+  return 'completed';
+}
+
+/** Why `traceSourceStatus` said what it said — the same three facts, in words. */
+function traceFailureReason(t: InvocationSource): string | null {
+  if (t.guardrailAction && t.guardrailAction !== 'NONE') return `guardrail ${t.guardrailAction.toLowerCase()} the answer`;
+  if (t.schemaValid === false) return 'the output did not conform (schema_valid false)';
+  const failed = t.steps?.filter((s) => s.status === 'failed') ?? [];
+  if (failed.length) return `step ${failed.map((s) => s.name).join(', ')} failed`;
+  return null;
+}
+
+const RECORD_STEP_STATUS: Record<AgentStepRecord['status'], PipelineStepStatus> = {
+  running: 'running', completed: 'completed', failed: 'failed',
+};
+
+/** Recorded STEP_STARTED/STEP_FINISHED → Steps; each TOOL_CALL_START…RESULT → an attempt. */
+function agentSteps(runId: string, recorded: readonly AgentStepRecord[] | null, run: {
+  status: PipelineRunStatus; startedAt: string | null; finishedAt: string | null; agentName: string;
+}): Step[] {
+  if (recorded && recorded.length > 0) {
+    return recorded.map((r) => {
+      // A step still `running` when its run ended did not finish; say so.
+      const status: PipelineStepStatus = r.status === 'running' && run.status !== 'running'
+        ? (run.status === 'completed' ? 'completed' : 'failed')
+        : RECORD_STEP_STATUS[r.status];
+      return {
+        runId, stepId: r.stepId, label: r.name, status,
+        startedAt: r.startedAt, finishedAt: r.finishedAt,
+        attempts: r.toolCalls.map((c, i) => ({
+          attempt: i + 1, status: RECORD_STEP_STATUS[c.status], startedAt: c.startedAt, finishedAt: c.finishedAt,
+          label: c.name, toolCallId: c.toolCallId,
+        })),
+        ...(r.toolCalls.length ? { detail: `${r.toolCalls.length} tool call${r.toolCalls.length === 1 ? '' : 's'}` } : {}),
+      };
+    });
+  }
+  // No STEP_* recorded (an agent that routes nothing, or a pre-P1 image): the
+  // run is one step — the invocation itself — so a Run never has no steps.
+  return [step(runId, 'invoke', `${run.agentName} invocation`, executeStatus(run.status), run.startedAt, run.finishedAt)];
+}
+
+const addMs = (iso: string, ms: number | null): string | null => {
+  if (ms === null) return null;
+  const t = Date.parse(iso);
+  return Number.isFinite(t) ? new Date(t + ms).toISOString() : null;
+};
+
+function projectAgentRuns(src: RunSources, runs: Run[], steps: Map<string, Step[]>, artifacts: Artifact[]): number {
+  const traces = src.invocations ?? [];
+  // Oldest first, so when two bundles claim one run id the earlier keys it.
+  const ordered = [...traces].sort((a, b) => a.ts.localeCompare(b.ts));
+  const primaryByRunId = new Map<string, InvocationSource>();
+  const extraByRunId = new Map<string, InvocationSource[]>();
+  for (const t of ordered) {
+    if (!t.aguiRunId) continue;
+    if (!primaryByRunId.has(t.aguiRunId)) primaryByRunId.set(t.aguiRunId, t);
+    else extraByRunId.set(t.aguiRunId, [...(extraByRunId.get(t.aguiRunId) ?? []), t]);
+  }
+  // A sub-agent trace folds into the Run its parent trace keys.
+  const runIdOfInvocation = new Map<string, string>();
+  for (const [rid, t] of primaryByRunId) runIdOfInvocation.set(t.invocationId, rid);
+  const childrenByRunId = new Map<string, InvocationSource[]>();
+  let unlinked = 0;
+  for (const t of ordered) {
+    if (t.aguiRunId) continue;
+    const rid = t.parentInvocationId ? runIdOfInvocation.get(t.parentInvocationId) : undefined;
+    if (rid) childrenByRunId.set(rid, [...(childrenByRunId.get(rid) ?? []), t]);
+    else unlinked++;
+  }
+
+  for (const [rid, t] of primaryByRunId) {
+    const id = runIdFor('invocation_traces', rid);
+    const sourceStatus = traceSourceStatus(t);
+    const status = crosswalkStatus(sourceStatus);
+    const tenant = agentTenant(t.agentId, t.tenant);
+    const extra = [...(extraByRunId.get(rid) ?? []), ...(childrenByRunId.get(rid) ?? [])];
+    const finishedAt = addMs(t.ts, t.durationMs);
+    const costs = [t, ...(childrenByRunId.get(rid) ?? [])].map((x) => x.totalCostUsd);
+    runs.push({
+      id,
+      definitionId: `agent:${t.agentId}`,
+      tenant,
+      status,
+      triggeredBy: t.userId,
+      triggerType: 'manual',
+      startedAt: t.ts,
+      finishedAt,
+      // The run's own trace plus its sub-agents'; null when none recorded one.
+      costUsd: costs.some((c) => c !== null) ? costs.reduce<number>((n, c) => n + (c ?? 0), 0) : null,
+      context: {
+        tenant, kind: 'agent', table: 'invocation_traces', id: t.invocationId, sourceStatus,
+        sources: [
+          { table: 'invocation_traces', id: t.invocationId, status: sourceStatus, role: 'primary' },
+          ...extra.map((x): SourceRef => ({ table: 'invocation_traces', id: x.invocationId, status: traceSourceStatus(x), role: 'child' })),
+        ],
+        title: t.promptSnippet?.trim() || `${t.agentName} run`,
+        aguiRunId: rid, threadId: t.threadId, agentId: t.agentId,
+        error: traceFailureReason(t),
+      },
+    });
+    const s = agentSteps(id, t.steps, { status, startedAt: t.ts, finishedAt, agentName: t.agentName });
+    steps.set(id, s);
+    // The trace bundle closed the run: the invocation_traces row is its artifact.
+    artifacts.push(traceArtifact(id, s, t, rid));
+    for (const c of childrenByRunId.get(rid) ?? []) artifacts.push(traceArtifact(id, s, c, rid));
+  }
+
+  // Relayed but no bundle yet — the Run exists from RUN_STARTED.
+  for (const live of src.liveAgentRuns ?? []) {
+    if (primaryByRunId.has(live.runId)) continue;
+    const id = runIdFor('invocation_traces', live.runId);
+    const status = crosswalkStatus(live.status);
+    const tenant = agentTenant(live.agentId, live.tenant);
+    runs.push({
+      id,
+      definitionId: `agent:${live.agentId}`,
+      tenant,
+      status,
+      triggeredBy: live.userId,
+      triggerType: 'manual',
+      startedAt: live.startedAt,
+      finishedAt: live.finishedAt,
+      costUsd: null,
+      context: {
+        tenant, kind: 'agent', table: 'invocation_traces', id: live.runId, sourceStatus: live.status,
+        // No row yet: the trace that will close this run has not been filed.
+        sources: [],
+        title: live.prompt?.trim() || `${live.agentName} run`,
+        aguiRunId: live.runId, threadId: live.threadId, agentId: live.agentId,
+        error: live.error,
+      },
+    });
+    steps.set(id, agentSteps(id, live.steps, { status, startedAt: live.startedAt, finishedAt: live.finishedAt, agentName: live.agentName }));
+  }
+  return unlinked;
+}
+
+function traceArtifact(runId: string, runSteps: readonly Step[], t: InvocationSource, aguiRunId: string): Artifact {
+  return {
+    id: `trace:${t.invocationId}`,
+    runId,
+    stepId: runSteps[runSteps.length - 1]?.stepId ?? null,
+    kind: 'trace',
+    // The trace uuid is the artifact's identity; href is where it reads.
+    uri: t.invocationId,
+    title: `${t.agentName} trace`,
+    createdAt: addMs(t.ts, t.durationMs) ?? t.ts,
+    meta: {
+      invocationId: t.invocationId,
+      agentId: t.agentId,
+      aguiRunId,
+      href: `/api/observability/invocations/${encodeURIComponent(t.invocationId)}`,
+      ...(t.parentInvocationId ? { parentInvocationId: t.parentInvocationId } : {}),
+      ...(t.durationMs !== null ? { durationMs: t.durationMs } : {}),
+    },
+  };
 }
 
 function changeArtifact(c: ChangeSource, runId: string | null): Artifact {

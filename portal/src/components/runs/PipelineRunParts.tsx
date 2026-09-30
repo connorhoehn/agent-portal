@@ -11,14 +11,14 @@
 // SSE stream for the events.
 
 import {
-  Chip, DataTable, DetailHeader, KeyValue, MetaLine, Stack, WorkflowStepper,
+  Chip, DataTable, DetailHeader, Inline, KeyValue, MetaLine, Stack, WorkflowStepper,
   type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { relativeTime } from '../../lib/relativeTime';
 import { usd } from '../../lib/format';
 import {
-  artifactKindLabel, kindLabel, runHref, runStatusChip, sourceLabel, sourceStatusNote, stepperSteps, stepStatusChip,
+  artifactKindLabel, attemptItems, kindLabel, runHref, runStatusChip, sourceLabel, sourceStatusNote, stepperSteps, stepStatusChip,
   type PipelineArtifact, type PipelineRun, type PipelineStep,
 } from '../../lib/pipelineRuns';
 import { RunTimeline } from './RunTimeline';
@@ -71,7 +71,15 @@ export function PipelineRunSummary({ run }: { run: PipelineRun }) {
           { label: 'Source status', value: run.context.sourceStatus.replace(/_/g, ' ') },
           { label: 'Triggered by', value: run.triggeredBy ?? 'not recorded', muted: run.triggeredBy == null },
           { label: 'Cost', value: run.costUsd != null ? usd(run.costUsd, { precision: 4 }) : 'not recorded', muted: run.costUsd == null },
-          { label: 'Folds', value: run.context.sources.map((s) => `${sourceLabel(s.table)} (${s.role})`).join(' · ') },
+          ...(run.context.aguiRunId ? [{ label: 'AG-UI run', value: run.context.aguiRunId, mono: true }] : []),
+          {
+            label: 'Folds',
+            // A relayed agent run has no row yet: its trace closes it later.
+            value: run.context.sources.length
+              ? run.context.sources.map((s) => `${sourceLabel(s.table)} (${s.role})`).join(' · ')
+              : 'no trace filed yet — relayed live',
+            muted: run.context.sources.length === 0,
+          },
         ]}
       />
       {run.context.error && <MetaLine size="xs" tone="secondary" items={[`error: ${run.context.error}`]} />}
@@ -86,7 +94,20 @@ const STEP_COLUMNS: DataTableColumn<PipelineStep>[] = [
     render: (s) => { const c = stepStatusChip(s.status); return <Chip tone={c.tone} size="xs">{c.label}</Chip>; },
   },
   { key: 'startedAt', header: 'Started', render: (s) => (s.startedAt ? relativeTime(s.startedAt) : '—') },
-  { key: 'attempts', header: 'Attempts', render: (s) => (s.attempts.length ? String(s.attempts[s.attempts.length - 1]!.attempt) : '—') },
+  {
+    key: 'attempts', header: 'Attempts',
+    // An agent run's attempts are its tool calls (TOOL_CALL_START…RESULT) —
+    // named, each with its own outcome; any other run's are numbered retries.
+    render: (s) => {
+      const items = attemptItems(s);
+      if (items.length === 0) return '—';
+      return (
+        <Inline gap="xs" wrap>
+          {items.map((a) => { const c = stepStatusChip(a.status); return <Chip key={a.key} tone={c.tone} size="xs" title={c.label}>{a.label}</Chip>; })}
+        </Inline>
+      );
+    },
+  },
   { key: 'detail', header: 'Detail', render: (s) => s.detail ?? '—' },
 ];
 

@@ -15,8 +15,43 @@
 
 import { config } from '../config.js';
 import {
-  projectRuns, type Projection, type RunSources, type BotRunSource, type SourceTable,
+  normalizeAgentSteps, projectRuns,
+  type Projection, type RunSources, type BotRunSource, type InvocationSource, type SourceTable,
 } from '../lib/pipeline-runs.js';
+import { liveAgentRuns } from '../lib/agent-runs-live.js';
+
+/** How far back the agent-run source reads — the observability surfaces' own week. */
+const INVOCATION_WINDOW_HOURS = 24 * 7;
+const INVOCATION_LIMIT = 1000;
+
+/** `invocation_traces` → InvocationSource, from either row source (snake_case, `exec()` shape). */
+export function invocationSourceFromRow(r: Record<string, unknown>): InvocationSource {
+  const str = (v: unknown): string | null => (typeof v === 'string' && v ? v : null);
+  const num = (v: unknown): number | null => {
+    const n = typeof v === 'number' ? v : typeof v === 'string' && v.trim() ? Number(v) : NaN;
+    return Number.isFinite(n) ? n : null;
+  };
+  const ts = str(r['ts_iso']) ?? str(r['tsIso']) ?? str(r['ts']) ?? '';
+  return {
+    invocationId: String(r['invocation_id']),
+    agentId: String(r['agent_id'] ?? 'unknown'),
+    agentName: String(r['agent_name'] ?? r['agent_id'] ?? 'unknown'),
+    aguiRunId: str(r['agui_run_id']),
+    threadId: str(r['agui_thread_id']),
+    steps: normalizeAgentSteps(r['steps']),
+    parentInvocationId: str(r['parent_invocation_id']),
+    userId: str(r['user_id']),
+    tenant: str(r['tenant']),
+    // RDS Data API hands TIMESTAMPTZ back naive (CLAUDE.md, the devbox fleet
+    // gotcha); the SELECT below formats it as UTC ISO so it is never read local.
+    ts,
+    durationMs: num(r['duration_ms']),
+    guardrailAction: str(r['guardrail_action']),
+    schemaValid: typeof r['schema_valid'] === 'boolean' ? r['schema_valid'] : null,
+    totalCostUsd: num(r['total_cost_usd']),
+    promptSnippet: str(r['prompt_snippet']),
+  };
+}
 
 export interface LoadedProjection extends Projection {
   /** Sources that could not be read, with the reason — never silently empty. */
@@ -52,6 +87,13 @@ export async function loadRunSources(): Promise<{ sources: RunSources; unavailab
       agentProjectRuns: await attempt('agent_project_runs', unavailable, () => agentProjectRuns.rows()),
       assessmentRuns: await attempt('assessment_runs', unavailable, () => runsFixture.rows()),
       compactions: await attempt('distillation_compactions', unavailable, () => listCompactions()),
+      invocations: await attempt('invocation_traces', unavailable, async () => {
+        // The one offline invocation_traces: the seeded day with every written
+        // bundle layered on top (mock/observability.ts traceRows()).
+        const { traceRows } = await import('../mock/observability.js');
+        return traceRows().map((r) => invocationSourceFromRow({ ...r, ts_iso: r.tsIso }));
+      }),
+      liveAgentRuns: liveAgentRuns(),
       changes: await attempt('agent_change_requests', unavailable, () => listChangeRequests()),
     };
     return { sources, unavailable };
@@ -80,12 +122,36 @@ export async function loadRunSources(): Promise<{ sources: RunSources; unavailab
     }),
     assessmentRuns: await attempt('assessment_runs', unavailable, () => assessment.listRuns({ limit: 500 })),
     compactions: await attempt('distillation_compactions', unavailable, () => listCompactions()),
+    invocations: await attempt('invocation_traces', unavailable, async () => {
+      const { exec } = await import('./aurora.js');
+      // A cluster that has not re-applied observability_schema.sql has no
+      // agui_run_id column: that is `unavailable` with the database's own
+      // words, never "no agent runs".
+      const rows = await exec(
+        `SELECT invocation_id::text AS invocation_id, agent_id, agent_name,
+                agui_run_id, agui_thread_id, steps::text AS steps, tenant,
+                parent_invocation_id::text AS parent_invocation_id, user_id,
+                to_char(ts AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS ts_iso,
+                duration_ms, guardrail_action, schema_valid,
+                total_cost_usd::float8 AS total_cost_usd, prompt_snippet
+           FROM observability.invocation_traces
+          WHERE ts > now() - make_interval(hours => :hours)
+          ORDER BY ts DESC
+          LIMIT :lim`,
+        [
+          { name: 'hours', value: { longValue: INVOCATION_WINDOW_HOURS } },
+          { name: 'lim', value: { longValue: INVOCATION_LIMIT } },
+        ],
+      );
+      return rows.map((r) => invocationSourceFromRow(r as Record<string, unknown>));
+    }),
+    liveAgentRuns: liveAgentRuns(),
     changes: await attempt('agent_change_requests', unavailable, () => listChangeRequests()),
   };
   return { sources, unavailable };
 }
 
-/** Read the five sources and project them — once per request. */
+/** Read the six sources (plus the relayed runs) and project them — once per request. */
 export async function loadProjection(): Promise<LoadedProjection> {
   const { sources, unavailable } = await loadRunSources();
   return { ...projectRuns(sources), unavailable };

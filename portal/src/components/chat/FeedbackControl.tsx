@@ -12,33 +12,33 @@
 // render an affordance a member's session will 403 on, and never blocks the
 // answer itself on feedback success/failure.
 //
-// invocationId is intentionally a prop, not derived here: at the AG-UI
-// streaming path InvokePage.tsx uses (useAgentStream), no invocationId for
-// the just-completed turn is currently threaded to the client — RUN_STARTED's
-// runId is a middleware-minted id unrelated to the agent's
-// ctx.invocation_id (the id observability.invocation_traces rows key on and
-// the one /feedback requires as a UUID). See InvokePage.tsx for the caller
-// wiring and the report from this change for the full trace of that gap.
-// Until a future event/field carries the real id, `invocationId` will be
-// undefined for every answer and this component correctly renders nothing —
-// exactly the "no invocationId → no control" behavior an errored turn also
-// needs.
+// WHICH ID. Either the trace's `invocationId` (a caller that has the trace
+// row) or the answer's AG-UI `runId`. The streaming Ask path has the run id
+// only: the middleware mints it, the agent stamps it on its trace bundle
+// (`agui_run_id`, pipelines P1), and /feedback resolves a run to that run's
+// own trace among the caller's own runs. That join is what unblocked this
+// control — before P1 the run id and the trace uuid were disjoint and every
+// answer rendered nothing. With neither id (an errored or incomplete turn)
+// there is nothing to label and the control renders nothing.
+//
+// A thumb pressed before the agent's bundle has landed (the CloudWatch
+// poller lags ~30s) gets a 404 that says so; the control reports it quietly
+// and a later press succeeds.
 
 import { useState } from 'react';
 import { useCapabilities } from '../../lib/capabilities';
-import { buildFeedbackBody, type AskFeedbackLabel } from './feedbackBody';
+import { buildFeedbackBody, buildRunFeedbackBody, type AskFeedbackLabel } from './feedbackBody';
 import { Button, Inline, MetaLine } from '@connorhoehnslalom/ui-components/shared';
 
 type Status = 'idle' | 'submitting' | 'submitted' | 'error';
 
-export function FeedbackControl({ invocationId }: { invocationId?: string }) {
+export function FeedbackControl({ invocationId, runId }: { invocationId?: string; runId?: string }) {
   const { can } = useCapabilities();
   const [status, setStatus] = useState<Status>('idle');
   const [selected, setSelected] = useState<AskFeedbackLabel | null>(null);
 
-  // No invocationId (errored/incomplete turn, or — currently — every turn
-  // until the streaming path threads one through) → nothing to label.
-  if (!invocationId) return null;
+  // Neither id (errored/incomplete turn) → nothing to label.
+  if (!invocationId && !runId) return null;
   // Not gated at all if the caller lacks the grant (member/SME/org-leader/
   // hr-admin/admin hold it; a bare reader does not).
   if (!can('LabelFeedback')) return null;
@@ -54,7 +54,7 @@ export function FeedbackControl({ invocationId }: { invocationId?: string }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify(buildFeedbackBody(invocationId as string, label)),
+        body: JSON.stringify(invocationId ? buildFeedbackBody(invocationId, label) : buildRunFeedbackBody(runId as string, label)),
       });
       if (!res.ok) throw new Error(`${res.status}`);
       setStatus('submitted');

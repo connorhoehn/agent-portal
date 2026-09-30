@@ -6,7 +6,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildFeedbackBody } from '../feedbackBody.ts';
+import { buildFeedbackBody, buildRunFeedbackBody } from '../feedbackBody.ts';
 
 const ID = '11111111-2222-3333-4444-555555555555';
 
@@ -28,4 +28,10 @@ test('drops a blank/whitespace-only note rather than sending empty string', () =
 
 test('omits note when undefined', () => {
   assert.deepEqual(buildFeedbackBody(ID, 'bad', undefined), { invocationId: ID, label: 'bad' });
+});
+
+test('by run: the AG-UI run id instead of a trace uuid, same note rules', () => {
+  assert.deepEqual(buildRunFeedbackBody('run-1', 'good'), { runId: 'run-1', label: 'good' });
+  assert.deepEqual(buildRunFeedbackBody('run-1', 'bad', '  off  '), { runId: 'run-1', label: 'bad', note: 'off' });
+  assert.deepEqual(buildRunFeedbackBody('run-1', 'bad', '  '), { runId: 'run-1', label: 'bad' });
 });

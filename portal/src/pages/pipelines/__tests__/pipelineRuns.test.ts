@@ -11,7 +11,7 @@ import assert from 'node:assert/strict';
 
 import {
   PIPELINE_RUN_STATUSES, STATUS_FILTER_OPTIONS, runStatusChip, runsQuery, sourceStatusNote,
-  stepperSteps, stepStatusChip, runHref, type PipelineStep,
+  stepperSteps, stepStatusChip, runHref, attemptItems, unlinkedNote, KIND_FILTER_OPTIONS, sourceLabel, type PipelineStep,
 } from '../../../lib/pipelineRuns.ts';
 
 test('every one of the nine run statuses has a tone and a readable label', () => {
@@ -56,4 +56,27 @@ test('run ids (table-prefixed) are URL-encoded, and empty filters are omitted', 
   assert.equal(runHref('/api/runs', 'job:job-obs-maint-1'), '/api/runs/job%3Ajob-obs-maint-1');
   assert.equal(runsQuery({}), '');
   assert.equal(runsQuery({ status: 'failed', kind: '', contextTenant: 'orgiq', limit: 200 }), '?status=failed&contextTenant=orgiq&limit=200');
+});
+
+// P1 — agent runs: a step's attempts are its tool calls, named.
+test('an agent step lists its tool calls as attempts; any other step shows its retry count', () => {
+  const agent = { attempts: [
+    { attempt: 1, status: 'completed' as const, label: 'search_organization', toolCallId: 'tc1' },
+    { attempt: 2, status: 'failed' as const, label: 'get_expertise_scores', toolCallId: 'tc2' },
+  ] };
+  assert.deepEqual(attemptItems(agent), [
+    { key: 'tc1', label: 'search_organization', status: 'completed' },
+    { key: 'tc2', label: 'get_expertise_scores', status: 'failed' },
+  ]);
+  assert.deepEqual(attemptItems({ attempts: [{ attempt: 3, status: 'completed' }] }), [{ key: 'n3', label: 'attempt 3', status: 'completed' }]);
+  assert.deepEqual(attemptItems({ attempts: [] }), []);
+});
+
+test('agent runs are filterable and named; unlinked traces are counted, not hidden', () => {
+  assert.ok(KIND_FILTER_OPTIONS.some((o) => o.value === 'agent'));
+  assert.equal(sourceLabel('invocation_traces'), 'agent trace');
+  assert.equal(unlinkedNote(undefined), null);
+  assert.equal(unlinkedNote({ invocation_traces: 0 }), null);
+  assert.match(unlinkedNote({ invocation_traces: 3 }) ?? '', /^3 agent traces carry no run id/);
+  assert.match(unlinkedNote({ invocation_traces: 1 }) ?? '', /^1 agent trace carries no run id/);
 });

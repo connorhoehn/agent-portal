@@ -1,6 +1,8 @@
 // The projection property (docs/pipelines-tenant-goal.md §"The projection"):
-// every row of the five run-shaped tables' registered fixtures is named in
-// exactly one Run's context.sources[], every Run's status is one of
+// every row of the six run-shaped tables' registered fixtures is named in
+// exactly one Run's context.sources[] — or, for an invocation_traces row with
+// no AG-UI run id and no linked parent (P1), counted in `unlinked` — every
+// Run's status is one of
 // pipeline-runtime's nine, every context.sourceStatus is the primary row's own
 // status, and every Run carries its context tenant.
 //
@@ -13,7 +15,7 @@
 jest.mock('../../config.js', () => ({ config: { mock: { aurora: true, agentcore: true } } }));
 
 import {
-  PIPELINE_RUN_STATUSES, crosswalkStatus, projectRuns, runEvents, SOURCE_TABLES,
+  PIPELINE_RUN_STATUSES, crosswalkStatus, projectRuns, runEvents, SOURCE_TABLES, traceSourceStatus, agentTenant,
   type RunSources, type SourceTable, type Run,
 } from '../pipeline-runs.js';
 import { agentJobs } from '../../mock/agent-jobs.js';
@@ -21,6 +23,8 @@ import { botRuns } from '../../mock/bots.js';
 import { agentProjectRuns } from '../../mock/agent-project-runs.js';
 import { runsFixture } from '../../mock/assessment.js';
 import { compactionJobs } from '../../mock/distillation.js';
+import { traceRows } from '../../mock/observability.js';
+import { invocationSourceFromRow } from '../../providers/pipeline-runs.js';
 import type { ScenarioName } from '../../mock/core/index.js';
 
 function fixtureSources(scenario?: ScenarioName): RunSources {
@@ -30,6 +34,8 @@ function fixtureSources(scenario?: ScenarioName): RunSources {
     agentProjectRuns: agentProjectRuns.rows(scenario),
     assessmentRuns: runsFixture.rows(scenario),
     compactions: compactionJobs.rows(scenario),
+    // invocation_traces — the seeded day plus written bundles (mock/observability.ts).
+    invocations: traceRows(scenario).map((r) => invocationSourceFromRow({ ...r, ts_iso: r.tsIso })),
   };
 }
 
@@ -40,12 +46,13 @@ function sourceRows(src: RunSources): Array<{ table: SourceTable; id: string; st
     ...src.agentProjectRuns.map((r) => ({ table: 'agent_project_runs' as const, id: r.id, status: r.status })),
     ...src.assessmentRuns.map((r) => ({ table: 'assessment_runs' as const, id: r.id, status: r.status })),
     ...src.compactions.map((r) => ({ table: 'distillation_compactions' as const, id: r.id, status: r.status })),
+    ...(src.invocations ?? []).map((r) => ({ table: 'invocation_traces' as const, id: r.invocationId, status: traceSourceStatus(r) })),
   ];
 }
 
 describe('the run projection over the five registered fixtures', () => {
   const src = fixtureSources();
-  const { runs, steps } = projectRuns(src);
+  const { runs, steps, unlinked } = projectRuns(src);
   const rows = sourceRows(src);
 
   it('every fixture is non-empty (a property over nothing is not a pass)', () => {
@@ -58,9 +65,14 @@ describe('the run projection over the five registered fixtures', () => {
       const k = `${s.table}:${s.id}`;
       seen.set(k, (seen.get(k) ?? 0) + 1);
     }
-    for (const r of rows) expect([`${r.table}:${r.id}`, seen.get(`${r.table}:${r.id}`)]).toEqual([`${r.table}:${r.id}`, 1]);
-    // …and invents none.
-    expect(seen.size).toBe(rows.length);
+    for (const r of rows) {
+      const n = seen.get(`${r.table}:${r.id}`);
+      // An unlinked trace is the one row allowed in no Run (it is counted below).
+      if (r.table === 'invocation_traces' && n === undefined) continue;
+      expect([`${r.table}:${r.id}`, n]).toEqual([`${r.table}:${r.id}`, 1]);
+    }
+    // …invents none, and every row not in a Run is counted, not dropped.
+    expect(seen.size + unlinked.invocation_traces).toBe(rows.length);
   });
 
   it('gives every Run one of the nine PipelineRunStatus values', () => {
@@ -76,9 +88,12 @@ describe('the run projection over the five registered fixtures', () => {
     }
   });
 
-  it('carries the context tenant the table decides', () => {
+  it('carries the context tenant the table decides (an agent run: the trace\'s own)', () => {
+    const traceById = new Map((src.invocations ?? []).map((i) => [i.invocationId, i]));
     for (const run of runs) {
-      const want = run.context.table === 'assessment_runs' ? 'assessment' : 'orgiq';
+      const trace = run.context.table === 'invocation_traces' ? traceById.get(run.context.id) : undefined;
+      const want = trace ? agentTenant(trace.agentId, trace.tenant)
+        : run.context.table === 'assessment_runs' ? 'assessment' : 'orgiq';
       expect(run.context.tenant).toBe(want);
       expect(run.tenant).toBe(want);
     }
@@ -104,12 +119,12 @@ describe('the run projection over the five registered fixtures', () => {
     expect(events.every((e) => /^pipeline[:.]/.test(e.type))).toBe(true);
   });
 
-  it('holds the property under every declared scenario the five share', () => {
+  it('holds the property under every declared scenario the six share', () => {
     for (const scenario of ['empty'] as ScenarioName[]) {
       const s2 = fixtureSources(scenario);
       const p2 = projectRuns(s2);
       const count = p2.runs.reduce((n, r) => n + r.context.sources.length, 0);
-      expect(count).toBe(sourceRows(s2).length);
+      expect(count + p2.unlinked.invocation_traces).toBe(sourceRows(s2).length);
     }
   });
 });

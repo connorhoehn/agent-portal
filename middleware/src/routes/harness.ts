@@ -388,6 +388,12 @@ harnessRouter.post('/trace', requireTraceAuth, asyncHandler(async (req, res) => 
   if (Array.isArray(body.toolCalls)) {
     input.toolCalls = body.toolCalls;
   }
+  // Pipelines P1 — the AG-UI run this bundle closes. Presence is checked
+  // here; shape (bounds, statuses) is lib/pipeline-runs normalizeAgentSteps'.
+  if (typeof body.runId === 'string' && body.runId.trim()) input.runId = body.runId.trim();
+  if (typeof body.threadId === 'string' && body.threadId.trim()) input.threadId = body.threadId.trim();
+  if (typeof body.tenant === 'string' && body.tenant.trim()) input.tenant = body.tenant.trim();
+  if (Array.isArray(body.steps)) input.steps = body.steps;
   // `memoryEvents` and `guardrailInterventions` are the other two substance
   // axes `processTrace` persists, and they were the only ones with no way in
   // through this route — so an agent could report the tool calls it made but

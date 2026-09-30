@@ -168,17 +168,17 @@
     {
       "method": "GET",
       "path": "/api/agents",
-      "source": "src/routes/agents.ts:41"
+      "source": "src/routes/agents.ts:42"
     },
     {
       "method": "POST",
       "path": "/api/agents/:agentId/invoke",
-      "source": "src/routes/agents.ts:182"
+      "source": "src/routes/agents.ts:207"
     },
     {
       "method": "GET",
       "path": "/api/agents/:agentId/metrics",
-      "source": "src/routes/agents.ts:46"
+      "source": "src/routes/agents.ts:47"
     },
     {
       "method": "GET",
@@ -2058,87 +2058,87 @@
     {
       "method": "GET",
       "path": "/api/observability/harness/cases",
-      "source": "src/routes/harness.ts:444"
+      "source": "src/routes/harness.ts:450"
     },
     {
       "method": "POST",
       "path": "/api/observability/harness/cases",
-      "source": "src/routes/harness.ts:513"
+      "source": "src/routes/harness.ts:519"
     },
     {
       "method": "DELETE",
       "path": "/api/observability/harness/cases/:id",
-      "source": "src/routes/harness.ts:670"
+      "source": "src/routes/harness.ts:676"
     },
     {
       "method": "GET",
       "path": "/api/observability/harness/cases/:id",
-      "source": "src/routes/harness.ts:472"
+      "source": "src/routes/harness.ts:478"
     },
     {
       "method": "PATCH",
       "path": "/api/observability/harness/cases/:id",
-      "source": "src/routes/harness.ts:588"
+      "source": "src/routes/harness.ts:594"
     },
     {
       "method": "GET",
       "path": "/api/observability/harness/coverage",
-      "source": "src/routes/harness.ts:1187"
+      "source": "src/routes/harness.ts:1193"
     },
     {
       "method": "POST",
       "path": "/api/observability/harness/promote",
-      "source": "src/routes/harness.ts:1562"
+      "source": "src/routes/harness.ts:1568"
     },
     {
       "method": "GET",
       "path": "/api/observability/harness/promoted-versions",
-      "source": "src/routes/harness.ts:1672"
+      "source": "src/routes/harness.ts:1678"
     },
     {
       "method": "POST",
       "path": "/api/observability/harness/results/:invocationId/rejudge",
-      "source": "src/routes/harness.ts:1134"
+      "source": "src/routes/harness.ts:1140"
     },
     {
       "method": "GET",
       "path": "/api/observability/harness/runs",
-      "source": "src/routes/harness.ts:801"
+      "source": "src/routes/harness.ts:807"
     },
     {
       "method": "POST",
       "path": "/api/observability/harness/runs",
-      "source": "src/routes/harness.ts:700"
+      "source": "src/routes/harness.ts:706"
     },
     {
       "method": "GET",
       "path": "/api/observability/harness/runs/:id",
-      "source": "src/routes/harness.ts:824"
+      "source": "src/routes/harness.ts:830"
     },
     {
       "method": "PATCH",
       "path": "/api/observability/harness/runs/:id",
-      "source": "src/routes/harness.ts:1045"
+      "source": "src/routes/harness.ts:1051"
     },
     {
       "method": "POST",
       "path": "/api/observability/harness/runs/:id/execute",
-      "source": "src/routes/harness.ts:759"
+      "source": "src/routes/harness.ts:765"
     },
     {
       "method": "GET",
       "path": "/api/observability/harness/runs/:id/status",
-      "source": "src/routes/harness.ts:882"
+      "source": "src/routes/harness.ts:888"
     },
     {
       "method": "POST",
       "path": "/api/observability/harness/runs/:runId/results",
-      "source": "src/routes/harness.ts:943"
+      "source": "src/routes/harness.ts:949"
     },
     {
       "method": "GET",
       "path": "/api/observability/harness/runs/:runIdA/compare/:runIdB",
-      "source": "src/routes/harness.ts:1425"
+      "source": "src/routes/harness.ts:1431"
     },
     {
       "method": "POST",
@@ -2293,27 +2293,27 @@
     {
       "method": "GET",
       "path": "/api/pipelines/artifacts",
-      "source": "src/routes/pipelines.ts:157"
+      "source": "src/routes/pipelines.ts:158"
     },
     {
       "method": "GET",
       "path": "/api/pipelines/runs",
-      "source": "src/routes/pipelines.ts:153"
-    },
-    {
-      "method": "GET",
-      "path": "/api/pipelines/runs/:id",
       "source": "src/routes/pipelines.ts:154"
     },
     {
       "method": "GET",
+      "path": "/api/pipelines/runs/:id",
+      "source": "src/routes/pipelines.ts:155"
+    },
+    {
+      "method": "GET",
       "path": "/api/pipelines/runs/:id/events",
-      "source": "src/routes/pipelines.ts:156"
+      "source": "src/routes/pipelines.ts:157"
     },
     {
       "method": "GET",
       "path": "/api/pipelines/runs/:id/steps",
-      "source": "src/routes/pipelines.ts:155"
+      "source": "src/routes/pipelines.ts:156"
     },
     {
       "method": "GET",
@@ -2602,53 +2602,113 @@
     },
     {
       "method": "GET",
+      "path": "/api/social/calls",
+      "source": "src/routes/social.ts:377"
+    },
+    {
+      "method": "GET",
       "path": "/api/social/channels",
-      "source": "src/routes/social.ts:128"
+      "source": "src/routes/social.ts:152"
     },
     {
       "method": "POST",
       "path": "/api/social/channels",
-      "source": "src/routes/social.ts:138"
+      "source": "src/routes/social.ts:162"
     },
     {
       "method": "GET",
       "path": "/api/social/channels/:slug",
-      "source": "src/routes/social.ts:163"
+      "source": "src/routes/social.ts:187"
     },
     {
       "method": "POST",
       "path": "/api/social/channels/:slug/join",
-      "source": "src/routes/social.ts:185"
+      "source": "src/routes/social.ts:209"
     },
     {
       "method": "POST",
       "path": "/api/social/channels/:slug/leave",
-      "source": "src/routes/social.ts:205"
+      "source": "src/routes/social.ts:229"
     },
     {
       "method": "GET",
       "path": "/api/social/dms",
-      "source": "src/routes/social.ts:218"
+      "source": "src/routes/social.ts:242"
     },
     {
       "method": "POST",
       "path": "/api/social/dms",
-      "source": "src/routes/social.ts:240"
+      "source": "src/routes/social.ts:264"
     },
     {
       "method": "POST",
       "path": "/api/social/dms/read",
-      "source": "src/routes/social.ts:254"
+      "source": "src/routes/social.ts:278"
     },
     {
       "method": "GET",
       "path": "/api/social/people",
-      "source": "src/routes/social.ts:266"
+      "source": "src/routes/social.ts:290"
+    },
+    {
+      "method": "GET",
+      "path": "/api/social/recordings",
+      "source": "src/routes/social.ts:359"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/social/recordings/:recordingId",
+      "source": "src/routes/social.ts:372"
+    },
+    {
+      "method": "GET",
+      "path": "/api/social/recordings/:recordingId/playback",
+      "source": "src/routes/social.ts:364"
+    },
+    {
+      "method": "POST",
+      "path": "/api/social/recordings/:recordingId/share",
+      "source": "src/routes/social.ts:368"
+    },
+    {
+      "method": "GET",
+      "path": "/api/social/rooms",
+      "source": "src/routes/social.ts:310"
+    },
+    {
+      "method": "POST",
+      "path": "/api/social/rooms",
+      "source": "src/routes/social.ts:316"
     },
     {
       "method": "GET",
       "path": "/api/social/summary",
-      "source": "src/routes/social.ts:42"
+      "source": "src/routes/social.ts:66"
+    },
+    {
+      "method": "GET",
+      "path": "/api/social/teams",
+      "source": "src/routes/social.ts:323"
+    },
+    {
+      "method": "POST",
+      "path": "/api/social/teams",
+      "source": "src/routes/social.ts:328"
+    },
+    {
+      "method": "GET",
+      "path": "/api/social/teams/:teamId",
+      "source": "src/routes/social.ts:338"
+    },
+    {
+      "method": "POST",
+      "path": "/api/social/teams/:teamId/members",
+      "source": "src/routes/social.ts:344"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/social/teams/:teamId/members/:userId",
+      "source": "src/routes/social.ts:354"
     },
     {
       "method": "GET",

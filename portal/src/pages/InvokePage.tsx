@@ -106,13 +106,15 @@ function renderMessageContent(content: string, streaming: boolean): ReactNode {
   );
 }
 
-// The AG-UI streaming path (useAgentStream) does not currently thread the
-// agent's real observability invocation id (ctx.invocation_id — the id
-// observability.invocation_traces rows, and therefore /feedback, key on) onto
-// a Message. RUN_STARTED.runId is a different, middleware-minted id the hook
-// doesn't even expose. Reading `invocationId` off the message defensively
-// here means FeedbackControl lights up for free the moment a future event
-// carries the real id — see FeedbackControl.tsx for the full trace.
+// Which trace an answer is. The stream hook (useAgentStream) never puts the
+// trace uuid on a Message, and does not surface RUN_STARTED.runId either — so
+// the page reads the run id from the invoke response's `X-AGUI-Run-Id` header
+// (routes/agents.ts mints it) and pins it to the turn's assistant messages
+// when the stream ends (`runIdByMessage` below). Since pipelines P1 the agent
+// stamps that same id on its trace bundle (`agui_run_id`), so FeedbackControl
+// can label the answer by run. `invocationId` is still read off the message
+// defensively for any future event that carries the trace uuid itself.
+const AGUI_RUN_ID_HEADER = 'X-AGUI-Run-Id';
 function answerInvocationId(msg: unknown): string | undefined {
   const id = (msg as { invocationId?: unknown } | null)?.invocationId;
   return typeof id === 'string' && id ? id : undefined;
@@ -267,6 +269,10 @@ function InvokePage({ renderWorkspace, renderAnswerEvidence, contextRefs = [], o
   // than whatever was captured at mount.
   const localSessionsRef = useRef<Record<string, SessionSummary>>({});
   const sentAgentRef = useRef<string | null>(null);
+  // The run id of the turn in flight (from the invoke response header), and
+  // each finished turn's assistant messages → the run that produced them.
+  const pendingRunIdRef = useRef<string | null>(null);
+  const [runIdByMessage, setRunIdByMessage] = useState<Record<string, string>>({});
   const sentContextRef = useRef<SearchRef[] | null>(null);
   const contextRef = useRef(contextRefs);
   contextRef.current = contextRefs;
@@ -286,7 +292,11 @@ function InvokePage({ renderWorkspace, renderAnswerEvidence, contextRefs = [], o
     // See agentInvokeFetch above: reads the real response body on failure so
     // a 503/403/etc. reports its actual status and the server's own detail,
     // instead of the library's bare `Stream failed: ${status}`.
-    fetch: (input, init) => agentInvokeFetch(sentAgentRef.current ? `/api/agents/${encodeURIComponent(sentAgentRef.current)}/invoke` : input, init),
+    fetch: async (input, init) => {
+      const res = await agentInvokeFetch(sentAgentRef.current ? `/api/agents/${encodeURIComponent(sentAgentRef.current)}/invoke` : input, init);
+      pendingRunIdRef.current = res.headers.get(AGUI_RUN_ID_HEADER);
+      return res;
+    },
     buildBody: (message, { sessionId: activeSessionId }) => ({
       message, ...(activeSessionId ? { sessionId: activeSessionId } : {}),
       ...((sentContextRef.current ?? contextRef.current).length ? { selection: { records: sentContextRef.current ?? contextRef.current } } : {}),
@@ -574,6 +584,23 @@ function InvokePage({ renderWorkspace, renderAnswerEvidence, contextRefs = [], o
   const sessionsUnavailable = Boolean(sessionListError) && !sessionList;
   const sessionsNeedAuth = /\b401\b|\b403\b/.test(sessionListError ?? '');
 
+  // When a turn finishes streaming, its assistant messages are the run whose
+  // id the response header carried — the key FeedbackControl labels by.
+  useEffect(() => {
+    if (isStreaming) return;
+    const runId = pendingRunIdRef.current;
+    if (!runId) return;
+    pendingRunIdRef.current = null;
+    const lastUser = messages.map((m) => m.role).lastIndexOf('user');
+    const turn = messages.slice(lastUser + 1).filter((m) => m.role === 'assistant');
+    if (turn.length === 0) return;
+    setRunIdByMessage((prev) => {
+      const next = { ...prev };
+      for (const m of turn) next[m.id] = runId;
+      return next;
+    });
+  }, [isStreaming, messages]);
+
   // One supervisor turn can stream as several adjacent assistant messages
   // (the hook flushes at every TEXT_MESSAGE_END) — merge them so the role
   // label renders once per turn instead of once per fragment.
@@ -801,7 +828,7 @@ function InvokePage({ renderWorkspace, renderAnswerEvidence, contextRefs = [], o
                 {renderWorkspace && msg.role === 'assistant' && renderAnswerEvidence?.(msg.toolCalls)}
                 {(!renderWorkspace || sources.some(source => source.kind !== 'graph') || !readSearchEvidence(msg.toolCalls).length) && <SourceChips sources={sources} {...(provenance ? { provenance } : {})} />}
                 {msg.role === 'assistant' && (
-                  <FeedbackControl invocationId={answerInvocationId(msg)} />
+                  <FeedbackControl invocationId={answerInvocationId(msg)} runId={runIdByMessage[msg.id]} />
                 )}
               </Stack>
             );

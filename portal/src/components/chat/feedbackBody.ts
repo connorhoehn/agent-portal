@@ -20,6 +20,22 @@ export interface FeedbackRequestBody {
 }
 
 /**
+ * The by-RUN body (pipelines P1): the Ask page holds the AG-UI run id of the
+ * answer it streamed, and the server resolves it to that run's own trace among
+ * the caller's own runs (`agui_run_id`, quality.ts).
+ */
+export interface RunFeedbackRequestBody {
+  runId: string;
+  label: AskFeedbackLabel;
+  note?: string;
+}
+
+export function buildRunFeedbackBody(runId: string, label: AskFeedbackLabel, note?: string): RunFeedbackRequestBody {
+  const trimmedNote = note?.trim();
+  return trimmedNote ? { runId, label, note: trimmedNote } : { runId, label };
+}
+
+/**
  * Build the exact JSON body to POST. Trims `note`; a blank/whitespace-only
  * note is dropped rather than sent (the server also trims, but this keeps the
  * wire payload the same shape either way).

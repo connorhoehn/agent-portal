@@ -362,8 +362,14 @@ export interface AgentCoreProvider {
     /** Trusted server-side fields for structured agent entrypoints (same as invokeAgent). */
     structuredInput?: Record<string, unknown>;
     sessionId?: string;
+    /**
+     * The AG-UI run id the route minted (the id its RUN_STARTED carries). The
+     * agent uses it as RunAgentInput.run_id and returns it on the trace bundle
+     * — the join between a run and its trace (pipelines P1).
+     */
+    runId?: string;
     userId?: string;
-    auth?: { sub: string; role: string };
+    auth?: { sub: string; role: string; tenant?: string };
     history?: { role: string; content: string }[];
   }): AsyncIterable<unknown>;
   /** Sessions, failure discarded — prefer `listCodeSessionsResult`. */

@@ -47,6 +47,7 @@ import { judgeResponse, NOVA_PRO_MODEL_ID } from './judge.js';
 import { validate, tryParseJson } from './schema-validator.js';
 import { estimateCost, estimateCostOrNull } from './pricing.js';
 import { config } from '../config.js';
+import { normalizeAgentSteps, type AgentStepRecord } from './pipeline-runs.js';
 import { clock } from '../mock/core/index.js';
 import { lexicalEmbedding } from '../mock/embedding.js';
 import {
@@ -143,6 +144,15 @@ export interface TraceInput {
   // Sprint 4 (M12) — per-fired-rule rows. Inserted best-effort to
   // observability.guardrail_interventions. Never blocks the parent insert.
   guardrailInterventions?: GuardrailInterventionInput[];
+  // Pipelines P1 — the AG-UI run this invocation IS. `runId` is RUN_STARTED's
+  // run id (agents/_shared/instrumentation.py), persisted as `agui_run_id`;
+  // `steps` is the run's STEP_* record with its TOOL_CALL_* attempts. The
+  // projection (lib/pipeline-runs.ts) keys an agent Run on runId and files
+  // this row as its `trace` artifact. `tenant` is the invoking session's.
+  runId?: string;
+  threadId?: string;
+  steps?: unknown;
+  tenant?: string;
 }
 
 // Result of a synchronous processTrace() call. The async enqueue() path
@@ -405,6 +415,11 @@ async function insertTrace(args: {
   parentInvocationId: string | null;
   userId: string | null;
   sessionId: string | null;
+  // Pipelines P1 — the AG-UI run.
+  aguiRunId: string | null;
+  aguiThreadId: string | null;
+  steps: AgentStepRecord[] | null;
+  tenant: string | null;
 }): Promise<boolean> {
   // Returns true only when this call actually created the row. A caller
   // racing another writer for the same invocation_id (another poller
@@ -451,6 +466,10 @@ async function insertTrace(args: {
       parent_invocation_id: args.parentInvocationId,
       user_id: args.userId,
       session_id: args.sessionId,
+      agui_run_id: args.aguiRunId,
+      agui_thread_id: args.aguiThreadId,
+      steps: args.steps,
+      tenant: args.tenant,
       // `ts` is `DEFAULT now()` in the schema — the server's clock, never the
       // caller's — so offline it is the mock clock's, never `new Date()`.
       ts: clock.nowIso(),
@@ -470,6 +489,17 @@ async function insertTrace(args: {
     ? ':parent_invocation_id::uuid'
     : 'NULL';
 
+  // Pipelines P1 columns. Written only while the cluster has them: a cluster
+  // that has not re-applied observability_schema.sql answers `column
+  // "agui_run_id" … does not exist`, and losing EVERY trace to a missing
+  // optional column would be far worse than losing the run link — so that one
+  // error flips this process to the pre-P1 column list, says so once, and
+  // retries. Re-applying the schema and restarting restores the link.
+  const withRun = !_runColumnsMissing;
+  const runCols = withRun ? ',\n      agui_run_id, agui_thread_id, steps, tenant' : '';
+  const runVals = withRun
+    ? `,\n      :agui_run_id, :agui_thread_id, ${args.steps ? ':steps::jsonb' : 'NULL'}, :tenant`
+    : '';
   const sql = `INSERT INTO observability.invocation_traces (
       invocation_id, agent_id, agent_name, template_id,
       prompt_snippet, response_snippet,
@@ -480,7 +510,7 @@ async function insertTrace(args: {
       judge_input_tokens, judge_output_tokens,
       est_cost_usd, judge_cost_usd, total_cost_usd,
       prompt_version, model_id, runtime_image_digest,
-      parent_invocation_id, user_id, session_id
+      parent_invocation_id, user_id, session_id${runCols}
     ) VALUES (
       :iid::uuid, :agent_id, :agent_name, :template_id,
       :prompt_snippet, :response_snippet,
@@ -491,7 +521,7 @@ async function insertTrace(args: {
       :judge_input_tokens, :judge_output_tokens,
       :est_cost_usd, :judge_cost_usd, :total_cost_usd,
       :prompt_version, :model_id, :runtime_image_digest,
-      ${parentSql}, :user_id, :session_id
+      ${parentSql}, :user_id, :session_id${runVals}
     )
     ON CONFLICT (invocation_id) DO NOTHING
     RETURNING invocation_id`;
@@ -525,12 +555,41 @@ async function insertTrace(args: {
   if (args.parentInvocationId) {
     params.push(strParam('parent_invocation_id', args.parentInvocationId));
   }
+  if (withRun) {
+    params.push(
+      nullableStr('agui_run_id', args.aguiRunId),
+      nullableStr('agui_thread_id', args.aguiThreadId),
+      nullableStr('tenant', args.tenant),
+    );
+    if (args.steps) params.push(strParam('steps', JSON.stringify(args.steps)));
+  }
 
   // RETURNING invocation_id comes back with one row on a fresh insert and
   // zero rows when ON CONFLICT DO NOTHING fired — that is how a genuine
   // insert is told apart from a race this call lost.
-  const rows = await exec(sql, params);
+  let rows: Record<string, unknown>[];
+  try {
+    rows = await exec(sql, params);
+  } catch (err) {
+    if (withRun && isMissingRunColumn(err)) {
+      _runColumnsMissing = true;
+      console.warn(
+        '[trace-sink] invocation_traces has no agui_run_id/steps/tenant columns — writing traces without the '
+        + 'AG-UI run link until schema/observability_schema.sql is re-applied and the middleware restarted',
+      );
+      return insertTrace(args);
+    }
+    throw err;
+  }
   return rows.length > 0;
+}
+
+// Set once the cluster has said the P1 columns do not exist (see insertTrace).
+let _runColumnsMissing = false;
+
+function isMissingRunColumn(err: unknown): boolean {
+  const msg = (err as Error | null)?.message ?? '';
+  return /column "?(agui_run_id|agui_thread_id|steps|tenant)"? .*does not exist/i.test(msg);
 }
 
 // Sprint 2 (M4) — best-effort batch INSERT of per-tool call rows. Capped at 50
@@ -1083,6 +1142,13 @@ export async function processTrace(input: TraceInput): Promise<TraceResult> {
   const sessionId = typeof input.sessionId === 'string' && input.sessionId.trim()
     ? input.sessionId.trim()
     : null;
+  // P1 — bounded, because it is agent output that crossed a network.
+  const clip = (v: unknown, max: number): string | null =>
+    (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null);
+  const aguiRunId = clip(input.runId, 200);
+  const aguiThreadId = clip(input.threadId, 200);
+  const runTenant = clip(input.tenant, 64);
+  const steps = normalizeAgentSteps(input.steps);
 
   try {
     // insertTrace's return value is load-bearing, not decorative: false
@@ -1118,6 +1184,10 @@ export async function processTrace(input: TraceInput): Promise<TraceResult> {
       parentInvocationId,
       userId,
       sessionId,
+      aguiRunId,
+      aguiThreadId,
+      steps: steps && steps.length > 0 ? steps : null,
+      tenant: runTenant,
     });
   } catch (err) {
     console.warn('[trace-sink] insertTrace failed:',
@@ -1219,6 +1289,7 @@ export async function processTrace(input: TraceInput): Promise<TraceResult> {
 // Exposed for unit tests / forced refresh. Not used in normal operation.
 
 export function _resetCachesForTest(): void {
+  _runColumnsMissing = false;
   _samplingCache.clear();
   _samplingFetchedAt = 0;
   _centroidCache.clear();

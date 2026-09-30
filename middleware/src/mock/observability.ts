@@ -70,6 +70,7 @@ import { agentFleet } from './agent-statuses.js';
 import { mockInvocationRows } from './invocations.js';
 import { mockListPromptVersions } from './prompt-versions.js';
 import { mockGuardrailRow } from './capabilities.js';
+import type { AgentStepRecord } from '../lib/pipeline-runs.js';
 import {
   cosineDistance,
   sinkAgentCentroid,
@@ -567,6 +568,17 @@ export interface MockTraceRow {
   parent_invocation_id: string | null;
   user_id: string | null;
   session_id: string | null;
+  /**
+   * Pipelines P1 — the AG-UI run the bundle closed (`agui_run_id`), its
+   * thread, its STEP_* record with TOOL_CALL_* attempts (`steps`), and the
+   * invoking session's tenant. On the seeded half only the portal's Ask
+   * traffic carries a run (see `attachAguiRuns`); a written row carries
+   * whatever its bundle said.
+   */
+  agui_run_id: string | null;
+  agui_thread_id: string | null;
+  steps: AgentStepRecord[] | null;
+  tenant: string | null;
   human_label: string | null;
   human_note: string | null;
   ts: string;
@@ -841,6 +853,10 @@ function seededTraceRows(scenario?: ScenarioName): MockTraceRow[] {
       parent_invocation_id: null, // linked below
       user_id: userId,
       session_id: sessionId,
+      agui_run_id: null, // attached below
+      agui_thread_id: null,
+      steps: null,
+      tenant: null,
       human_label: label?.label ?? null,
       human_note: label?.note ?? null,
       // Seeded answers were never embedded — there is no vector behind a
@@ -854,7 +870,59 @@ function seededTraceRows(scenario?: ScenarioName): MockTraceRow[] {
   }
 
   linkA2aParents(rows);
+  attachAguiRuns(rows, fleet);
   return rows;
+}
+
+/**
+ * Give the portal's Ask traffic its AG-UI run (pipelines P1).
+ *
+ * WHICH ROWS. A supervisor row with a user is a streamed Ask — the portal
+ * drives the supervisor's streaming path, and since P1 the middleware mints
+ * the run id and the bundle carries it back. Everything else stays without
+ * one, exactly as it would in the real table: a sub-agent the supervisor
+ * called is invoked synchronously with no run of its own (it folds into its
+ * parent's run through `parent_invocation_id`), and a row with no user is a
+ * scheduled or agent-to-agent call that no AG-UI stream opened. The
+ * projection counts those as unlinked; it does not drop them.
+ *
+ * WHAT THE STEPS ARE. Not authored: each step is one of the row's OWN derived
+ * tool calls (`toolCallsForTrace`, the same function the tool_calls feed
+ * reads), so a run's steps and the Tools page can never disagree about what
+ * the invocation called or how long it took. The supervisor brackets each
+ * routing call with STEP_STARTED/STEP_FINISHED, and that tool call is the
+ * step's one attempt.
+ */
+function attachAguiRuns(rows: MockTraceRow[], fleet: Map<string, { tools: string[] }>): void {
+  for (const row of rows) {
+    if (row.agent_id !== 'orgiq-supervisor' || !row.user_id) continue;
+    row.agui_run_id = uuidFrom(`${row.invocation_id}:agui-run`);
+    row.agui_thread_id = row.session_id;
+    row.tenant = 'orgiq';
+    const calls = toolCallsForTrace(row, fleet.get(row.agent_id)?.tools ?? []);
+    row.steps = calls.map((c, i): AgentStepRecord => {
+      const finishedAt = c.duration_ms === null ? null : new Date(new Date(c.tsIso).getTime() + c.duration_ms).toISOString();
+      const status = c.errored ? 'failed' : 'completed';
+      const name = STEP_NAME_OF_TOOL[c.tool_name] ?? c.tool_name;
+      return {
+        stepId: `${name}-${i + 1}`, name, status, startedAt: c.tsIso, finishedAt,
+        toolCalls: [{ toolCallId: c.tool_call_id, name: c.tool_name, status, startedAt: c.tsIso, finishedAt }],
+      };
+    });
+  }
+}
+
+/** The step a supervisor tool call is bracketed as (agents/supervisor/main.py SUB_AGENT_STEP_NAMES). */
+const STEP_NAME_OF_TOOL: Record<string, string> = {
+  route_to_agent: 'route',
+  synthesize_responses: 'synthesize',
+};
+
+/** A UUID-shaped id, deterministic in its key — the middleware mints v4s. */
+function uuidFrom(key: string): string {
+  let hex = '';
+  for (let i = 0; hex.length < 32; i++) hex += hash32(`${key}:${i}`).toString(16).padStart(8, '0');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
 }
 
 /**
@@ -906,6 +974,10 @@ function writtenTraceRows(scenario?: ScenarioName): MockTraceRow[] {
         parent_invocation_id: r.parent_invocation_id,
         user_id: r.user_id,
         session_id: r.session_id,
+        agui_run_id: r.agui_run_id,
+        agui_thread_id: r.agui_thread_id,
+        steps: r.steps,
+        tenant: r.tenant,
         human_label: label?.label ?? null,
         human_note: label?.note ?? null,
         output_embedding: r.output_embedding,
@@ -1039,8 +1111,20 @@ function derivedToolCalls(scenario?: ScenarioName): MockToolCallRow[] {
   const out: MockToolCallRow[] = [];
 
   for (const trace of seededTraceRows(scenario)) {
-    const tools = fleet.get(trace.agent_id)?.tools ?? [];
-    if (tools.length === 0) continue;
+    out.push(...toolCallsForTrace(trace, fleet.get(trace.agent_id)?.tools ?? []));
+  }
+  return out;
+}
+
+/**
+ * One seeded trace's tool calls — deterministic in the trace alone, so the
+ * tool_calls feed above and a run's recorded steps (`attachAguiRuns`) read the
+ * same calls from one derivation.
+ */
+function toolCallsForTrace(trace: MockTraceRow, tools: readonly string[]): MockToolCallRow[] {
+  const out: MockToolCallRow[] = [];
+  {
+    if (tools.length === 0) return out;
 
     // One to three calls, deterministic per invocation, always starting from
     // the agent's first tool so a fleet-wide latency panel has a stable spine.

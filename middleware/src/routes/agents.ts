@@ -12,6 +12,7 @@ import { requireAction, requireTenant, isAllowed, resolveSession } from '../lib/
 import { annotateToolResult } from '../lib/answer-sources.js';
 import { degradedFields } from '../lib/upstream.js';
 import { parseSearchSelection, numberSearchRecords, searchContextMessage } from '../lib/search-context.js';
+import { openAgentRun, recordAgentRunEvent, closeAgentRun } from '../lib/agent-runs-live.js';
 
 export const agentsRouter = Router();
 
@@ -83,6 +84,30 @@ export async function resolveAgentName(agentId: string): Promise<string> {
   } catch {
     return agentId;
   }
+}
+
+/**
+ * The AG-UI run id for this invoke — minted HERE, never taken from the body.
+ *
+ * The library's default honours a client-sent `body.runId`, and since P1 the
+ * run id is the key a trace (and so a feedback label) joins on — a
+ * caller-chosen id could collide with, or deliberately claim, someone else's
+ * run. So the server mints it, memoized on the request like the session id,
+ * and sends it to the agent (`runId` in the payload → RunAgentInput.run_id →
+ * the trace bundle's `runId`).
+ *
+ * It is also set as the `X-AGUI-Run-Id` response header, before the SSE
+ * stream opens: the portal's stream hook does not surface RUN_STARTED.runId,
+ * and the Ask page needs it to attach a LabelFeedback control to the answer.
+ */
+export const AGUI_RUN_ID_HEADER = 'X-AGUI-Run-Id';
+function deriveRunId(req: ExpressRequest): string {
+  const r = req as ExpressRequest & { _aguiRunId?: string };
+  if (!r._aguiRunId) {
+    r._aguiRunId = randomUUID();
+    if (r.res && !r.res.headersSent) r.res.setHeader(AGUI_RUN_ID_HEADER, r._aguiRunId);
+  }
+  return r._aguiRunId;
 }
 
 function deriveSessionId(req: { body?: Record<string, unknown> }): string {
@@ -219,6 +244,9 @@ agentsRouter.post('/:agentId/invoke', requireAction('Search'), requireAgentTenan
   const invokePayload = {
     message: userMessage,
     sessionId: canonicalSessionId,
+    // The run the portal is watching — the agent's RUN_STARTED and its trace
+    // bundle carry it back (pipelines P1).
+    runId: stream.runId,
     history,
     ...(structuredInput ? { structuredInput } : {}),
     ...(req.session ? {
@@ -258,6 +286,19 @@ agentsRouter.post('/:agentId/invoke', requireAction('Search'), requireAgentTenan
   // behind it. These ride along on the Memory event (capped in
   // lib/turn-tool-calls) and restore into the shape the live stream produces.
   const turnToolCalls = new Map<string, StoredToolCall>();
+  // The Run exists from RUN_STARTED (status running), before the agent's
+  // bundle arrives — lib/agent-runs-live.ts; the projection shows it until a
+  // trace with this run id replaces it.
+  openAgentRun({
+    runId: stream.runId,
+    threadId: canonicalSessionId,
+    agentId,
+    agentName,
+    userId: req.session?.sub ?? null,
+    tenant: req.session?.tenant ?? null,
+    prompt: rawUserMessage || null,
+    startedAt: startedAt.toISOString(),
+  });
   if (contextRecords.length > 0) {
     const id = randomUUID();
     const result = JSON.stringify({ records: contextRecords, edges: context.edges });
@@ -274,6 +315,7 @@ agentsRouter.post('/:agentId/invoke', requireAction('Search'), requireAgentTenan
       if (signal.aborted || stream.closed) break;
       const ev = event as { type?: string; [k: string]: unknown };
       if (!ev.type) continue;
+      recordAgentRunEvent(stream.runId, ev);
 
       switch (ev.type) {
         case 'RUN_STARTED':
@@ -364,6 +406,7 @@ agentsRouter.post('/:agentId/invoke', requireAction('Search'), requireAgentTenan
     }
   } catch (err) {
     const errMsg = (err as Error).message || 'invoke failed';
+    closeAgentRun(stream.runId, 'failed', errMsg);
     recordInvocation({
       id: stream.runId,
       agentId,
@@ -424,9 +467,11 @@ agentsRouter.post('/:agentId/invoke', requireAction('Search'), requireAgentTenan
     maybeGenerateTitle(canonicalSessionId, rawUserMessage);
   }
 
+  closeAgentRun(stream.runId, 'completed');
   stream.runFinished();
 }, {
   deriveSessionId: (req: ExpressRequest) => deriveSessionId(req),
+  deriveRunId,
 }));
 
 const RESERVED_INVOKE_KEYS = new Set(['message', 'prompt', 'input_text', 'sessionId', 'userId', 'auth', 'history']);
