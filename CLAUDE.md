@@ -237,7 +237,7 @@ python3.11 -m venv .venv-synth && .venv-synth/bin/pip install -r schema/synth/re
 ## Project dependencies
 
 - **ui-components** (`~/projects/ui-components`): `@connorhoehnslalom/ui-components`,
-  installed at **2.407.36** (sha `ec342193`, verified 2026-09-29 with the two settling
+  installed at **2.407.37** (sha `2bf906c7`, verified 2026-09-29 with the two settling
   commands below; 2.407.9 carries the CallDock render fixes and `--dock-floor`). 2.385 added `@tiptap/extension-mention` to what the rich
   composer imports; it is an *optional* peer, so npm does not install it and Vite
   fails at runtime with "Could not resolve @tiptap/extension-mention" — the portal
@@ -410,6 +410,7 @@ whole backlog. Most take `--quick` to skip the slow suites (jest, vite build).
 | `research-honesty-checks-2026-09-16.md` | The four "numbers that lie" bug classes, the class-4 triage rule (rates vs latencies), and each scanner's false-positive story | `validate-honest-numbers.sh` |
 | `nav-server-tier-decisions.md` | Nav ↔ route parity: the rail, the palette and `App.tsx` must gate every page the same way, every palette jump must resolve, and a nav item must not be gated narrower than the API it reads (that last one is ratcheted — the doc is where those get decided) | `validate-nav-parity.sh` |
 | `ui-components-queue.md` | Composites the library is missing — and, since it is the ledger the component-discipline gate reads, the ONLY thing that exempts a file from it. A row must say "Composed locally in `<file>`" to mint an exemption. | `validate-component-discipline.sh` |
+| `social-tenant-design.md`, `social-tenant-goal.md`, `pipelines-tenant-goal.md` | The third and fourth tenants (`social`, `pipelines`) and the header activity bell: the design (decisions E1–E5 taken from the user's direction, the bell fed by the gateway's `notifications()` feature, the work in judged lanes) and the two goals it names | `validate-social-tenant.sh`, `validate-pipelines-tenant.sh` |
 | `agent-eval-goal.md` | Per-agent golden sets (`agents/tests/golden/*.json`) + `agents/tests/golden_runner.py` — a `--mode structural` offline regression suite the validator runs, and a `--mode live` operator workflow (real Bedrock $, needs a deployed runtime or `agentcore dev`) it deliberately does not | `validate-agent-eval.sh` |
 | `agentcore-preview-surface.md` | Verified preview-API research + the machine-callback operator runbook (§6a) | — |
 | `agentcore-preview-plan.md` | The sequenced work plan against that research | — |
@@ -425,7 +426,7 @@ whole backlog. Most take `--quick` to skip the slow suites (jest, vite build).
 the removal of a retired tenant, and it deliberately asserts that the removed
 tenant's name appears **nowhere** in `CLAUDE.md`, so it cannot be listed here by
 name without failing its own check. `ls docs/*-goal.md scripts/validate-*.sh`
-(11 validators) is always the authoritative list.
+(16 validators) is always the authoritative list.
 
 ---
 
