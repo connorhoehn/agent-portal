@@ -8,8 +8,10 @@ import * as elbv2 from 'aws-cdk-lib/aws-elasticloadbalancingv2';
 import * as acm from 'aws-cdk-lib/aws-certificatemanager';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
+import * as ssm from 'aws-cdk-lib/aws-ssm';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import type { Construct } from 'constructs';
+import { socialRedisUrlParameterName, socialTablePrefix } from './social-stack';
 
 export interface MiddlewareServiceStackProps extends cdk.StackProps {
   readonly prefix?: string;
@@ -158,6 +160,8 @@ export class MiddlewareServiceStack extends cdk.Stack {
   /** The middleware task's security group (Redis and platform-api admit it). */
   public readonly serviceSecurityGroupId: string;
   public readonly taskRoleArn: string;
+  /** Fixed task role name — OrgIQ-Social attaches its chat-table policy by name. */
+  public readonly taskRoleName: string;
   /**
    * Fixed name of the realtime token secret. Consumers import it with
    * `Secret.fromSecretNameV2`, by name, so no export is created for it.
@@ -676,20 +680,37 @@ export class MiddlewareServiceStack extends cdk.Stack {
 
     // ── Realtime gateway (opt-in) ──────────────────────────────────────────
     // `--context realtimeGateway=true` turns the middleware into its own
-    // websocket gateway: REALTIME_GATEWAY=on plus REDIS_URL for cross-task
-    // fan-out. Opt-in, not default, because the Redis it points at lives in
-    // OrgIQ-Social (Cloud Map `redis.<prefix>-social.local`), which deploys
-    // AFTER this stack — turning it on first would hand every task a Redis
-    // URL that does not resolve yet. Override the URL with
-    // `--context realtimeRedisUrl=redis://…` (e.g. ElastiCache later).
-    const realtimeFlag = this.node.tryGetContext('realtimeGateway');
+    // websocket gateway (REALTIME_GATEWAY=on). Opt-in, not default, because
+    // the state it wants lives in OrgIQ-Social, which deploys AFTER this
+    // stack. With `deploySocial=true` also in context (the plan says every
+    // middleware deploy from then on carries the social flags):
+    //   - REDIS_URL comes from the SSM parameter OrgIQ-Social writes (its
+    //     ElastiCache endpoint), as a container secret, so no export freezes;
+    //   - SOCIAL_CHAT_STORE=dynamo + SOCIAL_CHAT_TABLE_PREFIX point social
+    //     chat at OrgIQ-Social's chat tables (it grants this role on them).
+    // `--context realtimeRedisUrl=redis://…` overrides the Redis as plain env.
+    // Without deploySocial and without an override, no REDIS_URL: call state
+    // and the notification inbox stay in memory (single task) and synth warns.
+    const ctxStr = (k: string) => this.node.tryGetContext(k) as string | undefined;
+    const ctxOn = (k: string) => { const v = this.node.tryGetContext(k); return v === true || v === 'true'; };
+    const realtimeEnabled = ctxOn('realtimeGateway');
+    const socialDeployed = ctxOn('deploySocial');
+    const platformHost = ctxStr('socialPlatformHost');
+    const sfuHost = ctxStr('socialSfuHost');
     const realtime = {
-      enabled: realtimeFlag === true || realtimeFlag === 'true',
-      redisUrl: (this.node.tryGetContext('realtimeRedisUrl') as string | undefined)
-        ?? `redis://redis.${prefix}-social.local:6379`,
-      gatewayUrl: this.node.tryGetContext('realtimeGatewayUrl') as string | undefined,
-      platformPublicUrl: this.node.tryGetContext('realtimePlatformPublicUrl') as string | undefined,
-      videoPublicUrl: this.node.tryGetContext('realtimeVideoPublicUrl') as string | undefined,
+      enabled: realtimeEnabled,
+      redisUrlOverride: ctxStr('realtimeRedisUrl'),
+      redisFromSocial: realtimeEnabled && socialDeployed && !ctxStr('realtimeRedisUrl'),
+      socialChat: realtimeEnabled && socialDeployed,
+      gatewayUrl: ctxStr('realtimeGatewayUrl'),
+      // Browser-facing URLs: explicit context wins; otherwise derived from
+      // the host rules OrgIQ-Social puts on this listener (same context keys
+      // it reads), only once the gateway is on so the default synth is unchanged.
+      platformPublicUrl: ctxStr('realtimePlatformPublicUrl')
+        ?? (realtimeEnabled && platformHost ? `https://${platformHost}` : undefined),
+      videoPublicUrl: ctxStr('realtimeVideoPublicUrl') ?? (realtimeEnabled
+        ? (ctxStr('videoPublicUrl') ?? (sfuHost ? `https://${sfuHost}` : undefined))
+        : undefined),
     };
 
     // ── Container environment variables ────────────────────────────────────
@@ -762,9 +783,13 @@ export class MiddlewareServiceStack extends cdk.Stack {
 
       // The middleware as its own realtime gateway (docs/social-calls-plan.md
       // step 7) — see `realtime` above for why it is opt-in.
-      ...(realtime.enabled && {
-        REALTIME_GATEWAY: 'on',
-        REDIS_URL: realtime.redisUrl,
+      ...(realtime.enabled && { REALTIME_GATEWAY: 'on' }),
+      ...(realtime.enabled && realtime.redisUrlOverride && { REDIS_URL: realtime.redisUrlOverride }),
+      // Social chat on OrgIQ-Social's DynamoDB tables (middleware/src/lib/
+      // social-chat.ts reads exactly these two names).
+      ...(realtime.socialChat && {
+        SOCIAL_CHAT_STORE: 'dynamo',
+        SOCIAL_CHAT_TABLE_PREFIX: socialTablePrefix(prefix, ctxStr('tableSuffix')),
       }),
       // Browser-facing endpoints echoed by the token bridge. Deliberately not
       // PLATFORM_API_URL: that one is the SERVER-side work-graph URL
@@ -795,6 +820,36 @@ export class MiddlewareServiceStack extends cdk.Stack {
       // The realtime token secret — no blackout window, see RealtimeJwtSecret.
       REALTIME_JWT_SECRET: ecs.Secret.fromSecretsManager(realtimeJwtSecret),
     };
+    if (realtime.redisFromSocial) {
+      // Written by OrgIQ-Social. It must exist before a task starts, which the
+      // deploy order guarantees (Social before `realtimeGateway=true`); a task
+      // started without it fails at start with ResourceInitializationError.
+      containerSecrets['REDIS_URL'] = ecs.Secret.fromSsmParameter(
+        ssm.StringParameter.fromStringParameterName(this, 'SocialRedisUrlParameter', socialRedisUrlParameterName(prefix)),
+      );
+    }
+    if (realtime.enabled) {
+      const warn = (m: string) => cdk.Annotations.of(this).addWarning(m);
+      if (!realtime.redisUrlOverride && !realtime.redisFromSocial) {
+        warn('realtimeGateway=true without deploySocial=true or realtimeRedisUrl — no REDIS_URL: call state and '
+          + 'the notification inbox are in memory and lost on every task replacement.');
+      }
+      if (!realtime.socialChat) {
+        warn('realtimeGateway=true without deploySocial=true — social chat uses the in-memory store (SOCIAL_CHAT_STORE unset).');
+      }
+      if (!realtime.gatewayUrl && certArn) {
+        warn('No realtimeGatewayUrl — with a certificate the socket URL must be the certificate\'s host '
+          + '(wss://<middleware host>), which this stack does not know; REALTIME_GATEWAY_URL is unset.');
+      }
+      if (!realtime.platformPublicUrl) {
+        warn('No realtimePlatformPublicUrl or socialPlatformHost — REALTIME_PLATFORM_PUBLIC_URL is unset, so the '
+          + 'token bridge tells browsers no platform-api (needs DNS/TLS, deploy plan §5).');
+      }
+      if (!realtime.videoPublicUrl) {
+        warn('No realtimeVideoPublicUrl, videoPublicUrl or socialSfuHost — REALTIME_VIDEO_PUBLIC_URL is unset, so '
+          + 'browsers are told no SFU (the SFU needs DNS/TLS and its custodian decision, deploy plan §3).');
+      }
+    }
     if (props.gatewayServiceAuthSecretArn) {
       const gatewaySecretRef = secretsmanager.Secret.fromSecretCompleteArn(
         this, 'GatewayServiceAuthSecretRef', props.gatewayServiceAuthSecretArn,
@@ -913,6 +968,16 @@ export class MiddlewareServiceStack extends cdk.Stack {
       cfnService.desiredCount = 0;
     }
 
+    // Without a certificate the ALB's own DNS name IS the middleware origin,
+    // so the socket URL can be derived (the portal appends /ws). ws://, not
+    // wss://: usable only from an http:// page, i.e. the portal on each
+    // participant's localhost — deploy plan §5's phase-2 arrangement.
+    if (realtime.enabled && !realtime.gatewayUrl && !certArn) {
+      fargateService.taskDefinition.defaultContainer!.addEnvironment(
+        'REALTIME_GATEWAY_URL', `ws://${fargateService.loadBalancer.loadBalancerDnsName}`,
+      );
+    }
+
     // ── Who may reach the load balancer ───────────────────────────────────
     // See `openListener: false` above for why this is not 0.0.0.0/0.
     const allowRaw = this.node.tryGetContext('albAllowCidr');
@@ -1023,6 +1088,7 @@ export class MiddlewareServiceStack extends cdk.Stack {
     this.serviceSecurityGroupId =
       fargateService.service.connections.securityGroups[0]!.securityGroupId;
     this.taskRoleArn = taskRole.roleArn;
+    this.taskRoleName = `${prefix}-middleware-task-role`;
 
     // ── Outputs ──────────────────────────────────────────────────────────
     new cdk.CfnOutput(this, 'MiddlewareEcrRepoUri', {

@@ -16,6 +16,7 @@
     "projectPrefix": "orgiq",
     "enableEval": "true",
     "deployCanary": "true",
+    "deploySocial": "false",
     "documentWorkspace": {
       "tenantId": "assessment",
       "publicBaseUrl": "https://orgiq-docs.orgiq.test",

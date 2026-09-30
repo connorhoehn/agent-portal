@@ -454,7 +454,8 @@ middlewareService.addDependency(guardrails);
 //   deploySocialImages=true  OrgIQ-SocialImages — three RETAIN ECR repos
 //   deploySocialMedia=true   OrgIQ-SocialMedia  — the SFU on EC2 + Elastic IP
 //                            (sfuAllowCidr, sfuImageDigest, socialPortalOrigin)
-//   deploySocial=true        OrgIQ-Social       — platform-api, Redis, tables
+//   deploySocial=true        OrgIQ-Social       — platform-api, ElastiCache Redis, tables,
+//                            the middleware's chat-table grant + REDIS_URL parameter
 //                            (deploySocialService, platformApiImageDigest,
 //                             socialPlatformHost, socialSfuHost, tableSuffix, …)
 //
@@ -502,6 +503,7 @@ if (deploySocial) {
     listener: middlewareService.listener,
     loadBalancerSecurityGroupId: middlewareService.loadBalancerSecurityGroupId,
     middlewareSecurityGroupId: middlewareService.serviceSecurityGroupId,
+    middlewareTaskRoleName: middlewareService.taskRoleName,
     realtimeJwtSecretName: middlewareService.realtimeJwtSecretName,
     cognitoUserPoolId: authentication.userPoolId,
     cognitoClientId: authentication.userPoolClientId,

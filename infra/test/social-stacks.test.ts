@@ -15,9 +15,11 @@ import { Annotations, Match, Template } from 'aws-cdk-lib/assertions';
 import { MiddlewareServiceStack } from '../lib/middleware-service-stack';
 import { SOCIAL_IMAGE_REPOS, SocialImagesStack, type SocialImageKey } from '../lib/social-images-stack';
 import { SocialMediaStack } from '../lib/social-media-stack';
-import { SOCIAL_TABLES, SocialStack, socialTablePrefix } from '../lib/social-stack';
+import {
+  MIDDLEWARE_CHAT_TABLES, SOCIAL_TABLES, SocialStack, socialRedisUrlParameterName, socialTablePrefix,
+} from '../lib/social-stack';
 import { ARNS, PREFIX, middlewareServiceStack, newApp } from './helpers/stacks';
-import { synthApp } from './helpers/app-assembly';
+import { exportedNames, importedExportNames, synthApp } from './helpers/app-assembly';
 
 const DIGEST = `sha256:${'a'.repeat(64)}`;
 const POOL = 'us-east-1_TESTPOOL';
@@ -52,6 +54,7 @@ function socialApp(context: Record<string, unknown> = {}, withSfu = true) {
     listener: mw.listener,
     loadBalancerSecurityGroupId: mw.loadBalancerSecurityGroupId,
     middlewareSecurityGroupId: mw.serviceSecurityGroupId,
+    middlewareTaskRoleName: mw.taskRoleName,
     realtimeJwtSecretName: mw.realtimeJwtSecretName,
     cognitoUserPoolId: POOL,
     ...(media && {
@@ -124,18 +127,106 @@ describe('OrgIQ-MiddlewareService — realtime amendments', () => {
     assert.ok(!names.includes('REDIS_URL'));
   });
 
-  test('--context realtimeGateway=true sets REALTIME_GATEWAY=on and REDIS_URL at the social Redis', () => {
-    const on = Template.fromStack(middlewareServiceStack({
+  test('REALTIME_GATEWAY/REDIS_URL/SOCIAL_CHAT_* are absent by default — the state they name deploys later', () => {
+    const c = container();
+    const names = [...(c.Environment as any[]), ...(c.Secrets as any[])].map((e) => e.Name);
+    for (const absent of ['REALTIME_GATEWAY', 'REDIS_URL', 'SOCIAL_CHAT_STORE', 'SOCIAL_CHAT_TABLE_PREFIX', 'REALTIME_GATEWAY_URL']) {
+      assert.ok(!names.includes(absent), `${absent} must not be set without realtimeGateway=true`);
+    }
+    t.resourceCountIs('AWS::SSM::Parameter', 0);
+  });
+
+  const envOf = (stack: MiddlewareServiceStack) => {
+    const td = Object.values<any>(Template.fromStack(stack).findResources('AWS::ECS::TaskDefinition'))[0];
+    const c = td.Properties.ContainerDefinitions.find((x: any) => x.Name === 'middleware');
+    return {
+      env: Object.fromEntries((c.Environment as any[]).map((e) => [e.Name, e.Value])) as Record<string, any>,
+      secrets: Object.fromEntries((c.Secrets as any[]).map((e) => [e.Name, e.ValueFrom])) as Record<string, any>,
+    };
+  };
+
+  test('realtimeGateway=true alone: gateway on, memory state (no REDIS_URL, no SOCIAL_CHAT_*), warned', () => {
+    const stack = middlewareServiceStack({ realtimeGateway: 'true' });
+    const { env, secrets } = envOf(stack);
+    assert.equal(env.REALTIME_GATEWAY, 'on');
+    assert.equal(env.REDIS_URL, undefined);
+    assert.equal(secrets.REDIS_URL, undefined);
+    assert.equal(env.SOCIAL_CHAT_STORE, undefined);
+    const a = Annotations.fromStack(stack);
+    a.hasWarning('*', Match.stringLikeRegexp('no REDIS_URL'));
+    a.hasWarning('*', Match.stringLikeRegexp('in-memory store'));
+  });
+
+  test('without a certificate the socket URL is derived from the ALB (ws://<alb dns>; the portal appends /ws)', () => {
+    const stack = middlewareServiceStack({ realtimeGateway: 'true' });
+    const { env } = envOf(stack);
+    const [albId] = Object.keys(Template.fromStack(stack).findResources('AWS::ElasticLoadBalancingV2::LoadBalancer'));
+    assert.deepEqual(env.REALTIME_GATEWAY_URL, { 'Fn::Join': ['', ['ws://', { 'Fn::GetAtt': [albId, 'DNSName'] }]] });
+  });
+
+  test('with a certificate and no realtimeGatewayUrl, the socket URL stays unset and synth says why', () => {
+    const stack = middlewareServiceStack({
+      realtimeGateway: 'true',
+      certificateArn: 'arn:aws:acm:us-east-1:111111111111:certificate/abc',
+    });
+    assert.equal(envOf(stack).env.REALTIME_GATEWAY_URL, undefined);
+    Annotations.fromStack(stack).hasWarning('*', Match.stringLikeRegexp('No realtimeGatewayUrl'));
+  });
+
+  test('with deploySocial=true: REDIS_URL is read from the SSM parameter OrgIQ-Social writes, chat goes to its tables', () => {
+    const stack = middlewareServiceStack({ realtimeGateway: 'true', deploySocial: 'true' });
+    const { env, secrets } = envOf(stack);
+    assert.equal(env.REDIS_URL, undefined, 'REDIS_URL must not be a plaintext env copy');
+    assert.match(JSON.stringify(secrets.REDIS_URL), /parameter\/orgiq\/social\/redis-url/);
+    assert.equal(socialRedisUrlParameterName('orgiq'), '/orgiq/social/redis-url');
+    // Names middleware/src/lib/social-chat.ts reads.
+    assert.equal(env.SOCIAL_CHAT_STORE, 'dynamo');
+    assert.equal(env.SOCIAL_CHAT_TABLE_PREFIX, 'orgiq-social-');
+    // The execution role (which resolves container secrets) can read it.
+    const policies = JSON.stringify(Template.fromStack(stack).findResources('AWS::IAM::Policy'));
+    assert.match(policies, /ssm:GetParameters/);
+    Annotations.fromStack(stack).hasNoWarning('*', Match.stringLikeRegexp('no REDIS_URL'));
+  });
+
+  test('tableSuffix moves SOCIAL_CHAT_TABLE_PREFIX with the tables', () => {
+    const { env } = envOf(middlewareServiceStack({ realtimeGateway: 'true', deploySocial: 'true', tableSuffix: 'v2' }));
+    assert.equal(env.SOCIAL_CHAT_TABLE_PREFIX, 'orgiq-social-v2-');
+  });
+
+  test('realtimeRedisUrl overrides as plain env, even with deploySocial', () => {
+    const { env, secrets } = envOf(middlewareServiceStack({
+      realtimeGateway: 'true', deploySocial: 'true', realtimeRedisUrl: 'redis://cache.example.internal:6379',
+    }));
+    assert.equal(env.REDIS_URL, 'redis://cache.example.internal:6379');
+    assert.equal(secrets.REDIS_URL, undefined);
+  });
+
+  test('explicit browser URLs win; otherwise platform/video derive from the social host rules', () => {
+    const explicit = envOf(middlewareServiceStack({
       realtimeGateway: 'true',
       realtimeGatewayUrl: 'wss://rt.example.com',
       realtimeVideoPublicUrl: 'https://sfu.example.com',
-    }));
-    const td = Object.values<any>(on.findResources('AWS::ECS::TaskDefinition'))[0];
-    const env = Object.fromEntries(td.Properties.ContainerDefinitions[0].Environment.map((e: any) => [e.Name, e.Value]));
-    assert.equal(env.REALTIME_GATEWAY, 'on');
-    assert.equal(env.REDIS_URL, 'redis://redis.orgiq-social.local:6379');
-    assert.equal(env.REALTIME_GATEWAY_URL, 'wss://rt.example.com');
-    assert.equal(env.REALTIME_VIDEO_PUBLIC_URL, 'https://sfu.example.com');
+    })).env;
+    assert.equal(explicit.REALTIME_GATEWAY_URL, 'wss://rt.example.com');
+    assert.equal(explicit.REALTIME_VIDEO_PUBLIC_URL, 'https://sfu.example.com');
+
+    const derived = envOf(middlewareServiceStack({
+      realtimeGateway: 'true', socialPlatformHost: 'platform.example.com', socialSfuHost: 'sfu.example.com',
+    })).env;
+    assert.equal(derived.REALTIME_PLATFORM_PUBLIC_URL, 'https://platform.example.com');
+    assert.equal(derived.REALTIME_VIDEO_PUBLIC_URL, 'https://sfu.example.com');
+    // Never the server-side name (work-graph/producer.ts).
+    assert.equal(derived.PLATFORM_API_URL, undefined);
+  });
+
+  test('with no host known, platform/video URLs stay unset and synth warns (no invented SFU or DNS)', () => {
+    const stack = middlewareServiceStack({ realtimeGateway: 'true' });
+    const { env } = envOf(stack);
+    assert.equal(env.REALTIME_PLATFORM_PUBLIC_URL, undefined);
+    assert.equal(env.REALTIME_VIDEO_PUBLIC_URL, undefined);
+    const a = Annotations.fromStack(stack);
+    a.hasWarning('*', Match.stringLikeRegexp('REALTIME_PLATFORM_PUBLIC_URL is unset'));
+    a.hasWarning('*', Match.stringLikeRegexp('REALTIME_VIDEO_PUBLIC_URL is unset'));
   });
 });
 
@@ -294,7 +385,8 @@ describe('OrgIQ-Social — platform-api, Redis, tables', () => {
     assert.equal(env.LVS_WEBHOOK_BOOTSTRAP_URL, 'http://social-platform.orgiq-social.local:3001/hooks/lvs/recording');
     assert.equal(env.COGNITO_USER_POOL_ID, POOL);
     assert.equal(env.VIDEO_SECRETS_REQUIRED, 'true');
-    assert.equal(env.REDIS_URL, 'redis://redis.orgiq-social.local:6379');
+    assert.match(JSON.stringify(env.REDIS_URL), /PrimaryEndPoint\.Address/, 'REDIS_URL must be the ElastiCache endpoint');
+    assert.match(JSON.stringify(env.REDIS_ENDPOINT), /PrimaryEndPoint\.Address/);
     assert.ok(JSON.stringify(env.VIDEO_API_URL).includes('PrivateIp'), 'VIDEO_API_URL must be the SFU private IP');
   });
 
@@ -348,15 +440,75 @@ describe('OrgIQ-Social — platform-api, Redis, tables', () => {
     });
   });
 
-  test('Redis is a Cloud Map container at redis.orgiq-social.local, reachable from the middleware and platform-api', () => {
-    t.hasResourceProperties('AWS::ServiceDiscovery::PrivateDnsNamespace', { Name: 'orgiq-social.local' });
-    t.hasResourceProperties('AWS::ServiceDiscovery::Service', { Name: 'redis' });
-    const standalone = Object.values<any>(t.findResources('AWS::EC2::SecurityGroupIngress'))
-      .map((r) => r.Properties);
-    const inline = Object.values<any>(t.findResources('AWS::EC2::SecurityGroup'))
-      .flatMap((sg) => (sg.Properties.SecurityGroupIngress ?? []) as any[]);
-    const redisIngress = [...standalone, ...inline].filter((r) => r.FromPort === 6379);
-    assert.ok(redisIngress.length >= 2, 'middleware and platform-api must both reach Redis');
+  test('Redis is ElastiCache: one cache.t4g.micro node, plain redis:// (the clients speak no TLS), encrypted at rest, DESTROY', () => {
+    t.resourceCountIs('AWS::ElastiCache::ReplicationGroup', 1);
+    t.hasResourceProperties('AWS::ElastiCache::ReplicationGroup', {
+      ReplicationGroupId: 'orgiq-social-redis',
+      Engine: 'redis',
+      CacheNodeType: 'cache.t4g.micro',
+      NumCacheClusters: 1,
+      AutomaticFailoverEnabled: false,
+      TransitEncryptionEnabled: false,
+      AtRestEncryptionEnabled: true,
+      Port: 6379,
+    });
+    const rg = Object.values<any>(t.findResources('AWS::ElastiCache::ReplicationGroup'))[0];
+    assert.equal(rg.DeletionPolicy, 'Delete', 'a cache must not outlive the stack and keep billing');
+    t.hasResourceProperties('AWS::ElastiCache::SubnetGroup', { CacheSubnetGroupName: 'orgiq-social-redis' });
+    // No Redis container any more — the old RedisService lost the notification inbox on every task replacement.
+    t.resourcePropertiesCountIs('AWS::ServiceDiscovery::Service', { Name: 'redis' }, 0);
+  });
+
+  test('the Redis security group admits exactly the middleware and platform-api on 6379', () => {
+    const [redisSgId] = Object.keys(t.findResources('AWS::EC2::SecurityGroup', {
+      Properties: { GroupDescription: Match.stringLikeRegexp('social Redis') },
+    }));
+    assert.ok(redisSgId);
+    const rg = Object.values<any>(t.findResources('AWS::ElastiCache::ReplicationGroup'))[0];
+    assert.ok(JSON.stringify(rg.Properties.SecurityGroupIds).includes(redisSgId));
+    const standalone = Object.values<any>(t.findResources('AWS::EC2::SecurityGroupIngress')).map((r) => r.Properties);
+    const inline = (t.findResources('AWS::EC2::SecurityGroup')[redisSgId]!.Properties.SecurityGroupIngress ?? []) as any[];
+    const toRedis = [...standalone.filter((r) => JSON.stringify(r.GroupId).includes(redisSgId)), ...inline];
+    assert.equal(toRedis.length, 2, 'middleware + platform-api, nothing else');
+    for (const r of toRedis) {
+      assert.equal(r.FromPort, 6379);
+      assert.equal(r.CidrIp, undefined, 'source must be a security group, never a CIDR');
+    }
+  });
+
+  test('the Redis URL is published to SSM by name for the middleware (no export)', () => {
+    t.hasResourceProperties('AWS::SSM::Parameter', {
+      Name: '/orgiq/social/redis-url',
+      Type: 'String',
+      Value: Match.objectLike({ 'Fn::Join': Match.anyValue() }),
+    });
+    const value = JSON.stringify(Object.values<any>(t.findResources('AWS::SSM::Parameter'))[0].Properties.Value);
+    assert.match(value, /redis:\/\//);
+    assert.match(value, /PrimaryEndPoint\.Address/);
+  });
+
+  test('the middleware task role gets exactly the four chat tables — attached by role name, six store calls, no Scan/CreateTable', () => {
+    const policies = Object.values<any>(t.findResources('AWS::IAM::Policy', {
+      Properties: { PolicyName: 'orgiq-middleware-social-chat' },
+    }));
+    assert.equal(policies.length, 1);
+    const p = policies[0].Properties;
+    assert.deepEqual(p.Roles, ['orgiq-middleware-task-role']);
+    const [stmt] = p.PolicyDocument.Statement;
+    assert.deepEqual([...stmt.Action].sort(), [
+      'dynamodb:BatchGetItem', 'dynamodb:DeleteItem', 'dynamodb:GetItem',
+      'dynamodb:PutItem', 'dynamodb:Query', 'dynamodb:UpdateItem',
+    ]);
+    const resources = JSON.stringify(stmt.Resource);
+    for (const table of MIDDLEWARE_CHAT_TABLES) {
+      assert.ok(resources.includes(`:table/orgiq-social-${table}"`), `missing ${table}`);
+      assert.ok(resources.includes(`:table/orgiq-social-${table}/index/*`), `missing ${table} indexes`);
+      assert.ok(SOCIAL_TABLES.some((x) => x.name === table), `${table} is granted but OrgIQ-Social does not create it`);
+    }
+    assert.ok(!/table\/orgiq-social-\*/.test(resources), 'never the whole namespace');
+    assert.equal(stmt.Resource.length, MIDDLEWARE_CHAT_TABLES.length * 2);
+    // chat-conversations carries the GSI the store queries.
+    assert.ok(SOCIAL_TABLES.find((x) => x.name === 'chat-conversations')!.gsi!.some((g) => g.name === 'channel-index'));
   });
 
   test('no open ingress anywhere in the stack', () => {
@@ -449,6 +601,47 @@ describe('bin/app.ts — the social stacks are opt-in', () => {
     for (const name of ['OrgIQ-SocialImages', 'OrgIQ-SocialMedia', 'OrgIQ-Social']) {
       assert.ok(!app.has(name), `${name} must not deploy unless asked`);
     }
+  });
+
+  test('cdk.json states deploySocial off, and ctxFlag reads "false" as off', () => {
+    const cdkJson = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'cdk.json'), 'utf8'));
+    assert.equal(cdkJson.context.deploySocial, 'false');
+    assert.ok(!synthApp({ deploySocial: 'false' }).has('OrgIQ-Social'));
+  });
+
+  test('the default app carries no ElastiCache, no social SSM parameter and no realtime env on the middleware', () => {
+    const app = synthApp();
+    for (const [name, tpl] of Object.entries<any>(app.templates)) {
+      const types = Object.values<any>(tpl.Resources ?? {}).map((r) => r.Type);
+      assert.ok(!types.some((x) => x.startsWith('AWS::ElastiCache::')), `${name} has ElastiCache by default`);
+      assert.ok(!JSON.stringify(tpl).includes('/social/redis-url'), `${name} references the social Redis parameter`);
+    }
+    const mw = JSON.stringify(app.templates['OrgIQ-MiddlewareService']);
+    for (const name of ['"REALTIME_GATEWAY"', '"REDIS_URL"', '"SOCIAL_CHAT_STORE"', '"SOCIAL_CHAT_TABLE_PREFIX"']) {
+      assert.ok(!mw.includes(name), `${name} in the default middleware template`);
+    }
+  });
+
+  test('the full social app: every Fn::ImportValue resolves, and the middleware imports nothing social', () => {
+    const app = synthApp({
+      deploySocial: 'true', deploySocialMedia: 'true', realtimeGateway: 'true', sfuAllowCidr: '203.0.113.4/32',
+    });
+    const exported = new Set<string>();
+    for (const tpl of Object.values(app.templates)) for (const n of exportedNames(tpl)) exported.add(n);
+    for (const [name, tpl] of Object.entries(app.templates)) {
+      for (const imp of importedExportNames(tpl)) assert.ok(exported.has(imp), `${name} imports ${imp}, which no stack exports`);
+    }
+    const mw = app.template('OrgIQ-MiddlewareService');
+    const mwImports = [...importedExportNames(app.templates['OrgIQ-MiddlewareService'])];
+    assert.deepEqual(mwImports.filter((n) => /social/i.test(n)), [], 'middleware must not import from the social stacks');
+    // …yet it is wired to Social's Redis and tables, by name.
+    const td = Object.values<any>(mw.findResources('AWS::ECS::TaskDefinition'))[0];
+    const c = td.Properties.ContainerDefinitions.find((x: any) => x.Name === 'middleware');
+    assert.ok((c.Secrets as any[]).some((x) => x.Name === 'REDIS_URL'));
+    assert.ok((c.Environment as any[]).some((x) => x.Name === 'SOCIAL_CHAT_STORE' && x.Value === 'dynamo'));
+    app.template('OrgIQ-Social').hasResourceProperties('AWS::IAM::Policy', {
+      PolicyName: 'orgiq-middleware-social-chat', Roles: ['orgiq-middleware-task-role'],
+    });
   });
 
   test('deploySocial + deploySocialMedia bring in all three, wired without a dependency cycle', () => {

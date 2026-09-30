@@ -3,14 +3,15 @@ import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import * as ecs from 'aws-cdk-lib/aws-ecs';
 import * as ecr from 'aws-cdk-lib/aws-ecr';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
+import * as elasticache from 'aws-cdk-lib/aws-elasticache';
 import * as elbv2 from 'aws-cdk-lib/aws-elasticloadbalancingv2';
 import * as elbv2Targets from 'aws-cdk-lib/aws-elasticloadbalancingv2-targets';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
+import * as ssm from 'aws-cdk-lib/aws-ssm';
 import * as discovery from 'aws-cdk-lib/aws-servicediscovery';
 import type { Construct } from 'constructs';
-import { RedisService } from 'realtime-examples/cdk/document-workspace';
 import { socialRepoName } from './social-images-stack';
 import { SFU_PORTS, sfuSecretNames } from './social-media-stack';
 
@@ -131,6 +132,22 @@ export function socialTablePrefix(prefix: string, suffix?: string): string {
   return suffix ? `${prefix}-social-${suffix}-` : `${prefix}-social-`;
 }
 
+/**
+ * The four tables the middleware's own gateway persists social chat in —
+ * realtime-modules' `DEFAULT_DYNAMO_CHAT_TABLES` (`DynamoChatStore`, read by
+ * middleware/src/lib/social-chat.ts under `SOCIAL_CHAT_STORE=dynamo`). The
+ * middleware task role is granted exactly these, not the whole namespace.
+ */
+export const MIDDLEWARE_CHAT_TABLES = ['chat-messages', 'chat-conversations', 'chat-members', 'chat-reads'] as const;
+
+/**
+ * SSM parameter OrgIQ-Social writes the Redis URL to, and the middleware task
+ * reads as its REDIS_URL container secret. By NAME, so no export freezes.
+ */
+export function socialRedisUrlParameterName(prefix: string): string {
+  return `/${prefix}/social/redis-url`;
+}
+
 const attr = (k: Key): dynamodb.Attribute => ({
   name: k.name,
   type: k.type === 'N' ? dynamodb.AttributeType.NUMBER : dynamodb.AttributeType.STRING,
@@ -146,6 +163,8 @@ export interface SocialStackProps extends cdk.StackProps {
   readonly listener: elbv2.IApplicationListener;
   readonly loadBalancerSecurityGroupId: string;
   readonly middlewareSecurityGroupId: string;
+  /** Fixed name of the middleware task role — granted the chat tables by name. */
+  readonly middlewareTaskRoleName: string;
   readonly realtimeJwtSecretName: string;
   // From OrgIQ-Authentication.
   readonly cognitoUserPoolId: string;
@@ -180,12 +199,21 @@ export interface SocialStackProps extends cdk.StackProps {
  * secrets and a platform-api service at desiredCount 0; after the image is
  * pushed, phase 2 (`deploySocialService=true` + the digest) scales it to 1.
  *
- * Redis runs as a Fargate container (realtime-examples' `RedisService`, the
- * one the document workspace uses): ~$7/mo, and it loses presence, ringing
- * calls and the ownership map on every task replacement. Acceptable for dev.
- * ElastiCache `cache.t4g.micro` (~$12/mo) is the move once people rely on it;
- * ElastiCache Serverless is probably incompatible (TLS + cluster mode, which
- * neither client builds). Point consumers at it with `realtimeRedisUrl`.
+ * Redis is ElastiCache, one `cache.t4g.micro` node (~$12/mo), not the Fargate
+ * container the plan first proposed (~$7/mo). Since social-tenant-design §3.3
+ * the middleware's Redis holds the notification inbox as well as call state,
+ * and a container loses both — every unread notification, every ringing
+ * call — on each task replacement. ElastiCache Serverless is ruled out by the
+ * clients, not by price: it is TLS-only and cluster-mode, and the middleware's
+ * `lib/redis-lite.ts` refuses `rediss://` and speaks no cluster protocol
+ * (platform-api builds plain `redis://` from REDIS_ENDPOINT too). No TLS
+ * means no AUTH token either, so the security group is the only lock; it
+ * admits the middleware and platform-api and nothing else.
+ *
+ * Also granted here, to the middleware's task role (imported by name): the
+ * four chat tables its gateway persists social chat in
+ * (`MIDDLEWARE_CHAT_TABLES`), and the Redis URL as an SSM parameter
+ * (`socialRedisUrlParameterName`) the middleware reads as REDIS_URL.
  */
 export class SocialStack extends cdk.Stack {
   public readonly tablePrefix: string;
@@ -219,24 +247,55 @@ export class SocialStack extends cdk.Stack {
       name: `${prefix}-social.local`,
     });
 
-    // ── Redis ──────────────────────────────────────────────────────────────
-    // redis.<prefix>-social.local:6379 — the address the middleware's
-    // realtimeGateway default points at. Pulled from ECR Public through the
-    // NAT (multi-arch, so ARM64 resolves).
-    const redis = new RedisService(this, 'SocialRedis', {
+    // ── Redis (ElastiCache, one node) ──────────────────────────────────────
+    // No 0.0.0.0/0 anywhere: the account's custodian revokes open ingress
+    // (CLAUDE.md), and nothing outside the VPC should reach this anyway.
+    const redisSg = new ec2.SecurityGroup(this, 'RedisSecurityGroup', {
       vpc: props.vpc,
-      cluster: props.cluster,
-      namespace,
-      cpuArchitecture: ecs.CpuArchitecture.ARM64,
-      subnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
-      image: ecs.ContainerImage.fromRegistry('public.ecr.aws/docker/library/redis:7-alpine'),
+      description: 'orgiq social Redis (ElastiCache): middleware + platform-api only',
+      allowAllOutbound: false,
     });
-    const redisHost = `redis.${prefix}-social.local`;
-    this.redisUrl = `redis://${redisHost}:6379`;
-    redis.securityGroup.addIngressRule(
+    redisSg.addIngressRule(
       ec2.Peer.securityGroupId(props.middlewareSecurityGroupId), ec2.Port.tcp(6379),
-      'Middleware realtime gateway fan-out',
+      'Middleware realtime gateway (call state, notifications)',
     );
+    const redisSubnets = new elasticache.CfnSubnetGroup(this, 'RedisSubnetGroup', {
+      cacheSubnetGroupName: `${prefix}-social-redis`,
+      description: 'orgiq social Redis: the middleware VPC private subnets',
+      subnetIds: props.vpc.selectSubnets({ subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS }).subnetIds,
+    });
+    const redis = new elasticache.CfnReplicationGroup(this, 'SocialRedis', {
+      replicationGroupId: `${prefix}-social-redis`,
+      replicationGroupDescription: 'orgiq social: realtime call state + notification inbox',
+      engine: 'redis',
+      engineVersion: '7.1',
+      cacheNodeType: 'cache.t4g.micro',
+      // One node, no replica, no failover: the dev phase of the deploy plan.
+      numCacheClusters: 1,
+      automaticFailoverEnabled: false,
+      multiAzEnabled: false,
+      port: 6379,
+      // Neither client speaks TLS (see the class comment); at rest is free.
+      transitEncryptionEnabled: false,
+      atRestEncryptionEnabled: true,
+      snapshotRetentionLimit: 0,
+      cacheSubnetGroupName: redisSubnets.cacheSubnetGroupName!,
+      securityGroupIds: [redisSg.securityGroupId],
+    });
+    redis.addDependency(redisSubnets);
+    // A cache: nothing to keep, and nothing left behind to bill after teardown.
+    redis.applyRemovalPolicy(cdk.RemovalPolicy.DESTROY);
+    const redisHost = redis.attrPrimaryEndPointAddress;
+    const redisPort = redis.attrPrimaryEndPointPort;
+    this.redisUrl = `redis://${redisHost}:${redisPort}`;
+
+    // The middleware reads this as its REDIS_URL container secret (ECS takes
+    // a String parameter). By name, so OrgIQ-MiddlewareService imports nothing.
+    const redisUrlParam = new ssm.StringParameter(this, 'SocialRedisUrlParameter', {
+      parameterName: socialRedisUrlParameterName(prefix),
+      stringValue: this.redisUrl,
+      description: 'REDIS_URL for the middleware realtime gateway (OrgIQ-Social ElastiCache)',
+    });
 
     // ── Tables ─────────────────────────────────────────────────────────────
     // RETAIN + fixed names + deletion protection, like ApplicationTables: a
@@ -265,6 +324,27 @@ export class SocialStack extends cdk.Stack {
         });
       }
     }
+
+    // ── The middleware's chat tables ───────────────────────────────────────
+    // Its gateway persists social chat through realtime-modules' DynamoChatStore
+    // (SOCIAL_CHAT_STORE=dynamo, set by OrgIQ-MiddlewareService alongside
+    // deploySocial). The role is imported by its fixed NAME and the policy
+    // lives in this stack, so the dependency stays one-way (Social → middleware).
+    // Exactly the store's six calls; no Scan, no CreateTable.
+    const middlewareRole = iam.Role.fromRoleName(this, 'MiddlewareTaskRole', props.middlewareTaskRoleName);
+    const tableArn = (name: string) => `arn:aws:dynamodb:${this.region}:${this.account}:table/${this.tablePrefix}${name}`;
+    new iam.Policy(this, 'MiddlewareSocialChatPolicy', {
+      policyName: `${prefix}-middleware-social-chat`,
+      roles: [middlewareRole],
+      statements: [new iam.PolicyStatement({
+        sid: 'SocialChatTables',
+        actions: [
+          'dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:UpdateItem', 'dynamodb:DeleteItem',
+          'dynamodb:Query', 'dynamodb:BatchGetItem',
+        ],
+        resources: MIDDLEWARE_CHAT_TABLES.flatMap((t) => [tableArn(t), `${tableArn(t)}/index/*`]),
+      })],
+    });
 
     // ── Secrets ────────────────────────────────────────────────────────────
     // Imported by NAME so no export freezes: the realtime JWT (minted by
@@ -346,7 +426,7 @@ export class SocialStack extends cdk.Stack {
       AWS_REGION: this.region,
       DDB_TABLE_PREFIX: this.tablePrefix,
       REDIS_ENDPOINT: redisHost,
-      REDIS_PORT: '6379',
+      REDIS_PORT: redisPort,
       REDIS_URL: this.redisUrl,
       SERVICE_AUTH_SERVICE_ID: 'platform-api',
       // A missing video secret fails boot rather than falling back to 'admin'.
@@ -406,7 +486,7 @@ export class SocialStack extends cdk.Stack {
       description: 'orgiq social platform-api tasks',
       allowAllOutbound: true,
     });
-    redis.securityGroup.addIngressRule(platformSg, ec2.Port.tcp(6379), 'platform-api');
+    redisSg.addIngressRule(platformSg, ec2.Port.tcp(6379), 'platform-api');
     // The middleware reaches platform-api server-side (work-graph ingest, proxies).
     platformSg.addIngressRule(ec2.Peer.securityGroupId(props.middlewareSecurityGroupId), ec2.Port.tcp(3001), 'Middleware');
     // platform-api reaches the middleware's realtime gateway (GATEWAY_WS_URL).
@@ -501,7 +581,15 @@ export class SocialStack extends cdk.Stack {
     });
     new cdk.CfnOutput(this, 'SocialRedisUrl', {
       value: this.redisUrl,
-      description: 'Redis (Fargate container) — the middleware\'s realtimeGateway default',
+      description: 'Redis (ElastiCache cache.t4g.micro) — reachable only inside the VPC',
+    });
+    new cdk.CfnOutput(this, 'SocialRedisUrlParameterName', {
+      value: redisUrlParam.parameterName,
+      description: 'SSM parameter the middleware task reads as REDIS_URL',
+    });
+    new cdk.CfnOutput(this, 'SocialChatTablePrefix', {
+      value: this.tablePrefix,
+      description: 'SOCIAL_CHAT_TABLE_PREFIX for the middleware gateway (SOCIAL_CHAT_STORE=dynamo)',
     });
     new cdk.CfnOutput(this, 'PlatformApiInternalUrl', {
       value: platformInternal,

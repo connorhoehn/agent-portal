@@ -70,6 +70,31 @@ def pick(*keys: str, default: str = "") -> str:
 
 ecr = f"{account}.dkr.ecr.{region}.amazonaws.com"
 
+def social_block() -> str:
+    """OrgIQ-Social (deploySocial=true): the middleware gateway's chat tables
+    and Redis, written COMMENTED OUT on purpose.
+
+    This file configures a LAPTOP middleware. The Redis is ElastiCache inside
+    the middleware VPC, unreachable from here, so a live REDIS_URL would make
+    every call frame fail until the connection times out. The chat tables ARE
+    reachable (IAM), but `npm run dev:mock` does not blank SOCIAL_CHAT_*, and
+    under MOCK_AURORA the gateway seeds its fixture channels into any empty
+    table it is pointed at — a stale .env.aws would write mock rows into the
+    deployed tables. Uncomment deliberately. The deployed task gets all three
+    from OrgIQ-MiddlewareService (REDIS_URL via SSM /orgiq/social/redis-url).
+    """
+    prefix = pick("SocialChatTablePrefix", "SocialTablePrefix", "orgiq-social-table-prefix")
+    redis = pick("SocialRedisUrl")
+    if not prefix and not redis:
+        return "# OrgIQ-Social not deployed (--context deploySocial=true): social chat and\n# realtime state stay in memory locally.\n"
+    return (
+        "# OrgIQ-Social — commented out on purpose; see social_block() in\n"
+        "# schema/dump-stack-outputs.sh before uncommenting.\n"
+        f"# SOCIAL_CHAT_STORE=dynamo\n"
+        f"# SOCIAL_CHAT_TABLE_PREFIX={prefix}\n"
+        f"# REDIS_URL={redis}   # inside the VPC: unreachable from a laptop\n"
+    )
+
 client_secret = cognito_client_secret()
 # Cognito rejects non-localhost HTTP callbacks, so the local BFF URL is the
 # only one that works until the deployed middleware has an HTTPS origin.
@@ -157,6 +182,7 @@ COGNITO_CALLBACK_URL={callback_url}
 # redirect resolves against :3001 and SSO ends on a middleware 404.
 PORTAL_ORIGIN={portal_origin}
 
+{social_block()}
 # Runtime image ECR URIs
 SUPERVISOR_ECR_URI={ecr}/orgiq-supervisor
 SEARCH_ECR_URI={ecr}/orgiq-search

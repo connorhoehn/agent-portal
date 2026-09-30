@@ -152,6 +152,14 @@ Priorities 10 and 20 are taken by the document workspace; use 30 and up.
 | ElastiCache `cache.t4g.micro`, one node, no replica | ~$12 | Survives gateway/platform restarts. The recommendation once people rely on it. |
 | ElastiCache Serverless | Valkey from ~$6; Redis OSS ~$90 minimum | Serverless requires TLS and is cluster-mode. The gateway and platform-api build plain `redis://` URLs from `REDIS_ENDPOINT`/`REDIS_PORT`, and I did not find a TLS or cluster-client path. Probably incompatible without upstream changes; not verified. |
 
+**Decided 2026-09-30: ElastiCache `cache.t4g.micro`, one node** (§9). Two
+things moved since this table was written. The middleware's Redis now holds
+the notification inbox as well as call state (social-tenant-design §3.3), and
+a container loses every unread notification on each task replacement. And
+Serverless is now ruled out by code, not guesswork: the middleware's client
+(`middleware/src/lib/redis-lite.ts`) refuses `rediss://` and has no cluster
+support.
+
 **`REALTIME_JWT_SECRET`: mint once, read in both, no plaintext copy.** The
 machine-callback gotcha exists because AgentCore runtimes can't take a
 Secrets Manager reference, so the value is copied by hand into `--context`.
@@ -416,7 +424,7 @@ the allowlisted HTTP ALB. That is fine for phase 2 and nothing more.
 |---|---|---|
 | gateway | Fargate ARM 0.5 vCPU / 1 GB | 14.4 |
 | platform-api | Fargate ARM 0.5 vCPU / 1 GB | 14.4 |
-| Redis | `RedisService` container 0.25 / 0.5 (→ `cache.t4g.micro` +4.5) | 7.2 |
+| Redis | ElastiCache `cache.t4g.micro`, one node (decided 2026-09-30, §9; the container was 7.2) | ~11.7 |
 | SFU | EC2 `t4g.small` + 20 GB gp3 + EIP | 17.5 |
 | DynamoDB | ~25 on-demand tables, PITR, near-zero storage | < 1 |
 | Secrets Manager | realtime JWT, service auth, LVS admin, LVS webhook | 1.6 |
@@ -424,7 +432,7 @@ the allowlisted HTTP ALB. That is fine for phase 2 and nothing more.
 | CloudWatch Logs | 3 groups, 1-month retention | 1-3 |
 | ALB | shared with the middleware; rules are free | 0 (+16.4 if separate) |
 | NAT gateway | already paid by `OrgIQ-MiddlewareService` | 0 (+data) |
-| **total** | | **≈ $58-62** |
+| **total** | | **≈ $62-66** as listed; **≈ $48-52** in practice, since the middleware is its own gateway and the gateway line no longer runs (§8) |
 | later: coturn | `t4g.small` + EIP | +16 |
 | alternative: SFU on Fargate + NLB | instead of EC2 | +31 |
 
@@ -459,17 +467,17 @@ separate gateway service. The `orgiq-social-gateway` repo exists anyway.
 | item | status |
 |---|---|
 | `OrgIQ-SocialImages` (`infra/lib/social-images-stack.ts`) | **code.** Repos `orgiq-social-gateway`, `orgiq-platform-api`, `orgiq-lvs-sfu`; RETAIN, `maxImageCount: 5`; exports `<repo>-ecr-uri`. In the app when any social flag is set (or `deploySocialImages=true`). |
-| `OrgIQ-MiddlewareService` amendments | **code.** Mints `orgiq-realtime-jwt-secret` as the `REALTIME_JWT_SECRET` container secret. `idle_timeout` 300 s unconditionally, target group `ProtocolVersion HTTP1`, stickiness explicitly off. `--context realtimeGateway=true` sets `REALTIME_GATEWAY=on` and `REDIS_URL` (default `redis://redis.orgiq-social.local:6379`, override `realtimeRedisUrl`). `realtimeGatewayUrl` / `realtimePlatformPublicUrl` / `realtimeVideoPublicUrl` feed the token bridge's browser URLs. |
+| `OrgIQ-MiddlewareService` amendments | **code.** Mints `orgiq-realtime-jwt-secret` as the `REALTIME_JWT_SECRET` container secret. `idle_timeout` 300 s unconditionally, target group `ProtocolVersion HTTP1`, stickiness explicitly off. `--context realtimeGateway=true` sets `REALTIME_GATEWAY=on`; with `deploySocial=true` also in context, `REDIS_URL` comes from SSM `/orgiq/social/redis-url` and `SOCIAL_CHAT_*` point at the chat tables (§9; override `realtimeRedisUrl`). `realtimeGatewayUrl` / `realtimePlatformPublicUrl` / `realtimeVideoPublicUrl` feed the token bridge's browser URLs. |
 | `OrgIQ-SocialMedia` (`infra/lib/social-media-stack.ts`) | **code.** `t4g.small` AL2023 ARM64 with an EIP, a systemd unit that runs the image `--network host` and announces the EIP. It mints `orgiq-social-sfu-admin-token` and `orgiq-social-sfu-webhook-secret`, and `RECORDING_ENABLED=false`. The security group opens only `sfuAllowCidr` on UDP 40000-40001 / TCP 40010-40011, and synth warns when that is empty or open. `deploySocialMedia=true`. |
-| `OrgIQ-Social` (`infra/lib/social-stack.ts`) | **code.** platform-api on Fargate ARM64 (Cloud Map `social-platform`, stop-before-start, `desiredCount 0` until `deploySocialService=true` + `platformApiImageDigest`), Redis container (`RedisService`), 23 on-demand RETAIN tables including `call-log` and `voicemail`, `tableSuffix` context. Host rules at priority 30 (`socialPlatformHost`) and 40 (`socialSfuHost` → SFU :3901). `deploySocial=true`. |
-| Middleware code | `videoUrl` in the token response; reading `REALTIME_PLATFORM_PUBLIC_URL` / `REALTIME_VIDEO_PUBLIC_URL`; the middleware gateway itself is **shipped** (2026-09-29, `middleware/src/lib/realtime-gateway.ts`: `/ws`, HS256 verify, `lobbyGuard`, Redis call state when `REDIS_URL` is set — see the plan's step 7). Note its router is single-process: Redis shares call state, not frame fan-out, so keep the middleware at one task while the gateway is on. The middleware task role has **no** grant on the `orgiq-social-*` tables yet; add one if its gateway persists chat. |
+| `OrgIQ-Social` (`infra/lib/social-stack.ts`) | **code.** platform-api on Fargate ARM64 (Cloud Map `social-platform`, stop-before-start, `desiredCount 0` until `deploySocialService=true` + `platformApiImageDigest`), ElastiCache Redis (`cache.t4g.micro`, one node, since 2026-09-30; was the `RedisService` container), 27 on-demand RETAIN tables including `call-log` and `voicemail`, `tableSuffix` context. Host rules at priority 30 (`socialPlatformHost`) and 40 (`socialSfuHost` → SFU :3901). `deploySocial=true`. |
+| Middleware code | `videoUrl` in the token response; reading `REALTIME_PLATFORM_PUBLIC_URL` / `REALTIME_VIDEO_PUBLIC_URL`; the middleware gateway itself is **shipped** (2026-09-29, `middleware/src/lib/realtime-gateway.ts`: `/ws`, HS256 verify, `lobbyGuard`, Redis call state when `REDIS_URL` is set — see the plan's step 7). Note its router is single-process: Redis shares call state, not frame fan-out, so keep the middleware at one task while the gateway is on. The middleware task role is granted the four chat tables by `OrgIQ-Social` (2026-09-30, §9). |
 | Upstream: gateway / platform-api / LVS | **shipped 2026-09-29.** gateway: none needed — the middleware's `/ws` verifies the `orgiq-hs256` token and enforces tenant lobbies. platform-api `416df6d9`: `requireAuth`/`optionalAuth` verify the OrgIQ token beside Cognito when `REALTIME_JWT_SECRET` is set (HS256 only, `iss` `orgiq-middleware`, `aud` `realtime`, `exp`, `tokenKind`, non-empty `sub`/`org`; `REALTIME_JWT_ISSUER`/`_AUDIENCE` override) into `{ sub, email, orgId: org, displayName, authKind }` (`src/lib/orgiqRealtimeToken.ts`); it runs before the `SKIP_AUTH` branch, so a forged or expired OrgIQ token is a 401 even in dev. `lobbyAccess.ts` is tenant-aware: an OrgIQ caller gets exactly the middleware's `lobbyGuard` (`<org>:` prefix only; `<org>:dm:<ids>` only for a listed id; nothing unprefixed), and any other caller naming `<tenant>:dm:<ids>` must be listed and in that org. platform-api calls LVS's session lifecycle (`/api/sessions`, `/join`, `/end`, `/refresh-token`) with `VIDEO_SERVICE_TOKEN` (`src/lib/lvsServiceAuth.ts`); unset, it still forwards the caller's bearer (realtime-examples' Tilt/CDK). LVS `cc28d028`: `cognito-auth.js` accepts `Bearer <LVS_SERVICE_TOKEN>` (constant-time) as a service caller before Cognito, which is otherwise unchanged. Stacks: `OrgIQ-SocialMedia` mints `orgiq-social-sfu-service-token` and the unit reads it into `LVS_SERVICE_TOKEN`; `OrgIQ-Social` passes it to platform-api as `VIDEO_SERVICE_TOKEN` (tests in `social-stacks.test.ts`). Both are pushed to their `main` (each repo's convention); `scripts/docker/document-workspace-sources.json` `socialSources` still pins the older commits, so the image build needs its platform-api and live-video-streaming shas moved. |
 | Upstream: realtime-examples | **still open upstream (checked 2026-09-29).** realtime-examples HEAD `423c91fd` (= `origin/main` as last fetched) lists 53 tables in `infra/dynamodb-schemas.json` (last changed in `6b9c9b61`), and neither `call-log` nor `voicemail` is among them; neither name appears anywhere under its `infra/` or `lib/`. So the infra pin stays at `2549856e` (1,087 commits behind HEAD) and `social-stack.ts` keeps its table copy. When upstream adds both tables: move the `realtime-examples` pin in `infra/package.json`, swap the copy for `ApplicationTables`, and keep the "table keys agree with the pinned manifest" test. |
 | Images/builds | **code (2026-09-29), not run against an account.** `scripts/docker/social-images-build.mjs` builds and pushes the three images ARM64 by digest from `socialSources` in `scripts/docker/document-workspace-sources.json` (realtime-examples `423c91fd`, platform-api `348f95de`, live-video-streaming `d9547941`) and prints the digest contexts; `--dry-run` verified, never built or pushed. `infra/scripts/deploy.sh` `ECR_REPOS` has `orgiq-social-gateway`, `orgiq-platform-api`, `orgiq-lvs-sfu`, which `infra/test/social-stacks.test.ts` pins against `SOCIAL_IMAGE_REPOS`. **Still missing:** the `orgiq-social-*` table and secret sweep in `deploy.sh`/`destroy.sh` (the tables carry deletion protection, so a sweep must turn that off first), and the three repos in `destroy.sh`'s billing sweep. |
 | DNS/TLS | **missing.** A hosted zone and an ACM certificate covering `platform.`, `sfu.` and the middleware host. The host rules take effect only once those names resolve to the ALB. |
 | Portal | **endpoints: socket done; hosting missing.** The gateway socket URL comes from the token response when `VITE_GATEWAY_URL` is unset (`portal/src/components/OptionalGatewayProvider.ts`, `portal/src/lib/realtimeToken.ts`, unit tests, `portal/e2e/realtime-endpoints.spec.ts`). Still open: the `/health` badge (`GatewayStatusBadge.tsx`, `useGatewayInfo.ts`) and the call host's `VITE_VIDEO_ENDPOINT` should read `realtimeEndpoints()`; the middleware must return `videoUrl` (`REALTIME_VIDEO_PUBLIC_URL`) and use `REALTIME_PLATFORM_PUBLIC_URL` for `platformApiUrl`. No hosting of any kind (S3/CloudFront). |
 | Verifiers | **done locally 2026-09-29, no bypasses** (platform-api `SKIP_AUTH=false`, SFU `LVS_AUTH_BYPASS=false`, a fake Cognito pool, so only the OrgIQ token and the service token could pass). Against clone containers of the new code: a wrong-secret token → 401 `Invalid token`, an expired one → 401 `Token expired`, a `tokenKind` other than `orgiq-hs256` → 401, no bearer → 401; a valid token for `assessment:dm:u-nora:u-vera` or for a dm it is not in → 404; a valid one for `orgiq:dm:u-nora:u-vera` → 201; the same user token sent straight to the SFU → 401. `portal/e2e/initiative-call.spec.ts` (Vera → Nora ring, accept, both live with playing video, leave; and decline) passed twice. The SFU log over those runs: 64 × `service token accepted (no user bearer)` on `/`, `/join`, `/end`, **0** Cognito verification attempts, 0 bypass lines. Media needed the **host** SFU: the containerized SFU (colima) reached ICE connected then lost it within ~2 s, every time — the risk the local-stack guide predicted. Details: [the first call § Verified tokens](social-calls-first-call.md#verified-tokens-no-bypasses-2026-09-29). **Still missing:** the same check against the *deployed* platform-api, SFU and middleware gateway (phase 2). |
-| TURN / recordings / ElastiCache | phase 4, unchanged. |
+| TURN / recordings | phase 4, unchanged. (ElastiCache moved into code on 2026-09-30, §9.) |
 
 ### Phase 1 deploy order
 
@@ -521,8 +529,10 @@ SOCIAL+=(--context deploySocialService=true --context platformApiImageDigest=$PL
 aws ecs describe-services --cluster orgiq-middleware --services orgiq-social-platform-api \
   --query 'services[0].[desiredCount,runningCount]'   # CREATE_COMPLETE proves nothing
 
-# 5. The middleware becomes the gateway now that redis.orgiq-social.local
-#    resolves, and the token bridge learns the browser URLs.
+# 5. The middleware becomes the gateway now that OrgIQ-Social has written
+#    /orgiq/social/redis-url, and the token bridge learns the browser URLs.
+#    SOCIAL carries deploySocial=true, which is what turns on REDIS_URL (SSM)
+#    and SOCIAL_CHAT_* — see §9.
 MW+=(--context realtimeGateway=true
      --context realtimeGatewayUrl=wss://$MIDDLEWARE_HOST
      --context realtimePlatformPublicUrl=https://platform.$DOMAIN
@@ -536,3 +546,135 @@ delete the exports they still import. CloudFormation refuses that with
 "Cannot delete export … in use", which is the same freeze as the
 KnowledgeBase gotcha.
 
+
+## 9. What is now in CDK (2026-09-30)
+
+Lane X of [the social tenant design](social-tenant-design.md) §7: the deploy
+half, as CDK code and tests only. Nothing was deployed and `cdk synth` did
+not run against an account; the AWS credentials had expired. `cd infra &&
+npm test` synthesizes the whole app in-process and offline. The default app
+(no context) was synthesized from HEAD and from this change: all 17 templates
+are byte-identical.
+
+### Resources
+
+| stack | resource | notes |
+|---|---|---|
+| `OrgIQ-Social` | `AWS::ElastiCache::ReplicationGroup` `orgiq-social-redis` | `cache.t4g.micro`, one node, no replica or failover, Redis 7.1, port 6379, encrypted at rest, **no TLS** (neither client speaks it). Because there is no TLS there is no AUTH token either, so the security group is the only lock. DeletionPolicy Delete: it is a cache. |
+| `OrgIQ-Social` | `AWS::ElastiCache::SubnetGroup` `orgiq-social-redis` | the middleware VPC's private subnets |
+| `OrgIQ-Social` | Redis security group | ingress 6379 from the middleware task SG and the platform-api SG only; no CIDR rule, so custodian has nothing to revoke |
+| `OrgIQ-Social` | `AWS::SSM::Parameter` `/orgiq/social/redis-url` | `redis://<primary endpoint>:6379`. The middleware reads it by name, so no export freezes. |
+| `OrgIQ-Social` | `AWS::IAM::Policy` `orgiq-middleware-social-chat` | attached to `orgiq-middleware-task-role` **by name**. It covers `GetItem`/`PutItem`/`UpdateItem`/`DeleteItem`/`Query`/`BatchGetItem` (the six calls `DynamoChatStore` makes) on `chat-messages`, `chat-conversations`, `chat-members` and `chat-reads` (+ their indexes) under the table prefix. No Scan, no CreateTable, not the whole namespace. |
+| `OrgIQ-Social` | outputs `SocialRedisUrl`, `SocialRedisUrlParameterName`, `SocialChatTablePrefix` | read by `schema/dump-stack-outputs.sh` |
+| `OrgIQ-Social` | (unchanged) platform-api on Fargate, 27 tables, host rules 30/40 | platform-api now gets `REDIS_ENDPOINT`/`REDIS_PORT`/`REDIS_URL` from ElastiCache |
+| `OrgIQ-MiddlewareService` | env `SOCIAL_CHAT_STORE=dynamo`, `SOCIAL_CHAT_TABLE_PREFIX=orgiq-social-[<tableSuffix>-]` | only with `realtimeGateway=true` **and** `deploySocial=true`; the names `middleware/src/lib/social-chat.ts` reads |
+| `OrgIQ-MiddlewareService` | container secret `REDIS_URL` ← SSM `/orgiq/social/redis-url` | same condition. `realtimeRedisUrl` overrides it as plain env. Without either, there is no REDIS_URL and synth warns: call state and the inbox stay in memory. |
+| `OrgIQ-MiddlewareService` | env `REALTIME_GATEWAY_URL` | `realtimeGatewayUrl` if given. Otherwise, with no certificate, `ws://<ALB DNS>` (the portal appends `/ws`), usable only from a `localhost` portal (§5). With a certificate it is left unset and synth warns, because the stack does not know the certificate's host. |
+| `OrgIQ-MiddlewareService` | env `REALTIME_PLATFORM_PUBLIC_URL`, `REALTIME_VIDEO_PUBLIC_URL` | explicit context wins. Otherwise they come from `https://<socialPlatformHost>` and `videoPublicUrl` / `https://<socialSfuHost>`. Unset (with a warning) when no host is known. |
+| `OrgIQ-MiddlewareService` | `REALTIME_JWT_SECRET` (`orgiq-realtime-jwt-secret`) | unchanged: already minted, and platform-api already reads it by name |
+| `infra/cdk.json` | `"deploySocial": "false"` | stated explicitly. `ctxFlag` reads `"false"` as off. |
+
+Tests: `infra/test/social-stacks.test.ts` covers every resource above. It
+checks that the default app has no ElastiCache, no social parameter and no
+realtime env. It checks the wiring with the flags on. And for the full social
+app (`deploySocial`, `deploySocialMedia`, `realtimeGateway`) it checks that
+every `Fn::ImportValue` resolves to an export and that the middleware imports
+nothing from the social stacks. There is no `infra/test/cross-stack.test.ts`;
+the fleet-wide import/export checks live in `app-wiring.test.ts` and still
+pass.
+
+### Context flags
+
+| flag | stack | effect |
+|---|---|---|
+| `deploySocial=true` | app, middleware | adds `OrgIQ-Social` (and `OrgIQ-SocialImages`). On the middleware, together with `realtimeGateway=true`: `REDIS_URL` from SSM and `SOCIAL_CHAT_*`. |
+| `deploySocialService=true` + `platformApiImageDigest` | Social | platform-api from 0 to 1 task |
+| `deploySocialMedia=true` + `sfuImageDigest` + `sfuAllowCidr` | SocialMedia | the SFU (§3). **Blocked** on the custodian decision. |
+| `realtimeGateway=true` | middleware | `REALTIME_GATEWAY=on` |
+| `realtimeRedisUrl`, `realtimeGatewayUrl`, `realtimePlatformPublicUrl`, `realtimeVideoPublicUrl` | middleware | explicit overrides |
+| `socialPlatformHost`, `socialSfuHost`, `videoPublicUrl`, `tableSuffix` | Social and middleware | read by both, so they must be passed to both |
+
+### Deploy order (multi-phase; every step needs the user's credentials)
+
+Run `aws-azure-login --mode gui` first. Then
+`aws sts get-caller-identity --query Account --output text` must print
+`647757222309`. Never use `264161986065`.
+
+1. **Agent images before the middleware.** The first time
+   `OrgIQ-MiddlewareService` deploys, the three machine-callback guards flip
+   to *required* (CLAUDE.md, "Closing the machine-callback guards"). So roll
+   the agent images first, with no secret context. On its own that roll
+   changes nothing:
+   ```bash
+   agents/base/build.sh && agents/build-all.sh
+   cd infra && ./scripts/deploy.sh OrgIQ-AgentCoreRuntime --context deployRuntimes=true
+   ```
+2. **Middleware, two phases** (the repo must hold an image before a task can
+   pull it):
+   ```bash
+   ./scripts/deploy.sh OrgIQ-MiddlewareService -e --context albAllowCidr=$IP_A/32,$IP_B/32
+   # build + push the middleware image (ARM64) to the orgiq-middleware repo, then:
+   ./scripts/deploy.sh OrgIQ-MiddlewareService -e --context deployMiddlewareService=true \
+     --context albAllowCidr=$IP_A/32,$IP_B/32
+   aws ecs describe-services --cluster orgiq-middleware --services orgiq-middleware \
+     --query 'services[0].[desiredCount,runningCount]'     # CREATE_COMPLETE proves nothing
+   ```
+3. **Close the callback guards on the fleet.** Read the three secrets and
+   redeploy the runtimes with them:
+   ```bash
+   for s in approvals-request harness-trace assessment-run-complete; do
+     aws secretsmanager get-secret-value --secret-id orgiq-$s-secret --query SecretString --output text; done
+   ./scripts/deploy.sh OrgIQ-AgentCoreRuntime --context deployRuntimes=true \
+     --context approvalsRequestSecret=… --context harnessTraceSecret=… --context assessmentRunCompleteSecret=…
+   ```
+4. **Social, phase 1**: tables, ElastiCache, the SSM parameter, the chat
+   grant, and platform-api at 0 tasks. Pass the middleware's flags as well,
+   or the middleware drops back to 0 tasks (context is not sticky):
+   ```bash
+   MW=(--context deployMiddlewareService=true --context albAllowCidr=$IP_A/32,$IP_B/32)
+   ./scripts/deploy.sh OrgIQ-SocialImages -e --context deploySocialImages=true
+   ./scripts/deploy.sh OrgIQ-MiddlewareService OrgIQ-Social -e "${MW[@]}" --context deploySocial=true
+   aws elasticache describe-replication-groups --replication-group-id orgiq-social-redis \
+     --query 'ReplicationGroups[0].Status'                  # "available"
+   aws ssm get-parameter --name /orgiq/social/redis-url --query Parameter.Value
+   ```
+5. **Social, phase 2**: build and push platform-api (§4), then
+   `--context deploySocialService=true --context platformApiImageDigest=$PLATFORM_DIGEST`,
+   as in "Phase 1 deploy order" step 4.
+6. **The middleware becomes the gateway.** It needs `realtimeGateway=true`
+   **and** `deploySocial=true` (REDIS_URL from SSM, SOCIAL_CHAT_*):
+   ```bash
+   ./scripts/deploy.sh OrgIQ-MiddlewareService OrgIQ-Social -e "${MW[@]}" \
+     --context deploySocial=true --context realtimeGateway=true
+   aws ecs describe-services --cluster orgiq-middleware --services orgiq-middleware \
+     --query 'services[0].[desiredCount,runningCount]'
+   aws logs tail /ecs/orgiq-middleware --since 10m | grep realtime-gateway   # "call state + inbox: redis (redis://…); chat store: dynamo"
+   ```
+   Keep the middleware at **one task**. Its router and its social
+   membership mirror are single-process: Redis shares call state, not
+   frame fan-out.
+7. **Local `.env.aws`**: `./schema/dump-stack-outputs.sh`. The social values
+   land **commented out**: a laptop cannot reach the Redis, and `dev:mock`
+   would seed fixture channels into the real chat tables.
+
+### What remains undeployable
+
+- **The SFU** (`OrgIQ-SocialMedia`). Media needs ingress from wherever the
+  participants are, and custodian revokes `0.0.0.0/0`. Whether it also
+  revokes UDP or high-TCP rules is unmeasured (the §3 phase-0 probe is an
+  operator AWS write). Until the account owner decides, only allowlisted
+  participants (`sfuAllowCidr`) can connect. `REALTIME_VIDEO_PUBLIC_URL`
+  stays unset and synth says so.
+- **DNS/TLS.** There is no hosted zone and no ACM certificate for
+  `platform.`, `sfu.` or the middleware host, so the host rules match
+  nothing. `REALTIME_PLATFORM_PUBLIC_URL` and the `wss://` socket URL cannot
+  be derived. Without a certificate the socket URL is `ws://<ALB>`, which
+  works only from a `localhost` portal.
+- **The Cognito HTTPS callback.** Cognito refuses non-localhost `http://`
+  callbacks, so the deployed middleware keeps `COGNITO_CALLBACK_URL` unset
+  (picker login only, with explicit `AUTH_DEMO_MODE=true`) until TLS exists.
+- **Teardown sweeps.** `destroy.sh`'s billing sweep does not list
+  ElastiCache. The replication group is DeletionPolicy Delete, so only a
+  failed stack delete would leave one behind. The `orgiq-social-*` tables
+  (RETAIN plus deletion protection) are still missing from `deploy.sh` and
+  `destroy.sh`, as §8 says.
