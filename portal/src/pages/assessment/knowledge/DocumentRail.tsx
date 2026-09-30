@@ -11,9 +11,7 @@ import {
   Banner,
   DropdownMenu,
   MoreIcon,
-  PlusIcon,
   PresenceAvatars,
-  RepeatIcon,
   Stack,
   StackedRail,
   type DropdownMenuSection,
@@ -297,6 +295,19 @@ export function DocumentRail(props: DocumentRailProps) {
     };
   };
 
+  const sourceMenu = (section: KnowledgeSection, synced: boolean, pulling: boolean, pulled: string): ReactNode => {
+    const items = [
+      ...(mayPull && synced ? [{ label: pulling ? `Pulling ${section.title}…` : 'Pull now', hint: pulled, disabled: pulling,
+        onSelect: () => void pulls.pull(section.key), 'data-testid': `section-pull-${section.key}` }] : []),
+      ...(props.onCreate && section.kind === 'local' ? [{ label: 'New page',
+        onSelect: () => props.onCreate!({ sectionKey: section.key }), 'data-testid': `section-new-page-${section.key}` }] : []),
+    ];
+    if (items.length === 0) return null;
+    return <DropdownMenu trigger={<MoreIcon size={14} />} triggerLabel={`Actions for ${section.title}`} triggerTitle={synced ? pulled : 'Actions'}
+      triggerTestId={`section-menu-${section.key}`} triggerClassName="h-7 w-7 border-transparent px-0 py-0 text-text-secondary" align="end"
+      sections={[{ items }]} />;
+  };
+
   const sourceGroup = (section: KnowledgeSection): StackedRailGroup => {
     const folderId = sectionFolderId(section.key);
     const synced = section.kind === 'synced';
@@ -310,12 +321,9 @@ export function DocumentRail(props: DocumentRailProps) {
       // The ids the walks anchor on stay those of the old folder row.
       testId: rowTestId(folderId),
       trailing: <SectionPresence sectionKey={section.key} join={!!selected && section.nodes.some(n => n.id === selected)} />,
-      actions: [
-        ...(mayPull && synced ? [{ label: pulling ? `Pulling ${section.title}…` : `Pull ${section.title} from ${section.provider ?? 'its source'} — ${pulled}`, icon: <RepeatIcon size={14} />, disabled: pulling,
-          onClick: () => void pulls.pull(section.key), 'data-testid': `section-pull-${section.key}` }] : []),
-        ...(props.onCreate && section.kind === 'local' ? [{ label: 'New page', icon: <PlusIcon size={14} />,
-          onClick: () => props.onCreate!({ sectionKey: section.key }), 'data-testid': `section-new-page-${section.key}` }] : []),
-      ],
+      // One ⋯ per source (2026-09-29): standalone Pull / New page buttons were
+      // extra 28px controls and truncated the group label at 220px.
+      actions: sourceMenu(section, synced, pulling, pulled),
       ...(pulling ? { pending: true } : {}),
       rows: [
         ...(byParent.get(null) ?? []).map(node => pageRow(node, section, byParent)),

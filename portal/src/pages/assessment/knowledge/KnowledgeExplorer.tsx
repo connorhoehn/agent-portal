@@ -15,7 +15,6 @@ import {
   InlinePlaceholder,
   LoadingState,
   MoreIcon,
-  PlusIcon,
   RailSection,
   Stack,
   VisuallyHidden,
@@ -230,10 +229,12 @@ function KnowledgeExplorerContent({ mode }: KnowledgeExplorerProps) {
 
   // The caption's 28px actions: New page, the list's ⋯, and the fold.
   const captionActions = (foldRail: () => void) => <Inline gap="none" wrap={false}>
-    {mayCreate && <IconButton aria-label="New page" title="New page" variant="ghost" size="sm" className="h-7 w-7 text-text-secondary" icon={<PlusIcon size={14} />} onClick={() => createDraft({ sectionKey: draftSectionKey! })} data-testid="new-page-btn" />}
     <DropdownMenu trigger={<MoreIcon size={14} />} triggerLabel="More for the documents list" triggerTitle="More" triggerTestId="document-rail-menu"
       triggerClassName="h-7 w-7 border-transparent px-0 py-0 text-text-secondary" align="end"
+      // One ⋯ beside the fold (2026-09-29): a standalone New page button was a
+      // third 28px control and truncated the caption to "DOCUM… 8" at 220px.
       sections={[{ items: [
+        ...(mayCreate ? [{ label: 'New page', onSelect: () => createDraft({ sectionKey: draftSectionKey! }), 'data-testid': 'new-page-btn' }] : []),
         { label: 'All documents', trailing: String(documentTotal), onSelect: openLibrary },
         { label: 'Refresh library', onSelect: () => void treeFetch.refresh() },
       ] }]} />
