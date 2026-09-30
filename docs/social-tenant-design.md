@@ -40,7 +40,7 @@ starts before its judge exists.
 | # | Research question | Taken | Decided by | If wrong |
 |---|---|---|---|---|
 | E1 | Pipelines: a section per tenant, or a tenant of their own | **A tenant, `pipelines`**, with a Runs section embedded into each other tenant in the last phase | the user's "basically the same" — the social pattern, tile first, embed later | the research's recommendation (a section per tenant over one shared model) is §6 phase 3 with the tile removed; nothing in the model changes, only the mounts |
-| E2 | Social store | **platform-api + DynamoDB** for rooms, teams, recordings, call sessions; a middleware **`ChatStore`** over the existing `chat-*` tables for channels, DMs, membership, reads; **Aurora** for identity and context bindings | research (the tables and routes exist; Aurora's Data API is the wrong tool for message fan-out) | Aurora for chat means rewriting `ChatStore` against `chat_messages` tables — the seam (`chat({ chatStore })`) is the same |
+| E2 | Social store | **platform-api + DynamoDB** for rooms, teams, recordings, call sessions; the library's **`DynamoChatStore`** (0.99.0) over the existing `chat-*` tables for channels, DMs, membership, reads; **Aurora** for identity and context bindings | research (the tables and routes exist; Aurora's Data API is the wrong tool for message fan-out) | Aurora for chat means rewriting `ChatStore` against `chat_messages` tables — the seam (`chat({ chatStore })`) is the same |
 | E3 | Identity source of truth | **`app_users`**, the realtime token the only bridge | research; picker logins have no Cognito subject | Cognito subjects would make SSO a prerequisite for chat; not revisited |
 | E4 | A product in the picker, or a data-only tenant | **A product with a tile** | the user's "create another tenant" | a data-only tenant has no home for channel admin, teams, recordings and no isolation walks to prove itself |
 | E5 | The guard rule: `org` only, or any tenant in `tenants` | **`tenants`** — a channel or room whose partition is any tenant the caller holds a grant in | required by "slowly contextually embed": an orgiq page cannot show a `social:` channel under `org`-only | keep `org`-only and embedding is impossible; the isolation walks are re-run either way |
@@ -152,9 +152,9 @@ existing write path):
 | Reply to your comment on a document | `POST /api/assessment/knowledge/doc/comment` with `parentId` | the parent comment's author | `reply` → `/assessment/<mode>?doc=<id>` |
 | A comment on a document you commented on | same route, top level | every other commenter on that document | `reply` (category "comment") |
 | `@mention` in a comment or a chat message | same route; chat `onMessage` router plugin | the mentioned users (`@<display name>` resolved against the tenant roster; unresolved mentions notify nobody) | `mention` |
-| A DM message while you have no live subscription to that lobby | router plugin `onMessage` on `chat` publish to `<t>:dm:<a>:<b>` — the lobby name carries the member ids | the other member(s) not currently subscribed to the channel | `message` → `/social/dms/<lobby>` |
+| A DM message while you have no live subscription to that lobby | router plugin `onMessage` on `chat` publish to `<t>:dm:<a>:<b>` — the lobby name carries the member ids; the sender is `message.metadata.userId` (server-stamped since 0.98.5, authoritative; the hook's `clientId` is the connection, or `'server'`) | the other member(s) not currently subscribed to the channel | `message` → `/social/dms/<lobby>` |
 | A channel message in a channel you are a member of but not viewing | same plugin, `social:ch:*`, membership from the `ChatStore` (§4.4) — **phase S1** | members minus current subscribers | `message` → `/social/channels/<slug>` |
-| Missed call (invite expired or declined with nobody joining) | `calls()` has no hook — the BFF learns it from the portal: `POST /api/social/calls/missed` from the caller's tab on timeout, session-authenticated | the callee(s) | `call-missed` → the page the invite carried (`channel: initiative:<id>` / a doc / a DM) |
+| Missed call (invite cancelled, declined, or unanswered) | `calls({ onCallMissed })` — in the library since 0.97.10 (`src/call/types.ts:468`: `{ callId, lobbyName, callerId, targetUserIds, reason: 'cancelled' \| 'declined' \| 'no-answer' }`; `onCallStarted`/`onCallEnded` beside it), wired in the gateway | the callee(s) | `call-missed` → the page the invite carried (`channel: initiative:<id>` / a doc / a DM) |
 | A proposed edit waiting on you (the drafter's `ProposedEditStrip`) | client-side today; server-side once P2's reply is stored | the document's editor | `approval-requested` → the doc |
 | An approval request (orgiq) | `POST /api/observability/approvals/request` (agent callback) | every user whose role holds `ApproveTransaction` in orgiq | `approval-requested` → `/iq/approvals` |
 | Pipeline run needs approval / finished / failed | the pipelines tenant, §5 | `triggeredBy`, and the approvers named on the step | `approval-requested` / `system` → `/pipelines/runs/<id>` |
@@ -226,9 +226,11 @@ One `app_users` id everywhere, unchanged. The realtime token already carries
   `p:` is admitted when `auth.tenants.includes(p)`; the DM rule (caller is
   one of the ids) is unchanged; `social:` channels additionally require
   membership once the `ChatStore` exists (S1);
-- platform-api (`lobbyAccess.ts`, rooms/teams routes): the partition is
-  read from the target and checked against `tenants` — an upstream change,
-  handed to that repo's session under the realtime integration exception.
+- platform-api (`lobbyAccess.ts`, rooms/teams/video-session routes): the
+  partition is read from the target and checked against `tenants`, `org`
+  still accepted for tokens without the claim — taken by the
+  realtime-modules session on 2026-09-29 (sha to be recorded here when it
+  lands).
 
 A token still says `org: <session tenant>`, so rooms and teams a user
 creates while standing in Social land under `social`. No second token.
@@ -243,7 +245,7 @@ never mint `social:` names of their own.
 
 | State | Store | Owner |
 |---|---|---|
-| channels, DMs, messages, membership, reads, pins | `chat-messages` / `chat-conversations` / `chat-members` (DynamoDB, `OrgIQ-Social`; DynamoDB Local under the `social` compose profile) through a middleware `DynamoChatStore` implementing the library's `ChatStore`, passed as `chat({ chatStore })` | middleware |
+| channels, DMs, messages, membership, reads, pins | `chat-messages` / `chat-conversations` / `chat-members` (DynamoDB, `OrgIQ-Social`; DynamoDB Local under the `social` compose profile) through the **library's** `DynamoChatStore` (realtime-modules 0.99.0, `server/stores/dynamo`, a faithful extraction of realtime-examples' chat persistence with the SDK v3 DocumentClient injected), passed as `chat({ chatStore: new DynamoChatStore({ client, tables }) })` — the middleware does not write its own | realtime-modules (store), middleware (wiring) |
 | rooms, teams, recordings, call sessions, call log | platform-api + DynamoDB; add `teams`, `team-members`, `social-relationships`, `video-recording-share-links` to `social-stack.ts` | platform-api (upstream), stack here |
 | notifications | Redis via the gateway feature (§3.3) | middleware |
 | context bindings | Aurora `social_bindings (tenant, context_kind, context_id, channel, created_by, created_at)` | middleware |
@@ -358,7 +360,7 @@ running against the shared stack.
 | **L** library ∥ | ui-components: `BellIcon`, `NotificationBell`, `WrappedNotificationBell`; queue rows for `ChannelBinding` strip and anything §4.5 finds missing; release, full-sha pin, Vite restart | library suites; `snapshot:exports`; the pin's settling commands | — |
 | **N** activity indicator | `notifications()` in the gateway + redis-lite sorted sets; `lib/social-notify.ts` + grant rule; producers rows 1–4 and 8 of §3.4; `notifications` mock fixture + scenarios; `ActivityBell` in the header; `tenantCaches` key; e2e spec | §3.6 spec; mock floor; route coverage; middleware suite | L, and the walker finished |
 | **S0** social registration ∥ | the 21 points of A.4 for `social`; cast; Cedar; brand tokens; empty-state pages; picker tile; isolation logs for the eight outside roles and three outbound walks | `validate-social-tenant.sh` phase-0 checks; assessment + newsroom-removal + nav-parity validators green | D |
-| **S1** channels + DMs | `DynamoChatStore`; `chat({ chatStore })`; membership in the guard; Channels and DMs pages; `POST /api/social/channels`, `/dms`; mock fixtures; two-context walk (post, read, DM, `AUTHZ_CHANNEL_DENIED` on a forged cross-tenant subscribe) | the walk + validator phase-1 checks | S0, N (the plugin reuses N's seam) |
+| **S1** channels + DMs | consume the library's `DynamoChatStore` (0.99.0 pin); `chat({ chatStore })`; membership in the guard; Channels and DMs pages; `POST /api/social/channels`, `/dms`; mock fixtures; two-context walk (post, read, DM, `AUTHZ_CHANNEL_DENIED` on a forged cross-tenant subscribe) | the walk + validator phase-1 checks | S0, N (the plugin reuses N's seam) |
 | **S2** rooms, teams, recordings | four tables added to `social-stack.ts`; platform-api `tenants` change (handed upstream); Rooms/Calls/Teams/Recordings pages on the library composites; room calls on `social:room:<slug>` through the existing call host | rooms created via REST are visible to a browser user in the tenant; recordings list | S0, upstream |
 | **P0** pipelines registration + projection ∥ | the 21 points for `pipelines`; cast; `lib/pipeline-runs.ts` projection + crosswalk; `/api/pipelines/runs` (list, `:id`, steps, events SSE); Runs and Artifacts pages; the maintenance-bot vertical slice on the bot detail page | every seed row of the five sources appears once with a valid status, mock and Aurora; `validate-pipelines-tenant.sh` | D |
 | **P1** agent half | run id into the trace bundle; steps from `STEP_*`/`TOOL_CALL_*`; trace artifact; `LabelFeedback` unblocked | golden runner structural mode; the harness suite | P0 |
