@@ -6,7 +6,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import {
   ActivityFeed,
-  Breadcrumbs,
   Button,
   ChevronIcon,
   DropdownMenu,
@@ -19,7 +18,6 @@ import {
   PlusIcon,
   RailSection,
   Stack,
-  Toolbar,
   VisuallyHidden,
   IconButton,
 } from '@connorhoehnslalom/ui-components/shared';
@@ -31,6 +29,8 @@ import { ActivityBar } from './ActivityBar';
 import { DocumentLibrary } from './DocumentLibrary';
 import { DocumentNavigationProvider, useDocumentNavigation } from './DocumentNavigation';
 import { DocumentRail, useSectionPulls, type QuickView } from './DocumentRail';
+import { ScopeHeader } from '@connorhoehnslalom/ui-components';
+import { useShellBreadcrumbItems } from '../../../components/shell/Breadcrumbs';
 import { ExplorerFrame } from './ExplorerFrame';
 import { RenameNodeDialog } from './RenameNodeDialog';
 import { NewDraftDialog, type DraftDestination } from './NewDraftDialog';
@@ -224,6 +224,7 @@ function KnowledgeExplorerContent({ mode }: KnowledgeExplorerProps) {
   const crumbs: { label: string; onClick?: () => void }[] = [
     ...(view.kind === 'activity' ? [{ label: 'Activity' }] : ancestors.map((n, index) => ({ label: n.title, ...(index < ancestors.length - 1 ? { onClick: () => handleSelectNode(n.id) } : {}) }))),
   ];
+  const shellTrail = useShellBreadcrumbItems();
   const documentTotal = sections.reduce((sum, section) => sum + sectionDocumentCount(section), 0);
   const mayMove = canDo('ManageKnowledge') && mode !== 'prompts';
 
@@ -317,6 +318,11 @@ function KnowledgeExplorerContent({ mode }: KnowledgeExplorerProps) {
   return (
     <ExplorerFrame
       rail={rail}
+      // The trail over the pane, the Org explorers' way: the shell groups
+      // (Informatics › Workspace), then Documents (the library), then this
+      // explorer's own crumbs. The shell's breadcrumb row is off for this page.
+      paneHeader={<ScopeHeader variant="crumbs" data-testid="knowledge-trail"
+        breadcrumbs={[...shellTrail, { label: 'Documents', onClick: openLibrary }, ...(libraryOpen ? [] : crumbs)]} />}
       aside={!libraryOpen && view.kind === 'node' && isPage && selectedNode
         ? <ActivityBar node={selectedNode} sectionKey={selectedSectionKey} sseEvents={sse.events} />
         : undefined}
@@ -324,11 +330,6 @@ function KnowledgeExplorerContent({ mode }: KnowledgeExplorerProps) {
       {/* Document pages use their own visible heading; other views still name the workspace. */}
       {(view.kind !== 'node' || !isPage) && !libraryOpen && <VisuallyHidden as="h1">{modeLabel}</VisuallyHidden>}
       <NewDraftDialog destination={creating} onClose={() => setCreating(null)} onCreated={id => { treeFetch.refresh(); handleSelectNode(id); }} />
-      {/* A page carries its trail on the editor's own title row (DocumentShell); the list its PageHeader. */}
-      {!isPage && !libraryOpen && <Toolbar aria-label="Document navigation" wrap className="px-6 py-3">
-        <Button variant="ghost" size="sm" className="border-0" onClick={openLibrary}>Documents</Button>
-        <Breadcrumbs items={crumbs} />
-      </Toolbar>}
 
       {libraryOpen && (treeFetch.isLoading ? <LoadingState label="Loading document library…" />
         : treeFetch.error ? <ErrorState title="Couldn't load the document library" body={treeFetch.error} />

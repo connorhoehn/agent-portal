@@ -11,10 +11,12 @@ const BASE = process.env.RAIL_PARITY_BASE ?? 'http://localhost:5183';
 const OTHER = process.argv.includes('--other') ? process.env.RAIL_PARITY_OTHER : null;
 const TOL = { width: 8, pitch: 2 };
 
-function findRailScript() {
+function findRailScript(anyLeft = false) {
   // The rail: the nearest ancestor of the caption (11px caps label) that is
-  // 160–340px wide and taller than 300px — the second navigation column.
-  return () => {
+  // 160–340px wide and taller than 300px — the second navigation column
+  // (right of the shell rail here; another app may put it at the left edge).
+  return (anyLeftArg) => {
+    const minLeft = anyLeftArg ? -1 : 100;
     const caps = [...document.querySelectorAll('h2, span, div, p')].filter((e) => {
       if (e.children.length > 3) return false;
       const cs = getComputedStyle(e);
@@ -25,7 +27,7 @@ function findRailScript() {
       let el = cap;
       for (let i = 0; i < 8 && el; i++, el = el.parentElement) {
         const r = el.getBoundingClientRect();
-        if (r.width >= 160 && r.width <= 340 && r.height >= 300 && r.left > 100) {
+        if (r.width >= 160 && r.width <= 340 && r.height >= 300 && r.left > minLeft) {
           const rows = [...el.querySelectorAll('a, button, [role=treeitem], [role=option], li')].filter((n) => {
             const b = n.getBoundingClientRect();
             return b.height >= 24 && b.height <= 44 && b.width > 120 && (n.textContent || '').trim().length > 0;
@@ -62,7 +64,7 @@ function findRailScript() {
           }).length;
           return {
             caption: (cap.textContent || '').trim().slice(0, 24), captionSize: capCs.fontSize, captionWeight: capCs.fontWeight,
-            width: Math.round(r.width), rowFont: rowCs.fontSize, rowWeight: rowCs.fontWeight, pitch, rows: rows.length, bg, radius, cardRadius, iconRows,
+            width: Math.round(r.width), left: Math.round(r.left), top: Math.round(r.top), rowFont: rowCs.fontSize, rowWeight: rowCs.fontWeight, pitch, rows: rows.length, bg, radius, cardRadius, iconRows,
           };
         }
       }
@@ -86,15 +88,15 @@ const ctx = await browser.newContext({ viewport: { width: 1672, height: 941 } })
 const page = await ctx.newPage();
 await signIn(page, BASE, 'u-vera', 'orgiq', 'org-leader');
 await page.goto(BASE + '/iq/library'); await page.waitForTimeout(2500);
-const reference = await page.evaluate(findRailScript());
+const reference = await page.evaluate(findRailScript(), false);
 let subject;
 if (OTHER) {
   const other = await ctx.newPage(); await other.goto(OTHER); await other.waitForTimeout(3500);
-  subject = await other.evaluate(findRailScript());
+  subject = await other.evaluate(findRailScript(), true);
 } else {
   await signIn(page, BASE, 'u-farah', 'assessment', null);
   await page.goto(BASE + '/assessment/workspace?doc=page%3A100002'); await page.waitForTimeout(3500);
-  subject = await page.evaluate(findRailScript());
+  subject = await page.evaluate(findRailScript(), false);
 }
 await browser.close();
 console.log('reference /iq/library:', JSON.stringify(reference));
@@ -104,6 +106,10 @@ if (!reference) problems.push('no rail found on /iq/library');
 if (!subject) problems.push('no rail found on the subject page');
 if (reference && subject) {
   if (Math.abs(reference.width - subject.width) > TOL.width) problems.push(`rail width ${subject.width} vs ${reference.width}`);
+  // The frame: the second rail sits flush against the shell rail at full
+  // height (the page is `data-shell-flush`), so its left and top match.
+  if (!OTHER && Math.abs(reference.left - subject.left) > 2) problems.push(`rail left ${subject.left} vs ${reference.left} — a padded frame or a shell breadcrumb row is still around it`);
+  if (!OTHER && Math.abs(reference.top - subject.top) > 2) problems.push(`rail top ${subject.top} vs ${reference.top} — a row above the rail (crumbs) or a padded frame`);
   if (reference.captionSize !== subject.captionSize) problems.push(`caption ${subject.captionSize} vs ${reference.captionSize}`);
   if (reference.rowFont !== subject.rowFont || reference.rowWeight !== subject.rowWeight) problems.push(`row type ${subject.rowFont}/${subject.rowWeight} vs ${reference.rowFont}/${reference.rowWeight}`);
   if (reference.pitch && subject.pitch && Math.abs(reference.pitch - subject.pitch) > TOL.pitch) problems.push(`row pitch ${subject.pitch} vs ${reference.pitch}`);

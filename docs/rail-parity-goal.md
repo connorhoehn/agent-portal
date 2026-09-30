@@ -34,16 +34,25 @@ documents rails move onto the Org rail's family.
    composite (its session or an agent under the integration exception); the
    adoption commit is recorded below and the validator measures its rail
    when the app is up on :15174, and says so when it is not.
-4. **Icons off by default.** The Org rail has none; a documents row may pass
+4. **The same frame, not only the same rail (2026-09-29, from the user's
+   screenshot of the gap between the shell rail and the documents rail).** The
+   Org explorers mount their second rail flush against the shell rail at full
+   height and print the trail in the pane header: the page root is
+   `data-shell-flush`, so the shell draws no 24px ring and no breadcrumb row.
+   The assessment explorer does the same (`ExplorerFrame`: `data-shell-flush`,
+   `paneHeader` = `ScopeHeader variant="crumbs"` with the shell trail + the
+   explorer's crumbs; the in-pane crumbs toolbar is gone). The judge measures
+   the rail's left and top against `/iq/library`'s.
+5. **Icons off by default.** The Org rail has none; a documents row may pass
    a small icon, the default is none. Ages sit in the meta slot in
    `RAIL_GROUP_COUNT` ink, as counts do.
 
 ## Definition of done
 
 - Measured headless at 1672×941: the second rail on `/assessment/workspace`
-  and on `/iq/library` agree on rail width (±8px), caption size (11px caps),
-  row font (13px/500), row pitch, current-row treatment, and neither has a
-  card background behind the rail.
+  and on `/iq/library` agree on rail width (±8px), left and top (±2px — the
+  flush frame), caption size (11px caps), row font (13px/500), row pitch,
+  current-row treatment, and neither has a card background or row icons.
 - realtime-examples `/documents` adopted: commit recorded here; when :15174
   answers, the same measurement passes against it.
 - The assessment-tenant and documents-parity validators stay green; the
@@ -87,6 +96,6 @@ documents rails move onto the Org rail's family.
 
 ## Adoption record
 
-- ui-components release: `2.407.30` (StackedRail, `d0f975fc`); a geometry fix (caret in the row-text column, one caption x, 18px per level) is in the library session's lane
+- ui-components release: `2.407.30` StackedRail (`d0f975fc`); `2.407.32` gutter model (caret in the row-text column, one caption x, 18px per level, `d7702462`); `2.407.33` rows at `SubNavLayout`'s 36px geometry, `ExplorerLayout.railWidth="xs"` = 220px, row `trailing` slot (`a1291afc`) — pinned here
 - aws-agentcore `DocumentRail.tsx`: bdf571d9 (2026-09-29)
 - realtime-examples `DocumentExplorer.tsx`: 895dac3f (2026-09-29 20:30, adopted by that repo's session; its audit and visual runs still finishing)

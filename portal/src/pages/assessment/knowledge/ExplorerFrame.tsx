@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { ExplorerLayout, ContextColumn, ViewportFillRegion, type ContextColumnState } from '@connorhoehnslalom/ui-components';
+import { ExplorerLayout, ContextColumn, type ContextColumnState } from '@connorhoehnslalom/ui-components';
 import { ChatIcon, Inline, Stack } from '@connorhoehnslalom/ui-components/shared';
 
 // Comments, Versions and Reviews are editor tabs (DocumentShell); the column
@@ -23,11 +23,19 @@ export interface ExplorerFrameProps {
    * handed to it to sit with the caption's other actions.
    */
   rail: (controls: { foldRail: () => void }) => ReactNode;
+  /**
+   * The row over the pane — the trail (shell groups + this explorer's crumbs)
+   * as a `ScopeHeader variant="crumbs"`, the way the Org explorers print it
+   * (2026-09-29: the shell's own breadcrumb row and its 24px content ring are
+   * off for this page via `data-shell-flush`, so the rail sits flush against
+   * the shell rail at full height, like /iq/library).
+   */
+  paneHeader?: ReactNode;
   children: ReactNode;
   aside?: ReactNode;
 }
 
-export function ExplorerFrame({ rail, children, aside }: ExplorerFrameProps) {
+export function ExplorerFrame({ rail, children, aside, paneHeader }: ExplorerFrameProps) {
   const [collapsed, setCollapsed] = useState(() => {
     try { return localStorage.getItem('assessment.documentRail.collapsed') === 'true'; }
     catch { return false; }
@@ -46,16 +54,17 @@ export function ExplorerFrame({ rail, children, aside }: ExplorerFrameProps) {
   const dock = <Stack ref={setHost} gap="sm" className="min-h-0 flex-1 p-4" />;
   return (
     <DocumentContext.Provider value={aside ? context : null}>
-      <ViewportFillRegion bottomGap={16} data-testid="knowledge-workspace">
+      <Stack gap="none" className="h-full min-h-0 min-w-0 bg-surface" data-shell-flush data-testid="knowledge-workspace">
         <ExplorerLayout
           rail={rail({ foldRail: toggleRail })}
           railLabel="document library"
-          // 240px, the narrowest the layout offers — the Org rail is 220 (see the goal doc's backlog).
-          railWidth="sm"
+          // 220px — the Org rail's width (`xs`, ui-components 2.407.33).
+          railWidth="xs"
           railCollapsed={collapsed}
           // Open, the fold is one of the caption's actions; folded, the strip's unfold control.
           {...(collapsed ? { onToggleRail: toggleRail } : {})}
           panePadding="none"
+          {...(paneHeader ? { paneHeader } : {})}
           data-testid="knowledge-explorer"
         >
           <Inline gap="none" align="stretch" wrap={false} className="min-h-0 min-w-0 flex-1 overflow-hidden">
@@ -69,7 +78,7 @@ export function ExplorerFrame({ rail, children, aside }: ExplorerFrameProps) {
             ]} /> : null}
           </Inline>
         </ExplorerLayout>
-      </ViewportFillRegion>
+      </Stack>
     </DocumentContext.Provider>
   );
 }
