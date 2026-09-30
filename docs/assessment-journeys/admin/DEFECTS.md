@@ -649,3 +649,7 @@ re-observed 2026-09-18 (dead code from the chrome removal): removing the "Live" 
 ## Open — found 2026-09-29, EditorShell rebuild re-walk
 
 - **Prompts are renamable from the rail by this role** (Rename… on every prompt row's ⋯, accepted by the server). Full evidence and owner in `lead-assessor/DEFECTS.md` #5; this role's `prompts.md` carries `verdict: fail`.
+
+## Open — found 2026-09-29 21:02–21:05, the StackedRail re-walk
+
+- **Source group labels truncate at the 220px documents rail with no title or tooltip** (workspace: “ENGINEERIN…”, “WORKSPACE DRA…”; enterprise: “ENTERPRISE CONTE…”) — seen as this role on `/assessment/workspace` and `/assessment/enterprise`; recorded once, with measurements and owner (ui-components `StackedRail`), as lead-assessor/DEFECTS.md #15. The two logs are `verdict: fail` on it.

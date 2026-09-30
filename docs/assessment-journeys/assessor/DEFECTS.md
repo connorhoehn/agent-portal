@@ -553,3 +553,7 @@ re-observed 2026-09-18 (the accent swatch, second pass): the swatch landed as a 
 Before the fix, the document tree ran the local useKeyboardTree handler in addition to the installed TreeView's own keyboard implementation. In the rendered workspace, focus Rubric Overview (leaf) and dispatch a bubbling ArrowRight: focus moves to sibling Team Playbooks, although ArrowRight on a leaf should do nothing. Native Tab traversal also skipped the current treeitem while reaching other controls; that observation may involve the native automation/window-focus behavior, so it is not independently attributed to product code. The installed library already supplied roving tabindex and keyboard behavior; the duplicate local shim was the competing implementation. The subsequent live recheck is recorded below.
 
 Resolution: root removed the redundant local hook and retained the installed library behavior. Live recheck confirms leaf ArrowRight stays put, arrows move once, Home/End reach the boundaries, Enter/Space toggle once, and native Tab enters the tree. See workspace.md for the complete current record.
+
+## Open — found 2026-09-29 21:02–21:05, the StackedRail re-walk
+
+- **Source group labels truncate at the 220px documents rail with no title or tooltip** (workspace: “ENGINEERIN…”; enterprise: “ENTERPRISE CONTE…”) — seen as this role on `/assessment/workspace` and `/assessment/enterprise`; recorded once, with measurements and owner (ui-components `StackedRail`), as lead-assessor/DEFECTS.md #15. The two logs are `verdict: fail` on it.

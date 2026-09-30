@@ -24,7 +24,7 @@ called out honestly rather than glossed over.
 | `documents.astro` (legacy `?doc=prompt:\|rule:\|ec:` redirect shim) | out-of-scope | Same — this app split Prompts/Rules/Enterprise into dedicated routes from day one, so there's no legacy unified `/documents` link to redirect from. |
 | `enterprise-context.astro` | ported | `EnterprisePage.tsx` (`KnowledgeExplorer mode="enterprise"`). |
 | `feedback.astro` | ported | `FeedbackPage.tsx` — list/filter, resolve, dismiss all wired to `/api/assessment/feedback*` (covered by `assessment-routes.test.ts` this slice). |
-| `prompts.astro` | ported | `PromptsPage.tsx` (`KnowledgeExplorer mode="prompts"`, read-only). |
+| `prompts.astro` | ported | `PromptsPage.tsx` (`KnowledgeExplorer mode="prompts"`). Editable through a draft for roles with `ManageKnowledge` since 139c4e81 (the published prompt the fleet reads changes only on an explicit publish; rename still 409s); read-only for the assessor. |
 | `report.astro` (chrome-less, printable per-team report) | out-of-scope | No portal route renders a print-stylesheet single-team report yet. The data it needs (`GET /teams/:id`, `GET /rollup`) already exists — this is a portal page-authoring gap, outside this slice's file scope (middleware routes/providers/mock only). |
 | `reports.astro` (portfolio rollup) | ported | `ReportsPage.tsx` — rollup, `WhereToStartCard`, publish. |
 | `rules.astro` | ported | `RulesPage.tsx` (`KnowledgeExplorer mode="rules"`). |

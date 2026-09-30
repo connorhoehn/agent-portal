@@ -9,7 +9,14 @@ u-asha, u-jonas, u-farah — never Demo User.
 ## Open
 
 
-### 2026-09-29 — a refused presence request gets no `AUTHZ_CHANNEL_DENIED` reply (low; signalling only)
+Nothing open (2026-09-29 20:05).
+
+## Closed
+
+### 2026-09-29 — a refused presence request gets no `AUTHZ_CHANNEL_DENIED` reply (low; signalling only) — **Closed, observed 2026-09-29 20:05**
+
+Re-probed 20:03–20:06 as all five orgiq personas and the demo SME, each with its own realtime token on `ws://localhost:3001/ws`: the presence **subscribe** on `assessment:knowledge:confluence-eng` is now answered `{type:'error', service:'presence', code:'AUTHZ_CHANNEL_DENIED', kind:'subscribe'}`, and the **`set`** naming it is answered `AUTHZ_CHANNEL_DENIED` (`kind: 'publish'`) before the ordinary ack with `channels: []`. u-jonas's watcher socket received no `update` from any of them and the Engineering Space row kept only assessment avatars. I did not check which change closed it (the middleware's presence hook or the library); the client can now tell refused from empty. The original report follows.
+
 
 Found 10:10 while closing the entry below. Under 0.98.6 a refused chat request is answered `{type:'error', code:'AUTHZ_CHANNEL_DENIED', kind, channel}`, but a refused presence request is not:
    - an orgiq socket's presence **subscribe** on `assessment:knowledge:confluence-eng` gets no frame at all;
@@ -19,7 +26,6 @@ Nothing leaks, since no roster and no fan-out. The cause is that the middleware 
 
 Owner: middleware. Now that 0.98.6 makes the router the single check, drop the redundant presence hook so the router's reply reaches the client. Alternatively realtime-modules could have a hook refusal reply the same way.
 
-## Closed
 
 ### 2026-09-29 — an orgiq session could appear in an assessment presence roster — **Closed 2026-09-29 10:11**
 
