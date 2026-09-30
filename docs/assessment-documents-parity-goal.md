@@ -380,8 +380,21 @@ composer; theirs the full editor. Three decisions, for both apps:
    drafter with the document (and the selection) as context, and the reply
    lands in the canvas as a proposed edit — inserted at the cursor or
    replacing the selection — with Apply / Discard; chat mode stays a mode.
-   `dev:mock` streams a canned edit. realtime-examples' `/documents` adopts
-   the same dock default (its session owns that swap).
+   `dev:mock` streams a canned edit. realtime-examples' `/documents` adopted
+   the same dock default on 2026-09-29 — 6e6a94fb (feature), 31081789
+   (summary = instruction, live-check pacing), d5e01ae1 (review + shots),
+   pinned to ui-components 2.407.36: the composer arrives in Agent mode, a
+   `streaming` item sits in `editor-shell-proposal`, then one `ready` item per
+   change (its agent-edit run writes suggestion marks; each mark → one
+   proposal, anchor = the mark's range), Apply/Discard drive the Suggestions
+   tab's own accept/reject, Apply all / Discard all for N>1. Not 1:1 with
+   ours: no `onRevise`, no selection sent (its `/agent-edit` route takes only
+   an instruction), anchors from marks rather than the cursor. A reader (the
+   assessor) is not offered Agent mode here (8f288081, journeys defect #17).
+   Known library bug on the default path: RichChatComposer's `onUpdate`
+   throws "Maximum update depth exceeded" under zero-delay synthetic
+   keystrokes in Agent mode (fine at 15 ms/key) — a fix lane is upstream;
+   Playwright `type()` at delay 0 can hit it.
 
 The validator asserts, per shipped slice: the canvas frame present (toolbar
 + ruler) on a prompt page for the demo user, no reader fallback text; a
