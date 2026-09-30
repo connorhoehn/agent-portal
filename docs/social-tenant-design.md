@@ -201,7 +201,7 @@ one of them in `CAPABILITY_ACTIONS`. The 21 registration points in the
 research's A.4 are the checklist, and the tenant's validator counts them.
 
 Cast (seed + identity fallback + Cognito seed list): `u-mira` Mira Okafor
-(community-admin), `u-theo` Theo Lindgren (moderator), `u-sana` Sana Iqbal
+(community-admin), `u-lena` Lena Brandt (moderator), `u-sana` Sana Iqbal
 (participant). For embedding, the curated orgiq cast and the assessment cast
 receive a `participant` grant in `social` — that is what E5 turns into
 access, and it is why the picker will show three tiles to most users. The
