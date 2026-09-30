@@ -107,6 +107,14 @@ describe('the partition rule reads the token\'s tenants (E5)', () => {
     expect(channelGuard({ userId: 'u-sana', org: 'orgiq', tenants: ['orgiq', 'social'] }, 'social:ch:design-reviews')).toBe(false);
   });
 
+  it('a channel\'s CALL lobby asks the same membership as its chat (2026-09-30)', () => {
+    // #general member: the lobby opens; #design-reviews non-member: refused,
+    // even though the social grant admits the partition.
+    expect(lobbyGuard({ userId: 'u-theo', org: 'orgiq', tenants: ['orgiq', 'social'] }, GENERAL)).toBe(true);
+    expect(lobbyGuard({ userId: 'u-sana', org: 'social', tenants: ['social'] }, 'social:ch:design-reviews')).toBe(false);
+    expect(lobbyGuard({ userId: 'u-sana', org: 'orgiq', tenants: ['orgiq'] }, GENERAL)).toBe(false);
+  });
+
   it('refuses assessment:doc:* to a social-only session, and a tenant it merely names', () => {
     expect(channelGuard({ userId: 'u-sana', org: 'social', tenants: ['social'] }, DOC)).toBe(false);
     expect(channelGuard({ userId: 'u-sana', org: 'social', tenants: ['social'] }, `presence:${DOC}`)).toBe(false);

@@ -179,6 +179,13 @@ export function lobbyGuard(auth: GuardAuth, lobbyName: string): boolean {
   const team = TEAM_CHANNEL.exec(lobbyName);
   if (team) return isSocialTeamMember(team[1]!, userId);
   if (partition === 'social' && rest.startsWith('team:')) return false; // a malformed team name
+  // A channel's CALL lobby is the channel: `social:ch:<slug>` admits the
+  // channel's active members only, the same rows chat on it checks. Until
+  // 2026-09-30 only chat asked membership, so any social grant holder could
+  // ring or join a private channel's call (social chat-workspace walk).
+  if (lobbyName.startsWith(SOCIAL_CHANNEL_PREFIX)) {
+    return !!slugForChannel(lobbyName) && socialChat().membershipStore.isActiveMember(lobbyName, userId);
+  }
   return true;
 }
 
@@ -194,15 +201,9 @@ export function lobbyGuard(auth: GuardAuth, lobbyName: string): boolean {
 export function channelGuard(auth: GuardAuth | null, channel: string): boolean {
   if (auth == null) return false;
   const bare = stripServicePrefix(channel);
-  if (!lobbyGuard(auth, bare)) return false;
-  // A social channel additionally needs membership (design §4.2): the store's
-  // `chat-members` rows, read through the synchronous mirror. The tenant rule
-  // above already refused every caller with no `social` grant.
-  if (bare.startsWith(SOCIAL_CHANNEL_PREFIX)) {
-    const userId = typeof auth.userId === 'string' ? auth.userId : '';
-    return !!slugForChannel(bare) && socialChat().membershipStore.isActiveMember(bare, userId);
-  }
-  return true;
+  // Membership for a `social:ch:<slug>` channel (design §4.2) is asked inside
+  // lobbyGuard now, so chat, presence and the channel's call lobby agree.
+  return lobbyGuard(auth, bare);
 }
 
 /**
