@@ -267,9 +267,12 @@ AE=$K/useDocumentAgentEdit.tsx
 AEM=$K/documentAgentEditModel.ts
 [ -d "$LIB" ] && grep -qE "export declare function ProposedEditStrip\b" "$LIB/doc-editor.d.ts" && awk '/declare interface EditorShellProps/,/^}/' "$LIB/doc-editor.d.ts" | grep -q "proposal?: ReactNode" \
   && ok "installed doc-editor exports ProposedEditStrip and EditorShell.proposal (2.407.34+)" || fail "installed ui-components has no ProposedEditStrip / EditorShell proposal slot"
-grep -q 'defaultMode="agent"' "$CONVO" && grep -q "disabledModes={\['terminal'\]}" "$CONVO" && ! grep -qE "disabledModes=\{\[[^]]*'agent'" "$CONVO" \
+# Agent is the default for a role that may edit; a reader (agentEditable false)
+# gets Chat with Agent offered-but-off (8f288081, journeys defect #17) — so
+# the literal is the editor branch of a conditional, never a bare 'chat'.
+grep -qE "defaultMode=(\"agent\"|\{agentEditable \? 'agent' : 'chat'\})" "$CONVO" && grep -qE "disabledModes=(\{\['terminal'\]\}|\{agentEditable \? \['terminal'\] : \['terminal', 'agent'\]\})" "$CONVO" && ! grep -qE "disabledModes=\{\[[^]]*'agent'" "$CONVO" \
   && ok "the dock's Agent mode is enabled and the default; Terminal stays off" || fail "$CONVO: Agent mode is not enabled + default (defaultMode=\"agent\", only terminal disabled)"
-grep -q "if (mode === 'agent') return agentEdit.send(message.text);" "$CONVO" && grep -q "conversation.send(message.text)" "$CONVO" \
+grep -qE "if \(mode === 'agent'\) return (agentEdit\.send\(message\.text\)|agentEditable \? agentEdit\.send\(message\.text\) : false);" "$CONVO" && grep -q "conversation.send(message.text)" "$CONVO" \
   && ok "Agent sends go to the drafter; Chat stays a mode on the conversation" || fail "$CONVO: onSend does not route agent → drafter and chat → conversation"
 grep -q "DOCUMENT_EDIT_AGENT_ID = 'orgiq-assessment-drafter'" "$AEM" && grep -q "mode: typeof DOCUMENT_EDIT_MODE" "$AEM" && grep -q "selection: DocumentSelection | null" "$AEM" \
   && ok "the request is the drafter's document command: id, title, text, selection + range" || fail "$AEM: the drafter request lost its document context"
