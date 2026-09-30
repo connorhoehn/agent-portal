@@ -179,10 +179,9 @@ mock too.
 A Playwright spec with two contexts: u-farah replies to u-jonas's comment →
 u-jonas's header bell reads 1 within 2s without a reload, the popover names
 the document and the author, clicking it lands on the document with the
-Comments tab open and the bell reads 0; u-asha (no `social` grant) receives
+Comments tab open and the bell reads 0; u-hr (Priya Desai, the bare hr-admin outside the curated cast, so no `social` grant) receives
 nothing from a `social:` DM sent to her id (the grant rule); a reload
-replays the unread set. Added to `validate-assessment-tenant.sh`'s e2e list
-and to the social tenant's validator.
+replays the unread set. Run by the social tenant's validator (non-quick).
 
 ## 4. The social tenant
 
@@ -205,8 +204,10 @@ Cast (seed + identity fallback + Cognito seed list): `u-mira` Mira Okafor
 (participant). For embedding, the curated orgiq cast and the assessment cast
 receive a `participant` grant in `social` — that is what E5 turns into
 access, and it is why the picker will show three tiles to most users. The
-demo user gets none: the isolation walks need a session with no social
-grant.
+demo user gets none: `permissiveGrants()` (`lib/session.ts`) hands the
+cookie-less demo identity every tenant in `TENANTS`, so it must leave
+`social` out explicitly — the isolation walks need a session with no social
+grant. `u-hr` stays outside the cast for the same reason.
 
 Rail (`GROUP_ORDER_BY_TENANT.social`): **Talk** (Channels `/social/channels`,
 Direct messages `/social/dms`), **Meet** (Calls `/social/calls`, Rooms
@@ -357,7 +358,7 @@ in the last phase, as the research proposed.
   a channel or room only to a holder of that tenant's grant (E5).
 - The activity indicator delivers to grant holders only (§3.4).
 - Every existing walk stays green: `validate-assessment-tenant.sh`
-  (its isolation logs gain the two new outside roles),
+  (its isolation logs gain the three new outside roles),
   `validate-orgiq-audit.sh`, `validate-newsroom-removal.sh` (re-pointed:
   three tenants), `validate-nav-parity.sh`, `validate-rail-parity.sh`.
 
