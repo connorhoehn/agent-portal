@@ -103,7 +103,7 @@ export function CanvasDocumentPane(props: DocPaneProps) {
   // Agent edits from the dock (decision 8): the drafter's reply lands in the
   // frame's proposal slot as a proposed edit with Apply / Discard.
   const agentEdit = useDocumentAgentEdit(node.id, title);
-  const composer = <DocumentComposerDock docId={node.id} title={title} conversation={conversation} agentEdit={agentEdit} />;
+  const composer = <DocumentComposerDock docId={node.id} title={title} conversation={conversation} agentEdit={agentEdit} agentEditable={!!grant?.canEdit} />;
   const chatPanel = <DocumentChatPanel title={title} userId={session?.sub ?? ''} conversation={conversation} />;
   const frame = { title, path: props.path, tab, onTab: setTab, commentCount: comments.openCount, comments: commentsTab, history, composer, proposal: agentEdit.strip };
   const href = `${location.pathname}?doc=${encodeURIComponent(node.id)}`;

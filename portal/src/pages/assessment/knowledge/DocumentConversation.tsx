@@ -67,19 +67,27 @@ export type DocumentConversation = ReturnType<typeof useDocumentConversation>;
  * hands `agentEdit.strip` to the shell's `proposal` slot so the strip sits in
  * the editor frame. Without one the dock runs its own and, having no frame
  * slot to reach, carries the strip above its composer row.
+ *
+ * `agentEditable` is whether the ROLE may edit this document. A reader (the
+ * assessor) used to get Agent mode by default, a real drafter run, and an
+ * Apply that refused only after the click (assessment journeys, defect #17);
+ * for a role that cannot edit, Agent mode is offered-but-off with the reason,
+ * the dock opens in Chat, and an agent send is refused before it leaves.
  */
-export function DocumentComposerDock(props: { docId: string; title: string; conversation: DocumentConversation; agentEdit?: DocumentAgentEdit }) {
+export function DocumentComposerDock(props: { docId: string; title: string; conversation: DocumentConversation; agentEdit?: DocumentAgentEdit; agentEditable: boolean }) {
   return props.agentEdit
     ? <ComposerDock {...props} agentEdit={props.agentEdit} stripInDock={false} />
     : <DockWithOwnAgentEdit {...props} />;
 }
 
-function DockWithOwnAgentEdit(props: { docId: string; title: string; conversation: DocumentConversation }) {
+function DockWithOwnAgentEdit(props: { docId: string; title: string; conversation: DocumentConversation; agentEditable: boolean }) {
   const agentEdit = useDocumentAgentEdit(props.docId, props.title);
   return <ComposerDock {...props} agentEdit={agentEdit} stripInDock />;
 }
 
-function ComposerDock({ docId, title, conversation, agentEdit, stripInDock }: { docId: string; title: string; conversation: DocumentConversation; agentEdit: DocumentAgentEdit; stripInDock: boolean }) {
+export const READER_AGENT_REASON = 'Your current role can read this document; ask an editor to make changes.';
+
+function ComposerDock({ docId, title, conversation, agentEdit, stripInDock, agentEditable }: { docId: string; title: string; conversation: DocumentConversation; agentEdit: DocumentAgentEdit; stripInDock: boolean; agentEditable: boolean }) {
   const context = useDocumentContext();
   const [chip, setChip] = useState(true);
   const error = agentEdit.error ?? conversation.error;
@@ -90,10 +98,11 @@ function ComposerDock({ docId, title, conversation, agentEdit, stripInDock }: { 
   </Stack> : null;
   return <ContextComposer
     context={{ kind: 'document', id: docId, title }}
-    defaultMode="agent"
-    disabledModes={['terminal']}
+    defaultMode={agentEditable ? 'agent' : 'chat'}
+    disabledModes={agentEditable ? ['terminal'] : ['terminal', 'agent']}
     modeUnavailableReasons={{
       terminal: 'Terminal sends lines to a running agent loop, and none is attached to a document.',
+      ...(agentEditable ? {} : { agent: READER_AGENT_REASON }),
       ...(conversation.connected ? {} : { chat: OFFLINE_REASON }),
     }}
     chatAvailable={conversation.connected}
@@ -109,7 +118,7 @@ function ComposerDock({ docId, title, conversation, agentEdit, stripInDock }: { 
     task={agentEdit.task}
     {...(above ? { above } : {})}
     onSend={(message, { mode }) => {
-      if (mode === 'agent') return agentEdit.send(message.text);
+      if (mode === 'agent') return agentEditable ? agentEdit.send(message.text) : false;
       if (mode !== 'chat') return false;
       const sent = conversation.send(message.text);
       // Show where it went: the thread opens beside the page.

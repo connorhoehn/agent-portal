@@ -306,6 +306,22 @@ test.describe('two people on one document', () => {
 // which comes back as a proposal in the library ProposedEditStrip. Apply writes
 // it into the canvas at the caret; the edit is then undone so the shared page
 // reads as it did.
+// A role that may only read (u-asha, assessor) is not offered Agent mode: the
+// dock opens in Chat and the agent placeholder never renders (assessment
+// journeys defect #17 — a reader used to get a real drafter run and an Apply
+// that refused only after the click).
+test('a reader gets the dock in Chat, with Agent mode off', async ({ page }) => {
+  await signIn(page, 'u-asha');
+  await page.goto(`/assessment/workspace?doc=${encodeURIComponent(DOC)}`);
+  await expect(page.locator(CANVAS)).toBeVisible({ timeout: 20_000 });
+  await expect(page.locator(`${CANVAS}[contenteditable="true"]`)).toHaveCount(0);
+  const dock = page.getByTestId('page-composer-dock');
+  await expect(dock).toBeVisible();
+  await expect(dock.locator('[data-placeholder^="Message this document"]')).toHaveCount(1);
+  await expect(dock.locator('[data-placeholder^="Ask the drafter"]')).toHaveCount(0);
+  await expect(page.getByTestId('document-agent-edit')).toHaveCount(0);
+});
+
 test('an agent-mode instruction lands in the canvas as a proposed edit', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
