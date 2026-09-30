@@ -49,7 +49,7 @@
     "ajv": "^8.20.0",
     "aws-jwt-verify": "^5.2.1",
     "cookie-parser": "^1.4.7",
-    "distributed-core": "github:connorhoehn/distributed-core#eb6e49104d30b0db074c0754b5bedf070402cb02",
+    "distributed-core": "github:connorhoehn/distributed-core#ad0879c1c75d384e8e5f86b60a91f634d5147a2a",
     "cors": "^2.8.5",
     "express": "^5.1.0",
     "jose": "^5.10.0",

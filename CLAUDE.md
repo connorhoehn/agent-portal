@@ -328,6 +328,39 @@ python3.11 -m venv .venv-synth && .venv-synth/bin/pip install -r schema/synth/re
   records the shared canvas composition, converter regressions, and the user
   requirement to preserve the accelerator's navigation/draft/publish UX.
 
+- **distributed-core** and **message-queue** exist under **BOTH**
+  `connorhoehn/` and `connorhoehnslalom/`, and the newer one is a *different
+  org for each*. ⚠️ A repo NAME does not identify a repository here, and
+  `~/projects/<name>` can be the org this project does not consume. As of
+  2026-09-30, verified by `git ls-remote` against both:
+
+  | repo | connorhoehn | connorhoehnslalom | consume |
+  |------|-------------|-------------------|---------|
+  | `distributed-core` | **0.46.5** `ad0879c1` | 0.42.2 `ba700374` | **connorhoehn** (slalom is a strict ancestor) |
+  | `message-queue` | 0.1.0 `e4d7ba9` | **0.2.2** `b93c6b7` | **connorhoehnslalom** (DIVERGED: +31 / +197 from `7b7efa4`) |
+
+  Both local checkouts pointed at the *older* org until 2026-09-30. They now set
+  `origin` to the consumed lineage and keep the other under a named remote
+  (`slalom` / `connorhoehn`) so nothing is unreachable; message-queue's 31
+  connorhoehn-only commits are parked on a local `connorhoehn-main` branch.
+
+  **This cost real debugging.** `scripts/docker/prepare-libraries.mjs` resolved
+  pins to `../<repo>` by NAME, discarding the owner, so a
+  `connorhoehn/distributed-core` pin was validated against the *slalom* clone,
+  which genuinely answers `upload-pack: not our ref` for shas it never had. That
+  read as "the commit was force-pushed away" and led to a silent three-minor
+  downgrade of a dependency middleware imports for real. The script now fetches
+  the sha from the owner the lockfile names before concluding anything — but
+  anything else reading `../distributed-core` still gets whatever org is cloned.
+  Before believing a commit is gone, check the remote the PIN names, not the one
+  `git remote -v` happens to show.
+
+  message-queue is not an npm dep of this repo — it is consumed only as the `mq`
+  container image for the document workspace, so the local checkout IS the build
+  input. v0.2.2 typechecks cleanly; the old `e4d7ba9` did not (71 errors, host and
+  container), so an image built from the old lineage needed `tsc` to emit through
+  failures. It no longer does.
+
 **Realtime integration task exception (user-authorized 2026-09-19):** the user
 explicitly requested fixes in the owning sibling repos while making the MQ/DC/
 realtime middleware and supporting Docker containers reusable and deployable
