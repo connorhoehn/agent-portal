@@ -421,11 +421,21 @@ export function conversationChannelForDoc(docId: string): string {
 
 /** A presence roster as `PresenceAvatars` users — the rail's per-source "who is here". */
 export function presenceAvatarUsers(roster: ReadonlyArray<{ clientId: string; status?: string; metadata?: Record<string, unknown> }>): Array<{ id: string; name: string; idle?: boolean }> {
-  return roster.map((entry) => {
+  // One avatar per PERSON, not per connection (re-audit #16, 2026-09-29: a
+  // reader with two tabs showed twice). Keyed by the presence metadata's
+  // userId when the gateway stamped one, else by the connection; a person
+  // reads idle only when every one of their connections is.
+  const byUser = new Map<string, { id: string; name: string; idle: boolean }>();
+  for (const entry of roster) {
     const meta = entry.metadata ?? {};
+    const userId = typeof meta['userId'] === 'string' && meta['userId'].length > 0 ? meta['userId'] : entry.clientId;
     const name = [meta['displayName'], meta['name'], meta['userId']].find((value): value is string => typeof value === 'string' && value.length > 0);
-    return { id: entry.clientId, name: name ?? 'Someone', ...(entry.status && entry.status !== 'online' ? { idle: true } : {}) };
-  });
+    const idle = !!entry.status && entry.status !== 'online';
+    const seen = byUser.get(userId);
+    if (seen) seen.idle = seen.idle && idle;
+    else byUser.set(userId, { id: userId, name: name ?? 'Someone', idle });
+  }
+  return [...byUser.values()].map(({ id, name, idle }) => ({ id, name, ...(idle ? { idle: true } : {}) }));
 }
 
 /** One tree section's realtime channel — just a presence headcount

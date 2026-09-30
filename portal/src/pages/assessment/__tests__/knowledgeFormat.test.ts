@@ -854,3 +854,18 @@ test('presenceAvatarUsers names each peer from its presence metadata', async () 
     { clientId: 'c2', status: 'away', metadata: {} },
   ]), [{ id: 'c1', name: 'Farah Osei' }, { id: 'c2', name: 'Someone', idle: true }]);
 });
+
+test('presenceAvatarUsers shows one avatar per person across their connections (re-audit #16)', async () => {
+  const { presenceAvatarUsers } = await import('../knowledge/knowledgeFormat.ts');
+  const users = presenceAvatarUsers([
+    { clientId: 'c1', status: 'online', metadata: { userId: 'u-farah', displayName: 'Farah Osei' } },
+    { clientId: 'c2', status: 'idle', metadata: { userId: 'u-farah', displayName: 'Farah Osei' } },
+    { clientId: 'c3', status: 'idle', metadata: { userId: 'u-jonas', displayName: 'Jonas Lindqvist' } },
+    { clientId: 'c4', status: 'online', metadata: {} },
+  ]);
+  assert.deepEqual(users, [
+    { id: 'u-farah', name: 'Farah Osei' },
+    { id: 'u-jonas', name: 'Jonas Lindqvist', idle: true },
+    { id: 'c4', name: 'Someone' },
+  ]);
+});
