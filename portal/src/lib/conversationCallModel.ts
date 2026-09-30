@@ -11,7 +11,8 @@
 // host (pages/projects/InitiativeCallHost.tsx).
 
 export interface CallPerson { personId: string; name: string }
-export interface RosterUser { personId: string; userId: string; displayName: string }
+/** `social`: the user holds a social grant — present only when the caller holds one (GET /api/roster/users). */
+export interface RosterUser { personId: string; userId: string; displayName: string; social?: boolean }
 export interface CallTarget { userId: string; displayName: string }
 
 export interface CallTargets {

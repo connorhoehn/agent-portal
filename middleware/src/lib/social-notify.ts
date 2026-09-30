@@ -19,7 +19,7 @@
 // no gateway (REALTIME_GATEWAY=off), no identity store, a failed delivery — all
 // are a logged no-op. The gateway wires the sink at attach (lib/realtime-gateway.ts).
 //
-// The producers that live at a write path (design §3.4 rows 1–3 and 8) are the
+// The producers that live at a write path (design §3.4 rows 1–3, 8 and 9) are the
 // `notify*` helpers below; the socket producers (row 4, DMs; row 6, missed
 // calls) live in the gateway, which is the only thing that sees those frames.
 
@@ -285,6 +285,72 @@ export async function notifyApprovalRequested(ev: ApprovalRequestEvent): Promise
     });
   } catch (err) {
     console.warn(`[social-notify] approval producer failed: ${(err as Error).message}`);
+  }
+}
+
+// ── Row 9: pipeline runs ────────────────────────────────────────────────────
+
+/** The run statuses that produce an item (design §3.4 row 9). */
+export const PIPELINE_NOTIFY_STATUSES = ['awaiting_approval', 'completed', 'failed'] as const;
+export type PipelineNotifyStatus = (typeof PIPELINE_NOTIFY_STATUSES)[number];
+
+export interface PipelineRunEvent {
+  runId: string;
+  status: string;
+  definitionId: string | null;
+  definitionTitle: string | null;
+  /** The session that started the run (`pipeline_runs.triggered_by`). */
+  triggeredBy: string | null;
+  /** The definition's effective approver roles (its own, else the tenant default). */
+  approverRoles: readonly string[];
+  error?: string | null;
+}
+
+/** Roles that can decide a step whatever it names (lib/pipeline-definitions.ts `canDecide`), minus the cross-tenant admin. */
+const ALWAYS_DECIDES = ['pipeline-admin'];
+
+/** Users whose pipelines grant includes one of `roles` (or pipeline-admin). */
+export async function pipelineApprovers(roles: readonly string[]): Promise<string[]> {
+  try {
+    const wanted = new Set([...roles, ...ALWAYS_DECIDES]);
+    return (await listUsers()).filter((u) => (u.grants['pipelines'] ?? []).some((r) => wanted.has(r))).map((u) => u.id);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Row 9: a pipeline_runs row ENTERING awaiting_approval, completed or failed →
+ * whoever triggered it and the holders of its approver roles. The item lives
+ * in the pipelines tenant (href `/pipelines/runs/<id>`), so the grant rule
+ * drops anyone without a pipelines grant — an orgiq user who triggered a run
+ * from a bot page sees it on the orgiq Runs section instead, not in the bell.
+ * Called by providers/pipeline-definitions.ts `updateRecord` only when the
+ * status actually moved, so a replayed job event notifies nobody twice.
+ */
+export async function notifyPipelineRun(ev: PipelineRunEvent): Promise<string[]> {
+  try {
+    if (!sink) return [];
+    if (!(PIPELINE_NOTIFY_STATUSES as readonly string[]).includes(ev.status)) return [];
+    const recipients = [...(ev.triggeredBy ? [ev.triggeredBy] : []), ...(await pipelineApprovers(ev.approverRoles))];
+    if (!recipients.length) return [];
+    const what = ev.definitionTitle || ev.definitionId || ev.runId;
+    const status = ev.status as PipelineNotifyStatus;
+    const title = status === 'awaiting_approval' ? `${what} is waiting on an approval`
+      : status === 'completed' ? `${what} finished` : `${what} failed`;
+    const body = status === 'failed' && ev.error ? snippet(ev.error)
+      : status === 'awaiting_approval' ? `Approved by ${ev.approverRoles.join(' or ') || 'the tenant default'}`
+      : `Run ${ev.runId}`;
+    return await notify(recipients, {
+      type: status === 'awaiting_approval' ? 'approval-requested' : 'system',
+      title,
+      body,
+      payload: { tenant: 'pipelines', kind: 'pipeline-run', runId: ev.runId, status, definitionId: ev.definitionId },
+      action: { label: 'Open the run', href: `/pipelines/runs/${encodeURIComponent(ev.runId)}` },
+    });
+  } catch (err) {
+    console.warn(`[social-notify] pipeline producer failed: ${(err as Error).message}`);
+    return [];
   }
 }
 

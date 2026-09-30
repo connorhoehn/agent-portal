@@ -24,13 +24,15 @@
 // reconnects, and the portal re-fetches a token on every drop.
 //
 // Tenant scoping, and what it does NOT cover yet:
-//   - call frames naming a lobby: refused unless the lobby is `<org>:…`, and a
-//     `<org>:dm:<ids>` lobby additionally only for one of those ids;
+//   - call frames naming a lobby: refused unless the lobby's partition
+//     (`<p>:…`) is the caller's tenant or one the token's `tenants` lists
+//     (design E5), and a `<p>:dm:<ids>` lobby additionally only for one of
+//     those ids;
 //   - untargeted (broadcast) invites: refused — the library fans those out to
 //     every connected client, which would ring across tenants;
-//   - chat and presence CHANNELS are not tenant-scoped here: the portal's
-//     channel names (`invoke`, section/doc ids) carry no tenant prefix, so
-//     that belongs with the presence-directory work in plan step 7.
+//   - chat and presence CHANNELS follow the same partition rule
+//     (channelGuard, below), plus membership for `social:ch:` and team
+//     channels.
 //
 // Enabled by REALTIME_GATEWAY=on|off. Default: on outside production, off in
 // production unless set, so the ECS task is unchanged until someone asks.
@@ -91,6 +93,7 @@ import {
 } from './social-chat.js';
 import { config } from '../config.js';
 import { listChannels } from '../providers/social-channels.js';
+import { isSocialTeamMember } from '../providers/social-platform.js';
 import { socialChannelMembersFixture, socialChannelMessagesFixture } from '../mock/social-channels.js';
 
 export const REALTIME_GATEWAY_PATH = '/ws';
@@ -139,43 +142,62 @@ export async function authenticateGatewayUpgrade(req: IncomingMessage): Promise<
   };
 }
 
+/** `social:team:<team slug>:<channel>` — a team's chat channel (design §4.3). */
+const TEAM_CHANNEL = /^social:team:([^:]+):[^:]+$/;
+
+type GuardAuth = { userId?: unknown; org?: unknown; tenants?: unknown };
+
 /**
- * May this connection use `lobbyName`? Only lobbies prefixed with the
- * caller's own tenant (`<org>:`); a `<org>:dm:<a>:<b>…` lobby (the shape
- * `dmLobbyName(ids, { prefix: '<org>:' })` builds) only when the caller is
- * one of the ids. Anything else under the prefix (a room, an initiative) is
- * open to the tenant.
+ * May this connection use `lobbyName`? The partition is the name's first
+ * segment (`<p>:…`), admitted when it is the caller's own tenant (`org`) or
+ * any tenant the token's `tenants` claim lists — the grant list
+ * (docs/social-tenant-design.md E5, §4.2: "slowly contextually embed" needs an
+ * orgiq page to open a `social:` channel for a user who holds a social grant).
+ * Then, whatever the partition:
+ *   - `<p>:dm:<a>:<b>…` (the shape `dmLobbyName(ids, { prefix: '<p>:' })`
+ *     builds) only when the caller is one of the ids;
+ *   - `social:team:<team>:<channel>` only for the team's members (the BFF's
+ *     in-process copy of platform-api's roster, providers/social-platform.ts).
+ * Anything else under an admitted partition (a room, an initiative) is open
+ * to the partition's grant holders.
  */
-export function lobbyGuard(auth: { userId?: unknown; org?: unknown }, lobbyName: string): boolean {
+export function lobbyGuard(auth: GuardAuth, lobbyName: string): boolean {
   const org = typeof auth.org === 'string' ? auth.org : '';
   const userId = typeof auth.userId === 'string' ? auth.userId : '';
-  if (!org || !userId) return false;
-  const prefix = `${org}:`;
-  if (!lobbyName.startsWith(prefix)) return false;
-  const rest = lobbyName.slice(prefix.length);
+  if (!userId) return false;
+  const tenants = Array.isArray(auth.tenants) ? auth.tenants.filter((t): t is string => typeof t === 'string' && !!t) : [];
+  const cut = lobbyName.indexOf(':');
+  if (cut <= 0) return false;
+  const partition = lobbyName.slice(0, cut);
+  if (partition !== org && !tenants.includes(partition)) return false;
+  const rest = lobbyName.slice(cut + 1);
   if (!rest) return false;
   if (rest === 'dm' || rest.startsWith('dm:')) {
     const ids = rest.slice(3).split(':').filter(Boolean);
     return ids.includes(userId);
   }
+  const team = TEAM_CHANNEL.exec(lobbyName);
+  if (team) return isSocialTeamMember(team[1]!, userId);
+  if (partition === 'social' && rest.startsWith('team:')) return false; // a malformed team name
   return true;
 }
 
 /**
  * May this connection subscribe to / publish on `channel` (chat, presence)?
- * The same rule as lobbies (2026-09-29): only channels prefixed with the
- * caller's own tenant (`<org>:`), and a `<org>:dm:<a>:<b>…` channel only
- * when the caller is one of the ids. Before this, `lobbyGuard` scoped calls
+ * The same rule as lobbies (2026-09-29; widened to the token's `tenants` by
+ * E5): only channels whose partition the caller holds a grant in, a
+ * `<p>:dm:<a>:<b>…` channel only when the caller is one of the ids, a team
+ * channel only for the team's members. Before this, `lobbyGuard` scoped calls
  * only, and every orgiq persona could join `assessment:doc:<id>` — read its
  * history and post into it (assessment isolation walk, 2026-09-29).
  */
-export function channelGuard(auth: { userId?: unknown; org?: unknown } | null, channel: string): boolean {
+export function channelGuard(auth: GuardAuth | null, channel: string): boolean {
   if (auth == null) return false;
   const bare = stripServicePrefix(channel);
   if (!lobbyGuard(auth, bare)) return false;
   // A social channel additionally needs membership (design §4.2): the store's
   // `chat-members` rows, read through the synchronous mirror. The tenant rule
-  // above already refused every caller outside `social:`.
+  // above already refused every caller with no `social` grant.
   if (bare.startsWith(SOCIAL_CHANNEL_PREFIX)) {
     const userId = typeof auth.userId === 'string' ? auth.userId : '';
     return !!slugForChannel(bare) && socialChat().membershipStore.isActiveMember(bare, userId);
@@ -196,8 +218,8 @@ export function stripServicePrefix(channel: string): string {
 }
 
 // Typed inline: the library's `ChannelAuthorize` type reaches ts-jest as `any`.
-const authorizeChannel = ({ kind, channel, ctx }: { kind: 'subscribe' | 'publish'; clientId: string; channel: string; ctx: { userId?: unknown; org?: unknown } | null }): boolean => {
-  const ok = channelGuard(ctx as { userId?: unknown; org?: unknown } | null, channel);
+const authorizeChannel = ({ kind, channel, ctx }: { kind: 'subscribe' | 'publish'; clientId: string; channel: string; ctx: GuardAuth | null }): boolean => {
+  const ok = channelGuard(ctx, channel);
   if (!ok) {
     const who = ctx as Record<string, unknown> | null;
     console.warn(`[realtime-gateway] refused ${kind} on channel '${channel}' for user '${String(who?.['userId'] ?? '?')}' (org '${String(who?.['org'] ?? '?')}')`);

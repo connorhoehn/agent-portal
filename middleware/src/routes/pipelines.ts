@@ -109,7 +109,9 @@ export function runReadHandlers(scope: { contextTenant?: ContextTenant } = {}) {
       const offset = intParam(req.query['offset'], 0, Number.MAX_SAFE_INTEGER);
       // total is the filtered set before paging — a count, not a page length.
       // `unlinked`: agent traces with no AG-UI run id (P1) — counted, not dropped.
-      res.json({ runs: filtered.slice(offset, offset + limit), total: filtered.length, limit, offset, unavailable: p.unavailable, unlinked: p.unlinked });
+      // A tenant façade counts only its own tenant's unlinked traces (lane E).
+      const unlinked = scope.contextTenant ? { invocation_traces: p.unlinkedByTenant?.[scope.contextTenant] ?? 0 } : p.unlinked;
+      res.json({ runs: filtered.slice(offset, offset + limit), total: filtered.length, limit, offset, unavailable: p.unavailable, unlinked });
     }),
     one: asyncHandler(async (req: Request, res: Response) => {
       const { p, run } = await findRun(req);

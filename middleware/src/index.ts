@@ -27,7 +27,7 @@ import { promptEvalsRouter } from './routes/prompt-evals.js';
 import { distillationRouter } from './routes/distillation.js';
 import { knowledgeBaseRouter } from './routes/knowledge-base.js';
 import { assessmentRouter } from './routes/assessment.js';
-import { socialRouter } from './routes/social.js';
+import { socialEmbedRouter, socialRouter } from './routes/social.js';
 import { pipelinesRouter } from './routes/pipelines.js';
 import { runsFacadeRouter } from './routes/runs.js';
 import { ingestRouter } from './routes/ingest.js';
@@ -245,6 +245,11 @@ app.use('/api/assessment', assessmentRouter);
 // The third and fourth tenants (docs/social-tenant-design.md §4, §5). Neither
 // has a machine callback, so the tenant gate sits at the mount: a session
 // parked in any other tenant is refused before a handler runs.
+// The cross-tenant half first (design E5, §4.6): context bindings and opening
+// a DM are gated on the caller's GRANTS (social + the context's tenant), so an
+// orgiq page can show its bound channel. Every other /api/social path falls
+// through to the tenant-gated router below.
+app.use('/api/social', socialEmbedRouter);
 app.use('/api/social', requireTenant('social'), socialRouter);
 app.use('/api/pipelines', requireTenant('pipelines'), pipelinesRouter);
 // The orgiq read of the pipelines run projection — only runs whose

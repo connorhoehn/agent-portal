@@ -37,6 +37,7 @@ import type { ContextTenant, PipelineRunStatus } from '../lib/pipeline-runs.js';
 import { clock } from '../mock/core/index.js';
 import { pipelineConfigRows, pipelineDefinitionRows, pipelineRunRecords } from '../mock/pipeline-definitions.js';
 import { jobEvents, type JobChangeEvent } from './agent-jobs.js';
+import { notifyPipelineRun, PIPELINE_NOTIFY_STATUSES } from '../lib/social-notify.js';
 
 type Unavailable = Array<{ source: string; error: string }>;
 
@@ -260,21 +261,47 @@ async function updateRecord(id: string, patch: { status: PipelineRunStatus; cost
   const terminal = isTerminalRunStatus(patch.status);
   if (config.mock.aurora) {
     const row = pipelineRunRecords.rows().find((r) => r.id === id);
-    if (!row || isTerminalRunStatus(row.status)) return;
+    // Unchanged status: nothing moved, so nothing to announce (a replayed job event).
+    if (!row || isTerminalRunStatus(row.status) || row.status === patch.status) return;
     row.status = patch.status;
     if (patch.costUsd !== undefined) row.costUsd = patch.costUsd;
     if (patch.error !== undefined) row.error = patch.error;
     if (terminal) row.finishedAt = clock.nowIso();
+    void announceRun({ id: row.id, definitionId: row.definitionId, triggeredBy: row.triggeredBy, status: row.status, error: row.error });
     return;
   }
-  await exec(
+  const moved = await exec(
     `UPDATE pipeline_runs SET status = :st,
             cost_usd = COALESCE(:cost, cost_usd), error = COALESCE(:err, error),
             finished_at = CASE WHEN :terminal THEN now() ELSE finished_at END
-      WHERE id = :id AND status NOT IN ('completed', 'rejected', 'failed', 'cancelled')`,
+      WHERE id = :id AND status <> :st AND status NOT IN ('completed', 'rejected', 'failed', 'cancelled')
+      RETURNING id, definition_id, triggered_by, error`,
     [s('st', patch.status), n('cost', patch.costUsd ?? null), s('err', patch.error ?? null),
       { name: 'terminal', value: { booleanValue: terminal } }, s('id', id)],
   );
+  const row = moved[0];
+  if (row) {
+    void announceRun({ id: String(row['id']), definitionId: str(row['definition_id']), triggeredBy: str(row['triggered_by']), status: patch.status, error: str(row['error']) });
+  }
+}
+
+/**
+ * Design §3.4 row 9: a record that just ENTERED awaiting_approval, completed
+ * or failed notifies its trigger and its approver-role holders (lib/social-notify.ts
+ * `notifyPipelineRun`, which applies the tenant rule). Fire-and-forget: a
+ * notification never slows or fails the job event that moved the record.
+ */
+async function announceRun(rec: { id: string; definitionId: string | null; triggeredBy: string | null; status: PipelineRunStatus; error: string | null }): Promise<void> {
+  try {
+    if (!(PIPELINE_NOTIFY_STATUSES as readonly string[]).includes(rec.status)) return;
+    const [def, cfg] = await Promise.all([rec.definitionId ? getDefinition(rec.definitionId) : Promise.resolve(null), getPipelinesConfig()]);
+    await notifyPipelineRun({
+      runId: rec.id, status: rec.status, definitionId: rec.definitionId, definitionTitle: def?.title ?? null,
+      triggeredBy: rec.triggeredBy, approverRoles: effectiveApproverRoles(def, cfg.defaultApproverRole).roles, error: rec.error,
+    });
+  } catch (err) {
+    console.warn(`[pipelines] could not announce run ${rec.id}: ${(err as Error).message}`);
+  }
 }
 
 /** A finished record's cost, read off its job once the job reports one — the only write to a terminal record. */

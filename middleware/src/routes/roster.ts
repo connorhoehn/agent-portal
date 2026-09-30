@@ -62,7 +62,10 @@ rosterRouter.get('/', asyncHandler(async (req, res) => {
 // person linked to a user in another tenant reads as unlinked here. A person
 // with no linked user is listed in `unlinked` so the page can say who it
 // cannot ring. Same bare session floor as the roster (mounted in index.ts).
-export interface RosterUser { personId: string; userId: string; displayName: string }
+// `social` (lane E, design §4.6): whether that user holds a social grant, so
+// Search's Message button can say who a DM would not reach — present only
+// when the CALLER holds a social grant (it is a fact about the social tenant).
+export interface RosterUser { personId: string; userId: string; displayName: string; social?: boolean }
 const MAX_PERSON_IDS = 50;
 
 rosterRouter.get('/users', asyncHandler(async (req, res) => {
@@ -72,9 +75,10 @@ rosterRouter.get('/users', asyncHandler(async (req, res) => {
   const users = personIds.length ? await listUsers() : [];
   const out: RosterUser[] = [];
   const unlinked: string[] = [];
+  const callerInSocial = (req.session?.grants?.['social']?.length ?? 0) > 0;
   for (const personId of personIds) {
     const u = users.find((x) => x.personId === personId && (!tenant || (x.grants[tenant]?.length ?? 0) > 0));
-    if (u) out.push({ personId, userId: u.id, displayName: u.displayName });
+    if (u) out.push({ personId, userId: u.id, displayName: u.displayName, ...(callerInSocial ? { social: (u.grants['social']?.length ?? 0) > 0 } : {}) });
     else unlinked.push(personId);
   }
   res.json({ users: out, unlinked });

@@ -1,15 +1,15 @@
 role: member
 user: u-theo
 pages: portal/src/App.tsx,portal/src/components/shell/Layout.tsx,portal/src/pages/SelectContextPage.tsx
-audited: 2026-09-30 05:01Z → 05:01Z, Chromium 1552×958 (Playwright headless, a fresh context per identity — not the shared Chrome tab), middleware dev:mock:social on :3001, Vite :5183 — re-walked after lane S2 changed App.tsx (the /social/* routes now point at the rooms, calls, contacts, teams, recordings and configuration pages)
+audited: 2026-09-30 07:06Z, Chromium 1552×958 (Playwright headless from portal/node_modules, a fresh context per identity — not the shared Chrome tab), middleware dev:mock:social on :3001, Vite :5183 — re-walked in lane E (E5 tenants guard in the gateway, the /api/social/bindings + grant-gated POST /api/social/dms routes, /iq/runs and /pipelines/configuration routes in App.tsx and the rail/palette rows in Layout.tsx/portalCommands.ts)
 social-grant: yes                 # /api/session/me: sub u-theo, tenant orgiq, role member, grants {"orgiq":["member"],"social":["participant"]}
-social-tile-visible: yes          # /select Workspaces tab: tiles ["orgiq","social"] (data-testid select-roles-*)
-social-nav-visible: no            # /iq/projects: 13 anchors in [data-shell-nav], 0 toward /social; ⌘K "Direct messages" lists 3 commands, 0 of them a social page
+social-tile-visible: yes          # /select Workspaces tab: tiles ["orgiq", "social"] (data-testid select-roles-*)
+social-nav-visible: no            # /iq/projects: 13 anchors in [data-shell-nav], 0 toward /social; ⌘K "Direct messages" lists 3 commands, 0 of them a social page; ⌘K "Runbooks" lists 5 commands, 0 of them a social page; ⌘K "Rubric" lists 9 commands, 0 of them a social page
 direct-route-result: redirect      # /social/channels → /iq/projects (h1 "My initiatives"); /social/rooms → /iq/projects (h1 "My initiatives"); /social/dms → /iq/projects (h1 "My initiatives"); 0 social page test ids rendered
 api-status: 403                   # /api/social/summary 403, /api/social/channels 403, /api/social/rooms 403, /api/social/teams 403, /api/social/recordings 403, /api/social/calls 403; POST /api/session/tenant {social} skipped (grant held)
 activity-leak: none               # bell opened: "Nothing new Activity will appear here.", 0 item links, 0 outside the tenants held
-console errors: 0 — the 6 "Failed to load resource: 403" lines the walk's own API probes log are the answers under test (api-status), counted apart
+console errors: 0 — the walk's API probes go through the context's request client, so their 403s never reach the page console
 screenshot: member.jpg                # /select as this identity
-screenshot-direct-route: member-direct-route.jpg   # where typing /social/dms lands
+screenshot-direct-route: member-direct-route.jpg   # where the last typed social URL leaves you
 verdict: pass
-notes: POST /api/session/login {userId:u-theo} → 200 (the call the Sign-in-as card makes), then sessionStorage['orgiq.contextChosen'] set to the sub — what the chooser's markContextChosen() does. This identity holds a social grant, so the Social tile shows on the picker — and the session standing in its own tenant still cannot reach /social/* or /api/social/* (the S2 routes included): the gate is the session's tenant, not the grant list.
+notes: POST /api/session/login {userId:u-theo} → 200 (the call the Sign-in-as card makes), then sessionStorage['orgiq.contextChosen'] set to the sub — what the chooser's markContextChosen() does. This identity holds a social grant, so the Social tile shows on the picker — and the session standing in its own tenant still cannot reach /social/* pages or the tenant-gated /api/social/* surface: the gate is the session's tenant. Two routes are grant-gated by design since lane E (design E5, §4.6): /api/social/bindings?context=initiative%3Ap-auth-migration 200 (the initiative's bound channel for the embedded strip) and POST /api/social/dms (Search → Message). Realtime, own token (tenants ["orgiq", "social"]): presence subscribe social:ch:general → presence/subscribed; chat join social:ch:general → chat/joined,chat/history; chat send social:ch:general → chat/message,chat/sent — E5 at work: this user is a member of #general, so an orgiq page may embed it.

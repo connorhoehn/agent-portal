@@ -156,3 +156,14 @@ Method: Chromium 1552×958 (Playwright headless from portal/node_modules, a fres
   - activity bell: header controls ['command-palette-hint', '2 agent runs in progress', 'local-compute-badge', 'activity-bell-button', 'Demo User· Member ▾']; the bell reads “Activity” and opens on “Nothing new | Activity will appear here.” — no item toward /assessment.
   - console errors: 0 (read after /select, home, the palette and every direct route; the 16 later "Failed to load resource" lines are the probes' own answers). No horizontal scroll (1552 = 1552). Screenshot: demo-user-reobs-2026-09-30-bell.jpg (where /assessment/teams left this identity).
   - verdict: pass.
+
+--- freshness re-observation, 2026-09-30 07:29Z (lane E: the E5 tenants guard, /iq/runs, /pipelines/configuration) ---
+Why: App.tsx and Layout.tsx changed in lane E and the gateway's partition rule now reads the realtime token's `tenants` (design E5) — the door this log's scenario is about. Every fact below was re-taken.
+Method: Chromium 1552×958 (Playwright headless from portal/node_modules, a fresh context per identity; the cookie-less context, then the picker's own two-step (POST /api/session/tenant {orgiq} + /role {sme}, what “Org · SME” does), then sessionStorage['orgiq.contextChosen'].
+  - after Org · SME: /api/session/me grants {"orgiq":["sme"]}, tenant orgiq, role sme; home /iq/projects; rail 14 anchors, 0 toward /assessment.
+  - direct-route-result: **redirect** — /assessment/teams → /iq/projects; /assessment/workspace?doc=page%3A100002 → /iq/projects.
+  - api-status: **403** — /api/assessment/teams 403, /api/assessment/knowledge/tree 403, /api/assessment/pipeline-runs 403, /api/assessment/knowledge/doc/workflows/comments?id=page%3A100002 403.
+  - realtime (the narrowed token, tenants ["orgiq"]): chat join assessment:doc:page:100002 → AUTHZ_CHANNEL_DENIED (kind subscribe); chat history assessment:doc:page:100002 → AUTHZ_CHANNEL_DENIED (kind subscribe); chat send assessment:doc:page:100002 → AUTHZ_CHANNEL_DENIED (kind publish); presence subscribe assessment:doc:page:100002 → AUTHZ_CHANNEL_DENIED (kind subscribe).
+  - the un-narrowed cookie-less identity, for the record: it holds assessment grants ({"orgiq":["member","sme","program-owner","org-leader","hr-admin","admin"],"assessment":["assessor","lead-assessor","program-lead","admin"]}), so under E5 its token may open the assessment partition — chat join assessment:doc:page:100002 → chat/joined; presence subscribe assessment:doc:page:100002 → presence/subscribed — while its REST reads stay 403 by session tenant (/api/assessment/teams 403). That is E5's rule (any tenant the caller holds a grant in) applied to a dev-only identity that can enter Assessment from the picker anyway; the picker-narrowed persona this log is about is refused.
+  - console errors: 0. Screenshot: demo-user-reobs-2026-09-30-lane-e.jpg.
+  - verdict: pass.

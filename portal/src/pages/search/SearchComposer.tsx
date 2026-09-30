@@ -12,6 +12,8 @@
 // usePeopleCall, ringing those people's OrgIQ sign-ins in the dm lobby of you +
 // them. While that call is on, the row is the call shelf; a ring anywhere in
 // /iq is answered by the shell's toast (InitiativeCallHost in IqLayout).
+// Beside it, Message opens a social DM with the one selected person
+// (./peopleMessage.tsx — lane E, docs/social-tenant-design.md §4.6).
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
@@ -21,6 +23,7 @@ import { recordKey, SEARCH_LABELS, type SearchRecord } from './searchTypes';
 import { parseSearchCommand, type SearchAgent } from './searchCommands';
 import { searchWorkflowCommands, searchWorkflowIn, type SearchWorkflowRow } from './searchWorkflows';
 import { usePeopleCall } from '../projects/peopleCall';
+import { usePeopleMessage } from './peopleMessage';
 import { peopleFromRecordKeys, searchCallChannel } from '../../lib/conversationCallModel';
 
 export interface SearchComposerProps {
@@ -102,8 +105,11 @@ export function SearchComposer({ value, onChange, onSubmit, disabled, agents, re
     startTestId: 'search-start-call',
     dockTestId: 'search-call-dock',
   });
-  const dock = call.dock ?? (people.length > 0 && call.startButton
-    ? <Inline justify="end" className="px-2 py-1" data-testid="search-call-row">{call.startButton}</Inline>
+  // Message (lane E, design §4.6): a DM in Social with the one selected
+  // person — drawn only for a session holding a social grant.
+  const message = usePeopleMessage(people);
+  const dock = call.dock ?? (people.length > 0 && (call.startButton || message)
+    ? <Inline justify="end" gap="xs" className="px-2 py-1" data-testid="search-call-row">{message}{call.startButton}</Inline>
     : null);
   const attachDraftReferences = () => {
     editorRef.current?.editor?.state.doc.descendants(node => {

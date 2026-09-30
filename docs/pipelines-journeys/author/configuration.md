@@ -1,14 +1,14 @@
 surface: configuration
 role: author
 user: u-ines (Ines Moreau)
-url: /pipelines/configuration
-pages: portal/src/pages/pipelines/PipelinesSurfacePage.tsx,portal/src/pages/pipelines/pipelinesSurfaces.ts
-audited: 2026-09-30 03:30Z, Chromium 1456×958 (Playwright headless, one context per identity — not the shared Chrome tab), middleware dev:mock:social on :3001, Vite :5183; GET /api/session/me: sub u-ines, tenant pipelines, role author, grants {"pipelines":["author"]}
+url: /pipelines/configuration (→ /pipelines/runs)
+pages: portal/src/pages/pipelines/ConfigurationPage.tsx,portal/src/App.tsx,portal/src/components/shell/Layout.tsx,portal/src/components/shell/portalCommands.ts
+audited: 2026-09-30 07:33Z, Chromium 1552×958 (Playwright headless from portal/node_modules, one context per identity — not the shared Chrome tab), middleware dev:mock:social on :3001, Vite :5183; GET /api/session/me: sub u-ines, tenant pipelines, role author, grants {"pipelines":["author"]} — re-walked in lane E (the page is real now and gated to pipeline-admin)
 screenshot: configuration.jpg
 verdict: pass
 console errors: 0
-layout: pass — content col left 224px w 1208px; no horizontal scroll (scrollWidth 1456 = innerWidth 1456); h1 "Configuration", badge "Coming in lane P2", one EmptyState in the content column
-keyboard: pass — 0 focusable controls in main (an empty state has none), Tab visited 0; the rail entry for the page is reachable by Tab from the shell
-empty-state: pass — the page IS its empty state on this lane: "Nothing to configure yet | Settings appear here as the features they govern arrive. Only a pipeline admin can change them. | What comes next | Lane P2 brings approver and retention settings."
-role-gating: pass — author holds ViewPipelines, AuthorDefinition, RunPipeline; forbidden ApproveStep, CancelRun, ManagePipelineConfig. Buttons in main: none; no Approve, Cancel, New definition or configuration control exists anywhere in the DOM of this surface (P0 surfaces are reads — those controls arrive with P2). The rail shows Configuration to every pipelines role (NAV_ITEMS carries no role gate); it opens a read-only empty state with no control — recorded in DEFECTS.md for P2, where ManagePipelineConfig gives it something to gate. The copy says only a pipeline admin can change settings; no setting exists yet, so nothing here is gated for any role.
-notes: Approver and retention settings are P2's.
+layout: pass — typing /pipelines/configuration lands on /pipelines/runs (h1 “Runs”): content col left 224px w 1304px; no horizontal scroll (scrollWidth 1552 = innerWidth 1552)
+keyboard: pass — no Configuration entry to reach: the rail carries 9 anchors and none is /pipelines/configuration; on the Runs page it lands on, 29 controls, 29 accept focus
+empty-state: n/a — this role is not shown the page at all (decision, DEFECTS.md Closed #1)
+role-gating: pass — author holds ViewPipelines, AuthorDefinition, RunPipeline; forbidden ApproveStep, CancelRun, ManagePipelineConfig. Configuration is pipeline-admin only (the separation-of-duties table): absent from the rail, absent from the palette (roles: ['pipeline-admin']), and the route redirects home (RequireRole pipeline-admin → HomeRedirect → /pipelines/runs); 0 select/Save in the DOM. The API agrees: GET /api/pipelines/configuration 200 (the default approver is shown on every Definition and Approval anyway), PUT 403
+notes: The one fact of the setting this role's work depends on — who approves a step by default — reads on Definitions and Approvals as “Operator (default)”.

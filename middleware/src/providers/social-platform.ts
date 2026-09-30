@@ -192,6 +192,42 @@ export async function createRoom(session: Session, input: CreateRoomInput): Prom
   return roomView(row);
 }
 
+// ── Team membership for the gateway (design §4.2, lane E) ───────────────────
+//
+// `social:team:<team slug>:<channel>` chat channels are admitted to the team's
+// MEMBERS only (lib/realtime-gateway.ts channelGuard). The guard is
+// synchronous and platform-api's membership needs a caller's token, so — like
+// lib/social-chat.ts's MirroredMembershipStore — the BFF keeps an in-process
+// copy, fed by every team read and write that passes through it: the Teams
+// page lists your teams (you are recorded as a member of each), a team's
+// detail replaces its roster, and add/remove/create edit it. A team the BFF
+// has never seen admits nobody: fail closed, and the Teams page is the only
+// door into a team channel, so a member has always passed through listTeams
+// first. Under dev:mock the fixtures ARE the store, read live.
+
+const teamRosterMirror = new Map<string, Set<string>>(); // team slug → user ids
+const teamSlugById = new Map<string, string>();
+
+function mirrorTeam(teamId: string, slug: string): void { teamSlugById.set(teamId, slug); }
+function mirrorAdd(slug: string, userId: string): void {
+  const set = teamRosterMirror.get(slug) ?? new Set<string>();
+  set.add(userId);
+  teamRosterMirror.set(slug, set);
+}
+
+/** Is `userId` a member of the team whose slug is `teamSlug`? (sync; the gateway's guard) */
+export function isSocialTeamMember(teamSlug: string, userId: string): boolean {
+  if (!teamSlug || !userId) return false;
+  if (socialPlatformBackend() === 'mock') {
+    const team = socialTeamsFixture.rows().find((t) => t.slug === teamSlug && t.state === 'active');
+    return !!team && !!teamMember(team.teamId, userId);
+  }
+  return teamRosterMirror.get(teamSlug)?.has(userId) ?? false;
+}
+
+/** Tests only. */
+export function resetSocialTeamMirror(): void { teamRosterMirror.clear(); teamSlugById.clear(); }
+
 // ── Teams ───────────────────────────────────────────────────────────────────
 
 interface PlatformTeamListItem extends SocialTeamRow { role?: 'owner' | 'member'; favorite?: boolean; channels?: SocialRoomRow[] }
@@ -202,6 +238,8 @@ export async function listTeams(session: Session): Promise<SocialTeamView[]> {
     const body = await platformRequest<{ teams?: PlatformTeamListItem[] }>(session, 'GET', '/api/teams');
     return (body?.teams ?? []).filter((t) => t.orgId === SOCIAL_PARTITION).map((t) => {
       const { channels, role, favorite, ...team } = t;
+      mirrorTeam(team.teamId, team.slug);
+      if (role) mirrorAdd(team.slug, session.sub);
       return { ...team, role: role ?? null, favorite: !!favorite, channels: (channels ?? []).filter((c) => c.state !== 'archived').map(channelView) };
     });
   }
@@ -224,6 +262,8 @@ export async function getTeam(session: Session, teamId: string): Promise<SocialT
       session, 'GET', `/api/teams/${encodeURIComponent(teamId)}`);
     if (!body?.team || body.team.orgId !== SOCIAL_PARTITION) throw new NotFoundError(`no team ${teamId}`);
     const members = body.members ?? [];
+    mirrorTeam(body.team.teamId, body.team.slug);
+    teamRosterMirror.set(body.team.slug, new Set(members.map((m) => m.userId)));
     const mine = members.find((m) => m.userId === session.sub);
     return {
       team: { ...body.team, role: body.role ?? null, favorite: !!mine?.favorite, channels: (body.channels ?? []).filter((c) => c.state !== 'archived').map(channelView) },
@@ -246,6 +286,8 @@ export async function createTeam(session: Session, input: CreateTeamInput): Prom
   const backend = socialPlatformBackend();
   if (backend === 'platform') {
     const body = await platformRequest<{ team: SocialTeamRow; channels?: SocialRoomRow[] }>(session, 'POST', '/api/teams', input);
+    mirrorTeam(body.team.teamId, body.team.slug);
+    mirrorAdd(body.team.slug, session.sub);
     return { ...body.team, role: 'owner', favorite: false, channels: (body.channels ?? []).map(channelView) };
   }
   if (backend === 'none') throw new AppError(503, 'teams need platform-api (none configured)');
@@ -274,6 +316,8 @@ export async function addTeamMember(session: Session, teamId: string, userId: st
     const body = await platformRequest<{ member: SocialTeamMemberRow }>(session, 'POST', `/api/teams/${encodeURIComponent(teamId)}/members`, {
       userId, ...(displayName ? { displayName } : {}), ...(session.name ? { byName: session.name } : {}),
     });
+    const slug = teamSlugById.get(teamId);
+    if (slug) mirrorAdd(slug, body.member.userId);
     return { userId: body.member.userId, role: body.member.role, addedAt: body.member.addedAt };
   }
   if (backend === 'none') throw new AppError(503, 'teams need platform-api (none configured)');
@@ -292,6 +336,8 @@ export async function removeTeamMember(session: Session, teamId: string, userId:
   const backend = socialPlatformBackend();
   if (backend === 'platform') {
     await platformRequest<unknown>(session, 'DELETE', `/api/teams/${encodeURIComponent(teamId)}/members/${encodeURIComponent(userId)}`);
+    const slug = teamSlugById.get(teamId);
+    if (slug) teamRosterMirror.get(slug)?.delete(userId);
     return;
   }
   if (backend === 'none') throw new AppError(503, 'teams need platform-api (none configured)');

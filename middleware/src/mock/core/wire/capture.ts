@@ -55,6 +55,9 @@ const QUERY_HINTS: Record<string, string> = {
   // hint for a shape it never had. spr-auth-s2 is the two-grant sprint, so
   // the capture sees a list, not a single row.
   'GET /api/grants': 'sprintId=spr-auth-s2',
+  // The seeded binding (mock/social-bindings.ts), so the capture witnesses a
+  // bound context rather than `binding: null`.
+  'GET /api/social/bindings': 'context=initiative%3Ap-auth-migration',
 };
 
 interface Capture {

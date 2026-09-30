@@ -171,7 +171,7 @@ def main():
         'orgiq_schema.sql',
         'search_workspace_schema.sql',
         'identity_schema.sql',
-        # The social tenant's channel directory (chat state is DynamoDB).
+        # The social tenant's channel directory + context bindings (chat state is DynamoDB).
         'social_schema.sql',
         'observability_schema.sql',
         'observability_authz_schema.sql',

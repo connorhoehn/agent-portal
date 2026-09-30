@@ -410,6 +410,12 @@ export interface Projection {
    * is either in exactly one Run's `context.sources` or in this count.
    */
   unlinked: { invocation_traces: number };
+  /**
+   * The same count split by the tenant each trace belongs to (`agentTenant`),
+   * so a tenant façade reports only its own unlinked traces — an assessment
+   * page must not read a count of orgiq agent traffic (lane E).
+   */
+  unlinkedByTenant: Partial<Record<ContextTenant, number>>;
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -701,13 +707,14 @@ export function projectRuns(src: RunSources): Projection {
     }
   }
 
-  const unlinked = projectAgentRuns(src, runs, steps, artifacts);
+  const unlinkedByTenant: Partial<Record<ContextTenant, number>> = {};
+  const unlinked = projectAgentRuns(src, runs, steps, artifacts, unlinkedByTenant);
 
   runs.sort((a, b) => (b.startedAt ?? '').localeCompare(a.startedAt ?? ''));
   // Newest first, like the runs — an artifact with no time sorts last. Stable,
   // so artifacts of one run keep the order their run produced them in.
   artifacts.sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''));
-  return { runs, steps, artifacts, unlinked: { invocation_traces: unlinked } };
+  return { runs, steps, artifacts, unlinked: { invocation_traces: unlinked }, unlinkedByTenant };
 }
 
 // ─── Agent runs (P1) ────────────────────────────────────────────────────────
@@ -771,7 +778,7 @@ const addMs = (iso: string, ms: number | null): string | null => {
   return Number.isFinite(t) ? new Date(t + ms).toISOString() : null;
 };
 
-function projectAgentRuns(src: RunSources, runs: Run[], steps: Map<string, Step[]>, artifacts: Artifact[]): number {
+function projectAgentRuns(src: RunSources, runs: Run[], steps: Map<string, Step[]>, artifacts: Artifact[], byTenant: Partial<Record<ContextTenant, number>> = {}): number {
   const traces = src.invocations ?? [];
   // Oldest first, so when two bundles claim one run id the earlier keys it.
   const ordered = [...traces].sort((a, b) => a.ts.localeCompare(b.ts));
@@ -791,7 +798,11 @@ function projectAgentRuns(src: RunSources, runs: Run[], steps: Map<string, Step[
     if (t.aguiRunId) continue;
     const rid = t.parentInvocationId ? runIdOfInvocation.get(t.parentInvocationId) : undefined;
     if (rid) childrenByRunId.set(rid, [...(childrenByRunId.get(rid) ?? []), t]);
-    else unlinked++;
+    else {
+      unlinked++;
+      const tenant = agentTenant(t.agentId, t.tenant);
+      byTenant[tenant] = (byTenant[tenant] ?? 0) + 1;
+    }
   }
 
   for (const [rid, t] of primaryByRunId) {

@@ -35,6 +35,21 @@ resolutions, and only one of them is code:
 What is **not** acceptable is the third case: nobody has decided, and the drift
 is invisible. The budget makes it visible and stops it growing.
 
+## Decided: `/iq/runs` is gated exactly as the `/api/runs` façade (2026-09-30, lane E)
+
+OrgIQ's Runs section (Operate) reads `GET /api/runs` — the orgiq façade over
+the pipelines run projection (`middleware/src/routes/runs.ts`), whose read
+gate is the bots router's: `readForRolesElseAction(['org-leader', 'hr-admin',
+'program-owner'], 'ManageBots')`. `ManageBots` adds `sme`, so the effective
+reader set is `sme`, `program-owner`, `org-leader`, `hr-admin` (+ `admin`).
+The rail row (`Layout.tsx`, with `admin` listed because the tenant-nav filter
+has no bypass), the palette row (`roles: BOTS`, "Workspace runs") and both
+routes (`App.tsx` `runs`, `runs/:id` under `RequireRole`) name exactly those
+four — not narrower than the API, and not wider: a `member` would get a page
+of 403s, the same reason `/admin/bots` does not show to them. Resolution 1
+("widen the nav to the server's tier") taken at birth rather than after the
+fact. If the façade's gate ever moves, the three portal gates move with it.
+
 ## Open: should `org-leader` see the Ingest surfaces read-only? (5 candidates)
 
 `/api/ingest` mounts `readForRolesElseAction(['org-leader', 'hr-admin'],

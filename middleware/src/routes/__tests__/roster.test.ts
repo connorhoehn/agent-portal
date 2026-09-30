@@ -101,10 +101,10 @@ describe('GET /api/roster (mock path)', () => {
 });
 
 describe('GET /api/roster/users (person → user, for the initiative call)', () => {
-  function appAs(tenant: string | null) {
+  function appAs(tenant: string | null, grants?: Record<string, string[]>) {
     const app = express();
     app.use((req, _res, next) => {
-      if (tenant) (req as unknown as { session: unknown }).session = { sub: 'u-vera', tenant, role: 'org-leader' };
+      if (tenant) (req as unknown as { session: unknown }).session = { sub: 'u-vera', tenant, role: 'org-leader', ...(grants ? { grants } : {}) };
       next();
     });
     app.use('/api/roster', rosterRouter);
@@ -126,6 +126,16 @@ describe('GET /api/roster/users (person → user, for the initiative call)', () 
   it('treats a user without a grant in the current tenant as unlinked', async () => {
     const res = await request(appAs('assessment')).get('/api/roster/users?personIds=p-004');
     expect(res.body).toEqual({ users: [], unlinked: ['p-004'] });
+  });
+
+  it('says who holds a social grant only to a caller who holds one (Search → Message, lane E)', async () => {
+    const res = await request(appAs('orgiq', { orgiq: ['org-leader'], social: ['participant'] })).get('/api/roster/users?personIds=p-004,p-011');
+    expect(res.body.users).toEqual([
+      { personId: 'p-004', userId: 'u-nora', displayName: 'Nora DaSilva', social: true },
+      { personId: 'p-011', userId: 'u-eli', displayName: 'Eli Garcia', social: false },
+    ]);
+    const without = await request(appAs('orgiq', { orgiq: ['org-leader'] })).get('/api/roster/users?personIds=p-004');
+    expect(without.body.users[0]).not.toHaveProperty('social');
   });
 
   it('answers an empty list for no person ids, without reading users', async () => {

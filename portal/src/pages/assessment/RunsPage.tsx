@@ -1,5 +1,6 @@
 // Runs / Activity — the run ledger. A DataTable of every recorded run, a detail Drawer
-// with the progress/result envelope and a Stop action, and a "Run a command" panel that
+// with the progress/result envelope and a Stop action, a "Pipeline runs" section (the
+// same runs in the pipelines ledger, via /api/assessment/pipeline-runs), and a "Run a command" panel that
 // lists the deployed Strands tools and collects each command
 // source before reserving a run (docs/assessment-tenant.md "Agentic support"). Launch responses are mapped per docs/agent-runs.md §1: 202 toasts
 // and adds the row, 400/403/409/429 each get their own explanation.
@@ -27,6 +28,7 @@ import {
   T,
 } from '@connorhoehnslalom/ui-components/shared';
 import { KeyValue } from '../../components/KeyValue';
+import { RunsLedger } from '../../components/runs/RunsLedger';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';
@@ -299,6 +301,19 @@ export default function RunsPage() {
       )}
 
       <RunACommandPanel onLaunched={load} />
+
+      {/* Pipeline runs (docs/social-tenant-design.md §5.1, lane E): the same
+          commands as runs of the pipelines ledger — steps, status crosswalk,
+          cost — read through this tenant's own façade (context.tenant =
+          assessment), never the pipelines tenant's door. The same RunsLedger
+          composition as /pipelines/runs and /iq/runs; rows do not open here
+          (the run detail lives in the ledger's own tenant). */}
+      <PageSection
+        title="Pipeline runs"
+        description="Each command above, as a run of the pipelines ledger — its status, kind and cost."
+      >
+        <RunsLedger endpoint="/api/assessment/pipeline-runs" detailBase={null} pageSize={10} data-testid="assessment-pipeline-runs" />
+      </PageSection>
 
       <Drawer open={detail !== null} onClose={() => setDetailId(null)} title={detail?.command} subtitle={detail?.id}>
         {detail && (

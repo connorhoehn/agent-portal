@@ -152,3 +152,16 @@ Method: Chromium 1552×958 (Playwright headless from portal/node_modules, a fres
   - activity bell: header controls ['command-palette-hint', '2 agent runs in progress', 'activity-bell-button', 'Theo Chang· Member ▾']; the bell reads “Activity” and opens on “Nothing new | Activity will appear here.” — no item toward /assessment.
   - console errors: 0 (read after /select, home, the palette and every direct route; the 16 later "Failed to load resource" lines are the probes' own answers). No horizontal scroll (1552 = 1552). Screenshot: member-reobs-2026-09-30-bell.jpg (where /assessment/teams left this identity).
   - verdict: pass.
+
+--- freshness re-observation, 2026-09-30 07:06Z (lane E: the E5 tenants guard, /iq/runs, /pipelines/configuration) ---
+Why: App.tsx (the /iq/runs and /iq/runs/:id routes, the pipeline-admin-only /pipelines/configuration route) and Layout.tsx (the /iq/runs rail row under Operate, the Configuration row's role gate) changed — both in this log's pages: digest — and the gateway now admits a channel's partition by the realtime token's `tenants` claim (design E5), which is exactly the door these walks probe. Every fact below was re-taken.
+Method: Chromium 1552×958 (Playwright headless from portal/node_modules, a fresh context per identity; POST /api/session/login {userId:u-theo} → 200 (the call the Sign-in-as card makes), then sessionStorage['orgiq.contextChosen'] set to the sub — what the chooser's markContextChosen() does.
+  - identity: sub u-theo, tenant orgiq, role member, grants {"orgiq":["member"],"social":["participant"]}.
+  - assessment-tile-visible: **no** — /select tiles ["orgiq", "social"]; the word “assessment” appears nowhere in the picker's text.
+  - assessment-nav-visible: **no** — rail on /iq/projects: 13 anchors, 0 toward /assessment.
+  - direct-route-result: **redirect** — /assessment/teams → /iq/projects (h1 "My initiatives"); /assessment/workspace?doc=page%3A100002 → /iq/projects (h1 "My initiatives"); /assessment/prompts → /iq/projects (h1 "My initiatives"); /assessment/runs → /iq/projects (h1 "My initiatives").
+  - api-status: **403** — /api/assessment/teams 403, /api/assessment/knowledge/tree 403, /api/assessment/pipeline-runs 403, /api/assessment/knowledge/doc/workflows/comments?id=page%3A100002 403; POST /api/session/tenant {assessment} 403.
+  - realtime (own token, tenants ["orgiq", "social"] — no assessment grant, so E5 opens nothing here): chat join assessment:doc:page:100002 → AUTHZ_CHANNEL_DENIED (kind subscribe); presence subscribe assessment:doc:page:100002 → AUTHZ_CHANNEL_DENIED (kind subscribe).
+  - activity bell: “Nothing new Activity will appear here.”, 0 item links, none toward /assessment.
+  - console errors: 0. No horizontal scroll (1552 = 1552). Screenshot: member-reobs-2026-09-30-lane-e.jpg (where the last typed URL leaves you).
+  - verdict: pass.

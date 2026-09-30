@@ -32,3 +32,9 @@ Found walking the S2 surfaces headless against dev:mock:social with the
    no LVS recording webhook for calls of up to 25s with two people; the
    Recordings page could only be walked empty. The list/player/share/delete
    paths are covered by the fixture-backed route tests.
+
+## Closed in lane E (re-walk on realtime-modules 0.99.3, 2026-09-30 08:00Z)
+
+- #1 teardown 404s — closed: Leave's DELETEs now go to the SFU (http://localhost:3901/api/channels/arn%3Alocal%3Aivs%3Achannel%2F<id>/whep/<id>; http://localhost:3901/api/channels/arn%3Alocal%3Aivs%3Achannel%2F<id>/whip/<id>); 0 console errors, no WHIP/WHEP response ≥400.
+- #2 second arrival ~3s — closed: 0.15s from the peer going live to “2 people” on this dock (bar 2s).
+- #3 tiles named by SFU id — closed: the remote tile reads the display name (“Town hall 2 people Share People 2 Leave You Sana Iqbal”).

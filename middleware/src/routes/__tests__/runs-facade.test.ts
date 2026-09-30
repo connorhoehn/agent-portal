@@ -126,6 +126,17 @@ describe('GET /api/assessment/pipeline-runs — the assessment read', () => {
     }
   });
 
+  it('counts only its own tenant\'s unlinked agent traces — never the orgiq fleet\'s (context tenant scoping, lane E)', async () => {
+    const { loadProjection } = await import('../../providers/pipeline-runs.js');
+    const p = await loadProjection();
+    const res = await request(appAs(as('assessor', 'assessment', 'u-asha'))).get('/api/assessment/pipeline-runs?limit=5');
+    expect(res.body.unlinked).toEqual({ invocation_traces: p.unlinkedByTenant.assessment ?? 0 });
+    const orgiq = await request(appAs(nora)).get('/api/runs?limit=5');
+    expect(orgiq.body.unlinked).toEqual({ invocation_traces: p.unlinkedByTenant.orgiq ?? 0 });
+    // Split, not invented: the per-tenant counts add up to the whole.
+    expect((p.unlinkedByTenant.orgiq ?? 0) + (p.unlinkedByTenant.assessment ?? 0)).toBe(p.unlinked.invocation_traces);
+  });
+
   it('refuses an orgiq or pipelines session (403)', async () => {
     for (const s of [mia, as('operator', 'pipelines', 'u-kofi')]) {
       const res = await request(appAs(s)).get('/api/assessment/pipeline-runs');

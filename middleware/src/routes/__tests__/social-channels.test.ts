@@ -29,7 +29,7 @@ jest.mock('@aws-sdk/client-verifiedpermissions', () => ({
 
 import express from 'express';
 import request from '../../test-support/http.js';
-import { socialRouter } from '../social.js';
+import { socialEmbedRouter, socialRouter } from '../social.js';
 import { requireTenant } from '../../lib/authz.js';
 import { errorHandler } from '../../lib/async-handler.js';
 import { socialChat } from '../../lib/social-chat.js';
@@ -43,6 +43,7 @@ function appAs(sub: string, role: Role, tenant = 'social') {
     req.session = { sub, iat: 0, role, tenant, grants: { [tenant]: [role] } } as unknown as Session;
     next();
   });
+  app.use('/api/social', socialEmbedRouter);
   app.use('/api/social', requireTenant('social'), socialRouter);
   app.use(errorHandler);
   return app;
@@ -63,7 +64,7 @@ describe('GET /api/social/channels', () => {
     const res = await request(sana()).get('/api/social/channels');
     expect(res.status).toBe(200);
     const slugs = res.body.channels.map((c: { slug: string }) => c.slug);
-    expect(slugs).toEqual(['general', 'design-reviews']);
+    expect(slugs).toEqual(['general', 'auth-migration', 'design-reviews']);
     const general = res.body.channels[0];
     expect(general).toMatchObject({ channel: 'social:ch:general', joined: true, role: 'member', privacy: 'public' });
     // Counted from the member rows, never stored.

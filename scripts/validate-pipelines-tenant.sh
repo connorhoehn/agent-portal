@@ -573,7 +573,9 @@ grep -E "path: '/iq/runs'" "$LAYOUT" 2>/dev/null | grep -qF "group: 'Operate'" &
 has "path: '/iq/runs'" "$CMDS" && ok "palette knows /iq/runs" || fail "$CMDS: no /iq/runs row"
 need "/api/assessment/pipeline-runs" "$ROUTE_TESTS/runs-facade.test.ts" "façade test covers /api/assessment/pipeline-runs"
 grep -rqF "/api/assessment/pipeline-runs" portal/src/pages/assessment 2>/dev/null && ok "assessment Activity reads /api/assessment/pipeline-runs" || fail "portal/src/pages/assessment: Activity is not fed from /api/assessment/pipeline-runs"
-grep -rqF "/api/pipelines/" portal/src/pages/assessment portal/src/pages/iq portal/src/pages/bots 2>/dev/null && fail "an orgiq/assessment page calls /api/pipelines/* (it must read its own tenant's façade)" || ok "no orgiq/assessment page reaches into /api/pipelines/*"
+# Comment lines (// … , * … , /* … , {/* … */}) are prose, not calls — a page
+# that says "never /api/pipelines/*" in a comment is obeying the rule.
+grep -rnF "/api/pipelines/" portal/src/pages/assessment portal/src/pages/iq portal/src/pages/bots 2>/dev/null | grep -qvE '^[^:]+:[0-9]+:[[:space:]]*(//|\*|/\*|\{/\*)' && fail "an orgiq/assessment page calls /api/pipelines/* (it must read its own tenant's façade)" || ok "no orgiq/assessment page reaches into /api/pipelines/*"
 if [ -f "$ROUTE_TESTS/runs-facade.test.ts" ]; then
   grep -qE "context.*tenant|contextTenant" "$ROUTE_TESTS/runs-facade.test.ts" && ok "façade test asserts filtering by context tenant" || fail "runs-facade.test.ts never asserts the context-tenant filter"
 fi

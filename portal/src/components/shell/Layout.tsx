@@ -118,6 +118,12 @@ const NAV_ITEMS: NavItem[] = [
   { path: '/iq/scores',     label: 'Scores',      tenant: 'orgiq',     group: 'Org', requireRoles: ['org-leader', 'hr-admin'] },
   // Initiative design discussions remain separate from reusable assets.
   { path: '/iq/designs', label: 'Designs', tenant: 'orgiq', group: 'Design' },
+  // OPERATE — the runs this workspace produced (bots, agents, the queue),
+  // read through the orgiq façade /api/runs (docs/social-tenant-design.md
+  // §5.1). Gated like the façade — the bots read gate: org-leader, hr-admin,
+  // program-owner, plus ManageBots (sme) — so the rail is not narrower than
+  // the API (docs/nav-server-tier-decisions.md). `admin` listed: no bypass here.
+  { path: '/iq/runs', label: 'Runs', tenant: 'orgiq', group: 'Operate', requireRoles: ['sme', 'program-owner', 'org-leader', 'hr-admin', 'admin'] },
   // Release: the session bundle every devbox Claude Code session boots with.
   // The assessment tenant is a different product with a different map: not
   // the SDLC arc but the assessment programme's own — ASSESS (the intake and
@@ -167,7 +173,10 @@ const NAV_ITEMS: NavItem[] = [
   { path: '/pipelines/agents',        label: 'Agents',        tenant: 'pipelines', group: 'Sources' },
   { path: '/pipelines/bots',          label: 'Bots',          tenant: 'pipelines', group: 'Sources' },
   { path: '/pipelines/commands',      label: 'Commands',      tenant: 'pipelines', group: 'Sources' },
-  { path: '/pipelines/configuration', label: 'Configuration', tenant: 'pipelines', group: 'System' },
+  // pipeline-admin only: author and operator never see Configuration (the
+  // separation-of-duties table, docs/pipelines-tenant-goal.md). `admin` is
+  // listed because the tenant-nav filter has no admin bypass.
+  { path: '/pipelines/configuration', label: 'Configuration', tenant: 'pipelines', group: 'System', requireRoles: ['pipeline-admin', 'admin'] },
   { path: '/settings',      label: 'Settings',    tenant: 'universal', group: 'System' },
 ];
 

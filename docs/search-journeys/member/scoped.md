@@ -12,3 +12,13 @@ keyboard: pass — 31 of 31 visible controls in <main> reachable by Tab at 1672 
 empty-state: pass — the "In: Design System API ▾" menu (16 items) starts with "Search entire workspace"; choosing it gives /iq/search?q=component+contracts&tab=results, the trigger reads "Workspace ▾", the crumbs drop Design System API, the footer loses its scope link, and "Ask about these results ↗" / "View connections ↗" leave the DOM (0 left). From the scoped URL again, the footer link (search-scope-all) does the same (same URL, 0 links left). Unscoped Results 3 ("3 results") ≥ scoped Results 3. In scope, "zzznoexist" shows "No matching records — Try another phrase or clear a filter."
 role-gating: member can scope, clear the scope, filter, sort, select, open records, save the search and ask; nothing on this surface is hidden for the role, so there is nothing to find absent from the DOM
 notes: Also scoped-header-1536.png and scoped-header-1280.png: the header band collapsed. Results: Initiatives 1 (Design System API, "Programmatic access to the design system: typed component contracts, …", "Open initiative" → /iq/projects/p-design-system-api) and Work 2 (Component API contract · Isabel Vasquez; Typed prop contracts with generated codemods · Theo Chang — each "Title match", In progress, "Open work item" → /iq/projects/p-design-system-api?tab=work&item=…); 4 <mark> highlights (component, contracts, Component, contracts). The scope menu lists "Search entire workspace", Workspace, then the 14 initiatives. The bare send still switches to Answer, so results take a Results-tab click. Against the mockup: the chip and link sit on their own row under a "← Design System API / Work" back crumb with an editable (pencil) title; here the trigger shares the header band, the link is in the footer and the title has no edit affordance.
+
+--- re-observation 2026-09-30 07:55Z (lane E — Search connections gained “Message”: SearchComposer.tsx + peopleMessage.tsx + searchMessageModel.ts) ---
+Walked as u-theo (Theo Chang) (orgiq/member, grants {"orgiq":["member"],"social":["participant"]}), headless Chromium 1552×958 from portal/node_modules, one fresh context — not the shared Chrome — middleware dev:mock:social :3001, Vite :5183, at /iq/search?scope=p-design-system-api&q=component%20contracts&tab=results.
+verdict: pass
+console errors: 0
+layout: pass — scrollWidth 1552 = innerWidth 1552; 1 <main>; content col left 200px w 1352px.
+keyboard: pass — 38 enabled visible controls in <main>, 38 accept focus (`.focus()` walk).
+empty-state: pass — unchanged from the walk above.
+role-gating: nothing else on this surface changed in lane E.
+screenshot: scoped-2026-09-30-lane-e.png

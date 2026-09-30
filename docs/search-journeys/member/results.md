@@ -12,3 +12,13 @@ keyboard: pass — 96 of 96 visible controls in <main> reachable by Tab (none un
 empty-state: pass — q=zzznoexist renders "No matching records — Try another phrase or clear a filter." above the hint "Select results to ask about them or view their connections."; every SEARCH rail count drops to 0 (All results 0 · People 0 · Initiatives 0 · Work 0 · Decisions 0 · Knowledge 0)
 role-gating: GET /api/session/capabilities gives member Search true, ViewOrgChart true, ViewLeaderboard false, ManageBudgets false, Masquerade false. The People group and avatars render; scope, type and sort menus, selection, Ask about selection and "Save search" (the ⋯ menu's only item) are usable; "Remove saved search" is absent from the DOM (0 matches, no saved search open) and "influence" appears 0 times in <main>'s HTML
 notes: Rail: All results 68 · People 3 · Initiatives 2 · Work 13 · Decisions 2 · Knowledge 48 · More types ▾, SAVED "No saved searches yet.", RECENT "No conversations yet." (All and Knowledge keep moving walk to walk with the mock's recorded observations: 62 → 68 since 20:05). Groups People 3 (3 rows) / Initiatives 2 (2) / Work 13 (7, See all 13) / Decisions 2 (1, See all 2) / Knowledge 48 (12, See all 48); 25 row checkboxes, 8 <mark> highlights; first row "VG · Vera Green · Data Modeling, Zero Trust, TypeScript · Principal Engineer · Platform Engineering · Matched through initiative membership". Start call on this tab: with Vera Green ticked the composer's call row appears (512–1624 × 724–760, 36px) with "Start call" enabled, title "Call Vera Green"; the list still scrolls on its own and the body does not. With nothing ticked there is no call row (absent, not disabled — DEFECTS.md "Observed"). Against the mockup (unchanged): people rows lead with skills rather than "Owner · Auth Migration"; the first result starts at 167px against the mockup's ~310px.
+
+--- re-observation 2026-09-30 07:55Z (lane E — Search connections gained “Message”: SearchComposer.tsx + peopleMessage.tsx + searchMessageModel.ts) ---
+Walked as u-theo (Theo Chang) (orgiq/member, grants {"orgiq":["member"],"social":["participant"]}), headless Chromium 1552×958 from portal/node_modules, one fresh context — not the shared Chrome — middleware dev:mock:social :3001, Vite :5183, at /iq/search?q=Who%20can%20help%20finish%20Auth%20Migration%3F&tab=results.
+verdict: pass
+console errors: 0
+layout: pass — scrollWidth 1552 = innerWidth 1552; 1 <main>; content col left 200px w 1352px.
+keyboard: pass — 105 enabled visible controls in <main>, 105 accept focus (`.focus()` walk).
+empty-state: pass — unchanged from the walk above.
+role-gating: nothing else on this surface changed in lane E.
+screenshot: results-2026-09-30-lane-e.png

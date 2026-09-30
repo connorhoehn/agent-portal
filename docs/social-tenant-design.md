@@ -155,9 +155,9 @@ existing write path):
 | A DM message while you have no live subscription to that lobby | router plugin `onMessage` on `chat` publish to `<t>:dm:<a>:<b>` — the lobby name carries the member ids; the sender is `message.metadata.userId` (server-stamped since 0.98.5, authoritative; the hook's `clientId` is the connection, or `'server'`) | the other member(s) not currently subscribed to the channel | `message` → `/social/dms/<lobby>` |
 | A channel message in a channel you are a member of but not viewing | same plugin, `social:ch:*`, membership from the `ChatStore` (§4.4) — **phase S1** | members minus current subscribers | `message` → `/social/channels/<slug>` |
 | Missed call (invite cancelled, declined, or unanswered) | `calls({ onCallMissed })` — in the library since 0.97.10 (`src/call/types.ts:468`: `{ callId, lobbyName, callerId, targetUserIds, reason: 'cancelled' \| 'declined' \| 'no-answer' }`; `onCallStarted`/`onCallEnded` beside it), wired in the gateway | the callee(s) | `call-missed` → the page the invite carried (`channel: initiative:<id>` / a doc / a DM) |
-| A proposed edit waiting on you (the drafter's `ProposedEditStrip`) | client-side today; server-side once P2's reply is stored | the document's editor | `approval-requested` → the doc |
+| A proposed edit waiting on you (the drafter's `ProposedEditStrip`) | client-side today; server-side once P2's reply is stored — **not wired (lane E, 2026-09-30)**: the proposal exists only in the proposing browser tab (`ProposedEditStrip` state), no BFF route ever sees it, so there is no write path to hang a producer on. It gets one the day the drafter's reply is persisted server-side; until then a second tab could not open the proposal the item would point at anyway | the document's editor | `approval-requested` → the doc |
 | An approval request (orgiq) | `POST /api/observability/approvals/request` (agent callback) | every user whose role holds `ApproveTransaction` in orgiq | `approval-requested` → `/iq/approvals` |
-| Pipeline run needs approval / finished / failed | the pipelines tenant, §5 | `triggeredBy`, and the approvers named on the step | `approval-requested` / `system` → `/pipelines/runs/<id>` |
+| Pipeline run needs approval / finished / failed | the pipelines tenant, §5 — **wired (lane E)**: `providers/pipeline-definitions.ts` `updateRecord` announces a `pipeline_runs` row only when its status actually MOVES into `awaiting_approval`, `completed` or `failed` (`lib/social-notify.ts` `notifyPipelineRun`) | `triggeredBy`, and the holders of the definition's effective approver roles (its own, else the tenant default) plus `pipeline-admin`; the tenant rule drops anyone without a pipelines grant | `approval-requested` / `system` → `/pipelines/runs/<id>` |
 
 `notifyUser` never throws and delivery is fire-and-forget, so no write path
 gets slower or fails because the gateway is down.
@@ -226,7 +226,12 @@ One `app_users` id everywhere, unchanged. The realtime token already carries
 - gateway (`realtime-gateway.ts` `channelGuard` / `lobbyGuard`): a prefix
   `p:` is admitted when `auth.tenants.includes(p)`; the DM rule (caller is
   one of the ids) is unchanged; `social:` channels additionally require
-  membership once the `ChatStore` exists (S1);
+  membership once the `ChatStore` exists (S1); `social:team:<team>:*`
+  channels require membership of the team (lane E — the BFF's in-process
+  copy of platform-api's roster, `providers/social-platform.ts`
+  `isSocialTeamMember`, fail-closed for a team it has not seen). **Landed in
+  lane E** (`lib/realtime-gateway.ts` `lobbyGuard`; tests
+  `lib/__tests__/realtime-gateway-tenants.test.ts`);
 - platform-api (`lobbyAccess.ts`, rooms/teams/video-session routes): the
   partition is read from the target and checked against `tenants`, `org`
   still accepted for tokens without the claim — landed upstream as
@@ -390,8 +395,18 @@ the user sees change is the bell (N), on the day L lands.
 
 ## 8. Not decided here
 
-- Whether the document pane's conversation moves to a `social:` channel or
-  keeps both (E, on evidence from the S1 walk).
+- ~~Whether the document pane's conversation moves to a `social:` channel or
+  keeps both (E, on evidence from the S1 walk).~~ **Decided (lane E,
+  2026-09-30): keep `assessment:doc:<id>`** — the BFF gateway channel the
+  document pane already uses, scoped by the assessment partition — **and allow
+  a `social:` binding on a document later through the same `social_bindings`
+  table** (context kind `document`, tenant `assessment`, already mapped in
+  `routes/social.ts` `BINDING_CONTEXT_TENANT`). Why: the document conversation
+  is the assessors' working thread about one document and must stay readable
+  to every assessment grant holder, including the ones with no social grant;
+  moving it would make a social grant a prerequisite for reviewing a
+  document. A binding adds a wider discussion beside it without taking the
+  narrow one away. No code change in E.
 - The social and pipelines brand hues — proposed above, easy to change in
   one token block each.
 - Who approves a pipeline step by default when a definition names no role

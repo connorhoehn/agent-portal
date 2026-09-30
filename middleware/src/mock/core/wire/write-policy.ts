@@ -2273,6 +2273,58 @@ export const WRITE_SPECS: readonly WriteSpec[] = [
     alsoAccept: [409],
     build: async () => ({ prompt: 'wire capture: local compute dispatch smoke test', kind: 'local:distill' }),
   },
+
+  // ── the pipelines tenant's four P2 writes, classified in lane E ───────────
+  //
+  // Each was `unclassified` — nobody had read the handler for the sweep. They
+  // replay as the orgiq admin persona: `admin` passes requireTenant('pipelines')
+  // and every Cedar gate, and the sweep has no pipelines persona of its own.
+  {
+    route: 'PUT /api/pipelines/configuration',
+    persona: 'orgiq/admin',
+    safe: 'An ECHO-BACK: the body is the default approver role GET /api/pipelines/configuration just returned, so the registered `pipelines.config` fixture (mock/pipeline-definitions.ts, read by providers/pipeline-definitions.ts `setDefaultApproverRole` under `config.mock.aurora`) ends with the same value and only `updatedBy` moves — which reset puts back. No AWS, no model, no timer.',
+    bodyFrom: 'routes/pipelines.ts: `defaultApproverRole` must be one of APPROVER_ROLE_OPTIONS — read off the GET, never retyped.',
+    intercepts: ['aurora'],
+    build: async (ctx) => {
+      const role = await ctx.pick('/api/pipelines/configuration', 'defaultApproverRole');
+      return role === null ? unsynthesisable('GET /api/pipelines/configuration named no defaultApproverRole to echo back') : { defaultApproverRole: role };
+    },
+  },
+  {
+    route: 'PUT /api/pipelines/definitions/:id/approvers',
+    persona: 'orgiq/admin',
+    safe: "Records an author's version — `recordApproverRoles` bumps the version and stores the roles on one row of the registered `pipelines.definitions` fixture (an append for a derived definition, an update for a stored one); reset restores the seeded rows. `roles: []` means \"the tenant default\", so the effective approvers the Approvals page shows do not change.",
+    bodyFrom: 'routes/pipelines.ts: `roles` is a list drawn from APPROVER_ROLE_OPTIONS; the empty list is valid and spelled in the handler\'s own error text ("empty = the tenant default"). `:id` resolves off GET /api/pipelines/definitions.',
+    intercepts: ['aurora'],
+    build: ok({ roles: [] }),
+  },
+  {
+    route: 'POST /api/pipelines/approvals/:id/decide',
+    persona: 'orgiq/admin',
+    safe: "It owns no store: `decideApproval` routes the decision to the gate's OWN verb — `reviewJob` (agent-jobs), `decideChange` (sdlc) or `answerConsult` (lab) — and each of those is on this allowlist in its own right (`POST /api/work/jobs/:id/review`, `POST /api/sdlc/changes/:id/decide`, `POST /api/lab/consults/:id/answer`) over a registered fixture reset restores. An approve on a job accepts it; nothing new is enqueued.",
+    bodyFrom: "routes/pipelines.ts: `decision` ∈ {'approve','reject'}; `note` optional. `:id` resolves off GET /api/pipelines/approvals — when the seeded world has nothing waiting, the route's 404 (\"No approval … is waiting\") is the shape captured, and a 409 is the gate's own \"no longer awaiting\" answer.",
+    build: ok({ decision: 'approve' }),
+    alsoAccept: [404, 409],
+  },
+  {
+    route: 'POST /api/pipelines/runs/:id/cancel',
+    persona: 'orgiq/admin',
+    safe: "Cancels through the source's own verb: `cancelJob` on the registered `agent-jobs` fixture (a queued or claimed job only) or `stopRun` on the registered assessment runs — both restored by reset — and anything else answers 409 \"stopped where it runs\" without writing. It does not reach a devbox: cancelling a claimed job only marks the row.",
+    bodyFrom: 'routes/pipelines.ts: no body. `:id` resolves off GET /api/pipelines/runs; the first run there is usually finished, so the 409 refusal is the usual shape captured.',
+    alsoAccept: [404, 409],
+  },
+
+  // ── the social tenant's context bindings (lane E) ─────────────────────────
+  {
+    route: 'PUT /api/social/bindings',
+    persona: 'orgiq/admin',
+    safe: 'Writes one row of the registered `social.bindings` fixture (mock/social-bindings.ts), which reset restores. No AWS, no model, no timer.',
+    bodyFrom: 'routes/social.ts: `channel` must be `social:ch:<slug>` of a directory channel, and the CONTEXT rides the query string (`?context=initiative:<id>`).',
+    build: async () =>
+      unsynthesisable(
+        'the context this binds is a query parameter (`?context=<kind>:<id>`), and this harness replays a write at its resolved path with a body only — it has no way to carry a query string. The GET side is captured with a QUERY_HINT; routes/__tests__/social-bindings.test.ts covers the write.',
+      ),
+  },
 ];
 
 /**

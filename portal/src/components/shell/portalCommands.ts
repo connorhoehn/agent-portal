@@ -115,6 +115,11 @@ const PAGES: PageEntry[] = [
     keywords: ['promotion', 'candidate', 'skill', 'approve', 'artifact'] },
   { label: 'Designs',            hint: 'Design threads and sign-off',         path: '/iq/designs',                                 tenant: 'orgiq',  group: 'Design',
     keywords: ['design', 'adr', 'decision', 'thread', 'sign-off', 'review'] },
+  // Operate (lane E): this workspace's runs through the orgiq façade /api/runs,
+  // gated like it (the bots read gate). "Workspace runs" in the palette so it
+  // is not confused with Observability's "Runs" (agent invocations).
+  { label: 'Workspace runs',     hint: 'Bot, agent and queue runs, with steps', path: '/iq/runs',                                  tenant: 'orgiq',  group: 'Operate', roles: BOTS,
+    keywords: ['run', 'runs', 'pipeline', 'bot', 'job', 'ledger', 'steps'] },
   { label: 'Local compute configuration', hint: 'Session settings and bundled skill versions', path: '/iq/local-compute/configuration', tenant: 'orgiq', group: 'Build',
     keywords: ['release', 'session', 'config', 'skill bundle', 'hooks'] },
   { label: 'Budgets',            hint: 'Agent spend vs allocation',           path: '/admin/budgets',                              tenant: 'admin',  group: 'Plan',    roles: BUDGETS,
@@ -287,8 +292,9 @@ const PAGES: PageEntry[] = [
     keywords: ['bot', 'cron', 'schedule', 'maintenance', 'source'] },
   { label: 'Commands',           hint: 'Assessment commands as runs',         path: '/pipelines/commands',                         tenant: 'pipelines', group: 'Sources',
     keywords: ['command', 'assessment', 'source'] },
-  { label: 'Configuration',      hint: 'Approvers, retention, sources',       path: '/pipelines/configuration',                    tenant: 'pipelines', group: 'System',
-    keywords: ['configuration', 'approver', 'retention', 'policy'] },
+  // pipeline-admin only (separation of duties) — rail and route agree.
+  { label: 'Configuration',      hint: 'Who approves a step by default',      path: '/pipelines/configuration',                    tenant: 'pipelines', group: 'System', roles: ['pipeline-admin'],
+    keywords: ['configuration', 'approver', 'default', 'policy'] },
   { label: 'Pipeline settings',  hint: 'Your run notifications and views',    path: '/pipelines/settings',                         tenant: 'pipelines', group: 'System',
     keywords: ['settings', 'preferences', 'notifications'] },
 ];

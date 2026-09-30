@@ -23,6 +23,8 @@
 //   #design-reviews  public, Lena's; Lena, Mira, Theo, Farah — Sana is NOT in it
 //                    (the participant's join walk), nor is the operator
 //   #moderators      private, Lena's; Lena and Mira only (hidden from everyone else)
+//   #auth-migration  public, Vera's; Vera, Theo, Mia, Sienna — the channel bound to
+//                    the p-auth-migration initiative (mock/social-bindings.ts, lane E)
 //   DM Lena ↔ Sana, DM Lena ↔ Mira — so the DMs page opens on something.
 // Timestamps come from the mock clock at read time (contract rule 3).
 
@@ -49,6 +51,7 @@ function seedChannels(): SocialChannelRow[] {
     { tenant: 'social', slug: 'general', name: 'General', description: 'Announcements and anything that does not have a home yet.', privacy: 'public', createdBy: 'u-mira', createdAt: clock.daysAgo(21) },
     { tenant: 'social', slug: 'design-reviews', name: 'Design reviews', description: 'Post a design, get eyes on it.', privacy: 'public', createdBy: 'u-lena', createdAt: clock.daysAgo(14) },
     { tenant: 'social', slug: 'moderators', name: 'Moderators', description: 'Moderation calls and escalations.', privacy: 'private', createdBy: 'u-lena', createdAt: clock.daysAgo(10) },
+    { tenant: 'social', slug: 'auth-migration', name: 'Auth migration', description: 'Discussion for the auth migration initiative (bound to its overview in OrgIQ).', privacy: 'public', createdBy: 'u-vera', createdAt: clock.daysAgo(8) },
   ];
 }
 
@@ -69,6 +72,10 @@ function seedMembers(): ChatMember[] {
     member(ch('design-reviews'), 'u-farah', 'member', 'u-farah', clock.daysAgo(6)),
     member(ch('moderators'), 'u-lena', 'owner', 'u-lena', clock.daysAgo(10)),
     member(ch('moderators'), 'u-mira', 'member', 'u-lena', clock.daysAgo(10)),
+    member(ch('auth-migration'), 'u-vera', 'owner', 'u-vera', clock.daysAgo(8)),
+    member(ch('auth-migration'), 'u-theo', 'member', 'u-theo', clock.daysAgo(8)),
+    member(ch('auth-migration'), 'u-mia', 'member', 'u-mia', clock.daysAgo(7)),
+    member(ch('auth-migration'), 'u-release', 'member', 'u-release', clock.daysAgo(7)),
   ];
 }
 
@@ -93,6 +100,8 @@ function seedMessages(): ChatMessage[] {
     msg('seed-general-4', ch('general'), 'u-mira', 'Mira Okafor', 'Yes — same time, same room.', clock.hoursAgo(5)),
     msg('seed-design-1', ch('design-reviews'), 'u-lena', 'Lena Brandt', 'First pass at the onboarding flow is up. Comments by Friday, please.', clock.daysAgo(2)),
     msg('seed-design-2', ch('design-reviews'), 'u-farah', 'Farah Osei', 'The empty state on step two reads well. The progress bar feels heavy.', clock.hoursAgo(20)),
+    msg('seed-auth-1', ch('auth-migration'), 'u-vera', 'Vera Green', 'Tenant two cuts over to the BFF login on Thursday. Shout here if your team still calls the SAML shim.', clock.daysAgo(2)),
+    msg('seed-auth-2', ch('auth-migration'), 'u-theo', 'Theo Chang', 'Search still has one SAML callback in staging — patching it today.', clock.hoursAgo(7)),
     msg('seed-mods-1', ch('moderators'), 'u-mira', 'Mira Okafor', 'Two reports on the same thread overnight — Lena, can you take a look?', clock.hoursAgo(9)),
     msg('seed-dm-ls-1', dmLenaSana, 'u-lena', 'Lena Brandt', 'Hi Sana — welcome aboard. Shout if anything in #general is unclear.', clock.daysAgo(1)),
     msg('seed-dm-ls-2', dmLenaSana, 'u-sana', 'Sana Iqbal', 'Thanks Lena, will do.', clock.hoursAgo(22)),

@@ -32,6 +32,7 @@ import { mockJobs } from '../../mock/agent-jobs.js';
 import { completeJob } from '../../providers/agent-jobs.js';
 import { promoteCandidate } from '../../providers/promotions.js';
 import { pipelineRunRecords } from '../../mock/pipeline-definitions.js';
+import { setNotificationSink, type NotificationInputLike } from '../../lib/social-notify.js';
 
 function appAs(session: Partial<Session>) {
   const app = express();
@@ -188,6 +189,28 @@ describe('POST /api/pipelines/definitions/:id/dry-run — RunPipeline, the exist
     expect(outsider.status).toBe(403);
     const bad = await request(ines()).post(`/api/pipelines/definitions/${enc(RUNBOOK)}/dry-run`).send({ budgetPerRunUsd: -1 });
     expect(bad.status).toBe(400);
+  });
+});
+
+describe('row 9 — a run record entering completed notifies its trigger and its approvers', () => {
+  afterEach(() => setNotificationSink(null));
+  it('completing the dry-run job sends one "finished" item each to u-ines (trigger) and the operator/pipeline-admin', async () => {
+    const sent: Array<{ userId: string; input: NotificationInputLike }> = [];
+    setNotificationSink({ notifyUser: async (userId, input) => { sent.push({ userId, input }); return {}; } });
+    const res = await request(ines()).post(`/api/pipelines/definitions/${enc(RUNBOOK)}/dry-run`).send({});
+    const job = mockJobs.find((j) => j.id === res.body.jobId)!;
+    job.status = 'running';
+    await completeJob(job.id, { status: 'done', result: { costUsd: 0.01 } });
+    for (let i = 0; i < 50 && sent.length < 3; i += 1) await new Promise((r) => setTimeout(r, 10));
+    expect(sent.map((x) => x.userId).sort()).toEqual(['u-dara', 'u-ines', 'u-kofi']);
+    expect(sent[0]!.input).toMatchObject({
+      type: 'system', payload: { tenant: 'pipelines', runId: `job:${job.id}`, status: 'completed' },
+      action: { href: `/pipelines/runs/${enc(`job:${job.id}`)}` },
+    });
+    // A replayed event for the same status moves nothing and notifies nobody again.
+    await completeJob(job.id, { status: 'done', result: { costUsd: 0.01 } }).catch(() => undefined);
+    await new Promise((r) => setTimeout(r, 30));
+    expect(sent).toHaveLength(3);
   });
 });
 

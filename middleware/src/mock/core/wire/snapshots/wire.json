@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-09-30T05:15:05.732Z",
-  "serverHandlerSha": "72689e4b8c46b2fed6392939ab168c03ccf7cf1a0f9da568bcec445b66449096",
+  "capturedAt": "2026-09-30T07:58:29.565Z",
+  "serverHandlerSha": "6f6620e68a333efe54904960e193af0014e67c204b330431196c5708841843ed",
   "baseUrl": "http://127.0.0.1:3012",
   "personas": [
     "orgiq/admin",
@@ -5206,7 +5206,7 @@
         "points[].bucketStart": "string",
         "points[].count": "number",
         "points[].driftP95": "number",
-        "points[].judgeP50": "number",
+        "points[].judgeP50": "null|number",
         "windowHours": "number"
       },
       "values": {}
@@ -7583,6 +7583,29 @@
     },
     "GET /api/sessions/:sessionId/events": {
       "skipped": "no value found for :sessionId under /api/sessions (orgiq/admin); no value found for :sessionId under /api/sessions (assessment/admin); no value found for :sessionId under /api/sessions (anonymous)"
+    },
+    "GET /api/social/bindings": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "binding": "object(dictionary)",
+        "canManage": "boolean",
+        "choices": "array",
+        "choices[]": "object",
+        "choices[].channel": "string",
+        "choices[].name": "string",
+        "choices[].privacy": "string",
+        "choices[].slug": "string",
+        "context": "string",
+        "joined": "boolean",
+        "tenant": "string"
+      },
+      "values": {
+        "tenant": [
+          "orgiq"
+        ]
+      }
     },
     "GET /api/social/calls": {
       "persona": "orgiq/admin",

@@ -47,6 +47,8 @@ const PipelinesLayout = lazy(() => import('./pages/pipelines/PipelinesLayout'));
 const PipelinesSurfacePage = lazy(() => import('./pages/pipelines/PipelinesSurfacePage'));
 const PipelinesRunsPage = lazy(() => import('./pages/pipelines/RunsPage'));
 const PipelinesRunDetailPage = lazy(() => import('./pages/pipelines/RunDetailPage'));
+const PipelinesConfigurationPage = lazy(() => import('./pages/pipelines/ConfigurationPage'));
+const IqRunsPage = lazy(() => import('./pages/iq/RunsPage'));
 const PipelinesArtifactsPage = lazy(() => import('./pages/pipelines/ArtifactsPage'));
 const PipelinesDefinitionsPage = lazy(() => import('./pages/pipelines/DefinitionsPage'));
 const PipelinesRunbooksPage = lazy(() => import('./pages/pipelines/RunbooksPage'));
@@ -315,7 +317,13 @@ export function App() {
             <Route path="agents" element={<Page element={<PipelinesSourcesPage source="agents" />} />} />
             <Route path="bots" element={<Page element={<PipelinesSourcesPage source="bots" />} />} />
             <Route path="commands" element={<Page element={<PipelinesSourcesPage source="commands" />} />} />
-            <Route path="configuration" element={<Page element={<PipelinesSurfacePage surface="configuration" />} />} />
+            {/* pipeline-admin only (separation of duties): author and operator
+                never see Configuration — rail, palette and route agree. */}
+            <Route path="configuration" element={
+              <RequireRole roles={['pipeline-admin']} fallback={<HomeRedirect />}>
+                <Page element={<PipelinesConfigurationPage />} />
+              </RequireRole>
+            } />
             <Route path="settings" element={<Page element={<PipelinesSurfacePage surface="settings" />} />} />
           </Route>
         ) : (
@@ -347,6 +355,19 @@ export function App() {
           <Route path="agents/:agentId" element={
             <RequireRole roles={['org-leader', 'hr-admin']} fallback={<HomeRedirect />}>
               <Page element={<AgentDetailPage />} />
+            </RequireRole>
+          } />
+          {/* Runs (Operate, lane E): this workspace's runs through the orgiq
+              façade /api/runs — gated like it, the bots read gate
+              (org-leader, hr-admin, program-owner + ManageBots: sme). */}
+          <Route path="runs" element={
+            <RequireRole roles={['hr-admin', 'sme', 'program-owner', 'org-leader']} fallback={<HomeRedirect />}>
+              <Page element={<IqRunsPage />} />
+            </RequireRole>
+          } />
+          <Route path="runs/:id" element={
+            <RequireRole roles={['hr-admin', 'sme', 'program-owner', 'org-leader']} fallback={<HomeRedirect />}>
+              <Page element={<PipelinesRunDetailPage apiBase="/api/runs" listPath="/iq/runs" cancelable={false} />} />
             </RequireRole>
           } />
           <Route path="search" element={<Page element={<SearchPage />} />} />

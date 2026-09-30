@@ -46,7 +46,7 @@ jest.mock('../role-registry.js', () => {
 
 import {
   assessmentDocumentHref, hrefInsideTenant, notify, notifyApprovalRequested, notifyDocumentComment,
-  parseDmLobby, resolveMentions, setNotificationSink, tenantLabel, usersHoldingAction,
+  notifyPipelineRun, parseDmLobby, resolveMentions, setNotificationSink, tenantLabel, usersHoldingAction,
   type NotificationInputLike,
 } from '../social-notify.js';
 
@@ -186,6 +186,37 @@ describe('the approval producer', () => {
     await notifyApprovalRequested({ approvalId: 'a1', agentId: 'orgiq-advisor', txId: 'tx-1', reason: 'Vendor renewal', amount: 18500 });
     expect(recipients()).toEqual([...approvers].sort());
     expect(sent[0]!.input).toMatchObject({ type: 'approval-requested', action: { href: '/admin/observability/approvals' }, payload: { tenant: 'orgiq', category: 'OrgIQ' } });
+  });
+});
+
+describe('the pipeline run producer (row 9)', () => {
+  const base = { runId: 'job:j-1', definitionId: 'runbook:rb-1', definitionTitle: 'Rotate keys', approverRoles: ['operator'] };
+  it('awaiting_approval reaches the trigger and the approver-role holders (pipeline-admin always decides)', async () => {
+    const to = await notifyPipelineRun({ ...base, status: 'awaiting_approval', triggeredBy: 'u-ines' });
+    // Not u-operator: the cross-tenant admin decides anything but is not paged for everything.
+    expect(to.sort()).toEqual(['u-dara', 'u-ines', 'u-kofi']);
+    expect(sent[0]!.input).toMatchObject({
+      type: 'approval-requested', title: 'Rotate keys is waiting on an approval',
+      payload: { tenant: 'pipelines', category: 'Pipelines', runId: 'job:j-1', status: 'awaiting_approval' },
+      action: { href: '/pipelines/runs/job%3Aj-1' },
+    });
+  });
+
+  it('completed and failed notify too; a failure carries its error', async () => {
+    await notifyPipelineRun({ ...base, status: 'completed', triggeredBy: 'u-ines' });
+    expect(sent.find((x) => x.userId === 'u-ines')!.input).toMatchObject({ type: 'system', title: 'Rotate keys finished' });
+    sent = [];
+    await notifyPipelineRun({ ...base, status: 'failed', triggeredBy: 'u-ines', error: 'step 2 refused' });
+    expect(sent.find((x) => x.userId === 'u-ines')!.input).toMatchObject({ title: 'Rotate keys failed', body: 'step 2 refused' });
+  });
+
+  it('other statuses notify nobody, and a trigger with no pipelines grant is dropped by the tenant rule', async () => {
+    for (const status of ['running', 'pending', 'cancelled', 'rejected']) {
+      expect(await notifyPipelineRun({ ...base, status, triggeredBy: 'u-ines' })).toEqual([]);
+    }
+    const to = await notifyPipelineRun({ ...base, status: 'completed', triggeredBy: 'u-theo', approverRoles: [] });
+    expect(to).not.toContain('u-theo');
+    expect(to).toEqual(['u-dara']);
   });
 });
 

@@ -48,6 +48,7 @@ import { useInitiativeListRail } from './projects/InitiativeListRail';
 import { initiativeBreadcrumbs, initiativeHref } from './projects/initiativeNavigation';
 import { InitiativeComposer } from './projects/InitiativeComposer';
 import { useInitiativeCall } from './projects/InitiativeCall';
+import { InitiativeDiscussion, type BoundChannelChat } from './projects/InitiativeDiscussion';
 import { AddNoteDialog, LinkDecisionDialog } from './project-detail/BriefDialogs';
 import { ContributorModal } from './project-detail/ContributorModal';
 import { ContributorsTable } from './project-detail/ContributorsTable';
@@ -389,6 +390,10 @@ function ProjectDetailPage() {
   const callSmes = useMemo(() => (project?.contributors ?? [])
     .filter((c) => ((c.personId in roleOverrides ? roleOverrides[c.personId] : c.role) ?? '').toLowerCase() === 'sme' && c.personId !== callOwnerId)
     .map((c) => ({ personId: c.personId, name: c.name })), [project, roleOverrides, callOwnerId]);
+  // The initiative's bound social channel (design §4.6): the strip on the
+  // overview hands its chat over, and the ONE composer below posts into it in
+  // Chat mode while the overview is showing.
+  const [boundChat, setBoundChat] = useState<BoundChannelChat | null>(null);
   const initiativeCall = useInitiativeCall({
     project: project ? { id: project.id, name: project.name } : null,
     owner: callOwner,
@@ -523,7 +528,9 @@ function ProjectDetailPage() {
       {...(composerSetup ? { setup: composerSetup } : {})}
       {...(onWork && current && canDispatch
         ? { onChat: (msg: { text: string }) => thread.postComment(msg.text) }
-        : {})}
+        : tab === 'overview' && boundChat
+          ? { onChat: (msg: { text: string }) => boundChat.send(msg.text) }
+          : {})}
       chatUnavailableReason={onWork && current
         ? 'Your role cannot post to the discussion — ask the agent instead'
         : 'Open a work item to discuss it — ask the agent here instead'}
@@ -668,6 +675,9 @@ function ProjectDetailPage() {
         composer={composer}
         data-testid="initiative-workspace"
       >
+        {tab === 'overview' && (
+          <InitiativeDiscussion initiativeId={project.id} onChat={setBoundChat} />
+        )}
         {tab === 'overview' && (
           <InitiativeOverview
             model={buildOverview(project, { tree: treeRead, error: workFailure ?? null, loading: workLoading })}

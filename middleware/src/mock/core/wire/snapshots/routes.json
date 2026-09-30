@@ -2293,77 +2293,77 @@
     {
       "method": "GET",
       "path": "/api/pipelines/approvals",
-      "source": "src/routes/pipelines.ts:315"
+      "source": "src/routes/pipelines.ts:317"
     },
     {
       "method": "POST",
       "path": "/api/pipelines/approvals/:id/decide",
-      "source": "src/routes/pipelines.ts:320"
+      "source": "src/routes/pipelines.ts:322"
     },
     {
       "method": "GET",
       "path": "/api/pipelines/artifacts",
-      "source": "src/routes/pipelines.ts:177"
+      "source": "src/routes/pipelines.ts:179"
     },
     {
       "method": "GET",
       "path": "/api/pipelines/configuration",
-      "source": "src/routes/pipelines.ts:341"
+      "source": "src/routes/pipelines.ts:343"
     },
     {
       "method": "PUT",
       "path": "/api/pipelines/configuration",
-      "source": "src/routes/pipelines.ts:346"
+      "source": "src/routes/pipelines.ts:348"
     },
     {
       "method": "GET",
       "path": "/api/pipelines/definitions",
-      "source": "src/routes/pipelines.ts:224"
+      "source": "src/routes/pipelines.ts:226"
     },
     {
       "method": "GET",
       "path": "/api/pipelines/definitions/:id",
-      "source": "src/routes/pipelines.ts:232"
+      "source": "src/routes/pipelines.ts:234"
     },
     {
       "method": "PUT",
       "path": "/api/pipelines/definitions/:id/approvers",
-      "source": "src/routes/pipelines.ts:252"
+      "source": "src/routes/pipelines.ts:254"
     },
     {
       "method": "POST",
       "path": "/api/pipelines/definitions/:id/dry-run",
-      "source": "src/routes/pipelines.ts:264"
+      "source": "src/routes/pipelines.ts:266"
     },
     {
       "method": "GET",
       "path": "/api/pipelines/runbooks",
-      "source": "src/routes/pipelines.ts:302"
+      "source": "src/routes/pipelines.ts:304"
     },
     {
       "method": "GET",
       "path": "/api/pipelines/runs",
-      "source": "src/routes/pipelines.ts:173"
+      "source": "src/routes/pipelines.ts:175"
     },
     {
       "method": "GET",
       "path": "/api/pipelines/runs/:id",
-      "source": "src/routes/pipelines.ts:174"
+      "source": "src/routes/pipelines.ts:176"
     },
     {
       "method": "POST",
       "path": "/api/pipelines/runs/:id/cancel",
-      "source": "src/routes/pipelines.ts:333"
+      "source": "src/routes/pipelines.ts:335"
     },
     {
       "method": "GET",
       "path": "/api/pipelines/runs/:id/events",
-      "source": "src/routes/pipelines.ts:176"
+      "source": "src/routes/pipelines.ts:178"
     },
     {
       "method": "GET",
       "path": "/api/pipelines/runs/:id/steps",
-      "source": "src/routes/pipelines.ts:175"
+      "source": "src/routes/pipelines.ts:177"
     },
     {
       "method": "GET",
@@ -2413,7 +2413,7 @@
     {
       "method": "GET",
       "path": "/api/roster/users",
-      "source": "src/routes/roster.ts:68"
+      "source": "src/routes/roster.ts:71"
     },
     {
       "method": "GET",
@@ -2651,114 +2651,129 @@
       "source": "src/routes/sessions.ts:71"
     },
     {
+      "method": "DELETE",
+      "path": "/api/social/bindings",
+      "source": "src/routes/social.ts:491"
+    },
+    {
+      "method": "GET",
+      "path": "/api/social/bindings",
+      "source": "src/routes/social.ts:466"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/social/bindings",
+      "source": "src/routes/social.ts:473"
+    },
+    {
       "method": "GET",
       "path": "/api/social/calls",
-      "source": "src/routes/social.ts:377"
+      "source": "src/routes/social.ts:386"
     },
     {
       "method": "GET",
       "path": "/api/social/channels",
-      "source": "src/routes/social.ts:152"
+      "source": "src/routes/social.ts:175"
     },
     {
       "method": "POST",
       "path": "/api/social/channels",
-      "source": "src/routes/social.ts:162"
+      "source": "src/routes/social.ts:185"
     },
     {
       "method": "GET",
       "path": "/api/social/channels/:slug",
-      "source": "src/routes/social.ts:187"
+      "source": "src/routes/social.ts:210"
     },
     {
       "method": "POST",
       "path": "/api/social/channels/:slug/join",
-      "source": "src/routes/social.ts:209"
+      "source": "src/routes/social.ts:232"
     },
     {
       "method": "POST",
       "path": "/api/social/channels/:slug/leave",
-      "source": "src/routes/social.ts:229"
+      "source": "src/routes/social.ts:252"
     },
     {
       "method": "GET",
       "path": "/api/social/dms",
-      "source": "src/routes/social.ts:242"
+      "source": "src/routes/social.ts:265"
     },
     {
       "method": "POST",
       "path": "/api/social/dms",
-      "source": "src/routes/social.ts:264"
+      "source": "src/routes/social.ts:503"
     },
     {
       "method": "POST",
       "path": "/api/social/dms/read",
-      "source": "src/routes/social.ts:278"
+      "source": "src/routes/social.ts:287"
     },
     {
       "method": "GET",
       "path": "/api/social/people",
-      "source": "src/routes/social.ts:290"
+      "source": "src/routes/social.ts:299"
     },
     {
       "method": "GET",
       "path": "/api/social/recordings",
-      "source": "src/routes/social.ts:359"
+      "source": "src/routes/social.ts:368"
     },
     {
       "method": "DELETE",
       "path": "/api/social/recordings/:recordingId",
-      "source": "src/routes/social.ts:372"
+      "source": "src/routes/social.ts:381"
     },
     {
       "method": "GET",
       "path": "/api/social/recordings/:recordingId/playback",
-      "source": "src/routes/social.ts:364"
+      "source": "src/routes/social.ts:373"
     },
     {
       "method": "POST",
       "path": "/api/social/recordings/:recordingId/share",
-      "source": "src/routes/social.ts:368"
+      "source": "src/routes/social.ts:377"
     },
     {
       "method": "GET",
       "path": "/api/social/rooms",
-      "source": "src/routes/social.ts:310"
+      "source": "src/routes/social.ts:319"
     },
     {
       "method": "POST",
       "path": "/api/social/rooms",
-      "source": "src/routes/social.ts:316"
+      "source": "src/routes/social.ts:325"
     },
     {
       "method": "GET",
       "path": "/api/social/summary",
-      "source": "src/routes/social.ts:66"
+      "source": "src/routes/social.ts:89"
     },
     {
       "method": "GET",
       "path": "/api/social/teams",
-      "source": "src/routes/social.ts:323"
+      "source": "src/routes/social.ts:332"
     },
     {
       "method": "POST",
       "path": "/api/social/teams",
-      "source": "src/routes/social.ts:328"
+      "source": "src/routes/social.ts:337"
     },
     {
       "method": "GET",
       "path": "/api/social/teams/:teamId",
-      "source": "src/routes/social.ts:338"
+      "source": "src/routes/social.ts:347"
     },
     {
       "method": "POST",
       "path": "/api/social/teams/:teamId/members",
-      "source": "src/routes/social.ts:344"
+      "source": "src/routes/social.ts:353"
     },
     {
       "method": "DELETE",
       "path": "/api/social/teams/:teamId/members/:userId",
-      "source": "src/routes/social.ts:354"
+      "source": "src/routes/social.ts:363"
     },
     {
       "method": "GET",

@@ -46,7 +46,7 @@ interface SessionContextValue {
    * switch the portal exposes, and it belongs to the /select chooser — there
    * is deliberately no inline setTenant: switching workspaces goes back
    * through the chooser so the boundary stays authoritative. */
-  enterContext: (tenant: Tenant, role: string) => Promise<void>;
+  enterContext: (tenant: Tenant, role: string, to?: string) => Promise<void>;
   login: (userId: string) => Promise<void>;
   masquerade: (userId: string) => Promise<void>;
   stopMasquerade: () => Promise<void>;
@@ -215,7 +215,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   // role must be held in the target tenant — the chooser only offers held ones.
   // (There is intentionally no standalone setTenant: the /select chooser is
   // the only tenant boundary, so inline switching can't bypass it.)
-  const enterContext = useCallback(async (tenant: Tenant, role: string) => {
+  const enterContext = useCallback(async (tenant: Tenant, role: string, to?: string) => {
     await post('/api/session/tenant', { tenant });
     await post('/api/session/role', { role });
     // Crossing the tenant boundary: drop the previous workspace's cached data
@@ -231,8 +231,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     if (subRef.current) markContextChosen(subRef.current);
     // Switching account redirects to that tenant's front door so the whole
     // app re-drives from the freshly re-minted session cookie. The route is
-    // lib/tenantHome's, not a second opinion about where people belong.
-    window.location.assign(tenantHome(tenant));
+    // lib/tenantHome's, not a second opinion about where people belong —
+    // unless the caller names a page INSIDE that tenant (an embedded
+    // "Open in Social" link, design §4.6); anything else falls back home.
+    window.location.assign(to && to.startsWith(`${tenantHome(tenant).split('/').slice(0, 2).join('/')}/`) ? to : tenantHome(tenant));
   }, []);
 
   const login = useCallback(async (userId: string) => {
@@ -343,7 +345,8 @@ export function RequireTenant({ tenant, children, fallback = null }: {
 }
 
 export function RequireRole({ roles, children, fallback = null }: {
-  roles: SessionRole[];
+  /** Role ids in any tenant (`SessionRole` names only orgiq's; `pipeline-admin` gates a pipelines route). */
+  roles: ReadonlyArray<SessionRole | string>;
   children: ReactNode;
   fallback?: ReactNode;
 }) {

@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-09-30T05:15:06.660Z",
-  "serverHandlerSha": "72689e4b8c46b2fed6392939ab168c03ccf7cf1a0f9da568bcec445b66449096",
+  "capturedAt": "2026-09-30T07:58:30.417Z",
+  "serverHandlerSha": "6f6620e68a333efe54904960e193af0014e67c204b330431196c5708841843ed",
   "baseUrl": "http://127.0.0.1:3012",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
@@ -187,6 +187,12 @@
       }
     },
     "DELETE /api/sdlc/policies/:id": {
+      "refused": {
+        "rule": "destructive",
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The only exceptions are deletes somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
+      }
+    },
+    "DELETE /api/social/bindings": {
       "refused": {
         "rule": "destructive",
         "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The only exceptions are deletes somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
@@ -2539,10 +2545,26 @@
       }
     },
     "POST /api/pipelines/approvals/:id/decide": {
-      "refused": {
-        "rule": "unclassified",
-        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
-      }
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "decidedThrough": "string",
+        "decision": "string",
+        "id": "string",
+        "outcome": "string"
+      },
+      "values": {
+        "decision": [
+          "approve"
+        ],
+        "outcome": [
+          "answered"
+        ]
+      },
+      "sent": [
+        "decision"
+      ]
     },
     "POST /api/pipelines/definitions/:id/dry-run": {
       "refused": {
@@ -2551,10 +2573,14 @@
       }
     },
     "POST /api/pipelines/runs/:id/cancel": {
-      "refused": {
-        "rule": "unclassified",
-        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
-      }
+      "persona": "orgiq/admin",
+      "status": 409,
+      "shape": {
+        "$": "object",
+        "error": "string"
+      },
+      "values": {},
+      "sent": []
     },
     "POST /api/promotions/:id/dismiss": {
       "persona": "orgiq/admin",
@@ -3187,16 +3213,76 @@
       }
     },
     "PUT /api/pipelines/configuration": {
-      "refused": {
-        "rule": "unclassified",
-        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
-      }
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "approverRoleOptions": "array",
+        "approverRoleOptions[]": "string",
+        "defaultApproverRole": "string",
+        "updatedBy": "string"
+      },
+      "values": {},
+      "sent": [
+        "defaultApproverRole"
+      ]
     },
     "PUT /api/pipelines/definitions/:id/approvers": {
-      "refused": {
-        "rule": "unclassified",
-        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
-      }
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "definition": "object",
+        "definition.approverRoles": "array",
+        "definition.contextTenant": "string",
+        "definition.description": "string",
+        "definition.enabled": "boolean",
+        "definition.id": "string",
+        "definition.kind": "string",
+        "definition.meta": "object",
+        "definition.meta.candidateId": "string",
+        "definition.meta.candidateStatus": "string",
+        "definition.meta.driftedFrom": "string",
+        "definition.meta.dryRunRunId": "null",
+        "definition.meta.initiativeId": "string",
+        "definition.meta.observationCount": "number",
+        "definition.meta.proposedKind": "string",
+        "definition.orphaned": "boolean",
+        "definition.owner": "null",
+        "definition.recorded": "boolean",
+        "definition.source": "object",
+        "definition.source.id": "string",
+        "definition.source.table": "string",
+        "definition.steps": "array",
+        "definition.steps[]": "object",
+        "definition.steps[].detail": "string",
+        "definition.steps[].id": "string",
+        "definition.steps[].label": "string",
+        "definition.tenant": "string",
+        "definition.title": "string",
+        "definition.triggers": "array",
+        "definition.triggers[]": "object",
+        "definition.triggers[].detail": "string",
+        "definition.triggers[].type": "string",
+        "definition.version": "number"
+      },
+      "values": {
+        "definition.kind": [
+          "runbook"
+        ],
+        "definition.tenant": [
+          "pipelines"
+        ],
+        "definition.triggers[].type": [
+          "manual"
+        ]
+      },
+      "sent": [
+        "roles"
+      ]
+    },
+    "PUT /api/social/bindings": {
+      "skipped": "no body: the context this binds is a query parameter (`?context=<kind>:<id>`), and this harness replays a write at its resolved path with a body only — it has no way to carry a query string. The GET side is captured with a QUERY_HINT; routes/__tests__/social-bindings.test.ts covers the write."
     }
   }
 }
