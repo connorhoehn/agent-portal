@@ -486,7 +486,11 @@ function PeopleConnections({ graph, selectedKeys, focusIds, showWholeOrg, onShow
         // overflows; without it the fit start-aligned the drawing beside the
         // legend and a selected person could sit past the right edge (D9,
         // 6 of 75 two-person opens, 2026-09-29).
-        multiSelectIds={selectedIds} spotlightIds={selectedIds} focusIds={selectedIds} layout={layout} showInfluence={showInfluence}
+        // pruneToFocus={false} (2.407.31): this page already chose the drawn
+        // set (`focusOrgPeople` + the Top-K / min-strength sliders) and counts
+        // it; the library's own one-hop trim on top dropped 3 of 11 people the
+        // counter and the person card still named (D10).
+        multiSelectIds={selectedIds} spotlightIds={selectedIds} focusIds={selectedIds} pruneToFocus={false} layout={layout} showInfluence={showInfluence}
         onToggleMultiSelect={id => {
           if (selectedIds.has(id)) { setPeople([...selectedIds].filter(item => item !== id)); if (detailId === id) setDetailId(null); }
           else { setPeople([...selectedIds, id]); setDetailId(id); }
