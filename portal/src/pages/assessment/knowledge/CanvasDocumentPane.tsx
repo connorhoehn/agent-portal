@@ -33,7 +33,7 @@ import { DocumentHistory } from './DocumentHistory';
 import { DocumentReviews } from './DocumentReviews';
 import { DocumentChatPanel, DocumentComposerDock, useDocumentConversation } from './DocumentConversation';
 import { documentAssetRoute } from './documentAssetRoute';
-import { publishDocumentEditor } from './useDocumentAgentEdit';
+import { publishDocumentEditor, useDocumentAgentEdit } from './useDocumentAgentEdit';
 import type { DocPaneProps } from './DocPane';
 import type { KnowledgeDoc } from './types';
 
@@ -100,9 +100,12 @@ export function CanvasDocumentPane(props: DocPaneProps) {
   // The page's conversation lives on the BFF gateway, so it is joined here —
   // outside the canvas's document-grant socket below.
   const conversation = useDocumentConversation(node.id, session?.name ?? 'Reader');
-  const composer = <DocumentComposerDock docId={node.id} title={title} conversation={conversation} />;
+  // Agent edits from the dock (decision 8): the drafter's reply lands in the
+  // frame's proposal slot as a proposed edit with Apply / Discard.
+  const agentEdit = useDocumentAgentEdit(node.id, title);
+  const composer = <DocumentComposerDock docId={node.id} title={title} conversation={conversation} agentEdit={agentEdit} />;
   const chatPanel = <DocumentChatPanel title={title} userId={session?.sub ?? ''} conversation={conversation} />;
-  const frame = { title, path: props.path, tab, onTab: setTab, commentCount: comments.openCount, comments: commentsTab, history, composer };
+  const frame = { title, path: props.path, tab, onTab: setTab, commentCount: comments.openCount, comments: commentsTab, history, composer, proposal: agentEdit.strip };
   const href = `${location.pathname}?doc=${encodeURIComponent(node.id)}`;
 
   if (grant) return <>{chatPanel}<GatewaySocketProvider url={grant.gatewayUrl} token={grant.token} authProtocol="document-grant-v1" rest={null}>

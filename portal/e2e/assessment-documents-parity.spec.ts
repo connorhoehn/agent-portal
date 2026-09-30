@@ -27,6 +27,35 @@ async function signIn(page: Page, userId = 'u-farah') {
   expect(status, 'demo login').toBe(200);
 }
 
+/** The cookie-less demo persona (not in the picker): into the assessment tenant, optionally as another of its roles. */
+async function signInAsDemo(page: Page, role?: string) {
+  await page.goto('/');
+  const post = (path: string, body: object) => page.evaluate(async ({ path, body }) => (await fetch(path, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify(body),
+  })).status, { path, body });
+  expect(await post('/api/session/tenant', { tenant: 'assessment' }), 'demo tenant switch').toBe(200);
+  if (role) expect(await post('/api/session/role', { role }), `demo role ${role}`).toBe(200);
+  const me = await page.evaluate(async () => (await fetch('/api/session/me', { credentials: 'include' })).json());
+  expect(me.sub, 'the demo persona').toBe('demo-user');
+}
+
+const PROMPT = 'prompt:classify-transcript.md';
+
+/** Types two characters into body text (never a heading — a heading anchor
+ * takes the click) and deletes them, then waits until the page reads exactly
+ * as it did: the edit exists only to start the draft. */
+async function typeAndUndo(page: Page, target: ReturnType<Page['locator']>) {
+  const canvas = page.locator(CANVAS);
+  const before = await canvas.innerText();
+  await target.click();
+  await page.keyboard.type('xy');
+  await expect.poll(async () => (await canvas.innerText()) !== before).toBe(true);
+  await page.keyboard.press('Backspace');
+  await page.keyboard.press('Backspace');
+  await expect.poll(async () => await canvas.innerText(), { message: 'the typed characters are removed again' }).toBe(before);
+}
+const FALLBACK = 'Document collaboration is unavailable';
+
 test('assessment workspace page opens in the shared document editor frame', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
@@ -42,14 +71,18 @@ test('assessment workspace page opens in the shared document editor frame', asyn
   await expect(page.locator(CANVAS)).toBeVisible({ timeout: 20_000 });
   await page.screenshot({ path: `${OUT}/parity-journey-reader.png` });
 
-  // A synced page is read until Edit draft; then the toolbar card and ruler.
-  await shell.getByRole('button', { name: 'Edit draft' }).click();
-  await expect(page.locator(`${CANVAS}[contenteditable="true"]`)).toBeVisible();
-  await expect(shell.getByRole('toolbar').first()).toBeVisible();
-  await expect(page.locator('[data-testid*="ruler"]').first()).toBeVisible();
-  await expect(shell.getByText('Local draft')).toBeVisible();
+  // Editing by default (decision 7): a synced page is editable on open — no
+  // Edit draft step — with the toolbar card and ruler; the first change starts
+  // its draft. The edit is typed and removed again, so the page is unchanged.
+  await expect(shell.getByRole('button', { name: /^(Edit draft|Edit document|Done editing)$/ })).toHaveCount(0);
+  await expect(page.locator(`${CANVAS}[contenteditable="true"]`)).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByTestId('canvas-document-toolbar')).toBeVisible();
+  await expect(page.getByTestId('canvas-document-ruler-row')).toBeVisible();
+  const chip = page.getByTestId('document-draft-chip');
+  await expect(chip).not.toHaveText('Local draft');
+  await typeAndUndo(page, page.locator(CANVAS).getByText('Claimed level', { exact: true }));
+  await expect(chip).toHaveText('Local draft');
   await page.screenshot({ path: `${OUT}/parity-journey-edit-draft.png` });
-  await shell.getByRole('button', { name: 'Done editing' }).click();
 
   // Versions is docked in its tab (VersionHistoryPanel docked), not a slide-out over the window.
   await shell.getByRole('tab', { name: /^Versions/ }).click();
@@ -63,6 +96,43 @@ test('assessment workspace page opens in the shared document editor frame', asyn
     await expect(page.getByTestId(`document-tab-${tab.toLowerCase()}`)).toBeVisible();
     await page.screenshot({ path: `${OUT}/parity-journey-${tab.toLowerCase()}.png` });
   }
+  expect(errors, 'page errors').toEqual([]);
+});
+
+// Decision 6: one editor frame on every document page, for every signed-in
+// user — the demo persona included. A reader (the demo user lands as
+// assessor) gets the canvas and the ruler, read-only; the library draws the
+// formatting toolbar only for an editable canvas. The same persona as
+// lead-assessor gets the toolbar and edits the prompt through its draft.
+test('a prompt page opens in the canvas frame for the demo user, never the reader fallback', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await signInAsDemo(page);
+  await page.goto(`/assessment/prompts?doc=${encodeURIComponent(PROMPT)}`);
+  const shell = page.getByTestId('document-shell');
+  await expect(shell).toBeVisible({ timeout: 20_000 });
+  await expect(page.locator(CANVAS)).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByTestId('canvas-document-ruler-row')).toBeVisible();
+  await expect(page.getByText(FALLBACK)).toHaveCount(0);
+  await expect(page.locator(`${CANVAS}[contenteditable="false"]`)).toBeVisible();
+  await page.screenshot({ path: `${OUT}/parity-journey-prompt-demo-reader.png` });
+
+  await signInAsDemo(page, 'lead-assessor');
+  await page.goto(`/assessment/prompts?doc=${encodeURIComponent(PROMPT)}`);
+  await expect(page.locator(`${CANVAS}[contenteditable="true"]`)).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByTestId('canvas-document-toolbar')).toBeVisible();
+  await expect(page.getByTestId('canvas-document-ruler-row')).toBeVisible();
+  await expect(page.getByText(FALLBACK)).toHaveCount(0);
+  await expect(shell.getByRole('button', { name: /^(Edit draft|Edit document)$/ })).toHaveCount(0);
+  await page.screenshot({ path: `${OUT}/parity-journey-prompt-demo-editor.png` });
+  // The first change starts the prompt's draft; it is typed and removed again.
+  await typeAndUndo(page, page.locator(CANVAS).getByText('If a required key is missing', { exact: false }));
+  await expect(page.getByTestId('document-draft-chip')).toHaveText('Local draft');
+  // Rename stays refused for prompts.
+  const rename = await page.evaluate(async (id) => (await fetch('/api/assessment/knowledge/doc/rename', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ id, title: 'Renamed' }),
+  })).status, PROMPT);
+  expect(rename, 'prompt rename is refused').toBe(409);
   expect(errors, 'page errors').toEqual([]);
 });
 
@@ -90,6 +160,10 @@ test('the rail, the All documents list and the document conversation match the r
   const dock = page.getByTestId('page-composer-dock');
   await expect(dock).toBeVisible();
   await expect(dock.getByText('Rubric Overview')).toBeVisible();
+  // Agent is the default mode (decision 8); Chat is one pick away.
+  await dock.getByRole('button', { name: 'Agent', exact: true }).click();
+  await dock.getByRole('button', { name: 'Composer mode: Agent' }).click();
+  await page.getByRole('menu', { name: 'Composer mode: Agent' }).getByRole('menuitem', { name: 'Chat', exact: true }).click();
   // The placeholder is the editor's empty paragraph, drawn from its data-placeholder.
   await expect(dock.locator('[data-placeholder="Message this document’s conversation…"]')).toHaveCount(1);
   await page.screenshot({ path: `${OUT}/parity-journey-rail-dock.png` });
@@ -224,4 +298,49 @@ test.describe('two people on one document', () => {
       await person.context.close();
     }
   });
+});
+
+// Decision 8: Agent mode is the dock's default. An instruction goes to the
+// assessment drafter with the page as context; `dev:mock` streams the
+// drafter's canned edit envelope (middleware/src/mock/document-agent-edits.ts),
+// which comes back as a proposal in the library ProposedEditStrip. Apply writes
+// it into the canvas at the caret; the edit is then undone so the shared page
+// reads as it did.
+test('an agent-mode instruction lands in the canvas as a proposed edit', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await signIn(page);
+  await page.goto(`/assessment/workspace?doc=${encodeURIComponent(DOC)}`);
+  const canvas = page.locator(CANVAS);
+  await expect(page.locator(`${CANVAS}[contenteditable="true"]`)).toBeVisible({ timeout: 20_000 });
+
+  const dock = page.getByTestId('page-composer-dock');
+  await expect(dock.locator('[data-placeholder^="Ask the drafter to edit this page"]')).toHaveCount(1);
+
+  // The caret at the end of the first body paragraph; nothing selected.
+  await canvas.locator('p').first().click();
+  await page.keyboard.press('End');
+  const before = await canvas.innerText();
+
+  await page.getByTestId('page-composer-input').click();
+  await page.keyboard.type('Add a next step about practice owners');
+  await page.keyboard.press('Enter');
+
+  const strip = page.getByTestId('document-agent-edit');
+  await expect(strip).toBeVisible({ timeout: 10_000 });
+  await expect(strip.getByTestId('document-agent-edit-placement')).toHaveText('Insert at cursor');
+  const apply = strip.getByTestId('document-agent-edit-apply');
+  await expect(apply).toBeEnabled({ timeout: 20_000 });
+  await expect(strip.getByTestId('document-agent-edit-preview')).toContainText('confirm an owner for each practice');
+  await page.screenshot({ path: `${OUT}/parity-journey-agent-proposal.png` });
+
+  await apply.click();
+  await expect(canvas).toContainText('Next step: confirm an owner for each practice before the scoring window opens.');
+  await expect(strip.getByTestId('document-agent-edit-applied')).toBeVisible();
+  await page.screenshot({ path: `${OUT}/parity-journey-agent-applied.png` });
+
+  // Undo the applied edit (the editor has focus after Apply).
+  await page.keyboard.press('ControlOrMeta+z');
+  await expect.poll(async () => await canvas.innerText(), { message: 'the applied edit is undone' }).toBe(before);
+  expect(errors, 'page errors').toEqual([]);
 });

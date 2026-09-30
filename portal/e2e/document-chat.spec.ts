@@ -136,6 +136,11 @@ test.describe('document conversation', () => {
     // 1. Farah sends from the composer dock under the page.
     const fromDock = `e2e dock ${stamp}`;
     sent.push(fromDock);
+    // The dock opens in Agent mode (parity goal, decision 8); pick Chat.
+    const dock = farah.page.getByTestId('page-composer-dock');
+    await dock.getByRole('button', { name: 'Agent', exact: true }).click();
+    await dock.getByRole('button', { name: 'Composer mode: Agent' }).click();
+    await farah.page.getByRole('menu', { name: 'Composer mode: Agent' }).getByRole('menuitem', { name: 'Chat', exact: true }).click();
     await farah.page.getByTestId('page-composer-input').click();
     await farah.page.keyboard.type(fromDock);
     await farah.page.keyboard.press('Enter');

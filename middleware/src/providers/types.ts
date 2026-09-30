@@ -359,6 +359,8 @@ export interface AgentCoreProvider {
   }): Promise<AgentInvokeResult>;
   invokeAgentStreaming(agentId: string, payload: {
     message: string;
+    /** Trusted server-side fields for structured agent entrypoints (same as invokeAgent). */
+    structuredInput?: Record<string, unknown>;
     sessionId?: string;
     userId?: string;
     auth?: { sub: string; role: string };

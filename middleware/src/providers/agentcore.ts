@@ -753,6 +753,7 @@ export const realAgentCore: AgentCoreProvider = {
     }
 
     const body = JSON.stringify({
+      ...payload.structuredInput,
       message: payload.message,
       prompt: payload.message,
       input_text: payload.message,
@@ -1278,7 +1279,7 @@ export const mockAgentCore: AgentCoreProvider = {
   },
 
   async invokeAgent(_agentId, payload): Promise<AgentInvokeResult> {
-    const m = selectMockResponse(payload.message);
+    const m = selectMockResponse(payload.message, payload.structuredInput);
     return {
       text: m.response,
       toolCalls: m.toolCalls.map((tc) => ({
@@ -1290,7 +1291,7 @@ export const mockAgentCore: AgentCoreProvider = {
   },
 
   async *invokeAgentStreaming(_agentId, payload): AsyncGenerator<unknown> {
-    const m = selectMockResponse(payload.message);
+    const m = selectMockResponse(payload.message, payload.structuredInput);
     const msgId = `mock-${Date.now()}`;
     yield { type: 'RUN_STARTED', threadId: payload.sessionId ?? 'mock', runId: msgId };
     // The real supervisor (agents/supervisor/main.py) brackets each routed

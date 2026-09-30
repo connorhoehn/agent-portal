@@ -26,6 +26,7 @@ import { InlineAlert, Stack } from '@connorhoehnslalom/ui-components/shared';
 import { useChat, useGatewayOptional } from '@connorhoehnslalom/realtime-modules/client';
 import { DocumentContextPanel, useDocumentContext } from './ExplorerFrame';
 import { conversationChannelForDoc } from './knowledgeFormat';
+import { useDocumentAgentEdit, type DocumentAgentEdit } from './useDocumentAgentEdit';
 
 const OFFLINE_REASON = 'The realtime gateway is not connected, so this document’s conversation is unavailable.';
 
@@ -53,27 +54,62 @@ export function useDocumentConversation(docId: string, displayName: string) {
 
 export type DocumentConversation = ReturnType<typeof useDocumentConversation>;
 
-/** The composer dock: the EditorShell footer on the Editor tab. */
-export function DocumentComposerDock({ docId, title, conversation }: { docId: string; title: string; conversation: DocumentConversation }) {
+/**
+ * The composer dock: the EditorShell footer on the Editor tab.
+ *
+ * Agent mode is on and the default (parity goal, decision 8): an instruction
+ * goes to the assessment drafter with the page as context, and its reply comes
+ * back as a proposed edit (`useDocumentAgentEdit`). Chat stays a mode and
+ * posts to the document's conversation as before; Terminal stays off.
+ *
+ * The pane owns the agent edit when it can: it calls `useDocumentAgentEdit`
+ * beside `useDocumentConversation`, passes the result here as `agentEdit`, and
+ * hands `agentEdit.strip` to the shell's `proposal` slot so the strip sits in
+ * the editor frame. Without one the dock runs its own and, having no frame
+ * slot to reach, carries the strip above its composer row.
+ */
+export function DocumentComposerDock(props: { docId: string; title: string; conversation: DocumentConversation; agentEdit?: DocumentAgentEdit }) {
+  return props.agentEdit
+    ? <ComposerDock {...props} agentEdit={props.agentEdit} stripInDock={false} />
+    : <DockWithOwnAgentEdit {...props} />;
+}
+
+function DockWithOwnAgentEdit(props: { docId: string; title: string; conversation: DocumentConversation }) {
+  const agentEdit = useDocumentAgentEdit(props.docId, props.title);
+  return <ComposerDock {...props} agentEdit={agentEdit} stripInDock />;
+}
+
+function ComposerDock({ docId, title, conversation, agentEdit, stripInDock }: { docId: string; title: string; conversation: DocumentConversation; agentEdit: DocumentAgentEdit; stripInDock: boolean }) {
   const context = useDocumentContext();
   const [chip, setChip] = useState(true);
+  const error = agentEdit.error ?? conversation.error;
+  const clearError = () => { agentEdit.clearError(); conversation.clearError(); };
+  const above = (error || (stripInDock && agentEdit.strip)) ? <Stack gap="xs">
+    {error && <InlineAlert tone="error" onDismiss={clearError} data-testid="page-composer-error">{error}</InlineAlert>}
+    {stripInDock && agentEdit.strip}
+  </Stack> : null;
   return <ContextComposer
     context={{ kind: 'document', id: docId, title }}
-    defaultMode="chat"
-    disabledModes={['agent', 'terminal']}
+    defaultMode="agent"
+    disabledModes={['terminal']}
     modeUnavailableReasons={{
-      agent: 'No agent edits assessment documents — say it in the conversation, or edit the draft.',
       terminal: 'Terminal sends lines to a running agent loop, and none is attached to a document.',
       ...(conversation.connected ? {} : { chat: OFFLINE_REASON }),
     }}
     chatAvailable={conversation.connected}
-    modePlaceholders={{ chat: 'Message this document’s conversation…' }}
+    modePlaceholders={{
+      agent: 'Ask the drafter to edit this page — select text to rewrite it…',
+      chat: 'Message this document’s conversation…',
+    }}
     contextChip={chip}
     onRemoveContext={() => setChip(false)}
     allowAttachments={false}
     draftKey={`assessment-document:${docId}`}
-    {...(conversation.error ? { above: <InlineAlert tone="error" onDismiss={conversation.clearError}>{conversation.error}</InlineAlert> } : {})}
+    working={agentEdit.working}
+    task={agentEdit.task}
+    {...(above ? { above } : {})}
     onSend={(message, { mode }) => {
+      if (mode === 'agent') return agentEdit.send(message.text);
       if (mode !== 'chat') return false;
       const sent = conversation.send(message.text);
       // Show where it went: the thread opens beside the page.

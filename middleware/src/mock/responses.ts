@@ -7,6 +7,7 @@
 // to type a question none of the keyword sets matched and hope.
 
 import { defineFixture } from './core/index.js';
+import { documentEditReply } from './document-agent-edits.js';
 
 export interface MockResponse {
   keywords: string[];
@@ -117,7 +118,13 @@ const defaultResponse: MockResponse = {
   response: `I searched the knowledge base and graph for relevant information.\n\nBased on available data, I can help you explore:\n- **People & expertise** — "Who knows X best?"\n- **Decisions & context** — "What was decided about Y?"\n- **Team dynamics** — "Show collaboration patterns"\n- **Scores & rankings** — "Who are the top contributors?"\n\nCould you provide more specifics about what you're looking for? I can search across documents, the organizational graph, and historical decisions.`,
 };
 
-export function selectMockResponse(message: string): MockResponse {
+export function selectMockResponse(message: string, structuredInput?: Record<string, unknown>): MockResponse {
+  // A document's composer dock sends the drafter's document-command payload
+  // (the runtime's structured input); its reply is the drafter's edit
+  // envelope, with no tool calls (the drafter emits its validated answer as
+  // one text message).
+  const edit = documentEditReply(structuredInput ?? message);
+  if (edit !== null) return { keywords: [], toolCalls: [], response: edit };
   const lower = message.toLowerCase();
   return chatResponses.rows().find((r) => r.keywords.some((k) => lower.includes(k))) ?? defaultResponse;
 }

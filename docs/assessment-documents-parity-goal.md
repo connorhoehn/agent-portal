@@ -52,7 +52,8 @@ response shapes; the accelerator's navigation / draft / publish UX survives
   `actionsLayout="menu"` (the example's "… ⋯" head; owner, mode and lifecycle
   actions live in ⋯). The accelerator actions stay as `workflowActions`: the
   Synced / Local draft chip, Take ownership, Review & publish
-  (`SourcePublishControl`), Edit draft / Done editing. Lifecycle errors render
+  (`SourcePublishControl`). (The Edit draft / Done editing toggle went with
+  decision 7 below.) Lifecycle errors render
   through `WorkspaceDocumentHeaderNotices` above the page.
 - The canvas is the shell surface with the example's settings: toolbar as the
   white card, ruler on, zoom in the toolbar overflow (no status bar), narrow
@@ -66,7 +67,7 @@ response shapes; the accelerator's navigation / draft / publish UX survives
   "Show outline" is a ⋯ menu item.
 - Preserved: per-source sections, Pull, New page / child draft, drag of
   synced pages through the source adapter, local draft → preview diff →
-  explicit Publish, prompts read-only.
+  explicit Publish; prompt names (rename refused).
 - Journey: `portal/e2e/assessment-documents-parity.spec.ts` (u-farah, who
   lands as lead-assessor — no tenant/role switch) at 1672×941; screenshots
   `docs/design/documents-parity/parity-journey-*.png`.
@@ -244,6 +245,149 @@ support both; the reference offers neither); only thread-root reactions are
 shown (reply reactions stay stored); no @-mention list in threads yet; the
 library's `useDocumentComments` cannot be used until its transport seam ships
 (below), so `useDocumentComments.ts` is that transport meanwhile.
+
+### Document pane parity — decisions 6 and 7 (one frame, editing by default)
+
+Decisions 6 and 7 of "Document pane parity" below.
+
+- **Every signed-in session gets a canvas grant, the demo user included.**
+  The demo persona has no identity row, so `currentDocumentSessionEpoch`
+  (`middleware/src/lib/document-session.ts`) had no epoch for it and the grant
+  call 503'd into the reader. Outside production, while the demo fallback is
+  live (no Cognito, demo mode — `dev:mock`), the demo persona's own session
+  epoch is taken as current and its role is checked against the permissive
+  demo grants; the gateway's and platform-api's session callback
+  (`/internal/document-grants/session`) takes the same path. Production
+  never does. The grant is read-only unless the role holds ManageKnowledge.
+- **The reader is a failure state only**: "Document collaboration is
+  unavailable" renders only when the grant call fails
+  (`CanvasDocumentPane.tsx`), with Retry connection.
+- **Editing by default.** No Edit draft / Done editing step: a role whose
+  grant carries `edit` types straight into the page
+  (`editable = canEdit && doc.synced && online`). On a synced page or a
+  prompt the first **local** change (a transaction that is not the ySync
+  binding's own) turns the draft chip to **Local draft**; Review & publish
+  stays the explicit publish. The chip is per session: after a reload it
+  reads the classification again until the next change (the canvas does not
+  report whether it differs from the source without a publish preview).
+- **Prompts edit through a draft.** `canvasSourceEditable`
+  (`middleware/src/providers/document-editability.ts`) admits `prompt:` ids,
+  used by the canvas route and `documentWorkflowAccess`; the portal's
+  `canEditDocumentCanvas` no longer special-cases the prompts mode — the grant
+  is the authority. The canvas is the prompt's draft; the published prompt the
+  fleet reads stays the stored Markdown and moves only through its promotion
+  path — `readDocumentCanvasProjection` still refuses prompts (tested), and the
+  legacy Markdown PUT refuses a migrated document. Rename stays refused (409,
+  "prompts cannot be renamed; a prompt's name is the command the fleet runs");
+  Rename, move and New page stay off on the Prompts rail. The assessor stays
+  read-only everywhere.
+- **Reader toolbar — a library limit.** `CanvasDocumentView` draws the
+  formatting toolbar only for an editable canvas, so a reader (the demo user
+  lands as assessor) gets the canvas, the ruler and the frame but no toolbar.
+  A read-only toolbar would be a ui-components change (queue it before
+  claiming "the same frame whoever looks" literally).
+- **Journey:** the first test now asserts the synced page is editable on
+  open (no Edit draft / Done editing / Edit document button), toolbar + ruler,
+  and the first typed change → Local draft (typed and removed again; the test
+  waits for the page text to match what it was). A new test: the demo user
+  (`POST /api/session/tenant`, cookie-less persona) on
+  `/assessment/prompts?doc=prompt%3Aclassify-transcript.md` — shell, canvas,
+  ruler, read-only, no fallback text; then the same persona as lead-assessor —
+  editable, toolbar + ruler, no Edit draft, first change → Local draft, rename
+  409. Screenshots `parity-journey-prompt-demo-reader.png`,
+  `-prompt-demo-editor.png`.
+
+### Document pane parity — decision 8 (agent edits from the dock, on by default)
+
+Decision 8 of "Document pane parity" below.
+
+- **The library strip first.** ui-components 2.407.34 ships
+  `ProposedEditStrip` (`/doc-editor` + root): `proposals` of `{id, kind
+  insert|replace, anchor {from,to}|'cursor', content {html?,text?}, summary?,
+  status streaming|ready|applying|applied|discarded}`, `onApply` /
+  `onDiscard`, optional `onRevise`, `onApplyAll` / `onDiscardAll` past one
+  proposal, the thinking affordance while streaming — and `EditorShell.proposal`,
+  a row between the page and the dock (never inside the collapsing composer).
+  `DocumentShell` forwards `proposal` on the Editor tab. realtime-examples'
+  `/documents` adopts the same composite.
+- **The dock** (`knowledge/DocumentConversation.tsx`): `defaultMode="agent"`,
+  only Terminal disabled (with its reason); Chat stays a mode on the document's
+  conversation. An Agent send goes to `useDocumentAgentEdit`
+  (`knowledge/useDocumentAgentEdit.tsx`); the TaskStrip ("Drafting an edit",
+  Stop) and the console's `working` drift show while the drafter works.
+- **The request** (`knowledge/documentAgentEditModel.ts`, node-tested):
+  `POST /api/agents/orgiq-assessment-drafter/invoke` over `useAgentStream`,
+  `message` = the instruction and `payload` = the drafter's own document
+  command — `{mode: "suggest-confluence-content", instruction, document: {id,
+  title, text (≤24k chars, `truncated`), selection {from, to, text} | null}}`.
+  The route hands `payload` to the runtime as structured input (top-level
+  `mode` / `document`, commit `074b5416`), on the streaming path as well as
+  the sync one. The reply is the drafter's envelope `{summary, content,
+  format: "markdown", source_spans, draft, published}` (`validate_document_output`).
+- **The proposal and Apply.** A send opens a `streaming` proposal anchored to
+  the selection (replace) or the caret (insert); the finished reply makes it
+  `ready`. Apply re-reads the page: a replacement lands only if the same text
+  is still at the same range (a collaborator may have changed it — otherwise
+  it asks to reselect), an insertion at the caret it was asked at; the
+  markdown goes in as paragraphs / headings through the canvas editor's
+  `insertContentAt`, so it is an ordinary Yjs change (undo works). Discard
+  drops it; Discard while streaming cancels the turn.
+- **The editor hand-off.** `publishDocumentEditor(sourceId, editor)` from
+  `CanvasDocumentPane`'s `onEditorReady` (null on unmount); until a pane
+  publishes one the hook reads TipTap's own `dom.editor` back-reference
+  inside `document-canvas-slot`.
+- **`dev:mock`** streams a canned edit: `middleware/src/mock/document-agent-edits.ts`
+  is a registered fixture (`document-agent-edits`; `empty` → the drafter's
+  `{agent, error}` envelope) read from the structured input; `source_spans`
+  quote the given page verbatim. Jest: `mock/__tests__/document-agent-edits.test.ts`.
+- **Journey:** `an agent-mode instruction lands in the canvas as a proposed
+  edit` — u-farah on `page:100002`, caret in the first paragraph, an Agent
+  instruction → the strip ("Insert at cursor", the preview) → Apply → the
+  text in the canvas → undone again. The conversation test (and
+  `e2e/document-chat.spec.ts`) now picks Chat from the mode menu first.
+  Screenshots `parity-journey-agent-proposal.png`, `-agent-applied.png`.
+- **Open, asserted:** the pane must call `useDocumentAgentEdit(node.id, title)`
+  beside `useDocumentConversation`, pass `agentEdit={agentEdit}` to
+  `DocumentComposerDock` and `proposal: agentEdit.strip` in the frame. Until
+  then the dock runs its own and carries the strip above its composer row —
+  the validator fails that line.
+- **Not done:** the drafter has no selection-scoped edit mode; the closest
+  contract (`suggest-confluence-content`) is used with an instruction that
+  asks for the replacement only. Revise… (`onRevise`) is not wired.
+
+## Document pane parity (2026-09-29, evening)
+
+The user compared `/assessment/prompts?doc=prompt:classify-transcript.md`
+with realtime-examples' `/documents/<id>?type=page`: ours showed a reader
+("Document collaboration is unavailable"), no toolbar, no ruler and no
+composer; theirs the full editor. Three decisions, for both apps:
+
+6. **(Shipped — see above.) One editor frame on every document page.** Workspace pages, prompts,
+   rules and enterprise pages all open in the canvas editor with the
+   familiar toolbar and ruler in the shell's toolbar slot. The reader is a
+   fallback for a real failure only (the grant call errored), never a mode:
+   in `dev:mock` every signed-in user, the demo user included, gets a canvas
+   grant (read-only when their role may not edit), so the frame is the same
+   whoever looks.
+7. **(Shipped — see above.) Editing by default.** A role that may edit types straight into the
+   page: on a synced page the first change starts its draft (no "Edit draft"
+   step); publish stays explicit. Prompts are edited the same way through a
+   draft (rename stays refused — the server 409 and the journey checks
+   hold); the published prompt still reaches the fleet through the existing
+   promotion path.
+8. **Agent edits from the dock, on by default.** The document composer's
+   Agent mode is enabled and default: an instruction goes to the assessment
+   drafter with the document (and the selection) as context, and the reply
+   lands in the canvas as a proposed edit — inserted at the cursor or
+   replacing the selection — with Apply / Discard; chat mode stays a mode.
+   `dev:mock` streams a canned edit. realtime-examples' `/documents` adopts
+   the same dock default (its session owns that swap).
+
+The validator asserts, per shipped slice: the canvas frame present (toolbar
++ ruler) on a prompt page for the demo user, no reader fallback text; a
+synced page editable without an explicit Edit draft; the dock's `agent`
+mode enabled and default on a document; a Playwright journey that sends an
+instruction and sees the proposed edit in the canvas.
 
 ## Backlog (not asserted yet — add a check when a slice ships)
 

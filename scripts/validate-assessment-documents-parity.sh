@@ -56,7 +56,7 @@ has 'social-documents\.mjs' docs/social-calls-local-stack.md && ok "local-stack 
 # ─────────────────────────────────────────────────────────────────────────────
 section "portal"
 if (cd portal && npx tsc --noEmit >/dev/null 2>&1); then ok "tsc clean"; else fail "portal: tsc errors"; fi
-if (cd portal && node --test 'src/pages/assessment/**/__tests__/*.test.ts' >/dev/null 2>&1); then ok "assessment node tests green (prompts stay read-only: documentCanvasState.test.ts)"; else fail "portal: assessment node tests failing"; fi
+if (cd portal && node --test 'src/pages/assessment/**/__tests__/*.test.ts' >/dev/null 2>&1); then ok "assessment node tests green (the grant is the only edit authority: documentCanvasState.test.ts)"; else fail "portal: assessment node tests failing"; fi
 
 # ─────────────────────────────────────────────────────────────────────────────
 section "component discipline ($K)"
@@ -88,7 +88,7 @@ has 'variant="bar"|header=\{header\}' "$PANE" && fail "$PANE still draws the hea
 for t in editor comments versions history reviews; do
   has "'$t'" "$SHELL" && ok "tab '$t' declared" || fail "$SHELL: tab '$t' missing"
 done
-for a in 'Take ownership' 'SourcePublishControl' "'Edit draft'" 'Edits are a local draft\. Publishing to the source is a separate action\.'; do
+for a in 'Take ownership' 'SourcePublishControl' "'Local draft'" 'Edits are a local draft\. Publishing to the source is a separate action\.'; do
   has "$a" "$PANE" && ok "workflow action kept: $a" || fail "$PANE lost: $a"
 done
 has 'workflowActions=' "$PANE" && ok "workflow actions ride DocumentHeader workflowActions" || fail "$PANE: no workflowActions"
@@ -235,25 +235,76 @@ has "/api/assessment/knowledge/pull" "$RAIL" && has "actions:" "$RAIL" && ok "sp
 has "onReorder: handleReorder" "$EXPLORER" && has "/api/assessment/knowledge/source/move" "$EXPLORER" && has "railDropPosition" "$RAIL" && has "canDragNode" "$RAIL" \
   && ok "drag of synced pages through the source adapter" || fail "KnowledgeExplorer / DocumentRail lost drag / source move"
 has "NewDraftDialog" "$EXPLORER" && ok "New page / child draft" || fail "KnowledgeExplorer lost NewDraftDialog"
-has "mode !== 'prompts'" "$K/documentCanvasState.ts" && ok "prompts read-only" || fail "documentCanvasState no longer keeps prompts read-only"
+has "onRename: setRenaming \} : \{\}\)\}" "$EXPLORER" && grep -q "mode !== 'prompts' && canDo('ManageKnowledge') ? { onRename" "$EXPLORER" \
+  && grep -q "if (id.startsWith('prompt:')) {" middleware/src/providers/assessment.ts && grep -q "status: 409, reason: 'prompts cannot be renamed" middleware/src/providers/assessment.ts \
+  && ok "prompt rename stays refused (no Rename on prompt rows; the server 409s)" || fail "prompt rename is offered or accepted"
+
+# ─────────────────────────────────────────────────────────────────────────────
+section "decision 6 — one editor frame on every document page"
+DS=middleware/src/lib/document-session.ts
+grep -q "function demoIdentity" "$DS" && grep -q "process.env\['NODE_ENV'\] === 'production' || !demoFallbackAllowed()" "$DS" && grep -q "demoIdentity(sub, reference.epoch) ?? await getUser" "$DS" \
+  && ok "the demo persona holds a document-session epoch outside production (so it gets a canvas grant)" || fail "$DS: the demo persona still has no document-session epoch — its grant call 503s into the reader"
+grep -q "demo persona" middleware/src/routes/__tests__/internal-document-grants.test.ts && grep -q "the demo persona included" middleware/src/routes/__tests__/assessment-canvas.test.ts \
+  && ok "tests: the demo grant (dev only) and a read grant for every signed-in reader" || fail "no tests for the demo persona's grant"
+grep -q "canvasSourceEditable(source) && await isAllowed(session, 'ManageKnowledge')" middleware/src/routes/assessment-canvas.ts \
+  && ok "the canvas route grants every assessment session; edit only for a role that may" || fail "assessment-canvas.ts does not derive edit from canvasSourceEditable + ManageKnowledge"
+awk '/^  if \(grant\) return/{g=NR} /grantError \? <Stack/{f=NR} END{exit !(g && f && g<f)}' "$PANE" \
+  && ok "the reader (\"Document collaboration is unavailable\") renders only on a grant error" || fail "$PANE: the reader is not confined to a grant failure"
+
+section "decision 7 — editing by default"
+! grep -qE "'Edit draft'|'Done editing'|'Edit document'|setEditing" "$PANE" && ok "no Edit draft / Done editing step" || fail "$PANE still has an explicit Edit draft step"
+grep -q "const editable = canEdit && doc.synced && online;" "$PANE" && ok "a role that may edit types straight into the page" || fail "$PANE: editable still waits on a toggle"
+grep -q "transaction.getMeta(ySyncPluginKey)" "$PANE" && grep -q "setDrafting(true)" "$PANE" && grep -q "data-testid=\"document-draft-chip\"" "$PANE" \
+  && ok "the first local change starts the draft (chip → Local draft; remote changes ignored)" || fail "$PANE: the draft chip does not follow the first local change"
+! grep -q "mode !== 'prompts'" "$K/documentCanvasState.ts" && grep -q "prompt:" middleware/src/providers/document-editability.ts \
+  && ok "prompts edit through a draft (the grant is the authority)" || fail "prompts are still read-only for editors"
+grep -q "source.id.startsWith('prompt:')" middleware/src/providers/document-canvas.ts && grep -q "never projects that draft as a publication" middleware/src/providers/__tests__/document-canvas.test.ts \
+  && ok "a prompt draft never becomes a source publication (projection refuses prompts; tested)" || fail "a prompt's canvas draft can be projected for publication"
+grep -q "Edits are a draft of this prompt. The published prompt changes only through its promotion path." "$PANE" && ok "prompt pages say the published prompt moves through promotion" || fail "$PANE: prompts do not explain their draft"
+
+section "decision 8 — agent edits from the dock, on by default"
+AE=$K/useDocumentAgentEdit.tsx
+AEM=$K/documentAgentEditModel.ts
+[ -d "$LIB" ] && grep -qE "export declare function ProposedEditStrip\b" "$LIB/doc-editor.d.ts" && awk '/declare interface EditorShellProps/,/^}/' "$LIB/doc-editor.d.ts" | grep -q "proposal?: ReactNode" \
+  && ok "installed doc-editor exports ProposedEditStrip and EditorShell.proposal (2.407.34+)" || fail "installed ui-components has no ProposedEditStrip / EditorShell proposal slot"
+grep -q 'defaultMode="agent"' "$CONVO" && grep -q "disabledModes={\['terminal'\]}" "$CONVO" && ! grep -qE "disabledModes=\{\[[^]]*'agent'" "$CONVO" \
+  && ok "the dock's Agent mode is enabled and the default; Terminal stays off" || fail "$CONVO: Agent mode is not enabled + default (defaultMode=\"agent\", only terminal disabled)"
+grep -q "if (mode === 'agent') return agentEdit.send(message.text);" "$CONVO" && grep -q "conversation.send(message.text)" "$CONVO" \
+  && ok "Agent sends go to the drafter; Chat stays a mode on the conversation" || fail "$CONVO: onSend does not route agent → drafter and chat → conversation"
+grep -q "DOCUMENT_EDIT_AGENT_ID = 'orgiq-assessment-drafter'" "$AEM" && grep -q "mode: typeof DOCUMENT_EDIT_MODE" "$AEM" && grep -q "selection: DocumentSelection | null" "$AEM" \
+  && ok "the request is the drafter's document command: id, title, text, selection + range" || fail "$AEM: the drafter request lost its document context"
+grep -q "useAgentStream" "$AE" && grep -q "documentEditInvokeUrl(DOCUMENT_EDIT_AGENT_ID)" "$AE" && grep -q "payload: requestRef.current" "$AE" \
+  && ok "the instruction streams through POST /api/agents/:id/invoke with the command as payload" || fail "$AE does not invoke the drafter through the invoke route with a payload"
+grep -q "import { ProposedEditStrip } from '@connorhoehnslalom/ui-components/doc-editor'" "$AE" && grep -q "insertContentAt" "$AE" && grep -q "resolveApplyTarget" "$AE" \
+  && ok "the reply is a library ProposedEditStrip; Apply writes at the anchor through the canvas editor" || fail "$AE: no library strip, or Apply does not write through the editor at the anchor"
+grep -q "^export function publishDocumentEditor" "$AE" && ok "publishDocumentEditor is the pane's editor hand-off" || fail "$AE does not export publishDocumentEditor"
+grep -q "publishDocumentEditor(" "$PANE" && ok "CanvasDocumentPane publishes its editor" || fail "$PANE does not call publishDocumentEditor from onEditorReady"
+grep -q "{ proposal }" "$SHELL" && grep -q "useDocumentAgentEdit(node.id" "$PANE" && grep -q "proposal: agentEdit.strip" "$PANE" && grep -q "agentEdit={agentEdit}" "$PANE" \
+  && ok "the strip sits in the editor frame (EditorShell proposal slot)" || fail "the strip is not in the editor frame yet: $PANE must call useDocumentAgentEdit(node.id, title) beside useDocumentConversation, pass agentEdit={agentEdit} to DocumentComposerDock and proposal: agentEdit.strip in the frame (DocumentShell already forwards it)"
+[ -f portal/src/pages/assessment/__tests__/documentAgentEditModel.test.ts ] && ok "model tests: request, reply, proposal, apply target" || fail "no documentAgentEditModel node tests"
+grep -q "key: 'document-agent-edits'" middleware/src/mock/document-agent-edits.ts && grep -q "documentEditReply(structuredInput ?? message)" middleware/src/mock/responses.ts \
+  && grep -q "selectMockResponse(payload.message, payload.structuredInput)" middleware/src/providers/agentcore.ts \
+  && ok "dev:mock streams the drafter's edit envelope from a registered fixture" || fail "dev:mock has no registered document-edit fixture on the streaming path"
+grep -q "an agent-mode instruction lands in the canvas as a proposed edit" portal/e2e/assessment-documents-parity.spec.ts \
+  && ok "journey test: instruction → proposed edit → Apply → text in the canvas" || fail "no agent-edit journey in the parity spec"
 
 # ─────────────────────────────────────────────────────────────────────────────
 if [ "$QUICK" = 0 ]; then
   section "middleware (document routers)"
-  if (cd middleware && npm test -- --testPathPattern 'assessment-canvas|assessment-document|assessment-knowledge-comments|document-workflows|document-source|document-canvas|internal-document|document-versions|document-mapping|document-drafts|document-comments|document-comment-import' >/dev/null 2>&1); then
+  if (cd middleware && npm test -- --testPathPattern 'document-agent-edits|assessment-canvas|assessment-document|assessment-knowledge-comments|document-workflows|document-source|document-canvas|internal-document|document-versions|document-mapping|document-drafts|document-comments|document-comment-import' >/dev/null 2>&1); then
     ok "jest: canvas / workflow / source / comments routers green"; else fail "middleware: document router jest failures"; fi
 
   section "journey (Playwright, 1672×941, configured canvas)"
   BASE=${PARITY_BASE_URL:-http://localhost:5183}
   if curl -fsS -o /dev/null --max-time 5 "$BASE/"; then
     if (cd portal && PARITY_BASE_URL="$BASE" node_modules/.bin/playwright test e2e/assessment-documents-parity.spec.ts --reporter=line >/tmp/assessment-documents-parity-journey.log 2>&1); then
-      ok "journey passed against $BASE (tabs, canvas, Edit draft toolbar + ruler; rail, views, list, dock → Chat round trip; two people: byline, imported + new + anchored comments, resolve, call ring/accept; no page errors)"
+      ok "journey passed against $BASE (tabs, canvas editable on open with toolbar + ruler, first change → Local draft; demo user on a prompt: canvas + ruler, no fallback, editor role → toolbar + draft, rename 409; rail, views, list, dock → Chat round trip; agent instruction → proposed edit → Apply in the canvas; two people: byline, imported + new + anchored comments, resolve, call ring/accept; no page errors)"
     else
       fail "journey failed against $BASE — see /tmp/assessment-documents-parity-journey.log"
       tail -25 /tmp/assessment-documents-parity-journey.log | sed 's/^/      /'
     fi
   else fail "no portal at $BASE (start the document stack; see the header of this script)"; fi
-  for s in parity-journey-reader parity-journey-edit-draft parity-journey-comments parity-journey-history parity-journey-reviews parity-journey-versions parity-journey-rail-dock parity-journey-chat parity-journey-list parity-journey-byline parity-journey-comments-threads parity-journey-comments-anchored parity-journey-call; do
+  for s in parity-journey-reader parity-journey-edit-draft parity-journey-prompt-demo-reader parity-journey-prompt-demo-editor parity-journey-comments parity-journey-history parity-journey-reviews parity-journey-versions parity-journey-rail-dock parity-journey-chat parity-journey-list parity-journey-byline parity-journey-comments-threads parity-journey-comments-anchored parity-journey-call parity-journey-agent-proposal parity-journey-agent-applied; do
     [ -s "docs/design/documents-parity/$s.png" ] && ok "screenshot $s.png" || fail "missing docs/design/documents-parity/$s.png"
   done
 fi

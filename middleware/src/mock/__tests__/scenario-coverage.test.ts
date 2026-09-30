@@ -53,6 +53,7 @@ import '../design-reviews.js';
 import '../devbox-delivery.js';
 import '../devbox-shell.js';
 import '../devbox-workspace.js';
+import '../document-agent-edits.js';
 import '../distillation.js';
 import '../embedding.js';
 import '../github-runs.js';

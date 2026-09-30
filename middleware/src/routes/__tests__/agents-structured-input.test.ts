@@ -1,6 +1,7 @@
 // POST /api/agents/:id/invoke — the optional `payload` object reaches the
 // runtime as structured input (the assessment drafter reads `mode` and
 // `document` at the top of its payload), with the route-owned keys removed.
+jest.mock('../../config.js', () => ({ config: { mock: { aurora: true, agentcore: true }, auth: {} } }));
 import { agentStructuredInput } from '../agents.js';
 
 describe('agentStructuredInput', () => {
