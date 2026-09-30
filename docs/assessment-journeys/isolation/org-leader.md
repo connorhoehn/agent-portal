@@ -136,3 +136,15 @@ Method: Chromium 1552×958 (Playwright headless, a fresh context per identity �
   - api-status: **403** — /api/assessment/teams 403, /api/assessment/knowledge/tree 403, /api/assessment/pipeline-runs 403.
   - console errors: 0. Screenshot: org-leader-reobs-2026-09-30.jpg (where /assessment/teams left this identity).
   - verdict: pass.
+
+--- freshness re-observation, 2026-09-30 05:42Z (the header activity bell; social S1/S2 and pipelines P2 routes) ---
+Why: Layout.tsx changed with 0cf97d21 (the header ActivityBell — the library's WrappedNotificationBell — now sits in every tenant's header), and App.tsx with c96be478 (social channels/DMs) and 0fb8eae6 (social rooms/calls/contacts/teams/recordings/configuration; pipelines definitions/runbooks/approvals/sources) — both in this log's pages: digest. Every fact below was re-taken, not carried forward.
+Method: Chromium 1552×958 (Playwright headless from portal/node_modules, a fresh context per identity — not the shared Chrome tab), middleware dev:mock:social on :3001, Vite :5183, HEAD 0fb8eae6; POST /api/session/login {userId:u-vera} → 200, then POST /api/session/role {role:org-leader} → 200, then sessionStorage['orgiq.contextChosen'] set to the sub — what the chooser's markContextChosen() does.
+  - identity: sub u-vera, tenant orgiq, role org-leader, grants {"orgiq":["org-leader","member"],"social":["participant"]}.
+  - assessment-tile-visible: **no** — /select tiles ['orgiq', 'social'].
+  - assessment-nav-visible: **no** — 33 anchors in [data-shell-nav] on /iq/projects, 0 toward /assessment.
+  - direct-route-result: **redirect** — /assessment/teams → /iq/projects (h1 "All initiatives"); /assessment/workspace?doc=page%3A100002 → /iq/projects.
+  - api-status: **403** — /api/assessment/teams 403, /api/assessment/knowledge/tree 403, /api/assessment/pipeline-runs 403; POST /api/session/tenant {assessment} 403 (session after: u-vera/orgiq/org-leader).
+  - activity bell: header controls ['command-palette-hint', '2 agent runs in progress', 'activity-bell-button', 'Vera Green· Org Lead']; the bell reads “Activity, 1 unread” and opens on “Notifications1 | Mark all read | Clear all | Unread (1) | All | Missed call from Nora DaSilva | OrgIQ · Missed call — Nobody answered — on Auth Migration. | 1h ago” — its item is in this identity’s own tenant, none toward /assessment.
+  - console errors: 0 (read after /select, home, the palette and every direct route; the 14 later "Failed to load resource" lines are the probes' own answers). No horizontal scroll (1552 = 1552). Screenshot: org-leader-reobs-2026-09-30-bell.jpg (where /assessment/teams left this identity).
+  - verdict: pass.

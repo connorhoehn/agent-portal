@@ -391,3 +391,24 @@ Re-observed 2026-09-29 21:53 (re-seal at fc883499; this log’s digest moved wit
 | prompts (`prompt:classify-transcript.md`) | 76 | 0 | sections Views / Prompts 9; header title “Prompts”; current “Classify Transcript”; 3 tab stops (no source ⋯ — prompts take no New page) |
 
 Every menu trigger in the rail is named. Findings: #15 closed (titles present on every group header). The two-`h1` note from 21:06 stands — each page still has the editor title and the canvas’s own first heading as `h1`s; on prompts the second reads “xyxxyxyClassify Transcript”, which is canvas residue from an earlier session, not markup (lead-assessor/DEFECTS.md #18). New, not an accessibility finding as such: lead-assessor/DEFECTS.md #17 (Agent mode and a live Apply for the read-only assessor). The two open search-input findings (#4, #6) are on pages this change does not reach.
+
+Re-observed 2026-09-30 06:02–06:04Z (this log's digest moved: `portal/src/pages/assessment` — 8f288081 (DocumentConversation.tsx: the reader's dock opens in Chat with Agent offered-but-off) and 0cf97d21 (CanvasDocumentPane.tsx: `?tab=comments`); separately, the header now carries the activity bell on every page (Layout.tsx + ActivityBell.tsx, 0cf97d21) — outside this log's pages: but inside every count below). All twelve surfaces re-swept as u-jonas (POST /api/session/login + /role lead-assessor; /api/session/me = u-jonas · assessment · lead-assessor), Chromium 1552×958 headless (Playwright from portal/node_modules), middleware dev:mock:social :3001 and Vite :5183 not restarted, HEAD 0fb8eae6, ui-components 2.407.39, realtime-modules 0.99.0. The same name-resolution order as above (aria-label → aria-labelledby → label → wrapping label → own text → title → img alt; hint text alone is not a name); visible = has client rects and no hidden/display:none ancestor.
+
+| surface | visible controls (incl. the 3 header controls) | unnamed | previous (2026-09-29) |
+|---|---|---|---|
+| dashboard | 33 | 1 — the team search (#4, open) | 25 / 1 |
+| team-scorecard (TEAM-001) | 56 | 0 | 55 / 0 |
+| submissions | 28 | 0 | 27 / 0 |
+| submissions-wizard (step 1) | 28 | 0 | 27 / 0 |
+| feedback | 64 | 1 — the question search (#6, open) | 43 / 1 |
+| reports | 41 | 0 | 33 / 0 |
+| runs | 41 | 0 | 28 / 0 |
+| configuration | 29 | 0 | 28 / 0 |
+| workspace (`page:100002`) | 177 | 0 | 173 / 0 |
+| enterprise | 74 | 0 | 76 / 0 |
+| rules | 66 | 0 | 68 / 0 |
+| prompts | 74 | 0 | 76 / 0 |
+
+The header on every surface is three named controls: “Open command palette” (⌘K Search), **“Activity”** (the bell; its name carries the unread count — “Activity, 1 unread” when there is one) and the account menu (“Jonas Lindqvist · Lead Assessor”). The per-surface growth is mostly not the header: the bell adds one control everywhere; the larger jumps (dashboard, feedback, reports, runs) are page content since the last full sweep, and none added an unnamed control. The document surfaces moved by a couple either way with the dock's mode (a reader's dock no longer carries the agent affordances; this sweep is the lead-assessor's, whose dock opens in Agent).
+
+The bell as a dialog, added to the dialog table's family: trigger `aria-haspopup="dialog"`, `aria-expanded` true while open; the popover is `role="dialog"` named “Activity” (no `aria-modal` — it is a non-modal popover); Enter on the focused bell opens it with focus moved inside; Tab cycles inside it (Mark all read, Clear all, Unread, All, each item — measured in the social activity logs); Escape closes it and focus returns to the bell. 0 console errors across the sweep. Findings unchanged: #4 and #6 open; the two-`h1` note stands.

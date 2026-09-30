@@ -144,3 +144,15 @@ Method: Chromium 1552×958 (Playwright headless, a fresh context per identity �
   - api-status: **403** — /api/assessment/teams 403, /api/assessment/knowledge/tree 403, /api/assessment/pipeline-runs 403.
   - console errors: 0. Screenshot: demo-user-reobs-2026-09-30.jpg (where /assessment/teams left this identity).
   - verdict: pass.
+
+--- freshness re-observation, 2026-09-30 05:43Z (the header activity bell; social S1/S2 and pipelines P2 routes) ---
+Why: Layout.tsx changed with 0cf97d21 (the header ActivityBell — the library's WrappedNotificationBell — now sits in every tenant's header), and App.tsx with c96be478 (social channels/DMs) and 0fb8eae6 (social rooms/calls/contacts/teams/recordings/configuration; pipelines definitions/runbooks/approvals/sources) — both in this log's pages: digest. Every fact below was re-taken, not carried forward.
+Method: Chromium 1552×958 (Playwright headless from portal/node_modules, a fresh context per identity — not the shared Chrome tab), middleware dev:mock:social on :3001, Vite :5183, HEAD 0fb8eae6; no sign-in: the cookie-less fallback identity (a fresh context with no cookie).
+  - identity: sub demo-user, tenant orgiq, role member, grants {"orgiq":["member","sme","program-owner","org-leader","hr-admin","admin"],"assessment":["assessor","lead-assessor","program-lead","admin"]}.
+  - assessment-tile-visible: **yes** — /select tiles ['orgiq', 'assessment'] (the demo identity is permissive in orgiq + assessment; social and pipelines are left out of permissiveGrants()).
+  - assessment-nav-visible: **no** — 12 anchors in [data-shell-nav] on /iq/projects, 0 toward /assessment.
+  - direct-route-result: **redirect** — /assessment/teams → /iq/projects (h1 "My initiatives"); /assessment/workspace?doc=page%3A100002 → /iq/projects.
+  - api-status: **403** — /api/assessment/teams 403, /api/assessment/knowledge/tree 403, /api/assessment/pipeline-runs 403; POST /api/session/tenant {assessment} n/a (grant held) (session after: demo-user/orgiq/member).
+  - activity bell: header controls ['command-palette-hint', '2 agent runs in progress', 'local-compute-badge', 'activity-bell-button', 'Demo User· Member ▾']; the bell reads “Activity” and opens on “Nothing new | Activity will appear here.” — no item toward /assessment.
+  - console errors: 0 (read after /select, home, the palette and every direct route; the 16 later "Failed to load resource" lines are the probes' own answers). No horizontal scroll (1552 = 1552). Screenshot: demo-user-reobs-2026-09-30-bell.jpg (where /assessment/teams left this identity).
+  - verdict: pass.

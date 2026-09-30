@@ -140,3 +140,15 @@ Method: Chromium 1552×958 (Playwright headless, a fresh context per identity �
   - api-status: **403** — /api/assessment/teams 403, /api/assessment/knowledge/tree 403, /api/assessment/pipeline-runs 403.
   - console errors: 0. Screenshot: member-reobs-2026-09-30.jpg (where /assessment/teams left this identity).
   - verdict: pass.
+
+--- freshness re-observation, 2026-09-30 05:37Z (the header activity bell; social S1/S2 and pipelines P2 routes) ---
+Why: Layout.tsx changed with 0cf97d21 (the header ActivityBell — the library's WrappedNotificationBell — now sits in every tenant's header), and App.tsx with c96be478 (social channels/DMs) and 0fb8eae6 (social rooms/calls/contacts/teams/recordings/configuration; pipelines definitions/runbooks/approvals/sources) — both in this log's pages: digest. Every fact below was re-taken, not carried forward.
+Method: Chromium 1552×958 (Playwright headless from portal/node_modules, a fresh context per identity — not the shared Chrome tab), middleware dev:mock:social on :3001, Vite :5183, HEAD 0fb8eae6; POST /api/session/login {userId:u-theo} → 200, then sessionStorage['orgiq.contextChosen'] set to the sub — what the chooser's markContextChosen() does.
+  - identity: sub u-theo, tenant orgiq, role member, grants {"orgiq":["member"],"social":["participant"]}.
+  - assessment-tile-visible: **no** — /select tiles ['orgiq', 'social'].
+  - assessment-nav-visible: **no** — 13 anchors in [data-shell-nav] on /iq/projects, 0 toward /assessment.
+  - direct-route-result: **redirect** — /assessment/teams → /iq/projects (h1 "My initiatives"); /assessment/workspace?doc=page%3A100002 → /iq/projects.
+  - api-status: **403** — /api/assessment/teams 403, /api/assessment/knowledge/tree 403, /api/assessment/pipeline-runs 403; POST /api/session/tenant {assessment} 403 (session after: u-theo/orgiq/member).
+  - activity bell: header controls ['command-palette-hint', '2 agent runs in progress', 'activity-bell-button', 'Theo Chang· Member ▾']; the bell reads “Activity” and opens on “Nothing new | Activity will appear here.” — no item toward /assessment.
+  - console errors: 0 (read after /select, home, the palette and every direct route; the 16 later "Failed to load resource" lines are the probes' own answers). No horizontal scroll (1552 = 1552). Screenshot: member-reobs-2026-09-30-bell.jpg (where /assessment/teams left this identity).
+  - verdict: pass.
