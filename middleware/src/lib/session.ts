@@ -20,7 +20,7 @@ import type { Request, Response, NextFunction } from 'express';
 import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
 import { config } from '../config.js';
 
-export const TENANTS = ['orgiq', 'assessment'] as const;
+export const TENANTS = ['orgiq', 'assessment', 'social', 'pipelines'] as const;
 export type Tenant = typeof TENANTS[number];
 
 // Role vocabulary per tenant. Must match the Cedar seeds in
@@ -29,12 +29,15 @@ export type Tenant = typeof TENANTS[number];
 export const ROLES_BY_TENANT: Record<Tenant, readonly string[]> = {
   orgiq: ['member', 'sme', 'program-owner', 'org-leader', 'hr-admin'],
   assessment: ['assessor', 'lead-assessor', 'program-lead'],
+  // The third and fourth tenants (docs/social-tenant-design.md §4, §5).
+  social: ['participant', 'moderator', 'community-admin'],
+  pipelines: ['author', 'operator', 'pipeline-admin'],
 };
 export const ADMIN_ROLE = 'admin';
 
 // Legacy export — the orgiq role list. Prefer ROLES_BY_TENANT.
 export const ROLES = ROLES_BY_TENANT.orgiq as readonly ['member', 'sme', 'program-owner', 'org-leader', 'hr-admin'];
-export type Role = 'member' | 'sme' | 'program-owner' | 'org-leader' | 'hr-admin' | 'assessor' | 'lead-assessor' | 'program-lead' | 'admin';
+export type Role = 'member' | 'sme' | 'program-owner' | 'org-leader' | 'hr-admin' | 'assessor' | 'lead-assessor' | 'program-lead' | 'participant' | 'moderator' | 'community-admin' | 'author' | 'operator' | 'pipeline-admin' | 'admin';
 
 export const DEFAULT_ROLE: Role = 'member';
 export const DEFAULT_TENANT: Tenant = 'orgiq';
@@ -82,12 +85,23 @@ export interface Session {
   epoch?: number;
 }
 
+/** Tenants the cookie-less demo identity is never handed. The social and
+ * pipelines tenants' isolation walks need a session that holds NO grant there
+ * (docs/social-tenant-design.md §4.1: "the demo user gets none"), and the demo
+ * identity is the one every outside-role walk can start from without a login.
+ * Seeded users still reach both through their real grants. */
+const DEMO_EXCLUDED_TENANTS: ReadonlySet<Tenant> = new Set<Tenant>(['social', 'pipelines']);
+
 /** Grants used for the cookie-less demo identity and legacy cookies: every role
- * in every tenant, so the demo stays fully explorable without a login step.
- * Seeded users get real (constrained) grants — that's where isolation shows. */
+ * in every tenant except social and pipelines, so the demo stays explorable
+ * without a login step. Seeded users get real (constrained) grants — that's
+ * where isolation shows. */
 export function permissiveGrants(): Grants {
   const g: Grants = {};
-  for (const t of TENANTS) g[t] = [...ROLES_BY_TENANT[t], ADMIN_ROLE];
+  for (const t of TENANTS) {
+    if (DEMO_EXCLUDED_TENANTS.has(t)) continue; // social, pipelines: no demo grant
+    g[t] = [...ROLES_BY_TENANT[t], ADMIN_ROLE];
+  }
   return g;
 }
 
@@ -133,6 +147,8 @@ export function hasGrant(grants: Grants, tenant: string, role: string): boolean 
 // Privilege rank, lower = less privileged. Used to choose a login landing role.
 const ROLE_RANK: Record<string, number> = {
   member: 0, assessor: 0, sme: 1, 'lead-assessor': 2, 'program-owner': 2, 'org-leader': 3, 'program-lead': 3, 'hr-admin': 4, admin: 99,
+  participant: 0, moderator: 2, 'community-admin': 3,
+  author: 0, operator: 1, 'pipeline-admin': 3,
 };
 
 /**

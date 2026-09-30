@@ -17,7 +17,7 @@
 // unit test (__tests__/tenantHome.test.ts) and node's ESM resolver does not
 // guess extensions. Vite and tsc both resolve them fine.
 import { contextCount, hasChosenContext } from './contextChoice.ts';
-import { ASSESSMENT_ENABLED } from './features.ts';
+import { tenantEnabled } from './features.ts';
 import type { Session } from './auth';
 
 /** A tenant's landing route — the front door of that product. */
@@ -27,6 +27,10 @@ export const TENANT_HOME: Record<string, string> = {
   // legitimately all-zeros on a quiet morning.
   orgiq: '/iq/projects',
   assessment: '/assessment/teams',
+  // The conversation is the social product's front door (design §4.1).
+  social: '/social/channels',
+  // The run ledger is the pipelines product's front door (design §5.3).
+  pipelines: '/pipelines/runs',
 };
 
 /** The workspace chooser. Where an identity goes when no single home fits. */
@@ -47,14 +51,13 @@ export const CHOOSER = '/select';
  */
 export function resolveHome(session: Session | null): string {
   if (!session) return CHOOSER;
-  const usable = ASSESSMENT_ENABLED
-    ? contextCount(session.grants)
-    : contextCount(Object.fromEntries(
-        Object.entries(session.grants ?? {}).filter(([t]) => t !== 'assessment'),
-      ));
+  // A parked tenant (its VITE_ENABLE_* flag off) offers no usable workspace.
+  const usable = contextCount(Object.fromEntries(
+    Object.entries(session.grants ?? {}).filter(([t]) => tenantEnabled(t)),
+  ));
   if (usable === 0) return CHOOSER;
   if (usable > 1 && !session.masquerading && !hasChosenContext(session.sub ?? '')) return CHOOSER;
-  if (session.tenant === 'assessment' && !ASSESSMENT_ENABLED) return TENANT_HOME.orgiq;
+  if (!tenantEnabled(session.tenant)) return TENANT_HOME.orgiq;
   return TENANT_HOME[session.tenant] ?? CHOOSER;
 }
 

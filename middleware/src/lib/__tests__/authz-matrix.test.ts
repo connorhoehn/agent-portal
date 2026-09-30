@@ -205,6 +205,39 @@ const MATRIX: Record<string, { tenant: string | null; granted: string[] }> = {
       'ManageAssessmentConfig', 'ManageUsers',
     ],
   },
+  // The social tenant (seeds/roles/social/, docs/social-tenant-design.md §4.1):
+  // a participant posts and calls; a moderator manages the spaces; the
+  // community admin owns configuration and the tenant's users.
+  'social/participant': {
+    tenant: 'social',
+    granted: ['ViewSocial', 'PostMessage', 'StartCall'],
+  },
+  'social/moderator': {
+    tenant: 'social',
+    granted: ['ViewSocial', 'PostMessage', 'StartCall', 'ManageChannels', 'ManageTeams', 'ManageRecordings'],
+  },
+  'social/community-admin': {
+    tenant: 'social',
+    granted: [
+      'ViewSocial', 'PostMessage', 'StartCall', 'ManageChannels', 'ManageTeams', 'ManageRecordings',
+      'ManageSocialConfig', 'ManageUsers',
+    ],
+  },
+  // The pipelines tenant (seeds/roles/pipelines/, docs/pipelines-tenant-goal.md
+  // §Cedar): separation of duties between who writes a definition and who
+  // approves its steps.
+  'pipelines/author': {
+    tenant: 'pipelines',
+    granted: ['ViewPipelines', 'AuthorDefinition', 'RunPipeline'],
+  },
+  'pipelines/operator': {
+    tenant: 'pipelines',
+    granted: ['ViewPipelines', 'RunPipeline', 'ApproveStep', 'CancelRun'],
+  },
+  'pipelines/pipeline-admin': {
+    tenant: 'pipelines',
+    granted: ['ViewPipelines', 'RunPipeline', 'ApproveStep', 'CancelRun', 'ManagePipelineConfig', 'ManageUsers'],
+  },
   '*/admin': {
     tenant: null,
     granted: ['*'], // cross-tenant blanket permit
@@ -212,7 +245,7 @@ const MATRIX: Record<string, { tenant: string | null; granted: string[] }> = {
 };
 
 describe('seed Cedar role -> capability matrix', () => {
-  test('exactly the nine seed roles exist', () => {
+  test('exactly the fifteen seed roles exist', () => {
     expect(sorted([...roles.keys()])).toEqual(sorted(Object.keys(MATRIX)));
   });
 

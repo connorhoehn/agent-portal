@@ -65,6 +65,23 @@ export const CAPABILITY_ACTIONS = [
   'RunAssessmentAgent',     // POST /runs — launch/stop the scorer and drafter
   'ManageKnowledge',        // knowledge doc PUT/restore
   'ManageAssessmentConfig', // motions + target level — program-lead only
+  // Social tenant — routes/social.ts, seeds/roles/social/*.cedar
+  // (docs/social-tenant-design.md §4.1).
+  'ViewSocial',             // reads: every /api/social surface
+  'PostMessage',            // post in a channel or DM
+  'StartCall',              // start or join a call / room
+  'ManageChannels',         // create, archive, moderate channels — moderator and up
+  'ManageTeams',            // curate teams — moderator and up
+  'ManageRecordings',       // share, retain, delete recordings — moderator and up
+  'ManageSocialConfig',     // tenant configuration — community-admin only
+  // Pipelines tenant — routes/pipelines.ts, seeds/roles/pipelines/*.cedar
+  // (docs/pipelines-tenant-goal.md §Cedar).
+  'ViewPipelines',          // reads: runs, steps, artifacts, definitions
+  'AuthorDefinition',       // write / version a definition — author only
+  'RunPipeline',            // start a run (an author's dry-run included)
+  'ApproveStep',            // decide a step waiting on a person — operator and up
+  'CancelRun',              // cancel a run — operator and up
+  'ManagePipelineConfig',   // tenant configuration — pipeline-admin only
 ] as const;
 
 export type CapabilityAction = (typeof CAPABILITY_ACTIONS)[number];

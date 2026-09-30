@@ -97,6 +97,13 @@
   --color-info-border:    #60a5fa;
   --color-optimize: #7c3aed;         /* canary / optimize feature identity */
   --color-optimize-hover: #5b21b6;   /* darker hover/pressed state */
+  /* Each tenant's brand, reachable from OUTSIDE that tenant: the workspace
+     picker draws every tile at once, so a tile cannot read --color-brand
+     (that is the tenant the session stands in). Same values as the
+     [data-tenant] blocks below. orgiq and assessment tiles predate these and
+     use primary/warning. */
+  --color-tenant-social: #7c3aed;
+  --color-tenant-pipelines: #2f6b57;
 }
 
 :root {
@@ -134,6 +141,8 @@ body {
    outranks it whichever stylesheet loads last. Four surface layers, still four
    distinct tones. */
 html[data-theme="dark"] {
+  --color-tenant-social: #a78bfa;
+  --color-tenant-pipelines: #6fc2a3;
   --color-brand: #8b91ff;
   --color-brand-hover: #a5aaff;
   --color-brand-ink: #c7d2fe;
@@ -400,6 +409,57 @@ html[data-theme="dark"] [data-tenant="assessment"] {
   --color-accent-bg: #22323D;
   --color-neutral-fg: #B9CFCF;
   --color-neutral-bg: #123F3F;
+}
+
+/* The social tenant (docs/social-tenant-design.md §4.1): a cool violet, so it
+   reads as neither orgiq's indigo nor assessment's teal. Only the brand family
+   changes — the ground stays the shared one, as orgiq's does. White on
+   #7c3aed is 5.70:1, clear of the 4.5 AA needs for the library's
+   `bg-primary text-white` button. */
+[data-tenant="social"] {
+  --color-brand: #7c3aed;            /* violet 600 */
+  --color-brand-hover: #6d28d9;
+  --color-brand-ink: #2e1065;
+  --color-brand-soft: #f5f3ff;
+  --background-image-brand-gradient: linear-gradient(90deg, #7c3aed 0%, #a855f7 55%, #d946ef 100%);
+  --color-primary: #7c3aed;
+  --color-primary-hover: #6d28d9;
+  --color-primary-soft: #f5f3ff;
+}
+html[data-theme="dark"][data-tenant="social"],
+html[data-theme="dark"] [data-tenant="social"] {
+  --color-brand: #a78bfa;
+  --color-brand-hover: #c4b5fd;
+  --color-brand-ink: #ddd6fe;
+  --color-brand-soft: #2e1065;
+  --background-image-brand-gradient: linear-gradient(90deg, #a78bfa 0%, #c084fc 55%, #f0abfc 100%);
+  --color-primary: #a78bfa;
+  --color-primary-hover: #c4b5fd;
+  --color-primary-soft: #2e1065;
+}
+/* The pipelines tenant (docs/social-tenant-design.md §5): a slate green — a
+   ledger's colour, quieter than assessment's teal and clear of orgiq's
+   indigo. Brand family only, like social. White on #2f6b57 is 6.25:1. */
+[data-tenant="pipelines"] {
+  --color-brand: #2f6b57;            /* slate green */
+  --color-brand-hover: #245445;
+  --color-brand-ink: #12302a;
+  --color-brand-soft: #e3efe9;
+  --background-image-brand-gradient: linear-gradient(90deg, #2f6b57 0%, #4d8a74 55%, #8fb3a3 100%);
+  --color-primary: #2f6b57;
+  --color-primary-hover: #245445;
+  --color-primary-soft: #e3efe9;
+}
+html[data-theme="dark"][data-tenant="pipelines"],
+html[data-theme="dark"] [data-tenant="pipelines"] {
+  --color-brand: #6fc2a3;
+  --color-brand-hover: #95d6bd;
+  --color-brand-ink: #c8ecde;
+  --color-brand-soft: #15332a;
+  --background-image-brand-gradient: linear-gradient(90deg, #6fc2a3 0%, #8fd0b8 55%, #b9e2d2 100%);
+  --color-primary: #6fc2a3;
+  --color-primary-hover: #95d6bd;
+  --color-primary-soft: #15332a;
 }
 
 /* A code block's Copy button is absolutely positioned inside the block and

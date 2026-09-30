@@ -4,7 +4,7 @@ import { Layout } from './components/shell/Layout';
 import { RequireRole, RequireTenant } from './lib/auth';
 import { RouteErrorBoundary } from './components/shell/RouteErrorBoundary';
 import { useSession } from './lib/auth';
-import { ASSESSMENT_ENABLED } from './lib/features';
+import { ASSESSMENT_ENABLED, PIPELINES_ENABLED, SOCIAL_ENABLED } from './lib/features';
 import { resolveHome } from './lib/tenantHome';
 import { OptionalGatewayProvider } from './components/OptionalGatewayProvider';
 // Eager: a redirect has nothing to lazy-load and must not flash a spinner.
@@ -33,6 +33,10 @@ const AssessmentPromptsPage = lazy(() => import('./pages/assessment/PromptsPage'
 const AssessmentRulesPage = lazy(() => import('./pages/assessment/RulesPage'));
 const AssessmentRunsPage = lazy(() => import('./pages/assessment/RunsPage'));
 const AssessmentConfigurationPage = lazy(() => import('./pages/assessment/ConfigurationPage'));
+const SocialLayout = lazy(() => import('./pages/social/SocialLayout'));
+const SocialSurfacePage = lazy(() => import('./pages/social/SocialSurfacePage'));
+const PipelinesLayout = lazy(() => import('./pages/pipelines/PipelinesLayout'));
+const PipelinesSurfacePage = lazy(() => import('./pages/pipelines/PipelinesSurfacePage'));
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
 const KnowledgeHomePage = lazy(() => import('./pages/knowledge/KnowledgeHomePage'));
 const KnowledgeLayout = lazy(() => import('./pages/knowledge/KnowledgeLayout'));
@@ -239,6 +243,62 @@ export function App() {
           </Route>
         ) : (
           <Route path="assessment/*" element={<Navigate to="/" replace />} />
+        )}
+
+        {/* ── /social/* — the third tenant (docs/social-tenant-design.md §4).
+             Flag ON by default (SOCIAL_ENABLED). Phase S0: every page is an
+             empty state naming the lane that brings its data. ── */}
+        {SOCIAL_ENABLED ? (
+          <Route
+            path="social"
+            element={(
+              <RequireTenant tenant="social" fallback={<HomeRedirect />}>
+                <Page element={<SocialLayout />} />
+              </RequireTenant>
+            )}
+          >
+            <Route index element={<Navigate to="channels" replace />} />
+            <Route path="channels" element={<Page element={<SocialSurfacePage surface="channels" />} />} />
+            <Route path="dms" element={<Page element={<SocialSurfacePage surface="dms" />} />} />
+            <Route path="calls" element={<Page element={<SocialSurfacePage surface="calls" />} />} />
+            <Route path="rooms" element={<Page element={<SocialSurfacePage surface="rooms" />} />} />
+            <Route path="contacts" element={<Page element={<SocialSurfacePage surface="contacts" />} />} />
+            <Route path="teams" element={<Page element={<SocialSurfacePage surface="teams" />} />} />
+            <Route path="profile" element={<Page element={<SocialSurfacePage surface="profile" />} />} />
+            <Route path="recordings" element={<Page element={<SocialSurfacePage surface="recordings" />} />} />
+            <Route path="configuration" element={<Page element={<SocialSurfacePage surface="configuration" />} />} />
+            <Route path="settings" element={<Page element={<SocialSurfacePage surface="settings" />} />} />
+          </Route>
+        ) : (
+          <Route path="social/*" element={<Navigate to="/" replace />} />
+        )}
+
+        {/* ── /pipelines/* — the fourth tenant (docs/social-tenant-design.md
+             §5). Flag ON by default (PIPELINES_ENABLED). Registration: every
+             page is an empty state naming the lane that brings its data. ── */}
+        {PIPELINES_ENABLED ? (
+          <Route
+            path="pipelines"
+            element={(
+              <RequireTenant tenant="pipelines" fallback={<HomeRedirect />}>
+                <Page element={<PipelinesLayout />} />
+              </RequireTenant>
+            )}
+          >
+            <Route index element={<Navigate to="runs" replace />} />
+            <Route path="definitions" element={<Page element={<PipelinesSurfacePage surface="definitions" />} />} />
+            <Route path="runbooks" element={<Page element={<PipelinesSurfacePage surface="runbooks" />} />} />
+            <Route path="runs" element={<Page element={<PipelinesSurfacePage surface="runs" />} />} />
+            <Route path="approvals" element={<Page element={<PipelinesSurfacePage surface="approvals" />} />} />
+            <Route path="artifacts" element={<Page element={<PipelinesSurfacePage surface="artifacts" />} />} />
+            <Route path="agents" element={<Page element={<PipelinesSurfacePage surface="agents" />} />} />
+            <Route path="bots" element={<Page element={<PipelinesSurfacePage surface="bots" />} />} />
+            <Route path="commands" element={<Page element={<PipelinesSurfacePage surface="commands" />} />} />
+            <Route path="configuration" element={<Page element={<PipelinesSurfacePage surface="configuration" />} />} />
+            <Route path="settings" element={<Page element={<PipelinesSurfacePage surface="settings" />} />} />
+          </Route>
+        ) : (
+          <Route path="pipelines/*" element={<Navigate to="/" replace />} />
         )}
 
         {/* ── /iq/* — OrgIQ tenant pages. Guarded like the other two trees:

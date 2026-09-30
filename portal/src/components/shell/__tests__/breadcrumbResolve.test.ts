@@ -14,7 +14,12 @@ const RAIL_PATHS = [
   '/admin/knowledge', '/admin/capabilities', '/admin/identity', '/admin/identity/users', '/admin/bots', '/admin/changes',
   '/assessment/teams', '/assessment/teams/t-1', '/assessment/submissions', '/assessment/reports', '/assessment/feedback',
   '/assessment/enterprise', '/assessment/workspace', '/assessment/prompts', '/assessment/rules', '/assessment/runs',
-  '/assessment/configuration', '/settings',
+  '/assessment/configuration',
+  '/social/channels', '/social/dms', '/social/calls', '/social/rooms', '/social/contacts', '/social/teams',
+  '/social/recordings', '/social/configuration',
+  '/pipelines/definitions', '/pipelines/runbooks', '/pipelines/runs', '/pipelines/approvals', '/pipelines/artifacts',
+  '/pipelines/agents', '/pipelines/bots', '/pipelines/commands', '/pipelines/configuration',
+  '/settings',
 ];
 
 test('every rail path resolves to a section and a page', () => {

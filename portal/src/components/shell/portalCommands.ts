@@ -20,7 +20,7 @@ import { useSession } from '../../lib/auth';
 import { openShell, useComputeOptional } from '@connorhoehnslalom/ui-components/compute';
 import { commandKeywords } from './commandKeywords';
 
-type PageTenant = 'orgiq' | 'assessment' | 'admin' | 'universal';
+type PageTenant = 'orgiq' | 'assessment' | 'social' | 'pipelines' | 'admin' | 'universal';
 
 interface PageEntry {
   label: string;
@@ -75,6 +75,12 @@ const CHANGES = ['program-owner', 'hr-admin'];
 export const GROUP_ORDER_BY_TENANT: Record<string, string[]> = {
   orgiq: ['Plan', 'Design', 'Build', 'Release', 'Operate', 'Org', 'System'],
   assessment: ['Assess', 'Analyze', 'Informatics', 'System'],
+  // docs/social-tenant-design.md §4.1 — talk, meet, the people you do it
+  // with, what was recorded, then the tenant's own configuration.
+  social: ['Talk', 'Meet', 'People', 'Library', 'System'],
+  // docs/social-tenant-design.md §5.3 — what can run, what ran, who produced
+  // it, then configuration.
+  pipelines: ['Catalog', 'Runs', 'Sources', 'System'],
 };
 export function groupRank(tenant: string, group?: string): number {
   const order = GROUP_ORDER_BY_TENANT[tenant] ?? GROUP_ORDER_BY_TENANT['orgiq']!;
@@ -239,6 +245,52 @@ const PAGES: PageEntry[] = [
   // legitimately readable by every assessment role; only writes are gated.
   { label: 'Configuration',      hint: 'Motions, cohorts, target level',      path: '/assessment/configuration',                   tenant: 'assessment', group: 'System', roles: ASSESSMENT_ROLES,
     keywords: ['configuration', 'motion', 'cohort', 'target level', 'certification', 'maturity'] },
+  // Social tenant — its own map (Talk / Meet / People / Library / System),
+  // mirroring NAV_ITEMS in Layout.tsx. Every route is readable by every
+  // social role (ViewSocial); writes are gated inside the pages.
+  { label: 'Channels',           hint: 'Conversations the tenant shares',     path: '/social/channels',                            tenant: 'social', group: 'Talk',
+    keywords: ['channel', 'chat', 'conversation', 'message', 'thread'] },
+  { label: 'Direct messages',    hint: 'One-to-one and small-group chats',    path: '/social/dms',                                 tenant: 'social', group: 'Talk',
+    keywords: ['dm', 'direct message', 'private', 'chat'] },
+  { label: 'Calls',              hint: 'Start or join a call',                path: '/social/calls',                               tenant: 'social', group: 'Meet',
+    keywords: ['call', 'video', 'audio', 'meet', 'ring'] },
+  { label: 'Rooms',              hint: 'Standing rooms you can drop into',    path: '/social/rooms',                               tenant: 'social', group: 'Meet',
+    keywords: ['room', 'hangout', 'huddle', 'meet'] },
+  { label: 'Contacts',           hint: 'People you talk with',                path: '/social/contacts',                            tenant: 'social', group: 'People',
+    keywords: ['contact', 'people', 'follow', 'presence'] },
+  { label: 'Teams',              hint: 'Teams and their channels',            path: '/social/teams',                               tenant: 'social', group: 'People',
+    keywords: ['team', 'group', 'members'] },
+  { label: 'Profile',            hint: 'How you appear to others here',       path: '/social/profile',                             tenant: 'social', group: 'People',
+    keywords: ['profile', 'status', 'avatar', 'me'] },
+  { label: 'Recordings',         hint: 'Call recordings and their shares',    path: '/social/recordings',                          tenant: 'social', group: 'Library',
+    keywords: ['recording', 'video', 'playback', 'share'] },
+  { label: 'Configuration',      hint: 'Retention, rooms and integrations',   path: '/social/configuration',                       tenant: 'social', group: 'System',
+    keywords: ['configuration', 'retention', 'policy', 'integration'] },
+  { label: 'Social settings',    hint: 'Your notification and call preferences', path: '/social/settings',                        tenant: 'social', group: 'System',
+    keywords: ['settings', 'preferences', 'notifications', 'do not disturb'] },
+  // Pipelines tenant — its own map (Catalog / Runs / Sources / System),
+  // mirroring NAV_ITEMS in Layout.tsx. Every route is readable by every
+  // pipelines role (ViewPipelines); writes are gated inside the pages.
+  { label: 'Definitions',        hint: 'Pipeline definitions and versions',   path: '/pipelines/definitions',                      tenant: 'pipelines', group: 'Catalog',
+    keywords: ['definition', 'pipeline', 'version', 'dag'] },
+  { label: 'Runbooks',           hint: 'Runbooks awaiting a dry-run',         path: '/pipelines/runbooks',                         tenant: 'pipelines', group: 'Catalog',
+    keywords: ['runbook', 'skill', 'dry-run', 'promotion'] },
+  { label: 'Runs',               hint: 'Every run, its steps and status',     path: '/pipelines/runs',                             tenant: 'pipelines', group: 'Runs',
+    keywords: ['run', 'job', 'execution', 'status', 'ledger'] },
+  { label: 'Approvals',          hint: 'Steps waiting on a person',           path: '/pipelines/approvals',                        tenant: 'pipelines', group: 'Runs',
+    keywords: ['approval', 'approve', 'review', 'waiting'] },
+  { label: 'Artifacts',          hint: 'What runs produced',                  path: '/pipelines/artifacts',                        tenant: 'pipelines', group: 'Runs',
+    keywords: ['artifact', 'change', 'document', 'trace', 'output'] },
+  { label: 'Agents',             hint: 'Agent invocations as runs',           path: '/pipelines/agents',                           tenant: 'pipelines', group: 'Sources',
+    keywords: ['agent', 'invocation', 'fleet', 'source'] },
+  { label: 'Bots',               hint: 'Scheduled bots as runs',              path: '/pipelines/bots',                             tenant: 'pipelines', group: 'Sources',
+    keywords: ['bot', 'cron', 'schedule', 'maintenance', 'source'] },
+  { label: 'Commands',           hint: 'Assessment commands as runs',         path: '/pipelines/commands',                         tenant: 'pipelines', group: 'Sources',
+    keywords: ['command', 'assessment', 'source'] },
+  { label: 'Configuration',      hint: 'Approvers, retention, sources',       path: '/pipelines/configuration',                    tenant: 'pipelines', group: 'System',
+    keywords: ['configuration', 'approver', 'retention', 'policy'] },
+  { label: 'Pipeline settings',  hint: 'Your run notifications and views',    path: '/pipelines/settings',                         tenant: 'pipelines', group: 'System',
+    keywords: ['settings', 'preferences', 'notifications'] },
 ];
 
 const UUID_RE = /^[0-9a-f-]{36}$/i;

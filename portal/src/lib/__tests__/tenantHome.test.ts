@@ -96,3 +96,10 @@ test('the tenant switch and `/` agree — one answer, not two', () => {
     assert.equal(tenantHome(t), resolveHome(session({ tenant: t, grants: { [t]: ['x'] } })));
   }
 });
+
+test('the social and pipelines front doors are their own trees', () => {
+  assert.equal(resolveHome(session({ tenant: 'social', role: 'participant' as never, grants: { social: ['participant'] } })), '/social/channels');
+  assert.equal(resolveHome(session({ tenant: 'pipelines', role: 'operator' as never, grants: { pipelines: ['operator'] } })), '/pipelines/runs');
+  assert.equal(tenantHome('social'), TENANT_HOME.social);
+  assert.equal(tenantHome('pipelines'), TENANT_HOME.pipelines);
+});

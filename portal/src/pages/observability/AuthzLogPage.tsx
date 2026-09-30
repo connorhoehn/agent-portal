@@ -38,7 +38,7 @@ interface AuthzEvent {
 }
 
 const ROLE_FILTERS = ['', 'member', 'sme', 'program-owner', 'org-leader', 'hr-admin', 'admin'] as const;
-const TENANT_FILTERS = ['', 'orgiq', 'assessment'] as const;
+const TENANT_FILTERS = ['', 'orgiq', 'assessment', 'social', 'pipelines'] as const;
 const DECISION_FILTERS = ['', 'ALLOW', 'DENY'] as const;
 const MAX_EVENTS = 500;
 

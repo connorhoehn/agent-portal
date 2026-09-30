@@ -6,7 +6,7 @@ import { Button, Inline, LoadingState, MetaLine, SectionLabel, Stack } from '@co
 
 export type Role = 'member' | 'sme' | 'program-owner' | 'org-leader' | 'hr-admin';
 export type SessionRole = Role | 'admin';
-export type Tenant = 'orgiq' | 'assessment';
+export type Tenant = 'orgiq' | 'assessment' | 'social' | 'pipelines';
 
 /** tenant id → roles held there (from user_tenant_roles via the session cookie). */
 export type Grants = Record<string, string[]>;

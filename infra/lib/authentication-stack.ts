@@ -126,6 +126,20 @@ export class AuthenticationStack extends cdk.Stack {
       { email: 'eli.garcia@orgiq.example', name: 'Eli Garcia' },
       { email: 'layla.hassan@orgiq.example', name: 'Layla Hassan' },
       { email: 'caleb.turner@orgiq.example', name: 'Caleb Turner' },
+      // Assessment tenant cast (docs/assessment-tenant.md) — the seed and the
+      // docs already named them; the pool did not, so they could reach the
+      // app only through the dev-only picker.
+      { email: 'asha.nair@assessment.example', name: 'Asha Nair' },
+      { email: 'jonas.lindqvist@assessment.example', name: 'Jonas Lindqvist' },
+      { email: 'farah.osei@assessment.example', name: 'Farah Osei' },
+      // Social tenant cast (docs/social-tenant-design.md §4.1).
+      { email: 'mira.okafor@social.example', name: 'Mira Okafor' },
+      { email: 'lena.brandt@social.example', name: 'Lena Brandt' },
+      { email: 'sana.iqbal@social.example', name: 'Sana Iqbal' },
+      // Pipelines tenant cast (docs/pipelines-tenant-goal.md §Cast).
+      { email: 'ines.moreau@orgiq.example', name: 'Ines Moreau' },
+      { email: 'kofi.mensah@orgiq.example', name: 'Kofi Mensah' },
+      { email: 'dara.whitfield@orgiq.example', name: 'Dara Whitfield' },
     ];
     for (const u of seedUsers) {
       new cognito.CfnUserPoolUser(this, `SeedUser-${u.email.replace(/[^a-z0-9]/gi, '-')}`, {

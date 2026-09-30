@@ -26,6 +26,12 @@ const PRESENTATION: Record<string, { label: string; summary: string }> = {
   assessor: { label: 'Assessor', summary: 'Scores dimensions and manages submission intake. No exception approval or report publishing.' },
   'lead-assessor': { label: 'Lead Assessor', summary: 'Approves N/A exceptions, publishes reports, curates the assessment knowledge base.' },
   'program-lead': { label: 'Program Lead', summary: 'Owns the assessment program — rubric target level, configuration, and user management.' },
+  participant: { label: 'Participant', summary: 'Member of the social tenant. Posts in channels and DMs, starts and joins calls. No moderation.' },
+  moderator: { label: 'Moderator', summary: 'Manages the social tenant\'s channels, teams and recordings. No tenant configuration.' },
+  'community-admin': { label: 'Community Admin', summary: 'Owns the social tenant — configuration, moderation and its users.' },
+  author: { label: 'Author', summary: 'Writes, versions and dry-runs pipeline definitions. Never approves a step of their own definition.' },
+  operator: { label: 'Operator', summary: 'Runs pipelines, approves waiting steps and cancels runs. Never writes the definition they approve.' },
+  'pipeline-admin': { label: 'Pipeline Admin', summary: 'An operator plus the pipelines tenant\'s configuration and users.' },
   admin: { label: 'Admin', summary: 'Cross-tenant platform operator. Full access; the only role that can masquerade.' },
 };
 

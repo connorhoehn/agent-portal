@@ -813,7 +813,7 @@ export const PARITY_ENTITIES: Array<ParityEntity<any>> = [
   // ── identity & tenancy (schema/identity_schema.sql) ────────────────────────
   {
     name: 'tenants',
-    describes: 'The two tenants the BFF serves; the user picker and requireTenant() both read this.',
+    describes: 'The four tenants the BFF serves — orgiq plus three tenants beside it (assessment, social, pipelines); the user picker and requireTenant() both read this.',
     sqlFile: 'identity_schema.sql',
     seedId: 'id',
     coverage: 'complete',

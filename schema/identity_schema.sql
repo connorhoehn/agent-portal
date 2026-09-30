@@ -47,7 +47,9 @@ CREATE INDEX IF NOT EXISTS user_tenant_roles_tenant_idx ON user_tenant_roles (te
 
 INSERT INTO tenants (id, display_name) VALUES
   ('orgiq', 'OrgIQ'),
-  ('assessment', 'Assessment')
+  ('assessment', 'Assessment'),
+  ('social', 'Social'),
+  ('pipelines', 'Pipelines')
 ON CONFLICT (id) DO NOTHING;
 
 -- ── Seed: demo users ─────────────────────────────────────────────────────────
@@ -81,13 +83,25 @@ INSERT INTO app_users (id, display_name, email, person_id) VALUES
   -- Assessment tenant cast (docs/assessment-tenant.md Roles (Cedar)).
   ('u-asha',     'Asha Nair',         'asha.nair@assessment.example', NULL),
   ('u-jonas',    'Jonas Lindqvist',   'jonas.lindqvist@assessment.example', NULL),
-  ('u-farah',    'Farah Osei',        'farah.osei@assessment.example', NULL)
+  ('u-farah',    'Farah Osei',        'farah.osei@assessment.example', NULL),
+  -- Social tenant cast (docs/social-tenant-design.md §4.1): one per role,
+  -- holding a grant only in social so their outbound walks start clean.
+  ('u-mira',     'Mira Okafor',       'mira.okafor@social.example', NULL),
+  ('u-lena',     'Lena Brandt',       'lena.brandt@social.example', NULL),
+  ('u-sana',     'Sana Iqbal',        'sana.iqbal@social.example', NULL),
+  -- Pipelines tenant cast (docs/pipelines-tenant-goal.md §Cast): one per role,
+  -- holding a grant only in pipelines.
+  ('u-ines',     'Ines Moreau',       'ines.moreau@orgiq.example', NULL),
+  ('u-kofi',     'Kofi Mensah',       'kofi.mensah@orgiq.example', NULL),
+  ('u-dara',     'Dara Whitfield',    'dara.whitfield@orgiq.example', NULL)
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO user_tenant_roles (user_id, tenant_id, role) VALUES
   -- Cross-tenant operator: the only identity allowed to masquerade.
   ('u-operator', 'orgiq',    'admin'),
   ('u-operator', 'assessment', 'admin'),
+  ('u-operator', 'social',   'admin'),
+  ('u-operator', 'pipelines', 'admin'),
   -- OrgIQ-only users, one per role tier.
   ('u-theo',     'orgiq',    'member'),
   ('u-vera',     'orgiq',    'org-leader'),
@@ -116,5 +130,29 @@ INSERT INTO user_tenant_roles (user_id, tenant_id, role) VALUES
   ('u-jonas',    'assessment', 'lead-assessor'),
   ('u-jonas',    'assessment', 'assessor'),
   ('u-farah',    'assessment', 'program-lead'),
-  ('u-farah',    'assessment', 'lead-assessor')
+  ('u-farah',    'assessment', 'lead-assessor'),
+
+  -- Social tenant: participant -> moderator -> community-admin ladder.
+  ('u-mira',     'social',   'community-admin'),
+  ('u-lena',     'social',   'moderator'),
+  ('u-sana',     'social',   'participant'),
+  -- The curated orgiq cast and the assessment cast join social as
+  -- participants, so a channel can be embedded where they already work
+  -- (design §4.1, E5). u-hr, the non-curated SMEs and the cookie-less demo
+  -- identity hold no social grant: the isolation walks need such sessions.
+  ('u-theo',     'social',   'participant'),
+  ('u-vera',     'social',   'participant'),
+  ('u-release',  'social',   'participant'),
+  ('u-rachel',   'social',   'participant'),
+  ('u-mia',      'social',   'participant'),
+  ('u-nora',     'social',   'participant'),
+  ('u-asha',     'social',   'participant'),
+  ('u-jonas',    'social',   'participant'),
+  ('u-farah',    'social',   'participant'),
+
+  -- Pipelines tenant: author / operator / pipeline-admin, separation of duties
+  -- between who writes a definition and who approves its steps.
+  ('u-ines',     'pipelines', 'author'),
+  ('u-kofi',     'pipelines', 'operator'),
+  ('u-dara',     'pipelines', 'pipeline-admin')
 ON CONFLICT DO NOTHING;

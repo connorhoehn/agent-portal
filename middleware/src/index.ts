@@ -27,6 +27,8 @@ import { promptEvalsRouter } from './routes/prompt-evals.js';
 import { distillationRouter } from './routes/distillation.js';
 import { knowledgeBaseRouter } from './routes/knowledge-base.js';
 import { assessmentRouter } from './routes/assessment.js';
+import { socialRouter } from './routes/social.js';
+import { pipelinesRouter } from './routes/pipelines.js';
 import { ingestRouter } from './routes/ingest.js';
 import { observabilityRouter } from './routes/observability.js';
 import { approvalsRouter } from './routes/approvals.js';
@@ -239,6 +241,11 @@ app.use('/api/drop', dropRouter);
 // secret) the same way harnessRouter exempts /trace. Mounting requireTenant
 // here would 401 that callback before the router ever saw the request.
 app.use('/api/assessment', assessmentRouter);
+// The third and fourth tenants (docs/social-tenant-design.md §4, §5). Neither
+// has a machine callback, so the tenant gate sits at the mount: a session
+// parked in any other tenant is refused before a handler runs.
+app.use('/api/social', requireTenant('social'), socialRouter);
+app.use('/api/pipelines', requireTenant('pipelines'), pipelinesRouter);
 // Ingest — reading jobs/storage/crawl status is operational visibility that the
 // Knowledge page surfaces to org-leaders; starting crawls, editing schedules and
 // other mutations still require ManageIngest (hr-admin).

@@ -36,13 +36,15 @@ import {
 } from '@connorhoehnslalom/ui-components/shared';
 import { useSession, type DirectoryUser, type Tenant } from '../lib/auth';
 import { toastError } from '../lib/toastStore';
-import { ASSESSMENT_ENABLED } from '../lib/features';
+import { tenantEnabled } from '../lib/features';
 import { markContextChosen } from '../lib/contextChoice';
 import { T } from './Text';
 
 const TENANT_META: Record<Tenant, { label: string; blurb: string; accent: string }> = {
   orgiq: { label: 'Org', blurb: 'Organizational intelligence — people, projects, decisions', accent: 'var(--color-primary)' },
   assessment: { label: 'Assessment', blurb: 'Engineering-maturity cockpit — teams, evidence, certification', accent: 'var(--color-warning)' },
+  social: { label: 'Social', blurb: 'Channels, direct messages, calls and rooms — the people you work with', accent: 'var(--color-tenant-social)' },
+  pipelines: { label: 'Pipelines', blurb: 'Definitions, runs and approvals — what the fleet ran, and for whom', accent: 'var(--color-tenant-pipelines)' },
 };
 
 const ROLE_META: Record<string, { label: string; hint: string }> = {
@@ -51,10 +53,16 @@ const ROLE_META: Record<string, { label: string; hint: string }> = {
   'program-owner': { label: 'Program Owner', hint: 'Allocates and grants on their own initiatives; sprints, board and bots' },
   'org-leader': { label: 'Org Leader', hint: 'Leaderboards + transaction approvals' },
   'hr-admin': { label: 'HR Admin', hint: 'People ops, guardrails, identity admin' },
-  admin: { label: 'Admin', hint: 'Cross-tenant operator — every role, both accounts' },
+  admin: { label: 'Admin', hint: 'Cross-tenant operator — every role, every account' },
   assessor: { label: 'Assessor', hint: 'Score dimensions, manage submission intake' },
   'lead-assessor': { label: 'Lead Assessor', hint: 'Approve exceptions, publish reports' },
   'program-lead': { label: 'Program Lead', hint: 'Own the assessment program end to end' },
+  participant: { label: 'Participant', hint: 'Post in channels and DMs, start and join calls' },
+  moderator: { label: 'Moderator', hint: 'Manage channels, teams and recordings' },
+  'community-admin': { label: 'Community Admin', hint: 'Own the social workspace — configuration and users' },
+  author: { label: 'Author', hint: 'Write, version and dry-run pipeline definitions' },
+  operator: { label: 'Operator', hint: 'Run pipelines, approve waiting steps, cancel runs' },
+  'pipeline-admin': { label: 'Pipeline Admin', hint: 'Operator plus the workspace configuration and users' },
 };
 
 /**
@@ -85,10 +93,29 @@ const CURATED: Array<{ id: string; persona: string }> = [
   { id: 'u-nora', persona: 'SME — spends a sprint envelope by assigning agents to work' },
   { id: 'u-rachel', persona: 'Program operator — identity, guardrails, governance' },
   { id: 'u-theo', persona: 'Member — the read-only floor: search and the org chart' },
+  // Social tenant cast — one per role (docs/social-tenant-design.md §4.1),
+  // each holding a grant only in social.
+  { id: 'u-mira', persona: 'Community admin — owns the social workspace, its configuration and users' },
+  { id: 'u-lena', persona: 'Moderator — manages channels, teams and recordings' },
+  { id: 'u-sana', persona: 'Participant — posts, messages and calls; moderates nothing' },
+  // Pipelines tenant cast — one per role (docs/pipelines-tenant-goal.md §Cast),
+  // each holding a grant only in pipelines.
+  { id: 'u-ines', persona: 'Pipeline author — writes and dry-runs definitions, never approves them' },
+  { id: 'u-kofi', persona: 'Pipeline operator — runs, approves and cancels, never writes a definition' },
+  { id: 'u-dara', persona: 'Pipeline admin — an operator plus configuration and users' },
 ];
 
 function roleLabel(role: string): string { return ROLE_META[role]?.label ?? role; }
 function tenantLabel(tenant: string): string { return TENANT_META[tenant as Tenant]?.label ?? tenant; }
+
+// Per-tenant tile tint, as whole class strings so Tailwind's scanner sees
+// every one (a composed `border-${x}` would not be generated).
+const TENANT_MARK_TINT: Record<Tenant, string> = {
+  orgiq: 'border-primary bg-primary/10',
+  assessment: 'border-warning bg-warning/10',
+  social: 'border-tenant-social bg-tenant-social/10',
+  pipelines: 'border-tenant-pipelines bg-tenant-pipelines/10',
+};
 
 /** Inline tenant mark — a tinted rounded badge with a per-tenant glyph. No
  *  external assets. Purely decorative, so aria-hidden.
@@ -101,14 +128,27 @@ function tenantLabel(tenant: string): string { return TENANT_META[tenant as Tena
  *  attributes, not a `style` prop, so those are unaffected. */
 function TenantMark({ tenant }: { tenant: Tenant }) {
   const accent = TENANT_META[tenant]?.accent ?? 'var(--color-primary)';
-  const isAssessment = tenant === 'assessment';
   const glyph =
-    isAssessment ? (
+    tenant === 'assessment' ? (
       // Checklist / scorecard
       <svg width={18} height={18} viewBox="0 0 24 24" fill="none" aria-hidden>
         <rect x="4" y="3.5" width="16" height="17" rx="1.5" stroke={accent} strokeWidth="1.6" />
         <path d="M8 8.5l1.4 1.4L11.5 7.5M8 14.5l1.4 1.4 2.1-2.4" stroke={accent} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
         <path d="M14 8.5h4M14 14.5h4" stroke={accent} strokeWidth="1.6" strokeLinecap="round" />
+      </svg>
+    ) : tenant === 'social' ? (
+      // Two overlapping speech bubbles — a conversation
+      <svg width={18} height={18} viewBox="0 0 24 24" fill="none" aria-hidden>
+        <path d="M4 5.5h10a1.5 1.5 0 0 1 1.5 1.5v5.5A1.5 1.5 0 0 1 14 14H8.5L5 17v-3H4a1.5 1.5 0 0 1-1.5-1.5V7A1.5 1.5 0 0 1 4 5.5z" stroke={accent} strokeWidth="1.6" strokeLinejoin="round" />
+        <path d="M18 9.5h1.5A1.5 1.5 0 0 1 21 11v5.5a1.5 1.5 0 0 1-1.5 1.5H19v2.5L16 18h-4.5a1.5 1.5 0 0 1-1.5-1.5V16" stroke={accent} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    ) : tenant === 'pipelines' ? (
+      // Three stages joined left to right — a pipeline run
+      <svg width={18} height={18} viewBox="0 0 24 24" fill="none" aria-hidden>
+        <rect x="2.5" y="9" width="5" height="6" rx="1.2" stroke={accent} strokeWidth="1.6" />
+        <rect x="9.5" y="9" width="5" height="6" rx="1.2" stroke={accent} strokeWidth="1.6" />
+        <rect x="16.5" y="9" width="5" height="6" rx="1.2" stroke={accent} strokeWidth="1.6" />
+        <path d="M7.5 12h2M14.5 12h2" stroke={accent} strokeWidth="1.6" strokeLinecap="round" />
       </svg>
     ) : (
       // Org graph (three connected nodes)
@@ -126,9 +166,7 @@ function TenantMark({ tenant }: { tenant: Tenant }) {
       align="center"
       justify="center"
       gap="none"
-      className={`inline-flex shrink-0 w-[34px] h-[34px] rounded-[9px] border ${
-        isAssessment ? 'border-warning bg-warning/10' : 'border-primary bg-primary/10'
-      }`}
+      className={`inline-flex shrink-0 w-[34px] h-[34px] rounded-[9px] border ${TENANT_MARK_TINT[tenant] ?? TENANT_MARK_TINT.orgiq}`}
     >
       {glyph}
     </Inline>
@@ -162,7 +200,7 @@ export default function SelectContextPage() {
   const accounts = useMemo(() => {
     const grants = session?.switchable ?? session?.grants ?? {};
     return (Object.keys(grants) as Tenant[])
-      .filter(t => ASSESSMENT_ENABLED || t !== 'assessment')
+      .filter(t => tenantEnabled(t))
       .filter(t => (grants[t] ?? []).length > 0)
       .map(t => ({ tenant: t, roles: [...(grants[t] ?? [])].sort() }));
   }, [session?.switchable, session?.grants]);
@@ -485,7 +523,7 @@ function UserCard({
   onPick: () => void;
 }) {
   const tenants = user.tenants
-    .filter(t => ASSESSMENT_ENABLED || t.tenant !== 'assessment');
+    .filter(t => tenantEnabled(t.tenant));
   return (
     <Card padding="none" className="flex flex-col self-start overflow-hidden">
       <Inline align="start" gap="sm" className="px-4 pt-4">

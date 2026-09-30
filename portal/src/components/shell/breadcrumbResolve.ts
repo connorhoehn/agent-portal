@@ -35,6 +35,22 @@ const CAPABILITY_LABELS: Record<string, string> = {
 };
 /** Which shell-rail group each assessment page hangs under — kept in step
  *  with NAV_ITEMS in Layout.tsx. */
+const SOCIAL_GROUPS: Record<string, string> = {
+  channels: 'Talk', dms: 'Talk', calls: 'Meet', rooms: 'Meet', contacts: 'People', teams: 'People',
+  profile: 'People', recordings: 'Library', configuration: 'System', settings: 'System',
+};
+const SOCIAL_LABELS: Record<string, string> = {
+  channels: 'Channels', dms: 'Direct messages', calls: 'Calls', rooms: 'Rooms', contacts: 'Contacts',
+  teams: 'Teams', profile: 'Profile', recordings: 'Recordings', configuration: 'Configuration', settings: 'Social settings',
+};
+const PIPELINES_GROUPS: Record<string, string> = {
+  definitions: 'Catalog', runbooks: 'Catalog', runs: 'Runs', approvals: 'Runs', artifacts: 'Runs',
+  agents: 'Sources', bots: 'Sources', commands: 'Sources', configuration: 'System', settings: 'System',
+};
+const PIPELINES_LABELS: Record<string, string> = {
+  definitions: 'Definitions', runbooks: 'Runbooks', runs: 'Runs', approvals: 'Approvals', artifacts: 'Artifacts',
+  agents: 'Agents', bots: 'Bots', commands: 'Commands', configuration: 'Configuration', settings: 'Pipeline settings',
+};
 const ASSESSMENT_GROUPS: Record<string, string> = {
   teams: 'Assess', submissions: 'Assess',
   reports: 'Analyze', feedback: 'Analyze',
@@ -176,6 +192,17 @@ export function resolveBreadcrumbs(pathname: string): Crumb[] {
       return [{ label: group }, { label: pageLabel, path: '/assessment/teams' }, { label: b }];
     }
     return [{ label: group }, { label: pageLabel }];
+  }
+
+  // The social and pipelines tenants mirror their shell rails the same way:
+  // the group the page sits under, then the page (Layout.tsx NAV_ITEMS).
+  if (root === 'social') {
+    const page = a ?? 'channels';
+    return [{ label: SOCIAL_GROUPS[page] ?? 'Social' }, { label: SOCIAL_LABELS[page] ?? page }];
+  }
+  if (root === 'pipelines') {
+    const page = a ?? 'runs';
+    return [{ label: PIPELINES_GROUPS[page] ?? 'Pipelines' }, { label: PIPELINES_LABELS[page] ?? page }];
   }
 
   if (root === 'settings') return [{ label: 'System' }, { label: 'Settings' }];

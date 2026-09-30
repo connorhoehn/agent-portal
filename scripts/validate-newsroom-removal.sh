@@ -28,10 +28,21 @@ done
 ok "deletion list checked"
 
 section "tenancy model"
-grep -qE "TENANTS\s*=\s*\[\s*'orgiq'\s*,\s*'assessment'\s*\]" middleware/src/lib/session.ts && ok "TENANTS = [orgiq, assessment]" || fail "middleware/src/lib/session.ts TENANTS still lists another tenant"
+# Re-pointed 2026-09-29 at "the retired tenant is absent" rather than "exactly
+# these two": the social and pipelines tenants joined TENANTS, and a pin on the
+# literal two-tenant list would turn this judge red for a reason unrelated to
+# the tenant it guards (docs/social-tenant-and-pipelines-research-2026-09-29.md
+# §A.3). The surviving tenants must still lead the list.
+tenants_line=$(grep -E "^export const TENANTS" middleware/src/lib/session.ts)
+if printf '%s' "$tenants_line" | grep -qE "TENANTS\s*=\s*\[\s*'orgiq'\s*,\s*'assessment'(\s*,|\s*\])" && ! printf '%s' "$tenants_line" | grep -qiE "$PAT"; then
+  ok "TENANTS keeps orgiq + assessment and names no retired tenant"
+else fail "middleware/src/lib/session.ts TENANTS lost orgiq/assessment or names the retired tenant"; fi
 grep -qE "'reporter'|'editor'" middleware/src/lib/session.ts middleware/src/lib/role-registry.ts middleware/src/lib/authz.ts 2>/dev/null && fail "reporter/editor roles survive in session/role-registry/authz" || ok "reporter/editor roles gone"
 grep -qE "u-reporter|u-editor" middleware/src/providers/identity.ts schema/identity_schema.sql 2>/dev/null && fail "seed users u-reporter/u-editor survive" || ok "seed users gone"
-grep -qE "Tenant\s*=\s*'orgiq'\s*\|\s*'assessment'" portal/src/lib/auth.tsx && ok "portal Tenant type is orgiq | assessment" || fail "portal/src/lib/auth.tsx Tenant type still names another tenant"
+tenant_type=$(grep -E "^export type Tenant\s*=" portal/src/lib/auth.tsx)
+if printf '%s' "$tenant_type" | grep -qE "Tenant\s*=\s*'orgiq'\s*\|\s*'assessment'(\s*\||\s*;)" && ! printf '%s' "$tenant_type" | grep -qiE "$PAT"; then
+  ok "portal Tenant type keeps orgiq | assessment and names no retired tenant"
+else fail "portal/src/lib/auth.tsx Tenant type lost orgiq/assessment or names the retired tenant"; fi
 [ -f portal/src/lib/features.ts ] && grep -qiE "NEWSROOM" portal/src/lib/features.ts && fail "NEWSROOM feature flag survives in features.ts" || ok "no newsroom feature flag"
 
 section "schema"

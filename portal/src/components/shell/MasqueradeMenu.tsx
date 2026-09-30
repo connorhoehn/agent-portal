@@ -16,6 +16,13 @@ const ROLE_LABELS: Record<string, string> = {
   assessor: 'Assessor',
   'lead-assessor': 'Lead Assessor',
   'program-lead': 'Program Lead',
+  // The social and pipelines tenants' roles (the picker's ROLE_META names).
+  participant: 'Participant',
+  moderator: 'Moderator',
+  'community-admin': 'Community Admin',
+  author: 'Author',
+  operator: 'Operator',
+  'pipeline-admin': 'Pipeline Admin',
 };
 
 const ROLE_HINTS: Record<string, string> = {
@@ -23,13 +30,19 @@ const ROLE_HINTS: Record<string, string> = {
   sme: 'Dispatches agent runs against a sprint envelope.',
   'org-leader': 'VP / Director. + leaderboards, approvals.',
   'hr-admin': 'Sees salary + perf. Edits guardrails.',
-  admin: 'Cross-tenant operator. Every role, both accounts.',
+  admin: 'Cross-tenant operator. Every role, every account.',
   assessor: 'Score dimensions, manage submission intake.',
   'lead-assessor': 'Approve exceptions, publish reports.',
   'program-lead': 'Own the assessment program end to end.',
+  participant: 'Post in channels and DMs, start and join calls.',
+  moderator: 'Manage channels, teams and recordings.',
+  'community-admin': 'Own the social workspace — configuration and users.',
+  author: 'Write, version and dry-run pipeline definitions.',
+  operator: 'Run pipelines, approve steps, cancel runs.',
+  'pipeline-admin': 'Operator plus configuration and users.',
 };
 
-const TENANT_LABELS: Record<string, string> = { orgiq: 'Org', assessment: 'Assessment' };
+const TENANT_LABELS: Record<string, string> = { orgiq: 'Org', assessment: 'Assessment', social: 'Social', pipelines: 'Pipelines' };
 
 function roleLabel(role: string): string {
   return ROLE_LABELS[role] ?? role;
