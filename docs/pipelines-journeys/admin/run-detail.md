@@ -1,0 +1,14 @@
+surface: run-detail
+role: admin
+user: u-operator (Platform Operator), entered the Pipelines workspace
+url: /pipelines/runs/job%3Ajob-obs-maint-1
+pages: portal/src/pages/pipelines/RunDetailPage.tsx,portal/src/components/runs/PipelineRunParts.tsx,portal/src/components/runs/RunTimeline.tsx,portal/src/lib/pipelineRuns.ts
+audited: 2026-09-30 03:32Z, Chromium 1456×958 (Playwright headless, one context per identity — not the shared Chrome tab), middleware dev:mock:social on :3001, Vite :5183; GET /api/session/me: sub u-operator, tenant pipelines, role admin, grants {"orgiq":["admin"],"assessment":["admin"],"social":["admin"],"pipelines":["admin"]}
+screenshot: run-detail.jpg
+verdict: pass
+console errors: 0
+layout: pass — content col left 224px w 1208px; no horizontal scroll (scrollWidth 1456 = innerWidth 1456); Run → Steps → Artifacts → Events render as four sections (pipeline-run, pipeline-steps, pipeline-artifacts, pipeline-events); the event stream card is 1208px, the full content width; this bot run's five steps are all done, so its WorkflowStepper has 0 aria-current; the in-flight bot-sourced run /pipelines/runs/bot-run%3Arun-inflight-obs-e1-s3 (marketplace work wi-obs-e1-s3 running) marks its current step aria-current=step:Executed
+keyboard: pass — 1 focusable control in main (the ← Runs back link), Tab visited 1; the step and artifact tables are read-only (no row action), the event stream is a live region, nothing opens a drawer so there is nothing for Escape to close
+empty-state: pass — /pipelines/runs/does-not-exist renders "Runs | Run | Run not found | No run with id does-not-exist — it may belong to a source that was pruned." (its two 404 network lines are the probe's own answer, excluded from the count); the in-flight run with no output reads "This run recorded no artifact."
+role-gating: pass — admin is the cross-tenant wildcard. Buttons in main: none; no Approve, Cancel, New definition or configuration control exists anywhere in the DOM of this surface (P0 surfaces are reads — those controls arrive with P2). Configuration in the rail is this role's to use; on this lane it is a read-only empty state
+notes: Header: RUN | obs-nightly-maintenance | completed | Bot | · | schedule trigger | · | started 1h ago | Run | job:job-obs-maint-1 | Definition | bot:32970d0a-e28e-5100-8fb0-a5cbb87dac99 | Workspace | orgiq | Source | queue job job-obs-maint-1 | Source status | done | Tr. Steps: cron firing:completed, Enqueued:completed, Claimed by a box:completed, Executed:completed, Human review:completed. Artifact: Transcript scheduled maintenance — completed. execute agent_jobs/job-obs-maint-1#result. Events: 12 event-catalog frames arrived over SSE without a refresh, first "pipeline:run:started · completed" — the recorded history replayed; live dispatcher and box-tail frames append to the same stream.

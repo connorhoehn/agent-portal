@@ -28,6 +28,7 @@ import * as provider from '../providers/assessment.js';
 import { isValidTeamId } from '../providers/assessment.js';
 import { documentCommentTargetIds } from '../providers/document-comments.js';
 import { assessmentDocumentHref, notificationSinkActive, notifyDocumentComment } from '../lib/social-notify.js';
+import { runReadHandlers } from './pipelines.js';
 import type { Cohort, MotionConfig, ScoringLogEntry } from '../mock/assessment.js';
 
 export const assessmentRouter: Router = Router();
@@ -369,6 +370,12 @@ assessmentRouter.get('/runs', viewGate, asyncHandler(async (req, res) => {
   const parsedLimit = limit ? parseInt(limit, 10) : undefined;
   res.json({ runs: await provider.listRuns({ command, team, status, limit: Number.isFinite(parsedLimit) ? parsedLimit : undefined }) });
 }));
+
+// The run projection, scoped to this tenant (docs/pipelines-tenant-goal.md
+// §E, decided there: `/runs` is already the assessment_runs ledger). Same
+// handler as /api/pipelines/runs and /api/runs, filtered to runs whose
+// context.tenant is 'assessment' — never another tenant's.
+assessmentRouter.get('/pipeline-runs', viewGate, runReadHandlers({ contextTenant: 'assessment' }).list);
 
 // Launches the agent run — duplicate-guarded per (command, team) and capped
 // at 3 concurrent, both enforced in the provider against the live ledger.

@@ -39,6 +39,10 @@ import { toastError, toastSuccess } from '../../lib/toastStore';
 import { writeJson } from '../../lib/writeJson';
 import { CostVsEstimate, runEstimate } from '../../components/marketplace/EstimateDrawer';
 import { RunTimeline } from '../../components/runs/RunTimeline';
+import {
+  PipelineRunArtifacts, PipelineRunEvents, PipelineRunSteps, PipelineRunSummary, usePipelineRun,
+} from '../../components/runs/PipelineRunParts';
+import type { RunListResponse } from '../../lib/pipelineRuns';
 import { DEVBOX_MODELS } from '../../lib/devboxModels';
 import { parsePgTimestampAsUtc } from '../../lib/pgTimestamp';
 import { relativeTime } from '../../lib/relativeTime';
@@ -137,6 +141,17 @@ export default function BotDetailPage() {
   const hasMoreRuns = runs.length > runsLimit;
   const running = runs.some((r) => r.status === 'running');
   if (running !== anyRunning) setAnyRunning(running);
+
+  // The same firings read as pipeline Runs (docs/pipelines-tenant-goal.md
+  // §"The vertical slice"): each cron firing is the trigger of the queue job
+  // it enqueued, rendered Run → Steps → Artifacts → Events through the orgiq
+  // façade /api/runs — never /api/pipelines/*, which is another tenant's door.
+  const { data: pipelineData, error: pipelineError, refresh: refreshPipeline } =
+    useFetch<RunListResponse>(id ? `/api/runs?botId=${encodeURIComponent(id)}&limit=50` : null, anyRunning ? 5_000 : 30_000);
+  const pipelineRuns = pipelineData?.runs ?? [];
+  const [pickedRunId, setPickedRunId] = useState<string | null>(null);
+  const pipelineRunId = pickedRunId ?? pipelineRuns[0]?.id ?? null;
+  const pipelineRun = usePipelineRun('/api/runs', pipelineRunId);
 
   const newest = runs[0] ?? null;
   const liveBoxId = newest?.status === 'running' && newest.outcome?.boxId ? newest.outcome.boxId : null;
@@ -507,6 +522,51 @@ export default function BotDetailPage() {
                 Show {Math.min(BOT_RUNS_PAGE_SIZE, runs.length - visibleRuns.length)} more
               </Button>
             </Inline>
+          )}
+
+          {/* ── One firing as a pipeline Run: the trigger record, the queue
+              job it became, its steps, what it left behind, its events. ── */}
+          {pipelineError ? (
+            <UnavailableNotice
+              error={pipelineError}
+              what="this bot's runs as pipeline runs"
+              source="Runs are projected from bot_runs and agent_jobs"
+              onRetry={refreshPipeline}
+            />
+          ) : pipelineRuns.length > 0 && (
+            <Stack gap="sm">
+              <DetailSection
+                title="Run"
+                hint="one firing, as a pipeline run"
+                actions={(
+                  <Select
+                    aria-label="Pipeline run"
+                    size="sm"
+                    className="max-w-[280px]"
+                    value={pipelineRunId ?? ''}
+                    onChange={(e) => setPickedRunId(e.target.value)}
+                    options={pipelineRuns.map((r) => ({
+                      value: r.id,
+                      label: `${r.context.id} · ${r.startedAt ? relativeTime(r.startedAt) : 'not started'}`,
+                    }))}
+                  />
+                )}
+                data-testid="pipeline-run"
+              >
+                {pipelineRun.run
+                  ? <PipelineRunSummary run={pipelineRun.run} />
+                  : <MetaLine size="sm" tone="tertiary" items={[pipelineRun.error ? `Could not load this run: ${pipelineRun.error}` : 'Loading run…']} />}
+              </DetailSection>
+              <DetailSection title="Steps" hint={`${pipelineRun.steps.length}`} data-testid="pipeline-steps">
+                <PipelineRunSteps steps={pipelineRun.steps} />
+              </DetailSection>
+              <DetailSection title="Artifacts" hint={`${pipelineRun.artifacts.length}`} data-testid="pipeline-artifacts">
+                <PipelineRunArtifacts artifacts={pipelineRun.artifacts} />
+              </DetailSection>
+              <DetailSection title="Events" data-testid="pipeline-events">
+                <PipelineRunEvents eventsUrl={pipelineRun.eventsUrl} />
+              </DetailSection>
+            </Stack>
           )}
         </Stack>
 

@@ -101,6 +101,11 @@ export interface RunTimelineHandle {
 
 export interface RunTimelineProps {
   boxId: string | null;
+  /** Tail this SSE URL instead of the box's own (`/api/devbox/boxes/:id/tail`).
+      Used for a pipeline run's event stream (`/api/runs/:id/events`), whose
+      event-catalog frames (`pipeline:run:*`, `pipeline:step:*`,
+      `pipeline.approval.*`) render as timeline meta rows. */
+  src?: string | null;
   title?: string;
   /** Tailwind max-height class for the scroll body. */
   maxHeightClass?: string;
@@ -115,7 +120,8 @@ export interface RunTimelineProps {
 
 export const RunTimeline = forwardRef<RunTimelineHandle, RunTimelineProps>(function RunTimeline(
   {
-    boxId,
+    boxId: boxIdProp,
+    src = null,
     title = 'EXECUTION TIMELINE',
     maxHeightClass = 'max-h-[calc(100vh-260px)]',
     headerExtra,
@@ -124,6 +130,8 @@ export const RunTimeline = forwardRef<RunTimelineHandle, RunTimelineProps>(funct
   },
   ref,
 ) {
+  // The stream key: a box id, or the explicit stream URL when one is given.
+  const boxId = src ?? boxIdProp;
   // ── Per-box streams (in-memory; switching boxes preserves each stream) ─────
   const [timelines, setTimelines] = useState<Record<string, TimelineItem[]>>({});
   const timeline = boxId ? (timelines[boxId] ?? []) : [];
@@ -152,7 +160,12 @@ export const RunTimeline = forwardRef<RunTimelineHandle, RunTimelineProps>(funct
 
   const handleTaskEvent = useCallback((box: string, ev: Record<string, unknown>) => {
     const type = ev['type'];
-    if (type === 'task_started') {
+    if (typeof type === 'string' && /^pipeline[:.]/.test(type)) {
+      // An event-catalog frame from a pipeline run stream — one meta row each.
+      const text = [type, ev['stepId'], ev['detail'] ?? ev['status']]
+        .filter((part) => typeof part === 'string' && part).join(' · ');
+      pushTimeline(box, (prev) => [...prev, { id: nextId(), kind: type.endsWith('failed') ? 'error' : 'meta', text }]);
+    } else if (type === 'task_started') {
       pushTimeline(box, (prev) => [...prev, { id: nextId(), kind: 'meta', text: `▶ task: ${String(ev['prompt'] ?? '')}` }]);
     } else if (type === 'devbox_start') {
       const persistent = ev['workspace_persistent'] ? 'persistent' : 'EPHEMERAL — no session storage mount!';
@@ -221,7 +234,7 @@ export const RunTimeline = forwardRef<RunTimelineHandle, RunTimelineProps>(funct
     const open = () => {
       es?.close();
       if (disposed) return;
-      es = new EventSource(`/api/devbox/boxes/${encodeURIComponent(boxId)}/tail`);
+      es = new EventSource(src ?? `/api/devbox/boxes/${encodeURIComponent(boxId)}/tail`);
       lastSeen = Date.now();
       setTailState('connecting');
 
@@ -286,7 +299,7 @@ export const RunTimeline = forwardRef<RunTimelineHandle, RunTimelineProps>(funct
       es?.close();
       setTailState('idle');
     };
-  }, [boxId, handleTaskEvent]);
+  }, [boxId, src, handleTaskEvent]);
 
   // ── Render ─────────────────────────────────────────────────────────────────
 

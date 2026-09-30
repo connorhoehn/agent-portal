@@ -22,7 +22,7 @@ export interface PipelinesSurface {
   /** Rail group (GROUP_ORDER_BY_TENANT.pipelines in the portal). */
   group: 'Catalog' | 'Runs' | 'Sources' | 'System';
   phase: PipelinesPhase;
-  /** True once the surface reads real rows; every one is false at registration. */
+  /** True once the surface reads real rows (Runs and Artifacts: the run projection, lane P0). */
   live: boolean;
 }
 
@@ -32,9 +32,9 @@ export const pipelinesSurfaces = defineFixture<PipelinesSurface>({
     default: () => [
       { id: 'definitions', label: 'Definitions', group: 'Catalog', phase: 'P2', live: false },
       { id: 'runbooks', label: 'Runbooks', group: 'Catalog', phase: 'P2', live: false },
-      { id: 'runs', label: 'Runs', group: 'Runs', phase: 'P0', live: false },
+      { id: 'runs', label: 'Runs', group: 'Runs', phase: 'P0', live: true },
       { id: 'approvals', label: 'Approvals', group: 'Runs', phase: 'P2', live: false },
-      { id: 'artifacts', label: 'Artifacts', group: 'Runs', phase: 'P0', live: false },
+      { id: 'artifacts', label: 'Artifacts', group: 'Runs', phase: 'P0', live: true },
       { id: 'agents', label: 'Agents', group: 'Sources', phase: 'P1', live: false },
       { id: 'bots', label: 'Bots', group: 'Sources', phase: 'P0', live: false },
       { id: 'commands', label: 'Commands', group: 'Sources', phase: 'P0', live: false },
