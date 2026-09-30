@@ -8,6 +8,7 @@ import {
   ActivityFeed,
   Breadcrumbs,
   Button,
+  ChevronIcon,
   DropdownMenu,
   EmptyState,
   ErrorState,
@@ -226,45 +227,59 @@ function KnowledgeExplorerContent({ mode }: KnowledgeExplorerProps) {
   const documentTotal = sections.reduce((sum, section) => sum + sectionDocumentCount(section), 0);
   const mayMove = canDo('ManageKnowledge') && mode !== 'prompts';
 
-  const rail = (
+  // The caption's 28px actions: New page, the list's ⋯, and the fold.
+  const captionActions = (foldRail: () => void) => <Inline gap="none" wrap={false}>
+    {mayCreate && <IconButton aria-label="New page" title="New page" variant="ghost" size="sm" className="h-7 w-7 text-text-secondary" icon={<PlusIcon size={14} />} onClick={() => createDraft({ sectionKey: draftSectionKey! })} data-testid="new-page-btn" />}
+    <DropdownMenu trigger={<MoreIcon size={14} />} triggerLabel="More for the documents list" triggerTitle="More" triggerTestId="document-rail-menu"
+      triggerClassName="h-7 w-7 border-transparent px-0 py-0 text-text-secondary" align="end"
+      sections={[{ items: [
+        { label: 'All documents', trailing: String(documentTotal), onSelect: openLibrary },
+        { label: 'Refresh library', onSelect: () => void treeFetch.refresh() },
+      ] }]} />
+    <IconButton aria-label="Hide document library" title="Hide document library" variant="ghost" size="sm" className="h-7 w-7 text-text-secondary"
+      icon={<ChevronIcon dir="left" size={14} />} onClick={foldRail} data-testid="knowledge-explorer-rail-fold" />
+  </Inline>;
+
+  const rail = ({ foldRail }: { foldRail: () => void }) => (
     <>
       <RenameNodeDialog
         node={renaming}
         onClose={() => setRenaming(null)}
         onSubmit={handleRename}
       />
+      <DocumentRail
+        title={mode === 'workspace' ? 'Documents' : modeLabel}
+        count={documentTotal}
+        actions={captionActions(foldRail)}
+        status={treeFetch.isLoading ? <LoadingState label="Loading…" />
+          : treeFetch.error ? <ErrorState title="Couldn't load the document library" body={treeFetch.error} />
+          : undefined}
+        sections={sections}
+        selectedId={view.kind === 'node' ? selectedId : null}
+        activitySectionKey={view.kind === 'activity' ? view.sectionKey : null}
+        libraryOpen={libraryOpen}
+        quickView={quickView}
+        onQuickView={setQuickView}
+        onOpenLibrary={openLibrary}
+        onOpenDocument={handleSelectNode}
+        onOpenActivity={openActivity}
+        activityCount={activityCount}
+        moveStatus={moveStatus}
+        sourceConfigured={sourceConfigured}
+        pulls={pulls}
+        {...(mayCreate ? { onCreate: createDraft } : {})}
+        {...(mode !== 'prompts' && canDo('ManageKnowledge') ? { onRename: setRenaming } : {})}
+        {...(mayMove ? { onReorder: handleReorder } : {})}
+      />
       {/* Why a move was refused, in the server's own words. Each refusal names
           something the reader can act on — which remote owns that subtree, or
           that publish is the way a doc leaves local — so a generic "move
-          failed" would throw away the whole value of the check. Dismisses on
-          the next drag. */}
+          failed" would throw away the whole value of the check. */}
       {moveError && (
         <ErrorState
           title="That move was not allowed"
           body={moveError}
           action={<Button size="sm" variant="ghost" onClick={() => setMoveError(null)}>Dismiss</Button>}
-        />
-      )}
-      {treeFetch.isLoading && <LoadingState label="Loading…" />}
-      {treeFetch.error && <ErrorState title="Couldn't load the document library" body={treeFetch.error} />}
-      {!treeFetch.isLoading && !treeFetch.error && (
-        <DocumentRail
-          sections={sections}
-          selectedId={view.kind === 'node' ? selectedId : null}
-          activitySectionKey={view.kind === 'activity' ? view.sectionKey : null}
-          libraryOpen={libraryOpen}
-          quickView={quickView}
-          onQuickView={setQuickView}
-          onOpenLibrary={openLibrary}
-          onOpenDocument={handleSelectNode}
-          onOpenActivity={openActivity}
-          activityCount={activityCount}
-          moveStatus={moveStatus}
-          sourceConfigured={sourceConfigured}
-          pulls={pulls}
-          {...(mayCreate ? { onCreate: createDraft } : {})}
-          {...(mode !== 'prompts' && canDo('ManageKnowledge') ? { onRename: setRenaming } : {})}
-          {...(mayMove ? { onReorder: handleReorder } : {})}
         />
       )}
       {mode === 'enterprise' && !treeFetch.isLoading && !treeFetch.error && (
@@ -302,17 +317,6 @@ function KnowledgeExplorerContent({ mode }: KnowledgeExplorerProps) {
   return (
     <ExplorerFrame
       rail={rail}
-      title={mode === 'workspace' ? 'Documents' : modeLabel}
-      count={documentTotal}
-      railActions={<Inline gap="none" wrap={false}>
-        {mayCreate && <IconButton aria-label="New page" title="New page" variant="ghost" size="sm" icon={<PlusIcon />} onClick={() => createDraft({ sectionKey: draftSectionKey! })} data-testid="new-page-btn" />}
-        <DropdownMenu trigger={<MoreIcon />} triggerLabel="More for the documents list" triggerTitle="More" triggerTestId="document-rail-menu"
-          triggerClassName="border-transparent" align="end"
-          sections={[{ items: [
-            { label: 'All documents', trailing: String(documentTotal), onSelect: openLibrary },
-            { label: 'Refresh library', onSelect: () => void treeFetch.refresh() },
-          ] }]} />
-      </Inline>}
       aside={!libraryOpen && view.kind === 'node' && isPage && selectedNode
         ? <ActivityBar node={selectedNode} sectionKey={selectedSectionKey} sseEvents={sse.events} />
         : undefined}

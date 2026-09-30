@@ -83,7 +83,7 @@ test('the rail, the All documents list and the document conversation match the r
   for (const name of ['All documents', 'Recent', 'Shared with me']) await expect(views.getByText(name, { exact: true })).toBeVisible();
   const tree = page.getByTestId('document-rail-tree');
   await expect(tree.getByTestId('document-rail-tree-row-section:confluence-eng')).toBeVisible();
-  await expect(tree.getByTestId(`document-rail-tree-row-${DOC}`)).toHaveAttribute('aria-selected', 'true');
+  await expect(tree.getByTestId(`document-rail-tree-row-${DOC}`)).toHaveAttribute('aria-current', 'page');
   await expect(page.getByTestId('section-pull-confluence-eng').or(tree.getByTestId('document-rail-tree-row-section:confluence-eng'))).toBeVisible();
 
   // The composer dock: the document chip, the conversation placeholder, Send.

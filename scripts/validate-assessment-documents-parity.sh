@@ -111,22 +111,21 @@ section "phase 3 — same rail and list (gaps 9, 10, 12)"
 if [ -d "$LIB" ]; then
   grep -qE "heading\?: 'compact' \| 'prominent' \| 'label'" "$LIB/index.d.ts" && ok "installed WorkspaceRail/ExplorerLayout has the label heading" || fail "installed ui-components has no WorkspaceRail heading=\"label\""
   grep -qE "export declare type TreeViewSize = .*'rail'" "$LIB/shared.d.ts" && ok "installed TreeView has size=\"rail\"" || fail "installed ui-components TreeView has no size=\"rail\" (2.407.13+)"
-  grep -qE "size\?: 'sm' \| 'md' \| 'rail'" "$LIB/social.d.ts" && ok "installed ConversationShelf has size=\"rail\"" || fail "installed ConversationShelf has no size=\"rail\""
+  grep -qE "export declare function StackedRail" "$LIB/index.d.ts" && ok "installed ui-components has StackedRail (the rail's composite since the rail-parity goal)" || fail "installed ui-components has no StackedRail"
   for c in PageHeader FilePickerButton FilterPopover DocumentResultList SearchInput; do
     grep -qE "export declare function $c\b" "$LIB/shared.d.ts" && ok "installed /shared exports $c" || fail "installed ui-components/shared does not export $c"
   done
 fi
-has 'railHeading="label"' "$FRAME" && has 'railCount' "$FRAME" && ok "rail header is the DOCUMENTS n label (railHeading=label + railCount)" || fail "$FRAME: rail header is not railHeading=\"label\" with railCount"
+has 'caption' "$RAIL" && has 'StackedRail' "$RAIL" && ok "rail header is StackedRail's caption (DOCUMENTS n + 28px actions)" || fail "$RAIL: the DOCUMENTS caption is not StackedRail's"
 has "title=\{mode === 'workspace' \? 'Documents'" "$EXPLORER" && has "count=\{documentTotal\}" "$EXPLORER" && ok "workspace rail reads DOCUMENTS <count>" || fail "$EXPLORER: the workspace rail is not titled Documents with its count"
 [ -f "$RAIL" ] && ok "knowledge/DocumentRail.tsx exists" || fail "$RAIL missing"
-has 'ConversationShelf compact plain size="rail"' "$RAIL" && ok "views are a plain rail-scale ConversationShelf" || fail "$RAIL: views are not ConversationShelf compact plain size=\"rail\""
+has "All documents" "$RAIL" && has "Shared with me" "$RAIL" && ok "views (All documents / Recent / Shared with me) are a StackedRail group" || fail "$RAIL: the Views group is missing"
 for v in "'All documents'" "'Recent'" "'Shared with me'"; do has "label: $v" "$RAIL" && ok "view $v" || fail "$RAIL: view $v missing"; done
-n_rail=$(grep -o 'KeyboardTreeView size="rail"' "$RAIL" | wc -l | tr -d ' ')
-[ "$n_rail" -ge 2 ] && ok "the tree and the Recent list are TreeView size=\"rail\" ($n_rail)" || fail "$RAIL: TreeView size=\"rail\" appears $n_rail times (want the sources tree and Recent)"
+has "StackedRail" "$RAIL" && ! has "KeyboardTreeView\|TreeView size" "$RAIL" && ok "the tree is StackedRail rows (no TreeView)" || fail "$RAIL: still a TreeView, or no StackedRail"
 grep -qE '<(KeyboardTreeView|TreeView|ConversationShelf)[^>]*size="(sm|md)"' "$K"/*.tsx && fail "a sm/md-scale tree or shelf is left under $K" || ok "no sm/md-scale tree or shelf in the rail"
 has "sectionFolderId" "$RAIL" && has "moveParentForRail" "$EXPLORER" && ok "sources are folder rows; a drop on a folder moves to that section's root" || fail "sources are not folder rows, or the synthetic folder id can reach the move endpoints"
 has "<SectionPresence" "$RAIL" && has "usePresence" "$RAIL" && has "PresenceAvatars" "$RAIL" && ok "per-source presence on the folder row" || fail "$RAIL lost per-source presence"
-has "label: 'New page'" "$RAIL" && has "label: 'Pull now'" "$RAIL" && has "rowMenu=\{rowMenu\}" "$RAIL" && ok "folder ⋯: New page / Pull now; page ⋯ via rowMenu" || fail "$RAIL: folder/page row menus missing"
+has "New page" "$RAIL" && has "Pull" "$RAIL" && has "<DropdownMenu" "$RAIL" && ok "source actions: New page / Pull; page ⋯ is a DropdownMenu in the row's menu slot" || fail "$RAIL: source actions or the page row menu are missing"
 has "document-rail-shared-empty" "$RAIL" && ok "Shared with me has an honest empty state" || fail "$RAIL: Shared with me has no stated empty state"
 for c in PageHeader FilePickerButton DropdownMenu SearchInput FilterPopover FilterChip DocumentResultList; do
   has "<$c\b" "$LIST" && ok "list page uses $c" || fail "$LIST does not render $c"
@@ -232,8 +231,8 @@ grep -q "documentCommentsModel.test.ts" <(ls portal/src/pages/assessment/__tests
 
 # ─────────────────────────────────────────────────────────────────────────────
 section "accelerator UX preserved (gap 15)"
-has "<SectionPullControl" "$RAIL" && has "/api/assessment/knowledge/pull" "$RAIL" && ok "space-level Pull (on the source folder row)" || fail "DocumentRail lost SectionPullControl / the pull route"
-has "onReorder: handleReorder" "$EXPLORER" && has "/api/assessment/knowledge/source/move" "$EXPLORER" && has "onReorder: props.onReorder, canDragNode, canDropNode" "$RAIL" \
+has "/api/assessment/knowledge/pull" "$RAIL" && has "actions:" "$RAIL" && ok "space-level Pull (a source group action)" || fail "DocumentRail lost the source Pull action / the pull route"
+has "onReorder: handleReorder" "$EXPLORER" && has "/api/assessment/knowledge/source/move" "$EXPLORER" && has "railDropPosition" "$RAIL" && has "canDragNode" "$RAIL" \
   && ok "drag of synced pages through the source adapter" || fail "KnowledgeExplorer / DocumentRail lost drag / source move"
 has "NewDraftDialog" "$EXPLORER" && ok "New page / child draft" || fail "KnowledgeExplorer lost NewDraftDialog"
 has "mode !== 'prompts'" "$K/documentCanvasState.ts" && ok "prompts read-only" || fail "documentCanvasState no longer keeps prompts read-only"

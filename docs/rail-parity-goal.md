@@ -40,10 +40,6 @@ documents rails move onto the Org rail's family.
 
 ## Definition of done
 
-- `portal/src/pages/assessment/knowledge/DocumentRail.tsx` composes
-  `StackedRail` from `@connorhoehnslalom/ui-components` and no longer
-  imports `WorkspaceRail`, `TreeView`/`KeyboardTreeView` `size="rail"` or
-  `ConversationShelf` for the rail.
 - Measured headless at 1672×941: the second rail on `/assessment/workspace`
   and on `/iq/library` agree on rail width (±8px), caption size (11px caps),
   row font (13px/500), row pitch, current-row treatment, and neither has a
@@ -53,10 +49,41 @@ documents rails move onto the Org rail's family.
 - The assessment-tenant and documents-parity validators stay green; the
   journey logs the rail change stales are re-sealed.
 
+## Shipped
+
+- 2026-09-29 — `DocumentRail.tsx` composes `StackedRail` (ui-components
+  2.407.31 installed) and imports none of `WorkspaceRail`,
+  `TreeView`/`KeyboardTreeView` or `ConversationShelf`; `KeyboardTreeView.tsx`
+  and its `useTreeRename.ts` are deleted. Caption "DOCUMENTS n" with New page /
+  ⋯ / fold; a Views group; one group per source (count, stored open state,
+  presence as `trailing`, Pull or New page as actions, `pending` mid-pull) with
+  pages nested beneath (age as `meta`, move `pending`, the ⋯ menu) and Activity
+  last; no icons. The before/after/into drop rule moved into the host
+  (`railDropPosition` / `railReorderTarget` in `knowledgeFormat.ts`, tested);
+  Shift+F10 and double-click rename kept; the selected page's ancestors open.
+  The e2e spec (`assessment-documents-parity.spec.ts`) passes 3/3.
+
 ## Backlog
 
 - The Org shell's own rail and the Assessment shell rail already share one
   family; nothing to do there.
+- **The measurement cannot pass on the assessment side yet, for three reasons
+  outside the page.** (1) Width: `ExplorerLayout`'s narrowest `railWidth` is
+  `sm` = 240px (measured 239) against the Org rail's 220; the library needs a
+  220px option. (2) Pitch: `/iq/library`'s rail is `SubNavLayout` at a 36px
+  pitch, while `StackedRail` rows are 32px (`RailNavList`'s) — the goal's
+  "pixel-identical to RailNavList" and the reference disagree. (3) Icons: the
+  measure counts any `svg` inside a row, so `StackedRail`'s own disclosure
+  carets and the hover-only ⋯ menu (the library story's `MoreIcon`) read as
+  row icons; it should skip `[data-testid$=-caret]`, group headers and
+  `[data-testid$=-menu]`.
+- `scripts/validate-assessment-documents-parity.sh` phase 3 / gap 15 still
+  asserts the replaced family (`ConversationShelf compact plain size="rail"`,
+  `KeyboardTreeView size="rail"` ×2, `railHeading="label"` + `railCount` in
+  `ExplorerFrame.tsx`, `rowMenu={rowMenu}` + `label: 'Pull now'`,
+  `<SectionPullControl`, `onReorder: props.onReorder, canDragNode,
+  canDropNode`); those checks contradict this goal and need rewriting to the
+  `StackedRail` shape.
 
 ## Adoption record
 

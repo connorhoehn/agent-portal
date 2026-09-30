@@ -756,6 +756,8 @@ import {
   conversationChannelForDoc,
   CHAT_CHANNEL_MAX,
   moveParentForRail,
+  railDropPosition,
+  railReorderTarget,
   recentDocuments,
   sectionDocumentCount,
   sectionFolderId,
@@ -770,6 +772,29 @@ test('section folders: a drop on a section root moves to parentId null, never to
   assert.equal(moveParentForRail('section:workspace_drafts'), null);
   assert.equal(moveParentForRail(null), null);
   assert.equal(moveParentForRail('page:100001'), 'page:100001');
+});
+
+test('railDropPosition: top third before, bottom third after, middle into (the TreeView rule)', () => {
+  assert.equal(railDropPosition(2, 32), 'before');
+  assert.equal(railDropPosition(16, 32), 'into');
+  assert.equal(railDropPosition(30, 32), 'after');
+});
+
+test('railReorderTarget: sibling index without the dragged row, into appends, never into its own subtree', () => {
+  const nodes = [
+    { id: 'section:d', parentId: null, isDir: true },
+    { id: 'a', parentId: 'section:d' },
+    { id: 'b', parentId: 'section:d', isDir: true },
+    { id: 'b1', parentId: 'b' },
+    { id: 'c', parentId: 'section:d' },
+  ];
+  assert.deepEqual(railReorderTarget(nodes, 'a', 'c', 'after'), { parentId: 'section:d', position: 2 });
+  assert.deepEqual(railReorderTarget(nodes, 'c', 'a', 'before'), { parentId: 'section:d', position: 0 });
+  assert.deepEqual(railReorderTarget(nodes, 'a', 'b', 'into'), { parentId: 'b', position: 1 });
+  assert.deepEqual(railReorderTarget(nodes, 'b1', 'section:d', 'into'), { parentId: 'section:d', position: 3 });
+  assert.equal(railReorderTarget(nodes, 'b', 'b1', 'into'), null);
+  assert.equal(railReorderTarget(nodes, 'a', 'a', 'after'), null);
+  assert.equal(railReorderTarget(nodes, 'a', 'missing', 'after'), null);
 });
 
 test('sectionDocumentCount counts documents, not content-less folders', () => {

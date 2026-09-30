@@ -127,6 +127,36 @@ export function sectionKeyOfFolder(id: string | null): string | null {
 export function moveParentForRail(targetParentId: string | null): string | null {
   return targetParentId === null || sectionKeyOfFolder(targetParentId) !== null ? null : targetParentId;
 }
+/**
+ * The rail's drag model. `StackedRail` passes drag events through and leaves
+ * what a drop means to the host, so the before / after / into decision the
+ * old `TreeView` made lives here, with the same rules: the row's top third is
+ * "before", its bottom third "after", the middle "into"; a drop never lands a
+ * node inside itself or its own subtree; `into` appends as the last child.
+ * Root pages carry their section's folder id as `parentId`, so a drop beside
+ * one resolves to that folder and `moveParentForRail` maps it back to null.
+ */
+export type RailDropPosition = 'before' | 'after' | 'into';
+export interface RailDragNode { id: string; parentId: string | null; isDir?: boolean }
+export function railDropPosition(offsetY: number, height: number): RailDropPosition {
+  return offsetY < height / 3 ? 'before' : offsetY > (height * 2) / 3 ? 'after' : 'into';
+}
+export function railReorderTarget(
+  nodes: ReadonlyArray<RailDragNode>, draggedId: string, targetId: string, position: RailDropPosition,
+): { parentId: string | null; position: number } | null {
+  const byId = new Map(nodes.map((node) => [node.id, node]));
+  const target = byId.get(targetId);
+  if (!target || !byId.has(draggedId) || draggedId === targetId) return null;
+  for (let at: RailDragNode | undefined = target; at?.parentId; at = byId.get(at.parentId)) {
+    if (at.parentId === draggedId) return null;
+  }
+  if (position === 'into') {
+    return { parentId: targetId, position: nodes.filter((node) => node.parentId === targetId && node.id !== draggedId).length };
+  }
+  const siblings = nodes.filter((node) => node.parentId === target.parentId && node.id !== draggedId).map((node) => node.id);
+  const index = siblings.indexOf(targetId);
+  return index === -1 ? null : { parentId: target.parentId, position: position === 'before' ? index : index + 1 };
+}
 /** Documents in a section — what its folder row counts ("Engineering Space 4"). */
 export function sectionDocumentCount(section: KnowledgeSection): number {
   return section.nodes.filter((node) => !isFolderNode(node)).length;

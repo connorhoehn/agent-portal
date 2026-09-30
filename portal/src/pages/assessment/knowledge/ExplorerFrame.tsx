@@ -17,17 +17,17 @@ export function DocumentContextPanel({ id, children }: { id: PanelId; children: 
 }
 
 export interface ExplorerFrameProps {
-  rail: ReactNode;
-  railHeader?: ReactNode;
-  railActions?: ReactNode;
+  /**
+   * The rail. It draws its own caption (the concise stacked rail's
+   * "DOCUMENTS n" row, docs/rail-parity-goal.md), so the fold control is
+   * handed to it to sit with the caption's other actions.
+   */
+  rail: (controls: { foldRail: () => void }) => ReactNode;
   children: ReactNode;
   aside?: ReactNode;
-  title?: string;
-  /** "DOCUMENTS 12" — the rail group label and its count (`WorkspaceRail heading="label"`). */
-  count?: number;
 }
 
-export function ExplorerFrame({ rail, railHeader, railActions, children, aside, title = 'Documents', count }: ExplorerFrameProps) {
+export function ExplorerFrame({ rail, children, aside }: ExplorerFrameProps) {
   const [collapsed, setCollapsed] = useState(() => {
     try { return localStorage.getItem('assessment.documentRail.collapsed') === 'true'; }
     catch { return false; }
@@ -48,16 +48,13 @@ export function ExplorerFrame({ rail, railHeader, railActions, children, aside, 
     <DocumentContext.Provider value={aside ? context : null}>
       <ViewportFillRegion bottomGap={16} data-testid="knowledge-workspace">
         <ExplorerLayout
-          rail={rail}
-          railTitle={title}
-          railHeading="label"
-          {...(count !== undefined ? { railCount: count } : {})}
-          railHeader={railHeader}
-          railActions={railActions}
+          rail={rail({ foldRail: toggleRail })}
           railLabel="document library"
-          railWidth="md"
+          // 240px, the narrowest the layout offers — the Org rail is 220 (see the goal doc's backlog).
+          railWidth="sm"
           railCollapsed={collapsed}
-          onToggleRail={toggleRail}
+          // Open, the fold is one of the caption's actions; folded, the strip's unfold control.
+          {...(collapsed ? { onToggleRail: toggleRail } : {})}
           panePadding="none"
           data-testid="knowledge-explorer"
         >
