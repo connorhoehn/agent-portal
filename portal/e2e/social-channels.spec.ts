@@ -9,10 +9,14 @@ import { test, expect, type Browser, type Page } from '@playwright/test';
 //      2s without a reload — and again after a reload (it was stored).
 //   2. u-sana opens a DM with u-mira through "New message"; her message
 //      arrives in u-mira's copy of the DM live, and u-mira's reply comes back.
-//   3. u-theo — a #general MEMBER, but standing in orgiq — hand-builds a
-//      subscribe to social:ch:general on /ws with his orgiq realtime token:
+//   3. u-hr — an orgiq hr-admin with NO social grant — hand-builds a
+//      subscribe to social:ch:general on /ws with her orgiq realtime token:
 //      the gateway answers AUTHZ_CHANNEL_DENIED and no message of the channel
-//      reaches him. The tenant rule is asked before membership.
+//      reaches her. The grant rule is asked before membership. (Until lane E
+//      this probe used u-theo, an orgiq member who holds a social grant and is
+//      a #general member; under the tenants-claim rule he is admitted from an
+//      orgiq session on purpose — that is what lets an initiative page show
+//      its bound channel — so he no longer forges anything.)
 //
 // The mock world is reset first and last (POST /api/__mock/reset), so the
 // posted messages do not outlive the run.
@@ -145,11 +149,11 @@ test('a forged cross-tenant subscribe is refused with AUTHZ_CHANNEL_DENIED', asy
   test.setTimeout(60_000);
   const context = await browser.newContext({ baseURL });
   const page = await context.newPage();
-  await signIn(page, 'u-theo');
+  await signIn(page, 'u-hr');
   const me = await page.evaluate(async () => (await fetch('/api/session/me', { credentials: 'include' })).json());
-  // u-theo holds a social participant grant and is a #general member, but this session stands in orgiq.
+  // u-hr stands in orgiq and holds no grant in social at all.
   expect(me.tenant).toBe('orgiq');
-  expect(me.grants.social).toEqual(['participant']);
+  expect(me.grants.social).toBeUndefined();
 
   const result = await page.evaluate(async () => {
     const t = await (await fetch('/api/session/realtime-token', { credentials: 'include' })).json() as { token: string; gatewayUrl: string };
