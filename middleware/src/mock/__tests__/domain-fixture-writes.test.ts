@@ -34,6 +34,7 @@ jest.mock('../../config.js', () => ({
 import { freezeClock, fixtureRegistry } from '../core/index.js';
 import { workItems } from '../work-items.js';
 import { promotionCandidates } from '../promotions.js';
+import { pipelineRunRecords } from '../pipeline-definitions.js';
 import { sessionBundles } from '../session-bundle.js';
 import { labConsults, labExperiences } from '../lab.js';
 import { promptEvalCases, promptEvalRuns } from '../prompt-evals.js';
@@ -140,15 +141,20 @@ describe('the promotions inbox', () => {
   it('promotes a candidate, and the reset takes the promotion back', async () => {
     expect((await getCandidate('promo-aurora-cold-start'))!.status).toBe('candidate');
 
-    const result = await promoteCandidate('promo-aurora-cold-start', {
-      approvedBy: 'Platform Operator', dryRunPassed: true,
+    // Rule 1: a skill promotes on a recorded, completed dry-run of its own runbook.
+    pipelineRunRecords.rows().push({
+      id: 'job:probe', definitionId: 'runbook:promo-aurora-cold-start', contextTenant: 'orgiq', runKind: 'runbook:dry-run',
+      status: 'completed', jobId: null, triggeredBy: 'u-ines', model: null, estimateUsd: null, costUsd: null,
+      error: null, startedAt: '2026-09-30T10:00:00.000Z', finishedAt: '2026-09-30T10:01:00.000Z',
     });
-    expect(result).toMatchObject({ candidate: { status: 'promoted', dryRunPassed: true } });
+    const result = await promoteCandidate('promo-aurora-cold-start', { approvedBy: 'Platform Operator' });
+    expect(result).toMatchObject({ candidate: { status: 'promoted', dryRunRunId: 'job:probe', dryRunPassed: true } });
 
     promotionCandidates.reset('default');
+    pipelineRunRecords.reset('default');
 
     expect(await getCandidate('promo-aurora-cold-start')).toMatchObject({
-      status: 'candidate', dryRunPassed: null,
+      status: 'candidate', dryRunRunId: null, dryRunPassed: null,
     });
   });
 

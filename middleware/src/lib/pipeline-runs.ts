@@ -53,7 +53,7 @@ export type PipelineRunStatus = (typeof PIPELINE_RUN_STATUSES)[number];
 /** Step statuses this projection can honestly produce from the source rows. */
 export type PipelineStepStatus = 'pending' | 'running' | 'awaiting_approval' | 'completed' | 'failed' | 'skipped';
 
-/** Definition kinds (research §D.3). `runbook` arrives with definitions in P2. */
+/** Definition kinds (research §D.3). `runbook` runs are the dry-runs P2 enqueues. */
 export type DefinitionKind = 'runbook' | 'agent' | 'bot' | 'assessment-command' | 'compaction';
 
 /** pipeline-runtime's trigger vocabulary (platform-api `triggerType`). */
@@ -498,10 +498,13 @@ export function projectRuns(src: RunSources): Projection {
     const id = runIdFor('agent_jobs', j.id);
     const trig = triggerOfJob.get(j.id);
     const status = crosswalkStatus(j.status);
-    const kind: DefinitionKind = j.botId ? 'bot' : 'agent';
+    // A job the pipelines tenant enqueued (the runbook dry-run, P2) names its
+    // definition in the payload — the queue executes it, the definition owns it.
+    const payloadDef = typeof j.payload?.['definitionId'] === 'string' ? String(j.payload['definitionId']) : null;
+    const kind: DefinitionKind = j.botId ? 'bot' : payloadDef && j.payload?.['definitionKind'] === 'runbook' ? 'runbook' : 'agent';
     runs.push({
       id,
-      definitionId: j.botId ? `bot:${j.botId}` : `job-kind:${j.kind}`,
+      definitionId: j.botId ? `bot:${j.botId}` : payloadDef ?? `job-kind:${j.kind}`,
       tenant: TENANT_OF.agent_jobs,
       status,
       triggeredBy: trig?.dispatchedBy ?? j.createdBy ?? null,

@@ -10,11 +10,21 @@
 // lib/pipeline-runs.ts over providers/pipeline-runs.ts — every tenant's runs,
 // filterable by `contextTenant`. The same handlers serve the context-filtered
 // façades (`/api/runs` for orgiq in routes/runs.ts, `/api/assessment/pipeline-runs`
-// in routes/assessment.ts) through `runReadHandlers`. Definitions and
-// approvals are P2.
+// in routes/assessment.ts) through `runReadHandlers`.
+//
+// P2 — definitions, runbooks, approvals (rule 1 of design §5.2). The catalog
+// is DERIVED from what exists (lib/pipeline-definitions.ts over
+// providers/pipeline-definitions.ts): every bot, assessment command, runbook
+// candidate and agent is one definition. Gates, per the goal doc's Cedar
+// table: reads `ViewPipelines`; recording a definition's approvers
+// `AuthorDefinition`; a runbook dry-run `RunPipeline` (it rides the existing
+// queue behind dispatch-work's money brakes); an approval decision
+// `ApproveStep` (routed to the gate's own decision path — no second approval
+// store); cancelling a run `CancelRun`; the tenant configuration
+// `ManagePipelineConfig`.
 
 import { Router, type Request, type Response } from 'express';
-import { asyncHandler, NotFoundError } from '../lib/async-handler.js';
+import { asyncHandler, NotFoundError, ValidationError } from '../lib/async-handler.js';
 import { initSSE, writeSSE, endSSE } from '../lib/sse.js';
 import { dispatcherEvents } from '../lib/job-dispatcher.js';
 import { subscribe as subscribeBox } from '../lib/devbox-fleet.js';
@@ -26,6 +36,15 @@ import { requireAction } from '../lib/authz.js';
 import { ROLES_BY_TENANT } from '../lib/session.js';
 import { tenantMembers, type TenantSummary } from '../lib/tenant-summary.js';
 import { pipelinesSurfaceCounts, pipelinesSurfaces } from '../mock/pipelines.js';
+import {
+  APPROVER_ROLE_OPTIONS, effectiveApproverRoles, validApproverRoles, candidateIdOf,
+  type Definition, type PipelineRunRecord,
+} from '../lib/pipeline-definitions.js';
+import {
+  loadDefinitions, listRunRecords, recordApproverRoles, startDryRun, listApprovals, decideApproval,
+  cancelRun, getPipelinesConfig, setDefaultApproverRole, watchPipelineRuns,
+} from '../providers/pipeline-definitions.js';
+import { decideDryRunGate } from '../providers/promotions.js';
 
 export const pipelinesRouter = Router();
 
@@ -156,3 +175,179 @@ pipelinesRouter.get('/runs/:id', view, runs.one);
 pipelinesRouter.get('/runs/:id/steps', view, runs.steps);
 pipelinesRouter.get('/runs/:id/events', view, runs.events);
 pipelinesRouter.get('/artifacts', view, runs.artifacts);
+
+// ─── Definitions (P2) ───────────────────────────────────────────────────────
+
+// A dry-run's record moves when its job does (the queue's completion path).
+watchPipelineRuns();
+
+interface RunDigest { id: string; status: string; startedAt: string | null }
+
+/** Per-definition run facts, SELECTED from the projection per read — never stored. */
+function runFacts(runs: readonly Run[]): Map<string, { runCount: number; lastRun: RunDigest | null }> {
+  const out = new Map<string, { runCount: number; lastRun: RunDigest | null }>();
+  for (const r of runs) {
+    const f = out.get(r.definitionId) ?? { runCount: 0, lastRun: null };
+    f.runCount += 1;
+    if (!f.lastRun || (r.startedAt ?? '') > (f.lastRun.startedAt ?? '')) f.lastRun = { id: r.id, status: r.status, startedAt: r.startedAt };
+    out.set(r.definitionId, f);
+  }
+  return out;
+}
+
+function withFacts(d: Definition, facts: ReturnType<typeof runFacts>, defaultRole: string) {
+  const f = facts.get(d.id) ?? { runCount: 0, lastRun: null };
+  const approvers = effectiveApproverRoles(d, defaultRole);
+  return { ...d, runCount: f.runCount, lastRun: f.lastRun, effectiveApproverRoles: approvers.roles, approversDefaulted: approvers.defaulted };
+}
+
+/** A runbook's rung on the ladder and what its dry-run says about promotion. */
+function runbookState(d: Definition, records: readonly PipelineRunRecord[]) {
+  const mine = records.filter((r) => r.definitionId === d.id).sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+  const lastDryRun = mine[0] ?? null;
+  const completed = mine.find((r) => r.status === 'completed') ?? null;
+  const judged = completed ?? lastDryRun;
+  const candidateId = candidateIdOf(d.id) ?? d.source.id;
+  const gate = decideDryRunGate({ id: candidateId }, judged ? { runId: judged.id, definitionId: judged.definitionId, status: judged.status } : null);
+  return {
+    candidateId,
+    proposedKind: d.meta['proposedKind'] ?? null,
+    candidateStatus: d.meta['candidateStatus'] ?? null,
+    dryRunRunId: d.meta['dryRunRunId'] ?? null,
+    lastDryRun,
+    dryRunCount: mine.length,
+    // What rule 1 says right now about RUNBOOK → SKILL, human approval aside.
+    promotionToSkill: gate.ok ? { ok: true as const, runId: judged!.id } : { ok: false as const, reason: gate.reason },
+  };
+}
+
+pipelinesRouter.get('/definitions', view, asyncHandler(async (req, res) => {
+  const [{ definitions, unavailable }, projection, cfg] = await Promise.all([loadDefinitions(), loadProjection(), getPipelinesConfig()]);
+  const kind = strParam(req.query['kind']);
+  const facts = runFacts(projection.runs);
+  const rows = definitions.filter((d) => !kind || d.kind === kind).map((d) => withFacts(d, facts, cfg.defaultApproverRole));
+  res.json({ definitions: rows, total: rows.length, unavailable, defaultApproverRole: cfg.defaultApproverRole });
+}));
+
+pipelinesRouter.get('/definitions/:id', view, asyncHandler(async (req, res) => {
+  const id = String(req.params['id'] ?? '');
+  const [{ definitions }, projection, cfg] = await Promise.all([loadDefinitions(), loadProjection(), getPipelinesConfig()]);
+  const def = definitions.find((d) => d.id === id);
+  if (!def) throw new NotFoundError('No definition ' + id);
+  const runs = filterRuns(projection.runs, { definitionId: id })
+    .sort((a, b) => (b.startedAt ?? '').localeCompare(a.startedAt ?? ''));
+  const unavailable: Array<{ source: string; error: string }> = [];
+  const records = def.kind === 'runbook' ? await readRecords(unavailable, id) : [];
+  res.json({
+    unavailable,
+    definition: withFacts(def, runFacts(runs), cfg.defaultApproverRole),
+    runs: runs.slice(0, 20),
+    dryRuns: records,
+    ...(def.kind === 'runbook' ? { runbook: runbookState(def, records) } : {}),
+    approverRoleOptions: APPROVER_ROLE_OPTIONS,
+  });
+}));
+
+// Record who approves this definition's steps — an author's version, one up.
+pipelinesRouter.put('/definitions/:id/approvers', requireAction('AuthorDefinition'), asyncHandler(async (req, res) => {
+  const id = String(req.params['id'] ?? '');
+  const roles = validApproverRoles((req.body ?? {})['roles']);
+  if (!roles) throw new ValidationError(`roles must be a list of ${APPROVER_ROLE_OPTIONS.join(' | ')} (empty = the tenant default)`);
+  const def = (await loadDefinitions()).definitions.find((d) => d.id === id);
+  if (!def) throw new NotFoundError('No definition ' + id);
+  const stored = await recordApproverRoles(def, roles, req.session?.sub ?? null);
+  res.json({ definition: { ...def, version: stored.version, approverRoles: stored.approverRoles, recorded: true } });
+}));
+
+// A runbook dry-run: a governed run through the EXISTING queue, behind
+// dispatch-work's brakes (each 409 names its gate and its confirm flag).
+pipelinesRouter.post('/definitions/:id/dry-run', requireAction('RunPipeline'), asyncHandler(async (req, res) => {
+  const body = (req.body ?? {}) as {
+    model?: unknown; budgetPerRunUsd?: unknown;
+    confirmOverRunBudget?: unknown; confirmOverAllocation?: unknown; confirmOverEnvelope?: unknown;
+  };
+  if (body.model !== undefined && typeof body.model !== 'string') throw new ValidationError('model must be a string');
+  let budgetPerRunUsd: number | null = null;
+  if (body.budgetPerRunUsd !== undefined && body.budgetPerRunUsd !== null) {
+    if (typeof body.budgetPerRunUsd !== 'number' || !Number.isFinite(body.budgetPerRunUsd) || body.budgetPerRunUsd < 0) {
+      throw new ValidationError('budgetPerRunUsd must be a non-negative number');
+    }
+    budgetPerRunUsd = body.budgetPerRunUsd;
+  }
+  const out = await startDryRun({
+    definitionId: String(req.params['id'] ?? ''),
+    sub: req.session?.sub,
+    ...(typeof body.model === 'string' ? { model: body.model } : {}),
+    budgetPerRunUsd,
+    confirm: {
+      runBudget: body.confirmOverRunBudget === true,
+      allocation: body.confirmOverAllocation === true,
+      envelope: body.confirmOverEnvelope === true,
+    },
+  });
+  if (!out.ok) { res.status(out.status).json(out.body); return; }
+  res.status(202).json({ run: out.run, jobId: out.jobId, estimate: out.estimate, brakes: out.brakes });
+}));
+
+/** The dry-run records, or none with the reason named — never an unreadable ledger read as "no dry-run". */
+async function readRecords(unavailable: Array<{ source: string; error: string }>, definitionId?: string): Promise<PipelineRunRecord[]> {
+  try {
+    return await listRunRecords(definitionId ? { definitionId } : {});
+  } catch (err) {
+    unavailable.push({ source: 'pipeline_runs', error: (err as Error).message });
+    return [];
+  }
+}
+
+pipelinesRouter.get('/runbooks', view, asyncHandler(async (_req, res) => {
+  const [{ definitions, unavailable }, projection, cfg] = await Promise.all([
+    loadDefinitions(), loadProjection(), getPipelinesConfig(),
+  ]);
+  const records = await readRecords(unavailable);
+  const facts = runFacts(projection.runs);
+  const runbooks = definitions.filter((d) => d.kind === 'runbook')
+    .map((d) => ({ ...withFacts(d, facts, cfg.defaultApproverRole), runbook: runbookState(d, records) }));
+  res.json({ runbooks, total: runbooks.length, unavailable });
+}));
+
+// ─── Approvals (P2) ─────────────────────────────────────────────────────────
+
+pipelinesRouter.get('/approvals', view, asyncHandler(async (_req, res) => {
+  const { approvals, unavailable } = await listApprovals();
+  res.json({ approvals, total: approvals.length, unavailable });
+}));
+
+pipelinesRouter.post('/approvals/:id/decide', requireAction('ApproveStep'), asyncHandler(async (req, res) => {
+  const body = (req.body ?? {}) as { decision?: unknown; note?: unknown };
+  if (body.decision !== 'approve' && body.decision !== 'reject') throw new ValidationError("decision must be 'approve' or 'reject'");
+  if (body.note !== undefined && body.note !== null && typeof body.note !== 'string') throw new ValidationError('note must be a string');
+  const out = await decideApproval(String(req.params['id'] ?? ''), body.decision, {
+    role: req.session?.role, sub: req.session?.sub, note: typeof body.note === 'string' ? body.note : null,
+  });
+  if (!out.ok) { res.status(out.status).json({ error: out.error }); return; }
+  res.json({ id: out.approval.id, decision: out.decision, outcome: out.outcome, decidedThrough: out.approval.decidedThrough });
+}));
+
+// ─── Cancel (P2) ─────────────────────────────────────────────────────────────
+
+pipelinesRouter.post('/runs/:id/cancel', requireAction('CancelRun'), asyncHandler(async (req, res) => {
+  const out = await cancelRun(String(req.params['id'] ?? ''));
+  if (!out.ok) { res.status(out.status).json({ error: out.error }); return; }
+  res.json({ id: req.params['id'], status: out.status });
+}));
+
+// ─── Configuration (P2) ─────────────────────────────────────────────────────
+
+pipelinesRouter.get('/configuration', view, asyncHandler(async (_req, res) => {
+  const cfg = await getPipelinesConfig();
+  res.json({ ...cfg, approverRoleOptions: APPROVER_ROLE_OPTIONS });
+}));
+
+pipelinesRouter.put('/configuration', requireAction('ManagePipelineConfig'), asyncHandler(async (req, res) => {
+  const role = (req.body ?? {})['defaultApproverRole'];
+  if (typeof role !== 'string' || !(APPROVER_ROLE_OPTIONS as readonly string[]).includes(role)) {
+    throw new ValidationError(`defaultApproverRole must be one of ${APPROVER_ROLE_OPTIONS.join(', ')}`);
+  }
+  const cfg = await setDefaultApproverRole(role, req.session?.sub ?? null);
+  res.json({ ...cfg, approverRoleOptions: APPROVER_ROLE_OPTIONS });
+}));

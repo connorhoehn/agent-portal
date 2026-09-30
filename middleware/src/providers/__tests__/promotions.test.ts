@@ -7,6 +7,7 @@ import {
   listCandidates, getCandidate, promoteCandidate, dismissCandidate,
   type Observation,
 } from '../promotions.js';
+import { pipelineRunRecords } from '../../mock/pipeline-definitions.js';
 
 function ob(over: Partial<Observation> & Pick<Observation, 'id' | 'sessionId'>): Observation {
   return {
@@ -95,43 +96,43 @@ describe('classifyPattern — runbook needs a trigger AND an outcome', () => {
 
 describe('decidePromotion — the human + dry-run gate', () => {
   it('refuses an already-promoted candidate', () => {
-    const r = decidePromotion({ status: 'promoted', proposedKind: 'insight' }, { approvedBy: 'Nora', dryRunPassed: null });
+    const r = decidePromotion({ id: 'pc', status: 'promoted', proposedKind: 'insight' }, { approvedBy: 'Nora', dryRun: null });
     expect(r.ok).toBe(false);
   });
 
   it('refuses a dismissed candidate', () => {
-    const r = decidePromotion({ status: 'dismissed', proposedKind: 'runbook' }, { approvedBy: 'Nora', dryRunPassed: null });
+    const r = decidePromotion({ id: 'pc', status: 'dismissed', proposedKind: 'runbook' }, { approvedBy: 'Nora', dryRun: null });
     expect(r.ok).toBe(false);
   });
 
   it('refuses without approval, regardless of kind', () => {
-    const r = decidePromotion({ status: 'candidate', proposedKind: 'insight' }, { approvedBy: null, dryRunPassed: null });
+    const r = decidePromotion({ id: 'pc', status: 'candidate', proposedKind: 'insight' }, { approvedBy: null, dryRun: null });
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.reason).toMatch(/human approval/);
   });
 
   it('passes an insight with approval alone', () => {
-    expect(decidePromotion({ status: 'candidate', proposedKind: 'insight' }, { approvedBy: 'Nora', dryRunPassed: null }).ok).toBe(true);
+    expect(decidePromotion({ id: 'pc', status: 'candidate', proposedKind: 'insight' }, { approvedBy: 'Nora', dryRun: null }).ok).toBe(true);
   });
 
   it('passes a runbook with approval alone — the dry-run gate is skill-only', () => {
-    expect(decidePromotion({ status: 'candidate', proposedKind: 'runbook' }, { approvedBy: 'Nora', dryRunPassed: null }).ok).toBe(true);
+    expect(decidePromotion({ id: 'pc', status: 'candidate', proposedKind: 'runbook' }, { approvedBy: 'Nora', dryRun: null }).ok).toBe(true);
   });
 
   it('refuses a skill approved but with no dry run yet', () => {
-    const r = decidePromotion({ status: 'approved', proposedKind: 'skill' }, { approvedBy: 'Nora', dryRunPassed: null });
+    const r = decidePromotion({ id: 'pc', status: 'approved', proposedKind: 'skill' }, { approvedBy: 'Nora', dryRun: null });
     expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.reason).toMatch(/dry run/);
+    if (!r.ok) expect(r.reason).toMatch(/completed dry-run of runbook:pc/);
   });
 
   it('refuses a skill whose dry run failed, with a distinct reason', () => {
-    const r = decidePromotion({ status: 'approved', proposedKind: 'skill' }, { approvedBy: 'Nora', dryRunPassed: false });
+    const r = decidePromotion({ id: 'pc', status: 'approved', proposedKind: 'skill' }, { approvedBy: 'Nora', dryRun: { runId: 'job:1', definitionId: 'runbook:pc', status: 'failed' } });
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.reason).toMatch(/failed/);
   });
 
   it('passes a skill with both approval and a passing dry run', () => {
-    expect(decidePromotion({ status: 'approved', proposedKind: 'skill' }, { approvedBy: 'Nora', dryRunPassed: true }).ok).toBe(true);
+    expect(decidePromotion({ id: 'pc', status: 'approved', proposedKind: 'skill' }, { approvedBy: 'Nora', dryRun: { runId: 'job:1', definitionId: 'runbook:pc', status: 'completed' } }).ok).toBe(true);
   });
 });
 
@@ -155,15 +156,23 @@ describe('the mock inbox end-to-end', () => {
     expect(before?.status).toBe('candidate');
 
     const refused = await promoteCandidate('promo-aurora-cold-start', { approvedBy: 'Priya Nair' });
-    expect(refused && 'error' in refused && refused.error).toMatch(/dry run/);
+    expect(refused && 'error' in refused && refused.error).toMatch(/dry-run/);
 
     const after = await getCandidate('promo-aurora-cold-start');
     expect(after?.status).toBe('approved');
   });
 
-  it('a passing dry run then promotes the same candidate', async () => {
-    const result = await promoteCandidate('promo-aurora-cold-start', { approvedBy: 'Priya Nair', dryRunPassed: true });
+  it('a completed dry-run of its own runbook then promotes the same candidate, citing the run', async () => {
+    pipelineRunRecords.rows().push({
+      id: 'job:dry-1', definitionId: 'runbook:promo-aurora-cold-start', contextTenant: 'orgiq', runKind: 'runbook:dry-run',
+      status: 'completed', jobId: null, triggeredBy: 'u-ines', model: null, estimateUsd: null, costUsd: null,
+      error: null, startedAt: '2026-09-30T10:00:00.000Z', finishedAt: '2026-09-30T10:01:00.000Z',
+    });
+    const result = await promoteCandidate('promo-aurora-cold-start', { approvedBy: 'Priya Nair' });
     expect(result && 'candidate' in result && result.candidate?.status).toBe('promoted');
+    expect(result && 'candidate' in result && result.candidate?.dryRunRunId).toBe('job:dry-1');
+    expect(result && 'candidate' in result && result.candidate?.dryRunPassed).toBe(true);
+    pipelineRunRecords.reset();
   });
 
   it('refuses to promote an already-promoted candidate', async () => {

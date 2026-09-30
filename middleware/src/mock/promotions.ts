@@ -74,7 +74,7 @@ function seedCandidates(): SeededCandidate[] {
     proposedKind: 'skill',
     title: 'Retry the Data API through an Aurora cold start',
     rationale: 'Three independent sessions hit the same HttpEndpointNotEnabledException on the first call after a scale-to-zero cluster wakes, and the same warm-up-then-backoff fix cleared it every time — a clean, repeatable procedure worth running unattended rather than re-discovering per session.',
-    dryRunPassed: null,
+    dryRunRunId: null,
     status: 'candidate',
     observations: [
       obs({
@@ -106,7 +106,11 @@ function seedCandidates(): SeededCandidate[] {
     proposedKind: 'skill',
     title: 'Pin Fargate tasks to ARM64 or eat exec format error',
     rationale: 'Three sessions across two people independently hit the identical crash-loop, root-caused it to the same default, and shipped the same one-line fix — approved and dry-run verified, now a standing skill the fleet applies without rediscovering it.',
-    dryRunPassed: true,
+    // Promoted before a dry-run was a recorded run (rule 1, pipelines P2):
+    // the verdict predates `pipeline_runs`, so there is no run id to cite and
+    // none is invented. Its "dry-run verified" is the reviewer's word, kept in
+    // the rationale where it was written.
+    dryRunRunId: null,
     status: 'promoted',
     observations: [
       obs({
@@ -134,7 +138,7 @@ function seedCandidates(): SeededCandidate[] {
     proposedKind: 'insight',
     title: 'Agent images need ADOT, not vanilla opentelemetry-distro',
     rationale: 'A pure fact about how AgentCore Runtime wires OTEL — no procedure to run, nothing to retry, just something every agent image must be built with. That makes it an insight to inject into the build-review checklist, not a runbook to execute.',
-    dryRunPassed: null,
+    dryRunRunId: null,
     status: 'candidate',
     observations: [
       obs({
@@ -170,7 +174,9 @@ function seedCandidates(): SeededCandidate[] {
     proposedKind: 'runbook',
     title: 'Custodian revokes open security-group ingress within seconds — request an allow-list instead',
     rationale: 'Was promoted to a skill after two clean sessions of the same fix (openListener: false, allow-list the caller CIDR). A third session hit the fix applied exactly as before and it STILL got revoked — custodian had started closing a second rule the skill did not cover. Drift detection caught the mismatch between the skill\'s recorded steps and observed behavior and sent it back down to runbook for a person to update before it runs unattended again.',
-    dryRunPassed: false,
+    // The failed dry-run the rationale describes ran before dry-runs were
+    // recorded as runs; the next one is a `pipeline_runs` row.
+    dryRunRunId: null,
     status: 'candidate',
     driftedFrom: 'skl-custodian-sg-allowlist',
     observations: [

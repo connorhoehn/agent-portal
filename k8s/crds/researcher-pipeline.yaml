@@ -23,7 +23,7 @@ spec:
       - id: approval
         type: approval
         config:
-          requiredRoles: [role:editor]
+          requiredRoles: [role:org-leader]  # org-leader, not editor: no tenant here has an `editor` role (docs/researcher-pipeline-crd.md)
           timeoutMs: 86400000  # 24 hours
       - id: publish
         type: webhook
@@ -43,7 +43,7 @@ spec:
         path: /api/orgiq/researcher/trigger
   approvalPolicy:
     enabled: true
-    requiredRoles: [role:editor]
+    requiredRoles: [role:org-leader]
     timeoutMs: 86400000
   audit:
     destination: ddb

@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-09-30T04:21:46.014Z",
-  "serverHandlerSha": "6d574d41144b95f42672974df2b6e0c78ea2a553f1eeb2dc24a91e5b30b4ec59",
+  "capturedAt": "2026-09-30T05:15:06.660Z",
+  "serverHandlerSha": "72689e4b8c46b2fed6392939ab168c03ccf7cf1a0f9da568bcec445b66449096",
   "baseUrl": "http://127.0.0.1:3012",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
@@ -2538,12 +2538,32 @@
         "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: DELETEs and UPDATEs through the RDS Data API with no mock branch."
       }
     },
+    "POST /api/pipelines/approvals/:id/decide": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
+    },
+    "POST /api/pipelines/definitions/:id/dry-run": {
+      "refused": {
+        "rule": "fires",
+        "reason": "Arms or fires something that outlives the capture — a cron registration, an agent job enqueued for the fleet dispatcher, a background sweep. The seeded bots are parked deliberately so the scheduler cannot fire against repos that do not exist yet. Here: enqueues a `runbook:dry-run` agent job the running fleet dispatcher claims for an idle box and plays through, outliving the capture."
+      }
+    },
+    "POST /api/pipelines/runs/:id/cancel": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
+    },
     "POST /api/promotions/:id/dismiss": {
       "persona": "orgiq/admin",
       "status": 200,
       "shape": {
         "$": "object",
+        "dryRun": "null",
         "dryRunPassed": "null",
+        "dryRunRunId": "null",
         "id": "string",
         "observations": "array",
         "observations[]": "object",
@@ -2578,41 +2598,13 @@
     },
     "POST /api/promotions/:id/promote": {
       "persona": "orgiq/admin",
-      "status": 200,
+      "status": 409,
       "shape": {
         "$": "object",
-        "dryRunPassed": "boolean",
-        "id": "string",
-        "observations": "array",
-        "observations[]": "object",
-        "observations[].body": "string",
-        "observations[].createdAt": "string",
-        "observations[].id": "string",
-        "observations[].initiativeId": "null",
-        "observations[].kind": "string",
-        "observations[].repo": "string",
-        "observations[].sessionId": "string",
-        "observations[].title": "string",
-        "proposedKind": "string",
-        "rationale": "string",
-        "sessionCount": "number",
-        "status": "string",
-        "supportCount": "number",
-        "title": "string"
+        "error": "string"
       },
-      "values": {
-        "observations[].kind": [
-          "decision",
-          "failed",
-          "worked"
-        ],
-        "status": [
-          "promoted"
-        ]
-      },
-      "sent": [
-        "dryRunPassed"
-      ]
+      "values": {},
+      "sent": []
     },
     "POST /api/rediscovery/check": {
       "persona": "orgiq/admin",
@@ -3192,6 +3184,18 @@
       "refused": {
         "rule": "spends",
         "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: writes the judge config to SSM, changing live judging for the whole fleet."
+      }
+    },
+    "PUT /api/pipelines/configuration": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
+    },
+    "PUT /api/pipelines/definitions/:id/approvers": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
       }
     }
   }

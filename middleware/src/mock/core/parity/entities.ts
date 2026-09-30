@@ -882,6 +882,36 @@ export const PARITY_ENTITIES: Array<ParityEntity<any>> = [
       { seed: 'status', mock: (t: { status: string }) => t.status },
     ],
   },
+  // The pipelines tenant's definition registry (lane P2). schema/pipeline_schema.sql
+  // seeds the nine assessment commands at version 1; the mock side is the
+  // DERIVED registry (lib/pipeline-definitions.ts over AGENT_COMMANDS merged
+  // with the `pipelines.definitions` fixture), so a command added to the
+  // worker's list and not to the seed — or seeded under the wrong agent —
+  // fails here. Only the registry's commands are compared: its bots,
+  // runbooks and agents are derived from their own tables.
+  {
+    name: 'pipeline_definitions',
+    describes: 'Definitions the pipelines tenant catalogs — the seeded assessment commands, each owned by the agent that runs it, against the derived registry.',
+    lesson: 'pipelines P2: a catalog derived from the worker\'s command list and a seed typed beside it drift the day one command is added.',
+    sqlFile: 'pipeline_schema.sql',
+    seedId: 'id',
+    coverage: 'subset',
+    mockRows: async () => {
+      const { loadDefinitions } = await import('../../../providers/pipeline-definitions.js');
+      // The registry's commands only: its bots, runbooks and agents are
+      // derived from tables the seed does not write here (their own entities).
+      return (await loadDefinitions()).definitions.filter((d) => d.kind === 'assessment-command');
+    },
+    mockId: (d: { id: string }) => d.id,
+    fields: [
+      { seed: 'kind', mock: (d: { kind: string }) => d.kind },
+      { seed: 'title', mock: (d: { title: string }) => d.title },
+      { seed: 'context_tenant', mock: (d: { contextTenant: string }) => d.contextTenant },
+      { seed: 'owner', mock: (d: { owner: string | null }) => d.owner },
+      { seed: 'version', mock: (d: { version: number }) => d.version, normalize: num },
+      { seed: 'source_id', mock: (d: { source: { id: string } }) => d.source.id },
+    ],
+  },
 
   // ── identity & tenancy (schema/identity_schema.sql) ────────────────────────
   {

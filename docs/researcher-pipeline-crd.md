@@ -21,6 +21,18 @@ User submits a query → agent searches → agent summarizes → optional human 
 
 Edges: `search → summarize → approval →(approved) publish`
 
+**Approver role — `role:org-leader` in both places (fixed 2026-09-30, pipelines lane P2).**
+The manifest's approval step and its `approvalPolicy` said `requiredRoles: [role:editor]`
+while this page said `role:org-leader`. `editor` is not a role in any tenant here
+(`middleware/src/lib/session.ts` `ROLES_BY_TENANT`), so a gate naming it could never be
+satisfied by anyone this app mints a session for; `org-leader` is the orgiq role that
+already approves spend and publishes org-facing decisions, which is what this gate
+guards. The yaml now says `role:org-leader` at both sites, matching this page. When the
+manifest is imported as a pipelines definition (phase 3, through the `PipelineBridge`),
+an approval step that names no role defaults to the pipelines tenant's `operator`
+(`docs/social-tenant-design.md` §8, `lib/pipeline-definitions.ts` `DEFAULT_APPROVER_ROLE`);
+this one names its role, so that default does not apply.
+
 ---
 
 ## Prerequisites

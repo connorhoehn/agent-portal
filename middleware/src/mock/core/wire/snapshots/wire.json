@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-09-30T04:21:45.215Z",
-  "serverHandlerSha": "6d574d41144b95f42672974df2b6e0c78ea2a553f1eeb2dc24a91e5b30b4ec59",
+  "capturedAt": "2026-09-30T05:15:05.732Z",
+  "serverHandlerSha": "72689e4b8c46b2fed6392939ab168c03ccf7cf1a0f9da568bcec445b66449096",
   "baseUrl": "http://127.0.0.1:3012",
   "personas": [
     "orgiq/admin",
@@ -6055,6 +6055,38 @@
       },
       "values": {}
     },
+    "GET /api/pipelines/approvals": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "approvals": "array",
+        "approvals[]": "object",
+        "approvals[].contextTenant": "string",
+        "approvals[].decidedThrough": "string",
+        "approvals[].definitionId": "null",
+        "approvals[].detail": "string",
+        "approvals[].id": "string",
+        "approvals[].question": "string",
+        "approvals[].requestedAt": "string",
+        "approvals[].requiredRoles": "array",
+        "approvals[].requiredRoles[]": "string",
+        "approvals[].rolesDefaulted": "boolean",
+        "approvals[].runId": "null",
+        "approvals[].source": "string",
+        "approvals[].sourceId": "string",
+        "approvals[].stepId": "string",
+        "approvals[].title": "string",
+        "approvals[].type": "string",
+        "total": "number",
+        "unavailable": "array"
+      },
+      "values": {
+        "approvals[].type": [
+          "pipeline.approval.requested"
+        ]
+      }
+    },
     "GET /api/pipelines/artifacts": {
       "persona": "orgiq/admin",
       "status": 200,
@@ -6104,6 +6136,251 @@
         "artifacts[].meta.status": [
           "changes_requested",
           "needs_approval"
+        ]
+      }
+    },
+    "GET /api/pipelines/configuration": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "approverRoleOptions": "array",
+        "approverRoleOptions[]": "string",
+        "defaultApproverRole": "string",
+        "updatedBy": "null"
+      },
+      "values": {}
+    },
+    "GET /api/pipelines/definitions": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "defaultApproverRole": "string",
+        "definitions": "array",
+        "definitions[]": "object",
+        "definitions[].approverRoles": "array",
+        "definitions[].approversDefaulted": "boolean",
+        "definitions[].contextTenant": "string",
+        "definitions[].description": "null|string",
+        "definitions[].effectiveApproverRoles": "array",
+        "definitions[].effectiveApproverRoles[]": "string",
+        "definitions[].enabled": "boolean",
+        "definitions[].id": "string",
+        "definitions[].kind": "string",
+        "definitions[].lastRun": "null|object",
+        "definitions[].lastRun.id": "string",
+        "definitions[].lastRun.startedAt": "string",
+        "definitions[].lastRun.status": "string",
+        "definitions[].meta": "object",
+        "definitions[].meta.allowedTools": "array",
+        "definitions[].meta.allowedTools[]": "string",
+        "definitions[].meta.budgetPerRunUsd": "number",
+        "definitions[].meta.candidateId": "string",
+        "definitions[].meta.candidateStatus": "string",
+        "definitions[].meta.cronExpr": "string",
+        "definitions[].meta.driftedFrom": "null|string",
+        "definitions[].meta.dryRunRunId": "null",
+        "definitions[].meta.initiativeId": "null|string",
+        "definitions[].meta.initiativeName": "string",
+        "definitions[].meta.model": "string",
+        "definitions[].meta.observationCount": "number",
+        "definitions[].meta.pausedReason": "string",
+        "definitions[].meta.promptDoc": "string",
+        "definitions[].meta.proposedKind": "string",
+        "definitions[].meta.protocol": "string",
+        "definitions[].meta.repo": "null",
+        "definitions[].meta.requiresReview": "boolean",
+        "definitions[].meta.status": "string",
+        "definitions[].meta.tools": "array",
+        "definitions[].meta.tools[]": "string",
+        "definitions[].meta.trigger": "string",
+        "definitions[].meta.updatedAt": "null",
+        "definitions[].meta.updatedBy": "null",
+        "definitions[].orphaned": "boolean",
+        "definitions[].owner": "null|string",
+        "definitions[].recorded": "boolean",
+        "definitions[].runCount": "number",
+        "definitions[].source": "object",
+        "definitions[].source.id": "string",
+        "definitions[].source.table": "string",
+        "definitions[].steps": "array",
+        "definitions[].steps[]": "object",
+        "definitions[].steps[].detail": "string",
+        "definitions[].steps[].id": "string",
+        "definitions[].steps[].label": "string",
+        "definitions[].tenant": "string",
+        "definitions[].title": "string",
+        "definitions[].triggers": "array",
+        "definitions[].triggers[]": "object",
+        "definitions[].triggers[].detail": "string",
+        "definitions[].triggers[].type": "string",
+        "definitions[].version": "number",
+        "total": "number",
+        "unavailable": "array"
+      },
+      "values": {
+        "definitions[].kind": [
+          "agent",
+          "assessment-command",
+          "bot",
+          "runbook"
+        ],
+        "definitions[].lastRun.status": [
+          "completed",
+          "failed",
+          "running"
+        ],
+        "definitions[].meta.status": [
+          "degraded",
+          "healthy"
+        ],
+        "definitions[].tenant": [
+          "pipelines"
+        ],
+        "definitions[].triggers[].type": [
+          "manual",
+          "schedule"
+        ]
+      }
+    },
+    "GET /api/pipelines/definitions/:id": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "approverRoleOptions": "array",
+        "approverRoleOptions[]": "string",
+        "definition": "object",
+        "definition.approverRoles": "array",
+        "definition.approversDefaulted": "boolean",
+        "definition.contextTenant": "string",
+        "definition.description": "string",
+        "definition.effectiveApproverRoles": "array",
+        "definition.effectiveApproverRoles[]": "string",
+        "definition.enabled": "boolean",
+        "definition.id": "string",
+        "definition.kind": "string",
+        "definition.lastRun": "null",
+        "definition.meta": "object",
+        "definition.meta.candidateId": "string",
+        "definition.meta.candidateStatus": "string",
+        "definition.meta.driftedFrom": "string",
+        "definition.meta.dryRunRunId": "null",
+        "definition.meta.initiativeId": "string",
+        "definition.meta.observationCount": "number",
+        "definition.meta.proposedKind": "string",
+        "definition.orphaned": "boolean",
+        "definition.owner": "null",
+        "definition.recorded": "boolean",
+        "definition.runCount": "number",
+        "definition.source": "object",
+        "definition.source.id": "string",
+        "definition.source.table": "string",
+        "definition.steps": "array",
+        "definition.steps[]": "object",
+        "definition.steps[].detail": "string",
+        "definition.steps[].id": "string",
+        "definition.steps[].label": "string",
+        "definition.tenant": "string",
+        "definition.title": "string",
+        "definition.triggers": "array",
+        "definition.triggers[]": "object",
+        "definition.triggers[].detail": "string",
+        "definition.triggers[].type": "string",
+        "definition.version": "number",
+        "dryRuns": "array",
+        "runbook": "object",
+        "runbook.candidateId": "string",
+        "runbook.candidateStatus": "string",
+        "runbook.dryRunCount": "number",
+        "runbook.dryRunRunId": "null",
+        "runbook.lastDryRun": "null",
+        "runbook.promotionToSkill": "object",
+        "runbook.promotionToSkill.ok": "boolean",
+        "runbook.promotionToSkill.reason": "string",
+        "runbook.proposedKind": "string",
+        "runs": "array",
+        "unavailable": "array"
+      },
+      "values": {
+        "definition.kind": [
+          "runbook"
+        ],
+        "definition.tenant": [
+          "pipelines"
+        ],
+        "definition.triggers[].type": [
+          "manual"
+        ]
+      }
+    },
+    "GET /api/pipelines/runbooks": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "runbooks": "array",
+        "runbooks[]": "object",
+        "runbooks[].approverRoles": "array",
+        "runbooks[].approversDefaulted": "boolean",
+        "runbooks[].contextTenant": "string",
+        "runbooks[].description": "string",
+        "runbooks[].effectiveApproverRoles": "array",
+        "runbooks[].effectiveApproverRoles[]": "string",
+        "runbooks[].enabled": "boolean",
+        "runbooks[].id": "string",
+        "runbooks[].kind": "string",
+        "runbooks[].lastRun": "null",
+        "runbooks[].meta": "object",
+        "runbooks[].meta.candidateId": "string",
+        "runbooks[].meta.candidateStatus": "string",
+        "runbooks[].meta.driftedFrom": "null|string",
+        "runbooks[].meta.dryRunRunId": "null",
+        "runbooks[].meta.initiativeId": "null|string",
+        "runbooks[].meta.observationCount": "number",
+        "runbooks[].meta.proposedKind": "string",
+        "runbooks[].orphaned": "boolean",
+        "runbooks[].owner": "null",
+        "runbooks[].recorded": "boolean",
+        "runbooks[].runCount": "number",
+        "runbooks[].runbook": "object",
+        "runbooks[].runbook.candidateId": "string",
+        "runbooks[].runbook.candidateStatus": "string",
+        "runbooks[].runbook.dryRunCount": "number",
+        "runbooks[].runbook.dryRunRunId": "null",
+        "runbooks[].runbook.lastDryRun": "null",
+        "runbooks[].runbook.promotionToSkill": "object",
+        "runbooks[].runbook.promotionToSkill.ok": "boolean",
+        "runbooks[].runbook.promotionToSkill.reason": "string",
+        "runbooks[].runbook.proposedKind": "string",
+        "runbooks[].source": "object",
+        "runbooks[].source.id": "string",
+        "runbooks[].source.table": "string",
+        "runbooks[].steps": "array",
+        "runbooks[].steps[]": "object",
+        "runbooks[].steps[].detail": "string",
+        "runbooks[].steps[].id": "string",
+        "runbooks[].steps[].label": "string",
+        "runbooks[].tenant": "string",
+        "runbooks[].title": "string",
+        "runbooks[].triggers": "array",
+        "runbooks[].triggers[]": "object",
+        "runbooks[].triggers[].detail": "string",
+        "runbooks[].triggers[].type": "string",
+        "runbooks[].version": "number",
+        "total": "number",
+        "unavailable": "array"
+      },
+      "values": {
+        "runbooks[].kind": [
+          "runbook"
+        ],
+        "runbooks[].tenant": [
+          "pipelines"
+        ],
+        "runbooks[].triggers[].type": [
+          "manual"
         ]
       }
     },
@@ -6327,7 +6604,9 @@
         "candidates": "array",
         "candidates[]": "object",
         "candidates[].driftedFrom": "string",
-        "candidates[].dryRunPassed": "boolean|null",
+        "candidates[].dryRun": "null",
+        "candidates[].dryRunPassed": "null",
+        "candidates[].dryRunRunId": "null",
         "candidates[].id": "string",
         "candidates[].observations": "array",
         "candidates[].observations[]": "object|object(dictionary)",
@@ -6363,7 +6642,9 @@
       "status": 200,
       "shape": {
         "$": "object",
+        "dryRun": "null",
         "dryRunPassed": "null",
+        "dryRunRunId": "null",
         "id": "string",
         "observations": "array",
         "observations[]": "object",
@@ -8009,6 +8290,7 @@
         "require_review",
         "retrieval",
         "retrieve",
+        "runbook",
         "skill",
         "synced",
         "system",
@@ -8226,11 +8508,14 @@
         "insight",
         "knowledge",
         "longtext",
+        "manual",
         "mentors",
         "person",
+        "pipeline.approval.requested",
         "procedure",
         "reports_to",
         "runbook",
+        "schedule",
         "sql",
         "story",
         "text",

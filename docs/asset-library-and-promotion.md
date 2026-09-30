@@ -133,6 +133,16 @@ PATTERN                a recurring shape
                   └──────▶ back to RUNBOOK
 ```
 
+**The dry-run is a run (pipelines lane P2, 2026-09-30).** "Dry-run passes" is no
+longer a boolean a reviewer asserts. Each RUNBOOK-rung candidate is a pipelines
+definition `runbook:<candidate>` (`middleware/src/lib/pipeline-definitions.ts`);
+`POST /api/pipelines/definitions/:id/dry-run` enqueues a `runbook:dry-run` job on
+the existing queue behind dispatch-work's money brakes and records a
+`pipeline_runs` row that the job's completion marks `completed`; and
+`providers/promotions.ts` refuses RUNBOOK → SKILL unless the verdict cites a
+completed run of that candidate's own definition (`dryRunRunId`). Judge:
+`middleware/src/lib/__tests__/promotion-requires-run.test.ts`.
+
 The bottom rung already exists and works: agents write typed observations
 (`worked | failed | gotcha | decision | convention`) through the `lab` CLI into
 `lab_experiences`, and every devbox session injects them at `SessionStart` via

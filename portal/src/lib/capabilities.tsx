@@ -52,7 +52,14 @@ export type Action =
   | 'ManageChannels'
   | 'ManageTeams'
   | 'ManageRecordings'
-  | 'ManageSocialConfig';
+  | 'ManageSocialConfig'
+  // Pipelines tenant (docs/pipelines-tenant-goal.md §Cedar) — in CAPABILITY_ACTIONS server-side
+  | 'ViewPipelines'
+  | 'AuthorDefinition'
+  | 'RunPipeline'
+  | 'ApproveStep'
+  | 'CancelRun'
+  | 'ManagePipelineConfig';
 
 interface CapabilitiesPayload {
   role: string;

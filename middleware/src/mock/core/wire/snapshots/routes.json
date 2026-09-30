@@ -2292,33 +2292,83 @@
     },
     {
       "method": "GET",
+      "path": "/api/pipelines/approvals",
+      "source": "src/routes/pipelines.ts:315"
+    },
+    {
+      "method": "POST",
+      "path": "/api/pipelines/approvals/:id/decide",
+      "source": "src/routes/pipelines.ts:320"
+    },
+    {
+      "method": "GET",
       "path": "/api/pipelines/artifacts",
-      "source": "src/routes/pipelines.ts:158"
+      "source": "src/routes/pipelines.ts:177"
+    },
+    {
+      "method": "GET",
+      "path": "/api/pipelines/configuration",
+      "source": "src/routes/pipelines.ts:341"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/pipelines/configuration",
+      "source": "src/routes/pipelines.ts:346"
+    },
+    {
+      "method": "GET",
+      "path": "/api/pipelines/definitions",
+      "source": "src/routes/pipelines.ts:224"
+    },
+    {
+      "method": "GET",
+      "path": "/api/pipelines/definitions/:id",
+      "source": "src/routes/pipelines.ts:232"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/pipelines/definitions/:id/approvers",
+      "source": "src/routes/pipelines.ts:252"
+    },
+    {
+      "method": "POST",
+      "path": "/api/pipelines/definitions/:id/dry-run",
+      "source": "src/routes/pipelines.ts:264"
+    },
+    {
+      "method": "GET",
+      "path": "/api/pipelines/runbooks",
+      "source": "src/routes/pipelines.ts:302"
     },
     {
       "method": "GET",
       "path": "/api/pipelines/runs",
-      "source": "src/routes/pipelines.ts:154"
+      "source": "src/routes/pipelines.ts:173"
     },
     {
       "method": "GET",
       "path": "/api/pipelines/runs/:id",
-      "source": "src/routes/pipelines.ts:155"
+      "source": "src/routes/pipelines.ts:174"
+    },
+    {
+      "method": "POST",
+      "path": "/api/pipelines/runs/:id/cancel",
+      "source": "src/routes/pipelines.ts:333"
     },
     {
       "method": "GET",
       "path": "/api/pipelines/runs/:id/events",
-      "source": "src/routes/pipelines.ts:157"
+      "source": "src/routes/pipelines.ts:176"
     },
     {
       "method": "GET",
       "path": "/api/pipelines/runs/:id/steps",
-      "source": "src/routes/pipelines.ts:156"
+      "source": "src/routes/pipelines.ts:175"
     },
     {
       "method": "GET",
       "path": "/api/pipelines/summary",
-      "source": "src/routes/pipelines.ts:32"
+      "source": "src/routes/pipelines.ts:51"
     },
     {
       "method": "GET",
@@ -2333,12 +2383,12 @@
     {
       "method": "POST",
       "path": "/api/promotions/:id/dismiss",
-      "source": "src/routes/promotions.ts:56"
+      "source": "src/routes/promotions.ts:59"
     },
     {
       "method": "POST",
       "path": "/api/promotions/:id/promote",
-      "source": "src/routes/promotions.ts:37"
+      "source": "src/routes/promotions.ts:40"
     },
     {
       "method": "POST",

@@ -37,11 +37,21 @@ const SocialLayout = lazy(() => import('./pages/social/SocialLayout'));
 const SocialSurfacePage = lazy(() => import('./pages/social/SocialSurfacePage'));
 const SocialChannelsPage = lazy(() => import('./pages/social/ChannelsPage'));
 const SocialDmsPage = lazy(() => import('./pages/social/DmsPage'));
+const SocialCallsPage = lazy(() => import('./pages/social/CallsPage'));
+const SocialRoomsPage = lazy(() => import('./pages/social/RoomsPage'));
+const SocialContactsPage = lazy(() => import('./pages/social/ContactsPage'));
+const SocialTeamsPage = lazy(() => import('./pages/social/TeamsPage'));
+const SocialRecordingsPage = lazy(() => import('./pages/social/RecordingsPage'));
+const SocialConfigurationPage = lazy(() => import('./pages/social/ConfigurationPage'));
 const PipelinesLayout = lazy(() => import('./pages/pipelines/PipelinesLayout'));
 const PipelinesSurfacePage = lazy(() => import('./pages/pipelines/PipelinesSurfacePage'));
 const PipelinesRunsPage = lazy(() => import('./pages/pipelines/RunsPage'));
 const PipelinesRunDetailPage = lazy(() => import('./pages/pipelines/RunDetailPage'));
 const PipelinesArtifactsPage = lazy(() => import('./pages/pipelines/ArtifactsPage'));
+const PipelinesDefinitionsPage = lazy(() => import('./pages/pipelines/DefinitionsPage'));
+const PipelinesRunbooksPage = lazy(() => import('./pages/pipelines/RunbooksPage'));
+const PipelinesApprovalsPage = lazy(() => import('./pages/pipelines/ApprovalsPage'));
+const PipelinesSourcesPage = lazy(() => import('./pages/pipelines/SourcesPage'));
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
 const KnowledgeHomePage = lazy(() => import('./pages/knowledge/KnowledgeHomePage'));
 const KnowledgeLayout = lazy(() => import('./pages/knowledge/KnowledgeLayout'));
@@ -267,13 +277,13 @@ export function App() {
             <Route path="channels/:slug" element={<Page element={<SocialChannelsPage />} />} />
             <Route path="dms" element={<Page element={<SocialDmsPage />} />} />
             <Route path="dms/:lobby" element={<Page element={<SocialDmsPage />} />} />
-            <Route path="calls" element={<Page element={<SocialSurfacePage surface="calls" />} />} />
-            <Route path="rooms" element={<Page element={<SocialSurfacePage surface="rooms" />} />} />
-            <Route path="contacts" element={<Page element={<SocialSurfacePage surface="contacts" />} />} />
-            <Route path="teams" element={<Page element={<SocialSurfacePage surface="teams" />} />} />
+            <Route path="calls" element={<Page element={<SocialCallsPage />} />} />
+            <Route path="rooms" element={<Page element={<SocialRoomsPage />} />} />
+            <Route path="contacts" element={<Page element={<SocialContactsPage />} />} />
+            <Route path="teams" element={<Page element={<SocialTeamsPage />} />} />
             <Route path="profile" element={<Page element={<SocialSurfacePage surface="profile" />} />} />
-            <Route path="recordings" element={<Page element={<SocialSurfacePage surface="recordings" />} />} />
-            <Route path="configuration" element={<Page element={<SocialSurfacePage surface="configuration" />} />} />
+            <Route path="recordings" element={<Page element={<SocialRecordingsPage />} />} />
+            <Route path="configuration" element={<Page element={<SocialConfigurationPage />} />} />
             <Route path="settings" element={<Page element={<SocialSurfacePage surface="settings" />} />} />
           </Route>
         ) : (
@@ -282,8 +292,10 @@ export function App() {
 
         {/* ── /pipelines/* — the fourth tenant (docs/social-tenant-design.md
              §5). Flag ON by default (PIPELINES_ENABLED). Runs, run detail and
-             Artifacts read the run projection (lane P0); every other page is
-             an empty state naming the lane that brings its data. ── */}
+             Artifacts read the run projection (lane P0); Definitions,
+             Runbooks, Approvals and the three Sources lists read the
+             definition registry (lane P2); Configuration and Settings are
+             still empty states naming the lane that brings their data. ── */}
         {PIPELINES_ENABLED ? (
           <Route
             path="pipelines"
@@ -294,15 +306,15 @@ export function App() {
             )}
           >
             <Route index element={<Navigate to="runs" replace />} />
-            <Route path="definitions" element={<Page element={<PipelinesSurfacePage surface="definitions" />} />} />
-            <Route path="runbooks" element={<Page element={<PipelinesSurfacePage surface="runbooks" />} />} />
+            <Route path="definitions" element={<Page element={<PipelinesDefinitionsPage />} />} />
+            <Route path="runbooks" element={<Page element={<PipelinesRunbooksPage />} />} />
             <Route path="runs" element={<Page element={<PipelinesRunsPage />} />} />
             <Route path="runs/:id" element={<Page element={<PipelinesRunDetailPage />} />} />
-            <Route path="approvals" element={<Page element={<PipelinesSurfacePage surface="approvals" />} />} />
+            <Route path="approvals" element={<Page element={<PipelinesApprovalsPage />} />} />
             <Route path="artifacts" element={<Page element={<PipelinesArtifactsPage />} />} />
-            <Route path="agents" element={<Page element={<PipelinesSurfacePage surface="agents" />} />} />
-            <Route path="bots" element={<Page element={<PipelinesSurfacePage surface="bots" />} />} />
-            <Route path="commands" element={<Page element={<PipelinesSurfacePage surface="commands" />} />} />
+            <Route path="agents" element={<Page element={<PipelinesSourcesPage source="agents" />} />} />
+            <Route path="bots" element={<Page element={<PipelinesSourcesPage source="bots" />} />} />
+            <Route path="commands" element={<Page element={<PipelinesSourcesPage source="commands" />} />} />
             <Route path="configuration" element={<Page element={<PipelinesSurfacePage surface="configuration" />} />} />
             <Route path="settings" element={<Page element={<PipelinesSurfacePage surface="settings" />} />} />
           </Route>

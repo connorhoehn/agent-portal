@@ -273,6 +273,11 @@ def main():
         # agent_projects_schema.sql, agentic_work_schema.sql and
         # local_compute_schema.sql have created the four tables it touches.
         'local_compute_worker_schema.sql',
+        # The pipelines tenant's own tables (definitions' recorded versions,
+        # the runs it starts — the runbook dry-run — and its config). No FK
+        # into any other table: the projection reads the run-shaped tables,
+        # nothing here joins them, so it can load last.
+        'pipeline_schema.sql',
     ]
 
     # Track genuine failures — statements that erred for a non-transient reason

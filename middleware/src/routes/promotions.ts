@@ -29,20 +29,23 @@ promotionsRouter.get('/:id', asyncHandler(async (req, res) => {
   res.json(candidate);
 }));
 
-// POST /api/promotions/:id/promote {dryRunPassed?}
+// POST /api/promotions/:id/promote {dryRunRunId?}
 // Approval is implicit in who is calling — the session's own name, same rule
-// as design-review sign-off. A skill refused only for a missing/failed dry
-// run still records the approval (see promoteCandidate) rather than making
-// the reviewer re-approve on every retry.
+// as design-review sign-off. A skill is judged on a RECORDED dry-run: the run
+// named by `dryRunRunId`, else the newest dry-run of its runbook definition
+// (pipelines tenant, rule 1). `dryRunPassed` is no longer evidence — a client
+// cannot assert that a run passed — so it is ignored when sent. A skill refused
+// only for its dry-run still records the approval (see promoteCandidate) rather
+// than making the reviewer re-approve on every retry.
 promotionsRouter.post('/:id/promote', manageGate, asyncHandler(async (req, res) => {
-  const { dryRunPassed } = (req.body ?? {}) as { dryRunPassed?: boolean };
-  if (dryRunPassed !== undefined && typeof dryRunPassed !== 'boolean') {
-    throw new ValidationError('dryRunPassed must be a boolean when provided');
+  const { dryRunRunId } = (req.body ?? {}) as { dryRunRunId?: unknown };
+  if (dryRunRunId !== undefined && dryRunRunId !== null && (typeof dryRunRunId !== 'string' || !dryRunRunId.trim())) {
+    throw new ValidationError('dryRunRunId must be a run id string when provided');
   }
   const session = resolveSession(req);
   const result = await promoteCandidate(String(req.params['id'] ?? ''), {
     approvedBy: session?.name ?? session?.sub ?? 'someone',
-    ...(dryRunPassed !== undefined ? { dryRunPassed } : {}),
+    ...(typeof dryRunRunId === 'string' ? { dryRunRunId: dryRunRunId.trim() } : {}),
   });
   if (!result) throw new NotFoundError('promotion candidate not found');
   if ('error' in result && result.error) {

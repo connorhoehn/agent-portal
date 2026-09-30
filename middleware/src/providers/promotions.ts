@@ -3,7 +3,8 @@
 //   OBSERVATION (one thing that happened once, written by `lab` into
 //   lab_experiences) → seen >=3 times across >=2 sessions → PATTERN →
 //   has a repeatable trigger AND outcome → RUNBOOK, else → INSIGHT (a fact
-//   injected, never run) → human approval + a passing dry run → SKILL.
+//   injected, never run) → human approval + a completed dry-run RUN of its
+//   runbook definition (pipelines tenant, rule 1) → SKILL.
 //   Drift detection can send a SKILL back to RUNBOOK.
 //
 // lab_experiences already stores the raw material; nothing curates it into
@@ -64,8 +65,21 @@ export interface PromotionCandidate {
   sessionCount: number;
   observations: Observation[];
   status: PromotionStatus;
-  /** null until a dry run has actually been attempted — distinct from
-   *  `false`, which means one ran and it failed. */
+  /**
+   * The dry-run this candidate's verdict stands on — a `pipeline_runs` id
+   * (`job:<uuid>`), the run of its runbook definition `runbook:<id>` that the
+   * pipelines tenant started (POST /api/pipelines/definitions/:id/dry-run).
+   * STORED: the run, not a claim about it. null until a dry-run has been
+   * resolved against this candidate.
+   */
+  dryRunRunId: string | null;
+  /** That run as it stands now — DERIVED per read from `pipeline_runs`, never stored. */
+  dryRun: DryRunRef | null;
+  /**
+   * DERIVED from `dryRun` for the readers that still speak the boolean (the
+   * orgiq promotions page): true = its run completed, false = it failed,
+   * null = no run or one still going. Never accepted as evidence on a write.
+   */
   dryRunPassed: boolean | null;
   /** Set when drift detection demoted this candidate from an existing skill
    *  back down to a runbook — the id of the skill it fell from. */
@@ -77,7 +91,15 @@ export interface PromotionCandidate {
  * numbers that fall out of `observations`. The mock fixture holds these; the
  * Aurora path, when there is one, will project the counts in SQL the same way.
  */
-export type SeededCandidate = Omit<PromotionCandidate, 'supportCount' | 'sessionCount'>;
+export type SeededCandidate = Omit<PromotionCandidate, 'supportCount' | 'sessionCount' | 'dryRun' | 'dryRunPassed'>;
+
+/** The run a promotion verdict is judged on (a `pipeline_runs` record, narrowed). */
+export interface DryRunRef {
+  runId: string;
+  definitionId: string;
+  status: string;
+  finishedAt?: string | null;
+}
 
 /** A cluster is the pre-candidate grouping: observations that look like the
  *  same recurring thing, before anyone has decided they qualify as a pattern
@@ -171,25 +193,44 @@ export function classifyPattern(cluster: Pick<Cluster, 'observations'>): 'runboo
   return hasOutcome && hasTrigger ? 'runbook' : 'insight';
 }
 
+/** The runbook definition a candidate is — the id its dry-runs are runs of. */
+export const runbookDefinitionIdOf = (candidateId: string): string => `runbook:${candidateId}`;
+
+/**
+ * Rule 1 of docs/social-tenant-design.md §5.2: a RUNBOOK becomes a SKILL only
+ * on a `completed` run of ITS OWN definition. Each refusal says which of the
+ * four facts failed, because the reviewer's next step differs: start a
+ * dry-run, wait for one, fix a failed one, or stop citing another runbook's.
+ */
+export function decideDryRunGate(
+  candidate: Pick<PromotionCandidate, 'id'>,
+  dryRun: DryRunRef | null,
+): { ok: true } | { ok: false; reason: string } {
+  const own = runbookDefinitionIdOf(candidate.id);
+  if (!dryRun) return { ok: false, reason: `a skill needs a completed dry-run of ${own} — start one from /pipelines/runbooks` };
+  if (dryRun.definitionId !== own) {
+    return { ok: false, reason: `run ${dryRun.runId} is a dry-run of ${dryRun.definitionId}, not of ${own} — a skill stands on its own runbook's run` };
+  }
+  if (dryRun.status === 'failed') return { ok: false, reason: `dry run ${dryRun.runId} failed — fix it and rerun before promoting` };
+  if (dryRun.status !== 'completed') return { ok: false, reason: `dry run ${dryRun.runId} is ${dryRun.status}, not completed — promote once it finishes` };
+  return { ok: true };
+}
+
 /**
  * May this candidate be promoted right now? Mirrors decideApproval's shape:
  * a candidate that is already terminal refuses outright, everything else
- * needs a human's name on it — and a SKILL additionally needs a dry run that
- * actually passed, because a skill runs unattended and a runbook does not.
- * `dryRunPassed === false` (ran, and failed) refuses with a DIFFERENT reason
- * than "hasn't run yet" — the reviewer needs to know which one it is.
+ * needs a human's name on it — and a SKILL additionally needs a completed
+ * dry-run of its own runbook definition (decideDryRunGate), because a skill
+ * runs unattended and a runbook does not.
  */
 export function decidePromotion(
-  candidate: Pick<PromotionCandidate, 'status' | 'proposedKind'>,
-  ctx: { approvedBy: string | null; dryRunPassed: boolean | null },
+  candidate: Pick<PromotionCandidate, 'id' | 'status' | 'proposedKind'>,
+  ctx: { approvedBy: string | null; dryRun: DryRunRef | null },
 ): { ok: true } | { ok: false; reason: string } {
   if (candidate.status === 'promoted') return { ok: false, reason: 'already promoted' };
   if (candidate.status === 'dismissed') return { ok: false, reason: 'dismissed — reopen it before promoting' };
   if (!ctx.approvedBy) return { ok: false, reason: 'needs human approval first' };
-  if (candidate.proposedKind === 'skill') {
-    if (ctx.dryRunPassed === false) return { ok: false, reason: 'dry run failed — fix it and rerun before promoting' };
-    if (ctx.dryRunPassed !== true) return { ok: false, reason: 'a skill needs a passing dry run before promotion' };
-  }
+  if (candidate.proposedKind === 'skill') return decideDryRunGate(candidate, ctx.dryRun);
   return { ok: true };
 }
 
@@ -202,12 +243,30 @@ export function decidePromotion(
  * session is one long incident told three times, which is the whole reason
  * `qualifiesAsPattern` asks for two.
  */
-function toCandidate(c: SeededCandidate): PromotionCandidate {
+function toCandidate(c: SeededCandidate, runs: ReadonlyMap<string, DryRunRef>): PromotionCandidate {
+  const dryRun = c.dryRunRunId ? runs.get(c.dryRunRunId) ?? null : null;
   return {
     ...c,
     supportCount: c.observations.length,
     sessionCount: new Set(c.observations.map((o) => o.sessionId)).size,
+    dryRun,
+    dryRunPassed: dryRun?.status === 'completed' ? true : dryRun?.status === 'failed' ? false : null,
   };
+}
+
+/** Every recorded pipelines run, by id — what `dryRunRunId` resolves against. */
+async function runRefs(): Promise<Map<string, DryRunRef>> {
+  try {
+    const { listRunRecords } = await import('./pipeline-definitions.js');
+    return new Map((await listRunRecords()).map((r) => [r.id, {
+      runId: r.id, definitionId: r.definitionId, status: r.status, finishedAt: r.finishedAt,
+    }]));
+  } catch (err) {
+    // pipeline_runs unreadable (a cluster without pipeline_schema.sql): every
+    // candidate then reads "no run", which refuses promotion — the safe side.
+    console.warn('[promotions] pipeline_runs unreadable:', (err as Error).message);
+    return new Map();
+  }
 }
 
 export async function listCandidates(opts: { status?: string } = {}): Promise<PromotionCandidate[]> {
@@ -216,35 +275,56 @@ export async function listCandidates(opts: { status?: string } = {}): Promise<Pr
   void config;
   let list = promotionCandidates.rows().slice();
   if (opts.status) list = list.filter((c) => c.status === opts.status);
-  return list.map(toCandidate).sort((a, b) => b.supportCount - a.supportCount);
+  const runs = await runRefs();
+  return list.map((c) => toCandidate(c, runs)).sort((a, b) => b.supportCount - a.supportCount);
 }
 
 export async function getCandidate(id: string): Promise<PromotionCandidate | null> {
   const c = promotionCandidates.rows().find((x) => x.id === id);
-  return c ? toCandidate(c) : null;
+  return c ? toCandidate(c, await runRefs()) : null;
 }
 
 /**
- * Human approves (and, for a skill, supplies a dry-run result). Refused by
- * decidePromotion, the approval still LANDS: a skill refused only for a
- * missing dry run has genuinely cleared the human gate, and the next call
- * with a passing run should not have to re-ask for approval. That is the
- * `status: 'approved'` resting state between `candidate` and `promoted`.
+ * Human approves. For a SKILL the verdict is judged on a recorded run: the one
+ * named (`dryRunRunId`), else the newest completed dry-run of this candidate's
+ * runbook definition, else its newest dry-run. A client can no longer assert
+ * that a dry run passed — the run says so or nothing does.
+ *
+ * Refused by decidePromotion, the approval still LANDS: a skill refused only
+ * for its dry-run has genuinely cleared the human gate, and the next call
+ * after a completed run should not have to re-ask for approval. That is the
+ * `status: 'approved'` resting state between `candidate` and `promoted`. The
+ * run the verdict was judged on is recorded on the candidate either way.
  */
 export async function promoteCandidate(
-  id: string, opts: { approvedBy: string; dryRunPassed?: boolean | null },
+  id: string, opts: { approvedBy: string; dryRunRunId?: string | null },
 ): Promise<{ candidate: PromotionCandidate; error?: never } | { candidate?: never; error: string } | null> {
   const c = promotionCandidates.rows().find((x) => x.id === id);
   if (!c) return null;
 
-  if (opts.dryRunPassed !== undefined) c.dryRunPassed = opts.dryRunPassed;
-  const gate = decidePromotion(c, { approvedBy: opts.approvedBy, dryRunPassed: c.dryRunPassed });
+  let dryRun: DryRunRef | null = null;
+  if (c.proposedKind === 'skill') {
+    const refs = await runRefs();
+    if (opts.dryRunRunId) {
+      dryRun = refs.get(opts.dryRunRunId) ?? null;
+      if (!dryRun) {
+        if (c.status === 'candidate') c.status = 'approved';
+        return { error: `no recorded run ${opts.dryRunRunId}` };
+      }
+    } else {
+      const { latestDryRunOf } = await import('./pipeline-definitions.js');
+      const latest = await latestDryRunOf(runbookDefinitionIdOf(c.id)).catch(() => null);
+      dryRun = latest ? refs.get(latest.id) ?? { runId: latest.id, definitionId: latest.definitionId, status: latest.status } : null;
+    }
+    if (dryRun && dryRun.definitionId === runbookDefinitionIdOf(c.id)) c.dryRunRunId = dryRun.runId;
+  }
+  const gate = decidePromotion(c, { approvedBy: opts.approvedBy, dryRun });
   if (!gate.ok) {
     if (c.status === 'candidate') c.status = 'approved';
     return { error: gate.reason };
   }
   c.status = 'promoted';
-  return { candidate: toCandidate(c) };
+  return { candidate: toCandidate(c, await runRefs()) };
 }
 
 export async function dismissCandidate(id: string, reason: string): Promise<PromotionCandidate | null> {
@@ -252,5 +332,5 @@ export async function dismissCandidate(id: string, reason: string): Promise<Prom
   if (!c) return null;
   c.status = 'dismissed';
   c.rationale = `${c.rationale} — dismissed: ${reason.trim()}`;
-  return toCandidate(c);
+  return toCandidate(c, await runRefs());
 }

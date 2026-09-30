@@ -45,7 +45,7 @@ const dismissMock = dismissCandidate as unknown as jest.Mock;
 const CANDIDATE = {
   id: 'pc-1', title: 'Retry the Data API cold start', proposedKind: 'runbook',
   status: 'candidate', supportCount: 4, rationale: 'seen on four boxes',
-  dryRunPassed: null, observations: [],
+  dryRunRunId: null, dryRun: null, dryRunPassed: null, observations: [],
 };
 
 function buildApp() {
@@ -113,9 +113,9 @@ describe('POST /api/promotions/:id/promote', () => {
     promoteMock.mockResolvedValue({ candidate: { ...CANDIDATE, status: 'promoted' } });
     const res = await request(buildApp())
       .post('/api/promotions/pc-1/promote')
-      .send({ dryRunPassed: true, approvedBy: 'somebody-else' });
+      .send({ dryRunRunId: 'job:run-1', approvedBy: 'somebody-else' });
     expect(res.status).toBe(200);
-    expect(promoteMock).toHaveBeenCalledWith('pc-1', { approvedBy: 'Priya Raman', dryRunPassed: true });
+    expect(promoteMock).toHaveBeenCalledWith('pc-1', { approvedBy: 'Priya Raman', dryRunRunId: 'job:run-1' });
     expect(res.body.status).toBe('promoted');
   });
 
@@ -126,15 +126,16 @@ describe('POST /api/promotions/:id/promote', () => {
     expect((promoteMock.mock.calls[0]![1] as { approvedBy: string }).approvedBy).toBe('u-1');
   });
 
-  it('omits dryRunPassed entirely when it was not supplied', async () => {
+  it('omits dryRunRunId when it was not supplied, and ignores a client-asserted dryRunPassed', async () => {
     promoteMock.mockResolvedValue({ candidate: CANDIDATE });
-    await request(buildApp()).post('/api/promotions/pc-1/promote').send({});
+    await request(buildApp()).post('/api/promotions/pc-1/promote').send({ dryRunPassed: true });
+    // A boolean is not a run: the provider judges the recorded dry-run instead.
     expect(promoteMock.mock.calls[0]![1]).toEqual({ approvedBy: 'Priya Raman' });
   });
 
-  it('400s a non-boolean dryRunPassed before touching the provider', async () => {
+  it('400s a non-string dryRunRunId before touching the provider', async () => {
     const res = await request(buildApp())
-      .post('/api/promotions/pc-1/promote').send({ dryRunPassed: 'yes' });
+      .post('/api/promotions/pc-1/promote').send({ dryRunRunId: 42 });
     expect(res.status).toBe(400);
     expect(promoteMock).not.toHaveBeenCalled();
   });

@@ -536,6 +536,11 @@ const SPENDS: Family[] = [
  * cron armed behind it.
  */
 const FIRES: Family[] = [
+  // The pipelines tenant's runbook dry-run (lane P2): it enqueues an
+  // `agent_jobs` row of kind `runbook:dry-run` that the already-running fleet
+  // dispatcher claims for any idle box and plays through — the job outlives
+  // the capture, exactly the `fires` shape.
+  { pattern: 'POST /api/pipelines/definitions/*/dry-run', what: 'enqueues a `runbook:dry-run` agent job the running fleet dispatcher claims for an idle box and plays through, outliving the capture' },
   // Moved here out of `spends`, where it read "drives a devbox microVM" — it
   // does not drive one, it hands one to the reaper. `startReaper` is running
   // from the moment routes/devbox.ts is imported, and a registered box enters
@@ -1506,9 +1511,10 @@ export const WRITE_SPECS: readonly WriteSpec[] = [
   {
     route: 'POST /api/promotions/:id/promote',
     persona: 'orgiq/admin',
-    safe: 'Promotes a seeded candidate — a real ladder step, `candidate` -> `promoted`, not an append. Replayable because `promotion-candidates` (mock/promotions.ts) is a registered fixture: reset puts the status and the `dryRunPassed` flag back. No AWS, no model, no timer; the ladder is pure in-process bookkeeping.',
-    bodyFrom: "routes/promotions.ts: `dryRunPassed` is optional and must be a boolean when present. `true` is the one value that reaches the success path — providers/promotions.ts `decidePromotion` refuses a `skill` outright unless a dry run passed — and the candidate resolved for `:id` is the seeded `skill` one, which GET /api/promotions?status=candidate lists first.",
-    build: ok({ dryRunPassed: true }),
+    safe: 'Promotes a seeded candidate — a real ladder step, `candidate` -> `approved`/`promoted`, not an append. Replayable because `promotion-candidates` (mock/promotions.ts) and `pipelines.runs` (mock/pipeline-definitions.ts) are registered fixtures: reset puts the status and the `dryRunRunId` back. No AWS, no model, no timer; the ladder is pure in-process bookkeeping.',
+    bodyFrom: "routes/promotions.ts: `dryRunRunId` is optional (a run id string); `dryRunPassed` is ignored since pipelines P2 — a client can no longer assert that a dry run passed. The candidate resolved for `:id` is the first `status=candidate` one; when that is a `skill`, rule 1 (providers/promotions.ts `decideDryRunGate`) refuses it with 409 until a completed dry-run of its runbook definition is recorded, and that refusal is the shape captured — hence 409 is accepted.",
+    build: ok({}),
+    alsoAccept: [409],
   },
   {
     route: 'POST /api/promotions/:id/dismiss',

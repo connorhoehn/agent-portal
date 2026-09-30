@@ -2,13 +2,13 @@ surface: bots
 role: author
 user: u-ines (Ines Moreau)
 url: /pipelines/bots
-pages: portal/src/pages/pipelines/PipelinesSurfacePage.tsx,portal/src/pages/pipelines/pipelinesSurfaces.ts
-audited: 2026-09-30 03:30Z, Chromium 1456×958 (Playwright headless, one context per identity — not the shared Chrome tab), middleware dev:mock:social on :3001, Vite :5183; GET /api/session/me: sub u-ines, tenant pipelines, role author, grants {"pipelines":["author"]}
+pages: portal/src/pages/pipelines/SourcesPage.tsx,portal/src/lib/pipelineDefinitions.ts
+audited: 2026-09-30 05:04Z, Chromium 148.0.7778.96 1456×958 (Playwright headless, one context per identity — not the shared Chrome tab), middleware dev:mock:social on :3001, Vite :5183; GET /api/session/me: sub u-ines, tenant pipelines, role author, grants {"pipelines":["author"]}
 screenshot: bots.jpg
 verdict: pass
 console errors: 0
-layout: pass — content col left 224px w 1208px; no horizontal scroll (scrollWidth 1456 = innerWidth 1456); h1 "Bots", badge "Coming in lane P0", one EmptyState in the content column
-keyboard: pass — 0 focusable controls in main (an empty state has none), Tab visited 0; the rail entry for the page is reachable by Tab from the shell
-empty-state: pass — the page IS its empty state on this lane: "No bot runs yet | A bot firing is the trigger of a run. Its history will be listed here. | What comes next | Lane P0 brings bot firings through the run projection."
-role-gating: pass — author holds ViewPipelines, AuthorDefinition, RunPipeline; forbidden ApproveStep, CancelRun, ManagePipelineConfig. Buttons in main: none; no Approve, Cancel, New definition or configuration control exists anywhere in the DOM of this surface (P0 surfaces are reads — those controls arrive with P2). The rail shows Configuration to every pipelines role (NAV_ITEMS carries no role gate); it opens a read-only empty state with no control — recorded in DEFECTS.md for P2, where ManagePipelineConfig gives it something to gate.
-notes: Bot firings already appear as runs on /pipelines/runs (Kind = Bot); this Sources page is the per-producer list, still an empty state on this lane.
+layout: pass — content col left 224px w 1208px; no horizontal scroll (scrollWidth 1456 = innerWidth 1456); h1 "Bots"; first table row top 286px; one row (search · count · recorded runs) above the table
+keyboard: pass — 13 really-visible focusables in main, Tab visited 13; Enter on the first focused row opened its definition (/pipelines/definitions?open=bot%3Aa0a4b025-3e67-5004-8b8a-05a3d4f2028d, drawer open); Escape closed the drawer; Back returned to the list
+empty-state: pass — search "zzzz-no-such-thing" leaves the table reading "No bots match "zzzz-no-such-thing"."
+role-gating: pass — author holds ViewPipelines, AuthorDefinition, RunPipeline; forbidden ApproveStep, CancelRun, ManagePipelineConfig. Read-only for every role: the page carries a "Read-only" badge, the only buttons in main are the table's Prev/Next, and the definition a row opens offers only what the role may do (Dry-run is for runbooks, which this list does not hold).
+notes: P2 re-walk — this surface was an empty state on P0 and now lists the bots from the definition registry (GET /api/pipelines/definitions?kind=…). First rows: a11y-audit-weekly paused Schedule · Manual · 0 8 * * 1 Design System v3 us.amazon.nova-lite-v1:0 4 completed 1d ago / api-contract-watch paused Schedule · Manual · 30 7 * * 1-5 Design System API us.amazon.nova-lite-v1:0 6 completed 1d ago / auth-dep-watch paused Schedule · Manual · 0 5 * * 1-5 Auth Migration us.amazon.nova-lite-v1:0 8 completed 3h ago. Twelve bots, each a definition with its cron (Schedule · Manual · <cron>), initiative and model; the seeded bots are parked, so each carries a paused chip and its firings are history.
