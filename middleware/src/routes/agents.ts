@@ -181,12 +181,18 @@ async function requireAgentCapability(
 
 agentsRouter.post('/:agentId/invoke', requireAction('Search'), requireAgentTenant, requireAgentCapability, asyncHandler(async (req, _res, next) => { parseSearchSelection(req.body?.selection); next(); }), agentStreamMiddleware(async (req: ExpressRequest, stream: AgentStream, signal: AbortSignal) => {
   const agentId = String(req.params['agentId'] ?? '');
-  const { message, sessionId, actorId, selection } = req.body as {
+  const { message, sessionId, actorId, selection, payload: rawPayload } = req.body as {
     message?: string;
     sessionId?: string;
     actorId?: string;
     selection?: unknown;
+    payload?: unknown;
   };
+  // Structured input for the agent (2026-09-29): the assessment drafter reads
+  // `mode` and `document` at the top of its payload, which `message` cannot
+  // carry to the fleet. A plain object only, bounded, and never the keys the
+  // route owns (message, sessionId, userId, auth, history) — those stay ours.
+  const structuredInput = agentStructuredInput(rawPayload);
   const rawUserMessage = message ?? '';
   const canonicalSessionId = deriveSessionId(req);
 
@@ -214,6 +220,7 @@ agentsRouter.post('/:agentId/invoke', requireAction('Search'), requireAgentTenan
     message: userMessage,
     sessionId: canonicalSessionId,
     history,
+    ...(structuredInput ? { structuredInput } : {}),
     ...(req.session ? {
       userId: req.session.sub,
       auth: {
@@ -421,3 +428,20 @@ agentsRouter.post('/:agentId/invoke', requireAction('Search'), requireAgentTenan
 }, {
   deriveSessionId: (req: ExpressRequest) => deriveSessionId(req),
 }));
+
+const RESERVED_INVOKE_KEYS = new Set(['message', 'prompt', 'input_text', 'sessionId', 'userId', 'auth', 'history']);
+const MAX_STRUCTURED_INPUT_BYTES = 64 * 1024;
+/**
+ * The invoke body's optional `payload` as the runtime's structured input: a
+ * plain object of at most 64 KiB with the route-owned keys removed; anything
+ * else (a string, an array, too large) is ignored rather than rejected, so an
+ * old client keeps working.
+ */
+export function agentStructuredInput(raw: unknown): Record<string, unknown> | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const entries = Object.entries(raw as Record<string, unknown>).filter(([k]) => !RESERVED_INVOKE_KEYS.has(k));
+  if (entries.length === 0) return undefined;
+  const out = Object.fromEntries(entries);
+  try { if (JSON.stringify(out).length > MAX_STRUCTURED_INPUT_BYTES) return undefined; } catch { return undefined; }
+  return out;
+}
