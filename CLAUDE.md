@@ -238,7 +238,7 @@ python3.11 -m venv .venv-synth && .venv-synth/bin/pip install -r schema/synth/re
 ## Project dependencies
 
 - **ui-components** (`~/projects/ui-components`): `@connorhoehnslalom/ui-components`,
-  installed at **2.407.39** (sha `3de81047`, verified 2026-09-30 with the two settling
+  installed at **2.407.40** (sha `e95120a8`, verified 2026-09-30 with the two settling
   commands below; 2.407.9 carries the CallDock render fixes and `--dock-floor`). 2.385 added `@tiptap/extension-mention` to what the rich
   composer imports; it is an *optional* peer, so npm does not install it and Vite
   fails at runtime with "Could not resolve @tiptap/extension-mention" — the portal
@@ -264,8 +264,13 @@ python3.11 -m venv .venv-synth && .venv-synth/bin/pip install -r schema/synth/re
   **`connorhoehn/realtime-modules`** canonical repository (the slalom fork is
   the second remote and is not what either package.json points at). As of
   2026-09-30 **both** the middleware and the portal pin
-  `c09930fa9e052d0cae2a89756a42ea6868f71676` (0.99.0, tag
-  `realtime-modules-v0.99.0`: `DynamoChatStore` under `server/stores/dynamo`
+  `085580abf2ba57419faf52af397e1bc454246451` (0.99.3, tag `v0.99.3`: tenant-prefixed
+  DM / group lobbies knock for outsiders; 0.99.2 resolves a relative WHIP/WHEP
+  `Location` against the endpoint so Leave's DELETE reaches the SFU, uses the
+  SFU's ICE answer as-is (offer-ready ~140 ms, was ~3 s), names remote tiles
+  from the SFU frames and exposes `appUserId`, `archiveRoom` POSTs
+  `/archive`; 0.99.1 makes every callee socket ring with the first `accepted`
+  taking the call; 0.99.0 = `c09930fa`: `DynamoChatStore` under `server/stores/dynamo`
   with `chat(store.chatOptions(extra))`, `FeaturePlugin.onMessage`/`onConnect`
   carry `userId`, `onReaction` carries the sender's `org`; the gateway also
   serves `notifications()` since 0cf97d21 — see `docs/social-tenant-design.md`

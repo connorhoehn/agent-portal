@@ -7,6 +7,7 @@ import { useSession, type SessionRole } from '../../lib/auth';
 const ROLE_LABELS: Record<string, string> = {
   member: 'Member',
   sme: 'SME',
+  'program-owner': 'Program Owner',
   'org-leader': 'Org Leader',
   'hr-admin': 'HR Admin',
   admin: 'Admin',
@@ -28,6 +29,7 @@ const ROLE_LABELS: Record<string, string> = {
 const ROLE_HINTS: Record<string, string> = {
   member: 'IC. Search + org chart.',
   sme: 'Dispatches agent runs against a sprint envelope.',
+  'program-owner': 'Allocates and grants on their own initiatives; sprints, board and bots.',
   'org-leader': 'VP / Director. + leaderboards, approvals.',
   'hr-admin': 'Sees salary + perf. Edits guardrails.',
   admin: 'Cross-tenant operator. Every role, every account.',
