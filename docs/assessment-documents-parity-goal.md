@@ -390,7 +390,10 @@ composer; theirs the full editor. Three decisions, for both apps:
    tab's own accept/reject, Apply all / Discard all for N>1. Not 1:1 with
    ours: no `onRevise`, no selection sent (its `/agent-edit` route takes only
    an instruction), anchors from marks rather than the cursor. A reader (the
-   assessor) is not offered Agent mode here (8f288081, journeys defect #17).
+   assessor) is not offered Agent mode here (8f288081, journeys defect #17);
+   realtime-examples mirrored it in 67ae2984 (+ a72685e1 shots) from its
+   `accessRoleOf` — a reader's composer opens in Chat with Agent disabled
+   and the page opens in Read mode with a locked canvas.
    Known library bug on the default path: RichChatComposer's `onUpdate`
    throws "Maximum update depth exceeded" under zero-delay synthetic
    keystrokes in Agent mode (fine at 15 ms/key) — a fix lane is upstream;
