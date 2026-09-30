@@ -29,6 +29,7 @@ import {
   LVSProvider,
   useConversationCall,
   useIncomingConversationCalls,
+  type ConversationCallEvent,
   type ConversationCallResult,
   type IncomingConversationCall,
 } from '@connorhoehnslalom/realtime-modules/client/video';
@@ -63,6 +64,15 @@ export interface InitiativeCallHostValue {
 
 const Ctx = createContext<InitiativeCallHostValue | null>(null);
 
+/**
+ * A call event, for a host that keeps a record of calls (the social tenant's
+ * call log, pages/social/socialCallLog.ts). `host` is who started the call,
+ * read from the hook at the moment of the event.
+ */
+export type CallHostEventKind = 'started' | 'ended' | 'missed';
+export type CallHostEvent = ConversationCallEvent & { direction?: 'outgoing' | 'incoming'; durationMs?: number | null };
+export type OnCallHostEvent = (kind: CallHostEventKind, event: CallHostEvent, ctx: { host: string | null; selfId: string }) => void;
+
 export function useInitiativeCallHost(): InitiativeCallHostValue | null {
   return useContext(Ctx);
 }
@@ -75,7 +85,7 @@ const getIdToken = async (): Promise<string> => (await realtimeTokenSource.get()
 // per call with the participant token platform-api mints.
 const noToken = (): string => '';
 
-function CallHost({ children, platformApiUrl }: { children: ReactNode; platformApiUrl: string | null }) {
+function CallHost({ children, platformApiUrl, onCallEvent }: { children: ReactNode; platformApiUrl: string | null; onCallEvent?: OnCallHostEvent }) {
   const { session } = useSession();
   const navigate = useNavigate();
   const location = useLocation();
@@ -88,6 +98,12 @@ function CallHost({ children, platformApiUrl }: { children: ReactNode; platformA
   const [lobby, setLobby] = useState<CallLobby | null>(null);
   const pendingRing = useRef<IncomingConversationCall | null>(null);
 
+  const hostRef = useRef<string | null>(null);
+  const eventRef = useRef(onCallEvent);
+  eventRef.current = onCallEvent;
+  const emit = (kind: CallHostEventKind, event: CallHostEvent) => {
+    eventRef.current?.(kind, event, { host: hostRef.current, selfId: self?.userId ?? '' });
+  };
   const call = useConversationCall({
     lobbyName: lobby?.lobbyName ?? UNBOUND,
     channel: lobby?.channel ?? null,
@@ -95,7 +111,14 @@ function CallHost({ children, platformApiUrl }: { children: ReactNode; platformA
     platformApi: { baseUrl: platformApiUrl ?? '', getIdToken },
     gateway: frames.gateway,
     discover: !!lobby && frames.configured,
+    ...(onCallEvent ? {
+      onCallStarted: (e: ConversationCallEvent) => emit('started', e),
+      onCallEnded: (e: ConversationCallEvent & { durationMs: number | null }) => emit('ended', e),
+      onCallMissed: (e: ConversationCallEvent & { direction: 'outgoing' | 'incoming' }) => emit('missed', e),
+    } : {}),
   });
+  hostRef.current = call.call?.host ?? hostRef.current;
+  if (call.phase === 'idle') hostRef.current = null;
   const phaseRef = useRef(call.phase);
   phaseRef.current = call.phase;
 
@@ -159,13 +182,13 @@ function CallHost({ children, platformApiUrl }: { children: ReactNode; platformA
  * after the first render — a cold token — remounts the page once, before any
  * call can exist.)
  */
-export function InitiativeCallHost({ children }: { children: ReactNode }) {
+export function InitiativeCallHost({ children, onCallEvent }: { children: ReactNode; onCallEvent?: OnCallHostEvent }) {
   const { session } = useSession();
   const { platformApiUrl, videoUrl } = useRealtimeEndpoints(!!session);
   const latched = useRef<string | null>(null);
   if (videoUrl && !latched.current) latched.current = videoUrl;
   const video = latched.current;
-  const host = <CallHost platformApiUrl={platformApiUrl}>{children}</CallHost>;
+  const host = <CallHost platformApiUrl={platformApiUrl} {...(onCallEvent ? { onCallEvent } : {})}>{children}</CallHost>;
   return video
     ? <LVSProvider baseUrl={video} getAuthToken={noToken}>{host}</LVSProvider>
     : host;

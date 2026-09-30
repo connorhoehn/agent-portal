@@ -22,6 +22,25 @@
 //   POST /dms/read {channel}       you have read the DM up to now (its unread count → 0)
 //   GET  /people                   everyone holding a social grant
 //
+// Phase S2 (design §4.4–§4.5): rooms, teams, recordings and the call log live
+// in platform-api; these are thin tenant-scoped proxies to it with the
+// caller's own realtime token, or the registered fixtures under dev:mock
+// (providers/social-platform.ts). The writes are here, not in the browser,
+// because the Cedar gate is the BFF's — platform-api lets anyone create.
+//
+//   GET    /rooms                           rooms in partition social (team channels left out)
+//   POST   /rooms                           create (ManageChannels) — public or private
+//   GET    /teams                           your teams, each with its channels
+//   POST   /teams                           create (ManageTeams) — with its General channel
+//   GET    /teams/:teamId                   one team: channels + members
+//   POST   /teams/:teamId/members {userId}  add someone (ManageTeams; the team's owner)
+//   DELETE /teams/:teamId/members/:userId   remove someone (ManageTeams; the owner, or yourself)
+//   GET    /recordings                      recordings you were in, social: lobbies only
+//   GET    /recordings/:recordingId/playback  what there is to play
+//   POST   /recordings/:recordingId/share   mint a share link (ManageRecordings)
+//   DELETE /recordings/:recordingId         delete (ManageRecordings; whoever started it)
+//   GET    /calls                           your call log, social: lobbies only
+//
 // Messages are never written here: they go over the gateway (`/ws`, `useChat`),
 // which admits a `social:ch:<slug>` subscribe/publish to its members only.
 
@@ -36,6 +55,11 @@ import { listUsers } from '../providers/identity.js';
 import { ROLES_BY_TENANT } from '../lib/session.js';
 import { tenantMembers, type TenantSummary } from '../lib/tenant-summary.js';
 import { socialSurfaceCounts, socialSurfaces } from '../mock/social.js';
+import {
+  addTeamMember, createRoom, createTeam, deleteRecording, getTeam, listCalls, listRecordings, listRooms, listTeams,
+  recordingPlayback, removeTeamMember, shareRecording, socialPlatformBackend,
+} from '../providers/social-platform.js';
+import type { Session } from '../lib/session.js';
 
 export const socialRouter = Router();
 
@@ -266,4 +290,91 @@ socialRouter.post('/dms/read', requireAction('ViewSocial'), asyncHandler(async (
 socialRouter.get('/people', requireAction('ViewSocial'), asyncHandler(async (_req, res) => {
   const people = [...(await socialRoster()).values()].sort((a, b) => a.displayName.localeCompare(b.displayName));
   res.json({ people });
+}));
+
+// ── Rooms, teams, recordings, calls (phase S2) ──────────────────────────────
+
+const sessionOf = (req: Request): Session => req.session as Session;
+const source = () => socialPlatformBackend();
+
+function requiredName(raw: unknown, what: string): string {
+  const name = typeof raw === 'string' ? raw.trim() : '';
+  if (!name || name.length > NAME_MAX) throw new ValidationError(`a ${what} needs a name of 1–${NAME_MAX} characters`);
+  if (!isValidSlug(slugify(name))) throw new ValidationError(`a ${what} name needs at least one letter or digit`);
+  return name;
+}
+function optionalDescription(raw: unknown): { description?: string } {
+  return typeof raw === 'string' && raw.trim() ? { description: raw.trim().slice(0, DESCRIPTION_MAX) } : {};
+}
+
+socialRouter.get('/rooms', requireAction('ViewSocial'), asyncHandler(async (req, res) => {
+  const rooms = await listRooms(sessionOf(req));
+  const open = rooms.filter((r) => r.visibility === 'org').length;
+  res.json({ source: source(), rooms, counts: { total: rooms.length, open, private: rooms.length - open } });
+}));
+
+socialRouter.post('/rooms', requireAction('ManageChannels'), asyncHandler(async (req, res) => {
+  const body = (req.body ?? {}) as { name?: unknown; description?: unknown; visibility?: unknown };
+  const name = requiredName(body.name, 'room');
+  const room = await createRoom(sessionOf(req), { name, ...optionalDescription(body.description), visibility: body.visibility === 'private' ? 'private' : 'org' });
+  res.status(201).json({ room });
+}));
+
+socialRouter.get('/teams', requireAction('ViewSocial'), asyncHandler(async (req, res) => {
+  const teams = await listTeams(sessionOf(req));
+  res.json({ source: source(), teams, counts: { total: teams.length, channels: teams.reduce((n, t) => n + t.channels.length, 0) } });
+}));
+
+socialRouter.post('/teams', requireAction('ManageTeams'), asyncHandler(async (req, res) => {
+  const body = (req.body ?? {}) as { name?: unknown; description?: unknown; visibility?: unknown };
+  const session = sessionOf(req);
+  const team = await createTeam(session, {
+    name: requiredName(body.name, 'team'), ...optionalDescription(body.description),
+    visibility: body.visibility === 'private' ? 'private' : 'org', ...(session.name ? { byName: session.name } : {}),
+  });
+  res.status(201).json({ team });
+}));
+
+socialRouter.get('/teams/:teamId', requireAction('ViewSocial'), asyncHandler(async (req, res) => {
+  const detail = await getTeam(sessionOf(req), String(req.params['teamId']));
+  const names = await displayNames();
+  res.json({ ...detail, members: detail.members.map((m) => ({ ...m, displayName: names.get(m.userId) ?? m.userId })) });
+}));
+
+socialRouter.post('/teams/:teamId/members', requireAction('ManageTeams'), asyncHandler(async (req, res) => {
+  const userId = typeof (req.body as { userId?: unknown } | undefined)?.userId === 'string' ? String((req.body as { userId: string }).userId).trim() : '';
+  if (!userId) throw new ValidationError('name the person to add (userId)');
+  // Only people who may stand in this tenant: a team is not a way in.
+  const peer = (await socialRoster()).get(userId);
+  if (!peer) throw new NotFoundError(`${userId} is not in this workspace`);
+  const member = await addTeamMember(sessionOf(req), String(req.params['teamId']), userId, peer.displayName);
+  res.status(201).json({ member: { ...member, displayName: peer.displayName } });
+}));
+
+socialRouter.delete('/teams/:teamId/members/:userId', requireAction('ManageTeams'), asyncHandler(async (req, res) => {
+  await removeTeamMember(sessionOf(req), String(req.params['teamId']), String(req.params['userId']));
+  res.status(204).end();
+}));
+
+socialRouter.get('/recordings', requireAction('ViewSocial'), asyncHandler(async (req, res) => {
+  const recordings = await listRecordings(sessionOf(req));
+  res.json({ source: source(), recordings, counts: { total: recordings.length, ready: recordings.filter((r) => r.stage === 'ready').length } });
+}));
+
+socialRouter.get('/recordings/:recordingId/playback', requireAction('ViewSocial'), asyncHandler(async (req, res) => {
+  res.json(await recordingPlayback(sessionOf(req), String(req.params['recordingId'])));
+}));
+
+socialRouter.post('/recordings/:recordingId/share', requireAction('ManageRecordings'), asyncHandler(async (req, res) => {
+  res.status(201).json(await shareRecording(sessionOf(req), String(req.params['recordingId'])));
+}));
+
+socialRouter.delete('/recordings/:recordingId', requireAction('ManageRecordings'), asyncHandler(async (req, res) => {
+  await deleteRecording(sessionOf(req), String(req.params['recordingId']));
+  res.status(204).end();
+}));
+
+socialRouter.get('/calls', requireAction('ViewSocial'), asyncHandler(async (req, res) => {
+  const calls = await listCalls(sessionOf(req));
+  res.json({ source: source(), calls, counts: { total: calls.length, missed: calls.filter((c) => c.outcome === 'missed' && c.direction === 'incoming').length } });
 }));

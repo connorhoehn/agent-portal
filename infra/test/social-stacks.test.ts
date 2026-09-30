@@ -386,6 +386,29 @@ describe('OrgIQ-Social — platform-api, Redis, tables', () => {
     });
   });
 
+  test('the S2 tables — teams, team-members, social-relationships, video-recording-share-links — with their indexes and TTL', () => {
+    t.hasResourceProperties('AWS::DynamoDB::Table', {
+      TableName: 'orgiq-social-teams',
+      KeySchema: [{ AttributeName: 'orgId', KeyType: 'HASH' }, { AttributeName: 'teamId', KeyType: 'RANGE' }],
+      GlobalSecondaryIndexes: Match.arrayWith([Match.objectLike({ IndexName: 'orgId-slug-index' })]),
+    });
+    t.hasResourceProperties('AWS::DynamoDB::Table', {
+      TableName: 'orgiq-social-team-members',
+      KeySchema: [{ AttributeName: 'teamId', KeyType: 'HASH' }, { AttributeName: 'userId', KeyType: 'RANGE' }],
+      GlobalSecondaryIndexes: Match.arrayWith([Match.objectLike({ IndexName: 'userId-index' })]),
+    });
+    t.hasResourceProperties('AWS::DynamoDB::Table', {
+      TableName: 'orgiq-social-social-relationships',
+      KeySchema: [{ AttributeName: 'followerId', KeyType: 'HASH' }, { AttributeName: 'followeeId', KeyType: 'RANGE' }],
+      GlobalSecondaryIndexes: Match.arrayWith([Match.objectLike({ IndexName: 'followeeId-followerId-index' })]),
+    });
+    t.hasResourceProperties('AWS::DynamoDB::Table', {
+      TableName: 'orgiq-social-video-recording-share-links',
+      KeySchema: [{ AttributeName: 'shareToken', KeyType: 'HASH' }],
+      TimeToLiveSpecification: { AttributeName: 'ttl', Enabled: true },
+    });
+  });
+
   test('tableSuffix moves the whole namespace so a redeploy dodges the RETAINed tables', () => {
     assert.equal(socialTablePrefix('orgiq', 'v2'), 'orgiq-social-v2-');
     assert.throws(() => socialTablePrefix('orgiq', 'bad suffix'));

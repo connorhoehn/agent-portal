@@ -162,3 +162,19 @@ the centred mode closes on Escape and carries dialog semantics, the way
 `Modal` does. Composed nothing locally: `portal/src/pages/social/ChannelsPage.tsx`
 passes `anchor` (the header's New channel button), which takes the popover
 path and meets the keyboard rule.
+
+## Social S2 gaps (rooms, teams, recordings, calls) — 2026-09-30
+
+Found building lane S2 of `docs/social-tenant-design.md`. Verified against the
+installed dist (ui-components 2.407.39, realtime-modules 0.99.0), not the
+changelogs.
+
+| primitive | why | where used |
+|---|---|---|
+| realtime-modules has no client for platform-api's teams, recordings or call log | `client/hangout-rooms` covers `/api/rooms` only. `/api/teams` (teams + channels + members), `/api/recordings` (+ playback-token, share, delete) and `/api/calls/log` (+ `POST /log/events`, the reporter every client must run) have no hook; realtime-examples keeps its own `useCallLog`/`useCallLogReporter` in its frontend. Wanted: `useTeams`, `useRecordings`, `useCallLog` + a reporter bound to `useConversationCall`. | The reads go through the BFF (`middleware/src/providers/social-platform.ts`, tenant-scoped and Cedar-gated); the call-log writer is composed locally in `portal/src/pages/social/socialCallLog.ts`, wired in `portal/src/pages/social/SocialLayout.tsx` |
+| `useConversationCall` fires no callback for a room walked into alone | `start([])` opens a call nobody is rung into, so `startedAt` stays null: no `onCallStarted`, and `teardown` fires neither `onCallEnded` nor `onCallMissed`. platform-api's log has a `joined` direction for exactly this (a PLACE), but the hook gives a host nothing to report it from. Wanted: an `onJoined`/`onLeft` pair, or `onCallStarted` when the local media goes live. | Composed locally in `portal/src/pages/social/SocialLayout.tsx` (`RoomCallLog`: reports off the phase) |
+| realtime-modules `archiveRoom` calls a route platform-api does not serve | `client/hangout-rooms/api.ts` sends `DELETE /api/rooms/:slug`; platform-api serves `POST /api/rooms/:slug/archive` (Express answers the DELETE with an HTML 404). `useHangoutRooms().archiveRoom` therefore always fails. | Not used here (the rooms page offers no archive); the S2 e2e archives with `POST …/archive` directly |
+| `createHangoutRoomsSection` always draws its "New room" + | No `canCreate`/`hideCreate` prop, so a role that may not open rooms still gets the control. | `portal/src/pages/social/RoomsPage.tsx` passes `renderCreateDialog`, which for such a role opens a `Modal` saying who can (a control shown deliberately, with its reason) |
+| No "add people" picker for a membership list | `MembersPanel` hands back `onAdd(trigger)` but the library has no dialog to pick the person — `NewConversationPanel` is worded for starting a DM, `UserPicker` searches its own backend. | Composed locally in `portal/src/pages/social/TeamsPage.tsx` (a `Modal` over a searchable `DataTable` of the roster with an Add action per row) |
+| No call-log composite | A call history (who, direction, outcome, when, length, call back; a Missed filter) has no library row or list — `CallActivityCard` is a chat card for one call. | Composed locally in `portal/src/pages/social/CallsPage.tsx` (`SegmentedControl` + `DataTable`) |
+| `CreateTeamDialog` inherits `PopoverForm`'s centred-mode Escape gap (the row above) | Same defect as `CreateChannelDialog`. | `portal/src/pages/social/TeamsPage.tsx` always passes `anchor` (the button that opened it) |

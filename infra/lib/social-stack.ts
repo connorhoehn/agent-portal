@@ -69,6 +69,20 @@ export const SOCIAL_TABLES: readonly TableSpec[] = [
   { name: 'social-profiles', hash: S('userId') },
   { name: 'social-rooms', hash: S('roomId') },
   { name: 'social-room-members', hash: S('roomId'), range: S('userId'), gsi: [{ name: 'userId-roomId-index', hash: S('userId'), range: S('roomId') }] },
+  // teams, follows, recording share links (docs/social-tenant-design.md §4.4,
+  // phase S2): platform-api's `/api/teams` (a team's channels are hangout
+  // rooms carrying its teamId), the follow graph the contacts page reads, and
+  // `POST /api/recordings/:id/share`'s links (TTL'd).
+  {
+    name: 'teams', hash: S('orgId'), range: S('teamId'),
+    gsi: [{ name: 'orgId-slug-index', hash: S('orgId'), range: S('slug') }],
+  },
+  { name: 'team-members', hash: S('teamId'), range: S('userId'), gsi: [{ name: 'userId-index', hash: S('userId') }] },
+  {
+    name: 'social-relationships', hash: S('followerId'), range: S('followeeId'),
+    gsi: [{ name: 'followeeId-followerId-index', hash: S('followeeId'), range: S('followerId') }],
+  },
+  { name: 'video-recording-share-links', hash: S('shareToken'), ttl: 'ttl' },
   // touched at boot (dynamo-setup.ts checks TTL on each)
   {
     name: 'social-outbox', hash: S('outboxId'),

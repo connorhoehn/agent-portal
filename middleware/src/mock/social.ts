@@ -25,7 +25,7 @@ export interface SocialSurface {
   group: 'Talk' | 'Meet' | 'People' | 'Library' | 'System';
   /** The lane that brings this surface its data. */
   phase: SocialPhase;
-  /** True once the surface reads real rows (S0: none; S1: channels and DMs). */
+  /** True once the surface reads real rows (S0: none; S1: channels and DMs; S2: the rest). */
   live: boolean;
 }
 
@@ -35,12 +35,12 @@ export const socialSurfaces = defineFixture<SocialSurface>({
     default: () => [
       { id: 'channels', label: 'Channels', group: 'Talk', phase: 'S1', live: true },
       { id: 'dms', label: 'Direct messages', group: 'Talk', phase: 'S1', live: true },
-      { id: 'calls', label: 'Calls', group: 'Meet', phase: 'S2', live: false },
-      { id: 'rooms', label: 'Rooms', group: 'Meet', phase: 'S2', live: false },
-      { id: 'contacts', label: 'Contacts', group: 'People', phase: 'S2', live: false },
-      { id: 'teams', label: 'Teams', group: 'People', phase: 'S2', live: false },
-      { id: 'recordings', label: 'Recordings', group: 'Library', phase: 'S2', live: false },
-      { id: 'configuration', label: 'Configuration', group: 'System', phase: 'S2', live: false },
+      { id: 'calls', label: 'Calls', group: 'Meet', phase: 'S2', live: true },
+      { id: 'rooms', label: 'Rooms', group: 'Meet', phase: 'S2', live: true },
+      { id: 'contacts', label: 'Contacts', group: 'People', phase: 'S2', live: true },
+      { id: 'teams', label: 'Teams', group: 'People', phase: 'S2', live: true },
+      { id: 'recordings', label: 'Recordings', group: 'Library', phase: 'S2', live: true },
+      { id: 'configuration', label: 'Configuration', group: 'System', phase: 'S2', live: true },
     ],
     empty: () => [],
   },
