@@ -239,10 +239,13 @@ One `app_users` id everywhere, unchanged. The realtime token already carries
   on rooms and team create/list, 404 elsewhere); an OrgIQ caller's room call
   lobby is now `<partition>:room:<slug>` (Cognito callers keep `room:<slug>`);
   video sessions opened on a `<tenant>:` lobby are recorded under that tenant.
-  Open upstream, decided here for S2: a private room's lobby must look the
-  room up (today `social:room:x` admits anyone with a `social` grant, and the
-  video API called directly skips the rooms route's membership check); call
-  reactions still read under the caller's org until their event carries one.
+  Closed upstream in platform-api `62f9913`: the lobby check looks the room
+  up once per request — a public room admits anyone who may use the tenant,
+  a private room its creator and members only (403 "Access denied to room"
+  from the rooms route or the video API alike, before any LVS call; a
+  non-member of a private `room:<slug>` used to get 404 from the video API
+  and now gets 403). Call reactions carrying an org arrive with the
+  DynamoChatStore release (0.99.0).
 
 A token still says `org: <session tenant>`, so rooms and teams a user
 creates while standing in Social land under `social`. No second token.
