@@ -10,6 +10,12 @@ const ROLE_LABELS: Record<string, string> = {
   'org-leader': 'Org Leader',
   'hr-admin': 'HR Admin',
   admin: 'Admin',
+  // The assessment tenant's roles (the same names the workspace picker's
+  // ROLE_META uses); the menu showed the raw ids after the 2026-09-29 row
+  // conversion (assessment journey re-audit, #12).
+  assessor: 'Assessor',
+  'lead-assessor': 'Lead Assessor',
+  'program-lead': 'Program Lead',
 };
 
 const ROLE_HINTS: Record<string, string> = {
@@ -18,6 +24,9 @@ const ROLE_HINTS: Record<string, string> = {
   'org-leader': 'VP / Director. + leaderboards, approvals.',
   'hr-admin': 'Sees salary + perf. Edits guardrails.',
   admin: 'Cross-tenant operator. Every role, both accounts.',
+  assessor: 'Score dimensions, manage submission intake.',
+  'lead-assessor': 'Approve exceptions, publish reports.',
+  'program-lead': 'Own the assessment program end to end.',
 };
 
 const TENANT_LABELS: Record<string, string> = { orgiq: 'Org', assessment: 'Assessment' };
