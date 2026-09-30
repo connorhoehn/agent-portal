@@ -10,10 +10,22 @@
 // the next time the dependency tree is being moved anyway — the store takes
 // any object with these method names.
 //
-// Scope, deliberately: one connection, no pipelining API, no pub/sub, no
-// cluster, no TLS (`rediss://` is refused rather than silently downgraded).
-// A dropped connection rejects everything in flight and reconnects on the
-// next command.
+// Scope, deliberately: no pipelining API, no cluster, no TLS (`rediss://` is
+// refused rather than silently downgraded). A dropped connection rejects
+// everything in flight and reconnects on the next command.
+//
+// Pub/sub lives in `RedisSubscriber`, a SEPARATE connection, because Redis puts
+// a subscribed connection into a mode where it accepts only (P)SUBSCRIBE,
+// (P)UNSUBSCRIBE, PING and QUIT — issuing a GET on it is a protocol error. It
+// also pushes `message` frames the client never asked for, which `RedisLite`
+// would mis-pair with the next pending request (its `data` handler shifts the
+// FIFO for every reply). Both facts make "one socket for everything" wrong
+// rather than merely untidy, so the two connections are different classes.
+//
+// The adapters at the bottom exist so distributed-core's horizontal-scaling
+// components can drive this client instead of pulling in ioredis:
+// `lockRedisClient` satisfies its `cluster/locks` RedisClient (SET NX PX, EVAL,
+// INCR) and `pubSubRedisClient` its `gateway/pubsub` RedisLikeClient.
 
 import net from 'node:net';
 
@@ -84,6 +96,27 @@ function encode(args: readonly (string | number)[]): string {
   return out;
 }
 
+interface RedisEndpoint {
+  host: string;
+  port: number;
+  username: string | null;
+  password: string | null;
+  db: number;
+}
+
+/** Shared by both connection classes so they cannot disagree about a URL. */
+function parseRedisUrl(url: string): RedisEndpoint {
+  const u = new URL(url);
+  if (u.protocol !== 'redis:') throw new Error(`unsupported Redis URL scheme '${u.protocol}' (only redis:// — no TLS support)`);
+  return {
+    host: u.hostname || '127.0.0.1',
+    port: Number(u.port || 6379),
+    username: u.username ? decodeURIComponent(u.username) : null,
+    password: u.password ? decodeURIComponent(u.password) : null,
+    db: Number(u.pathname.replace(/^\//, '') || 0),
+  };
+}
+
 export class RedisLite {
   private socket: net.Socket | null = null;
   private ready: Promise<void> | null = null;
@@ -96,13 +129,12 @@ export class RedisLite {
   private readonly db: number;
 
   constructor(url: string) {
-    const u = new URL(url);
-    if (u.protocol !== 'redis:') throw new Error(`unsupported Redis URL scheme '${u.protocol}' (only redis:// — no TLS support)`);
-    this.host = u.hostname || '127.0.0.1';
-    this.port = Number(u.port || 6379);
-    this.username = u.username ? decodeURIComponent(u.username) : null;
-    this.password = u.password ? decodeURIComponent(u.password) : null;
-    this.db = Number(u.pathname.replace(/^\//, '') || 0);
+    const e = parseRedisUrl(url);
+    this.host = e.host;
+    this.port = e.port;
+    this.username = e.username;
+    this.password = e.password;
+    this.db = e.db;
   }
 
   private connect(): Promise<void> {
@@ -208,6 +240,242 @@ export interface NotificationRedisLike {
   hGetAll(key: string): Promise<Record<string, string>>;
   expire(key: string, seconds: number): Promise<unknown>;
   del(key: string): Promise<unknown>;
+}
+
+/** A `message` frame's payload and the channel it arrived on. */
+export type SubscriberListener = (message: string, channel: string) => void;
+
+/**
+ * A connection held in Redis subscriber mode. Separate from `RedisLite` for the
+ * protocol reasons in the header comment: this socket receives server PUSHES
+ * that pair with no request, and may not issue ordinary commands.
+ *
+ * Reconnects are the point of this class, not an extra. A replica that loses
+ * its subscriber connection stops receiving every other replica's frames while
+ * still serving traffic and still looking healthy — a silent split where each
+ * node believes it is the whole cluster. So a drop re-dials with backoff and
+ * re-issues SUBSCRIBE for every channel a listener is still registered for,
+ * and `onStateChange` reports it so the caller can surface the gap.
+ */
+export class RedisSubscriber {
+  private socket: net.Socket | null = null;
+  private parser = new RespParser();
+  private readonly endpoint: RedisEndpoint;
+  private readonly listeners = new Map<string, Set<SubscriberListener>>();
+  /** Resolvers for in-flight (P)SUBSCRIBE/UNSUBSCRIBE confirmations. */
+  private confirms = new Map<string, Array<() => void>>();
+  private connecting: Promise<void> | null = null;
+  private closed = false;
+  private retry = 0;
+  private errorHandlers = new Set<(err: Error) => void>();
+  private stateHandlers = new Set<(state: 'ready' | 'disconnected') => void>();
+
+  constructor(url: string, private readonly reconnectBaseMs = 50) {
+    this.endpoint = parseRedisUrl(url);
+  }
+
+  onError(handler: (err: Error) => void): void { this.errorHandlers.add(handler); }
+  onStateChange(handler: (state: 'ready' | 'disconnected') => void): void { this.stateHandlers.add(handler); }
+
+  private emitError(err: Error): void {
+    // A subscriber with no error handler must not take the process down with an
+    // unhandled 'error' event, which is how a Redis blip became a crash loop.
+    for (const h of this.errorHandlers) { try { h(err); } catch { /* ignore */ } }
+  }
+
+  private emitState(state: 'ready' | 'disconnected'): void {
+    for (const h of this.stateHandlers) { try { h(state); } catch { /* ignore */ } }
+  }
+
+  async connect(): Promise<void> {
+    if (this.closed) throw new Error('subscriber closed');
+    if (this.socket) return;
+    if (this.connecting) return this.connecting;
+    this.connecting = new Promise<void>((resolve, reject) => {
+      const socket = net.createConnection({ host: this.endpoint.host, port: this.endpoint.port });
+      socket.setNoDelay(true);
+      this.parser = new RespParser();
+      let settled = false;
+      socket.once('connect', () => { this.socket = socket; settled = true; resolve(); });
+      socket.on('data', (chunk: Buffer) => this.onData(chunk));
+      const drop = (err: Error): void => {
+        this.socket = null;
+        this.connecting = null;
+        // Confirmations will never arrive on a dead socket; fail them so a
+        // caller awaiting subscribe() does not hang forever.
+        const waiting = [...this.confirms.values()].flat();
+        this.confirms = new Map();
+        for (const w of waiting) w();
+        if (!settled) { settled = true; reject(err); } else this.emitError(err);
+        this.emitState('disconnected');
+        this.scheduleReconnect();
+      };
+      socket.on('error', drop);
+      socket.on('close', () => drop(new Error('redis subscriber connection closed')));
+    }).then(async () => {
+      if (this.endpoint.password) {
+        await this.send(this.endpoint.username
+          ? ['AUTH', this.endpoint.username, this.endpoint.password]
+          : ['AUTH', this.endpoint.password]);
+      }
+      // No SELECT: pub/sub is not namespaced by db, so issuing it would imply
+      // an isolation this transport does not provide.
+      this.connecting = null;
+      this.retry = 0;
+      this.emitState('ready');
+    }).catch((err: unknown) => {
+      this.socket?.destroy();
+      this.socket = null;
+      this.connecting = null;
+      throw err;
+    });
+    return this.connecting;
+  }
+
+  private scheduleReconnect(): void {
+    if (this.closed || this.listeners.size === 0) return;
+    const delay = Math.min(this.reconnectBaseMs * 2 ** this.retry++, 5_000);
+    const timer = setTimeout(() => {
+      if (this.closed) return;
+      void this.connect()
+        .then(() => this.resubscribeAll())
+        .catch((err: unknown) => this.emitError(err instanceof Error ? err : new Error(String(err))));
+    }, delay);
+    // Never hold the event loop open for a reconnect nobody is waiting on.
+    timer.unref?.();
+  }
+
+  private async resubscribeAll(): Promise<void> {
+    const channels = [...this.listeners.keys()];
+    if (channels.length > 0) await this.send(['SUBSCRIBE', ...channels]);
+  }
+
+  private onData(chunk: Buffer): void {
+    this.parser.push(chunk);
+    for (let r = this.parser.next(); r !== undefined; r = this.parser.next()) {
+      if (r instanceof Error) { this.emitError(r); continue; }
+      if (!Array.isArray(r)) continue; // +OK from AUTH, or a PONG
+      const kind = typeof r[0] === 'string' ? r[0] : '';
+      if (kind === 'message' && typeof r[1] === 'string' && typeof r[2] === 'string') {
+        const [, channel, payload] = r as [string, string, string];
+        for (const l of this.listeners.get(channel) ?? []) {
+          // One listener must not be able to stop the others, or a single
+          // throwing consumer silently halves the fan-out.
+          try { l(payload, channel); } catch { /* ignore */ }
+        }
+        continue;
+      }
+      if ((kind === 'subscribe' || kind === 'unsubscribe') && typeof r[1] === 'string') {
+        const waiting = this.confirms.get(r[1]);
+        if (waiting && waiting.length > 0) waiting.shift()!();
+      }
+    }
+  }
+
+  private send(args: readonly (string | number)[]): Promise<void> {
+    const socket = this.socket;
+    if (!socket) return Promise.reject(new Error('redis subscriber not connected'));
+    socket.write(encode(args));
+    return Promise.resolve();
+  }
+
+  /** Resolves once the server confirms, so a caller can publish and expect delivery. */
+  async subscribe(channel: string, listener: SubscriberListener): Promise<void> {
+    const existing = this.listeners.get(channel);
+    if (existing) { existing.add(listener); return; }
+    this.listeners.set(channel, new Set([listener]));
+    await this.connect();
+    const confirmed = new Promise<void>((resolve) => {
+      const list = this.confirms.get(channel) ?? [];
+      list.push(resolve);
+      this.confirms.set(channel, list);
+    });
+    await this.send(['SUBSCRIBE', channel]);
+    await confirmed;
+  }
+
+  async unsubscribe(channel?: string): Promise<void> {
+    const channels = channel ? [channel] : [...this.listeners.keys()];
+    for (const c of channels) this.listeners.delete(c);
+    if (!this.socket || channels.length === 0) return;
+    await this.send(['UNSUBSCRIBE', ...channels]);
+  }
+
+  async quit(): Promise<void> {
+    this.closed = true;
+    this.listeners.clear();
+    if (!this.socket) return;
+    try { await this.send(['QUIT']); } catch { /* closing anyway */ }
+    this.socket?.destroy();
+    this.socket = null;
+  }
+}
+
+/**
+ * distributed-core's `cluster/locks` RedisClient, over one RedisLite. Its
+ * `set(key, value, 'NX', 'PX', ttl)` shape is ioredis's positional form; EVAL
+ * and INCR are what the provider's fencing-token and release scripts need.
+ */
+export interface LockRedisLike {
+  set(key: string, value: string, nx: 'NX' | 'XX', px: 'PX', ttlMs: number): Promise<'OK' | null>;
+  get(key: string): Promise<string | null>;
+  eval(script: string, numkeys: number, ...args: string[]): Promise<unknown>;
+  incr(key: string): Promise<number>;
+  quit(): Promise<void>;
+}
+
+export function lockRedisClient(r: RedisLite): LockRedisLike {
+  return {
+    async set(key, value, nx, px, ttlMs) {
+      return (await r.command('SET', key, value, nx, px, Math.max(1, Math.floor(ttlMs)))) as 'OK' | null;
+    },
+    async get(key) { return (await r.command('GET', key)) as string | null; },
+    eval(script, numkeys, ...args) { return r.command('EVAL', script, numkeys, ...args); },
+    async incr(key) { return Number(await r.command('INCR', key)) || 0; },
+    async quit() { await r.quit(); },
+  };
+}
+
+/**
+ * distributed-core's `gateway/pubsub` RedisLikeClient. Two sockets on purpose:
+ * `publish` needs an ordinary connection and `subscribe` a subscriber-mode one
+ * (header comment). `duplicate()` is what RedisPubSubManager calls when it
+ * wants its own subscriber, and it must hand back an independent connection —
+ * returning `this` would put the publishing socket into subscriber mode and
+ * break every later publish.
+ */
+export interface PubSubRedisLike {
+  connect(): Promise<void>;
+  publish(channel: string, message: string): Promise<number>;
+  subscribe(channel: string, listener: SubscriberListener): Promise<void>;
+  unsubscribe(channel?: string): Promise<void>;
+  duplicate(): PubSubRedisLike;
+  quit(): Promise<unknown>;
+  on(event: string, handler: (...args: unknown[]) => void): unknown;
+}
+
+export function pubSubRedisClient(url: string): PubSubRedisLike {
+  const publisher = new RedisLite(url);
+  const subscriber = new RedisSubscriber(url);
+  return {
+    // Both sockets are LAZY: RedisPubSubManager calls createClient() twice and
+    // uses one object purely as publisher and the other purely as subscriber,
+    // so eagerly dialling both here would open four connections to do the work
+    // of two. PING validates the URL and credentials up front — a wrong
+    // REDIS_URL should fail here, not silently at the first fan-out.
+    async connect() { await publisher.ping(); },
+    async publish(channel, message) { return Number(await publisher.command('PUBLISH', channel, message)) || 0; },
+    subscribe: (channel, listener) => subscriber.subscribe(channel, listener),
+    unsubscribe: (channel) => subscriber.unsubscribe(channel),
+    duplicate: () => pubSubRedisClient(url),
+    async quit() { await Promise.allSettled([publisher.quit(), subscriber.quit()]); },
+    on(event, handler) {
+      if (event === 'error') subscriber.onError((err) => handler(err));
+      if (event === 'ready') subscriber.onStateChange((s) => { if (s === 'ready') handler(); });
+      if (event === 'end' || event === 'disconnect') subscriber.onStateChange((s) => { if (s === 'disconnected') handler(); });
+      return undefined;
+    },
+  };
 }
 
 export function notificationRedisClient(r: RedisLite): NotificationRedisLike {

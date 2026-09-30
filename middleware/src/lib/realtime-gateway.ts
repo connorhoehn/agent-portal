@@ -38,12 +38,20 @@
 // production unless set, so the ECS task is unchanged until someone asks.
 //
 // Call state lives in Redis when REDIS_URL is set (realtime-modules'
-// RedisCallStateStore over lib/redis-lite.ts), in memory otherwise. The
-// ROUTER is always the library's single-process LocalRealtimeRouter: Redis
-// makes call state survive a restart and be shared, but it does not fan
-// frames out across replicas — run one task until a Redis-backed router
-// exists (the library's recipe names realtime-examples' MessageRouter as the
-// reference implementation).
+// RedisCallStateStore over lib/redis-lite.ts), in memory otherwise. Note that
+// shared call STATE is not the same thing as shared DELIVERY: Redis call state
+// makes a call survive a restart, but it never fanned frames out across
+// replicas.
+//
+// Delivery across replicas is `REALTIME_FANOUT=redis` (needs a REDIS_URL),
+// which swaps the router for lib/realtime-router-distributed.ts —
+// `attachRealtime({ router })` is the library's documented transport seam. It
+// is OFF by default: turning it on implicitly, just because REDIS_URL happens
+// to be set for call state, would change an existing deployment's routing
+// semantics without anyone asking. With it off the router is the library's
+// single-process LocalRealtimeRouter and this service must run ONE task —
+// at two, people in the same channel see different conversations depending on
+// which task their socket landed on, and nothing errors.
 //
 // Notifications (docs/social-tenant-design.md §3.3–§3.4): the library's
 // user-addressed inbox, persisted by lib/notification-store.ts (Redis when
@@ -69,6 +77,8 @@
 
 import type { IncomingMessage, Server } from 'node:http';
 import { attachRealtime, chat, presence, calls, notifications, type RealtimeHandle } from '@connorhoehnslalom/realtime-modules/server';
+import { DistributedRealtimeRouter, lazyRouterBus, redisRouterBus, type RouterBus } from './realtime-router-distributed.js';
+import { replicaId } from './replica-fleet.js';
 import { RedisCallStateStore, InMemoryCallStateStore, type CallStateRedis } from '@connorhoehnslalom/realtime-modules/call';
 import { DynamoChatStore, type DynamoCommandClient } from '@connorhoehnslalom/realtime-modules/server/stores/dynamo';
 import type { ChatMember, ChatMessage } from '@connorhoehnslalom/realtime-modules/chat';
@@ -506,6 +516,29 @@ export interface AttachGatewayOptions {
   pingIntervalMs?: number;
   /** Override the chat backend (tests). Default: from SOCIAL_CHAT_* (socialChatConfig). */
   socialChat?: SocialChatBackend;
+  /**
+   * Fan realtime frames across replicas so the service can run >1 task.
+   * Default: from `REALTIME_FANOUT` (`redis` turns it on), and only when a
+   * REDIS_URL exists — there is nothing to fan out over otherwise. Supply a bus
+   * directly in tests to exercise two replicas without a Redis.
+   */
+  fanout?: RouterBus | 'redis' | null;
+  /**
+   * Override this replica's fan-out identity. Two replicas sharing an id drop
+   * each other's frames as their own echo, so tests that run two gateways in one
+   * process MUST set distinct ids (see replicaId()).
+   */
+  nodeId?: string;
+}
+
+/**
+ * Whether cross-replica fan-out is asked for. Off by default, so a deploy that
+ * has not opted in keeps the single-task router it has been running — turning
+ * this on implicitly would change the semantics of an existing service on the
+ * strength of an unrelated variable (REDIS_URL) already being set for call state.
+ */
+export function realtimeFanoutRequested(): boolean {
+  return (process.env['REALTIME_FANOUT'] ?? '').trim().toLowerCase() === 'redis';
 }
 
 /**
@@ -533,17 +566,35 @@ export function attachRealtimeGateway(server: Server, opts: AttachGatewayOptions
   // this gateway briefly wired `presence({ authorizeChannel })` as well —
   // dropped again because that hook answers silently and hid the router's
   // refusal frame (assessment re-audit, 2026-09-29).
+  const plugins = [
+    dmNotifyPlugin(() => (handleRef?.router as unknown as DmRouter | undefined) ?? null),
+    channelNotifyPlugin(() => (handleRef?.router as unknown as DmRouter | undefined) ?? null),
+  ];
+  // Cross-replica routing, when asked for. `attachRealtime` ignores `authorize`
+  // and `plugins` once a custom router is supplied — they become the router's
+  // job — so they are handed to it instead of being passed twice.
+  const wanted = opts.fanout === undefined ? (realtimeFanoutRequested() ? 'redis' : null) : opts.fanout;
+  const nodeId = opts.nodeId ?? replicaId();
+  let distributed: DistributedRealtimeRouter | null = null;
+  if (wanted === 'redis' && !redisUrl) {
+    console.warn('[realtime-gateway] REALTIME_FANOUT=redis needs a REDIS_URL; staying single-task');
+  } else if (wanted) {
+    const bus = wanted === 'redis'
+      ? lazyRouterBus(redisRouterBus(redisUrl!, nodeId), (err) =>
+          console.warn(`[realtime-gateway] fan-out bus unavailable (${err.message}); this task is routing alone`))
+      : wanted;
+    distributed = new DistributedRealtimeRouter({ bus, nodeId, authorize: authorizeChannel, plugins: plugins as never, logger });
+  }
   const handle = attachRealtime(server, {
     path: REALTIME_GATEWAY_PATH,
     auth: authenticateGatewayUpgrade,
     pingIntervalMs: opts.pingIntervalMs ?? 30_000,
     logger,
-    // Chat + presence channels are tenant-scoped like call lobbies.
-    authorize: authorizeChannel,
-    plugins: [
-      dmNotifyPlugin(() => (handleRef?.router as unknown as DmRouter | undefined) ?? null),
-      channelNotifyPlugin(() => (handleRef?.router as unknown as DmRouter | undefined) ?? null),
-    ],
+    ...(distributed ? { router: distributed as never } : {
+      // Chat + presence channels are tenant-scoped like call lobbies.
+      authorize: authorizeChannel,
+      plugins,
+    }),
     // A fresh socket gets its unread set (the library leaves replay to the host).
     onConnect: (clientId: string, ctx: Record<string, unknown>) => {
       const userId = typeof ctx?.['userId'] === 'string' ? ctx['userId'] : '';

@@ -188,6 +188,44 @@ describe('OrgIQ-MiddlewareService — realtime amendments', () => {
     Annotations.fromStack(stack).hasNoWarning('*', Match.stringLikeRegexp('no REDIS_URL'));
   });
 
+  // The task ceiling and cross-replica fan-out are ONE decision, and getting it
+  // wrong is silent: with the gateway on and no bus, a second task is a split
+  // brain — two people in a channel land on different tasks and see different
+  // conversations, with no error and no failed health check. maxCapacity was
+  // unconditionally 4, so that outcome was a function of CPU load.
+  const maxCapacityOf = (stack: MiddlewareServiceStack): number => {
+    const targets = Object.values<any>(Template.fromStack(stack)
+      .findResources('AWS::ApplicationAutoScaling::ScalableTarget'));
+    assert.equal(targets.length, 1, 'expected exactly one scalable target');
+    return targets[0].Properties.MaxCapacity as number;
+  };
+
+  test('the gateway without a Redis cannot scale out: REALTIME_FANOUT unset, maxCapacity pinned to 1, warned', () => {
+    const stack = middlewareServiceStack({ realtimeGateway: 'true' });
+    assert.equal(envOf(stack).env.REALTIME_FANOUT, undefined);
+    assert.equal(maxCapacityOf(stack), 1);
+    Annotations.fromStack(stack).hasWarning('*', Match.stringLikeRegexp('maxCapacity is pinned to 1'));
+  });
+
+  test('with deploySocial the bus exists, so fan-out is on and the ceiling comes back', () => {
+    const stack = middlewareServiceStack({ realtimeGateway: 'true', deploySocial: 'true' });
+    assert.equal(envOf(stack).env.REALTIME_FANOUT, 'redis');
+    assert.equal(maxCapacityOf(stack), 4);
+    Annotations.fromStack(stack).hasNoWarning('*', Match.stringLikeRegexp('maxCapacity is pinned to 1'));
+  });
+
+  test('an explicit realtimeRedisUrl is also a bus', () => {
+    const stack = middlewareServiceStack({ realtimeGateway: 'true', realtimeRedisUrl: 'redis://cache.example.internal:6379' });
+    assert.equal(envOf(stack).env.REALTIME_FANOUT, 'redis');
+    assert.equal(maxCapacityOf(stack), 4);
+  });
+
+  test('with the gateway off, nothing changes — no fan-out and the normal ceiling', () => {
+    const stack = middlewareServiceStack({});
+    assert.equal(envOf(stack).env.REALTIME_FANOUT, undefined);
+    assert.equal(maxCapacityOf(stack), 4);
+  });
+
   test('tableSuffix moves SOCIAL_CHAT_TABLE_PREFIX with the tables', () => {
     const { env } = envOf(middlewareServiceStack({ realtimeGateway: 'true', deploySocial: 'true', tableSuffix: 'v2' }));
     assert.equal(env.SOCIAL_CHAT_TABLE_PREFIX, 'orgiq-social-v2-');

@@ -701,6 +701,12 @@ export class MiddlewareServiceStack extends cdk.Stack {
       enabled: realtimeEnabled,
       redisUrlOverride: ctxStr('realtimeRedisUrl'),
       redisFromSocial: realtimeEnabled && socialDeployed && !ctxStr('realtimeRedisUrl'),
+      // Cross-replica frame fan-out (middleware lib/realtime-router-distributed.ts).
+      // Requires a Redis, since that IS the bus. Without it the router is
+      // single-process and this service must run exactly one task — see the
+      // maxCapacity guard below, which is what makes that a configuration fact
+      // rather than a comment someone has to remember.
+      fanout: realtimeEnabled && (socialDeployed || !!ctxStr('realtimeRedisUrl')),
       socialChat: realtimeEnabled && socialDeployed,
       gatewayUrl: ctxStr('realtimeGatewayUrl'),
       // Browser-facing URLs: explicit context wins; otherwise derived from
@@ -784,6 +790,7 @@ export class MiddlewareServiceStack extends cdk.Stack {
       // The middleware as its own realtime gateway (docs/social-calls-plan.md
       // step 7) — see `realtime` above for why it is opt-in.
       ...(realtime.enabled && { REALTIME_GATEWAY: 'on' }),
+      ...(realtime.fanout && { REALTIME_FANOUT: 'redis' }),
       ...(realtime.enabled && realtime.redisUrlOverride && { REDIS_URL: realtime.redisUrlOverride }),
       // Social chat on OrgIQ-Social's DynamoDB tables (middleware/src/lib/
       // social-chat.ts reads exactly these two names).
@@ -1035,6 +1042,12 @@ export class MiddlewareServiceStack extends cdk.Stack {
     // No sticky sessions, on purpose: cross-task fan-out goes over Redis
     // pub/sub (realtime-examples' own ALB helper is "destickified" for the
     // same reason), so a socket may land on any task.
+    //
+    // ⚠️ That was a statement of intent before it was true. Fan-out is
+    // `REALTIME_FANOUT=redis` (set above only when a Redis exists) and is off by
+    // default, so "a socket may land on any task" is safe only then — which is
+    // why maxCapacity below is 1 without it, rather than leaving stickiness to
+    // paper over a router that cannot reach the other replica.
     fargateService.targetGroup.setAttribute('stickiness.enabled', 'false');
 
     // ── Health check ──────────────────────────────────────────────────────
@@ -1049,9 +1062,23 @@ export class MiddlewareServiceStack extends cdk.Stack {
 
     // ── Auto-scaling ──────────────────────────────────────────────────────
     // Start at 1 replica; scale up under CPU/memory pressure.
+    //
+    // ⚠️ The ceiling depends on whether realtime frames can cross replicas.
+    // With the gateway ON and no fan-out bus the router is single-process, so a
+    // second task is not "more capacity" — it is a split brain: two people in
+    // one channel land on different tasks and see different conversations, with
+    // no error anywhere. Scaling to 4 was previously unconditional, which made
+    // that outcome a function of CPU load. The ceiling is therefore 1 in exactly
+    // that configuration, and the warning says which flag lifts it.
+    const canScaleOut = !realtime.enabled || realtime.fanout;
+    if (!canScaleOut) {
+      cdk.Annotations.of(this).addWarning(
+        'realtimeGateway=true without a Redis (deploySocial=true or realtimeRedisUrl): realtime frames '
+        + 'cannot cross replicas, so maxCapacity is pinned to 1. Add one to enable REALTIME_FANOUT=redis.');
+    }
     const scaling = fargateService.service.autoScaleTaskCount({
       minCapacity: 1,
-      maxCapacity: 4,
+      maxCapacity: canScaleOut ? 4 : 1,
     });
     scaling.scaleOnCpuUtilization('CpuScaling', {
       targetUtilizationPercent: 70,

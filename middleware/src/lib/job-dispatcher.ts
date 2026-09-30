@@ -21,6 +21,7 @@ import {
 } from '../providers/agent-jobs.js';
 import { listBoxes, appendEvent, getBox, registerBox } from './devbox-fleet.js';
 import { isLocalBoxId } from './local-compute-fleet.js';
+import { replicaFleet } from './replica-fleet.js';
 import { runDevboxTask } from '../routes/devbox.js';
 
 const TICK_MS = Number(process.env['JOB_DISPATCH_INTERVAL_MS'] ?? 10_000);
@@ -213,9 +214,22 @@ async function tick(): Promise<void> {
  * Local claims are left to the periodic sweep, which reaps them once their
  * heartbeat actually goes quiet — the honest test for a worker the middleware
  * cannot see.
+ *
+ * ⚠️ A SIBLING REPLICA is the same counterexample, and it arrives the moment this
+ * service scales. "Any job still marked live at boot is orphaned" holds only
+ * while this process is the ONLY executor; with a second task the booting
+ * replica requeues work the first one is actively running, so the job runs
+ * twice, is billed twice, and the straggler's completion overwrites the newer
+ * attempt. That fires on every scale-out and on every task of a rolling deploy —
+ * i.e. precisely when you scale. So the zero-window sweep now runs only when
+ * `replicaFleet().peers()` is empty, and is serialized by a short distributed
+ * lock so two replicas booting together cannot both sweep. With no REDIS_URL the
+ * fleet reports no peers and the behaviour is byte-for-byte what it was.
  */
 async function recoverOrphanedWork(): Promise<void> {
   try {
+    const fleet = replicaFleet();
+    const peers = await fleet.peers();
     const live = [
       ...(await listJobs({ status: 'running', limit: 100 })),
       ...(await listJobs({ status: 'claimed', limit: 100 })),
@@ -230,7 +244,23 @@ async function recoverOrphanedWork(): Promise<void> {
       adopted++;
     }
 
-    const reaped = await reapStaleJobs(0, { includeFenced: false });
+    if (peers.length > 0) {
+      // Somebody else is executing. Say so loudly: the operator needs to know
+      // that in-flight work was left alone deliberately, not missed.
+      console.log(
+        `[dispatcher] restart recovery: re-registered ${adopted} worker(s); ` +
+        `${peers.length} sibling replica(s) live (${peers.join(', ')}), so the ` +
+        `zero-window sweep is skipped — ${live.length} live job(s) left to the ` +
+        'periodic sweep' + (skippedLocal ? `, ${skippedLocal} local claim(s) alone` : ''),
+      );
+      return;
+    }
+    const reaped = await fleet.withLock('dispatcher-boot-recovery', 30_000,
+      () => reapStaleJobs(0, { includeFenced: false }));
+    if (!reaped) {
+      console.log('[dispatcher] restart recovery: another replica holds the recovery lock; skipping the sweep');
+      return;
+    }
     if (adopted || skippedLocal || reaped.requeued || reaped.failed) {
       console.log(
         `[dispatcher] restart recovery: re-registered ${adopted} worker(s), ` +
