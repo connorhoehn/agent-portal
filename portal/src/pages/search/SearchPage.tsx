@@ -482,7 +482,11 @@ function PeopleConnections({ graph, selectedKeys, focusIds, showWholeOrg, onShow
         onFocusPerson={id => { setPeople([...selectedIds, id]); setDetailId(id); }}
         onAsk={id => onAsk([`person:${id}`])} askLabel={person => `Ask about ${person.name.split(' ')[0]}`} /> : null}>
       <OrgGraph data-testid="search-org-graph" aria-label="Org graph" people={people} relationships={edges} departments={data.departments}
-        multiSelectIds={selectedIds} spotlightIds={selectedIds} layout={layout} showInfluence={showInfluence}
+        // focusIds is what the automatic fit centres on when the drawing
+        // overflows; without it the fit start-aligned the drawing beside the
+        // legend and a selected person could sit past the right edge (D9,
+        // 6 of 75 two-person opens, 2026-09-29).
+        multiSelectIds={selectedIds} spotlightIds={selectedIds} focusIds={selectedIds} layout={layout} showInfluence={showInfluence}
         onToggleMultiSelect={id => {
           if (selectedIds.has(id)) { setPeople([...selectedIds].filter(item => item !== id)); if (detailId === id) setDetailId(null); }
           else { setPeople([...selectedIds, id]); setDetailId(id); }
