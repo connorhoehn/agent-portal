@@ -14,7 +14,7 @@ extension. Portal code owns API data, role permissions, URL state, and callbacks
 ## Dependency pin
 
 The portal pins the library by full git sha in `portal/package.json`
-(`github:connorhoehnslalom/ui-components#<sha>`, 2.407.34 = `fedd6c59`), the same
+(`github:connorhoehnslalom/ui-components#<sha>`, 2.407.36 = `ec342193`), the same
 way as every other bump. It briefly ran on a `file:../../ui-components` link
 while the component was being ported; that link and the `install-links` npmrc
 line are gone, and neither should come back on a branch that gets committed.
