@@ -238,7 +238,7 @@ python3.11 -m venv .venv-synth && .venv-synth/bin/pip install -r schema/synth/re
 ## Project dependencies
 
 - **ui-components** (`~/projects/ui-components`): `@connorhoehnslalom/ui-components`,
-  installed at **2.407.37** (sha `2bf906c7`, verified 2026-09-29 with the two settling
+  installed at **2.407.39** (sha `3de81047`, verified 2026-09-30 with the two settling
   commands below; 2.407.9 carries the CallDock render fixes and `--dock-floor`). 2.385 added `@tiptap/extension-mention` to what the rich
   composer imports; it is an *optional* peer, so npm does not install it and Vite
   fails at runtime with "Could not resolve @tiptap/extension-mention" — the portal
@@ -263,9 +263,13 @@ python3.11 -m venv .venv-synth && .venv-synth/bin/pip install -r schema/synth/re
   its EventBus. ⚠️ Two remotes, two version lines: this repo pins the
   **`connorhoehn/realtime-modules`** canonical repository (the slalom fork is
   the second remote and is not what either package.json points at). As of
-  2026-09-29 **both** the middleware and the portal pin
-  `71a46567c5153a3ff43768808036783d48a2671c` (0.98.7, tag
-  `realtime-modules-v0.98.7`; from `d84d9612`/0.98.3 via 0.98.4–0.98.6 — 0.98.4
+  2026-09-30 **both** the middleware and the portal pin
+  `c09930fa9e052d0cae2a89756a42ea6868f71676` (0.99.0, tag
+  `realtime-modules-v0.99.0`: `DynamoChatStore` under `server/stores/dynamo`
+  with `chat(store.chatOptions(extra))`, `FeaturePlugin.onMessage`/`onConnect`
+  carry `userId`, `onReaction` carries the sender's `org`; the gateway also
+  serves `notifications()` since 0cf97d21 — see `docs/social-tenant-design.md`
+  §3; before that `71a46567` = 0.98.7, tag `realtime-modules-v0.98.7`; from `d84d9612`/0.98.3 via 0.98.4–0.98.6 — 0.98.4
   fixed the ghost participant after both call sockets close under
   `attachRealtime`, recognises tenant-prefixed `<org>:dm:` lobbies, and
   refuses targetless invites by default (`calls({ allowUntargetedInvites })`);
