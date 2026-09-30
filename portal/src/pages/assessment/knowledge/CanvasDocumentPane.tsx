@@ -16,7 +16,7 @@ import { useCapabilities } from '../../../lib/capabilities';
 import { sendJson } from '../../../lib/writeJson';
 import { usePendingDocumentChanges } from './DocumentNavigation';
 import { DocumentContextPanel, useDocumentContext } from './ExplorerFrame';
-import { DocumentShell, type DocumentTab } from './DocumentShell';
+import { DOCUMENT_TABS, DocumentShell, type DocumentTab } from './DocumentShell';
 import { DocumentActivityFeed } from './ActivityBar';
 import { DocumentComments } from './DocumentComments';
 import { DocumentReader } from './DocumentReader';
@@ -90,7 +90,13 @@ export function CanvasDocumentPane(props: DocPaneProps) {
     return () => { window.clearTimeout(timer); window.clearTimeout(expiry); };
   }, [grant, refreshGrant]);
 
-  const [tab, setTab] = useState<DocumentTab>('editor');
+  // `?tab=comments` (the header bell's reply/mention links) opens on that tab;
+  // a later navigation to the same document with a tab switches to it.
+  const requestedTab = new URLSearchParams(location.search).get('tab');
+  const [tab, setTab] = useState<DocumentTab>(() => (DOCUMENT_TABS as readonly string[]).includes(requestedTab ?? '') ? requestedTab as DocumentTab : 'editor');
+  useEffect(() => {
+    if (requestedTab && (DOCUMENT_TABS as readonly string[]).includes(requestedTab)) setTab(requestedTab as DocumentTab);
+  }, [requestedTab, location.key]);
   const title = doc.data?.title ?? node.title;
   // Document-level reactions sit with the discussion, not in the head row.
   const commentsTab = <DocumentComments key={node.id} sourceId={node.id} title={title} userId={session?.sub ?? ''}

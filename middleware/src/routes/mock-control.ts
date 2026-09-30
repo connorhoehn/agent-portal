@@ -52,6 +52,7 @@ import { rehydrateMockFleet } from '../providers/devbox-fleet-store.js';
 import { rehydrateMockCrawlTargets } from '../lib/crawl-targets.js';
 import { rehydrateMockCrawls } from '../lib/crawler.js';
 import { rehydrateMockSchedules } from '../lib/ingest-scheduler.js';
+import { rehydrateMockNotifications } from '../lib/notification-store.js';
 
 export const mockControlRouter = Router();
 
@@ -84,7 +85,9 @@ function rehydrateIngestMocks(): void {
  * copy of rows nobody could read.
  */
 function rehydrateAll(): void {
-  for (const step of [rehydrateMockFleet, rehydrateIngestMocks]) {
+  // The gateway's notification inbox is the same kind of copy (an in-memory
+  // store seeded from mock/notifications.ts), so it is rebuilt here too.
+  for (const step of [rehydrateMockFleet, rehydrateIngestMocks, rehydrateMockNotifications]) {
     try { step(); } catch { /* the fixture is pinned to `error`; its routes report it */ }
   }
 }

@@ -2,7 +2,10 @@ import { changeDocumentVersion, type DocumentVersionChange } from '../providers/
 import { Router, type Request } from 'express';
 import { requireAction, requireTenant } from '../lib/authz.js';
 import { DocumentWorkflowError, performDocumentWorkflow, listDocumentReviewers, type WorkflowOperation } from '../providers/document-workflows.js';
-import { createDocumentComment, deleteDocumentComment, listDocumentComments, updateDocumentComment, type DocumentCommentResult } from '../providers/document-comments.js';
+import { createDocumentComment, deleteDocumentComment, listDocumentComments, updateDocumentComment, type DocumentCommentResult, type PlatformDocumentComment } from '../providers/document-comments.js';
+import { getKnowledgeDoc } from '../providers/assessment.js';
+import { assessmentDocumentHref, notificationSinkActive, notifyDocumentComment } from '../lib/social-notify.js';
+import type { Session } from '../lib/session.js';
 
 export const assessmentDocumentWorkflowsRouter = Router();
 assessmentDocumentWorkflowsRouter.use('/doc/workflows', requireTenant('assessment'), requireAction('ViewAssessment'));
@@ -82,6 +85,29 @@ function handleComments(run: (req: Request, id: string, session: NonNullable<Req
   };
 }
 assessmentDocumentWorkflowsRouter.get('/doc/workflows/comments', handleComments(async (_req, id, session) => ({ status: 200, body: { ...await listDocumentComments(id, session) } })));
-assessmentDocumentWorkflowsRouter.post('/doc/workflows/comments', handleComments((req, id, session) => createDocumentComment(id, session, req.body ?? {})));
+assessmentDocumentWorkflowsRouter.post('/doc/workflows/comments', handleComments(async (req, id, session) => {
+  const result = await createDocumentComment(id, session, req.body ?? {});
+  const comment = result.body['comment'] as PlatformDocumentComment | undefined;
+  if (result.status === 201 && comment) void notifyCommentActivity(id, session, comment);
+  return result;
+}));
+
+// The header activity indicator (docs/social-tenant-design.md §3.4 rows 1–3)
+// for a comment on a platform-api thread: the parent's author on a reply, the
+// document's other commenters on a root, anyone @mentioned. Runs after the
+// write and is never awaited — a slow comments read cannot slow the post.
+async function notifyCommentActivity(sourceId: string, session: Session, comment: PlatformDocumentComment): Promise<void> {
+  if (!notificationSinkActive()) return; // gateway off: nothing to deliver, so nothing to read
+  try {
+    const [doc, list] = await Promise.all([getKnowledgeDoc(sourceId), listDocumentComments(sourceId, session)]);
+    const earlier = list.comments.filter((c) => c.commentId !== comment.commentId && !c.deletedAt);
+    await notifyDocumentComment({
+      tenant: 'assessment', docId: sourceId, docTitle: doc?.title ?? sourceId, href: assessmentDocumentHref(sourceId),
+      commentId: comment.commentId, authorId: session.sub, authorName: session.name, text: comment.text,
+      parentAuthorId: comment.parentCommentId ? list.comments.find((c) => c.commentId === comment.parentCommentId)?.userId ?? null : null,
+      priorAuthorIds: earlier.map((c) => c.userId),
+    });
+  } catch { /* the comment is stored; a missed notification is not an error */ }
+}
 assessmentDocumentWorkflowsRouter.patch('/doc/workflows/comments/:commentId', handleComments((req, id, session) => updateDocumentComment(id, session, req.params['commentId'], req.body ?? {})));
 assessmentDocumentWorkflowsRouter.delete('/doc/workflows/comments/:commentId', handleComments((req, id, session) => deleteDocumentComment(id, session, req.params['commentId'])));

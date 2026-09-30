@@ -2,7 +2,7 @@
 // step 7, deploy-plan risk #2 — the gateway half).
 //
 //   ws(s)://<middleware>/ws     Sec-WebSocket-Protocol: bearer-token-v1, <jwt>
-//   features: chat, presence, calls (+ the library's built-in subscribe)
+//   features: chat, presence, calls, notifications (+ the library's built-in subscribe)
 //
 // Why here and not realtime-examples' gateway container: that server verifies
 // Cognito id_tokens (or runs with SKIP_AUTH, which trusts any claims), and it
@@ -42,13 +42,26 @@
 // frames out across replicas — run one task until a Redis-backed router
 // exists (the library's recipe names realtime-examples' MessageRouter as the
 // reference implementation).
+//
+// Notifications (docs/social-tenant-design.md §3.3–§3.4): the library's
+// user-addressed inbox, persisted by lib/notification-store.ts (Redis when
+// REDIS_URL, the library's store over an in-memory map otherwise, seeded from
+// mock/notifications.ts under MOCK_AURORA). The library does not replay a
+// user's unread set by itself — `onConnect` below does, once per socket. The
+// producers are lib/social-notify.ts's `notify` (wired here as the sink) plus
+// two that only this file can see:
+//   - a DM message (chat publish on `<tenant>:dm:<a>:<b>…`) → the other
+//     members who have no live subscription to that channel;
+//   - a missed call (`calls({ onCallMissed })`) → the invite's targets.
 
 import type { IncomingMessage, Server } from 'node:http';
-import { attachRealtime, chat, presence, calls, type RealtimeHandle } from '@connorhoehnslalom/realtime-modules/server';
+import { attachRealtime, chat, presence, calls, notifications, type RealtimeHandle } from '@connorhoehnslalom/realtime-modules/server';
 import { RedisCallStateStore, InMemoryCallStateStore, type CallStateRedis } from '@connorhoehnslalom/realtime-modules/call';
 import { isAllowedBrowserOrigin } from './browser-origin.js';
 import { realtimeSigningSecret, tokenFromSubprotocol, verifyRealtimeToken } from './realtime-token.js';
 import { RedisLite } from './redis-lite.js';
+import { createGatewayNotificationStore, releaseGatewayNotificationStore, seedMockNotifications } from './notification-store.js';
+import { conversationHref, notify, parseDmLobby, setNotificationSink, type NotificationSink } from './social-notify.js';
 
 export const REALTIME_GATEWAY_PATH = '/ws';
 
@@ -160,6 +173,116 @@ function guardWithLog(auth: Record<string, unknown>, lobbyName: string): boolean
   return ok;
 }
 
+// ── Socket producers (design §3.4 rows 4 and 6) ────────────────────────────
+
+/** The router surface the DM producer reads. `channelMembers` is LocalRealtimeRouter's
+ * private channel → clientIds map: realtime-modules 0.98.7 exposes no public "who is
+ * subscribed to this channel" accessor, so it is read duck-typed, and when it is
+ * absent (a different router) every member but the sender is notified. */
+interface DmRouter {
+  getUserIdForClient?(clientId: string): string | undefined;
+  channelMembers?: Map<string, Set<string>>;
+}
+
+function snippet(text: unknown, max = 140): string {
+  const flat = typeof text === 'string' ? text.replace(/\s+/g, ' ').trim() : '';
+  return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
+}
+
+/** Users with a live subscription to `channel` (chat subscribes it bare; `chat:`-prefixed covered too). */
+export function liveSubscribers(router: DmRouter, channel: string): Set<string> | null {
+  const members = router.channelMembers;
+  if (!(members instanceof Map)) return null;
+  const out = new Set<string>();
+  for (const name of [channel, `chat:${channel}`]) {
+    for (const clientId of members.get(name) ?? []) {
+      const userId = router.getUserIdForClient?.(clientId);
+      if (userId) out.add(userId);
+    }
+  }
+  return out;
+}
+
+/**
+ * Row 4: a chat message on a `<tenant>:dm:<a>:<b>…` channel notifies the other
+ * members who are not looking at it. The sender is the PUBLISHING CONNECTION's
+ * authenticated user (the plugin's `clientId` is the publisher); the message's
+ * server-stamped sender (`message.userId`, and `metadata.userId` where a
+ * library version stamps it there) must agree or the frame is ignored. The
+ * gateway's `authorize` already refused a publish by a non-member.
+ */
+export function dmNotifyPlugin(getRouter: () => DmRouter | null) {
+  return {
+    name: 'social-dm-notify',
+    onMessage: ({ clientId, channelId, message }: { clientId: string; channelId: string; message: unknown }) => {
+      const frame = message as { type?: unknown; action?: unknown; message?: { userId?: unknown; message?: unknown; metadata?: { userId?: unknown; displayName?: unknown } } } | null;
+      if (!frame || frame.type !== 'chat' || frame.action !== 'message' || !frame.message) return;
+      const channel = stripServicePrefix(channelId);
+      const dm = parseDmLobby(channel);
+      if (!dm) return;
+      const router = getRouter();
+      const sender = router?.getUserIdForClient?.(clientId);
+      const stamped = frame.message.userId ?? frame.message.metadata?.userId;
+      if (!router || !sender || (typeof stamped === 'string' && stamped !== sender) || !dm.members.includes(sender)) return;
+      const live = liveSubscribers(router, channel);
+      const recipients = dm.members.filter((u) => u !== sender && !(live?.has(u) ?? false));
+      if (!recipients.length) return;
+      const name = typeof frame.message.metadata?.displayName === 'string' && frame.message.metadata.displayName ? frame.message.metadata.displayName : sender;
+      void notify(recipients, {
+        type: 'message',
+        title: `${name} sent you a message`,
+        body: snippet(frame.message.message) || 'New message',
+        channel,
+        payload: { tenant: dm.tenant, kind: 'message', channel, actorId: sender, actorName: name },
+        action: { label: 'Open the conversation', href: conversationHref(dm.tenant, channel) },
+      });
+    },
+  };
+}
+
+/** Invites seen by `calls({ config.authorize })`, so a missed call knows who was rung and from where. */
+const invites = new Map<string, { targets: string[]; channel: string | null; at: number }>();
+const INVITE_TTL_MS = 10 * 60_000;
+
+export function recordInvite(action: string, data: { callId?: unknown; targetUserIds?: unknown; channel?: unknown }): void {
+  if (action !== 'invite' || typeof data?.callId !== 'string') return;
+  const now = Date.now();
+  for (const [id, v] of invites) if (now - v.at > INVITE_TTL_MS) invites.delete(id);
+  const targets = Array.isArray(data.targetUserIds) ? data.targetUserIds.filter((t): t is string => typeof t === 'string') : [];
+  invites.set(data.callId, { targets, channel: typeof data.channel === 'string' ? data.channel : null, at: now });
+}
+
+const MISSED_BODY: Record<string, string> = {
+  cancelled: 'The call ended before anyone answered.',
+  declined: 'The call was declined.',
+  'no-answer': 'Nobody answered.',
+};
+
+/** Row 6: an invite that never became a call → its targets (from the invite, else a DM lobby's other members). */
+export async function notifyMissedCall(summary: { callId: string; lobbyName: string; callerId: string; callerName?: string; reason: string }): Promise<void> {
+  const seen = invites.get(summary.callId);
+  invites.delete(summary.callId);
+  const tenant = summary.lobbyName.split(':')[0] ?? '';
+  if (!tenant) return;
+  const dm = parseDmLobby(summary.lobbyName);
+  const targets = (seen?.targets.length ? seen.targets : dm?.members ?? []).filter((u) => u !== summary.callerId);
+  if (!targets.length) return;
+  const channel = seen?.channel ?? null;
+  const initiative = channel?.startsWith('initiative:') ? channel.slice('initiative:'.length) : null;
+  const href = initiative && tenant === 'orgiq'
+    ? `/iq/projects/${encodeURIComponent(initiative)}`
+    : conversationHref(tenant, summary.lobbyName);
+  const caller = summary.callerName || summary.callerId;
+  await notify(targets, {
+    type: 'call-missed',
+    title: `Missed call from ${caller}`,
+    body: MISSED_BODY[summary.reason] ?? 'Missed call.',
+    channel: channel ?? summary.lobbyName,
+    payload: { tenant, kind: 'call-missed', callId: summary.callId, lobbyName: summary.lobbyName, callerId: summary.callerId, callerName: caller, reason: summary.reason, ...(channel ? { channel } : {}) },
+    action: { label: initiative ? 'Open the initiative' : 'Open the conversation', href },
+  });
+}
+
 let status: { gateway: 'on' | 'off'; store: RealtimeGatewayStore | null } = { gateway: 'off', store: null };
 
 /** For /api/health. */
@@ -190,6 +313,11 @@ export function attachRealtimeGateway(server: Server, opts: AttachGatewayOptions
   const redis = redisUrl ? new RedisLite(redisUrl) : null;
   const store: RealtimeGatewayStore = redis ? 'redis' : 'memory';
   const stateStore = redis ? new RedisCallStateStore(redis as unknown as CallStateRedis) : new InMemoryCallStateStore();
+  const inbox = createGatewayNotificationStore(redis);
+  // Bound after attach: the plugin and onConnect run only once sockets exist.
+  let handleRef: RealtimeHandle | null = null;
+  const notificationService = (): (NotificationSink & { replayUnreadForUser(clientId: string, userId: string): Promise<void> }) | null =>
+    (handleRef?.services['notification'] as unknown as (NotificationSink & { replayUnreadForUser(clientId: string, userId: string): Promise<void> }) | undefined) ?? null;
   // Since realtime-modules 0.98.6 the router is the single authorization
   // point: a refused presence/reactions/cursor subscribe reaches no service
   // state and every fan-out runs `authorize` first, answering
@@ -205,6 +333,12 @@ export function attachRealtimeGateway(server: Server, opts: AttachGatewayOptions
     logger,
     // Chat + presence channels are tenant-scoped like call lobbies.
     authorize: authorizeChannel,
+    plugins: [dmNotifyPlugin(() => (handleRef?.router as unknown as DmRouter | undefined) ?? null)],
+    // A fresh socket gets its unread set (the library leaves replay to the host).
+    onConnect: (clientId: string, ctx: Record<string, unknown>) => {
+      const userId = typeof ctx?.['userId'] === 'string' ? ctx['userId'] : '';
+      if (userId) void notificationService()?.replayUnreadForUser(clientId, userId);
+    },
     features: [
       chat(),
       presence(),
@@ -212,16 +346,27 @@ export function attachRealtimeGateway(server: Server, opts: AttachGatewayOptions
         stateStore,
         lobbyGuard: guardWithLog,
         config: {
+          // Never refuses (the tenant rule is lobbyGuard's); records who an
+          // invite rang, which onCallMissed's summary does not carry.
+          authorize: (_clientId: string, action: string, data: { callId?: unknown; targetUserIds?: unknown; channel?: unknown }) => {
+            recordInvite(action, data ?? {});
+            return true;
+          },
           // An invite with no targets is fanned out to every connected
           // client — every tenant. The portal's hooks always target.
           canCall: (_callerId: string, targetUserIds: string[]) => targetUserIds.length > 0,
+          onCallMissed: (summary: { callId: string; lobbyName: string; callerId: string; callerName?: string; reason: string }) => notifyMissedCall(summary),
         },
       }),
+      notifications({ store: inbox.store }),
     ],
   });
+  handleRef = handle;
+  setNotificationSink(notificationService());
+  if (inbox.memory) void seedMockNotifications().catch(() => undefined);
   status = { gateway: 'on', store };
   const where = redis ? `redis (${redisUrl!.replace(/\/\/[^@/]*@/, '//***@')})` : 'memory';
-  console.log(`[realtime-gateway] serving ${REALTIME_GATEWAY_PATH} (chat, presence, calls); call state: ${where}`);
+  console.log(`[realtime-gateway] serving ${REALTIME_GATEWAY_PATH} (chat, presence, calls, notifications); call state + inbox: ${where}`);
   if (redis) {
     void redis.ping().catch((err: unknown) => {
       console.warn(`[realtime-gateway] REDIS_URL is set but Redis did not answer (${(err as Error).message}); call frames will fail until it does`);
@@ -232,6 +377,9 @@ export function attachRealtimeGateway(server: Server, opts: AttachGatewayOptions
     store,
     redis,
     dispose: async () => {
+      setNotificationSink(null);
+      releaseGatewayNotificationStore();
+      handleRef = null;
       await baseDispose();
       await redis?.quit();
       status = { gateway: 'off', store: null };

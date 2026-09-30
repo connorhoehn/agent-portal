@@ -170,10 +170,13 @@ describe('an assessment token on its own channels', () => {
     send(farah, { service: 'presence', action: 'subscribe', channel: PRESENCE_CHANNEL });
     await settle();
     send(jonas, { service: 'presence', action: 'set', status: 'online', metadata: { displayName: 'Forged Name' }, channels: [PRESENCE_CHANNEL] });
-    await until(() => JSON.stringify(farah.frames).includes('u-jonas'));
+    // Presence frames only: the dev:mock notification seed replays an item to
+    // u-farah on connect that also names u-jonas (mock/notifications.ts).
+    const presenceFrames = () => farah.frames.filter((f) => f.type === 'presence');
+    await until(() => JSON.stringify(presenceFrames()).includes('u-jonas'));
     expect(denied(farah)).toEqual([]);
     expect(denied(jonas)).toEqual([]);
-    const text = JSON.stringify(farah.frames);
+    const text = JSON.stringify(presenceFrames());
     expect(text).toContain('Jonas Assessor');
     expect(text).not.toContain('Forged Name');
   });

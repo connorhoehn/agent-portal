@@ -38,13 +38,14 @@ import { MasqueradeMenu } from './MasqueradeMenu';
 import { GatewayStatusBadge } from './GatewayStatusBadge';
 import { ActiveRunsBadge } from './ActiveRunsBadge';
 import { LocalComputeBadge } from './LocalComputeBadge';
+import { ActivityBell } from './ActivityBell';
 import { useOrgiqShellPolls, useRefreshSessionOnDeny } from './orgiqShellPolls';
 import { usePortalCommands, usePortalDynamicCommands, groupRank } from './portalCommands';
 import { DevboxQuickSwitch, type PaletteScope } from './DevboxQuickSwitch';
 import { brandMarkUri, gradientStops } from './brandMark';
 import { ToastHost } from './ToastHost';
 import { ComputeDock } from '@connorhoehnslalom/ui-components/compute';
-import { ASSESSMENT_ENABLED } from '../../lib/features';
+import { tenantEnabled } from '../../lib/features';
 
 interface Health {
   status: string;
@@ -61,7 +62,7 @@ interface WorkSummary {
   findings: { open: number; critical: number; warning: number };
 }
 
-type Tenant = 'orgiq' | 'assessment' | 'admin';
+type Tenant = 'orgiq' | 'assessment' | 'social' | 'pipelines' | 'admin';
 type NavItem = { path: string; label: string; requireRoles?: string[]; tenant: Tenant | 'universal'; group?: string };
 
 // The app is an SDLC agent platform first — agents that link codebases, run in
@@ -81,6 +82,8 @@ type NavItem = { path: string; label: string; requireRoles?: string[]; tenant: T
 const PALETTE_PLACEHOLDER: Record<string, string> = {
   orgiq: 'Jump to a page, paste an invocation id, search runs…',
   assessment: 'Jump to a page, find a team (TEAM-0NN) or a command…',
+  social: 'Jump to a channel, a call, a room or a person…',
+  pipelines: 'Jump to a run, a definition or an approval…',
 };
 
 // ⌘I scopes the same ⌘K dialog down to just the Devbox group (see
@@ -140,6 +143,31 @@ const NAV_ITEMS: NavItem[] = [
   // the tenant-nav filter has no admin bypass (the PLATFORM_ITEMS one does).
   { path: '/assessment/configuration', label: 'Configuration', tenant: 'assessment', group: 'System',
     requireRoles: ['program-lead', 'assessor', 'lead-assessor', 'admin'] },
+  // The social tenant's own map (docs/social-tenant-design.md §4.1): TALK
+  // (channels, DMs) → MEET (calls, rooms) → PEOPLE → LIBRARY (recordings) →
+  // SYSTEM. Every social role reads every page (ViewSocial); writes are gated
+  // inside them, so no row names roles.
+  { path: '/social/channels',      label: 'Channels',        tenant: 'social', group: 'Talk' },
+  { path: '/social/dms',           label: 'Direct messages', tenant: 'social', group: 'Talk' },
+  { path: '/social/calls',         label: 'Calls',           tenant: 'social', group: 'Meet' },
+  { path: '/social/rooms',         label: 'Rooms',           tenant: 'social', group: 'Meet' },
+  { path: '/social/contacts',      label: 'Contacts',        tenant: 'social', group: 'People' },
+  { path: '/social/teams',         label: 'Teams',           tenant: 'social', group: 'People' },
+  { path: '/social/recordings',    label: 'Recordings',      tenant: 'social', group: 'Library' },
+  { path: '/social/configuration', label: 'Configuration',   tenant: 'social', group: 'System' },
+  // The pipelines tenant's own map (docs/social-tenant-design.md §5.3):
+  // CATALOG (what can run) → RUNS (what ran, what waits on a person, what it
+  // produced) → SOURCES (the three producers) → SYSTEM. Every pipelines role
+  // reads every page (ViewPipelines).
+  { path: '/pipelines/definitions',   label: 'Definitions',   tenant: 'pipelines', group: 'Catalog' },
+  { path: '/pipelines/runbooks',      label: 'Runbooks',      tenant: 'pipelines', group: 'Catalog' },
+  { path: '/pipelines/runs',          label: 'Runs',          tenant: 'pipelines', group: 'Runs' },
+  { path: '/pipelines/approvals',     label: 'Approvals',     tenant: 'pipelines', group: 'Runs' },
+  { path: '/pipelines/artifacts',     label: 'Artifacts',     tenant: 'pipelines', group: 'Runs' },
+  { path: '/pipelines/agents',        label: 'Agents',        tenant: 'pipelines', group: 'Sources' },
+  { path: '/pipelines/bots',          label: 'Bots',          tenant: 'pipelines', group: 'Sources' },
+  { path: '/pipelines/commands',      label: 'Commands',      tenant: 'pipelines', group: 'Sources' },
+  { path: '/pipelines/configuration', label: 'Configuration', tenant: 'pipelines', group: 'System' },
   { path: '/settings',      label: 'Settings',    tenant: 'universal', group: 'System' },
 ];
 
@@ -190,6 +218,8 @@ const PLATFORM_ITEMS: NavItem[] = [
 const TENANT_LABELS: Record<Tenant, string> = {
   orgiq: 'Org',
   assessment: 'Assessment',
+  social: 'Social',
+  pipelines: 'Pipelines',
   admin: 'Admin',
 };
 
@@ -241,7 +271,7 @@ export function Layout() {
   );
 
   const navItems = NAV_ITEMS.filter((item) => {
-    if (item.tenant === 'assessment' && !ASSESSMENT_ENABLED) return false;
+    if (item.tenant !== 'universal' && item.tenant !== 'admin' && !tenantEnabled(item.tenant)) return false;
     if (item.tenant === 'universal') return true;
     if (session?.role === 'admin') return item.tenant === session?.tenant;
     if (item.requireRoles && !(session && item.requireRoles.includes(session.role ?? ''))) return false;
@@ -397,6 +427,10 @@ export function Layout() {
                   never fetches and never renders. */}
               <ActiveRunsBadge />
               {session?.tenant === 'orgiq' && <LocalComputeBadge />}
+              {/* Replies, mentions, DMs, missed calls, approvals — addressed
+                  to this user, filtered to the tenants they hold a grant in
+                  (docs/social-tenant-design.md §3). */}
+              <ActivityBell />
               <GatewayStatusBadge />
               <MasqueradeMenu />
             </Inline>

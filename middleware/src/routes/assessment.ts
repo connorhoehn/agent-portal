@@ -27,6 +27,7 @@ import { assessmentBroker } from '../lib/assessment-broker.js';
 import * as provider from '../providers/assessment.js';
 import { isValidTeamId } from '../providers/assessment.js';
 import { documentCommentTargetIds } from '../providers/document-comments.js';
+import { assessmentDocumentHref, notificationSinkActive, notifyDocumentComment } from '../lib/social-notify.js';
 import type { Cohort, MotionConfig, ScoringLogEntry } from '../mock/assessment.js';
 
 export const assessmentRouter: Router = Router();
@@ -805,7 +806,25 @@ assessmentRouter.post('/knowledge/doc/comment', viewGate, asyncHandler(async (re
   if (!result.ok && result.status === 409) { res.status(409).json({ error: result.reason, code: 'comments_moved' }); return; }
   if (!result.ok) throw new ValidationError(result.reason);
   res.status(201).json(result);
+  // The header activity indicator (docs/social-tenant-design.md §3.4 rows
+  // 1–3): the parent's author on a reply, the document's other commenters on
+  // a top-level comment, anyone @mentioned. After the response, never awaited.
+  if (req.session) void notifyLegacyComment(body.id, body.body, req.session.sub, req.session.name, (body.parentId as string | null | undefined) ?? null);
 }));
+
+async function notifyLegacyComment(docId: string, text: string, authorId: string, authorName: string | undefined, parentId: string | null): Promise<void> {
+  if (!notificationSinkActive()) return; // gateway off: nothing to deliver, so nothing to read
+  try {
+    const [doc, comments] = await Promise.all([provider.getKnowledgeDoc(docId), provider.listKnowledgeComments(docId)]);
+    if (!doc || !comments) return;
+    await notifyDocumentComment({
+      tenant: 'assessment', docId, docTitle: doc.title, href: assessmentDocumentHref(docId),
+      commentId: '', authorId, ...(authorName ? { authorName } : {}), text,
+      parentAuthorId: parentId ? comments.find((c) => c.id === parentId)?.author ?? null : null,
+      priorAuthorIds: comments.filter((c) => !c.deleted_at).map((c) => c.author),
+    });
+  } catch { /* the comment is stored; a missed notification is not an error */ }
+}
 
 // One tab announcing itself on one document — the piece that was missing
 // for presence to work at all (see DocPane's useChannel(...).presence,

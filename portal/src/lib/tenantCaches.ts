@@ -42,6 +42,10 @@ const LOCAL_KEYS: readonly string[] = [
   'devbox.sessionId',         // RETIRED lib/devboxRegistry.ts — legacy single-box session
   'orgiq.terminalDock.v1',    // RETIRED lib/terminalDock.ts — pre-migration dock state
   'orgiq:masquerade:history', // pages/SettingsPage.tsx MASQUERADE_HISTORY_KEY — admin masquerade history
+  // realtime-modules' useNotifications read marks (its DEFAULT_STORAGE_KEY),
+  // read by the header bell (components/shell/ActivityBell.tsx). The ids are
+  // one user's inbox; the server keeps the read truth and replays it.
+  'rmn:notifications:read',
 ];
 
 /** localStorage key PREFIXES — one entry per surface, cleared for every match. */

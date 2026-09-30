@@ -9,7 +9,14 @@ jest.mock('../../providers/assessment.js', () => {
     listKnowledgeComments: jest.fn(async (id: string) => fixtures.knowledgeComments(id)),
   };
 });
-jest.mock('../../providers/identity.js', () => ({ listUsers: jest.fn(async () => []) }));
+jest.mock('../../providers/identity.js', () => {
+  const users: Record<string, { id: string; displayName: string; grants: Record<string, string[]> }> = {
+    'u-jonas': { id: 'u-jonas', displayName: 'Jonas Lindqvist', grants: { assessment: ['assessor'] } },
+    'u-farah': { id: 'u-farah', displayName: 'Farah Osei', grants: { assessment: ['lead-assessor'] } },
+    'u-hr': { id: 'u-hr', displayName: 'Priya Desai', grants: { orgiq: ['hr-admin'] } },
+  };
+  return { listUsers: jest.fn(async () => []), getUser: jest.fn(async (id: string) => users[id] ?? null) };
+});
 jest.mock('../../lib/assessment-broker.js', () => ({ assessmentBroker: { publish: jest.fn() } }));
 jest.mock('../../providers/document-canvas.js', () => ({}));
 jest.mock('../../lib/role-registry.js', () => ({ roleRegistry: () => [{ id: 'assessor', tenant: 'assessment', label: 'Assessor', summary: '', capabilities: ['ViewAssessment'] }] }));
@@ -19,6 +26,7 @@ import { assessmentDocumentWorkflowsRouter } from '../assessment-document-workfl
 import { changeDocumentVersion } from '../../providers/document-versions.js';
 import { performDocumentWorkflow } from '../../providers/document-workflows.js';
 import type { Session } from '../../lib/session.js';
+import { setNotificationSink, type NotificationInputLike } from '../../lib/social-notify.js';
 const session: Session = { sub: 'alice', role: 'assessor', tenant: 'assessment', iat: 0, grants: { assessment: ['assessor'] } };
 function app(identity: Session = session) { return express().use(express.json()).use((req, _res, next) => { req.session = identity; next(); }).use('/api/assessment/knowledge', assessmentDocumentWorkflowsRouter); }
 const url = '/api/assessment/knowledge/doc/workflows';
@@ -77,5 +85,21 @@ describe('document comments', () => {
   });
   it('denies cross-tenant sessions', async () => {
     expect((await request(app({ ...session, tenant: 'orgiq', role: 'member' })).get(`${url}/comments?id=page%3A100002`)).status).toBe(403);
+  });
+  it('a reply notifies the parent comment\'s author through the activity seam (design §3.4 row 1)', async () => {
+    const sent: Array<{ userId: string; input: NotificationInputLike }> = [];
+    setNotificationSink({ notifyUser: async (userId, input) => { sent.push({ userId, input }); return {}; } });
+    try {
+      const farah: Session = { sub: 'u-farah', name: 'Farah Osei', role: 'assessor', tenant: 'assessment', iat: 0, grants: { assessment: ['assessor'] } };
+      const reply = await request(app(farah)).post('/api/assessment/knowledge/doc/workflows/comments?id=page%3A100002').send({ text: 'Adding it now', parentCommentId: 'kc-rubric-01' });
+      expect(reply.status).toBe(201);
+      for (let i = 0; i < 50 && !sent.length; i += 1) await new Promise((r) => setTimeout(r, 10));
+      expect(sent.map((s) => s.userId)).toEqual(['u-jonas']);
+      expect(sent[0]!.input).toMatchObject({
+        type: 'reply', title: 'Farah Osei replied to your comment', body: expect.stringContaining('Rubric Overview'),
+        payload: { tenant: 'assessment', category: 'Assessment', documentId: 'page:100002' },
+        action: { href: '/assessment/workspace?doc=page%3A100002&tab=comments' },
+      });
+    } finally { setNotificationSink(null); }
   });
 });

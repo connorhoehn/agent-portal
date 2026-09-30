@@ -39,6 +39,7 @@ import { ssoAvailable } from '../lib/session.js';
 import { logAuthz } from '../lib/audit.js';
 import { rateLimit } from '../lib/rate-limit.js';
 import { APPROVALS_SERVICE_AUTH, requireServiceAuth, serviceAuthOr } from '../lib/service-auth.js';
+import { notifyApprovalRequested } from '../lib/social-notify.js';
 
 export const approvalsRouter = Router();
 
@@ -384,6 +385,10 @@ approvalsRouter.post('/request', requestLimit, serviceAuth, asyncHandler(async (
   publishApprovalEvent(ev);
 
   res.status(201).json({ approvalId });
+  // The header activity indicator (docs/social-tenant-design.md §3.4 row 8):
+  // every orgiq user whose role may approve. After the response, never awaited.
+  const amount = typeof payload['amount'] === 'number' ? payload['amount'] : (typeof payload['amount'] === 'string' ? Number(payload['amount']) : null);
+  void notifyApprovalRequested({ approvalId, agentId, txId, reason, amount });
 }));
 
 // List approvals (optionally filtered by status). Used by the portal queue.

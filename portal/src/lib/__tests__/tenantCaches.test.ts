@@ -56,6 +56,8 @@ const DATA_KEYS = [
   'ui-components.computeDock.v1',
   'ui-components.computerLab.v1',
   'orgiq:masquerade:history',
+  // realtime-modules' useNotifications read marks — one user's inbox ids.
+  'rmn:notifications:read',
   'chat.session.invoke',
   'chat.session.explore',
 ];

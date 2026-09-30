@@ -1,5 +1,5 @@
 // A minimal Redis (RESP2) client — just enough for realtime-modules'
-// `RedisCallStateStore` (lib/realtime-gateway.ts).
+// `RedisCallStateStore` and `RedisNotificationStore` (lib/realtime-gateway.ts).
 //
 // Why not `redis`/`ioredis`: neither is installed in this workspace, and the
 // `github:` pins make an `npm install` here a multi-minute operation that can
@@ -183,4 +183,42 @@ export class RedisLite {
   expire(key: string, seconds: number): Promise<Reply> { return this.command('EXPIRE', key, Math.max(1, Math.floor(seconds))); }
   /** 1 when the key was created, 0 when it already existed. */
   setNX(key: string, value: string): Promise<Reply> { return this.command('SETNX', key, value); }
+
+  // ── Sorted sets, for the notification inbox (notif:list:<userId>) ─────────
+  zadd(key: string, score: number, member: string): Promise<Reply> { return this.command('ZADD', key, score, member); }
+  async zrange(key: string, start: number, stop: number): Promise<string[]> {
+    return ((await this.command('ZRANGE', key, start, stop)) as string[] | null) ?? [];
+  }
+  async zcard(key: string): Promise<number> { return Number(await this.command('ZCARD', key)) || 0; }
+  zremrangebyrank(key: string, start: number, stop: number): Promise<Reply> { return this.command('ZREMRANGEBYRANK', key, start, stop); }
+}
+
+/**
+ * realtime-modules' `NotificationRedisClient` is node-redis v4-shaped
+ * (camelCase, `zAdd(key, { score, value })`); RedisLite is ioredis-shaped.
+ * This adapter maps the casing so one REDIS_URL connection backs call state
+ * and the notification inbox alike.
+ */
+export interface NotificationRedisLike {
+  zAdd(key: string, member: { score: number; value: string }): Promise<unknown>;
+  zRange(key: string, start: number, stop: number): Promise<string[]>;
+  zCard(key: string): Promise<number>;
+  zRemRangeByRank(key: string, start: number, stop: number): Promise<unknown>;
+  hSet(key: string, field: string, value: string): Promise<unknown>;
+  hGetAll(key: string): Promise<Record<string, string>>;
+  expire(key: string, seconds: number): Promise<unknown>;
+  del(key: string): Promise<unknown>;
+}
+
+export function notificationRedisClient(r: RedisLite): NotificationRedisLike {
+  return {
+    zAdd: (key, m) => r.zadd(key, m.score, m.value),
+    zRange: (key, start, stop) => r.zrange(key, start, stop),
+    zCard: (key) => r.zcard(key),
+    zRemRangeByRank: (key, start, stop) => r.zremrangebyrank(key, start, stop),
+    hSet: (key, field, value) => r.hset(key, field, value),
+    hGetAll: (key) => r.hgetall(key),
+    expire: (key, seconds) => r.expire(key, seconds),
+    del: (key) => r.del(key),
+  };
 }

@@ -10,7 +10,7 @@
 
 import net from 'node:net';
 import type { AddressInfo } from 'node:net';
-import { RedisLite } from '../redis-lite.js';
+import { RedisLite, notificationRedisClient } from '../redis-lite.js';
 
 let server: net.Server;
 let port: number;
@@ -53,6 +53,8 @@ const REPLIES: Record<string, string> = {
   SETNX: ':1\r\n',
   EXPIRE: '-ERR invalid expire time\r\n',
   QUIT: '+OK\r\n',
+  ZRANGE: '*2\r\n$3\r\n{a}\r\n$3\r\n{b}\r\n',
+  ZCARD: ':2\r\n',
 };
 
 beforeAll(async () => {
@@ -102,4 +104,23 @@ it('rejects only the command that got an error reply', async () => {
 
 it('refuses rediss:// instead of connecting in plaintext', () => {
   expect(() => new RedisLite('rediss://example:6380')).toThrow(/no TLS/);
+});
+
+it('speaks the notification inbox\'s sorted sets, and the node-redis-shaped adapter maps onto them', async () => {
+  const r = new RedisLite(`redis://127.0.0.1:${port}`);
+  try {
+    const c = notificationRedisClient(r);
+    await c.zAdd('notif:list:u-jonas', { score: 1700000000000, value: '{a}' });
+    expect(await c.zRange('notif:list:u-jonas', 0, -1)).toEqual(['{a}', '{b}']);
+    expect(await c.zCard('notif:list:u-jonas')).toBe(2);
+    await c.zRemRangeByRank('notif:list:u-jonas', 0, -201);
+    await c.hSet('notif:read:u-jonas', 'n1', '1');
+    expect(seen).toEqual(expect.arrayContaining([
+      ['ZADD', 'notif:list:u-jonas', '1700000000000', '{a}'],
+      ['ZRANGE', 'notif:list:u-jonas', '0', '-1'],
+      ['ZCARD', 'notif:list:u-jonas'],
+      ['ZREMRANGEBYRANK', 'notif:list:u-jonas', '0', '-201'],
+      ['HSET', 'notif:read:u-jonas', 'n1', '1'],
+    ]));
+  } finally { await r.quit(); }
 });
