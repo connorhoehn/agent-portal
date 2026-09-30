@@ -233,7 +233,7 @@
     {
       "method": "POST",
       "path": "/api/assessment/knowledge/canvas",
-      "source": "src/routes/assessment-canvas.ts:7"
+      "source": "src/routes/assessment-canvas.ts:8"
     },
     {
       "method": "GET",

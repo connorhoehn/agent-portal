@@ -6,6 +6,7 @@ import type { Session } from '../lib/session.js';
 import { currentDocumentSessionEpoch, documentSessionId } from '../lib/document-session.js';
 import { documentCanvasSchema } from '../lib/document-canvas-schema.js';
 import { documentSourceRevision, ensureDocumentMapping, markDocumentMappingReady } from './document-mapping.js';
+import { canvasSourceEditable } from './document-editability.js';
 
 interface CanvasSource { id: string; title: string; classification: string; markdown: string; editable?: boolean; source_parent_id?: string | null }
 
@@ -60,7 +61,7 @@ export interface DocumentCanvasAccess {
 export async function connectDocumentCanvas(source: CanvasSource, session: Session, canEdit: boolean, options: { workflowManage?: boolean } = {}):Promise<DocumentCanvasAccess> {
   const { isAllowed } = await import('../lib/authz.js');
   if (session.tenant !== 'assessment' || !await isAllowed(session, 'ViewAssessment')) throw new Error('Switch to an authorized assessment session before opening documents');
-  const mayEdit = canEdit && !source.id.startsWith('prompt:') && (source.editable === true || source.classification === 'synced') && await isAllowed(session, 'ManageKnowledge');
+  const mayEdit = canEdit && canvasSourceEditable(source) && await isAllowed(session, 'ManageKnowledge');
   const settings = configuration();
   const sessionId = documentSessionId(session);
   const epoch = await currentDocumentSessionEpoch(session.sub, 'assessment', sessionId);
@@ -94,8 +95,7 @@ export async function connectDocumentCanvas(source: CanvasSource, session: Sessi
 export async function documentWorkflowAccess(source: CanvasSource, session: Session) {
   const { isAllowed } = await import('../lib/authz.js');
   if (session.tenant !== 'assessment' || !await isAllowed(session, 'ViewAssessment')) throw new Error('Document workflow access denied');
-  const canEdit = !source.id.startsWith('prompt:') && (source.editable === true || source.classification === 'synced')
-    && await isAllowed(session, 'ManageKnowledge');
+  const canEdit = canvasSourceEditable(source) && await isAllowed(session, 'ManageKnowledge');
   return connectDocumentCanvas(source, session, canEdit, { workflowManage: true });
 }
 

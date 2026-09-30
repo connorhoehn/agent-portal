@@ -3257,11 +3257,13 @@ export async function renameKnowledgeNode(
     ? await A.fetchKnowledgeTree()
     : M.knowledgeSections();
 
-  // Prompts are read-only fleet instructions (docs/assessment-tenant.md): the
-  // portal hides Rename on them, and the server refuses too — the 2026-09-29
-  // explorer rebuild briefly offered Rename on every row and this accepted it.
+  // A prompt's name is the fleet's command name, so it is never renamed here:
+  // the portal hides Rename on prompts, and the server refuses too — the
+  // 2026-09-29 explorer rebuild briefly offered Rename on every row and this
+  // accepted it. Its BODY is edited through a canvas draft (parity goal
+  // decision 7); the published prompt moves only through its promotion path.
   if (id.startsWith('prompt:')) {
-    return { ok: false, status: 409, reason: 'prompts are read-only; edit them in the fleet asset library' };
+    return { ok: false, status: 409, reason: 'prompts cannot be renamed; a prompt\'s name is the command the fleet runs' };
   }
   const section = sections.find((sec) => sec.nodes.some((n) => n.id === id));
   if (!section) return { ok: false, status: 404, reason: `node "${id}" not found` };

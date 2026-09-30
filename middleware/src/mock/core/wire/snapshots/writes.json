@@ -1,7 +1,7 @@
 {
-  "capturedAt": "2026-09-29T22:47:15.118Z",
-  "serverHandlerSha": "0546059cde658da4c70a4bd571768ad9f8ce0eda1e9f6e13561dc88338d3b042",
-  "baseUrl": "http://127.0.0.1:3018",
+  "capturedAt": "2026-09-30T01:25:37.114Z",
+  "serverHandlerSha": "3a927657ad4aae7f8f37a191a5b2f39b1cad692d6de84c211bc21395baeb9801",
+  "baseUrl": "http://127.0.0.1:3012",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
     "agentcore",
@@ -712,6 +712,7 @@
           "distillation-procedure-applications",
           "distillation-queue-messages",
           "distillation-review-samples",
+          "document-agent-edits",
           "github-identity",
           "github-orgs",
           "github-repos",

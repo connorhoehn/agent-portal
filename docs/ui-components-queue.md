@@ -138,3 +138,13 @@ The documents rail still maps presence through `presenceAvatarUsers` in
 `knowledgeFormat.ts` — move it to `adaptPresenceRoster` when the rail's
 presence join is wired (see the rail presence finding in the assessment
 journeys).
+
+## `CanvasDocumentView` draws no toolbar for a read-only page — 2026-09-29
+
+The formatting toolbar renders only when the page is editable, so a reader
+(the assessor, the demo user) sees the canvas and the ruler but no toolbar,
+while realtime-examples' reference draws the frame the same for everyone.
+Wanted: a read-only toolbar state (controls disabled, find still live) so
+every document page has one frame regardless of role. Composed nothing
+locally; the assessment workspace ships without it for readers
+(`docs/assessment-documents-parity-goal.md`, decision 6).

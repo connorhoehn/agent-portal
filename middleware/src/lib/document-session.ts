@@ -1,5 +1,18 @@
-import type { Session } from './session.js';
+import { DEMO_SUB, demoFallbackAllowed, permissiveGrants, type Session } from './session.js';
 import { getUser } from '../providers/identity.js';
+
+/** The demo persona has no identity row, so it has no stored epoch to revoke
+ * against: its cookie is never re-resolved (lib/session.ts) and the epoch a
+ * tenant/role switch stamps on it is whatever the in-memory bump returned.
+ * Outside production, while the demo fallback is live (no Cognito, demo mode
+ * on — i.e. `dev:mock`), the session's own epoch is taken as current and the
+ * role is checked against the permissive demo grants, so the demo user gets
+ * the same canvas as everyone else (read-only unless its role may edit).
+ * Production never takes this branch. */
+function demoIdentity(sub: string, epoch: number): { epoch: number; grants: Record<string, string[]> } | null {
+  if (sub !== DEMO_SUB || process.env['NODE_ENV'] === 'production' || !demoFallbackAllowed()) return null;
+  return { epoch, grants: permissiveGrants() };
+}
 
 interface DocumentSessionReference {
   role: string;
@@ -26,7 +39,7 @@ export async function currentDocumentSessionEpoch(sub: string, tenantId: string,
     if (!reference || typeof reference.role !== 'string' || !Number.isSafeInteger(reference.epoch)
       || reference.epoch < 0 || !Number.isFinite(reference.iat)) return null;
   } catch { return null; }
-  const user = await getUser(sub, { authoritative: true });
+  const user = demoIdentity(sub, reference.epoch) ?? await getUser(sub, { authoritative: true });
   if (!user || user.epoch !== reference.epoch || !user.grants[tenantId]?.includes(reference.role)) return null;
   if (reference.actor) {
     if (typeof reference.actor.sub !== 'string' || !Number.isSafeInteger(reference.actor.epoch)) return null;

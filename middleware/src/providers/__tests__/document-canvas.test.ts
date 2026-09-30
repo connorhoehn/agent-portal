@@ -127,3 +127,10 @@ it('rechecks editing authority inside the grant issuer even when a caller reques
  expect(jest.mocked(createDocumentGrant).mock.calls.at(-1)![0].operations).toEqual(['read','comment']);
  jest.mocked(isAllowed).mockResolvedValue(true);
 });
+it('edits a prompt through its draft, but never projects that draft as a publication', async () => {
+  const prompt = { id: 'prompt:classify-transcript.md', title: 'Classify Transcript', classification: 'internal', markdown: '# Classify', editable: false };
+  const result = await connectDocumentCanvas(prompt, session, true);
+  expect(result.canEdit).toBe(true);
+  expect(jest.mocked(createDocumentGrant).mock.calls.at(-1)![0].operations).toEqual(['read', 'comment', 'edit']);
+  await expect(readDocumentCanvasProjection(prompt, session)).rejects.toThrow('not authorized');
+});

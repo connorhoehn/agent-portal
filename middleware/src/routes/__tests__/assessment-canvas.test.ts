@@ -36,10 +36,19 @@ it('allows authorized local drafts of synced sources', async () => {
   expect((await request(app(lead)).post('/api/assessment/knowledge/canvas').send({ id: 'page:100002' })).status).toBe(200);
   expect(connectDocumentCanvas).toHaveBeenCalledWith(expect.anything(), lead, true);
 });
-it('keeps prompt mirrors read-only even for knowledge managers', async () => {
+it('lets a knowledge manager edit a prompt through its draft; an assessor still reads it', async () => {
+  jest.mocked(getKnowledgeDoc).mockResolvedValue({ id: 'prompt:instructions', title: 'Instructions', classification: 'internal', markdown: '# Do this',
+    path: 'prompts/instructions.md', editable: false, updated_at: '2026-09-20T10:00:00Z' });
   const lead: Session = { ...user, role: 'lead-assessor' };
   expect((await request(app(lead)).post('/api/assessment/knowledge/canvas').send({ id: 'prompt:instructions' })).status).toBe(200);
-  expect(connectDocumentCanvas).toHaveBeenCalledWith(expect.anything(), lead, false);
+  expect(connectDocumentCanvas).toHaveBeenLastCalledWith(expect.anything(), lead, true);
+  expect((await request(app()).post('/api/assessment/knowledge/canvas').send({ id: 'prompt:instructions' })).status).toBe(200);
+  expect(connectDocumentCanvas).toHaveBeenLastCalledWith(expect.anything(), user, false);
+});
+it('issues a read grant to every signed-in reader, the demo persona included', async () => {
+  const demo: Session = { sub: 'demo-user', name: 'Demo User', role: 'assessor', tenant: 'assessment', grants: { assessment: ['assessor'] }, iat: 0 };
+  expect((await request(app(demo)).post('/api/assessment/knowledge/canvas').send({ id: 'page:100002' })).status).toBe(200);
+  expect(connectDocumentCanvas).toHaveBeenCalledWith(expect.anything(), demo, false);
 });
 it('rejects other tenants before contacting document storage', async () => {
   expect((await request(app({ ...user, tenant: 'orgiq', role: 'member' })).post('/api/assessment/knowledge/canvas').send({ id: 'page:100002' })).status).toBe(403);

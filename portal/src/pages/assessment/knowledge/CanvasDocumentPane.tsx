@@ -7,7 +7,8 @@ import { createCanvasExtensions, MacroNode, HeadingAnchor, MarkdownClipboard, Ca
 import { TextStyleKit } from '@tiptap/extension-text-style';
 import { TableKit } from '@tiptap/extension-table';
 import Image from '@tiptap/extension-image';
-import type { Editor } from '@tiptap/react';
+import type { Editor, EditorEvents } from '@tiptap/react';
+import { ySyncPluginKey } from '@tiptap/y-tiptap';
 import { useDocumentImageUpload, MAX_IMAGE_BYTES } from '@connorhoehnslalom/ui-components/doc-editor';
 import { useFetch } from '../../../hooks/useFetch';
 import { useSession } from '../../../lib/auth';
@@ -32,6 +33,7 @@ import { DocumentHistory } from './DocumentHistory';
 import { DocumentReviews } from './DocumentReviews';
 import { DocumentChatPanel, DocumentComposerDock, useDocumentConversation } from './DocumentConversation';
 import { documentAssetRoute } from './documentAssetRoute';
+import { publishDocumentEditor } from './useDocumentAgentEdit';
 import type { DocPaneProps } from './DocPane';
 import type { KnowledgeDoc } from './types';
 
@@ -189,14 +191,17 @@ function ConnectedCanvas({ grant, mode, sourceConfigured, accessValid, userId, t
   });
   const call = useDocumentCall({ docId: grant.sourceId, href, title: grant.title, people: people.people, onOpenPeople: () => frame.onTab('editor') });
   usePendingDocumentChanges(grant.documentId, doc.pendingUpdateCount);
-  const [editing, setEditing] = useState(false);
+  // The live editor, for the dock's agent edits (useDocumentAgentEdit); withdrawn on unmount.
+  useEffect(() => () => publishDocumentEditor(grant.sourceId, null), [grant.sourceId]);
   const [wireError, setWireError] = useState<string | null>(null);
   const workflow = useDocumentWorkflow(grant.sourceId, grant.documentId, onWorkflowChanged);
   const lifecycle = workflow.data?.lifecycle;
   const workflowLocked = lifecycle?.status === 'approved' || lifecycle?.status === 'finalized';
-  const canEdit = canEditDocumentCanvas(grant, mode, accessValid) && !!lifecycle && !workflow.unavailable && !workflowLocked;
+  const canEdit = canEditDocumentCanvas(grant, accessValid) && !!lifecycle && !workflow.unavailable && !workflowLocked;
   const online = gateway.connectionState === 'connected';
-  const editable = canEdit && editing && doc.synced && online;
+  // Editing by default (goal decision 7): a role that may edit types straight
+  // into the page — there is no Edit draft step. Publishing stays explicit.
+  const editable = canEdit && doc.synced && online;
   const editableRef = useRef(editable);
   editableRef.current = editable;
   const insertImage = async (file: File) => {
@@ -212,6 +217,20 @@ function ConnectedCanvas({ grant, mode, sourceConfigured, accessValid, userId, t
     finally { setImagePending(false); }
   };
   const sourceDraft = grant.sourceId.startsWith('page:') || !!grant.sourceParentId;
+  const promptDraft = mode === 'prompts' || grant.sourceId.startsWith('prompt:');
+  // A synced page or a prompt is edited as a draft, and its first change
+  // starts that draft: the chip turns to "Local draft" on the first local edit
+  // (a remote change arrives as the ySync binding's own transaction).
+  const [drafting, setDrafting] = useState(false);
+  useEffect(() => {
+    if (!liveEditor || !editable || drafting || !(sourceDraft || promptDraft)) return;
+    const changed = ({ transaction }: EditorEvents['update']) => {
+      const sync = transaction.getMeta(ySyncPluginKey) as { isChangeOrigin?: boolean } | undefined;
+      if (!sync?.isChangeOrigin) setDrafting(true);
+    };
+    liveEditor.on('update', changed);
+    return () => { liveEditor.off('update', changed); };
+  }, [liveEditor, editable, drafting, sourceDraft, promptDraft]);
   const user = useMemo(() => ({ name: userName, color: 'teal' }), [userName]);
   useEffect(() => gateway.onMessage(message => {
     if (message.channel !== `doc:${grant.documentId}`) return;
@@ -243,18 +262,17 @@ function ConnectedCanvas({ grant, mode, sourceConfigured, accessValid, userId, t
     lifecycleLoading={workflow.loading} lifecycleBusy={workflow.busy}
     onLifecycleAction={workflow.transition}
     owner={lifecycle ? lifecycle.ownerId ? { userId: lifecycle.ownerId, displayName: lifecycle.ownerId === userId ? userName : lifecycle.ownerId } : null : undefined}
-    modeReason={sourceDraft ? 'Edits are a local draft. Publishing to the source is a separate action.' : canEdit ? 'This document can be edited by your current role.' : 'Your current role can read this document.'}
+    modeReason={!canEdit ? 'Your current role can read this document.'
+      : promptDraft ? 'Edits are a draft of this prompt. The published prompt changes only through its promotion path.'
+      : sourceDraft ? 'Edits are a local draft. Publishing to the source is a separate action.' : 'This document can be edited by your current role.'}
     onExport={exportMarkdown} exportFormats={['markdown']} onPrint={() => window.print()}
     onToggleHistory={() => frame.onTab('versions')}
     workflowActions={<Inline gap="sm" align="center" wrap>
-      <Chip size="xs" tone="neutral">{sourceDraft && editing ? 'Local draft' : CLASSIFICATION_LABEL[grant.classification] ?? grant.classification}</Chip>
+      <Chip size="xs" tone="neutral" data-testid="document-draft-chip">{(sourceDraft || promptDraft) && drafting ? 'Local draft' : CLASSIFICATION_LABEL[grant.classification] ?? grant.classification}</Chip>
       {margin.commentButton}
       {workflow.data?.canClaimOwnership && <Button size="sm" variant="secondary" disabled={workflow.busy || !accessValid} onClick={workflow.claim}>Take ownership</Button>}
       {sourceConfigured && sourceDraft && capabilities.ready && capabilities.can('ManageKnowledge') && <SourcePublishControl sourceId={grant.sourceId}
         disabled={!canEdit || !doc.synced || !online || doc.pendingUpdateCount > 0} changeSequence={changeSequence} onPublished={onPublished} />}
-      {canEdit && <Button size="sm" variant={editing ? 'secondary' : 'primary'} disabled={!doc.synced || !online} onClick={() => setEditing(value => !value)}>
-        {editing ? 'Done editing' : sourceDraft ? 'Edit draft' : 'Edit document'}
-      </Button>}
     </Inline>} />;
   const notices = <>
     {accessNotice}
@@ -304,7 +322,7 @@ function ConnectedCanvas({ grant, mode, sourceConfigured, accessValid, userId, t
     onFocusGutterItem={margin.onFocusGutterItem} onHoverGutterItem={margin.onHoverGutterItem}
     {...(people.following ? { belowRuler: <FollowModeBar followingUserId={people.following} participants={people.followBarParticipants}
       onStopFollow={people.stopFollowing} appearance="bar" data-testid="document-follow-bar" /> } : {})}
-    onEditorReady={editor => { editorRef.current = editor as Editor | null; setOutlineEditor(editor as Parameters<typeof useDocumentOutline>[0]); }} />
+    onEditorReady={editor => { editorRef.current = editor as Editor | null; setOutlineEditor(editor as Parameters<typeof useDocumentOutline>[0]); publishDocumentEditor(grant.sourceId, editor); }} />
     <DocumentContextPanel id="outline"><DocumentOutline entries={outline.entries} activeId={outline.activeId} onSelect={outline.goTo} /></DocumentContextPanel>
     {margin.composer}
     <ConfirmDialog open={confirmRecovery} onCancel={() => setConfirmRecovery(false)} title="Recover earlier changes?" tone="caution"

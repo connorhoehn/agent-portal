@@ -1,3 +1,4 @@
+jest.mock('../../config.js', () => ({ config: { mock: {}, auth: {} } }));
 jest.mock('../../providers/identity.js', () => ({ getUser: jest.fn() }));
 import express from 'express';
 import request from '../../test-support/http.js';
@@ -58,4 +59,25 @@ it('validates the original operator epoch for masqueraded sessions', async () =>
 it('rejects malformed and cross-tenant references', async () => {
   expect((await send({ sub: 'alice', tenantId: 'orgiq', sessionId: 'x' })).status).toBe(400);
   expect((await send({ sub: 'alice', tenantId: 'assessment', sessionId: 'broken' })).body).toEqual({ epoch: null });
+});
+
+describe('the demo persona (no identity row)', () => {
+  const demo: Session = { sub: 'demo-user', tenant: 'assessment', role: 'assessor', grants: { assessment: ['assessor'] }, iat: Date.now() };
+  const savedEnv = process.env['NODE_ENV'];
+  afterEach(() => { process.env['NODE_ENV'] = savedEnv; });
+  it('takes its own session epoch outside production, so it gets the same canvas as everyone else', async () => {
+    expect((await send({ sub: 'demo-user', tenantId: 'assessment', sessionId: documentSessionId(demo) })).body).toEqual({ epoch: 0 });
+    // A tenant switch stamps the demo cookie with the in-memory bump's value.
+    expect((await send({ sub: 'demo-user', tenantId: 'assessment', sessionId: documentSessionId({ ...demo, epoch: 1 }) })).body).toEqual({ epoch: 1 });
+    expect(getUser).not.toHaveBeenCalled();
+  });
+  it('is still refused for a role outside the demo grants', async () => {
+    expect((await send({ sub: 'demo-user', tenantId: 'assessment', sessionId: documentSessionId({ ...demo, role: 'member' }) })).body).toEqual({ epoch: null });
+  });
+  it('has no epoch in production — it falls through to the identity store, which has no such user', async () => {
+    process.env['NODE_ENV'] = 'production';
+    jest.mocked(getUser).mockResolvedValue(null);
+    expect((await send({ sub: 'demo-user', tenantId: 'assessment', sessionId: documentSessionId(demo) })).body).toEqual({ epoch: null });
+    expect(getUser).toHaveBeenCalledWith('demo-user', { authoritative: true });
+  });
 });

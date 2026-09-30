@@ -8,7 +8,9 @@ export function documentCanvasSaveState(state: 'idle' | 'pending' | 'saved' | 'e
   };
 }
 
-/** Auth expiry and source prompts are independent of whether a socket is open. */
-export function canEditDocumentCanvas(grant: { canEdit: boolean; expiresAt: number }, mode: string, accessValid: boolean, now = Date.now()): boolean {
-  return accessValid && grant.canEdit && grant.expiresAt > now && mode !== 'prompts';
+/** Auth expiry is independent of whether a socket is open. The grant is the
+ * authority on editing: the BFF issues `edit` only to a role that may edit,
+ * prompts included — a prompt is edited through its draft (goal decision 7). */
+export function canEditDocumentCanvas(grant: { canEdit: boolean; expiresAt: number }, accessValid: boolean, now = Date.now()): boolean {
+  return accessValid && grant.canEdit && grant.expiresAt > now;
 }
