@@ -25,7 +25,7 @@ export interface SocialSurface {
   group: 'Talk' | 'Meet' | 'People' | 'Library' | 'System';
   /** The lane that brings this surface its data. */
   phase: SocialPhase;
-  /** True once the surface reads real rows; every one is false at S0. */
+  /** True once the surface reads real rows (S0: none; S1: channels and DMs). */
   live: boolean;
 }
 
@@ -33,8 +33,8 @@ export const socialSurfaces = defineFixture<SocialSurface>({
   key: 'social.surfaces',
   scenarios: {
     default: () => [
-      { id: 'channels', label: 'Channels', group: 'Talk', phase: 'S1', live: false },
-      { id: 'dms', label: 'Direct messages', group: 'Talk', phase: 'S1', live: false },
+      { id: 'channels', label: 'Channels', group: 'Talk', phase: 'S1', live: true },
+      { id: 'dms', label: 'Direct messages', group: 'Talk', phase: 'S1', live: true },
       { id: 'calls', label: 'Calls', group: 'Meet', phase: 'S2', live: false },
       { id: 'rooms', label: 'Rooms', group: 'Meet', phase: 'S2', live: false },
       { id: 'contacts', label: 'Contacts', group: 'People', phase: 'S2', live: false },

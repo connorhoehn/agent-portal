@@ -1,7 +1,7 @@
 role: hr-admin
 user: u-hr
 pages: portal/src/App.tsx,portal/src/components/shell/Layout.tsx,portal/src/pages/SelectContextPage.tsx
-audited: 2026-09-30 02:38Z → 02:38Z, Chromium 1552×958 (Playwright headless, a fresh context per identity — not the shared Chrome tab), middleware dev:mock:social on :3001, Vite :5183
+audited: 2026-09-30 03:39Z → 03:39Z, Chromium 1552×958 (Playwright headless, a fresh context per identity — not the shared Chrome tab), middleware dev:mock:social on :3001, Vite :5183
 social-grant: no                 # /api/session/me: sub u-hr, tenant orgiq, role hr-admin, grants {"orgiq":["hr-admin"]}
 social-tile-visible: no          # /select Workspaces tab: tiles ['orgiq'] (data-testid select-roles-*)
 social-nav-visible: no            # /iq/projects: 35 anchors in [data-shell-nav], 0 toward /social; ⌘K "Direct messages" lists 13 commands, 0 of them a social page

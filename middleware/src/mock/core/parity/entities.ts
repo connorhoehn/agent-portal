@@ -27,6 +27,7 @@
 
 import { sameValue, type ParityEntity } from './compare.js';
 import { seedRows, type SeedRow, type SeedValue } from './sql-seed.js';
+import { crosswalkStatus as crosswalkRunStatus } from '../../../lib/pipeline-runs.js';
 import {
   collaborationKey, contributionKey, idByName, lostToAnEarlierSeed, personSkillKey,
   resolveOrName, teamMembershipKey, undirectedKey,
@@ -807,6 +808,78 @@ export const PARITY_ENTITIES: Array<ParityEntity<any>> = [
       // 120 characters (`…triage flaky pipeline tests, lint `) while the mock
       // carries the bot's whole prompt_template. A generator artifact, not a
       // fixture claim, so the scalar above is the part worth pinning.
+    ],
+  },
+
+  // ── the pipelines run projection (lib/pipeline-runs.ts) ────────────────────
+  //
+  // docs/pipelines-tenant-goal.md §Registration row 10: the design's P0 judge
+  // is "every seed row appears exactly once with a valid PipelineRunStatus,
+  // under dev:mock and against Aurora". The mock rows below ARE the projection
+  // (providers/pipeline-runs.ts over the registered fixtures); the seed side is
+  // the same crosswalk (`crosswalkStatus`, imported from the projection) over
+  // the SQL seed. Of the five run-shaped tables only `agent_jobs` and
+  // `bot_runs` are seeded (agent_project_runs, assessment_runs and
+  // distillation_compactions have no INSERTs in schema/), so two rows pin it:
+  // the Run keyed on its job, and the bot firing folded into it as trigger.
+  {
+    name: 'pipeline runs',
+    describes: 'The pipelines run projection — each seeded agent_jobs row is one Run, its status crosswalked into pipeline-runtime\'s nine and kept verbatim as context.sourceStatus.',
+    lesson: 'pipelines P0: a projection that drops or double-counts a seed row, or guesses a status, is not a ledger.',
+    sqlFile: 'seed_program.sql',
+    sqlTable: 'agent_jobs',
+    seedId: 'id',
+    coverage: 'subset',
+    mockRows: async () => {
+      const { loadProjection } = await import('../../../providers/pipeline-runs.js');
+      return (await loadProjection()).runs.filter((r) => r.context.table === 'agent_jobs');
+    },
+    mockId: (r: { context: { id: string } }) => r.context.id,
+    fields: [
+      {
+        seed: 'status',
+        label: 'status (crosswalked)',
+        mock: (r: { status: string }) => r.status,
+        normalize: (v: SeedValue) => (typeof v === 'string' ? crosswalkRunStatus(v) : null),
+      },
+      {
+        seed: 'status',
+        label: 'context.sourceStatus',
+        mock: (r: { context: { sourceStatus: string } }) => r.context.sourceStatus,
+      },
+      {
+        seed: 'bot_id',
+        label: 'definitionId',
+        mock: (r: { definitionId: string }) => r.definitionId,
+        normalize: (v: SeedValue) => (typeof v === 'string' ? `bot:${v}` : null),
+      },
+    ],
+    uncheckedColumns: {
+      finished_at: 'written by the seed as a relative NOW() expression and re-timed on the mock side by the same clock drift the bot_runs row documents; the agent_jobs entity already owns this column.',
+    },
+  },
+  {
+    name: 'pipeline run triggers',
+    describes: 'The bot firing folded into each projected job Run as its trigger record (context.sources role trigger) — the "once" rule of docs/pipelines-tenant-goal.md.',
+    sqlFile: 'seed_program.sql',
+    sqlTable: 'bot_runs',
+    seedId: '',
+    seedKey: (row) => String(row.values['job_id']),
+    seedFilter: (row) => typeof row.values['job_id'] === 'string',
+    coverage: 'subset',
+    mockRows: async () => {
+      const { loadProjection } = await import('../../../providers/pipeline-runs.js');
+      const out: Array<{ jobId: string; status: string; runStatus: string }> = [];
+      for (const r of (await loadProjection()).runs) {
+        if (r.context.table !== 'agent_jobs') continue;
+        const t = r.context.sources.find((s) => s.role === 'trigger' && s.table === 'bot_runs');
+        if (t) out.push({ jobId: r.context.id, status: t.status, runStatus: r.status });
+      }
+      return out;
+    },
+    mockId: (t: { jobId: string }) => t.jobId,
+    fields: [
+      { seed: 'status', mock: (t: { status: string }) => t.status },
     ],
   },
 

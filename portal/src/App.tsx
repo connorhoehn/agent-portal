@@ -35,8 +35,13 @@ const AssessmentRunsPage = lazy(() => import('./pages/assessment/RunsPage'));
 const AssessmentConfigurationPage = lazy(() => import('./pages/assessment/ConfigurationPage'));
 const SocialLayout = lazy(() => import('./pages/social/SocialLayout'));
 const SocialSurfacePage = lazy(() => import('./pages/social/SocialSurfacePage'));
+const SocialChannelsPage = lazy(() => import('./pages/social/ChannelsPage'));
+const SocialDmsPage = lazy(() => import('./pages/social/DmsPage'));
 const PipelinesLayout = lazy(() => import('./pages/pipelines/PipelinesLayout'));
 const PipelinesSurfacePage = lazy(() => import('./pages/pipelines/PipelinesSurfacePage'));
+const PipelinesRunsPage = lazy(() => import('./pages/pipelines/RunsPage'));
+const PipelinesRunDetailPage = lazy(() => import('./pages/pipelines/RunDetailPage'));
+const PipelinesArtifactsPage = lazy(() => import('./pages/pipelines/ArtifactsPage'));
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
 const KnowledgeHomePage = lazy(() => import('./pages/knowledge/KnowledgeHomePage'));
 const KnowledgeLayout = lazy(() => import('./pages/knowledge/KnowledgeLayout'));
@@ -258,8 +263,10 @@ export function App() {
             )}
           >
             <Route index element={<Navigate to="channels" replace />} />
-            <Route path="channels" element={<Page element={<SocialSurfacePage surface="channels" />} />} />
-            <Route path="dms" element={<Page element={<SocialSurfacePage surface="dms" />} />} />
+            <Route path="channels" element={<Page element={<SocialChannelsPage />} />} />
+            <Route path="channels/:slug" element={<Page element={<SocialChannelsPage />} />} />
+            <Route path="dms" element={<Page element={<SocialDmsPage />} />} />
+            <Route path="dms/:lobby" element={<Page element={<SocialDmsPage />} />} />
             <Route path="calls" element={<Page element={<SocialSurfacePage surface="calls" />} />} />
             <Route path="rooms" element={<Page element={<SocialSurfacePage surface="rooms" />} />} />
             <Route path="contacts" element={<Page element={<SocialSurfacePage surface="contacts" />} />} />
@@ -274,8 +281,9 @@ export function App() {
         )}
 
         {/* ── /pipelines/* — the fourth tenant (docs/social-tenant-design.md
-             §5). Flag ON by default (PIPELINES_ENABLED). Registration: every
-             page is an empty state naming the lane that brings its data. ── */}
+             §5). Flag ON by default (PIPELINES_ENABLED). Runs, run detail and
+             Artifacts read the run projection (lane P0); every other page is
+             an empty state naming the lane that brings its data. ── */}
         {PIPELINES_ENABLED ? (
           <Route
             path="pipelines"
@@ -288,9 +296,10 @@ export function App() {
             <Route index element={<Navigate to="runs" replace />} />
             <Route path="definitions" element={<Page element={<PipelinesSurfacePage surface="definitions" />} />} />
             <Route path="runbooks" element={<Page element={<PipelinesSurfacePage surface="runbooks" />} />} />
-            <Route path="runs" element={<Page element={<PipelinesSurfacePage surface="runs" />} />} />
+            <Route path="runs" element={<Page element={<PipelinesRunsPage />} />} />
+            <Route path="runs/:id" element={<Page element={<PipelinesRunDetailPage />} />} />
             <Route path="approvals" element={<Page element={<PipelinesSurfacePage surface="approvals" />} />} />
-            <Route path="artifacts" element={<Page element={<PipelinesSurfacePage surface="artifacts" />} />} />
+            <Route path="artifacts" element={<Page element={<PipelinesArtifactsPage />} />} />
             <Route path="agents" element={<Page element={<PipelinesSurfacePage surface="agents" />} />} />
             <Route path="bots" element={<Page element={<PipelinesSurfacePage surface="bots" />} />} />
             <Route path="commands" element={<Page element={<PipelinesSurfacePage surface="commands" />} />} />

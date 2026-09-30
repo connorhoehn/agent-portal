@@ -72,6 +72,12 @@ const middlewareEnv = {
   // comments that have not moved.
   DOCUMENT_COMMENT_IMPORT_TABLE: process.env.DOCUMENT_COMMENT_IMPORT_TABLE || 'document-comments',
   DOCUMENT_COMMENT_IMPORT_DYNAMODB_ENDPOINT: process.env.DOCUMENT_COMMENT_IMPORT_DYNAMODB_ENDPOINT || 'http://127.0.0.1:8000',
+  // Social channels and DMs (docs/social-tenant-design.md §4.4): the gateway's
+  // chat({ chatStore }) takes realtime-modules' DynamoChatStore over the
+  // profile's chat-* tables instead of the in-memory store. DynamoDB Local is
+  // in-memory, so the middleware seeds the mock channels into it once when
+  // they are empty. SOCIAL_CHAT_STORE=memory in the shell keeps the old store.
+  SOCIAL_CHAT_DYNAMODB_ENDPOINT: process.env.SOCIAL_CHAT_DYNAMODB_ENDPOINT || 'http://127.0.0.1:8000',
 };
 const services = ['social-redis', 'social-dynamodb', 'social-gateway-image', 'social-dynamodb-init',
   'social-gateway', 'social-platform-api'];

@@ -53,15 +53,45 @@
 //   - a DM message (chat publish on `<tenant>:dm:<a>:<b>…`) → the other
 //     members who have no live subscription to that channel;
 //   - a missed call (`calls({ onCallMissed })`) → the invite's targets.
+//   - a channel message (chat publish on `social:ch:<slug>`) → the channel's
+//     active members who have no live subscription to it; `@<name>` in the
+//     text → the mentioned members, as a `mention` (design §3.4 row 5).
+//
+// Chat state (docs/social-tenant-design.md §4.4, lane S1): `chat({ chatStore })`
+// takes the social backend from lib/social-chat.ts — the library's
+// DynamoChatStore when SOCIAL_CHAT_STORE=dynamo or a SOCIAL_CHAT_* DynamoDB
+// setting is present (DynamoDB Local under the `social` compose profile), the
+// library's in-memory stores (fixture-backed under MOCK_AURORA) otherwise. A
+// `social:ch:<slug>` channel is admitted to its active MEMBERS only, on top of
+// the tenant rule; `social:dm:<ids>` to the ids, as every `<org>:dm:` name.
 
 import type { IncomingMessage, Server } from 'node:http';
 import { attachRealtime, chat, presence, calls, notifications, type RealtimeHandle } from '@connorhoehnslalom/realtime-modules/server';
 import { RedisCallStateStore, InMemoryCallStateStore, type CallStateRedis } from '@connorhoehnslalom/realtime-modules/call';
+import { DynamoChatStore, type DynamoCommandClient } from '@connorhoehnslalom/realtime-modules/server/stores/dynamo';
+import type { ChatMember, ChatMessage } from '@connorhoehnslalom/realtime-modules/chat';
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { isAllowedBrowserOrigin } from './browser-origin.js';
 import { realtimeSigningSecret, tokenFromSubprotocol, verifyRealtimeToken } from './realtime-token.js';
 import { RedisLite } from './redis-lite.js';
 import { createGatewayNotificationStore, releaseGatewayNotificationStore, seedMockNotifications } from './notification-store.js';
-import { conversationHref, notify, parseDmLobby, setNotificationSink, type NotificationSink } from './social-notify.js';
+import { conversationHref, notify, parseDmLobby, resolveMentions, setNotificationSink, type NotificationSink } from './social-notify.js';
+import {
+  createMemorySocialChatBackend,
+  dmMembers,
+  MirroredMembershipStore,
+  setSocialChatBackend,
+  slugForChannel,
+  socialChat,
+  socialChatConfig,
+  SOCIAL_CHANNEL_PREFIX,
+  type SocialChatBackend,
+  type SocialChatConfig,
+  type SocialConversations,
+} from './social-chat.js';
+import { config } from '../config.js';
+import { listChannels } from '../providers/social-channels.js';
+import { socialChannelMembersFixture, socialChannelMessagesFixture } from '../mock/social-channels.js';
 
 export const REALTIME_GATEWAY_PATH = '/ws';
 
@@ -140,7 +170,17 @@ export function lobbyGuard(auth: { userId?: unknown; org?: unknown }, lobbyName:
  * history and post into it (assessment isolation walk, 2026-09-29).
  */
 export function channelGuard(auth: { userId?: unknown; org?: unknown } | null, channel: string): boolean {
-  return auth != null && lobbyGuard(auth, stripServicePrefix(channel));
+  if (auth == null) return false;
+  const bare = stripServicePrefix(channel);
+  if (!lobbyGuard(auth, bare)) return false;
+  // A social channel additionally needs membership (design §4.2): the store's
+  // `chat-members` rows, read through the synchronous mirror. The tenant rule
+  // above already refused every caller outside `social:`.
+  if (bare.startsWith(SOCIAL_CHANNEL_PREFIX)) {
+    const userId = typeof auth.userId === 'string' ? auth.userId : '';
+    return !!slugForChannel(bare) && socialChat().membershipStore.isActiveMember(bare, userId);
+  }
+  return true;
 }
 
 /**
@@ -240,6 +280,146 @@ export function dmNotifyPlugin(getRouter: () => DmRouter | null) {
   };
 }
 
+/**
+ * Row 5: a chat message on a `social:ch:<slug>` channel notifies the channel's
+ * active members who are not looking at it (no live subscription), and
+ * `@<display name>` in the text — resolved against the social roster — sends
+ * the mentioned MEMBERS a `mention` instead (live or not: a mention asks for
+ * attention). A mention of someone outside the channel notifies nobody: the
+ * link would open a channel they cannot read. The sender is the plugin's
+ * authenticated `userId` (0.99.0), falling back to the publishing connection's.
+ */
+export function channelNotifyPlugin(getRouter: () => DmRouter | null, members: () => MirroredMembershipStore = () => socialChat().membershipStore) {
+  return {
+    name: 'social-channel-notify',
+    onMessage: ({ clientId, channelId, message, userId }: { clientId: string; channelId: string; message: unknown; userId?: string }) => {
+      const frame = message as { type?: unknown; action?: unknown; message?: { userId?: unknown; message?: unknown; metadata?: { displayName?: unknown } } } | null;
+      if (!frame || frame.type !== 'chat' || frame.action !== 'message' || !frame.message) return;
+      const channel = stripServicePrefix(channelId);
+      const slug = slugForChannel(channel);
+      if (!slug) return;
+      const router = getRouter();
+      const sender = userId ?? router?.getUserIdForClient?.(clientId);
+      const stamped = frame.message.userId;
+      if (!sender || (typeof stamped === 'string' && stamped !== sender)) return;
+      const store = members();
+      if (!store.isActiveMember(channel, sender)) return;
+      const audience = store.activeMembers(channel).map((m) => m.userId).filter((u) => u !== sender);
+      if (!audience.length) return;
+      const live = router ? liveSubscribers(router, channel) : null;
+      const name = typeof frame.message.metadata?.displayName === 'string' && frame.message.metadata.displayName ? frame.message.metadata.displayName : sender;
+      const text = typeof frame.message.message === 'string' ? frame.message.message : '';
+      void notifyChannelMessage({ channel, slug, sender, name, text, audience, live });
+    },
+  };
+}
+
+export async function notifyChannelMessage(ev: { channel: string; slug: string; sender: string; name: string; text: string; audience: string[]; live: Set<string> | null }): Promise<void> {
+  try {
+    const href = `/social/channels/${encodeURIComponent(ev.slug)}`;
+    const payload = { tenant: 'social', kind: 'message', channel: ev.channel, actorId: ev.sender, actorName: ev.name };
+    const action = { label: 'Open the channel', href };
+    const body = snippet(ev.text) || 'New message';
+    const mentioned = (await resolveMentions(ev.text, 'social')).filter((u) => ev.audience.includes(u));
+    if (mentioned.length) {
+      await notify(mentioned, { type: 'mention', title: `${ev.name} mentioned you in #${ev.slug}`, body, channel: ev.channel, payload: { ...payload, kind: 'mention' }, action });
+    }
+    const rest = ev.audience.filter((u) => !mentioned.includes(u) && !(ev.live?.has(u) ?? false));
+    if (rest.length) {
+      await notify(rest, { type: 'message', title: `${ev.name} in #${ev.slug}`, body, channel: ev.channel, payload, action });
+    }
+  } catch (err) {
+    console.warn(`[realtime-gateway] channel notify failed: ${(err as Error).message}`);
+  }
+}
+
+// ── Chat state (design §4.4) ────────────────────────────────────────────────
+
+function socialChatClient(cfg: SocialChatConfig): DynamoCommandClient {
+  // DynamoDB Local accepts any key; never send the operator's real
+  // credentials to a loopback emulator (the comment importer's rule).
+  const local = !!cfg.endpoint && process.env['NODE_ENV'] !== 'production';
+  return new DynamoDBClient({
+    region: cfg.region,
+    ...(cfg.endpoint ? { endpoint: cfg.endpoint } : {}),
+    ...(local ? { credentials: { accessKeyId: 'local', secretAccessKey: 'local' } } : {}),
+  });
+}
+
+/**
+ * The chat backend for `cfg`: the library's DynamoChatStore, or the memory one.
+ * Dynamo's membership is mirrored in process for the synchronous guard and
+ * hydrated from `chat-members` for every directory channel; under MOCK_AURORA a
+ * directory channel with no rows in DynamoDB yet is seeded once from the
+ * fixtures, so DynamoDB Local (in-memory, emptied on every restart) opens on
+ * the same world as the memory store.
+ */
+export function createSocialChatBackend(cfg: SocialChatConfig = socialChatConfig(), opts: { client?: DynamoCommandClient } = {}): SocialChatBackend {
+  if (cfg.store !== 'dynamo') return createMemorySocialChatBackend();
+  const store = new DynamoChatStore({ client: opts.client ?? socialChatClient(cfg), tablePrefix: cfg.tablePrefix, logger });
+  const mirror: ChatMember[] = [];
+  const membershipStore = new MirroredMembershipStore(() => mirror, store.members);
+  const conversations: SocialConversations = {
+    listForUser: async (userId) => (await store.conversations.listForUser(userId)).map((r) => ({
+      channel: r.channel, peers: r.peers, lastMessageAt: r.lastMessageAt || null,
+      lastMessagePreview: r.lastMessagePreview || null, lastMessageUserId: r.lastMessageUserId,
+    })),
+    recordJoin: (channel, userId) => store.conversations.recordJoin(channel, userId),
+    recordDmMessage: (channel, members, message) => store.conversations.recordMessage({ channel, members, message }),
+  };
+  const seedIfEmpty = async (channel: string): Promise<void> => {
+    if (!config.mock.aurora || (await store.members.listMembers(channel)).length) return;
+    for (const m of socialChannelMembersFixture.rows().filter((r) => r.channel === channel)) await store.members.putMember(m);
+    for (const m of socialChannelMessagesFixture.rows().filter((r) => r.channel === channel)) await store.putMessage(m);
+  };
+  const seedDms = async (): Promise<void> => {
+    if (!config.mock.aurora) return;
+    const byChannel = new Map<string, ChatMessage[]>();
+    for (const m of socialChannelMessagesFixture.rows()) {
+      if (dmMembers(m.channel)) byChannel.set(m.channel, [...(byChannel.get(m.channel) ?? []), m]);
+    }
+    for (const [channel, msgs] of byChannel) {
+      if ((await store.listMessages(channel, 1)).length) continue;
+      for (const m of msgs) {
+        await store.putMessage(m);
+        await conversations.recordDmMessage(channel, dmMembers(channel)!, m);
+      }
+    }
+  };
+  const ready = (async () => {
+    for (const row of await listChannels()) {
+      const channel = `${SOCIAL_CHANNEL_PREFIX}${row.slug}`;
+      await seedIfEmpty(channel);
+      await membershipStore.hydrate(channel);
+    }
+    await seedDms();
+  })().catch((err: unknown) => {
+    console.warn(`[realtime-gateway] social chat store did not hydrate (${(err as Error).message}); social channels refuse every subscribe until it does`);
+  });
+  return {
+    kind: 'dynamo',
+    chatStore: store,
+    membershipStore,
+    readReceiptStore: store.reads,
+    conversations,
+    chatOptions: (extra = {}) => ({
+      ...store.chatOptions({
+        // The library indexes `chat:dm:` names itself; a `social:dm:` DM reaches
+        // it as a channel message, so its members are indexed here.
+        onChannelMessage: (info) => {
+          const ids = dmMembers(info.channel);
+          if (ids) void conversations.recordDmMessage(info.channel, ids, info.message).catch(() => undefined);
+          extra.onChannelMessage?.(info);
+        },
+      }),
+      membershipStore,
+    }),
+    lastMessage: async (channel) => (await store.listMessages(channel, 1))[0] ?? null,
+    recentMessages: (channel, limit) => store.listMessages(channel, limit),
+    ready,
+  };
+}
+
 /** Invites seen by `calls({ config.authorize })`, so a missed call knows who was rung and from where. */
 const invites = new Map<string, { targets: string[]; channel: string | null; at: number }>();
 const INVITE_TTL_MS = 10 * 60_000;
@@ -301,6 +481,8 @@ export interface AttachGatewayOptions {
   /** Override REDIS_URL (tests). `null` forces memory. */
   redisUrl?: string | null;
   pingIntervalMs?: number;
+  /** Override the chat backend (tests). Default: from SOCIAL_CHAT_* (socialChatConfig). */
+  socialChat?: SocialChatBackend;
 }
 
 /**
@@ -314,6 +496,8 @@ export function attachRealtimeGateway(server: Server, opts: AttachGatewayOptions
   const store: RealtimeGatewayStore = redis ? 'redis' : 'memory';
   const stateStore = redis ? new RedisCallStateStore(redis as unknown as CallStateRedis) : new InMemoryCallStateStore();
   const inbox = createGatewayNotificationStore(redis);
+  const chatBackend = opts.socialChat ?? createSocialChatBackend();
+  const chatOpts = chatBackend.chatOptions();
   // Bound after attach: the plugin and onConnect run only once sockets exist.
   let handleRef: RealtimeHandle | null = null;
   const notificationService = (): (NotificationSink & { replayUnreadForUser(clientId: string, userId: string): Promise<void> }) | null =>
@@ -333,14 +517,17 @@ export function attachRealtimeGateway(server: Server, opts: AttachGatewayOptions
     logger,
     // Chat + presence channels are tenant-scoped like call lobbies.
     authorize: authorizeChannel,
-    plugins: [dmNotifyPlugin(() => (handleRef?.router as unknown as DmRouter | undefined) ?? null)],
+    plugins: [
+      dmNotifyPlugin(() => (handleRef?.router as unknown as DmRouter | undefined) ?? null),
+      channelNotifyPlugin(() => (handleRef?.router as unknown as DmRouter | undefined) ?? null),
+    ],
     // A fresh socket gets its unread set (the library leaves replay to the host).
     onConnect: (clientId: string, ctx: Record<string, unknown>) => {
       const userId = typeof ctx?.['userId'] === 'string' ? ctx['userId'] : '';
       if (userId) void notificationService()?.replayUnreadForUser(clientId, userId);
     },
     features: [
-      chat(),
+      chat({ ...chatOpts, chatStore: chatOpts.chatStore }),
       presence(),
       calls({
         stateStore,
@@ -363,10 +550,15 @@ export function attachRealtimeGateway(server: Server, opts: AttachGatewayOptions
   });
   handleRef = handle;
   setNotificationSink(notificationService());
+  // The routes read the same backend; a mock reset drops the ChatService's
+  // per-channel caches so the rebuilt fixture rows are what the next join reads.
+  setSocialChatBackend(chatBackend, () => {
+    (handleRef?.services['chat'] as unknown as { channelCaches?: Map<string, unknown> } | undefined)?.channelCaches?.clear();
+  });
   if (inbox.memory) void seedMockNotifications().catch(() => undefined);
   status = { gateway: 'on', store };
   const where = redis ? `redis (${redisUrl!.replace(/\/\/[^@/]*@/, '//***@')})` : 'memory';
-  console.log(`[realtime-gateway] serving ${REALTIME_GATEWAY_PATH} (chat, presence, calls, notifications); call state + inbox: ${where}`);
+  console.log(`[realtime-gateway] serving ${REALTIME_GATEWAY_PATH} (chat, presence, calls, notifications); call state + inbox: ${where}; chat store: ${chatBackend.kind}`);
   if (redis) {
     void redis.ping().catch((err: unknown) => {
       console.warn(`[realtime-gateway] REDIS_URL is set but Redis did not answer (${(err as Error).message}); call frames will fail until it does`);
@@ -378,6 +570,7 @@ export function attachRealtimeGateway(server: Server, opts: AttachGatewayOptions
     redis,
     dispose: async () => {
       setNotificationSink(null);
+      setSocialChatBackend(null);
       releaseGatewayNotificationStore();
       handleRef = null;
       await baseDispose();

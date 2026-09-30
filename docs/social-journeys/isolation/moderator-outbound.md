@@ -1,11 +1,11 @@
 role: moderator
 user: u-lena
 pages: portal/src/App.tsx,portal/src/components/shell/Layout.tsx,portal/src/pages/SelectContextPage.tsx
-audited: 2026-09-30 02:41Z → 02:42Z, Chromium 1552×958 (Playwright headless, a fresh context per identity — not the shared Chrome tab), middleware dev:mock:social on :3001, Vite :5183
+audited: 2026-09-30 03:42Z → 03:43Z, Chromium 1552×958 (Playwright headless, a fresh context per identity — not the shared Chrome tab), middleware dev:mock:social on :3001, Vite :5183
 identity: sub u-lena, tenant social, role moderator, grants {"social":["moderator"]}
 orgiq-nav-visible: no              # rail on /social/channels: 9 anchors (/social/channels, /social/dms, /social/calls, /social/rooms, /social/contacts, /social/teams, /social/recordings, /social/configuration, /settings), 0 matching ^/(iq|admin)
-orgiq-route-result: redirect       # /iq/projects → /social/channels (h1 "Channels"); /admin/bots/b-x → /social/channels (h1 "Channels"); /iq/runs is not a route in any tenant yet and renders "Page not found"
-orgiq-api-status: 403                # /api/bots 403, /api/graph/people?limit=1 403, /api/work/summary 403, /api/runs 404 (/api/runs is the orgiq façade the pipelines lane has not mounted yet — unrouted, not a door); POST /api/session/tenant {orgiq} 403
+orgiq-route-result: redirect       # /iq/projects → /social/channels (h1 "Channels"); /admin/bots/b-x → /social/channels (h1 "Channels"); /iq/runs is not a route in any tenant yet and renders "Page not found" (h1 None)
+orgiq-api-status: 403                # /api/bots 403, /api/graph/people?limit=1 403, /api/work/summary 403, /api/runs 403; POST /api/session/tenant {orgiq} 403
 assessment-nav-visible: no         # 0 anchors matching ^/assessment
 assessment-route-result: redirect  # /assessment/teams → /social/channels (h1 "Channels")
 assessment-api-status: 403           # /api/assessment/teams 403, /api/assessment/knowledge/tree 403, /api/assessment/pipeline-runs 403; POST /api/session/tenant {assessment} 403

@@ -1,7 +1,7 @@
 role: demo-user (cookie-less fallback identity, dev only)
 user: demo-user
 pages: portal/src/App.tsx,portal/src/components/shell/Layout.tsx,portal/src/pages/SelectContextPage.tsx
-audited: 2026-09-30 02:40Z → 02:41Z, Chromium 1552×958 (Playwright headless, a fresh context per identity — not the shared Chrome tab), middleware dev:mock:social on :3001, Vite :5183
+audited: 2026-09-30 03:41Z → 03:42Z, Chromium 1552×958 (Playwright headless, a fresh context per identity — not the shared Chrome tab), middleware dev:mock:social on :3001, Vite :5183
 social-grant: no                 # /api/session/me: sub demo-user, tenant orgiq, role member, grants {"orgiq":["member","sme","program-owner","org-leader","hr-admin","admin"],"assessment":["assessor","lead-assessor","program-lead","admin"]}
 social-tile-visible: no          # /select Workspaces tab: tiles ['orgiq', 'assessment'] (data-testid select-roles-*)
 social-nav-visible: no            # /iq/projects: 12 anchors in [data-shell-nav], 0 toward /social; ⌘K "Direct messages" lists 3 commands, 0 of them a social page

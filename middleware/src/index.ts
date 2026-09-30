@@ -29,6 +29,7 @@ import { knowledgeBaseRouter } from './routes/knowledge-base.js';
 import { assessmentRouter } from './routes/assessment.js';
 import { socialRouter } from './routes/social.js';
 import { pipelinesRouter } from './routes/pipelines.js';
+import { runsFacadeRouter } from './routes/runs.js';
 import { ingestRouter } from './routes/ingest.js';
 import { observabilityRouter } from './routes/observability.js';
 import { approvalsRouter } from './routes/approvals.js';
@@ -246,6 +247,10 @@ app.use('/api/assessment', assessmentRouter);
 // parked in any other tenant is refused before a handler runs.
 app.use('/api/social', requireTenant('social'), socialRouter);
 app.use('/api/pipelines', requireTenant('pipelines'), pipelinesRouter);
+// The orgiq read of the pipelines run projection — only runs whose
+// context.tenant is 'orgiq' (docs/pipelines-tenant-goal.md §"The vertical
+// slice"). The bot detail page reads its runs here, never /api/pipelines/*.
+app.use('/api/runs', requireTenant('orgiq'), runsFacadeRouter);
 // Ingest — reading jobs/storage/crawl status is operational visibility that the
 // Knowledge page surfaces to org-leaders; starting crawls, editing schedules and
 // other mutations still require ManageIngest (hr-admin).

@@ -44,7 +44,15 @@ export type Action =
   | 'ManageSubmissions'
   | 'RunAssessmentAgent'
   | 'ManageKnowledge'
-  | 'ManageAssessmentConfig';
+  | 'ManageAssessmentConfig'
+  // Social tenant (docs/social-tenant-design.md §4.1) — in CAPABILITY_ACTIONS server-side since S0
+  | 'ViewSocial'
+  | 'PostMessage'
+  | 'StartCall'
+  | 'ManageChannels'
+  | 'ManageTeams'
+  | 'ManageRecordings'
+  | 'ManageSocialConfig';
 
 interface CapabilitiesPayload {
   role: string;

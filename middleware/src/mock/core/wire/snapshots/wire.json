@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-09-30T02:53:30.216Z",
-  "serverHandlerSha": "1c757e205011726a18aaa3e2dedb055590f7e2a785e5f346f6126b73c281c3a0",
+  "capturedAt": "2026-09-30T03:56:46.554Z",
+  "serverHandlerSha": "26289b44f108a1e78724e7b00f82ab585d3262bb46a5e0db3a767006966d71d1",
   "baseUrl": "http://127.0.0.1:3012",
   "personas": [
     "orgiq/admin",
@@ -693,6 +693,66 @@
         ],
         "sections[].nodes[].classification": [
           "internal"
+        ]
+      }
+    },
+    "GET /api/assessment/pipeline-runs": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "limit": "number",
+        "offset": "number",
+        "runs": "array",
+        "runs[]": "object",
+        "runs[].context": "object",
+        "runs[].context.error": "null|string",
+        "runs[].context.id": "string",
+        "runs[].context.kind": "string",
+        "runs[].context.sourceStatus": "string",
+        "runs[].context.sources": "array",
+        "runs[].context.sources[]": "object",
+        "runs[].context.sources[].id": "string",
+        "runs[].context.sources[].role": "string",
+        "runs[].context.sources[].status": "string",
+        "runs[].context.sources[].table": "string",
+        "runs[].context.table": "string",
+        "runs[].context.tenant": "string",
+        "runs[].context.title": "string",
+        "runs[].costUsd": "null",
+        "runs[].definitionId": "string",
+        "runs[].finishedAt": "null|string",
+        "runs[].id": "string",
+        "runs[].startedAt": "string",
+        "runs[].status": "string",
+        "runs[].tenant": "string",
+        "runs[].triggerType": "string",
+        "runs[].triggeredBy": "null",
+        "total": "number",
+        "unavailable": "array"
+      },
+      "values": {
+        "runs[].context.kind": [
+          "assessment-command"
+        ],
+        "runs[].context.sources[].role": [
+          "primary"
+        ],
+        "runs[].context.sources[].status": [
+          "completed",
+          "failed",
+          "running"
+        ],
+        "runs[].context.tenant": [
+          "assessment"
+        ],
+        "runs[].status": [
+          "completed",
+          "failed",
+          "running"
+        ],
+        "runs[].tenant": [
+          "assessment"
         ]
       }
     },
@@ -5993,6 +6053,216 @@
       },
       "values": {}
     },
+    "GET /api/pipelines/artifacts": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "artifacts": "array",
+        "artifacts[]": "object",
+        "artifacts[].contextTenant": "null|string",
+        "artifacts[].createdAt": "string",
+        "artifacts[].id": "string",
+        "artifacts[].kind": "string",
+        "artifacts[].meta": "object",
+        "artifacts[].meta.changeId": "string",
+        "artifacts[].meta.command": "string",
+        "artifacts[].meta.filesChanged": "number",
+        "artifacts[].meta.level": "string",
+        "artifacts[].meta.prUrl": "string",
+        "artifacts[].meta.status": "string",
+        "artifacts[].meta.teamId": "null|string",
+        "artifacts[].meta.toolCalls": "number",
+        "artifacts[].meta.turns": "number",
+        "artifacts[].runId": "null|string",
+        "artifacts[].runStatus": "null|string",
+        "artifacts[].stepId": "null|string",
+        "artifacts[].title": "string",
+        "artifacts[].uri": "string",
+        "limit": "number",
+        "offset": "number",
+        "total": "number",
+        "unavailable": "array"
+      },
+      "values": {
+        "artifacts[].kind": [
+          "change",
+          "document",
+          "scores",
+          "transcript"
+        ],
+        "artifacts[].meta.level": [
+          "L2"
+        ],
+        "artifacts[].meta.status": [
+          "changes_requested",
+          "delivered",
+          "needs_approval"
+        ]
+      }
+    },
+    "GET /api/pipelines/runs": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "limit": "number",
+        "offset": "number",
+        "runs": "array",
+        "runs[]": "object",
+        "runs[].context": "object",
+        "runs[].context.botId": "null|string",
+        "runs[].context.boxId": "null",
+        "runs[].context.error": "null|string",
+        "runs[].context.id": "string",
+        "runs[].context.kind": "string",
+        "runs[].context.projectId": "string",
+        "runs[].context.sourceStatus": "string",
+        "runs[].context.sources": "array",
+        "runs[].context.sources[]": "object",
+        "runs[].context.sources[].id": "string",
+        "runs[].context.sources[].role": "string",
+        "runs[].context.sources[].status": "string",
+        "runs[].context.sources[].table": "string",
+        "runs[].context.table": "string",
+        "runs[].context.tenant": "string",
+        "runs[].context.title": "string",
+        "runs[].context.trigger": "null|string",
+        "runs[].context.workItemId": "null|string",
+        "runs[].costUsd": "null|number",
+        "runs[].definitionId": "string",
+        "runs[].finishedAt": "null|string",
+        "runs[].id": "string",
+        "runs[].startedAt": "string",
+        "runs[].status": "string",
+        "runs[].tenant": "string",
+        "runs[].triggerType": "string",
+        "runs[].triggeredBy": "null|string",
+        "total": "number",
+        "unavailable": "array"
+      },
+      "values": {
+        "runs[].context.kind": [
+          "agent",
+          "assessment-command",
+          "bot",
+          "compaction"
+        ],
+        "runs[].context.sources[].role": [
+          "primary",
+          "trigger"
+        ],
+        "runs[].context.sources[].status": [
+          "completed",
+          "done",
+          "failed",
+          "running",
+          "succeeded"
+        ],
+        "runs[].context.tenant": [
+          "assessment",
+          "orgiq"
+        ],
+        "runs[].status": [
+          "completed",
+          "failed",
+          "running"
+        ],
+        "runs[].tenant": [
+          "assessment",
+          "orgiq"
+        ]
+      }
+    },
+    "GET /api/pipelines/runs/:id": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "artifacts": "array",
+        "run": "object",
+        "run.context": "object",
+        "run.context.error": "null",
+        "run.context.id": "string",
+        "run.context.kind": "string",
+        "run.context.sourceStatus": "string",
+        "run.context.sources": "array",
+        "run.context.sources[]": "object",
+        "run.context.sources[].id": "string",
+        "run.context.sources[].role": "string",
+        "run.context.sources[].status": "string",
+        "run.context.sources[].table": "string",
+        "run.context.table": "string",
+        "run.context.tenant": "string",
+        "run.context.title": "string",
+        "run.costUsd": "null",
+        "run.definitionId": "string",
+        "run.finishedAt": "null",
+        "run.id": "string",
+        "run.startedAt": "string",
+        "run.status": "string",
+        "run.tenant": "string",
+        "run.triggerType": "string",
+        "run.triggeredBy": "null"
+      },
+      "values": {
+        "run.context.kind": [
+          "assessment-command"
+        ],
+        "run.context.sources[].role": [
+          "primary"
+        ],
+        "run.context.sources[].status": [
+          "running"
+        ],
+        "run.context.tenant": [
+          "assessment"
+        ],
+        "run.status": [
+          "running"
+        ],
+        "run.tenant": [
+          "assessment"
+        ]
+      }
+    },
+    "GET /api/pipelines/runs/:id/events": {
+      "skipped": "server-sent event stream (orgiq/admin); server-sent event stream (assessment/admin); no value found for :id under /api/pipelines/runs (anonymous)"
+    },
+    "GET /api/pipelines/runs/:id/steps": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "runId": "string",
+        "steps": "array",
+        "steps[]": "object",
+        "steps[].attempts": "array",
+        "steps[].attempts[]": "object",
+        "steps[].attempts[].attempt": "number",
+        "steps[].attempts[].finishedAt": "null|string",
+        "steps[].attempts[].startedAt": "string",
+        "steps[].attempts[].status": "string",
+        "steps[].detail": "string",
+        "steps[].finishedAt": "null|string",
+        "steps[].label": "string",
+        "steps[].runId": "string",
+        "steps[].startedAt": "null|string",
+        "steps[].status": "string",
+        "steps[].stepId": "string"
+      },
+      "values": {
+        "steps[].attempts[].status": [
+          "completed",
+          "running"
+        ],
+        "steps[].status": [
+          "completed",
+          "pending",
+          "running"
+        ]
+      }
+    },
     "GET /api/pipelines/summary": {
       "persona": "orgiq/admin",
       "status": 200,
@@ -6129,6 +6399,165 @@
         "users": "array"
       },
       "values": {}
+    },
+    "GET /api/runs": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "limit": "number",
+        "offset": "number",
+        "runs": "array",
+        "runs[]": "object",
+        "runs[].context": "object",
+        "runs[].context.botId": "null|string",
+        "runs[].context.boxId": "null",
+        "runs[].context.error": "null|string",
+        "runs[].context.id": "string",
+        "runs[].context.kind": "string",
+        "runs[].context.projectId": "string",
+        "runs[].context.sourceStatus": "string",
+        "runs[].context.sources": "array",
+        "runs[].context.sources[]": "object",
+        "runs[].context.sources[].id": "string",
+        "runs[].context.sources[].role": "string",
+        "runs[].context.sources[].status": "string",
+        "runs[].context.sources[].table": "string",
+        "runs[].context.table": "string",
+        "runs[].context.tenant": "string",
+        "runs[].context.title": "string",
+        "runs[].context.trigger": "null|string",
+        "runs[].context.workItemId": "null|string",
+        "runs[].costUsd": "null|number",
+        "runs[].definitionId": "string",
+        "runs[].finishedAt": "null|string",
+        "runs[].id": "string",
+        "runs[].startedAt": "string",
+        "runs[].status": "string",
+        "runs[].tenant": "string",
+        "runs[].triggerType": "string",
+        "runs[].triggeredBy": "null|string",
+        "total": "number",
+        "unavailable": "array"
+      },
+      "values": {
+        "runs[].context.kind": [
+          "agent",
+          "bot",
+          "compaction"
+        ],
+        "runs[].context.sources[].role": [
+          "primary",
+          "trigger"
+        ],
+        "runs[].context.sources[].status": [
+          "done",
+          "failed",
+          "running",
+          "succeeded"
+        ],
+        "runs[].context.tenant": [
+          "orgiq"
+        ],
+        "runs[].status": [
+          "completed",
+          "failed",
+          "running"
+        ],
+        "runs[].tenant": [
+          "orgiq"
+        ]
+      }
+    },
+    "GET /api/runs/:id": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "artifacts": "array",
+        "run": "object",
+        "run.context": "object",
+        "run.context.botId": "null",
+        "run.context.error": "null",
+        "run.context.id": "string",
+        "run.context.kind": "string",
+        "run.context.projectId": "string",
+        "run.context.sourceStatus": "string",
+        "run.context.sources": "array",
+        "run.context.sources[]": "object",
+        "run.context.sources[].id": "string",
+        "run.context.sources[].role": "string",
+        "run.context.sources[].status": "string",
+        "run.context.sources[].table": "string",
+        "run.context.table": "string",
+        "run.context.tenant": "string",
+        "run.context.title": "string",
+        "run.context.trigger": "null",
+        "run.context.workItemId": "null",
+        "run.costUsd": "null",
+        "run.definitionId": "string",
+        "run.finishedAt": "null",
+        "run.id": "string",
+        "run.startedAt": "string",
+        "run.status": "string",
+        "run.tenant": "string",
+        "run.triggerType": "string",
+        "run.triggeredBy": "null"
+      },
+      "values": {
+        "run.context.kind": [
+          "agent"
+        ],
+        "run.context.sources[].role": [
+          "primary"
+        ],
+        "run.context.sources[].status": [
+          "running"
+        ],
+        "run.context.tenant": [
+          "orgiq"
+        ],
+        "run.status": [
+          "running"
+        ],
+        "run.tenant": [
+          "orgiq"
+        ]
+      }
+    },
+    "GET /api/runs/:id/events": {
+      "skipped": "server-sent event stream (orgiq/admin); server-sent event stream (assessment/admin); no value found for :id under /api/runs (anonymous)"
+    },
+    "GET /api/runs/:id/steps": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "runId": "string",
+        "steps": "array",
+        "steps[]": "object",
+        "steps[].attempts": "array",
+        "steps[].attempts[]": "object",
+        "steps[].attempts[].attempt": "number",
+        "steps[].attempts[].finishedAt": "null",
+        "steps[].attempts[].startedAt": "string",
+        "steps[].attempts[].status": "string",
+        "steps[].finishedAt": "null",
+        "steps[].label": "string",
+        "steps[].runId": "string",
+        "steps[].startedAt": "null|string",
+        "steps[].status": "string",
+        "steps[].stepId": "string"
+      },
+      "values": {
+        "steps[].attempts[].status": [
+          "running"
+        ],
+        "steps[].status": [
+          "pending",
+          "running"
+        ]
+      }
     },
     "GET /api/saved-searches": {
       "persona": "orgiq/admin",
@@ -6816,6 +7245,97 @@
     "GET /api/sessions/:sessionId/events": {
       "skipped": "no value found for :sessionId under /api/sessions (orgiq/admin); no value found for :sessionId under /api/sessions (assessment/admin); no value found for :sessionId under /api/sessions (anonymous)"
     },
+    "GET /api/social/channels": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "channels": "array",
+        "channels[]": "object",
+        "channels[].channel": "string",
+        "channels[].createdAt": "string",
+        "channels[].createdBy": "string",
+        "channels[].description": "string",
+        "channels[].joined": "boolean",
+        "channels[].lastMessageAt": "string",
+        "channels[].lastMessagePreview": "string",
+        "channels[].memberCount": "number",
+        "channels[].name": "string",
+        "channels[].privacy": "string",
+        "channels[].role": "null",
+        "channels[].slug": "string"
+      },
+      "values": {}
+    },
+    "GET /api/social/channels/:slug": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "channel": "object",
+        "channel.channel": "string",
+        "channel.createdAt": "string",
+        "channel.createdBy": "string",
+        "channel.description": "string",
+        "channel.joined": "boolean",
+        "channel.lastMessageAt": "string",
+        "channel.lastMessagePreview": "string",
+        "channel.memberCount": "number",
+        "channel.name": "string",
+        "channel.privacy": "string",
+        "channel.role": "null",
+        "channel.slug": "string",
+        "members": "array",
+        "members[]": "object",
+        "members[].addedAt": "string",
+        "members[].displayName": "string",
+        "members[].role": "string",
+        "members[].userId": "string",
+        "recent": "array",
+        "recent[]": "object",
+        "recent[].displayName": "string",
+        "recent[].id": "string",
+        "recent[].message": "string",
+        "recent[].timestamp": "string",
+        "recent[].userId": "string"
+      },
+      "values": {
+        "members[].role": [
+          "member",
+          "owner"
+        ]
+      }
+    },
+    "GET /api/social/dms": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "conversations": "array"
+      },
+      "values": {}
+    },
+    "GET /api/social/people": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "people": "array",
+        "people[]": "object",
+        "people[].displayName": "string",
+        "people[].roles": "array",
+        "people[].roles[]": "string",
+        "people[].userId": "string"
+      },
+      "values": {
+        "people[].roles[]": [
+          "admin",
+          "community-admin",
+          "moderator",
+          "participant"
+        ]
+      }
+    },
     "GET /api/social/summary": {
       "persona": "orgiq/admin",
       "status": 200,
@@ -7308,16 +7828,21 @@
         "answer",
         "application",
         "artifact",
+        "assessment-command",
         "blocked",
+        "bot",
+        "change",
         "clarification",
         "close_claim",
         "cluster",
         "comment",
+        "compaction",
         "confluence",
         "convention",
         "decision",
         "deploy",
         "devbox:task",
+        "document",
         "eks",
         "evaluator",
         "exception_review",
@@ -7347,11 +7872,13 @@
         "require_review",
         "retrieval",
         "retrieve",
+        "scores",
         "skill",
         "synced",
         "system",
         "task",
         "tool",
+        "transcript",
         "worked",
         "write"
       ]
@@ -7398,9 +7925,12 @@
         "admin",
         "contributor",
         "decider",
+        "member",
         "org-leader",
         "owner",
-        "sme"
+        "primary",
+        "sme",
+        "trigger"
       ]
     },
     "roles": {

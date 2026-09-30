@@ -149,3 +149,16 @@ Wanted: a read-only toolbar state (controls disabled, find still live) so
 every document page has one frame regardless of role. Composed nothing
 locally; the assessment workspace ships without it for readers
 (`docs/assessment-documents-parity-goal.md`, decision 6).
+
+## `PopoverForm` (and so `CreateChannelDialog`) ignores Escape when centred — 2026-09-29
+
+Found on the social S1 walk. `PopoverForm` has two modes: anchored, it
+renders through the library popover (Escape and an outside click close it,
+focus returns to the trigger); without an `anchor` it renders a centred
+backdrop whose only close paths are the Cancel button and a mouse-down on the
+backdrop — no Escape handler, no `role="dialog"`/`aria-modal`, no focus
+return. `CreateChannelDialog` without `anchor` inherits all of that. Wanted:
+the centred mode closes on Escape and carries dialog semantics, the way
+`Modal` does. Composed nothing locally: `portal/src/pages/social/ChannelsPage.tsx`
+passes `anchor` (the header's New channel button), which takes the popover
+path and meets the keyboard rule.

@@ -1,7 +1,7 @@
 role: lead-assessor
 user: u-jonas
 pages: portal/src/App.tsx,portal/src/components/shell/Layout.tsx,portal/src/pages/SelectContextPage.tsx
-audited: 2026-09-30 02:39Z → 02:40Z, Chromium 1552×958 (Playwright headless, a fresh context per identity — not the shared Chrome tab), middleware dev:mock:social on :3001, Vite :5183
+audited: 2026-09-30 03:40Z → 03:41Z, Chromium 1552×958 (Playwright headless, a fresh context per identity — not the shared Chrome tab), middleware dev:mock:social on :3001, Vite :5183
 social-grant: yes                 # /api/session/me: sub u-jonas, tenant assessment, role lead-assessor, grants {"assessment":["lead-assessor","assessor"],"social":["participant"]}
 social-tile-visible: yes          # /select Workspaces tab: tiles ['assessment', 'social'] (data-testid select-roles-*)
 social-nav-visible: no            # /assessment/teams: 11 anchors in [data-shell-nav], 0 toward /social; ⌘K "Direct messages" lists 0 commands, 0 of them a social page

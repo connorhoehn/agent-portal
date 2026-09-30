@@ -1,7 +1,7 @@
 role: org-leader
 user: u-vera
 pages: portal/src/App.tsx,portal/src/components/shell/Layout.tsx,portal/src/pages/SelectContextPage.tsx
-audited: 2026-09-30 02:38Z → 02:38Z, Chromium 1552×958 (Playwright headless, a fresh context per identity — not the shared Chrome tab), middleware dev:mock:social on :3001, Vite :5183
+audited: 2026-09-30 03:39Z → 03:39Z, Chromium 1552×958 (Playwright headless, a fresh context per identity — not the shared Chrome tab), middleware dev:mock:social on :3001, Vite :5183
 social-grant: yes                 # /api/session/me: sub u-vera, tenant orgiq, role org-leader, grants {"orgiq":["org-leader","member"],"social":["participant"]}
 social-tile-visible: yes          # /select Workspaces tab: tiles ['orgiq', 'social'] (data-testid select-roles-*)
 social-nav-visible: no            # /iq/projects: 33 anchors in [data-shell-nav], 0 toward /social; ⌘K "Direct messages" lists 9 commands, 0 of them a social page
