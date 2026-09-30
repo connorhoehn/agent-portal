@@ -45,12 +45,17 @@ export interface SocialDm {
   unreadCount?: number;
 }
 
+/** A row's person, with the presence dot the rail draws (undefined: no dot). */
+export interface SocialRailPeer extends SocialPeer {
+  online?: boolean;
+}
+
 /** The rail row the library's `ConversationRail` takes (its `ConversationItem`, the fields used here). */
 export interface SocialRailItem {
   channel: string;
   kind: 'dm' | 'group' | 'channel';
   name?: string;
-  peers: SocialPeer[];
+  peers: SocialRailPeer[];
   lastMessagePreview?: string;
   lastMessageAt?: string;
   unreadCount?: number;
@@ -157,4 +162,123 @@ export function dmCandidates(people: readonly SocialPerson[], selfId: string): A
     .filter((p) => p.userId !== selfId)
     .sort((a, b) => a.displayName.localeCompare(b.displayName))
     .map((p) => ({ userId: p.userId, displayName: p.displayName, ...(p.roles.length ? { hint: p.roles.join(', ') } : {}) }));
+}
+
+// ── The chat rail's extras (SocialChatWorkspace) ────────────────────────────
+
+/**
+ * The DM rows' presence dots: a peer standing in the workspace (on
+ * `social:lobby`) is online, anyone else offline. Channel rows carry no peers.
+ */
+export function withPresence(items: readonly SocialRailItem[], online: ReadonlySet<string>): SocialRailItem[] {
+  return items.map((item) => (item.peers.length
+    ? { ...item, peers: item.peers.map((p) => ({ ...p, online: online.has(p.userId) })) }
+    : item));
+}
+
+/** One tile of the rail's "Active now" grid (the library's `ActivePerson`, the fields used here). */
+export interface SocialActivePerson {
+  userId: string;
+  displayName: string;
+  status: 'online' | 'away';
+}
+
+/**
+ * Who is in the workspace right now, from the lobby roster as
+ * `presenceAvatarUsers` folds it (one entry per person): everyone but the
+ * viewer, online before away, then by name.
+ */
+export function activeNow(here: ReadonlyArray<{ id: string; name: string; idle?: boolean }>, selfId: string): SocialActivePerson[] {
+  return here
+    .filter((p) => p.id !== selfId)
+    .map((p) => ({ userId: p.id, displayName: p.name, status: p.idle ? 'away' as const : 'online' as const }))
+    .sort((a, b) => Number(a.status === 'away') - Number(b.status === 'away') || a.displayName.localeCompare(b.displayName));
+}
+
+/** A row matches the rail's find box by its channel name or a person's name. */
+export function matchesRailFilter(item: SocialRailItem, query: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  return (item.name ?? '').toLowerCase().includes(q) || item.peers.some((p) => p.displayName.toLowerCase().includes(q));
+}
+
+/** The inbox entry fields the rail reads (realtime-modules' `Notification`). */
+export interface SocialInboxEntry {
+  id: string;
+  type: string;
+  title: string;
+  body?: string;
+  timestamp: string;
+  read?: boolean;
+  channel?: string;
+  payload?: Record<string, unknown>;
+}
+
+/** Only this workspace's items: the shelf counts and lists what the social tenant sent. */
+export function socialInbox<E extends SocialInboxEntry>(entries: readonly E[]): E[] {
+  return entries.filter((e) => e.payload?.['tenant'] === 'social');
+}
+
+/** A mention as the library's `ChannelMentionsPanel` lists it (`ChannelMentionItem`). */
+export interface SocialMention {
+  messageId: string;
+  channel: string;
+  channelLabel?: string;
+  author: string;
+  excerpt: string;
+  at?: string;
+  unread?: boolean;
+}
+
+/**
+ * The Mentions shelf: the inbox's `mention` items (row 5 of the producer
+ * table sends one when `@name` in a channel message names you), newest first.
+ * The item id stands in for the message id — the notification does not carry
+ * one — so a jump lands on the channel, not the line.
+ */
+export function mentionItems(entries: readonly SocialInboxEntry[]): SocialMention[] {
+  return socialInbox(entries)
+    .filter((e) => (e.payload?.['kind'] ?? e.type) === 'mention' && typeof e.channel === 'string' && e.channel.length > 0)
+    .map((e) => {
+      const slug = slugFromChannel(e.channel!);
+      const actor = e.payload?.['actorName'];
+      return {
+        messageId: e.id,
+        channel: e.channel!,
+        ...(slug ? { channelLabel: `#${slug}` } : {}),
+        author: typeof actor === 'string' && actor ? actor : 'Someone',
+        excerpt: e.body ?? e.title,
+        at: e.timestamp,
+        ...(e.read ? {} : { unread: true }),
+      };
+    })
+    .sort((a, b) => (b.at ?? '').localeCompare(a.at ?? ''));
+}
+
+/** A recording as the conversation's Calls view lists it (the library's `ChannelRecordingItem`). */
+export interface SocialConversationRecording {
+  recordingId: string;
+  startedAt?: string;
+  durationMs?: number;
+  participantCount?: number;
+  participants?: Array<{ userId: string; displayName?: string }>;
+  playable?: boolean;
+}
+
+/** The recordings made in one conversation's lobby, newest first. */
+export function conversationRecordings(
+  recordings: ReadonlyArray<{ recordingId: string; lobbyName: string; startedAt: string; durationMs: number; participantCount?: number; participants: Array<{ userId: string; displayName?: string }>; stage: string }>,
+  lobby: string,
+): SocialConversationRecording[] {
+  return recordings
+    .filter((r) => r.lobbyName === lobby)
+    .sort((a, b) => b.startedAt.localeCompare(a.startedAt))
+    .map((r) => ({
+      recordingId: r.recordingId,
+      startedAt: r.startedAt,
+      durationMs: r.durationMs,
+      participantCount: r.participantCount ?? r.participants.length,
+      participants: r.participants,
+      playable: r.stage === 'ready',
+    }));
 }

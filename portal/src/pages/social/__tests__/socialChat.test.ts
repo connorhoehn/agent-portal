@@ -8,8 +8,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  channelHref, channelRailItems, dmCandidates, dmHref, dmMembers, dmPeers, dmRailItems, dmTitle,
-  privacyForApi, slugFromChannel, type SocialChannel, type SocialDm,
+  activeNow, channelHref, channelRailItems, conversationRecordings, dmCandidates, dmHref, dmMembers, dmPeers, dmRailItems, dmTitle,
+  matchesRailFilter, mentionItems, privacyForApi, slugFromChannel, socialInbox, withPresence, type SocialChannel, type SocialDm,
 } from '../socialChat.ts';
 
 const channel = (slug: string, joined: boolean, extra: Partial<SocialChannel> = {}): SocialChannel => ({
@@ -81,4 +81,57 @@ test('the DM rail carries each unread count, and none on the conversation being 
   const rows = dmRailItems(dms, 'social:dm:u-mira:u-sana', 'u-sana', []);
   assert.equal(rows.find((r) => r.channel === 'social:dm:u-lena:u-sana')?.unreadCount, 2);
   assert.equal(rows.find((r) => r.channel === 'social:dm:u-mira:u-sana')?.unreadCount, undefined);
+});
+
+// ── The chat rail's extras (SocialChatWorkspace) ────────────────────────────
+
+test('DM rows carry a presence dot; channel rows none', () => {
+  const rows = withPresence([
+    { channel: 'social:dm:u-a:u-b', kind: 'dm', peers: [{ userId: 'u-b', displayName: 'Bea' }] },
+    { channel: 'social:ch:general', kind: 'channel', name: 'general', peers: [] },
+  ], new Set(['u-b']));
+  assert.equal(rows[0]!.peers[0]!.online, true);
+  assert.deepEqual(rows[1]!.peers, []);
+  assert.equal(withPresence(rows, new Set())[0]!.peers[0]!.online, false);
+});
+
+test('Active now leaves the viewer out, online before away', () => {
+  const people = activeNow([
+    { id: 'u-me', name: 'Me' }, { id: 'u-z', name: 'Zed', idle: true }, { id: 'u-b', name: 'Bea' }, { id: 'u-a', name: 'Ann' },
+  ], 'u-me');
+  assert.deepEqual(people.map((p) => `${p.displayName}:${p.status}`), ['Ann:online', 'Bea:online', 'Zed:away']);
+});
+
+test('the find box matches a channel name or a person', () => {
+  const ch = { channel: 'social:ch:design', kind: 'channel' as const, name: 'design', peers: [] };
+  const dm = { channel: 'social:dm:u-a:u-b', kind: 'dm' as const, peers: [{ userId: 'u-b', displayName: 'Bea Chen' }] };
+  assert.equal(matchesRailFilter(ch, ''), true);
+  assert.equal(matchesRailFilter(ch, 'DES'), true);
+  assert.equal(matchesRailFilter(dm, 'chen'), true);
+  assert.equal(matchesRailFilter(dm, 'design'), false);
+});
+
+test('the shelf counts only this workspace\'s inbox; Mentions are its mention items', () => {
+  const entries = [
+    { id: 'n1', type: 'mention', title: 'Lena mentioned you in #general', body: '@Mira can you look', timestamp: '2026-09-30T10:00:00Z', channel: 'social:ch:general', payload: { tenant: 'social', kind: 'mention', actorName: 'Lena Brandt' } },
+    { id: 'n2', type: 'message' as never, title: 'Theo in #general', timestamp: '2026-09-30T11:00:00Z', channel: 'social:ch:general', payload: { tenant: 'social', kind: 'message' } },
+    { id: 'n3', type: 'mention', title: 'elsewhere', timestamp: '2026-09-30T12:00:00Z', channel: 'orgiq:x', read: true, payload: { tenant: 'orgiq', kind: 'mention' } },
+  ];
+  assert.deepEqual(socialInbox(entries).map((e) => e.id), ['n1', 'n2']);
+  assert.deepEqual(mentionItems(entries), [{
+    messageId: 'n1', channel: 'social:ch:general', channelLabel: '#general', author: 'Lena Brandt',
+    excerpt: '@Mira can you look', at: '2026-09-30T10:00:00Z', unread: true,
+  }]);
+});
+
+test('a conversation\'s Calls view lists the recordings from its own lobby, newest first', () => {
+  const rec = (id: string, lobbyName: string, startedAt: string, stage = 'ready') => ({
+    recordingId: id, lobbyName, startedAt, durationMs: 60_000, participants: [{ userId: 'u-a' }], stage,
+  });
+  const items = conversationRecordings([
+    rec('r1', 'social:ch:general', '2026-09-29T10:00:00Z'),
+    rec('r2', 'social:room:town-hall', '2026-09-30T10:00:00Z'),
+    rec('r3', 'social:ch:general', '2026-09-30T09:00:00Z', 'saving'),
+  ], 'social:ch:general');
+  assert.deepEqual(items.map((i) => `${i.recordingId}:${i.playable}:${i.participantCount}`), ['r3:false:1', 'r1:true:1']);
 });

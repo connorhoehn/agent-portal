@@ -1,7 +1,9 @@
 // Headless measurement for docs/rail-parity-goal.md: the second rail on the
 // Assessment workspace (or another app's /documents with --other) must agree
 // with /iq/library's concise stacked rail on width, caption, row type, pitch
-// and chrome. Run from portal/ (Playwright is installed there).
+// and chrome. With RAIL_PARITY_SUBJECT + RAIL_PARITY_USER it measures the
+// chat-rail variant's frame on those pages instead (below). Run from portal/
+// (Playwright is installed there).
 import { createRequire } from 'node:module';
 // Playwright is installed in portal/, wherever this script is run from.
 const require = createRequire(new URL('../../portal/package.json', import.meta.url));
@@ -81,6 +83,72 @@ async function signIn(page, base, userId, tenant, role) {
     if (tenant) await fetch('/api/session/tenant', { ...h, body: JSON.stringify({ tenant }) });
     if (role) await fetch('/api/session/role', { ...h, body: JSON.stringify({ role }) });
   }, { userId, tenant, role });
+}
+
+// ── The chat-rail variant (docs/rail-parity-goal.md, decision 6) ────────────
+// RAIL_PARITY_SUBJECT=<path>[,<path>…] RAIL_PARITY_USER=<userId>
+// [RAIL_PARITY_TENANT=<tenant>]: the social workspace's pages draw the chat
+// app's sidebar (ConversationRail: shelf, Active now, Teams, Rooms, Direct
+// messages, Channels — avatars and previews by design), so the StackedRail
+// rules (36px rows, 13px text, no icons) do not apply. What does: the FRAME.
+// The rail sits flush against the shell rail (left = the content column's
+// left = 200 ± 2), starts at the content top (± 2, nothing above it — no page
+// header, no shell breadcrumb row), runs the content's full height (± 4), has
+// no card ring (radius ≤ 2), and carries the shelf and its section captions.
+const SUBJECTS = (process.env.RAIL_PARITY_SUBJECT ?? '').split(',').map((v) => v.trim()).filter(Boolean);
+if (SUBJECTS.length) {
+  const user = process.env.RAIL_PARITY_USER;
+  if (!user) { console.log('RAIL_PARITY_SUBJECT needs RAIL_PARITY_USER'); process.exit(2); }
+  const tenant = process.env.RAIL_PARITY_TENANT ?? 'social';
+  const CAPTIONS = (process.env.RAIL_PARITY_CAPTIONS ?? 'Active now,Teams,Rooms,Direct messages,Channels').split(',');
+  const SHELF = (process.env.RAIL_PARITY_SHELF ?? 'Activity,Mentions,Calls,Recordings').split(',');
+  const browser = await chromium.launch();
+  const ctx = await browser.newContext({ viewport: { width: 1672, height: 941 } });
+  const page = await ctx.newPage();
+  // One sign-in for every subject (the login route is rate-limited, 15/min).
+  await signIn(page, BASE, user, tenant, null);
+  let failed = 0;
+  for (const path of SUBJECTS) {
+    await page.goto(BASE + path); await page.waitForTimeout(3500);
+    const m = await page.evaluate(({ CAPTIONS, SHELF }) => {
+      const main = document.querySelector('main');
+      const rail = document.querySelector('nav[aria-label="Chat"]') ?? document.querySelector('[data-testid$="chat-rail"]');
+      if (!main || !rail) return null;
+      const mr = main.getBoundingClientRect(); const mcs = getComputedStyle(main);
+      const content = { left: mr.left + parseFloat(mcs.paddingLeft), top: mr.top + parseFloat(mcs.paddingTop), bottom: mr.bottom - parseFloat(mcs.paddingBottom) };
+      const r = rail.getBoundingClientRect(); const rcs = getComputedStyle(rail);
+      const crumbs = [...document.querySelectorAll('.shell-breadcrumbs')].some((e) => e.getBoundingClientRect().height > 0 && getComputedStyle(e).display !== 'none');
+      const text = (rail.textContent ?? '').toLowerCase();
+      const heads = [...rail.querySelectorAll('h2, h3, [data-testid="conversation-section"], [role="heading"], button, span')]
+        .map((e) => (e.textContent ?? '').trim().toLowerCase());
+      return {
+        railLeft: Math.round(r.left), railTop: Math.round(r.top), railWidth: Math.round(r.width), railHeight: Math.round(r.height),
+        contentLeft: Math.round(content.left), contentTop: Math.round(content.top), contentHeight: Math.round(content.bottom - content.top),
+        radius: parseFloat(rcs.borderTopLeftRadius) || 0, crumbs,
+        missingCaptions: CAPTIONS.filter((c) => !heads.some((h) => h.startsWith(c.toLowerCase()))),
+        missingShelf: SHELF.filter((c) => !text.includes(c.toLowerCase())),
+        hScroll: document.documentElement.scrollWidth > innerWidth,
+      };
+    }, { CAPTIONS, SHELF });
+    console.log(`subject ${path} as ${user}:`, JSON.stringify(m));
+    const problems = [];
+    if (!m) problems.push('no chat rail (nav[aria-label=Chat]) or no <main>');
+    else {
+      if (Math.abs(m.railLeft - 200) > 2) problems.push(`rail left ${m.railLeft} — not flush against the 200px shell rail`);
+      if (Math.abs(m.railLeft - m.contentLeft) > 2) problems.push(`rail left ${m.railLeft} vs content left ${m.contentLeft} — a padded frame is around it`);
+      if (Math.abs(m.railTop - m.contentTop) > 2) problems.push(`rail top ${m.railTop} vs content top ${m.contentTop} — something (a page header, the crumbs) sits above it`);
+      if (Math.abs(m.railHeight - m.contentHeight) > 4) problems.push(`rail height ${m.railHeight} vs content height ${m.contentHeight} — not full height`);
+      if (m.crumbs) problems.push('the shell breadcrumb row is showing (the page root is not data-shell-flush)');
+      if (m.radius > 2) problems.push(`the rail has card chrome (radius ${m.radius}px)`);
+      if (m.missingCaptions.length) problems.push(`section captions missing: ${m.missingCaptions.join(', ')}`);
+      if (m.missingShelf.length) problems.push(`shelf destinations missing: ${m.missingShelf.join(', ')}`);
+      if (m.hScroll) problems.push('horizontal page scroll');
+    }
+    if (problems.length) { failed += 1; console.log(`DIFFERS ${path}:`); for (const p of problems) console.log(' - ' + p); }
+    else console.log(`MATCH ${path} — chat rail ${m.railWidth}px at x=${m.railLeft}, top ${m.railTop}, height ${m.railHeight} of ${m.contentHeight}`);
+  }
+  await browser.close();
+  process.exit(failed ? 1 : 0);
 }
 
 const browser = await chromium.launch();

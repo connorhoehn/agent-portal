@@ -29,13 +29,13 @@ jar for the second user, and restore the user's persona afterwards.
 | surface | url | phase | what "the surface" includes |
 |---|---|---|---|
 | activity | the header bell, opened on `/social/channels` | N | the bell and its unread count; an item arriving from the second context without a reload; the popover (category, title, body, age); clicking an item lands inside the item's tenant and marks it read; Mark all read; Clear; Escape closes and focus returns to the bell; a reload replays the unread set |
-| channels | `/social/channels` | S1 | the channel rail (`ConversationRail`), a channel opened, a message posted and seen in the second context without a reload, history after a reload, create channel for a role that may |
+| channels | `/social/channels` | S1 | the chat workspace's rail (`ConversationRail`, flush at x=200 — `docs/rail-parity-goal.md` decision 6), a channel opened with its header (Chat / Documents / Pinned / Calls, the call actions, ⋯ Leave), a message posted and seen in the second context without a reload, history after a reload, create channel for a role that may |
 | dms | `/social/dms` | S1 | the DM list, a DM opened with the second user, a round trip, the unread mark on the list |
-| calls | `/social/calls` | S2 | the call log, a call started from a DM or a room, the missed-call item it leaves when unanswered |
-| rooms | `/social/rooms` | S2 | the room list, a room created (role that may), joined, its lobby `social:room:<slug>` |
+| calls | `/social/calls` | S2 | the chat workspace with the shelf's Calls open: the call log, a call started from a DM or a room, the missed-call item it leaves when unanswered |
+| rooms | `/social/rooms` | S2 | the chat workspace's Rooms section, the room opened in the pane, a room created (role that may), joined, its lobby `social:room:<slug>` |
 | contacts | `/social/contacts` | S2 | the roster with presence, a person opened, "Message" into a DM |
-| teams | `/social/teams` | S2 | the team tree (`TeamChannelTree`), a team channel opened, membership edit for a role that may |
-| recordings | `/social/recordings` | S2 | the list, a recording played, share/delete for a role that may |
+| teams | `/social/teams` | S2 | the team tree (`TeamChannelTree`, in the chat rail), a team channel opened, membership edit for a role that may |
+| recordings | `/social/recordings` | S2 | the chat workspace with the shelf's Recordings open: the list, a recording played, share/delete for a role that may |
 | configuration | `/social/configuration` | S2 | community-admin only; other roles: what they see instead |
 
 ## Per surface

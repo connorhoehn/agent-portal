@@ -2,15 +2,15 @@ surface: recordings
 role: moderator
 user: u-lena
 url: /social/recordings
-pages: portal/src/pages/social/RecordingsPage.tsx
-audited: 2026-09-30 04:49Z → 04:49Z, Chromium 1552×958 (Playwright headless, one fresh context per user — not the shared Chrome tab), middleware dev:mock:social on :3001 with the `social` compose profile up (platform-api :23001, DynamoDB Local :8000, host SFU :3901), Vite :5183
+pages: portal/src/pages/social/RecordingsPage.tsx,portal/src/pages/social/SocialChatWorkspace.tsx,portal/src/pages/social/RecordingsPane.tsx
+audited: 2026-09-30 12:40Z → 12:42Z, Chromium 1672×941 (Playwright headless, one fresh context per user — not the shared Chrome tab), middleware dev:mock:social on :3001 with the `social` compose profile up (platform-api, DynamoDB Local, host SFU), Vite :5183
 session: /api/session/me sub u-lena, tenant social, role moderator
 screenshot: recordings.jpg
 verdict: pass
 console errors: 0
-layout: pass — content col left 224px w 1304px; no horizontal scroll (scrollWidth 1552 = innerWidth 1552); the empty state full width
-keyboard: pass — 0 controls in main to reach: the empty state carries no action (recordings are made by calls, not here)
-empty-state: pass — "No recordings yet — A recorded call lands here for everyone who was on it. Nothing you were on has been recorded in this workspace." (GET /api/social/recordings: source platform, 0 recordings)
+layout: pass — chat rail (library ConversationRail) 300px at x=200, flush against the 200px shell rail (content col left 200, 0px from content start), top 70 = content top 70, 871px tall = the full content height (no page header, shell crumbs off); pane 1172px at x=500; no horizontal scroll (scrollWidth 1672 = innerWidth 1672)
+keyboard: pass — 20 distinct Tab stops from the rail's Find box through main (first: Find a chat, social-chat-rail-shelf-activity, social-chat-rail-shelf-mentions, social-chat-rail-shelf-calls, social-chat-rail-shelf-recordings, rail-section-header-toggle…) against 32 visible controls in main — the rail's conversation rows and the tree sit behind roving tabindexes (ArrowDown walks them), so fewer stops than controls is the design; the empty state carries no action (recordings are made by calls, not here)
+empty-state: pass — "No recordings yet A recorded call lands here for everyone who was on it. Nothing you were on has been recorded in this workspace." (GET /api/social/recordings: source platform, 0 recordings); /social/recordings?recording=no-such-recording renders "No recordings yet A recorded call lands here for everyone who was on it. Nothing you were on has been recorded in this workspace."
 realtime: n/a — the list polls every 30s; nothing on it is pushed
-role-gating: ManageRecordings: rows would carry Share, and Delete when this user started the recording (none to show)
-notes: The walk's room calls (two people, up to 25s, platform-api reported recording "default-on") produced no recording — platform-api received no LVS recording webhook in this stack — so a recording could not be played; the list, the player's "Nothing to play" state, Share and Delete are covered by the route tests against the fixtures (routes/__tests__/social-platform.test.ts) and the e2e asserts the list renders for the tenant.
+role-gating: ManageRecordings: rows carry Share, and Delete for the recording's starter (0 Share controls on screen)
+notes: The page is the chat workspace with the shelf's Recordings destination open (the library RecordingList + RecordingPlayer in the pane). The walk's room calls produced no recording — platform-api received no LVS recording webhook in this stack — so the player's states are covered by the route tests against the fixtures (routes/__tests__/social-platform.test.ts).

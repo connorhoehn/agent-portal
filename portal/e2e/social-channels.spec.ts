@@ -88,8 +88,8 @@ test('a channel message posted in one context arrives in the other', async ({ br
   const sana = await person(browser, baseURL, 'u-sana', '/social/channels/general', 'social-channels-page');
   await composerReady(mira.page);
   await composerReady(sana.page);
-  // The rail lists the directory; #general is open in both.
-  await expect(sana.page.getByTestId('social-channel-rail').locator('[data-testid="conversation-row"][data-channel="social:ch:general"]')).toBeVisible();
+  // The chat rail lists the directory under Channels; #general is open in both.
+  await expect(sana.page.getByTestId('social-chat-rail').locator('[data-testid="conversation-row"][data-channel="social:ch:general"]')).toBeVisible();
 
   const text = `Agenda for Thursday is up ${Date.now()}`;
   await say(mira.page, text);
@@ -133,7 +133,7 @@ test('a direct message round trip', async ({ browser, baseURL }) => {
 
   // The conversation is in Sana's list now (the conversations index).
   await sana.page.reload();
-  await expect(sana.page.getByTestId('social-dm-rail').locator(`[data-testid="conversation-row"][data-channel="${lobby}"]`)).toBeVisible({ timeout: 10_000 });
+  await expect(sana.page.getByTestId('social-chat-rail').locator(`[data-testid="conversation-row"][data-channel="${lobby}"]`)).toBeVisible({ timeout: 10_000 });
 
   for (const p of [mira, sana]) {
     expect(p.errors, 'page errors').toEqual([]);

@@ -2,15 +2,15 @@ surface: teams
 role: participant
 user: u-sana
 url: /social/teams?channel=social:team:community:events
-pages: portal/src/pages/social/TeamsPage.tsx
-audited: 2026-09-30 04:51Z → 04:51Z, Chromium 1552×958 (Playwright headless, one fresh context per user — not the shared Chrome tab), middleware dev:mock:social on :3001 with the `social` compose profile up (platform-api :23001, DynamoDB Local :8000, host SFU :3901), Vite :5183
+pages: portal/src/pages/social/TeamsPage.tsx,portal/src/pages/social/SocialChatWorkspace.tsx,portal/src/pages/social/SocialConversation.tsx
+audited: 2026-09-30 12:38Z → 12:40Z, Chromium 1672×941 (Playwright headless, one fresh context per user — not the shared Chrome tab), middleware dev:mock:social on :3001 with the `social` compose profile up (platform-api, DynamoDB Local, host SFU), Vite :5183
 session: /api/session/me sub u-sana, tenant social, role participant
 screenshot: teams.jpg
 verdict: pass
-console errors: 0 — the only one logged is the unknown-id probe's own "Failed to load resource: 404" for GET /api/social/teams/no-such-team, the correct answer to a made-up id, counted apart
-layout: pass — content col left 224px w 1304px; no horizontal scroll (scrollWidth 1552 = innerWidth 1552); the library TeamChannelTree in a 288px Card at the content start, the channel conversation (WrappedChatPanel + ContextComposer) beside it, composer in view with no body scroll
-keyboard: pass — 2 Tab stops in main (social-team-tree-team-01M3R9ES5GY8ZAJ56VM2AEH925:CoCommunity⋯, social-team-tree-team-01M3R9ES5GY8ZAJ56VM2AEH925-menu:More options for Community); the tree is roving: ArrowDown from the team row focused social-team-tree-channel-social:team:community:general, again social-team-tree-channel-social:team:community:events
+console errors: 0 — the unknown-team probe's own "Failed to load resource: 404" for GET /api/social/teams/no-such-team, the correct answer to a made-up id, counted apart
+layout: pass — chat rail (library ConversationRail) 300px at x=200, flush against the 200px shell rail (content col left 200, 0px from content start), top 70 = content top 70, 871px tall = the full content height (no page header, shell crumbs off); pane 1172px at x=500; no horizontal scroll (scrollWidth 1672 = innerWidth 1672); composer at y 871–913px of 941, in view with no body scroll (scrollHeight 941)
+keyboard: pass — 23 distinct Tab stops from the rail's Find box through main (first: Find a chat, social-chat-rail-shelf-activity, social-chat-rail-shelf-mentions, social-chat-rail-shelf-calls, social-chat-rail-shelf-recordings, rail-section-header-toggle…) against 41 visible controls in main — the rail's conversation rows and the tree sit behind roving tabindexes (ArrowDown walks them), so fewer stops than controls is the design
 empty-state: pass — /social/teams?team=no-such-team renders "This team is not available It does not exist, or it is private and you are not on it."; a user on no team (u-operator) gets "You are not on a team yet…" (admin log)
-realtime: pass — 2ms: u-mira (Mira Okafor) posted in Community · Events (social:team:community:events) from their own context; it appeared here with no reload
-role-gating: no ManageTeams: Members shows the roster with "A moderator who owns this team adds or removes people." and no Add/Remove; no New team control (absent from the DOM, and from the tree's heading)
-notes: Members: "Open channel MO Mira Okafor Owner LB Lena Brandt SI Sana Iqbal (you)". Teams are platform-api's (team Community, owner u-mira, members u-lena and u-sana, channels General and Events — seeded over REST for this walk); a team's channel conversation is social:team:<team>:<channel> on the BFF gateway.
+realtime: pass — <0.01s: Mira Okafor posted in social:team:community:events from their own context; it appeared here with no reload
+role-gating: no ManageTeams: no New team + on the TEAMS heading (count 0, absent from the DOM); Members (⋯ menu) shows "Open channel MO Mira Okafor Owner LB Lena Brandt SI Sana Iqbal (you)" with 0 Add control(s) — only the team's owner adds or removes people
+notes: Teams (GET /api/social/teams): Community (member; General, Events). the conversation header (library WrappedConversationSurface) carries the tabs Chat | Documents | Pinned | Calls; Documents → URL ?channel=social%3Ateam%3Acommunity%3Aevents&view=documents (the view is in the URL), Chat restores it; audio-call 1 + video-call 1 actions; the ⋯ menu lists Members and Escape closed it (yes). Enter on the focused tree row opened ?channel=social:team:community:events.

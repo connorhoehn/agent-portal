@@ -47,6 +47,32 @@ documents rails move onto the Org rail's family.
    a small icon, the default is none. Ages sit in the meta slot in
    `RAIL_GROUP_COUNT` ink, as counts do.
 
+6. **The chat-rail variant (2026-09-30, the user: "that iconic 21st-century
+   left side bar rail that all online chat social apps have").** The social
+   workspace's six chat pages — `/social/channels`, `/social/dms`,
+   `/social/teams`, `/social/rooms`, `/social/calls`, `/social/recordings` —
+   are ONE composition (`portal/src/pages/social/SocialChatWorkspace.tsx`;
+   the route only picks what the pane opens on) and do **not** use
+   `StackedRail`. They draw the chat app's sidebar the way realtime-examples'
+   `MessagesPage.tsx` does, from the library's `ConversationRail`: a shelf
+   (Activity, Mentions, Calls, Recordings — destinations that are not
+   conversations), Active now (`ActivePeopleGrid` over presence), Teams
+   (`TeamChannelTree`), Rooms (the library's hook-bound rooms section —
+   `ConversationRail` has no rooms group), then Direct messages and Channels
+   (`sectionOrder="dms-first"`, a + on each). Avatars, presence dots, `#`
+   glyphs, previews and ages are the point of this rail, so the StackedRail
+   rules — 36px rows, 13px/500 text, no leading icons, 220px — do not apply;
+   its width is the library default (`WorkspaceRail` `md`, 300px). What does
+   apply is the **frame**, and the judge measures it: the page root is
+   `data-shell-flush`, there is no `PageHeader` or shell breadcrumb row above
+   the rail, the rail's left = the content column's left = 200 ± 2 (flush
+   against the shell rail), its top = the content top ± 2, its height = the
+   content height ± 4, no card ring (radius ≤ 2), no horizontal scroll, and
+   the shelf (Activity / Mentions / Calls / Recordings) and the section
+   captions (ACTIVE NOW / TEAMS / ROOMS / DIRECT MESSAGES / CHANNELS) are
+   present. Contacts and Configuration stay ordinary pages (the 24px ring,
+   the crumbs), with no second rail.
+
 ## Definition of done
 
 - Measured headless at 1672×941: the second rail on `/assessment/workspace`
@@ -55,6 +81,8 @@ documents rails move onto the Org rail's family.
   current-row treatment, and neither has a card background or row icons.
 - realtime-examples `/documents` adopted: commit recorded here; when :15174
   answers, the same measurement passes against it.
+- The six social chat pages pass the chat-rail frame measurement
+  (`RAIL_PARITY_SUBJECT=… RAIL_PARITY_USER=u-mira`, decision 6).
 - The assessment-tenant and documents-parity validators stay green; the
   journey logs the rail change stales are re-sealed.
 
@@ -100,3 +128,4 @@ documents rails move onto the Org rail's family.
 - aws-agentcore `DocumentRail.tsx`: bdf571d9 (2026-09-29)
 - The user's "too much left padding on the items" report (2026-09-29, screenshot of realtime-examples `/documents/02e18866…?type=page`) is closed by the `2.407.32` gutter model, pinned in both apps: measured headless on 2026-09-30 at 1672×941, DPR 2, on `2.407.40` — a `/documents` row's text sits **17px** from the rail's left edge (`padding-left: 14px`, rail at x=0, 220px wide, 36px pitch), the same 17px inset the shell rail's items have on `/iq/library` (group headers 8px), and the judge's `--other` run reports `MATCH` against the `/iq/library` reference (`/tmp/rail-parity-other.log`).
 - realtime-examples `DocumentExplorer.tsx`: 895dac3f (2026-09-29 20:30, first adoption) then f4ee1f97 (2.407.33 rail: 220px, 36px pitch, presence on rows via `trailing`; that session measured rail x=0 from y=53, no ring, trail in the pane header)
+- social chat workspace (decision 6), not yet committed (working tree on `fff0826d`): `SocialChatWorkspace.tsx` renders `/social/channels`, `/social/dms`, `/social/teams`, `/social/rooms`, `/social/calls` and `/social/recordings`. Measured headless on 2026-09-30 at 1672×941 as u-mira (community-admin): on every one of the six, the chat rail (`nav[aria-label=Chat]`) is 300px wide at x=200 (content left 200), top 70 (content top 70, no crumbs, no page header), 871px tall of an 871px content column, radius 0, no horizontal scroll; shelf Activity / Mentions / Calls / Recordings and captions Active now / Teams / Rooms / Direct messages / Channels all present — judge `MATCH` ×6 (`/tmp/rail-parity-social.log`). Before: `ConversationRail` 288px at x=224, top 207 under a `PageHeader`; Teams' `TeamChannelTree` in a card at x=241.

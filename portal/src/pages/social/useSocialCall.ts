@@ -17,7 +17,7 @@ import { useInitiativeCallHost } from '../projects/InitiativeCallHost';
 import { callAvailability } from '../../lib/conversationCallModel';
 import { dmLobby, roomLobby } from './socialPlatform';
 
-type Pending = { lobbyName: string; targets: { userId: string; displayName: string }[] };
+type Pending = { lobbyName: string; targets: { userId: string; displayName: string }[]; audioOnly: boolean };
 
 export interface SocialCall {
   /** Why a call cannot start right now, or null. */
@@ -25,7 +25,13 @@ export interface SocialCall {
   /** The lobby of the call in progress, if any. */
   activeLobby: string | null;
   joinRoom: (room: { slug: string; name: string }) => void;
-  callPeople: (people: { userId: string; displayName: string }[]) => void;
+  callPeople: (people: { userId: string; displayName: string }[], opts?: { audioOnly?: boolean }) => void;
+  /**
+   * An open call in a conversation's own lobby (a channel, a team channel):
+   * nobody is rung — like walking into a room — and whoever opens the
+   * conversation sees the call in progress and joins it.
+   */
+  callConversation: (conversation: { channel: string; title: string }, opts?: { audioOnly?: boolean }) => void;
   leave: () => void;
   notice: string | null;
   clearNotice: () => void;
@@ -56,21 +62,21 @@ export function useSocialCall(): SocialCall {
     pending.current = null;
     // A live call in this lobby (discovered by the host): walk into it.
     if (live && rejoin) void rejoin();
-    else void start(want.targets);
+    else void start(want.targets, want.audioOnly ? { audioOnly: true } : undefined);
   }, [bound, start, rejoin, live]);
 
-  const begin = useCallback((lobbyName: string, title: string, channel: string, targets: Pending['targets']) => {
+  const begin = useCallback((lobbyName: string, title: string, channel: string, targets: Pending['targets'], audioOnly = false) => {
     if (!host) return;
     if (!availability.ok) { setNotice(availability.reason); return; }
     if (inCall) { setNotice(bound === lobbyName ? 'You are already in this call.' : 'You are already in a call. Leave it first.'); return; }
     setNotice(null);
-    pending.current = { lobbyName, targets };
+    pending.current = { lobbyName, targets, audioOnly };
     host.bind({ lobbyName, title, channel });
     // Already bound to this lobby: the effect will not re-run, so start now.
     if (bound === lobbyName && host.call) {
       pending.current = null;
       if (live) void host.call.rejoin();
-      else void host.call.start(targets);
+      else void host.call.start(targets, audioOnly ? { audioOnly: true } : undefined);
     }
   }, [host, availability.ok, availability.ok ? null : availability.reason, inCall, bound, live]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -78,13 +84,14 @@ export function useSocialCall(): SocialCall {
     unavailable: availability.ok ? null : availability.reason,
     activeLobby: inCall ? bound : null,
     joinRoom: (room) => { const lobby = roomLobby(room.slug); begin(lobby, room.name, lobby, []); },
-    callPeople: (people) => {
+    callPeople: (people, opts) => {
       const self = host?.self?.userId;
       const others = people.filter((p) => p.userId && p.userId !== self);
       if (!self || !others.length) { setNotice('Pick someone other than yourself to call.'); return; }
       const lobby = dmLobby([self, ...others.map((p) => p.userId)]);
-      begin(lobby, others.map((p) => p.displayName).join(', '), lobby, others);
+      begin(lobby, others.map((p) => p.displayName).join(', '), lobby, others, !!opts?.audioOnly);
     },
+    callConversation: (conversation, opts) => { begin(conversation.channel, conversation.title, conversation.channel, [], !!opts?.audioOnly); },
     leave: () => { if (call) void call.leave(); },
     notice,
     clearNotice: () => setNotice(null),
