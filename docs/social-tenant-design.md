@@ -228,9 +228,21 @@ One `app_users` id everywhere, unchanged. The realtime token already carries
   membership once the `ChatStore` exists (S1);
 - platform-api (`lobbyAccess.ts`, rooms/teams/video-session routes): the
   partition is read from the target and checked against `tenants`, `org`
-  still accepted for tokens without the claim — taken by the
-  realtime-modules session on 2026-09-29 (sha to be recorded here when it
-  lands).
+  still accepted for tokens without the claim — landed upstream as
+  platform-api `849a890` (2026-09-29, `src/lib/partition.ts`; 11 new tests).
+  The rule is literal: a caller's partitions are its `tenants` claim when
+  non-empty, else its `org` — so the BFF's token must list the session's own
+  tenant in `tenants` (it does: `tenants` is the grant list and a session can
+  only stand in a tenant it holds a grant in). Three consequences for S2:
+  rooms and teams look up by the caller's org, so reaching one in another
+  partition needs `?tenant=` (or body `tenant`) on those routes (refusal 403
+  on rooms and team create/list, 404 elsewhere); an OrgIQ caller's room call
+  lobby is now `<partition>:room:<slug>` (Cognito callers keep `room:<slug>`);
+  video sessions opened on a `<tenant>:` lobby are recorded under that tenant.
+  Open upstream, decided here for S2: a private room's lobby must look the
+  room up (today `social:room:x` admits anyone with a `social` grant, and the
+  video API called directly skips the rooms route's membership check); call
+  reactions still read under the caller's org until their event carries one.
 
 A token still says `org: <session tenant>`, so rooms and teams a user
 creates while standing in Social land under `social`. No second token.
