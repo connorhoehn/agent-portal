@@ -12,14 +12,14 @@ import { useRecordingRead } from './useRecordingRead';
 
 import { RECORDING_CHANGED_EVENT } from './recordingEvents';
 export { RECORDING_CHANGED_EVENT } from './recordingEvents';
-export function PageRecordings(props: { lobby: string; subjectName: string; preview?: boolean; onOpen(id: string | null): void }) {
+export function PageRecordings(props: { lobby: string; subjectName: string; preview?: boolean; documentSourceId?: string; onOpen(id: string | null): void }) {
   const { session } = useSession();
   if (!session || session.sub === 'unknown') return null;
   const identity = JSON.stringify([session.sub, session.tenant, session.role, session.masquerading]);
-  return <RecordingShelf key={`${identity}:${props.lobby}`} {...props} />;
+  return <RecordingShelf key={`${identity}:${props.lobby}:${props.documentSourceId ?? ''}`} {...props} />;
 }
-function RecordingShelf({ lobby, subjectName, preview = false, onOpen }: { lobby: string; subjectName: string; preview?: boolean; onOpen(id: string | null): void }) {
-  const client = useMemo(() => createInitiativeRecordingsClient({ scopeLabel: 'page' }), []);
+function RecordingShelf({ lobby, subjectName, preview = false, documentSourceId, onOpen }: { lobby: string; subjectName: string; preview?: boolean; documentSourceId?: string; onOpen(id: string | null): void }) {
+  const client = useMemo(() => createInitiativeRecordingsClient({ scopeLabel: 'page', documentSourceId }), [documentSourceId]);
   const [params] = useSearchParams();
   const selectedId = preview ? null : params.get('recording');
   const [searchActive, setSearchActive] = useState(false);
@@ -42,14 +42,15 @@ function RecordingShelf({ lobby, subjectName, preview = false, onOpen }: { lobby
     finally { if (!abort.signal.aborted) setOlderBusy(false); }
   }
   const allRows = [...new Map([...(read.value?.items ?? []), ...(older?.items ?? [])].map(row => [row.recordingId, row])).values()];
-  const rows = preview ? allRows.slice(0, 2) : allRows;
+  const associated = documentSourceId ? allRows.filter(row => row.artifactContext?.tenant === 'assessment' && row.artifactContext.documentSourceId === documentSourceId) : allRows;
+  const rows = preview ? associated.slice(0, 2) : associated;
   return <Stack gap="sm" className="min-w-0" data-testid={preview ? 'initiative-recordings-activity' : 'initiative-recordings'}>
     <Inline gap="sm" align="center" justify="between" wrap><T size="sm" weight="semibold">Recorded huddles</T>
       <Inline gap="sm">{preview ? <Button variant="link" size="sm" className="text-xs" onClick={() => onOpen(null)}>All recordings</Button>
         : selectedId ? <Button variant="link" size="sm" className="text-xs" onClick={() => onOpen(null)}>Back to docs & recordings</Button>
         : <FileRefreshAction label="Refresh recorded huddles" refreshing={read.loading} onRefresh={refresh} />}</Inline>
     </Inline>
-    {!preview && !selectedId && <RecordingContentSearch lobby={lobby} onActive={setSearchActive} />}
+    {!preview && !selectedId && <RecordingContentSearch lobby={lobby} documentSourceId={documentSourceId} onActive={setSearchActive} />}
     {selectedId ? <RecordingDetail key={selectedId} id={selectedId} lobby={lobby} subjectName={subjectName} client={client} />
       : searchActive ? null
       : read.error ? <InlineAlert tone="warning">{read.error}</InlineAlert>

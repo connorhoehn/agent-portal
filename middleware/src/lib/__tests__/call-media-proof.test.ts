@@ -2,12 +2,16 @@ jest.mock('../../config.js', () => ({ config: { region: 'us-east-1', mock: { aur
 jest.mock('../../providers/identity.js', () => ({ getUser: jest.fn() }));
 jest.mock('../authz.js', () => ({ isAllowed: jest.fn(async () => false) }));
 jest.mock('../page-resources.js', () => ({ pageResourceVisible: jest.fn() }));
+jest.mock('../../providers/assessment.js', () => ({ getKnowledgeDoc: jest.fn() }));
 import express from 'express';
 import request from '../../test-support/http.js';
 import { InMemoryCallStateStore } from '@connorhoehnslalom/realtime-modules/call';
 import type { RealtimeRouter } from '@connorhoehnslalom/realtime-modules/server';
 import { getUser, type UserInfo } from '../../providers/identity.js';
 import { pageResourceVisible } from '../page-resources.js';
+import { isAllowed } from '../authz.js';
+import { getKnowledgeDoc } from '../../providers/assessment.js';
+import { assessmentDocumentLobby } from '../assessment-document-context.js';
 import { CallMediaProofRuntime, setCallMediaProofRuntime } from '../call-media-proof.js';
 import { lobbyGuard } from '../gateway/authority.js';
 import { realtimeLobbyAccessRouter } from '../../routes/realtime-lobby-access.js';
@@ -23,6 +27,8 @@ beforeEach(async () => {
   users = new Map([['alice', { id: 'alice', displayName: 'Alice', email: null, personId: null, epoch: 2, grants: { orgiq: ['member'] } }]]);
   jest.mocked(getUser).mockReset().mockImplementation(async id => users.get(id) ?? null);
   jest.mocked(pageResourceVisible).mockReset().mockResolvedValue(true);
+  jest.mocked(isAllowed).mockReset().mockResolvedValue(false);
+  jest.mocked(getKnowledgeDoc).mockReset();
   sockets = new Map([['alice-socket', ctx(session)], ['alice-unseated', ctx(session)], ['bob-socket', ctx({ ...session, sub: 'bob' })]]);
   const router = { isClientLive: (id: string) => sockets.has(id), getClientData: (id: string) => ({ userContext: sockets.get(id) }) } as RealtimeRouter;
   calls = new InMemoryCallStateStore();
@@ -83,4 +89,40 @@ test('malformed body, forged bearer and unavailable authority fail closed', asyn
   expect((await ask({ callId: CALL, clientId: 'alice-socket', lobbyName: LOBBY, userId: 'bob' })).status).toBe(400);
   expect((await ask(undefined, 'invalid')).status).toBe(401);
   setCallMediaProofRuntime(null); expect((await ask()).status).toBe(503);
+});
+
+async function documentSeat(channelSource = 'ec:standards/ci-cd-standards.md', withChannel = true) {
+  const sourceId = 'ec:standards/ci-cd-standards.md', lobbyName = assessmentDocumentLobby(sourceId), callId = 'doc-call';
+  const signed: Session = { ...session, tenant: 'assessment', role: 'assessor', grants: { assessment: ['assessor'] } };
+  users.get('alice')!.grants = signed.grants;
+  sockets.set('alice-socket', ctx(signed));
+  jest.mocked(isAllowed).mockResolvedValue(true);
+  jest.mocked(getKnowledgeDoc).mockResolvedValue({ id: sourceId, title: 'CI standards', classification: 'internal', markdown: '', editable: true, path: '', updated_at: '' });
+  await calls.forgetCall(callId);
+  await calls.registerParticipant(callId, 'alice-socket', 'alice', lobbyName, [], withChannel ? `assessment-document:/assessment/enterprise?doc=${encodeURIComponent(channelSource)}` : undefined);
+  await calls.markAccepted(callId, 600);
+  const token = (await signRealtimeToken(realtimeClaims(signed), 'synthetic-seat-proof')).token;
+  return { sourceId, lobbyName, callId, token, input: { callId, lobbyName, clientId: 'alice-socket', documentSourceId: sourceId } };
+}
+test('accepted native document seat proves original hashed source without Social access or page POST', async () => {
+  const doc = await documentSeat(); const res = await ask(doc.input, doc.token);
+  expect(res.status).toBe(200);
+  expect(res.body).toMatchObject({ allowed: true, tenant: 'assessment', documentContext: { tenant: 'assessment', sourceId: doc.sourceId, lobbyName: doc.lobbyName } });
+  expect(getKnowledgeDoc).toHaveBeenCalledTimes(2);
+  expect(getKnowledgeDoc).toHaveBeenCalledWith(doc.sourceId);
+});
+test('document source must match the original accepted stored channel, not just a client hash claim', async () => {
+  const wrong = await documentSeat('different-source'); expect((await ask(wrong.input, wrong.token)).status).toBe(403);
+  const legacy = await documentSeat('', false); expect((await ask(legacy.input, legacy.token)).status).toBe(403);
+  const { documentSourceId: _omitted, ...noSource } = legacy.input;
+  expect((await ask(noSource, legacy.token)).status).toBe(403);
+  expect((await ask({ callId: CALL, lobbyName: LOBBY, clientId: 'alice-socket', documentSourceId: 'page:100002' })).status).toBe(403);
+});
+test('document deletion, permission revocation and leaving during source I/O cannot bind', async () => {
+  const doc = await documentSeat();
+  jest.mocked(getKnowledgeDoc).mockResolvedValueOnce(null); expect((await ask(doc.input, doc.token)).status).toBe(403);
+  jest.mocked(isAllowed).mockResolvedValue(false); expect((await ask(doc.input, doc.token)).status).toBe(403);
+  jest.mocked(isAllowed).mockResolvedValue(true);
+  jest.mocked(getKnowledgeDoc).mockImplementation(async () => { sockets.delete('alice-socket'); return { id: doc.sourceId, title: 'deleted seat', classification: '', markdown: '', editable: false, path: '', updated_at: '' }; });
+  expect((await ask(doc.input, doc.token)).status).toBe(403);
 });

@@ -13,7 +13,7 @@ export function RecordingDetail({ id, lobby, client, subjectName }: { id: string
   const [currentTimeMs, setCurrentTimeMs] = useState(0);
   const [mediaError, setMediaError] = useState(false);
   const metadata = useRecordingRead(id, signal => client.detail(id, lobby, signal), row => recordingIsProcessing(row) ? 5000 : null);
-  const row = metadata.value;
+  const row = metadata.error ? null : metadata.value;
   const statusKey = row && !metadata.error ? JSON.stringify([row.recordingId, row.composeStatus, row.transcriptStatus, row.summaryStatus, row.processingAttemptId, row.summaryRunId]) : null;
   useEffect(() => { if (statusKey) notifyRecordingRead(lobby, 'detail'); }, [statusKey, lobby]);
   // Verify the exact native subject before requesting any asset. Every route

@@ -31,6 +31,7 @@ import { realtimeSigningSecret, verifyRealtimeToken } from '../lib/realtime-toke
 import { callMediaProofRuntime } from '../lib/call-media-proof.js';
 import { getLivePrincipal } from '../lib/live-principal.js';
 import { AppError } from '../lib/async-handler.js';
+import { isDocumentSourceId, readAssessmentDocument } from '../lib/assessment-document-context.js';
 
 export const MAX_LOBBY_NAME = 256;
 
@@ -49,14 +50,15 @@ realtimeLobbyAccessRouter.post('/call-seat', asyncHandler(async (req, res) => {
   try { auth = gatewayAuthFromClaims(await verifyRealtimeToken(token, secret)); }
   catch { res.status(401).json({ error: 'invalid or expired realtime token' }); return; }
   const input = req.body as Record<string, unknown> | null;
-  if (!input || typeof input !== 'object' || Array.isArray(input) || Object.keys(input).some(key => !['callId', 'lobbyName', 'clientId'].includes(key))
+  if (!input || typeof input !== 'object' || Array.isArray(input) || Object.keys(input).some(key => !['callId', 'lobbyName', 'clientId', 'documentSourceId'].includes(key))
     || !['callId', 'clientId'].every(key => typeof input[key] === 'string' && /^[A-Za-z0-9:_-]{1,256}$/.test(input[key] as string))
-    || typeof input.lobbyName !== 'string' || !input.lobbyName || input.lobbyName.length > MAX_LOBBY_NAME) {
+    || typeof input.lobbyName !== 'string' || !input.lobbyName || input.lobbyName.length > MAX_LOBBY_NAME
+    || (input.documentSourceId !== undefined && !isDocumentSourceId(input.documentSourceId))) {
     res.status(400).json({ error: 'callId, lobbyName and clientId required' }); return;
   }
   try {
     const { session } = await getLivePrincipal(auth);
-    res.json(await callMediaProofRuntime().get(session, input.callId as string, input.lobbyName, input.clientId as string));
+    res.json(await callMediaProofRuntime().get(session, input.callId as string, input.lobbyName, input.clientId as string, input.documentSourceId as string | undefined));
   } catch (error) {
     if (error instanceof AppError && error.status >= 500) throw error;
     res.status(403).json({ allowed: false });
@@ -77,14 +79,26 @@ realtimeLobbyAccessRouter.post('/lobby-access', asyncHandler(async (req, res) =>
     res.status(401).json({ error: 'invalid or expired realtime token' }); return;
   }
   const lobbyName = (req.body as { lobbyName?: unknown } | undefined)?.lobbyName;
+  const documentSourceId = (req.body as { documentSourceId?: unknown } | undefined)?.documentSourceId;
   if (typeof lobbyName !== 'string' || !lobbyName || lobbyName.length > MAX_LOBBY_NAME) {
     res.status(400).json({ error: 'lobbyName is required' }); return;
+  }
+  if (documentSourceId !== undefined && (!isDocumentSourceId(documentSourceId) || !lobbyName.startsWith('assessment:doc:'))) {
+    res.status(400).json({ error: 'Valid Assessment document source required' }); return;
   }
   // No callId: the question is the lobby itself, never a stored call's.
   const allowed = await admitCall(auth, 'join', { lobbyName }, callGuards(noStoredCall));
   if (!allowed) {
     console.warn(`[lobby-access] refused lobby '${lobbyName}' for user '${String(auth['userId'])}' (org '${String(auth['org'])}')`);
     res.status(403).json({ allowed: false }); return;
+  }
+  if (documentSourceId !== undefined) {
+    const { session } = await getLivePrincipal(auth);
+    if (session.tenant !== 'assessment' || !await readAssessmentDocument(documentSourceId, lobbyName)
+      || !await readAssessmentDocument(documentSourceId, lobbyName)
+      || !await admitCall(auth, 'join', { lobbyName }, callGuards(noStoredCall))) {
+      res.status(403).json({ allowed: false }); return;
+    }
   }
   res.json({ allowed: true });
 }));

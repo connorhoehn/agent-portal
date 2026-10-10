@@ -23,6 +23,8 @@ export interface InitiativeRecording extends Pick<LVSRecording, 'recordingId' | 
   transcriptGeneratedAt?: string;
   summaryRunId?: string;
   processingAttemptId?: string;
+  /** Server-verified host association, never decoded from a lobby hash. */
+  artifactContext?: { tenant: string; initiativeId?: string; teamId?: string; documentSourceId?: string };
 }
 export interface RecordingPage { items: InitiativeRecording[]; cursor: string | null }
 export interface RecordingPlayback { mediaState: string; composedUrl?: string | null; playlistUrl?: string | null; token?: string | null }
@@ -51,6 +53,7 @@ export function createInitiativeRecordingsClient(options: {
   fetchImpl?: typeof fetch;
   platformApiUrl?: string;
   scopeLabel?: string;
+  documentSourceId?: string;
 } = {}) {
   const source = options.source ?? realtimeTokenSource;
   const doFetch = options.fetchImpl ?? fetch;
@@ -90,6 +93,7 @@ export function createInitiativeRecordingsClient(options: {
     async detail(id: string, lobby: string, signal: AbortSignal): Promise<InitiativeRecording> {
       const row = await request<InitiativeRecording>(`/api/recordings/${encodeURIComponent(id)}`, signal);
       if (row.recordingId !== id || row.lobbyName !== lobby) throw new Error(`This recording is not part of this ${options.scopeLabel ?? 'initiative'}.`);
+      if (options.documentSourceId && (row.artifactContext?.tenant !== 'assessment' || row.artifactContext.documentSourceId !== options.documentSourceId)) throw new Error('This recording could not be associated with this exact source document.');
       return row;
     },
     playback: (id: string, signal: AbortSignal) => request<RecordingPlayback>(`/api/recordings/${encodeURIComponent(id)}/playback-token`, signal, 'POST'),

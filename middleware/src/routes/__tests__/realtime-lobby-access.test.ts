@@ -9,11 +9,14 @@ jest.mock('../../config.js', () => ({ config: { region: 'us-east-1', auth: { ses
 jest.mock('../../providers/identity.js', () => ({ getUser: jest.fn() }));
 jest.mock('../../lib/authz.js', () => ({ isAllowed: jest.fn() }));
 jest.mock('../../lib/page-resources.js', () => ({ pageResourceVisible: jest.fn() }));
+jest.mock('../../providers/assessment.js', () => ({ getKnowledgeDoc: jest.fn() }));
 import express from 'express';
 import request from '../../test-support/http.js';
 import { getUser, type UserInfo } from '../../providers/identity.js';
 import { isAllowed } from '../../lib/authz.js';
 import { pageResourceVisible } from '../../lib/page-resources.js';
+import { getKnowledgeDoc } from '../../providers/assessment.js';
+import { assessmentDocumentLobby } from '../../lib/assessment-document-context.js';
 import { realtimeClaims, signRealtimeToken, REALTIME_TOKEN_TTL_S } from '../../lib/realtime-token.js';
 import { createMemorySocialChatBackend, setSocialChatBackend, socialChat } from '../../lib/social-chat.js';
 import type { Session } from '../../lib/session.js';
@@ -43,6 +46,36 @@ beforeEach(() => {
   jest.mocked(getUser).mockReset().mockImplementation(async id => users.get(id) ?? null);
   jest.mocked(isAllowed).mockReset().mockResolvedValue(true);
   jest.mocked(pageResourceVisible).mockReset().mockResolvedValue(true);
+  jest.mocked(getKnowledgeDoc).mockReset();
+});
+
+describe('stored recording document source read', () => {
+  const sourceId = 'ec:standards/ci-cd.md', lobbyName = assessmentDocumentLobby(sourceId);
+  const doc = { id: sourceId, title: 'CI standards', classification: 'internal', markdown: '', editable: false, path: '', updated_at: '' };
+  const read = async (body: object = { lobbyName, documentSourceId: sourceId }, s = inAssessment) => request(app)
+    .post('/api/realtime/lobby-access').set('authorization', `Bearer ${await tokenFor(s)}`).send(body);
+  it('exact source exists + current Assessment read returns allowed with no Social grant', async () => {
+    jest.mocked(getKnowledgeDoc).mockResolvedValue(doc);
+    expect((await read()).body).toEqual({ allowed: true });
+    expect(getKnowledgeDoc).toHaveBeenCalledTimes(2);
+    expect(getKnowledgeDoc).toHaveBeenCalledWith(sourceId);
+  });
+  it('wrong hash, deleted source, wrong active tenant and revoked ViewAssessment deny', async () => {
+    jest.mocked(getKnowledgeDoc).mockResolvedValue(doc);
+    expect((await read({ lobbyName, documentSourceId: 'other-source' })).status).toBe(403);
+    jest.mocked(getKnowledgeDoc).mockResolvedValueOnce(null); expect((await read()).status).toBe(403);
+    expect((await read(undefined, alice)).status).toBe(403);
+    jest.mocked(isAllowed).mockResolvedValue(false); expect((await read()).status).toBe(403);
+  });
+  it('source deletion or epoch revocation during source I/O cannot authorize playback', async () => {
+    jest.mocked(getKnowledgeDoc).mockResolvedValueOnce(doc).mockResolvedValueOnce(null);
+    expect((await read()).status).toBe(403);
+    jest.mocked(getKnowledgeDoc).mockImplementation(async () => { users.get('alice')!.epoch += 1; return doc; });
+    expect((await read()).status).toBe(403);
+  });
+  it.each([{ lobbyName, documentSourceId: '' }, { lobbyName, documentSourceId: ['one', 'two'] }, { lobbyName: 'orgiq:initiative:p-auth-migration', documentSourceId: sourceId }])('malformed/unrelated hint %j is rejected', async body => {
+    expect((await read(body)).status).toBe(400); expect(getKnowledgeDoc).not.toHaveBeenCalled();
+  });
 });
 afterAll(() => {
   if (original === undefined) delete process.env['REALTIME_JWT_SECRET'];

@@ -2,12 +2,13 @@ jest.mock('../../lib/live-principal.js', () => ({ currentLiveSession: jest.fn(as
 jest.mock('../../lib/gateway/authority.js', () => ({ admitLobbyRead: jest.fn(async () => 'ok') }));
 jest.mock('../../lib/realtime-token.js', () => ({ realtimeSigningSecret: jest.fn(() => 'synthetic-key'), realtimeClaims: jest.fn(s => ({ sub: s.sub, org: s.tenant, epoch: s.epoch, act: s.act })), signRealtimeToken: jest.fn(async claims => ({ token: `synthetic-${claims.sub}` })) }));
 jest.mock('../projects.js', () => ({ getProject: jest.fn(async () => ({ id: 'p-observability', name: 'Observability Platform' })) }));
-jest.mock('../assessment.js', () => ({ getTeamDetail: jest.fn(async (id: string) => ({ team: { id, name: 'Notifications Service' } })) }));
+jest.mock('../assessment.js', () => ({ getTeamDetail: jest.fn(async (id: string) => ({ team: { id, name: 'Notifications Service' } })), getKnowledgeDoc: jest.fn(), getKnowledgeTree: jest.fn() }));
 import { AppError } from '../../lib/async-handler.js';
 import { currentLiveSession } from '../../lib/live-principal.js';
 import { admitLobbyRead } from '../../lib/gateway/authority.js';
 import { realtimeClaims } from '../../lib/realtime-token.js';
-import { getTeamDetail } from '../assessment.js';
+import { getTeamDetail, getKnowledgeDoc, getKnowledgeTree } from '../assessment.js';
+import { assessmentDocumentLobby } from '../../lib/assessment-document-context.js';
 import { listRecordingSearchRecords, resolveRecordingSearchRecord } from '../recording-search.js';
 const session = { sub: 'u-nora', name: 'Nora', tenant: 'orgiq', role: 'member', iat: 123, epoch: 4, grants: { orgiq: ['member'] } };
 const row = { recordingId: 'rec-1', lobbyName: 'orgiq:initiative:p-observability', startedAt: '2026-10-10T10:00:00Z', endedAt: '2026-10-10T10:01:00Z', transcriptStatus: 'ready', summaryStatus: 'ready', summaryRunId: 'run-1', stage: 'ready' };
@@ -176,4 +177,44 @@ test('native outage is explicit and unavailable config never adopts a mock/globa
   expect(await listRecordingSearchRecords(session)).toEqual({ records: [], partial: ['Recording artifacts unavailable'] });
   delete process.env['PLATFORM_API_URL'];
   expect(await listRecordingSearchRecords(session)).toEqual({ records: [], partial: ['Recordings unavailable'] });
+});
+const sourceId = 'ec:standards/ci-cd-standards.md';
+const documentRow = { ...row, recordingId: 'doc-rec', lobbyName: assessmentDocumentLobby(sourceId), artifactContext: { tenant: 'assessment', documentSourceId: sourceId } };
+function useDocumentRecording(value: object = documentRow) {
+  mock(getKnowledgeDoc).mockResolvedValue({ id: sourceId, title: 'CI/CD Standards' });
+  mock(getKnowledgeTree).mockResolvedValue({ sections: [{ key: 'enterprise_context', kind: 'local', nodes: [{ id: sourceId, is_dir: false }] }] });
+  const original = fetcher.getMockImplementation()!;
+  fetcher.mockImplementation(async (url: string, opts: unknown) => url.includes('?limit=') ? response({ items: [value] })
+    : url.endsWith('/doc-rec') ? response(value) : original(url, opts));
+}
+test('hashed document recording projects original source only after participant+fresh host checks and exact scope', async () => {
+  useDocumentRecording();
+  const result = await listRecordingSearchRecords(assessment, undefined, 'assessment', sourceId);
+  expect(result.records).toHaveLength(1);
+  expect(result.records[0]).toMatchObject({ id: 'doc-rec', title: 'CI/CD Standards huddle · 2026-10-10', href: `/assessment/enterprise?doc=${encodeURIComponent(sourceId)}&tab=recordings&recording=doc-rec` });
+  expect(result.records[0]?.searchText).toContain('twenty milliseconds');
+  expect(getKnowledgeDoc).toHaveBeenCalledTimes(2);
+  expect(await resolveRecordingSearchRecord(assessment, 'doc-rec', undefined, 'assessment', Date.now() + 8000, sourceId)).toMatchObject({ id: 'doc-rec' });
+  expect(await resolveRecordingSearchRecord(assessment, 'doc-rec', undefined, 'assessment', Date.now() + 8000, 'different-source')).toBeNull();
+  expect(await resolveRecordingSearchRecord(assessment, 'doc-rec', 'TEAM-005', 'assessment')).toBeNull();
+});
+test.each([{ artifactContext: null }, { artifactContext: { tenant: 'orgiq', documentSourceId: sourceId } }, { artifactContext: { tenant: 'assessment', documentSourceId: 'wrong-source' } }, { lobbyName: 'orgiq:doc:any' }])('unverified/mismatched document metadata %j does not hydrate', async change => {
+  useDocumentRecording({ ...documentRow, ...change });
+  expect((await listRecordingSearchRecords(assessment, undefined, 'assessment', sourceId)).records).toEqual([]);
+  expect(fetcher).toHaveBeenCalledTimes(1); expect(getKnowledgeDoc).not.toHaveBeenCalled();
+});
+test('document access/participation revocation or source association change never leaves searchable artifact text', async () => {
+  useDocumentRecording(); mock(getKnowledgeDoc).mockResolvedValueOnce(null);
+  expect((await listRecordingSearchRecords(assessment, undefined, 'assessment', sourceId)).records).toEqual([]);
+  expect(fetcher.mock.calls.some(([url]) => url.endsWith('/transcript'))).toBe(false);
+  useDocumentRecording(); mock(getKnowledgeDoc).mockResolvedValueOnce({ id: sourceId, title: 'Before deletion' }).mockResolvedValueOnce(null);
+  expect((await listRecordingSearchRecords(assessment, undefined, 'assessment', sourceId)).records).toEqual([]);
+  useDocumentRecording(); const original = fetcher.getMockImplementation()!; let details = 0;
+  fetcher.mockImplementation(async (url, opts) => url.endsWith('/doc-rec') && ++details === 2 ? response({ ...documentRow, artifactContext: null }) : original(url, opts));
+  expect((await listRecordingSearchRecords(assessment, undefined, 'assessment', sourceId)).records).toEqual([]);
+});
+test('document scope cannot widen Work tenant or be combined with team scope', async () => {
+  await expect(listRecordingSearchRecords(session, undefined, 'orgiq', sourceId)).rejects.toMatchObject({ status: 400 });
+  await expect(resolveRecordingSearchRecord(assessment, 'doc-rec', 'TEAM-005', 'assessment', undefined, sourceId)).rejects.toMatchObject({ status: 400 });
+  expect(fetcher).not.toHaveBeenCalled();
 });

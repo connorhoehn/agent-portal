@@ -305,3 +305,26 @@ Search Results, Answer and Connections share native icon scope, type and sort co
 People rows load existing authorized portraits, with initials only when no photo is available or loading fails. Confirmed Online/Away status uses the shell's existing authenticated presence subscription and exact directory identity mapping. Missing or disconnected presence is omitted; no last-online timestamp is invented. Generated office/leave presence is removed from the Search graph. Inferred rare-skills/department findings remain HR-only, and ordinary result snippets retain self-disclosed profile information without repetitive empty-profile prose.
 
 The advisory remains after the context chips, keeping Agent/Chat first. Escape closes both the pinned notice and its hover preview. Final primary and candidate portal typechecks pass, along with three Search presentation browser cases, one native people-row case, one notice interaction case, and eleven people/result model tests. See the local search-people and search-presentation evidence for isolated browser verification; these tests do not send messages or start calls. Backend avatar projection remains in the separate recording integration candidate; the primary frontend uses the existing authorized graph source without restarting the API.
+
+
+## Document recording context candidate (October 10)
+
+The isolated recording candidate now connects existing Assessment document calls
+to their exact original source, including hashed lobbies, and presents saved
+recordings, transcript and summary in the document's Recordings tab. Scoped
+artifact search uses the existing Assessment read authority and native
+participant checks. Document deletion, lost participation or revoked read access
+withholds the artifacts. No Work document calling policy or inferred source
+association is added.
+
+[The current audit](meeting-processing-audit-20261010.md#verified-document-context-and-shared-recording-files)
+and [integration receipt](evidence/2026-10-10/native-meeting-pipeline/document-context-integration.json)
+record 16 shared UI browser fixtures, 5 unit cases, 100 app backend cases and 98
+native boundary cases, with typechecks passing. Run the managed isolated fixture
+with `cd portal && node node_modules/@playwright/test/cli.js test --config playwright.recording.config.ts`.
+It owns loopback port 5283 and uses an inert API target at port 9. Candidate
+publication does not activate the primary API or native recording services;
+the owned automatic finalizer transaction/model proof now passes, while real
+SFU/gateway/card delivery and live journey acceptance remain pending. See the
+[automatic proof](evidence/2026-10-10/native-meeting-pipeline/automatic-finalizer-proof.json)
+for exact fixture boundaries.

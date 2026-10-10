@@ -9,9 +9,9 @@ complete. Implementation is isolated from the running, memory-backed app.
 | --- | --- | --- |
 | Native video transcription | Owned native PipelineExecutor run processed the preserved synthetic MP4 through Whisper and persisted 11 engine-timestamped speech segments. Media hash is unchanged. | Activate the candidate timestamp service only after a safe service handoff. Attribution remains mixed-call audio, not speaker diarization. |
 | Successful meeting summary | The same owned native run used the Codex CLI subscription bridge and saved a nonempty, grounded summary against that recording. Transcript and summary both reached ready. Stale attempts and changed settled results were rejected. | Native participant retrieval and Work search passed for two owned identities; safe activation in the running application remains. |
-| Processing immediately after meeting end | Shared Work/Assessment recording components cover saving, transcription, summary and terminal states. Eleven owned browser fixtures pass, including a cleared call host and late identity changes. | Canonical gateway-seat/media binding and strict finalizer resolution are implemented and checked. Fixture lifecycle tests do not prove actual gateway delivery. |
+| Processing immediately after meeting end | Shared Work/Assessment recording components cover saving, transcription, summary and terminal states. Sixteen owned browser fixtures pass, including a cleared call host, exact source-document routing and late identity changes. | Canonical gateway-seat/media binding and strict finalizer resolution are implemented and checked. Fixture lifecycle tests do not prove actual gateway delivery. |
 | Attach artifacts to recording | Native persistence passes; shared detail shows transcript and summary beside the recording. A failed summary preserves ready transcript and video. | Native participant API acceptance passed. Integrated activation remains. |
-| Search and project context | Candidate Work search reads participant-authorized native artifacts with fresh host checks and exact initiative links. Discovery and hydration are bounded and report incomplete results. | Owned persisted-artifact search, native nonparticipant denial and revoked-epoch rejection pass (4 checks). Directory and Cedar use explicit synthetic fixtures. This is read-through search, not a durable vector index. |
+| Search and project context | Candidate Work and Assessment search reads participant-authorized native artifacts with fresh host checks and exact initiative, team or verified original-document links. Discovery and hydration are bounded and report incomplete results. | Owned persisted-artifact search, native nonparticipant denial and revoked-epoch rejection pass (4 checks). Directory and Cedar use explicit synthetic fixtures. This is read-through search, not a durable vector index. |
 | Preserve reviewed work and originals | Implementation and owned acceptance use isolated checkouts/storage. The original video is unchanged. No live call, grant or saved deck was changed by this run. | Preserve the memory-backed application through a supported handoff before activation; no complete supported checkpoint endpoint has been found. |
 
 ## Native engine acceptance
@@ -124,16 +124,16 @@ activation; the existing user-facing application does not yet run this candidate
 
 ## Reproduce the isolated UI check
 
-Use an isolated checkout with its own installed dependencies. In `portal`, start
-Vite with an inert API target (port 9) and run the browser suite in another shell:
+Use an isolated checkout with its own installed dependencies:
 
 ```sh
-API_PROXY_TARGET=http://127.0.0.1:9 npx vite --host 127.0.0.1 --port 5283 --strictPort
+cd portal && node node_modules/@playwright/test/cli.js test --config playwright.recording.config.ts
 ```
 
-```sh
-npx playwright test e2e/recording-pipeline.spec.ts --project=chromium
-```
+The configuration starts and stops its own loopback Vite server on port 5283,
+refuses an existing server, and sets the API proxy to the inert loopback port 9.
+It runs the recording pipeline and document recording specs together; no manual
+Vite process or primary application API is used.
 
 The spec intercepts its owned API requests and supplies an inert native call
 host. The only video is a two-second synthetic preview; it never starts a real
@@ -201,6 +201,78 @@ preserved during this implementation pass.
 
 Assessment team Documents now has a candidate transcript/summary content search using its own ViewAssessment authority, a signed Assessment native token, exact recording participant reads, and a fresh team-read check. Work Search remains scoped to Work. Seventy-seven focused middleware tests, 34 Assessment parent-route tests, and middleware typecheck pass; these counts describe distinct runs, not a replacement for live native acceptance. The UI covers partial results, exact recording navigation, denied access and actor changes. Eleven recording browser fixtures pass, including active media failure/reconnection not falsely becoming a post-call processing card.
 
-The prior real Whisper/Codex run seeded a recording and started transcription directly. It did not test the automatic completion-webhook/finalizer path. A later audit found duplicate completion could overwrite saved artifacts and enqueue another automatic attempt; native remediation is published separately as platform-api commit c366dcc. Its 176 tests across ten suites and typecheck pass. The host Docker socket is unavailable. An owned Dynamo container was started through the existing Colima VM, but VM control subsequently timed out; actual transaction acceptance did not pass, and cleanup of the exact owned container remains unconfirmed. The bounded harness was stopped; no shared service was restarted. See platform-api docs/work-huddle-candidates/finalization-replay-verification.json for the exact resource and limits. No fresh automatic native acceptance or service activation is claimed. Document-call binding, hashed document context, and workspace recording routes remain open.
+The prior real Whisper/Codex run seeded a recording and started transcription directly. It did not test the automatic completion-webhook/finalizer path. A later audit found duplicate completion could overwrite saved artifacts and enqueue another automatic attempt; native remediation is published separately as platform-api commit c366dcc. Its 176 tests across ten suites and typecheck pass. The host Docker socket is unavailable. An owned Dynamo container was started through the existing Colima VM, but VM control subsequently timed out; actual transaction acceptance did not pass, and cleanup of the exact owned container remains unconfirmed. The bounded harness was stopped; no shared service was restarted. See platform-api docs/work-huddle-candidates/finalization-replay-verification.json for the exact resource and limits. No fresh automatic native acceptance or service activation is claimed. Document-call binding, hashed document context, and workspace recording routes were still open at that checkpoint; the source implementation and fixture checks below now cover them. Fresh automatic finalizer acceptance was still pending at that checkpoint; the owned proof below supersedes that status.
 
 Frontend-only file controls and composer notices were also applied to the primary app in commit 8f363b5f. Three toolbar browser cases and one notice interaction/layout case pass; primary portal typecheck passes. Native recording package/API changes remain isolated. Search keeps the mode control first, then context chips and a small notices icon; hover/focus previews the list and click pins it. No permanent history footer is rendered.
+
+
+## Verified document context and shared recording files
+
+The candidate adds a Recordings tab to the existing Assessment document workspace,
+including Enterprise, Rules and Prompts source documents. The saved recording,
+transcript and summary remain native artifacts. Search and selected-record
+hydration use the existing Assessment read gate, native participant ownership,
+and a fresh exact source read. Search results open the document's current section
+and Recordings tab. Work initiative and Assessment team files retain their
+existing paths; no Work document call family or unsupported association is added.
+
+A document source ID is never reconstructed from the lobby hash. The native call
+store captures the original document channel once at call creation, including
+initial page joins and invitations. The binding callback compares its exact
+source ID with that immutable accepted-call channel, canonical lobby hash,
+current signed actor/tenant/epoch, accepted socket and fresh source read. The
+native media attendance stores the verified context immutably and returns the
+same context in its acknowledgment. Finalization retains document context only
+when every recorded signed seat agrees; missing or conflicting context remains
+unassociated. Legacy calls cannot acquire a source later through re-invitation.
+
+Native document recording detail, playback and artifact reads also ask the
+existing BFF callback about the stored source. Lists use the caller's participant
+index and exact membership reads. A deleted or denied source, lost membership,
+wrong active tenant or missing context is withheld, including revocation during
+native media I/O. Explicit preexisting share-capability reads retain their
+existing bounded grant contract. The separate raw-media access candidate is not
+activated by this work.
+
+The [document integration receipt](evidence/2026-10-10/native-meeting-pipeline/document-context-integration.json)
+links exact source/package hashes to [backend checks](evidence/2026-10-10/native-meeting-pipeline/document-context-backend.json)
+and [shared UI checks](evidence/2026-10-10/native-meeting-pipeline/document-context-ui.json).
+The app backend passes 100 distinct focused cases; the native boundary lane
+passes 98. Both typechecks pass. The UI passes 16 browser fixtures and 5 unit
+cases, with portal typecheck passing. The SDK lane passes its build, 37 focused
+cases and 9 owned Redis cases. These counts describe these source lanes; older
+overlapping runs elsewhere in the guide must not be added. The [document recording
+fixture](evidence/2026-10-10/native-meeting-pipeline/document-recording-partial.png)
+shows independent transcript and summary status in the actual shared document
+shell. Fixture APIs and identity/policy data are explicit; no actual human-call
+acceptance, capture or live Cedar session is claimed.
+
+The SDK package is pinned identically in the isolated portal and middleware;
+primary services remain unchanged. The later owned automatic finalizer proof below now covers that transaction and
+model path. Safe native activation and a state-preserving handoff for the
+memory-backed app remain necessary before live journey acceptance.
+
+
+## Automatic finalizer acceptance in owned storage
+
+The [fresh automatic finalizer proof](evidence/2026-10-10/native-meeting-pipeline/automatic-finalizer-proof.json)
+passes from the actual signed completion-webhook handler through the native
+finalize executor, actual DynamoDB transactions and automatically enqueued
+transcription child. No recording row was pre-seeded and the manual transcription
+helper was not called. Actual Whisper produced 11 timestamped segments; actual
+Codex subscription inference saved a 1,019-character summary. Both isolated
+participant reads returned the exact saved summary; a nonparticipant was denied.
+Repeating the completion webhook preserved the ready row and enqueued no second
+automatic generation. The immutable media hash is unchanged.
+
+The owned harness uses native PipelineExecutor, EventBus and WAL lifecycle; it
+does not boot production Raft/RunPersistence. Accepted gateway-seat metadata is
+an explicit fixture. Composition/file HTTP transport is immutable fixture media,
+not real SFU or ffmpeg capture. Native chat cards were **zero** because the Work
+initiative lobby is not mapped to native chat; the processing UI's finite polling
+is covered separately by browser fixtures. Work-graph effects were intercepted,
+so neither notification nor external graph delivery is claimed. Native primary
+services, original media and application data were not activated or changed.
+The receipt retains exact native source hashes and these boundaries. This owned
+success supersedes the earlier failed transaction attempt while preserving its
+dated failure and cleanup limitation above.

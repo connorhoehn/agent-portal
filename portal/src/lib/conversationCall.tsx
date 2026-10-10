@@ -8,6 +8,7 @@ import { createElement } from 'react';
 import { createCallBlockHost } from '@connorhoehnslalom/ui-components/integrations/realtime';
 import { StreamVideo } from '@connorhoehnslalom/ui-components/video';
 import { separateCallScreenTiles } from './callScreenTiles';
+import { documentRecordingNavigation } from '../components/recordings/documentRecordingContext';
 
 // Keep the native capture/publish lifecycle. The installed dock mapping's
 // screenTile option replaces a camera; this app presents both native streams.
@@ -18,7 +19,11 @@ const conversationCallDockProps: typeof video.conversationCallDockProps = (state
 );
 // The native platform binds each media participant to a currently accepted
 // gateway seat before associating a completed recording with a call.
-const useConversationCall: typeof video.useConversationCall = opts => video.useConversationCall({ ...opts, bindRecordingCall: true });
+const useConversationCall: typeof video.useConversationCall = opts => video.useConversationCall({ ...opts, bindRecordingCall: true,
+  // The original call channel survives an incoming Accept and page navigation.
+  // This is only a hint: native authority checks the stored channel and source.
+  documentSourceId: documentRecordingNavigation(opts.lobbyName, opts.channel)?.documentSourceId,
+});
 export const calls = createCallBlockHost({ ...video, useConversationCall, conversationCallDockProps });
 export const {
   CallHostProvider, CallMediaOutlet, CallBlock,

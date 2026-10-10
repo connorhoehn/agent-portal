@@ -86,7 +86,8 @@ export interface CallAccessOptions {
   lobbyAllowed: (auth: Record<string, unknown>, lobby: string) => boolean;
   authority?: (session: Session) => Promise<CallAuthority>;
 }
-export async function activeCallParticipant(opts: CallAccessOptions, callId: string, session: Session): Promise<{
+export async function activeCallParticipant(opts: CallAccessOptions, callId: string, session: Session,
+  options: { allowAssessmentDocument?: boolean } = {}): Promise<{
   call: ActiveCallStateView; authority: CallAuthority; clientIds: string[];
 }> {
   const readAuthority = opts.authority ?? (value => currentCallAuthority(value, HUDDLE_CHAT_TENANTS));
@@ -94,7 +95,8 @@ export async function activeCallParticipant(opts: CallAccessOptions, callId: str
   const call = await opts.calls.getCall(callId);
   if (!call) throw new AppError(404, 'Call is no longer active');
   // A huddle belongs to its lobby's tenant; a session standing elsewhere is not a seat of it.
-  const tenant = huddleLobbyTenant(call.lobbyName);
+  const tenant = huddleLobbyTenant(call.lobbyName)
+    ?? (options.allowAssessmentDocument && /^assessment:doc:[A-Za-z0-9:_-]{1,256}$/.test(call.lobbyName) ? 'assessment' : null);
   if (!tenant) throw new AppError(403, 'This call requires an OrgIQ lobby');
   if (tenant !== session.tenant) throw new AppError(403, 'Join this call before opening its conversation');
   const key = callProvenance(session);

@@ -108,6 +108,21 @@ test('nonparticipant detail denial prevents every artifact read', async ({ page 
   expect(errors).toEqual([]);
 });
 
+test('a fresh metadata denial hides ready artifacts and stops their polling', async ({ page }) => {
+  const data = state({ exact: true, mode: 'ready' }); const errors = await mount(page, data, '?recording=recording-exact');
+  await expect(page.getByTestId('recording-transcript-attachment')).toContainText('Exact saved transcript');
+  await expect(page.getByTestId('recording-summary-attachment')).toContainText('Validate the rollback window');
+  data.denied = true;
+  await page.getByRole('button', { name: 'Refresh recording' }).click();
+  await expect(page.getByTestId('initiative-recording-detail')).toContainText('not available to your account');
+  await expect(page.getByTestId('recording-transcript-attachment')).toHaveCount(0);
+  await expect(page.getByTestId('recording-summary-attachment')).toHaveCount(0);
+  const artifactReads = data.requests.filter(path => /\/(transcript|summary|playback-token)$/.test(path)).length;
+  await page.clock.install(); await page.clock.runFor(65_000);
+  expect(data.requests.filter(path => /\/(transcript|summary|playback-token)$/.test(path)).length).toBe(artifactReads);
+  expect(errors).toEqual([]);
+});
+
 test('late artifact receipt cannot reveal a previous signed actor after session change', async ({ page }) => {
   let resolve!: () => void; const hold = new Promise<void>(r => { resolve = r; });
   const data = state({ exact: true, mode: 'ready', holdTranscript: hold }); const errors = await mount(page, data, '?recording=recording-exact');

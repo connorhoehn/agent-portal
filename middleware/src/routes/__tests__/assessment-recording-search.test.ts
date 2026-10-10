@@ -17,7 +17,7 @@ beforeEach(() => { jest.mocked(listRecordingSearchRecords).mockReset().mockResol
 test('existing Assessment read authority admits assessor without adding Search or Social grants', async () => {
   const res = await request(makeApp()).get('/api/assessment/recordings/search?q=receipt&teamId=TEAM-005&limit=20&offset=1&sort=recent');
   expect(res.status).toBe(200); expect(res.headers['cache-control']).toBe('private, no-store');
-  expect(listRecordingSearchRecords).toHaveBeenCalledWith(reader, 'TEAM-005', 'assessment');
+  expect(listRecordingSearchRecords).toHaveBeenCalledWith(reader, 'TEAM-005', 'assessment', undefined);
 });
 test.each([null, { ...reader, tenant: 'orgiq' }, { ...reader, tenant: 'orgiq', role: 'admin' }, { ...reader, role: 'member', grants: { assessment: ['member'] } }])('cross-tenant/missing read authority is denied before native access', async session => {
   const res = await request(makeApp(session as Session | null)).get('/api/assessment/recordings/search');
@@ -37,7 +37,7 @@ test('hydration deduplicates exact recording refs, carries team scope, and exclu
   jest.mocked(resolveRecordingSearchRecord).mockResolvedValueOnce({ type: 'recording', id: 'owned', title: 'Huddle', href: '/assessment/teams/TEAM-005?tab=documents&recording=owned' });
   const res = await request(makeApp()).get('/api/assessment/recordings/records?keys=recording:owned,recording:denied,recording:owned&teamId=TEAM-005');
   expect(res.status).toBe(200); expect(res.body.records.map((r: { id: string }) => r.id)).toEqual(['owned']);
-  expect(resolveRecordingSearchRecord).toHaveBeenNthCalledWith(1, reader, 'owned', 'TEAM-005', 'assessment', expect.any(Number));
+  expect(resolveRecordingSearchRecord).toHaveBeenNthCalledWith(1, reader, 'owned', 'TEAM-005', 'assessment', expect.any(Number), undefined);
   expect(resolveRecordingSearchRecord).toHaveBeenCalledTimes(2);
   expect((await request(makeApp()).get('/api/assessment/recordings/records?keys=initiative:fake')).status).toBe(400);
 });
@@ -48,4 +48,16 @@ test('selected-record hydration shares one bounded native read window and stops 
     expect((await request(makeApp()).get('/api/assessment/recordings/records?keys=recording:first,recording:second')).status).toBe(504);
     expect(resolveRecordingSearchRecord).toHaveBeenCalledTimes(1);
   } finally { clock.mockRestore(); }
+});
+test('document recording search and hydration forward original source scope without a team substitution', async () => {
+  const sourceId = 'ec:standards/ci-cd.md';
+  expect((await request(makeApp()).get(`/api/assessment/recordings/search?documentSourceId=${encodeURIComponent(sourceId)}`)).status).toBe(200);
+  expect(listRecordingSearchRecords).toHaveBeenCalledWith(reader, undefined, 'assessment', sourceId);
+  expect((await request(makeApp()).get(`/api/assessment/recordings/records?keys=recording:owned&documentSourceId=${encodeURIComponent(sourceId)}`)).status).toBe(200);
+  expect(resolveRecordingSearchRecord).toHaveBeenCalledWith(reader, 'owned', undefined, 'assessment', expect.any(Number), sourceId);
+});
+test.each(['documentSourceId=&teamId=TEAM-005', 'documentSourceId=source&teamId=TEAM-005', 'documentSourceId=%00source', 'documentSourceId=one&documentSourceId=two'])('invalid/ambiguous document scope %s is rejected before native reads', async query => {
+  expect((await request(makeApp()).get(`/api/assessment/recordings/search?${query}`)).status).toBe(400);
+  expect((await request(makeApp()).get(`/api/assessment/recordings/records?keys=recording:owned&${query}`)).status).toBe(400);
+  expect(listRecordingSearchRecords).not.toHaveBeenCalled(); expect(resolveRecordingSearchRecord).not.toHaveBeenCalled();
 });

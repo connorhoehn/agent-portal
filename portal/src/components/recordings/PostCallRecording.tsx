@@ -9,8 +9,9 @@ import { createInitiativeRecordingsClient, recordingForCall, type InitiativeReco
 import { recordingHref, recordingIsProcessing, recordingProcessingLabel, recordingStage } from './recordingState';
 import { useRecordingRead } from './useRecordingRead';
 import { RECORDING_CHANGED_EVENT, notifyRecordingRead } from './recordingEvents';
+import { documentRecordingNavigation, type DocumentRecordingNavigation } from './documentRecordingContext';
 
-interface EndedCall { callId: string; lobby: string; title: string; bindingUnavailable?: boolean }
+interface EndedCall { callId: string; lobby: string; title: string; bindingUnavailable?: boolean; document?: DocumentRecordingNavigation }
 export function PostCallRecordingMonitor() {
   const { session } = useSession();
   if (!session || session.sub === 'unknown') return null;
@@ -24,24 +25,26 @@ function Monitor({ actorId, tenant }: { actorId: string; tenant: string }) {
   const callId = host?.call.call?.callId;
   const lobby = host?.lobby?.lobbyName;
   const title = host?.lobby?.title;
+  const channel = host?.lobby?.channel;
   const binding = host?.call.recordingBinding;
   useEffect(() => {
     // The native host may clear self/lobby on leave before its terminal phase.
     // The signed-session keyed boundary remains authoritative for this saved call.
     if ((host?.self?.userId && host.self.userId !== actorId) || (host?.tenant && host.tenant !== tenant)) { joined.current = null; setEnded(null); return; }
-    if (host?.self?.userId === actorId && host.tenant === tenant && ['live', 'reconnecting'].includes(phase) && callId && lobby && recordingHref(lobby)) {
-      joined.current = { callId, lobby, title: title ?? 'Huddle', bindingUnavailable: binding?.callId === callId && binding.status === 'unavailable' };
+    const document = lobby ? documentRecordingNavigation(lobby, channel) : null;
+    if (host?.self?.userId === actorId && host.tenant === tenant && ['live', 'reconnecting'].includes(phase) && callId && lobby && (recordingHref(lobby) || document)) {
+      joined.current = { callId, lobby, title: title ?? 'Huddle', ...(document ? { document } : {}), bindingUnavailable: binding?.callId === callId && binding.status === 'unavailable' };
       setEnded(previous => previous?.callId === callId ? null : previous);
     }
     // Native media errors can report "failed" while the gateway still owns
     // the active call. Wait for the call to clear before claiming it ended.
     if (!callId && ['ended', 'idle', 'failed'].includes(phase) && joined.current) { setEnded(joined.current); joined.current = null; }
-  }, [phase, callId, lobby, title, actorId, tenant, host?.self?.userId, host?.tenant, binding?.callId, binding?.status]);
+  }, [phase, callId, lobby, title, channel, actorId, tenant, host?.self?.userId, host?.tenant, binding?.callId, binding?.status]);
   return ended ? <PostCallRecording key={`${ended.callId}:${ended.lobby}`} ended={ended} onDismiss={() => setEnded(null)} /> : null;
 }
 export function PostCallRecording({ ended, onDismiss }: { ended: EndedCall; onDismiss(): void }) {
   const navigate = useNavigate();
-  const client = useMemo(() => createInitiativeRecordingsClient({ scopeLabel: 'call' }), []);
+  const client = useMemo(() => createInitiativeRecordingsClient({ scopeLabel: 'call', documentSourceId: ended.document?.documentSourceId }), [ended.document?.documentSourceId]);
   const exact = useRef<InitiativeRecording | null>(null);
   const [expanded, setExpanded] = useState(false);
   const observed = useRecordingRead(`${ended.callId}:${ended.lobby}`, async signal => {
@@ -65,7 +68,7 @@ export function PostCallRecording({ ended, onDismiss }: { ended: EndedCall; onDi
   const partial = row?.transcriptStatus === 'failed' || row?.summaryStatus === 'failed' || row?.composeStatus === 'failed';
   const label = observed.error ? 'Recording access could not be confirmed' : observed.timedOut ? 'Recording is not ready yet'
     : row ? recordingProcessingLabel(row) : 'Waiting for the recording from this call';
-  const href = recordingHref(ended.lobby, row?.recordingId);
+  const href = recordingHref(ended.lobby, row?.recordingId, ended.document);
   return <Stack gap="xs" className="border-b border-border bg-surface px-4 py-2" data-testid="postcall-recording" data-call-id={ended.callId}>
     <Inline gap="sm" align="center" justify="between" wrap>
       <Inline gap="sm" align="center" wrap>{pending && <Spinner size="sm" />}<T size="xs" weight="semibold">{ended.title}</T><T size="xs" tone="secondary" role="status">{label}</T></Inline>

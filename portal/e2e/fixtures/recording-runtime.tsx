@@ -8,7 +8,7 @@ const listeners = new Set<() => void>();
 const prohibited = () => { throw new Error('Inert recording fixture forbids actions.'); };
 export const fixtureLifecycle = { setPhase(next: typeof phase) { phase = next; for (const listener of listeners) listener(); } };
 const settings = { settings: {}, update: prohibited, previewStream: null, previewError: null, micLevel: 0, testMic: async () => prohibited(), testSound: async () => prohibited(), testMicState: 'idle' };
-const calls = createCallBlockHost({
+export const calls = createCallBlockHost({
   LVSProvider: ({ children }: { children?: import('react').ReactNode }) => <>{children}</>,
   useConversationCall: () => {
     const current = useSyncExternalStore(listener => { listeners.add(listener); return () => { listeners.delete(listener); }; }, () => phase);
@@ -22,4 +22,6 @@ const calls = createCallBlockHost({
   useMediaDevices: () => ({ microphones: [], cameras: [], speakers: [], permission: { microphone: 'unavailable', camera: 'unavailable' }, speakerSelectionSupported: false }),
   useAudioVideoSettings: (() => settings) as unknown as CallBlockModules['useAudioVideoSettings'], conversationCallDockProps,
 } as CallBlockModules);
-export const { CallHostProvider, useCallHost } = calls;
+export const { CallHostProvider, CallMediaOutlet, CallBlock, useCallHost, useCallBlock, useCallLobby,
+  useCallMediaPanel, useCallBlockPlacement, useCallBlockPageClaimed, useClaimCallBlock } = calls;
+export { callCounts, callDrawn } from '@connorhoehnslalom/ui-components/integrations/realtime';

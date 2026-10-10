@@ -7,11 +7,13 @@ import type { SearchResponse } from '../../pages/search/searchTypes';
 
 /** Assessment has no Work search grant. Use its own team-read authority and
  * native recording participant checks, without borrowing another tenant. */
-export function RecordingContentSearch({ lobby, onActive }: { lobby: string; onActive(active: boolean): void }) {
+export function RecordingContentSearch({ lobby, documentSourceId, onActive }: { lobby: string; documentSourceId?: string; onActive(active: boolean): void }) {
   const teamId = /^assessment:team:(TEAM-[A-Za-z0-9-]{1,120})$/.exec(lobby)?.[1];
-  return teamId ? <TeamRecordingSearch key={teamId} teamId={teamId} onActive={onActive} /> : null;
+  const scope = documentSourceId && lobby.startsWith('assessment:doc:') ? { documentSourceId } : teamId ? { teamId } : null;
+  return scope ? <ScopedRecordingSearch key={JSON.stringify(scope)} scope={scope} onActive={onActive} /> : null;
 }
-function TeamRecordingSearch({ teamId, onActive }: { teamId: string; onActive(active: boolean): void }) {
+type RecordingSearchScope = { teamId: string; documentSourceId?: never } | { documentSourceId: string; teamId?: never };
+function ScopedRecordingSearch({ scope, onActive }: { scope: RecordingSearchScope; onActive(active: boolean): void }) {
   const [query, setQuery] = useState('');
   const [debounced, setDebounced] = useState('');
   useEffect(() => {
@@ -24,13 +26,14 @@ function TeamRecordingSearch({ teamId, onActive }: { teamId: string; onActive(ac
     <SearchInput size="sm" value={query} onChange={value => setQuery(value.slice(0, 1000))}
       placeholder="Search transcripts and summaries…" aria-label="Search recording content" />
     {query.trim() && (query.trim() !== debounced ? <LoadingState label="Searching recording content…" />
-      : <RecordingSearchResults key={`${teamId}:${debounced}`} teamId={teamId} query={debounced} />)}
+      : <RecordingSearchResults key={`${JSON.stringify(scope)}:${debounced}`} scope={scope} query={debounced} />)}
   </Stack>;
 }
-function RecordingSearchResults({ teamId, query }: { teamId: string; query: string }) {
+function RecordingSearchResults({ scope, query }: { scope: RecordingSearchScope; query: string }) {
   const navigate = useNavigate();
   const [offset, setOffset] = useState(0);
-  const params = new URLSearchParams({ q: query, teamId, limit: '20', offset: String(offset) });
+  const params = new URLSearchParams({ q: query, limit: '20', offset: String(offset) });
+  if (scope.documentSourceId) params.set('documentSourceId', scope.documentSourceId); else params.set('teamId', scope.teamId!);
   // The request-keyed boundary prevents old query/page results remaining visible
   // during a fresh read. The parent recording shelf is also actor-keyed.
   return <ResultPage key={params.toString()} url={`/api/assessment/recordings/search?${params}`}

@@ -1,5 +1,6 @@
 import type { RecordingStage } from '@connorhoehnslalom/ui-components/social';
 import type { InitiativeRecording, RecordingProgress } from '../../pages/projects/initiativeRecordingApi.ts';
+import { documentRecordingHref, type DocumentRecordingNavigation } from './documentRecordingContext.ts';
 
 const active = (status: string | undefined) => status === 'pending' || status === 'processing';
 export function recordingStage(row: InitiativeRecording): RecordingStage {
@@ -23,7 +24,8 @@ export function recordingProcessingLabel(row: InitiativeRecording): string {
   if (row.summaryStatus === 'ready') return 'Recording, transcript and summary ready';
   return row.transcriptStatus === 'ready' ? 'Recording and transcript ready' : 'Recording ready';
 }
-export function recordingHref(lobby: string, recordingId?: string): string | null {
+export function recordingHref(lobby: string, recordingId?: string, document?: DocumentRecordingNavigation): string | null {
+  if (document) return documentRecordingHref(lobby, document, recordingId);
   const project = /^orgiq:initiative:([^:]+)$/.exec(lobby)?.[1];
   const team = /^assessment:team:([^:]+)$/.exec(lobby)?.[1];
   if (!project && !team) return null;
