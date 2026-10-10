@@ -1,0 +1,48 @@
+{
+  "checkedAt": "2026-10-10T14:17:13.496452+00:00",
+  "sourceCommit": "7794216664307dcf428046f3860ea6612621d4c2",
+  "branch": "chore/work-huddle-cleanup-20261010",
+  "remoteVerified": true,
+  "activation": {
+    "apiHealthy": true,
+    "oldPid": 10743,
+    "newPid": 95131,
+    "originalDeckReadStatus": 200,
+    "originalDeckTitle": "Observability review",
+    "durableDeckBytesUnchanged": true,
+    "renderedOriginalSlide": true,
+    "browserErrors": 0
+  },
+  "verification": {
+    "backendFocusedTests": {
+      "queues": 52,
+      "huddleAuthority": 79,
+      "presentationContextAndRegression": 67
+    },
+    "portalTypecheck": "pass",
+    "middlewareTypecheck": "pass",
+    "portalProductionBuild": "pass",
+    "isolatedBrowserCases": [
+      "queues partial failures and metadata-only reads",
+      "huddle denial without contradictory loading",
+      "StrictMode preview recovery",
+      "hung preview retry",
+      "compact deck layout and draft retention",
+      "selected-slide request, answer and repeated-question context"
+    ]
+  },
+  "incident": {
+    "description": "An unvalidated inspector cleanup expression was followed by API process exit. Causality was not definitively established; raw incident evidence is retained locally.",
+    "recoverySnapshotCapturedAt": "2026-10-10T04:30:30.250Z",
+    "restoredSnapshotFixtures": 160,
+    "restoredSnapshotChatMessages": 142,
+    "newerMemoryOnlyActivity": "May be missing; not recovered or claimed preserved",
+    "recordingServiceRestarted": false,
+    "durableDeckBackupSha256": "1a13755379ce0de03095dacbbfe78980a9a6c8fac99c710d703a1a9a5484baff"
+  },
+  "limits": [
+    "Offline agent responses are labeled presentation content previews, not remote model summaries.",
+    "No fresh live two-person call or real message was authored for acceptance.",
+    "Queue browser evidence uses intercepted metadata; no production queue connection is claimed."
+  ]
+}
