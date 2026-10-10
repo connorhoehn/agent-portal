@@ -1,0 +1,60 @@
+{
+  "verifiedAt": "2026-10-10T15:15:20.553891+00:00",
+  "status": "PASS",
+  "tests": {
+    "suite": "middleware/src/providers/__tests__/recording-search-native-acceptance.test.ts",
+    "passed": 4,
+    "total": 4,
+    "runtimeSeconds": 4.314
+  },
+  "genuineNativeArtifacts": {
+    "sourceProofSha256": "15a0f8a25b5f75f61210589c6b6ea5b68c58d28e343aca615ee654681f4ca1b2",
+    "recordingRowSha256": "7c4d16cb930a242dfbb279566b3fd52848a3642c08295b78dc88cabf04cad9ea",
+    "transcriptSha256": "bdf9793c99f640b512edfb18d0f8a4406c822c56fe4fadbb5c622eec64164d81",
+    "summarySha256": "16dc6f18da7f3e31be2094cf65f33e29a28c5178e19f089e32f56f450f9528da",
+    "pipelineResultSha256": "6229a5a8f7c10d12a2864e84b4230edfabcf4ff6a5b12abd7b8be830bf5f49ac",
+    "readOnlyNativeRouter": true,
+    "actualNativeJwtVerification": true,
+    "actualParticipantDynamoIndex": true,
+    "actualTranscriptAndSummary": true,
+    "hashingBasis": "All *Sha256 fields above hash exact named local artifact file bytes. PersistedTranscriptJsonSha256 separately hashes UTF-8 bytes of the native Dynamo row transcriptJson string.",
+    "persistedTranscriptJsonSha256": "5dc6fb556d4da6f42ee7c7898453bb6431bd50e866434de612a4cd31ed922d56"
+  },
+  "assertions": [
+    "Both synthetic native participants receive exact stored timed transcript and summary",
+    "Search returns clickable recording ref tagged to canonical initiative",
+    "Selected recording context is re-authorized without private searchText leakage",
+    "Native nonparticipant transcript404 and no search or selected-context leakage",
+    "BFF current directory epoch rejection invalidates revoked fixture identity"
+  ],
+  "authorityLimitations": [
+    "Directory and Cedar are explicit synthetic inert test fixtures",
+    "Canonical initiative visibility uses existing mock Aurora project data",
+    "This is not real human login, a user call, production enrollment or live-state acceptance"
+  ],
+  "effects": {
+    "primaryServicesTouched": false,
+    "realMessagesInvitesJobs": false,
+    "nativeArtifactWritesByReadHarness": false,
+    "runtimeInspectorsSignals": false
+  },
+  "sources": {
+    "middleware/src/providers/recording-search.ts": "42f53073a459bbcabc600be9a4defd7758ca691ec7961b8de01982e14407bddb",
+    "middleware/src/providers/search.ts": "2bc6d09b8b3a09f59ae206936bba22bd0f77461b80269e3acfe973a7d89c22ea",
+    "middleware/src/providers/__tests__/recording-search-native-acceptance.test.ts": "f44e8b540f4e255464de9ad3d0d3f8c749b538eb0babbf22a37a7d1df98f9d76",
+    ".scratch/recording-cross-read/native-read-server.ts": "309c846cebe160589df2d7d55f7fad09795dbf3103b07dc606ad559372cd74dd"
+  },
+  "reproduction": {
+    "optInTest": "middleware/src/providers/__tests__/recording-search-native-acceptance.test.ts",
+    "readOnlyHarnessUsed": ".scratch/recording-cross-read/native-read-server.ts",
+    "portableHarness": "docs/demos/work-huddles/evidence/2026-10-10/native-meeting-pipeline/readonly-native-harness.ts",
+    "nativeCheckout": "/private/tmp/platform-meeting-pipeline",
+    "requiredFixtures": [
+      "Uniquely owned local DynamoDB populated by actual pipeline acceptance",
+      "REALTIME_JWT_SECRET synthetic signing fixture matching native verifier",
+      "RECORDING_READ_ACCEPTANCE_PATH actual persisted recording row file",
+      "RECORDING_READ_ACCEPTANCE_URL owned readonly harness URL"
+    ],
+    "testCommand": "npm test -- --runInBand src/providers/__tests__/recording-search-native-acceptance.test.ts"
+  }
+}

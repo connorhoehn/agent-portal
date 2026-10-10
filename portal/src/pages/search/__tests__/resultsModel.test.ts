@@ -56,3 +56,13 @@ test('a count that is a floor reads "N+" everywhere a count is drawn', () => {
   assert.equal(partialSourcesTitle(['Approved design decisions unavailable']), 'One source is incomplete — counts are minimums');
   assert.equal(partialSourcesTitle(['Work source window is limited', 'Decisions unavailable']), '2 sources are incomplete — counts are minimums');
 });
+
+
+test('recording results retain a distinct group, action and canonical file link', () => {
+  const recording: SearchRecord = { id: 'rec-7', type: 'recording', title: 'Auth huddle', href: '/iq/projects/auth?tab=docs&recording=rec-7', description: 'Transcript excerpt' };
+  const group = groupResults([recording], { recording: 1 }, type => `?type=${type}`)[0];
+  assert.equal(group.label, 'Recordings');
+  assert.equal(group.id, 'recording');
+  assert.equal(group.records[0].href, recording.href);
+  assert.equal(openLabelFor('recording'), 'Open recording');
+});

@@ -5,29 +5,57 @@
 // participant-index client. Storage, capture, compose and permissions remain
 // in platform-api/LVS; this adapter only adds initiative filtering and paging.
 import type { LVSRecording } from '@connorhoehnslalom/realtime-modules/client/video';
-import type { RecordingListItem, TimedReaction } from '@connorhoehnslalom/ui-components/video';
+import type { RecordingListItem, TimedReaction, TranscriptSegment } from '@connorhoehnslalom/ui-components/video';
 import { realtimeEndpoints, realtimeTokenSource, type RealtimeTokenSource } from '../../lib/realtimeToken.ts';
 
 export interface InitiativeRecording extends Pick<LVSRecording, 'recordingId' | 'startedAt'>,
   Partial<Pick<LVSRecording, 'endedAt' | 'durationMs' | 'participants'>> {
   lobbyName: string;
+  callId?: string;
   participantCount?: number;
   composeStatus?: string;
   stage?: string;
+  transcriptionRequested?: boolean;
+  transcriptStatus?: 'pending' | 'processing' | 'ready' | 'failed';
+  summaryStatus?: 'pending' | 'processing' | 'ready' | 'failed' | 'skipped';
+  transcriptError?: string | null;
+  summaryError?: string | null;
+  transcriptGeneratedAt?: string;
+  summaryRunId?: string;
+  processingAttemptId?: string;
 }
 export interface RecordingPage { items: InitiativeRecording[]; cursor: string | null }
-export interface RecordingPlayback { mediaState: string; composedUrl?: string | null; playlistUrl?: string | null }
+export interface RecordingPlayback { mediaState: string; composedUrl?: string | null; playlistUrl?: string | null; token?: string | null }
+/** Native playback may return an already-authorized URL or a separate token.
+ * Preserve signed queries and never substitute a live URL for missing media. */
+export function recordingPlaybackUrl(value: RecordingPlayback | null): string | null {
+  const raw = value?.composedUrl ?? value?.playlistUrl;
+  if (!raw || !/^https?:\/\//.test(raw)) return null;
+  try { const url = new URL(raw); if (value?.token && !url.searchParams.has('token')) url.searchParams.set('token', value.token); return url.href; }
+  catch { return null; }
+}
 export interface RecordedReaction { reactionId: string; lobbyName: string; userId?: string | null; displayName?: string; emoji: string; at: string }
+export interface RecordingProgress { status: 'pending' | 'processing' | 'failed' | 'stalled' | 'unavailable'; terminal: boolean; retryAfterMs: number | null; error?: string | null }
+export type RecordingTranscript = { status: 'ready'; segments: TranscriptSegment[] } | RecordingProgress;
+export type RecordingSummary = { status: 'ready'; markdown: string } | RecordingProgress | { status: 'skipped'; terminal: true; retryAfterMs: null };
+
+function progress(body: Record<string, unknown>, response: Response): RecordingProgress {
+  const status = ['pending', 'processing', 'failed', 'stalled'].includes(String(body.status)) ? body.status as RecordingProgress['status'] : 'unavailable';
+  const terminal = body.terminal === true || ['failed', 'stalled', 'unavailable'].includes(status);
+  const requested = typeof body.retryAfterMs === 'number' ? body.retryAfterMs : Number(response.headers.get('Retry-After')) * 1000;
+  return { status, terminal, retryAfterMs: terminal ? null : Math.max(5000, Math.min(60000, requested || 5000)), ...(typeof body.error === 'string' ? { error: body.error } : {}) };
+}
 
 export function createInitiativeRecordingsClient(options: {
   source?: Pick<RealtimeTokenSource, 'get'>;
   fetchImpl?: typeof fetch;
   platformApiUrl?: string;
+  scopeLabel?: string;
 } = {}) {
   const source = options.source ?? realtimeTokenSource;
   const doFetch = options.fetchImpl ?? fetch;
   const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {};
-  async function request<T>(path: string, signal: AbortSignal, method = 'GET'): Promise<T> {
+  async function response(path: string, signal: AbortSignal, method = 'GET'): Promise<Response> {
     for (let attempt = 0; attempt < 2; attempt++) {
       const token = await source.get({ force: attempt > 0 });
       signal.throwIfAborted(); // An identity change while minting must not send the old bearer.
@@ -42,11 +70,14 @@ export function createInitiativeRecordingsClient(options: {
         if (res.status === 401) throw new Error('Your session expired. Sign in again to open call recordings.');
         throw new Error('Call recordings could not be loaded. Try again.');
       }
-      const body = await res.json() as T;
-      signal.throwIfAborted();
-      return body;
+      return res;
     }
     throw new Error('Your session could not authorize this recording.');
+  }
+  async function request<T>(path: string, signal: AbortSignal, method = 'GET'): Promise<T> {
+    const body = await (await response(path, signal, method)).json() as T;
+    signal.throwIfAborted();
+    return body;
   }
   return {
     async page(cursor: string | null, signal: AbortSignal): Promise<RecordingPage> {
@@ -58,10 +89,27 @@ export function createInitiativeRecordingsClient(options: {
     },
     async detail(id: string, lobby: string, signal: AbortSignal): Promise<InitiativeRecording> {
       const row = await request<InitiativeRecording>(`/api/recordings/${encodeURIComponent(id)}`, signal);
-      if (row.recordingId !== id || row.lobbyName !== lobby) throw new Error('This recording is not part of this initiative.');
+      if (row.recordingId !== id || row.lobbyName !== lobby) throw new Error(`This recording is not part of this ${options.scopeLabel ?? 'initiative'}.`);
       return row;
     },
     playback: (id: string, signal: AbortSignal) => request<RecordingPlayback>(`/api/recordings/${encodeURIComponent(id)}/playback-token`, signal, 'POST'),
+    async transcript(id: string, signal: AbortSignal): Promise<RecordingTranscript> {
+      const res = await response(`/api/recordings/${encodeURIComponent(id)}/transcript`, signal);
+      const body = await res.json() as Record<string, unknown>; signal.throwIfAborted();
+      if (res.status === 202) return progress(body, res);
+      if (!Array.isArray(body.segments) || body.segments.some(segment => !segment || typeof segment.text !== 'string' || !Number.isFinite(segment.startMs) || !Number.isFinite(segment.endMs))) throw new Error('The saved transcript response is invalid.');
+      return { status: 'ready', segments: body.segments as TranscriptSegment[] };
+    },
+    async summary(id: string, signal: AbortSignal, knownStatus?: InitiativeRecording['summaryStatus']): Promise<RecordingSummary> {
+      const res = await response(`/api/recordings/${encodeURIComponent(id)}/summary`, signal);
+      if (res.status === 202) { const body = await res.json() as Record<string, unknown>; signal.throwIfAborted(); return progress(body, res); }
+      const status = res.headers.get('X-Summary-Status') ?? knownStatus;
+      const markdown = await res.text(); signal.throwIfAborted();
+      if (status === 'pending' || status === 'processing' || status === 'failed') return progress({ status, terminal: status === 'failed' }, res);
+      if (status === 'skipped' || status === 'none') return { status: 'skipped', terminal: true, retryAfterMs: null };
+      if (status !== 'ready') return { status: 'unavailable', terminal: true, retryAfterMs: null };
+      return { status: 'ready', markdown };
+    },
     async reactions(row: InitiativeRecording, signal: AbortSignal): Promise<RecordedReaction[]> {
       if (!row.endedAt) return [];
       const query = new URLSearchParams({ lobbyName: row.lobbyName, from: row.startedAt, to: row.endedAt });
@@ -72,6 +120,23 @@ export function createInitiativeRecordingsClient(options: {
   };
 }
 export type InitiativeRecordingsClient = ReturnType<typeof createInitiativeRecordingsClient>;
+
+/** Exact ended-call association. A neighbouring/latest lobby recording is never a substitute. */
+export async function recordingForCall(client: Pick<InitiativeRecordingsClient, 'page'>, callId: string, lobby: string, signal: AbortSignal): Promise<InitiativeRecording | null> {
+  let cursor: string | null = null;
+  const seen = new Set<string>();
+  for (let page = 0; page < 5; page++) {
+    signal.throwIfAborted();
+    const result = await client.page(cursor, signal);
+    signal.throwIfAborted();
+    const row = result.items.find(item => item.callId === callId && item.lobbyName === lobby);
+    if (row) return row;
+    if (!result.cursor) return null;
+    if (seen.has(result.cursor)) throw new Error('The recording list could not advance. Try refreshing.');
+    seen.add(result.cursor); cursor = result.cursor;
+  }
+  return null;
+}
 
 /** Bounded work per click, with a cursor to continue. An empty partial page is not an empty history. */
 export async function readInitiativeRecordings(client: Pick<InitiativeRecordingsClient, 'page'>, lobby: string, signal: AbortSignal, cursor: string | null = null): Promise<RecordingPage> {

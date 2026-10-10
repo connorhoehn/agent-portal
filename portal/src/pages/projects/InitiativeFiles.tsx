@@ -8,6 +8,9 @@ import { absoluteTime, durationLabel } from '../../lib/relativeTime';
 import { documentKind, workspaceDocuments } from './initiativePaneModel';
 import { initiativeDeckPaths, type InitiativeDeckSummary } from './decks/initiativeDecksApi';
 import { createInitiativeRecordingsClient, readInitiativeRecordings, type RecordingPage } from './initiativeRecordingApi';
+import { RECORDING_CHANGED_EVENT } from '../../components/recordings/recordingEvents';
+import { useRecordingRead } from '../../components/recordings/useRecordingRead';
+import { recordingIsProcessing, recordingProcessingLabel } from '../../components/recordings/recordingState';
 
 type FileRow = { id: string; title: string; kind: 'document' | 'presentation' | 'recording'; detail: string; href?: string; recordingId?: string };
 type Read = { files: FileRow[]; recordings: RecordingPage | null; pending: boolean; failures: string[] };
@@ -31,8 +34,14 @@ function Files({ projectId, projectName, itemIds, workspaceHref, onOpenRecording
   const client = useMemo(() => createInitiativeRecordingsClient(), []);
   const itemKey = itemIds?.join(',') ?? null;
   const lobby = `orgiq:initiative:${projectId}`;
+  const recordingRead = useRecordingRead(`${lobby}:${refresh}`, signal => readInitiativeRecordings(client, lobby, signal), page => page.items.some(recordingIsProcessing) ? 5000 : null);
   const recordingRows = (page: RecordingPage): FileRow[] => page.items.map(row => ({ id: `recording:${row.recordingId}`, recordingId: row.recordingId,
-    title: `${projectName} huddle`, kind: 'recording', detail: `${absoluteTime(row.startedAt)} · ${durationLabel(row.durationMs ?? 0)} · ${row.participantCount ?? row.participants?.length ?? 0} ${(row.participantCount ?? row.participants?.length ?? 0) === 1 ? 'person' : 'people'}` }));
+    title: `${projectName} huddle`, kind: 'recording', detail: `${recordingProcessingLabel(row)} · ${absoluteTime(row.startedAt)} · ${durationLabel(row.durationMs ?? 0)} · ${row.participantCount ?? row.participants?.length ?? 0} ${(row.participantCount ?? row.participants?.length ?? 0) === 1 ? 'person' : 'people'}` }));
+  useEffect(() => {
+    const update = (event: Event) => { if ((event as CustomEvent<{ lobby?: string }>).detail?.lobby === lobby) recordingRead.refresh(); };
+    window.addEventListener(RECORDING_CHANGED_EVENT, update);
+    return () => window.removeEventListener(RECORDING_CHANGED_EVENT, update);
+  }, [lobby, recordingRead.refresh]);
   useEffect(() => {
     const abort = new AbortController();
     setRead({ files: [], recordings: null, pending: true, failures: [] }); setOlderError(null); setOlderBusy(false);
@@ -49,23 +58,27 @@ function Files({ projectId, projectName, itemIds, workspaceHref, onOpenRecording
       if (!Array.isArray(rows) || rows.some(row => row.projectId !== projectId || typeof row.id !== 'string' || typeof row.title !== 'string')) throw new Error('Invalid project presentations');
       return rows.map(row => ({ id: `presentation:${row.id}`, title: row.title, kind: 'presentation', detail: `PowerPoint · ${absoluteTime(row.updatedAt)}`, href: initiativeDeckPaths.page(row.id) }));
     };
-    void Promise.allSettled([docs(), decks(), readInitiativeRecordings(client, lobby, abort.signal)]).then(([documents, presentations, recordings]) => {
+    void Promise.allSettled([docs(), decks()]).then(([documents, presentations]) => {
       if (abort.signal.aborted) return;
-      setRead({ pending: false, files: [...(documents.status === 'fulfilled' ? documents.value.files : []), ...(presentations.status === 'fulfilled' ? presentations.value : []), ...(recordings.status === 'fulfilled' ? recordingRows(recordings.value) : [])],
-        recordings: recordings.status === 'fulfilled' ? recordings.value : null,
-        failures: [documents.status === 'rejected' || documents.value.partial ? 'Some documents' : '', presentations.status === 'rejected' ? 'Presentations' : '', recordings.status === 'rejected' ? 'Recordings' : ''].filter(Boolean) });
+      setRead({ pending: false, files: [...(documents.status === 'fulfilled' ? documents.value.files : []), ...(presentations.status === 'fulfilled' ? presentations.value : [])],
+        recordings: null,
+        failures: [documents.status === 'rejected' || documents.value.partial ? 'Some documents' : '', presentations.status === 'rejected' ? 'Presentations' : ''].filter(Boolean) });
     });
     return () => abort.abort();
   }, [projectId, projectName, itemKey, refresh, client, lobby]); // eslint-disable-line react-hooks/exhaustive-deps
-  const shown = read.files.filter(row => (kind === 'all' || kind === row.kind) && row.title.toLowerCase().includes(query.trim().toLowerCase()));
+  const files = recordingRead.error ? read.files.filter(row => row.kind !== 'recording') : [...new Map([...read.files, ...(recordingRead.value ? recordingRows(recordingRead.value) : [])].map(row => [row.id, row])).values()];
+  const failures = [...read.failures, ...(recordingRead.error ? ['Recordings'] : [])];
+  const cursor = read.recordings ? read.recordings.cursor : recordingRead.value?.cursor;
+  const pending = read.pending || recordingRead.loading;
+  const shown = files.filter(row => (kind === 'all' || kind === row.kind) && row.title.toLowerCase().includes(query.trim().toLowerCase()));
   const open = (row: FileRow) => row.recordingId ? onOpenRecording(row.recordingId) : row.href && navigate(row.href);
   // This request is also retired on refresh, scope change or unmount.
   const [olderRequest, setOlderRequest] = useState<AbortController | null>(null);
   useEffect(() => () => olderRequest?.abort(), [olderRequest, refresh, itemKey, projectName]);
   async function older() {
-    if (!read.recordings?.cursor || olderBusy) return;
+    if (!cursor || olderBusy || recordingRead.error) return;
     const abort = new AbortController(); setOlderRequest(abort); setOlderBusy(true); setOlderError(null);
-    try { const result = await readInitiativeRecordings(client, lobby, abort.signal, read.recordings.cursor); if (abort.signal.aborted) return;
+    try { const result = await readInitiativeRecordings(client, lobby, abort.signal, cursor); if (abort.signal.aborted) return;
       setRead(current => ({ ...current, files: [...new Map([...current.files, ...recordingRows(result)].map(row => [row.id, row])).values()], recordings: result }));
     } catch { if (!abort.signal.aborted) setOlderError('Older recordings could not be read. Try again.'); }
     finally { if (!abort.signal.aborted) setOlderBusy(false); }
@@ -76,13 +89,13 @@ function Files({ projectId, projectName, itemIds, workspaceHref, onOpenRecording
         <Select size="sm" className="!w-36" aria-label="File type" value={kind} onChange={event => setKind(event.target.value)} options={[{ value: 'all', label: 'All files' }, { value: 'document', label: 'Documents' }, { value: 'presentation', label: 'Presentations' }, { value: 'recording', label: 'Recordings' }]} />
       </Inline>
       <Inline gap="xs" wrap><FileViewToggle value={view} onChange={setView} />
-        <Button size="sm" variant="ghost" disabled={read.pending} onClick={() => { setOlderBusy(false); setRefresh(n => n + 1); }}>Refresh</Button>
+        <Button size="sm" variant="ghost" disabled={pending} onClick={() => { setOlderBusy(false); setRefresh(n => n + 1); }}>Refresh</Button>
         <Button size="sm" variant="secondary" onClick={() => navigate(workspaceHref)}>Open workspace</Button></Inline>
     </Inline>
-    {read.failures.length > 0 && <InlineAlert tone="warning">{read.failures.join(', ')} could not be read. Other available files are shown. Use Refresh to retry.</InlineAlert>}
-    {read.pending ? <LoadingState label="Loading project files…" /> : <>
+    {failures.length > 0 && <InlineAlert tone="warning">{failures.join(', ')} could not be read. Other available files are shown. Use Refresh to retry.</InlineAlert>}
+    {pending ? <LoadingState label="Loading project files…" /> : <>
       <T size="xs" tone="secondary">{shown.length} {shown.length === 1 ? 'file' : 'files'}{query || kind !== 'all' ? ' matching this view' : ' in this initiative'}</T>
-      {shown.length === 0 ? <Stack gap="xs" className="rounded-lg border border-dashed border-border p-6"><T size="sm" weight="semibold">{read.files.length ? 'No matching files' : 'No project files yet'}</T><T size="sm" tone="secondary" wrap>{read.files.length ? 'Try another search or file type.' : 'Linked work documents, saved project presentations, and recordings you participated in appear here.'}</T></Stack>
+      {shown.length === 0 ? <Stack gap="xs" className="rounded-lg border border-dashed border-border p-6"><T size="sm" weight="semibold">{files.length ? 'No matching files' : 'No project files yet'}</T><T size="sm" tone="secondary" wrap>{files.length ? 'Try another search or file type.' : 'Linked work documents, saved project presentations, and recordings you participated in appear here.'}</T></Stack>
         : view === 'cards' ? <FileCards items={shown.map(row => ({ ...row, kindLabel: row.kind }))} onOpen={id => { const row = shown.find(file => file.id === id); if (row) open(row); }} testId="initiative-files-cards" itemTestId="initiative-file" />
         : <div className="divide-y divide-border rounded-lg border border-border" data-testid="initiative-files-list">
           {shown.map(row => <Button key={row.id} variant="ghost" className="!h-auto !w-full !justify-start !rounded-none !px-3 !py-3 text-left" onClick={() => open(row)} data-testid="initiative-file">
@@ -92,8 +105,9 @@ function Files({ projectId, projectName, itemIds, workspaceHref, onOpenRecording
             </Stack></Inline>
           </Button>)}
         </div>}
+      {recordingRead.timedOut && <T size="xs" tone="secondary" role="status">Recording processing is taking longer than expected. Refresh to check again.</T>}
       {olderError && <T size="xs" tone="secondary" role="status">{olderError}</T>}
-      {read.recordings?.cursor && <Inline><Button variant="secondary" size="sm" disabled={olderBusy} onClick={() => void older()}>Load older recordings</Button></Inline>}
+      {cursor && !recordingRead.error && <Inline><Button variant="secondary" size="sm" disabled={olderBusy} onClick={() => void older()}>Load older recordings</Button></Inline>}
     </>}
   </Stack>;
 }

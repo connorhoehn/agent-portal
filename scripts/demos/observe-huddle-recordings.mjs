@@ -6,6 +6,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
+import { recordingPipelineAcceptance } from './recording-pipeline-acceptance.mjs';
 
 const exec = promisify(execFile);
 const args = process.argv.slice(2);
@@ -23,6 +24,7 @@ const {callRecordingRepo,pipelineRunRepo}=require('/app/dist/repositories');
 const lobby=process.argv[1],since=Date.parse(process.argv[2]);
 const pick=(value,keys)=>Object.fromEntries(keys.filter(k=>value?.[k]!==undefined).map(k=>[k,value[k]]));
 const safeError=value=>typeof value==='string'?value.replace(/Bearer\s+\S+/gi,'Bearer [redacted]').replace(/([?&](?:token|sig|signature|key)=)[^&\s]+/gi,'$1[redacted]').slice(0,500):undefined;
+const speechCount=row=>{try{return JSON.parse(row.transcriptJson??'null')?.segments?.filter(s=>s.kind!=='reaction'&&typeof s.text==='string'&&s.text.trim()).length??0}catch{return 0}};
 (async()=>{
   const rows=[],seen=new Set();let cursor;
   for(let page=0;page<10;page++){
@@ -33,7 +35,9 @@ const safeError=value=>typeof value==='string'?value.replace(/Bearer\s+\S+/gi,'B
       rows.push({...pick(rec,['recordingId','callId','sessionId','channelArn','lobbyName','startedAt','endedAt','durationMs','sessionDurationMs','composeStatus','composeCheckedAt','transcriptStatus','transcriptStatusAt','summaryStatus','participantCount']),
         participants:(rec.participants??[]).map(p=>pick(p,['userId','displayName'])),
         tracks:(rec.tracks??[]).map(t=>pick(t,['legId','participantId','kind','durationMs','startedAtMs','endedAtMs','endReason','size'])),
-        composedBytes:rec.composedSegment?.size,transcriptError:safeError(rec.transcriptError)});
+        composedBytes:rec.composedSegment?.size,transcriptError:safeError(rec.transcriptError),
+        summaryRunId:rec.summaryRunId,summaryChars:typeof rec.summaryMarkdown==='string'?rec.summaryMarkdown.trim().length:0,
+        transcriptSpeechSegments:speechCount(rec),summaryError:safeError(rec.summaryError)});
     }
     cursor=result.cursor;if(!cursor)break;
   }
@@ -89,6 +93,7 @@ node scripts/demos/observe-huddle-recordings.mjs --since <UTC timestamp> --expec
 --out        optional JSON evidence destination
 --verify     exit 2 unless the expected recordings composed and native finalize runs completed
 --wait-pipeline also wait for the native transcription child runs to finish (including truthful failure)
+--require-summary require a completed current run with stored speech and a nonempty ready summary; failure does not pass
 --container  existing native platform container, default orgiq-media-validation-platform-api
 --sfu        local native LVS origin, default http://127.0.0.1:3902
 --platform   local native platform origin, default http://127.0.0.1:23002
@@ -133,11 +138,6 @@ Compose completion is separate from transcript/summary success; both statuses ar
           recordings: rows.filter(row => Date.parse(row.startedAt) >= Date.parse(since)).map(sfuRecording) });
       } catch (error) { sfuRows.push({ channelArn: arn, error: error.message }); }
     }
-    const composed = native.recordings.filter(recording => recording.endedAt && ['ok', 'degraded'].includes(recording.composeStatus)
-      && sfuRows.some(channel => channel.channelArn === recording.channelArn && channel.recordings?.some(row => row.recordingId === recording.recordingId && ['ok', 'degraded'].includes(row.composeStatus)))
-      && native.pipelines.some(run => run.recordingId === recording.recordingId && run.pipelineId === 'recording-finalize' && run.status === 'completed'));
-    const withTerminalTranscription = composed.filter(recording => native.pipelines.some(run => run.recordingId === recording.recordingId
-      && run.pipelineId === 'call-transcription' && ['completed', 'failed', 'cancelled', 'rejected'].includes(run.status)));
     const observation = {
       observedAt: new Date().toISOString(),
       health: { status: health.status, checks: health.checks?.map(check => pick(check, ['name', 'ok', 'degraded', 'details'])) },
@@ -147,9 +147,9 @@ Compose completion is separate from transcript/summary success; both statuses ar
       liveTransports: pick(transports, ['webRtcTransports', 'serverTransports', 'serverTransportsByType', 'pipeTransports', 'producers', 'consumers']),
       channels: relevantChannels.map(channel => ({ ...pick(channel, ['arn', 'name']), recordingConfiguration: pick(channel.recordingConfiguration, ['enabled', 'destination', 'recordingProfile', 'startWhenParticipants', 'transcribe', 'composePerPeer']) })),
       platform: native, sfu: sfuRows,
-      acceptance: { expected, freshRecordings: native.recordings.length, composedWithCompletedNativeFinalize: composed.length,
-        expectedComposed: composed.length >= expected, withTerminalTranscription: withTerminalTranscription.length,
-        observationFinished: composed.length >= expected && (!args.includes('--wait-pipeline') || withTerminalTranscription.length >= expected) },
+      acceptance: recordingPipelineAcceptance(native.recordings, native.pipelines, sfuRows, {
+        expected, waitPipeline: args.includes('--wait-pipeline'), requireSummary: args.includes('--require-summary'),
+      }),
     };
     observations.push(observation);
     report = { kind: 'native-huddle-recording-observation', since, lobby, readOnly: true,

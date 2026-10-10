@@ -1,4 +1,4 @@
-export type SearchRecordType = 'person' | 'initiative' | 'work' | 'decision' | 'knowledge' | 'asset';
+export type SearchRecordType = 'person' | 'initiative' | 'work' | 'decision' | 'knowledge' | 'asset' | 'recording';
 export interface SearchRef { type: SearchRecordType; id: string }
 export interface SearchRecord extends SearchRef {
   title: string;
@@ -27,9 +27,9 @@ export interface SearchResponse {
 }
 export type SearchTab = 'results' | 'answer' | 'connections';
 export type SearchSort = 'relevance' | 'recent';
-export const SEARCH_TYPES: SearchRecordType[] = ['person', 'initiative', 'work', 'decision', 'knowledge', 'asset'];
+export const SEARCH_TYPES: SearchRecordType[] = ['person', 'initiative', 'work', 'decision', 'knowledge', 'recording', 'asset'];
 export const SEARCH_LABELS: Record<SearchRecordType | 'all', string> = {
-  all: 'All results', person: 'People', initiative: 'Initiatives', work: 'Work', decision: 'Decisions', knowledge: 'Knowledge', asset: 'Agent library',
+  all: 'All results', person: 'People', initiative: 'Initiatives', work: 'Work', decision: 'Decisions', knowledge: 'Knowledge', asset: 'Agent library', recording: 'Recordings',
 };
 export const recordKey = (record: SearchRef) => `${record.type}:${record.id}`;
 export function parseRecordKeys(value: string | null): SearchRef[] {

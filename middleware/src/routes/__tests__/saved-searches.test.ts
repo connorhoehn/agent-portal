@@ -14,6 +14,12 @@ const app = express(); app.use(express.json());
 app.use((req, _res, next) => { (req as unknown as { session: unknown }).session = { sub: String(req.headers['x-user'] ?? 'user-a'), tenant: 'orgiq' }; next(); });
 app.use('/api/saved-searches', savedSearchesRouter); app.use(errorHandler);
 beforeEach(() => savedSearchesFixture.rows().splice(0));
+it('saves recording refs only as a definition, never artifact text or authority', async () => {
+  const saved = await request(app).post('/api/saved-searches').send({ name: 'Call evidence', query: 'budget', types: ['recording'], selectedKeys: ['recording:rec-native'] });
+  expect(saved.status).toBe(201);
+  expect(saved.body.search).toMatchObject({ types: ['recording'], selectedKeys: ['recording:rec-native'] });
+  expect((await request(app).post('/api/saved-searches').send({ name: 'Leak', query: 'budget', transcript: 'private body' })).status).toBe(400);
+});
 it('creates/reopens/renames/deletes definitions scoped to current user', async () => {
   const created = await request(app).post('/api/saved-searches').send({ name: 'Auth', query: 'Who helps?', scope: 'p-auth' });
   expect(created.status).toBe(201); const id = created.body.search.id;

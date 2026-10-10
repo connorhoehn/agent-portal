@@ -5,6 +5,8 @@ import { SEARCH_TYPES, SEARCH_SORTS, searchRecords, resolveSearchContext, type S
 
 export const searchRouter = Router();
 searchRouter.use(requireTenant('orgiq'), requireAction('Search'));
+// Participant-private artifacts and snippets must never enter a shared cache.
+searchRouter.use((_req, res, next) => { res.set('Cache-Control', 'private, no-store'); next(); });
 searchRouter.get('/', asyncHandler(async (req, res) => {
   const q = String(req.query['q'] ?? '').trim();
   const type = String(req.query['type'] ?? 'all');

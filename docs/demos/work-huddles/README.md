@@ -1,5 +1,10 @@
 # Work huddle demo rehearsal
 
+The current [meeting-processing audit](meeting-processing-audit-20261010.md)
+tracks transcription, summarization, post-call progress and searchable project
+recordings separately. A terminal pipeline failure is not a successful summary;
+the observer's new `--require-summary` gate makes that distinction explicit.
+
 Rehearse an initiative review, a contextual huddle, a scoped search, and a shared PowerPoint review against the existing local mock stack at `http://localhost:5183`. The call belongs to the signed-in shell, so navigation keeps the call and its conversation connected. Presentation collaboration follows saved revisions; simultaneous keystrokes are not merged.
 
 Accepting a call about the same initiative preserves the current work selection, scoped Search, or already bound presentation. A call about another place opens its canonical page.

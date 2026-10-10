@@ -17,6 +17,7 @@ import { isPageCallLobby, pageHuddleLogBodies, startPageHuddleTracker, type Page
 import { roomSlugFromLobby } from '../../pages/social/socialPlatform';
 import { acceptedCallHref, callPeopleHref, callScopeKey, shellCallDockTestId } from './callShellModel';
 import { HuddleChatProvider, HuddleChatPanel, HuddleReactionOverlay, useHuddleChat } from './HuddleChat';
+import { PostCallRecordingMonitor } from '../recordings/PostCallRecording';
 
 const getToken = async () => (await realtimeTokenSource.get()).token;
 /** The pre-join choices were remembered under this key before the call host moved into the library. */
@@ -180,5 +181,6 @@ export function ShellCallMedia({ id }: { id?: string }) {
       onOpenDocument={doc => { if (doc.href) navigate(doc.href); }}
       dockTestId={(lobby, tenant) => shellCallDockTestId(lobby.channel, tenant)} />
     <HuddleChatPanel />
+    <PostCallRecordingMonitor />
   </>;
 }

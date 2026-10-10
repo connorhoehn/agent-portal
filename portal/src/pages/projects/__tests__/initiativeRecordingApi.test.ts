@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createInitiativeRecordingsClient, initiativeRecordingItems, readInitiativeRecordings, recordingReactions, timedRecordingReactions, type InitiativeRecording } from '../initiativeRecordingApi.ts';
+import { recordingPlaybackUrl, createInitiativeRecordingsClient, initiativeRecordingItems, readInitiativeRecordings, recordingForCall, recordingReactions, timedRecordingReactions, type InitiativeRecording } from '../initiativeRecordingApi.ts';
 
 const lobby = 'orgiq:initiative:p-observability';
 const signal = () => new AbortController().signal;
@@ -97,4 +97,49 @@ test('shared replay layer receives exact recorded reaction offsets without neigh
   const heart = { reactionId: 'heart', at: '2026-10-09T17:20:26.283Z', lobbyName: lobby, emoji: '❤️', displayName: 'Vera Green' };
   assert.deepEqual(timedRecordingReactions(rec, [heart, { ...heart, reactionId: 'neighbour', lobbyName: 'room:elsewhere' }]),
     [{ id: 'heart', emoji: '❤️', displayName: 'Vera Green', offsetMs: 35_164 }]);
+});
+
+test('ended-call discovery requires both the exact call ID and native lobby, never the latest nearby recording', async () => {
+  const neighbour = { ...row('latest'), callId: 'another-call' };
+  const wrongScope = { ...row('private', 'orgiq:initiative:p-other'), callId: 'ended-call' };
+  assert.equal(await recordingForCall({ page: async () => ({ items: [neighbour, wrongScope], cursor: null }) }, 'ended-call', lobby, signal()), null);
+  const wanted = { ...row('exact'), callId: 'ended-call' };
+  const cursors: Array<string | null> = [];
+  assert.equal((await recordingForCall({ page: async cursor => { cursors.push(cursor); return cursor ? { items: [wanted], cursor: null } : { items: [neighbour], cursor: 'older' }; } }, 'ended-call', lobby, signal()))?.recordingId, 'exact');
+  assert.deepEqual(cursors, [null, 'older']);
+});
+
+test('native transcript progress preserves the terminal flag and bounded Retry-After contract', async () => {
+  let failed = false;
+  const client = createInitiativeRecordingsClient({ source: { get: async () => ({ token: 'fixture', expiresAt: '2099', platformApiUrl: 'https://platform.invalid' }) },
+    fetchImpl: (async () => Response.json(failed ? { status: 'stalled', terminal: true, error: 'worker did not progress' } : { status: 'processing', terminal: false, retryAfterMs: 17000 }, { status: 202 })) as typeof fetch });
+  assert.deepEqual(await client.transcript('exact', signal()), { status: 'processing', terminal: false, retryAfterMs: 17000 });
+  failed = true;
+  assert.deepEqual(await client.transcript('exact', signal()), { status: 'stalled', terminal: true, retryAfterMs: null, error: 'worker did not progress' });
+});
+
+test('failed or pending summary text is never represented as a completed generated summary', async () => {
+  let state = 'processing';
+  const client = createInitiativeRecordingsClient({ source: { get: async () => ({ token: 'fixture', expiresAt: '2099', platformApiUrl: 'https://platform.invalid' }) },
+    fetchImpl: (async () => new Response('_Compatibility status explanation_', { headers: { 'X-Summary-Status': state } })) as typeof fetch });
+  assert.equal((await client.summary('exact', signal())).status, 'processing');
+  state = 'failed'; const failed = await client.summary('exact', signal());
+  assert.equal(failed.status, 'failed'); assert.equal('markdown' in failed, false);
+  state = 'ready'; assert.deepEqual(await client.summary('exact', signal()), { status: 'ready', markdown: '_Compatibility status explanation_' });
+});
+
+test('summary failure leaves native timestamped transcript segments independently readable', async () => {
+  const segments = [{ startMs: 1250, endMs: 2500, speakerId: 'participant', speakerLabel: 'Participant', text: 'Keep this exact saved line.' }];
+  const client = createInitiativeRecordingsClient({ source: { get: async () => ({ token: 'fixture', expiresAt: '2099', platformApiUrl: 'https://platform.invalid' }) },
+    fetchImpl: (async url => String(url).endsWith('/summary') ? new Response('Summary unavailable', { headers: { 'X-Summary-Status': 'failed' } }) : Response.json({ segments })) as typeof fetch });
+  assert.deepEqual(await client.transcript('exact', signal()), { status: 'ready', segments });
+  assert.equal((await client.summary('exact', signal())).status, 'failed');
+});
+
+
+test('playback preserves native signed URLs and accepts separate token without replacing authority', () => {
+  assert.equal(recordingPlaybackUrl({ mediaState: 'playable', composedUrl: 'https://video.example/exact.mp4?token=recording-bound&other=kept', token: 'legacy-extra' }), 'https://video.example/exact.mp4?token=recording-bound&other=kept');
+  assert.equal(recordingPlaybackUrl({ mediaState: 'playable', playlistUrl: 'https://video.example/exact.mp4?other=kept', token: 'separate+token' }), 'https://video.example/exact.mp4?other=kept&token=separate%2Btoken');
+  assert.equal(recordingPlaybackUrl({ mediaState: 'unavailable', token: 'no-media' }), null);
+  assert.equal(recordingPlaybackUrl({ mediaState: 'playable', composedUrl: 'javascript:invalid' }), null);
 });

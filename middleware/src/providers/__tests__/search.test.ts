@@ -6,6 +6,7 @@ jest.mock('../design-reviews.js', () => ({ listDesignReviews: jest.fn(), getDesi
 jest.mock('../decisions.js', () => ({ listDecisions: jest.fn(), getDecision: jest.fn() }));
 jest.mock('../distillation.js', () => ({ listItems: jest.fn(), getItem: jest.fn() }));
 jest.mock('../prompt-library.js', () => ({ listAssets: jest.fn(), getAsset: jest.fn() }));
+jest.mock('../recording-search.js', () => ({ listRecordingSearchRecords: jest.fn(async () => ({ records: [], partial: [] })), resolveRecordingSearchRecord: jest.fn() }));
 import { isAllowed } from '../../lib/authz.js';
 import { aurora } from '../index.js';
 import { listProjects, listProjectSummaries, getProject } from '../projects.js';
@@ -15,11 +16,13 @@ import { listDecisions } from '../decisions.js';
 import { listItems } from '../distillation.js';
 import { listAssets } from '../prompt-library.js';
 import { searchRecords, resolveSearchRecords, resolveSearchContext } from '../search.js';
+import { listRecordingSearchRecords, resolveRecordingSearchRecord } from '../recording-search.js';
 const principal = { sub: 'member', role: 'member', tenant: 'orgiq' };
 const mock = (fn: unknown) => fn as jest.Mock;
 beforeEach(() => {
   jest.resetAllMocks();
   mock(isAllowed).mockResolvedValue(true);
+  mock(listRecordingSearchRecords).mockResolvedValue({ records: [], partial: [] });
   mock(aurora.fetchGraph).mockResolvedValue({ peopleTotal: 2, nodes: [
     { id: 'vera', name: 'Vera Green', title: 'Engineer', department: 'Platform', skills: ['identity'] },
     { id: 'nora', name: 'Nora Chang', title: 'Engineer', department: 'Design', skills: [] },
@@ -37,6 +40,26 @@ beforeEach(() => {
     { id: 'guide', title: 'Bring SSO up', summary: '', level: 'L2', cluster_ids: ['cluster'], library_item_id: 'skill', status: 'published', type: 'procedure' },
   ], total: 3 });
   mock(listAssets).mockResolvedValue({ assets: [{ id: 'skill', name: 'Bring SSO up', description: '', lifecycleStatus: 'draft', kind: 'skill', usedBy: [] }], total: 1 });
+});
+test('native recording text is searchable and scoped, but only an excerpt leaves the projection', async () => {
+  mock(listRecordingSearchRecords).mockResolvedValue({ records: [{ type: 'recording', id: 'rec-native', title: 'Auth Migration huddle', href: '/iq/projects/auth?tab=docs&recording=rec-native', searchText: `${'quiet '.repeat(400)}Exact callback origin decision`, sourceRefs: [{ type: 'initiative', id: 'auth' }] }], partial: [] });
+  const result = await searchRecords(principal, { q: 'callback origin', scope: 'auth', type: 'recording' });
+  expect(result.counts.recording).toBe(1);
+  expect(result.results[0]?.description).toContain('Exact callback origin decision');
+  expect(result.results[0]?.description?.length).toBeLessThanOrEqual(1202);
+  expect(JSON.stringify(result)).not.toContain('searchText');
+  expect((await searchRecords(principal)).results.some(r => 'searchText' in r)).toBe(false);
+  expect(result.edges).toContainEqual(expect.objectContaining({ source: 'initiative:auth', target: 'recording:rec-native' }));
+});
+test('recording read failures disclose a partial source and selected context is re-resolved', async () => {
+  mock(listRecordingSearchRecords).mockRejectedValue(new Error('native unavailable'));
+  const result = await searchRecords(principal, { type: 'recording' });
+  expect(result.partial).toContain('Recordings unavailable');
+  expect(result.totalIsLowerBound).toBe(true);
+  mock(resolveRecordingSearchRecord).mockResolvedValue({ type: 'recording', id: 'r1', title: 'Canonical current call', href: '/iq/projects/auth?tab=docs&recording=r1', sourceRefs: [{ type: 'initiative', id: 'auth' }] });
+  const selected = await resolveSearchContext(principal, [{ type: 'initiative', id: 'auth' }, { type: 'recording', id: 'r1' }]);
+  expect(resolveRecordingSearchRecord).toHaveBeenCalledWith(principal, 'r1');
+  expect(selected.edges).toContainEqual(expect.objectContaining({ source: 'initiative:auth', target: 'recording:r1' }));
 });
 test('a question finds the existing initiative and its real owner, SME, and assigned work', async () => {
   const r = await searchRecords(principal, { q: 'Who can help finish Auth Migration?' });

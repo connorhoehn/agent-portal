@@ -16,7 +16,10 @@ const conversationCallDockProps: typeof video.conversationCallDockProps = (state
   participant => createElement('div', { 'data-call-stream': 'screen', className: 'h-full w-full' },
     createElement(StreamVideo, { stream: participant.screenStream!, muted: true, className: 'h-full w-full object-contain' })),
 );
-export const calls = createCallBlockHost({ ...video, conversationCallDockProps });
+// The native platform binds each media participant to a currently accepted
+// gateway seat before associating a completed recording with a call.
+const useConversationCall: typeof video.useConversationCall = opts => video.useConversationCall({ ...opts, bindRecordingCall: true });
+export const calls = createCallBlockHost({ ...video, useConversationCall, conversationCallDockProps });
 export const {
   CallHostProvider, CallMediaOutlet, CallBlock,
   useCallHost, useCallBlock, useCallLobby, useCallMediaPanel, useCallBlockPlacement, useCallBlockPageClaimed, useClaimCallBlock,

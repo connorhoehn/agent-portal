@@ -55,7 +55,7 @@ export function partialSourcesTitle(partial: string[]): string {
 
 const OPEN_LABELS: Record<SearchRecordType, string> = {
   person: 'Open profile', initiative: 'Open initiative', work: 'Open work item',
-  decision: 'Open decision', knowledge: 'Open document', asset: 'Open in library',
+  decision: 'Open decision', knowledge: 'Open document', asset: 'Open in library', recording: 'Open recording',
 };
 /** The labelled row action a scoped search draws (the library appends ↗). */
 export const openLabelFor = (type: SearchRecordType) => OPEN_LABELS[type];

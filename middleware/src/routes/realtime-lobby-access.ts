@@ -28,10 +28,40 @@ import { asyncHandler } from '../lib/async-handler.js';
 import { admitCall, callGuards, noStoredCall } from '../lib/gateway/authority.js';
 import { gatewayAuthFromClaims } from '../lib/gateway/auth.js';
 import { realtimeSigningSecret, verifyRealtimeToken } from '../lib/realtime-token.js';
+import { callMediaProofRuntime } from '../lib/call-media-proof.js';
+import { getLivePrincipal } from '../lib/live-principal.js';
+import { AppError } from '../lib/async-handler.js';
 
 export const MAX_LOBBY_NAME = 256;
 
 export const realtimeLobbyAccessRouter = Router();
+
+// The native video service forwards the caller's original bearer. A successful
+// answer proves this exact connected accepted seat, not just page membership.
+realtimeLobbyAccessRouter.post('/call-seat', asyncHandler(async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  const header = req.headers.authorization;
+  const token = typeof header === 'string' && header.startsWith('Bearer ') ? header.slice(7).trim() : '';
+  const secret = realtimeSigningSecret();
+  if (!token) { res.status(401).json({ error: 'realtime token required' }); return; }
+  if (!secret) { res.status(503).json({ error: 'realtime token verification unavailable' }); return; }
+  let auth: Record<string, unknown>;
+  try { auth = gatewayAuthFromClaims(await verifyRealtimeToken(token, secret)); }
+  catch { res.status(401).json({ error: 'invalid or expired realtime token' }); return; }
+  const input = req.body as Record<string, unknown> | null;
+  if (!input || typeof input !== 'object' || Array.isArray(input) || Object.keys(input).some(key => !['callId', 'lobbyName', 'clientId'].includes(key))
+    || !['callId', 'clientId'].every(key => typeof input[key] === 'string' && /^[A-Za-z0-9:_-]{1,256}$/.test(input[key] as string))
+    || typeof input.lobbyName !== 'string' || !input.lobbyName || input.lobbyName.length > MAX_LOBBY_NAME) {
+    res.status(400).json({ error: 'callId, lobbyName and clientId required' }); return;
+  }
+  try {
+    const { session } = await getLivePrincipal(auth);
+    res.json(await callMediaProofRuntime().get(session, input.callId as string, input.lobbyName, input.clientId as string));
+  } catch (error) {
+    if (error instanceof AppError && error.status >= 500) throw error;
+    res.status(403).json({ allowed: false });
+  }
+}));
 
 realtimeLobbyAccessRouter.post('/lobby-access', asyncHandler(async (req, res) => {
   res.set('Cache-Control', 'no-store');

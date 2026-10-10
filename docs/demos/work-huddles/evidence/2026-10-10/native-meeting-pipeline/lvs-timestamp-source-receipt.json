@@ -1,0 +1,27 @@
+{
+  "status": "staged-verified",
+  "worktree": "/private/tmp/lvs-meeting-timestamps",
+  "branch": "feat/meeting-timestamps-20261010",
+  "baseCommit": "d63b863b6f8269ba93ad27e8b1b6c80b8240839e",
+  "files": {
+    "services/transcription-worker/scripts/speech-cli.py": "b8ef0028700d6fd839a378c68d370016603a24442cab914b215d38c24917e9a2",
+    "services/transcription-worker/tests/test_speech_cli.py": "a80800385ac9e31d33dcbcd26798c2fe120874702b461b56fec7ceeccd840209",
+    "services/transcription-worker/README.md": "5916533c4b053f980895ea60dbf41327b091a4c5a7c765a570d048a83913b4db"
+  },
+  "patchSHA256": "5e5be573bd6d7d488b6d4b4061c58d6af4a21ab4fb1ff6c5339e8dc2b8fdcdad",
+  "verification": {
+    "dependencyFreeCLIContractTests": 8,
+    "testsPassed": true,
+    "diffCheckPassed": true,
+    "matchesActualAcceptedSpeechCLI": true
+  },
+  "runtimeActivation": false,
+  "existing14041Unchanged": true,
+  "actualSpeechProof": "/private/tmp/meeting-native-pipeline-proof-attempt02/execution-provenance.json",
+  "limits": [
+    "Source isolated from primary LVS; root owns eventual activation.",
+    "No model rerun performed solely to collect source hashes.",
+    "Accepted pipeline receipt source hashes identify end-of-run working TS files, not independent loaded transpiled module bytes.",
+    "Successful bridge was launched before later diagnostic JSON/redirect hardening; current bridge source does not establish loaded-byte hash."
+  ]
+}

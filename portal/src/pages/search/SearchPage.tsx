@@ -40,7 +40,7 @@ async function readJSON<T>(url: string, init?: RequestInit): Promise<T> {
   return response.status===204 ? undefined as T : response.json();
 }
 const PAGE_SIZE = 25;
-const MAIN_TYPES: Array<SearchRecordType | 'all'> = ['all', 'person', 'initiative', 'work', 'decision', 'knowledge'];
+const MAIN_TYPES: Array<SearchRecordType | 'all'> = ['all', 'person', 'initiative', 'work', 'decision', 'knowledge', 'recording'];
 const isPlainClick = (event: MouseEvent) => !(event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0);
 
 /** Search's right pane (the library pane contract): the conversation, and a person as a record tab beside it. */

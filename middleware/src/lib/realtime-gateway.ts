@@ -56,6 +56,7 @@ import { createOrgiqWorkGraphStream, type WorkGraphStreamPublisher } from './wor
 import { tenantCursor } from './gateway-cursor.js';
 import { CallPageRuntime, MemoryCallPageStore, RedisCallPageStore, observeCallPageLifecycle, setCallPageRuntime, type CallPageSnapshot } from './call-pages.js';
 import { CallChatRuntime, huddleMembershipStore, setCallChatRuntime } from './call-chat.js';
+import { CallMediaProofRuntime, setCallMediaProofRuntime } from './call-media-proof.js';
 import { withHuddleChat } from './call-chat-send.js';
 import { withDmPageReferences } from './dm-page-references.js';
 import { withAssessmentPageReferences } from './assessment-page-references.js';
@@ -322,6 +323,7 @@ export function attachRealtimeGateway(server: Server, opts: AttachGatewayOptions
   chatRuntime = new CallChatRuntime({ calls: baseStateStore, state: redis ? new RedisCallChatStateStore(redis) : new MemoryCallChatStateStore(),
     messages: chatBackend.chatStore, router: handle.router, lobbyAllowed: lobbyGuard });
   setCallChatRuntime(chatRuntime);
+  setCallMediaProofRuntime(new CallMediaProofRuntime({ calls: baseStateStore, router: handle.router, lobbyAllowed: lobbyGuard }));
   setNotificationSink(notificationService());
   setDiscussionInbox(handle.services['notification'] as unknown as DiscussionInbox);
   // lib/distillation-realtime.ts pushes the distillation feed here as well as
@@ -378,6 +380,7 @@ export function attachRealtimeGateway(server: Server, opts: AttachGatewayOptions
         setCallPageRuntime(null);
         chatRuntime?.dispose();
         setCallChatRuntime(null);
+        setCallMediaProofRuntime(null);
         setNotificationSink(null);
         setDiscussionInbox(null);
         setDistillationGatewayTarget(null);

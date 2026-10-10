@@ -9,8 +9,9 @@ import { listDesignReviews, getDesignThread, type DesignReview } from './design-
 import { listDecisions, getDecision } from './decisions.js';
 import { listItems, getItem, type DistillationItem } from './distillation.js';
 import { listAssets, getAsset } from './prompt-library.js';
+import { listRecordingSearchRecords, resolveRecordingSearchRecord, type RecordingSearchRecord } from './recording-search.js';
 
-export const SEARCH_TYPES = ['person', 'initiative', 'work', 'decision', 'knowledge', 'asset'] as const;
+export const SEARCH_TYPES = ['person', 'initiative', 'work', 'decision', 'knowledge', 'asset', 'recording'] as const;
 export type SearchRecordType = typeof SEARCH_TYPES[number];
 export interface SearchRef { type: SearchRecordType; id: string }
 export interface SearchRecord extends SearchRef {
@@ -60,7 +61,15 @@ function score(record: SearchRecord, tokens: string[]): number {
   const hits = tokens.filter(t => text.includes(t));
   return hits.length ? hits.length * 2 + tokens.filter(t => title.includes(t)).length * 4 + (tokens.every(t => title.includes(t)) ? 12 : 0) : 0;
 }
-const textOf = (record: SearchRecord): string => `${record.title} ${record.description ?? ''} ${record.subtitle ?? ''}`.toLowerCase();
+const textOf = (record: RecordingSearchRecord): string => `${record.title} ${record.searchText ?? record.description ?? ''} ${record.subtitle ?? ''}`.toLowerCase();
+function publicRecord(record: RecordingSearchRecord, tokens: string[] = []): SearchRecord {
+  const { searchText, ...visible } = record;
+  if (!searchText) return visible;
+  // Match the whole bounded native artifact, but return only a useful excerpt.
+  const firstHit = tokens.map(t => searchText.toLowerCase().indexOf(t)).filter(i => i >= 0).sort((a, b) => a - b)[0] ?? 0;
+  const start = Math.max(0, firstHit - 160);
+  return { ...visible, description: `${start ? '…' : ''}${searchText.slice(start, start + 1200)}${start + 1200 < searchText.length ? '…' : ''}` };
+}
 /** The text half of score(): which part of the record the query hit. */
 function textReason(record: SearchRecord, tokens: string[]): MatchReason | undefined {
   if (!tokens.length) return undefined;
@@ -109,7 +118,7 @@ export async function searchRecords(principal: PrincipalRef, opts: SearchOptions
   async function read<T>(name: string, promise: Promise<T>, fallback: T): Promise<T> {
     try { return await promise; } catch { partial.push(`${name} unavailable`); return fallback; }
   }
-  const [graph, projects, work, decisions, designs, knowledge, assets] = await Promise.all([
+  const [graph, projects, work, decisions, designs, knowledge, assets, recordings] = await Promise.all([
     allowed.people ? read('People', aurora.fetchGraph(), null) : Promise.resolve(null),
     read('Initiatives', listProjects({ limit: 200 }), []),
     read('Work', searchWorkItems({ limit: 200 }), []),
@@ -117,7 +126,9 @@ export async function searchRecords(principal: PrincipalRef, opts: SearchOptions
     read('Approved design decisions', listDesignReviews({ status: 'approved' }), []),
     read('Knowledge', listItems({ limit: 1000 }), { items: [], total: 0, next_cursor: null }),
     read('Agent library', listAssets({ limit: 200 }), { assets: [], total: 0, facets: { kind: {}, tier: {}, role: {} } }),
+    read('Recordings', listRecordingSearchRecords(principal, opts.scope), { records: [], partial: [] }),
   ]);
+  partial.push(...recordings.partial);
   if (graph && graph.peopleTotal > graph.nodes.length) partial.push('People source window is limited');
   if (projects.length >= 200) partial.push('Initiatives source window is limited');
   if (work.length >= 200) partial.push('Work source window is limited');
@@ -127,9 +138,9 @@ export async function searchRecords(principal: PrincipalRef, opts: SearchOptions
   // Initiative prose is scored for every initiative, scoped or not, so widening
   // the scope can never drop a summary match. One batched read, not one per row.
   const summaries = await read('Initiative summaries', listProjectSummaries(projects.map(p => p.id)), new Map<string, string>());
-  const records = new Map<string, SearchRecord>();
+  const records = new Map<string, RecordingSearchRecord>();
   const edges: SearchEdge[] = [];
-  const add = (record: SearchRecord) => records.set(searchKey(record), record);
+  const add = (record: RecordingSearchRecord) => records.set(searchKey(record), record);
   const edge = (source: SearchRef, target: SearchRef, label: string) => {
     const from = searchKey(source), to = searchKey(target);
     edges.push({ id: `${from}:${label}:${to}`, source: from, target: to, label });
@@ -173,6 +184,10 @@ export async function searchRecords(principal: PrincipalRef, opts: SearchOptions
   });
   assets.assets.forEach(a => add({ type: 'asset', id: a.id, title: a.name, description: a.description, status: a.lifecycleStatus, subtitle: `${a.kind} · ${a.usedBy.length ? a.usedBy.join(', ') : 'Not used yet'}`, href: `/iq/library/${enc(a.id)}`, updatedAt: isoOrUndefined(a.updatedAt) }));
   assets.assets.forEach(a => { if (a.designReviewId) edge({ type: 'decision', id: a.designReviewId }, { type: 'asset', id: a.id }, 'ratifies'); });
+  recordings.records.forEach(record => {
+    add(record);
+    record.sourceRefs?.forEach(source => edge(source, record, 'recorded artifacts'));
+  });
   // Only load contribution roles for relevant initiatives, rather than issuing
   // a detail query per catalog row. Owners are already authoritative above.
   const tokens = terms(opts.q ?? '');
@@ -225,19 +240,19 @@ export async function searchRecords(principal: PrincipalRef, opts: SearchOptions
   const byRecent = (a: SearchRecord, b: SearchRecord) => (a.updatedAt && b.updatedAt ? b.updatedAt.localeCompare(a.updatedAt) : a.updatedAt ? -1 : b.updatedAt ? 1 : 0) || byRelevance(a, b);
   const annotate = (r: SearchRecord): SearchRecord => {
     const reason = reasons.get(searchKey(r));
-    if (!tokens.length) return reason ? { ...r, matchReason: reason } : r;
+    if (!tokens.length) return reason ? { ...publicRecord(r), matchReason: reason } : publicRecord(r);
     const text = textOf(r);
-    return { ...r, ...(reason ? { matchReason: reason } : {}), highlights: tokens.filter(t => text.includes(t)) };
+    return { ...publicRecord(r, tokens), ...(reason ? { matchReason: reason } : {}), highlights: tokens.filter(t => text.includes(t)) };
   };
   const matches = available.filter(r => (scores.get(searchKey(r)) ?? 0) > 0).sort(opts.sort === 'recent' ? byRecent : byRelevance).map(annotate);
-  const counts = { all: matches.length, person: 0, initiative: 0, work: 0, decision: 0, knowledge: 0, asset: 0 };
+  const counts = { all: matches.length, person: 0, initiative: 0, work: 0, decision: 0, knowledge: 0, asset: 0, recording: 0 };
   matches.forEach(r => counts[r.type]++);
   const filtered = matches.filter(r => !opts.type || opts.type === 'all' || r.type === opts.type);
   const results = filtered.slice(opts.offset ?? 0, (opts.offset ?? 0) + (opts.limit ?? 50));
   const visible = new Set(results.map(searchKey));
   const neighbors = new Set<string>();
   validEdges.forEach(e => { if (visible.has(e.source)) neighbors.add(e.target); if (visible.has(e.target)) neighbors.add(e.source); });
-  const related = available.filter(r => neighbors.has(searchKey(r)) && !visible.has(searchKey(r))).slice(0, 100).map(r => (scores.get(searchKey(r)) ?? 0) > 0 ? annotate(r) : r);
+  const related = available.filter(r => neighbors.has(searchKey(r)) && !visible.has(searchKey(r))).slice(0, 100).map(r => (scores.get(searchKey(r)) ?? 0) > 0 ? annotate(r) : publicRecord(r));
   related.forEach(r => visible.add(searchKey(r)));
   // `total` is the requested type's match count — the same number its tab
   // badge shows — counted over the records the bounded source reads returned.
@@ -271,6 +286,7 @@ export async function resolveSearchRecords(principal: PrincipalRef, refs: Search
     }
     if (ref.type === 'knowledge') { const k = await getItem(ref.id); return k ? knowledgeRecord(k) : null; }
     if (ref.type === 'asset') { const a = await getAsset(ref.id); return a ? { ...ref, title: a.name, description: a.description, status: a.lifecycleStatus, href: `/iq/library/${enc(a.id)}` } : null; }
+    if (ref.type === 'recording') return resolveRecordingSearchRecord(principal, ref.id);
     return null;
   }));
   return resolved.filter((r): r is NonNullable<typeof r> => r !== null);
@@ -320,6 +336,8 @@ export async function resolveSearchContext(principal: PrincipalRef, refs: Search
         k.cluster_ids.forEach(id => link({ type: 'knowledge', id }, record, 'distilled into'));
         if (k.library_item_id) link(record, { type: 'asset', id: k.library_item_id }, 'derived asset');
       }
+    } else if (record.type === 'recording') {
+      record.sourceRefs?.forEach(source => link(source, record, 'recorded artifacts'));
     }
   }));
   return { records, edges: [...new Map(edges.map(e => [e.id, e])).values()] };
