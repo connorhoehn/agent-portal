@@ -42,7 +42,10 @@ async function gateway(sharedRedis: string | null, nodeId = randomUUID()): Promi
   // other's frames as its own echo, and fan-out silently delivers nothing.
   let redis: GatewayRedis | undefined, router: RedisRealtimeRouter | undefined;
   if (sharedRedis) { redis = new GatewayRedis(sharedRedis); await redis.open(); }
-  for (const userId of ['u-sana', 'u-mira']) await backend.membershipStore.putMember({ channel: GENERAL, userId, role: 'member', addedBy: userId,
+  // A channel row alone cannot authorize a Work-only identity. Include that
+  // row in the negative fixture so the native router's tenant/grant fence is
+  // exercised rather than stopping early at ChatService's membership gate.
+  for (const userId of ['u-sana', 'u-mira', 'u-theo']) await backend.membershipStore.putMember({ channel: GENERAL, userId, role: 'member', addedBy: userId,
     addedAt: new Date().toISOString(), historyFrom: null, removedAt: null });
   const handle = attachRealtimeGateway(server, { redisUrl: null, pingIntervalMs: 0, statsIntervalMs: 0,
     socialChat: backend,
@@ -162,6 +165,7 @@ describe('native peer delivery through attachRealtimeGateway', () => {
       ws.send(JSON.stringify({ service: 'chat', action: 'join', channel: GENERAL }));
       await until(() => frames.some((f) => f.type === 'error' && f.code === 'AUTHZ_CHANNEL_DENIED'));
       expect(frames.some((f) => f.code === 'AUTHZ_CHANNEL_DENIED')).toBe(true);
+      expect(frames.some(frame => frame.action === 'joined' || frame.action === 'history')).toBe(false);
     } finally {
       await a.dispose();
       await new Promise<void>((r) => a.server.close(() => r()));
