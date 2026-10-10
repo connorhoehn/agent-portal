@@ -22,16 +22,15 @@
 import { useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import {
-  Button, Card, CardHeader, Chip, DataTable, EntityCell, Inline, PageSection,
+  Button, Card, CardHeader, Chip, DataTable, Inline, PageSection,
   SegmentedControl, Table, TableHead, TableBody, TableRow, TableTh, TableTd,
-  type DataTableColumn,
+  type DataTableColumn, T,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { GuardrailRuleBadge } from '../../components/observability/GuardrailRuleBadge';
 import { SmartEmptyState } from '../../components/observability/SmartEmptyState';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { firstDegraded, readDegraded } from '../../lib/degraded';
-import { T } from './Text';
 import { RowEmpty } from './ReadState';
 import { WindowPicker, useWindowUrlState } from './WindowPicker';
 import { relativeTime } from '../../lib/relativeTime';
@@ -171,7 +170,14 @@ function GuardrailRulesPage() {
       // The name, because "u-caleb tripped PROMPT_ATTACK five times" is a
       // riddle and "Caleb Turner" is a finding. The id stays underneath: it is
       // what you need to search a log with.
-      render: (a) => <EntityCell label={a.userName ?? a.userId} id={a.userId} />,
+      render: (a) => (
+        <Inline gap="xs" align="center" wrap={false}>
+          <T>{a.userName ?? a.userId}</T>
+          {a.userName && a.userName !== a.userId && (
+            <T size="xs" tone="tertiary" className="font-mono">{a.userId}</T>
+          )}
+        </Inline>
+      ),
     },
     {
       key: 'topRule',
@@ -179,65 +185,65 @@ function GuardrailRulesPage() {
       render: (a) => (
         a.topRule ? (
           <Inline gap="xs" align="center" wrap>
-            <T className="font-mono text-[12px] text-text-primary">{a.topRule}</T>
+            <T className="font-mono">{a.topRule}</T>
             {a.topRuleCategory && (
               <Chip tone={categoryTone(a.topRuleCategory)} size="xs">{a.topRuleCategory}</Chip>
             )}
           </Inline>
-        ) : <T className="text-[11px] text-text-tertiary">—</T>
+        ) : <T size="xs" tone="tertiary">—</T>
       ),
     },
     {
       key: 'interventions',
       header: 'Times',
-      align: 'right',
+      numeric: true,
       sortable: true,
-      render: (a) => <T className="tabular-nums text-[12px]">{a.interventions}</T>,
+      render: (a) => <T tabular>{a.interventions}</T>,
     },
     {
       key: 'blocked',
       header: 'Blocked',
-      align: 'right',
+      numeric: true,
       sortable: true,
       // Blocked and anonymized are different events: one refused the request,
       // the other served it with the sensitive part removed. Summing them into
       // a single "interventions" number hides which happened.
       render: (a) => (
-        <T className={`tabular-nums text-[12px] ${a.blocked > 0 ? 'text-danger' : 'text-text-tertiary'}`}>{a.blocked}</T>
+        <T tabular tone={a.blocked > 0 ? 'inherit' : 'tertiary'} className={a.blocked > 0 ? 'text-danger' : undefined}>{a.blocked}</T>
       ),
     },
     {
       key: 'anonymized',
       header: 'Anonymized',
-      align: 'right',
-      render: (a) => <T className="tabular-nums text-[12px] text-text-secondary">{a.anonymized}</T>,
+      numeric: true,
+      render: (a) => <T tabular tone="secondary">{a.anonymized}</T>,
     },
     {
       key: 'highSeverity',
       header: 'High',
-      align: 'right',
+      numeric: true,
       sortable: true,
       render: (a) => (
         a.highSeverity > 0
           ? <Chip tone="danger" size="xs">{a.highSeverity}</Chip>
-          : <T className="tabular-nums text-[12px] text-text-tertiary">0</T>
+          : <T tabular tone="tertiary">0</T>
       ),
     },
     {
       key: 'uniqueRules',
       header: 'Rules',
-      align: 'right',
+      numeric: true,
       // Distinct rules is the probing signal: one person hitting one rule
       // repeatedly is usually doing their job badly, and one person hitting
       // four different rules is looking for the edges.
-      render: (a) => <T className="tabular-nums text-[12px] text-text-secondary">{a.uniqueRules}</T>,
+      render: (a) => <T tabular tone="secondary">{a.uniqueRules}</T>,
     },
     {
       key: 'lastSeenAt',
       header: 'Last',
       sortable: true,
       render: (a) => (
-        <T className="whitespace-nowrap text-[11.5px] text-text-secondary" title={new Date(a.lastSeenAt).toLocaleString()}>
+        <T size="xs" tone="secondary" className="whitespace-nowrap" title={new Date(a.lastSeenAt).toLocaleString()}>
           {relativeTime(a.lastSeenAt)}
         </T>
       ),
@@ -251,7 +257,7 @@ function GuardrailRulesPage() {
       render: (a) => (
         <Link
           to={`/admin/observability/invocations/search?userId=${encodeURIComponent(a.userId)}`}
-          className="whitespace-nowrap text-[12px] font-medium text-primary no-underline hover:underline"
+          className="text-xs whitespace-nowrap text-primary no-underline hover:underline"
         >
           Their requests →
         </Link>
@@ -301,6 +307,7 @@ function GuardrailRulesPage() {
             />
           ) : (
             <DataTable<ByActorEntry>
+              size="sm"
               data={actors}
               keyField={(a) => a.userId}
               striped
@@ -327,15 +334,15 @@ function GuardrailRulesPage() {
             ]}
           />
         ) : (
-          <Table>
+          <Table size="sm">
             <TableHead>
               <TableRow>
                 <TableTh>Rule</TableTh>
                 <TableTh>Category</TableTh>
-                <TableTh>Total</TableTh>
-                <TableTh>LOW</TableTh>
-                <TableTh>MEDIUM</TableTh>
-                <TableTh>HIGH</TableTh>
+                <TableTh numeric>Total</TableTh>
+                <TableTh numeric>LOW</TableTh>
+                <TableTh numeric>MEDIUM</TableTh>
+                <TableTh numeric>HIGH</TableTh>
                 <TableTh></TableTh>
               </TableRow>
             </TableHead>
@@ -348,22 +355,22 @@ function GuardrailRulesPage() {
                     onClick={() => setSelectedRule(focused ? null : r.ruleName)}
                     className={focused ? 'bg-surface-hover cursor-pointer' : 'cursor-pointer'}
                   >
-                    <TableTd className="text-[12px] font-medium font-mono">{r.ruleName}</TableTd>
+                    <TableTd className="font-mono">{r.ruleName}</TableTd>
                     <TableTd>
                       {r.ruleCategory ? (
                         <Chip tone={categoryTone(r.ruleCategory)} size="xs">
                           {r.ruleCategory}
                         </Chip>
                       ) : (
-                        <T className="text-[11px] text-text-tertiary">—</T>
+                        <T size="xs" tone="tertiary">—</T>
                       )}
                     </TableTd>
-                    <TableTd className="text-[12px] text-text-secondary">{r.count}</TableTd>
+                    <TableTd numeric>{r.count}</TableTd>
                     <SeverityCell n={r.severityCounts.LOW} tone="neutral" />
                     <SeverityCell n={r.severityCounts.MEDIUM} tone="warning" />
                     <SeverityCell n={r.severityCounts.HIGH} tone="danger" />
                     <TableTd className="text-right">
-                      <T className="text-[11px] text-text-tertiary">{focused ? '▾' : '▸'}</T>
+                      <T size="xs" tone="tertiary">{focused ? '▾' : '▸'}</T>
                     </TableTd>
                   </TableRow>
                 );
@@ -396,7 +403,7 @@ function GuardrailRulesPage() {
           {interventions.length === 0 ? (
             <RowEmpty text="No interventions captured for this rule yet." degraded={guardrailsDegraded} />
           ) : (
-            <Table>
+            <Table size="sm">
               <TableHead>
                 <TableRow>
                   <TableTh>Agent</TableTh>
@@ -409,8 +416,8 @@ function GuardrailRulesPage() {
               <TableBody>
                 {interventions.map((i) => (
                   <TableRow key={i.interventionId}>
-                    <TableTd className="text-[12px] font-medium whitespace-nowrap">{i.agentId}</TableTd>
-                    <TableTd className="text-[11px] text-text-tertiary whitespace-nowrap">
+                    <TableTd className="whitespace-nowrap">{i.agentId}</TableTd>
+                    <TableTd className="whitespace-nowrap">
                       {new Date(i.ts).toLocaleString()}
                     </TableTd>
                     <TableTd>
@@ -420,18 +427,16 @@ function GuardrailRulesPage() {
                         severity={i.severity}
                       />
                     </TableTd>
-                    <TableTd className="text-[12px] max-w-[380px] truncate" title={i.matchedText ?? ''}>
-                      {i.matchedText ? (
-                        <T className="font-mono text-[11.5px]">{i.matchedText}</T>
-                      ) : (
-                        <T className="text-[11px] text-text-tertiary">(no excerpt)</T>
-                      )}
+                    <TableTd className="max-w-[380px] truncate" title={i.matchedText ?? ''}>
+                      <T size="xs" tone={i.matchedText ? 'primary' : 'tertiary'} className={i.matchedText ? 'font-mono' : undefined}>
+                        {i.matchedText || '(no excerpt)'}
+                      </T>
                     </TableTd>
                     <TableTd className="text-right whitespace-nowrap">
                       {i.invocationId ? (
                         <Link
                           to={`/admin/observability/invocations/${i.invocationId}`}
-                          className="px-2 py-0.5 text-[12px] text-primary no-underline"
+                          className="text-xs px-2 py-0.5 text-primary no-underline"
                           title="Open invocation detail"
                         >
                           Open
@@ -451,11 +456,11 @@ function GuardrailRulesPage() {
 
 function SeverityCell({ n, tone }: { n: number; tone: Tone }) {
   return (
-    <TableTd>
+    <TableTd numeric>
       {n > 0 ? (
         <Chip tone={tone} size="xs">{n}</Chip>
       ) : (
-        <T className="text-[11px] text-text-tertiary">0</T>
+        <T size="xs" tone="tertiary">0</T>
       )}
     </TableTd>
   );

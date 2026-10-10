@@ -1,0 +1,14 @@
+
+Running 9 tests using 1 worker
+
+  ✓  1 [chromium] › e2e/huddle-chat-real.spec.ts:103:1 › protected persisted huddle messages reach peers live, replay, and retain exact references across navigation (5.7s)
+  ✓  2 [chromium] › e2e/huddle-chat-real.spec.ts:161:1 › unjoined and outsider users cannot read or post, and delivery retries are persisted without duplicates (6.3s)
+  ✓  3 [chromium] › e2e/huddle-chat-real.spec.ts:193:1 › explicit To keeps Discussion separate from the huddle and removing draft context leaves the shared pin intact (4.2s)
+  ✓  4 [chromium] › e2e/huddle-chat-real.spec.ts:230:3 › a real persisted acknowledgement clears the locked composer draft only after confirmation (4.0s)
+  ✓  5 [chromium] › e2e/huddle-chat-real.spec.ts:230:3 › a real persisted acknowledgement keeps the composer draft when its recipient changes (4.0s)
+  ✓  6 [chromium] › e2e/huddle-chat-real.spec.ts:274:1 › a real delayed panel acknowledgement preserves text typed for the next huddle message (3.4s)
+  ✓  7 [chromium] › e2e/huddle-chat-real.spec.ts:296:1 › an explicitly selected huddle that ends retains its draft instead of retargeting Discussion (3.6s)
+  ✓  8 [chromium] › e2e/huddle-page-sharing.spec.ts:63:1 › a pinned page reaches joined peers, survives shell navigation, and changes only through explicit actions (4.8s)
+  ✓  9 [chromium] › e2e/huddle-page-sharing.spec.ts:113:1 › rejected replacement retains the pin and concurrent writers cannot overwrite the same revision (3.5s)
+
+  9 passed (40.3s)

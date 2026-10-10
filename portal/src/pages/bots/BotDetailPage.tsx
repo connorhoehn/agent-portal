@@ -301,7 +301,7 @@ export default function BotDetailPage() {
             source="Bots are read from Aurora"
             onRetry={refreshBot}
           />
-          <Link to="/admin/bots" className="text-[12px] text-primary no-underline hover:underline">← Bots</Link>
+          <Link to="/admin/bots" className="text-xs text-primary no-underline hover:underline">← Bots</Link>
         </Stack>
       </PageSection>
     );
@@ -326,7 +326,7 @@ export default function BotDetailPage() {
       <Card padding="sm" className="mb-4">
         <Inline gap="sm" wrap align="center" justify="between">
           <Inline gap="sm" wrap align="center">
-            <Link to="/admin/bots" className="text-[12px] text-primary no-underline hover:underline shrink-0">← Bots</Link>
+            <Link to="/admin/bots" className="text-xs text-primary no-underline hover:underline shrink-0">← Bots</Link>
             <Chip tone={TEMPLATE_TONE[bot.template]} size="xs">{bot.template}</Chip>
             {(() => {
               const c = botStatusChip(bot);
@@ -420,7 +420,7 @@ export default function BotDetailPage() {
           ) : runs.length === 0 ? (
             <MetaLine size="sm" tone="tertiary" items={['This bot has never fired. Use ▶ Run now, or wait for its trigger.']} />
           ) : (
-            <Table>
+            <Table size="sm">
               <TableHead>
                 <TableRow>
                   <TableTh>Trigger</TableTh>
@@ -446,26 +446,26 @@ export default function BotDetailPage() {
                   );
                   return (
                   <TableRow key={r.id}>
-                    <TableTd className="text-[12px] text-text-secondary">{r.trigger}</TableTd>
+                    <TableTd className="text-text-secondary">{r.trigger}</TableTd>
                     <TableTd>
                       <Chip tone={runStateChip(r.status).tone} size="xs" dot={r.status === 'running' ? 'pulse' : undefined}>
                         {runStateChip(r.status).label}
                       </Chip>
                     </TableTd>
-                    <TableTd className="text-[12px] whitespace-nowrap">
+                    <TableTd className="whitespace-nowrap">
                       <CostVsEstimate costUsd={r.costUsd} estimate={runEstimate(r)} />
                     </TableTd>
                     <TableTd
-                      className="text-[12px] text-text-secondary whitespace-nowrap"
+                      className="text-xs text-text-secondary whitespace-nowrap"
                       title={dur.title}
                     >
                       {dur.text}
                     </TableTd>
-                    <TableTd className="text-[12px] text-text-tertiary whitespace-nowrap" title={new Date(r.startedAt).toLocaleString()}>
+                    <TableTd className="text-text-tertiary whitespace-nowrap" title={new Date(r.startedAt).toLocaleString()}>
                       {relativeTime(r.startedAt)}
                     </TableTd>
                     <TableTd>
-                      <Inline gap="sm" wrap className="text-[12px]" title={o.summary}>
+                      <Inline gap="sm" wrap={false} title={o.summary}>
                         {o.reason && (
                           r.status === 'failed'
                             ? <Chip tone="danger" size="xs">{o.reason}</Chip>
@@ -488,7 +488,7 @@ export default function BotDetailPage() {
                         {canLinkRun && (
                           <Link
                             to={`/admin/projects?project=${bot.agentProjectId}&run=${r.runId}`}
-                            className="text-text-secondary no-underline hover:text-primary hover:underline font-mono text-[11px]"
+                            className="text-xs text-text-secondary no-underline hover:text-primary hover:underline font-mono"
                           >
                             run {r.runId!.slice(0, 8)}
                           </Link>
@@ -497,7 +497,7 @@ export default function BotDetailPage() {
                           <Link
                             to={`/iq/work/${encodeURIComponent(r.jobId)}`}
                             title="Open the queued job this firing produced"
-                            className="text-text-secondary no-underline hover:text-primary hover:underline font-mono text-[11px]"
+                            className="text-xs text-text-secondary no-underline hover:text-primary hover:underline font-mono"
                           >
                             job →
                           </Link>
@@ -589,7 +589,7 @@ export default function BotDetailPage() {
               </Inline>
             </Stack>
           ) : (
-            <Stack gap="none" className="text-[12.5px] text-text-primary leading-relaxed whitespace-pre-wrap">
+            <Stack gap="none" className="text-xs text-text-primary leading-relaxed whitespace-pre-wrap">
               {bot.prompt}
             </Stack>
           )}
@@ -650,7 +650,7 @@ export default function BotDetailPage() {
               </Inline>
             </Stack>
           ) : (
-            <Table>
+            <Table size="sm">
               <TableBody>
                 <TableRow>
                   <TableTd className="text-text-tertiary w-32">Model</TableTd>

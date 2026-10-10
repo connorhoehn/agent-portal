@@ -11,6 +11,8 @@ session and media all worked**, including video through the SFU, both ways.
 |---|---|---|
 | middleware | `:3001`, `npm run dev:mock` (already running) | `REALTIME_JWT_SECRET` unset → dev secret; `PLATFORM_API_URL` unset |
 | websocket-gateway | `social-gateway` on **`:28080`** | `SOCIAL_GATEWAY_PORT=28080`: realtime-examples' Tilt stack held 18080 |
+
+Known limit (2026-10-06): the `orgiq-media-validation-platform-api` container exited 134 (JavaScript heap out of memory) after repeated two-browser media runs; `docker start` restores it and `/health` returns 200 within seconds. Check it first when the forwarded :23002 answers with ECONNRESET.
 | platform-api | `social-platform-api` on **`:23001`** | `SOCIAL_PLATFORM_API_PORT=23001`, same reason |
 | SFU | the **host** SFU on `:3901` (Tilt's `lvs-sfu`, `node src/server.js`) | Tilt held 3901, which cannot move, so `social-sfu` was not started. `SOCIAL_VIDEO_API_URL=http://host.docker.internal:3901` — the guide's host-SFU variant, and Tilt's own arrangement |
 | portal | a second Vite on **`:5184`** | `VITE_GATEWAY_URL=http://localhost:28080 VITE_PLATFORM_API_URL=http://localhost:23001 VITE_VIDEO_ENDPOINT=http://localhost:3901`; `portal/.env.local` untouched |
@@ -228,3 +230,55 @@ transport. Auth was fine (the same service-token lines). Moving the same code
 to the host fixed it, which is the colima UDP-forwarding risk the local-stack
 guide describes. The first host run also failed once with "Execution context
 was destroyed" while probing video, then passed twice; not reproduced.
+
+## Tilt stack
+
+`tilt up` can carry real huddle media on the local stack. The root `Tiltfile`
+adds a `platform-api-forward` resource (label `media`): an SSH forward into the
+Colima VM for the media-validation platform-api (`127.0.0.1:23002`) and its SFU
+Redis (`16480`). It copies the capacity forwarder's key and options but is a
+separate process; never touch that forwarder or the default colima socket.
+
+The middleware resource reads the gitignored `middleware/.env.tilt.local`
+(a JSON object, mode 600) and adds it to its environment. Keys:
+`REALTIME_JWT_SECRET` (must equal the platform-api container's value; copy it
+from `docker inspect` on the capacity socket, never print or commit it),
+`REALTIME_PLATFORM_PUBLIC_URL=http://127.0.0.1:23002`,
+`REALTIME_VIDEO_PUBLIC_URL=http://127.0.0.1:3902`, and
+`SOCIAL_PLATFORM_INTERNAL_URL` / `DOCUMENT_PLATFORM_INTERNAL_URL`. Without the
+file the stack runs as before, with no media. The native SFU (`:3902`, host
+process) must already be running; Tilt does not manage it.
+
+Check: `GET /api/session/realtime-token` returns `platformApiUrl` and
+`videoUrl`. Run from `portal/`:
+`REAL_MEDIA_ACCEPTANCE=1 PARITY_BASE_URL=http://127.0.0.1:5183 npx playwright test e2e/huddle-media-real.spec.ts --project chromium`
+
+### Document canvas on the Tilt stack (2026-10-06)
+
+The assessment document canvas needs three things the media-validation
+platform-api (`:23002`) does not provide: the document **gateway** socket
+(`ws://…:28080`, what `connectDocumentCanvas` seeds and the browser dials),
+the labelled **social** platform-api (`:23001`, the comments/workflows backend
+that trusts the same grant key), and the `DOCUMENT_GRANT_*` signing settings.
+Without them every canvas, comments and presence call answers 503.
+
+- Tiltfile: a `social-docs-forward` resource (label `media`) forwards `28080`
+  and `23001` from the Colima VM, same key/options as `platform-api-forward`.
+- `middleware/.env.tilt.local` (JSON, mode 600, never print): add
+  `DOCUMENT_GRANT_ISSUER`, `DOCUMENT_GRANT_KEY_ID`, `DOCUMENT_GRANT_PRIVATE_KEY`
+  and `DOCUMENT_POLICY_SECRET` from `.scratch/social-documents/settings.json`
+  (the same file the containers were built from), `DOCUMENT_GATEWAY_PUBLIC_URL`
+  and `DOCUMENT_GATEWAY_INTERNAL_URL=ws://127.0.0.1:28080`, and
+  `DOCUMENT_PLATFORM_INTERNAL_URL=http://127.0.0.1:23001`. Leave
+  `SOCIAL_PLATFORM_INTERNAL_URL` and `REALTIME_PLATFORM_PUBLIC_URL` on `:23002`
+  so huddle media is untouched.
+- The `orgiq-social-*` containers showed "unhealthy" because their
+  `orgiq-social-redis` and `orgiq-social-dynamodb` had exited (255) when the VM
+  restarted; DynamoDB Local is in-memory so its tables were gone. Recovery, on
+  the capacity socket only: `docker start orgiq-social-redis
+  orgiq-social-dynamodb`, `docker start -a orgiq-social-dynamodb-init`
+  (recreates the tables), then `docker restart orgiq-social-gateway
+  orgiq-social-platform-api` (the gateway returned `SERVICE_INTERNAL_ERROR` on
+  seed until restarted). Both then report healthy.
+- Check: as u-farah in the assessment tenant, `POST /api/assessment/knowledge/canvas`
+  with `{"id":"page:100002"}` returns a `gatewayUrl` and token, not 503.

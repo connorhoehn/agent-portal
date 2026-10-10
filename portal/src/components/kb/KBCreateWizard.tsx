@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import {
-  Button, Card, CodeBlock, FormField, Inline, InlineAlert, MetaLine, Modal,
-  SectionLabel, Stack, Textarea,
+  T,
+  Button, Card, CodeBlock, FormField, Inline, InlineAlert, Input, MetaLine, Modal,
+  SectionLabel, Select, Stack, Textarea,
 } from '@connorhoehnslalom/ui-components/shared';
 import type { KbRegistryEntry } from '../../pages/admin/KBRegistryPage.js';
 import { ProvisioningProgress } from './ProvisioningProgress.js';
@@ -106,7 +107,7 @@ function Step1({
     <div>
       <FormField label="Name" required error={nameErr} hint={nameHint}>
         {({ labelId: _l, ...p }) => (
-          <input
+          <Input
             {...p}
             value={state.name}
             onChange={handleNameChange}
@@ -119,7 +120,7 @@ function Step1({
 
       <FormField label="Slug" required error={slugErr} hint={slugHint}>
         {({ labelId: _l, ...p }) => (
-          <input
+          <Input
             {...p}
             value={state.slug}
             onChange={handleSlugChange}
@@ -132,29 +133,31 @@ function Step1({
 
       <FormField label="Tenant">
         {({ labelId: _l, ...p }) => (
-          <select
+          <Select
             {...p}
             value={state.tenant}
             onChange={(e) => onChange({ tenant: e.target.value as Step1State['tenant'] })}
-          >
-            <option value="orgiq">orgiq</option>
-          </select>
+            options={[
+              { value: "orgiq", label: "orgiq" },
+            ]}
+          />
         )}
       </FormField>
 
       <FormField label="Purpose">
         {({ labelId: _l, ...p }) => (
-          <select
+          <Select
             {...p}
             value={state.purpose}
             onChange={(e) => onChange({ purpose: e.target.value as Step1State['purpose'] })}
-          >
-            <option value="default">default</option>
-            <option value="articles">articles</option>
-            <option value="hr">hr</option>
-            <option value="engineering">engineering</option>
-            <option value="custom">custom</option>
-          </select>
+            options={[
+              { value: "default", label: "default" },
+              { value: "articles", label: "articles" },
+              { value: "hr", label: "hr" },
+              { value: "engineering", label: "engineering" },
+              { value: "custom", label: "custom" },
+            ]}
+          />
         )}
       </FormField>
 
@@ -237,7 +240,7 @@ function Step2({
   return (
     <div>
       {/* Resource preview panel */}
-      <Card className="mb-4.5 px-3.5 py-2.5 bg-surface-panel text-[12px]">
+      <Card className="text-xs mb-4.5 px-3.5 py-2.5 bg-surface-panel">
         <SectionLabel className="mb-1.5">Resources that will be created</SectionLabel>
         {/* Label/value pairs. The two-column CSS grid this replaces kept the
             value column flexible; Inline rows do the same and keep each pair
@@ -245,15 +248,15 @@ function Step2({
         <Stack gap="xs">
           <Inline gap="sm" align="baseline" wrap={false}>
             <MetaLine tone="secondary" className="shrink-0 w-32" items={['Bedrock KB name']} />
-            <Inline as="code" gap="none" className="font-mono text-text-primary text-[12px] break-all">{bedrockName}</Inline>
+            <Inline as="code" gap="none" className="font-mono break-all"><T as="span" size="xs" tone="primary">{bedrockName}</T></Inline>
           </Inline>
           <Inline gap="sm" align="baseline" wrap={false}>
             <MetaLine tone="secondary" className="shrink-0 w-32" items={['Aurora table']} />
-            <Inline as="code" gap="none" className="font-mono text-text-primary text-[12px] break-all">{auroraTable}</Inline>
+            <Inline as="code" gap="none" className="font-mono break-all"><T as="span" size="xs" tone="primary">{auroraTable}</T></Inline>
           </Inline>
           <Inline gap="sm" align="baseline" wrap={false}>
             <MetaLine tone="secondary" className="shrink-0 w-32" items={['S3 prefix']} />
-            <Inline as="code" gap="none" className="font-mono text-text-primary text-[12px] break-all">{state.s3Prefix || '—'}</Inline>
+            <Inline as="code" gap="none" className="font-mono break-all"><T as="span" size="xs" tone="primary">{state.s3Prefix || '—'}</T></Inline>
           </Inline>
         </Stack>
       </Card>
@@ -265,7 +268,7 @@ function Step2({
         hint='Must end with "/". Documents synced here will be ingested into this KB.'
       >
         {({ labelId: _l, ...p }) => (
-          <input
+          <Input
             {...p}
             value={state.s3Prefix}
             onChange={(e) => onChange({ s3Prefix: e.target.value, s3PrefixTouched: true })}
@@ -277,18 +280,19 @@ function Step2({
 
       <FormField label="Chunking Strategy">
         {({ labelId: _l, ...p }) => (
-          <select
+          <Select
             {...p}
             value={state.chunkingStrategy}
             onChange={(e) =>
               onChange({ chunkingStrategy: e.target.value as Step2State['chunkingStrategy'] })
             }
-          >
-            <option value="SEMANTIC">SEMANTIC — context-aware variable chunks</option>
-            <option value="FIXED">FIXED — fixed-size chunks</option>
-            <option value="HIERARCHICAL">HIERARCHICAL — parent + child chunks</option>
-            <option value="NONE">NONE — no chunking (whole documents)</option>
-          </select>
+            options={[
+              { value: "SEMANTIC", label: "SEMANTIC — context-aware variable chunks" },
+              { value: "FIXED", label: "FIXED — fixed-size chunks" },
+              { value: "HIERARCHICAL", label: "HIERARCHICAL — parent + child chunks" },
+              { value: "NONE", label: "NONE — no chunking (whole documents)" },
+            ]}
+          />
         )}
       </FormField>
 
@@ -299,7 +303,7 @@ function Step2({
           hint="64–2048. SEMANTIC: target size (actual may vary). FIXED: exact size."
         >
           {({ labelId: _l, ...p }) => (
-            <input
+            <Input
               {...p}
               type="number"
               value={state.maxTokens}
@@ -337,7 +341,7 @@ function Step3({
     <div>
       <Card className="px-3.5 py-2.5 mb-5 bg-surface-panel">
         <MetaLine tone="secondary" className="mb-0.5" items={['Creating']} />
-        <Inline as="div" gap="none" className="font-semibold text-[14px] text-text-primary">{kb.name}</Inline>
+        <T as="div" size="sm" weight="semibold" tone="primary">{kb.name}</T>
         <MetaLine size="xs" className="mt-0.5 font-mono" items={[`${kb.slug} · ${kb.tenant}`]} />
       </Card>
 

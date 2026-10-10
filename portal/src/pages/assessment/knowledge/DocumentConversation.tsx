@@ -11,37 +11,39 @@
 // hands the dock and the panel into both frames. One `useChat` join per page:
 // the dock and the panel read and write the same thread.
 //
-// The thread is the library `ChatPanel` fed through the portal's own message
-// adapter, not `WrappedChatPanel`: the library's realtime-modules
-// integrations entry imports the canonical `@connorhoehn/realtime-modules`
-// scope, which this portal keys as `@connorhoehnslalom/realtime-modules`, so
-// importing it fails at runtime ("does not provide an export named
-// 'useLVSLiveHls'") — and validate-component-discipline.sh bans the import.
-// Queued in docs/ui-components-queue.md.
+// The dock is the library `ConversationComposer` (Agent → the drafter's
+// proposed edit, Chat → this conversation); the thread is ConversationThread
+// over the library `WrappedChatPanel` (the scope-agnostic
+// `integrations/realtime` entry).
 
+import { offlineReason } from '../../../components/chat/chatConnection';
 import { useState } from 'react';
-import { ContextComposer } from '@connorhoehnslalom/ui-components/social/rich-composer';
-import { WrappedChatPanel } from '@connorhoehnslalom/ui-components/integrations/realtime';
 import { InlineAlert, Stack } from '@connorhoehnslalom/ui-components/shared';
-import { useChat, useGatewayOptional } from '@connorhoehnslalom/realtime-modules/client';
 import { DocumentContextPanel, useDocumentContext } from './ExplorerFrame';
 import { conversationChannelForDoc } from './knowledgeFormat';
 import { useDocumentAgentEdit, type DocumentAgentEdit } from './useDocumentAgentEdit';
+import { routeDockSend } from './documentComposerRoute';
+import { ConversationThread, useConversation } from '../../../components/chat/ConversationThread';
+import { ConversationComposer } from '../../../lib/conversationComposer';
+import { useCallBlock, useCallHost } from '../../../lib/conversationCall';
+import { lobbyPrefix } from '../../../lib/conversationCallModel';
+import { documentCallLobby } from './documentCommentsModel';
 
-const OFFLINE_REASON = 'The realtime gateway is not connected, so this document’s conversation is unavailable.';
+const OFFLINE_REASON = offlineReason('this document’s conversation');
 
-export function useDocumentConversation(docId: string, displayName: string) {
-  const channel = conversationChannelForDoc(docId);
-  const chat = useChat(channel);
-  const gateway = useGatewayOptional();
-  const connected = gateway?.connectionState === 'connected';
+/**
+ * The page's ONE conversation (`useConversation` on the document's channel):
+ * the dock under the page and the Chat panel beside it share it. The doc family
+ * publishes under ViewAssessment, the authority that already lets this reader
+ * open the page, so every reader may post.
+ */
+export function useDocumentConversation(docId: string) {
+  const conversation = useConversation(conversationChannelForDoc(docId), { maySend: true });
   const [error, setError] = useState<string | null>(null);
-  const send = (text: string): boolean => {
-    if (!connected || !text.trim()) return false;
+  /** A Chat send: the composer has landed the files and stamped the quote. */
+  const send = (text: string, metadata: Record<string, unknown>): boolean => {
     try {
-      // The gateway does not invent a display name; without it the message
-      // reaches everyone else nameless (WrappedChatPanel's own rule).
-      chat.sendMessage(text.trim(), { displayName });
+      conversation.chat.sendMessage(text, metadata);
       setError(null);
       return true;
     } catch (cause) {
@@ -49,7 +51,7 @@ export function useDocumentConversation(docId: string, displayName: string) {
       return false;
     }
   };
-  return { channel, chat, connected, displayName, send, error, clearError: () => setError(null) };
+  return { ...conversation, send, error, clearError: () => setError(null) };
 }
 
 export type DocumentConversation = ReturnType<typeof useDocumentConversation>;
@@ -68,11 +70,10 @@ export type DocumentConversation = ReturnType<typeof useDocumentConversation>;
  * the editor frame. Without one the dock runs its own and, having no frame
  * slot to reach, carries the strip above its composer row.
  *
- * `agentEditable` is whether the ROLE may edit this document. A reader (the
- * assessor) used to get Agent mode by default, a real drafter run, and an
- * Apply that refused only after the click (assessment journeys, defect #17);
- * for a role that cannot edit, Agent mode is offered-but-off with the reason,
- * the dock opens in Chat, and an agent send is refused before it leaves.
+ * `agentEditable` is whether the ROLE may edit this document. For a role that
+ * cannot edit, Agent mode is offered-but-off with the reason, the dock opens
+ * in Chat, and an agent send is refused before it leaves (assessment
+ * journeys, defect #17).
  */
 export function DocumentComposerDock(props: { docId: string; title: string; conversation: DocumentConversation; agentEdit?: DocumentAgentEdit; agentEditable: boolean }) {
   return props.agentEdit
@@ -90,62 +91,72 @@ export const READER_AGENT_REASON = 'Your current role can read this document; as
 function ComposerDock({ docId, title, conversation, agentEdit, stripInDock, agentEditable }: { docId: string; title: string; conversation: DocumentConversation; agentEdit: DocumentAgentEdit; stripInDock: boolean; agentEditable: boolean }) {
   const context = useDocumentContext();
   const [chip, setChip] = useState(true);
+  // This document's huddle (useDocumentCall's lobby): the call bar and tiles above the input,
+  // naming the document as its chip (the mockup's "Auth architecture review · Auth architecture").
+  const tenant = useCallHost()?.tenant ?? null;
+  const { block } = useCallBlock(tenant ? documentCallLobby(lobbyPrefix(tenant), conversation.channel) : null, { documents: [{ id: docId, title }] });
   const error = agentEdit.error ?? conversation.error;
   const clearError = () => { agentEdit.clearError(); conversation.clearError(); };
   const above = (error || (stripInDock && agentEdit.strip)) ? <Stack gap="xs">
     {error && <InlineAlert tone="error" onDismiss={clearError} data-testid="page-composer-error">{error}</InlineAlert>}
     {stripInDock && agentEdit.strip}
   </Stack> : null;
-  return <ContextComposer
+  return <ConversationComposer
+    channel={conversation.channel}
+    chat={conversation.chat}
     context={{ kind: 'document', id: docId, title }}
+    // The role decides Agent (a reader's is off with the reason); the doc family lets every reader post.
+    capabilities={{ maySend: conversation.maySend, mayAttach: true, agent: { allowed: agentEditable, reason: READER_AGENT_REASON } }}
+    offModes={{ terminal: 'Terminal sends lines to a running agent loop, and none is attached to a document.' }}
+    offline={conversation.connected ? null : OFFLINE_REASON}
+    identity={{ userId: conversation.userId, displayName: conversation.displayName }}
     defaultMode={agentEditable ? 'agent' : 'chat'}
-    disabledModes={agentEditable ? ['terminal'] : ['terminal', 'agent']}
-    modeUnavailableReasons={{
-      terminal: 'Terminal sends lines to a running agent loop, and none is attached to a document.',
-      ...(agentEditable ? {} : { agent: READER_AGENT_REASON }),
-      ...(conversation.connected ? {} : { chat: OFFLINE_REASON }),
-    }}
-    chatAvailable={conversation.connected}
+    // A quote-reply started in the thread beside the page travels with a Chat send.
+    reply={conversation.quote}
+    // Agent → the drafter (a reader's Agent is off); Chat → this conversation, and the thread opens beside the page.
+    onAgent={text => routeDockSend('agent', { agentEditable, agent: () => agentEdit.send(text), chat: () => false })}
+    recipients={[{ id: 'discussion', label: title, channel: conversation.channel, attachments: true,
+      send: out => routeDockSend('chat', { agentEditable, agent: () => false, chat: () => {
+        const sent = conversation.send(out.text, out.metadata);
+        if (sent) context?.open('chat');
+        return sent;
+      } }) }]}
+    // One input per conversation: while this dock is mounted it owns the conversation's input,
+    // so the Chat panel beside the page shows the thread only and its Write/Reply land here.
+    claim={{ label: 'the document composer', replies: true }}
+    answersFocus
+    callBlock={block}
     modePlaceholders={{
       agent: 'Ask the drafter to edit this page — select text to rewrite it…',
       chat: 'Message this document’s conversation…',
     }}
     contextChip={chip}
     onRemoveContext={() => setChip(false)}
-    allowAttachments={false}
     draftKey={`assessment-document:${docId}`}
     working={agentEdit.working}
     task={agentEdit.task}
     {...(above ? { above } : {})}
-    onSend={(message, { mode }) => {
-      if (mode === 'agent') return agentEditable ? agentEdit.send(message.text) : false;
-      if (mode !== 'chat') return false;
-      const sent = conversation.send(message.text);
-      // Show where it went: the thread opens beside the page.
-      if (sent) context?.open('chat');
-      return sent;
-    }}
     label="Document conversation composer"
     data-testid="page-composer-dock"
     composerTestId="page-composer" />;
 }
 
-/** The thread, in the context column's Chat panel. */
-export function DocumentChatPanel({ title, userId, conversation }: { title: string; userId: string; conversation: DocumentConversation }) {
-  // The library's own hook-bound wrapper (ui-components 2.407.20,
-  // `integrations/realtime` — the scope-agnostic entry): it takes the
-  // `useChat` result and adapts the thread itself, the way the initiative
-  // and search pages do, so this page composes no message adapter of its own.
+/**
+ * The thread, in the context column's Chat panel: ConversationThread
+ * (`/summarize`, shared pins, attachments) over the page's own conversation.
+ * The doc family publishes under ViewAssessment, so every reader may pin. While
+ * the dock is mounted (the Editor tab) it owns this conversation's input: the
+ * panel is then the thread only, and Write/Reply put the caret in the dock.
+ */
+export function DocumentChatPanel({ title, conversation }: { title: string; conversation: DocumentConversation }) {
   return <DocumentContextPanel id="chat">
     <Stack gap="sm" className="min-h-0 flex-1" data-testid="document-chat-panel">
       {!conversation.connected && <InlineAlert tone="warning">{OFFLINE_REASON}</InlineAlert>}
-      <WrappedChatPanel key={conversation.channel} chat={conversation.chat} currentUserId={userId} displayName={conversation.displayName}
-        fill showHeader={false} disabled={!conversation.connected}
-        composer={<ContextComposer context={{ kind: 'conversation', id: conversation.channel, title }} modes={['chat']}
-          chatAvailable={conversation.connected} {...(conversation.connected ? {} : { modeUnavailableReasons: { chat: OFFLINE_REASON } })}
-          modePlaceholders={{ chat: 'Write a message…' }} allowAttachments={false} draftKey={`${conversation.channel}:panel`}
-          onSend={message => conversation.send(message.text)}
-          data-testid="document-chat-composer-dock" composerTestId="document-chat-composer" />} />
+      <ConversationThread conversation={conversation} title={title} pins={{ canPin: true }} attachments reactions
+        placeholder="Write a message…"
+        composer={{ draftKey: `${conversation.channel}:panel`,
+          recipients: [{ id: 'discussion', label: title, channel: conversation.channel, attachments: true, send: out => conversation.send(out.text, out.metadata) }] }}
+        data-testid="document-chat" />
     </Stack>
   </DocumentContextPanel>;
 }

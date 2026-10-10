@@ -15,6 +15,13 @@
 jest.mock('../../config.js', () => ({
   config: { region: 'us-east-1', aurora: {}, auth: { sessionSigningSecretArn: '' }, cognito: { portalOrigin: '' }, mock: { aurora: true } },
 }));
+// Same declared seed capabilities; the Jest CJS runtime cannot import the
+// registry's import.meta URL, while production uses the real Cedar registry.
+jest.mock('../role-registry.js', () => ({ roleRegistry: () => [
+  { id: 'participant', tenant: 'social', capabilities: ['ViewSocial', 'PostMessage', 'StartCall'] },
+  { id: 'moderator', tenant: 'social', capabilities: ['ViewSocial', 'PostMessage', 'StartCall'] },
+  { id: 'community-admin', tenant: 'social', capabilities: ['ViewSocial', 'PostMessage', 'StartCall'] },
+] }));
 
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -24,6 +31,9 @@ import { socialChat } from '../social-chat.js';
 import { signRealtimeToken, realtimeClaims } from '../realtime-token.js';
 import type { Session } from '../session.js';
 import { socialChannelMembersFixture, socialChannelMessagesFixture } from '../../mock/social-channels.js';
+import { socialRoomsFixture, socialTeamMembersFixture, socialTeamsFixture } from '../../mock/social-platform.js';
+import { addTeamMember, createTeam } from '../../providers/social-platform.js';
+import { getUser } from '../../providers/identity.js';
 
 const SECRET = 'test-realtime-secret';
 const GENERAL = 'social:ch:general';
@@ -54,12 +64,16 @@ afterAll(async () => {
   await new Promise<void>((resolve) => server.close(() => resolve()));
   socialChannelMembersFixture.reset();
   socialChannelMessagesFixture.reset();
+  socialRoomsFixture.reset();
+  socialTeamMembersFixture.reset();
+  socialTeamsFixture.reset();
   if (prevSecret === undefined) delete process.env['REALTIME_JWT_SECRET'];
   else process.env['REALTIME_JWT_SECRET'] = prevSecret;
 });
 
 async function connectAs(sub: string, name: string, tenant: string): Promise<Open> {
-  const session = { sub, name, role: 'participant', tenant, grants: { [tenant]: ['participant'] }, iat: Math.floor(Date.now() / 1000) } as Session;
+  const user = await getUser(sub, { authoritative: true });
+  const session = { sub, name, role: user?.grants[tenant]?.[0], tenant, grants: user?.grants ?? {}, epoch: user?.epoch ?? 0, iat: Math.floor(Date.now() / 1000) } as Session;
   const { token } = await signRealtimeToken(realtimeClaims(session), SECRET);
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(`ws://127.0.0.1:${port}${REALTIME_GATEWAY_PATH}`, ['bearer-token-v1', token]);
@@ -96,7 +110,9 @@ const newItems = (o: Open) => o.frames.filter((f) => f.type === 'notification:ne
 describe('channelGuard on social:ch: names', () => {
   it('admits a member, refuses a non-member, and refuses another tenant before membership is asked', () => {
     expect(channelGuard({ userId: 'u-sana', org: 'social' }, GENERAL)).toBe(true);
-    expect(channelGuard({ userId: 'u-sana', org: 'social' }, `chat:${GENERAL}`)).toBe(true);
+    // baseChannel (0.107) unwraps `chat:` only around a DM lobby; the chat
+    // service uses the bare name, so a `chat:`-prefixed channel name fails closed.
+    expect(channelGuard({ userId: 'u-sana', org: 'social' }, `chat:${GENERAL}`)).toBe(false);
     expect(channelGuard({ userId: 'u-sana', org: 'social' }, DESIGN)).toBe(false);
     expect(channelGuard({ userId: 'u-sana', org: 'social' }, `presence:${DESIGN}`)).toBe(false);
     // u-theo is a member of #general, but a token standing in orgiq is not in social.
@@ -119,7 +135,7 @@ describe('channels over the socket', () => {
   beforeEach(async () => {
     mira = await connectAs('u-mira', 'Mira Okafor', 'social');
     sana = await connectAs('u-sana', 'Sana Iqbal', 'social');
-    theo = await connectAs('u-theo', 'Theo Chang', 'orgiq');
+    theo = await connectAs('u-hr', 'Priya Desai', 'orgiq');
   });
   afterEach(() => { for (const o of [mira, sana, theo]) o.ws.close(); });
 
@@ -132,6 +148,69 @@ describe('channels over the socket', () => {
     expect(chatMessages(sana, GENERAL).find((m) => m.message === 'hello from the test')).toMatchObject({ userId: 'u-mira' });
     expect(denied(mira)).toEqual([]);
     expect(socialChannelMessagesFixture.rows().some((m) => m.channel === GENERAL && m.message === 'hello from the test')).toBe(true);
+  });
+
+  it('edit and delete are author-only at the gateway; an edit keeps the message id and its references', async () => {
+    send(sana, { service: 'chat', action: 'join', channel: GENERAL });
+    send(mira, { service: 'chat', action: 'join', channel: GENERAL });
+    await settle();
+    const ref = { kind: 'work-item', id: 'wi-auth' };
+    send(mira, { service: 'chat', action: 'send', channel: GENERAL, message: 'original words', metadata: { pageReference: ref } });
+    await until(() => chatMessages(sana, GENERAL).some((m) => m.message === 'original words'));
+    const id = (chatMessages(sana, GENERAL).find((m) => m.message === 'original words') as unknown as { id: string }).id;
+    const errors = (o: Open) => o.frames.filter((f) => f.type === 'error').length;
+    const updated = (o: Open) => o.frames.filter((f) => f.type === 'chat' && f.action === 'messageUpdated');
+    const deleted = (o: Open) => o.frames.filter((f) => f.type === 'chat' && f.action === 'messageDeleted');
+
+    // A non-author's edit and delete are refused and reach nobody.
+    const before = errors(sana);
+    send(sana, { service: 'chat', action: 'edit', channel: GENERAL, messageId: id, message: 'forged' });
+    send(sana, { service: 'chat', action: 'delete', channel: GENERAL, messageId: id });
+    await until(() => errors(sana) >= before + 2);
+    expect(updated(mira)).toEqual([]);
+    expect(deleted(mira)).toEqual([]);
+
+    // The author's edit reaches the peer; the id and the stored reference survive.
+    send(mira, { service: 'chat', action: 'edit', channel: GENERAL, messageId: id, message: 'edited words' });
+    await until(() => updated(sana).length > 0);
+    const record = socialChannelMessagesFixture.rows().find((m) => m.channel === GENERAL && m.message === 'edited words') as unknown as { id: string; metadata?: { pageReference?: unknown }; editedAt?: string };
+    expect(record).toMatchObject({ id, metadata: { pageReference: ref } });
+    expect(record.editedAt).toBeTruthy();
+
+    send(mira, { service: 'chat', action: 'delete', channel: GENERAL, messageId: id });
+    await until(() => deleted(sana).length > 0);
+  });
+
+  it('the owner and added member join and exchange messages in a new team General channel longer than 50 characters', async () => {
+    const owner = {
+      sub: 'u-mira', name: 'Mira Okafor', role: 'community-admin', tenant: 'social',
+      grants: { social: ['community-admin'] }, iat: Math.floor(Date.now() / 1000),
+    } as Session;
+    const team = await createTeam(owner, { name: 'Audit community admin newly created team', visibility: 'private' });
+    await addTeamMember(owner, team.teamId, 'u-sana', 'Sana Iqbal');
+    const general = team.channels.find((c) => c.name === 'General')!;
+    const channel = `social:team:${team.slug}:${general.slug.slice(team.slug.length + 1)}`;
+    expect(channel.length).toBeGreaterThan(50);
+    expect(channelGuard({ userId: 'u-mira', org: 'social' }, channel)).toBe(true);
+    expect(channelGuard({ userId: 'u-sana', org: 'social' }, channel)).toBe(true);
+    expect(channelGuard({ userId: 'u-lena', org: 'social' }, channel)).toBe(false);
+
+    for (const member of [mira, sana]) send(member, { service: 'chat', action: 'join', channel });
+    await until(() => [mira, sana].every((member) => member.frames.some((f) => f.type === 'chat' && f.action === 'joined' && f['channel'] === channel)));
+
+    send(mira, { service: 'chat', action: 'send', channel, message: 'owner in a long team channel' });
+    await until(() => [mira, sana].every((member) => chatMessages(member, channel).some((m) => m.message === 'owner in a long team channel')));
+    send(sana, { service: 'chat', action: 'send', channel, message: 'member in a long team channel' });
+    await until(() => [mira, sana].every((member) => chatMessages(member, channel).some((m) => m.message === 'member in a long team channel')));
+
+    expect(chatMessages(sana, channel)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ message: 'owner in a long team channel', userId: 'u-mira' }),
+      expect.objectContaining({ message: 'member in a long team channel', userId: 'u-sana' }),
+    ]));
+    expect((await socialChat().chatStore.listMessages(channel, 10)).map((m) => m.message)).toEqual(expect.arrayContaining([
+      'owner in a long team channel', 'member in a long team channel',
+    ]));
+    for (const member of [mira, sana]) expect(member.frames.filter((f) => f.type === 'error')).toEqual([]);
   });
 
   it('a social user who is not a member of social:ch:design-reviews is refused join, send and presence', async () => {
@@ -154,7 +233,8 @@ describe('channels over the socket', () => {
   it('a forged cross-tenant subscribe to social:ch:general from an orgiq session answers AUTHZ_CHANNEL_DENIED', async () => {
     send(theo, { service: 'chat', action: 'join', channel: GENERAL });
     send(theo, { service: 'chat', action: 'history', channel: GENERAL, limit: 10 });
-    await until(() => denied(theo).length >= 2);
+    await until(() => theo.frames.filter(f => f.type === 'error').length >= 2);
+    expect(denied(theo).length).toBeGreaterThanOrEqual(1);
     expect(denied(theo)[0]).toMatchObject({ service: 'chat', channel: GENERAL });
     expect(theo.frames.some((f) => f.type === 'chat' && (f.action === 'history' || f.action === 'message'))).toBe(false);
   });

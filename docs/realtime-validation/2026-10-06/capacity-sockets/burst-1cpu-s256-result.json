@@ -1,0 +1,508 @@
+{
+  "at": "2026-10-06T18:51:22.539Z",
+  "options": {
+    "url": "ws://orgiq-bff-capacity-a:3001/ws",
+    "peerUrls": [
+      "ws://orgiq-bff-capacity-b:3001/ws"
+    ],
+    "peerContainers": [
+      "orgiq-bff-capacity-b"
+    ],
+    "sockets": 1000,
+    "calls": 100,
+    "groupSizes": [
+      2
+    ],
+    "holdSeconds": 10,
+    "scenario": "steady",
+    "secret": "dev-fallback",
+    "json": "/results/burst.json",
+    "serverPid": null,
+    "healthUrl": "http://orgiq-bff-capacity-a:3001/api/health",
+    "rampPerSec": 50,
+    "chatEverySec": 30,
+    "chatStartup": "burst",
+    "stateEverySec": 20,
+    "spreadSeconds": 2,
+    "org": "social",
+    "origin": null,
+    "soakSeconds": 300,
+    "restartAfterSeconds": 150,
+    "recoveryTimeoutSeconds": 60,
+    "restartContainer": null,
+    "redisContainer": null,
+    "sampleContainer": "orgiq-bff-capacity-a",
+    "driverContainer": "orgiq-bff-capacity-driver-burst",
+    "tokenTtlSeconds": 600,
+    "identityManifest": "/results/identities.json"
+  },
+  "results": [
+    {
+      "scenario": "steady",
+      "identities": {
+        "mode": "directory-manifest",
+        "users": 1000,
+        "sha256": "239951005922487ce0a0a1dfb08529fc42fe3489a415416d6cfb932aecc11db8"
+      },
+      "groupSize": 2,
+      "calls": 100,
+      "sockets": 1000,
+      "holdSeconds": 10,
+      "soak": null,
+      "recoveries": [],
+      "unexpectedDisconnects": 0,
+      "runTag": "e484",
+      "durationS": 42.4,
+      "rampSeconds": 20,
+      "connect": {
+        "ok": 1000,
+        "fail": 0,
+        "failReasons": {},
+        "ms": {
+          "n": 1000,
+          "p50": 6.6,
+          "p95": 16.9,
+          "p99": 28.1,
+          "max": 77.3
+        }
+      },
+      "established": 100,
+      "failedCalls": [],
+      "latencyMs": {
+        "inviteToIncoming": {
+          "n": 100,
+          "p50": 219.8,
+          "p95": 1101.5,
+          "p99": 1183.3,
+          "max": 1204.3
+        },
+        "acceptToAccepted": {
+          "n": 100,
+          "p50": 118.5,
+          "p95": 156.3,
+          "p99": 168.2,
+          "max": 169.5
+        },
+        "chatDelivery": {
+          "n": 1292,
+          "p50": 2180.9,
+          "p95": 2777.9,
+          "p99": 2860.7,
+          "max": 2935.5
+        }
+      },
+      "chat": {
+        "sent": 1292,
+        "delivered": 1292,
+        "expectedSenders": 800,
+        "sendingUsers": 800,
+        "deliveredUsers": 800
+      },
+      "chatAdmission": {
+        "expected": 800,
+        "joined": 800,
+        "waitMs": 3084.1
+      },
+      "crossDeliveries": {
+        "call": 0,
+        "chat": 0,
+        "presence": 0,
+        "samples": []
+      },
+      "unexpectedEnded": {
+        "count": 0,
+        "callsEnded": 0,
+        "samples": []
+      },
+      "answeredElsewhere": 0,
+      "denied": {
+        "count": 20,
+        "samples": [
+          {
+            "user": "u-container-load-0349",
+            "channel": "social:dm:u-container-load-0349:u-container-load-0350",
+            "kind": "subscribe"
+          },
+          {
+            "user": "u-container-load-0351",
+            "channel": "social:dm:u-container-load-0351:u-container-load-0352",
+            "kind": "subscribe"
+          },
+          {
+            "user": "u-container-load-0353",
+            "channel": "social:dm:u-container-load-0353:u-container-load-0354",
+            "kind": "subscribe"
+          },
+          {
+            "user": "u-container-load-0355",
+            "channel": "social:dm:u-container-load-0355:u-container-load-0356",
+            "kind": "subscribe"
+          },
+          {
+            "user": "u-container-load-0357",
+            "channel": "social:dm:u-container-load-0357:u-container-load-0358",
+            "kind": "subscribe"
+          },
+          {
+            "user": "u-container-load-0359",
+            "channel": "social:dm:u-container-load-0359:u-container-load-0360",
+            "kind": "subscribe"
+          },
+          {
+            "user": "u-container-load-0365",
+            "channel": "social:dm:u-container-load-0365:u-container-load-0366",
+            "kind": "subscribe"
+          },
+          {
+            "user": "u-container-load-0367",
+            "channel": "social:dm:u-container-load-0367:u-container-load-0368",
+            "kind": "subscribe"
+          },
+          {
+            "user": "u-container-load-0369",
+            "channel": "social:dm:u-container-load-0369:u-container-load-0370",
+            "kind": "subscribe"
+          },
+          {
+            "user": "u-container-load-0371",
+            "channel": "social:dm:u-container-load-0371:u-container-load-0372",
+            "kind": "subscribe"
+          }
+        ]
+      },
+      "otherErrors": {
+        "count": 18,
+        "byMessage": {
+          "call:Not authorized for call action: status": 18
+        }
+      },
+      "notifications": {
+        "total": 1,
+        "missedCall": 1
+      },
+      "doubleAccept": null,
+      "glare": null,
+      "churn": null,
+      "frames": {
+        "in": 10567,
+        "out": 4692,
+        "byKind": {
+          "presence.set": 1800,
+          "notification:bulk-update.": 920,
+          "chat.joined": 800,
+          "call.active-call": 182,
+          "chat.history": 800,
+          "presence.subscribed": 780,
+          "error.AUTHZ_CHANNEL_DENIED": 20,
+          "error.": 18,
+          "presence.update": 770,
+          "chat.message": 2584,
+          "chat.sent": 1292,
+          "call.invite": 100,
+          "call.accepted": 100,
+          "call.participant-state": 200,
+          "call.user-status": 200,
+          "notification:new.": 1
+        }
+      },
+      "server": {
+        "pid": null,
+        "container": "orgiq-bff-capacity-a",
+        "memorySource": "docker-working-set",
+        "sampleErrors": 0,
+        "rssMb": {
+          "peak": 242,
+          "last": 238.9
+        },
+        "cpuPct": {
+          "peak": 97.6,
+          "mean": 36,
+          "p95": 97.6
+        },
+        "healthMs": {
+          "n": 81,
+          "p50": 1.5,
+          "p95": 143.5,
+          "p99": 271.4,
+          "max": 271.4,
+          "errors": 0,
+          "plannedOutageErrors": 0
+        },
+        "slowHealth": [
+          {
+            "ms": 52.9,
+            "atS": 20,
+            "phase": "ramp"
+          },
+          {
+            "ms": 64.7,
+            "atS": 20.5,
+            "phase": "ramp"
+          },
+          {
+            "ms": 115.5,
+            "atS": 21,
+            "phase": "ramp"
+          },
+          {
+            "ms": 184.9,
+            "atS": 21.5,
+            "phase": "ramp"
+          },
+          {
+            "ms": 104.3,
+            "atS": 22,
+            "phase": "ramp"
+          },
+          {
+            "ms": 143.5,
+            "atS": 22.5,
+            "phase": "ramp"
+          },
+          {
+            "ms": 106.7,
+            "atS": 23,
+            "phase": "ramp"
+          },
+          {
+            "ms": 193.5,
+            "atS": 23.5,
+            "phase": "ramp"
+          },
+          {
+            "ms": 88.4,
+            "atS": 24.1,
+            "phase": "ramp"
+          },
+          {
+            "ms": 271.4,
+            "atS": 24.6,
+            "phase": "ramp"
+          },
+          {
+            "ms": 192.9,
+            "atS": 25.1,
+            "phase": "calls-starting"
+          },
+          {
+            "ms": 85.7,
+            "atS": 25.6,
+            "phase": "calls-starting"
+          }
+        ]
+      },
+      "peerServers": [
+        {
+          "url": "ws://orgiq-bff-capacity-b:3001/ws",
+          "pid": null,
+          "container": "orgiq-bff-capacity-b",
+          "memorySource": "docker-working-set",
+          "sampleErrors": 0,
+          "rssMb": {
+            "peak": 231.2,
+            "last": 230.8
+          },
+          "cpuPct": {
+            "peak": 94.6,
+            "mean": 30.7,
+            "p95": 94.6
+          },
+          "healthMs": {
+            "n": 81,
+            "p50": 1.4,
+            "p95": 125.7,
+            "p99": 222.4,
+            "max": 222.4,
+            "errors": 0,
+            "plannedOutageErrors": 0
+          },
+          "slowHealth": [
+            {
+              "ms": 125.7,
+              "atS": 20,
+              "phase": "ramp"
+            },
+            {
+              "ms": 109,
+              "atS": 20.5,
+              "phase": "ramp"
+            },
+            {
+              "ms": 203,
+              "atS": 21,
+              "phase": "ramp"
+            },
+            {
+              "ms": 125.3,
+              "atS": 21.5,
+              "phase": "ramp"
+            },
+            {
+              "ms": 155.4,
+              "atS": 22,
+              "phase": "ramp"
+            },
+            {
+              "ms": 117.5,
+              "atS": 23.5,
+              "phase": "ramp"
+            },
+            {
+              "ms": 222.4,
+              "atS": 24,
+              "phase": "ramp"
+            },
+            {
+              "ms": 178,
+              "atS": 24.5,
+              "phase": "ramp"
+            }
+          ]
+        }
+      ],
+      "targets": [
+        {
+          "url": "ws://orgiq-bff-capacity-a:3001/ws",
+          "socketsOpened": 500
+        },
+        {
+          "url": "ws://orgiq-bff-capacity-b:3001/ws",
+          "socketsOpened": 500
+        }
+      ],
+      "clientEventLoopMs": {
+        "p50": 10.2,
+        "p99": 12.3,
+        "max": 54.8
+      },
+      "verdict": [
+        {
+          "name": "sockets connect",
+          "ok": true,
+          "measured": "1000/1000",
+          "limit": "100%"
+        },
+        {
+          "name": "calls established",
+          "ok": true,
+          "measured": "100/100",
+          "limit": "all"
+        },
+        {
+          "name": "invite→incoming p95",
+          "ok": false,
+          "measured": 1101.5,
+          "limit": "< 250 ms"
+        },
+        {
+          "name": "invite→incoming p99",
+          "ok": false,
+          "measured": 1183.3,
+          "limit": "< 1000 ms"
+        },
+        {
+          "name": "accept→accepted p95",
+          "ok": true,
+          "measured": 156.3,
+          "limit": "< 250 ms"
+        },
+        {
+          "name": "chat delivery p95",
+          "ok": false,
+          "measured": 2777.9,
+          "limit": "< 300 ms, with paired-sender evidence"
+        },
+        {
+          "name": "background chat coverage",
+          "ok": true,
+          "measured": "800/800",
+          "limit": "all paired senders reach their peer"
+        },
+        {
+          "name": "background chat admission",
+          "ok": true,
+          "measured": "800/800; 3084.1ms",
+          "limit": "all server join acknowledgements within 10 seconds"
+        },
+        {
+          "name": "cross-call/channel deliveries",
+          "ok": true,
+          "measured": 0,
+          "limit": "0"
+        },
+        {
+          "name": "answered-elsewhere outside scenario 4",
+          "ok": true,
+          "measured": 0,
+          "limit": "0"
+        },
+        {
+          "name": "ended before scripted hang-up",
+          "ok": true,
+          "measured": 0,
+          "limit": "0"
+        },
+        {
+          "name": "unplanned socket disconnects",
+          "ok": true,
+          "measured": 0,
+          "limit": "0"
+        },
+        {
+          "name": "AUTHZ_CHANNEL_DENIED",
+          "ok": false,
+          "measured": 20,
+          "limit": "0"
+        },
+        {
+          "name": "event-loop proxy (/api/health p99)",
+          "ok": false,
+          "measured": 271.4,
+          "limit": "< 50 ms"
+        },
+        {
+          "name": "health errors outside planned outage",
+          "ok": true,
+          "measured": 0,
+          "limit": "0"
+        },
+        {
+          "name": "server memory peak",
+          "ok": true,
+          "measured": 242,
+          "limit": "< 700 MiB"
+        },
+        {
+          "name": "container samples",
+          "ok": true,
+          "measured": 0,
+          "limit": "no errors, at least one sample"
+        },
+        {
+          "name": "peer 1: health p99",
+          "ok": false,
+          "measured": 222.4,
+          "limit": "< 50 ms"
+        },
+        {
+          "name": "peer 1: health errors",
+          "ok": true,
+          "measured": 0,
+          "limit": "0"
+        },
+        {
+          "name": "peer 1: memory peak",
+          "ok": true,
+          "measured": 231.2,
+          "limit": "< 700 MiB"
+        },
+        {
+          "name": "peer 1: container samples",
+          "ok": true,
+          "measured": 0,
+          "limit": "no errors, at least one sample"
+        }
+      ]
+    }
+  ]
+}

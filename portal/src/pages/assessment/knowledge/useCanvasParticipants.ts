@@ -77,7 +77,7 @@ export function useCanvasParticipants(editor: Editor | null, awareness: Awarenes
   const participants = useMemo(() => people.map(p => ({ id: p.id, name: p.name, online: true, ...(p.color ? { color: p.color } : {}) })), [people]);
   // FollowModeBar speaks the editor's Participant shape.
   const followBarParticipants = useMemo(() => people.map(p => ({
-    clientId: String(p.clientIds[0] ?? p.id), userId: p.id, displayName: p.name, color: p.color ?? '#0d9488',
+    clientId: String(p.clientIds[0] ?? p.id), userId: p.id, displayName: p.name, color: p.color ?? 'var(--color-brand)',
     mode: 'editor' as const, currentSectionId: null,
   })), [people]);
   const onParticipantClick = useCallback((id: string) => {

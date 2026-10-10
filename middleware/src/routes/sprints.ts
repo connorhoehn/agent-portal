@@ -33,6 +33,7 @@ import {
 import { initiativeExists } from '../providers/budgets.js';
 import { getWorkItem, updateWorkItem } from '../providers/work-items.js';
 import { getUser } from '../providers/identity.js';
+import { mineViewer } from '../lib/mine.js';
 import { stewardsInitiative } from '../lib/initiative-scope.js';
 
 /**
@@ -120,7 +121,7 @@ sprintsRouter.get('/', asyncHandler(async (req, res) => {
   // app_users.id — "my sprints" only exists for an account linked to a person.
   // An unlinked account (the platform operator, the HR admin) gets an explicit
   // null rather than an empty list that reads as "you have no sprints".
-  const personId = (await getUser(session.sub))?.personId ?? null;
+  const { personId } = await mineViewer(session);
 
   const sprints = await listSprints({
     personId,
@@ -201,7 +202,7 @@ sprintsRouter.get('/envelopes', asyncHandler(async (req, res) => {
   // grants read failed). That is not "you have no envelopes" — say so rather
   // than render an empty list that reads as $0 of everything.
   if (envelopes === null) {
-    const personId = (await getUser(session.sub))?.personId ?? null;
+    const { personId } = await mineViewer(session);
     res.json({
       personId,
       resolved: false,
@@ -237,7 +238,7 @@ sprintsRouter.get('/envelopes', asyncHandler(async (req, res) => {
   // the weakest row rather than a per-page true that some rows contradict.
   const attributionAvailable = rows.every((r) => r.attributionAvailable);
   res.json({
-    personId: envelopes[0]?.granteePersonId ?? (await getUser(session.sub))?.personId ?? null,
+    personId: envelopes[0]?.granteePersonId ?? (await mineViewer(session)).personId,
     resolved: true,
     attributionAvailable,
     note: attributionAvailable ? ATTRIBUTED_NOTE : UNKNOWN_NOTE,
@@ -301,6 +302,8 @@ sprintsRouter.post('/', manageSprints, asyncHandler(async (req, res) => {
     goal,
     ...(status ? { status } : {}),
   });
+  // Content-free live hint for the activity graph (lib/work-graph/live.ts); lazy so this router's tests do not load the bots provider.
+  void import('../lib/work-graph/live.js').then(m => m.notifyWorkGraphChanged(initiativeId, 'sprint')).catch(() => undefined);
   res.status(201).json({ sprint });
 }));
 
@@ -334,6 +337,8 @@ sprintsRouter.patch('/:sprintId/items', manageSprints, asyncHandler(async (req, 
 
   const updated = await updateWorkItem(workItemId, { sprintId });
   if (!updated) throw new NotFoundError('No such work item');
+  // Content-free live hint for the activity graph (lib/work-graph/live.ts); lazy so this router's tests do not load the bots provider.
+  void import('../lib/work-graph/live.js').then(m => m.notifyWorkGraphChanged(sprint.orgProjectId, 'sprint')).catch(() => undefined);
   res.json({ workItem: updated });
 }));
 
@@ -353,5 +358,7 @@ sprintsRouter.delete('/:sprintId/items/:itemId', manageSprints, asyncHandler(asy
 
   const updated = await updateWorkItem(workItemId, { sprintId: null });
   if (!updated) throw new NotFoundError('No such work item');
+  // Content-free live hint for the activity graph (lib/work-graph/live.ts); lazy so this router's tests do not load the bots provider.
+  void import('../lib/work-graph/live.js').then(m => m.notifyWorkGraphChanged(sprint.orgProjectId, 'sprint')).catch(() => undefined);
   res.json({ workItem: updated });
 }));

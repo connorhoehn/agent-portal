@@ -399,9 +399,10 @@ describe('GET /api/distillation/library/:libraryItemId/provenance', () => {
     expect(res.body.lineage.nodes.length).toBeGreaterThan(0);
   });
 
-  it('404s for a Library item nothing was distilled into', async () => {
+  it('answers "never distilled" as a 200 with no artifact, not a 404', async () => {
     const res = await request(buildApp()).get('/api/distillation/library/lib-stakeholder-email/provenance');
-    expect(res.status).toBe(404);
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ artifact: null, lineage: null });
   });
 });
 

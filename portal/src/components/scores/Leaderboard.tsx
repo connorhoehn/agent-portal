@@ -48,7 +48,7 @@ export function Leaderboard({ entries, selectedId, onSelect, deptColors, rankedB
             id={scoreRowButtonId(s.personId)}
             variant="ghost"
             size="sm"
-            className={`!h-auto !justify-start !border-0 !bg-transparent !p-0 font-inherit text-inherit hover:!bg-transparent hover:underline focus-visible:underline ${selected ? 'font-semibold' : 'font-medium'}`}
+            className={`!h-auto !justify-start !border-0 !bg-transparent !p-0 font-inherit text-inherit hover:!bg-transparent hover:underline focus-visible:underline ${selected ? '' : ''}`}
             onClick={(e) => { e.stopPropagation(); onSelect(selected ? null : s.personId); }}
           >
             {s.name}
@@ -90,22 +90,21 @@ export function Leaderboard({ entries, selectedId, onSelect, deptColors, rankedB
     {
       key: 'influence',
       header: 'Influence',
-      align: 'right',
-      className: 'text-xs text-text-secondary',
+      numeric: true,
+      className: 'text-text-secondary',
       render: (s) => formatScore(s.influence),
     },
     {
       key: 'expertise',
       header: 'Expertise',
-      align: 'right',
-      className: 'text-xs text-text-secondary',
+      numeric: true,
+      className: 'text-text-secondary',
       render: (s) => formatScore(s.expertise),
     },
     {
       key: 'composite',
       header: 'Composite',
-      align: 'right',
-      className: 'font-semibold',
+      numeric: true,
       render: (s) => {
         // Influence/expertise/composite all pass through the one
         // `formatScore` normalizer — DEFECTS.md org-leader #11 was three
@@ -119,15 +118,13 @@ export function Leaderboard({ entries, selectedId, onSelect, deptColors, rankedB
         const expW = 60 * ((1 - weight) * expScore) / 100;
         const tooltip = `${Math.round(weight * 100)}% influence (${infScore}) + ${Math.round((1 - weight) * 100)}% expertise (${expScore})`;
         return (
-          <>
+          <Inline gap="sm" align="center" justify="end" wrap={false} title={tooltip}>
             {compositeScore}
-            <Stack gap="none" title={tooltip} className="mt-1">
-              <svg width={60} height={6} className="block ml-auto">
-                <rect x={0}    y={0} width={infW} height={6} rx={2} fill="var(--color-primary, #6366f1)" />
-                <rect x={infW} y={0} width={expW} height={6} rx={2} fill="var(--color-success)" />
-              </svg>
-            </Stack>
-          </>
+            <svg width={60} height={6} className="block shrink-0" aria-hidden="true">
+              <rect x={0}    y={0} width={infW} height={6} rx={2} fill="var(--color-primary, #6366f1)" />
+              <rect x={infW} y={0} width={expW} height={6} rx={2} fill="var(--color-success)" />
+            </svg>
+          </Inline>
         );
       },
     },
@@ -136,7 +133,7 @@ export function Leaderboard({ entries, selectedId, onSelect, deptColors, rankedB
   return (
     <Card padding="md">
       <Inline gap="sm" align="center" wrap className="mb-3">
-        <EntityCell label="Leaderboard" labelClassName="text-sm" />
+        <EntityCell label="Leaderboard" labelClassName="" />
         {rankedBy ? (
           <Chip size="xs" tone="accent">Ranked by: {rankedBy}</Chip>
         ) : (
@@ -150,6 +147,7 @@ export function Leaderboard({ entries, selectedId, onSelect, deptColors, rankedB
         data={entries}
         columns={columns}
         keyField={(s) => s.personId}
+        size="sm"
         onRowClick={(s) => onSelect(s.personId === selectedId ? null : s.personId)}
       />
     </Card>

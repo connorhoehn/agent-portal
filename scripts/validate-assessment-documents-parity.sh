@@ -16,6 +16,7 @@
 # PARITY_BASE_URL points the journey at a portal other than :5183.
 set -u
 cd "$(dirname "$0")/.."
+source scripts/lib/judges.sh  # jg_*: static gates run once per tree state
 QUICK=0
 for a in "$@"; do case "$a" in --quick) QUICK=1;; esac; done
 
@@ -55,7 +56,7 @@ has 'social-documents\.mjs' docs/social-calls-local-stack.md && ok "local-stack 
 
 # ─────────────────────────────────────────────────────────────────────────────
 section "portal"
-if (cd portal && npx tsc --noEmit >/dev/null 2>&1); then ok "tsc clean"; else fail "portal: tsc errors"; fi
+if jg_portal_tsc >/dev/null 2>&1; then ok "tsc clean"; else fail "portal: tsc errors"; fi
 if (cd portal && node --test 'src/pages/assessment/**/__tests__/*.test.ts' >/dev/null 2>&1); then ok "assessment node tests green (the grant is the only edit authority: documentCanvasState.test.ts)"; else fail "portal: assessment node tests failing"; fi
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -140,11 +141,15 @@ grep -q "'markdown'" middleware/src/routes/assessment-document-source.ts && grep
 # ─────────────────────────────────────────────────────────────────────────────
 section "phase 4 (part) — the document conversation (gap 7)"
 [ -f "$CONVO" ] && ok "knowledge/DocumentConversation.tsx exists" || fail "$CONVO missing"
-has "import \{ ContextComposer \} from '@connorhoehnslalom/ui-components/social/rich-composer'" "$CONVO" && ok "the dock is the library ContextComposer" || fail "$CONVO does not import ContextComposer from /social/rich-composer"
+# 2.439: the dock is the library ConversationComposer (ContextComposer with the conversation's wiring), bound in lib/conversationComposer.ts.
+has "<ConversationComposer\b" "$CONVO" && has "createConversationComposer" portal/src/lib/conversationComposer.ts && ok "the dock is the library ConversationComposer" || fail "$CONVO does not use the library ConversationComposer"
 has "context=\{\{ kind: 'document', id: docId, title \}\}" "$CONVO" && ok "document context chip (\"Chat · <title> ×\")" || fail "$CONVO: composer context is not the document"
 has "Message this document’s conversation…" "$CONVO" && ok "placeholder: Message this document’s conversation…" || fail "$CONVO: reference placeholder missing"
-has "useChat\b.*from '@connorhoehnslalom/realtime-modules/client'" "$CONVO" && has "conversationChannelForDoc" "$CONVO" && ok "useChat on the per-document channel" || fail "$CONVO: not useChat on conversationChannelForDoc"
-has "<WrappedChatPanel\b" "$CONVO" && has "ui-components/integrations/realtime'" "$CONVO" && has '<DocumentContextPanel id="chat">' "$CONVO" && ok "the thread is the library WrappedChatPanel (integrations/realtime, 2.407.20) in the context column" || fail "$CONVO: no WrappedChatPanel from integrations/realtime in the Chat context panel"
+has "useConversation\(conversationChannelForDoc\(docId\)" "$CONVO" && has "useChat\(channel\)" portal/src/components/chat/ConversationThread.tsx && ok "useChat on the per-document channel (one useConversation)" || fail "$CONVO: not useChat on conversationChannelForDoc"
+SCP=portal/src/components/chat/ConversationThread.tsx
+has "<ConversationThread\b" "$CONVO" && has "<WrappedChatPanel\b" "$SCP" && has "ui-components/integrations/realtime'" "$SCP" && has '<DocumentContextPanel id="chat">' "$CONVO" && ok "the thread is the library WrappedChatPanel (integrations/realtime) reached through ConversationThread, in the context column" || fail "$CONVO: the Chat context panel is not ConversationThread over the library WrappedChatPanel"
+# The role decides Agent through the composer's capabilities: allowed only for an editor, off with the reason for a reader.
+has "defaultMode=\{agentEditable \? 'agent' : 'chat'\}" "$CONVO" && has "agent: \{ allowed: agentEditable, reason: READER_AGENT_REASON \}" "$CONVO" && has "routeDockSend" "$CONVO" && ok "agent/chat mode row; a reader's Agent mode is off with the reason (no mutation controls)" || fail "$CONVO: the dock's agent/chat mode row or its reader gating changed"
 has "adaptChatMessageForPanel" "$CONVO" && fail "$CONVO: composes its own message adapter — WrappedChatPanel adapts the useChat result itself" || ok "no page-side message adapter"
 has "footer: composer" "$SHELL" && ok "the dock is EditorShell's footer" || fail "$SHELL does not pass the composer as the EditorShell footer"
 awk '/^export function CanvasDocumentPane/,/^}/' "$PANE" | awk '/useDocumentConversation\(/{c=NR} /<GatewaySocketProvider/{g=NR} END{exit !(c && g && c<g)}' \
@@ -219,14 +224,15 @@ grep -q "<FollowModeBar" "$PANE" && ok "following shows the library FollowModeBa
 
 section "phase 4 — the in-document call (gap 8)"
 CALL=$K/useDocumentCall.tsx
-grep -q "useInitiativeCallHost" "$CALL" && grep -q "lib/conversationCallModel'" "$CALL" && grep -q "lib/conversationCall'" "$CALL" \
-  && ok "reuses the tenant call host, the shared call model and the library ConversationCallDock" || fail "$CALL does not reuse the shared call stack"
+SHELLCALL=portal/src/components/shell/ShellCallHost.tsx
+grep -q "useCallHost" "$CALL" && grep -q "lib/conversationCallModel'" "$CALL" && grep -q "CallMediaOutlet" "$SHELLCALL" \
+  && ok "reuses the shell's call host, the shared call model and the library ConversationCallDock (drawn once by the shell)" || fail "$CALL does not reuse the shared call stack"
 ! grep -qE "useConversationCall\(|useIncomingConversationCalls\(" "$K"/*.tsx "$K"/*.ts && ok "no second call hook on the page" || fail "a second useConversationCall under $K"
-grep -q "<VideoDockSlot docked canAccept" "$CALL" && grep -q "gutterLead={call.dock}" "$PANE" && ok "the call docks in the page margin (VideoDockSlot as gutterLead)" || fail "the call is not a VideoDockSlot in the gutter lead"
+grep -q "gutterLead={call.dock}" "$PANE" && grep -q "dock: null" "$CALL" && grep -q "<CallMediaOutlet" "$SHELLCALL" && ok "the call dock lives in the persistent shell (the gutter slot stays compatible and empty)" || fail "the call dock is neither in the gutter lead nor the shell"
 grep -q "{...call.headerProps}" "$PANE" && grep -q "onToggleVideoCall" "$CALL" && ok "Call in the shared DocumentHeader" || fail "no Call control on the DocumentHeader"
 grep -q "return \`\${prefix}doc:" "$MODEL" && grep -q "documentCallLobby(lobbyPrefix(tenant)" "$CALL" && ok "lobby is <tenant>:doc:<doc>, tenant-prefixed" || fail "document call lobby is not tenant-prefixed <tenant>:doc:<doc>"
-grep -q "<InitiativeCallHost><DocumentCallNavigator /><Outlet /></InitiativeCallHost>" portal/src/pages/assessment/AssessmentLayout.tsx \
-  && ok "assessment routes mount the call host; Accept opens the document" || fail "AssessmentLayout does not host calls"
+grep -q "<ShellCallHost>" portal/src/components/shell/Layout.tsx && grep -q "<Outlet />" portal/src/pages/assessment/AssessmentLayout.tsx \
+  && ok "the authenticated Layout hosts calls for assessment routes; Accept opens the document" || fail "Layout does not host calls"
 grep -q "documentCommentsModel.test.ts" <(ls portal/src/pages/assessment/__tests__/) && ok "model tests: threads, groups, byline, lobby" || fail "no documentCommentsModel node tests"
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -270,9 +276,10 @@ AEM=$K/documentAgentEditModel.ts
 # Agent is the default for a role that may edit; a reader (agentEditable false)
 # gets Chat with Agent offered-but-off (8f288081, journeys defect #17) — so
 # the literal is the editor branch of a conditional, never a bare 'chat'.
-grep -qE "defaultMode=(\"agent\"|\{agentEditable \? 'agent' : 'chat'\})" "$CONVO" && grep -qE "disabledModes=(\{\['terminal'\]\}|\{agentEditable \? \['terminal'\] : \['terminal', 'agent'\]\})" "$CONVO" && ! grep -qE "disabledModes=\{\[[^]]*'agent'" "$CONVO" \
+grep -qE "defaultMode=\{agentEditable \? 'agent' : 'chat'\}" "$CONVO" && grep -qE "offModes=\{\{ terminal:" "$CONVO" && ! grep -qE "offModes=\{\{[^}]*agent:" "$CONVO" \
   && ok "the dock's Agent mode is enabled and the default; Terminal stays off" || fail "$CONVO: Agent mode is not enabled + default (defaultMode=\"agent\", only terminal disabled)"
-grep -qE "if \(mode === 'agent'\) return (agentEdit\.send\(message\.text\)|agentEditable \? agentEdit\.send\(message\.text\) : false);" "$CONVO" && grep -q "conversation.send(message.text)" "$CONVO" \
+grep -q "routeDockSend('agent'" "$CONVO" && grep -q "agent: () => agentEdit.send(text)" "$CONVO" && grep -q "routeDockSend('chat'" "$CONVO" && grep -qE "conversation.send\(out.text, out.metadata\)" "$CONVO" \
+  && grep -q "if (mode === 'agent') return routes.agentEditable ? routes.agent() : false;" portal/src/pages/assessment/knowledge/documentComposerRoute.ts \
   && ok "Agent sends go to the drafter; Chat stays a mode on the conversation" || fail "$CONVO: onSend does not route agent → drafter and chat → conversation"
 grep -q "DOCUMENT_EDIT_AGENT_ID = 'orgiq-assessment-drafter'" "$AEM" && grep -q "mode: typeof DOCUMENT_EDIT_MODE" "$AEM" && grep -q "selection: DocumentSelection | null" "$AEM" \
   && ok "the request is the drafter's document command: id, title, text, selection + range" || fail "$AEM: the drafter request lost its document context"

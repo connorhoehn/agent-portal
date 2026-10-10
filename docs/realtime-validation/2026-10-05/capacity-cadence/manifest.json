@@ -1,0 +1,19 @@
+{
+  "acceptedCapacity": false,
+  "startup": "spread over background cadence; synchronized burst remains separately unaccepted",
+  "nativeSteadyPassedExceptMemory": true,
+  "memoryLimitMiB": 700,
+  "runtime": "unrestricted Node 25 development source processes; not resource-bounded production containers",
+  "evidenceDigests": {
+    "orgiq-capacity-cadence-driver-tests.log": "790a50ec6e7855e2d4c4fae0858ce13d72950a7fc1017b971f396e24467c2cef",
+    "orgiq-capacity-cadence-types.log": "a6aacf3de309c23e5aeb92922e8082e8eb964285a805f031247d7ef19849931b",
+    "orgiq-capacity-cadence-build.log": "890dd11b16e4a3386f08a4fa8529271130230f259e3188a13da295ba4ce5d33b",
+    "orgiq-capacity-cadence-bff-core.log": "3dff5cb29e7c5d672ec34cbd5cc49c092b14112ace1ca54821027b7afe97383c",
+    "orgiq-capacity-cadence-pilot.log": "18e16bd541803984f556440127212ea4ba3632a5bfd4879dc31f66446802974d",
+    "orgiq-capacity-cadence-steady.log": "b83676e6340f1ba459ddc1d236a8b167645e30488c5971d01ec9171cda84f098",
+    "orgiq-bff-cluster-capacity-pilot.json": "9414d876478979feb61be027f9a022585fb863e2aae948db65aca1fba48732e6",
+    "orgiq-bff-cluster-capacity-steady.json": "683e34d5f8c8448c31a7b0abf75a18443caa61bbc58f893ae4bfddaded91931e",
+    "orgiq-capacity-dynamo-failure-before.log": "426c786daf8074c6b52288c4c59965e3dddc9389ef232900cb5c3860c1cb15c8",
+    "orgiq-capacity-dynamo-failure-after.log": "9c9baa061646c5c6ff9b24a389ec2a71c84a18afffc9843f6610c7a1ace0e3a4"
+  }
+}

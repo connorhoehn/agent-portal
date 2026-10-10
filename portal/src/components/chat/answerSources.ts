@@ -154,7 +154,10 @@ function tidy(text: string): string {
     .replace(/[ \t]+([.,;:!?])/g, '$1') // "word ." → "word."
     .replace(/\(\s*\)/g, '') // empty parens left behind
     .replace(/^[ \t]*(?:[-*+]|\d+[.)])[ \t]*$/gm, '') // orphaned list marker
-    .replace(/[ \t]{2,}/g, ' ') // doubled spaces
+    // Doubled spaces inside a line only: leading indentation is Markdown
+    // structure — "   - Decision" under "1. …" is that item's sub-list, and
+    // collapsing it to one space split the list into flat runs (search DEFECTS 2).
+    .replace(/(\S)[ \t]{2,}/g, '$1 ')
     .replace(/[ \t]+$/gm, '') // trailing spaces per line
     .replace(/\n{3,}/g, '\n\n') // blank-line runs
     .trim();

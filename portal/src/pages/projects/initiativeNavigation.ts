@@ -19,6 +19,9 @@ export function initiativeListHref(search: URLSearchParams, scope: 'all' | 'mine
 
 export function initiativeHref(id: string, search: URLSearchParams, scope: 'all' | 'mine', tab = 'overview'): string {
   const params = new URLSearchParams(initiativeListHref(search, scope).split('?')[1]);
+  // Agent output belongs to the initiative, so moving between its content
+  // views does not dismiss it. Leaf record panes still close with their leaf.
+  if (search.get('pane') === 'agent') params.set('pane', 'agent');
   if (tab !== 'overview') params.set('tab', tab);
   return `/iq/projects/${encodeURIComponent(id)}?${params}`;
 }
@@ -47,4 +50,10 @@ export function initiativeBreadcrumbs({ search, scope, sprints = false, project,
     if (item) base.push({ label: item });
   }
   return base;
+}
+
+/** The Initiatives section landing (`?nav=section`) opens its first child,
+ *  All initiatives, whoever is looking; any other URL has no landing default. */
+export function landingScope(search: URLSearchParams): 'all' | null {
+  return search.get('nav') === 'section' && !search.get('scope') && search.get('lens') !== 'sprints' ? 'all' : null;
 }

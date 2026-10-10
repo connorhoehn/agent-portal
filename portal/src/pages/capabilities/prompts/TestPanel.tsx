@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { Button, Card, DetailHeader, Inline, InlineAlert, SectionLabel, SkeletonCard, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { Button, Card, DetailHeader, Inline, InlineAlert, SectionLabel, SkeletonCard, Stack, T } from '@connorhoehnslalom/ui-components/shared';
 import { AssistPanel } from './AssistPanel';
 import { GuardrailBanner, GuardrailSelect } from './GuardrailControls';
 import { VariableInput } from './VariableInput';
@@ -7,7 +7,6 @@ import { extractVariableNames, flattenGuardrailTrace, versionLabel } from './pro
 import { usePersonOptions, useSkillOptions } from './useVariableOptions';
 import { invokePrompt, usePromptVersionDetail } from '../../../components/canary/usePromptLibrary.js';
 import type { GuardrailIntervention, Selection } from './types';
-import { T } from '../Text';
 
 /** Live test harness: fill the variables, optionally attach a guardrail, stream
  *  the model's answer back. */
@@ -18,15 +17,10 @@ export function TestPanel({
   selection: Selection;
   onClose: () => void;
 }) {
-  // Same shape as EditPanel: this panel REPLACED the "Test ▶" button, so
-  // leaving must hand focus back to the fresh trigger node, and Escape must
-  // close the panel rather than fall through to the shell.
-  const close = useCallback(() => {
-    onClose();
-    requestAnimationFrame(() => {
-      document.querySelector<HTMLElement>('[data-prompt-test-trigger]')?.focus();
-    });
-  }, [onClose]);
+  // Same shape as EditPanel: this panel REPLACED the "Test" button, Escape
+  // must close it rather than fall through to the shell, and the focus
+  // hand-back to that button happens in ViewPanel once it is back on screen.
+  const close = useCallback(() => { onClose(); }, [onClose]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -96,7 +90,7 @@ export function TestPanel({
                   <SectionLabel>Variables</SectionLabel>
                   {varNames.map((name, i) => (
                     <Stack gap="xs" as="label" key={name}>
-                      <T className="font-mono text-[11px] font-semibold text-[var(--color-optimize)]">
+                      <T size="xs" weight="semibold" className="font-mono text-[var(--color-optimize)]">
                         {`{{${name}}}`}
                       </T>
                       <VariableInput

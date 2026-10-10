@@ -34,7 +34,7 @@ export const TENANT_HOME: Record<string, string> = {
 };
 
 /** The workspace chooser. Where an identity goes when no single home fits. */
-export const CHOOSER = '/select';
+export const CHOOSER = '/workspaces';
 
 /**
  * Resolve the route this session should land on.

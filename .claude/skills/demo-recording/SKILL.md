@@ -14,7 +14,7 @@ the product, not the script.
 |---|---|
 | Script | `portal/e2e/computer-lab-demo.spec.ts` |
 | Recording config | `portal/playwright.demo.config.ts` |
-| What each act proves | `docs/computer-lab-demo.md` |
+| What each beat proves, click script, knobs | `docs/demos/computer-lab-demo.md` |
 | Output | `portal/e2e-demo/computer-lab-demo-computer-lab-walkthrough/video.webm` (gitignored) |
 
 **The message it exists to carry**, which every revision has to keep: AgentCore
@@ -29,8 +29,8 @@ passes review.
 cd middleware && npm run dev:mock        # :3001
 cd portal && npm run dev -- --port 5183  # :5183
 
-# 2. Fast pass while editing — same assertions, ~20s, no waiting
-cd portal && DEMO_SLOW_MS=0 DEMO_BEAT_MS=250 npx playwright test --config playwright.demo.config.ts
+# 2. Fast pass while editing — same assertions, ~50s (director beat 1000ms)
+cd portal && DEMO_BASE_URL=http://127.0.0.1:5183 DEMO_SLOW_MS=0 DEMO_BEAT_MS=250 npx playwright test --config playwright.demo.config.ts
 
 # 3. The take
 cd portal && npx playwright test --config playwright.demo.config.ts
@@ -132,8 +132,11 @@ rm e2e/zz-probe.spec.ts
 
 ## Pacing
 
-`DEMO_BEAT_MS` (hold per beat, default 1800) and `DEMO_SLOW_MS` (pointer
-speed, default 260). A take runs about a minute. If a beat is too quick to
+`DEMO_BEAT_MS` (hold per beat, default 1800), `DEMO_SLOW_MS` (pointer
+speed, default 260) and `DEMO_PACE_MS` (the demo director's beat, sent as the
+scenario's `paceMs`; default ~2.2× the hold, clamped 1–4s). The story is the
+`demo` scenario (`middleware/src/mock/demo-director.ts`); a take runs about
+four to five minutes. If a beat is too quick to
 read, raise the hold for that act specifically — `beat(page, BEAT_MS * 3)` —
 rather than slowing the whole recording.
 
@@ -143,7 +146,7 @@ rather than slowing the whole recording.
 2. Watch the take. An assertion can pass while the screen shows nothing worth
    watching — that is the one failure mode this script must not have.
 3. If a beat now depends on product behaviour that changed, update
-   `docs/computer-lab-demo.md` too: the acts table and the "known rough edges"
+   `docs/demos/computer-lab-demo.md` too: the click script and the "known rough edges"
    list are the demo's contract with whoever watches it.
 4. Re-check the rough edges in that doc. They are real gaps, and one of them
    getting fixed is a reason to add a beat, not just to delete a line.

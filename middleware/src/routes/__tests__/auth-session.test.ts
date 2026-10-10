@@ -190,9 +190,9 @@ describe('GET /api/session/users — the picker list', () => {
     const res = await request(buildApp()).get('/api/session/users');
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body)).toBe(true);
-    // Exactly four keys: the picker needs a name and where they can go, and
-    // nothing else about the account travels to an unauthenticated caller.
-    expect(Object.keys(res.body[0]).sort()).toEqual(['displayName', 'email', 'id', 'tenants']);
+    // Exactly five keys: the picker needs a name, a face and where they can
+    // go, and nothing else about the account travels to an unauthenticated caller.
+    expect(Object.keys(res.body[0]).sort()).toEqual(['avatarUrl', 'displayName', 'email', 'id', 'tenants']);
     expect(res.body[0].tenants).toEqual([
       { tenant: 'orgiq', roles: ['sme'] },
       { tenant: 'assessment', roles: ['assessor', 'lead-assessor'] },

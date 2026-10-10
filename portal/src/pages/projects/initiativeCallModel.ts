@@ -24,6 +24,9 @@ export type { CallAvailability, CallTarget, RosterUser };
 export type InitiativeCallPerson = CallPerson;
 export type InitiativeCallTargets = CallTargets;
 
+/** The same initiative huddle for every reader, independent of who is on its roster. */
+export const initiativeHuddleLobby = (projectId: string): string => `orgiq:initiative:${projectId}`;
+
 /** The owner first, then SMEs; a person listed twice counts once. */
 export function initiativeCallPeople(
   owner: InitiativeCallPerson | null,
@@ -35,5 +38,5 @@ export function initiativeCallPeople(
 export const initiativeCallTargets = callTargets;
 
 export function initiativeCallAvailability(input: Omit<Parameters<typeof callAvailability>[0], 'nobodyReason'>): CallAvailability {
-  return callAvailability({ ...input, nobodyReason: 'Nobody else on this initiative has an OrgIQ sign-in to call' });
+  return callAvailability({ ...input, nobodyReason: 'Nobody else on this initiative has a Work sign-in to call' });
 }

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { connectionsView, focusedRecordEdges, focusedRecords, focusOrgPeople, orgFocusIds } from '../connectionsModel.ts';
+import { connectionsView, focusedRecordEdges, focusedRecords, focusOrgPeople, orgFocusIds, withNameTooltips } from '../connectionsModel.ts';
 import { searchMigration } from '../searchModel.ts';
 import { parseRecordKeys, recordKey, type SearchEdge, type SearchRecord } from '../searchTypes.ts';
 
@@ -66,4 +66,16 @@ test('focusOrgPeople narrows to the focus and direct neighbours', () => {
   assert.deepEqual(narrowed.relationships, [rels[0], rels[1], rels[3]]);
   assert.equal(focusOrgPeople(people, rels, []).people, people);
   assert.deepEqual(focusOrgPeople(people, rels, ['zzz']).people, []);
+});
+
+test('graph node tooltips lead with the full name, since the label is clamped', () => {
+  const name = "A batch processor with no queue limit is not backpressure, it's a memory leak waiting for a spike";
+  const [withSummary, bare, same, person] = withNameTooltips<{ title: string; subtitle?: string; description?: string }>([
+    { title: name, description: 'Cap the queue.' }, { title: 'Initiative X' }, { title: 'Echo', description: 'Echo' },
+    { title: 'Vera Green', subtitle: 'Principal Engineer · Platform Engineering' },
+  ]);
+  assert.equal(withSummary.description, `${name}\n\nCap the queue.`);
+  assert.equal(bare.description, undefined);
+  assert.equal(same.description, 'Echo');
+  assert.equal(person.description, 'Vera Green\nPrincipal Engineer · Platform Engineering');
 });

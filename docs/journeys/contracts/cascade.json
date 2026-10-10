@@ -1,0 +1,943 @@
+{
+ "measured": {
+  "sourceDigest": "95f885bbdd1322e19464db981b137478d9f6d4c0e9f92aae2fbc3bd85dc9efbf",
+  "at": "2026-10-08T12:06:20.039Z"
+ },
+ "routes": {
+  "/admin/bots": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/admin/bots/:id": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:28:38.865Z"
+  },
+  "/admin/budgets": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/admin/capabilities": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/admin/changes": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/admin/devbox": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/admin/identity": {
+   "value": {
+    "violations": [],
+    "lands": "/admin/identity/roles"
+   },
+   "changedAt": "2026-10-08T09:28:38.865Z"
+  },
+  "/admin/identity/roles": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:28:38.865Z"
+  },
+  "/admin/identity/test": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/admin/identity/users": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/admin/ingest/crawl": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/admin/ingest/history": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/admin/ingest/schedules": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/admin/ingest/sources": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/admin/ingest/storage": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/admin/knowledge": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/admin/observability": {
+   "value": {
+    "violations": [],
+    "lands": "/admin/observability/summary"
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/admin/observability/agents": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/admin/observability/approvals": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/admin/observability/authz": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/admin/observability/calibration": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/admin/observability/capability-events": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/admin/observability/cost": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/admin/observability/drift": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/admin/observability/guardrail-rules": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/admin/observability/harness": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/admin/observability/invocations": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/admin/observability/invocations/search": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/admin/observability/memory": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/admin/observability/model-compare": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/admin/observability/oncall": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/admin/observability/quality": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/admin/observability/sessions": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/admin/observability/summary": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/admin/observability/tools": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/admin/observability/traffic": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/admin/projects": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/assessment": {
+   "value": {
+    "violations": [],
+    "lands": "/assessment/teams"
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/assessment/activity": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/assessment/communication": {
+   "value": {
+    "violations": [],
+    "lands": "/assessment/communication/channels/:slug"
+   },
+   "changedAt": "2026-10-08T12:06:20.039Z"
+  },
+  "/assessment/communication/channels/:slug": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:28:38.865Z"
+  },
+  "/assessment/configuration": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/assessment/decks": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/assessment/decks/:deckId": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/assessment/enterprise": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/assessment/feedback": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/assessment/prompts": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/assessment/reports": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/assessment/rules": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/assessment/runs": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/assessment/submissions": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/assessment/teams": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/assessment/teams/:teamId": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/assessment/workspace": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/iq": {
+   "value": {
+    "violations": [],
+    "lands": "/iq/work"
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/iq/activity": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/iq/agents": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/iq/agents/:agentId": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/iq/canary": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/iq/communication": {
+   "value": {
+    "violations": [],
+    "lands": "/iq/communication/channels/:slug"
+   },
+   "changedAt": "2026-10-08T12:06:20.039Z"
+  },
+  "/iq/communication/channels/:slug": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:28:38.865Z"
+  },
+  "/iq/decisions/:id": {
+   "value": {
+    "violations": [],
+    "lands": "/iq/projects"
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/iq/decks/:deckId": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/iq/designs": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/iq/designs?nav=section": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/iq/designs/:id": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/iq/diff": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/iq/distillation/activity": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/iq/distillation/activity?view=graph": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/iq/distillation/knowledge": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/iq/distillation/knowledge?item=": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/iq/distillation/knowledge?nav=distillation": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/iq/distillation/knowledge?view=notes": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/iq/distillation/review": {
+   "value": {
+    "violations": [],
+    "lands": "/iq/distillation/review?sample="
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/iq/distillation/review?sample=": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/iq/distillation/review?view=promotions": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/iq/documents/:documentId": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/iq/evaluations": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/iq/history": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/iq/library": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/iq/library?nav=section": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/iq/library/:assetId": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/iq/local-compute": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/iq/local-compute/configuration": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/iq/projects": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/iq/projects?nav=section": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/iq/projects/:id": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/iq/projects/:id?item=": {
+   "value": {
+    "violations": [
+     "title"
+    ],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/iq/prompt-ops": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/iq/prompts": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/iq/runs": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/iq/runs/:id": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/iq/scores": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/iq/scores/cohorts": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/iq/scores/compare": {
+   "value": {
+    "violations": [],
+    "lands": "/iq/scores"
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/iq/search": {
+   "value": {
+    "violations": [
+     "title"
+    ],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/iq/work": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/iq/work/:jobId": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/iq/work/changes": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/iq/work/findings": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/iq/work/queue": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/pipelines": {
+   "value": {
+    "violations": [],
+    "lands": "/pipelines/runs"
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/pipelines/activity": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/pipelines/agents": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/pipelines/approvals": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/pipelines/artifacts": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/pipelines/bots": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/pipelines/commands": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/pipelines/communication": {
+   "value": {
+    "violations": [],
+    "lands": "/pipelines/communication/channels/:slug"
+   },
+   "changedAt": "2026-10-08T12:06:20.039Z"
+  },
+  "/pipelines/communication/channels/:slug": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:28:38.865Z"
+  },
+  "/pipelines/configuration": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/pipelines/decks/:deckId": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/pipelines/definitions": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/pipelines/runbooks": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/pipelines/runs": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/pipelines/runs/:id": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/pipelines/settings": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/settings": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/social": {
+   "value": {
+    "violations": [],
+    "lands": "/social/channels"
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/social/calls": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/social/channels": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/social/channels/:slug": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/social/configuration": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/social/contacts": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/social/decks/:deckId": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/social/dms": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/social/dms/:lobby": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:28:38.865Z"
+  },
+  "/social/profile": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/social/recordings": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/social/rooms": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/social/settings": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/social/teams": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/social/work-graph": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-08T09:14:20.900Z"
+  }
+ }
+}

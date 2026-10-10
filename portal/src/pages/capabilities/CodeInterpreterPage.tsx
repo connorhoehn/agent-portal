@@ -22,7 +22,7 @@ import {
   TableRow,
   TableTh,
   TableTd,
-  Textarea,
+  Textarea, T,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { UnavailableNotice, orUnknown } from '../../components/UnavailableNotice';
@@ -30,7 +30,6 @@ import { useFetch } from '../../hooks/useFetch';
 import { relativeTime } from '../../lib/relativeTime';
 import { toastError } from '../../lib/toastStore';
 import { writeJson } from '../../lib/writeJson';
-import { T } from './Text';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -175,11 +174,13 @@ print(f"mean={statistics.mean(nums):.2f}, stdev={statistics.stdev(nums):.2f}")`)
       )}
 
       <StatStrip
+        variant="line"
+        size="sm"
         className="mb-4"
         items={[
           // An em dash, not a zero: "0 active sessions" and "we could not ask
           // how many sessions are active" must not read the same.
-          { label: 'Active Sessions', value: orUnknown(active.length, !!sessionsFailure), tone: 'accent' },
+          { label: 'active sessions', value: orUnknown(active.length, !!sessionsFailure), tone: 'accent' },
           // NOT "lifetime". This was `sessions.length` under that label, which
           // made it the length of one list rather than a total: the control
           // plane prunes terminated sessions, so the number it reported was
@@ -188,8 +189,8 @@ print(f"mean={statistics.mean(nums):.2f}, stdev={statistics.stdev(nums):.2f}")`)
           // two tiles, one number, one of them claiming to count history.
           // Terminated comes off the same list and is a claim that list can
           // actually support.
-          { label: 'Terminated', value: orUnknown(terminated.length, !!sessionsFailure) },
-          { label: 'Last Activity', value: sessionsFailure ? '—' : lastEverActive ? relativeTime(lastEverActive.lastActivityAt) : '—' },
+          { label: 'terminated', value: orUnknown(terminated.length, !!sessionsFailure) },
+          { label: 'last activity', value: sessionsFailure ? '—' : lastEverActive ? relativeTime(lastEverActive.lastActivityAt) : '—' },
         ]}
       />
 
@@ -211,7 +212,7 @@ print(f"mean={statistics.mean(nums):.2f}, stdev={statistics.stdev(nums):.2f}")`)
               spellCheck={false}
               minRows={6}
               autoResize
-              className="font-mono text-xs"
+              className="text-xs font-mono"
             />
             {result && (
               <Stack gap="xs">
@@ -245,9 +246,9 @@ print(f"mean={statistics.mean(nums):.2f}, stdev={statistics.stdev(nums):.2f}")`)
                   <MetaLine
                     items={[
                       <Chip tone={session.status === 'ACTIVE' ? 'success' : 'neutral'} size="xs">{session.status}</Chip>,
-                      <T className="text-[13px] font-medium">{session.agentName}</T>,
-                      <T className="font-mono text-[11px] text-text-tertiary">{session.sessionId}</T>,
-                      <T className="text-[11px] text-text-tertiary">Last active {relativeTime(session.lastActivityAt)}</T>,
+                      <T size="sm" weight="medium">{session.agentName}</T>,
+                      <T size="xs" className="font-mono text-text-tertiary">{session.sessionId}</T>,
+                      <T size="xs" className="text-text-tertiary">Last active {relativeTime(session.lastActivityAt)}</T>,
                     ]}
                   />
                 )}
@@ -284,7 +285,7 @@ print(f"mean={statistics.mean(nums):.2f}, stdev={statistics.stdev(nums):.2f}")`)
           inset
           title="Code Execution Traces"
           subtitle="every code_execute capability event · in-memory ring (last 50)"
-          action={<T className="text-[11px] text-text-tertiary">{codeEvents.length} event{codeEvents.length === 1 ? '' : 's'}</T>}
+          action={<T size="xs" className="text-text-tertiary">{codeEvents.length} event{codeEvents.length === 1 ? '' : 's'}</T>}
         />
         {eventsLoading && codeEvents.length === 0 ? (
           <LoadingState label="Loading code execution traces…" />
@@ -301,7 +302,7 @@ print(f"mean={statistics.mean(nums):.2f}, stdev={statistics.stdev(nums):.2f}")`)
             calls the sandbox.
           </InlinePlaceholder>
         ) : (
-          <Table>
+          <Table size="sm">
             <TableHead>
               <TableRow>
                 <TableTh>Session</TableTh>
@@ -321,14 +322,14 @@ print(f"mean={statistics.mean(nums):.2f}, stdev={statistics.stdev(nums):.2f}")`)
                 return (
                   <Fragment key={ev.id}>
                     <TableRow>
-                      <TableTd className="font-mono text-[10px] text-text-tertiary">
+                      <TableTd className="font-mono text-text-tertiary">
                         {ev.sessionId ? (ev.sessionId.length > 18 ? ev.sessionId.slice(0, 14) + '…' : ev.sessionId) : '—'}
                       </TableTd>
-                      <TableTd className="whitespace-nowrap text-[11px] text-text-tertiary">
+                      <TableTd className="whitespace-nowrap text-text-tertiary">
                         {relativeTime(ev.startedAt)}
                       </TableTd>
-                      <TableTd className="text-[11px]">{language}</TableTd>
-                      <TableTd className="text-[11px] text-text-tertiary">{ev.durationMs}ms</TableTd>
+                      <TableTd >{language}</TableTd>
+                      <TableTd className="text-text-tertiary">{ev.durationMs}ms</TableTd>
                       <TableTd>
                         <Chip tone={ev.ok ? 'success' : 'danger'} size="xs">{ev.ok ? 'ok' : 'error'}</Chip>
                       </TableTd>
@@ -371,7 +372,7 @@ print(f"mean={statistics.mean(nums):.2f}, stdev={statistics.stdev(nums):.2f}")`)
           inset
           title="Agent Sandbox Executions"
           subtitle="code the agents themselves ran during recent invocations"
-          action={<T className="text-[11px] text-text-tertiary">{agentSandboxRows.length} execution{agentSandboxRows.length === 1 ? '' : 's'}</T>}
+          action={<T size="xs" className="text-text-tertiary">{agentSandboxRows.length} execution{agentSandboxRows.length === 1 ? '' : 's'}</T>}
         />
         {invLoading && agentSandboxRows.length === 0 ? (
           <LoadingState label="Loading agent sandbox executions…" />
@@ -380,7 +381,7 @@ print(f"mean={statistics.mean(nums):.2f}, stdev={statistics.stdev(nums):.2f}")`)
             No agent-driven sandbox executions in the last 50 invocations.
           </InlinePlaceholder>
         ) : (
-          <Table>
+          <Table size="sm">
             <TableHead>
               <TableRow>
                 <TableTh>Agent</TableTh>
@@ -398,14 +399,14 @@ print(f"mean={statistics.mean(nums):.2f}, stdev={statistics.stdev(nums):.2f}")`)
                 return (
                   <Fragment key={key}>
                     <TableRow>
-                      <TableTd className="text-xs">{exec.agentName}</TableTd>
-                      <TableTd className="whitespace-nowrap text-[11px] text-text-tertiary">
+                      <TableTd >{exec.agentName}</TableTd>
+                      <TableTd className="whitespace-nowrap text-text-tertiary">
                         {relativeTime(exec.timestamp)}
                       </TableTd>
-                      <TableTd className="font-mono text-[10px] text-text-tertiary">
+                      <TableTd className="font-mono text-text-tertiary">
                         {exec.sessionId ? (exec.sessionId.length > 18 ? exec.sessionId.slice(0, 14) + '…' : exec.sessionId) : '—'}
                       </TableTd>
-                      <TableTd className="text-[11px] text-text-tertiary">{exec.durationMs}ms</TableTd>
+                      <TableTd className="text-text-tertiary">{exec.durationMs}ms</TableTd>
                       <TableTd>
                         <Chip tone={exec.error ? 'danger' : 'success'} size="xs">{exec.error ? 'error' : 'ok'}</Chip>
                       </TableTd>
@@ -448,7 +449,7 @@ print(f"mean={statistics.mean(nums):.2f}, stdev={statistics.stdev(nums):.2f}")`)
           inset
           title="Past Sessions"
           subtitle="from AgentCore Data Plane · code interpreter sessions auto-terminate after execution"
-          action={<T className="text-[11px] text-text-tertiary">{terminated.length} terminated</T>}
+          action={<T size="xs" className="text-text-tertiary">{terminated.length} terminated</T>}
         />
         {sessionsFailure ? (
           <UnavailableNotice
@@ -463,7 +464,7 @@ print(f"mean={statistics.mean(nums):.2f}, stdev={statistics.stdev(nums):.2f}")`)
             No past sessions yet. Run code above or invoke the scoring agent to trigger one.
           </InlinePlaceholder>
         ) : (
-          <Table>
+          <Table size="sm">
             <TableHead>
               <TableRow>
                 <TableTh>Agent</TableTh>
@@ -478,14 +479,14 @@ print(f"mean={statistics.mean(nums):.2f}, stdev={statistics.stdev(nums):.2f}")`)
                 const dur = new Date(s.lastActivityAt).getTime() - new Date(s.startedAt).getTime();
                 return (
                   <TableRow key={s.sessionId}>
-                    <TableTd className="text-xs">{s.agentName}</TableTd>
-                    <TableTd className="whitespace-nowrap text-[11px] text-text-tertiary">
+                    <TableTd >{s.agentName}</TableTd>
+                    <TableTd className="whitespace-nowrap text-text-tertiary">
                       {new Date(s.startedAt).toLocaleString()}
                     </TableTd>
-                    <TableTd className="font-mono text-[10px] text-text-tertiary">
+                    <TableTd className="font-mono text-text-tertiary">
                       {s.sessionId.length > 22 ? s.sessionId.slice(0, 16) + '…' : s.sessionId}
                     </TableTd>
-                    <TableTd className="text-[11px] text-text-tertiary">
+                    <TableTd className="text-text-tertiary">
                       {dur > 0 ? `${(dur / 1000).toFixed(1)}s` : '—'}
                     </TableTd>
                     <TableTd><Chip tone="neutral" size="xs">{s.status}</Chip></TableTd>

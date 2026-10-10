@@ -441,6 +441,46 @@ import {
   seededRunsFor,
 } from '../mock/bots.js';
 
+/**
+ * The offline analogue of reconcileBotRuns' run-backed SELECT (lib/bot-runner.ts),
+ * row for row and in the same column names, so the settle loop that consumes it
+ * is the one the real path runs.
+ *
+ * Why it exists: offline the reconcile was a flat no-op, so a governed
+ * marketplace dispatch in `dev:mock` never settled — its bot_run stayed
+ * `running` forever (holding a slot of the concurrency ceiling), its work item
+ * stayed `in_progress` even after its change was captured for review, and the
+ * dispatcher's sprint envelope never burned, because burn counts only settled
+ * cost. Joins are the SQL's: the run row by `run_id`, the newest change request
+ * captured from that run, the bot's per-run budget.
+ */
+export async function mockRunBackedSettlements(): Promise<Record<string, unknown>[]> {
+  const { agentProjectRuns } = await import('../mock/agent-project-runs.js');
+  const { sdlcChanges } = await import('../mock/sdlc.js');
+  const out: Record<string, unknown>[] = [];
+  for (const br of liveBotRuns.rows()) {
+    if (br.status !== 'running' || !br.runId) continue;
+    const run = agentProjectRuns.rows().find((r) => r.id === br.runId);
+    if (!run || (run.status !== 'done' && run.status !== 'failed')) continue;
+    const change = sdlcChanges.rows()
+      .filter((c) => c.runId === br.runId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+    const bot = br.botId ? MOCK_BOTS.find((b) => b.id === br.botId) : undefined;
+    out.push({
+      id: br.id,
+      work_item_id: br.workItemId ?? null,
+      run_status: run.status,
+      cost_usd: run.costUsd ?? null,
+      files_changed: run.filesChanged ?? null,
+      run_error: run.error ?? null,
+      change_id: change?.id ?? null,
+      pr_url: change?.prUrl ?? null,
+      budget_per_run_usd: bot?.budgetPerRunUsd ?? null,
+    });
+  }
+  return out;
+}
+
 /** Test seam — drop everything this process recorded, leaving the seeded cron
  *  history alone. `fixtureRegistry.resetAll()` (POST /api/__mock/reset) does the
  *  same for both halves, which is what makes an offline dispatch undoable. */
@@ -881,7 +921,35 @@ export function mockRunsAttributedTo(orgProjectId: string): BotRun[] {
   return [...byId.values()];
 }
 
-export async function createBotRun(input: {
+/**
+ * A bot_runs row was inserted or settled. Listeners get ids only (the work
+ * graph's refetch hint, lib/work-graph/live.ts); they re-read through the
+ * authorized REST/snapshot path, never from this payload.
+ */
+export interface BotRunChange { runId: string; botId: string | null; workItemId: string | null }
+const botRunListeners = new Set<(change: BotRunChange) => void>();
+export function onBotRunChange(listener: (change: BotRunChange) => void): () => void {
+  botRunListeners.add(listener);
+  return () => { botRunListeners.delete(listener); };
+}
+function emitBotRunChange(change: BotRunChange): void {
+  for (const listener of botRunListeners) {
+    try { listener(change); } catch { /* a listener never breaks the write */ }
+  }
+}
+
+export async function createBotRun(input: Parameters<typeof insertBotRun>[0]): Promise<BotRun | null> {
+  const run = await insertBotRun(input);
+  if (run) emitBotRunChange({ runId: run.id, botId: run.botId, workItemId: run.workItemId });
+  return run;
+}
+
+export async function finalizeBotRun(id: string, result: Parameters<typeof settleBotRun>[1]): Promise<void> {
+  await settleBotRun(id, result);
+  emitBotRunChange({ runId: id, botId: null, workItemId: null });
+}
+
+async function insertBotRun(input: {
   /** Null for a marketplace run — the work item is the mission, no bot exists. */
   botId: string | null; trigger: string; runId?: string | null; jobId?: string | null;
   workItemId?: string | null;
@@ -984,7 +1052,7 @@ export async function createBotRun(input: {
   return rows[0] ? rowToRun(rows[0]) : null;
 }
 
-export async function finalizeBotRun(id: string, result: {
+async function settleBotRun(id: string, result: {
   status: 'done' | 'failed' | 'skipped';
   costUsd?: number | null;
   /**

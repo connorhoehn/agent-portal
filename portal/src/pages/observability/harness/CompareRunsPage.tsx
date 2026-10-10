@@ -30,12 +30,11 @@ import {
   TableHead,
   TableRow,
   TableTh,
-  TableTd,
+  TableTd, T,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../../hooks/useFetch';
 import { CostChip } from '../../../components/observability/CostChip';
 import { ModeChip } from '../../../components/observability/ModeChip';
-import { T } from '../Text';
 import { RowEmpty } from '../ReadState';
 import { PassChip, ErrorBlock, RunIdPairLine } from './harnessShared';
 
@@ -248,18 +247,18 @@ function CompareRunsPage() {
       <Card padding="md">
         <Inline justify="between" align="start" gap="md" className="mb-3">
           <Stack gap="xs">
-            <T as="div" className="text-base font-semibold">
-              Comparing <T className="font-mono text-[11.5px]">{shortRunId(runA.runId)}</T> →{' '}
-              <T className="font-mono text-[11.5px]">{shortRunId(runB.runId)}</T>
+            <T as="div" size="sm" weight="semibold">
+              Comparing <T size="xs" className="font-mono">{shortRunId(runA.runId)}</T> →{' '}
+              <T size="xs" className="font-mono">{shortRunId(runB.runId)}</T>
             </T>
-            <Inline gap="sm" align="center" className="text-[12px] text-text-secondary">
-              <T title={`run A: ${runA.runId}`}>A:&nbsp;<strong>{runA.label}</strong></T>
+            <Inline gap="sm" align="center" className="text-xs text-text-secondary">
+              <T title={`run A: ${runA.runId}`}>A:&nbsp;<T size="sm" weight="semibold">{runA.label}</T></T>
               <ModeChip mode={summary.modeA} />
               <T className="text-text-tertiary">→</T>
-              <T title={`run B: ${runB.runId}`}>B:&nbsp;<strong>{runB.label}</strong></T>
+              <T title={`run B: ${runB.runId}`}>B:&nbsp;<T size="sm" weight="semibold">{runB.label}</T></T>
               <ModeChip mode={summary.modeB} />
             </Inline>
-            <Inline gap="sm" align="center" className="text-[12px] text-text-secondary">
+            <Inline gap="sm" align="center" className="text-xs text-text-secondary">
               <T>pass rate:</T>
               <Chip tone="neutral" size="xs">{fmtPct(summary.passRateA)}</Chip>
               <T className="text-text-tertiary">→</T>
@@ -279,31 +278,31 @@ function CompareRunsPage() {
                 {fmtSignedDuration(summary.durationDeltaMs)}
               </Chip>
             </Inline>
-            <Inline gap="sm" align="center" className="text-[12px] text-text-secondary">
-              <T>judge A:</T> <T className="font-mono text-[11.5px]">{summary.judgeModelA}</T>
+            <Inline gap="sm" align="center" className="text-xs text-text-secondary">
+              <T>judge A:</T> <T size="xs" className="font-mono">{summary.judgeModelA}</T>
               {summary.judgeModelA !== summary.judgeModelB && (
                 <>
                   <T className="text-text-tertiary">·</T>
-                  <T>judge B:</T> <T className="font-mono text-[11.5px]">{summary.judgeModelB}</T>
+                  <T>judge B:</T> <T size="xs" className="font-mono">{summary.judgeModelB}</T>
                   <Chip tone="warning" size="xs">judges differ</Chip>
                 </>
               )}
               <T className="text-text-tertiary">·</T>
-              <T>tests A:&nbsp;<strong>{runA.passed}/{runA.totalCases}</strong></T>
+              <T>tests A:&nbsp;<T size="sm" weight="semibold">{runA.passed}/{runA.totalCases}</T></T>
               <T className="text-text-tertiary">·</T>
-              <T>tests B:&nbsp;<strong>{runB.passed}/{runB.totalCases}</strong></T>
+              <T>tests B:&nbsp;<T size="sm" weight="semibold">{runB.passed}/{runB.totalCases}</T></T>
             </Inline>
           </Stack>
           <Inline gap="sm">
             <Link
               to={`/admin/observability/harness/runs/${encodeURIComponent(runIdA)}`}
-              className="text-[12px] text-primary no-underline px-2 py-0.5 rounded hover:underline"
+              className="text-xs text-primary no-underline px-2 py-0.5 rounded hover:underline"
             >
               ← Run A
             </Link>
             <Link
               to={`/admin/observability/harness/runs/${encodeURIComponent(runIdB)}`}
-              className="text-[12px] text-primary no-underline px-2 py-0.5 rounded hover:underline"
+              className="text-xs text-primary no-underline px-2 py-0.5 rounded hover:underline"
             >
               Run B →
             </Link>
@@ -321,8 +320,8 @@ function CompareRunsPage() {
           <Stack gap="xs">
             {summary.promptVersionDelta.map((d) => (
               <Inline key={d.agentId} gap="sm" wrap align="center" className="py-1.5 border-b border-border">
-                <T className="text-[12px] font-medium whitespace-nowrap">{d.agentId}</T>
-                <T className="font-mono text-[11.5px] text-text-tertiary">
+                <T size="xs" weight="medium" className="whitespace-nowrap">{d.agentId}</T>
+                <T size="xs" className="font-mono text-text-tertiary">
                   p:{shortPv(d.fromVersion)}
                 </T>
                 <T className="text-text-tertiary">→</T>
@@ -334,7 +333,7 @@ function CompareRunsPage() {
                   title="Diff the two prompt versions"
                 >
                   <Chip tone="neutral" size="xs">
-                    <T className="font-mono text-[11.5px]">p:{shortPv(d.toVersion)}</T>
+                    <T size="xs" className="font-mono">p:{shortPv(d.toVersion)}</T>
                   </Chip>
                 </Button>
               </Inline>
@@ -382,7 +381,7 @@ function CompareRunsPage() {
           >
             {neutralOpen ? '▾' : '▸'} Neutral
           </Button>
-          <T className="text-[11px] text-text-tertiary">
+          <T size="xs" className="text-text-tertiary">
             {neutral.length} test{neutral.length === 1 ? '' : 's'} within ±0.05
           </T>
         </Inline>
@@ -479,7 +478,7 @@ function ResultsTable({
   void runIdA; void runIdB;
 
   return (
-    <Table>
+    <Table size="sm">
       <TableHead>
         <TableRow>
           <TableTh>Test</TableTh>
@@ -506,8 +505,8 @@ function ResultsTable({
                 onClick={() => onToggleExpand(r.testId)}
                 className="cursor-pointer"
               >
-                <TableTd className="text-[11px] text-text-tertiary font-mono whitespace-nowrap">{r.testId}</TableTd>
-                <TableTd className="text-[12px] font-medium whitespace-nowrap">{r.agentId || '—'}</TableTd>
+                <TableTd className="text-text-tertiary font-mono whitespace-nowrap">{r.testId}</TableTd>
+                <TableTd className="whitespace-nowrap">{r.agentId || '—'}</TableTd>
                 <TableTd className="whitespace-nowrap">
                   <Chip tone={judgeTone(r.scoreA)} size="xs">{fmt(r.scoreA)}</Chip>
                   <T className="text-text-tertiary mx-1">→</T>
@@ -523,7 +522,7 @@ function ResultsTable({
                     {fmtSignedCost(r.costDeltaUsd)}
                   </Chip>
                 </TableTd>
-                <TableTd className="text-[12px] text-text-secondary whitespace-nowrap">
+                <TableTd className="text-text-secondary whitespace-nowrap">
                   {fmtSignedDuration(r.durationDeltaMs)}
                 </TableTd>
                 <TableTd className="whitespace-nowrap">
@@ -535,7 +534,7 @@ function ResultsTable({
                   <Link
                     to={`/admin/observability/harness/runs/${encodeURIComponent(runIdA)}`}
                     onClick={(e) => e.stopPropagation()}
-                    className="text-[11px] text-primary no-underline hover:underline"
+                    className="text-xs text-primary no-underline hover:underline"
                     title="Open run A"
                   >
                     view A
@@ -544,7 +543,7 @@ function ResultsTable({
                   <Link
                     to={`/admin/observability/harness/runs/${encodeURIComponent(runIdB)}`}
                     onClick={(e) => e.stopPropagation()}
-                    className="text-[11px] text-primary no-underline hover:underline"
+                    className="text-xs text-primary no-underline hover:underline"
                     title="Open run B"
                   >
                     view B
@@ -570,11 +569,11 @@ function ResponseDiff({ result }: { result: ComparedResult }) {
   return (
     <Inline gap="md" align="start">
       <Stack gap="xs" className="flex-1 min-w-0">
-        <T as="div" className="text-[10px] font-bold text-text-tertiary tracking-wide">RESPONSE A</T>
+        <T as="div" size="xs" weight="semibold" className="text-text-tertiary tracking-wide">RESPONSE A</T>
         <CodeBlock code={result.responseA ?? '(no response captured)'} language="text" />
       </Stack>
       <Stack gap="xs" className="flex-1 min-w-0">
-        <T as="div" className="text-[10px] font-bold text-text-tertiary tracking-wide">RESPONSE B</T>
+        <T as="div" size="xs" weight="semibold" className="text-text-tertiary tracking-wide">RESPONSE B</T>
         <CodeBlock code={result.responseB ?? '(no response captured)'} language="text" />
       </Stack>
     </Inline>
@@ -630,23 +629,23 @@ function PromptDiffModal({
       {loading && <LoadingState label="Loading…" />}
 
       {err && (
-        <T as="div" className="p-4 overflow-y-auto text-[12px] text-danger">
+        <T as="div" size="xs" className="p-4 overflow-y-auto text-danger">
           Could not load prompt versions: {err}
         </T>
       )}
 
       {!loading && !err && (
-        <Stack gap="md" className="p-4 overflow-y-auto text-[12px]">
+        <Stack gap="md" className="text-xs p-4 overflow-y-auto">
           <Inline gap="md" align="start">
             <Stack gap="xs" className="flex-1 min-w-0">
-              <T as="div" className="text-[10px] font-bold text-text-tertiary tracking-wide">
-                FROM — <T className="font-mono text-[11.5px]">p:{shortPv(entry.fromVersion)}</T>
+              <T as="div" size="xs" weight="semibold" className="text-text-tertiary tracking-wide">
+                FROM — <T size="xs" className="font-mono">p:{shortPv(entry.fromVersion)}</T>
               </T>
               <CodeBlock code={fromDetail?.content ?? '(not registered)'} language="text" />
             </Stack>
             <Stack gap="xs" className="flex-1 min-w-0">
-              <T as="div" className="text-[10px] font-bold text-text-tertiary tracking-wide">
-                TO — <T className="font-mono text-[11.5px]">p:{shortPv(entry.toVersion)}</T>
+              <T as="div" size="xs" weight="semibold" className="text-text-tertiary tracking-wide">
+                TO — <T size="xs" className="font-mono">p:{shortPv(entry.toVersion)}</T>
               </T>
               <CodeBlock code={toDetail?.content ?? '(not registered)'} language="text" />
             </Stack>

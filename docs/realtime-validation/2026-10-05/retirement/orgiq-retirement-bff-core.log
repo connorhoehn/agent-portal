@@ -1,0 +1,16 @@
+✔ two full BFFs share protected huddle messages and canonical Work pages (823.730875ms)
+✔ both BFFs refuse a retired real directory epoch and retain protected history (953.135208ms)
+✔ forged caller and foreign lobby frames cannot cross the application boundary (302.398458ms)
+✔ a private channel created on one BFF is visible remotely and its remote leave revokes delivery (382.482833ms)
+✔ shared presence on the other BFF uses real identity and omits a revoked source (122.6745ms)
+✔ a missed-call notification reaches a peer BFF and replays from the shared inbox (258.859292ms)
+✔ retiring the real masquerade operator blocks admission on both BFFs (28.821083ms)
+✔ an abruptly lost BFF returns under a new owner and restores the same authenticated call seat (33179.018084ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 8
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 36207.859708

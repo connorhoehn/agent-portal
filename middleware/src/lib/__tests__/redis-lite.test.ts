@@ -124,3 +124,66 @@ it('speaks the notification inbox\'s sorted sets, and the node-redis-shaped adap
     ]));
   } finally { await r.quit(); }
 });
+
+describe('deadlines (capacity review #8)', () => {
+  // A Redis that accepts TCP and then says nothing — a stalled node, a
+  // failover in progress — used to hang every awaited command forever.
+  let silent: net.Server;
+  let silentPort: number;
+  let stalled = true;
+  const sockets: net.Socket[] = [];
+  beforeAll(async () => {
+    silent = net.createServer((s) => {
+      sockets.push(s);
+      s.on('data', (d) => {
+        if (stalled) return;
+        for (const cmd of parseCommands(String(d)).cmds) s.write(cmd[0] === 'PING' ? '+PONG\r\n' : '+OK\r\n');
+      });
+    });
+    await new Promise<void>((r) => silent.listen(0, '127.0.0.1', r));
+    silentPort = (silent.address() as AddressInfo).port;
+  });
+  afterAll(async () => {
+    for (const s of sockets) s.destroy();
+    await new Promise<void>((r) => silent.close(() => r()));
+  });
+
+  it('rejects a command that gets no reply, and every command queued behind it', async () => {
+    stalled = true;
+    const r = new RedisLite(`redis://127.0.0.1:${silentPort}`, { commandTimeoutMs: 80 });
+    const started = Date.now();
+    const results = await Promise.allSettled([r.ping(), r.get('a')]);
+    expect(results.map((x) => x.status)).toEqual(['rejected', 'rejected']);
+    expect(String((results[0] as PromiseRejectedResult).reason)).toMatch(/PING timed out after 80ms/);
+    expect(Date.now() - started).toBeLessThan(2_000);
+  });
+
+  it('reconnects on the next command once the server answers again', async () => {
+    stalled = true;
+    const r = new RedisLite(`redis://127.0.0.1:${silentPort}`, { commandTimeoutMs: 80 });
+    await expect(r.ping()).rejects.toThrow(/timed out/);
+    stalled = false;
+    await expect(r.ping()).resolves.toBe('PONG');
+    await r.quit();
+  });
+
+  it('a connect that never completes is bounded too', async () => {
+    // 10.255.255.1 is unroutable from a laptop/CI box: SYNs go nowhere.
+    const r = new RedisLite('redis://10.255.255.1:6379', { connectTimeoutMs: 100, commandTimeoutMs: 0 });
+    const started = Date.now();
+    await expect(r.ping()).rejects.toThrow();
+    expect(Date.now() - started).toBeLessThan(3_000);
+  });
+
+  it('REDIS_COMMAND_TIMEOUT_MS sets the default; 0 disables it', () => {
+    const prev = process.env['REDIS_COMMAND_TIMEOUT_MS'];
+    try {
+      process.env['REDIS_COMMAND_TIMEOUT_MS'] = '0';
+      expect((new RedisLite('redis://127.0.0.1:1') as unknown as { commandTimeoutMs: number }).commandTimeoutMs).toBe(0);
+      delete process.env['REDIS_COMMAND_TIMEOUT_MS'];
+      expect((new RedisLite('redis://127.0.0.1:1') as unknown as { commandTimeoutMs: number }).commandTimeoutMs).toBe(2_000);
+    } finally {
+      if (prev === undefined) delete process.env['REDIS_COMMAND_TIMEOUT_MS']; else process.env['REDIS_COMMAND_TIMEOUT_MS'] = prev;
+    }
+  });
+});

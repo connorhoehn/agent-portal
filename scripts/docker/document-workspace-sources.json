@@ -13,6 +13,6 @@
     "_comment": "The OrgIQ-SocialImages builds (scripts/docker/social-images-build.mjs). Kept apart from `sources` so the document-workspace build neither archives nor rebuilds them; the commits are the clean sibling HEADs on 2026-09-29, the trees the compose `social` profile builds from. Move a pin by editing the full 40-char sha.",
     "realtime-examples": { "url": "git@github.com:connorhoehn/realtime-examples.git", "commit": "423c91fd4cbe2f542111de43955dc36ca008867a" },
     "platform-api": { "url": "git@github.com:connorhoehnslalom/platform-api.git", "commit": "416df6d9137245bb77685122a63ee38716ad9597" },
-    "live-video-streaming": { "url": "git@github.com:connorhoehn/live-video-streaming.git", "commit": "cc28d0286538eb6696b1586afcab28d708966b1e" }
+    "live-video-streaming": { "url": "git@github.com:connorhoehn/live-video-streaming.git", "commit": "1c26334bd7508fc5fc6afbb1319e6d2fd7a0aa45" }
   }
 }

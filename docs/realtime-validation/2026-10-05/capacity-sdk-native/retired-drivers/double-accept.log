@@ -1,0 +1,36 @@
+target ws://orgiq-bff-capacity-a:3001/ws · health http://orgiq-bff-capacity-a:3001/api/health · server pid unknown (pass --server-pid) · hold 30s
+
+=== double-accept · group 2 · 100 calls · 1000 sockets (200 in calls, 10 second tabs, 790 chat/presence) · run tag 60b2
+  ramp: 1000/1000 connected in 20s
+  connect 1000/1000 (p95 8.3 ms) · established 100/100 · 69.7s
+  invite→incoming  p50 39.9  p95 61.8  p99 68.2  max 93.5 ms (n=100)
+  accept→accepted  p50 37.3  p95 55.5  p99 79.2  max 124.7 ms (n=100)
+  chat delivery    p50 36.9  p95 79.3  p99 844.8  max 1137.2 ms (n=1580 of 1580 sent)
+  cross: call 0 chat 0 presence 0 · unexpected ended 0 · answered-elsewhere 10 · denied 0 · other errors 0
+  double accept: 10/10 exactly one winner; duplicate accepted at caller 0
+  slow /api/health samples (>=50 ms): 60.1ms@20s/ramp
+  server orgiq-bff-capacity-a: docker-working-set peak 198.1 MiB · CPU peak 97.3% mean 42.2% · /api/health p50 1.1 p99 35.1 max 60.1 ms (0 errors; 0 planned-outage errors) · client loop p99 12.3 ms
+  PASS  sockets connect: 1000/1000 (100%)
+  PASS  calls established: 100/100 (all)
+  PASS  invite→incoming p95: 61.8 (< 250 ms)
+  PASS  invite→incoming p99: 68.2 (< 1000 ms)
+  PASS  accept→accepted p95: 55.5 (< 250 ms)
+  PASS  chat delivery p95: 79.3 (< 300 ms, with paired-sender evidence)
+  PASS  background chat coverage: 790/790 (all paired senders reach their peer)
+  PASS  background chat admission: 790/790; 2703.5ms (all server join acknowledgements within 10 seconds)
+  PASS  cross-call/channel deliveries: 0 (0)
+  PASS  double accept: exactly one winner: 10/10 (all)
+  PASS  ended before scripted hang-up: 0 (0)
+  PASS  unplanned socket disconnects: 0 (0)
+  PASS  AUTHZ_CHANNEL_DENIED: 0 (0)
+  PASS  event-loop proxy (/api/health p99): 35.1 (< 50 ms)
+  PASS  health errors outside planned outage: 0 (0)
+  PASS  server memory peak: 198.1 (< 700 MiB)
+  PASS  container samples: 0 (no errors, at least one sample)
+  PASS  peer 1: health p99: 43.8 (< 50 ms)
+  PASS  peer 1: health errors: 0 (0)
+  PASS  peer 1: memory peak: 209 (< 700 MiB)
+  PASS  peer 1: container samples: 0 (no errors, at least one sample)
+
+1/1 runs passed every threshold
+  PASS  double-accept × 2

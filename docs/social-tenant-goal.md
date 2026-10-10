@@ -8,7 +8,7 @@ passes and prints every failing line, so one run shows the whole backlog.
 scripts/validate-social-tenant.sh                 # everything, slow suites included
 scripts/validate-social-tenant.sh --quick         # skip jest, vite build, Playwright; siblings run --quick
 scripts/validate-social-tenant.sh --phase S0      # gates + one phase (S0 | N | S1 | S2 | E)
-scripts/validate-social-tenant.sh --seal          # record the journey logs' source digests (after a walk)
+scripts/journeys/seal.sh docs/social-journeys/<dir>  # seal journey logs (after a walk; docs/journeys.md)
 scripts/validate-social-tenant.sh --no-time       # accepted for the /goal hook; skips SOCIAL_TIME_GATE
 ```
 
@@ -40,6 +40,93 @@ lanes). The registration checklist is the research's §A.4
 21 rows, each a file and a line; the S0 phase checks those files by name.
 The pipelines tenant has its own goal (`docs/pipelines-tenant-goal.md`,
 lane D's second pair) and is not judged here.
+
+## Pinning implementation — 2026-10-01
+
+Design §4.4's pin state is now wired end to end. Both consumers pin
+realtime-modules 0.100.1 at
+`270183c2344b2320108f9a773a0480b49feb309c` (`feat/chat-pins`).
+The library owns memory/Dynamo pin stores; the BFF owns current grant and
+conversation access checks; the installed conversation composites own the UI.
+Pin excerpts, authors and timestamps come from the authoritative message store.
+Missing/deleted originals and messages before the caller's history floor are
+hidden. Jump retrieves an older original through authenticated
+`GET /api/chat/message` and explains when intervening history is not loaded.
+The Social stack grants the middleware access to the existing `chat-pins`
+table. That infrastructure change has not been deployed.
+
+Verification is recorded by executable tests: seven library store tests,
+twenty BFF route tests (`chat-pins.test.ts`), and four headless browser journeys
+(`portal/e2e/social-pins.spec.ts`) covering live sharing, reload, jump,
+another member unpinning, failed-save rollback, and Jump to an original
+excluded by 1,001 newer persisted messages. The fourth journey modifies one
+outbound frame to provoke a real server rejection, observes the retained
+draft and explanation, then retries normally and observes one persisted
+message and a cleared draft. Browser persistence is
+observed across reloads on the memory backend; Dynamo durability is tested
+with a command client double and a fresh adapter instance.
+The host chat service now accepts channel identifiers up to 256 characters,
+so valid team slugs do not exceed its former 50-character default. A real
+gateway regression creates a private team whose General identifier exceeds
+50 characters and verifies owner/member join, bidirectional delivery,
+persistence and nonmember denial. Conversation sending waits for a chat
+join and a persisted `sent` acknowledgement; rejected or unconfirmed sends
+retain the composer draft and show an explanation. Six pure client tests
+cover acknowledgements, nested errors, timeouts and scope changes, including
+late acknowledgements from a previous attempt. An echoed message must match
+the attempt nonce, channel and authoritative author before its id can
+confirm delivery.
+All 24 role/surface journeys were subsequently re-observed and sealed on
+2026-10-01. Their local interactions pass with no console errors or overflow;
+12 conversation records pass and 12 media records remain limited by the
+unavailable platform-api/SFU stack. Those records predate the personal team
+preference changes below and now need a fresh walk. Live-media acceptance
+and the Assessment dependency's 19 stale records remain open. The whole
+Social goal is not accepted.
+
+## Personal team preferences and Leave — 2026-10-03
+
+The installed `TeamChannelTree` Pin/Unpin menu now writes the caller's
+membership favorite through `PATCH /api/social/teams/:teamId/me`, forwarding
+only `{favorite:boolean}` to the existing upstream API. Its native tree puts
+pinned teams first. This preference is personal; another member's order,
+the shared team, channels and notifications do not change. Reload reads the
+stored preference. Mock membership rows are registered and resettable.
+
+The BFF requires ViewSocial, the current selected Social role and exact
+session epoch, current masquerade actor authority, and active team membership.
+It refuses extra actor/tenant fields and verifies the upstream team/user/value
+receipt. Participants can now Leave their own team through the existing
+menu. Removing someone else retains ManageTeams and owner checks. Successful
+membership writes advance a roster generation, preventing a pre-write
+list/detail read from restoring the removed member's gateway admission.
+
+The frontend waits for a confirmed save, rejects older list responses and
+uses one synchronous lock per team for Pin and membership changes. Short
+receipt/departure reconciliation protects against eventual reads and expires
+after 30 seconds so another tab of the same actor can change the preference
+or observe a re-invitation. Leave immediately removes the team and its channels.
+Late failures, receipts and Leave navigation stay scoped to the original
+actor and pane; failed writes retain confirmed state with an explanation.
+
+Verified locally: 13 pure preference client/model tests, 41 registered
+Express-handler/provider contracts, portal/middleware typecheck, all 1,254
+portal tests, production build, component discipline, nav parity and 78
+wire/policy tests. Handler/provider tests omit only the standard suite's
+unrelated global listening hook through a temporary test config. The ordinary
+HTTP suite retains real transport contracts; it has not run for this feature.
+`portal/e2e/social-team-preferences.spec.ts` discovers 12 prepared browser
+cases for persistence/isolation, refusal/retry, stale reads, write locks,
+scope/navigation and participant Leave. They remain unrun because sandbox
+localhost binding fails with EPERM. The installed menu's Enter/Space handler
+appears to consume nested button activation; this source-derived finding is
+queued in `docs/ui-components-queue.md` and has a separate unskipped contract.
+
+The static route inventory has 609 routes and 329 GET routes. The new PATCH
+capture refusal was generated from its independent-platform-backend policy;
+captured response data, timestamps and server digests were retained. Fresh
+HTTP captures and all 24 Social role/surface walks are pending. Their digests
+were not resealed without observation; the overall judge remains red.
 
 ## Cast
 
@@ -192,6 +279,11 @@ is the sanctioned one); and the isolation logs below.
    - `a direct message round trip`
    - `a forged cross-tenant subscribe is refused with AUTHZ_CHANNEL_DENIED`
 9. Journey logs for `channels` and `dms`.
+10. Shared pins (design §4.4): the installed library exports
+    `DynamoChatPinsStore` and `MemoryChatPinsStore`; the gateway imports the
+    store, `/api/chat/pins` is mounted, and the conversation imports `usePins`.
+    BFF access/persistence tests exist and `portal/e2e/social-pins.spec.ts`
+    passes the shared pin/reload/jump/unpin and failed-save journeys.
 
 ## Phase S2 — rooms, teams, recordings
 
@@ -260,10 +352,11 @@ One log + one screenshot per (role × surface) under
 Required fields (grepped): `verdict: pass`, `console errors: 0`,
 `layout: pass`, `keyboard: pass`, `empty-state: pass|n/a`,
 `realtime: pass|n/a`, `screenshot: <file>` (the file exists beside the log),
-`pages: <files>`; the words TODO, unverified, placeholder anywhere make the
-log not count. Freshness is by **content digest** of the `pages:` entries,
-recorded in `docs/social-journeys/.pages-sha` by `--seal` — exactly the
-assessment rule; normal runs never write it.
+`pages: <files>` (optional since 2026-10-08); the words TODO, unverified,
+placeholder anywhere make the log not count. Freshness is the walked routes'
+**rendered contract** against the seal in `docs/social-journeys/.contract-sha`
+(docs/journeys.md), written only by `scripts/journeys/seal.sh` after a walk;
+normal runs never write it.
 
 **Isolation** (`docs/social-journeys/isolation/`, phase S0):
 

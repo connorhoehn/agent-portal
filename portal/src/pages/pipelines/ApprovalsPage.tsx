@@ -29,11 +29,11 @@ interface ApprovalsResponse { approvals: ApprovalRequest[]; total: number; unava
 
 const COLUMNS: DataTableColumn<ApprovalRequest>[] = [
   { key: 'title', header: 'Waiting step', render: (a) => a.title },
-  { key: 'source', header: 'Asked by', render: (a) => <Chip tone="neutral" size="xs">{approvalSourceLabel(a.source)}</Chip> },
+  { key: 'source', header: 'Asked by', width: '128px', render: (a) => <Chip tone="neutral" size="xs">{approvalSourceLabel(a.source)}</Chip> },
   { key: 'step', header: 'Step', render: (a) => a.stepId },
   { key: 'approvers', header: 'Approved by', render: (a) => approverSummary(a.requiredRoles, a.rolesDefaulted) },
   {
-    key: 'requestedAt', header: 'Waiting since', sortable: true,
+    key: 'requestedAt', header: 'Waiting since', numeric: true, sortable: true,
     compare: (x, y) => (x.requestedAt ?? '').localeCompare(y.requestedAt ?? ''),
     render: (a) => (a.requestedAt ? relativeTime(a.requestedAt) : '—'),
   },
@@ -84,6 +84,7 @@ export default function ApprovalsPage() {
       ) : (
         <DataTable
           data-testid="pipelines-approvals-table"
+          size="sm"
           data={rows}
           columns={COLUMNS}
           keyField={(a) => a.id}

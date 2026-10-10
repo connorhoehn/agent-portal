@@ -13,6 +13,8 @@ import { annotateToolResult } from '../lib/answer-sources.js';
 import { degradedFields } from '../lib/upstream.js';
 import { parseSearchSelection, numberSearchRecords, searchContextMessage } from '../lib/search-context.js';
 import { openAgentRun, recordAgentRunEvent, closeAgentRun } from '../lib/agent-runs-live.js';
+import { parsePresentationContext, resolvePresentationContext, presentationQuestionMessage, type PresentationQuestionContext } from '../lib/presentation-context.js';
+import { AppError, ValidationError } from '../lib/async-handler.js';
 
 export const agentsRouter = Router();
 
@@ -164,13 +166,30 @@ function requireAgentTenant(req: import('express').Request, res: import('express
 // data-plane ManageIngest capability. Read agents (supervisor/search/advisor)
 // keep their existing Search + tenant gating, authorized by requireAgentTenant.
 //
+// The devbox runtime is gated the same way on ManageDevbox: it runs Claude
+// Code in a microVM — compute that bills and a shell that can push to repos —
+// which is why /api/devbox/* already requires ManageDevbox. The portal's agent
+// picker hides it from roles without the capability, but a hidden control is
+// not a gate: until 2026-10-01 any signed-in role could POST here directly.
+//
 // The id is matched on the normalized form because the runtime cache registers
-// several spellings (graph-builder / orgiq-graph-builder / orgiq_graph_builder),
-// mirroring how agentTenant() normalizes.
+// several spellings (graph-builder / orgiq-graph-builder / orgiq_graph_builder,
+// devbox / orgiq-devbox / orgiq_devbox), mirroring how agentTenant() normalizes.
 const WRITE_AGENT_RE = /(graph[-_]builder|ingestion|scoring)/;
+const DEVBOX_AGENT_RE = /(^|[-_])devbox($|[-_])/;
 
-function isWriteAgent(agentId: string): boolean {
-  return WRITE_AGENT_RE.test(agentId.toLowerCase());
+interface AgentCapabilityGate { action: string; message: string }
+
+/** The capability a DIRECT invoke of `agentId` needs beyond Search, or null. */
+export function agentCapabilityGate(agentId: string): AgentCapabilityGate | null {
+  const id = agentId.toLowerCase();
+  if (WRITE_AGENT_RE.test(id)) {
+    return { action: 'ManageIngest', message: 'this agent performs data writes; you need the ManageIngest capability to invoke it directly' };
+  }
+  if (DEVBOX_AGENT_RE.test(id)) {
+    return { action: 'ManageDevbox', message: 'this agent runs a devbox (Claude Code in a microVM); you need the ManageDevbox capability to invoke it directly' };
+  }
+  return null;
 }
 
 // Runs AFTER requireAgentTenant and BEFORE the SSE stream opens, so a blocked
@@ -181,30 +200,38 @@ async function requireAgentCapability(
   next: import('express').NextFunction,
 ): Promise<void> {
   const agentId = String(req.params['agentId'] ?? '');
-  if (!isWriteAgent(agentId)) { next(); return; }
+  const gate = agentCapabilityGate(agentId);
+  if (!gate) { next(); return; }
   const session = resolveSession(req);
   if (!session) {
     // requireAction('Search') runs first and 401s an anonymous caller, so this
-    // is belt-and-suspenders for a write agent reached without a session.
+    // is belt-and-suspenders for a gated agent reached without a session.
     res.status(401).json({ error: 'Unauthenticated' });
     return;
   }
   try {
-    if (await isAllowed(session, 'ManageIngest')) { next(); return; }
-    res.status(403).json({
-      error: 'Forbidden',
-      action: 'ManageIngest',
-      agentId,
-      message: 'this agent performs data writes; you need the ManageIngest capability to invoke it directly',
-    });
+    if (await isAllowed(session, gate.action)) { next(); return; }
+    res.status(403).json({ error: 'Forbidden', action: gate.action, agentId, message: gate.message });
   } catch {
     // Authorization infrastructure failure (AVP unreachable/throttled) — 503,
     // matching requireAction's distinction between a DENY and an outage.
-    res.status(503).json({ error: 'authorization unavailable', action: 'ManageIngest' });
+    res.status(503).json({ error: 'authorization unavailable', action: gate.action });
   }
 }
 
-agentsRouter.post('/:agentId/invoke', requireAction('Search'), requireAgentTenant, requireAgentCapability, asyncHandler(async (req, _res, next) => { parseSearchSelection(req.body?.selection); next(); }), agentStreamMiddleware(async (req: ExpressRequest, stream: AgentStream, signal: AbortSignal) => {
+const presentationContexts = new WeakMap<ExpressRequest, PresentationQuestionContext>();
+agentsRouter.post('/:agentId/invoke', requireAction('Search'), requireAgentTenant, requireAgentCapability, asyncHandler(async (req, _res, next) => {
+  parseSearchSelection(req.body?.selection);
+  const presentation = parsePresentationContext(req.body?.presentationContext);
+  if (presentation) {
+    if (String(req.params['agentId'] ?? '') !== 'orgiq-supervisor') throw new AppError(403, 'Presentation questions require the Work supervisor');
+    if (typeof req.body?.message !== 'string' || !req.body.message.trim() || req.body.message.length > 8_000) {
+      throw new ValidationError('Presentation question must contain 1 to 8,000 characters');
+    }
+    presentationContexts.set(req, await resolvePresentationContext(presentation, resolveSession(req)));
+  }
+  next();
+}), agentStreamMiddleware(async (req: ExpressRequest, stream: AgentStream, signal: AbortSignal) => {
   const agentId = String(req.params['agentId'] ?? '');
   const { message, sessionId, actorId, selection, payload: rawPayload } = req.body as {
     message?: string;
@@ -217,19 +244,23 @@ agentsRouter.post('/:agentId/invoke', requireAction('Search'), requireAgentTenan
   // `mode` and `document` at the top of its payload, which `message` cannot
   // carry to the fleet. A plain object only, bounded, and never the keys the
   // route owns (message, sessionId, userId, auth, history) — those stay ours.
-  const structuredInput = agentStructuredInput(rawPayload);
+  const presentation = presentationContexts.get(req);
+  const structuredInput = { ...agentStructuredInput(rawPayload), ...(presentation ? { presentationQuestion: presentation } : {}) };
   const rawUserMessage = message ?? '';
   const canonicalSessionId = deriveSessionId(req);
 
   // Only server-resolved records enter context. Existing runtime capabilities
   // still determine what this agent may execute; selection grants no authority.
-  const refs = parseSearchSelection(selection);
+  // A presentation reference is the evidence scope. Its initiative supplies
+  // access, not a second unrelated context read or replacement answer.
+  const refs = presentation ? [] : parseSearchSelection(selection);
   const principal = resolveSession(req);
   const { resolveSearchContext } = refs.length ? await import('../providers/search.js') : { resolveSearchContext: null };
   const context = refs.length && principal && resolveSearchContext
     ? await resolveSearchContext(principal, refs) : { records: [], edges: [] };
   const contextRecords = numberSearchRecords(context.records);
-  const userMessage = searchContextMessage(rawUserMessage, contextRecords, context.edges);
+  const userMessage = presentation ? presentationQuestionMessage(rawUserMessage, presentation)
+    : searchContextMessage(rawUserMessage, contextRecords, context.edges);
 
   const startedAt = new Date();
   const agentName = await resolveAgentName(agentId);
@@ -248,7 +279,7 @@ agentsRouter.post('/:agentId/invoke', requireAction('Search'), requireAgentTenan
     // bundle carry it back (pipelines P1).
     runId: stream.runId,
     history,
-    ...(structuredInput ? { structuredInput } : {}),
+    ...(Object.keys(structuredInput).length ? { structuredInput } : {}),
     ...(req.session ? {
       userId: req.session.sub,
       auth: {
@@ -308,6 +339,17 @@ agentsRouter.post('/:agentId/invoke', requireAction('Search'), requireAgentTenan
     stream.toolCallEnd(id);
     stream.toolCallResult(randomUUID(), id, result);
     turnToolCalls.set(id, { id, name: 'search_context', args, result });
+  }
+  if (presentation) {
+    const id = randomUUID();
+    const { content, ...reference } = presentation;
+    const args = JSON.stringify({ deckId: reference.deckId, revisionId: reference.revisionId, scope: reference.scope, slideId: reference.slideId });
+    const result = JSON.stringify({ ...reference, slideTitles: content.slides.map(slide => slide.title) });
+    stream.toolCallStart(id, 'presentation_context');
+    stream.toolCallArgs(id, args);
+    stream.toolCallEnd(id);
+    stream.toolCallResult(randomUUID(), id, result);
+    turnToolCalls.set(id, { id, name: 'presentation_context', args, result });
   }
 
   try {
@@ -474,7 +516,7 @@ agentsRouter.post('/:agentId/invoke', requireAction('Search'), requireAgentTenan
   deriveRunId,
 }));
 
-const RESERVED_INVOKE_KEYS = new Set(['message', 'prompt', 'input_text', 'sessionId', 'userId', 'auth', 'history']);
+const RESERVED_INVOKE_KEYS = new Set(['message', 'prompt', 'input_text', 'sessionId', 'userId', 'auth', 'history', 'presentationQuestion', 'presentationContext']);
 const MAX_STRUCTURED_INPUT_BYTES = 64 * 1024;
 /**
  * The invoke body's optional `payload` as the runtime's structured input: a

@@ -16,12 +16,11 @@ import {
   MetaLine,
   Select,
   Stack,
-  Switch,
+  Switch, T,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { escapeNestReducer, INITIAL_ESCAPE_NEST_STATE, shouldHostHandleEscape, topEscapeLayer } from './escapeNesting';
-import { T } from './Text';
 import { toastError, toastSuccess } from '../../lib/toastStore';
 import { sprintItemUrl, sprintItemsUrl } from './sprintForm';
 import { addableItems, bucketByColumn, PRIORITY_TONE, usd } from './sprintFormat';
@@ -133,7 +132,7 @@ function WorkItemCard({ item, isMine, canRemove, removing, onRemove }: {
     >
       <Stack gap="xs">
         <Inline gap="xs" align="start" justify="between" wrap={false}>
-          <T className="text-[13px] leading-snug">{item.title}</T>
+          <T size="sm" className="leading-snug">{item.title}</T>
           {canRemove ? (
             <IconButton
               aria-label={`Remove ${item.title} from this sprint`}
@@ -227,7 +226,7 @@ export function SprintBoard({ sprintId, orgProjectId, personId, canManageSprints
       <Inline justify="between">
         {addControl ?? <span />}
         {personId ? (
-          <Inline gap="xs" as="label" className="text-[12px] text-text-secondary cursor-pointer">
+          <Inline gap="xs" as="label" className="text-xs text-text-secondary cursor-pointer">
             <Switch
               checked={mineOnly}
               onChange={setMineOnly}

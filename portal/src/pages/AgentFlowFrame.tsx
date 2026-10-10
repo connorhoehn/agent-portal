@@ -20,8 +20,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { formatTokenCount } from '../lib/format';
-import { Card, Chip, Inline, Stack, StatusDot } from '@connorhoehnslalom/ui-components/shared';
-import { T } from './Text';
+import { Card, Chip, Inline, Stack, StatusDot, T } from '@connorhoehnslalom/ui-components/shared';
 
 // ── Palette + formatters shared with AgentFlowPage.tsx ───────────────────────
 
@@ -123,7 +122,7 @@ function AgentNodeComp({ id, data }: { id: string; data: unknown }) {
         {/* Every agent today is in the one `orgiq` cluster (CLUSTER_COLORS
             has a single entry) — a fixed semantic tone reads the same as
             that cluster's indigo swatch without a computed `style` object. */}
-        <Chip size="xs" uppercase tone="accent">Org</Chip>
+        <Chip size="xs" uppercase tone="accent">Work</Chip>
       </Inline>
 
       <T className="mb-[9px] block text-[10px] leading-[1.35] text-text-tertiary">{meta.description}</T>

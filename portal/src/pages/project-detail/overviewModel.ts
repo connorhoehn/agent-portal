@@ -102,6 +102,7 @@ export function headerStatsLine(project: ProjectDetail, tree: WorkItemTree[] | n
 /** One blocked item: "Blocked" · title / reason · assignee ┆ points ┆ Open →. */
 export interface AttentionItem {
   id: string;
+  key?: string | null;
   title: string;
   /** Why it is blocked — the short `blockedReason`; the summary, then the
    *  description, when no reason was written. Null when there is nothing. */
@@ -126,6 +127,7 @@ function attentionOf(projectId: string, row: FlatWorkItem): AttentionItem {
   const reason = [row.blockedReason, row.summary, row.description].map((s) => s?.trim()).find(Boolean) ?? null;
   return {
     id: row.id,
+    key: row.key ?? null,
     title: row.title,
     reason,
     assigneeName: row.assigneeName ?? null,
@@ -139,6 +141,7 @@ function attentionOf(projectId: string, row: FlatWorkItem): AttentionItem {
 /** Title only (U2); the person and points sit in the row's columns. */
 export interface UpNextRow {
   id: string;
+  key?: string | null;
   title: string;
   /** Null when unassigned — the column reads "Unassigned", never a guess. */
   assigneeName: string | null;
@@ -150,6 +153,7 @@ export interface UpNextRow {
 function upNextOf(projectId: string, row: FlatWorkItem): UpNextRow {
   return {
     id: row.id,
+    key: row.key ?? null,
     title: row.title,
     assigneeName: row.assigneeName ?? null,
     points: row.storyPoints != null ? ptsLabel(row.storyPoints) : null,

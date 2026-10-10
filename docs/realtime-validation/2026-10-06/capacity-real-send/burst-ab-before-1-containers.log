@@ -1,0 +1,2 @@
+Started owned compiled BFF a container 77584e608aa49f9e21731dea39d7c5797db5b559532bb14a54a1f25ce3339cb9 port 3065 image sha256:f9e9c019e510a2b87f6d6e1b50ddb682e02903bffbd634ed8a7e7edb6a5f1e25 budget 1 CPU / 1024 MiB
+Started owned compiled BFF b container 79744da2c18576db77e344cffd43e20a9b475debf4e339ea4c3a931641643ac1 port 3066 image sha256:f9e9c019e510a2b87f6d6e1b50ddb682e02903bffbd634ed8a7e7edb6a5f1e25 budget 1 CPU / 1024 MiB

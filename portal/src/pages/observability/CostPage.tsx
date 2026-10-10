@@ -20,7 +20,7 @@
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router';
 import {
-  Card, Chip, Inline, InlinePlaceholder, KPIGrid, PageSection, SectionLabel, Stack, StatCard, Table, TableHead, TableBody, TableRow, TableTh, TableTd,
+  Card, Chip, Inline, InlinePlaceholder, PageSection, SectionLabel, Stack, StatStrip, Table, TableHead, TableBody, TableRow, TableTh, TableTd, T,
 } from '@connorhoehnslalom/ui-components/shared';
 import {
   BarChart,
@@ -38,7 +38,6 @@ import { firstDegraded, readDegraded } from '../../lib/degraded';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { CostChip } from '../../components/observability/CostChip';
 import { SmartEmptyState } from '../../components/observability/SmartEmptyState';
-import { T } from './Text';
 import { normalizePgTimestamp, parsePgTimestamp, pgTimestampMs } from '../../lib/pgTimestamp';
 import { WindowPicker, useWindowUrlState } from './WindowPicker';
 
@@ -236,11 +235,7 @@ function costPerGoodTone(cost: number | null): 'success' | 'warning' | 'danger' 
 
 // ─── Reusable cell classes (Tailwind, not inline style objects) ─────────────
 
-const agentCellCls = 'whitespace-nowrap text-[12px] font-medium';
-const numCellCls = 'text-[12px] text-[var(--color-text-secondary)] [font-variant-numeric:tabular-nums]';
-const tsCellCls = 'whitespace-nowrap text-[11px] text-[var(--color-text-tertiary)]';
-const monoCellCls = 'whitespace-nowrap font-mono text-[11px] text-[var(--color-text-tertiary)]';
-const snippetCellCls = 'max-w-[360px] truncate text-[12px]';
+const snippetCellCls = 'max-w-[360px] truncate';
 
 // ─── Page ───────────────────────────────────────────────────────────────────
 
@@ -409,7 +404,7 @@ function CostPage() {
       <Card padding="md">
         <SectionLabel as="div" className="mb-3">
           Cost Over Time{' '}
-          <T className="text-[11px] font-normal text-[var(--color-text-tertiary)]">
+          <T size="xs" tone="tertiary">
             stacked $ per agent · bucket {win.bucket}m · window {win.label}
             {chartMarkers.length > 0 ? ` · ${chartMarkers.length} deploy marker${chartMarkers.length === 1 ? '' : 's'}` : ''}
           </T>
@@ -480,16 +475,16 @@ function CostPage() {
           </Stack>
         )}
         {chartMarkers.length > 0 && (
-          <Inline gap="xs" wrap align="center" className="mt-3 text-[11px] text-[var(--color-text-secondary)]">
-            <T className="text-[10px] font-bold tracking-[0.5px] text-[var(--color-text-tertiary)]">
+          <Inline gap="xs" wrap align="center" className="mt-3">
+            <T size="xs" weight="semibold" tone="tertiary">
               deploys:
             </T>
             {chartMarkers.map(({ marker, key }) => (
               <Chip key={key} tone="neutral" size="xs">
-                <T className="font-mono">
+                <T size="xs" className="font-mono">
                   {marker.agentId}@{marker.promptVersion.slice(0, 6)}
                 </T>
-                <T className="text-[10px] text-[var(--color-text-tertiary)]">
+                <T size="xs" tone="tertiary">
                   {' '}· {shortTime(marker.registeredAt, win.hours)}
                 </T>
               </Chip>
@@ -502,7 +497,7 @@ function CostPage() {
       <Card padding="md">
         <SectionLabel as="div" className="mb-3">
           Per-Agent Breakdown{' '}
-          <T className="text-[11px] font-normal text-[var(--color-text-tertiary)]">
+          <T size="xs" tone="tertiary">
             sorted by total cost · {perAgentBlind ? 'count unavailable' : `${perAgentRows.length} agent${perAgentRows.length === 1 ? '' : 's'}`}
           </T>
         </SectionLabel>
@@ -513,17 +508,17 @@ function CostPage() {
               : 'No invocations with cost data in this window.'}
           </InlinePlaceholder>
         ) : (
-          <Table>
+          <Table size="sm">
             <TableHead>
               <TableRow>
                 <TableTh>Agent</TableTh>
-                <TableTh>Invocations</TableTh>
-                <TableTh>Input tok</TableTh>
-                <TableTh>Output tok</TableTh>
-                <TableTh>Agent $</TableTh>
-                <TableTh>Judge $</TableTh>
-                <TableTh>Total $</TableTh>
-                <TableTh>Cost / good</TableTh>
+                <TableTh numeric>Invocations</TableTh>
+                <TableTh numeric>Input tok</TableTh>
+                <TableTh numeric>Output tok</TableTh>
+                <TableTh numeric>Agent $</TableTh>
+                <TableTh numeric>Judge $</TableTh>
+                <TableTh numeric>Total $</TableTh>
+                <TableTh numeric>Cost / good</TableTh>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -531,13 +526,13 @@ function CostPage() {
                 const cpg = costPerGoodByAgent.get(r.agentId) ?? null;
                 return (
                   <TableRow key={r.agentId}>
-                    <TableTd className={agentCellCls}>{r.agentId}</TableTd>
-                    <TableTd className={numCellCls}>{fmtInt(r.invocations)}</TableTd>
-                    <TableTd className={numCellCls}>{fmtInt(r.inputTokens)}</TableTd>
-                    <TableTd className={numCellCls}>{fmtInt(r.outputTokens)}</TableTd>
-                    <TableTd className={numCellCls}>{fmtUsd(r.estCostUsd, 4)}</TableTd>
-                    <TableTd className={numCellCls}>{fmtUsd(r.judgeCostUsd, 4)}</TableTd>
-                    <TableTd className={`${numCellCls} font-semibold`}>
+                    <TableTd className="whitespace-nowrap">{r.agentId}</TableTd>
+                    <TableTd numeric>{fmtInt(r.invocations)}</TableTd>
+                    <TableTd numeric>{fmtInt(r.inputTokens)}</TableTd>
+                    <TableTd numeric>{fmtInt(r.outputTokens)}</TableTd>
+                    <TableTd numeric>{fmtUsd(r.estCostUsd, 4)}</TableTd>
+                    <TableTd numeric>{fmtUsd(r.judgeCostUsd, 4)}</TableTd>
+                    <TableTd numeric className="font-semibold">
                       {fmtUsd(r.totalCostUsd)}
                     </TableTd>
                     <TableTd>
@@ -553,69 +548,51 @@ function CostPage() {
         )}
       </Card>
 
-      {/* Headline cards row — kept below the table it summarizes (matches
-          KnowledgeHomePage's "right now" strip): Total spend and Cost per
-          good response are both derivable from the Per-Agent Breakdown table
-          above, but A2A overhead is not shown anywhere else on this page, so
-          it stays here rather than being dropped. */}
-      <Card padding="md">
-        <KPIGrid columns={3}>
-          <StatCard
-            label="Total spend"
-            value={totalBlind ? '—' : fmtUsd(totalCostUsd)}
-            hint={
-              totalBlind
-                ? 'spend could not be read — this is not $0'
-                : `${fmtInt(invocations)} invocations · ${fmtInt(total?.inputTokens ?? 0)} in / ${fmtInt(total?.outputTokens ?? 0)} out tokens`
-            }
-          />
-          <StatCard
-            label="A2A overhead"
-            value={a2aBlind ? '—' : fmtPct(a2a?.a2aFraction ?? 0)}
-            danger={!a2aBlind && !!(a2a && a2a.a2aFraction > 0.4)}
-            hint={
-              a2aBlind
-                ? 'routing share could not be read'
-                : a2a && a2a.totalCostUsd > 0
-                ? `${fmtUsd(a2a.a2aCostUsd)} of ${fmtUsd(a2a.totalCostUsd)} on multi-agent routing · ${fmtInt(a2a.a2aInvocations)} sub-calls`
-                : 'of total cost is multi-agent routing'
-            }
-          />
-          <StatCard
-            label="Cost per good response"
-            value={
+      {/* Headline figures — kept below the table they summarize. */}
+      <StatStrip
+        variant="line"
+        size="sm"
+        aria-label="Cost headline figures"
+        items={[
+          {
+            label: 'total spend',
+            value: totalBlind ? '—' : fmtUsd(totalCostUsd),
+            title: totalBlind
+              ? 'spend could not be read — this is not $0'
+              : `${fmtInt(invocations)} invocations · ${fmtInt(total?.inputTokens ?? 0)} in / ${fmtInt(total?.outputTokens ?? 0)} out tokens`,
+          },
+          {
+            label: 'A2A overhead',
+            value: a2aBlind ? '—' : fmtPct(a2a?.a2aFraction ?? 0),
+            tone: !a2aBlind && a2a && a2a.a2aFraction > 0.4 ? 'danger' : 'default',
+            title: a2aBlind
+              ? 'routing share could not be read'
+              : a2a && a2a.totalCostUsd > 0
+              ? `${fmtUsd(a2a.a2aCostUsd)} of ${fmtUsd(a2a.totalCostUsd)} on multi-agent routing · ${fmtInt(a2a.a2aInvocations)} sub-calls`
+              : 'of total cost is multi-agent routing',
+          },
+          {
+            label:
+              valueRatioRanked.best && valueRatioRanked.worst &&
+              valueRatioRanked.best.agentId !== valueRatioRanked.worst.agentId
+                ? `per good response (best ${valueRatioRanked.best.agentId}, worst ${valueRatioRanked.worst.agentId} ${fmtUsd(valueRatioRanked.worst.costPerGood, 4)})`
+                : valueRatioRanked.best
+                ? `per good response (${valueRatioRanked.best.agentId})`
+                : 'per good response',
+            value:
               valueRatioRanked.best?.costPerGood != null
                 ? fmtUsd(valueRatioRanked.best.costPerGood, 4)
-                : '—'
-            }
-            hint={
-              valueRatioRanked.best && valueRatioRanked.worst &&
-              valueRatioRanked.best.agentId !== valueRatioRanked.worst.agentId ? (
-                <Inline as="span" gap="xs" wrap align="center">
-                  <Chip tone="success" size="xs">
-                    ✓ {valueRatioRanked.best.agentId} {fmtUsd(valueRatioRanked.best.costPerGood, 4)}
-                  </Chip>
-                  <Chip tone="danger" size="xs">
-                    ⚠ {valueRatioRanked.worst.agentId} {fmtUsd(valueRatioRanked.worst.costPerGood, 4)}
-                  </Chip>
-                </Inline>
-              ) : valueRatioRanked.best ? (
-                <Chip tone="success" size="xs">
-                  ✓ {valueRatioRanked.best.agentId}
-                </Chip>
-              ) : (
-                'judge_score ≥ 0.7'
-              )
-            }
-          />
-        </KPIGrid>
-      </Card>
+                : '—',
+            title: 'judge_score ≥ 0.7',
+          },
+        ]}
+      />
 
       {/* Top expensive invocations. */}
       <Card padding="md">
         <SectionLabel as="div" className="mb-3">
           Top Expensive Invocations{' '}
-          <T className="text-[11px] font-normal text-[var(--color-text-tertiary)]">
+          <T size="xs" tone="tertiary">
             highest single-call cost first · click → open invocation detail
           </T>
         </SectionLabel>
@@ -626,14 +603,14 @@ function CostPage() {
               : 'No expensive invocations recorded in this window.'}
           </InlinePlaceholder>
         ) : (
-          <Table>
+          <Table size="sm">
             <TableHead>
               <TableRow>
                 <TableTh>Agent</TableTh>
                 <TableTh>When</TableTh>
                 <TableTh>Prompt ver</TableTh>
                 <TableTh>Prompt</TableTh>
-                <TableTh>Total $</TableTh>
+                <TableTh numeric>Total $</TableTh>
                 <TableTh></TableTh>
               </TableRow>
             </TableHead>
@@ -646,11 +623,11 @@ function CostPage() {
                     navigate(`/admin/observability/invocations/${r.invocationId}`)
                   }
                 >
-                  <TableTd className={agentCellCls}>{r.agentId || '—'}</TableTd>
-                  <TableTd className={tsCellCls}>
+                  <TableTd className="whitespace-nowrap">{r.agentId || '—'}</TableTd>
+                  <TableTd className="whitespace-nowrap">
                     {r.ts ? (parsePgTimestamp(r.ts)?.toLocaleString() ?? r.ts) : '—'}
                   </TableTd>
-                  <TableTd className={monoCellCls}>
+                  <TableTd className="whitespace-nowrap font-mono">
                     {r.promptVersion ? `p:${r.promptVersion.slice(0, 8)}` : '—'}
                   </TableTd>
                   <TableTd
@@ -663,9 +640,7 @@ function CostPage() {
                     <CostChip cost={r.totalCostUsd} />
                   </TableTd>
                   <TableTd className="whitespace-nowrap text-right">
-                    <Inline as="span" gap="none" className="text-[12px] text-[var(--color-primary)]">
-                      Open
-                    </Inline>
+                    <T size="xs" className="text-[var(--color-primary)]">Open</T>
                   </TableTd>
                 </TableRow>
               ))}
@@ -678,7 +653,7 @@ function CostPage() {
       <Card padding="md">
         <SectionLabel as="div" className="mb-3">
           By Model{' '}
-          <T className="text-[11px] font-normal text-[var(--color-text-tertiary)]">
+          <T size="xs" tone="tertiary">
             spend per foundation model · {byModelBlind ? 'count unavailable' : `${byModelRows.length} model${byModelRows.length === 1 ? '' : 's'}`}
           </T>
         </SectionLabel>
@@ -689,24 +664,24 @@ function CostPage() {
               : 'No model attribution yet — older rows may pre-date model_id capture.'}
           </InlinePlaceholder>
         ) : (
-          <Table>
+          <Table size="sm">
             <TableHead>
               <TableRow>
                 <TableTh>Model</TableTh>
-                <TableTh>Invocations</TableTh>
-                <TableTh>Input tok</TableTh>
-                <TableTh>Output tok</TableTh>
-                <TableTh>Total $</TableTh>
+                <TableTh numeric>Invocations</TableTh>
+                <TableTh numeric>Input tok</TableTh>
+                <TableTh numeric>Output tok</TableTh>
+                <TableTh numeric>Total $</TableTh>
               </TableRow>
             </TableHead>
             <TableBody>
               {byModelRows.map((r) => (
                 <TableRow key={r.modelId}>
-                  <TableTd className={monoCellCls}>{r.modelId}</TableTd>
-                  <TableTd className={numCellCls}>{fmtInt(r.invocations)}</TableTd>
-                  <TableTd className={numCellCls}>{fmtInt(r.inputTokens)}</TableTd>
-                  <TableTd className={numCellCls}>{fmtInt(r.outputTokens)}</TableTd>
-                  <TableTd className={`${numCellCls} font-semibold`}>
+                  <TableTd className="whitespace-nowrap font-mono">{r.modelId}</TableTd>
+                  <TableTd numeric>{fmtInt(r.invocations)}</TableTd>
+                  <TableTd numeric>{fmtInt(r.inputTokens)}</TableTd>
+                  <TableTd numeric>{fmtInt(r.outputTokens)}</TableTd>
+                  <TableTd numeric className="font-semibold">
                     {fmtUsd(r.totalCostUsd)}
                   </TableTd>
                 </TableRow>

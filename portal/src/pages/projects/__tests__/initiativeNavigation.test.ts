@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { initiativeBreadcrumbs, initiativeHref, initiativeListHref } from '../initiativeNavigation.ts';
+import { initiativeBreadcrumbs, initiativeHref, initiativeListHref, landingScope } from '../initiativeNavigation.ts';
 
 const search = new URLSearchParams('scope=all&q=auth&status=active&sort=name&tab=work&item=work-1&view=history&wq=fix');
 
@@ -11,6 +11,12 @@ test('list parent retains filters but closes project and work selections', () =>
 test('project and work parents clear only their descendants', () => {
   assert.equal(initiativeHref('p-auth', search, 'all'), '/iq/projects/p-auth?scope=all&q=auth&status=active&sort=name');
   assert.equal(initiativeHref('p-auth', search, 'all', 'work'), '/iq/projects/p-auth?scope=all&q=auth&status=active&sort=name&tab=work');
+});
+
+test('Agent output stays visible when moving through initiative content', () => {
+  const params = new URLSearchParams('pane=agent&paneRecord=run:old&item=wi-old&tab=work&scope=all');
+  assert.equal(initiativeHref('p-auth', params, 'all'), '/iq/projects/p-auth?scope=all&pane=agent');
+  assert.equal(initiativeListHref(params, 'all'), '/iq/projects?scope=all');
 });
 
 test('work trail names every level and links to each parent', () => {
@@ -36,4 +42,11 @@ test('sprint parent retains its scope and window but clears selection', () => {
   const trail = initiativeBreadcrumbs({ search: params, scope: 'mine', sprints: true, sprint: 'Sprint 12' });
   assert.deepEqual(trail.map((c) => c.label), ['Plan', 'Initiatives', 'Sprints', 'Sprint 12']);
   assert.equal(trail[2].href, '/iq/projects?lens=sprints&sprintScope=mine&sprintWindow=any');
+});
+
+test('the section landing defaults to All initiatives, never a placeholder', () => {
+  assert.equal(landingScope(new URLSearchParams('nav=section')), 'all');
+  assert.equal(landingScope(new URLSearchParams('nav=section&scope=mine')), null);
+  assert.equal(landingScope(new URLSearchParams('nav=section&lens=sprints')), null);
+  assert.equal(landingScope(new URLSearchParams('')), null);
 });

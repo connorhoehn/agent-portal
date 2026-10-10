@@ -15,6 +15,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import {
+  T,
   Button,
   Card,
   Chip,
@@ -252,16 +253,14 @@ function ChangeCard({ change: c, busy, act, superseded }: {
           {superseded && (
             <Chip tone="neutral" size="xs" title="A newer change has been captured for this codebase">superseded</Chip>
           )}
-          <Inline as="span" gap="none" className="min-w-0 truncate text-[13px] font-semibold text-text-primary">{c.title}</Inline>
+          <T as="span" size="sm" weight="semibold" tone="primary" className="min-w-0 truncate">{c.title}</T>
         </Inline>
         {c.repoFullName && (
           <Link
             to={`/admin/projects?project=${c.projectId}`}
-            title="Open this codebase"
-            className="shrink-0 font-mono text-[11px] text-text-tertiary no-underline hover:text-primary hover:underline"
-          >
+            title="Open this codebase" className="shrink-0 font-mono no-underline hover:text-primary hover:underline"><T as="span" size="xs" tone="tertiary">
             {c.repoFullName}
-          </Link>
+          </T></Link>
         )}
       </Inline>
 
@@ -322,10 +321,10 @@ function ChangeCard({ change: c, busy, act, superseded }: {
             <Stack gap="xs">
               <Inline gap="xs" align="baseline">
                 <Chip tone={VERDICT_TONE[review.verdict]} size="xs">Reviewer {VERDICT_LABEL[review.verdict]}</Chip>
-                <Inline as="span" gap="none" className="text-[11px] text-text-tertiary">{review.model ?? 'model'}</Inline>
+                <T as="span" size="xs" tone="tertiary">{review.model ?? 'model'}</T>
               </Inline>
               {review.summary && (
-                <Inline as="span" gap="none" className="text-[12px] leading-snug text-text-secondary">{review.summary}</Inline>
+                <T as="span" size="xs" tone="secondary">{review.summary}</T>
               )}
               {review.findings.length > 0 && (
                 <Stack gap="none" className="mt-0.5">
@@ -337,9 +336,9 @@ function ChangeCard({ change: c, busy, act, superseded }: {
                       >
                         {f.severity ?? 'note'}
                       </Chip>
-                      <Inline as="span" gap="none" className="text-[11px] leading-snug text-text-tertiary">
+                      <T as="span" size="xs" tone="tertiary">
                         {f.file ? `${f.file}${f.line ? `:${f.line}` : ''} — ` : ''}{f.note}
-                      </Inline>
+                      </T>
                     </Inline>
                   ))}
                 </Stack>
@@ -348,11 +347,11 @@ function ChangeCard({ change: c, busy, act, superseded }: {
           </Card>
         )}
 
-        {c.error && <Inline as="span" gap="none" className="text-[11px] leading-snug text-danger">{c.error}</Inline>}
+        {c.error && <T as="span" size="xs" tone="inherit" className="text-danger">{c.error}</T>}
         {c.prUrl && (
-          <ExternalLink external href={c.prUrl} className="inline-block text-[12px] text-primary no-underline hover:underline">
+          <ExternalLink external href={c.prUrl} className="inline-block text-primary no-underline hover:underline"><T as="span" size="xs" tone="inherit">
             View pull request →
-          </ExternalLink>
+          </T></ExternalLink>
         )}
 
         {/* Actions, by state. A superseded change has been overtaken by a newer
@@ -360,9 +359,9 @@ function ChangeCard({ change: c, busy, act, superseded }: {
             delivery would ship the newer change's content — act on that one. */}
         <Inline gap="sm" align="center" wrap>
           {superseded ? (
-            <Inline as="span" gap="none" className="text-[11px] italic text-text-tertiary">
+            <T as="span" size="xs" tone="tertiary" className="italic">
               A newer change supersedes this one — decide and deliver the latest change for this codebase instead.
-            </Inline>
+            </T>
           ) : !canDecide ? null : (
             <>
               {(c.status === 'needs_approval' || c.status === 'changes_requested') && (
@@ -399,11 +398,9 @@ function ChangeCard({ change: c, busy, act, superseded }: {
           {c.diff && (
             <Link
               to={`/admin/changes/${c.id}`}
-              className="rounded-md border border-border bg-surface px-2.5 py-1.5 text-[12px] text-text-secondary no-underline hover:border-primary hover:text-primary transition-colors"
-              title="Per-file diff with the reviewer's findings pinned to lines"
-            >
+              title="Per-file diff with the reviewer's findings pinned to lines" className="rounded-md border border-border bg-surface px-2.5 py-1.5 no-underline hover:border-primary hover:text-primary transition-colors"><T as="span" size="xs" tone="secondary">
               Review diff →
-            </Link>
+            </T></Link>
           )}
         </Inline>
       </Stack>

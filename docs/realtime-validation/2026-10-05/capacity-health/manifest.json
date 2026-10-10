@@ -1,0 +1,25 @@
+{
+  "capacityAccepted": false,
+  "stage": "cached dependency diagnostics: prior steady health gate failure retained",
+  "artifacts": {
+    "docs/realtime-validation/2026-10-05/capacity-health/orgiq-capacity-internal-steady.log": "acf879edf0802b967b07ecf3b0d6a95418b4f14f777e3d89dc699d3703b5959a",
+    "docs/realtime-validation/2026-10-05/capacity-health/orgiq-bff-container-internal-steady.json": "c03e39d10ec99e6c88d37a8d10441de58b88fbecd703ad333c1f482f3024cd09",
+    "docs/realtime-validation/2026-10-05/capacity-health/orgiq-capacity-health-tests.log": "0a878a5f19b98af2765878239ae43129f18961581e2f5557dd8bd60aa309e767",
+    "docs/realtime-validation/2026-10-05/capacity-health/orgiq-capacity-health-types.log": "a6aacf3de309c23e5aeb92922e8082e8eb964285a805f031247d7ef19849931b",
+    "docs/realtime-validation/2026-10-05/capacity-health/cached-health-orgiq-capacity-health-steady.log": "58b830c08d5e2ac328364bed33dc93a86c4b9ffa1523bb7a469703fdfcc8d55d",
+    "docs/realtime-validation/2026-10-05/capacity-health/cached-health-orgiq-bff-container-internal-steady.json": "bdb2badecbf1f1446e78f97c76810afe6423e365a5496526b16e4e009ca22092",
+    "docs/realtime-validation/2026-10-05/capacity-health/orgiq-capacity-health-double-accept.log": "0a59fcffeee7c477744f94e48f94b0f7837e968919474ffd8afe1f0fd9b059cf",
+    "docs/realtime-validation/2026-10-05/capacity-health/orgiq-bff-container-internal-double-accept.json": "dff4c7907fe98b340a1e8b77c263ceca6f536dddbc69dd5883617e609d12d3a4",
+    "docs/realtime-validation/2026-10-05/capacity-health/orgiq-capacity-health-ring-storm.log": "ddb02148ef6d5b0e343551a179b981a36fa095b7e5458c532c948c2babd0210c",
+    "docs/realtime-validation/2026-10-05/capacity-health/orgiq-bff-container-internal-ring-storm.json": "bb8301f80935a76e0201c1ddf234dec47b59e845ad9c8ba62826a457a570ff48",
+    "docs/realtime-validation/2026-10-05/capacity-health/orgiq-capacity-health-churn.log": "a228396d0409038ff33820236a20d53e8722b06b4185688c40c30489aba1a698",
+    "docs/realtime-validation/2026-10-05/capacity-health/orgiq-bff-container-internal-churn.json": "1de6fc69ce2ff415938a48c9369799a08bf32edab020256614f6bbeb61e6f99b",
+    "docs/realtime-validation/2026-10-05/capacity-health/orgiq-capacity-health-soak.log": "c19bd9a1cd8e34901910e2f7832601c09c8da5a3f3b7aebe971e25086f1b6a37",
+    "docs/realtime-validation/2026-10-05/capacity-health/orgiq-bff-container-internal-soak.json": "97b728a9e43779f61befb3e87dfe842ea52cd53595b8164a92d6bb3877a69d5f",
+    "docs/realtime-validation/2026-10-05/capacity-health/orgiq-capacity-health-burst.log": "e3764e36d5f824ea727d370cc97cf3265c1307c8fdc2ffdddb057684b0d9136b",
+    "docs/realtime-validation/2026-10-05/capacity-health/orgiq-bff-container-internal-burst.json": "29409327a59d20d501f79fea968d45b54f77a94e676cc74de59fa9a54b8178f2",
+    "docs/realtime-validation/2026-10-05/capacity-health/compiled-image-source.tar.gz": "28bcfff2fe478551783f0ac918fd54ddc25c17eaabbc3178fa080b73c54d0bd3"
+  },
+  "compiledImage": "sha256:6e96951dff03b5322109eba3faa27bb962b55e8f44e04f2786da215d857f55d1",
+  "libraryCommit": "68581f7023b9948b7f16cc094d723dc332683039"
+}

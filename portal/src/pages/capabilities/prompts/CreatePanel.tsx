@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Button, Card, Chip, DetailHeader, FilterChip, FormField, FormRow, Inline, InlineAlert, Input, SectionLabel, Stack, Textarea } from '@connorhoehnslalom/ui-components/shared';
+import { Button, Card, Chip, DetailHeader, FilterChip, FormField, FormRow, Inline, InlineAlert, Input, SectionLabel, Stack, Textarea, T } from '@connorhoehnslalom/ui-components/shared';
 import { InferenceSettings, type InferenceSettingsValue } from './InferenceSettings';
 import { STARTER_TEMPLATES } from './starterTemplates';
 import {
@@ -10,7 +10,6 @@ import {
   isValidNewPrompt,
 } from './promptFormat';
 import { createPrompt } from '../../../components/canary/usePromptLibrary.js';
-import { T } from '../Text';
 
 /** New-prompt form. Creates a DRAFT in the Bedrock Prompt Library; publishing a
  *  numbered version is a separate step in EditPanel. */
@@ -105,7 +104,7 @@ export function CreatePanel({
           <Inline gap="sm" justify="between">
             <SectionLabel>Template *</SectionLabel>
             <Inline gap="xs" justify="end">
-              <T className="text-[10px] text-text-tertiary">Start from</T>
+              <T size="xs" className="text-text-tertiary">Start from</T>
               {STARTER_TEMPLATES.map(t => (
                 <FilterChip
                   key={t.label}

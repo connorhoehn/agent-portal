@@ -1,5 +1,5 @@
 // Team actions — the scorecard header's Change lead / Reset assessment /
-// Delete team controls, mirroring the source app's TeamActionsMenu. All four
+// Delete team controls (plus Create review deck, gated on RunAssessmentAgent), mirroring the source app's TeamActionsMenu. All four
 // mutating verbs (create is a separate "New team" affordance on the
 // dashboard) are gated on `ScoreAssessment` — the same capability
 // `PATCH/DELETE/POST reset-assessment /teams/:id...` gate on server-side
@@ -19,6 +19,7 @@ import {
 import { useCapabilities } from '../../../lib/capabilities';
 import { toastError, toastSuccess } from '../../../lib/toastStore';
 import { sendJson } from '../../../lib/writeJson';
+import { CreateDeckDialog } from '../decks/CreateDeckDialog';
 
 interface TeamActionsMenuProps {
   teamId: string;
@@ -35,12 +36,15 @@ export function TeamActionsMenu({ teamId, teamName, currentLead, onChanged, onDe
   const [leadOpen, setLeadOpen] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deckOpen, setDeckOpen] = useState(false);
   const [lead, setLead] = useState(currentLead);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => { if (leadOpen) setLead(currentLead); }, [leadOpen, currentLead]);
 
-  if (!ready || !can('ScoreAssessment')) return null;
+  const canScore = ready && can('ScoreAssessment');
+  const canDeck = ready && can('RunAssessmentAgent');
+  if (!canScore && !canDeck) return null;
 
   async function saveLead() {
     setBusy(true);
@@ -92,12 +96,17 @@ export function TeamActionsMenu({ teamId, teamName, currentLead, onChanged, onDe
         align="end"
         sections={[{
           items: [
-            { label: 'Change lead', onSelect: () => setLeadOpen(true) },
-            { label: 'Reset assessment', onSelect: () => setResetOpen(true) },
-            { label: 'Delete team', danger: true, onSelect: () => setDeleteOpen(true) },
+            ...(canDeck ? [{ label: 'Create review deck', onSelect: () => setDeckOpen(true) }] : []),
+            ...(canScore ? [
+              { label: 'Change lead', onSelect: () => setLeadOpen(true) },
+              { label: 'Reset assessment', onSelect: () => setResetOpen(true) },
+              { label: 'Delete team', danger: true, onSelect: () => setDeleteOpen(true) },
+            ] : []),
           ],
         }]}
       />
+
+      <CreateDeckDialog open={deckOpen} onClose={() => setDeckOpen(false)} teamId={teamId} teamName={teamName} />
 
       <Modal
         open={leadOpen}

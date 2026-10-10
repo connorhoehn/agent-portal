@@ -8,7 +8,7 @@
 # Usage:  scripts/validate-social-tenant.sh               # full run
 #         scripts/validate-social-tenant.sh --quick       # skip jest, vite build, Playwright; siblings get --quick
 #         scripts/validate-social-tenant.sh --phase S0    # gates + siblings + one phase: S0 | N | S1 | S2 | E
-#         scripts/validate-social-tenant.sh --seal        # record journey-log source digests (after a walk)
+#         scripts/validate-social-tenant.sh --seal        # retired: scripts/journeys/seal.sh <dir> seals, after a walk
 #         scripts/validate-social-tenant.sh --no-time     # skip the optional SOCIAL_TIME_GATE=<hour> gate
 #
 # The e2e specs run (non-quick) against PARITY_BASE_URL (default
@@ -19,13 +19,14 @@
 set -u
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
+source scripts/lib/judges.sh  # jg_*: static gates run once per tree state
 
-QUICK=0; NO_TIME=0; SEAL=0; PHASE=""
+QUICK=0; NO_TIME=0; PHASE=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --quick) QUICK=1 ;;
     --no-time) NO_TIME=1 ;;
-    --seal) SEAL=1 ;;
+    --seal) echo "--seal is retired: walk the logs, then run scripts/journeys/seal.sh <dir> (docs/journeys.md)" >&2; exit 2 ;;
     --phase) shift; PHASE="${1:-}" ;;
     --phase=*) PHASE="${1#--phase=}" ;;
     *) echo "unknown flag: $1" >&2; exit 2 ;;
@@ -60,6 +61,9 @@ IDFB=$MW/src/providers/identity.ts
 INDEX=$MW/src/index.ts
 ENTITIES=$MW/src/mock/core/parity/entities.ts
 GATEWAY=$MW/src/lib/realtime-gateway.ts
+CHAT_BACKEND=$MW/src/lib/social-chat.ts
+GATEWAY_CALLS=$MW/src/lib/gateway/calls.ts
+GATEWAY_AUTHORITY=$MW/src/lib/gateway/authority.ts
 REDIS=$MW/src/lib/redis-lite.ts
 NOTIFY=$MW/src/lib/social-notify.ts
 ROUTER=$MW/src/routes/social.ts
@@ -161,11 +165,11 @@ page_uses() {
 # Gates. A tenant that does not compile is not done.
 # ─────────────────────────────────────────────────────────────────────────────
 section "gates"
-if (cd middleware && npx tsc --noEmit >/dev/null 2>&1); then ok "middleware tsc clean"; else fail "middleware: tsc errors"; fi
-if (cd portal && npx tsc --noEmit >/dev/null 2>&1); then ok "portal tsc clean"; else fail "portal: tsc errors"; fi
+if jg_mw_tsc >/dev/null 2>&1; then ok "middleware tsc clean"; else fail "middleware: tsc errors"; fi
+if jg_portal_tsc >/dev/null 2>&1; then ok "portal tsc clean"; else fail "portal: tsc errors"; fi
 if [ "$QUICK" = 0 ]; then
   if (cd middleware && npx jest --silent >/dev/null 2>&1); then ok "middleware jest green"; else fail "middleware: jest failures"; fi
-  if (cd portal && npx vite build 2>&1 | grep -q '✓ built'); then ok "portal vite build"; else fail "portal: vite build fails"; fi
+  if jg_vite_build 2>&1 | grep -q '✓ built'; then ok "portal vite build"; else fail "portal: vite build fails"; fi
 fi
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -314,28 +318,27 @@ for t in "requireTenant('social')" "community-admin" "social-tenant-goal.md" "va
 
 section "S0 · pages ($SP): component discipline and tenant boundary"
 if [ ! -d "$SP" ]; then fail "$SP missing — the empty-state pages S0 ships"; else
-  RAW_RE='<(div|p|span|h[1-6]|ul|ol|li|section|nav|article|table|tr|td|th|button|a|label|input|textarea|select|form|code|pre)( [^>]*)?className='
+  source scripts/lib/discipline.sh  # the one raw-element counter (brace-aware), shared with validate-component-discipline.sh
+  DC_QUEUE=$QUEUE
   MAX_RAW_ELEMENTS=0; QUEUED_MAX_PER_FILE=8
   # Only rows that say "Composed locally in `<file>`" mint an exemption.
-  QUEUED_FILES=$(grep -oE "Composed locally in \`$SP/[A-Za-z0-9_/.-]+\.tsx\`" "$QUEUE" 2>/dev/null | grep -oE "$SP/[A-Za-z0-9_/.-]+\.tsx" | sort -u)
-  printf '%s\n' $QUEUED_FILES > "$TMP/queued.txt"
-  PAGE_FILES=$(find "$SP" -name '*.tsx' | sort | grep -vxF -f "$TMP/queued.txt")
-  count_in() { local re="$1"; shift; local n=0 c f; for f in "$@"; do c=$(grep -oE "$re" "$f" | wc -l | tr -d ' '); n=$((n+c)); done; echo "$n"; }
+  QUEUED_FILES=$(dc_queued_files "$SP/")
+  PAGE_FILES=$(dc_area_files "$SP" "$SP/")
   n_files=$(printf '%s\n' $PAGE_FILES | grep -c . || true)
   if [ "$n_files" = 0 ]; then fail "$SP has no .tsx pages"; else
-    n_div=$(count_in '<div( [^>]*)?className=' $PAGE_FILES)
-    n_btn=$(count_in '<button' $PAGE_FILES)
-    n_sty=$(count_in 'style=\{\{' $PAGE_FILES)
-    n_raw=$(count_in "$RAW_RE" $PAGE_FILES)
+    n_div=$(dc_count_re '<div( [^>]*)?className=' $PAGE_FILES)
+    n_btn=$(dc_count_re '<button' $PAGE_FILES)
+    n_sty=$(dc_count_re 'style=\{\{' $PAGE_FILES)
+    n_raw=$(dc_count_raw $PAGE_FILES)
     q_over=""
-    for f in $QUEUED_FILES; do [ -f "$f" ] || continue; c=$(grep -oE "$RAW_RE" "$f" | wc -l | tr -d ' '); [ "$c" -le "$QUEUED_MAX_PER_FILE" ] || q_over="$q_over ${f#$SP/}($c)"; done
+    for f in $QUEUED_FILES; do [ -f "$f" ] || continue; c=$(dc_count_raw "$f"); [ "$c" -le "$QUEUED_MAX_PER_FILE" ] || q_over="$q_over ${f#$SP/}($c)"; done
     [ -z "$q_over" ] && ok "queued composites each ≤ $QUEUED_MAX_PER_FILE raw elements" || fail "queued composite over the per-file cap:$q_over"
     [ "$n_div" = 0 ] && ok "no raw <div className> ($n_files files)" || fail "raw <div className> in social pages: $n_div (must be 0 — Stack/Inline/Card/RailSection/PageSection)"
     [ "$n_btn" = 0 ] && ok "no raw <button>" || fail "raw <button> in social pages: $n_btn (must be 0 — Button/IconButton)"
     [ "$n_sty" = 0 ] && ok "no inline style={{}}" || fail "inline style={{}} in social pages: $n_sty (must be 0)"
     if [ "$n_raw" -le "$MAX_RAW_ELEMENTS" ]; then ok "raw styled elements: $n_raw (budget $MAX_RAW_ELEMENTS)"; else
       fail "raw styled elements: $n_raw > budget $MAX_RAW_ELEMENTS — worst files:"
-      for f in $PAGE_FILES; do c=$(grep -oE "$RAW_RE" "$f" | wc -l | tr -d ' '); [ "$c" -gt 0 ] && printf '      %4d  %s\n' "$c" "${f#$SP/}"; done | sort -rn | head -8
+      for f in $PAGE_FILES; do c=$(dc_count_raw "$f"); [ "$c" -gt 0 ] && printf '      %4d  %s\n' "$c" "${f#$SP/}"; done | sort -rn | head -8
     fi
   fi
   if grep -rq "ui-components/integrations/realtime-modules" "$SP" --include='*.tsx'; then fail "social pages import integrations/realtime-modules (breaks vite build; use integrations/realtime)"; else ok "no integrations/realtime-modules imports"; fi
@@ -453,7 +456,7 @@ spec_check portal/e2e/social-activity.spec.ts "§3.6 spec" \
   "a reload replays the unread set"
 if [ "$QUICK" = 0 ]; then
   for v in validate-mock-floor.sh validate-route-coverage.sh; do
-    if bash "scripts/$v" >"$TMP/$v.log" 2>&1; then ok "$v green"; else fail "$v red (design names it a judge of lane N) — see its output"; tail -4 "$TMP/$v.log" | sed 's/^/      /'; fi
+    if jg_judge "$v" >"$TMP/$v.log" 2>&1; then ok "$v green"; else fail "$v red (design names it a judge of lane N) — see its output"; tail -4 "$TMP/$v.log" | sed 's/^/      /'; fi
   done
 fi
 section "N · journey logs (activity)"
@@ -467,7 +470,7 @@ if want S1; then
 section "S1 · the library's DynamoChatStore"
 rmv=$(cd "$MW" && node -p "require('./node_modules/@connorhoehnslalom/realtime-modules/package.json').version" 2>/dev/null)
 if [ -n "$rmv" ] && node -e "const [a,b,c]=process.argv[1].split('.').map(Number); process.exit(a>0||b>99||(b===99&&c>=0)?0:1)" "$rmv"; then ok "middleware realtime-modules $rmv ≥ 0.99.0"; else fail "design E2 middleware realtime-modules is ${rmv:-unreadable}; DynamoChatStore needs ≥ 0.99.0 (full 40-char sha pin)"; fi
-has "import[^;]*DynamoChatStore" "$GATEWAY" && has "@connorhoehnslalom/realtime-modules" "$GATEWAY" && ok "realtime-gateway.ts imports the library's DynamoChatStore" || fail "design §4.4 $GATEWAY does not import DynamoChatStore from the library"
+has "import[^;]*DynamoChatStore" "$CHAT_BACKEND" && has "@connorhoehnslalom/realtime-modules" "$CHAT_BACKEND" && ok "social-chat.ts imports the library's DynamoChatStore (the store factory, audit D3/D12)" || fail "design §4.4 $CHAT_BACKEND does not import DynamoChatStore from the library"
 tr '\n' ' ' < "$GATEWAY" 2>/dev/null | grep -qE "chat\(\{[^}]*chatStore" && ok "chat({ chatStore }) wired" || fail "design §4.4 $GATEWAY: chat() takes no chatStore"
 local_store=$(grep -rlE "class DynamoChatStore" "$MW/src" 2>/dev/null | head -3)
 [ -z "$local_store" ] && ok "no middleware-local DynamoChatStore" || fail "design §4.4 the middleware writes its own DynamoChatStore ($local_store) — consume the library's"
@@ -485,12 +488,20 @@ for f in $(grep -rlF "social-notify" "$MW/src" --include='*.ts' 2>/dev/null | gr
 [ -n "$row5" ] && ok "producer row 5 (channel message) wired ($row5)" || fail "design §3.4 row 5: no middleware file importing social-notify handles social:ch: messages"
 
 section "S1 · pages"
-miss=""; for c in ConversationRail WrappedChatPanel ContextComposer; do page_uses "$c" || miss="$miss $c"; done
-[ -z "$miss" ] && ok "Channels/DMs compose ConversationRail + WrappedChatPanel + ContextComposer" || fail "design §4.5 no page under $SP uses (from ui-components):$miss"
+# 2.439: the composer is the library ConversationComposer (ContextComposer with the conversation wiring).
+miss=""; for c in ConversationRail WrappedChatPanel ConversationComposer; do page_uses "$c" || miss="$miss $c"; done
+[ -z "$miss" ] && ok "Channels/DMs compose ConversationRail + WrappedChatPanel + ConversationComposer" || fail "design §4.5 no page under $SP uses (from ui-components):$miss"
 spec_check portal/e2e/social-channels.spec.ts "S1 walk" \
   "a channel message posted in one context arrives in the other" \
   "a direct message round trip" \
   "a forged cross-tenant subscribe is refused with AUTHZ_CHANNEL_DENIED"
+section "S1 · shared message pins (design §4.4)"
+if (cd "$MW" && node -e "const d=require('@connorhoehnslalom/realtime-modules/server/stores/dynamo'); const m=require('@connorhoehnslalom/realtime-modules/chat'); process.exit(typeof d.DynamoChatPinsStore==='function' && typeof m.MemoryChatPinsStore==='function' ? 0 : 1)") >"$TMP/pin-stores.log" 2>&1; then ok "installed library exports Dynamo and memory pin stores"; else fail "design §4.4 the installed library lacks chat pin stores"; fi
+hasF "DynamoChatPinsStore" "$CHAT_BACKEND" && hasF "usePins" "$SP/SocialConversation.tsx" && hasF "chatPinsRouter" "$INDEX" && ok "library pin state wired through BFF and conversation" || fail "design §4.4 shared pin state is not wired end to end"
+[ -f "$RTESTS/chat-pins.test.ts" ] && ok "pin route access and persistence tests exist" || fail "chat pin routes lack tests"
+spec_check portal/e2e/social-pins.spec.ts "S1 pins walk" \
+  "a shared pin arrives live, survives reload, jumps to the message, and another member can unpin it" \
+  "a failed pin rolls back and keeps its explanation visible on the Pinned tab"
 journey_check "S1" channels dms
 fi
 
@@ -518,7 +529,7 @@ section "S2 · stack + upstream"
 miss=""; for t in teams team-members social-relationships video-recording-share-links; do hasF "name: '$t'" "$SOCIAL_STACK" || miss="$miss $t"; done
 [ -z "$miss" ] && ok "social-stack.ts declares the four platform-api tables" || fail "design §4.4 $SOCIAL_STACK lacks table(s):$miss"
 has '^platform-api tenants commit: `[0-9a-f]{7,40}`' "$GOAL" && ok "platform-api tenants-claim commit recorded in $GOAL" || fail "design §4.2 the platform-api tenants-claim change is not recorded — add a line 'platform-api tenants commit: \`<sha>\`' to $GOAL when it lands"
-has "onCallMissed" "$GATEWAY" && hasF "social-notify" "$GATEWAY" && ok "missed calls (row 6) from calls({ onCallMissed }) reach the seam" || fail "design §3.4 row 6 $GATEWAY: no calls({ onCallMissed }) wired to social-notify"
+has "onCallMissed" "$GATEWAY_CALLS" && hasF "social-notify" "$GATEWAY_CALLS" && ok "missed calls (row 6) from calls({ onCallMissed }) reach the seam" || fail "design §3.4 row 6 $GATEWAY_CALLS: no calls({ onCallMissed }) wired to social-notify"
 
 section "S2 · pages"
 miss=""
@@ -536,7 +547,7 @@ fi
 # ═════════════════════════════════════════════════════════════════════════════
 if want E; then
 section "E · the tenants guard (E5)"
-has "tenants\??\.includes\(" "$GATEWAY" && ok "gateway admits a prefix by the token's tenants" || fail "design E5 $GATEWAY: channelGuard/lobbyGuard never check auth.tenants.includes(prefix)"
+has "tenants\??\.includes\(" "$GATEWAY_AUTHORITY" && ok "gateway admits a prefix by the token's tenants" || fail "design E5 $GATEWAY_AUTHORITY: channelGuard/lobbyGuard never check auth.tenants.includes(prefix)"
 tg=""; for f in $LTESTS/realtime-gateway*.test.ts; do [ -f "$f" ] && grep -q "tenants:" "$f" && grep -qF "social:" "$f" && tg="$f"; done
 [ -n "$tg" ] && ok "the tenants guard test exists ($tg)" || fail "design E5 no $LTESTS/realtime-gateway*.test.ts sets tenants: and names a social: channel (admit + refuse)"
 
@@ -548,8 +559,17 @@ if [ -z "$bsql" ]; then fail "design §4.4 no schema/*.sql creates social_bindin
   [ -z "$miss" ] && ok "social_bindings ($bsql) has its six columns" || fail "design §4.4 $bsql social_bindings lacks:$miss"
 fi
 has "[A-Za-z_]*[Rr]outer\.get\('/bindings'" "$ROUTER" && ok "GET /api/social/bindings mounted" || fail "research C.5 $ROUTER has no GET /bindings"
-hasF "ChannelBinding" "$QUEUE" && ok "ChannelBinding queue row" || fail "design §4.6 $QUEUE has no ChannelBinding row"
-grep -rqw "ChannelBinding" portal/src/pages/projects --include='*.tsx' 2>/dev/null && ok "initiative overview renders ChannelBinding" || fail "design §4.6 portal/src/pages/projects never renders ChannelBinding"
+{ hasF "ChannelBinding" "$QUEUE" || grep -rqE "ChannelBindingStrip.*ui-components/social" portal/src 2>/dev/null || grep -rqE "ui-components/social" portal/src/components/social/ChannelBindingStrip.tsx 2>/dev/null; } && ok "ChannelBinding queue row or library ChannelBindingStrip import" || fail "design §4.6 either $QUEUE needs a ChannelBinding row or the portal must import ChannelBindingStrip from @connorhoehnslalom/ui-components/social (neither found)"
+# §4.6, the user 2026-10-06: the binding lives in the bottom Social bar, never as a strip on top of the page.
+ES=portal/src/components/shell/EmbeddedSocial.tsx
+{ grep -q "useChannelBinding" "$ES" && grep -qw "ChannelBinding" "$ES" && grep -q "shell-social-page" "$ES"; } \
+  && ok "the bottom Social bar offers the page's bound channel (useChannelBinding + ChannelBinding + shell-social-page tab in $ES)" \
+  || fail "design §4.6 $ES must offer the page's bound channel as a bar tab (useChannelBinding, ChannelBinding, data-testid shell-social-page)"
+grep -rq "usePageSocialChannel\|useInitiativeSocialChannel" portal/src/pages/ProjectDetailPage.tsx portal/src/pages/projects 2>/dev/null \
+  && ok "the initiative page names its binding context for the bar" || fail "design §4.6 the initiative page never calls usePageSocialChannel/useInitiativeSocialChannel"
+if grep -rqE "<(ChannelBinding|ChannelBindingStrip|InitiativeDiscussion)[ />]" portal/src/pages/projects portal/src/pages/ProjectDetailPage.tsx 2>/dev/null; then
+  fail "design §4.6 (2026-10-06) pages/projects renders a top ChannelBinding strip — the binding belongs in the bottom Social bar"
+else ok "no top ChannelBinding strip on the initiative page"; fi
 grep -rq "dmLobbyName" portal/src/pages/search 2>/dev/null && ok "Search connections open a DM (dmLobbyName)" || fail "design §4.6 portal/src/pages/search never reaches dmLobbyName (people → DM)"
 
 section "E · forged subscribe refused for no-grant sessions"
@@ -565,48 +585,21 @@ if [ "$seen" = 0 ]; then fail "no isolation log with social-grant: no (demo-user
 elif [ "$fb" = 0 ]; then ok "$seen no-grant isolation logs record AUTHZ_CHANNEL_DENIED"; else fail "$fb no-grant isolation logs lack the forged-subscribe refusal"; fi
 if [ "$QUICK" = 0 ]; then
   for v in validate-rail-parity.sh validate-search-workspace.sh; do
-    if bash "scripts/$v" >"$TMP/$v.log" 2>&1; then ok "$v green"; else fail "$v red (a judge of lane E)"; tail -4 "$TMP/$v.log" | sed 's/^/      /'; fi
+    if jg_judge "$v" >"$TMP/$v.log" 2>&1; then ok "$v green"; else fail "$v red (a judge of lane E)"; tail -4 "$TMP/$v.log" | sed 's/^/      /'; fi
   done
 fi
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Journey freshness — by CONTENT digest of each log's `pages:`, as the
-# assessment judge does. Only --seal writes the record.
+# Journey freshness — each log's walked routes: their rendered contract
+# against its sealed walk (docs/journeys.md). Only scripts/journeys/seal.sh seals.
 # ─────────────────────────────────────────────────────────────────────────────
 section "journey freshness ($JDIR)"
-SHA_CACHE="$JDIR/.pages-sha"
-pages_sha() {
-  local out="" d items; IFS=',' read -ra items <<< "$1"
-  for d in "${items[@]}"; do d=$(echo "$d" | tr -d ' '); [ -n "$d" ] || continue
-    if [ -f "$d" ]; then out="$out$(shasum -a 256 "$d" 2>/dev/null)"; continue; fi
-    [ -d "$d" ] || return 1
-    local files; files=$(find "$d" \( -name '*.tsx' -o -name '*.ts' \) 2>/dev/null | sort)
-    [ -n "$files" ] || return 1
-    out="$out$(printf '%s\n' "$files" | xargs shasum -a 256 2>/dev/null)"
-  done
-  [ -n "$out" ] || return 1
-  printf '%s' "$out" | shasum -a 256 | cut -d' ' -f1
-}
-sha_recorded() { grep -F "$1 " "$SHA_CACHE" 2>/dev/null | tail -1 | cut -d' ' -f2; }
-sha_record() {
-  [ -f "$SHA_CACHE" ] || : > "$SHA_CACHE"
-  grep -vF "$1 " "$SHA_CACHE" > "$SHA_CACHE.tmp" 2>/dev/null || : > "$SHA_CACHE.tmp"
-  printf '%s %s\n' "$1" "$2" >> "$SHA_CACHE.tmp"
-  sort -o "$SHA_CACHE" "$SHA_CACHE.tmp" && rm -f "$SHA_CACHE.tmp"
-}
+source scripts/lib/journeys.sh
 logs=$(find "$JDIR" -name '*.md' ! -name 'PROTOCOL.md' ! -name 'DEFECTS.md' 2>/dev/null | sort)
 if [ -z "$logs" ]; then ok "no journey logs yet (nothing to hold fresh — the phase checks above count them)"; else
-  stale=0; names=""
-  for f in $logs; do
-    pages=$(grep -iE '^pages: *' "$f" | head -1 | sed -E 's/^pages: *//')
-    if [ -z "$pages" ]; then stale=$((stale+1)); names="$names ${f#$JDIR/}(no-pages)"; continue; fi
-    cur=$(pages_sha "$pages") || { stale=$((stale+1)); names="$names ${f#$JDIR/}(invalid-pages)"; continue; }
-    [ "$SEAL" = 1 ] && { sha_record "$f" "$cur"; continue; }
-    [ "$(sha_recorded "$f")" = "$cur" ] || { stale=$((stale+1)); names="$names ${f#$JDIR/}(content-digest)"; }
-  done
-  if [ "$SEAL" = 1 ]; then ok "sealed digests for the present logs into $SHA_CACHE"; fi
-  [ "$stale" = 0 ] && ok "journey logs match their recorded source content" || fail "$stale journey logs have missing or different source digests — re-audit them:$names"
+  jr_freshness "$JDIR" $logs
+  jr_report
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -617,7 +610,7 @@ QF=""; [ "$QUICK" = 1 ] && QF="--quick"
 for v in "validate-assessment-tenant.sh --no-time" "validate-nav-parity.sh" "$RETIRED_V"; do
   name=${v%% *}; args=${v#"$name"}
   # shellcheck disable=SC2086
-  if bash "scripts/$name" $args $QF >"$TMP/$name.log" 2>&1; then ok "$name green${QF:+ ($QF)}"; else
+  if jg_judge "$name" $args $QF >"$TMP/$name.log" 2>&1; then ok "$name green${QF:+ ($QF)}"; else
     fail "$name red${QF:+ ($QF)} — its failing lines:"
     sed -n '/CHECK(S) FAILING\|FAILING:/,$p' "$TMP/$name.log" | head -8 | sed 's/^/      /'
     grep -E '✗' "$TMP/$name.log" | head -6 | sed 's/^/      /'

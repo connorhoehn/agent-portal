@@ -22,7 +22,11 @@
 // clean", the single most misleading answer this module could give.
 
 import type { BedrockAgentCoreClient } from '@aws-sdk/client-bedrock-agentcore';
+import { clock } from './core/index.js';
+import { demoActive, demoBeatMs } from './demo-pace.js';
+import type { ProductStep } from './demo-auth-products.js';
 import {
+  type WorkProduct,
   IDLE_RUN_COST_USD, commitPending, hasCommit, pendingStat, porcelain,
   resetToParent, selectWorkProduct, stageWork, workspaceFor,
 } from './devbox-workspace.js';
@@ -81,6 +85,154 @@ export function runMockShell(sessionId: string, wrapped: string): string {
   return `fatal: mock devbox: unsupported command (${cmd.slice(0, 120)})\n`;
 }
 
+/** One event of a mock run, stamped when it is yielded rather than when planned. */
+type MockEvent = Record<string, unknown>;
+
+/** A planned run: its events, and how the stream must end. */
+interface PlannedRun {
+  events: MockEvent[];
+  pace: 'default' | 'demo';
+  /** Resolves when somebody answers — the stream holds open until then. */
+  awaitAnswer: Promise<void> | null;
+  /** Called once the stream has yielded its last event. */
+  onDone?: () => void;
+}
+
+const say = (text: string): MockEvent => ({ type: 'assistant', message: { content: [{ type: 'text', text }] } });
+const use = (name: string, input: Record<string, unknown>): MockEvent =>
+  ({ type: 'assistant', message: { content: [{ type: 'tool_use', name, input }] } });
+
+/**
+ * The plan as a TodoWrite call — the real Claude Code plan wire shape (lab
+ * contract §1): items before `done` are completed, the next is in flight.
+ */
+function todoWrite(plan: readonly string[], doneThrough: number): MockEvent {
+  return use('TodoWrite', {
+    todos: plan.map((content, i) => ({
+      content,
+      activeForm: content,
+      status: i <= doneThrough ? 'completed' : i === doneThrough + 1 ? 'in_progress' : 'pending',
+    })),
+  });
+}
+
+/** A product's narrated steps, re-emitting the plan whenever a step finishes an item. */
+function narrate(plan: readonly string[], steps: readonly ProductStep[], events: MockEvent[]): void {
+  for (const st of steps) {
+    if (st.tool) events.push(use(st.tool.name, st.tool.input));
+    if (st.say) events.push(say(st.say));
+    if (st.done !== undefined) events.push(todoWrite(plan, st.done));
+  }
+}
+
+// ─── Questions a run is waiting on ──────────────────────────────────────────
+//
+// A product with a `question` ends its run the way a real Claude Code run that
+// needs a human does — the last assistant text ends with '?', then
+// `devbox_end`, which the fleet reads as `waiting` — but the governed run that
+// started it is not over: its work is still to do. So the stream stays OPEN
+// after that last frame, exactly as `executeProjectRun` would sit on a real
+// runtime that has not returned, until the next task on the same session (the
+// operator's answer, through `POST /api/devbox/:sessionId/task`) plays the
+// product's `answered` phase. When that phase has streamed, the held run
+// closes, `readWorkingTree` finds the staged change, and capture → review →
+// gate runs on the governed run that asked — the whole real pipeline, with
+// only the sandbox imaginary.
+//
+// Bounded: an unanswered question releases after MOCK_DEVBOX_ANSWER_TIMEOUT_MS
+// (default 20 min) with nothing staged, which the pipeline reads as a run
+// that changed nothing. `resetMockDevboxTransport` releases every held run and
+// silences every stream in flight, so `POST /api/__mock/reset` never leaves a
+// run from the old world writing into the new one.
+
+interface HeldRun { product: WorkProduct; release: () => void; }
+const held = new Map<string, HeldRun>();
+let epoch = 0;
+
+function answerTimeoutMs(): number {
+  const raw = Number(process.env['MOCK_DEVBOX_ANSWER_TIMEOUT_MS']);
+  return Number.isFinite(raw) && raw > 0 ? raw : 20 * 60_000;
+}
+
+/** Whether a session's run is holding open on an unanswered question. */
+export function isAwaitingAnswer(sessionId: string): boolean {
+  return held.has(sessionId);
+}
+
+/** Release every held run and silence every stream in flight. */
+export function resetMockDevboxTransport(): void {
+  epoch++;
+  const runs = [...held.values()];
+  held.clear();
+  for (const run of runs) run.release();
+}
+
+function planRun(sessionId: string, prompt: string): PlannedRun {
+  // An answer to a held question, whatever it says: the session is what ties
+  // it to the run that asked.
+  const waiting = held.get(sessionId);
+  if (waiting?.product.answered) {
+    const { product } = waiting;
+    const answered = product.answered!;
+    held.delete(sessionId);
+    stageWork(sessionId, product.diff);
+    const events: MockEvent[] = [];
+    narrate(product.plan ?? [], answered.steps, events);
+    events.push({
+      type: 'result', subtype: 'success', num_turns: answered.steps.length + 1,
+      total_cost_usd: answered.costUsd, result: answered.summary,
+    });
+    events.push({ type: 'devbox_end', exit_code: 0 });
+    return { events, pace: product.pace ?? 'default', awaitAnswer: null, onDone: waiting.release };
+  }
+
+  const product = selectWorkProduct(prompt);
+  const events: MockEvent[] = [];
+
+  if (!product) {
+    events.push(say('I read the repository and found nothing to change for this task.'));
+    events.push({ type: 'result', subtype: 'success', num_turns: 1, total_cost_usd: IDLE_RUN_COST_USD, result: 'No change was needed.' });
+    events.push({ type: 'devbox_end', exit_code: 0 });
+    return { events, pace: 'default', awaitAnswer: null };
+  }
+
+  if (product.plan && product.steps) {
+    events.push(todoWrite(product.plan, -1));
+    narrate(product.plan, product.steps, events);
+  } else {
+    events.push(say(`Working in the checkout. ${product.summary}`));
+    for (const call of product.toolCalls) events.push(use(call.name, { file_path: call.target }));
+  }
+
+  if (product.question && product.answered) {
+    // Nothing staged: the work is what the answer unlocks.
+    events.push(say(product.question));
+    events.push({
+      type: 'result', subtype: 'success', num_turns: (product.steps?.length ?? 0) + 1,
+      total_cost_usd: product.costUsd, result: product.question,
+    });
+    events.push({ type: 'devbox_end', exit_code: 0 });
+    // Held from now, not from when the last frame is yielded, so an answer can
+    // never arrive in a gap where the session looks like it asked nothing.
+    const answered = new Promise<void>((resolve) => {
+      const timer = setTimeout(() => { held.delete(sessionId); resolve(); }, answerTimeoutMs());
+      timer.unref?.();
+      held.set(sessionId, { product, release: () => { clearTimeout(timer); resolve(); } });
+    });
+    return { events, pace: product.pace ?? 'default', awaitAnswer: answered };
+  }
+
+  stageWork(sessionId, product.diff);
+  events.push({
+    type: 'result', subtype: 'success',
+    num_turns: (product.steps?.length ?? product.toolCalls.length) + 1,
+    total_cost_usd: product.costUsd,
+    result: product.summary,
+  });
+  events.push({ type: 'devbox_end', exit_code: 0 });
+  return { events, pace: product.pace ?? 'default', awaitAnswer: null };
+}
+
 /**
  * Run one agent task against a session's workspace.
  *
@@ -88,35 +240,20 @@ export function runMockShell(sessionId: string, wrapped: string): string {
  * assistant text, tool_use blocks, a `result` with the run's own verdict and
  * cost, then `devbox_end` — and leaves the selected work product uncommitted
  * in the tree, which is what makes the run "change code" as far as
- * `readWorkingTree` is concerned.
+ * `readWorkingTree` is concerned. (A product that asks a question stages
+ * nothing until it is answered — see "Questions a run is waiting on".)
  */
 export function runMockTask(sessionId: string, prompt: string): string[] {
-  const product = selectWorkProduct(prompt);
-  const events: Record<string, unknown>[] = [];
-
-  if (!product) {
-    events.push({ type: 'assistant', message: { content: [{ type: 'text', text: 'I read the repository and found nothing to change for this task.' }] } });
-    events.push({ type: 'result', subtype: 'success', num_turns: 1, total_cost_usd: IDLE_RUN_COST_USD, result: 'No change was needed.' });
-    events.push({ type: 'devbox_end', exit_code: 0 });
-  } else {
-    stageWork(sessionId, product.diff);
-    events.push({ type: 'assistant', message: { content: [{ type: 'text', text: `Working in the checkout. ${product.summary}` }] } });
-    for (const call of product.toolCalls) {
-      events.push({ type: 'assistant', message: { content: [{ type: 'tool_use', name: call.name, input: { file_path: call.target } }] } });
-    }
-    events.push({
-      type: 'result', subtype: 'success',
-      num_turns: product.toolCalls.length + 1,
-      total_cost_usd: product.costUsd,
-      result: product.summary,
-    });
-    events.push({ type: 'devbox_end', exit_code: 0 });
-  }
-  return events.map((e) => `data: ${JSON.stringify(e)}\n`);
+  return planRun(sessionId, prompt).events.map((e) => `data: ${JSON.stringify(e)}\n`);
 }
 
-async function* shellStream(out: string): AsyncGenerator<{ chunk: { contentDelta: { stdout: string } } }> {
+async function* shellStream(out: string, delayMs = 0): AsyncGenerator<{ chunk: { contentDelta: { stdout: string } } }> {
+  if (delayMs > 0) await sleep(delayMs);
   yield { chunk: { contentDelta: { stdout: out } } };
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise<void>((r) => { const t = setTimeout(r, ms); t.unref?.(); });
 }
 
 /**
@@ -127,21 +264,44 @@ async function* shellStream(out: string): AsyncGenerator<{ chunk: { contentDelta
  * and yielding every event in one tick made a run begin and end inside the
  * same event-loop turn — so a computer in the lab never *showed* as running,
  * it simply had a finished run attached to it. The pace is per event, so the
- * five-ish events of a typical work product run for a few seconds.
+ * five-ish events of a typical work product run for a few seconds. A `demo`
+ * product paces by the demo's beat instead (mock/demo-pace.ts).
  */
-function devboxPaceMs(): number {
+function devboxPaceMs(pace: 'default' | 'demo' = 'default'): number {
+  if (pace === 'demo') return demoBeatMs();
   const raw = process.env['MOCK_DEVBOX_PACE_MS'];
   if (raw !== undefined && raw !== '') return Math.max(0, Number(raw) || 0);
   return process.env['NODE_ENV'] === 'test' ? 0 : 900;
 }
 
-async function* taskStream(lines: string[]): AsyncGenerator<Uint8Array> {
+/**
+ * How long the clone that boots a microVM takes — the window a freshly minted
+ * computer reads `provisioning` (lib/bot-runner.ts ensureWorkspace).
+ * `MOCK_DEVBOX_PROVISION_MS` overrides; default 2.5s in development, two demo
+ * beats while the demo runs, 0 under jest.
+ */
+function provisionMs(): number {
+  const raw = process.env['MOCK_DEVBOX_PROVISION_MS'];
+  if (raw !== undefined && raw !== '') return Math.max(0, Number(raw) || 0);
+  if (demoActive()) return 2 * demoBeatMs();
+  return process.env['NODE_ENV'] === 'test' ? 0 : 2_500;
+}
+
+async function* taskStream(run: PlannedRun): AsyncGenerator<Uint8Array> {
   const enc = new TextEncoder();
-  const pace = devboxPaceMs();
-  for (const line of lines) {
-    if (pace > 0) await new Promise<void>((r) => { const t = setTimeout(r, pace); t.unref?.(); });
-    yield enc.encode(line);
+  const pace = devboxPaceMs(run.pace);
+  const started = epoch;
+  try {
+    for (const ev of run.events) {
+      if (pace > 0) await sleep(pace);
+      if (epoch !== started) return;            // the world was reset under this run
+      yield enc.encode(`data: ${JSON.stringify({ ...ev, ts: clock.nowIso() })}\n`);
+    }
+  } finally {
+    run.onDone?.();
   }
+  // Hold the run open on its question — see "Questions a run is waiting on".
+  if (run.awaitAnswer && epoch === started) await run.awaitAnswer;
 }
 
 /**
@@ -151,6 +311,10 @@ async function* taskStream(lines: string[]): AsyncGenerator<Uint8Array> {
  * it beyond `send` is reachable from the devbox callers, so implementing the
  * rest would be dead code pretending to be a contract.
  */
+function commandName(command: unknown): string {
+  return (command as { constructor?: { name?: string } } | null)?.constructor?.name ?? '';
+}
+
 export function mockDevboxClient(): BedrockAgentCoreClient {
   const client = {
     async send(command: unknown): Promise<unknown> {
@@ -160,7 +324,11 @@ export function mockDevboxClient(): BedrockAgentCoreClient {
       // The shell command API — `body: { command, timeout }`.
       const body = input['body'] as { command?: string } | undefined;
       if (body && typeof body.command === 'string') {
-        return { stream: shellStream(runMockShell(sessionId, body.command)) };
+        // The clone is what boots a microVM, so it is the one command that
+        // takes a while — long enough for the lab to show the computer
+        // `provisioning` (lib/bot-runner.ts ensureWorkspace).
+        const booting = /git clone /.test(unwrapProbe(body.command));
+        return { stream: shellStream(runMockShell(sessionId, body.command), booting ? provisionMs() : 0) };
       }
 
       // The agent task API — `payload` is UTF-8 JSON.
@@ -169,8 +337,15 @@ export function mockDevboxClient(): BedrockAgentCoreClient {
         let prompt = '';
         try { prompt = String((JSON.parse(Buffer.from(payload).toString('utf8')) as { prompt?: unknown }).prompt ?? ''); }
         catch { prompt = ''; }
-        return { response: taskStream(runMockTask(sessionId, prompt)) };
+        return { response: taskStream(planRun(sessionId, prompt)) };
       }
+
+      // StopRuntimeSession — what the reaper and `DELETE /boxes/:id` send. It
+      // carries a session and nothing else. Offline there is no microVM to
+      // stop, so stopping one always succeeds; answering it with the throw
+      // below made the reaper's stop fail on every sweep, re-announce the reap
+      // into the box's tail each minute and never settle the box.
+      if (commandName(command) === 'StopRuntimeSessionCommand') return {};
 
       throw new Error('mock devbox: unrecognised runtime command');
     },

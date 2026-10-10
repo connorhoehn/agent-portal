@@ -19,7 +19,10 @@ import {
 } from '@connorhoehnslalom/ui-components/integrations/realtime';
 import { Button, Modal, Stack } from '@connorhoehnslalom/ui-components/shared';
 import { writeJson } from '../../lib/writeJson';
+import { useSocialPlane } from './socialPlane';
 import { hangoutRoomsFrom, type SocialRoom, type SocialSource } from './socialPlatform';
+import { SocialReadStatus } from './SocialReadStatus';
+import { RAIL_SECTION_CONTENT_INSET } from '@connorhoehnslalom/ui-components/social';
 
 const HangoutRoomRow = createHangoutRoomRow({ useRoomOccupancy: hangoutRooms.useRoomOccupancy });
 const HangoutRoomsSection = createHangoutRoomsSection(HangoutRoomRow);
@@ -53,22 +56,25 @@ export function RoomCreateDialog({ open, onClose, mayCreate, createRoom, onCreat
 }
 
 export function useRoomsModel(rooms: RoomsFetch) {
+  const { api } = useSocialPlane();
   return useMemo(() => hangoutRoomsFrom({
     rooms: rooms.data?.rooms ?? null,
     isLoading: rooms.isLoading,
     error: rooms.error,
     refetch: rooms.refresh,
     create: async (body) => {
-      const res = await writeJson<{ room: SocialRoom }>('/api/social/rooms', 'POST', body);
+      const res = await writeJson<{ room: SocialRoom }>(`${api}/rooms`, 'POST', body);
       if (!res.ok || !res.data) throw new Error(res.error ?? 'The room could not be created.');
       rooms.refresh();
       return res.data.room;
     },
-  }), [rooms.data, rooms.isLoading, rooms.error, rooms.refresh]); // eslint-disable-line react-hooks/exhaustive-deps
+  }), [rooms.data, rooms.isLoading, rooms.error, rooms.refresh, api]); // eslint-disable-line react-hooks/exhaustive-deps
 }
 
-export default function SocialRoomsSection({ rooms, mayCreate, onOpen }: {
+export default function SocialRoomsSection({ rooms, mayCreate, onOpen, collapsed, onToggleCollapse }: {
   rooms: RoomsFetch; mayCreate: boolean; onOpen: (slug: string) => void;
+  /** The rail's own heading and fold (ui-components 2.432.0): the host remembers it with the rail's other sections. */
+  collapsed?: boolean; onToggleCollapse?: (next: boolean) => void;
 }) {
   const model = useRoomsModel(rooms);
   return (
@@ -77,11 +83,15 @@ export default function SocialRoomsSection({ rooms, mayCreate, onOpen }: {
       hangoutRooms={model as never}
       title="Rooms"
       storageKey="social-rooms"
+      {...(onToggleCollapse ? { collapsed: !!collapsed, onToggleCollapse } : {})}
       onJoin={(slug: string) => onOpen(slug)}
       renderCreateDialog={({ open, onClose }: { open: boolean; onClose: () => void }) => (
         <RoomCreateDialog open={open} onClose={onClose} mayCreate={mayCreate} createRoom={model.createRoom} onCreated={onOpen} />
       )}
     />
+    {rooms.data && rooms.error && !collapsed && <Stack gap="none" className={RAIL_SECTION_CONTENT_INSET}>
+      <SocialReadStatus source="Rooms" read={rooms} retry={rooms.refresh} testId="social-rooms-read-status" />
+    </Stack>}
     </Stack>
   );
 }

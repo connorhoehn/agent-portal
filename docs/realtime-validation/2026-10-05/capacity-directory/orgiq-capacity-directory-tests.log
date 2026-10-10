@@ -1,0 +1,9 @@
+PASS src/providers/__tests__/identity-authoritative.test.ts
+PASS src/lib/__tests__/live-principal.test.ts
+
+Test Suites: 2 passed, 2 total
+Tests:       33 passed, 33 total
+Snapshots:   0 total
+Time:        7.54 s
+Ran all test suites within paths "src/providers/__tests__/identity-authoritative.test.ts", "src/lib/__tests__/live-principal.test.ts".
+Force exiting Jest: Have you considered using `--detectOpenHandles` to detect async operations that kept running after all tests finished?

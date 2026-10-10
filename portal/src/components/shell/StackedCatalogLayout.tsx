@@ -1,7 +1,14 @@
 import type { ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
-import { ExplorerLayout, ScopeHeader, ViewportFillRegion } from '@connorhoehnslalom/ui-components';
-import { EmptyState, GroupedList, Stack, SubNavLayout, activeNavItemClassName, inactiveNavItemClassName, type SubNavItem } from '@connorhoehnslalom/ui-components/shared';
+import { ListRailLayout, ScopeHeader, ViewportFillRegion } from '@connorhoehnslalom/ui-components';
+import { GroupedList, PageSection, Stack, SubNavLayout, activeNavItemClassName, inactiveNavItemClassName, type SubNavItem } from '@connorhoehnslalom/ui-components/shared';
+import { UNDER_CRUMBS_BAND } from './headerRhythm';
+import { SectionHeader } from './SectionContent';
+
+function groupsOf(rows: Array<{ subline?: string }>, fallback: string) {
+  const ids = [...new Set(rows.map((row) => row.subline ?? fallback))];
+  return ids.map((id) => ({ id, title: id, count: rows.filter((row) => (row.subline ?? fallback) === id).length }));
+}
 
 /** The Design catalogs share the same hierarchy as Distillation:
  * section navigation, record list, then the selected record. */
@@ -10,10 +17,10 @@ export function StackedCatalogLayout({
   onSelect, railHeader, railNotice, children, catalogOverview = false, overviewDescription, overviewActions,
 }: {
   catalogOverview?: boolean;
-  /** The overview's header blurb and actions (2026-09-29): drawn in the layout's
-   *  `ScopeHeader` so the title is the one every stacked page uses — a page that
-   *  drew its own `PageHeader size="lg"` under the crumbs sat at 28px/700 beside
-   *  siblings at 22px/600. */
+  /** The overview's header blurb and actions: drawn by the layout's own
+   *  `PageSection` under the crumbs band, so the overview's title is the 20px/600
+   *  heading every Org page uses, 16px under the trail (headerRhythm.ts). A page
+   *  that drew its own header here sat at a size and offset of its own. */
   overviewDescription?: string;
   overviewActions?: ReactNode;
   title: string;
@@ -32,7 +39,6 @@ export function StackedCatalogLayout({
   const location = useLocation();
   const navigate = useNavigate();
   const params = new URLSearchParams(location.search);
-  const atSection = !catalogOverview && params.get('nav') === 'section';
   params.delete('nav');
   params.delete('item');
   const listHref = `${basePath}${params.size ? `?${params}` : ''}`;
@@ -47,43 +53,47 @@ export function StackedCatalogLayout({
   });
   const breadcrumbs = [
     { label: group },
-    ...(atSection ? [{ label: title }] : [crumb(title, sectionHref),
+    ...([crumb(title, sectionHref),
       ...(selectedId ? [crumb(listTitle, listHref), { label: selectedTitle ?? 'Record' }] : [{ label: listTitle }])]),
   ];
   const content = catalogOverview && !selectedId ? <Stack gap="none" className="h-full min-h-0">
-    <ScopeHeader breadcrumbs={[{ label: group }, { label: title }]} title={title}
-      {...(overviewDescription ? { description: overviewDescription } : {})}
-      {...(overviewActions ? { controls: overviewActions } : {})} />
-    <div className="min-h-0 flex-1 overflow-auto px-6 pb-6" data-testid="catalog-overview">{children}</div>
-  </Stack> : atSection ? <Stack gap="none" className="h-full min-h-0">
-            <ScopeHeader title={title} breadcrumbs={breadcrumbs} />
-            <EmptyState size="sm" title={`Browse ${title.toLowerCase()}`} description="Choose a view from the menu to open its records." />
-          </Stack> : <ExplorerLayout
-            railTitle={listTitle}
-            railHeading="caption"
-            railWidth="ms"
-            railLabel={`${title.toLowerCase()} records`}
-            railHeader={railHeader}
-            rail={railNotice ?? <GroupedList
-              size="md" currentStyle="bar" groupHeading="label"
-              groups={[{ id: 'records', title: listTitle, count: rows.length }]}
-              rows={rows.map((row) => ({ ...row, groupId: 'records' }))}
-              currentId={selectedId}
-              onOpenRow={(row) => onSelect(row.id)}
-            />}
-            paneHeader={<ScopeHeader variant="crumbs" breadcrumbs={breadcrumbs} />}
-            panePadding="none"
-            className="min-h-0 min-w-0 flex-1"
-            data-testid="catalog-explorer"
-          >
-            <Stack gap="md" className="min-w-0 w-full overflow-x-auto p-5">{children}</Stack>
-          </ExplorerLayout>;
+    <ScopeHeader variant="crumbs" breadcrumbs={[{ label: group }, { label: title }]} />
+    <Stack gap="none" className={`min-h-0 flex-1 overflow-auto px-6 pb-6 ${UNDER_CRUMBS_BAND}`} data-testid="catalog-overview">
+      <PageSection title={title}
+        {...(overviewDescription ? { description: overviewDescription } : {})}
+        {...(overviewActions ? { actions: overviewActions } : {})}>
+        {children}
+      </PageSection>
+    </Stack>
+  </Stack> : <ListRailLayout
+    header={<SectionHeader breadcrumbs={breadcrumbs} title={title} />}
+    // The record list is a flush list rail beside the section rail, the
+    // Initiatives rail's structure (docs/layout-cascade.md); the content
+    // column after it opens with the trail and the title. Rows group by their
+    // category line (a design's status, an asset's kind).
+    list={{
+      title: listTitle,
+      count: rows.length,
+      label: `${title.toLowerCase()} records`,
+      header: railHeader,
+      body: railNotice ?? <GroupedList
+        size="md" currentStyle="bar" groupHeading="label" groupCountAlign="end"
+        groups={groupsOf(rows, listTitle)}
+        rows={rows.map((row) => ({ id: row.id, title: row.title, groupId: row.subline ?? listTitle }))}
+        currentId={selectedId}
+        onOpenRow={(row) => onSelect(row.id)}
+      />,
+    }}
+    data-testid="catalog-explorer"
+  >
+    <Stack gap="md" className="min-w-0 w-full overflow-x-auto px-6 pb-6">{children}</Stack>
+  </ListRailLayout>;
   return (
     <ViewportFillRegion bottomGap={0} data-testid="stacked-catalog">
       <Stack gap="none" className="h-full min-h-0 bg-surface" data-shell-flush>
         <SubNavLayout title={title} items={items} railLabel={`${title} navigation`} storageKey={`catalog-${title}`} contentAs="section" contentLabel={`${title} workspace`}
           renderNavItem={(item, body) => {
-            const active = !atSection && items.find((entry) => entry.path === item.path)?.active;
+            const active = items.find((entry) => entry.path === item.path)?.active;
             return <Link to={item.path} aria-current={active ? 'page' : undefined} className={active ? activeNavItemClassName : inactiveNavItemClassName}>{body}</Link>;
           }}>
           {content}

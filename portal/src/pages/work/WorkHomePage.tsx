@@ -5,19 +5,21 @@
 // findings and the DLQ on /iq/work/findings — this page is the glance, not
 // the archive.
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import {
   Button, Card, Chip, ConsultCard, Inline, InlineAlert, PageSection, SectionLabel, Stack, StatStrip,
-  ToolCallStrip, Toolbar, DataTable, PageHeader, Disclosure, type DataTableColumn,
+  ToolCallStrip, Toolbar, DataTable, Divider, PageHeader, Disclosure, type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
+import { useWorkEvents } from '../../hooks/useWorkEvents';
 import { useCapabilities } from '../../lib/capabilities';
 import { durationLabel, relativeTime } from '../../lib/relativeTime';
 import { toastError, toastPending, toastSuccess } from '../../lib/toastStore';
 import { sendJson, writeJson } from '../../lib/writeJson';
 import { usd } from '../../lib/format';
 import { QueuePulse } from './QueuePulse';
+import { ACTIVE_RUNS_URL, dispatchedRunsNoun, type DispatchedRun } from './dispatchedRuns';
 import {
   BotOrigin, JobStatusPill, PROPOSAL_LABELS, ServesItem, T, money, toToolCallStripItems,
   type Job, type LabConsult, type Proposal, type Summary,
@@ -44,6 +46,11 @@ export default function WorkHomePage() {
   const { data: consultData, refresh: refreshConsults } =
     useFetch<{ consults: LabConsult[] }>('/api/lab/consults?status=pending', 8_000);
   const { data: jobsData, error: jobsError, isLoading: jobsLoading, refresh: refreshJobs } = useFetch<{ jobs: Job[] }>('/api/work/jobs?limit=50', 8_000);
+  // The header's "N running" counts dispatched runs, which this queue never
+  // holds (dispatchedRuns.ts) — so the queue section says so rather than
+  // reading Running 0 beside it with no explanation.
+  const { data: dispatchedData } = useFetch<{ runs: DispatchedRun[] }>(ACTIVE_RUNS_URL, 10_000, { share: true });
+  const dispatchedCount = dispatchedData?.runs.length ?? 0;
   const { data: proposalsData, refresh: refreshProposals } = useFetch<{ proposals: Proposal[] }>('/api/work/proposals?status=pending', 20_000);
   // Slower cadence than the rest of the board — this number moves on the
   // scale of decisions made, not queue churn.
@@ -56,11 +63,7 @@ export default function WorkHomePage() {
     refreshSummary(); refreshJobs(); refreshProposals(); refreshConsults();
   }, [refreshSummary, refreshJobs, refreshProposals, refreshConsults]);
 
-  useEffect(() => {
-    const es = new EventSource('/api/work/events');
-    es.onmessage = () => refreshAll();
-    return () => es.close();
-  }, [refreshAll]);
+  useWorkEvents(refreshAll);
 
   async function answerConsult(id: string, answer: string) {
     setAnsweringId(id);
@@ -133,16 +136,16 @@ export default function WorkHomePage() {
   const recentColumns: DataTableColumn<Job>[] = [
     { key: 'title', header: 'Run', render: (job) => <Link to={`/iq/work/${encodeURIComponent(job.id)}`} className="text-[13px] text-text-primary hover:text-primary hover:underline">{job.title}</Link> },
     { key: 'status', header: 'Result', render: (job) => <JobStatusPill status={job.status} /> },
-    { key: 'finishedAt', header: 'Finished', render: (job) => <T className="text-[13px] text-text-secondary">{relativeTime(job.finishedAt!)}</T> },
-    { key: 'duration', header: 'Duration', render: (job) => <T className="text-[13px] text-text-secondary">{durationLabel(job.result?.durationMs)}</T> },
+    { key: 'finishedAt', header: 'Finished', numeric: true, render: (job) => relativeTime(job.finishedAt!) },
+    { key: 'duration', header: 'Duration', numeric: true, render: (job) => durationLabel(job.result?.durationMs) },
     { key: 'open', header: '', render: () => <span aria-hidden>›</span> },
   ];
 
   return (
-    <Stack gap="lg" data-testid="automate-inbox">
-      <PageHeader size="lg" title="Inbox" description="Questions and approvals waiting for you."
-        actions={canManage ? <Button variant="primary" onClick={() => navigate('/iq/work/queue?compose=1#new-run')}>New run</Button> : undefined} />
-      <PageSection size="md" title="Needs your attention">
+    <Stack gap="md" data-testid="automate-inbox">
+      <PageHeader title="Inbox" description="Questions and approvals waiting for you."
+        actions={canManage ? <Button size="sm" variant="primary" onClick={() => navigate('/iq/work/queue?compose=1')}>New run</Button> : undefined} />
+      <PageSection size="sm" title="Needs your attention">
       {/* A failed load renders as zeros everywhere below — "0 workers, 0 needs
           you" reads exactly like a healthy, idle system. Say so plainly.
           `summaryFailure` (transport error OR the wire's `degraded` marker) —
@@ -168,16 +171,23 @@ export default function WorkHomePage() {
         <Stack gap="none" className="mb-5">
           <Stack gap="sm" className="p-3.5">
             {pendingConsults.map((c) => (
-              <ConsultCard
+              <Disclosure
                 key={c.id}
-                question={c.question}
-                {...(c.context ? { context: c.context } : {})}
-                origin={[c.repo, c.boxId].filter((x): x is string => !!x)}
-                askedAt={`asked ${relativeTime(c.createdAt)}`}
-                status={c.status}
-                busy={answeringId === c.id}
-                {...(canManage ? { onAnswer: (answer: string) => void answerConsult(c.id, answer) } : {})}
-              />
+                variant="plain"
+                density="compact"
+                tone="warning"
+                summary={<T className="truncate" title={c.question}>Agent question: {c.question}</T>}
+              >
+                <ConsultCard
+                  question={c.question}
+                  {...(c.context ? { context: c.context } : {})}
+                  origin={[c.repo, c.boxId].filter((x): x is string => !!x)}
+                  askedAt={`asked ${relativeTime(c.createdAt)}`}
+                  status={c.status}
+                  busy={answeringId === c.id}
+                  {...(canManage ? { onAnswer: (answer: string) => void answerConsult(c.id, answer) } : {})}
+                />
+              </Disclosure>
             ))}
           </Stack>
         </Stack>
@@ -284,17 +294,22 @@ export default function WorkHomePage() {
 
       {!summaryFailure && (needsReview === 0 && pendingProposals === 0) && pendingConsults.length > 0 && <T className="text-[13px] text-text-tertiary">✓ No pending approvals or proposed changes.</T>}
       </PageSection>
-      <PageSection size="md" title="Current queue" className="border-t border-b border-border py-5"
+      <Divider spacing="none" />
+      <PageSection size="sm" title="Current queue"
+        description={dispatchedCount > 0
+          ? `Queue jobs only — ${dispatchedRunsNoun(dispatchedCount)} from initiative work items ${dispatchedCount === 1 ? 'is' : 'are'} running outside the queue; Runs lists them.`
+          : 'Queue jobs only — runs dispatched from initiative work items are listed on Runs when they are live.'}
         actions={<Link to="/iq/work/queue" className="text-[13px] text-primary hover:underline">View runs →</Link>}>
-        <StatStrip frameless aria-label="Current queue" items={[
+        <StatStrip variant="line" size="sm" aria-label="Current queue" items={[
           { label: 'Queued', value: summaryFailure || !s ? '—' : s.jobs.queued ?? 0 },
           { label: 'Running', value: summaryFailure || !s ? '—' : active },
           { label: 'Waiting for review', value: summaryFailure || !s ? '—' : needsReview },
           { label: 'Failed', value: summaryFailure || !s ? '—' : s.jobs.failed ?? 0 },
         ]} />
       </PageSection>
-      <PageSection size="md" title="Recent runs" actions={<Link to="/iq/work/queue" className="text-[13px] text-primary hover:underline">All runs →</Link>}>
-        {jobsError ? <InlineAlert tone="error">{jobsError}</InlineAlert> : <DataTable data={recent} columns={recentColumns} keyField={(job) => job.id} onRowClick={(job) => navigate(`/iq/work/${encodeURIComponent(job.id)}`)} frameless loading={jobsLoading && !jobsData} emptyMessage="No completed runs yet" />}
+      <Divider spacing="none" />
+      <PageSection size="sm" title="Recent runs" actions={<Link to="/iq/work/queue" className="text-[13px] text-primary hover:underline">All runs →</Link>}>
+        {jobsError ? <InlineAlert tone="error">{jobsError}</InlineAlert> : <DataTable data={recent} columns={recentColumns} keyField={(job) => job.id} size="sm" onRowClick={(job) => navigate(`/iq/work/${encodeURIComponent(job.id)}`)} frameless loading={jobsLoading && !jobsData} emptyMessage="No completed runs yet" />}
       </PageSection>
       <Link to="/iq/work/findings" className="text-[13px] text-primary hover:underline">{s && !summaryFailure ? `${s.findings.open} open findings` : 'View findings'} →</Link>
       <Disclosure summary="Queue operations" variant="plain" density="compact">

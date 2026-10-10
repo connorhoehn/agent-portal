@@ -1,0 +1,18 @@
+{
+  "acceptedCapacity": false,
+  "implementation": "batched SQL directory snapshots; before pending membership coalescing",
+  "evidenceDigests": {
+    "orgiq-capacity-directory-types.log": "a6aacf3de309c23e5aeb92922e8082e8eb964285a805f031247d7ef19849931b",
+    "orgiq-capacity-directory-build.log": "890dd11b16e4a3386f08a4fa8529271130230f259e3188a13da295ba4ce5d33b",
+    "orgiq-capacity-directory-tests.log": "3fdcb35723d8fd575910387ba2914135d881d9465284d72adc2c4f3633817aff",
+    "orgiq-capacity-directory-app-tests.log": "be4e97b0bf1535af564cbe80d88781df290669710f640c7ad000d91bb3337371",
+    "orgiq-capacity-directory-app-tests.json": "75663cad0b2c5c49544f98225ed41f0604672cbebec4db45990728a297f568a2",
+    "orgiq-capacity-directory-bff-core.log": "31827e7327964c36166e245987ad5e373fab5385804b5a09c17b952c1da34096",
+    "orgiq-capacity-directory-pilot.log": "9a3b5d6321306b90a31f60dde8949ac3c80c0ea22515bd9e2e1d845122ca15d8",
+    "orgiq-capacity-directory-steady.log": "5cf41d8c5133af7edb958c15e4d7e5da0e2f62ec30ca13bc453c4b93a0bacc10",
+    "orgiq-bff-cluster-capacity-pilot.json": "2a2e5be03de184c5314f6c27518afe40b531152a041b2428a9482e91491e4000",
+    "orgiq-bff-cluster-capacity-steady.json": "3d8a933a980c44c7116b18c6d6343eb920c7915a7fe01e969995cbc521b4127f",
+    "orgiq-bff-cluster-a-native-metrics.json": "5e6491d06f7b7b03bc3362d8e32ecbca9583b10e2fc29baebd0c349d7960fca6",
+    "orgiq-bff-cluster-b-native-metrics.json": "3b16fd8f0e35ef0fb594b54d0a9c828d6a649cd458feb9a62837d6ae7eed9097"
+  }
+}

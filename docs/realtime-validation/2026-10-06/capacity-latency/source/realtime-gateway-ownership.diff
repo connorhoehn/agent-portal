@@ -1,0 +1,30 @@
+diff --git a/docs/realtime-validation/2026-10-06/capacity-real-send/source/realtime-gateway.ts b/middleware/src/lib/realtime-gateway.ts
+index 591a2b08..997f1c7a 100644
+--- a/docs/realtime-validation/2026-10-06/capacity-real-send/source/realtime-gateway.ts
++++ b/middleware/src/lib/realtime-gateway.ts
+@@ -88,6 +88,7 @@ import { upgradeScheme } from './trusted-proxy.js';
+ import { realtimeSigningSecret, tokenFromSubprotocol, verifyRealtimeToken } from './realtime-token.js';
+ import { RedisLite, type GatewayRedisStore } from './redis-lite.js';
+ import { GatewayRedis } from './gateway-redis.js';
++import type { LeasedOwner } from './realtime-node-ownership.js';
+ import { hostname } from 'node:os';
+ import { createGatewayNotificationStore, releaseGatewayNotificationStore, seedMockNotifications } from './notification-store.js';
+ import { conversationHref, notify, notifyTenantChannelMention, parseDmLobby, resolveMentions, setNotificationSink, type NotificationSink } from './social-notify.js';
+@@ -784,7 +785,7 @@ export type GatewayHandle = RealtimeHandle & { store: RealtimeGatewayStore; redi
+ 
+ /** Ready transport before the host starts accepting upgrades. The synchronous
+  * attach function remains available to existing single-gateway callers. */
+-export async function startRealtimeGateway(server: Server, opts: AttachGatewayOptions = {}): Promise<GatewayHandle> {
++export async function startRealtimeGateway(server: Server, opts: AttachGatewayOptions = {}): Promise<GatewayHandle & { ownership?: LeasedOwner }> {
+   const routing = (process.env['REALTIME_GATEWAY_ROUTER'] ?? 'local').trim();
+   if (routing === 'local') return attachRealtimeGateway(server, opts);
+   if (routing !== 'redis') throw new Error('REALTIME_GATEWAY_ROUTER must be local or redis');
+@@ -810,7 +811,7 @@ export async function startRealtimeGateway(server: Server, opts: AttachGatewayOp
+     } });
+     await router!.start();
+     console.log('[realtime-gateway] Redis peer routing ready', { nodeId: router!.nodeId });
+-    return handle;
++    return Object.assign(handle, { ownership: router! as LeasedOwner });
+   } catch (error) {
+     if (handle) await handle.dispose(); else await redis.quit();
+     throw error;

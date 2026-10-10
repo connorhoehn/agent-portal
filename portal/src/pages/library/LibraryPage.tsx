@@ -22,7 +22,7 @@ import {
   Inline,
   SearchInput,
   Stack,
-  type DataTableColumn,
+  type DataTableColumn, T,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { useDebouncedSearch } from '../../hooks/useDebouncedSearch';
@@ -31,11 +31,10 @@ import { useCrumbLabel } from '../../lib/crumbLabels';
 import { useCapabilities } from '../../lib/capabilities';
 import { useSession } from '../../lib/auth';
 import { AssetDrawer } from './AssetDrawer';
-import { T } from './Text';
 import {
   KIND_HINT, KIND_LABEL, KIND_ORDER,
   TIER_HINT, TIER_LABEL, TIER_ORDER,
-  facetOptions, libraryEmptyKind,
+  LIBRARY_SOURCE, facetOptions, libraryEmptyKind,
 } from './libraryFormat';
 import type { AssetKind, AssetTier, LibraryAsset, LibraryResponse } from './types';
 import { knowledgeHref } from '../distillation/distillationRoutes';
@@ -118,8 +117,11 @@ export default function LibraryPage() {
             </Button>
             {a.lifecycleStatus === 'draft' && <Chip tone="neutral" size="xs">draft</Chip>}
           </Inline>
-          {/* Keep a compact preview; the asset detail retains the full description. */}
-          <T as="div" className="text-[12px] text-text-tertiary truncate" title={a.description}>{a.description}</T>
+          {/* Keep a compact preview; the full text is the title and the asset
+              detail. `T` lays out as a flex box, where text-overflow has no
+              effect — the text was cut mid-glyph with no ellipsis — so the
+              preview is made a block for `truncate` to apply. */}
+          <T as="div" className="block truncate text-[12px] text-text-tertiary" title={a.description}>{a.description}</T>
         </Stack>
       ),
     },
@@ -138,12 +140,12 @@ export default function LibraryPage() {
     {
       key: 'usedBy', header: 'Used by', width: '17%',
       render: (a) => (
-        <T as="div" title={a.usedBy.join(', ')} className={`text-[13px] truncate ${a.usedBy.length === 0 ? 'text-text-tertiary' : 'text-text-secondary'}`}>
+        <T as="div" title={a.usedBy.join(', ')} className={`block truncate text-[13px] ${a.usedBy.length === 0 ? 'text-text-tertiary' : 'text-text-secondary'}`}>
           {a.usedBy.length ? `${a.usedBy[0].replace(/^bot:/, '').replace('portal:studio', 'Studio').replace('portal:designs', 'Designs')}${a.usedBy.length > 1 ? ` +${a.usedBy.length - 1}` : ''}` : 'Not used yet'}
         </T>
       ),
     },
-    { key: 'open', header: '', width: '3%', align: 'right', render: () => <span aria-hidden className="text-text-tertiary">›</span> },
+    { key: 'open', header: '', width: '3%', align: 'right', render: () => <T aria-hidden className="inline-flex text-text-tertiary">›</T> },
   ];
 
   return (
@@ -162,9 +164,9 @@ export default function LibraryPage() {
       selectedId={openId} selectedTitle={assets.find((asset) => asset.id === openId)?.name}
       onSelect={setOpenId}
       railHeader={<SearchInput value={searchText} onChange={onSearchChange} placeholder="Search assets…" aria-label="Search Agent library" className="w-full" />}
-      railNotice={libraryFailure ? <UnavailableNotice error={libraryFailure} what="library assets" source="Library catalog" onRetry={refresh} /> : isLoading && !data ? <EmptyState size="sm" title="Loading assets…" /> : assets.length === 0 ? <EmptyState size="sm" title="No assets in this view" /> : undefined}
+      railNotice={libraryFailure ? <UnavailableNotice error={libraryFailure} what="library assets" source={LIBRARY_SOURCE} onRetry={refresh} /> : isLoading && !data ? <EmptyState size="sm" title="Loading assets…" /> : assets.length === 0 ? <EmptyState size="sm" title="No assets in this view" /> : undefined}
     >
-    {openId ? <AssetDrawer key={openId} id={openId} onOpenAsset={setOpenId} /> :
+    {openId ? <AssetDrawer key={openId} id={openId} onOpenAsset={setOpenId} onBack={() => setOpenId(null)} /> :
     <Stack gap="none">
 
       <Inline gap="sm" wrap align="center" className="border-t border-border py-4 mb-2" data-testid="library-filters">
@@ -185,7 +187,7 @@ export default function LibraryPage() {
         <UnavailableNotice
           error={libraryFailure}
           what="the library"
-          source="Assets are read from the library catalog"
+          source={LIBRARY_SOURCE}
           onRetry={refresh}
         />
       ) : !(isLoading && !data) && emptyKind === 'filtered' ? (

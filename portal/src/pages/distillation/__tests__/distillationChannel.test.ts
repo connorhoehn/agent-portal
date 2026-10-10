@@ -20,14 +20,16 @@ test('each channel patches its own REST route', () => {
 });
 
 test('extractFrame accepts bare and wrapped frames for the right channel only', () => {
-  const bare = { type: 'levels', channel: 'distill:levels', levels: [] };
+  const bare = { type: 'levels', channel: 'orgiq:distill:levels', levels: [] };
   assert.deepEqual(extractFrame(bare, 'distill:levels'), bare);
-  const wrapped = { type: 'message', channel: 'distill:jobs', payload: { type: 'job', job: job('j1') } };
+  const wrapped = { type: 'message', channel: 'orgiq:distill:jobs', payload: { type: 'job', job: job('j1') } };
   assert.equal(extractFrame(wrapped, 'distill:jobs')?.type, 'job');
   assert.equal(extractFrame({ type: 'x', data: { type: 'review', pending: 2, decided: 5 } }, 'distill:review')?.type, 'review');
 
   assert.equal(extractFrame(bare, 'distill:jobs'), null, 'other channel');
   assert.equal(extractFrame({ ...bare, channel: 'chat:general' }, 'distill:levels'), null);
+  // The page key is not the wire name: a frame on the bare name is not ours.
+  assert.equal(extractFrame({ ...bare, channel: 'distill:levels' }, 'distill:levels'), null);
   assert.equal(extractFrame({ type: 'levels', levels: 'nope' }, 'distill:levels'), null, 'malformed');
   assert.equal(extractFrame({ type: 'job', job: {} }, 'distill:jobs'), null, 'job without id');
   assert.equal(extractFrame({ type: 'review', pending: '2', decided: 1 }, 'distill:review'), null);

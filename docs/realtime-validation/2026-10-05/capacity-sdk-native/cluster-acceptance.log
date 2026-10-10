@@ -1,0 +1,20 @@
+✔ two genuine tabs racing across full BFFs receive exactly one accepted seat (3416.6275ms)
+✔ a real REST job producer reaches both cookie and JWT peers, then stops for a retired cookie epoch (380.739375ms)
+✔ two full BFFs share protected huddle messages and canonical Work pages (797.868625ms)
+✔ both BFFs refuse a retired real directory epoch and retain protected history (940.657542ms)
+✔ forged caller and foreign lobby frames cannot cross the application boundary (297.544167ms)
+✔ a private channel created on one BFF is visible remotely and its remote leave revokes delivery (915.747667ms)
+✔ shared presence on the other BFF uses real identity and omits a revoked source (119.574625ms)
+✔ a missed-call notification reaches a peer BFF and replays from the shared inbox (212.90125ms)
+✔ a peer DM reader avoids an unread alert and receives one after leaving (585.064417ms)
+✔ a full stored inbox replays across nodes and a later membership removal filters without deleting records (394.723542ms)
+✔ retiring the real masquerade operator blocks admission on both BFFs (13.85125ms)
+✔ an abruptly lost BFF returns under a new owner and restores the same authenticated call seat (33661.852875ms)
+ℹ tests 12
+ℹ suites 0
+ℹ pass 12
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 41966.314209

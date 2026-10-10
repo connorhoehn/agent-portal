@@ -110,6 +110,8 @@ export const SHAPE_ENTITIES: Array<ShapeEntity<any>> = [
         'The IdP subject, filled on first SSO login (routes/auth.ts links by external_sub then email). Every seeded user is a picker-login user, so the seeded row holds NULL — and a fallback that invented one would make a user look already-linked to a Cognito pool that is minted fresh on every rebuild.',
       created_at:
         'Not on UserInfo and rendered nowhere; the DDL default is NOW(), so there is no fixed value to mirror.',
+      avatar_url:
+        'Not a UserInfo field on purpose: faces are a separate best-effort read (`userAvatars` in providers/identity.ts) so a cluster without the additive column loses faces, never directory authority. The seed INSERT leaves it NULL; offline the face comes from the registered `avatars` fixture (mock/avatars.ts), keyed by the linked person or the user id.',
     },
     extraKeys: {
       grants:

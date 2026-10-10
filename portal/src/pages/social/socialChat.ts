@@ -6,6 +6,8 @@
 // Channel names are `social:ch:<slug>` and DM lobbies `social:dm:<sorted ids>`
 // (§4.3) — the server mints both; the portal only reads them back.
 
+import { dmLobbyPrefix, parseDmLobby } from '@connorhoehnslalom/realtime-modules/call';
+
 /** One channel as `GET /api/social/channels` lists it. */
 export interface SocialChannel {
   slug: string;
@@ -27,6 +29,8 @@ export interface SocialChannel {
 export interface SocialPeer {
   userId: string;
   displayName: string;
+  /** Portrait URL from the directory; absent/null renders initials. */
+  avatarUrl?: string | null;
 }
 
 /** One person holding a social grant (`GET /api/social/people`). */
@@ -46,7 +50,9 @@ export interface SocialDm {
 }
 
 /** A row's person, with the presence dot the rail draws (undefined: no dot). */
-export interface SocialRailPeer extends SocialPeer {
+export interface SocialRailPeer extends Omit<SocialPeer, 'avatarUrl'> {
+  /** Left off when the directory has none — the rail then draws initials. */
+  avatarUrl?: string;
   online?: boolean;
 }
 
@@ -62,7 +68,8 @@ export interface SocialRailItem {
 }
 
 export const CHANNEL_PREFIX = 'social:ch:';
-export const DM_PREFIX = 'social:dm:';
+// The library's own prefix rule, so it cannot drift from `dmLobbyName`.
+export const DM_PREFIX = dmLobbyPrefix({ prefix: 'social:' });
 
 /** `social:ch:<slug>` → `<slug>`; anything else → null. */
 export function slugFromChannel(channel: string): string | null {
@@ -71,16 +78,18 @@ export function slugFromChannel(channel: string): string | null {
 
 /** `social:dm:<a>:<b>…` → its member ids; anything else → []. */
 export function dmMembers(lobby: string): string[] {
-  if (!lobby.startsWith(DM_PREFIX)) return [];
-  return lobby.slice(DM_PREFIX.length).split(':').filter(Boolean);
+  // The library returns null for anything but a well-formed `social:dm:`
+  // lobby (fewer than two members, another tenant, a hashed group); this API says [].
+  const parsed = parseDmLobby(lobby, { prefix: 'social:' });
+  return parsed?.kind === 'dm' ? parsed.members : [];
 }
 
-export function channelHref(slug: string): string {
-  return `/social/channels/${encodeURIComponent(slug)}`;
+export function channelHref(slug: string, route = '/social'): string {
+  return `${route}/channels/${encodeURIComponent(slug)}`;
 }
 
-export function dmHref(lobby: string): string {
-  return `/social/dms/${encodeURIComponent(lobby)}`;
+export function dmHref(lobby: string, route = '/social'): string {
+  return `${route}/dms/${encodeURIComponent(lobby)}`;
 }
 
 /** The create dialog says `standard | private`; the API says `public | private`. */
@@ -118,10 +127,19 @@ export function channelRailItems(channels: readonly SocialChannel[]): SocialRail
 
 /** A DM's people, named from the roster where the list did not name them; the caller left out. */
 export function dmPeers(lobby: string, selfId: string, people: readonly SocialPeer[], known?: readonly SocialPeer[]): SocialPeer[] {
-  const names = new Map<string, string>();
-  for (const p of people) names.set(p.userId, p.displayName);
-  for (const p of known ?? []) names.set(p.userId, p.displayName);
-  return dmMembers(lobby).filter((id) => id !== selfId).map((id) => ({ userId: id, displayName: names.get(id) ?? id }));
+  const byId = new Map<string, SocialPeer>();
+  for (const p of people) byId.set(p.userId, p);
+  for (const p of known ?? []) byId.set(p.userId, { ...p, avatarUrl: p.avatarUrl ?? byId.get(p.userId)?.avatarUrl ?? null });
+  return dmMembers(lobby).filter((id) => id !== selfId).map((id) => {
+    const p = byId.get(id);
+    return { userId: id, displayName: p?.displayName ?? id, ...(p?.avatarUrl ? { avatarUrl: p.avatarUrl } : {}) };
+  });
+}
+
+/** A rail peer as the library's `ConversationPeer` takes it: a null avatar is left off (initials). */
+function railPeer(p: SocialPeer): SocialRailPeer {
+  const { avatarUrl, ...rest } = p;
+  return avatarUrl ? { ...rest, avatarUrl } : rest;
 }
 
 export function dmRailItem(dm: SocialDm): SocialRailItem {
@@ -130,7 +148,7 @@ export function dmRailItem(dm: SocialDm): SocialRailItem {
   return {
     channel: dm.channel,
     kind: dm.peers.length > 1 ? 'group' : 'dm',
-    peers: dm.peers,
+    peers: dm.peers.map(railPeer),
     ...(preview !== undefined ? { lastMessagePreview: preview } : {}),
     ...(at !== undefined ? { lastMessageAt: at } : {}),
     ...(dm.unreadCount ? { unreadCount: dm.unreadCount } : {}),
@@ -146,7 +164,7 @@ export function dmRailItems(dms: readonly SocialDm[], selected: string | null, s
   const items = dms.map((dm) => dmRailItem(dm.channel === selected ? { ...dm, unreadCount: 0 } : dm));
   if (selected && selected.startsWith(DM_PREFIX) && !items.some((i) => i.channel === selected)) {
     const peers = dmPeers(selected, selfId, people);
-    if (peers.length) items.unshift({ channel: selected, kind: peers.length > 1 ? 'group' : 'dm', peers });
+    if (peers.length) items.unshift({ channel: selected, kind: peers.length > 1 ? 'group' : 'dm', peers: peers.map(railPeer) });
   }
   return items;
 }
@@ -157,11 +175,11 @@ export function dmTitle(peers: readonly SocialPeer[]): string {
 }
 
 /** People the caller can start a DM with — everyone on the social roster but themselves, by name. */
-export function dmCandidates(people: readonly SocialPerson[], selfId: string): Array<{ userId: string; displayName: string; hint?: string }> {
+export function dmCandidates(people: readonly SocialPerson[], selfId: string): Array<{ userId: string; displayName: string; hint?: string; avatarUrl?: string }> {
   return people
     .filter((p) => p.userId !== selfId)
     .sort((a, b) => a.displayName.localeCompare(b.displayName))
-    .map((p) => ({ userId: p.userId, displayName: p.displayName, ...(p.roles.length ? { hint: p.roles.join(', ') } : {}) }));
+    .map((p) => ({ userId: p.userId, displayName: p.displayName, ...(p.roles.length ? { hint: p.roles.join(', ') } : {}), ...(p.avatarUrl ? { avatarUrl: p.avatarUrl } : {}) }));
 }
 
 // ── The chat rail's extras (SocialChatWorkspace) ────────────────────────────
@@ -181,6 +199,7 @@ export interface SocialActivePerson {
   userId: string;
   displayName: string;
   status: 'online' | 'away';
+  avatarUrl?: string;
 }
 
 /**
@@ -188,10 +207,10 @@ export interface SocialActivePerson {
  * `presenceAvatarUsers` folds it (one entry per person): everyone but the
  * viewer, online before away, then by name.
  */
-export function activeNow(here: ReadonlyArray<{ id: string; name: string; idle?: boolean }>, selfId: string): SocialActivePerson[] {
+export function activeNow(here: ReadonlyArray<{ id: string; name: string; idle?: boolean; avatarUrl?: string }>, selfId: string): SocialActivePerson[] {
   return here
     .filter((p) => p.id !== selfId)
-    .map((p) => ({ userId: p.id, displayName: p.name, status: p.idle ? 'away' as const : 'online' as const }))
+    .map((p) => ({ userId: p.id, displayName: p.name, status: p.idle ? 'away' as const : 'online' as const, ...(p.avatarUrl ? { avatarUrl: p.avatarUrl } : {}) }))
     .sort((a, b) => Number(a.status === 'away') - Number(b.status === 'away') || a.displayName.localeCompare(b.displayName));
 }
 

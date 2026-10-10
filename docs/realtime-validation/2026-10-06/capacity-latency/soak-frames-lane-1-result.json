@@ -1,0 +1,714 @@
+{
+  "at": "2026-10-06T17:23:47.580Z",
+  "options": {
+    "url": "ws://orgiq-bff-capacity-a:3001/ws",
+    "peerUrls": [
+      "ws://orgiq-bff-capacity-b:3001/ws"
+    ],
+    "peerContainers": [
+      "orgiq-bff-capacity-b"
+    ],
+    "sockets": 1000,
+    "calls": 100,
+    "groupSizes": [
+      2
+    ],
+    "holdSeconds": 60,
+    "scenario": "soak",
+    "secret": "dev-fallback",
+    "json": "/results/soak.json",
+    "serverPid": null,
+    "healthUrl": "http://orgiq-bff-capacity-a:3001/api/health",
+    "rampPerSec": 50,
+    "chatEverySec": 30,
+    "chatStartup": "spread",
+    "stateEverySec": 20,
+    "spreadSeconds": 20,
+    "org": "social",
+    "origin": null,
+    "soakSeconds": 300,
+    "restartAfterSeconds": 150,
+    "recoveryTimeoutSeconds": 60,
+    "restartContainer": null,
+    "redisContainer": null,
+    "sampleContainer": "orgiq-bff-capacity-a",
+    "driverContainer": "orgiq-bff-capacity-driver-soak",
+    "tokenTtlSeconds": 120,
+    "identityManifest": "/results/identities.json"
+  },
+  "results": [
+    {
+      "scenario": "soak",
+      "identities": {
+        "mode": "directory-manifest",
+        "users": 1000,
+        "sha256": "239951005922487ce0a0a1dfb08529fc42fe3489a415416d6cfb932aecc11db8"
+      },
+      "groupSize": 2,
+      "calls": 100,
+      "sockets": 1000,
+      "holdSeconds": 60,
+      "soak": {
+        "requestedSeconds": 300,
+        "tokenTtlSeconds": 120,
+        "startedAt": "2026-10-06T17:18:43.035Z",
+        "expiredBeforeReconnect": 0,
+        "elapsedSeconds": 300,
+        "completed": true
+      },
+      "recoveries": [
+        {
+          "kind": "token-renewal",
+          "startedAt": "2026-10-06T17:19:29.004Z",
+          "durationSeconds": 25.6,
+          "outageSeconds": 0,
+          "sockets": {
+            "expected": 1000,
+            "recovered": 1000,
+            "ms": {
+              "n": 1000,
+              "p50": 9987.7,
+              "p95": 21247.4,
+              "p99": 22044.8,
+              "max": 22249.9
+            }
+          },
+          "callStatus": {
+            "expected": 200,
+            "recovered": 200
+          },
+          "participantStates": {
+            "expected": 200,
+            "recovered": 200
+          },
+          "chat": {
+            "expected": 800,
+            "recovered": 800
+          },
+          "presence": {
+            "expected": 800,
+            "republished": 800,
+            "expectedPeerDeliveries": 800,
+            "peerDeliveries": 800
+          },
+          "complete": true,
+          "error": null
+        },
+        {
+          "kind": "token-renewal",
+          "startedAt": "2026-10-06T17:20:59.213Z",
+          "durationSeconds": 24.8,
+          "outageSeconds": 0,
+          "sockets": {
+            "expected": 1000,
+            "recovered": 1000,
+            "ms": {
+              "n": 1000,
+              "p50": 9986.1,
+              "p95": 21244.4,
+              "p99": 22044.7,
+              "max": 22243.9
+            }
+          },
+          "callStatus": {
+            "expected": 200,
+            "recovered": 200
+          },
+          "participantStates": {
+            "expected": 200,
+            "recovered": 200
+          },
+          "chat": {
+            "expected": 800,
+            "recovered": 800
+          },
+          "presence": {
+            "expected": 800,
+            "republished": 800,
+            "expectedPeerDeliveries": 800,
+            "peerDeliveries": 800
+          },
+          "complete": true,
+          "error": null
+        },
+        {
+          "kind": "token-renewal",
+          "startedAt": "2026-10-06T17:22:29.149Z",
+          "durationSeconds": 25.6,
+          "outageSeconds": 0,
+          "sockets": {
+            "expected": 1000,
+            "recovered": 1000,
+            "ms": {
+              "n": 1000,
+              "p50": 9987,
+              "p95": 21239.5,
+              "p99": 22041.6,
+              "max": 22240.3
+            }
+          },
+          "callStatus": {
+            "expected": 200,
+            "recovered": 200
+          },
+          "participantStates": {
+            "expected": 200,
+            "recovered": 200
+          },
+          "chat": {
+            "expected": 800,
+            "recovered": 800
+          },
+          "presence": {
+            "expected": 800,
+            "republished": 800,
+            "expectedPeerDeliveries": 800,
+            "peerDeliveries": 800
+          },
+          "complete": true,
+          "error": null
+        }
+      ],
+      "unexpectedDisconnects": 0,
+      "runTag": "ac74",
+      "durationS": 348.1,
+      "rampSeconds": 20,
+      "connect": {
+        "ok": 4000,
+        "fail": 0,
+        "failReasons": {},
+        "ms": {
+          "n": 4000,
+          "p50": 5.8,
+          "p95": 11.7,
+          "p99": 19.4,
+          "max": 84.1
+        }
+      },
+      "established": 100,
+      "failedCalls": [],
+      "latencyMs": {
+        "inviteToIncoming": {
+          "n": 100,
+          "p50": 39.3,
+          "p95": 55.9,
+          "p99": 635.1,
+          "max": 835.7
+        },
+        "acceptToAccepted": {
+          "n": 100,
+          "p50": 36,
+          "p95": 44.5,
+          "p99": 46.8,
+          "max": 51.8
+        },
+        "chatDelivery": {
+          "n": 12392,
+          "p50": 25.4,
+          "p95": 3094.4,
+          "p99": 3501.8,
+          "max": 4573.3
+        }
+      },
+      "chat": {
+        "sent": 12394,
+        "delivered": 12392,
+        "expectedSenders": 800,
+        "sendingUsers": 800,
+        "deliveredUsers": 800
+      },
+      "chatAdmission": {
+        "expected": 800,
+        "joined": 800,
+        "waitMs": 1169.3
+      },
+      "crossDeliveries": {
+        "call": 0,
+        "chat": 0,
+        "presence": 0,
+        "samples": []
+      },
+      "unexpectedEnded": {
+        "count": 0,
+        "callsEnded": 0,
+        "samples": []
+      },
+      "answeredElsewhere": 0,
+      "denied": {
+        "count": 0,
+        "samples": []
+      },
+      "otherErrors": {
+        "count": 0,
+        "byMessage": {}
+      },
+      "notifications": {
+        "total": 3,
+        "missedCall": 2
+      },
+      "doubleAccept": null,
+      "glare": null,
+      "churn": null,
+      "frames": {
+        "in": 98547,
+        "out": 54194,
+        "byKind": {
+          "presence.set": 15200,
+          "notification:bulk-update.": 3680,
+          "chat.joined": 3200,
+          "call.active-call": 6300,
+          "chat.history": 3200,
+          "presence.subscribed": 3200,
+          "chat.message": 24785,
+          "chat.sent": 12392,
+          "presence.update": 13605,
+          "call.invite": 100,
+          "call.accepted": 100,
+          "call.participant-state": 9299,
+          "call.user-status": 801,
+          "presence.offline": 2682,
+          "notification:new.": 3
+        }
+      },
+      "server": {
+        "pid": null,
+        "container": "orgiq-bff-capacity-a",
+        "memorySource": "docker-working-set",
+        "sampleErrors": 0,
+        "rssMb": {
+          "peak": 264.4,
+          "last": 264.2
+        },
+        "cpuPct": {
+          "peak": 102.7,
+          "mean": 30.4,
+          "p95": 99.6
+        },
+        "healthMs": {
+          "n": 692,
+          "p50": 1,
+          "p95": 22.2,
+          "p99": 181.2,
+          "max": 236.4,
+          "errors": 0,
+          "plannedOutageErrors": 0
+        },
+        "slowHealth": [
+          {
+            "ms": 236.4,
+            "atS": 20,
+            "phase": "ramp"
+          },
+          {
+            "ms": 74.9,
+            "atS": 113.1,
+            "phase": "token-renewal"
+          },
+          {
+            "ms": 188.3,
+            "atS": 114.1,
+            "phase": "token-renewal"
+          },
+          {
+            "ms": 210,
+            "atS": 114.6,
+            "phase": "token-renewal"
+          },
+          {
+            "ms": 158.9,
+            "atS": 115.1,
+            "phase": "soak"
+          },
+          {
+            "ms": 120.5,
+            "atS": 117.1,
+            "phase": "soak"
+          },
+          {
+            "ms": 75.9,
+            "atS": 117.6,
+            "phase": "soak"
+          },
+          {
+            "ms": 62.4,
+            "atS": 118.1,
+            "phase": "soak"
+          },
+          {
+            "ms": 181.2,
+            "atS": 203.2,
+            "phase": "token-renewal"
+          },
+          {
+            "ms": 58.5,
+            "atS": 203.7,
+            "phase": "token-renewal"
+          },
+          {
+            "ms": 99.2,
+            "atS": 205.7,
+            "phase": "soak"
+          },
+          {
+            "ms": 121.4,
+            "atS": 206.2,
+            "phase": "soak"
+          },
+          {
+            "ms": 62.9,
+            "atS": 292.7,
+            "phase": "token-renewal"
+          },
+          {
+            "ms": 189.7,
+            "atS": 293.2,
+            "phase": "token-renewal"
+          },
+          {
+            "ms": 221.5,
+            "atS": 293.7,
+            "phase": "token-renewal"
+          },
+          {
+            "ms": 221.4,
+            "atS": 294.2,
+            "phase": "token-renewal"
+          },
+          {
+            "ms": 127.6,
+            "atS": 296.8,
+            "phase": "soak"
+          },
+          {
+            "ms": 122.3,
+            "atS": 297.3,
+            "phase": "soak"
+          }
+        ]
+      },
+      "peerServers": [
+        {
+          "url": "ws://orgiq-bff-capacity-b:3001/ws",
+          "pid": null,
+          "container": "orgiq-bff-capacity-b",
+          "memorySource": "docker-working-set",
+          "sampleErrors": 0,
+          "rssMb": {
+            "peak": 263.5,
+            "last": 262.5
+          },
+          "cpuPct": {
+            "peak": 102.4,
+            "mean": 30.7,
+            "p95": 95.9
+          },
+          "healthMs": {
+            "n": 692,
+            "p50": 0.9,
+            "p95": 24.6,
+            "p99": 130.2,
+            "max": 326.8,
+            "errors": 0,
+            "plannedOutageErrors": 0
+          },
+          "slowHealth": [
+            {
+              "ms": 326.8,
+              "atS": 20,
+              "phase": "ramp"
+            },
+            {
+              "ms": 53.3,
+              "atS": 22,
+              "phase": "ramp"
+            },
+            {
+              "ms": 150.4,
+              "atS": 22.5,
+              "phase": "ramp"
+            },
+            {
+              "ms": 52.1,
+              "atS": 114.1,
+              "phase": "token-renewal"
+            },
+            {
+              "ms": 58.9,
+              "atS": 115.1,
+              "phase": "soak"
+            },
+            {
+              "ms": 92.7,
+              "atS": 116.6,
+              "phase": "soak"
+            },
+            {
+              "ms": 101.4,
+              "atS": 117.1,
+              "phase": "soak"
+            },
+            {
+              "ms": 169.2,
+              "atS": 117.6,
+              "phase": "soak"
+            },
+            {
+              "ms": 127.3,
+              "atS": 202.7,
+              "phase": "token-renewal"
+            },
+            {
+              "ms": 130.2,
+              "atS": 203.2,
+              "phase": "token-renewal"
+            },
+            {
+              "ms": 144.9,
+              "atS": 203.7,
+              "phase": "token-renewal"
+            },
+            {
+              "ms": 242.1,
+              "atS": 204.2,
+              "phase": "token-renewal"
+            },
+            {
+              "ms": 61.4,
+              "atS": 206.2,
+              "phase": "soak"
+            },
+            {
+              "ms": 78.3,
+              "atS": 206.7,
+              "phase": "soak"
+            },
+            {
+              "ms": 82.9,
+              "atS": 293.2,
+              "phase": "token-renewal"
+            },
+            {
+              "ms": 82.8,
+              "atS": 293.7,
+              "phase": "token-renewal"
+            },
+            {
+              "ms": 72.1,
+              "atS": 294.2,
+              "phase": "token-renewal"
+            },
+            {
+              "ms": 174.5,
+              "atS": 294.7,
+              "phase": "token-renewal"
+            },
+            {
+              "ms": 83.5,
+              "atS": 296.3,
+              "phase": "soak"
+            },
+            {
+              "ms": 87.9,
+              "atS": 296.8,
+              "phase": "soak"
+            },
+            {
+              "ms": 80.3,
+              "atS": 297.3,
+              "phase": "soak"
+            },
+            {
+              "ms": 66.1,
+              "atS": 297.8,
+              "phase": "soak"
+            },
+            {
+              "ms": 55.3,
+              "atS": 298.3,
+              "phase": "soak"
+            }
+          ]
+        }
+      ],
+      "targets": [
+        {
+          "url": "ws://orgiq-bff-capacity-a:3001/ws",
+          "socketsOpened": 2000
+        },
+        {
+          "url": "ws://orgiq-bff-capacity-b:3001/ws",
+          "socketsOpened": 2000
+        }
+      ],
+      "clientEventLoopMs": {
+        "p50": 10.2,
+        "p99": 11.7,
+        "max": 49.3
+      },
+      "verdict": [
+        {
+          "name": "sockets connect",
+          "ok": true,
+          "measured": "4000/4000",
+          "limit": "100%"
+        },
+        {
+          "name": "calls established",
+          "ok": true,
+          "measured": "100/100",
+          "limit": "all"
+        },
+        {
+          "name": "invite→incoming p95",
+          "ok": true,
+          "measured": 55.9,
+          "limit": "< 250 ms"
+        },
+        {
+          "name": "invite→incoming p99",
+          "ok": true,
+          "measured": 635.1,
+          "limit": "< 1000 ms"
+        },
+        {
+          "name": "accept→accepted p95",
+          "ok": true,
+          "measured": 44.5,
+          "limit": "< 250 ms"
+        },
+        {
+          "name": "chat delivery p95",
+          "ok": false,
+          "measured": 3094.4,
+          "limit": "< 300 ms, with paired-sender evidence"
+        },
+        {
+          "name": "background chat coverage",
+          "ok": true,
+          "measured": "800/800",
+          "limit": "all paired senders reach their peer"
+        },
+        {
+          "name": "background chat admission",
+          "ok": true,
+          "measured": "800/800; 1169.3ms",
+          "limit": "all server join acknowledgements within 10 seconds"
+        },
+        {
+          "name": "cross-call/channel deliveries",
+          "ok": true,
+          "measured": 0,
+          "limit": "0"
+        },
+        {
+          "name": "answered-elsewhere outside scenario 4",
+          "ok": true,
+          "measured": 0,
+          "limit": "0"
+        },
+        {
+          "name": "ended before scripted hang-up",
+          "ok": true,
+          "measured": 0,
+          "limit": "0"
+        },
+        {
+          "name": "unplanned socket disconnects",
+          "ok": true,
+          "measured": 0,
+          "limit": "0"
+        },
+        {
+          "name": "AUTHZ_CHANNEL_DENIED",
+          "ok": true,
+          "measured": 0,
+          "limit": "0"
+        },
+        {
+          "name": "event-loop proxy (/api/health p99)",
+          "ok": false,
+          "measured": 181.2,
+          "limit": "< 50 ms"
+        },
+        {
+          "name": "health errors outside planned outage",
+          "ok": true,
+          "measured": 0,
+          "limit": "0"
+        },
+        {
+          "name": "server memory peak",
+          "ok": true,
+          "measured": 264.4,
+          "limit": "< 700 MiB"
+        },
+        {
+          "name": "container samples",
+          "ok": true,
+          "measured": 0,
+          "limit": "no errors, at least one sample"
+        },
+        {
+          "name": "peer 1: health p99",
+          "ok": false,
+          "measured": 130.2,
+          "limit": "< 50 ms"
+        },
+        {
+          "name": "peer 1: health errors",
+          "ok": true,
+          "measured": 0,
+          "limit": "0"
+        },
+        {
+          "name": "peer 1: memory peak",
+          "ok": true,
+          "measured": 263.5,
+          "limit": "< 700 MiB"
+        },
+        {
+          "name": "peer 1: container samples",
+          "ok": true,
+          "measured": 0,
+          "limit": "no errors, at least one sample"
+        },
+        {
+          "name": "bounded soak completed",
+          "ok": true,
+          "measured": 300,
+          "limit": ">= 300s"
+        },
+        {
+          "name": "expired sockets at reauthentication",
+          "ok": true,
+          "measured": 0,
+          "limit": "0"
+        },
+        {
+          "name": "soak protocol errors",
+          "ok": true,
+          "measured": 0,
+          "limit": "0"
+        },
+        {
+          "name": "token-renewal 1: complete recovery",
+          "ok": true,
+          "measured": "1000/1000 sockets; 200/200 call statuses; 25.6s",
+          "limit": "100% authenticated sockets, original call membership, peer state, chat and presence"
+        },
+        {
+          "name": "token-renewal 2: complete recovery",
+          "ok": true,
+          "measured": "1000/1000 sockets; 200/200 call statuses; 24.8s",
+          "limit": "100% authenticated sockets, original call membership, peer state, chat and presence"
+        },
+        {
+          "name": "token-renewal 3: complete recovery",
+          "ok": true,
+          "measured": "1000/1000 sockets; 200/200 call statuses; 25.6s",
+          "limit": "100% authenticated sockets, original call membership, peer state, chat and presence"
+        }
+      ]
+    }
+  ]
+}

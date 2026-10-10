@@ -220,7 +220,7 @@ export const KIND_FILTER_OPTIONS: Array<{ value: string; label: string }> = [
 
 export const TENANT_FILTER_OPTIONS: Array<{ value: string; label: string }> = [
   { value: '', label: 'Any workspace' },
-  { value: 'orgiq', label: 'Org' },
+  { value: 'orgiq', label: 'Work' },
   { value: 'assessment', label: 'Assessment' },
 ];
 

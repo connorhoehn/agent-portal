@@ -16,25 +16,27 @@ import { AssetRelationships } from '../distillation/AssetRelationships';
 //                An unexplained similarity list is not actionable.
 
 import {
-  Card, Chip, ChoiceList, ChoiceRow, DetailSection, Inline, InlinePlaceholder, LoadingState, MetaLine, ProgressBar, Stack,
+  Card, Chip, ChoiceList, ChoiceRow, DetailSection, Inline, InlinePlaceholder, LoadingState, MetaLine, PageHeader, ProgressBar, Stack, T,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
-import { UnavailableNotice } from '../../components/UnavailableNotice';
+import { RecordNotFound, UnavailableNotice, isNotFoundError } from '../../components/UnavailableNotice';
 import { AssetEvals } from './AssetEvals';
 import { DistillationProvenance } from './DistillationProvenance';
 import { relativeTime } from '../../lib/relativeTime';
 import { Link } from 'react-router';
-import { T } from './Text';
 import {
   KIND_HINT, KIND_LABEL, KIND_TONE, SOURCE_HINT, SOURCE_TONE,
-  TIER_HINT, TIER_LABEL, TIER_TONE, evalLabel, isFenced, readinessRows, usageLine,
+  LIBRARY_SOURCE, TIER_HINT, TIER_LABEL, TIER_TONE, evalLabel, isFenced, readinessRows, usageLine,
 } from './libraryFormat';
 import type { AssetDetail } from './types';
 
-export function AssetDrawer({ id, onOpenAsset }: { id: string; onOpenAsset: (id: string) => void }) {
+export function AssetDrawer({ id, onOpenAsset, onBack }: { id: string; onOpenAsset: (id: string) => void; onBack: () => void }) {
   const { data, isLoading, error, refresh } = useFetch<AssetDetail>(`/api/library/${encodeURIComponent(id)}`, 0);
 
-  if (error) return <UnavailableNotice error={error} what="this asset" source="Assets are read from the library catalog" onRetry={refresh} />;
+  if (error && isNotFoundError(error)) {
+    return <RecordNotFound heading="Asset" title="Asset not found" body={`No library asset has the id "${id}".`} backLabel="All assets" onBack={onBack} />;
+  }
+  if (error) return <UnavailableNotice error={error} what="this asset" source={LIBRARY_SOURCE} onRetry={refresh} />;
   if (isLoading || !data) return <LoadingState label="Loading…" />;
 
   const { asset: a, readiness, related } = data;
@@ -44,18 +46,23 @@ export function AssetDrawer({ id, onOpenAsset }: { id: string; onOpenAsset: (id:
 
   return (
     <Stack gap="lg">
-      <header>
-        <Inline gap="xs" wrap>
-          <T className="text-[15px] font-semibold text-text-primary">{a.name}</T>
-          <Chip tone={KIND_TONE[a.kind]} size="xs" title={KIND_HINT[a.kind]}>{KIND_LABEL[a.kind]}</Chip>
-          <Chip tone={TIER_TONE[a.tier]} size="xs" title={TIER_HINT[a.tier]}>{TIER_LABEL[a.tier]}</Chip>
-        </Inline>
-        <T as="p" className="mt-1.5 mb-0 text-[12.5px] leading-relaxed text-text-secondary">{a.description}</T>
+      <Stack gap="none">
+        {/* The asset's name is the page's one h1 (program-owner #25). */}
+        <PageHeader
+          title={a.name}
+          badge={(
+            <Inline gap="xs" wrap>
+              <Chip tone={KIND_TONE[a.kind]} size="xs" title={KIND_HINT[a.kind]}>{KIND_LABEL[a.kind]}</Chip>
+              <Chip tone={TIER_TONE[a.tier]} size="xs" title={TIER_HINT[a.tier]}>{TIER_LABEL[a.tier]}</Chip>
+            </Inline>
+          )}
+          description={a.description}
+        />
         <MetaLine
           className="mt-1.5"
           items={[`v${a.version}`, a.lifecycleStatus, a.ownerName ?? 'no owner', `updated ${relativeTime(a.updatedAt)}`]}
         />
-      </header>
+      </Stack>
 
       <DetailSection
         first

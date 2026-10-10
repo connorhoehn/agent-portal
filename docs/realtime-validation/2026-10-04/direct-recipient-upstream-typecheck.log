@@ -1,0 +1,4 @@
+
+> @connorhoehn/realtime-modules@0.101.0 typecheck
+> tsc --noEmit
+

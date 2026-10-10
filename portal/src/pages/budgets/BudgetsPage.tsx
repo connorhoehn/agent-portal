@@ -18,11 +18,11 @@ import {
   PageSection,
   Stack,
   StatStrip,
-  SubNavLayout,
   type SubNavItem,
   activeNavItemClassName,
   inactiveNavItemClassName,
 } from '@connorhoehnslalom/ui-components/shared';
+import { BuildSectionLayout } from '../../components/shell/BuildSectionLayout';
 import { useFetch } from '../../hooks/useFetch';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { useCapabilities } from '../../lib/capabilities';
@@ -78,8 +78,6 @@ export default function BudgetsPage() {
     {
       path: '/admin/budgets',
       label: 'Initiatives',
-      hint: 'Monthly allocation per initiative',
-      group: 'Reports',
       ...(budgets.length > 0 ? { count: budgets.length } : {}),
     },
     {
@@ -88,8 +86,6 @@ export default function BudgetsPage() {
       // word where it is the precise one.
       path: '/admin/budgets?report=sprints',
       label: 'Sprints',
-      hint: 'Envelopes granted against a sprint',
-      group: 'Reports',
       ...(grants.length > 0 ? { count: grants.length } : {}),
     },
   ];
@@ -110,35 +106,38 @@ export default function BudgetsPage() {
         ? 'Budget envelopes granted to an SME for one sprint, and what the initiative actually spent inside that window.'
         : `Monthly agent-spend allocations per initiative, against actuals from bot and marketplace runs · ${MONTH_LABEL}`}
     >
-      {/* One compact strip rather than four tall cards: these are the frame
-          for the report below, not the content. */}
+      {/* One line of stats at the app's body step, not four tall cards: these
+          are the frame for the report below, not the content. The hints that
+          used to sit under each card value are the clusters' tooltips. */}
       {summary && maint && (
         <StatStrip
           aria-label="Budget rollup"
+          variant="line"
+          size="sm"
           items={[
-            { label: 'Allocated', value: usd(summary.totalAllocatedUsd), hint: MONTH_LABEL },
+            { label: 'allocated', value: usd(summary.totalAllocatedUsd), title: `Allocated for ${MONTH_LABEL}` },
             {
-              label: 'Spent this period',
+              label: 'spent this period',
               value: usd(summary.totalSpentThisPeriodUsd),
-              hint: `${summary.byTrigger.reduce((n, t) => n + t.runCount, 0)} runs`,
+              title: `${summary.byTrigger.reduce((n, t) => n + t.runCount, 0)} runs this period`,
             },
             {
-              label: 'Remaining',
+              label: summary.totalAllocatedUsd - summary.totalSpentThisPeriodUsd < 0 ? 'over allocation' : 'remaining',
               value: usd(summary.totalAllocatedUsd - summary.totalSpentThisPeriodUsd),
               ...(summary.totalAllocatedUsd - summary.totalSpentThisPeriodUsd < 0
                 ? { tone: 'danger' as const } : {}),
-              hint: remainingHint(summary.totalAllocatedUsd - summary.totalSpentThisPeriodUsd),
+              title: `${remainingHint(summary.totalAllocatedUsd - summary.totalSpentThisPeriodUsd)}. ${remainingTitle(summary.totalMaintenanceUsd, summary.totalSpentThisPeriodUsd, MONTH_LABEL)}`,
             },
             {
-              label: 'Maintenance floor',
+              label: 'maintenance floor',
               value: usd(summary.totalMaintenanceUsd),
-              hint: maint.hint,
+              title: `${maint.hint}. ${maintenanceTitle(maint.floorIsAllSpend, MONTH_LABEL)}`,
             },
           ]}
         />
       )}
 
-      <Stack gap="none" className="mt-4">
+      <Stack gap="none" className="mt-3">
         {report === 'sprints' ? (
           <SprintsReport grants={grants} error={grantError} hasData={grantData != null} canManage={canManage} refresh={refreshGrants} />
         ) : (
@@ -157,11 +156,10 @@ export default function BudgetsPage() {
   );
 
   return (
-    <SubNavLayout
+    <BuildSectionLayout
       title="Budgets"
       items={items}
       storageKey="budgets-subnav"
-      contentAs="section"
       contentLabel="Budgets"
       renderNavItem={(item, children) => {
         // Both reports live at the same path and differ only by ?report=, so
@@ -187,7 +185,7 @@ export default function BudgetsPage() {
       }}
     >
       {body}
-    </SubNavLayout>
+    </BuildSectionLayout>
   );
 }
 

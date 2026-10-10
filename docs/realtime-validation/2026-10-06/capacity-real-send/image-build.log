@@ -1,0 +1,80 @@
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 1.36kB done
+#1 DONE 0.0s
+
+#2 [context locked_libraries] load .dockerignore
+#2 transferring locked_libraries: 2B done
+#2 DONE 0.0s
+
+#3 [internal] load metadata for docker.io/library/node:22-slim
+#3 DONE 0.4s
+
+#4 [internal] load .dockerignore
+#4 transferring context: 75B done
+#4 DONE 0.0s
+
+#5 [deps 1/6] FROM docker.io/library/node:22-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392
+#5 resolve docker.io/library/node:22-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392 done
+#5 DONE 0.0s
+
+#6 [internal] load build context
+#6 transferring context: 1.07MB 0.1s done
+#6 DONE 0.1s
+
+#7 [context locked_libraries] load from client
+#7 transferring locked_libraries: 31.99MB 0.2s done
+#7 DONE 0.2s
+
+#8 [deps 3/6] COPY package*.json ./
+#8 CACHED
+
+#9 [production 3/8] COPY --from=deps /app/node_modules ./node_modules
+#9 CACHED
+
+#10 [deps 6/6] RUN --mount=type=cache,target=/root/.npm npm ci --ignore-scripts --legacy-peer-deps
+#10 CACHED
+
+#11 [deps 2/6] WORKDIR /app
+#11 CACHED
+
+#12 [deps 4/6] COPY --from=locked_libraries / /vendor/
+#12 CACHED
+
+#13 [deps 5/6] RUN node /vendor/install-locked.mjs
+#13 CACHED
+
+#14 [production 4/8] COPY package*.json ./
+#14 CACHED
+
+#15 [production 5/8] COPY src ./src
+#15 DONE 0.1s
+
+#16 [production 6/8] COPY seeds ./seeds
+#16 DONE 0.1s
+
+#17 [production 7/8] COPY tsconfig.json ./
+#17 DONE 0.1s
+
+#18 [production 8/8] RUN npm run build
+#18 0.347 
+#18 0.347 > @orgiq/middleware@0.3.0 build
+#18 0.347 > tsc
+#18 0.347 
+#18 16.85 npm notice
+#18 16.85 npm notice New major version of npm available! 10.9.9 -> 12.2.0
+#18 16.85 npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.0
+#18 16.85 npm notice To update run: npm install -g npm@12.2.0
+#18 16.85 npm notice
+#18 DONE 16.9s
+
+#19 exporting to image
+#19 exporting layers
+#19 exporting layers 0.6s done
+#19 exporting manifest sha256:c749a4aaef7948ec4fbadfaf1421c9d47e5e512e74b2a268d0dc69d8d5ef33c9 done
+#19 exporting config sha256:c9e5cd0c81f7582aef27bc9f5f5f5a8d412c7625778b3a2745320dd69f3b71aa done
+#19 naming to docker.io/library/orgiq-middleware:cluster-real-send-validation done
+#19 unpacking to docker.io/library/orgiq-middleware:cluster-real-send-validation
+#19 unpacking to docker.io/library/orgiq-middleware:cluster-real-send-validation 0.2s done
+#19 DONE 0.8s

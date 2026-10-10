@@ -1,0 +1,90 @@
+name: orgiq-soak
+
+# Isolated test target: no host AWS credentials, sibling source mounts or owner
+# app ports. Redis survives a gateway restart; the router is still one process.
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: orgiq-soak-redis
+    command: [redis-server, --appendonly, "yes", --maxmemory, 128mb, --maxmemory-policy, noeviction]
+    ports: ["127.0.0.1:16379:6379"]
+    volumes: ["redis-data:/data"]
+    mem_limit: 256m
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 2s
+      timeout: 1s
+      retries: 30
+
+  gateway:
+    image: orgiq-soak-gateway:local
+    container_name: orgiq-soak-gateway
+    build:
+      context: ../../middleware
+      target: production
+      additional_contexts:
+        locked_libraries: ../../.docker-libraries
+    ports: ["127.0.0.1:13061:3001"]
+    cpus: 0.5
+    mem_limit: 768m
+    environment:
+      PORT: "3001"
+      NODE_ENV: development
+      DEV_OFFLINE: "true"
+      AUTH_DEMO_MODE: "true"
+      MOCK_AURORA: "true"
+      MOCK_AGENTCORE: "true"
+      MOCK_GUARDRAILS: "true"
+      MOCK_CLOUDWATCH: "true"
+      MOCK_QUEUE: "true"
+      SWEEP_INTERVAL_MIN: "0"
+      REALTIME_GATEWAY: "on"
+      REALTIME_JWT_SECRET: orgiq-soak-local-only
+      REALTIME_GATEWAY_URL: http://localhost:13061
+      REDIS_URL: redis://redis:6379
+      SOCIAL_CHAT_STORE: memory
+      POLICY_STORE_ID: ""
+      SESSION_SIGNING_SECRET_ARN: ""
+      COGNITO_USER_POOL_ID: ""
+      COGNITO_CLIENT_ID: ""
+      COGNITO_CLIENT_SECRET: ""
+      COGNITO_DOMAIN: ""
+      COGNITO_CALLBACK_URL: ""
+      SOCIAL_PLATFORM_INTERNAL_URL: ""
+      DOCUMENT_PLATFORM_INTERNAL_URL: ""
+      PLATFORM_API_URL: ""
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3001/api/health',{signal:AbortSignal.timeout(2000)}).then(async r=>{const b=await r.json();process.exit(r.ok&&b.service==='orgiq-middleware'&&b.realtime?.store==='redis'?0:1)}).catch(()=>process.exit(1))"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+      start_period: 15s
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+
+  # Keep the 1,000 WebSocket connections inside Docker's network. Routing them
+  # through Lima's SSH forwarding exhausted the host transport in the first run.
+  # The Docker socket is test orchestration access for the driver's exact-name
+  # restart and stats guards; this service is never in an application image.
+  load-driver:
+    profiles: [driver]
+    image: orgiq-soak-driver:local
+    build:
+      context: .
+      dockerfile: Dockerfile.driver
+    cpus: 1.0
+    mem_limit: 512m
+    environment:
+      REALTIME_JWT_SECRET: orgiq-soak-local-only
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - driver-results:/results
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+
+volumes:
+  redis-data:
+  driver-results:

@@ -1,3 +1,4 @@
+import { persistInitiativeDecks, initiativeDeckDurabilityEnabled, initiativeDeckRelationalFixtures } from '../mock/initiative-deck-durability.js';
 // The mock control plane — dev-only, so an audit can ASK for a world instead
 // of damaging one.
 //
@@ -54,6 +55,8 @@ import { rehydrateMockCrawls } from '../lib/crawler.js';
 import { rehydrateMockSchedules } from '../lib/ingest-scheduler.js';
 import { rehydrateMockNotifications } from '../lib/notification-store.js';
 import { rehydrateMockSocialChat } from '../lib/social-chat.js';
+import { getDemoState, resetDemoDirector, startDemoDirector, stopDemoDirector } from '../mock/demo-director.js';
+import { getDistillationDemoState, resetDistillationDemo, startDistillationDemo, stopDistillationDemo } from '../mock/distillation-demo.js';
 
 export const mockControlRouter = Router();
 
@@ -306,6 +309,8 @@ function readState(registry: FixtureRegistry): {
   scenario: ScenarioName;
   fixtures: FixtureState[];
   registryLoaded: boolean;
+  demo: ReturnType<typeof getDemoState>;
+  distillationDemo: ReturnType<typeof getDistillationDemoState>;
 } {
   const fixtures = listFixtures(registry).map((fixture): FixtureState => {
     const scenario = effectiveScenario(fixture.key);
@@ -320,7 +325,13 @@ function readState(registry: FixtureRegistry): {
   fixtures.sort((a, b) => a.key.localeCompare(b.key));
   // `registryLoaded` answers the question a blank surface always raises in
   // dev:mock: is this feature unseeded, or has no fixture registered at all?
-  return { enabled: true, scenario: globalScenario, fixtures, registryLoaded: fixtures.length > 0 };
+  // `demo` is where the Computer Lab demo's story has got to (mock/demo-director.ts)
+  // — phase and milestones, so an e2e can wait on the story instead of a clock.
+  // `distillationDemo` is the same for the Distillation demo (mock/distillation-demo.ts).
+  return {
+    enabled: true, scenario: globalScenario, fixtures, registryLoaded: fixtures.length > 0,
+    demo: getDemoState(), distillationDemo: getDistillationDemoState(),
+  };
 }
 
 // ── Routes ─────────────────────────────────────────────────────────────────
@@ -362,6 +373,10 @@ mockControlRouter.post('/api/__mock/scenario', ...gate, (req, res) => {
   const registry = resolveRegistry();
 
   if (body.fixture !== undefined) {
+    if (initiativeDeckDurabilityEnabled() && typeof body.fixture === 'string' && initiativeDeckRelationalFixtures.includes(body.fixture)) {
+      res.status(409).json({ error: 'Local deck persistence keeps decks and their revision history together. Use a full mock reset or scenario change.', relatedFixtures: initiativeDeckRelationalFixtures });
+      return;
+    }
     const fixture = findFixture(registry, body.fixture, res);
     if (!fixture) return;
     // Refuse a scenario this fixture has no branch for, rather than pinning a
@@ -380,6 +395,10 @@ mockControlRouter.post('/api/__mock/scenario', ...gate, (req, res) => {
       });
       return;
     }
+    // A pin rebuilds the in-memory fleet and silences every run in flight
+    // (rehydrateAll), so a demo story cannot survive it — say so by stopping.
+    stopDemoDirector();
+    stopDistillationDemo();
     pin(fixture, scenario);
     // See rehydrateMockFleet's doc comment: the microVM fleet lives in an
     // in-memory Map, not in fixture rows, so pinning `devbox-boxes` to `empty`
@@ -387,14 +406,43 @@ mockControlRouter.post('/api/__mock/scenario', ...gate, (req, res) => {
     // one promise ("ask for an empty state by name") silently not kept for
     // this fixture. Cheap enough to run unconditionally; it no-ops off mock.
     rehydrateAll();
+    persistInitiativeDecks();
     res.json({ applied: { scenario, fixture: fixture.key }, ...readState(registry) });
     return;
   }
 
+  resetDemoDirector();
+  resetDistillationDemo();
   unpinAll(registry);
   registry.resetAll(scenario);
   rehydrateAll();
+  persistInitiativeDecks();
   globalScenario = scenario;
+  // The `demo` world is a story, not only a state: its director dispatches
+  // through this server's own routes (mock/demo-director.ts), so it is handed
+  // the address this request arrived on.
+  if (scenario === 'demo') {
+    // Optional per-start knobs, so an e2e can play the story fast against a
+    // running server: `paceMs` (beat length) and `autoAnswer` (false → only a
+    // person answers B). Each falls back to its env when absent.
+    const raw = req.body as { paceMs?: unknown; autoAnswer?: unknown };
+    const port = req.socket.localPort;
+    void startDemoDirector(`http://127.0.0.1:${port}`, {
+      ...(typeof raw.paceMs === 'number' && raw.paceMs >= 0 ? { paceMs: raw.paceMs } : {}),
+      ...(typeof raw.autoAnswer === 'boolean' ? { autoAnswer: raw.autoAnswer } : {}),
+    });
+  }
+  // The Distillation demo plays in-process into the world just established.
+  // Same per-start knobs as `demo`: `paceMs` (beat length) and
+  // `autoDecideBeats` (how long it waits for a person on the open pattern;
+  // 0 → only a person decides it).
+  if (scenario === 'distillation-demo') {
+    const raw = req.body as { paceMs?: unknown; autoDecideBeats?: unknown };
+    void startDistillationDemo({
+      ...(typeof raw.paceMs === 'number' && raw.paceMs >= 0 ? { paceMs: raw.paceMs } : {}),
+      ...(typeof raw.autoDecideBeats === 'number' && raw.autoDecideBeats >= 0 ? { autoDecideBeats: raw.autoDecideBeats } : {}),
+    });
+  }
   res.json({ applied: { scenario, fixture: null }, ...readState(registry) });
 });
 
@@ -412,15 +460,24 @@ mockControlRouter.post('/api/__mock/reset', ...gate, (req, res) => {
   const registry = resolveRegistry();
 
   if (body.fixture !== undefined) {
+    if (initiativeDeckDurabilityEnabled() && typeof body.fixture === 'string' && initiativeDeckRelationalFixtures.includes(body.fixture)) {
+      res.status(409).json({ error: 'Local deck persistence keeps decks and their revision history together. Use a full mock reset or scenario change.', relatedFixtures: initiativeDeckRelationalFixtures });
+      return;
+    }
     const fixture = findFixture(registry, body.fixture, res);
     if (!fixture) return;
+    stopDemoDirector();
+    stopDistillationDemo();
     unpin(fixture);
     fixture.reset();
     rehydrateAll();
+    persistInitiativeDecks();
     res.json({ reset: { fixture: fixture.key, scenario: globalScenario }, ...readState(registry) });
     return;
   }
 
+  resetDemoDirector();
+  resetDistillationDemo();
   unpinAll(registry);
   // The dev-pairing file as well as the rows: without this, a machine paired
   // by hand reappears on the next boot and `reset` silently means "reset most
@@ -432,6 +489,7 @@ mockControlRouter.post('/api/__mock/reset', ...gate, (req, res) => {
   // box that was renamed or stopped during a demo. Runs AFTER resetAll so it
   // re-reads the fixture in the world the reset just established.
   rehydrateAll();
+  persistInitiativeDecks();
   globalScenario = DEFAULT_SCENARIO;
   res.json({ reset: { fixture: null, scenario: DEFAULT_SCENARIO }, ...readState(registry) });
 });
@@ -530,4 +588,6 @@ export function __resetMockControlState(): void {
   overrides.clear();
   globalScenario = DEFAULT_SCENARIO;
   injected = null;
+  resetDemoDirector();
+  resetDistillationDemo();
 }

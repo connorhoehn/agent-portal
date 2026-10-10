@@ -1,0 +1,199 @@
+{
+  "version": 1,
+  "brand": "Work",
+  "scope": "The 17 sign-in picker identities plus the Observability initiative demo contributors",
+  "style": "Photographic synthetic adult professionals, natural skin texture, soft window daylight, muted office backgrounds",
+  "generator": "Built-in image_gen; original generation files retained in Codex generated_images",
+  "personas": [
+    {
+      "subjectId": "u-operator",
+      "userId": "u-operator",
+      "name": "Platform Operator",
+      "portraitUrl": "/avatars/photos/u-operator.jpg",
+      "focus": "Platform operations",
+      "biography": "Keeps the shared platform available and helps teams diagnose access and runtime issues.",
+      "speakingStyle": "Calm and precise; asks for the failing action and checks the evidence before changing a setting.",
+      "prompt": "Use case: photorealistic-natural. Asset: square photographic directory headshot for an entirely fictional adult professional in an enterprise collaboration app. Real camera photograph, authentic skin texture and subtle asymmetry, soft window daylight, quiet softly blurred warm-gray office background, face centered and straight-on with eyes toward the lens, entire hair and shoulders safely inside the square for a circular avatar crop. Friendly composed expression, normal business-casual clothes, natural proportions. One person only. No illustration, cartoon, vector art, 3D render, stylized features, plastic skin, fashion styling, logos, text or watermark. Character: The fictional platform operator, an adult man around 40. Warm brown skin, short neatly cropped black hair, dark eyes, short neatly kept beard, calm approachable expression, wearing a gray oxford shirt over a white tee. A normal experienced systems administrator."
+    },
+    {
+      "subjectId": "p-005",
+      "userId": "u-release",
+      "name": "Sienna Garcia",
+      "portraitUrl": "/avatars/photos/p-005.jpg",
+      "focus": "Release coordination",
+      "biography": "Coordinates platform releases, manages delivery budgets, and makes dependencies visible before a release slips.",
+      "speakingStyle": "Direct and organized; closes discussions with an owner, a next step, and a date.",
+      "prompt": "Use case: photorealistic-natural. Asset: square photographic directory headshot for an entirely fictional adult professional in an enterprise collaboration app. Real camera photograph, authentic skin texture and subtle asymmetry, soft window daylight, quiet softly blurred warm-gray office background, face centered and straight-on with eyes toward the lens, entire hair and shoulders safely inside the square for a circular avatar crop. Friendly composed expression, normal business-casual clothes, natural proportions. One person only. No illustration, cartoon, vector art, 3D render, stylized features, plastic skin, fashion styling, logos, text or watermark. Character: Sienna Garcia, fictional woman around 35, release manager and platform engineer. Light olive skin, straight dark-brown chin-length bob, brown eyes, calm slight smile, wearing a plain rust-colored blouse. Practical confident colleague."
+    },
+    {
+      "subjectId": "p-002",
+      "userId": "u-vera",
+      "name": "Vera Green",
+      "portraitUrl": "/avatars/photos/p-002.jpg",
+      "focus": "Engineering leadership",
+      "biography": "Connects the technical details of an initiative to its delivery risks and the decisions the team needs to make.",
+      "speakingStyle": "Thoughtful and concise; asks what changed, what is blocked, and what evidence supports the plan.",
+      "prompt": "Use case: photorealistic-natural. Asset: square photographic directory headshot for an entirely fictional adult professional in an enterprise collaboration app. Real camera photograph, authentic skin texture and subtle asymmetry, soft window daylight, quiet softly blurred warm-gray office background, face centered and straight-on with eyes toward the lens, entire hair and shoulders safely inside the square for a circular avatar crop. Friendly composed expression, normal business-casual clothes, natural proportions. One person only. No illustration, cartoon, vector art, 3D render, stylized features, plastic skin, fashion styling, logos, text or watermark. Character: Vera Green, fictional woman around 44, principal engineer and org leader. Fair skin with light freckles, shoulder-length chestnut-brown hair with a few natural gray strands, relaxed brown eyes, subtle smile, wearing a plain slate-blue shirt. Credible experienced engineering leader."
+    },
+    {
+      "subjectId": "u-asha",
+      "userId": "u-asha",
+      "name": "Asha Nair",
+      "portraitUrl": "/avatars/photos/u-asha.jpg",
+      "focus": "Assessment",
+      "biography": "Reviews engineering evidence with teams and helps turn an unclear claim into an actionable follow-up.",
+      "speakingStyle": "Curious and measured; asks for a specific example before recommending a score.",
+      "prompt": "Use case: photorealistic-natural. Asset: square photographic directory headshot for an entirely fictional adult professional in an enterprise collaboration app. Real camera photograph, authentic skin texture and subtle asymmetry, soft window daylight, quiet softly blurred warm-gray office background, face centered and straight-on with eyes toward the lens, entire hair and shoulders safely inside the square for a circular avatar crop. Friendly composed expression, normal business-casual clothes, natural proportions. One person only. No illustration, cartoon, vector art, 3D render, stylized features, plastic skin, fashion styling, logos, text or watermark. Character: Asha Nair, fictional woman around 33, technology assessor. Medium-brown skin, straight dark hair in a loose low ponytail, dark eyes, subtle smile, wearing a muted burgundy blouse. Thoughtful confident professional."
+    },
+    {
+      "subjectId": "u-jonas",
+      "userId": "u-jonas",
+      "name": "Jonas Lindqvist",
+      "portraitUrl": "/avatars/photos/u-jonas.jpg",
+      "focus": "Assessment review",
+      "biography": "Reviews assessment exceptions and calibrates findings so different teams are judged consistently.",
+      "speakingStyle": "Patient and analytical; separates an observation from a conclusion and explains the gap.",
+      "prompt": "Use case: photorealistic-natural. Asset: square photographic directory headshot for an entirely fictional adult professional in an enterprise collaboration app. Real camera photograph, authentic skin texture and subtle asymmetry, soft window daylight, quiet softly blurred warm-gray office background, face centered and straight-on with eyes toward the lens, entire hair and shoulders safely inside the square for a circular avatar crop. Friendly composed expression, normal business-casual clothes, natural proportions. One person only. No illustration, cartoon, vector art, 3D render, stylized features, plastic skin, fashion styling, logos, text or watermark. Character: Jonas Lindqvist, fictional man around 47, lead assessor. Fair skin with natural texture, short sandy-blond hair starting to gray, light blue eyes, neatly trimmed short beard, thoughtful slight smile, wearing a slate-green button-down. Friendly experienced professional."
+    },
+    {
+      "subjectId": "u-farah",
+      "userId": "u-farah",
+      "name": "Farah Osei",
+      "portraitUrl": "/avatars/photos/u-farah.jpg",
+      "focus": "Assessment program",
+      "biography": "Runs the assessment program and keeps its follow-up work connected to team priorities.",
+      "speakingStyle": "Warm and pragmatic; keeps the discussion on useful next actions rather than paperwork.",
+      "prompt": "Use case: photorealistic-natural. Asset: square photographic directory headshot for an entirely fictional adult professional in an enterprise collaboration app. Real camera photograph, authentic skin texture and subtle asymmetry, soft window daylight, quiet softly blurred warm-gray office background, face centered and straight-on with eyes toward the lens, entire hair and shoulders safely inside the square for a circular avatar crop. Friendly composed expression, normal business-casual clothes, natural proportions. One person only. No illustration, cartoon, vector art, 3D render, stylized features, plastic skin, fashion styling, logos, text or watermark. Character: Farah Osei, fictional woman around 45, assessment program lead. Dark-brown skin, shoulder-length fine braids pulled loosely back, dark eyes, confident warm slight smile, wearing a plain ochre knit top with a dark jacket. Experienced thoughtful technology leader."
+    },
+    {
+      "subjectId": "p-030",
+      "userId": "u-mia",
+      "name": "Mia Singh",
+      "portraitUrl": "/avatars/photos/p-030.jpg",
+      "focus": "Delivery program",
+      "biography": "Coordinates initiative delivery, sprint planning, and budget allocation across the program.",
+      "speakingStyle": "Collaborative and decisive; clarifies the smallest useful milestone and who will own it.",
+      "prompt": "Use case: photorealistic-natural. Asset: square photographic directory headshot for an entirely fictional adult professional in an enterprise collaboration app. Real camera photograph, authentic skin texture and subtle asymmetry, soft window daylight, quiet softly blurred warm-gray office background, face centered and straight-on with eyes toward the lens, entire hair and shoulders safely inside the square for a circular avatar crop. Friendly composed expression, normal business-casual clothes, natural proportions. One person only. No illustration, cartoon, vector art, 3D render, stylized features, plastic skin, fashion styling, logos, text or watermark. Character: Mia Singh, fictional woman around 41, program owner and delivery leader. Warm medium-brown skin, dark shoulder-length wavy hair, dark eyes, composed welcoming expression, wearing a simple navy blouse and a light gray cardigan. Credible experienced technology program leader."
+    },
+    {
+      "subjectId": "p-004",
+      "userId": "u-nora",
+      "name": "Nora DaSilva",
+      "portraitUrl": "/avatars/photos/p-004.jpg",
+      "focus": "Platform engineering",
+      "biography": "Owns the Observability Platform initiative and translates operational problems into clear engineering work.",
+      "speakingStyle": "Hands-on and candid; describes the failure in plain language and proposes an observable success criterion.",
+      "prompt": "Use case: photorealistic-natural. Asset: square photographic directory headshot for an entirely fictional adult professional in an enterprise collaboration app. Real camera photograph, authentic skin texture and subtle asymmetry, soft window daylight, quiet softly blurred warm-gray office background, face centered and straight-on with eyes toward the lens, entire hair and shoulders safely inside the square for a circular avatar crop. Friendly composed expression, normal business-casual clothes, natural proportions. One person only. No illustration, cartoon, vector art, 3D render, stylized features, plastic skin, fashion styling, logos, text or watermark. Character: Nora DaSilva, fictional woman around 36, senior platform engineer. Warm tan skin, dark-brown wavy shoulder-length hair tucked behind one ear, dark eyes, subtle friendly smile, wearing a simple olive-green knit top. Approachable hands-on technical colleague."
+    },
+    {
+      "subjectId": "p-012",
+      "userId": "u-rachel",
+      "name": "Rachel Kowalski",
+      "portraitUrl": "/avatars/photos/p-012.jpg",
+      "focus": "Program operations",
+      "biography": "Keeps identity, governance, and program controls understandable to the teams using them.",
+      "speakingStyle": "Clear and supportive; explains the reason for a rule and how to complete the permitted action.",
+      "prompt": "Use case: photorealistic-natural. Asset: square photographic directory headshot for an entirely fictional adult professional in an enterprise collaboration app. Real camera photograph, authentic skin texture and subtle asymmetry, soft window daylight, quiet softly blurred warm-gray office background, face centered and straight-on with eyes toward the lens, entire hair and shoulders safely inside the square for a circular avatar crop. Friendly composed expression, normal business-casual clothes, natural proportions. One person only. No illustration, cartoon, vector art, 3D render, stylized features, plastic skin, fashion styling, logos, text or watermark. Character: Rachel Kowalski, fictional woman around 46, technology program operator. Fair skin with normal fine lines, dark-blond hair loosely tied back, hazel eyes, thin understated rectangular glasses, soft confident smile, wearing a simple dark blue blouse. Practical experienced professional."
+    },
+    {
+      "subjectId": "p-001",
+      "userId": "u-theo",
+      "name": "Theo Chang",
+      "portraitUrl": "/avatars/photos/p-001.jpg",
+      "focus": "Platform engineering",
+      "biography": "Helps the platform team find existing knowledge and understand the connections between people and work.",
+      "speakingStyle": "Curious and practical; looks for the runbook or decision that answers a concrete question.",
+      "prompt": "Photographic head-and-shoulders portrait of a fictional adult software engineer, neutral office background, natural skin texture, dark hair, navy overshirt and charcoal crewneck; no illustration, logo or text."
+    },
+    {
+      "subjectId": "u-mira",
+      "userId": "u-mira",
+      "name": "Mira Okafor",
+      "portraitUrl": "/avatars/photos/u-mira.jpg",
+      "focus": "Community",
+      "biography": "Helps people find the right conversation, share useful work, and build an active professional community.",
+      "speakingStyle": "Welcoming and clear; connects a question to a person or channel and follows up.",
+      "prompt": "Use case: photorealistic-natural. Asset: square photographic directory headshot for an entirely fictional adult professional in an enterprise collaboration app. Real camera photograph, authentic skin texture and subtle asymmetry, soft window daylight, quiet softly blurred warm-gray office background, face centered and straight-on with eyes toward the lens, entire hair and shoulders safely inside the square for a circular avatar crop. Friendly composed expression, normal business-casual clothes, natural proportions. One person only. No illustration, cartoon, vector art, 3D render, stylized features, plastic skin, fashion styling, logos, text or watermark. Character: Mira Okafor, fictional woman around 39, community manager. Deep-brown skin, natural short coiled hair, dark eyes, warm relaxed smile, wearing a muted teal blouse. Approachable energetic colleague."
+    },
+    {
+      "subjectId": "u-lena",
+      "userId": "u-lena",
+      "name": "Lena Brandt",
+      "portraitUrl": "/avatars/photos/u-lena.jpg",
+      "focus": "Community moderation",
+      "biography": "Keeps channels and team spaces useful, organized, and welcoming.",
+      "speakingStyle": "Friendly and matter-of-fact; resolves friction with a clear explanation and a visible next step.",
+      "prompt": "Use case: photorealistic-natural. Asset: square photographic directory headshot for an entirely fictional adult professional in an enterprise collaboration app. Real camera photograph, authentic skin texture and subtle asymmetry, soft window daylight, quiet softly blurred warm-gray office background, face centered and straight-on with eyes toward the lens, entire hair and shoulders safely inside the square for a circular avatar crop. Friendly composed expression, normal business-casual clothes, natural proportions. One person only. No illustration, cartoon, vector art, 3D render, stylized features, plastic skin, fashion styling, logos, text or watermark. Character: Lena Brandt, fictional woman around 32, community moderator. Fair skin with light freckles, straight shoulder-length dark-blond hair, green-gray eyes, friendly relaxed smile, wearing a simple dark sage shirt. Normal approachable professional."
+    },
+    {
+      "subjectId": "u-sana",
+      "userId": "u-sana",
+      "name": "Sana Iqbal",
+      "portraitUrl": "/avatars/photos/u-sana.jpg",
+      "focus": "Community participation",
+      "biography": "Shares product feedback and cross-team context through conversations, calls, and documents.",
+      "speakingStyle": "Engaged and specific; brings a concrete example and asks how others are handling it.",
+      "prompt": "Use case: photorealistic-natural. Asset: square photographic directory headshot for an entirely fictional adult professional in an enterprise collaboration app. Real camera photograph, authentic skin texture and subtle asymmetry, soft window daylight, quiet softly blurred warm-gray office background, face centered and straight-on with eyes toward the lens, entire hair and shoulders safely inside the square for a circular avatar crop. Friendly composed expression, normal business-casual clothes, natural proportions. One person only. No illustration, cartoon, vector art, 3D render, stylized features, plastic skin, fashion styling, logos, text or watermark. Character: Sana Iqbal, fictional woman around 29, community participant and product specialist. Warm medium-brown skin, shoulder-length dark-brown loose curls, brown eyes, friendly subtle smile, wearing a plain warm-gray sweater. Natural everyday professional portrait."
+    },
+    {
+      "subjectId": "u-ines",
+      "userId": "u-ines",
+      "name": "Ines Moreau",
+      "portraitUrl": "/avatars/photos/u-ines.jpg",
+      "focus": "Workflow engineering",
+      "biography": "Authors pipeline definitions and tests their behavior before asking an operator to run them.",
+      "speakingStyle": "Precise and exploratory; narrates the expected result and checks the dry-run evidence.",
+      "prompt": "Use case: photorealistic-natural. Asset: square photographic directory headshot for an entirely fictional adult professional in an enterprise collaboration app. Real camera photograph, authentic skin texture and subtle asymmetry, soft window daylight, quiet softly blurred warm-gray office background, face centered and straight-on with eyes toward the lens, entire hair and shoulders safely inside the square for a circular avatar crop. Friendly composed expression, normal business-casual clothes, natural proportions. One person only. No illustration, cartoon, vector art, 3D render, stylized features, plastic skin, fashion styling, logos, text or watermark. Character: Ines Moreau, fictional woman around 34, pipeline author and workflow engineer. Light olive skin, dark-brown wavy chin-length bob, hazel eyes, understated thin glasses, gentle confident smile, wearing a plain dark plum shirt. Curious thoughtful technical professional."
+    },
+    {
+      "subjectId": "u-kofi",
+      "userId": "u-kofi",
+      "name": "Kofi Mensah",
+      "portraitUrl": "/avatars/photos/u-kofi.jpg",
+      "focus": "Pipeline operations",
+      "biography": "Runs approved workflows and responds when a step stalls, fails, or needs a decision.",
+      "speakingStyle": "Calm under pressure; names the current state, its impact, and the next safe action.",
+      "prompt": "Use case: photorealistic-natural. Asset: square photographic directory headshot for an entirely fictional adult professional in an enterprise collaboration app. Real camera photograph, authentic skin texture and subtle asymmetry, soft window daylight, quiet softly blurred warm-gray office background, face centered and straight-on with eyes toward the lens, entire hair and shoulders safely inside the square for a circular avatar crop. Friendly composed expression, normal business-casual clothes, natural proportions. One person only. No illustration, cartoon, vector art, 3D render, stylized features, plastic skin, fashion styling, logos, text or watermark. Character: Kofi Mensah, fictional man around 38, pipeline operations engineer. Deep-brown skin, very short natural black hair, dark eyes, neatly trimmed close beard, relaxed friendly slight smile, wearing a muted navy polo shirt. Experienced calm operational colleague."
+    },
+    {
+      "subjectId": "u-dara",
+      "userId": "u-dara",
+      "name": "Dara Whitfield",
+      "portraitUrl": "/avatars/photos/u-dara.jpg",
+      "focus": "Pipeline administration",
+      "biography": "Maintains pipeline configuration and makes operational decisions visible to authors and operators.",
+      "speakingStyle": "Experienced and clear; explains the tradeoff and confirms who can make the change.",
+      "prompt": "Use case: photorealistic-natural. Asset: square photographic directory headshot for an entirely fictional adult professional in an enterprise collaboration app. Real camera photograph, authentic skin texture and subtle asymmetry, soft window daylight, quiet softly blurred warm-gray office background, face centered and straight-on with eyes toward the lens, entire hair and shoulders safely inside the square for a circular avatar crop. Friendly composed expression, normal business-casual clothes, natural proportions. One person only. No illustration, cartoon, vector art, 3D render, stylized features, plastic skin, fashion styling, logos, text or watermark. Character: Dara Whitfield, fictional woman around 46, pipeline administrator and reliability lead. Warm brown skin, short natural salt-and-pepper curls, dark eyes, confident composed expression with a slight smile, wearing a simple charcoal jacket over a blue-gray blouse. A practical experienced technology professional."
+    },
+    {
+      "subjectId": "u-tomas",
+      "userId": "u-tomas",
+      "name": "Tom\u00e1s Ferreira",
+      "portraitUrl": "/avatars/photos/u-tomas.jpg",
+      "focus": "Workflow collaboration",
+      "biography": "Builds workflows and uses the Communication plane to coordinate their rollout with colleagues.",
+      "speakingStyle": "Approachable and concrete; shares a run or definition so everyone is discussing the same work.",
+      "prompt": "Use case: photorealistic-natural. Asset: square photographic directory headshot for an entirely fictional adult professional in an enterprise collaboration app. Real camera photograph, authentic skin texture and subtle asymmetry, soft window daylight, quiet softly blurred warm-gray office background, face centered and straight-on with eyes toward the lens, entire hair and shoulders safely inside the square for a circular avatar crop. Friendly composed expression, normal business-casual clothes, natural proportions. One person only. No illustration, cartoon, vector art, 3D render, stylized features, plastic skin, fashion styling, logos, text or watermark. Character: Tom\u00e1s Ferreira, fictional man around 31, workflow engineer. Warm olive skin, short wavy dark-brown hair, brown eyes, neat short mustache and beard, friendly relaxed smile, wearing a plain slate-blue crewneck. An approachable everyday technical colleague."
+    },
+    {
+      "subjectId": "p-008",
+      "userId": "u-layla",
+      "name": "Layla Hassan",
+      "portraitUrl": "/avatars/photos/p-008.jpg",
+      "focus": "Infrastructure and observability",
+      "biography": "Builds reliable telemetry pipelines and helps teams identify which alerts deserve action.",
+      "speakingStyle": "Practical and evidence-led; explains the dependency, the validation plan, and who owns the next step.",
+      "prompt": "Use case: photorealistic-natural. Asset: square photographic directory headshot for an entirely fictional adult professional in an enterprise collaboration app. Real camera photograph, authentic skin texture and subtle asymmetry, soft window daylight, quiet softly blurred warm-gray office background, face centered and straight-on with eyes toward the lens, entire hair and shoulders safely inside the square for a circular avatar crop. Friendly composed expression, normal business-casual clothes, natural proportions. One person only. No illustration, cartoon, vector art, 3D render, stylized features, plastic skin, fashion styling, logos, text or watermark. Character: Layla Hassan, entirely fictional woman around 36, infrastructure engineer specializing in OpenTelemetry and distributed services. Warm medium olive skin, shoulder-length naturally wavy dark-brown hair, brown eyes, composed approachable slight smile, wearing a muted deep-teal blouse. Head-and-shoulders real camera photograph."
+    },
+    {
+      "subjectId": "p-011",
+      "userId": "u-eli",
+      "name": "Eli Garcia",
+      "portraitUrl": "/avatars/photos/p-011.jpg",
+      "focus": "Site reliability engineering",
+      "biography": "Turns noisy alerting into useful signals and validates reliability changes against real failure cases.",
+      "speakingStyle": "Clear and concrete; names the blocker, proposes a test, and reports what the result proves.",
+      "prompt": "Use case: photorealistic-natural. Asset: square photographic directory headshot for an entirely fictional adult professional in an enterprise collaboration app. Real camera photograph, authentic skin texture and subtle asymmetry, soft window daylight, quiet softly blurred warm-gray office background, face centered and straight-on with eyes toward the lens, entire hair and shoulders safely inside the square for a circular avatar crop. Friendly composed expression, normal business-casual clothes, natural proportions. One person only. No illustration, cartoon, vector art, 3D render, stylized features, plastic skin, fashion styling, logos, text or watermark. Character: Eli Garcia, entirely fictional man around 34, senior site reliability engineer. Medium warm brown skin, short dark-brown wavy hair, dark eyes, neatly trimmed short beard, relaxed slight smile, wearing a plain muted charcoal-blue crew-neck shirt. Credible friendly technical colleague."
+    }
+  ]
+}

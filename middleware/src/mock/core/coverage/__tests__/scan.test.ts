@@ -136,6 +136,24 @@ describe('collectTestCalls — argument resolution, on a throwaway fixture file'
     ]);
   });
 
+  it('inlines a same-file const path used as a template base, so `${url}/items` is not one wildcard segment', () => {
+    write('const url = \'/api/docs/workflows\'; it(\'t\', async () => { const id = "c-1"; await request(app).patch(`${url}/comments/${id}?id=p`); });');
+    const calls = collectTestCalls(root);
+    expect(calls[0]!.segments).toEqual([
+      { kind: 'literal', value: 'api' },
+      { kind: 'literal', value: 'docs' },
+      { kind: 'literal', value: 'workflows' },
+      { kind: 'literal', value: 'comments' },
+      { kind: 'wildcard' },
+    ]);
+  });
+
+  it('does not inline a const base glued to another substitution — `${BASE}${path}` stays one wildcard segment', () => {
+    write('const BASE = \'/api/obs/oncall\'; for (const path of [\'/timeline\']) { it(\'t\', async () => { await request(app).get(`${BASE}${path}`); }); }');
+    const calls = collectTestCalls(root);
+    expect(calls[0]!.segments).toEqual([{ kind: 'wildcard' }]);
+  });
+
   it('resolves a bare identifier bound by a same-file const', () => {
     write(`const path = '/api/y'; it('t', async () => { await request(app).post(path); });`);
     const calls = collectTestCalls(root);

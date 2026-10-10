@@ -1,0 +1,12 @@
+{
+  "capacityAccepted": false,
+  "libraryCommit": "c5c967ee18fb2fa6dabe126e2dcdd023a4a64dac",
+  "compiledImage": "sha256:9493e0964c2bc1a72f89315c4d84cf96e1fce91cc32b15d54a7b22ec0dc96ac2",
+  "scope": "actual HTTP/router readiness precedes unchanged burst; all 1000 sockets and 100 calls succeed, latency and both health gates fail; no later dispatch prototype is in this image",
+  "limitation": "Docker access denied after permission change; fresh final container metrics/identity inspection unavailable. Complete driver result/log retained.",
+  "artifacts": {
+    "docs/realtime-validation/2026-10-05/capacity-table-ready/orgiq-bff-container-internal-burst.json": "88a293aca1b76b46745953c008fe3703e341490114803114d6b9b66331a396a1",
+    "docs/realtime-validation/2026-10-05/capacity-table-ready/launcher-source.tar.gz": "a36ee2aab35fe1b500dbfc6f440b74ba0ef89b5d77343413a7622a5a4f95266e",
+    "docs/realtime-validation/2026-10-05/capacity-table-ready/orgiq-table-profile-ready-capacity-burst.log": "e5791f13b7fb2a3207081fe186b152f6fff5155636c20a486db52ba13a21a9ba"
+  }
+}

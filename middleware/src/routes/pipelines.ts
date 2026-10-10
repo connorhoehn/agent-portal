@@ -32,6 +32,9 @@ import {
   filterRuns, runEvents, type ContextTenant, type PipelineEvent, type PipelineEventName, type Run,
 } from '../lib/pipeline-runs.js';
 import { loadProjection } from '../providers/pipeline-runs.js';
+import { pipelineDecksRouter } from './pipeline-decks.js';
+import { pipelinesWorkGraphRouter } from './pipelines-work-graph.js';
+import { notifyPipelinesWorkGraphChanged } from '../lib/work-graph/live.js';
 import { requireAction } from '../lib/authz.js';
 import { ROLES_BY_TENANT } from '../lib/session.js';
 import { tenantMembers, type TenantSummary } from '../lib/tenant-summary.js';
@@ -46,7 +49,14 @@ import {
 } from '../providers/pipeline-definitions.js';
 import { decideDryRunGate } from '../providers/promotions.js';
 
+import { readPipelineQueues } from '../lib/pipeline-queues.js';
+
 export const pipelinesRouter = Router();
+
+pipelinesRouter.get('/queues', requireAction('ViewPipelines'), asyncHandler(async (_req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  res.json(await readPipelineQueues());
+}));
 
 pipelinesRouter.get('/summary', requireAction('ViewPipelines'), asyncHandler(async (_req, res) => {
   const body: TenantSummary = {
@@ -177,6 +187,10 @@ pipelinesRouter.get('/runs/:id', view, runs.one);
 pipelinesRouter.get('/runs/:id/steps', view, runs.steps);
 pipelinesRouter.get('/runs/:id/events', view, runs.events);
 pipelinesRouter.get('/artifacts', view, runs.artifacts);
+// The activity graph (docs/activity-graph-migration.md §8): same assembly and stream as orgiq's.
+pipelinesRouter.use('/work-graph', pipelinesWorkGraphRouter);
+// Run report decks (slice 3 of docs/agentic-flows-migration.md).
+pipelinesRouter.use(pipelineDecksRouter);
 
 // ─── Definitions (P2) ───────────────────────────────────────────────────────
 
@@ -223,6 +237,7 @@ function runbookState(d: Definition, records: readonly PipelineRunRecord[]) {
   };
 }
 
+// The definitions the signed-in author owns or last edited are GET /api/me/groups?kind=pipeline (lib/mine.ts), not a ?scope here.
 pipelinesRouter.get('/definitions', view, asyncHandler(async (req, res) => {
   const [{ definitions, unavailable }, projection, cfg] = await Promise.all([loadDefinitions(), loadProjection(), getPipelinesConfig()]);
   const kind = strParam(req.query['kind']);
@@ -327,14 +342,16 @@ pipelinesRouter.post('/approvals/:id/decide', requireAction('ApproveStep'), asyn
     role: req.session?.role, sub: req.session?.sub, note: typeof body.note === 'string' ? body.note : null,
   });
   if (!out.ok) { res.status(out.status).json({ error: out.error }); return; }
+  void notifyPipelinesWorkGraphChanged(out.approval.runId, 'approval');
   res.json({ id: out.approval.id, decision: out.decision, outcome: out.outcome, decidedThrough: out.approval.decidedThrough });
 }));
 
 // ─── Cancel (P2) ─────────────────────────────────────────────────────────────
 
 pipelinesRouter.post('/runs/:id/cancel', requireAction('CancelRun'), asyncHandler(async (req, res) => {
-  const out = await cancelRun(String(req.params['id'] ?? ''));
+  const out = await cancelRun(String(req.params['id'] ?? ''), req.session?.sub ?? null);
   if (!out.ok) { res.status(out.status).json({ error: out.error }); return; }
+  void notifyPipelinesWorkGraphChanged(String(req.params['id'] ?? ''), 'run');
   res.json({ id: req.params['id'], status: out.status });
 }));
 

@@ -132,6 +132,7 @@ export function inputRefs(job: CompactionRun): Array<{ id: string; level: Level 
 export function whatChanged(job: CompactionRun): string {
   if (job.what_changed) return job.what_changed;
   if (job.status === 'failed') return job.error ?? 'Failed without an error message.';
+  if (isRetrying(job)) return retryReason(job)!;
   if (job.status === 'queued') return 'Waiting for the queue to hand it to a worker.';
   if (job.status === 'running') return job.stepLabel ?? job.phase ?? 'In progress.';
   return `${ioLabel(job)}.`;
@@ -183,9 +184,11 @@ export interface RunRow {
   id: string;
   groupId: RunGroup;
   title: string;
-  /** "13 run notes → 4 patterns · 3h ago" */
+  /** "13 run notes → 4 patterns" (the row's own meta line) */
+  meta: string;
+  /** "started 3h ago" (the second line; empty when the start is unknown) */
   subline: string;
-  status: { label: string; tone: RunTone };
+  status: { label: string; tone: RunTone; meta?: string };
   level: Level;
 }
 
@@ -212,8 +215,9 @@ export function runRows(jobs: CompactionRun[], nowMs: number): RunRow[] {
         id: j.id,
         groupId,
         title: transformationLabel(j.level),
-        subline: [ioLabel(j), ago ? `started ${ago}` : null].filter(Boolean).join(' · '),
-        status: runStatus(j.status),
+        meta: ioLabel(j),
+        subline: ago ? `started ${ago}` : '',
+        status: jobStatus(j),
         level: j.level,
       };
     });
@@ -253,4 +257,29 @@ export function replicationLine(rep: ReplicationResponse | null | undefined): { 
     text: `${count} of ${n} ${n === 1 ? 'replica' : 'replicas'} drifting${worst > 0 ? ` · ${durationText(worst)} behind` : ''}`,
     tone: 'warning',
   };
+}
+
+// ── A pass the queue is about to hand back ───────────────────────────────
+
+/** A queued pass whose last delivery failed: the queue left it unacked and
+ *  will deliver it again (phase `retrying`). */
+export function isRetrying(job: CompactionRun): boolean {
+  return job.status === 'queued' && job.phase === 'retrying';
+}
+
+/** The row/inspector status: `runStatus`, except a retry reads as one —
+ *  "Retrying · delivery 1 failed" — instead of a plain Queued. */
+export function jobStatus(job: CompactionRun): { label: string; tone: RunTone; meta?: string } {
+  if (!isRetrying(job)) return runStatus(job.status);
+  const n = job.attempts ?? 0;
+  return { label: 'Retrying', tone: 'warning', ...(n > 0 ? { meta: `delivery ${n} failed` } : {}) };
+}
+
+/** Why a retrying pass is waiting: the server's own warning line when the
+ *  log has one, else a sentence from the attempt count. */
+export function retryReason(job: CompactionRun): string | null {
+  if (!isRetrying(job)) return null;
+  const warn = [...(job.log ?? [])].reverse().find((l) => l.level === 'warn');
+  if (warn?.message) return warn.message;
+  return `Delivery ${job.attempts ?? 1} failed — the queue will hand the pass back for another try.`;
 }

@@ -57,14 +57,43 @@ A page's own context rail (a nested section rail such as Automate's) is a
 **Flush workspace pages.** A page that brings its own header and panes marks
 its root `data-shell-flush`; `app.css` then drops the shell's 24px content
 padding and hides the shell's breadcrumb row for it, because the page's
-header prints the same trail (`useShellBreadcrumbItems`). The initiative
-page (`/iq/projects/:id`, the Work four-pane view) is the first: its
-ui-components `ScopeHeader` sets its own rhythm — the trail about 6px above
-a 22px/600 title, as the Work mockup draws it — so the branding journeys'
-16px trail→title rule is judged on pages in the shell's padded column, and
-the detail surface in that rule is the Automate job page. Mark a page flush
-only when it is a full workspace; a list or record page keeps the shell's
-padding and title rhythm.
+header prints the same trail (`useShellBreadcrumbItems`) as a
+`ScopeHeader variant="crumbs"` band.
+
+**The title rule (2026-10-01).** Every Org page has exactly one `h1`: the
+20px/600 `PageHeader`/`PageSection` heading, its top 16px under the bottom
+of the trail above it — the shell's trail on a padded page, the crumbs band
+on a flush one. List and detail pages alike. The flush layouts carry the
+spacing, not the pages: `BuildSectionLayout` (Automate, Local compute,
+Bots, Changes) and `StackedCatalogLayout` (Designs, Agent library, their
+records) start their body `UNDER_CRUMBS_BAND`
+(`components/shell/headerRhythm.ts`), and the catalog overview's title is
+the layout's own `PageSection`; Distillation, whose band also carries the
+repository select, uses `UNDER_CRUMBS_BAND_WITH_CONTROLS`, and each of its
+destinations draws its own `h1` (the module draws none, or Review and
+Activity had two). Between 2026-09-28 (`9e4f5fe7`, the stacked Build
+navigation) and this rule each flush layout picked its own gap, so the
+titles landed 4–32px under the trail at three sizes.
+
+Initiatives (All, My, Sprints and detail) use `InitiativeHeaderFrame` with
+the same heading and spacing. The installed `ScopeHeader` only offers 22px
+and 28px titles, so the frame composes its status, controls, people and tabs
+from the library's primitives until the queued 20px option ships.
+
+Workspaces whose header is a designed band, and so keep their own rhythm
+(each consistent within itself; the journeys' `rhythm:` line judges the
+pages above, not these):
+
+- **Search** — one inline header row, the title as the trail's last segment
+  (`docs/search-workspace-goal.md` decision 9).
+- **Record headlines on `EditorShell`** — a distillation record, a review
+  claim, a work item: the record's headline under its own crumb line
+  (`docs/distillation-guide-record-spec.md`).
+- **Canvases** — Architecture and Computer Lab carry a visually hidden `h1`;
+  the diagram and the lab are their frame.
+
+Mark a page flush only when it is a full workspace; a list or record page
+keeps the shell's padding and title rhythm.
 
 ## Dark
 

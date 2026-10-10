@@ -8,8 +8,12 @@ import { useEffect, useReducer, useState, type KeyboardEvent } from 'react';
 import {
   Button,
   Card,
+  CheckIcon,
+  CloseIcon,
   ConfirmDialog,
+  EditIcon,
   FormField,
+  IconButton,
   InlineAlert,
   InlinePlaceholder,
   Inline,
@@ -21,7 +25,8 @@ import {
   TableHead,
   TableRow,
   TableTd,
-  TableTh,
+  TableTh, T,
+  TrashIcon,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { toastError, toastSuccess } from '../../lib/toastStore';
@@ -29,7 +34,6 @@ import { escapeNestReducer, INITIAL_ESCAPE_NEST_STATE, shouldHostHandleEscape, t
 import { grantUrl, grantsUrl, validateGrantAmount } from './sprintForm';
 import { usd } from './sprintFormat';
 import { PeopleSelect, usePeopleOptions } from './PeopleSelect';
-import { T } from './Text';
 import { writeJson } from '../../lib/writeJson';
 import type { GrantRow, Sprint } from './types';
 
@@ -110,6 +114,7 @@ function GrantRowView({ grant, editing, busy, onEdit, onSave, onCancelEdit, onRe
 }) {
   const [amount, setAmount] = useState(String(grant.allocatedUsd));
   const [note, setNote] = useState(grant.note ?? '');
+  const who = grant.granteeName ?? grant.granteePersonId;
 
   if (editing) {
     return (
@@ -128,8 +133,10 @@ function GrantRowView({ grant, editing, busy, onEdit, onSave, onCancelEdit, onRe
         </TableTd>
         <TableTd className="text-right">
           <Inline gap="xs" justify="end">
-            <Button size="sm" variant="primary" disabled={busy} onClick={() => onSave(amount, note)}>Save</Button>
-            <Button size="sm" variant="ghost" disabled={busy} onClick={onCancelEdit}>Cancel</Button>
+            <IconButton size="sm" variant="primary" icon={<CheckIcon />} disabled={busy}
+              aria-label={`Save envelope for ${who}`} title="Save" onClick={() => onSave(amount, note)} />
+            <IconButton size="sm" icon={<CloseIcon />} disabled={busy}
+              aria-label={`Cancel editing envelope for ${who}`} title="Cancel" onClick={onCancelEdit} />
           </Inline>
         </TableTd>
       </TableRow>
@@ -137,7 +144,7 @@ function GrantRowView({ grant, editing, busy, onEdit, onSave, onCancelEdit, onRe
   }
   return (
     <TableRow>
-      <TableTd className="font-semibold">{grant.granteeName ?? grant.granteePersonId}</TableTd>
+      <TableTd >{grant.granteeName ?? grant.granteePersonId}</TableTd>
       <TableTd className="text-right tabular-nums">{usd(grant.allocatedUsd)}</TableTd>
       <TableTd className="text-text-tertiary">{grant.note ?? '—'}</TableTd>
       <TableTd className="text-right">
@@ -146,8 +153,10 @@ function GrantRowView({ grant, editing, busy, onEdit, onSave, onCancelEdit, onRe
               Cancel — see the comment there. Button isn't forwardRef, and
               this row itself remounts (keyed on edit state) the moment
               editing starts, so a captured DOM ref would already be stale. */}
-          <Button size="sm" variant="ghost" onClick={onEdit} data-grant-trigger={`edit:${grant.id}`}>Edit</Button>
-          <Button size="sm" variant="ghost" disabled={busy} onClick={onRevoke}>Revoke</Button>
+          <IconButton size="sm" icon={<EditIcon />} onClick={onEdit} data-grant-trigger={`edit:${grant.id}`}
+            aria-label={`Edit envelope for ${who}`} title="Edit" />
+          <IconButton size="sm" icon={<TrashIcon />} disabled={busy} onClick={onRevoke}
+            aria-label={`Revoke envelope for ${who}`} title="Revoke" />
         </Inline>
       </TableTd>
     </TableRow>
@@ -268,7 +277,7 @@ export function GrantsPanel({ sprint, onChanged }: { sprint: Sprint; onChanged: 
   return (
     <Stack gap="sm" onKeyDown={handleNestedEscape}>
       <Inline justify="between" align="baseline">
-        <T className="text-[13px] text-text-secondary" wrap>
+        <T size="sm" className="text-text-secondary" wrap>
           Budget envelopes scoped to this sprint. Zeroing one freezes its spend without losing its history.
         </T>
         {!adding ? (
@@ -298,7 +307,7 @@ export function GrantsPanel({ sprint, onChanged }: { sprint: Sprint; onChanged: 
       ) : grants.length === 0 ? (
         <InlinePlaceholder>No envelope is granted to this sprint yet.</InlinePlaceholder>
       ) : (
-        <Table>
+        <Table size="sm">
           <TableHead>
             <TableRow>
               <TableTh>Grantee</TableTh>

@@ -186,7 +186,7 @@ describe('scenarios', () => {
   });
 
   it('publishes a one-line description for every scenario name', () => {
-    expect(SCENARIO_NAMES).toEqual(['default', 'empty', 'error', 'large', 'fresh']);
+    expect(SCENARIO_NAMES).toEqual(['default', 'empty', 'error', 'large', 'fresh', 'demo', 'distillation-demo']);
     for (const name of SCENARIO_NAMES) {
       expect(describeScenario(name)).toEqual(SCENARIOS[name]);
       expect(SCENARIOS[name].name).toBe(name);

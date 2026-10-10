@@ -85,16 +85,7 @@ function asEstimates(item: FlatWorkItem, est: ReturnType<typeof useWorkEstimate>
   };
 }
 
-export function RunDraft({
-  item,
-  codebases,
-  run,
-  canDispatch,
-  showGrantCue,
-  onEstimateSaved,
-  onAuthorize,
-  onChoiceChange,
-}: {
+type RunDraftProps = {
   item: FlatWorkItem;
   codebases: Codebase[];
   /** This item's latest marketplace run, if any. */
@@ -106,7 +97,23 @@ export function RunDraft({
   onAuthorize: (choice: RunChoice) => void;
   /** Every change to the draft — the collapsed Run setup's hint reads it. */
   onChoiceChange?: (choice: RunChoice) => void;
-}) {
+};
+
+/** A different work item starts a new plan; refreshing its codebases does not. */
+export function RunDraft(props: RunDraftProps) {
+  return <RunDraftForItem key={props.item.id} {...props} />;
+}
+
+function RunDraftForItem({
+  item,
+  codebases,
+  run,
+  canDispatch,
+  showGrantCue,
+  onEstimateSaved,
+  onAuthorize,
+  onChoiceChange,
+}: RunDraftProps) {
   const [model, setModel] = useState(DEFAULT_DEVBOX_MODEL);
   const [agentProjectId, setAgentProjectId] = useState<string | null>(null);
   // The dispatch route's per-run cap (budgetPerRunUsd): the run is refused if
@@ -114,16 +121,13 @@ export function RunDraft({
   const [capUsd, setCapUsd] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [instruction, setInstruction] = useState('');
-  // A new item is a new draft: the last item's codebase may not deliver this
-  // one. Keyed on the ids, not the array — the host rebuilds that array every
-  // render, and depending on it reset the cap and codebase on each keystroke.
-  const codebaseKey = codebases.map((c) => c.id).join(',');
-  const onlyCodebase = codebases.length === 1 ? codebases[0]!.id : null;
+  // Reconcile only the codebase selection after an asynchronous load or poll.
+  // Keep a still-readable explicit choice and never erase the plan or cap.
+  const codebaseKey = JSON.stringify(codebases.map((c) => c.id));
   useEffect(() => {
-    setAgentProjectId(onlyCodebase);
-    setCapUsd(null);
-    setInstruction('');
-  }, [item.id, codebaseKey, onlyCodebase]);
+    const ids = JSON.parse(codebaseKey) as string[];
+    setAgentProjectId(current => current && ids.includes(current) ? current : ids.length === 1 ? ids[0]! : null);
+  }, [codebaseKey]);
 
   useEffect(() => {
     onChoiceChange?.({ model, agentProjectId, capUsd, instruction });

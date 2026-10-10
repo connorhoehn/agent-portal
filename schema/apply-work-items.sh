@@ -16,6 +16,7 @@ AURORA_SECRET_ARN=$(aws cloudformation describe-stacks \
   --output text)
 
 SCHEMA_FILE="$(dirname "$0")/orgiq_work_items_schema.sql"
+KEY_SCHEMA_FILE="$(dirname "$0")/work_item_key_schema.sql"
 PROGRAM_SCHEMA_FILE="$(dirname "$0")/program_schema.sql"
 # The curated program seed: 14 canonical p-* initiatives, each with one owner,
 # a couple of SMEs, epics/stories/bugs estimated in points and dollars,
@@ -33,24 +34,10 @@ run_file() {
   echo "Applying $label ($file)..."
   local count=0
 
-  # Split on ; at paren-depth 0, strip line comments, skip blanks.
-  python3 - "$file" <<'PYEOF' | while IFS= read -r stmt; do
-import sys, re
-src = open(sys.argv[1]).read()
-# strip -- comments but preserve $$ strings (PL/pgSQL not used here)
-src = re.sub(r'--[^\n]*', '', src)
-out, depth, buf = [], 0, []
-for ch in src:
-    if ch == '(':   depth += 1
-    elif ch == ')': depth -= 1
-    if ch == ';' and depth == 0:
-        s = ''.join(buf).strip()
-        if s:
-            print(s.replace('\n', ' '))
-        buf = []
-    else:
-        buf.append(ch)
-PYEOF
+  # Preserve dollar-quoted function bodies and SQL newlines. JSON encoding
+  # carries each complete statement through the line-oriented shell loop.
+  while IFS= read -r encoded; do
+    stmt="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]))' "$encoded")"
     [ -z "$stmt" ] && continue
     count=$((count + 1))
     preview="$(echo "$stmt" | head -c 80)"
@@ -62,12 +49,32 @@ PYEOF
       --region "$REGION" \
       --sql "$stmt" \
       --output json > /dev/null
-  done
+  done < <(python3 - "$file" <<'PYEOF'
+import json, re, sys
+current, tag = [], None
+for line in open(sys.argv[1]):
+    stripped = line.strip()
+    if tag is None and (not stripped or stripped.startswith('--')):
+        continue
+    current.append(line)
+    for marker in re.findall(r'\$[A-Za-z_][A-Za-z0-9_]*\$|\$\$', line):
+        if tag is None:
+            tag = marker
+        elif marker == tag:
+            tag = None
+    if tag is None and stripped.endswith(';'):
+        print(json.dumps(''.join(current).strip()))
+        current = []
+if tag is not None or ''.join(current).strip():
+    raise SystemExit('Incomplete SQL statement')
+PYEOF
+  )
 
   echo "  Done: $count statements."
 }
 
 run_file "$SCHEMA_FILE"         "work-items schema"
+run_file "$KEY_SCHEMA_FILE"     "immutable work-item keys"
 run_file "$PROGRAM_SCHEMA_FILE" "program schema (sprints, grants, estimates)"
 run_file "$SEED_FILE"           "curated program seed"
 

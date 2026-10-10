@@ -363,7 +363,20 @@ identityRouter.delete('/policies/:id', identityAdminOnly, requireAction('EditPol
 
 // ── Schema GET/PUT ────────────────────────────────────────────────────────────
 
+// Offline (dev:mock, no policy store) there is no AVP schema to read. The
+// actions the enforced seed policies name ARE the schema's action set, so the
+// mock answer is derived from the role registry on every read: nothing stored,
+// nothing to drift, nothing for /api/__mock/reset to undo.
+function derivedMockSchema(): { schema: unknown; raw: string } {
+  const names = new Set<string>();
+  for (const r of roleRegistry()) for (const c of r.capabilities) if (c !== '*') names.add(c);
+  const actions = Object.fromEntries([...names].sort().map((n) => [n, { appliesTo: { principalTypes: ['User'], resourceTypes: ['Resource'] } }]));
+  const schema = { OrgIQ: { entityTypes: {}, actions } };
+  return { schema, raw: JSON.stringify(schema) };
+}
+
 identityRouter.get('/schema', identityAdminOnly, asyncHandler(async (_req, res) => {
+  if (!config.auth.policyStoreId && config.mock.aurora) { res.json(derivedMockSchema()); return; }
   const policyStoreId = ensureStore(res); if (!policyStoreId) return;
   const out = await client.send(new GetSchemaCommand({ policyStoreId }));
   let parsed: unknown = null;

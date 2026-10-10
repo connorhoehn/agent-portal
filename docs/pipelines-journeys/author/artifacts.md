@@ -2,13 +2,15 @@ surface: artifacts
 role: author
 user: u-ines (Ines Moreau)
 url: /pipelines/artifacts
-pages: portal/src/pages/pipelines/ArtifactsPage.tsx,portal/src/components/runs/PipelineRunParts.tsx,portal/src/lib/pipelineRuns.ts
-audited: 2026-09-30 04:15Z, Chromium 1456×958 (Playwright headless, one context per identity — not the shared Chrome tab), middleware dev:mock:social on :3001, Vite :5183; GET /api/session/me: sub u-ines, tenant pipelines, role author, grants {"pipelines":["author"]}
+pages: portal/src/pages/pipelines/ArtifactsPage.tsx
+audited: 2026-10-08 10:49Z → 2026-10-08 10:49Z, Chromium (Playwright headless from portal/node_modules, a fresh context per identity, not the shared Chrome tab), 1680×940, Tilt stack: middleware dev:mock on :3001, Vite :5183
+session: /api/session/me sub u-ines, tenant pipelines, role author, grants {"pipelines":["author"]}
 screenshot: artifacts.jpg
 verdict: pass
 console errors: 0
-layout: pass — content col left 224px w 1208px; no horizontal scroll (scrollWidth 1456 = innerWidth 1456); one filter row (Artifact kind select, "239 artifacts"); first table row top 280px; newest first, kinds on the first page: Trace, Transcript, Change
-keyboard: pass — 27 really-visible focusables in main (kind=Trace), Tab visited 27; Enter on the first trace row opened its run (/pipelines/runs/agent-run%3A79eed77e-7aee-4911-a7ee-d45878eed5eb)
-empty-state: pass — kind=Trace, empty before P1, now lists "139 artifacts" (first: Trace | Supervisor trace | agent-run:79eed77e-7aee-4911-a7ee-d45878eed5eb | completed | orgiq | 2m ago); every other kind has rows too (Change 3 artifacts, Document 17 artifacts, Scores 3 artifacts, Transcript 77 artifacts), so the filtered empty message "No artifact of this kind." was read from ArtifactsPage.tsx rather than provoked (a scenario switch would move every other walker's world)
-role-gating: pass — author holds ViewPipelines, AuthorDefinition, RunPipeline; forbidden ApproveStep, CancelRun, ManagePipelineConfig. Buttons in main: none; no Approve, Cancel, New definition or configuration control exists anywhere in the DOM of this surface (P0 surfaces are reads — those controls arrive with P2). The rail shows Configuration to every pipelines role (NAV_ITEMS carries no role gate); it opens a read-only empty state with no control — recorded in DEFECTS.md for P2, where ManagePipelineConfig gives it something to gate
-notes: P1 re-walk. Every agent run files its invocation_traces row as a 'trace' artifact (the uri is the trace uuid; meta.href names /api/observability/invocations/<uuid>), and a sub-agent trace folded into a run is filed on that run too. The list now reads newest first across kinds. Changes captured outside any run the projection reads (every seeded change has run_id null) still list as "no run" with no workspace — the only artifacts a context-scoped façade does not show.
+layout: pass — content col left 224px w 1432px, top 70px, bottom 893px; no horizontal scroll (scrollWidth 1680 / innerWidth 1680); h1 “Artifacts”; 1 <main>
+type: title 20/600; sizes in main (size/weight×text nodes): 14/400×82, 10/600×48, 11/400×24, 12/400×15, 12/600×6, 14/500×1, 20/600×1
+keyboard: pass — 28 really-visible focusables in main (27 Tab stops, the rest roving tabindex=-1 members), Tab visited 27; Enter on the first row (focus on TR) opened /pipelines/runs/agent-run%3A79eed77e-7aee-4911-a7ee-d45878eed5eb; browser Back returned to /pipelines/artifacts
+empty-state: n/a — no filter value of this table produced an empty result in the live data (nothing to provoke without damaging shared state)
+role-gating: pass — holds ViewPipelines, AuthorDefinition, RunPipeline; forbidden ApproveStep, CancelRun, ManagePipelineConfig. Controls in main: ["Prev","Next"]; Approve/Reject absent from the DOM, Cancel run absent, New definition absent, Configuration rail row absent; invalid-body write probes (403 = refused by Cedar, anything else = past the gate, nothing written): PUT /configuration {} → 403; PUT /definitions/no-such-definition/approvers {} → 400; POST /approvals/no-such-step/decide {} → 403; POST /runs/no-such-run/cancel {} → 403
+notes: Every field above was observed in this pass, not carried forward.  Main text on arrival: Runs › Artifacts Artifacts What runs produced — changes, documents, scores and transcripts. Any kind Change Document Scores Transcript Trace 239 artifacts KIND ARTIFACT RUN RUN STATUS WORKSPACE CREATED Trace Supervisor trace agent-run:79eed

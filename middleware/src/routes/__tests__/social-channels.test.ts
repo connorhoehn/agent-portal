@@ -64,8 +64,11 @@ describe('GET /api/social/channels', () => {
     const res = await request(sana()).get('/api/social/channels');
     expect(res.status).toBe(200);
     const slugs = res.body.channels.map((c: { slug: string }) => c.slug);
-    expect(slugs).toEqual(['general', 'auth-migration', 'design-reviews']);
-    const general = res.body.channels[0];
+    expect(slugs).toEqual(expect.arrayContaining(['general', 'random', 'events', 'auth-migration', 'design-reviews']));
+    // Sana is in neither #moderators nor #incidents (not a member; private/hidden or not offered).
+    expect(slugs).not.toContain('moderators');
+    expect(res.body.channels.find((c: { slug: string }) => c.slug === 'design-reviews').joined).toBe(false);
+    const general = res.body.channels.find((c: { slug: string }) => c.slug === 'general');
     expect(general).toMatchObject({ channel: 'social:ch:general', joined: true, role: 'member', privacy: 'public' });
     // Counted from the member rows, never stored.
     expect(general.memberCount).toBe(socialChannelMembersFixture.rows().filter((m) => m.channel === 'social:ch:general' && !m.removedAt).length);
@@ -158,11 +161,11 @@ describe('DMs', () => {
   it('GET /api/social/dms lists your conversations with the other person named', async () => {
     const res = await request(sana()).get('/api/social/dms');
     expect(res.status).toBe(200);
-    expect(res.body.conversations).toEqual([
-      expect.objectContaining({ channel: 'social:dm:u-lena:u-sana', peers: [{ userId: 'u-lena', displayName: 'Lena Brandt' }], lastMessagePreview: 'Thanks Lena, will do.', lastMessageUserId: 'u-sana' }),
-    ]);
+    expect(res.body.conversations).toEqual(expect.arrayContaining([
+      expect.objectContaining({ channel: 'social:dm:u-lena:u-sana', peers: [{ userId: 'u-lena', displayName: 'Lena Brandt', avatarUrl: '/avatars/u-lena.svg' }], lastMessagePreview: 'Thanks Lena, will do.', lastMessageUserId: 'u-sana' }),
+    ]));
     const miraDms = await request(mira()).get('/api/social/dms');
-    expect(miraDms.body.conversations.map((c: { channel: string }) => c.channel)).toEqual(['social:dm:u-lena:u-mira']);
+    expect(miraDms.body.conversations.map((c: { channel: string }) => c.channel)).toEqual(expect.arrayContaining(['social:dm:u-lena:u-mira']));
   });
 
   it('POST /api/social/dms opens the sorted lobby; refuses yourself and anyone outside the tenant', async () => {
@@ -180,7 +183,7 @@ describe('DM unread counts and POST /api/social/dms/read', () => {
   it('counts messages from the other person after your cursor and your own last message; reading clears it', async () => {
     // Sana answered Lena last, so she has read the thread; Lena has not read Mira's question.
     const sanaDms = await request(sana()).get('/api/social/dms');
-    expect(sanaDms.body.conversations[0].unreadCount).toBe(0);
+    expect(sanaDms.body.conversations.find((c: { channel: string }) => c.channel === 'social:dm:u-lena:u-sana').unreadCount).toBe(0);
     const lenaDms = await request(lena()).get('/api/social/dms');
     const withMira = lenaDms.body.conversations.find((c: { channel: string }) => c.channel === 'social:dm:u-lena:u-mira');
     expect(withMira.unreadCount).toBe(1);
@@ -220,6 +223,6 @@ describe('GET /api/social/people', () => {
     const ids = res.body.people.map((p: { userId: string }) => p.userId);
     expect(ids).toEqual(expect.arrayContaining(['u-mira', 'u-lena', 'u-sana', 'u-operator', 'u-theo']));
     expect(ids).not.toContain('u-hr');
-    expect(res.body.people.find((p: { userId: string }) => p.userId === 'u-mira')).toEqual({ userId: 'u-mira', displayName: 'Mira Okafor', roles: ['community-admin'] });
+    expect(res.body.people.find((p: { userId: string }) => p.userId === 'u-mira')).toEqual({ userId: 'u-mira', displayName: 'Mira Okafor', roles: ['community-admin'], avatarUrl: '/avatars/u-mira.svg' });
   });
 });

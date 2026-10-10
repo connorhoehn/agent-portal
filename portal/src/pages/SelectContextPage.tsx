@@ -18,7 +18,9 @@
 // workspace behind, not a soft in-place toggle.
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useSearchParams } from 'react-router';
 import { ChoiceList, ChoiceRow } from '@connorhoehnslalom/ui-components';
+import { BranchIcon, ChatIcon, ChecklistIcon, GraphIcon, T } from '@connorhoehnslalom/ui-components/shared';
 import {
   Avatar,
   Button,
@@ -37,11 +39,12 @@ import {
 import { useSession, type DirectoryUser, type Tenant } from '../lib/auth';
 import { toastError } from '../lib/toastStore';
 import { tenantEnabled } from '../lib/features';
+import { orgiqReferenceReturnHref } from '../lib/dmPageReferences';
 import { markContextChosen } from '../lib/contextChoice';
-import { T } from './Text';
+import demoPortraits from '../lib/demoPortraits.json';
 
 const TENANT_META: Record<Tenant, { label: string; blurb: string; accent: string }> = {
-  orgiq: { label: 'Org', blurb: 'Organizational intelligence — people, projects, decisions', accent: 'var(--color-primary)' },
+  orgiq: { label: 'Work', blurb: 'Initiatives, people, decisions, and the work you do together', accent: 'var(--color-primary)' },
   assessment: { label: 'Assessment', blurb: 'Engineering-maturity cockpit — teams, evidence, certification', accent: 'var(--color-warning)' },
   social: { label: 'Social', blurb: 'Channels, direct messages, calls and rooms — the people you work with', accent: 'var(--color-tenant-social)' },
   pipelines: { label: 'Pipelines', blurb: 'Definitions, runs and approvals — what the fleet ran, and for whom', accent: 'var(--color-tenant-pipelines)' },
@@ -103,6 +106,8 @@ const CURATED: Array<{ id: string; persona: string }> = [
   { id: 'u-ines', persona: 'Pipeline author — writes and dry-runs definitions, never approves them' },
   { id: 'u-kofi', persona: 'Pipeline operator — runs, approves and cancels, never writes a definition' },
   { id: 'u-dara', persona: 'Pipeline admin — an operator plus configuration and users' },
+  // Also holds Social (the Communication-plane walker); outside the pure pipelines-only cast.
+  { id: 'u-tomas', persona: 'Pipeline author with Social — writes definitions and joins the Communication plane' },
 ];
 
 function roleLabel(role: string): string { return ROLE_META[role]?.label ?? role; }
@@ -111,10 +116,10 @@ function tenantLabel(tenant: string): string { return TENANT_META[tenant as Tena
 // Per-tenant tile tint, as whole class strings so Tailwind's scanner sees
 // every one (a composed `border-${x}` would not be generated).
 const TENANT_MARK_TINT: Record<Tenant, string> = {
-  orgiq: 'border-primary bg-primary/10',
-  assessment: 'border-warning bg-warning/10',
-  social: 'border-tenant-social bg-tenant-social/10',
-  pipelines: 'border-tenant-pipelines bg-tenant-pipelines/10',
+  orgiq: 'border-primary bg-primary/10 text-primary',
+  assessment: 'border-warning bg-warning/10 text-warning',
+  social: 'border-tenant-social bg-tenant-social/10 text-tenant-social',
+  pipelines: 'border-tenant-pipelines bg-tenant-pipelines/10 text-tenant-pipelines',
 };
 
 /** Inline tenant mark — a tinted rounded badge with a per-tenant glyph. No
@@ -123,42 +128,14 @@ const TENANT_MARK_TINT: Record<Tenant, string> = {
  *  Fixed at 34px (the badge's one real call site never asks for another
  *  size) so the tint/size can be plain per-tenant Tailwind classes instead
  *  of a computed `style` object — the validator now bans a JSX `style=` prop
- *  even when the object is hoisted to a named const. `accent` still feeds the
- *  SVG `stroke` attributes below, which are plain SVG presentation
- *  attributes, not a `style` prop, so those are unaffected. */
+ *  even when the object is hoisted to a named const. */
 function TenantMark({ tenant }: { tenant: Tenant }) {
-  const accent = TENANT_META[tenant]?.accent ?? 'var(--color-primary)';
+  // Library glyphs paint in currentColor, so the tint class carries the accent.
   const glyph =
-    tenant === 'assessment' ? (
-      // Checklist / scorecard
-      <svg width={18} height={18} viewBox="0 0 24 24" fill="none" aria-hidden>
-        <rect x="4" y="3.5" width="16" height="17" rx="1.5" stroke={accent} strokeWidth="1.6" />
-        <path d="M8 8.5l1.4 1.4L11.5 7.5M8 14.5l1.4 1.4 2.1-2.4" stroke={accent} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M14 8.5h4M14 14.5h4" stroke={accent} strokeWidth="1.6" strokeLinecap="round" />
-      </svg>
-    ) : tenant === 'social' ? (
-      // Two overlapping speech bubbles — a conversation
-      <svg width={18} height={18} viewBox="0 0 24 24" fill="none" aria-hidden>
-        <path d="M4 5.5h10a1.5 1.5 0 0 1 1.5 1.5v5.5A1.5 1.5 0 0 1 14 14H8.5L5 17v-3H4a1.5 1.5 0 0 1-1.5-1.5V7A1.5 1.5 0 0 1 4 5.5z" stroke={accent} strokeWidth="1.6" strokeLinejoin="round" />
-        <path d="M18 9.5h1.5A1.5 1.5 0 0 1 21 11v5.5a1.5 1.5 0 0 1-1.5 1.5H19v2.5L16 18h-4.5a1.5 1.5 0 0 1-1.5-1.5V16" stroke={accent} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    ) : tenant === 'pipelines' ? (
-      // Three stages joined left to right — a pipeline run
-      <svg width={18} height={18} viewBox="0 0 24 24" fill="none" aria-hidden>
-        <rect x="2.5" y="9" width="5" height="6" rx="1.2" stroke={accent} strokeWidth="1.6" />
-        <rect x="9.5" y="9" width="5" height="6" rx="1.2" stroke={accent} strokeWidth="1.6" />
-        <rect x="16.5" y="9" width="5" height="6" rx="1.2" stroke={accent} strokeWidth="1.6" />
-        <path d="M7.5 12h2M14.5 12h2" stroke={accent} strokeWidth="1.6" strokeLinecap="round" />
-      </svg>
-    ) : (
-      // Org graph (three connected nodes)
-      <svg width={18} height={18} viewBox="0 0 24 24" fill="none" aria-hidden>
-        <circle cx="12" cy="5" r="2.4" stroke={accent} strokeWidth="1.6" />
-        <circle cx="5.5" cy="18" r="2.4" stroke={accent} strokeWidth="1.6" />
-        <circle cx="18.5" cy="18" r="2.4" stroke={accent} strokeWidth="1.6" />
-        <path d="M10.6 6.9 6.9 15.9M13.4 6.9l3.7 9M8 18h8" stroke={accent} strokeWidth="1.6" strokeLinecap="round" />
-      </svg>
-    );
+    tenant === 'assessment' ? <ChecklistIcon size={18} />
+    : tenant === 'social' ? <ChatIcon size={18} />
+    : tenant === 'pipelines' ? <BranchIcon size={18} />
+    : <GraphIcon size={18} />;
   return (
     <Inline
       as="span"
@@ -175,6 +152,8 @@ function TenantMark({ tenant }: { tenant: Tenant }) {
 
 export default function SelectContextPage() {
   const { session, enterContext, logout, ssoEnabled, signInWithSso, listUsers, login } = useSession();
+  const [params] = useSearchParams();
+  const referenceReturn = orgiqReferenceReturnHref(params.get('to'));
 
   // The dev sign-in list. This page is the pre-app boundary, which makes it
   // the right — and now only — home for the user picker: the header menu
@@ -252,7 +231,7 @@ export default function SelectContextPage() {
     // workspace (re-driving the layout from the re-minted cookie).
     markContextChosen(session?.sub ?? '');
     try {
-      await enterContext(tenant, role);
+      await enterContext(tenant, role, tenant === 'orgiq' ? referenceReturn : undefined);
     } catch (err) {
       // enterContext hard-navigates on success, so a swallowed failure has NO
       // observable outcome — a chooser full of buttons that sometimes do
@@ -265,6 +244,8 @@ export default function SelectContextPage() {
   }
 
   const name = session?.name ?? session?.sub ?? 'you';
+  // Your own face, from the directory the people tab already loaded (initials when absent).
+  const selfAvatar = directory?.find(u => u.id === session?.sub)?.avatarUrl ?? undefined;
   const currentTenant = session?.tenant;
   const currentRole = session?.role;
 
@@ -304,10 +285,10 @@ export default function SelectContextPage() {
       <Band>
         <Inline wrap align="center" justify="between" gap="sm" className="py-2.5">
           <T className="text-[13px] font-bold tracking-[0.14em] text-[var(--color-primary)] uppercase">
-            OrgIQ
+            Work
           </T>
           <Inline align="center" gap="sm">
-            <Avatar name={name} size={24} />
+            <Avatar name={name} size={24} src={selfAvatar} />
             <T className="text-[13px] font-semibold text-[var(--color-text-primary)]">{name}</T>
             <Button variant="ghost" size="sm" onClick={() => void logout()}>
               Sign out
@@ -339,6 +320,7 @@ export default function SelectContextPage() {
             }
           />
         </Stack>
+        {referenceReturn && <T className="text-sm text-text-secondary" wrap>Choose an Work workspace role to open the shared page.</T>}
         {peopleEnabled ? (
           <Tabs
             className="-mb-px"
@@ -406,14 +388,16 @@ export default function SelectContextPage() {
         ) : filtered.length === 0 ? (
           <EmptyState title="No match" body={`Nothing matches "${query}".`} actionLabel="Clear filter" onAction={() => setQuery('')} />
         ) : (
-          <CatalogGrid columns={3}>
+          // Equal rows (auto-rows-fr) and full-height cards: every workspace card
+          // is the same size, whatever its role count (user direction, 2026-10-07).
+          <CatalogGrid columns={3} className="auto-rows-fr" data-testid="select-workspace-grid">
             {filtered.map(({ tenant, roles }) => {
               const isCurrentAccount = currentTenant === tenant;
               return (
                 <Card
                   key={tenant}
                   padding="none"
-                  className="flex flex-col self-start overflow-hidden"
+                  className="flex h-full flex-col overflow-hidden"
                   aria-label={`${tenantLabel(tenant)} workspace`}
                 >
                   <Inline align="start" gap="sm" className="border-b border-[var(--color-border)] bg-[var(--color-surface-panel)] px-4 py-3">
@@ -425,10 +409,8 @@ export default function SelectContextPage() {
                         </T>
                         {isCurrentAccount && <Chip tone="info" size="xs" uppercase>current</Chip>}
                       </Inline>
-                      {/* The account's stable id, the way the AWS tile shows the
-                          account number under the account name. */}
-                      <T className="mt-0.5 block truncate font-mono text-[11px] text-[var(--color-text-tertiary)]">
-                        {tenant} · {roles.length} role{roles.length === 1 ? '' : 's'}
+                      <T size="xs" tone="tertiary" className="mt-0.5 block truncate">
+                        {roles.length} role{roles.length === 1 ? '' : 's'}
                       </T>
                     </Stack>
                   </Inline>
@@ -465,7 +447,7 @@ export default function SelectContextPage() {
 
       {peopleEnabled && (
         <TabPanel id="people" when={activeTab} idPrefix="selctx">
-          <CatalogGrid columns={3}>
+          <CatalogGrid columns={3} className="auto-rows-fr" data-testid="select-people-grid">
             {cast.map(({ user, persona }) => (
               <UserCard
                 key={user.id}
@@ -484,7 +466,7 @@ export default function SelectContextPage() {
               </Button>
               {showEveryone && (
                 <Stack gap="none" className="mt-4">
-                  <CatalogGrid columns={3}>
+                  <CatalogGrid columns={3} className="auto-rows-fr" data-testid="select-others-grid">
                     {others.map(user => (
                       <UserCard
                         key={user.id}
@@ -522,12 +504,13 @@ function UserCard({
   isCurrent: boolean;
   onPick: () => void;
 }) {
+  const portraitPersona = demoPortraits.personas.find(p => p.userId === user.id && p.name === user.displayName);
   const tenants = user.tenants
     .filter(t => tenantEnabled(t.tenant));
   return (
-    <Card padding="none" className="flex flex-col self-start overflow-hidden">
+    <Card padding="none" className="flex h-full flex-col overflow-hidden" data-testid="select-user-card">
       <Inline align="start" gap="sm" className="px-4 pt-4">
-        <Avatar name={user.displayName} size={36} />
+        <Avatar name={user.displayName} size={36} src={user.avatarUrl ?? undefined} />
         <Stack gap="none" className="min-w-0 flex-1">
           <Inline align="center" gap="xs">
             <PersonHoverCard
@@ -535,11 +518,13 @@ function UserCard({
                 userId: user.id,
                 displayName: user.displayName,
                 email: user.email ?? undefined,
+                avatarUrl: user.avatarUrl ?? undefined,
                 title: persona ? persona.split(' — ')[0] : undefined,
                 department: tenants.map(t => tenantLabel(t.tenant)).join(' · ') || undefined,
               }}
               details={
                 <Stack gap="xs">
+                  {portraitPersona && <T size="sm" wrap>{portraitPersona.biography}</T>}
                   {tenants.map(t => (
                     <Inline key={t.tenant} wrap align="center" gap="xs">
                       <T className="text-[11px] font-semibold text-[var(--color-text-secondary)]">
@@ -568,12 +553,12 @@ function UserCard({
       </Inline>
 
       {persona && (
-        <T as="p" className="px-4 pt-2.5 text-xs leading-relaxed text-[var(--color-text-secondary)]">
+        <T as="p" className="line-clamp-3 px-4 pt-2.5 text-xs leading-relaxed text-[var(--color-text-secondary)]" title={persona}>
           {persona}
         </T>
       )}
 
-      <Inline wrap gap="xs" className="mt-3 px-4">
+      <Inline wrap gap="xs" className="mt-3 mb-4 px-4">
         {tenants.map(t => (
           <Chip key={t.tenant} size="xs" tone={t.tenant === 'assessment' ? 'accent' : 'neutral'}>
             {tenantLabel(t.tenant)} · {t.roles.map(roleLabel).join(', ')}
@@ -581,7 +566,8 @@ function UserCard({
         ))}
       </Inline>
 
-      <Stack gap="none" className="mt-4 border-t border-[var(--color-border)] px-4 py-2.5">
+      {/* mt-auto pins the action row to the card's foot, so it lines up across a row of equal-height cards. */}
+      <Stack gap="none" className="mt-auto border-t border-[var(--color-border)] px-4 py-2.5">
         {/* Label is the bare verb: the card above already names the person,
             and a first-name split turns "Platform Operator" into "Platform".
             The full name goes to the accessible name instead. */}

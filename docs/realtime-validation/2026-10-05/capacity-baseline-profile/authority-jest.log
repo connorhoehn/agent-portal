@@ -1,0 +1,12 @@
+PASS src/lib/__tests__/dynamo-dispatch-optin.test.ts
+PASS src/lib/__tests__/dynamo-dispatch.test.ts
+PASS src/lib/__tests__/live-principal.test.ts
+PASS src/lib/__tests__/live-subscribers.test.ts
+PASS src/lib/__tests__/direct-recipient.test.ts
+PASS src/lib/__tests__/social-membership-fence.test.ts
+
+Test Suites: 6 passed, 6 total
+Tests:       64 passed, 64 total
+Snapshots:   0 total
+Time:        19.023 s
+Ran all test suites within paths "src/lib/__tests__/dynamo-dispatch.test.ts", "src/lib/__tests__/social-membership-fence.test.ts", "src/lib/__tests__/direct-recipient.test.ts", "src/lib/__tests__/live-principal.test.ts", "src/lib/__tests__/live-subscribers.test.ts", "src/lib/__tests__/dynamo-dispatch-optin.test.ts".

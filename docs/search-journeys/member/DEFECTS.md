@@ -1,12 +1,51 @@
-# Search workspace — member (u-theo) defects, 2026-09-29 20:28–20:38 full re-walk after commit 1bb6bf78 (people view passes pruneToFocus={false} to OrgGraph, ui-components 2.407.31)
+# Search workspace — member (u-theo) defects, 2026-10-06 re-walk (ui-components 2.420.0, realtime-modules 0.109.0, after the Search/Explore graph fix)
 
-All five surfaces re-walked as Theo Chang (member) against dev:mock with headless Playwright at 1672×941 (portal at 1bb6bf78, ui-components 2.407.31 sha 410da038, `dist/graph-BG99Q8kv.js` served, realtime-modules 0.98.7). No call was placed. Verdicts: results **pass**, answer **pass**, connections **pass**, people **pass**, scoped **pass**. Console errors 0, page errors 0 and HTTP ≥400 responses 0 on every surface and in every probe.
+All five surfaces re-walked as Theo Chang (u-theo) with headless Playwright at 1680×940 against the Tilt app :5183 / BFF :3001 dev:mock. All five pass; console errors 0 on every surface. The three defects that were open on 2026-10-01 were each re-tested and no longer reproduce.
 
-## Still present
+## Open
 
 None.
 
-## Observed, not defects
+## Follow-up (2026-10-08 re-walk; real, tracked, not blocking a verdict)
+
+- **The title sits on the trail's row, not under it** (all five surfaces). Trail at x=488, title at x=525, both top 80px; h1 is 14px/600 on Answer/Connections/People and 18px/600 (the query) on Results/Scoped. Rule: layout-cascade `title`; listed in `portal/e2e/layout-cascade-baseline.ts` (search-workspace decision 9 versus `docs/layout-cascade.md`).
+- **Shell rail and SEARCH rail are not on one type scale** - labels 16px vs 13px (SEARCH rows on a 32px pitch). Rule: search protocol step 3. The type-scale ledger tracks `scale rail 13/500`, `scale rail 13/600`, `siblings rail 12|11` for `/iq/search`.
+- **Answer: the numbered Sources list cuts long titles with an ellipsis and no `title`** (6 strings, e.g. "Tenant-by-tenant cutover r" 224 of 283px); the full text is in the link's aria-label only. Carried from 2026-10-06; protocol rule "clipped text needs a title".
+- **People graph opens at 40% with name labels about 4px tall.** The 2026-10-06 walk found no larger fit that keeps all 56 inside; this walk did not re-search that, so it is carried, not re-established.
+
+## Closed at this walk (2026-10-06)
+
+- **Partial source read left the tab badge and rail counts exact while the footer said "N+"** (results, scoped; was Open 1) — with `POST /api/__mock/scenario {"scenario":"error","fixture":"design-reviews"}` the Results tab, "All results" and every rail count now carry the "+" (results: "44+", footer "44+ results", pager "1–25 of 44+"; scoped: "3+" and "3+ results in Design System API"). The default scenario was restored afterwards and the exact counts returned.
+- **Answer Markdown lost list nesting** (answer; was Open 2) — the streamed answer now renders one numbered list ("1. Auth Middleware Rewrite", "2. SSO Provider Selection") with the sub-bullets nested (3 `<ol>` of 2 items, 2 nested lists in the DOM).
+- **Prompt deep link sent the question twice** (answer; was Open 3) — `/iq/invoke?prompt=hello%20there` issued one POST to `/api/agents/orgiq-supervisor/invoke` in each of three runs and the answer reads as one clean stream.
+
+## Observed, not defects (2026-10-06 walk)
+
+- **Deep-link transcript notice, seen once.** In one member run, the deep link opened straight after an ask and "View these connections" in the same browser context and showed "This conversation's transcript isn't stored in this environment — The session exists, but this environment has no memory store to read its turns back from" instead of the answer. Two later runs (one directly after an ask) did not reproduce it. Watch for it; no repro yet.
+- **Whole-org people graph opens at 40% with all 56 inside** (was 90% with a few past the edge). Name labels are about 5px tall there; 45% still fits all 56 and 54% loses three, so no larger fit reaches a readable size. Picking a person gives 116–125% for one pick and 90% for two or three.
+- **Smallest name label on the 25-record connections graph is about 8.7px (Force), 8.1px (Radial), 7.9px (Hierarchy)** at the automatic fit. The whole graph fits at 72–79%, so the rule allows it.
+- The answer's numbered Sources list still cuts four long titles with an ellipsis and no `title` attribute (the full text is in the link's aria-label).
+- Opening the connections strip and sending a question adds a record to the mock's all-types world (59 → 61 over the session), so counts drift between walks.
+
+## Observed, not defects (2026-10-01 walk, kept as history)
+
+- Start call could not be observed ringing: this walk's dev:mock stack has no platform-api, so Start call is disabled everywhere with "Calls need platform-api — the middleware returned no platformApiUrl (REALTIME_PLATFORM_PUBLIC_URL) and VITE_PLATFORM_API_URL is not set". Message was not pressed (it moves the session into Social).
+- The answer's numbered Sources list cuts each source title at 224px with an ellipsis and no `title` tooltip; the full title is only in the link's aria-label ("Source 5: …"). The provenance chips above it do carry tooltips.
+- Whole-org people graph opens at 90% with a few of 56 people past the edge; the whole org needs ~68–74%, so this is the allowed no-selection fallback (Fit shows all 56).
+- On the expanded conversation canvas (1168×332) Force opens at 73% with two unselected work items behind the zoom cluster; the selected three stay whole and clear — the allowed fallback.
+- The mock records an observation per ask, so result counts drift between walks (All results 44 → 47 over this session).
+
+## Earlier walks (kept as history; not re-observed on 2026-10-01)
+
+Previous header: Search workspace — member (u-theo) defects, 2026-09-29 20:28–20:38 full re-walk after commit 1bb6bf78 (people view passes pruneToFocus={false} to OrgGraph, ui-components 2.407.31)
+
+All five surfaces re-walked as Theo Chang (member) against dev:mock with headless Playwright at 1672×941 (portal at 1bb6bf78, ui-components 2.407.31 sha 410da038, `dist/graph-BG99Q8kv.js` served, realtime-modules 0.98.7). No call was placed. Verdicts: results **pass**, answer **pass**, connections **pass**, people **pass**, scoped **pass**. Console errors 0, page errors 0 and HTTP ≥400 responses 0 on every surface and in every probe.
+
+### Still present
+
+None.
+
+### Observed, not defects
 
 - **The composer sometimes drops a space typed at machine speed (new this walk).** Owner, if it is one: ui-components `RichChatComposer` (the Tiptap editor under `AgentComposerDock`), reached from `portal/src/pages/search/SearchComposer.tsx`. In the answer walk, after an ask → expand the graph card → Open graph → back to Answer → `/agent` → Advisor, Playwright's `keyboard.type('What should the Auth Migration owners prioritise next sprint?')` left the editor holding `/agent Advisor What should the Auth Migrationowners prioritise next sprint?` (innerHTML read before Enter), so q and the title carried "Migrationowners". Rate: 2 of 4 runs of that full flow; 0 of 3 runs of the shorter ask → `/agent` → Advisor flow; 0 of 4 runs of the full flow typed one key at a time with the editor text checked after each key; 0 in plain typing with no `/agent` prefix. No console errors and no DOM removals inside the editor while typing. Not a verdict fail because it did not reproduce at key-by-key pace; worth a look if a fast typist or a paste path reports lost spaces. The 20:06 walk sent the same question intact.
 - **In the walk's own connections keyboard run, focus left the "Initiative: Auth Migration" node after Space.** Space selected it (selection gained initiative:p-auth-migration), but the active element no longer carried aria-pressed, so the following Enter did not deselect it and the type-filter empty state was then read with four records selected ("2 records · 0 connections … No recorded connections"). A dedicated rerun did Space → select, Enter → deselect, re-focus + Enter → select in 3 of 3 opens, with focus staying on the node button, and the three-people Decisions filter shows "0 records · 0 connections · No connections to show" as logged. Probably a late re-fit re-rendering the node while the walk's shorter settle was still running; I did not instrument it.
@@ -19,7 +58,7 @@ None.
 - The mock's recorded observations keep growing between walks (results All 62 → 68, Knowledge 42 → 48; the answer card 77 → 83 records), so counts in these logs are per-walk.
 - The long-prompt header observations of 08:23 (answer-long*.png) were not re-measured in this walk.
 
-## History (fixed)
+### History (fixed)
 
 - Fixed by commit 1bb6bf78 + ui-components 2.407.31 (2026-09-29 20:32 people walk): **D10** — with a selection the org graph drew fewer people than its counter because `OrgGraph` pruned the page's neighbourhood to its own 1-hop set once `focusIds` was passed. The page now passes `pruneToFocus={false}` alongside `focusIds`. Counter and drawing agree: Sarah Singh 11/11 (Force and Radial), Vera Green 15/15, Sarah Singh + Nora Chang 17/17 (plain and type=person); every Strongest-connections name in Sarah's and Vera's cards is drawn (Layla Hassan and Sarah Singh were the ones missing); find Sarah Singh then Enter on Vera Green gives selection=person:p-014,person:p-002 again (people-focus.png). D9 stays fixed with the fuller drawing: 24 two-person opens, 48 measurements, all 90%, 0 clipped, smallest inset Nora Chang right 28px. people-focus-undrawn.png is removed.
 - Fixed by commit 5475429b (2026-09-29 20:01 people walk): **D9** — the two-person org graph (Sarah Singh + Nora Chang) opened at 90% with the SELECTED Nora Chang past the canvas's right edge in 6 of 75 opens (right inset down to −62px): the page passed `multiSelectIds` / `spotlightIds` but not `focusIds`, so `OrgGraph`'s automatic fit took its no-focus, start-aligned branch. With `focusIds={selectedIds}` (`SearchPage.tsx` ~line 489), 24 opens alternating `/iq/search?tab=connections&selection=person:p-014,person:p-051` and the same with `type=person`, every second one after the focus view in Force or Radial, each read at +3s and +7s: 48 of 48 measurements at 90% with both selected whole and clear of the overlays — 0 clipped. Smallest insets L/T/R/B: Nora Chang 825/196/**13**/90, Sarah Singh 215/41/523/269. Fit → 78–81% with all drawn inside, twice (people-two-selected.png). people-two-selected-clipped.png is removed. The same change introduced D10.

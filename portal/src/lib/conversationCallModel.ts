@@ -8,7 +8,7 @@
 // the persons with no linked user. Started from an initiative
 // (pages/projects/initiativeCallModel.ts) or from Search
 // (pages/search/SearchComposer.tsx); the call itself lives in the /iq shell's
-// host (pages/projects/InitiativeCallHost.tsx).
+// host (the library's call block host, lib/conversationCall.tsx).
 
 export interface CallPerson { personId: string; name: string }
 /** `social`: the user holds a social grant — present only when the caller holds one (GET /api/roster/users). */
@@ -60,12 +60,12 @@ export function callTargets(
   return { targets, skipped, selfOnly: self && targets.length === 0 && skipped.length === 0 };
 }
 
-/** "Maya Patel has no OrgIQ sign-in, so the call will not ring them." */
+/** "Maya Patel has no Work sign-in, so the call will not ring them." */
 export function skippedNotice(skipped: CallPerson[]): string | null {
   if (skipped.length === 0) return null;
   const names = skipped.map((p) => p.name || p.personId);
   const list = names.length === 1 ? names[0]! : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
-  return `${list} ${names.length === 1 ? 'has' : 'have'} no OrgIQ sign-in in this workspace, so the call will not ring them.`;
+  return `${list} ${names.length === 1 ? 'has' : 'have'} no Work sign-in in this workspace, so the call will not ring them.`;
 }
 
 export type CallAvailability = { ok: true } | { ok: false; reason: string };
@@ -85,7 +85,7 @@ export function callAvailability(input: {
   if (!input.signedIn) return { ok: false, reason: 'Sign in to start a call' };
   if (input.connectionState !== 'connected') return { ok: false, reason: 'Connecting to the realtime gateway…' };
   if (!input.usersLoaded) return { ok: false, reason: 'Finding who to call…' };
-  if (input.targets.length === 0) return { ok: false, reason: input.nobodyReason ?? 'Nobody here has an OrgIQ sign-in to call' };
+  if (input.targets.length === 0) return { ok: false, reason: input.nobodyReason ?? 'Nobody here has a Work sign-in to call' };
   return { ok: true };
 }
 
@@ -113,8 +113,9 @@ export function initiativeCallChannel(initiativeId: string): string {
   return `${INITIATIVE}${initiativeId}`;
 }
 export function initiativeFromChannel(channel: string | null | undefined): string | null {
-  if (!channel || !channel.startsWith(INITIATIVE)) return null;
-  return channel.slice(INITIATIVE.length) || null;
+  if (!channel) return null;
+  const prefix = channel.startsWith(INITIATIVE) ? INITIATIVE : channel.startsWith('orgiq:initiative:') ? 'orgiq:initiative:' : null;
+  return prefix ? channel.slice(prefix.length) || null : null;
 }
 
 /** The same people give the same channel, in any order. Null with nobody. */

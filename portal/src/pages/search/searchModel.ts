@@ -6,7 +6,7 @@ export function searchMigration(pathname: string, search: string, hash = '') {
   const focus = params.get('focus') ?? params.get('selected');
   if (focus && !params.has('selection')) params.set('selection', focus.split(',').filter(Boolean).map(id => id.includes(':') && SEARCH_TYPES.includes(id.split(':')[0] as SearchRecordType) ? id : `person:${id}`).join(','));
   const entities = params.get('entities');
-  if (entities && !params.has('type')) params.set('type', ({people:'person', projects:'initiative'} as Record<string,string>)[entities] ?? 'all');
+  if (entities && !params.has('type')) params.set('type', ({people:'person', hierarchy:'person', skills:'person', projects:'initiative'} as Record<string,string>)[entities] ?? 'all');
   return `/iq/search?${params}${hash}`;
 }
 export function readSearchEvidence(toolCalls?: Array<{name: string; result?: string}>) {

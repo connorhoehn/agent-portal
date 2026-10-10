@@ -15,14 +15,15 @@ import {
   EmptyState,
   ErrorState,
   Inline,
+  IconButton,
   InlineAlert,
-  MetaLine,
   Modal,
   FormField,
   Textarea,
   PageHeader,
   Stack,
   PageSection,
+  PlayCircleIcon,
   Select,
   StatusPill,
   T,
@@ -112,33 +113,33 @@ function RunACommandPanel({ onLaunched }: { onLaunched: () => void }) {
         <DataTable<AgentCommand>
           data={commands}
           keyField={(cmd) => cmd.name}
+          size="sm"
           // The command registry is small today but not bounded by contract
           // — 15 keeps a growing registry a scan, not a scroll.
           pageSize={15}
           columns={[
-            { key: 'name', header: 'Command', render: (cmd) => <strong className="text-sm font-semibold">{cmd.name}</strong> },
-            { key: 'summary', header: 'What it does', render: (cmd) => (cmd.summary ? <MetaLine size="xs" items={[cmd.summary]} /> : '—') },
+            { key: 'name', header: 'Command', render: (cmd) => <T size="sm" weight="medium">{cmd.name}</T> },
+            { key: 'summary', header: 'What it does', render: (cmd) => (cmd.summary ? <T size="sm" title={cmd.summary}>{cmd.summary.length > 90 ? `${cmd.summary.slice(0, 90)}…` : cmd.summary}</T> : '—') },
             {
               key: 'tools',
               header: 'Tools',
               render: (cmd) => (
-                <Inline wrap gap="xs">
-                  {cmd.allowed_tools.map((tool) => (
-                    <Chip key={tool} tone="neutral" size="xs" mono>{tool}</Chip>
-                  ))}
-                </Inline>
+                <Chip tone="neutral" size="xs" mono title={cmd.allowed_tools.join(', ') || 'no tools'}>
+                  {cmd.allowed_tools.length} {cmd.allowed_tools.length === 1 ? 'tool' : 'tools'}
+                </Chip>
               ),
             },
-            {
-              key: 'run',
-              header: '',
-              render: (cmd) => (canRun ? (
-                <Button size="sm" aria-label={`Prepare ${cmd.name}`} disabled={!teamId || launching === cmd.name} onClick={() => { setPreparing(cmd.name); setSourceText(''); setSubmissionId(''); setRecommendationId(''); }}>
-                  {launching === cmd.name ? 'Starting…' : 'Run'}
-                </Button>
-              ) : null),
-            },
           ]}
+          rowActions={canRun ? (cmd) => (
+            <IconButton
+              size="sm"
+              icon={<PlayCircleIcon />}
+              aria-label={`Prepare ${cmd.name}`}
+              title={launching === cmd.name ? 'Starting…' : 'Run'}
+              disabled={!teamId || launching === cmd.name}
+              onClick={() => { setPreparing(cmd.name); setSourceText(''); setSubmissionId(''); setRecommendationId(''); }}
+            />
+          ) : undefined}
         />
       )}
       <Modal open={preparing !== null} onClose={() => setPreparing(null)} title={preparing ?? 'Prepare command'}
@@ -273,6 +274,7 @@ export default function RunsPage() {
         <DataTable<RunRecord>
           data={runs}
           keyField={(r) => r.id}
+          size="sm"
           striped
           onRowClick={(r) => setDetailId(r.id)}
           loading={loading && !runsResp}
@@ -285,7 +287,7 @@ export default function RunsPage() {
               header: 'Run',
               // DataTable rows with onRowClick are keyboard-reachable on
               // their own now, so this is plain text, not a Button.
-              render: (r) => <T className="font-mono text-xs">{r.id}</T>,
+              render: (r) => <T size="sm" tabular>{r.id}</T>,
             },
             { key: 'command', header: 'Command', render: (r) => r.command },
             { key: 'team', header: 'Team', render: (r) => r.team_id ?? '—' },
@@ -294,8 +296,8 @@ export default function RunsPage() {
               header: 'Status',
               render: (r) => <StatusPill state={RUN_STATUS_PILL_STATE[r.status]} label={r.status} size="sm" />,
             },
-            { key: 'started', header: 'Started', render: (r) => formatRelativeTime(r.started_at) },
-            { key: 'duration', header: 'Duration', render: (r) => formatDuration(r.started_at, r.finished_at) },
+            { key: 'started', header: 'Started', numeric: true, render: (r) => formatRelativeTime(r.started_at) },
+            { key: 'duration', header: 'Duration', numeric: true, render: (r) => formatDuration(r.started_at, r.finished_at) },
           ]}
         />
       )}

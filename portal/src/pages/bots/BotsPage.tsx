@@ -25,6 +25,7 @@ import {
   Select,
   Stack,
   StatStrip,
+  T,
   type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
@@ -195,9 +196,9 @@ export default function BotsPage() {
           <Link
             to={`/admin/bots/${bot.id}`}
             onClick={(e) => e.stopPropagation()}
-            className="text-[13px] font-semibold text-text-primary no-underline hover:text-primary hover:underline"
+            className="text-text-primary no-underline hover:text-primary hover:underline"
           >
-            {bot.name}
+            <T weight="semibold">{bot.name}</T>
           </Link>
           <Chip tone={TEMPLATE_TONE[bot.template]} size="xs">{bot.template}</Chip>
         </Inline>
@@ -220,18 +221,18 @@ export default function BotsPage() {
             to={`/admin/projects?project=${bot.agentProjectId}`}
             onClick={(e) => e.stopPropagation()}
             title={`Open the codebase this bot works on: ${bot.agentProjectRepo}`}
-            className="font-mono text-[11px] text-text-secondary no-underline hover:text-primary hover:underline"
+            className="text-xs font-mono text-text-secondary no-underline hover:text-primary hover:underline"
           >
-            {bot.agentProjectRepo}
+            <T size="xs">{bot.agentProjectRepo}</T>
           </Link>
         ) : bot.orgProjectId ? (
           <Link
             to={`/iq/projects/${bot.orgProjectId}`}
             onClick={(e) => e.stopPropagation()}
             title={`Open the initiative this bot serves: ${bot.orgProjectName ?? bot.orgProjectId}`}
-            className="text-[11px] text-primary no-underline hover:underline"
+            className="text-xs text-primary no-underline hover:underline"
           >
-            {bot.orgProjectName ?? bot.orgProjectId}
+            <T size="xs">{bot.orgProjectName ?? bot.orgProjectId}</T>
           </Link>
         ) : (
           <MetaLine size="xs" tone="tertiary" items={['no target']} />
@@ -346,20 +347,22 @@ export default function BotsPage() {
         <>
           <StatStrip
             aria-label="Bot fleet summary"
+            variant="line"
+            size="sm"
             className="mb-3"
             items={[
-              { label: 'Enabled', value: rollup.enabled },
-              { label: 'Paused', value: rollup.paused },
+              { label: 'enabled', value: rollup.enabled },
+              { label: 'paused', value: rollup.paused },
               {
-                label: 'Spend today',
+                label: 'spent today',
                 value: usd(rollup.spendTodayUsd),
-                hint: rollup.budgetTodayUsd != null ? `of ${usd(rollup.budgetTodayUsd)} daily budget` : undefined,
+                title: rollup.budgetTodayUsd != null ? `of ${usd(rollup.budgetTodayUsd)} daily budget` : undefined,
               },
               {
-                label: 'Near budget',
+                label: 'near budget',
                 value: rollup.nearBudgetCount,
                 tone: rollup.nearBudgetCount > 0 ? 'danger' : 'default',
-                hint: '≥80% of daily budget',
+                title: '≥80% of daily budget',
               },
             ]}
           />
@@ -400,6 +403,7 @@ export default function BotsPage() {
             data={filtered}
             keyField={(b) => b.id}
             onRowClick={(b) => navigate(`/admin/bots/${b.id}`)}
+            size="sm"
             striped
             emptyMessage={bots.length === 0 ? 'No bots yet.' : 'No bots match the current filters.'}
             columns={columns}

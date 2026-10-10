@@ -30,13 +30,12 @@ import {
   MetaLine,
   PageSection,
   Stack,
-  type DataTableColumn,
+  type DataTableColumn, T,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { useSession, type SessionRole } from '../../lib/auth';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { relativeTime } from '../../lib/relativeTime';
-import { T } from './Text';
 
 /** Everything under `/admin/ingest` — including `/admin/ingest/crawl`, which
  *  "Surveying a site" and the footer's "Knowledge → Sources" point at — is
@@ -175,10 +174,9 @@ export default function CapabilitiesHomePage() {
       header: 'Capability',
       sortable: true,
       render: (c) => (
-        <Stack gap="none">
+        <Inline gap="none" align="center" wrap={false} title={ROLES[c.key].purpose}>
           <EntityCell label={c.label} />
-          <T className="text-[11px] leading-snug text-text-tertiary" wrap>{ROLES[c.key].purpose}</T>
-        </Stack>
+        </Inline>
       ),
     },
     {
@@ -197,19 +195,18 @@ export default function CapabilitiesHomePage() {
         // Stated plainly rather than dressed up. A capability nobody has found
         // a job for is worth knowing about — it is a candidate to adopt or to
         // stop paying for.
-        if (!used) return <T className="text-[11.5px] text-text-tertiary">Nothing uses it yet</T>;
+        if (!used) return <T size="xs" className="text-text-tertiary">Nothing uses it yet</T>;
         const gated = used.to === '/admin/ingest/crawl' && !canOpenIngest;
         return (
-          <Stack gap="none">
+          <Inline gap="none" align="center" wrap={false} title={used.description}>
             {gated ? (
-              <T className="text-[12px] font-semibold text-text-tertiary">{used.label} (HR admin)</T>
+              <T size="xs" weight="semibold" className="text-text-tertiary">{used.label} (HR admin)</T>
             ) : (
-              <Link to={used.to} className="text-[12px] font-semibold text-primary no-underline hover:underline">
+              <Link to={used.to} className="text-xs text-primary no-underline hover:underline">
                 {used.label} →
               </Link>
             )}
-            <T className="text-[11px] leading-snug text-text-tertiary" wrap>{used.description}</T>
-          </Stack>
+          </Inline>
         );
       },
     },
@@ -218,8 +215,8 @@ export default function CapabilitiesHomePage() {
       header: 'Configured id',
       render: (c) => (
         c.configuredId
-          ? <T className="font-mono text-[11px] text-text-secondary" title={c.configuredId}>{c.configuredId}</T>
-          : <T className="text-[11px] text-text-tertiary">—</T>
+          ? <T size="xs" className="font-mono text-text-secondary" title={c.configuredId}>{c.configuredId}</T>
+          : <T size="xs" className="text-text-tertiary">—</T>
       ),
     },
     {
@@ -230,8 +227,8 @@ export default function CapabilitiesHomePage() {
         // Absent is not "never": only three of the seven emit capability
         // events at all, so a blank here means nothing was recorded rather
         // than that nothing happened.
-        if (!at) return <T className="text-[11px] text-text-tertiary">{OBSERVED_KEYS.has(c.key) ? 'not in the last 100 events' : 'not recorded'}</T>;
-        return <T className="text-[11.5px] text-text-secondary">{relativeTime(at)}</T>;
+        if (!at) return <T size="xs" className="text-text-tertiary">{OBSERVED_KEYS.has(c.key) ? 'not in the last 100 events' : 'not recorded'}</T>;
+        return <T size="xs" className="text-text-secondary">{relativeTime(at)}</T>;
       },
     },
     {
@@ -240,7 +237,7 @@ export default function CapabilitiesHomePage() {
       render: (c) => {
         const tools = ROLES[c.key].tools;
         return tools ? (
-          <Link to={tools.to} className="whitespace-nowrap text-[12px] font-medium text-primary no-underline hover:underline">
+          <Link to={tools.to} className="text-xs whitespace-nowrap text-primary no-underline hover:underline">
             {tools.label} →
           </Link>
         ) : null;
@@ -269,8 +266,8 @@ export default function CapabilitiesHomePage() {
           <Stack gap="none">
             {problems.map((c) => (
               <Stack key={c.key} gap="xs" className="border-b border-border px-3.5 py-3 last:border-b-0">
-                <T className="text-[13px] font-semibold text-text-primary">{c.label}</T>
-                <T className="text-[12px] leading-snug text-text-secondary" wrap>{c.detail}</T>
+                <T size="sm" weight="semibold" className="text-text-primary">{c.label}</T>
+                <T size="xs" className="leading-snug text-text-secondary" wrap>{c.detail}</T>
               </Stack>
             ))}
           </Stack>
@@ -293,13 +290,14 @@ export default function CapabilitiesHomePage() {
         <DataTable<CapabilityStatus>
           data={caps}
           keyField={(c) => c.key}
+          size="sm"
           striped
           columns={columns}
           emptyMessage="No capabilities reported. The reconcile endpoint returned an empty list, which means the account has none configured rather than that the check failed."
         />
       )}
 
-      <T className="mt-4 text-[11px] leading-snug text-text-tertiary" wrap>
+      <T size="xs" className="mt-4 leading-snug text-text-tertiary" wrap>
         Prompts moved to <Link to="/iq/prompts" className="text-primary no-underline hover:underline">Prompts</Link>,
         which is the same page this section used to render a second copy of. Crawling moved to{' '}
         {canOpenIngest ? (

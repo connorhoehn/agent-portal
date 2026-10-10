@@ -20,6 +20,7 @@ import {
   SectionLabel,
   Stack,
   StatStrip,
+  T,
 } from '@connorhoehnslalom/ui-components/shared';
 import type { DataTableColumn } from '@connorhoehnslalom/ui-components/shared';
 import { useSession } from '../../lib/auth';
@@ -153,19 +154,17 @@ function UsersPage() {
       key: 'user',
       header: 'User',
       render: (u) => (
-        <Stack gap="none">
-          <Inline gap="xs" align="center">
-            <Inline as="span" className="text-[13px] font-medium text-text-primary">{u.displayName}</Inline>
-            {session?.sub === u.id && <Chip size="xs">you</Chip>}
-          </Inline>
-          <Inline as="span" className="font-mono text-[11px] text-text-tertiary">{u.id}</Inline>
-        </Stack>
+        <Inline gap="sm" align="center" wrap={false}>
+          <T as="span" size="sm" weight="semibold">{u.displayName}</T>
+          {session?.sub === u.id && <Chip size="xs">you</Chip>}
+          <T as="span" size="xs" tone="tertiary" className="font-mono">{u.id}</T>
+        </Inline>
       ),
     },
     {
       key: 'email',
       header: 'Email',
-      render: (u) => <Inline as="span" className="text-text-secondary">{u.email ?? '—'}</Inline>,
+      render: (u) => <T as="span" size="sm" tone="secondary">{u.email ?? '—'}</T>,
     },
     {
       key: 'persona',
@@ -185,8 +184,8 @@ function UsersPage() {
       render: (u) => {
         const labels = grantChipLabels(u.grants);
         return labels.length > 0
-          ? <Inline gap="xs" wrap>{labels.map(l => <Chip key={l} size="xs">{l}</Chip>)}</Inline>
-          : <Inline as="span" className="text-text-tertiary">none</Inline>;
+          ? <Inline gap="xs" wrap={false}>{labels.map(l => <Chip key={l} size="xs">{l}</Chip>)}</Inline>
+          : <T as="span" size="sm" tone="tertiary">none</T>;
       },
     },
   ];
@@ -217,13 +216,16 @@ function UsersPage() {
       {!(error ?? degraded) && (
         <StatStrip
           aria-label="Tenants"
+          variant="line"
+          size="sm"
           items={tenants.map(t => {
             const userCount = tenantUserCount(t.id, users);
             const tenantRoles = (rolesForTenant.get(t.id) ?? []).filter(r => r.tenant === t.id);
+            const hint = `${t.id} · ${t.status} · roles: ${tenantRoles.map(r => r.id).join(', ') || '—'}`;
             return {
-              label: t.displayName,
+              label: `${t.displayName.toLowerCase()} users`,
               value: orUnknown(userCount, Boolean(error ?? degraded)),
-              hint: `${t.id} · ${t.status} · roles: ${tenantRoles.map(r => r.id).join(', ') || '—'}`,
+              title: hint,
             };
           })}
         />
@@ -231,6 +233,7 @@ function UsersPage() {
 
       {(error ?? degraded) ? null : (
         <DataTable
+          size="sm"
           data={users}
           keyField={u => u.id}
           columns={columns}
@@ -238,18 +241,18 @@ function UsersPage() {
           searchPlaceholder="Search users…"
           loading={loadingFirst}
           rowActions={(u) => (
-            <Inline gap="xs" justify="end">
+            <Inline gap="md" justify="end" wrap={false}>
               {/* Become this user. Deliberately here and not in the header
                   menu: it is a rare administrative act, not a thing to trip
                   over while working. Hidden when a real sign-in is required,
                   where the underlying POST would 403 anyway. */}
               {canSignInAs && session?.sub !== u.id && (
-                <Button size="sm" variant="secondary" disabled={busy} onClick={() => signInAs(u)} title="Reload the app as this user (dev only)">
+                <Button size="sm" variant="link" disabled={busy} onClick={() => signInAs(u)} title="Reload the app as this user (dev only)">
                   Sign in as
                 </Button>
               )}
               {canManage && (
-                <Button size="sm" variant="secondary" disabled={busy} onClick={() => openGrantsEditor(u)}>
+                <Button size="sm" variant="link" disabled={busy} onClick={() => openGrantsEditor(u)}>
                   Edit grants
                 </Button>
               )}
@@ -371,10 +374,10 @@ function PersonaCell({ user, busy, canEdit, onLink }: {
     );
   }
   return (
-    <Inline gap="xs" align="center">
-      <Inline as="span" className="font-mono text-text-secondary">{user.personId ?? '—'}</Inline>
+    <Inline gap="sm" align="center" wrap={false}>
+      <T as="span" size="sm" tone="secondary" className="font-mono">{user.personId ?? '—'}</T>
       {canEdit && (
-        <Button size="sm" variant="secondary" disabled={busy} onClick={() => { setDraft(user.personId ?? ''); setEditing(true); }}>
+        <Button size="sm" variant="link" disabled={busy} onClick={() => { setDraft(user.personId ?? ''); setEditing(true); }}>
           {user.personId ? 'Relink' : 'Link'}
         </Button>
       )}
@@ -393,10 +396,10 @@ function TenantGrantsCard({ tenant, roles, checked, onToggle }: {
       <Stack gap="xs">
         <SectionLabel>{tenant.displayName}</SectionLabel>
         {roles.map(r => (
-          <Inline as="label" key={r.id} gap="xs" align="center" className="cursor-pointer text-[12px]">
+          <Inline as="label" key={r.id} gap="xs" align="center" className="text-xs cursor-pointer">
             <Checkbox checked={checked.includes(r.id)} onChange={() => onToggle(r.id)} aria-label={r.label} />
-            {r.label}
-            {r.tenant === null && <Inline as="span" className="text-[10px] text-text-tertiary">cross-tenant</Inline>}
+            <T as="span" size="sm">{r.label}</T>
+            {r.tenant === null && <T as="span" size="xs" tone="tertiary">cross-tenant</T>}
           </Inline>
         ))}
       </Stack>
@@ -435,9 +438,9 @@ function NewTenantForm({ busy, error, onCancel, onSubmit }: {
         <FormField label="Display name" hint="Defaults to the id when left blank.">
           {(wiring) => <Input {...inputWiring(wiring)} value={name} onChange={e => setName(e.target.value)} />}
         </FormField>
-        <Inline as="span" className="text-[11px] text-text-tertiary">
+        <T as="span" size="xs" tone="tertiary">
           Creates the tenant row. Add role seeds under <code>middleware/seeds/roles/&lt;id&gt;/</code> for its Cedar roles.
-        </Inline>
+        </T>
       </Stack>
       <Inline gap="xs" justify="end">
         <Button variant="secondary" onClick={onCancel} disabled={busy}>Cancel</Button>

@@ -2,13 +2,15 @@ surface: bots
 role: author
 user: u-ines (Ines Moreau)
 url: /pipelines/bots
-pages: portal/src/pages/pipelines/SourcesPage.tsx,portal/src/lib/pipelineDefinitions.ts
-audited: 2026-09-30 05:04Z, Chromium 148.0.7778.96 1456×958 (Playwright headless, one context per identity — not the shared Chrome tab), middleware dev:mock:social on :3001, Vite :5183; GET /api/session/me: sub u-ines, tenant pipelines, role author, grants {"pipelines":["author"]}
+pages: portal/src/pages/pipelines/BotsPage.tsx
+audited: 2026-10-08 10:49Z → 2026-10-08 10:50Z, Chromium (Playwright headless from portal/node_modules, a fresh context per identity, not the shared Chrome tab), 1680×940, Tilt stack: middleware dev:mock on :3001, Vite :5183
+session: /api/session/me sub u-ines, tenant pipelines, role author, grants {"pipelines":["author"]}
 screenshot: bots.jpg
 verdict: pass
 console errors: 0
-layout: pass — content col left 224px w 1208px; no horizontal scroll (scrollWidth 1456 = innerWidth 1456); h1 "Bots"; first table row top 286px; one row (search · count · recorded runs) above the table
-keyboard: pass — 13 really-visible focusables in main, Tab visited 13; Enter on the first focused row opened its definition (/pipelines/definitions?open=bot%3Aa0a4b025-3e67-5004-8b8a-05a3d4f2028d, drawer open); Escape closed the drawer; Back returned to the list
-empty-state: pass — search "zzzz-no-such-thing" leaves the table reading "No bots match "zzzz-no-such-thing"."
-role-gating: pass — author holds ViewPipelines, AuthorDefinition, RunPipeline; forbidden ApproveStep, CancelRun, ManagePipelineConfig. Read-only for every role: the page carries a "Read-only" badge, the only buttons in main are the table's Prev/Next, and the definition a row opens offers only what the role may do (Dry-run is for runbooks, which this list does not hold).
-notes: P2 re-walk — this surface was an empty state on P0 and now lists the bots from the definition registry (GET /api/pipelines/definitions?kind=…). First rows: a11y-audit-weekly paused Schedule · Manual · 0 8 * * 1 Design System v3 us.amazon.nova-lite-v1:0 4 completed 1d ago / api-contract-watch paused Schedule · Manual · 30 7 * * 1-5 Design System API us.amazon.nova-lite-v1:0 6 completed 1d ago / auth-dep-watch paused Schedule · Manual · 0 5 * * 1-5 Auth Migration us.amazon.nova-lite-v1:0 8 completed 3h ago. Twelve bots, each a definition with its cron (Schedule · Manual · <cron>), initiative and model; the seeded bots are parked, so each carries a paused chip and its firings are history.
+layout: pass — content col left 224px w 1432px, top 70px, bottom 893px; no horizontal scroll (scrollWidth 1680 / innerWidth 1680); h1 “Bots”; 1 <main>
+type: title 20/600; sizes in main (size/weight×text nodes): 14/400×78, 10/600×25, 12/600×8, 14/600×2, 14/500×1, 20/600×1
+keyboard: pass — 14 really-visible focusables in main (13 Tab stops, the rest roving tabindex=-1 members), Tab visited 13; Enter on the first row (focus on TR) opened /pipelines/definitions?open=bot%3Aa0a4b025-3e67-5004-8b8a-05a3d4f2028d; browser Back returned to /pipelines/bots
+empty-state: pass — a read-only list with no filter; /pipelines/bots/does-not-exist renders “Sources › Bots Page not found Nothing lives at /pipelines/bots/does-not-exist. T”
+role-gating: pass — holds ViewPipelines, AuthorDefinition, RunPipeline; forbidden ApproveStep, CancelRun, ManagePipelineConfig. Controls in main: []; Approve/Reject absent from the DOM, Cancel run absent, New definition absent, Configuration rail row absent; invalid-body write probes (403 = refused by Cedar, anything else = past the gate, nothing written): PUT /configuration {} → 403; PUT /definitions/no-such-definition/approvers {} → 400; POST /approvals/no-such-step/decide {} → 403; POST /runs/no-such-run/cancel {} → 403
+notes: Every field above was observed in this pass, not carried forward.  Main text on arrival: Sources › Bots Bots Read-only Standing missions from the org workspace — each bot is a definition, each firing one of its runs. 12 bots • 77 recorded runs BOT STATE TRIGGER INITIATIVE MODEL RUNS LAST RUN LAST RUN AT a11y-audit-weekly paused

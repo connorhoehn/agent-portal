@@ -1,5 +1,6 @@
 import type { KbRegistryEntry } from '../../pages/admin/KBRegistryPage.js';
-import { Card, Inline, SectionLabel, Stack, StatusDot } from '@connorhoehnslalom/ui-components/shared';
+import {
+  T, Card, Inline, SectionLabel, Stack, StatusDot } from '@connorhoehnslalom/ui-components/shared';
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -29,19 +30,20 @@ function PipelineBox({
   return (
     <Card padding="sm" className="min-w-[120px]">
       <Stack gap="none" className="gap-1">
-        <SectionLabel className="text-[11px] font-medium tracking-[0.03em]">{title}</SectionLabel>
+        <SectionLabel>{title}</SectionLabel>
 
         <Inline gap="none"
           className="flex items-center gap-0 flex-nowrap"
         >
-          <Inline
+          <T
             as="span"
-            gap="none"
-            className={`text-[13px] font-medium text-text-primary truncate ${value === '—' ? '' : 'font-mono'}`}
+            size="sm"
+            weight="semibold"
+            className={`truncate ${value === '—' ? '' : 'font-mono'}`}
             title={value}
           >
             {value}
-          </Inline>
+          </T>
           {showDot && (
             // The library StatusDot, not the local one this file used to define
             // and which shadowed it by the same name.
@@ -59,14 +61,9 @@ function PipelineBox({
 
 function Arrow() {
   return (
-    <Inline
-      as="span"
-      gap="none"
-      aria-hidden
-      className="text-xl mx-2 text-text-tertiary self-center select-none shrink-0"
-    >
+    <T as="span" size="sm" tone="tertiary" aria-hidden className="mx-2 self-center select-none shrink-0">
       ──▶
-    </Inline>
+    </T>
   );
 }
 

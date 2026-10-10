@@ -4,6 +4,7 @@ import cron from 'node-cron';
 import { startIngestionJob } from '../providers/knowledge-base.js';
 import { config } from '../config.js';
 import { ingestScheduleRows } from '../mock/ingest-schedules.js';
+import { mockRestartMirror } from '../mock/restart-state.js';
 
 // `process.cwd()`, NOT `import.meta.url` — see crawl-targets.ts's identical
 // comment for why (the same trap `routes/mock-control.ts::bootHandlerSha`
@@ -68,7 +69,7 @@ function registerTask(s: IngestSchedule): void {
 export function initScheduler(): void {
   if (config.mock.aurora) {
     // Copy, not the fixture's own array — see rehydrateMockSchedules below.
-    schedules = ingestScheduleRows.rows().map((s) => ({ ...s }));
+    schedules = (mockRestartMirror('ingestSchedules') as IngestSchedule[] | undefined) ?? ingestScheduleRows.rows().map((s) => ({ ...s }));
     console.log(`[scheduler] loaded ${schedules.length} mock schedule(s)`);
     for (const s of schedules) registerTask(s); // no-op under mock; kept for path parity.
     return;

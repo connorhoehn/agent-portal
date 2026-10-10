@@ -1,7 +1,22 @@
 import * as cdk from 'aws-cdk-lib';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as bedrockagentcore from 'aws-cdk-lib/aws-bedrockagentcore';
+import * as ssm from 'aws-cdk-lib/aws-ssm';
 import type { Construct } from 'constructs';
+
+/**
+ * SSM parameters holding the capability ids the deployed middleware needs
+ * (CODE_INTERPRETER_ID, BROWSER_PROFILE_ID). Read BY NAME as ECS container
+ * secrets, resolved at task start — so the middleware creates no import (no
+ * export freeze) and a rebuilt capability's fresh id reaches the next task
+ * instead of rotting the way middleware/.env.aws does (CLAUDE.md).
+ */
+export function capabilityParameterNames(prefix: string): { codeInterpreterId: string; browserProfileId: string } {
+  return {
+    codeInterpreterId: `/${prefix}/capabilities/code-interpreter-id`,
+    browserProfileId: `/${prefix}/capabilities/browser-profile-id`,
+  };
+}
 
 export interface AgentCoreCapabilitiesStackProps extends cdk.StackProps {
   readonly prefix?: string;
@@ -121,6 +136,18 @@ export class AgentCoreCapabilitiesStack extends cdk.Stack {
     // -------------------------------------------------------------------
     // Outputs
     // -------------------------------------------------------------------
+
+    const params = capabilityParameterNames(prefix);
+    new ssm.StringParameter(this, 'CodeInterpreterIdParameter', {
+      parameterName: params.codeInterpreterId,
+      stringValue: codeInterpreter.attrCodeInterpreterId,
+      description: 'CODE_INTERPRETER_ID for the deployed middleware (read by name)',
+    });
+    new ssm.StringParameter(this, 'BrowserProfileIdParameter', {
+      parameterName: params.browserProfileId,
+      stringValue: browserProfile.attrProfileId,
+      description: 'BROWSER_PROFILE_ID for the deployed middleware (read by name)',
+    });
 
     new cdk.CfnOutput(this, 'CodeInterpreterId', {
       value: codeInterpreter.attrCodeInterpreterId,

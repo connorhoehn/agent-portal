@@ -140,6 +140,8 @@ export class AuthenticationStack extends cdk.Stack {
       { email: 'ines.moreau@orgiq.example', name: 'Ines Moreau' },
       { email: 'kofi.mensah@orgiq.example', name: 'Kofi Mensah' },
       { email: 'dara.whitfield@orgiq.example', name: 'Dara Whitfield' },
+      // Pipelines author who also holds Social — the Communication-plane walker, outside the pure cast.
+      { email: 'tomas.ferreira@orgiq.example', name: 'Tomás Ferreira' },
     ];
     for (const u of seedUsers) {
       new cognito.CfnUserPoolUser(this, `SeedUser-${u.email.replace(/[^a-z0-9]/gi, '-')}`, {

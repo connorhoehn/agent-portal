@@ -83,7 +83,7 @@ describe('demo picker: /tenant then /role', () => {
 
 // The picker offers what the identity may BECOME (`switchable`), the
 // session carries what it IS (`grants`). A narrowed demo persona still sees
-// every persona on /select; a real user sees exactly their grants.
+// every persona on /workspaces; a real user sees exactly their grants.
 describe('GET /me exposes switchable grants', () => {
   it('is the permissive set for the demo persona and the real grants for a user', async () => {
     const narrowed: Session = { ...demo, role: 'program-lead', tenant: 'assessment', grants: { assessment: ['program-lead'] } };

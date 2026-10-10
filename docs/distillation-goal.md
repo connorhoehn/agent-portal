@@ -158,7 +158,7 @@ GET  /artifacts?status=&type=&q=                                   → { artifac
 GET  /facts/:id/lineage                                            → Lineage
 GET  /review?verdict=pending|agree|disagree                        → { samples }
 POST /review/:id            { verdict, note }   ManageBots gate    → the sample
-GET  /library/:libraryItemId/provenance                            → { artifact, lineage } (or 404)
+GET  /library/:libraryItemId/provenance                            → { artifact, lineage } (both null when the asset was never distilled)
 GET  /procedures                                                   → { procedures: ProcedureView[] } drifting → unproven → proven
 GET  /procedures/:id                                               → ProcedureView (404 unless the artifact is a procedure)
 GET  /procedures/:id/applications                                  → { applications } newest first

@@ -21,12 +21,12 @@ import type { SubNavItem } from '@connorhoehnslalom/ui-components/shared';
 // (DEFECTS.md #10).
 export const PROMPT_MGMT_PLATFORM_GROUPS = new Set(['Ops', 'Author', 'Ship']);
 export const PROMPT_MGMT_ITEMS: SubNavItem[] = [
-  { path: '/iq/library',              label: 'Agent library',         hint: 'Every prompt, evaluator, skill and insight', group: 'Browse' },
-  { path: '/iq/prompt-ops',           label: 'What is deployed', hint: 'Live prompts + what to do next',    group: 'Ops' },
-  { path: '/iq/prompts',              label: 'Studio',          hint: 'Author, type the contract, test',    group: 'Author' },
-  { path: '/iq/history',              label: 'Versions',        hint: 'Version log, diffs, past experiments', group: 'Author' },
-  { path: '/iq/evaluations',          label: 'Evals',           hint: 'Judge configuration + pass rates',   group: 'Author' },
-  { path: '/iq/canary',               label: 'Rollout',         hint: 'Canary A/B, weights, rollback',      group: 'Ship' },
+  { path: '/iq/library',              label: 'Agent library', group: 'Browse' },
+  { path: '/iq/prompt-ops',           label: 'What is deployed',    group: 'Ops' },
+  { path: '/iq/prompts',              label: 'Studio', group: 'Author' },
+  { path: '/iq/history',              label: 'Versions', group: 'Author' },
+  { path: '/iq/evaluations',          label: 'Evals', group: 'Author' },
+  { path: '/iq/canary',               label: 'Rollout', group: 'Ship' },
 ];
 
 /** Pure filter, split out so the platform-role gate is unit-testable without

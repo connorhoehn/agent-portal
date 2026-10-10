@@ -359,6 +359,11 @@ export const botRuns = defineFixture<BotRun>({
     default: () => [...Object.values(seededRunsByBot()).flat(), ...inFlightMarketplaceRuns()],
     empty: () => [],
     large: () => [...largeBotRuns(), ...inFlightMarketplaceRuns()],
+    // The Computer Lab demo (mock/demo-director.ts): the cron history without
+    // Observability's two in-flight runs. Those hold two of the three
+    // concurrency slots (see inFlightMarketplaceRuns), and the demo's three
+    // agents need all three — in this world those two runs have landed.
+    demo: () => Object.values(seededRunsByBot()).flat(),
   },
 });
 
@@ -469,7 +474,7 @@ function seededBots(): Bot[] {
   return [
     mockBot({ id: '32970d0a-e28e-5100-8fb0-a5cbb87dac99', name: 'obs-nightly-maintenance', template: 'bug',
       prompt: 'Nightly maintenance for the observability stack: bump collector and SDK dependencies, triage flaky pipeline tests, lint dashboards for broken panels.',
-      orgProjectId: 'p-observability', orgProjectName: 'Observability Platform' }),
+      orgProjectId: 'p-observability', orgProjectName: 'Observability Platform', createdBy: 'u-tomas' }),
     // 0.4/1.5, not 0.5/2 — these are the exact numbers decideRunBudget and the
     // daily brake compare against, so a fixture that rounds them up demonstrates
     // a money gate the seeded bot does not have.

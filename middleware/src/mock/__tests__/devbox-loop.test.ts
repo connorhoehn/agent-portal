@@ -87,6 +87,14 @@ describe('the mock devbox shell', () => {
     expect(porcelain(workspaceFor(SESSION))).toBe('');
   });
 
+  it('stops a session when the reaper asks — there is no microVM to fail to stop', async () => {
+    class StopRuntimeSessionCommand { constructor(readonly input: Record<string, unknown>) {} }
+    const out = await mockDevboxClient().send(
+      new StopRuntimeSessionCommand({ agentRuntimeArn: 'arn', runtimeSessionId: SESSION }) as never,
+    );
+    expect(out).toEqual({});
+  });
+
   it('answers an unrecognised probe with fatal:, not with silence', () => {
     // Silence reads as "the tree is clean" to readWorkingTree, which is the
     // most misleading answer this module could give.

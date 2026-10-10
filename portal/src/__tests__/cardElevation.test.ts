@@ -85,7 +85,7 @@ test('elevation resolves through --elev-*, which dark mode can reach', () => {
 });
 
 // Unlayered defaults outrank Tailwind utilities regardless of specificity.
-// In particular, PersonCardFrame's explicit shadow-lg must remain effective.
+// In particular, the library HoverCard's explicit shadow-lg must remain effective.
 test('card defaults stay below explicit Tailwind shadow utilities', () => {
   const css = readFileSync(join(import.meta.dirname, '..', 'app.css'), 'utf8');
   assert.match(css, /@layer components\s*\{\s*\.rounded-lg\.border-border\.bg-surface\s*\{/);

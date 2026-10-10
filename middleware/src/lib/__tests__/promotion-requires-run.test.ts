@@ -33,6 +33,10 @@ describe('rule 1 — a RUNBOOK becomes a SKILL only on a completed run of its ow
   it('no run → refused, and the approval still lands', async () => {
     const out = await promoteCandidate(SKILL, { approvedBy: 'Dara Whitfield' });
     expect(out && 'error' in out && out.error).toMatch(/needs a completed dry-run of runbook:promo-aurora-cold-start/);
+    // The refusal says the approval landed, and names no other tenant's page
+    // as the remedy (an orgiq reviewer holds no pipelines grant — sme #19).
+    expect(out && 'error' in out && out.error).toMatch(/the approval is recorded/);
+    expect(out && 'error' in out && out.error).not.toMatch(/\/pipelines\//);
     const after = await getCandidate(SKILL);
     expect(after?.status).toBe('approved');
     expect(after?.dryRunRunId).toBeNull();

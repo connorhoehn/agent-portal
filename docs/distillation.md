@@ -35,7 +35,7 @@ The views are the tiers below under reader-facing names: **Run notes** = L0,
 in the tier graph and in each record's Technical details.
 
 Live data: the pages read a REST snapshot and patch it from the middleware's
-realtime channels (`distill:levels`, `distill:jobs`, `distill:review`) through
+realtime channels (`orgiq:distill:levels`, `orgiq:distill:jobs`, `orgiq:distill:review`) through
 `hooks/useDistillationChannel.ts`; with no gateway they poll. To get live
 frames locally set `VITE_GATEWAY_URL=ws://localhost:3001/realtime` in
 `portal/.env.local` and restart Vite.

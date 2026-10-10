@@ -3,14 +3,13 @@
 //
 // The roster is the tenant's (`GET /api/social/people`: everyone holding a
 // social grant, from the identity store). Presence is the workspace's own
-// channel, `social:lobby`, which every social page joins (SocialLayout), read
-// here with realtime-modules' `usePresence` and drawn with the library's
+// channel, `social:lobby`, owned by the persistent shell. Read its shared
+// roster here without taking another subscription, drawn with the library's
 // `PresenceAvatars`. From a person: Message opens (or reopens) your DM with
 // them; Call rings them into `social:dm:<ids>` through the shell's call host.
 
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { usePresence } from '@connorhoehnslalom/realtime-modules/client';
 import {
   Button, Chip, DataTable, EmptyState, ErrorState, Inline, InlineAlert, LoadingState, PageHeader, PageSection, PresenceAvatars, Stack, Text,
   type DataTableColumn,
@@ -19,9 +18,9 @@ import { useFetch } from '../../hooks/useFetch';
 import { useSession } from '../../lib/auth';
 import { useCapabilities } from '../../lib/capabilities';
 import { writeJson } from '../../lib/writeJson';
-import { presenceAvatarUsers } from '../assessment/knowledge/knowledgeFormat';
+import { useEmbeddedSocial } from '../../components/shell/EmbeddedSocial';
 import { dmHref, type SocialPerson } from './socialChat';
-import { contactRows, roleLabel, SOCIAL_PRESENCE_CHANNEL, type ContactRow } from './socialPlatform';
+import { contactRows, roleLabel, type ContactRow } from './socialPlatform';
 import { useSocialCall } from './useSocialCall';
 
 export default function ContactsPage() {
@@ -32,8 +31,7 @@ export default function ContactsPage() {
   const mayMessage = ready && can('PostMessage');
   const mayCall = ready && can('StartCall');
   const { data, isLoading, error, refresh } = useFetch<{ people: SocialPerson[] }>('/api/social/people');
-  const { roster } = usePresence(SOCIAL_PRESENCE_CHANNEL);
-  const here = useMemo(() => presenceAvatarUsers(roster), [roster]);
+  const here = useEmbeddedSocial()?.presencePeople ?? [];
   const rows = useMemo(() => contactRows(data?.people ?? [], here, me), [data, here, me]);
   const [busy, setBusy] = useState<string | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
@@ -53,7 +51,7 @@ export default function ContactsPage() {
       key: 'displayName', header: 'Name', sortable: true,
       render: (r) => (
         <Inline gap="sm" align="center">
-          <PresenceAvatars size={24} maxVisible={1} users={[{ id: r.userId, name: r.displayName, ...(r.online && !r.idle ? {} : { idle: true }) }]} />
+          <PresenceAvatars size={24} maxVisible={1} users={[{ id: r.userId, name: r.displayName, ...(r.avatarUrl ? { avatarUrl: r.avatarUrl } : {}), ...(r.online && !r.idle ? {} : { idle: true }) }]} />
           <Text>{r.displayName}{r.userId === me ? ' (you)' : ''}</Text>
         </Inline>
       ),
@@ -82,7 +80,7 @@ export default function ContactsPage() {
           <PageSection title="Here now" count={here.length} data-testid="social-contacts-here">
             {here.length
               ? <PresenceAvatars size={32} maxVisible={12} users={here} />
-              : <EmptyState align="start" title="Nobody else is here" description="People show up here while they have a social page open." />}
+              : <EmptyState align="start" title="Nobody else is here" description="People show up here while Social is connected in their workspace." />}
           </PageSection>
           <DataTable
             data={rows}

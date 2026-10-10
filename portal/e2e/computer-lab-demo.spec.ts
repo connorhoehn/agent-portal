@@ -1,281 +1,257 @@
 // The Computer Lab walkthrough — a recorded demo, not a correctness test.
 //
-// WHAT IT SHOWS, in one continuous take:
-//   1. An SME opens an initiative and dispatches a tagged issue to an agent.
-//   2. The money gates decide whether that dispatch is allowed to spend.
-//   3. A computer — an AgentCore microVM — appears in the lab running it.
-//   4. The SME opens several computers at once and works in one: a shell in
-//      the microVM's persistent workspace, and a Claude session in it.
-//   5. The run's change arrives in the review queue, bound to the issue.
-//   6. Cron: a standing mission on a schedule, braked by the same gates.
+// WHAT IT SHOWS, in one continuous take, all inside the Computer Lab:
+//   1. Nora DaSilva (u-nora, SME on Auth Migration) has the lab open. Three
+//      agents — Ada, Basil and Cleo — pick up three open items on the
+//      initiative, and three computers (AgentCore microVMs) appear under it.
+//   2. She opens Ada's computer: a real shell in its persistent workspace, then
+//      the Agent view — the run's plan as a checklist, step by step.
+//   3. Cleo's Bot logs stream; Cleo finishes, reaches for the next item, and
+//      the sprint-envelope money gate refuses it — naming itself and the flag.
+//   4. Basil asks a question it cannot answer alone. Nora answers FROM THE LAB
+//      (the Agent pane's inline reply) and Basil resumes.
+//   5. Ada's change is posted for review; the reviewer sees it in the queue.
+//
+// WHERE THE STORY COMES FROM. `POST /api/__mock/scenario {"scenario":"demo"}`
+// starts the demo director (middleware/src/mock/demo-director.ts). Every pickup
+// is a real `POST /api/bots/dispatch-work` as Nora, so the computers on screen
+// are the ones the governed dispatch minted, the refusal is the real 409, and
+// the change is the real capture → review → gate. The spec only watches and
+// answers Basil; it never writes a run, a change or a budget row.
 //
 // WHY IT IS ONE TEST. Playwright records one video per test, so splitting the
-// acts would produce six clips of a story that only makes sense in order.
+// acts would produce clips of a story that only makes sense in order.
 // `test.step` keeps the structure legible in the reporter without cutting the
-// tape.
+// tape. Each act asserts its STORY beat against the UI and cross-checks the
+// director's milestones at GET /api/__mock/state — never markup.
 //
-// It asserts as it goes — a demo that silently records the wrong screen is
-// worse than one that fails — but the assertions are about the STORY beats
-// (the computer appeared; the gate named itself), not about markup. Anything
-// tighter would break every time the library restyles a pane.
-//
-// Run it:
-//   cd portal && npx playwright test --config playwright.demo.config.ts
-//
-// Needs the offline stack: middleware `npm run dev:mock` on :3001 and the
-// portal on :5183. It talks to nothing else — no AWS, no deployed runtime.
+// Run it (see docs/demos/computer-lab-demo.md):
+//   cd portal && DEMO_SLOW_MS=0 DEMO_BEAT_MS=250 npx playwright test --config playwright.demo.config.ts   # fast pass
+//   cd portal && npx playwright test --config playwright.demo.config.ts                                  # the take
 
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type APIRequestContext, type Locator, type Page } from '@playwright/test';
+import { signIn } from './realSession';
 
-/** The tagged issue the SME dispatches. Open, small, and labelled, so the
- *  board shows the tags the story is about. */
-const ISSUE = {
-  id: 'wi-auth-e2-b3',
-  title: 'Logout leaves the legacy shim cookie alive',
-  initiative: 'p-auth-migration',
-  initiativeName: 'Auth Migration',
-};
+const INITIATIVE = 'Auth Migration';
+/** The agents' names, as the director writes them onto their computers. */
+const ADA = 'Ada';
+const BASIL = 'Basil';
+const CLEO = 'Cleo';
+/** Ada's and Basil's items — the titles the review queue should carry. */
+const ADA_ITEM = 'Logout leaves the legacy shim cookie alive';
+const BASIL_ITEM = 'Tenant-by-tenant cutover runbook with rollback';
+/** What Nora tells Basil, typed on camera. */
+const ANSWER = 'Smallest tenant first — one tenant a day, so a bad cutover touches the fewest people.';
 
-/** A seeded cron bot on the same initiative — `schema/seed_program.sql` parks
- *  every bot, which is the state the cron beat starts from. */
-const CRON_BOT = 'auth-dep-watch';
-
-/** How long a beat holds on screen after it lands, so a viewer can read it.
- *  This is the pacing dial for the whole recording. */
+/** How long a beat holds on screen after it lands, so a viewer can read it. */
 const BEAT_MS = Number(process.env['DEMO_BEAT_MS'] ?? 1800);
+/** The director's beat (how fast the AGENTS move), sent in the scenario body.
+ *  Defaults to ~2× the viewer's beat, clamped to 1–4s: the take tells the story
+ *  at the director's own default, the fast pass in about a minute. */
+const PACE_MS = Number(process.env['DEMO_PACE_MS'] ?? Math.min(4000, Math.max(1000, Math.round(BEAT_MS * 2.2))));
 
 async function beat(page: Page, ms = BEAT_MS): Promise<void> {
   await page.waitForTimeout(ms);
 }
 
-/**
- * Become one of the seeded people.
- *
- * The demo-mode picker endpoint, not the SSO flow: offline there is no Cognito
- * and this is the same call the portal's own user picker makes. Each switch
- * hard-navigates afterwards, because the app tears down in-memory state on a
- * context change and a soft route push would leave the previous person's data
- * on screen mid-recording.
- */
-async function signIn(page: Page, userId: string): Promise<void> {
-  await page.goto('/');
-  await page.evaluate(async (id: string) => {
-    await fetch('/api/session/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ userId: id }),
-    });
-  }, userId);
+/** Put every fixture back and stop any story in flight (docs/mock-floor.md). */
+async function resetFixtures(request: APIRequestContext): Promise<void> {
+  await request.post('/api/__mock/reset').catch(() => null);
 }
 
-/**
- * Put the fixtures back.
- *
- * Every take starts from the same board, the same fleet and the same parked
- * bots, so a second recording is not shaped by the first one's dispatch. This
- * is the control plane's own reset (`docs/mock-floor.md`) rather than a
- * restart, so it is fast and leaves the dev server alone.
- */
-async function resetFixtures(page: Page): Promise<void> {
-  await page.request.post('/api/__mock/reset').catch(() => null);
+interface DemoState {
+  phase: string;
+  milestones: Record<'running3' | 'questionAsked' | 'questionAnswered' | 'captured' | 'answerCaptured' | 'gateRefused', boolean>;
+  answeredBy: 'person' | 'director' | null;
+  gate: { gate?: string; confirmFlag?: string } | null;
+  errors: string[];
+}
+
+async function demoState(request: APIRequestContext): Promise<DemoState> {
+  // Tolerates one unreadable answer (a `tsx watch` reload mid-request) — the
+  // poll that called it asks again; a reload that drops the story is caught by
+  // the phase check in milestone().
+  const res = await request.get('/api/__mock/state').catch(() => null);
+  const body = res?.ok() ? await res.json().catch(() => null) as { demo?: DemoState } | null : null;
+  return body?.demo ?? { phase: 'unreachable', milestones: {} as DemoState['milestones'], answeredBy: null, gate: null, errors: [] };
+}
+
+/** Wait for one of the director's milestones — the cross-check behind a beat. */
+async function milestone(request: APIRequestContext, key: keyof DemoState['milestones'], timeout = 120_000): Promise<void> {
+  await expect.poll(async () => {
+    const s = await demoState(request);
+    if (s.errors.length > 0) throw new Error(`demo director: ${s.errors.join('; ')}`);
+    // `idle` mid-take means something reset the shared server (another
+    // session's reset, or a middleware reload) and the story is gone.
+    if (s.phase === 'idle') throw new Error('demo director is idle — the mock server was reset or restarted mid-take');
+    return s.milestones[key];
+  }, { message: `demo milestone ${key}`, timeout, intervals: [250, 500, 1000] }).toBe(true);
+}
+
+/** The lab pane showing a given agent's computer (its header carries the label). */
+function paneOf(page: Page, agent: string): Locator {
+  return page.getByTestId('lab-pane').filter({ has: page.locator(`[title^="${agent} · "]`) });
+}
+
+/** Switch a pane between Shell / Activity / Bot logs / Agent. */
+async function showAs(page: Page, agent: string, kind: 'Shell' | 'Bot logs' | 'Agent'): Promise<void> {
+  await paneOf(page, agent).getByRole('button', { name: 'Pane kind' }).click();
+  await page.getByRole('menuitem').filter({ hasText: new RegExp(`^${kind}`) }).click();
+}
+
+/** The number on a status pill in the lab header ("3 running" → 3). */
+async function pillCount(page: Page, status: string): Promise<number> {
+  const pill = page.getByTestId(`lab-pill-${status}`);
+  if (await pill.count() === 0) return 0;
+  return Number(/\d+/.exec((await pill.textContent()) ?? '')?.[0] ?? 0);
 }
 
 test('computer lab walkthrough', async ({ page }) => {
-  // A page that threw on camera is a re-take, not a footnote — so the
-  // walkthrough watches its own console.
-  //
-  // 409 is EXCLUDED, and that is not a loophole. A money gate refusing a
-  // dispatch answers 409 with the flag that would open it (`lib/bot-runner.ts`
-  // decideRunBudget / decideAllocation / decideEnvelope), and Act 8 provokes
-  // one deliberately: the browser logs every non-2xx as a console error, so
-  // asserting on a bare count would make "the brake fired" indistinguishable
-  // from "the page broke". Every other status still fails the take.
+  // A page that threw on camera is a re-take, not a footnote. 409 is
+  // excluded because a money gate refusing a dispatch answers 409 by design;
+  // the shell's GET /api/social/embedded probe is answered 403 for a session
+  // without a social grant (every orgiq SME), counted by status AND url.
   const consoleErrors: string[] = [];
+  let expectedSocialProbe403s = 0;
+  page.on('response', (r) => {
+    if (r.status() === 403 && new URL(r.url()).pathname === '/api/social/embedded') expectedSocialProbe403s += 1;
+  });
   page.on('console', (m) => {
     if (m.type() !== 'error') return;
     if (/status of 409/.test(m.text())) return;
+    if (/status of 403/.test(m.text()) && expectedSocialProbe403s > 0) { expectedSocialProbe403s -= 1; return; }
     consoleErrors.push(m.text());
   });
 
-  await test.step('Reset to the seeded world', async () => {
-    await page.goto('/');
-    await resetFixtures(page);
-  });
-
-  await test.step('Act 1 — the SME opens her initiative', async () => {
-    await signIn(page, 'u-nora');
-    // The initiative opens on its Overview now; the board is the Work tab.
-    await page.goto(`/iq/projects/${ISSUE.initiative}?tab=work`);
-    // The header carries the story's framing: the initiative, its points,
-    // how much agent spend it has drawn, and which repo delivers it.
-    await expect(page.getByText(ISSUE.initiativeName).first()).toBeVisible();
-    await expect(page.getByText(/\$[\d.,]+ spent/i).first()).toBeVisible();
-    await beat(page, BEAT_MS * 2);
-  });
-
-  await test.step('Act 1 — find the tagged issue on the board', async () => {
-    // Narrow to what is actually dispatchable. `Open` is the only status a
-    // dispatch will accept — an in-progress item 409s, which is a fine thing
-    // for the product to do and a poor thing to record.
-    await page.getByRole('button', { name: 'Open', exact: true }).click();
-    await beat(page);
-    await expect(page.getByText(ISSUE.title)).toBeVisible();
-    await beat(page);
-  });
-
-  await test.step('Act 2 — authorize the spend', async () => {
-    // The row's own dispatch affordance. Scoped to the issue's row so the
-    // recording cannot wander onto a different item when the board reorders.
-    const row = page.locator('tr', { hasText: ISSUE.title });
-    await row.getByRole('button', { name: /Run/ }).click();
-
-    // The estimate drawer is the money surface: the model tier, the forecast
-    // range, and — the part worth pausing on — how much of THIS person's
-    // sprint envelope the run would spend. Nothing here is a static number;
-    // each one is computed against the seeded grants and run history.
-    const authorize = page.getByRole('button', { name: /^Authorize$/ });
-    await expect(authorize).toBeVisible();
-    await expect(page.getByText(/envelope/i).first()).toBeVisible();
-    await beat(page, BEAT_MS * 2);
-
-    // Sonnet rather than the default Haiku: a multi-step code change is what
-    // the demo is about, and the tier visibly moves the forecast the gates
-    // then judge.
-    const sonnet = page.getByText(/^Sonnet —/);
-    if (await sonnet.isVisible().catch(() => false)) {
-      await sonnet.click();
+  try {
+    await test.step('Nora opens the Computer Lab', async () => {
+      await page.goto('/');
+      await resetFixtures(page.request);
+      await page.goto('/');
+      await signIn(page, 'u-nora');
+      await page.goto('/admin/devbox');
+      // The seeded fleet: computers grouped by the initiative they serve.
+      await expect(page.getByTestId('lab-fleet-rail')).toBeVisible();
+      await expect(page.getByTestId('lab-fleet-group').first()).toBeVisible();
       await beat(page);
-    }
-
-    await authorize.click();
-    // Authorizing is a two-step on purpose: the confirmation restates what is
-    // about to be spent, against which item, and that the change still faces
-    // review. A gate may answer here instead — the per-run cap, the
-    // initiative's allocation, or the envelope — each naming itself and the
-    // confirmation that opens it, so the recording shows the brake working
-    // and then shows someone deciding to spend anyway.
-    const confirm = page.getByRole('button', {
-      name: /^(Authorize run|Dispatch anyway|Authorize anyway|Confirm)/i,
     });
-    await expect(confirm).toBeVisible();
-    await beat(page, BEAT_MS * 2);
-    await confirm.click();
-    await beat(page, BEAT_MS * 2);
-  });
 
-  await test.step('Act 3 — the computer appears in the lab', async () => {
-    await page.goto('/admin/devbox');
-    // The fleet is grouped by initiative, so the computer this dispatch minted
-    // lands under Auth Migration next to the ones already there. It carries
-    // the issue's own title as its current task — that is the whole point of
-    // the beat: work dispatched from the board shows up as a machine doing it.
-    await expect(page.getByText(/computers/i).first()).toBeVisible();
-    await expect(page.getByText(ISSUE.initiativeName).first()).toBeVisible();
-    await expect(page.getByText(ISSUE.title).first()).toBeVisible({ timeout: 30_000 });
-    await beat(page, BEAT_MS * 2);
-  });
+    await test.step('Three agents pick up three Auth Migration items', async () => {
+      // Each pickup is a governed dispatch as Nora; `autoAnswer: false` means
+      // only a person can answer Basil's question — the beat this take is for.
+      const res = await page.request.post('/api/__mock/scenario', {
+        data: { scenario: 'demo', paceMs: PACE_MS, autoAnswer: false },
+      });
+      expect(res.ok(), `starting the demo scenario answered ${res.status()}`).toBeTruthy();
 
-  await test.step('Act 4 — open several computers at once', async () => {
-    // The lab is a multiplexer, not a list with a terminal behind it. Watch
-    // two computers at once: this is the affordance the surface exists for.
-    const watchButtons = page.getByRole('button', { name: /^Watch / });
-    const count = await watchButtons.count();
-    for (let i = 0; i < Math.min(count, 2); i += 1) {
-      await watchButtons.nth(i).click();
-      await beat(page, 900);
-    }
-    await beat(page);
-  });
-
-  await test.step('Act 5 — work inside the microVM', async () => {
-    // The lab restores an open shell, so this opens one only when there is
-    // none — clicking `shell` on a pane that already has one would close the
-    // terminal the rest of this act types into.
-    const terminal = page.locator('.xterm-helper-textarea, textarea').first();
-    if (await terminal.count() === 0) {
-      await page.getByRole('button', { name: /^shell$/ }).first().click();
-      await beat(page);
-    }
-    await terminal.click({ timeout: 10_000 });
-
-    // `/mnt/workspace` is the microVM's persistent mount, and the README in it
-    // says so in as many words — which is why it is worth opening on camera
-    // rather than just listing the directory.
-    for (const command of ['ls', 'cat README.md']) {
-      await page.keyboard.type(command, { delay: 55 });
-      await page.keyboard.press('Enter');
-      await beat(page, 1600);
-    }
-
-    // The centrepiece: a Claude session running INSIDE the microVM, streaming
-    // its tool calls, turn count, wall time and cost the way a real one does.
-    await page.keyboard.type('claude "clear the legacy shim cookie on logout"', { delay: 45 });
-    await page.keyboard.press('Enter');
-    // Assert the session actually played. Without this the recording could
-    // show an empty prompt and still pass, which is the one failure mode a
-    // demo script must not have.
-    await expect(page.getByText(/done · \d+ turns/)).toBeVisible({ timeout: 30_000 });
-    await beat(page, BEAT_MS * 2);
-  });
-
-  await test.step('Act 6 — the change reaches the review queue', async () => {
-    // A different person, because reviewing is a different right: an SME
-    // spends an envelope, a platform operator decides what lands. Priya holds
-    // one role, so this lands straight on the page — Rachel (hr-admin AND
-    // org-leader) would stop at the workspace picker, which is correct
-    // behaviour and a detour in a recording.
-    await signIn(page, 'u-hr');
-    await page.goto('/admin/changes');
-    // The run captured a diff, and it arrived carrying the issue's own title
-    // and the initiative it delivers — the governed half of "an agent did
-    // some work". Nothing here was hand-written for the demo: the diff came
-    // out of the workspace the run actually touched.
-    const change = page.locator('*', { hasText: ISSUE.title }).last();
-    await expect(page.getByText(ISSUE.title).first()).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByText(/delivering Auth Migration/i).first()).toBeVisible();
-    await beat(page, BEAT_MS * 2);
-    void change;
-
-    // Close the loop on camera: a human approves what the agent wrote.
-    const approve = page.getByRole('button', { name: /^Approve$/ }).first();
-    if (await approve.isVisible().catch(() => false)) {
-      await approve.click();
+      const group = page.getByTestId('lab-fleet-group').filter({ hasText: INITIATIVE });
+      await expect(group).toContainText(/3 computers/, { timeout: 60_000 });
+      for (const agent of [ADA, BASIL, CLEO]) {
+        await expect(page.locator('[data-rail-row]', { hasText: agent }).first()).toBeVisible();
+      }
+      // The header pills count them at work (with any seeded box also running).
+      await expect.poll(() => pillCount(page, 'running'), {
+        message: 'three computers running at once', timeout: 60_000, intervals: [200],
+      }).toBeGreaterThanOrEqual(3);
+      await milestone(page.request, 'running3');
       await beat(page, BEAT_MS * 2);
-    }
-  });
+    });
 
-  await test.step('Act 7 — the money behind it', async () => {
-    await page.goto('/admin/budgets');
-    // Allocation per initiative, and what has been spent against it. This is
-    // the pot the SME's sprint envelope was carved out of two acts ago.
-    await expect(page.getByText(ISSUE.initiativeName).first()).toBeVisible({ timeout: 20_000 });
-    await beat(page, BEAT_MS * 2);
-  });
+    await test.step("Inside Ada's microVM: a shell, then the agent's plan", async () => {
+      await page.locator('[data-rail-row]', { hasText: ADA }).first().click();
+      const ada = paneOf(page, ADA);
+      await expect(ada).toBeVisible();
+      // A real terminal on the computer. Click into it only — never toggle the
+      // shell button, which would close a restored shell.
+      const terminal = ada.locator('.xterm-helper-textarea');
+      await expect(terminal).toHaveCount(1, { timeout: 15_000 });
+      await terminal.click({ force: true });
+      await page.keyboard.type('ls', { delay: 55 });
+      await page.keyboard.press('Enter');
+      await beat(page);
 
-  await test.step('Act 8 — cron: the standing mission, and its brake', async () => {
-    await page.goto('/admin/bots');
-    // Every seeded bot ships PARKED — they would otherwise fire at repos that
-    // do not exist yet — so un-pausing one is how scheduled maintenance
-    // starts, and it is a truthful thing to do on camera rather than a
-    // fixture pretending the fleet was already busy.
-    const row = page.locator('tr', { hasText: CRON_BOT });
-    await expect(row).toBeVisible();
-    await beat(page);
+      // The Agent view: the run's latest plan as a checklist, step by step.
+      await showAs(page, ADA, 'Agent');
+      await expect(ada.getByText('Plan', { exact: true })).toBeVisible({ timeout: 30_000 });
+      await expect(ada.getByText(/\d+ of \d+ done/)).toBeVisible();
+      await beat(page, BEAT_MS * 2);
+    });
 
-    await row.locator('button', { hasText: 'Resume' }).click();
-    await expect(row.getByText('enabled')).toBeVisible({ timeout: 15_000 });
-    await beat(page);
+    await test.step("Cleo's bot logs stream", async () => {
+      await page.getByRole('button', { name: new RegExp(`^Open ${CLEO} · .* in a new pane$`) }).click();
+      await showAs(page, CLEO, 'Bot logs');
+      // Log lines from Cleo's run on the refresh loop.
+      await expect(paneOf(page, CLEO).getByText(/refresh/i).first()).toBeVisible({ timeout: 30_000 });
+      await beat(page, BEAT_MS * 2);
+    });
 
-    // Firing it by hand takes the SAME gates a person's dispatch takes: this
-    // bot's forecast overruns its own $0.40 per-run cap, so the brake refuses
-    // it and names both numbers. A standing mission is not exempt from the
-    // money just because a schedule started it.
-    await row.locator('button', { hasText: 'Run now' }).click();
-    await expect(page.getByText(/exceeds the per-run budget/i)).toBeVisible({ timeout: 20_000 });
-    await beat(page, BEAT_MS * 3);
-  });
+    await test.step('Cleo reaches for the next item, and the envelope gate holds it', async () => {
+      await milestone(page.request, 'gateRefused');
+      const gate = (await demoState(page.request)).gate;
+      expect(gate?.gate).toBe('envelope');
+      expect(gate?.confirmFlag).toBe('confirmOverEnvelope');
 
-  expect(consoleErrors, `console errors during the walkthrough:\n${consoleErrors.join('\n')}`)
-    .toHaveLength(0);
+      await showAs(page, CLEO, 'Agent');
+      const cleo = paneOf(page, CLEO);
+      await expect(cleo.getByText(/Held at the envelope gate/)).toBeVisible({ timeout: 15_000 });
+      await expect(cleo.getByText(/confirmOverEnvelope/).first()).toBeVisible();
+      await beat(page, BEAT_MS * 3);
+    });
+
+    await test.step('Basil needs Nora — she answers from the lab', async () => {
+      await milestone(page.request, 'questionAsked');
+      await expect.poll(() => pillCount(page, 'waiting'), { message: 'a computer needs you', timeout: 30_000 })
+        .toBeGreaterThanOrEqual(1);
+
+      await page.getByRole('button', { name: new RegExp(`^Open ${BASIL} · .* in a new pane$`) }).click();
+      await showAs(page, BASIL, 'Agent');
+      const basil = paneOf(page, BASIL);
+      await expect(basil.getByText(/Should I write it smallest-tenant-first or riskiest-tenant-first\?/).last())
+        .toBeVisible({ timeout: 15_000 });
+      await beat(page, BEAT_MS * 2);
+
+      const reply = basil.getByRole('textbox', { name: /^Reply to Basil/ });
+      await reply.click();
+      await reply.pressSequentially(ANSWER, { delay: BEAT_MS >= 1000 ? 25 : 0 });
+      await beat(page);
+      await basil.getByRole('button', { name: 'Reply', exact: true }).click();
+
+      // The answer resumed the task on Basil's session — the person did it.
+      await milestone(page.request, 'questionAnswered', 30_000);
+      expect((await demoState(page.request)).answeredBy).toBe('person');
+      await expect(basil.getByText(ANSWER).first()).toBeVisible({ timeout: 15_000 });
+      await beat(page, BEAT_MS * 2);
+    });
+
+    await test.step("Ada's change is posted for review; Basil finishes too", async () => {
+      await milestone(page.request, 'captured');
+      await expect(paneOf(page, ADA).getByText(/Change posted for review/)).toBeVisible({ timeout: 15_000 });
+      await beat(page);
+      await milestone(page.request, 'answerCaptured');
+      await expect(paneOf(page, BASIL).getByText(/Change posted for review/)).toBeVisible({ timeout: 15_000 });
+      await beat(page, BEAT_MS * 2);
+    });
+
+    await test.step('The changes wait in the review queue', async () => {
+      // Reviewing is a different right: Priya Desai (u-hr, hr-admin) decides
+      // what lands. Single-role, so no workspace picker detour.
+      await page.goto('/');
+      await signIn(page, 'u-hr');
+      const queue = await page.request.get('/api/sdlc/changes');
+      expect(queue.ok(), `review queue answered ${queue.status()}`).toBeTruthy();
+      const titles = JSON.stringify(await queue.json());
+      expect(titles).toContain(ADA_ITEM);
+      expect(titles).toContain(BASIL_ITEM);
+
+      await page.goto('/admin/changes');
+      await expect(page.getByText(ADA_ITEM).first()).toBeVisible({ timeout: 30_000 });
+      await expect(page.getByText(/delivering Auth Migration/i).first()).toBeVisible();
+      await beat(page, BEAT_MS * 3);
+    });
+
+    expect(consoleErrors, `console errors during the walkthrough:\n${consoleErrors.join('\n')}`)
+      .toHaveLength(0);
+  } finally {
+    await resetFixtures(page.request);
+  }
 });

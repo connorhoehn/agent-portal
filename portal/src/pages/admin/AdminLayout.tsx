@@ -1,7 +1,6 @@
 import { BuildSectionLayout } from '../../components/shell/BuildSectionLayout';
 import { Outlet, useLocation } from 'react-router';
-import { Inline, Stack } from '@connorhoehnslalom/ui-components/shared';
-import { KBHealthBadge } from '../../components/kb/KBHealthBadge.js';
+import { Stack } from '@connorhoehnslalom/ui-components/shared';
 import { useAutomateSpec } from '../work/automateNav';
 
 // Reproduces SubNavLayout's own default active/inactive nav-item look (see
@@ -15,13 +14,14 @@ import { useAutomateSpec } from '../work/automateNav';
 // Without it, clicking Bots from the rail dropped you out of the hierarchy —
 // exactly the breadcrumb break the old Workers item was removed for.
 //
-// The KB health badge survives, but only over the knowledge pages — mounted
-// layout-wide it floated a "1 KB broken" alarm over surfaces that have
-// nothing to do with the KB registry.
+// The KB health badge lives in the knowledge pages' own headers (Knowledge,
+// Registry). Mounted layout-wide it floated a "1 KB broken" alarm over
+// surfaces that have nothing to do with the KB registry; mounted here as a row
+// above the knowledge pages it pushed their titles 42px further under the
+// trail than every other Org title.
 function AdminLayout() {
   const { pathname } = useLocation();
   const automate = useAutomateSpec();
-  const onKnowledge = pathname.startsWith('/admin/knowledge');
   const inAutomate = pathname.startsWith('/admin/bots') || pathname.startsWith('/admin/changes');
 
   if (inAutomate) {
@@ -30,11 +30,6 @@ function AdminLayout() {
 
   return (
     <Stack gap="none" className="h-full min-h-0">
-      {onKnowledge && (
-        <Inline justify="end" className="px-6 pt-4">
-          <KBHealthBadge />
-        </Inline>
-      )}
       <Stack gap="none" className="min-h-0 flex-1">
         <Outlet />
       </Stack>

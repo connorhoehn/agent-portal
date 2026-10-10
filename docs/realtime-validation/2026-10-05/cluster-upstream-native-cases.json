@@ -1,0 +1,333 @@
+{
+  "assertionResults": [
+    {
+      "ancestorTitles": [
+        "RedisRealtimeRouter / native peer transport"
+      ],
+      "duration": 37,
+      "failing": false,
+      "failureDetails": [],
+      "failureMessages": [],
+      "fullName": "RedisRealtimeRouter / native peer transport resolves authenticated peers across nodes and confirms actual remote writes",
+      "invocations": 1,
+      "location": null,
+      "numPassingAsserts": 5,
+      "retryReasons": [],
+      "startAt": 1791202333450,
+      "status": "passed",
+      "title": "resolves authenticated peers across nodes and confirms actual remote writes"
+    },
+    {
+      "ancestorTitles": [
+        "RedisRealtimeRouter / native peer transport"
+      ],
+      "duration": 15,
+      "failing": false,
+      "failureDetails": [],
+      "failureMessages": [],
+      "fullName": "RedisRealtimeRouter / native peer transport rechecks remote recipient epoch/policy and keeps the inbox delivery count honest",
+      "invocations": 1,
+      "location": null,
+      "numPassingAsserts": 2,
+      "retryReasons": [],
+      "startAt": 1791202333487,
+      "status": "passed",
+      "title": "rechecks remote recipient epoch/policy and keeps the inbox delivery count honest"
+    },
+    {
+      "ancestorTitles": [
+        "RedisRealtimeRouter / native peer transport"
+      ],
+      "duration": 57,
+      "failing": false,
+      "failureDetails": [],
+      "failureMessages": [],
+      "fullName": "RedisRealtimeRouter / native peer transport shares channels with source publish checks and destination membership checks",
+      "invocations": 1,
+      "location": null,
+      "numPassingAsserts": 4,
+      "retryReasons": [],
+      "startAt": 1791202333502,
+      "status": "passed",
+      "title": "shares channels with source publish checks and destination membership checks"
+    },
+    {
+      "ancestorTitles": [
+        "RedisRealtimeRouter / native peer transport"
+      ],
+      "duration": 30,
+      "failing": false,
+      "failureDetails": [],
+      "failureMessages": [],
+      "fullName": "RedisRealtimeRouter / native peer transport drops a held delivery after disconnect and suppresses in-flight duplicate frames",
+      "invocations": 1,
+      "location": null,
+      "numPassingAsserts": 3,
+      "retryReasons": [],
+      "startAt": 1791202333559,
+      "status": "passed",
+      "title": "drops a held delivery after disconnect and suppresses in-flight duplicate frames"
+    },
+    {
+      "ancestorTitles": [
+        "RedisRealtimeRouter / native peer transport"
+      ],
+      "duration": 57,
+      "failing": false,
+      "failureDetails": [],
+      "failureMessages": [],
+      "fullName": "RedisRealtimeRouter / native peer transport fences an awaited channel filter across unsubscribe and resubscribe",
+      "invocations": 1,
+      "location": null,
+      "numPassingAsserts": 1,
+      "retryReasons": [],
+      "startAt": 1791202333589,
+      "status": "passed",
+      "title": "fences an awaited channel filter across unsubscribe and resubscribe"
+    },
+    {
+      "ancestorTitles": [
+        "RedisRealtimeRouter / native peer transport"
+      ],
+      "duration": 1230,
+      "failing": false,
+      "failureDetails": [],
+      "failureMessages": [],
+      "fullName": "RedisRealtimeRouter / native peer transport keeps live directory entries through renewals and rejects another live node owner",
+      "invocations": 1,
+      "location": null,
+      "numPassingAsserts": 3,
+      "retryReasons": [],
+      "startAt": 1791202333646,
+      "status": "passed",
+      "title": "keeps live directory entries through renewals and rejects another live node owner"
+    },
+    {
+      "ancestorTitles": [
+        "RedisRealtimeRouter / native peer transport"
+      ],
+      "duration": 332,
+      "failing": false,
+      "failureDetails": [],
+      "failureMessages": [],
+      "fullName": "RedisRealtimeRouter / native peer transport fences a lost node lease and rejects stale connection generations after restart",
+      "invocations": 1,
+      "location": null,
+      "numPassingAsserts": 6,
+      "retryReasons": [],
+      "startAt": 1791202334876,
+      "status": "passed",
+      "title": "fences a lost node lease and rejects stale connection generations after restart"
+    },
+    {
+      "ancestorTitles": [
+        "RedisRealtimeRouter / native peer transport"
+      ],
+      "duration": 1260,
+      "failing": false,
+      "failureDetails": [],
+      "failureMessages": [],
+      "fullName": "RedisRealtimeRouter / native peer transport keeps an expired local lease fenced after a late successful renewal response",
+      "invocations": 1,
+      "location": null,
+      "numPassingAsserts": 3,
+      "retryReasons": [],
+      "startAt": 1791202335208,
+      "status": "passed",
+      "title": "keeps an expired local lease fenced after a late successful renewal response"
+    },
+    {
+      "ancestorTitles": [
+        "RedisRealtimeRouter / native peer transport"
+      ],
+      "duration": 41,
+      "failing": false,
+      "failureDetails": [],
+      "failureMessages": [],
+      "fullName": "RedisRealtimeRouter / native peer transport prunes expired peer entries while preserving a live user connection index",
+      "invocations": 1,
+      "location": null,
+      "numPassingAsserts": 3,
+      "retryReasons": [],
+      "startAt": 1791202336468,
+      "status": "passed",
+      "title": "prunes expired peer entries while preserving a live user connection index"
+    },
+    {
+      "ancestorTitles": [
+        "RedisRealtimeRouter / native peer transport"
+      ],
+      "duration": 53,
+      "failing": false,
+      "failureDetails": [],
+      "failureMessages": [],
+      "fullName": "RedisRealtimeRouter / native peer transport isolates cluster namespaces and ignores forged peer origins",
+      "invocations": 1,
+      "location": null,
+      "numPassingAsserts": 2,
+      "retryReasons": [],
+      "startAt": 1791202336509,
+      "status": "passed",
+      "title": "isolates cluster namespaces and ignores forged peer origins"
+    },
+    {
+      "ancestorTitles": [
+        "RedisRealtimeRouter / native peer transport"
+      ],
+      "duration": 217,
+      "failing": false,
+      "failureDetails": [],
+      "failureMessages": [],
+      "fullName": "RedisRealtimeRouter / native peer transport returns an unconfirmed receipt on lost acknowledgement without duplicating the write",
+      "invocations": 1,
+      "location": null,
+      "numPassingAsserts": 2,
+      "retryReasons": [],
+      "startAt": 1791202336563,
+      "status": "passed",
+      "title": "returns an unconfirmed receipt on lost acknowledgement without duplicating the write"
+    },
+    {
+      "ancestorTitles": [
+        "RedisRealtimeRouter / native peer transport"
+      ],
+      "duration": 20,
+      "failing": false,
+      "failureDetails": [],
+      "failureMessages": [],
+      "fullName": "RedisRealtimeRouter / native peer transport does not announce readiness or leave a registry entry when registration outlives its socket",
+      "invocations": 1,
+      "location": null,
+      "numPassingAsserts": 1,
+      "retryReasons": [],
+      "startAt": 1791202336780,
+      "status": "passed",
+      "title": "does not announce readiness or leave a registry entry when registration outlives its socket"
+    },
+    {
+      "ancestorTitles": [
+        "RedisRealtimeRouter / native peer transport"
+      ],
+      "duration": 49,
+      "failing": false,
+      "failureDetails": [],
+      "failureMessages": [],
+      "fullName": "RedisRealtimeRouter / native peer transport retains bounded early client frames and dispatches them once after registration",
+      "invocations": 1,
+      "location": null,
+      "numPassingAsserts": 2,
+      "retryReasons": [],
+      "startAt": 1791202336800,
+      "status": "passed",
+      "title": "retains bounded early client frames and dispatches them once after registration"
+    },
+    {
+      "ancestorTitles": [
+        "RedisRealtimeRouter / native peer transport"
+      ],
+      "duration": 10,
+      "failing": false,
+      "failureDetails": [],
+      "failureMessages": [],
+      "fullName": "RedisRealtimeRouter / native peer transport closes an overfull startup queue without dispatching unauthorised early work",
+      "invocations": 1,
+      "location": null,
+      "numPassingAsserts": 2,
+      "retryReasons": [],
+      "startAt": 1791202336849,
+      "status": "passed",
+      "title": "closes an overfull startup queue without dispatching unauthorised early work"
+    },
+    {
+      "ancestorTitles": [
+        "RedisRealtimeRouter / native peer transport"
+      ],
+      "duration": 85,
+      "failing": false,
+      "failureDetails": [],
+      "failureMessages": [],
+      "fullName": "RedisRealtimeRouter / native peer transport carries native call invite/accept and named departures with shared Redis call state",
+      "invocations": 1,
+      "location": null,
+      "numPassingAsserts": 2,
+      "retryReasons": [],
+      "startAt": 1791202336859,
+      "status": "passed",
+      "title": "carries native call invite/accept and named departures with shared Redis call state"
+    },
+    {
+      "ancestorTitles": [
+        "RedisRealtimeRouter / native peer transport"
+      ],
+      "duration": 8,
+      "failing": false,
+      "failureDetails": [],
+      "failureMessages": [],
+      "fullName": "RedisRealtimeRouter / native peer transport drains async disconnect cleanup before disposing the peer transport",
+      "invocations": 1,
+      "location": null,
+      "numPassingAsserts": 2,
+      "retryReasons": [],
+      "startAt": 1791202336944,
+      "status": "passed",
+      "title": "drains async disconnect cleanup before disposing the peer transport"
+    },
+    {
+      "ancestorTitles": [
+        "RedisRealtimeRouter / native peer transport"
+      ],
+      "duration": 1477,
+      "failing": false,
+      "failureDetails": [],
+      "failureMessages": [],
+      "fullName": "RedisRealtimeRouter / native peer transport restores an accepted call seat when the user reconnects on another node",
+      "invocations": 1,
+      "location": null,
+      "numPassingAsserts": 2,
+      "retryReasons": [],
+      "startAt": 1791202336952,
+      "status": "passed",
+      "title": "restores an accepted call seat when the user reconnects on another node"
+    },
+    {
+      "ancestorTitles": [
+        "RedisRealtimeRouter / native peer transport"
+      ],
+      "duration": 31,
+      "failing": false,
+      "failureDetails": [],
+      "failureMessages": [],
+      "fullName": "RedisRealtimeRouter / native peer transport applies the destination tenant policy to a cross-node call invite",
+      "invocations": 1,
+      "location": null,
+      "numPassingAsserts": 2,
+      "retryReasons": [],
+      "startAt": 1791202338429,
+      "status": "passed",
+      "title": "applies the destination tenant policy to a cross-node call invite"
+    },
+    {
+      "ancestorTitles": [
+        "RedisRealtimeRouter / native peer transport"
+      ],
+      "duration": 18,
+      "failing": false,
+      "failureDetails": [],
+      "failureMessages": [],
+      "fullName": "RedisRealtimeRouter / native peer transport routes a server-originated notification across nodes and excludes revoked recipients from its receipt count",
+      "invocations": 1,
+      "location": null,
+      "numPassingAsserts": 2,
+      "retryReasons": [],
+      "startAt": 1791202338460,
+      "status": "passed",
+      "title": "routes a server-originated notification across nodes and excludes revoked recipients from its receipt count"
+    }
+  ],
+  "endTime": 1791202338478,
+  "message": "",
+  "name": "/private/tmp/orgiq-realtime-cluster-candidate/test/server/redis-router.integration.test.ts",
+  "startTime": 1791202331460,
+  "status": "passed",
+  "summary": ""
+}

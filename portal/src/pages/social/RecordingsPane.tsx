@@ -14,13 +14,17 @@
 // The list and the player are the library's `RecordingList` + `RecordingPlayer`.
 
 import { useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router';
+import { useNavigate, useSearchParams } from 'react-router';
 import { RecordingList, RecordingPlayer } from '@connorhoehnslalom/ui-components/video';
 import {
   Button, Chip, ConfirmDialog, EmptyState, ErrorState, Inline, InlineAlert, KeyValue, LoadingState, PageHeader, Stack,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { writeJson } from '../../lib/writeJson';
+import RoomRecordingSummary from './RoomRecordingSummary';
+import { useSocialPlane } from './socialPlane';
+import { isRoomLobby, roomSummarizeText, type RoomSummaryTarget } from './socialRoomSummary';
+import { socialSummarizeApi } from './socialSummarize';
 import { formatDuration, lobbyLabel, mayDeleteRecording, recordingItems, type NameOf, type SocialRecording, type SocialRoom, type SocialSource } from './socialPlatform';
 
 interface RecordingsResponse { source: SocialSource; recordings: SocialRecording[]; counts: { total: number; ready: number } }
@@ -31,14 +35,16 @@ const MEDIA_STATE: Record<string, string> = {
   unavailable: 'There is no playable file for this recording.',
 };
 
-export default function RecordingsPane({ me, nameOf, rooms, mayManage }: { me: string; nameOf: NameOf; rooms: readonly SocialRoom[]; mayManage: boolean }) {
-  const { data, isLoading, error, refresh } = useFetch<RecordingsResponse>('/api/social/recordings', 30_000);
+export default function RecordingsPane({ me, nameOf, rooms, mayManage, postTargets = [], displayName }: { me: string; nameOf: NameOf; rooms: readonly SocialRoom[]; mayManage: boolean; postTargets?: readonly RoomSummaryTarget[]; displayName?: string }) {
+  const { api, route } = useSocialPlane();
+  const { data, isLoading, error, refresh } = useFetch<RecordingsResponse>(`${api}/recordings`, 30_000);
   const [params, setParams] = useSearchParams();
+  const navigate = useNavigate();
   const selectedId = params.get('recording');
   const recs = useMemo(() => data?.recordings ?? [], [data]);
   const selected = recs.find((r) => r.recordingId === selectedId) ?? null;
   const items = useMemo(() => recordingItems(recs, me, nameOf, rooms), [recs, me, nameOf, rooms]);
-  const playback = useFetch<Playback>(selected ? `/api/social/recordings/${encodeURIComponent(selected.recordingId)}/playback` : null);
+  const playback = useFetch<Playback>(selected ? `${api}/recordings/${encodeURIComponent(selected.recordingId)}/playback` : null);
   const [shared, setShared] = useState<string | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<SocialRecording | null>(null);
@@ -47,14 +53,29 @@ export default function RecordingsPane({ me, nameOf, rooms, mayManage }: { me: s
 
   async function share(r: SocialRecording) {
     setProblem(null);
-    const res = await writeJson<{ shareUrl: string; expiresAt: string }>(`/api/social/recordings/${encodeURIComponent(r.recordingId)}/share`, 'POST');
+    const res = await writeJson<{ shareUrl: string; expiresAt: string }>(`${api}/recordings/${encodeURIComponent(r.recordingId)}/share`, 'POST');
     if (!res.ok || !res.data) { setProblem(res.error ?? 'The share link could not be made.'); return; }
     setShared(`Share link ready (valid until ${new Date(res.data.expiresAt).toLocaleDateString()}): ${res.data.shareUrl}`);
   }
 
+  /** A DM call's conversation is its lobby; a room call's private card is drawn here, below. */
+  const summaryChannel = (r: SocialRecording): string | null => (r.lobbyName.startsWith('social:dm:') || isRoomLobby(r.lobbyName) ? r.lobbyName : null);
+  const [roomRun, setRoomRun] = useState<{ recordingId: string; runId: string } | null>(null);
+  const summarize = async (r: SocialRecording) => {
+    if (isRoomLobby(r.lobbyName)) {
+      setProblem(null);
+      try {
+        const started = await socialSummarizeApi.start(r.lobbyName, roomSummarizeText(r.recordingId));
+        setRoomRun({ recordingId: r.recordingId, runId: started.runId });
+      } catch (cause) { setProblem(cause instanceof Error ? cause.message : 'The summary could not be started.'); }
+      return;
+    }
+    navigate(`${route}/dms/${encodeURIComponent(r.lobbyName)}?summarizeRecording=${encodeURIComponent(r.recordingId)}`);
+  };
+
   async function remove(r: SocialRecording) {
     setConfirmDelete(null);
-    const res = await writeJson(`/api/social/recordings/${encodeURIComponent(r.recordingId)}`, 'DELETE');
+    const res = await writeJson(`${api}/recordings/${encodeURIComponent(r.recordingId)}`, 'DELETE');
     if (!res.ok) { setProblem(res.error ?? 'The recording could not be deleted.'); return; }
     if (selectedId === r.recordingId) select(null);
     refresh();
@@ -103,7 +124,18 @@ export default function RecordingsPane({ me, nameOf, rooms, mayManage }: { me: s
               description={selectedId ? 'It does not exist, or you were not on the call.' : 'Choose a recording on the left to play it.'} />
           ) : (
             <Stack gap="md" className="min-w-0 flex-1" data-testid="social-recording-detail">
-              <PageHeader title={lobbyLabel(selected.lobbyName, me, nameOf, rooms)} description={new Date(selected.startedAt).toLocaleString()} />
+              <PageHeader title={lobbyLabel(selected.lobbyName, me, nameOf, rooms)} description={new Date(selected.startedAt).toLocaleString()}
+                actions={(
+                  <Button variant="secondary" size="sm" disabled={!summaryChannel(selected) || selected.stage !== 'ready'} onClick={() => void summarize(selected)}
+                    data-testid="social-recording-summarize"
+                    {...(!summaryChannel(selected) ? { title: 'This call has no conversation to summarize into.' } : selected.stage !== 'ready' ? { title: 'The transcript is not ready yet.' } : {})}>
+                    Summarize
+                  </Button>
+                )} />
+              {roomRun && roomRun.recordingId === selected.recordingId && (
+                <RoomRecordingSummary key={roomRun.runId} runId={roomRun.runId} instruction="/summarize" userId={me} displayName={displayName ?? nameOf(me)}
+                  targets={postTargets} onDismiss={() => setRoomRun(null)} />
+              )}
               {playback.isLoading && !playback.data ? <LoadingState label="Finding the recording…" /> : playback.data?.playlistUrl ? (
                 <RecordingPlayer playlistUrl={playback.data.playlistUrl} hideDownload={selected.lobbyName.includes(':dm:')} />
               ) : (

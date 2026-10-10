@@ -1,0 +1,42 @@
+{
+  "recordedAt": "2026-10-05T20:01:51.813619+00:00",
+  "scope": "prototype deadline correction for overdue timer callbacks; offline authority validation only",
+  "capacityAccepted": false,
+  "nativeAccepted": false,
+  "cloudAccepted": false,
+  "passedAuthorityTests": 62,
+  "libraryCommit": "c5c967ee18fb2fa6dabe126e2dcdd023a4a64dac",
+  "typecheck": "passed",
+  "build": "passed",
+  "compiledConsumption": "1000 expired jobs never invoke controlled client; fresh work admitted",
+  "nativeBlocker": "Task Docker socket remains denied; localhost listeners and cloud credential access remain unresolved",
+  "beforeFailureScope": "Two new regressions reproduce late dispatch and expired admission occupation. The pre-fix assertion failure also surfaced in the following test due to a dangling assertion; assertions are now collected together.",
+  "sourceSnapshot": "docs/realtime-validation/2026-10-05/capacity-sdk-deadline/source-snapshot.tar.gz",
+  "sources": {
+    "CLAUDE.md": "0d7c81000564dfb0f876eec71723590f6f6b61fcfea8b823d4b0292c812118c3",
+    "docs/realtime-validation/2026-10-05/capacity-progress.md": "8ad1ca3f7a3c12d5a357663ac4995b63dc35f21da94a0f98342a315fa20023a1",
+    "middleware/src/lib/dynamo-dispatch.ts": "dc5a45e008708d0b5061c3858823256dae46731e960d35a86dfc99bc18e81bf1",
+    "middleware/src/lib/social-chat.ts": "5cf3223b7cd4b4d1f014b0acc67f191ee7a4901a09b88e9127e7d5a7fbfd5296",
+    "middleware/src/lib/realtime-gateway.ts": "9d6f9032ecbbfd687a09c11455598083f5773fcc07a5fd5047e81218ce435724",
+    "middleware/src/lib/__tests__/dynamo-dispatch.test.ts": "d58bfe657ffec1de3b998894afc39344a4270f31de0bae4ba29e0b300c7c271e",
+    "middleware/src/lib/__tests__/social-membership-fence.test.ts": "0b1a32fa73f232007c57ad9136486b70e70ee63e1bb5b2c588d894fa06796173",
+    "middleware/src/lib/__tests__/direct-recipient.test.ts": "8e9cb1cfeb7afd05b0532eaf917ef1950a26d1cd630a03864d3373bc2b24d866",
+    "middleware/src/lib/__tests__/live-principal.test.ts": "f1fc93e58a2dc6cf073f1ffc30c4c06b2d85771a1d79e94de34ff83d2a056d3e",
+    "middleware/src/lib/__tests__/live-subscribers.test.ts": "28ecde3270b7a0c89156a76a9927e612a3e43a888f718f3fb391e2f32d0fd782",
+    "middleware/dist/lib/dynamo-dispatch.js": "ef24da83f486af1c3e199a3407b9ecfcfa8e00958f13e1fe4639fde0d1ebc8d8",
+    "middleware/package.json": "a034d082ce9f01870357e17fd8a1e14585b3b028d502dfde61334f47c08dfdc1",
+    "middleware/package-lock.json": "267bbe0acf2ecb9e5175a32eb596877dee0f07a4ec9f52d406911bffe4793e58",
+    "infra/lib/middleware-service-stack.ts": "73700a0c06118e2e4a26835f1a87c6ba359a44a0a0e59aeeb9bffeaa4b271e95"
+  },
+  "artifacts": {
+    "docs/realtime-validation/2026-10-05/capacity-sdk-deadline/source-snapshot.tar.gz": "6d24d7c53afd939e8e1f8a14632a967b2933354487736fd7c99a0888c8c0c78f",
+    "docs/realtime-validation/2026-10-05/capacity-sdk-deadline/orgiq-dispatch-deadline-compiled.log": "7a4ec1a77a460df9e5a9cfd6158ed979587b03cb2ff3b8bb2872f29950f84394",
+    "docs/realtime-validation/2026-10-05/capacity-sdk-deadline/orgiq-dispatch-deadline-types.log": "a6aacf3de309c23e5aeb92922e8082e8eb964285a805f031247d7ef19849931b",
+    "docs/realtime-validation/2026-10-05/capacity-sdk-deadline/orgiq-offline-authority-jest.config.cjs": "304477d47f7e21783f1043da53d85cbdd3e79679e77eaddb535ad562d60d1018",
+    "docs/realtime-validation/2026-10-05/capacity-sdk-deadline/orgiq-dispatch-deadline-before.log": "23e4cb9b5638d13b653296654b9fcaecdf8f4368e065023ff96e6f479543897b",
+    "docs/realtime-validation/2026-10-05/capacity-sdk-deadline/orgiq-dispatch-deadline-tests.json": "9986432b9cc56cf5dae5e78113995c201961112b1d57bf3a916c56979ed6f7ea",
+    "docs/realtime-validation/2026-10-05/capacity-sdk-deadline/orgiq-dispatch-deadline-tests.log": "270c0fd9e834f3857964acc0e3d9ef40f5d626a33c1cb2af9511825c7420ae2e",
+    "docs/realtime-validation/2026-10-05/capacity-sdk-deadline/orgiq-dispatch-current-docker-access.log": "68e20b9dfa5034600eb850b11d0ed7fc5bfb2258397a5fe6ab63164ca5fc0b53",
+    "docs/realtime-validation/2026-10-05/capacity-sdk-deadline/orgiq-dispatch-deadline-build.log": "890dd11b16e4a3386f08a4fa8529271130230f259e3188a13da295ba4ce5d33b"
+  }
+}

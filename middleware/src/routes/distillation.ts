@@ -287,11 +287,14 @@ distillationRouter.post('/review/:id', manageGate, asyncHandler(async (req, res)
 }));
 
 // GET /api/distillation/library/:libraryItemId/provenance
+// An asset nothing was distilled into is the common case (hand-authored
+// prompts and skills), not a missing resource: it answers 200 with
+// `{ artifact: null, lineage: null }`. As a 404 it was "the expected answer"
+// to the Library page and a console error to the browser on every open.
 distillationRouter.get('/library/:libraryItemId/provenance', asyncHandler(async (req, res) => {
   const id = requireId(String(req.params['libraryItemId']), 'libraryItemId');
   const provenance = await libraryProvenance(id);
-  if (!provenance) throw new NotFoundError(`no artifact links to library item ${id}`);
-  res.json(provenance);
+  res.json(provenance ?? { artifact: null, lineage: null });
 }));
 
 // ─── Procedures: ordered steps, and whether they still hold ────────────────

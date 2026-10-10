@@ -24,6 +24,8 @@ test('a machine id round-trips through the prefix', () => {
   assert.equal(c.id, `${LOCAL_ID_PREFIX}node-abc123`);
   assert.equal(isLocalMachineId(c.id), true);
   assert.equal(nodeIdOf(c.id), 'node-abc123');
+  // The field the lab reads to draw a laptop and keep a terminal off it.
+  assert.equal(c.kind, 'local');
 });
 
 test('a microVM id is not mistaken for a machine', () => {

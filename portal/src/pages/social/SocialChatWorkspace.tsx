@@ -28,44 +28,52 @@
 // The page root is `data-shell-flush`: the shell draws no 24px ring and no
 // breadcrumb row around it, so the rail starts at the content top at x=200.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from 'react';
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
 import { ViewportFillRegion } from '@connorhoehnslalom/ui-components';
 import {
-  ActivePeopleGrid, ChannelMentionsPanel, ConversationRail, CreateChannelDialog, CreateTeamDialog, MembersPanel,
-  NewConversationPanel, RailSectionHeader, TeamChannelTree,
-  type CreateChannelDialogInput, type CreateTeamDialogInput, type RailSelection,
+  ActivePeopleGrid, AddPeoplePicker, ChannelMentionsPanel, ConversationRail, CreateChannelDialog, CreateTeamDialog, MembersPanel,
+  NewConversationPanel, RAIL_SECTION_CONTENT_INSET, TeamChannelTree, useRailSectionMemory,
+  type ActivePerson, type ConversationRailSection, type CreateChannelDialogInput, type CreateTeamDialogInput, type RailSelection,
 } from '@connorhoehnslalom/ui-components/social';
 import {
-  ActivityIcon, AtIcon, Button, ChannelHeader, DataTable, EmptyState, ErrorState, IconButton, InlineAlert, LoadingState,
-  Modal, PhoneIcon, PlayCircleIcon, PlusIcon, SearchInput, Stack, VisuallyHidden, type DataTableColumn,
+  ActivityIcon, AtIcon, Button, ChannelHeader, EmptyState, ErrorState, IconButton, InlineAlert, LoadingState,
+  PhoneIcon, PlayCircleIcon, PlusIcon, Stack, VisuallyHidden,
 } from '@connorhoehnslalom/ui-components/shared';
 import { WrappedNotificationCenter } from '@connorhoehnslalom/ui-components/integrations/realtime';
-import { useGatewayOptional, useNotifications, usePresence } from '@connorhoehnslalom/realtime-modules/client';
+import { useSharedNotifications } from '../../components/shell/SharedNotifications';
 import { useFetch } from '../../hooks/useFetch';
 import { useSession } from '../../lib/auth';
 import { useCapabilities } from '../../lib/capabilities';
 import { writeJson } from '../../lib/writeJson';
-import { presenceAvatarUsers } from '../assessment/knowledge/knowledgeFormat';
+import { useEmbeddedSocial } from '../../components/shell/EmbeddedSocial';
 import SocialConversation, { conversationView } from './SocialConversation';
 import CallLogPane, { type CallsResponse } from './CallLogPane';
 import RecordingsPane from './RecordingsPane';
+import { roomSummaryTargets } from './socialRoomSummary';
 import RoomPane from './RoomPane';
 import SocialRoomsSection, { RoomCreateDialog, useRoomsModel, type RoomsResponse } from './SocialRoomsSection';
 import {
   CHANNEL_PREFIX, DM_PREFIX, activeNow, channelHref, channelRailItems, dmCandidates, dmHref, dmPeers, dmRailItems, dmTitle,
   conversationRecordings, matchesRailFilter, mentionItems, privacyForApi, slugFromChannel, socialInbox, withPresence,
-  type SocialChannel, type SocialDm, type SocialPeer, type SocialPerson,
+  type SocialActivePerson, type SocialChannel, type SocialDm, type SocialPeer, type SocialPerson,
 } from './socialChat';
+import type { SharedWorkMessage } from './SharedWorkView';
+import { newMessageChannels } from './socialRailLive';
 import {
-  SOCIAL_PRESENCE_CHANNEL, findTeamChannel, namesFrom, teamCandidates, teamTreeItems,
-  type SocialRecording, type SocialSource, type SocialTeam, type SocialTeamMember,
+  findTeamChannel, namesFrom, teamCandidates, teamTreeItems,
+  type SocialRecording, type SocialTeam, type SocialTeamMember,
 } from './socialPlatform';
-import { useSocialCall } from './useSocialCall';
+import { useSocialCall, useSocialFooterContext, type SocialFooterContext } from './useSocialCall';
+import { useSocialTeams } from './useSocialTeams';
+import { useSocialPlane } from './socialPlane';
+import { SectionContent } from '../../components/shell/SectionContent';
+import { SectionLabel, useHeaderDensity } from '@connorhoehnslalom/ui-components/shared';
+import { SocialReadStatus } from './SocialReadStatus';
+import { conversationRailEmptyLabel } from './socialReadState';
 
 export type SocialChatRoute = 'channels' | 'dms' | 'teams' | 'rooms' | 'calls' | 'recordings';
 
-interface TeamsResponse { source: SocialSource; teams: SocialTeam[]; counts: { total: number; channels: number } }
 interface TeamDetail { team: SocialTeam; members: SocialTeamMember[] }
 type Candidate = { userId: string; displayName: string; hint?: string };
 /** Shelf destinations kept in local state; Calls and Recordings are routes. */
@@ -79,25 +87,70 @@ const PAGE_TESTID: Record<SocialChatRoute, string> = {
   rooms: 'social-rooms-page', calls: 'social-calls-page', recordings: 'social-recordings-page',
 };
 interface RecordingsResponse { recordings: SocialRecording[] }
-/** The rail's folded sections survive a reload on this device (a preference, not state). */
-const FOLDED_KEY = 'social.chatRail.folded';
+/**
+ * The rail's per-device memory (the library rail model, `useRailSectionMemory`):
+ * folded sections under `social.chatRail.folded`, the reader's section order
+ * under `social.chatRail.layout`. Sections folded until the reader opens them
+ * (the user, 2026-10-07: "by default some of them should be collapsed"):
+ * Teams and Rooms. Active now, the plane's groups, Direct messages and
+ * Channels open.
+ */
+const RAIL_MEMORY_KEY = 'social.chatRail';
+const DEFAULT_FOLDED: Readonly<Record<string, boolean>> = { Teams: true, Rooms: true };
 
-function useFoldedSections() {
-  const [folded, setFolded] = useState<Record<string, boolean>>(() => {
-    try {
-      const value: unknown = JSON.parse(localStorage.getItem(FOLDED_KEY) ?? '{}');
-      return value && typeof value === 'object' ? value as Record<string, boolean> : {};
-    } catch { return {}; }
-  });
-  const set = useCallback((label: string, next: boolean) => setFolded((value) => {
-    const updated = { ...value, [label]: next };
-    try { localStorage.setItem(FOLDED_KEY, JSON.stringify(updated)); } catch { /* A device preference only. */ }
-    return updated;
-  }), []);
-  return { folded, set, isFolded: (label: string) => !!folded[label] };
+/**
+ * Embedded as another tenant's Communication page (socialPlane.ts): the pane
+ * becomes that page's content column — its trail first, then its title
+ * (docs/layout-cascade.md) — and the Calls destination also lists the huddles
+ * on that tenant's own pages (its former Calls page).
+ */
+export interface WorkspaceEmbedding {
+  breadcrumbs: ComponentProps<typeof SectionContent>['breadcrumbs'];
+  title: string;
+  actions?: ReactNode;
+  pageCalls: ReactNode;
+  pageMissed: number;
+  /**
+   * The host tenant's org-context sections (docs/communication-plane-goal.md
+   * §1.3–1.4), placed after Active now. Built outside pages/social: this
+   * workspace never names another tenant's routes.
+   */
+  railSections?: (rail: WorkspaceRailContext) => readonly ConversationRailSection[];
+  /** The host's own view in the content column (a group, an org team, a person), or null for the workspace's pane. */
+  pane?: ReactNode | null;
+  /** Authorized host-thread context; start uses this workspace's single call hook. */
+  footerConversation?: { channel: string; title: string } | null;
+  /** Active now, enriched by the host (status, in a call, activity, shared work); never a second presence subscription. */
+  activePeople?: (people: readonly SocialActivePerson[]) => ActivePerson[];
+  /** A tile's shared-work affordance (`ActivePeopleGrid onSelectSharedWork`). */
+  onSelectSharedWork?: (userId: string) => void;
+  /** The open conversation's Shared work view (`?view=shared`), beside Chat | Files | Documents | Pinned | Calls. */
+  sharedWork?: (conversation: { channel: string; name: string; messages: readonly SharedWorkMessage[] }) => ReactNode;
+  /**
+   * The plane's landing when no conversation is named (Channels, no slug): the
+   * host opens the user's default conversation or draws its overview — never a
+   * "Pick a channel" placeholder (docs/layout-cascade.md rule 6).
+   */
+  landing?: (data: WorkspaceLandingData) => ReactNode;
 }
 
-export default function SocialChatWorkspace({ route }: { route: SocialChatRoute }) {
+/** What the workspace hands the host's landing: its own lists and Active now tiles, no second fetch. */
+export interface WorkspaceLandingData {
+  /** The channel and DM lists have answered (with data or an error). */
+  ready: boolean;
+  channels: readonly SocialChannel[];
+  conversations: readonly SocialDm[];
+  activePeople: ComponentProps<typeof ActivePeopleGrid>['people'];
+}
+
+/** What the workspace hands a host rail section: the find box and presence. Folds are the rail's own (data sections, keyed by label). */
+export interface WorkspaceRailContext {
+  query: string;
+  online: ReadonlySet<string>;
+  here: ReadonlyArray<{ id: string; name: string; idle?: boolean }>;
+}
+
+export default function SocialChatWorkspace({ route, embedding }: { route: SocialChatRoute; embedding?: WorkspaceEmbedding }) {
   const { slug: rawSlug, lobby: rawLobby } = useParams<{ slug?: string; lobby?: string }>();
   const [params, setParams] = useSearchParams();
   const location = useLocation();
@@ -105,20 +158,30 @@ export default function SocialChatWorkspace({ route }: { route: SocialChatRoute 
   const { session } = useSession();
   const me = session?.sub ?? '';
   const displayName = session?.name ?? me;
-  const { can, ready } = useCapabilities();
+  const plane = useSocialPlane();
+  const { api, route: base } = plane;
+  const tenantCapabilities = useCapabilities();
+  // Embedded in another tenant, `can()` there answers for THAT tenant; the
+  // plane asks the actor's current Social grants instead (GET …/capabilities).
+  const planeCapabilities = useFetch<{ actions: Record<string, boolean> }>(plane.embedded ? `${api}/capabilities` : null, 60_000);
+  const can = (action: Parameters<typeof tenantCapabilities.can>[0]) => (plane.embedded ? !!planeCapabilities.data?.actions[action] : tenantCapabilities.can(action));
+  const ready = plane.embedded ? !!planeCapabilities.data : tenantCapabilities.ready;
   const mayCreateChannel = ready && can('ManageChannels');
   const mayManageTeams = ready && can('ManageTeams');
   const mayManageRecordings = ready && can('ManageRecordings');
+  // The composer is offered only to a reader whose CURRENT grants allow posting (the plane's own capabilities when embedded).
+  const mayPost = ready && can('PostMessage');
 
   // ── Data ──────────────────────────────────────────────────────────────
-  const channelsFetch = useFetch<{ channels: SocialChannel[] }>('/api/social/channels');
-  const dmsFetch = useFetch<{ conversations: SocialDm[] }>('/api/social/dms');
-  const peopleFetch = useFetch<{ people: SocialPerson[] }>('/api/social/people');
-  const teamsFetch = useFetch<TeamsResponse>('/api/social/teams', 30_000);
-  const roomsFetch = useFetch<RoomsResponse>('/api/social/rooms', 15_000);
-  const callsFetch = useFetch<CallsResponse>('/api/social/calls', 20_000);
+  const channelsFetch = useFetch<{ channels: SocialChannel[] }>(`${api}/channels`);
+  const dmsFetch = useFetch<{ conversations: SocialDm[] }>(`${api}/dms`, 30_000);
+  const peopleFetch = useFetch<{ people: SocialPerson[] }>(`${api}/people`);
+  const teamScope = JSON.stringify([me, session?.tenant, session?.role, session?.grants, session?.masquerading]);
+  const teamsFetch = useSocialTeams(teamScope, me, api);
+  const roomsFetch = useFetch<RoomsResponse>(`${api}/rooms`, 15_000);
+  const callsFetch = useFetch<CallsResponse>(`${api}/calls`, 20_000);
   // Shared with RecordingsPane's read of the same URL (one request in flight).
-  const recordingsFetch = useFetch<RecordingsResponse>('/api/social/recordings', 30_000, { share: true });
+  const recordingsFetch = useFetch<RecordingsResponse>(`${api}/recordings`, 30_000, { share: true });
 
   const channels = useMemo(() => channelsFetch.data?.channels ?? [], [channelsFetch.data]);
   const conversations = useMemo(() => dmsFetch.data?.conversations ?? [], [dmsFetch.data]);
@@ -135,11 +198,25 @@ export default function SocialChatWorkspace({ route }: { route: SocialChatRoute 
   const roomSlug = route === 'rooms' ? params.get('room') : null;
   // The open conversation's view (Chat | Documents | Pinned | Calls), in the URL.
   const view = conversationView(params.get('view'));
+  // `?view=graph` is the conversation's work graph: the surface stays on Chat's frame, the graph fills the pane.
+  // Embedded (the Communication plane), the conversation's work graph is part of its Shared work view (`?view=shared`).
+  const sharedWork = embedding?.sharedWork;
+  const graph = params.get('view') === (sharedWork ? 'shared' : 'graph');
+  const graphPropsFor = (channel: string, name: string) => (sharedWork ? {
+    graphOpen: graph, graphLabel: 'Shared work', onToggleGraph: () => setView(graph ? 'chat' : 'shared'),
+    renderGraph: (messages: readonly SharedWorkMessage[]) => sharedWork({ channel, name, messages }),
+  } : { graphOpen: graph, onToggleGraph: () => setView(graph ? 'chat' : 'graph') });
   const setView = (next: string) => setParams((prev) => {
     const out = new URLSearchParams(prev);
     if (next === 'chat') out.delete('view'); else out.set('view', next);
     return out;
   }, { replace: true });
+  // `?summarizeRecording=<id>` (the Recordings pane's Summarize) runs `/summarize --recording <id>` once in this DM.
+  const summarizeRecording = params.get('summarizeRecording');
+  const finishSummarizeRecording = () => setParams((prev) => { const out = new URLSearchParams(prev); out.delete('summarizeRecording'); return out; }, { replace: true });
+  // An inbox link names a Social destination; embedded, the same destination is under this page.
+  const planeHref = (href: string) => (plane.embedded && /^\/social\/(channels|dms|teams|rooms|calls|recordings)(\/|\?|$)/.test(href)
+    ? `${base}${href.slice('/social'.length)}` : href);
   const [shelf, setShelf] = useState<Shelf | null>(null);
   const [picking, setPicking] = useState(false);
   // Any navigation leaves the shelf and the picker: the URL names the pane again.
@@ -147,22 +224,17 @@ export default function SocialChatWorkspace({ route }: { route: SocialChatRoute 
 
   const openTeam = findTeamChannel(teams, teamChannel);
   const focusTeamId = openTeam?.team.teamId ?? managing;
-  const detail = useFetch<TeamDetail>(focusTeamId ? `/api/social/teams/${encodeURIComponent(focusTeamId)}` : null);
+  const detail = useFetch<TeamDetail>(focusTeamId ? `${api}/teams/${encodeURIComponent(focusTeamId)}` : null);
   const members = detail.data?.members ?? [];
 
   // ── Presence, inbox, calls ────────────────────────────────────────────
-  // SocialLayout joins `social:lobby` for every social page; this only reads it.
-  const { roster: lobbyRoster } = usePresence(SOCIAL_PRESENCE_CHANNEL);
-  const here = useMemo(() => presenceAvatarUsers(lobbyRoster), [lobbyRoster]);
+  // The shell owns this subscription across routes. A second reader hook's
+  // cleanup would unsubscribe that shared connection when this page unmounts.
+  const here = useEmbeddedSocial()?.presencePeople ?? [];
   const online = useMemo(() => new Set(here.filter((p) => !p.idle).map((p) => p.id)), [here]);
   const people = useMemo(() => activeNow(here, me), [here, me]);
 
-  const inbox = useNotifications();
-  const gateway = useGatewayOptional();
-  const tell = useCallback((frame: Record<string, unknown>) => {
-    if (gateway?.connectionState !== 'connected') return;
-    try { gateway.send({ service: 'notification', ...frame }); } catch { /* offline: the local mark stands */ }
-  }, [gateway]);
+  const inbox = useSharedNotifications();
   const socialItems = useMemo(() => socialInbox(inbox.notifications), [inbox.notifications]);
   const unread = socialItems.filter((n) => !n.read).length;
   const mentions = useMemo(() => mentionItems(inbox.notifications), [inbox.notifications]);
@@ -172,22 +244,37 @@ export default function SocialChatWorkspace({ route }: { route: SocialChatRoute 
     ...inbox,
     notifications: [...socialItems].reverse(),
     unreadCount: unread,
-    markAllRead: () => { inbox.markAllRead(); tell({ action: 'markAllRead' }); },
-  }), [inbox, socialItems, unread, tell]);
-  const markRead = useCallback((id: string) => { inbox.markAsRead(id); tell({ action: 'markRead', id }); }, [inbox, tell]);
+  }), [inbox, socialItems, unread]);
+  const markRead = useCallback((id: string) => { inbox.markAsRead(id); }, [inbox]);
+  // A new message item in the inbox feed (the server only sends it to readers of that
+  // channel) refetches the rail's lists, so a DM row and its badge move while another
+  // conversation is open. The first pass only records what was already there.
+  const seenInbox = useRef<Set<string> | null>(null);
+  const refreshDmsLive = dmsFetch.refresh;
+  const refreshChannelsLive = channelsFetch.refresh;
+  useEffect(() => {
+    const first = seenInbox.current === null;
+    const seen = seenInbox.current ?? new Set<string>();
+    const { channels: touched, ids } = newMessageChannels(socialItems, seen);
+    for (const id of ids) seen.add(id);
+    seenInbox.current = seen;
+    if (first || touched.length === 0) return;
+    if (touched.some((c) => c.startsWith(DM_PREFIX))) refreshDmsLive();
+    if (touched.some((c) => c.startsWith(CHANNEL_PREFIX))) refreshChannelsLive();
+  }, [socialItems, refreshDmsLive, refreshChannelsLive]);
 
   const call = useSocialCall();
 
   // ── The rail's rows ───────────────────────────────────────────────────
   const [query, setQuery] = useState('');
-  const folded = useFoldedSections();
+  const rail = useRailSectionMemory(RAIL_MEMORY_KEY, { defaultFolded: DEFAULT_FOLDED, opened: route === 'teams' ? ['Teams'] : route === 'rooms' ? ['Rooms'] : [] });
   const rows = useMemo(() => withPresence([
     ...dmRailItems(conversations, lobby, me, roster),
     ...channelRailItems(channels),
   ], online).filter((item) => matchesRailFilter(item, query)), [conversations, lobby, me, roster, channels, online, query]);
   // Controlled: the tree mounts before the teams load, and an uncontrolled
   // tree takes its open set from the first render (none). Open unless folded.
-  const tree = useMemo(() => teamTreeItems(teams).map((t) => ({ ...t, expanded: !folded.folded[`team:${t.teamId}`] })), [teams, folded.folded]);
+  const tree = useMemo(() => teamTreeItems(teams).map((t) => ({ ...t, expanded: !rail.collapsedSections[`team:${t.teamId}`] })), [teams, rail.collapsedSections]);
 
   const selected: RailSelection | null = shelf ? { kind: 'shelf', id: shelf }
     : picking ? null
@@ -195,10 +282,21 @@ export default function SocialChatWorkspace({ route }: { route: SocialChatRoute 
       : slug ? { kind: 'conversation', channel: `${CHANNEL_PREFIX}${slug}` }
         : lobby ? { kind: 'conversation', channel: lobby }
           : null;
+  // Embedded (Communication), the content column's header takes the library
+  // header density: an open conversation is rich content — the title as one
+  // compact row, collapsible into the trail, remembered per device.
+  const headerDensity = useHeaderDensity({ contentKind: selected?.kind === 'conversation' ? 'conversation' : 'list', headerId: 'communication' });
 
   // ── Writes ────────────────────────────────────────────────────────────
   const [problem, setProblem] = useState<string | null>(null);
+  const [preferenceProblem, setPreferenceProblem] = useState<{ scope: string; pane: string; message: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  const paneScope = `${location.key}:${shelf ?? ''}:${picking}`;
+  const writeContext = useRef({ model: teamsFetch.model, pane: paneScope });
+  writeContext.current = { model: teamsFetch.model, pane: paneScope };
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  useEffect(() => { setBusy(false); setProblem(null); setPreferenceProblem(null); }, [teamScope]);
   const channelAnchor = useRef<HTMLElement | null>(null);
   const teamAnchor = useRef<HTMLElement | null>(null);
   const [creatingChannel, setCreatingChannel] = useState(false);
@@ -208,7 +306,7 @@ export default function SocialChatWorkspace({ route }: { route: SocialChatRoute 
   const roomsModel = useRoomsModel(roomsFetch);
 
   async function createChannel(input: CreateChannelDialogInput): Promise<void> {
-    const res = await writeJson<{ channel: SocialChannel }>('/api/social/channels', 'POST', {
+    const res = await writeJson<{ channel: SocialChannel }>(`${api}/channels`, 'POST', {
       name: input.name,
       ...(input.description ? { description: input.description } : {}),
       privacy: privacyForApi(input.privacy),
@@ -217,13 +315,13 @@ export default function SocialChatWorkspace({ route }: { route: SocialChatRoute 
     if (!res.ok || !res.data) throw new Error(res.error ?? 'The channel could not be created.');
     setCreatingChannel(false);
     channelsFetch.refresh();
-    navigate(channelHref(res.data.channel.slug));
+    navigate(channelHref(res.data.channel.slug, base));
   }
 
   async function channelMembership(action: 'join' | 'leave', target: SocialChannel): Promise<void> {
     setBusy(true);
     setProblem(null);
-    const res = await writeJson<{ channel: SocialChannel }>(`/api/social/channels/${encodeURIComponent(target.slug)}/${action}`, 'POST');
+    const res = await writeJson<{ channel: SocialChannel }>(`${api}/channels/${encodeURIComponent(target.slug)}/${action}`, 'POST');
     setBusy(false);
     if (!res.ok) { setProblem(res.error ?? `Could not ${action} #${target.slug}.`); return; }
     channelsFetch.refresh();
@@ -237,7 +335,7 @@ export default function SocialChatWorkspace({ route }: { route: SocialChatRoute 
     if (!res.ok || !res.data) { setProblem(res.error ?? 'The conversation could not be opened.'); return; }
     setPicking(false);
     dmsFetch.refresh();
-    navigate(dmHref(res.data.channel));
+    navigate(dmHref(res.data.channel, base));
   }
 
   // Reading the open DM moves your cursor (its unread count clears); the list
@@ -248,17 +346,30 @@ export default function SocialChatWorkspace({ route }: { route: SocialChatRoute 
     if (!lobby || !mine || count === 0) return;
     void writeJson('/api/social/dms/read', 'POST', { channel: lobby }).then((res) => { if (res.ok) refreshDms(); });
   }, [lobby, mine, refreshDms]);
+  // The OPEN conversation's rail row (its server-derived preview and time) moves with the
+  // conversation: the inbox feed carries no item for a channel its reader is viewing, so the
+  // live refetch above never fires for it (D3). The open panel reports its latest line; a
+  // change after the first report refetches the list that draws the row.
+  const latestOpenLine = useRef<{ channel: string | null; summary: string | null } | null>(null);
+  const refreshChannelsList = channelsFetch.refresh;
+  const refreshTeamsList = teamsFetch.refresh;
+  const openRowChanged = useCallback((channel: string, summary: string | null) => {
+    const prior = latestOpenLine.current;
+    latestOpenLine.current = { channel, summary };
+    if (!prior || prior.channel !== channel || prior.summary === summary) return;
+    if (channel.startsWith('social:team:')) refreshTeamsList(); else refreshChannelsList();
+  }, [refreshChannelsList, refreshTeamsList]);
 
   const goTeams = (next: { channel?: string | null; team?: string | null }) => {
     const p: Record<string, string> = {};
     if (next.channel) p['channel'] = next.channel;
     if (next.team) p['team'] = next.team;
     if (route === 'teams') setParams(p, { replace: true });
-    else navigate(`/social/teams${Object.keys(p).length ? `?${new URLSearchParams(p)}` : ''}`);
+    else navigate(`${base}/teams${Object.keys(p).length ? `?${new URLSearchParams(p)}` : ''}`);
   };
 
   async function createTeam(input: CreateTeamDialogInput) {
-    const res = await writeJson<{ team: SocialTeam }>('/api/social/teams', 'POST', input);
+    const res = await writeJson<{ team: SocialTeam }>(`${api}/teams`, 'POST', input);
     if (!res.ok || !res.data) throw new Error(res.error ?? 'The team could not be created.');
     setCreatingTeam(false);
     teamsFetch.refresh();
@@ -267,49 +378,128 @@ export default function SocialChatWorkspace({ route }: { route: SocialChatRoute 
 
   async function teamMembership(method: 'POST' | 'DELETE', userId: string, teamId = focusTeamId) {
     if (!teamId) return;
+    const context = writeContext.current;
+    const stillHere = () => mounted.current && writeContext.current.model === context.model && writeContext.current.pane === context.pane;
     setBusy(true);
     setProblem(null);
-    const base = `/api/social/teams/${encodeURIComponent(teamId)}/members`;
-    const res = method === 'POST'
-      ? await writeJson(base, 'POST', { userId })
-      : await writeJson(`${base}/${encodeURIComponent(userId)}`, 'DELETE');
-    setBusy(false);
-    if (!res.ok) { setProblem(res.error ?? 'The team could not be changed.'); return; }
-    detail.refresh();
-    teamsFetch.refresh();
-    if (method === 'DELETE' && userId === me) goTeams({});
+    const membersUrl = `${api}/teams/${encodeURIComponent(teamId)}/members`;
+    try {
+      const changed = await context.model.changeMembership(teamId, async () => {
+        const res = method === 'POST'
+          ? await writeJson(membersUrl, 'POST', { userId })
+          : await writeJson(`${membersUrl}/${encodeURIComponent(userId)}`, 'DELETE');
+        if (!res.ok) throw new Error(res.error ?? 'The team could not be changed.');
+      }, method === 'DELETE' && userId === me);
+      if (!changed || !stillHere()) return;
+      detail.refresh();
+      if (method === 'DELETE' && userId === me && focusTeamId === teamId) goTeams({});
+    } catch (error) {
+      if (stillHere()) setProblem(error instanceof Error ? error.message : 'The team could not be changed.');
+    } finally {
+      if (mounted.current && writeContext.current.model === context.model) setBusy(false);
+    }
+  }
+
+  async function pinTeam(teamId: string, favorite: boolean) {
+    const context = writeContext.current;
+    setPreferenceProblem(null);
+    try {
+      await context.model.pin(teamId, favorite);
+    } catch (error) {
+      if (mounted.current && writeContext.current.model === context.model && writeContext.current.pane === context.pane) {
+        setPreferenceProblem({ scope: teamScope, pane: context.pane,
+          message: error instanceof Error ? error.message : 'The team preference could not be saved.' });
+      }
+    }
   }
 
   const openNewDm = () => { setShelf(null); setPicking(true); };
 
   // ── The rail ──────────────────────────────────────────────────────────
-  const conversationsError = dmsFetch.error && channelsFetch.error ? dmsFetch.error : null;
-  const rail = (
+  const activeTiles = embedding?.activePeople ? embedding.activePeople(people) : people;
+  const railContext: WorkspaceRailContext = { query, online, here };
+  const teamsReadPending = !teamsFetch.data && (teamsFetch.isLoading || !!teamsFetch.error);
+  const sections: ConversationRailSection[] = [
+    {
+      // The rail draws the heading (its fold and count) over the people grid.
+      id: 'active-now', label: 'Active now', heading: true, count: activeTiles.length, 'data-testid': 'social-active-now',
+      node: <ActivePeopleGrid
+        people={activeTiles}
+        emptyLabel="Nobody is sharing work or online right now."
+        maxVisible={8}
+        onSelectPerson={(userId) => { void startDm(userId); }}
+        {...(embedding?.onSelectSharedWork ? { onSelectSharedWork: embedding.onSelectSharedWork } : {})}
+        className={RAIL_SECTION_CONTENT_INSET}
+        data-testid="social-active-now"
+      />,
+    },
+    ...(embedding?.railSections?.(railContext) ?? []),
+    {
+      id: 'teams', label: 'Teams',
+      ...(teamsReadPending ? { heading: true } : {}),
+      node: teamsReadPending
+        ? <Stack gap="none" className={RAIL_SECTION_CONTENT_INSET}><SocialReadStatus source="Teams" read={teamsFetch} retry={teamsFetch.refresh} testId="social-teams-read-status" /></Stack> : (
+        <Stack gap="none">
+        <TeamChannelTree
+          teams={tree}
+          filter={query}
+          activeChannel={openTeam ? teamChannel : null}
+          onSelectChannel={(channel) => goTeams({ channel })}
+          onToggleTeam={(teamId, expanded) => rail.setFolded(`team:${teamId}`, !expanded)}
+          onManageTeam={(teamId) => goTeams({ team: teamId })}
+          onTogglePinTeam={(teamId, favorite) => { void pinTeam(teamId, favorite); }}
+          onLeaveTeam={(teamId) => { void teamMembership('DELETE', me, teamId); }}
+          collapsed={rail.isFolded('Teams')}
+          onToggleCollapse={(next) => rail.setFolded('Teams', next)}
+          {...(mayManageTeams ? { onCreateTeam: (trigger: HTMLElement) => { teamAnchor.current = trigger; setCreatingTeam(true); } } : {})}
+          data-testid="social-team-tree"
+        />
+        {teamsFetch.error && !rail.isFolded('Teams') && <Stack gap="none" className={RAIL_SECTION_CONTENT_INSET}><SocialReadStatus source="Teams" read={teamsFetch} retry={teamsFetch.refresh} testId="social-teams-read-status" /></Stack>}
+        </Stack>
+      ),
+    },
+    {
+      id: 'rooms', label: 'Rooms',
+      node: <SocialRoomsSection rooms={roomsFetch} mayCreate={mayCreateChannel}
+        collapsed={rail.isFolded('Rooms')} onToggleCollapse={(next) => rail.setFolded('Rooms', next)}
+        onOpen={(slug) => navigate(`${base}/rooms?room=${encodeURIComponent(slug)}`)} />,
+    },
+  ];
+  const railNode = (
     <ConversationRail
       title="Chat"
       actions={<IconButton aria-label="New message" title="New message" size="sm" variant="ghost" icon={<PlusIcon size={14} />}
         onClick={openNewDm} data-testid="social-new-dm" />}
-      header={<SearchInput value={query} onChange={setQuery} placeholder="Find a chat" size="sm" className="w-full" aria-label="Find a chat" data-testid="social-rail-search" />}
+      search={{ value: query, onChange: setQuery, placeholder: 'Find a chat', label: 'Find a chat', 'data-testid': 'social-rail-search' }}
+      // One compact row of destinations (the user, 2026-10-07: they "shouldn't all stack in this window").
+      shelfLayout="bar"
       shelf={[
         { id: 'activity', label: 'Activity', icon: <ActivityIcon size={15} />, count: unread },
         { id: 'mentions', label: 'Mentions', icon: <AtIcon size={15} />, count: unreadMentions, urgent: true },
-        { id: 'calls', label: 'Calls', icon: <PhoneIcon size={15} />, count: callsFetch.data?.counts.missed ?? 0, urgent: true },
+        { id: 'calls', label: 'Calls', icon: <PhoneIcon size={15} />, count: (callsFetch.data?.counts.missed ?? 0) + (embedding?.pageMissed ?? 0), urgent: true },
         { id: 'recordings', label: 'Recordings', icon: <PlayCircleIcon size={15} /> },
       ]}
       conversations={rows}
+      beforeList={(channelsFetch.error || dmsFetch.error) && <Stack gap="xs" className={RAIL_SECTION_CONTENT_INSET}>
+        <SocialReadStatus source="Direct messages" read={dmsFetch} retry={dmsFetch.refresh} testId="social-dms-read-status" />
+        <SocialReadStatus source="Channels" read={channelsFetch} retry={channelsFetch.refresh} testId="social-channels-read-status" />
+      </Stack>}
       sectionOrder="dms-first"
+      sections={sections}
+      {...rail.railProps}
       maxVisible={8}
-      selected={selected}
+      selected={embedding?.pane ? null : selected}
       onSelect={(selection) => {
         if (selection.kind === 'shelf') {
           setPicking(false);
-          if (selection.id === 'calls' || selection.id === 'recordings') { setShelf(null); navigate(`/social/${selection.id}`); return; }
+          if (selection.id === 'calls' || selection.id === 'recordings') { setShelf(null); navigate(`${base}/${selection.id}`); return; }
           setShelf(selection.id === 'mentions' ? 'mentions' : 'activity');
+          if (embedding?.pane) navigate(base);
           return;
         }
         const channelSlug = slugFromChannel(selection.channel);
-        if (channelSlug) navigate(channelHref(channelSlug));
-        else if (selection.channel.startsWith(DM_PREFIX)) navigate(dmHref(selection.channel));
+        if (channelSlug) navigate(channelHref(channelSlug, base));
+        else if (selection.channel.startsWith(DM_PREFIX)) navigate(dmHref(selection.channel, base));
       }}
       {...(call.unavailable ? {} : {
         onStartCall: (channel: string) => {
@@ -317,8 +507,6 @@ export default function SocialChatWorkspace({ route }: { route: SocialChatRoute 
           if (peers.length) call.callPeople(peers);
         },
       })}
-      collapsedSections={folded.folded}
-      onToggleSection={folded.set}
       sectionActions={{
         'Direct messages': [{ label: 'New message', icon: <PlusIcon size={12} />, onClick: openNewDm, 'data-testid': 'social-rail-new-dm' }],
         ...(mayCreateChannel ? {
@@ -329,40 +517,7 @@ export default function SocialChatWorkspace({ route }: { route: SocialChatRoute 
           }],
         } : {}),
       }}
-      beforeList={(
-        <>
-          <Stack gap="none" data-testid="social-active-now-section">
-            <RailSectionHeader label="Active now" presentational={false} count={people.length}
-              collapsed={folded.isFolded('Active now')} onToggleCollapse={(next) => folded.set('Active now', next)}
-              controls="social-active-now" />
-            {!folded.isFolded('Active now') && <ActivePeopleGrid
-              people={people}
-              emptyLabel="Nobody is sharing work or online right now."
-              maxVisible={8}
-              onSelectPerson={(userId) => { void startDm(userId); }}
-              data-testid="social-active-now"
-            />}
-          </Stack>
-          {teamsFetch.error && !teamsFetch.data ? null : (
-            <TeamChannelTree
-              teams={tree}
-              filter={query}
-              activeChannel={openTeam ? teamChannel : null}
-              onSelectChannel={(channel) => goTeams({ channel })}
-              onToggleTeam={(teamId, expanded) => folded.set(`team:${teamId}`, !expanded)}
-              onManageTeam={(teamId) => goTeams({ team: teamId })}
-              onLeaveTeam={(teamId) => { void teamMembership('DELETE', me, teamId); }}
-              collapsed={folded.isFolded('Teams')}
-              onToggleCollapse={(next) => folded.set('Teams', next)}
-              {...(mayManageTeams ? { onCreateTeam: (trigger: HTMLElement) => { teamAnchor.current = trigger; setCreatingTeam(true); } } : {})}
-              data-testid="social-team-tree"
-            />
-          )}
-          <SocialRoomsSection rooms={roomsFetch} mayCreate={mayCreateChannel}
-            onOpen={(slug) => navigate(`/social/rooms?room=${encodeURIComponent(slug)}`)} />
-        </>
-      )}
-      emptyLabel={conversationsError ? `Couldn’t load your conversations — ${conversationsError}.` : 'No conversations yet'}
+      emptyLabel={conversationRailEmptyLabel([dmsFetch, channelsFetch], query)}
       data-testid="social-chat-rail"
     />
   );
@@ -371,10 +526,6 @@ export default function SocialChatWorkspace({ route }: { route: SocialChatRoute 
   const openChannel = slug ? channels.find((c) => c.slug === slug) ?? null : null;
   const dmListed = lobby ? conversations.find((c) => c.channel === lobby) : undefined;
   const dmPeople = lobby ? dmPeers(lobby, me, roster, dmListed?.peers) : [];
-  const candidateColumns: DataTableColumn<Candidate>[] = [
-    { key: 'displayName', header: 'Name', sortable: true },
-    { key: 'hint', header: 'Role', width: '160px' },
-  ];
   const candidates = useMemo<Candidate[]>(
     () => teamCandidates(dmCandidates(peopleFetch.data?.people ?? [], me), members),
     [peopleFetch.data, me, members],
@@ -383,27 +534,57 @@ export default function SocialChatWorkspace({ route }: { route: SocialChatRoute 
   const canEditMembers = mayManageTeams && isOwner;
 
   const recordingsFor = (lobbyName: string) => conversationRecordings(recordingsFetch.data?.recordings ?? [], lobbyName);
-  const openRecording = (id: string) => navigate(`/social/recordings?recording=${encodeURIComponent(id)}`);
+  const openRecording = (id: string) => navigate(`${base}/recordings?recording=${encodeURIComponent(id)}`);
   const conversationCall = (channel: string, title: string) => (call.unavailable ? {} : {
     onStartCall: (audioOnly: boolean) => call.callConversation({ channel, title }, { audioOnly }),
   });
 
+  // The footer's idle group names what is open here and its Huddle runs the
+  // same start as the conversation's call button (realtime-parity gap 3).
+  const openRoom = route === 'rooms' && roomSlug ? rooms.find((r) => r.slug === roomSlug) ?? null : null;
+  const footerContext: SocialFooterContext | null = shelf || picking ? null
+    : embedding?.pane
+      ? (embedding.footerConversation ? { lobbyName: embedding.footerConversation.channel, title: embedding.footerConversation.title,
+        start: () => call.callConversation(embedding.footerConversation!) } : null)
+    : route === 'channels' && openChannel?.joined
+      ? { lobbyName: openChannel.channel, title: `#${openChannel.slug}`, start: () => call.callConversation({ channel: openChannel.channel, title: `#${openChannel.slug}` }) }
+    : route === 'dms' && lobby && mine && dmPeople.length
+      ? { lobbyName: lobby, title: dmTitle(dmPeople), start: () => call.callPeople(dmPeople) }
+    : openRoom
+      ? { lobbyName: openRoom.lobbyName, title: openRoom.name, start: () => call.joinRoom(openRoom) }
+    : route === 'teams' && openTeam && teamChannel
+      ? { lobbyName: teamChannel, title: `${openTeam.team.name} · ${openTeam.channel.name}`, start: () => call.callConversation({ channel: teamChannel, title: `${openTeam.team.name} · ${openTeam.channel.name}` }) }
+      : null;
+  useSocialFooterContext(footerContext, call.unavailable);
+
   function pane() {
-    if (route === 'calls' && !shelf && !picking) return <CallLogPane calls={callsFetch} me={me} nameOf={nameOf} rooms={rooms} call={call} />;
-    if (route === 'recordings' && !shelf && !picking) return <RecordingsPane me={me} nameOf={nameOf} rooms={rooms} mayManage={mayManageRecordings} />;
+    // The host's own view (a group's page discussion, an org team, a person's shared work) — the plane only.
+    if (embedding?.pane && !shelf && !picking) return embedding.pane;
+    if (route === 'calls' && !shelf && !picking) {
+      const social = <CallLogPane calls={callsFetch} me={me} nameOf={nameOf} rooms={rooms} call={call} />;
+      if (!embedding) return social;
+      // Embedded: this tenant's page huddles (its former Calls page) first, then the Social call log.
+      return (
+        <Stack gap="lg" className="min-h-0 min-w-0 flex-1 overflow-auto" data-testid="communication-calls">
+          <Stack gap="sm"><SectionLabel as="h2">On this workspace's pages</SectionLabel>{embedding.pageCalls}</Stack>
+          <Stack gap="sm"><SectionLabel as="h2">Social calls</SectionLabel>{social}</Stack>
+        </Stack>
+      );
+    }
+    if (route === 'recordings' && !shelf && !picking) return <RecordingsPane me={me} nameOf={nameOf} rooms={rooms} mayManage={mayManageRecordings} postTargets={roomSummaryTargets(channels, conversations)} displayName={displayName} />;
     if (shelf === 'activity') {
       return <WrappedNotificationCenter notifications={inboxView} className="min-h-0 flex-1"
         onItemClick={(item, entry) => {
           markRead(item.id);
           const href = entry?.action?.href;
-          if (href && href.startsWith('/') && !href.startsWith('//')) navigate(href);
+          if (href && href.startsWith('/') && !href.startsWith('//')) navigate(planeHref(href));
         }} data-testid="social-activity-pane" />;
     }
     if (shelf === 'mentions') {
       return mentions.length
         ? <ChannelMentionsPanel className="min-h-0 flex-1" mentions={mentions} data-testid="social-mentions-pane"
-          onJump={(channel, id) => { markRead(id); const s = slugFromChannel(channel); if (s) navigate(channelHref(s)); }} />
-        : <EmptyState align="start" testId="social-mentions-empty" title="No mentions"
+          onJump={(channel, id) => { markRead(id); const s = slugFromChannel(channel); if (s) navigate(channelHref(s, base)); }} />
+        : <EmptyState size="sm" align="start" testId="social-mentions-empty" title="No mentions"
           description="When someone writes @ and your name in a channel you are in, it lands here." />;
     }
     if (picking) {
@@ -411,31 +592,38 @@ export default function SocialChatWorkspace({ route }: { route: SocialChatRoute 
         peopleError={peopleFetch.error} busy={busy} onStartDm={startDm} onCancel={() => setPicking(false)} data-testid="social-dm-picker" />;
     }
     if (route === 'channels') {
+      if (!slug && embedding?.landing) {
+        return embedding.landing({
+          ready: !!(channelsFetch.data || channelsFetch.error) && !!(dmsFetch.data || dmsFetch.error),
+          channels, conversations, activePeople: activeTiles,
+        });
+      }
       if (channelsFetch.isLoading && !channelsFetch.data) return <LoadingState label="Loading channels…" />;
       if (channelsFetch.error && !channelsFetch.data) return <ErrorState title="Channels could not be loaded" description={channelsFetch.error} actionLabel="Try again" onAction={channelsFetch.refresh} />;
       if (!slug) {
         return channels.length === 0
-          ? <EmptyState testId="social-empty-channels" align="start" title="No channels yet"
+          ? <EmptyState size="sm" testId="social-empty-channels" align="start" title="No channels yet"
             description={mayCreateChannel
               ? 'Channels are where a community talks in the open. None exist in this workspace yet — create the first one.'
               : 'Channels are where a community talks in the open. None exist in this workspace yet; a moderator can create one.'}
             {...(mayCreateChannel ? { action: <Button variant="primary" size="sm" onClick={(e) => { channelAnchor.current = e.currentTarget; setCreatingChannel(true); }} data-testid="social-empty-create-channel">Create a channel</Button> } : {})} />
-          : <EmptyState align="start" title="Pick a channel" description="Choose a channel on the left to read it. Channels you have not joined show a Join button first." />;
+          : <EmptyState size="sm" align="start" title="Pick a channel" description="Choose a channel on the left to read it. Channels you have not joined show a Join button first." />;
       }
-      if (!openChannel) return <EmptyState align="start" testId="social-channel-missing" title={`#${slug} is not available`} description="This channel does not exist, or it is private and you are not a member." />;
+      if (!openChannel) return <EmptyState size="sm" align="start" testId="social-channel-missing" title={`#${slug} is not available`} description="This channel does not exist, or it is private and you are not a member." />;
       if (openChannel.joined) {
-        return <SocialConversation key={openChannel.channel} channel={openChannel.channel} name={`#${openChannel.slug}`}
+        return <SocialConversation focusTarget key={openChannel.channel} channel={openChannel.channel} name={`#${openChannel.slug}`} maySend={mayPost}
           description={`${openChannel.memberCount} ${openChannel.memberCount === 1 ? 'member' : 'members'}${openChannel.description ? ` · ${openChannel.description}` : ''}`}
-          view={view} onViewChange={setView}
+          view={graph ? 'chat' : view} onViewChange={setView} {...graphPropsFor(openChannel.channel, `#${openChannel.slug}`)}
           {...conversationCall(openChannel.channel, `#${openChannel.slug}`)} callInProgress={call.activeLobby === openChannel.channel}
           recordings={recordingsFor(openChannel.channel)} onOpenRecording={openRecording}
           menu={[{ label: `Leave #${openChannel.slug}`, danger: true, disabled: busy, onSelect: () => void channelMembership('leave', openChannel), 'data-testid': 'social-leave-channel' }]}
-          userId={me} displayName={displayName} placeholder={`Message #${openChannel.slug}`} />;
+          userId={me} displayName={displayName} nameOf={nameOf} placeholder={`Message #${openChannel.slug}`}
+          onLatestMessage={(summary) => openRowChanged(openChannel.channel, summary)} />;
       }
       return (
         <Stack gap="md" className="min-w-0 flex-1">
           <ChannelHeader name={`#${openChannel.slug}`} {...(openChannel.description ? { description: openChannel.description } : {})} memberCount={openChannel.memberCount} />
-          <EmptyState align="start" testId="social-channel-not-joined" title={`You are not in #${openChannel.slug}`}
+          <EmptyState size="sm" align="start" testId="social-channel-not-joined" title={`You are not in #${openChannel.slug}`}
             description="Join to read the conversation and post in it. Everyone in the channel will see you arrive."
             action={<Button variant="primary" size="sm" disabled={busy} onClick={() => void channelMembership('join', openChannel)} data-testid="social-join-channel">Join #{openChannel.slug}</Button>} />
         </Stack>
@@ -446,17 +634,19 @@ export default function SocialChatWorkspace({ route }: { route: SocialChatRoute 
       if (dmsFetch.error && !dmsFetch.data) return <ErrorState title="Conversations could not be loaded" description={dmsFetch.error} actionLabel="Try again" onAction={dmsFetch.refresh} />;
       if (!lobby) {
         const any = conversations.length > 0;
-        return <EmptyState align="start" testId="social-empty-dms" title={any ? 'Pick a conversation' : 'No direct messages yet'}
+        return <EmptyState size="sm" align="start" testId="social-empty-dms" title={any ? 'Pick a conversation' : 'No direct messages yet'}
           description={any ? 'Choose a conversation on the left, or start a new one.' : 'A direct message is visible only to the people in it. You have not started one here.'}
-          actionLabel="New message" onAction={openNewDm} />;
+          action={<Button variant="primary" size="sm" onClick={openNewDm} data-testid="social-empty-new-dm">New message</Button>} />;
       }
-      if (!mine) return <EmptyState align="start" testId="social-dm-missing" title="This conversation is not yours" description="A direct message opens only for the people it names." />;
-      return <SocialConversation key={lobby} channel={lobby} name={dmTitle(dmPeople)} userId={me} displayName={displayName}
+      if (!mine) return <EmptyState size="sm" align="start" testId="social-dm-missing" title="This conversation is not yours" description="A direct message opens only for the people it names." />;
+      return <SocialConversation focusTarget key={lobby} channel={lobby} name={dmTitle(dmPeople)} userId={me} displayName={displayName} nameOf={nameOf} maySend={mayPost}
+        {...(dmPeople.length === 1 && dmPeople[0]?.avatarUrl ? { avatarUrl: dmPeople[0].avatarUrl } : {})}
         online={dmPeople.some((p) => online.has(p.userId))}
-        view={view} onViewChange={setView}
+        view={graph ? 'chat' : view} onViewChange={setView} {...graphPropsFor(lobby, dmTitle(dmPeople))}
         {...(call.unavailable ? {} : { onStartCall: (audioOnly: boolean) => call.callPeople(dmPeople, { audioOnly }) })}
         callInProgress={call.activeLobby === lobby}
         recordings={recordingsFor(lobby)} onOpenRecording={openRecording}
+        {...(summarizeRecording ? { autoRun: `/summarize --recording ${summarizeRecording}`, onAutoRunDone: finishSummarizeRecording } : {})}
         placeholder={`Message ${dmTitle(dmPeople)}`} onMessages={markDmRead} />;
     }
     if (route === 'rooms') {
@@ -469,15 +659,16 @@ export default function SocialChatWorkspace({ route }: { route: SocialChatRoute 
     if (teamsFetch.isLoading && !teamsFetch.data) return <LoadingState label="Loading teams…" />;
     if (teamsFetch.error && !teamsFetch.data) return <ErrorState title="Teams could not be loaded" description={teamsFetch.error} actionLabel="Try again" onAction={teamsFetch.refresh} />;
     if (openTeam) {
-      return <SocialConversation key={teamChannel!} channel={teamChannel!} name={`${openTeam.team.name} · ${openTeam.channel.name}`}
+      return <SocialConversation focusTarget key={teamChannel!} channel={teamChannel!} name={`${openTeam.team.name} · ${openTeam.channel.name}`} maySend={mayPost}
         {...(openTeam.team.description || members.length ? {
           description: [members.length ? `${members.length} ${members.length === 1 ? 'member' : 'members'}` : '', openTeam.team.description ?? ''].filter(Boolean).join(' · '),
         } : {})}
-        view={view} onViewChange={setView}
+        view={graph ? 'chat' : view} onViewChange={setView} {...graphPropsFor(teamChannel!, `${openTeam.team.name} · ${openTeam.channel.name}`)}
         {...conversationCall(teamChannel!, `${openTeam.team.name} · ${openTeam.channel.name}`)} callInProgress={call.activeLobby === teamChannel}
         recordings={recordingsFor(teamChannel!)} onOpenRecording={openRecording}
         menu={[{ label: 'Members', onSelect: () => goTeams({ team: openTeam.team.teamId }), 'data-testid': 'social-team-open-members' }]}
-        userId={me} displayName={displayName} placeholder={`Message ${openTeam.channel.name}`} />;
+        userId={me} displayName={displayName} nameOf={nameOf} placeholder={`Message ${openTeam.channel.name}`}
+        onLatestMessage={(summary) => openRowChanged(teamChannel!, summary)} />;
     }
     if (managing && detail.data) {
       return (
@@ -489,7 +680,10 @@ export default function SocialChatWorkspace({ route }: { route: SocialChatRoute 
             </InlineAlert>
           )}
           <MembersPanel
-            members={members.map((m) => ({ id: m.userId, name: m.displayName, role: m.role, addedAt: m.addedAt }))}
+            members={members.map((m) => {
+              const avatarUrl = roster.find((p) => p.userId === m.userId)?.avatarUrl;
+              return { id: m.userId, name: m.displayName, role: m.role, addedAt: m.addedAt, ...(avatarUrl ? { avatarUrl } : {}) };
+            })}
             open={detail.data.team.visibility === 'org'}
             canManage={canEditMembers}
             currentUserId={me}
@@ -499,48 +693,62 @@ export default function SocialChatWorkspace({ route }: { route: SocialChatRoute 
         </Stack>
       );
     }
-    if (managing && detail.error) return <EmptyState align="start" testId="social-team-missing" title="This team is not available" description="It does not exist, or it is private and you are not on it." />;
+    if (managing && detail.isLoading && !detail.data) return <LoadingState label="Loading team…" />;
+    if (managing && detail.error) return <ErrorState title="This team could not be loaded" description={detail.error} actionLabel="Try again" onAction={detail.refresh} />;
     if (teams.length === 0) {
-      return <EmptyState testId="social-empty-teams" align="start" title="You are not on a team yet"
+      return <EmptyState size="sm" testId="social-empty-teams" align="start" title="You are not on a team yet"
         description={mayManageTeams
           ? 'A team groups people and their channels. Create one and add the people it is for.'
           : 'A team groups people and their channels. A moderator adds you to one.'}
         {...(mayManageTeams ? { action: <Button variant="primary" size="sm" onClick={(e) => { teamAnchor.current = e.currentTarget; setCreatingTeam(true); }} data-testid="social-empty-create-team">New team</Button> } : {})} />;
     }
-    return <EmptyState align="start" title="Pick a channel" description="Choose a team's channel on the left to read it, or open a team's ⋯ menu to see who is on it." />;
+    return <EmptyState size="sm" align="start" title="Pick a channel" description="Choose a team's channel on the left to read it, or open a team's ⋯ menu to see who is on it." />;
+  }
+
+  function alerts() {
+    return <>
+      {problem && <InlineAlert tone="error" onDismiss={() => setProblem(null)}>{problem}</InlineAlert>}
+      {preferenceProblem?.scope === teamScope && preferenceProblem.pane === paneScope && (
+        <InlineAlert tone="error" onDismiss={() => setPreferenceProblem(null)} data-testid="social-team-preference-error">
+          {preferenceProblem.message}
+        </InlineAlert>
+      )}
+      {call.notice && <InlineAlert tone="warning" onDismiss={call.clearNotice}>{call.notice}</InlineAlert>}
+    </>;
   }
 
   return (
     <Stack gap="none" className="min-h-0 min-w-0 bg-surface" data-shell-flush data-testid={PAGE_TESTID[route]}>
-      <VisuallyHidden as="h1">{PAGE_TITLE[route]}</VisuallyHidden>
+      {!embedding && <VisuallyHidden as="h1">{PAGE_TITLE[route]}</VisuallyHidden>}
       <ViewportFillRegion className="flex min-w-0" data-testid="social-chat-workspace">
-        {rail}
-        <Stack as="section" aria-label={PAGE_TITLE[route]} gap="sm" className="min-h-0 min-w-0 flex-1 overflow-hidden px-5 py-4" data-testid="social-chat-pane">
-          {problem && <InlineAlert tone="error" onDismiss={() => setProblem(null)}>{problem}</InlineAlert>}
-          {call.notice && <InlineAlert tone="warning" onDismiss={call.clearNotice}>{call.notice}</InlineAlert>}
-          {pane()}
-        </Stack>
+        {railNode}
+        {embedding ? (
+          <SectionContent breadcrumbs={embedding.breadcrumbs} title={embedding.title} body="fill" {...headerDensity.headerProps}
+            {...(embedding.actions ? { actions: embedding.actions } : {})} data-testid="communication-content">
+            <Stack as="section" aria-label={PAGE_TITLE[route]} gap="sm" className="min-h-0 min-w-0 flex-1 overflow-hidden" ref={headerDensity.contentRef} data-testid="social-chat-pane">
+              {alerts()}
+              {pane()}
+            </Stack>
+          </SectionContent>
+        ) : (
+          <Stack as="section" aria-label={PAGE_TITLE[route]} gap="sm" className="min-h-0 min-w-0 flex-1 overflow-hidden px-5 py-4" data-testid="social-chat-pane">
+            {alerts()}
+            {pane()}
+          </Stack>
+        )}
       </ViewportFillRegion>
       {/* Always anchored to the control that opened them: centred, the
           library's PopoverForm has no Escape (docs/ui-components-queue.md). */}
       <CreateChannelDialog open={creatingChannel} teamName="Social" anchor={channelAnchor}
         onCreate={createChannel} onClose={() => setCreatingChannel(false)} data-testid="social-create-channel-dialog" />
       <RoomCreateDialog open={creatingRoom} onClose={() => setCreatingRoom(false)} mayCreate={mayCreateChannel}
-        createRoom={roomsModel.createRoom} onCreated={(slug) => navigate(`/social/rooms?room=${encodeURIComponent(slug)}`)} />
+        createRoom={roomsModel.createRoom} onCreated={(slug) => navigate(`${base}/rooms?room=${encodeURIComponent(slug)}`)} />
       <CreateTeamDialog open={creatingTeam} anchor={teamAnchor} onCreate={createTeam} onClose={() => setCreatingTeam(false)} data-testid="social-create-team-dialog" />
-      <Modal open={adding} onClose={() => setAdding(false)} title="Add people to the team" maxWidth={560}
-        footer={<Button variant="secondary" size="sm" onClick={() => setAdding(false)}>Done</Button>}>
-        <DataTable
-          data={candidates}
-          columns={candidateColumns}
-          keyField={(c) => c.userId}
-          searchable
-          searchPlaceholder="Find a person"
-          emptyMessage="Everyone in this workspace is already on the team."
-          rowActions={(c) => <Button variant="ghost" size="sm" disabled={busy} onClick={() => void teamMembership('POST', c.userId)} data-testid="social-team-add-person">Add</Button>}
-          data-testid="social-team-candidates"
-        />
-      </Modal>
+      <AddPeoplePicker open={adding} onClose={() => setAdding(false)} title="Add people to the team"
+        candidates={candidates.map((c) => ({ userId: c.userId, displayName: c.displayName, ...(c.hint ? { subtitle: c.hint } : {}) }))}
+        searchPlaceholder="Find a person" emptyMessage="Everyone in this workspace is already on the team." busy={busy}
+        onAdd={async (ids) => { for (const id of ids) await teamMembership('POST', id); setAdding(false); }}
+        data-testid="social-team-candidates" />
     </Stack>
   );
 }

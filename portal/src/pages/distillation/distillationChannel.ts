@@ -5,6 +5,10 @@
 //   distill:levels  {type:'levels', levels}
 //   distill:jobs    {type:'job', job}
 //   distill:review  {type:'review', pending, decided}
+// Those are the page-facing keys. On the wire each carries the `orgiq:`
+// partition (WIRE_CHANNEL) because the /ws gateway admits a channel only
+// under the caller's tenant prefix — the middleware's
+// lib/distillation-channels.ts holds the same names.
 // No React; tested under node:test.
 
 import type { CompactionRun, TierLevel } from './types.ts';
@@ -15,6 +19,13 @@ export const CHANNEL_SNAPSHOT_URL: Record<DistillationChannel, string> = {
   'distill:levels': '/api/distillation/levels',
   'distill:jobs': '/api/distillation/compactions',
   'distill:review': '/api/distillation/review',
+};
+
+/** The gateway channel each key is subscribed and pushed on. */
+export const WIRE_CHANNEL: Record<DistillationChannel, string> = {
+  'distill:levels': 'orgiq:distill:levels',
+  'distill:jobs': 'orgiq:distill:jobs',
+  'distill:review': 'orgiq:distill:review',
 };
 
 export type DistillationFrame =
@@ -47,7 +58,7 @@ function asFrame(v: unknown, want: DistillationFrame['type']): DistillationFrame
  */
 export function extractFrame(msg: unknown, channel: DistillationChannel): DistillationFrame | null {
   if (!isRecord(msg)) return null;
-  if (typeof msg.channel === 'string' && msg.channel !== channel) return null;
+  if (typeof msg.channel === 'string' && msg.channel !== WIRE_CHANNEL[channel]) return null;
   const want = FRAME_FOR[channel];
   const direct = asFrame(msg, want);
   if (direct) return direct;

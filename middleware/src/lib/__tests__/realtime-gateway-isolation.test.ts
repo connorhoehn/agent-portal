@@ -12,6 +12,8 @@
 //   - a `<org>:dm:` call lobby invite from someone who is not one of the ids
 //     is refused, in both tenants, and never rings the target.
 
+// Real Cedar seed roles: tenant channel families ask ViewAssessment etc. (lib/tenant-channels.ts).
+jest.mock('../role-registry.js', () => ({ roleRegistry: () => jest.requireActual('../../test-support/seed-roles').seedRoleRegistry() }));
 jest.mock('../../config.js', () => ({
   config: { region: 'us-east-1', auth: { sessionSigningSecretArn: '' }, cognito: { portalOrigin: '' }, mock: { aurora: true } },
 }));
@@ -23,6 +25,7 @@ import { attachRealtimeGateway, REALTIME_GATEWAY_PATH } from '../realtime-gatewa
 import { rejectUnsupportedUpgrades } from '../unsupported-upgrades.js';
 import { signRealtimeToken, realtimeClaims } from '../realtime-token.js';
 import type { Session } from '../session.js';
+import { getUser } from '../../providers/identity.js';
 
 const SECRET = 'test-realtime-secret';
 const DOC_CHANNEL = 'assessment:doc:page:100002';
@@ -59,7 +62,8 @@ beforeEach(() => { warn = jest.spyOn(console, 'warn').mockImplementation(() => u
 afterEach(() => { warn.mockRestore(); });
 
 async function connectAs(sub: string, name: string, tenant: string): Promise<Open> {
-  const session = { sub, name, role: 'member', tenant, grants: { [tenant]: ['member'] }, iat: Math.floor(Date.now() / 1000) } as Session;
+  const user = await getUser(sub, { authoritative: true });
+  const session = { sub, name, role: user?.grants[tenant]?.[0], tenant, grants: user?.grants ?? {}, epoch: user?.epoch ?? 0, iat: Math.floor(Date.now() / 1000) } as Session;
   const { token } = await signRealtimeToken(realtimeClaims(session), SECRET);
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(`ws://127.0.0.1:${port}${REALTIME_GATEWAY_PATH}`, ['bearer-token-v1', token]);
@@ -136,7 +140,8 @@ describe('an orgiq token against assessment channels', () => {
     // The assessment side never hears about Theo, and its roster has no orgiq entry.
     send(farah, { service: 'presence', action: 'subscribe', channel: PRESENCE_CHANNEL });
     await settle();
-    expect(JSON.stringify(farah.frames)).not.toContain('u-theo');
+    // Notification replays (the seeded social inbox) may legitimately name Theo as an actor: look at presence frames only.
+    expect(JSON.stringify(farah.frames.filter((f) => f['service'] === 'presence' || f['type'] === 'presence'))).not.toContain('u-theo');
     expect(denied(farah)).toEqual([]);
   });
 });
@@ -179,6 +184,79 @@ describe('an assessment token on its own channels', () => {
     const text = JSON.stringify(presenceFrames());
     expect(text).toContain('Jonas Assessor');
     expect(text).not.toContain('Forged Name');
+  });
+});
+
+describe('typing frames stay inside the channel authority (parity gap 1, 2026-10-06)', () => {
+  const typingFrames = (o: Open) => chatFrames(o).filter((f) => f.action === 'typing');
+
+  it('reaches a member of the same tenant channel, and a non-member tenant is refused with nothing fanned out', async () => {
+    send(farah, { service: 'chat', action: 'join', channel: DOC_CHANNEL });
+    send(jonas, { service: 'chat', action: 'join', channel: DOC_CHANNEL });
+    await settle();
+    send(farah, { service: 'chat', action: 'typing', channel: DOC_CHANNEL, typing: true });
+    await until(() => typingFrames(jonas).some((f) => f['userId'] === 'u-farah' && f['typing'] === true));
+
+    const before = typingFrames(jonas).length;
+    send(theo, { service: 'chat', action: 'typing', channel: DOC_CHANNEL, typing: true });
+    await until(() => denied(theo).length >= 1);
+    expect(denied(theo)[0]).toMatchObject({ service: 'chat', channel: DOC_CHANNEL, kind: 'publish' });
+    await settle();
+    expect(typingFrames(jonas).length).toBe(before);
+    expect(typingFrames(jonas).some((f) => f['userId'] === 'u-theo')).toBe(false);
+  });
+});
+
+describe('tenant channel families (default deny, 2026-10-05)', () => {
+  it('refuses an orgiq name no family lists, and an assessment reader standing in another tenant', async () => {
+    send(theo, { service: 'chat', action: 'join', channel: 'orgiq:room:anything' });
+    send(theo, { service: 'presence', action: 'subscribe', channel: 'orgiq:doc:1' });
+    await until(() => denied(theo).length >= 2);
+    expect(denied(theo).map((f) => f['channel']).sort()).toEqual(['orgiq:doc:1', 'orgiq:room:anything']);
+    // Farah holds assessment grants, but this socket's signed source is social.
+    const away = await connectAs('u-farah', 'Farah Away', 'social');
+    try {
+      send(away, { service: 'chat', action: 'join', channel: DOC_CHANNEL });
+      await until(() => denied(away).length >= 1);
+      expect(denied(away)[0]).toMatchObject({ channel: DOC_CHANNEL });
+    } finally { away.ws.close(); }
+  });
+
+  it('lets an orgiq member join an initiative presence but not post into its discussion', async () => {
+    const channel = 'orgiq:initiative:p-soc2';
+    send(theo, { service: 'presence', action: 'subscribe', channel });
+    send(theo, { service: 'chat', action: 'join', channel });
+    await settle(300);
+    expect(denied(theo)).toEqual([]);
+    send(theo, { service: 'chat', action: 'send', channel, message: 'member post' });
+    await until(() => denied(theo).length >= 1);
+    expect(denied(theo)[0]).toMatchObject({ channel, kind: 'publish' });
+  });
+});
+
+describe('the tenant-neutral shell entry (<tenant>:lobby presence, <tenant>:dm chat)', () => {
+  it('shares presence and a DM between two orgiq users, and keeps another tenant out', async () => {
+    const nora = await connectAs('u-nora', 'Nora DaSilva', 'orgiq');
+    const vera = await connectAs('u-vera', 'Vera Green', 'orgiq');
+    try {
+      send(nora, { service: 'presence', action: 'subscribe', channel: 'orgiq:lobby' });
+      await settle();
+      send(vera, { service: 'presence', action: 'set', status: 'online', metadata: {}, channels: ['orgiq:lobby'] });
+      await until(() => JSON.stringify(nora.frames.filter((f) => f.type === 'presence')).includes('u-vera'));
+      send(farah, { service: 'presence', action: 'subscribe', channel: 'orgiq:lobby' });
+      send(vera, { service: 'chat', action: 'send', channel: 'orgiq:lobby', message: 'not a chat room' });
+      await until(() => denied(farah).length >= 1 && denied(vera).length >= 1);
+      expect(denied(farah)[0]).toMatchObject({ channel: 'orgiq:lobby' });
+
+      const dm = 'orgiq:dm:u-nora:u-vera';
+      send(nora, { service: 'chat', action: 'join', channel: dm });
+      send(vera, { service: 'chat', action: 'join', channel: dm });
+      await settle();
+      send(vera, { service: 'chat', action: 'send', channel: dm, message: 'hello nora' });
+      await until(() => JSON.stringify(nora.frames).includes('hello nora'));
+      send(theo, { service: 'chat', action: 'join', channel: dm });
+      await until(() => denied(theo).some((f) => f['channel'] === dm));
+    } finally { nora.ws.close(); vera.ws.close(); }
   });
 });
 

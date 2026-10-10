@@ -1,0 +1,5 @@
+This directory holds the portal's local build of `@connorhoehnslalom/ui-components` 2.439.0 with the shared HoverCard viewport fix. `package.json` and `package-lock.json` resolve the checked-in tarball here, so installation does not depend on a temporary worktree or an unpublished release.
+
+The base is exactly the portal's previous pin, `2a9f10c5cd4a10823b9669a43cf87b0ed3f1a9a4`. The patch beside the tarball changes the native shared component and adds placement tests. It preserves the component's public props, hover timing, pinning, focus, Escape and non-modal behavior. No public-API change, package publication or version bump is included.
+
+The provenance JSON records the source commit, patch and artifact hashes. To rebuild, apply the patch to a native ui-components worktree at that commit, run its tests, `npm run lint` and `npm run build`, then run `npm pack --ignore-scripts`. Replace the named artifact and regenerate the dependency lock with a normal npm installation before verifying the portal. The source and demo TypeScript gate are separate from the optional static-style guard; existing guard violations are recorded in the verification receipt.

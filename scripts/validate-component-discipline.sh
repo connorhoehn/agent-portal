@@ -39,163 +39,31 @@ SRC=portal/src
 QUEUE=docs/ui-components-queue.md
 
 # The same element set validate-assessment-tenant.sh counts.
-RAW_RE='<(div|p|span|h[1-6]|ul|ol|li|section|nav|article|table|tr|td|th|button|a|label|input|textarea|select|form|code|pre)( [^>]*)?className='
-
-# A raw element is permitted in exactly one kind of file: a local composite
-# standing in for a primitive the library lacks, AND queued for it. Only rows
-# that say "Composed locally in `<file>`" mint an exemption — a row that merely
-# names where a gap was worked around must not exempt that file.
-QUEUED_FILES=$(grep -oE "Composed locally in \`portal/src/[A-Za-z0-9_/.-]+\.tsx\`" "$QUEUE" 2>/dev/null \
-  | grep -oE "portal/src/[A-Za-z0-9_/.-]+\.tsx" | sort -u)
-# A queued file still gets a per-file cap, so "queue it" cannot become
-# "hand-roll it".
+# One raw-element counter for every discipline check (audit 2026-10-07 T7):
+# scripts/lib/discipline.sh, which the tenant validators source too.
+source scripts/lib/discipline.sh
+DC_QUEUE=$QUEUE
+RAW_RE=$DC_RAW_RE
+QUEUED_FILES=$(dc_queued_files portal/src/)
 QUEUED_MAX_PER_FILE=8
+count_re() { dc_count_re "$@"; }
+count_raw() { dc_count_raw "$@"; }
+area_files() { dc_area_files "$1" portal/src/; }
 
-count_re() { # count_re <regex> <files...> — single-line patterns only
-  local re="$1"; shift
-  local n=0 c
-  for f in "$@"; do
-    [ -f "$f" ] || continue
-    c=$(grep -oE "$re" "$f" 2>/dev/null | wc -l | tr -d ' ')
-    n=$((n + c))
-  done
-  printf '%s' "$n"
-}
-
-# Raw styled elements, counted across LINE BREAKS.
-#
-# `grep` matches a line at a time, and JSX opening tags routinely span several:
-#
-#     <input
-#       type="range"
-#       className="w-full accent-primary"
-#     />
-#
-# A line-based regex cannot see that element at all. Measured when this gate was
-# first written: 45 raw elements portal-wide — about 9% — were invisible, and
-# "converting" a file could mean nothing more than pushing its className onto
-# its own line. A budget guarding a number that can be gamed by reformatting is
-# not a budget.
-#
-# So the raw count is multi-line aware. `<button` and `style={` stay on grep:
-# both are single tokens with no such blind spot.
-#
-# (The assessment tenant's own gate has the same line-based regex. Its zero was
-# checked against this counter when this was written and is a true zero, so
-# nothing there is hiding behind the same gap.)
-count_raw() { # count_raw <files...>
-  [ $# -eq 0 ] && { printf '0'; return; }
-  python3 - "$@" <<'PY'
-import re, sys
-EL = r'div|p|span|h[1-6]|ul|ol|li|section|nav|article|table|tr|td|th|button|a|label|input|textarea|select|form|code|pre'
-# Brace-aware on purpose. The regex this replaced was
-#   rf'<({EL})(\s[^>]*?)?\sclassName='
-# and `[^>]*?` cannot cross a `>`. Any element carrying an arrow function
-# before its className — `onClick={() => ...}`, which is most interactive
-# elements — was therefore invisible to this gate. It hid five of them,
-# including a <button> this very script had just been used to justify.
-tag_rx = re.compile(rf'<({EL})(?=[\s/>])')
-
-def tag_end(s, i):
-    depth = 0; q = None; j = i
-    while j < len(s):
-        c = s[j]
-        if q:
-            if c == q and s[j - 1] != '\\':
-                q = None
-        elif c in '"\'`':
-            q = c
-        elif c == '{':
-            depth += 1
-        elif c == '}':
-            depth -= 1
-        elif c == '>' and depth == 0:
-            return j
-        j += 1
-    return -1
-
-total = 0
-for path in sys.argv[1:]:
-    try:
-        s = open(path, encoding='utf-8', errors='ignore').read()
-    except OSError:
-        continue
-    for m in tag_rx.finditer(s):
-        end = tag_end(s, m.start())
-        # `className=` OR `style=`. A raw <div style={{...}}> with no class is
-        # just as hand-rolled as one with a class, and counting only the first
-        # was this counter's THIRD blind spot — after `[^>]*?` not crossing an
-        # arrow function, and the style counter ignoring hoisted consts. It was
-        # hiding 16.
-        if end > 0 and re.search(r'\s(className|style)=', s[m.start():end]):
-            total += 1
-print(total, end='')
-PY
-}
-
-is_queued() {
-  printf '%s\n' $QUEUED_FILES | grep -qxF "$1"
-}
-
-# Files in an area, minus the queued composites.
-area_files() { # area_files <dir>
-  local dir="$1" f
-  while IFS= read -r f; do
-    is_queued "$f" || printf '%s\n' "$f"
-  done < <(find "$dir" -name '*.tsx' 2>/dev/null | sort)
-}
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Per-area ratchets.
-#
-# `pages/**` is already close to clean — that is what the assessment gate and
-# the surfaces built after it bought. `components/**` is where the debt is,
-# because nothing ever counted it. Each budget below is TODAY'S count; lower it
-# as the area converts.
-#
-# Format: <path>:<raw budget>
-# ─────────────────────────────────────────────────────────────────────────────
-# ⚠️ ONE-TIME RE-BASELINE, and the only raise this file will ever carry.
-# The first version of this gate counted with a line-based grep, which cannot
-# see a JSX tag whose className sits on a later line — 45 elements portal-wide,
-# ~9%, were invisible, and a file could be "converted" by reformatting alone.
-# `count_raw` is multi-line aware now, so these raw numbers went UP without any
-# code getting worse. The never-raise rule exists to stop new debt hiding, not
-# to protect a measurement known to be wrong. From here they only go down.
-#
-# Format: <path>:<raw>:<button>:<inline-style>
-#
-# `portal/src` is the catch-all so no directory can escape by not being listed;
-# the narrower entries exist so a regression names the area that caused it.
-# Raw counts nest (an entry covers its subdirectories), which is deliberate —
-# converting a leaf lowers both its own budget and its parent's.
-# STYLE COUNTING, and why the budgets below jumped once.
-#
-# This counted `style={{` — inline object literals only. Hoisting the identical
-# object to a module-level const and writing `style={rowStyle}` walked straight
-# past it, which is the same evasion ui-components' own CLAUDE.md records
-# against its demo guard: "a rule you can evade by naming a variable is not a
-# rule". It was hiding 59 props, 33 of them in two observability files that this
-# gate had already reported as nearly clean.
-#
-# It counts every `style=` prop now. The style budgets were re-baselined UPWARD
-# once, here, to the honest number — the only upward move any budget in this
-# file has ever made, and it reflects counting that was always wrong rather than
-# work that regressed.
 AREAS=(
-  "portal/src:0:4:26"
+  "portal/src:0:0:7"
   "portal/src/components/runs:0:0:0"
   "portal/src/components/codebases:0:0:0"
   "portal/src/components/scores:0:0:4"
   "portal/src/components/marketplace:0:0:0"
-  "portal/src/components/ingest:0:0:4"
-  "portal/src/components/canary:0:0:7"
+  "portal/src/components/ingest:0:0:0"
+  "portal/src/components/canary:0:0:1"
   "portal/src/components/org-graph:0:2:6"
-  "portal/src/components/shell:0:1:1"
+  "portal/src/components/shell:0:0:0"
   "portal/src/components/knowledge:0:0:0"
   "portal/src/components/sdlc:0:0:0"
   "portal/src/components/kb:0:0:2"
-  "portal/src/components/observability:0:0:2"
+  "portal/src/components/observability:0:0:0"
   "portal/src/pages:0:0:0"
 )
 
@@ -256,16 +124,104 @@ done
   || fail "queued composite over the per-file cap of $QUEUED_MAX_PER_FILE:$q_over"
 
 # ─────────────────────────────────────────────────────────────────────────────
-# The library entry that breaks the production build. Same check the assessment
-# gate makes, applied to the whole portal: importing it fails `vite build`
-# because @tiptap/react is a ui-components PEER dep this portal never installed.
+# The library entry that once broke the production build. ui-components'
+# integrations/realtime-modules imports the canonical `@connorhoehn/realtime-
+# modules` while this portal installs `@connorhoehnslalom/realtime-modules`;
+# vite.config.ts aliases the name and tsconfig paths map the typings, so the
+# entry is importable. This check asserts that bridge stays in place.
 # ─────────────────────────────────────────────────────────────────────────────
-section "no build-breaking library entry"
-if grep -rq "ui-components/integrations/realtime-modules" "$SRC" --include='*.tsx' 2>/dev/null; then
-  fail "imports integrations/realtime-modules (breaks vite build without @tiptap/react)"
+section "realtime-modules alias bridge"
+if grep -q "'@connorhoehn/realtime-modules': '@connorhoehnslalom/realtime-modules'" portal/vite.config.ts \
+   && grep -q '"@connorhoehn/realtime-modules/client"' portal/tsconfig.json; then
+  ok "vite alias + tsconfig paths map @connorhoehn/realtime-modules"
 else
-  ok "no integrations/realtime-modules imports"
+  fail "alias for @connorhoehn/realtime-modules missing in portal/vite.config.ts or tsconfig.json (integrations/realtime-modules would not build)"
 fi
+
+section "raw typography on bare text nodes (ratchet)"
+# AI-generated pages drift by writing `<span className="text-sm font-semibold">`
+# instead of the library's `<T size weight tone>`. Count raw type-scale and
+# font-weight utilities on bare <span>/<div>/<p> (brace-aware, multi-line) in
+# portal/src. Baseline is in scripts/raw-typography-budget.txt: it may go down,
+# never up. Counter: scripts/count-raw-typography.py (--files lists offenders).
+TYPO_BUDGET=$(tr -d ' \n' < scripts/raw-typography-budget.txt 2>/dev/null || echo 0)
+TYPO_N=$(python3 scripts/count-raw-typography.py "$SRC" 2>/dev/null | tail -1)
+if [ "${TYPO_N:-x}" -le "$TYPO_BUDGET" ] 2>/dev/null; then
+  ok "raw typography utilities on bare text: $TYPO_N (budget $TYPO_BUDGET)"
+else
+  fail "raw typography utilities on bare span/div/p: ${TYPO_N:-?} > budget $TYPO_BUDGET (use T size/weight/tone)"
+fi
+
+section "layout drift — library primitives composed off the type scale (burn-down)"
+# The raw counters above are at zero portal-wide, and pages still read
+# inconsistent: the drift moved up a level, into compositions built FROM the
+# library — a `T className="text-[11px]"`, a card StatStrip with 17px values on
+# a list page, a table cell stacking a caption and a bar under its value, a ✕
+# glyph for an icon (the 2026-10-07 /admin/budgets report). One counter,
+# scripts/count-layout-drift.py (brace-aware tag walking — an arrow function in
+# an onClick cannot truncate a tag), nine classes. The last three are the
+# table rules (docs/layout-cascade.md "Tables", 2026-10-07): `cellbutton` (a
+# text Button in a table cell or row actions), `lonesearch` (DataTable's own
+# search field on a row of its own) and `tablesize` (a DataTable/Table off the
+# 44px step — an explicit size other than sm; the shell's compact density
+# draws every table there since ui-components 2.440); `densitysize` (2026-10-08,
+# the density lane) is an explicit size="sm" on a composite the compact
+# density already draws at sm — the house density restated per call; its
+# budget is zero, so any new one fails; `stackedcell` and `cardstat` are the same rules'
+# second-line and card-strip halves. The tolerated debt is a BURN-DOWN,
+# scripts/layout-drift-burndown.tsv: one row per (class, file) with the count
+# allowed in that file, its owner surface and a due date (audit J1). A file
+# over its row (or with none), and a row still counting after its due date,
+# fail; a file under its row is reported so the row can be lowered.
+# Card-variant stat tiles are allowed only in the dashboards listed in
+# scripts/card-stat-allowed.txt.
+DRIFT_BURNDOWN=scripts/layout-drift-burndown.tsv
+DRIFT_OUT=$(python3 scripts/count-layout-drift.py "$SRC" --list 2>/dev/null)
+if [ -z "$DRIFT_OUT" ]; then
+  fail "layout drift: count-layout-drift.py produced no output — the gate is not measuring anything"
+elif [ ! -f "$DRIFT_BURNDOWN" ]; then
+  fail "layout drift: $DRIFT_BURNDOWN missing"
+else
+  DRIFT_CUR=$(mktemp)
+  printf '%s\n' "$DRIFT_OUT" | awk '/^[a-z]+ [0-9]+$/ { c = $1; next } c && /:[0-9]+$/ { sub(/^ +/, ""); sub(/:[0-9]+$/, ""); n[c "\t" $0]++ } END { for (k in n) print k "\t" n[k] }' > "$DRIFT_CUR"
+  DRIFT_V=$(node portal/e2e/burndown.ts check "$DRIFT_BURNDOWN" --current "$DRIFT_CUR")
+  rm -f "$DRIFT_CUR"
+  for cls in bar bigtext cardstat stackedcell glyphbutton pxtype cellbutton lonesearch tablesize densitysize; do
+    n=$(printf '%s\n' "$DRIFT_OUT" | awk -v c="$cls" '$1==c && NF==2 {print $2}')
+    b=$(awk -F'\t' -v c="$cls" '!/^#/ && $1==c {s+=$3} END {print s+0}' "$DRIFT_BURNDOWN")
+    if [ -z "$n" ]; then fail "layout drift: no count for '$cls'"; continue; fi
+    over=$(printf '%s\n' "$DRIFT_V" | awk -v c="$cls" '/^OVER / { sub(/^OVER /, ""); split($0, f, "\t"); if (f[1]==c) print "      " f[2] " (" f[3] " > row " f[4] ")" }')
+    due=$(printf '%s\n' "$DRIFT_V" | awk -v c="$cls" '/^PASTDUE / { sub(/^PASTDUE /, ""); split($0, f, "\t"); if (f[1]==c) print "      " f[2] " (" f[3] ", " f[4] ", due " f[5] ")" }')
+    burned=$(printf '%s\n' "$DRIFT_V" | awk -v c="$cls" '/^BURNED / { sub(/^BURNED /, ""); split($0, f, "\t"); if (f[1]==c) k++ } END { print k+0 }')
+    if [ -n "$over" ]; then
+      fail "layout drift $cls: $n — a file is over its burn-down row (or has none)"; printf '%s\n' "$over"
+    elif [ -n "$due" ]; then
+      fail "layout drift $cls: $n — burn-down rows past their due date"; printf '%s\n' "$due"
+    elif [ "$burned" -gt 0 ]; then
+      ok "layout drift $cls: $n (burn-down $b) — $burned file(s) under their row: LOWER THE ROWS in $DRIFT_BURNDOWN"
+    else
+      ok "layout drift $cls: $n (burn-down $b)"
+    fi
+    # Every offender is printed for the small classes (pxtype is the long tail: see the owner table).
+    if [ "$n" -gt 0 ] && [ "$cls" != pxtype ]; then
+      printf '%s\n' "$DRIFT_OUT" | awk -v c="$cls" '
+        /^[a-z]+ [0-9]+$/ { on = ($1 == c); next }
+        on { sub(/^ +/, ""); print "      " $0 }'
+    fi
+  done
+  printf '%s\n' "$DRIFT_V" | grep -q '^INVALID ' && { fail "layout drift: malformed burn-down rows"; printf '%s\n' "$DRIFT_V" | grep '^INVALID ' | sed 's/^/      /'; }
+  printf '      remaining by owner surface (due):\n'
+  printf '%s\n' "$DRIFT_V" | awk -F'\t' '/^OWNER / { sub(/^OWNER /, "", $1); n++; if (n <= 12) printf "        %-34s %4s  %s\n", $1, $2, $3; else rest += $2 } END { if (n > 12) printf "        … %d more surfaces, %d offenders\n", n - 12, rest }'
+fi
+
+# Specs sign in through ONE helper (audit 2026-10-07 T1, stop-doing rule 10):
+# a spec that POSTs /api/session/login itself, or declares its own
+# signIn/login function, has forked the session contract.
+section "e2e sign-in discipline (portal/e2e/realSession.ts)"
+local_login=$(grep -lE "api/session/login" portal/e2e/*.spec.ts 2>/dev/null)
+local_fn=$(grep -lE "^(async )?function (signIn|signin|login|logIn|loginAs|signInAs)\b|^const (signIn|login|loginAs) *= *async" portal/e2e/*.spec.ts 2>/dev/null)
+[ -z "$local_login" ] && ok "no spec posts /api/session/login itself" || fail "specs sign in on their own (use e2e/realSession.ts):$(echo $local_login | sed 's#portal/e2e/##g')"
+[ -z "$local_fn" ] && ok "no spec declares its own signIn/login function" || fail "specs declare a local sign-in function (use e2e/realSession.ts):$(echo $local_fn | sed 's#portal/e2e/##g')"
 
 if [ "$REPORT" = 1 ]; then
   section "report — every area, including ungated ones"

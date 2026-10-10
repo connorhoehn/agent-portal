@@ -1,0 +1,39 @@
+{
+  "sessions": 1,
+  "before": [
+    {
+      "connected": 2,
+      "audioBytes": 245,
+      "audioSamples": 6720,
+      "audioEnergy": 3.725517682546122e-11,
+      "videoBytes": 5903,
+      "videoFrames": 2
+    },
+    {
+      "connected": 2,
+      "audioBytes": 677,
+      "audioSamples": 12960,
+      "audioEnergy": 1.7535080352323961e-7,
+      "videoBytes": 10319,
+      "videoFrames": 5
+    }
+  ],
+  "final": [
+    {
+      "connected": 2,
+      "audioBytes": 1611,
+      "audioSamples": 32640,
+      "audioEnergy": 0.11731033164317173,
+      "videoBytes": 26085,
+      "videoFrames": 12
+    },
+    {
+      "connected": 2,
+      "audioBytes": 1958,
+      "audioSamples": 37440,
+      "audioEnergy": 0.1373301090474206,
+      "videoBytes": 42989,
+      "videoFrames": 15
+    }
+  ]
+}

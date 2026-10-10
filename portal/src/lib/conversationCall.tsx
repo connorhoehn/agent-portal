@@ -1,11 +1,33 @@
-// The conversation-call pair — the call dock and the incoming-call toast —
-// from ui-components 2.407.22's scope-agnostic `integrations/realtime` entry,
-// bound once to this portal's realtime-modules video hooks. Composed locally
-// until that release (2026-09-29); the local body carried the library's exact
-// props and test ids so this swap changed nothing on the page.
+// The conversation call, bound once to this portal's realtime-modules video
+// hooks: the library's call block host (ui-components 2.439
+// `createCallBlockHost`) — the shell's ONE `useConversationCall`, rings, the
+// pre-join device check, the one media sink and `useCallBlock(channel)` for a
+// composer's `callBlock` slot (the dock and the ring toast are drawn by the host).
 import * as video from '@connorhoehnslalom/realtime-modules/client/video';
-import { createConversationCallDock } from '@connorhoehnslalom/ui-components/integrations/realtime';
+import { createElement } from 'react';
+import { createCallBlockHost } from '@connorhoehnslalom/ui-components/integrations/realtime';
+import { StreamVideo } from '@connorhoehnslalom/ui-components/video';
+import { separateCallScreenTiles } from './callScreenTiles';
+import { documentRecordingNavigation } from '../components/recordings/documentRecordingContext';
 
-export const ConversationCallDock = createConversationCallDock(video);
-export { IncomingCallToast } from '@connorhoehnslalom/ui-components/integrations/realtime';
-export type { ConversationCallDockProps, IncomingCallToastProps } from '@connorhoehnslalom/ui-components/integrations/realtime';
+// Keep the native capture/publish lifecycle. The installed dock mapping's
+// screenTile option replaces a camera; this app presents both native streams.
+const conversationCallDockProps: typeof video.conversationCallDockProps = (state, ui) => separateCallScreenTiles(
+  state, video.conversationCallDockProps(state, { ...ui, screenTile: undefined }),
+  participant => createElement('div', { 'data-call-stream': 'screen', className: 'h-full w-full' },
+    createElement(StreamVideo, { stream: participant.screenStream!, muted: true, className: 'h-full w-full object-contain' })),
+);
+// The native platform binds each media participant to a currently accepted
+// gateway seat before associating a completed recording with a call.
+const useConversationCall: typeof video.useConversationCall = opts => video.useConversationCall({ ...opts, bindRecordingCall: true,
+  // The original call channel survives an incoming Accept and page navigation.
+  // This is only a hint: native authority checks the stored channel and source.
+  documentSourceId: documentRecordingNavigation(opts.lobbyName, opts.channel)?.documentSourceId,
+});
+export const calls = createCallBlockHost({ ...video, useConversationCall, conversationCallDockProps });
+export const {
+  CallHostProvider, CallMediaOutlet, CallBlock,
+  useCallHost, useCallBlock, useCallLobby, useCallMediaPanel, useCallBlockPlacement, useCallBlockPageClaimed, useClaimCallBlock,
+} = calls;
+export { callCounts, callDrawn } from '@connorhoehnslalom/ui-components/integrations/realtime';
+export type { CallLobby, OnCallHostEvent } from '@connorhoehnslalom/ui-components/integrations/realtime';

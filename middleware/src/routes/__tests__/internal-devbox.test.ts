@@ -14,7 +14,7 @@ import type { Request, Response, NextFunction } from 'express';
 import request, { attachToSharedServer } from '../../test-support/http.js';
 import { SERVICE_AUTH_HEADER, signEnvelope } from '@connorhoehn/service-runtime';
 import { internalDevboxRouter } from '../internal-devbox.js';
-import { _resetFleet } from '../../lib/devbox-fleet.js';
+import { _resetFleet, getBox } from '../../lib/devbox-fleet.js';
 import { _resetLoopMock } from '../../mock/devbox-agent-loop.js';
 import { isValidFileId } from '../../lib/devbox-files.js';
 
@@ -400,5 +400,69 @@ describe('internal devbox router — workspace files (mock)', () => {
     expect(isValidFileId('../notes.md')).toBe(false);
     expect(isValidFileId('a/b')).toBe(false);
     expect(isValidFileId('notes.md')).toBe(true);
+  });
+});
+
+// ─── shell-url and stop: the two box-scoped writes ─────────────────────────
+
+describe('internal devbox router — shell-url and stop (mock)', () => {
+  const originalMock = process.env['MOCK_AGENTCORE'];
+  beforeEach(() => { process.env['MOCK_AGENTCORE'] = 'true'; });
+  afterEach(() => {
+    if (originalMock === undefined) delete process.env['MOCK_AGENTCORE'];
+    else process.env['MOCK_AGENTCORE'] = originalMock;
+  });
+
+  async function createSession(): Promise<{ sessionId: string; boxId: string }> {
+    const body = { principal: principal(), label: 'shell-and-stop' };
+    const res = await request(app()).post('/internal/devbox/sessions').set(signed(body)).send(body);
+    expect(res.status).toBe(201);
+    return res.body as { sessionId: string; boxId: string };
+  }
+
+  it('mints a mock shell URL for a registered session, honouring a valid shellId', async () => {
+    const { sessionId } = await createSession();
+    const body = { principal: principal(), shellId: 'loop-shell_1' };
+    const res = await request(app()).post(`/internal/devbox/${sessionId}/shell-url`).set(signed(body)).send(body);
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ url: `mock-shell://${sessionId}?shell=loop-shell_1`, shellId: 'loop-shell_1', mock: true, expiresIn: 900 });
+    expect(typeof res.body.maxFrameBytes).toBe('number');
+  });
+
+  it('shell-url refuses an unsigned call, a mismatched principal, an unknown session and a bad shellId', async () => {
+    const { sessionId } = await createSession();
+    const body = { principal: principal() };
+    expect((await request(app()).post(`/internal/devbox/${sessionId}/shell-url`).send(body)).status).toBe(401);
+    const wrong = { principal: { service: 'someone-else', requestedBy: 'u-x' } };
+    expect((await request(app()).post(`/internal/devbox/${sessionId}/shell-url`).set(signed(wrong)).send(wrong)).status).toBe(400);
+    const unknown = 'z'.repeat(40);
+    const missing = await request(app()).post(`/internal/devbox/${unknown}/shell-url`).set(signed(body)).send(body);
+    expect(missing.status).toBe(404);
+    expect(missing.body).toEqual({ error: 'computer not found' });
+    const badShell = { principal: principal(), shellId: '../etc' };
+    const bad = await request(app()).post(`/internal/devbox/${sessionId}/shell-url`).set(signed(badShell)).send(badShell);
+    expect(bad.status).toBe(400);
+    expect(bad.body.error).toMatch(/invalid shellId/);
+    expect((await request(app()).post('/internal/devbox/short/shell-url').set(signed(body)).send(body)).status).toBe(400);
+  });
+
+  it('DELETE stops the session and settles the fleet row to stopped', async () => {
+    const { sessionId, boxId } = await createSession();
+    expect(getBox(boxId)?.status).not.toBe('stopped');
+    const body = { principal: principal() };
+    const res = await request(app()).delete(`/internal/devbox/${sessionId}`).set(signed(body)).send(body);
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ stopped: true, sessionId });
+    expect(getBox(boxId)?.status).toBe('stopped');
+  });
+
+  it('DELETE refuses an unsigned call or a principal that disagrees with the signer, and leaves the box running', async () => {
+    const { sessionId, boxId } = await createSession();
+    const body = { principal: principal() };
+    expect((await request(app()).delete(`/internal/devbox/${sessionId}`).send(body)).status).toBe(401);
+    expect((await request(appWithBrowserSession()).delete(`/internal/devbox/${sessionId}`).send(body)).status).toBe(401);
+    const noPrincipal = {};
+    expect((await request(app()).delete(`/internal/devbox/${sessionId}`).set(signed(noPrincipal)).send(noPrincipal)).status).toBe(400);
+    expect(getBox(boxId)?.status).not.toBe('stopped');
   });
 });

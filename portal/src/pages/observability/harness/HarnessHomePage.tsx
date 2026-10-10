@@ -24,7 +24,7 @@ import {
   TableBody,
   TableRow,
   TableTh,
-  TableTd,
+  TableTd, T,
 } from '@connorhoehnslalom/ui-components/shared';
 import {
   BarChart,
@@ -41,7 +41,6 @@ import { CostChip } from '../../../components/observability/CostChip';
 import { ModeChip } from '../../../components/observability/ModeChip';
 import { SmartEmptyState } from '../../../components/observability/SmartEmptyState';
 import { UnavailableNotice } from '../../../components/UnavailableNotice';
-import { T } from '../Text';
 import { RowEmpty } from '../ReadState';
 import { statusTone, passRateTone, fmtPct, type RunStatus } from './harnessShared';
 import { parsePgTimestamp } from '../../../lib/pgTimestamp.ts';
@@ -365,13 +364,13 @@ function HarnessHomePage() {
           align="center"
           wrap
           gap="xs"
-          className="text-[12px] text-[var(--color-text-secondary)] mt-1.5"
+          className="text-xs text-[var(--color-text-secondary)] mt-1.5"
         >
-          <strong>{activeCount}</strong> active case{activeCount === 1 ? '' : 's'}
+          <T size="sm" weight="semibold">{activeCount}</T> active case{activeCount === 1 ? '' : 's'}
           <T className="text-[var(--color-text-tertiary)]">·</T>
-          last run <strong>{relTime(lastRun?.startedAt ?? null)}</strong>
+          last run <T size="sm" weight="semibold">{relTime(lastRun?.startedAt ?? null)}</T>
           <T className="text-[var(--color-text-tertiary)]">·</T>
-          judge: <T className="font-[ui-monospace,monospace] text-[11.5px]">{judgeModelId}</T>
+          judge: <T size="xs" className="font-[ui-monospace,monospace]">{judgeModelId}</T>
         </Inline>
 
         {/* Active-run banner */}
@@ -388,12 +387,12 @@ function HarnessHomePage() {
       {/* Pass-rate sparkline */}
       <Card padding="md">
         <Inline as="div" align="center" justify="between" wrap gap="md" className="mb-3">
-          <Inline as="h2" gap="xs" wrap className="text-[14px] font-semibold m-0">
+          <T as="p" role="heading" aria-level={2} size="sm" weight="semibold" className="m-0">
             Pass-rate over last {sparkData.length || 14} run{sparkData.length === 1 ? '' : 's'}{' '}
-            <T className="text-[11px] text-[var(--color-text-tertiary)] font-normal">
+            <T size="xs" className="text-[var(--color-text-tertiary)] font-normal">
               green ≥ 85% · amber 70–85% · red &lt; 70%
             </T>
-          </Inline>
+          </T>
         </Inline>
         {sparkData.length === 0 ? (
           <RowEmpty text="No runs yet. Click Run now to replay the test set." degraded={runsError} />
@@ -435,12 +434,12 @@ function HarnessHomePage() {
       {/* Recent runs */}
       <Card padding="md">
         <Inline as="div" align="center" justify="between" wrap gap="md" className="mb-3">
-          <Inline as="h2" gap="xs" wrap className="text-[14px] font-semibold m-0">
+          <T as="p" role="heading" aria-level={2} size="sm" weight="semibold" className="m-0">
             Recent runs{' '}
-            <T className="text-[11px] text-[var(--color-text-tertiary)] font-normal">
+            <T size="xs" className="text-[var(--color-text-tertiary)] font-normal">
               latest {runs.length} · Δ shows pass-count drift vs previous run
             </T>
-          </Inline>
+          </T>
         </Inline>
         {runs.length === 0 ? (
           <SmartEmptyState
@@ -459,7 +458,7 @@ function HarnessHomePage() {
             ]}
           />
         ) : (
-          <Table>
+          <Table size="sm">
             <TableHead>
               <TableRow>
                 <TableTh>Label</TableTh>
@@ -480,23 +479,23 @@ function HarnessHomePage() {
                 const prev = runs[i + 1];
                 return (
                   <TableRow key={r.runId}>
-                    <TableTd className="text-[12px] font-medium max-w-[220px]" title={r.label}>
-                      <Stack gap="xs">
-                        <span>{r.label}</span>
+                    <TableTd className="max-w-[220px]" title={r.label}>
+                      <Inline gap="sm" align="center" wrap={false}>
+                        <T className="truncate">{r.label}</T>
                         {r.gitSha && (
-                          <T className="text-[10.5px] text-[var(--color-text-tertiary)] font-[ui-monospace,monospace]">
+                          <T size="xs" className="shrink-0 text-[var(--color-text-tertiary)] font-[ui-monospace,monospace]">
                             {shortSha(r.gitSha)}
                           </T>
                         )}
-                      </Stack>
+                      </Inline>
                     </TableTd>
                     <TableTd className="whitespace-nowrap">
                       <ModeChip mode={r.mode} />
                     </TableTd>
-                    <TableTd className="text-[11px] text-[var(--color-text-tertiary)] whitespace-nowrap">
+                    <TableTd className="text-[var(--color-text-tertiary)] whitespace-nowrap">
                       {new Date(r.startedAt).toLocaleString()}
                     </TableTd>
-                    <TableTd className="text-[12px] text-[var(--color-text-secondary)] whitespace-nowrap">
+                    <TableTd className="text-[var(--color-text-secondary)] whitespace-nowrap">
                       {r.completed}/{r.totalCases}
                     </TableTd>
                     <TableTd>
@@ -504,7 +503,7 @@ function HarnessHomePage() {
                         {fmtPct(r.passRate)}
                       </Chip>
                     </TableTd>
-                    <TableTd className="text-[12px] text-[var(--color-text-secondary)] whitespace-nowrap">
+                    <TableTd className="text-[var(--color-text-secondary)] whitespace-nowrap">
                       <RegressionDelta current={r} previous={prev} />
                     </TableTd>
                     <TableTd className="whitespace-nowrap">
@@ -535,12 +534,12 @@ function HarnessHomePage() {
       {/* Coverage bars */}
       <Card padding="md">
         <Inline as="div" align="center" justify="between" wrap gap="md" className="mb-3">
-          <Inline as="h2" gap="xs" wrap className="text-[14px] font-semibold m-0">
+          <T as="p" role="heading" aria-level={2} size="sm" weight="semibold" className="m-0">
             Coverage{' '}
-            <T className="text-[11px] text-[var(--color-text-tertiary)] font-normal">
+            <T size="xs" className="text-[var(--color-text-tertiary)] font-normal">
               ⚠ flag indicates &lt; 5 cases · last-run pass count shown on the right
             </T>
-          </Inline>
+          </T>
         </Inline>
         {coverage.length === 0 ? (
           <RowEmpty text="No coverage data yet." degraded={coverageError} />
@@ -558,12 +557,12 @@ function HarnessHomePage() {
                   ? (c.lastRunPassed as number) / (c.lastRunTotal as number)
                   : null;
                 return (
-                  <Inline key={c.agentId} as="div" align="center" gap="md" className="text-[12px]">
-                    <Inline as="div" align="center" gap="xs" className="w-[160px] shrink-0 font-medium">
+                  <Inline key={c.agentId} as="div" align="center" gap="md" >
+                    <Inline as="div" align="center" gap="xs" className="w-[160px] shrink-0">
                       <span>{c.agentId}</span>
                       {thin && (
                         <T
-                          className="text-[10.5px] text-[var(--color-warning)]"
+                          className="text-xs text-[var(--color-warning)]"
                           title="Thin coverage (< 5 cases)"
                         >
                           ⚠ thin
@@ -588,7 +587,7 @@ function HarnessHomePage() {
                           {c.lastRunPassed}/{c.lastRunTotal}
                         </Chip>
                       ) : (
-                        <T className="text-[11px] text-[var(--color-text-tertiary)] font-normal">
+                        <T size="xs" className="text-[var(--color-text-tertiary)] font-normal">
                           no data
                         </T>
                       )}
@@ -604,10 +603,10 @@ function HarnessHomePage() {
       {/* Run-now modal */}
       {modalOpen && (
         <Modal onClose={closeModal}>
-          <Inline as="h3" gap="none" className="mt-0 mb-3 text-[15px] font-semibold">
+          <T as="p" role="heading" aria-level={3} size="sm" weight="semibold" className="mt-0 mb-3">
             Start a new run
-          </Inline>
-          <Stack as="label" gap="xs" className="text-[12px] text-[var(--color-text-secondary)]">
+          </T>
+          <Stack as="label" gap="xs" className="text-xs text-[var(--color-text-secondary)]">
             Label for this run
             <Input
               autoFocus
@@ -620,7 +619,7 @@ function HarnessHomePage() {
             <Stack
               as="div"
               gap="none"
-              className="mt-2.5 py-1.5 px-2.5 text-[12px] bg-[rgba(239,68,68,0.10)] border border-[var(--color-danger)] rounded-[4px] text-[var(--color-danger)]"
+              className="text-xs mt-2.5 py-1.5 px-2.5 bg-[rgba(239,68,68,0.10)] border border-[var(--color-danger)] rounded-[4px] text-[var(--color-danger)]"
             >
               {modalErr}
             </Stack>
@@ -659,15 +658,15 @@ function SparkTooltip(props: {
   return (
     <Stack
       gap="none"
-      className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[4px] py-1.5 px-2.5 text-[12px] leading-[1.55]"
+      className="text-xs bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[4px] py-1.5 px-2.5 leading-[1.55]"
     >
-      <T as="div" className="font-semibold">
+      <T as="div" weight="semibold">
         {p.fullLabel}
       </T>
       <div>
         {p.passed}/{p.total} passing ({(p.passRate * 100).toFixed(1)}%)
       </div>
-      <T as="div" className="text-[var(--color-text-tertiary)] text-[11px]">
+      <T as="div" size="xs" className="text-[var(--color-text-tertiary)]">
         judge: {p.judgeModelId}
       </T>
     </Stack>
@@ -734,12 +733,12 @@ function ActiveRunBanner({
       as="div"
       align="center"
       gap="md"
-      className={`mt-3 rounded-[4px] border py-2 px-3 text-[12px] ${activeRunBannerToneClasses[tone]}`}
+      className={`text-xs mt-3 rounded-[4px] border py-2 px-3 ${activeRunBannerToneClasses[tone]}`}
     >
       <T className="flex-1">
-        <strong>{message}</strong>
+        <T size="sm" weight="semibold">{message}</T>
         <T className="text-[var(--color-text-tertiary)] ml-2">
-          run id: <T className="font-[ui-monospace,monospace] text-[11.5px]">{runId.slice(0, 8)}…</T>
+          run id: <T size="xs" className="font-[ui-monospace,monospace]">{runId.slice(0, 8)}…</T>
         </T>
       </T>
       <Button variant="ghost" size="sm" onClick={onView}>

@@ -40,11 +40,12 @@ export function useGatewayFrames(): GatewayFrames {
   const send = live?.send;
   const onMessage = live?.onMessage;
   const connectionState = live ? String(live.connectionState) : 'disconnected';
+  const clientId = live?.clientId ?? null;
   const sessionEpoch = (live as { sessionEpoch?: number } | null)?.sessionEpoch;
   const gateway = useMemo<ConversationCallGateway>(() => (
     send && onMessage
-      ? { send, onMessage, connectionState, ...(sessionEpoch !== undefined ? { sessionEpoch } : {}) }
+      ? { send, onMessage, connectionState, clientId, ...(sessionEpoch !== undefined ? { sessionEpoch } : {}) }
       : INERT
-  ), [send, onMessage, connectionState, sessionEpoch]);
+  ), [send, onMessage, connectionState, sessionEpoch, clientId]);
   return { gateway, configured: !!live, connectionState };
 }

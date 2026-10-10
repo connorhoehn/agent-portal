@@ -27,6 +27,7 @@ export type AssessmentEvent =
   | { type: 'knowledge.pulled'; section: string; pages: number; files_pulled: number; ts: string }
   | { type: 'knowledge.published'; id: string; page_id: string; version: number; ts: string }
   | { type: 'knowledge.doc.saved'; id: string; stamp: string; by: string; ts: string }
+  | { type: 'knowledge.proposal.changed'; doc_id: string; id: string; status: 'ready' | 'applying' | 'applied' | 'discarded'; version: number; by: string; ts: string }
   | { type: 'knowledge.moved'; id: string; parent_id: string | null; position: number; by: string; ts: string }
   | { type: 'knowledge.renamed'; id: string; title: string; by: string; ts: string }
   | { type: 'knowledge.comment.created'; id: string; doc_id: string; parent_id?: string | null; by: string; body: string; ts: string }
@@ -145,6 +146,7 @@ export function partitionKeyFor(event: AssessmentEvent): string {
   switch (event.type) {
     case 'knowledge.presence': return `presence:${event.doc_id}`;
     case 'knowledge.doc.saved': return `doc:${event.id}`;
+    case 'knowledge.proposal.changed': return `doc:${event.doc_id}`;
     case 'knowledge.published': return `doc:${event.id}`;
     case 'knowledge.moved': return `doc:${event.id}`;
     case 'knowledge.renamed': return `doc:${event.id}`;

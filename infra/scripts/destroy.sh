@@ -482,8 +482,59 @@ echo ""
 # cdk then fails on stack 1 with UnresolvedAccount. Fail loudly instead.
 require_creds
 
-if ! "${CDK[@]}" destroy --all --force; then
+# The opt-in stacks are only IN the app when their flags are set, so a bare
+# `cdk destroy --all` never sees OrgIQ-Portal, OrgIQ-Social, OrgIQ-SocialMedia
+# or OrgIQ-SocialImages — and then fails on OrgIQ-MiddlewareService, whose
+# exports they still import ("Cannot delete export … in use"). Synthesize the
+# whole superset for teardown; a stack that was never deployed is a no-op.
+DESTROY_CONTEXT=(
+  --context deploySocialImages=true
+  --context deploySocial=true
+  --context deploySocialMedia=true
+  --context deployPortal=true
+)
+if ! "${CDK[@]}" destroy --all --force "${DESTROY_CONTEXT[@]}"; then
   FAILURES+=("cdk destroy --all exited non-zero — one or more stacks not destroyed")
+fi
+
+# ──────────────────────────────────────────────────────────────────
+# 6b. RETAINed-by-design resources (opt-in purge)
+#
+# Two families survive `cdk destroy` on purpose: the OrgIQ-Social tables
+# (RETAIN + deletion protection: chat history, call log, voicemail) and the
+# image repos whose loss would strand a stack mid-rebuild (orgiq-middleware and
+# the three OrgIQ-SocialImages repos). They still bill (table/PITR storage,
+# image storage), so the sweep below reports them. Deleting them is the
+# operator's call, made explicitly:
+#   PURGE_RETAINED=true ./scripts/destroy.sh
+# Deletion protection has to be switched off first — delete-table is refused
+# while it is on.
+# ──────────────────────────────────────────────────────────────────
+RETAINED_REPOS=(
+  "${PREFIX}-middleware"
+  "${PREFIX}-social-gateway"
+  "${PREFIX}-platform-api"
+  "${PREFIX}-lvs-sfu"
+)
+if [[ "${PURGE_RETAINED:-false}" == "true" ]]; then
+  echo ""
+  echo "── PURGE_RETAINED=true: deleting the RETAINed social tables and image repos ──"
+  require_creds
+  for table in $(aws dynamodb list-tables --region "$REGION" \
+      --query "TableNames[?starts_with(@, '${PREFIX}-social-')]" --output text 2>/dev/null | tr '\t' '\n' || true); do
+    echo "  Deleting table ${table} (deletion protection off first)"
+    aws dynamodb update-table --table-name "$table" --no-deletion-protection-enabled \
+      --region "$REGION" > /dev/null 2>&1 || true
+    aws dynamodb delete-table --table-name "$table" --region "$REGION" > /dev/null 2>&1 \
+      || FAILURES+=("social table ${table} could not be deleted")
+  done
+  for repo in "${RETAINED_REPOS[@]}"; do
+    if aws ecr describe-repositories --repository-names "$repo" --region "$REGION" > /dev/null 2>&1; then
+      echo "  Deleting ECR repo ${repo} (with its images)"
+      aws ecr delete-repository --repository-name "$repo" --force --region "$REGION" > /dev/null 2>&1 \
+        || FAILURES+=("ECR repo ${repo} could not be deleted")
+    fi
+  done
 fi
 
 # ──────────────────────────────────────────────────────────────────
@@ -540,6 +591,30 @@ else
       FAILURES+=("${STACK_NAME} force-delete call failed")
     fi
     rm -f "$RETAIN_ERR"
+  done
+fi
+
+# ──────────────────────────────────────────────────────────────────
+# 7b. Finish the secrets this destroy just scheduled for deletion.
+#
+# Step 3 ran BEFORE cdk destroy, so every secret the stacks owned (the
+# middleware's callback/realtime secrets, the CloudFront origin secret, the
+# social and SFU secrets — all fixed names) is now pending deletion, and the
+# name stays taken through the recovery window: a rebuild inside it fails on
+# the first one. They are all generated; finish them.
+# ──────────────────────────────────────────────────────────────────
+echo ""
+echo "── Finishing secrets scheduled for deletion ──"
+PENDING_SECRETS=$(aws secretsmanager list-secrets --include-planned-deletion \
+  --query "SecretList[?starts_with(Name, '${PREFIX}-') && DeletedDate != null].Name" \
+  --output text 2>/dev/null || true)
+if [[ -z "$PENDING_SECRETS" ]]; then
+  echo "  None pending"
+else
+  for SECRET_NAME in $PENDING_SECRETS; do
+    echo "  Force-deleting ${SECRET_NAME}"
+    aws secretsmanager delete-secret --secret-id "$SECRET_NAME" \
+      --force-delete-without-recovery > /dev/null 2>&1 || true
   done
 fi
 
@@ -658,6 +733,61 @@ else
       --query "Buckets[?starts_with(Name, '${PREFIX}-')].Name" \
       --output text 2>/dev/null || true); do
     sweep_survivor "S3 bucket still present: ${bkt}"
+  done
+
+  # ElastiCache (OrgIQ-Social's cache.t4g.micro, ~\$12/mo). DeletionPolicy
+  # Delete, so only a failed stack delete leaves one — which is exactly when.
+  for rg in $(aws elasticache describe-replication-groups --region "$REGION" \
+      --query "ReplicationGroups[?starts_with(ReplicationGroupId, '${PREFIX}')].ReplicationGroupId" \
+      --output text 2>/dev/null || true); do
+    sweep_survivor "ElastiCache replication group still present: ${rg} (~\$12/mo)"
+  done
+
+  # The SFU host and its Elastic IP (OrgIQ-SocialMedia). An EIP that outlives
+  # its instance bills by the hour while attached to nothing.
+  for inst in $(aws ec2 describe-instances --region "$REGION" \
+      --filters "Name=tag:Name,Values=${PREFIX}-social-sfu" "Name=instance-state-name,Values=pending,running,stopping,stopped" \
+      --query 'Reservations[].Instances[].InstanceId' --output text 2>/dev/null || true); do
+    sweep_survivor "SFU EC2 instance still present: ${inst}"
+  done
+  for ip in $(aws ec2 describe-addresses --region "$REGION" \
+      --filters "Name=tag:Name,Values=${PREFIX}-social-sfu" \
+      --query 'Addresses[].PublicIp' --output text 2>/dev/null || true); do
+    sweep_survivor "SFU Elastic IP still allocated: ${ip}"
+  done
+
+  # CloudFront distributions (OrgIQ-Portal). Global, so no --region; matched
+  # on the comment the stack writes. A distribution deletes slowly (it must be
+  # disabled first), so a survivor right after cdk destroy may be on its way.
+  for dist in $(aws cloudfront list-distributions \
+      --query "DistributionList.Items[?contains(Comment, '(OrgIQ-Portal)')].Id" \
+      --output text 2>/dev/null || true); do
+    [[ "$dist" == "None" ]] && continue
+    sweep_survivor "CloudFront distribution still present: ${dist}"
+  done
+
+  # OrgIQ-Social tables: RETAIN + deletion protection on purpose (6b above).
+  SOCIAL_LEFT=$(aws dynamodb list-tables --region "$REGION" \
+    --query "TableNames[?starts_with(@, '${PREFIX}-social-')]" --output text 2>/dev/null | wc -w | tr -d ' ' || echo 0)
+  if [[ "${SOCIAL_LEFT:-0}" != "0" ]]; then
+    sweep_survivor "${SOCIAL_LEFT} OrgIQ-Social table(s) retained (${PREFIX}-social-*) — PURGE_RETAINED=true deletes them"
+  fi
+
+  # RETAINed image repos (6b above).
+  for repo in "${RETAINED_REPOS[@]}"; do
+    if aws ecr describe-repositories --repository-names "$repo" --region "$REGION" > /dev/null 2>&1; then
+      sweep_survivor "ECR repo retained: ${repo} — PURGE_RETAINED=true deletes it"
+    fi
+  done
+
+  # Live secrets a STACK made (\$0.40/mo each) — matched on the
+  # aws:cloudformation:stack-name tag CloudFormation stamps, so an operator's
+  # own secrets (the document-grant keys in cdk.json, a gateway HMAC secret)
+  # are not reported. Pending-deletion ones were finished in 7b.
+  for sec in $(aws secretsmanager list-secrets --region "$REGION" \
+      --query "SecretList[?starts_with(Name, '${PREFIX}-') && (Tags || \`[]\`)[?Key=='aws:cloudformation:stack-name']].Name" \
+      --output text 2>/dev/null || true); do
+    sweep_survivor "Secret still present: ${sec}"
   done
 
   [[ "$SWEEP_CLEAN" == "1" ]] && echo "  No surviving billing resources found"

@@ -36,3 +36,30 @@ infra/deploy-*.log
 # Playwright output from ad-hoc journey walks
 test-results/
 portal/test-results/
+
+# Gateway chat attachments stored on local disk in dev (lib/gateway-attachments.ts).
+middleware/.data/
+
+# Stray root-level screenshots from ad-hoc browser walks
+portal/*.jpg
+portal/*.png
+outputs/
+.env.tilt.local
+
+# journey contract sweeps: per-worker parts of a run in flight (portal/e2e/contracts.ts)
+docs/journeys/contracts/.partial/
+
+# Existing local native ASR dependencies used by scripts/dev/native-speech-cli.py.
+.cache/work-huddle-native-asr/
+
+# Local test runs, compiler profiles and browser reproductions.
+portal/.test-artifacts/
+*.profraw
+.repro-vite-placeholder
+
+# Local call captures and their raw audit evidence may contain private conversations.
+# Source fixes and sanitized handoff notes are committed separately.
+docs/demos/work-huddles/evidence/
+docs/demos/work-huddles/speaking-media/
+docs/demos/work-huddles/media-handoff/
+docs/demos/work-huddles/*.zip

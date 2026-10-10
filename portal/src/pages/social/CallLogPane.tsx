@@ -12,17 +12,17 @@
 // call walks back into the room. A new call starts from a person (Contacts,
 // Active now) or a conversation.
 
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { useNavigate } from 'react-router';
 import {
-  Button, Chip, DataTable, EmptyState, ErrorState, LoadingState, PageHeader, SegmentedControl, Stack,
-  type DataTableColumn,
+  Button, Chip, EmptyState, ErrorState, LoadingState, PageHeader, Stack,
 } from '@connorhoehnslalom/ui-components/shared';
+import { CallLogList } from '@connorhoehnslalom/ui-components/social';
 import { callBackTargets, callRows, roomSlugFromLobby, type CallRow, type NameOf, type SocialCall as SocialCallEntry, type SocialRoom, type SocialSource } from './socialPlatform';
 import type { SocialCall } from './useSocialCall';
+import { useSocialPlane } from './socialPlane';
 
 export interface CallsResponse { source: SocialSource; calls: SocialCallEntry[]; counts: { total: number; missed: number } }
-type Filter = 'all' | 'missed';
 
 const when = (iso: string) => new Date(iso).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 
@@ -31,31 +31,19 @@ export interface CallsFetch { data: CallsResponse | null; isLoading: boolean; er
 
 export default function CallLogPane({ calls, me, nameOf, rooms, call }: { calls: CallsFetch; me: string; nameOf: NameOf; rooms: readonly SocialRoom[]; call: SocialCall }) {
   const navigate = useNavigate();
+  const { route, embedded } = useSocialPlane();
+  // Embedded there is no Contacts page: the plane's Direct messages (its New message) is where you call someone.
+  const callSomeone = embedded ? `${route}/dms` : `${route}/contacts`;
   const { data, isLoading, error, refresh } = calls;
-  const [filter, setFilter] = useState<Filter>('all');
 
-  const rows = useMemo(() => {
-    const all = callRows(data?.calls ?? [], me, nameOf, rooms);
-    return filter === 'missed' ? all.filter((r) => r.missed) : all;
-  }, [data, me, nameOf, rooms, filter]);
+  const allRows = useMemo(() => callRows(data?.calls ?? [], me, nameOf, rooms), [data, me, nameOf, rooms]);
 
   const callBack = (row: CallRow) => {
     const room = roomSlugFromLobby(row.lobbyName);
-    if (room) { navigate(`/social/rooms?room=${encodeURIComponent(room)}`); return; }
+    if (room) { navigate(`${route}/rooms?room=${encodeURIComponent(room)}`); return; }
     const ids = callBackTargets(row.lobbyName, me);
     if (ids?.length) call.callPeople(ids.map((id) => ({ userId: id, displayName: nameOf(id) })));
   };
-
-  const columns: DataTableColumn<CallRow>[] = [
-    { key: 'who', header: 'Who', sortable: true },
-    { key: 'direction', header: 'Direction', width: '120px' },
-    {
-      key: 'outcome', header: 'Outcome', width: '130px',
-      render: (r) => <Chip tone={r.missed ? 'danger' : 'neutral'} size="xs">{r.outcome}</Chip>,
-    },
-    { key: 'startedAt', header: 'When', width: '170px', sortable: true, render: (r) => when(r.startedAt) },
-    { key: 'duration', header: 'Length', width: '100px', align: 'right' },
-  ];
 
   const missed = data?.counts.missed ?? 0;
   return (
@@ -64,36 +52,23 @@ export default function CallLogPane({ calls, me, nameOf, rooms, call }: { calls:
         title="Calls"
         description="Calls you placed, answered or missed in this workspace. Start a new one from a person or a conversation, or join a room."
         {...(missed ? { badge: <Chip tone="danger" size="xs" data-testid="social-calls-missed">{missed} missed</Chip> } : {})}
-        actions={<Button variant="secondary" size="sm" onClick={() => navigate('/social/contacts')}>Call someone</Button>}
+        actions={<Button variant="secondary" size="sm" onClick={() => navigate(callSomeone)}>Call someone</Button>}
       />
       {isLoading && !data ? <LoadingState label="Loading your calls…" /> : error && !data ? (
         <ErrorState title="Your calls could not be loaded" description={error} actionLabel="Try again" onAction={refresh} />
       ) : (data?.calls.length ?? 0) === 0 ? (
         <EmptyState testId="social-empty-calls" align="start" title="No calls yet"
           description="Calls you place or receive in this workspace, and the ones you missed, are listed here."
-          actionLabel="Call someone" onAction={() => navigate('/social/contacts')} />
+          actionLabel="Call someone" onAction={() => navigate(callSomeone)} />
       ) : (
-        <Stack gap="sm">
-          <SegmentedControl
-            aria-label="Which calls"
-            value={filter}
-            onChange={(v: string) => setFilter(v as Filter)}
-            options={[{ value: 'all', label: 'All' }, { value: 'missed', label: `Missed${missed ? ` (${missed})` : ''}` }]}
-            data-testid="social-calls-filter"
-          />
-          <DataTable
-            data={rows}
-            columns={columns}
-            keyField={(r) => r.id}
-            emptyMessage="No missed calls."
-            rowActions={(r) => (
-              <Button variant="ghost" size="sm" disabled={!!call.unavailable} onClick={() => callBack(r)} data-testid="social-call-back">
-                {roomSlugFromLobby(r.lobbyName) ? 'Open room' : 'Call back'}
-              </Button>
-            )}
-            data-testid="social-call-log"
-          />
-        </Stack>
+        <CallLogList
+          rows={allRows}
+          callBackDisabled={!!call.unavailable}
+          callBackLabel={(r) => (roomSlugFromLobby((r as CallRow).lobbyName) ? 'Open room' : 'Call back')}
+          onCallBack={(r) => callBack(r as CallRow)}
+          formatWhen={when}
+          data-testid="social-call-log"
+        />
       )}
     </Stack>
   );

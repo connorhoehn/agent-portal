@@ -1,0 +1,49 @@
+
+> @orgiq/middleware@0.3.0 test
+> node node_modules/.bin/jest --config jest.config.cjs --runInBand src/lib/__tests__/realtime-gateway|src/lib/__tests__/live-principal.test.ts|src/lib/__tests__/call-chat|src/routes/__tests__/call-chat.test.ts|src/routes/__tests__/call-pages.test.ts|src/routes/__tests__/dm-page-references.test.ts|src/routes/__tests__/social-embedded.test.ts
+
+PASS src/lib/__tests__/call-chat-durable.integration.test.ts (12.998 s)
+PASS src/lib/__tests__/realtime-gateway.test.ts
+  ● Console
+
+    console.log
+      [realtime-gateway] serving /ws (chat, presence, calls, notifications); call state + inbox: memory; chat store: memory
+
+      at attachRealtimeGateway (src/lib/realtime-gateway.ts:729:11)
+
+PASS src/lib/__tests__/realtime-gateway-isolation.test.ts
+  ● Console
+
+    console.log
+      [realtime-gateway] serving /ws (chat, presence, calls, notifications); call state + inbox: memory; chat store: memory
+
+      at attachRealtimeGateway (src/lib/realtime-gateway.ts:729:11)
+
+PASS src/lib/__tests__/realtime-gateway-notifications.test.ts
+PASS src/lib/__tests__/realtime-gateway-social.test.ts
+PASS src/lib/__tests__/realtime-gateway-distillation.test.ts
+PASS src/lib/__tests__/realtime-gateway-tenants.test.ts
+PASS src/lib/__tests__/realtime-gateway-live-authority.test.ts
+PASS src/lib/__tests__/realtime-gateway-social-dynamo.test.ts
+PASS src/routes/__tests__/call-chat.test.ts
+PASS src/lib/__tests__/live-principal.test.ts
+PASS src/lib/__tests__/call-chat-lifecycle.test.ts
+PASS src/routes/__tests__/dm-page-references.test.ts
+PASS src/lib/__tests__/call-chat-gateway.test.ts
+  ● Console
+
+    console.log
+      [realtime-gateway] serving /ws (chat, presence, calls, notifications); call state + inbox: memory; chat store: memory
+
+      at attachRealtimeGateway (src/lib/realtime-gateway.ts:729:11)
+
+PASS src/routes/__tests__/social-embedded.test.ts
+PASS src/routes/__tests__/call-pages.test.ts
+PASS src/lib/__tests__/call-chat-state.test.ts
+PASS src/lib/__tests__/call-chat-redis.integration.test.ts
+
+Test Suites: 18 passed, 18 total
+Tests:       2 skipped, 208 passed, 210 total
+Snapshots:   0 total
+Time:        64.864 s, estimated 66 s
+Ran all test suites matching /src\/lib\/__tests__\/realtime-gateway|src\/lib\/__tests__\/live-principal.test.ts|src\/lib\/__tests__\/call-chat|src\/routes\/__tests__\/call-chat.test.ts|src\/routes\/__tests__\/call-pages.test.ts|src\/routes\/__tests__\/dm-page-references.test.ts|src\/routes\/__tests__\/social-embedded.test.ts/i.

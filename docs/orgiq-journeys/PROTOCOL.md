@@ -113,15 +113,9 @@ org-leader = `u-vera`, hr-admin = `u-rachel` (Rachel Kowalski — the
    the control absent).
 6. Role gating: list what this role CAN do here and what is hidden, and
    confirm hidden controls are absent from the DOM.
-7. `pages:` — the page directories AND/OR files the surface renders from
-   (comma-separated, e.g. `portal/src/pages/projects,portal/src/pages/project-detail`
-   or `portal/src/pages/ExplorePage.tsx,portal/src/pages/Text.tsx`). Name
-   the root page's *file* for a root-level page (ProjectsPage, InvokePage,
-   ExplorePage, ScoresPage, AgentFlowPage, SettingsPage …) — a bare
-   `portal/src/pages` entry means every root page file and goes stale on
-   any of them. Freshness is per surface: the validator compares the recorded
-   content digest with the current `.tsx` content among those entries. Find them with the
-   route in `portal/src/App.tsx` and the imports of that page.
+7. `pages:` (optional since 2026-10-08) — the page files the surface renders
+   from. Freshness no longer reads it (below); it helps the next walker find
+   the code, and it is the freshness basis only for a log that names no route.
 8. Write the log. Wrong things → `verdict: fail — <what>` and a numbered
    entry under `## Open` in `docs/orgiq-journeys/<role>/DEFECTS.md` (file
    hints, repro). Do not fix pages during an audit pass.
@@ -159,28 +153,12 @@ verdict: pass
 notes: <anything that leaks — a link, a menu entry, a palette row, a breadcrumb — into a surface this role must not see>
 ```
 
-## Freshness is about content, not mtime
+## Freshness and sealing
 
-A log is stale when the code it observed **changed**. mtime is only a proxy,
-and on 2026-09-07 it proved a bad one: a bulk operation stamped 134 portal
-source files with one identical mtime (14:35:02) while changing none of them
-— the Vite dev server logged no HMR update for any of them, and the only
-content change that afternoon was a single edit at 14:03. Fifty-four logs
-"went stale" against edits that never happened.
+Freshness and sealing follow [docs/journeys.md](../journeys.md): a log is stale when the rendered contract of a route its `url:` names changed since its walk was sealed (sweep measurements, gate, the assertions of the specs that cover it), and only `scripts/journeys/seal.sh <dir>`, after a walk, seals it.
 
-So the validator hashes the files each `pages:` line names and keeps the
-digest in `docs/orgiq-journeys/.pages-sha`. A later mtime bump carrying the
-same digest is not a change; a digest that moves is, whatever the mtimes say.
-
-Normal validation is read-only. A newer log timestamp must never overwrite a
-mismatched digest: editing or checking out a log does not prove its pages were
-re-audited. Missing or different digests fail even when the log is newer than
-the source. The explicit `--seal` maintenance mode remains separate; never use
-it simply to clear failures without the supporting audit evidence.
-
-
-`--seal` re-records every digest using the validator's own hash function.
-Use it only after the affected records contain fresh observations of the
-current source, or after verifying a metadata-only recovery against unchanged
-source content. Record the reason in the logs. Missing source paths are errors,
-not empty content that can be sealed.
+The digest rule this replaced (2026-09-07 → 2026-10-08) was right that mtime
+is a bad proxy — a bulk operation once stamped 134 unchanged files and staled
+54 logs — but a content digest of the source has the same flaw one level up:
+a refactor that changes bytes and keeps the page restales every log over it.
+The validator's `--seal` is retired.

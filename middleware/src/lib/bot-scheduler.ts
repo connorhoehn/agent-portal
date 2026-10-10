@@ -89,7 +89,15 @@ export async function initBotScheduler(): Promise<void> {
   if (inited) return;
   inited = true;
   if (config.mock.aurora) {
-    console.log('[bots] scheduler skipped (mock aurora)');
+    // No cron offline (the seeded bots target repos that do not exist), but
+    // the reconcile tick still runs: it is what settles a governed dispatch
+    // once its run finishes — bot_run cost, the work item's next state, the
+    // envelope's burn — and offline it reads the fixtures (reconcileBotRuns).
+    console.log('[bots] scheduler skipped (mock aurora); reconcile tick on');
+    reconcileTimer = setInterval(() => {
+      void reconcileBotRuns().catch((err: unknown) => console.warn('[bots] reconcile failed:', (err as Error).message));
+    }, RECONCILE_INTERVAL_MS);
+    reconcileTimer.unref();
     return;
   }
 

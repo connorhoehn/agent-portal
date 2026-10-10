@@ -75,10 +75,8 @@ function toMachineNode(node: WireNode): MachineNode {
   };
 }
 
-export function LocalComputeBadge() {
-  const navigate = useNavigate();
-  const { can, ready } = useCapabilities();
-  const { session } = useSession();
+/** The caller's own machines (server filters by owner); shared with FleetIndicator. */
+export function useLocalNodes(): { nodes: MachineNode[]; polling: boolean; loaded: boolean } {
   // `/api/local-compute/*` is requireTenant('orgiq'): the fetch is gated
   // before it fires (orgiqShellPolls.ts), not left to 403 on every poll. A
   // 401/403 that still gets through surfaces as `error` and renders nothing.
@@ -86,6 +84,14 @@ export function LocalComputeBadge() {
   const { data, error } = useFetch<{ nodes: WireNode[] }>(orgiq ? '/api/local-compute/nodes' : null, POLL_MS);
   useRefreshSessionOnDeny(error);
   const nodes = useMemo(() => (data?.nodes ?? []).map(toMachineNode), [data]);
+  return { nodes, polling: orgiq, loaded: !!data && !error };
+}
+
+export function LocalComputeBadge() {
+  const navigate = useNavigate();
+  const { can, ready } = useCapabilities();
+  const { session } = useSession();
+  const { nodes } = useLocalNodes();
 
   return (
     <MachinePresenceMenu

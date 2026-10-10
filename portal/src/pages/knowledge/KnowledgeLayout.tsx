@@ -6,7 +6,8 @@
 // click from the Knowledge home.
 
 import { NavLink, Outlet } from 'react-router';
-import { SubNavLayout, activeNavItemClassName, inactiveNavItemClassName } from '@connorhoehnslalom/ui-components/shared';
+import { activeNavItemClassName, inactiveNavItemClassName } from '@connorhoehnslalom/ui-components/shared';
+import { BuildSectionLayout } from '../../components/shell/BuildSectionLayout';
 import { useSession } from '../../lib/auth';
 import { knowledgeItemsFor } from './knowledgeNav';
 
@@ -16,11 +17,10 @@ export default function KnowledgeLayout() {
   // this exact rail instead of swapping in a second one.
   const items = knowledgeItemsFor(session?.role);
   return (
-    <SubNavLayout
+    <BuildSectionLayout
       title="Knowledge"
       storageKey="knowledge"
       items={items}
-      contentAs="section"
       contentLabel="Knowledge"
       renderNavItem={(item, children) => (
         <NavLink
@@ -34,7 +34,7 @@ export default function KnowledgeLayout() {
       )}
     >
       <Outlet />
-    </SubNavLayout>
+    </BuildSectionLayout>
   );
 }
 

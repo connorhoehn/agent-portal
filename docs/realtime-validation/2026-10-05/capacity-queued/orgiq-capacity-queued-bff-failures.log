@@ -1,0 +1,11 @@
+✔ losing a subscriber connection permanently removes both leased BFFs from health admission (927.031959ms)
+✔ retirement after peer connection loss preserves page ownership and both users' huddle history (4693.791709ms)
+✔ a stalled Redis command path fences health within its bounded renewal deadline (45310.9ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 51081.425167

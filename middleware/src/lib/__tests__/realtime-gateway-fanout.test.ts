@@ -1,58 +1,60 @@
-// Two gateways, two http servers, real `ws` clients, one shared bus — the
-// scaled-out shape, through the real `attachRealtimeGateway` path rather than
-// against the router class directly.
-//
-// This is the test that would have caught the bug the distributed router exists
-// to fix: with the default single-process router, `alice` on gateway A and `bob`
-// on gateway B are in the same channel and simply never see each other's
-// messages. No error, no refusal — two people in one room with different
-// transcripts. So the first case asserts delivery ACROSS gateways, and the last
-// one asserts the old behaviour is still what you get when fan-out is off, since
-// that is the default and must not have changed.
-//
-// `fanout` is injected as an in-memory bus, so this runs without a Redis while
-// exercising the same code path Redis drives (redisRouterBus only swaps the
-// transport underneath the identical RouterBus interface).
+// Main's socket fan-out contract migrated to the native leased router.
+// Dedicated opt-in Redis + real WS servers, with explicit fixture authority.
+// Without GATEWAY_FANOUT_REDIS_URL only the unchanged local default runs.
 
 jest.mock('../../config.js', () => ({
   config: { region: 'us-east-1', aurora: {}, auth: { sessionSigningSecretArn: '' }, cognito: { portalOrigin: '' }, mock: { aurora: true } },
 }));
+jest.mock('../role-registry.js', () => ({ roleRegistry: () => [{ id: 'participant', tenant: 'social', capabilities: ['ViewSocial', 'PostMessage'] }] }));
+jest.mock('../../providers/identity.js', () => ({ getUser: jest.fn() }));
+jest.mock('../authz.js', () => ({ isAllowed: jest.fn() }));
 
 import http from 'node:http';
+import { randomUUID } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
 import WebSocket from 'ws';
 import { attachRealtimeGateway, REALTIME_GATEWAY_PATH } from '../realtime-gateway.js';
+import { RedisRealtimeRouter } from '@connorhoehnslalom/realtime-modules/server';
+import { GatewayRedis } from '../gateway-redis.js';
+import { createMemorySocialChatBackend, type SocialChatBackend } from '../social-chat.js';
+import { getUser, type UserInfo } from '../../providers/identity.js';
+import { isAllowed } from '../authz.js';
 import { signRealtimeToken, realtimeClaims } from '../realtime-token.js';
 import type { Session } from '../session.js';
-import type { RouterBus } from '../realtime-router-distributed.js';
-import { socialChannelMembersFixture, socialChannelMessagesFixture } from '../../mock/social-channels.js';
 
 const SECRET = 'test-realtime-secret';
 const GENERAL = 'social:ch:general';
 type Frame = Record<string, unknown> & { type?: string; action?: string; code?: string };
 type Open = { ws: WebSocket; frames: Frame[] };
 
-/** One bus shared by both gateways, JSON round-tripping as Redis would. */
-function sharedBus(): RouterBus {
-  const handlers: Array<(p: unknown) => void> = [];
-  return {
-    publish(_topic, payload) {
-      const wire = JSON.parse(JSON.stringify(payload)) as unknown;
-      for (const h of handlers) h(wire);
-    },
-    subscribe(_topic, handler) { handlers.push(handler); },
-  };
+const redisUrl = process.env['GATEWAY_FANOUT_REDIS_URL'];
+if (redisUrl && !['localhost', '127.0.0.1', '[::1]', '::1'].includes(new URL(redisUrl).hostname)) {
+  throw new Error('GATEWAY_FANOUT_REDIS_URL must name a dedicated loopback test Redis');
 }
+const clusterCase = redisUrl ? it : it.skip;
+let namespace: string, users: Map<string, UserInfo>, backend: SocialChatBackend;
 
-interface Gateway { server: http.Server; port: number; dispose: () => Promise<void> }
+interface Gateway { server: http.Server; port: number; dispose: () => Promise<void>; messages: SocialChatBackend['chatStore'] }
 
-async function gateway(fanout: RouterBus | null, nodeId = `test-${Math.random().toString(36).slice(2, 8)}`): Promise<Gateway> {
+async function gateway(sharedRedis: string | null, nodeId = randomUUID()): Promise<Gateway> {
   const server = http.createServer((_req, res) => { res.statusCode = 404; res.end(); });
   // Distinct node ids are mandatory: a shared id makes each replica discard the
   // other's frames as its own echo, and fan-out silently delivers nothing.
-  const { dispose } = attachRealtimeGateway(server, { redisUrl: null, pingIntervalMs: 0, fanout, nodeId });
+  let redis: GatewayRedis | undefined, router: RedisRealtimeRouter | undefined;
+  if (sharedRedis) { redis = new GatewayRedis(sharedRedis); await redis.open(); }
+  for (const userId of ['u-sana', 'u-mira']) await backend.membershipStore.putMember({ channel: GENERAL, userId, role: 'member', addedBy: userId,
+    addedAt: new Date().toISOString(), historyFrom: null, removedAt: null });
+  const handle = attachRealtimeGateway(server, { redisUrl: null, pingIntervalMs: 0, statsIntervalMs: 0,
+    socialChat: backend,
+    ...(redis ? { redisClient: redis, routerFactory: hooks => {
+      router = new RedisRealtimeRouter({ ...hooks, namespace, nodeId, redis: redis!.cluster, leaseMs: 10000, requestTimeoutMs: 3000 });
+      return router;
+    } } : {}),
+  });
+  try { await router?.start(); } catch (error) { await handle.dispose(); throw error; }
+  const { dispose } = handle;
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
-  return { server, port: (server.address() as AddressInfo).port, dispose };
+  return { server, port: (server.address() as AddressInfo).port, dispose, messages: backend.chatStore };
 }
 
 const sockets: WebSocket[] = [];
@@ -60,7 +62,7 @@ const sockets: WebSocket[] = [];
 async function connectAs(port: number, sub: string, name: string): Promise<Open> {
   const session = {
     sub, name, role: 'participant', tenant: 'social',
-    grants: { social: ['participant'] }, iat: Math.floor(Date.now() / 1000),
+    grants: { social: ['participant'] }, epoch: 0, iat: Math.floor(Date.now() / 1000),
   } as Session;
   const { token } = await signRealtimeToken(realtimeClaims(session), SECRET);
   return new Promise((resolve, reject) => {
@@ -93,6 +95,14 @@ const chatIn = (o: Open, channel: string) => o.frames
   .map((f) => (f['message'] as { message: string }).message);
 
 const prevSecret = process.env['REALTIME_JWT_SECRET'];
+beforeEach(() => {
+  namespace = `gateway-fanout-test-${randomUUID()}`;
+  backend = createMemorySocialChatBackend({ fixtures: false });
+  users = new Map(['u-sana', 'u-mira'].map(id => [id, { id, displayName: id, email: null, personId: null, epoch: 0, grants: { social: ['participant'] } }]));
+  users.set('u-theo', { id: 'u-theo', displayName: 'Fixture Work reader', email: null, personId: null, epoch: 0, grants: { orgiq: ['member'] } });
+  jest.mocked(getUser).mockImplementation(async id => users.has(id) ? structuredClone(users.get(id)!) : null);
+  jest.mocked(isAllowed).mockImplementation(async principal => principal.tenant === 'social' && principal.role === 'participant');
+});
 beforeAll(() => {
   jest.spyOn(console, 'warn').mockImplementation(() => undefined);
   jest.spyOn(console, 'log').mockImplementation(() => undefined);
@@ -100,15 +110,13 @@ beforeAll(() => {
 });
 afterAll(() => {
   for (const ws of sockets) ws.terminate();
-  socialChannelMembersFixture.reset();
-  socialChannelMessagesFixture.reset();
   if (prevSecret === undefined) delete process.env['REALTIME_JWT_SECRET'];
   else process.env['REALTIME_JWT_SECRET'] = prevSecret;
 });
 
-describe('cross-replica fan-out through attachRealtimeGateway', () => {
-  it('delivers a message between users whose sockets are on different gateways', async () => {
-    const bus = sharedBus();
+describe('native peer delivery through attachRealtimeGateway', () => {
+  clusterCase('delivers exactly once between users whose sockets are on different leased gateways', async () => {
+    const bus = redisUrl!;
     const a = await gateway(bus);
     const b = await gateway(bus);
     try {
@@ -132,15 +140,15 @@ describe('cross-replica fan-out through attachRealtimeGateway', () => {
     }
   }, 20_000);
 
-  it('still refuses a cross-tenant subscribe on the scaled-out path', async () => {
+  clusterCase('still refuses a cross-tenant subscribe on the native leased path', async () => {
     // Fan-out must not become a way around the router's authz: the orgiq token
     // is refused on a social channel exactly as it is on one task.
-    const bus = sharedBus();
+    const bus = redisUrl!;
     const a = await gateway(bus);
     try {
       const session = {
         sub: 'u-theo', name: 'Theo', role: 'member', tenant: 'orgiq',
-        grants: { orgiq: ['member'] }, iat: Math.floor(Date.now() / 1000),
+        grants: { orgiq: ['member'] }, epoch: 0, iat: Math.floor(Date.now() / 1000),
       } as Session;
       const { token } = await signRealtimeToken(realtimeClaims(session), SECRET);
       const ws = new WebSocket(`ws://127.0.0.1:${a.port}${REALTIME_GATEWAY_PATH}`, ['bearer-token-v1', token]);
@@ -148,12 +156,36 @@ describe('cross-replica fan-out through attachRealtimeGateway', () => {
       const frames: Frame[] = [];
       ws.on('message', (d) => frames.push(JSON.parse(String(d)) as Frame));
       await new Promise<void>((resolve, reject) => { ws.on('open', () => resolve()); ws.on('error', reject); });
+      // Native leased registration is asynchronous: an open TCP/WebSocket is
+      // not the gateway's accepted-session receipt.
+      await until(() => frames.some(frame => frame.type === 'session'));
       ws.send(JSON.stringify({ service: 'chat', action: 'join', channel: GENERAL }));
       await until(() => frames.some((f) => f.type === 'error' && f.code === 'AUTHZ_CHANNEL_DENIED'));
       expect(frames.some((f) => f.code === 'AUTHZ_CHANNEL_DENIED')).toBe(true);
     } finally {
       await a.dispose();
       await new Promise<void>((r) => a.server.close(() => r()));
+    }
+  }, 20_000);
+
+  clusterCase('reauthorizes peer recipients after grant removal without dropping the authorized stored message', async () => {
+    const a = await gateway(redisUrl!), b = await gateway(redisUrl!);
+    try {
+      const sana = await connectAs(a.port, 'u-sana', 'Sana'), mira = await connectAs(b.port, 'u-mira', 'Mira');
+      send(sana, { service: 'chat', action: 'join', channel: GENERAL }); send(mira, { service: 'chat', action: 'join', channel: GENERAL });
+      await until(() => sana.frames.some(frame => frame.action === 'joined') && mira.frames.some(frame => frame.action === 'joined'));
+      users.get('u-mira')!.grants.social = [];
+      send(sana, { service: 'chat', action: 'send', channel: GENERAL, message: 'Stored after recipient removal' });
+      await until(() => sana.frames.some(frame => frame.action === 'sent'));
+      await new Promise(resolve => setTimeout(resolve, 150));
+      expect(chatIn(mira, GENERAL)).not.toContain('Stored after recipient removal');
+      expect((await a.messages.listMessages(GENERAL, 20)).map(row => row.message)).toContain('Stored after recipient removal');
+      send(mira, { service: 'chat', action: 'history', channel: GENERAL });
+      await until(() => mira.frames.some(frame => frame.code === 'AUTHZ_CHANNEL_DENIED'));
+      expect(mira.frames.some(frame => frame.action === 'history')).toBe(false);
+    } finally {
+      await a.dispose(); await b.dispose();
+      await new Promise<void>(resolve => a.server.close(() => resolve())); await new Promise<void>(resolve => b.server.close(() => resolve()));
     }
   }, 20_000);
 

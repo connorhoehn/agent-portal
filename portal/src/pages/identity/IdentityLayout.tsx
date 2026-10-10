@@ -1,12 +1,13 @@
 import { NavLink, Outlet } from 'react-router';
-import { SubNavLayout, type SubNavItem, activeNavItemClassName, inactiveNavItemClassName } from '@connorhoehnslalom/ui-components/shared';
+import { type SubNavItem, activeNavItemClassName, inactiveNavItemClassName } from '@connorhoehnslalom/ui-components/shared';
+import { BuildSectionLayout } from '../../components/shell/BuildSectionLayout';
 
 const ITEMS: SubNavItem[] = [
-  { path: 'users',    label: 'Users',    hint: 'Identities + tenant grants' },
-  { path: 'roles',    label: 'Roles',    hint: 'Cedar permission matrix' },
-  { path: 'policies', label: 'Policies', hint: 'AVP Cedar source' },
-  { path: 'schema',   label: 'Schema',   hint: 'Entity types + actions' },
-  { path: 'test',     label: 'Sandbox',  hint: 'Dry-run authz decisions' },
+  { path: 'users',    label: 'Users' },
+  { path: 'roles',    label: 'Roles' },
+  { path: 'policies', label: 'Policies' },
+  { path: 'schema',   label: 'Schema' },
+  { path: 'test',     label: 'Sandbox' },
 ];
 
 // SubNavLayout's `renderNavItem` is the only way to get a real react-router
@@ -20,10 +21,10 @@ const ITEMS: SubNavItem[] = [
 
 function IdentityLayout() {
   return (
-    <SubNavLayout
+    <BuildSectionLayout
       title="Identity Management"
+      storageKey="identity-subnav"
       items={ITEMS}
-      contentAs="section"
       contentLabel="Identity"
       renderNavItem={(item, children) => (
         <NavLink to={item.path} className={({ isActive }) => (isActive ? activeNavItemClassName : inactiveNavItemClassName)}>
@@ -32,7 +33,7 @@ function IdentityLayout() {
       )}
     >
       <Outlet />
-    </SubNavLayout>
+    </BuildSectionLayout>
   );
 }
 

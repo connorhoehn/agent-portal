@@ -84,3 +84,21 @@ describe('MemoryMessageQueue', () => {
     await expect(q.send('nope', 'x')).rejects.toThrow(/does not exist/);
   });
 });
+
+
+it('inspects backlog and expired leases without receiving, redriving or changing receipts', async () => {
+  const { q, rows, ready, advance } = harness(1);
+  await ready;
+  expect(await q.inspect('uncreated')).toBeNull();
+  expect(q.definition('uncreated')).toBeUndefined();
+  await q.send('work', 'private payload', { groupId: 'g' });
+  const [leased] = await q.receive('work');
+  const before = structuredClone(rows);
+  expect(await q.inspect('work')).toMatchObject({ ready: 0, inFlight: 1, delayed: 0 });
+  expect(rows).toEqual(before);
+  advance(31_000);
+  expect(await q.inspect('work')).toMatchObject({ ready: 1, inFlight: 0 });
+  expect(rows).toEqual(before);
+  expect(rows[0]!.receipt_handle).toBe(leased!.receipt_handle);
+  expect(await q.inspect('work-dlq')).toMatchObject({ ready: 0 });
+});

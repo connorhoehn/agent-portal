@@ -1,7 +1,0 @@
-[frspec] disabled (MTPLX_FRSPEC_DRAFT=None)
-[mtplx] dense-decode ceiling auto: 131072 tokens (15% RAM over 65536 B/token — MODEL DEFAULT, set MTPLX_DENSE_KV_BYTES_PER_TOKEN for non-Qwen3.8 geometry)
-[mtplx] compiled-verify prewarm {"buckets": [], "skipped": ["no_paged_entries"], "already": [], "elapsed_s": 0.0, "complete": true}
-{
-  "candidate": "2",
-  "output": "/Users/connor.hoehn/projects/aws-agentcore/outputs/cli/tune/tune-20260908-112932/d2.json"
-}

@@ -4,7 +4,7 @@
 // brand gradient's stops, read from the tenant element's computed tokens,
 // so the mark IS the brand and follows the theme.
 
-/** Two-letter mark for a tenant label ("Org" → "Or", "Assessment" → "As"). */
+/** Two-letter mark for a tenant label ("Work" → "Or", "Assessment" → "As"). */
 export function brandInitials(label: string): string {
   const s = label.trim();
   if (!s) return '?';

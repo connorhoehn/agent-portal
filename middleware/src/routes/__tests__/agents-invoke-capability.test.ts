@@ -62,9 +62,11 @@ jest.mock('../../providers/index.js', () => ({
 
 import express from 'express';
 import request from '../../test-support/http.js';
-import { agentsRouter } from '../agents.js';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { agentsRouter, agentCapabilityGate } from '../agents.js';
 import { errorHandler } from '../../lib/async-handler.js';
-import { clearAuthzCache } from '../../lib/authz.js';
+import { clearAuthzCache, CAPABILITY_ACTIONS } from '../../lib/authz.js';
 
 /** The actionId a mocked IsAuthorizedCommand asks about. */
 function actionIdOf(cmd: unknown): string {
@@ -144,6 +146,60 @@ describe('POST /api/agents/:agentId/invoke — ManageIngest gate on write agents
     const res = await invoke('orgiq-supervisor');
     expect(res.status).toBe(403);
     expect(res.body).toMatchObject({ error: 'Forbidden', action: 'Search' });
+  });
+});
+
+// The devbox runtime (Claude Code in a microVM) is gated on ManageDevbox the
+// same way: the portal's picker hides it from roles without the capability,
+// and this pins that the route refuses them too (2026-10-01).
+describe('POST /api/agents/:agentId/invoke — ManageDevbox gate on the devbox agent', () => {
+  const DEVBOX_IDS = ['devbox', 'orgiq-devbox', 'orgiq_devbox', 'ORGIQ-DEVBOX'];
+
+  it('403s a session without ManageDevbox on every id spelling, before any stream opens', async () => {
+    allowOnly('Search', 'ManageIngest'); // a member's Search, even with ManageIngest
+    for (const id of DEVBOX_IDS) {
+      const res = await invoke(id);
+      expect(res.status).toBe(403);
+      expect(res.body).toMatchObject({ error: 'Forbidden', action: 'ManageDevbox', agentId: id });
+      expect(res.body.message).toMatch(/ManageDevbox/);
+    }
+  });
+
+  it('lets a ManageDevbox holder invoke it', async () => {
+    allowOnly('Search', 'ManageDevbox');
+    for (const id of DEVBOX_IDS) {
+      const res = await invoke(id);
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({ streamed: true });
+    }
+  });
+
+  it('503s (not 403) when authorization itself is unavailable', async () => {
+    mockSend.mockImplementation((cmd: unknown) => (actionIdOf(cmd) === 'Search'
+      ? Promise.resolve({ decision: 'ALLOW' })
+      : Promise.reject(new Error('throttled'))));
+    const res = await invoke('orgiq-devbox');
+    expect(res.status).toBe(503);
+    expect(res.body).toMatchObject({ action: 'ManageDevbox' });
+  });
+
+  it('does not catch ids that merely contain the word', () => {
+    expect(agentCapabilityGate('orgiq-supervisor')).toBeNull();
+    expect(agentCapabilityGate('devboxer')).toBeNull();
+    expect(agentCapabilityGate('orgiq-devbox')?.action).toBe('ManageDevbox');
+    expect(agentCapabilityGate('orgiq_graph_builder')?.action).toBe('ManageIngest');
+  });
+
+  it('matches the seeded roles: sme and hr-admin hold ManageDevbox, member does not', () => {
+    const holds = (role: string) => /OrgIQ::Action::"ManageDevbox"/.test(
+      readFileSync(join(__dirname, '../../../seeds/roles/orgiq', `${role}.cedar`), 'utf8'));
+    expect(holds('member')).toBe(false);
+    expect(holds('sme')).toBe(true);
+    expect(holds('hr-admin')).toBe(true);
+  });
+
+  it('is probed by GET /api/session/capabilities, so the picker can read it', () => {
+    expect(CAPABILITY_ACTIONS).toContain('ManageDevbox');
   });
 });
 

@@ -18,6 +18,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import {
+  T,
   Button,
   Card,
   CatalogGrid,
@@ -369,9 +370,9 @@ export default function AgentProjectsPage() {
         </Button>
         {githubConnections.length === 0 && canIngest && (
           <Inline align="center" gap="xs">
-            <Inline as="span" gap="none" className="text-[11px] text-text-tertiary">No GitHub connection yet</Inline>
+            <T as="span" size="xs" tone="tertiary">No GitHub connection yet</T>
             <Button variant="ghost" size="sm" onClick={() => setShowConnections(true)}>Add one here</Button>
-            <Inline as="span" gap="none" className="text-[11px] text-text-tertiary">— Knowledge → Sources also manages these; ingest shares the vault.</Inline>
+            <T as="span" size="xs" tone="tertiary">— Knowledge → Sources also manages these; ingest shares the vault.</T>
           </Inline>
         )}
       </Inline>
@@ -428,9 +429,9 @@ export default function AgentProjectsPage() {
               </Button>
             </Inline>
             {connection && repoOptions.length > 0 && (
-              <Inline as="span" gap="none" className="text-[11px] text-text-tertiary">
+              <T as="span" size="xs" tone="tertiary">
                 {repoOptions.length} repositories visible to this credential.
-              </Inline>
+              </T>
             )}
           </Stack>
         </Card>
@@ -471,22 +472,24 @@ export default function AgentProjectsPage() {
                   <Inline align="center" gap="sm" wrap>
                     <ExternalLink external
                       href={`https://github.com/${p.repoFullName}`}
-                      title={`Open ${p.repoFullName} on GitHub`}
-                      className="inline-flex items-center gap-1 truncate font-mono text-[13px] font-semibold text-text-primary hover:text-primary hover:underline"
-                    >
+                      title={`Open ${p.repoFullName} on GitHub`} className="inline-flex items-center gap-1 truncate font-mono hover:text-primary hover:underline"><T as="span" size="sm" weight="semibold" tone="primary">
                       {p.repoFullName}
-                      <Inline as="span" gap="none" className="text-[10px] text-text-tertiary" aria-hidden="true">↗</Inline>
-                    </ExternalLink>
-                    {!p.connectionName && <Chip size="xs">public</Chip>}
+                      <T as="span" aria-hidden="true" size="xs" tone="tertiary">↗</T>
+                    </T></ExternalLink>
+                    {/* `connection_name` is the only visibility signal the row
+                        carries: null means it was linked as public, with no
+                        credential. Say which, both ways — a bare absence of
+                        "public" did not tell anyone the repo was private. */}
+                    {p.connectionName
+                      ? <Chip size="xs" title={`Private — cloned and pushed with the ${p.connectionName} credential`}>private</Chip>
+                      : <Chip size="xs" title="Linked as public — no credential is sent">public</Chip>}
                     {p.orgProjectName && (
                       p.orgProjectId ? (
                         <Link
                           to={`/iq/projects/${p.orgProjectId}`}
-                          title={`Open the initiative this codebase delivers: ${p.orgProjectName}`}
-                          className="max-w-[40%] shrink-0 truncate rounded bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary no-underline hover:underline"
-                        >
+                          title={`Open the initiative this codebase delivers: ${p.orgProjectName}`} className="max-w-[40%] shrink-0 truncate rounded bg-primary/10 px-1.5 py-0.5 text-primary no-underline hover:underline"><T as="span" size="xs" tone="inherit">
                           {p.orgProjectName}
-                        </Link>
+                        </T></Link>
                       ) : (
                         <Chip size="xs" tone="accent" title={`Delivers: ${p.orgProjectName}`}>{p.orgProjectName}</Chip>
                       )
@@ -508,8 +511,8 @@ export default function AgentProjectsPage() {
                   {inWorkspace ? (
                     <>
                       <Inline align="center" gap="sm" wrap>
-                        <Inline as="span" gap="none" className="text-[11px] text-success">in {box?.label}</Inline>
-                        <Inline as="span" gap="none" className="truncate font-mono text-[11px] text-text-tertiary">{p.checkout}</Inline>
+                        <T as="span" size="xs" tone="inherit" className="text-success">in {box?.label}</T>
+                        <T as="span" size="xs" tone="tertiary" className="truncate font-mono">{p.checkout}</T>
                       </Inline>
                       {canDevbox && (
                         <Inline gap="xs">
@@ -527,12 +530,12 @@ export default function AgentProjectsPage() {
                     </>
                   ) : (
                     <>
-                      <Inline as="span" gap="none" className="text-[11px] text-text-tertiary">
+                      <T as="span" size="xs" tone="tertiary">
                         {p.clonedAt
                           // A workspace is disposable; the project is not.
                           ? 'Its workspace is gone — microVMs are wiped by image pushes and expire when idle.'
                           : 'Not in a workspace yet.'}
-                      </Inline>
+                      </T>
                       {canDevbox && (
                         <Button variant="primary" size="sm" disabled={busy === `clone:${p.id}`} onClick={() => void clone(p)}>
                           {busy === `clone:${p.id}` ? 'cloning…' : p.clonedAt ? 'Re-clone' : 'Clone into workspace'}
@@ -543,15 +546,15 @@ export default function AgentProjectsPage() {
                 </Inline>
 
                 {p.owners.length > 0 && (
-                  <Inline as="span" gap="none" className="border-b border-border px-3.5 py-2 text-[11px] text-text-tertiary">
+                  <T as="span" size="xs" tone="tertiary" className="border-b border-border px-3.5 py-2">
                     Accountable: {p.owners.map((o) => o.name + (o.role ? ` (${o.role})` : '')).join(', ')}
-                  </Inline>
+                  </T>
                 )}
 
                 {runs.length === 0 ? (
-                  <Inline as="span" gap="none" className="px-3.5 py-3 text-[11px] text-text-tertiary">
+                  <T as="span" size="xs" tone="tertiary" className="px-3.5 py-3">
                     Nothing has been run against this yet.
-                  </Inline>
+                  </T>
                 ) : (
                   <Stack gap="none">
                     {runs.map((r) => (
@@ -563,7 +566,7 @@ export default function AgentProjectsPage() {
                       >
                         <Chip tone={STATUS_TONE[r.status]} size="xs">{r.status}</Chip>
                         <Stack gap="none" className="min-w-0 flex-1">
-                          <Inline as="span" gap="none" className="truncate text-[12px] text-text-primary" title={r.prompt}>{r.prompt}</Inline>
+                          <T as="span" title={r.prompt} size="xs" tone="primary" className="truncate">{r.prompt}</T>
                           <MetaLine
                             size="xs"
                             items={[
@@ -575,12 +578,12 @@ export default function AgentProjectsPage() {
                             ]}
                           />
                           {r.diffSummary && (
-                            <Inline as="span" gap="none" className="mt-0.5 truncate text-[11px] text-text-secondary" title={r.diffSummary}>
+                            <T as="span" title={r.diffSummary} size="xs" tone="secondary" className="mt-0.5 truncate">
                               {r.diffSummary}
-                            </Inline>
+                            </T>
                           )}
                           {r.error && (
-                            <Inline as="span" gap="none" className="mt-0.5 truncate text-[11px] text-danger">{r.error}</Inline>
+                            <T as="span" size="xs" tone="inherit" className="mt-0.5 truncate text-danger">{r.error}</T>
                           )}
                         </Stack>
                       </Inline>
@@ -590,9 +593,9 @@ export default function AgentProjectsPage() {
 
                 {(openChangesByProject[p.id] ?? 0) > 0 && (
                   <Inline className="border-t border-border bg-warning-bg/40 px-3.5 py-2">
-                    <Link to="/admin/changes" className="text-[11px] font-semibold text-warning no-underline hover:underline">
+                    <Link to="/admin/changes" className="text-warning no-underline hover:underline"><T as="span" size="xs" weight="semibold" tone="inherit">
                       {openChangesByProject[p.id]} change{openChangesByProject[p.id] === 1 ? '' : 's'} awaiting review →
-                    </Link>
+                    </T></Link>
                   </Inline>
                 )}
               </Card>
@@ -617,7 +620,7 @@ export default function AgentProjectsPage() {
         title={runFor ? `Run on ${runFor.repoFullName}` : 'Run'}
         footer={
           <Inline align="center" justify="between" gap="sm" className="w-full">
-            <Inline as="span" gap="none" className="text-[11px] text-text-tertiary">⌘⏎ to run · esc to close</Inline>
+            <T as="span" size="xs" tone="tertiary">⌘⏎ to run · esc to close</T>
             <Button variant="primary" size="sm" disabled={busy === 'run' || !prompt.trim()} onClick={() => void run()}>
               {busy === 'run' ? 'starting…' : 'Run'}
             </Button>

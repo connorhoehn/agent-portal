@@ -151,3 +151,7 @@ export function readinessRows(r: {
   }
   return rows;
 }
+
+/** Where the catalog is read from, as the clause UnavailableNotice joins to
+ *  "…, so this is unknown rather than empty." — not a bare noun. */
+export const LIBRARY_SOURCE = 'Assets are read from the library catalog';

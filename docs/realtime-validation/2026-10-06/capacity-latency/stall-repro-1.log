@@ -1,0 +1,20 @@
+✖ a stalled Redis command path fences health within its bounded renewal deadline (46052.970792ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 46400.551583
+
+✖ failing tests:
+
+test at test-support/bff-cluster-redis-failures.mjs:88:1
+✖ a stalled Redis command path fences health within its bounded renewal deadline (46052.970792ms)
+  Error: Timed out: old stable owner leases expire naturally
+      at until (file:///Users/connorhoehn/Projects/aws-agentcore/middleware/test-support/bff-cluster-fixture.mjs:37:9)
+      at async TestContext.<anonymous> (file:///Users/connorhoehn/Projects/aws-agentcore/middleware/test-support/bff-cluster-redis-failures.mjs:105:3)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3)
+exit=1

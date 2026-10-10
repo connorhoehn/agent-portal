@@ -1,9 +1,8 @@
 import { useState } from 'react';
-import { Button, Card, CardHeader, CatalogGrid, Inline, InlineAlert, InlinePlaceholder, Input, SectionLabel, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { Button, Card, CardHeader, CatalogGrid, Inline, InlineAlert, InlinePlaceholder, Input, SectionLabel, Stack, T } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../../lib/capabilities';
 import { askPage } from './browserApi';
 import type { WebQAResult } from './types';
-import { T } from '../Text';
 
 /**
  * Web Q&A: URL + question → screenshot + Nova Lite answer.
@@ -94,7 +93,7 @@ function WebQAResultPanes({ result }: { result: WebQAResult }) {
       </Stack>
       <Stack gap="xs">
         <SectionLabel>Answer</SectionLabel>
-        <T className="whitespace-pre-wrap text-[13px] leading-relaxed text-text-primary" wrap>{result.answer}</T>
+        <T size="sm" className="whitespace-pre-wrap leading-relaxed text-text-primary" wrap>{result.answer}</T>
       </Stack>
     </CatalogGrid>
   );

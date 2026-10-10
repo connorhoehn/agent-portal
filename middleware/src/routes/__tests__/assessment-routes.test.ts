@@ -931,3 +931,155 @@ describe('GET /workspace', () => {
     expect(res.status).toBe(403);
   });
 });
+
+// ─── Routes the whole-router coverage scan found untested ───────────────────
+
+describe('GET /configuration', () => {
+  it('200s an assessor with the seeded target level and every motion', async () => {
+    const res = await request(buildApp()).get('/api/assessment/configuration');
+    expect(res.status).toBe(200);
+    expect(res.body.target_level).toBe(3);
+    expect(res.body.motions).toHaveLength(3);
+    for (const m of res.body.motions) expect(m).toMatchObject({ cohort: expect.any(String), title: expect.any(String), tag: expect.any(String) });
+  });
+
+  it('403s a role with no ViewAssessment', async () => {
+    expect((await request(buildApp({ role: OUTSIDE_ROLE })).get('/api/assessment/configuration')).status).toBe(403);
+  });
+});
+
+describe('GET /knowledge/doc/version', () => {
+  const docId = 'ec:standards/ci-cd-standards.md';
+
+  it('returns the one version named by stamp, the same row the version list carries', async () => {
+    const list = await request(buildApp()).get('/api/assessment/knowledge/doc/versions?id=ec%3Astandards%2Fci-cd-standards.md');
+    expect(list.status).toBe(200);
+    const listed = list.body.versions[0] as { stamp: string };
+    const res = await request(buildApp()).get(`/api/assessment/knowledge/doc/version?id=${encodeURIComponent(docId)}&stamp=${encodeURIComponent(listed.stamp)}`);
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual(listed);
+  });
+
+  it('400s without both id and stamp, and 404s an unknown stamp', async () => {
+    expect((await request(buildApp()).get('/api/assessment/knowledge/doc/version?id=ec%3Astandards%2Fci-cd-standards.md')).status).toBe(400);
+    expect((await request(buildApp()).get('/api/assessment/knowledge/doc/version?stamp=20260101T000000Z')).status).toBe(400);
+    expect((await request(buildApp()).get('/api/assessment/knowledge/doc/version?id=ec%3Astandards%2Fci-cd-standards.md&stamp=no-such-stamp')).status).toBe(404);
+  });
+
+  it('403s a role with no ViewAssessment', async () => {
+    expect((await request(buildApp({ role: OUTSIDE_ROLE })).get('/api/assessment/knowledge/doc/version?id=ec%3Astandards%2Fci-cd-standards.md&stamp=x')).status).toBe(403);
+  });
+});
+
+describe('GET /runs/:runId', () => {
+  it('200s one run by id — the same row the run list carries', async () => {
+    // Seeded run ids are minted from the mock clock, so read one off the list.
+    const list = await request(buildApp()).get('/api/assessment/runs');
+    expect(list.status).toBe(200);
+    const listed = list.body.runs[0] as { id: string; command: string; status: string };
+    expect(listed?.id).toEqual(expect.stringMatching(/^run-/));
+    const res = await request(buildApp()).get(`/api/assessment/runs/${listed.id}`);
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ id: listed.id, command: listed.command, status: listed.status });
+  });
+
+  it('404s an unknown run and 403s a role with no ViewAssessment', async () => {
+    expect((await request(buildApp()).get('/api/assessment/runs/run-does-not-exist')).status).toBe(404);
+    expect((await request(buildApp({ role: OUTSIDE_ROLE })).get('/api/assessment/runs/run-any')).status).toBe(403);
+  });
+});
+
+describe('DELETE /submissions/:team/:envelope', () => {
+  const teamId = 'TEAM-002';
+  const envelopeId = 'sub-test-delete-fixture';
+  const seed = () => upsertSubmission({
+    schema_version: '1.0',
+    envelope_id: envelopeId,
+    source: { kind: 'ms_forms_export', system: 'microsoft_forms', origin_file: 'x.csv', origin_row: 1, form_submission_id: '1' },
+    team_id: teamId,
+    team_name_raw: 'Kubernetes Operator',
+    submitter: { name: 'Test User', email: 'test@example.com', is_primary_contact: true },
+    submitted_at: '1/1/2026 00:00',
+    ingested_at: new Date().toISOString(),
+    assessment_date: '1/1/2026 00:00',
+    self_certified: true,
+    supersedes: null,
+    dimension_hints: [],
+    status: 'committed',
+    revision: 1,
+  });
+  beforeEach(seed);
+  afterEach(() => { removeSubmission(teamId, envelopeId); });
+
+  it('deletes the envelope once; the detail read and a second delete then 404', async () => {
+    expect((await request(buildApp()).get(`/api/assessment/submissions/${teamId}/${envelopeId}`)).status).toBe(200);
+    const res = await request(buildApp()).delete(`/api/assessment/submissions/${teamId}/${envelopeId}`);
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ ok: true });
+    expect((await request(buildApp()).get(`/api/assessment/submissions/${teamId}/${envelopeId}`)).status).toBe(404);
+    expect((await request(buildApp()).delete(`/api/assessment/submissions/${teamId}/${envelopeId}`)).status).toBe(404);
+  });
+
+  it('400s a malformed team id', async () => {
+    expect((await request(buildApp()).delete(`/api/assessment/submissions/not-a-team/${envelopeId}`)).status).toBe(400);
+  });
+
+  it('403s a role with no ManageSubmissions and leaves the envelope in place', async () => {
+    expect((await request(buildApp({ role: OUTSIDE_ROLE })).delete(`/api/assessment/submissions/${teamId}/${envelopeId}`)).status).toBe(403);
+    expect((await request(buildApp()).get(`/api/assessment/submissions/${teamId}/${envelopeId}`)).status).toBe(200);
+  });
+});
+
+describe('POST /teams/:id/evidence', () => {
+  it('201s an unscored PENDING item that the team evidence log then lists', async () => {
+    const res = await request(buildApp())
+      .post('/api/assessment/teams/TEAM-001/evidence')
+      .send({ dimension_id: '3', source_type: 'transcript', excerpt: 'We deploy from main via the pipeline.' });
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({
+      evidence_id: expect.stringMatching(/^EV-/), dimension_id: '3', source_type: 'transcript',
+      excerpt: 'We deploy from main via the pipeline.', scored: false, status: 'PENDING', supports_level: null,
+    });
+    const log = await request(buildApp()).get('/api/assessment/teams/TEAM-001/evidence');
+    expect(log.status).toBe(200);
+    expect(log.body.evidence.some((e: { evidence_id: string }) => e.evidence_id === res.body.evidence_id)).toBe(true);
+  });
+
+  it('coerces an unknown source_type to document and a missing dimension to null', async () => {
+    const res = await request(buildApp()).post('/api/assessment/teams/TEAM-001/evidence').send({ source_type: 'email', excerpt: 'Forwarded note' });
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({ source_type: 'document', dimension_id: null });
+  });
+
+  it('400s without an excerpt or with a malformed team id, 404s an unknown team', async () => {
+    expect((await request(buildApp()).post('/api/assessment/teams/TEAM-001/evidence').send({ source_type: 'document' })).status).toBe(400);
+    expect((await request(buildApp()).post('/api/assessment/teams/team1/evidence').send({ excerpt: 'x' })).status).toBe(400);
+    expect((await request(buildApp()).post('/api/assessment/teams/TEAM-999/evidence').send({ excerpt: 'x' })).status).toBe(404);
+  });
+
+  it('403s a role with no ScoreAssessment', async () => {
+    expect((await request(buildApp({ role: OUTSIDE_ROLE })).post('/api/assessment/teams/TEAM-001/evidence').send({ excerpt: 'x' })).status).toBe(403);
+  });
+});
+
+describe('GET /teams/:id/exceptions', () => {
+  it('200s the team archetype, the archetype options and its open exceptions', async () => {
+    const res = await request(buildApp()).get('/api/assessment/teams/TEAM-001/exceptions');
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ team_id: 'TEAM-001', archetype: 'internal-tooling-no-deploy' });
+    expect(Array.isArray(res.body.archetypes) && res.body.archetypes.length > 0).toBe(true);
+    expect(res.body.exceptions.map((e: { dimension_id: string }) => e.dimension_id).sort()).toEqual(['6', '7']);
+  });
+
+  it('answers an empty list for a team with none, 404 for an unknown team, 400 for a malformed id', async () => {
+    const none = await request(buildApp()).get('/api/assessment/teams/TEAM-002/exceptions');
+    expect(none.status).toBe(200);
+    expect(none.body.exceptions).toEqual([]);
+    expect((await request(buildApp()).get('/api/assessment/teams/TEAM-999/exceptions')).status).toBe(404);
+    expect((await request(buildApp()).get('/api/assessment/teams/bad/exceptions')).status).toBe(400);
+  });
+
+  it('403s a role with no ViewAssessment', async () => {
+    expect((await request(buildApp({ role: OUTSIDE_ROLE })).get('/api/assessment/teams/TEAM-001/exceptions')).status).toBe(403);
+  });
+});

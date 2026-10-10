@@ -4,6 +4,9 @@ it('keeps legacy people IDs and deduplicates typed refs without trusting client 
   expect(parseSearchSelection({ peopleIds: ['a'], records: [{ type: 'person', id: 'a', title: 'Fake' }, { type: 'work', id: 'b' }] })).toEqual([{ type: 'person', id: 'a' }, { type: 'work', id: 'b' }]);
   expect(parseSearchSelection(undefined)).toEqual([]);
 });
+it('keeps only a canonical recording identity from client selection', () => {
+  expect(parseSearchSelection({ records: [{ type: 'recording', id: 'rec-native', title: 'fabricated call', transcript: 'fabricated text', initiativeId: 'wrong' }] })).toEqual([{ type: 'recording', id: 'rec-native' }]);
+});
 it('rejects malformed/oversized selection before resolving data', () => {
   for (const selection of ['a', { peopleIds: 'a' }, { records: [{ type: 'admin', id: 'x' }] }, { records: [{ type: 'person', id: '' }] }, { peopleIds: Array(51).fill('a') }, { records: [{ type: 'person', id: 'a'.repeat(257) }] }]) expect(() => parseSearchSelection(selection)).toThrow();
 });

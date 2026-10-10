@@ -10,6 +10,18 @@ const require = createRequire(new URL('../../portal/package.json', import.meta.u
 const { chromium } = require('playwright');
 
 const BASE = process.env.RAIL_PARITY_BASE ?? 'http://localhost:5183';
+// The rail half of the rendered contract (docs/journeys.md): with
+// RAIL_PARITY_CONTRACT_OUT=<file.jsonl> every measured subject appends
+// { key: <its path>, value: { verdict, problems } }, numbers masked so a
+// pixel of noise is not a contract change; scripts/journeys/measure.sh hands
+// the file to portal/e2e/contracts.ts.
+import fs from 'node:fs';
+const CONTRACT_OUT = process.env.RAIL_PARITY_CONTRACT_OUT;
+function record(key, problems) {
+  if (!CONTRACT_OUT) return;
+  const value = { verdict: problems.length ? 'DIFFERS' : 'MATCH', problems: problems.map((p) => p.replace(/-?\d+(\.\d+)?/g, '#')).sort() };
+  fs.appendFileSync(CONTRACT_OUT, `${JSON.stringify({ key, value })}\n`);
+}
 const OTHER = process.argv.includes('--other') ? process.env.RAIL_PARITY_OTHER : null;
 const TOL = { width: 8, pitch: 2 };
 
@@ -95,6 +107,81 @@ async function signIn(page, base, userId, tenant, role) {
 // left = 200 ± 2), starts at the content top (± 2, nothing above it — no page
 // header, no shell breadcrumb row), runs the content's full height (± 4), has
 // no card ring (radius ≤ 2), and carries the shelf and its section captions.
+// ── The list-rail frame (docs/layout-cascade.md rule 5) ─────────────────────
+// RAIL_PARITY_LIST=<path>[,<path>…] [RAIL_PARITY_USER=u-vera]
+// [RAIL_PARITY_TENANT=orgiq]: a page's list is a flush list rail stacked
+// directly beside the section rail — the same ExplorerLayout rail the
+// Initiatives list draws (`nav[aria-label="Explorer"]`). Per page: the list
+// rail's left is the section rail's right (± 2), it starts at the content top
+// (± 2) and runs its full height (± 4), neither it nor any ancestor inside
+// <main> carries a radius (no floating box), its width equals the Initiatives
+// rail's (± 2), and the breadcrumb trail is the first row of the content
+// column after it: 24px (± 2) right of the list rail, ≤ 24px under the top.
+const LIST_SUBJECTS = (process.env.RAIL_PARITY_LIST ?? '').split(',').map((v) => v.trim()).filter(Boolean);
+if (LIST_SUBJECTS.length) {
+  const user = process.env.RAIL_PARITY_USER ?? 'u-vera';
+  const tenant = process.env.RAIL_PARITY_TENANT ?? 'orgiq';
+  const browser = await chromium.launch();
+  const ctx = await browser.newContext({ viewport: { width: 1672, height: 941 } });
+  const page = await ctx.newPage();
+  await signIn(page, BASE, user, tenant, null);
+  const frame = () => {
+    const main = document.querySelector('[data-shell-nav] main') ?? document.querySelector('main');
+    if (!main) return null;
+    const mr = main.getBoundingClientRect(); const mcs = getComputedStyle(main);
+    const content = { left: mr.left + parseFloat(mcs.paddingLeft), top: mr.top + parseFloat(mcs.paddingTop), bottom: mr.bottom - parseFloat(mcs.paddingBottom) };
+    const visible = (e) => { const b = e.getBoundingClientRect(); return b.width > 0 && b.height > 0; };
+    const list = [...main.querySelectorAll('nav[aria-label="Explorer"]')].find(visible) ?? null;
+    const lr = list?.getBoundingClientRect();
+    const section = [...main.querySelectorAll('nav, aside, [role="navigation"]')].filter(visible).filter((e) => e !== list && !(list && e.contains(list)) && !(list && list.contains(e)))
+      .map((e) => e.getBoundingClientRect())
+      .find((b) => Math.abs(b.left - content.left) <= 2 && b.width >= 120 && b.width <= 340 && b.height >= (content.bottom - content.top) * 0.6) ?? null;
+    let radius = 0;
+    for (let el = list; el && el !== main; el = el.parentElement) radius = Math.max(radius, parseFloat(getComputedStyle(el).borderTopLeftRadius) || 0);
+    const crumbEl = [...main.querySelectorAll('nav[aria-label*="readcrumb"]')].filter(visible)
+      .find((e) => !lr || e.getBoundingClientRect().left >= lr.right - 2) ?? null;
+    const cb = crumbEl?.getBoundingClientRect();
+    return {
+      contentLeft: Math.round(content.left), contentTop: Math.round(content.top), contentHeight: Math.round(content.bottom - content.top),
+      section: section ? { left: Math.round(section.left), right: Math.round(section.right), width: Math.round(section.width) } : null,
+      list: lr ? { left: Math.round(lr.left), right: Math.round(lr.right), top: Math.round(lr.top), width: Math.round(lr.width), height: Math.round(lr.height), radius } : null,
+      crumb: cb ? { left: Math.round(cb.left), top: Math.round(cb.top), text: (crumbEl.textContent ?? '').slice(0, 60) } : null,
+      hScroll: document.documentElement.scrollWidth > innerWidth,
+    };
+  };
+  await page.goto(BASE + '/iq/projects'); await page.waitForTimeout(3000);
+  const ref = await page.evaluate(frame);
+  console.log('reference /iq/projects:', JSON.stringify(ref?.list));
+  let failed = 0;
+  for (const path of LIST_SUBJECTS) {
+    await page.goto(BASE + path); await page.waitForTimeout(3000);
+    const m = await page.evaluate(frame);
+    console.log(`list ${path}:`, JSON.stringify(m));
+    const problems = [];
+    if (!m) problems.push('no <main>');
+    else if (!m.list) problems.push('no list rail (nav[aria-label="Explorer"]) on the page');
+    else {
+      if (!m.section) problems.push('no section rail at the content edge');
+      else if (m.list.left - m.section.right < -1 || m.list.left - m.section.right > 2) problems.push(`list rail at x=${m.list.left}, ${m.list.left - m.section.right}px from the section rail's right ${m.section.right} — not stacked beside it`);
+      if (Math.abs(m.list.top - m.contentTop) > 2) problems.push(`list rail top ${m.list.top} vs content top ${m.contentTop} — something sits above it (a trail, a title)`);
+      if (Math.abs(m.list.height - m.contentHeight) > 4) problems.push(`list rail height ${m.list.height} vs content ${m.contentHeight} — not full height`);
+      if (m.list.radius > 2) problems.push(`the list rail floats in a rounded box (radius ${m.list.radius}px)`);
+      if (ref?.list && Math.abs(m.list.width - ref.list.width) > 2) problems.push(`list rail width ${m.list.width} vs the Initiatives rail ${ref.list.width}`);
+      if (!m.crumb) problems.push('no breadcrumb trail right of the list rail');
+      else {
+        if (Math.abs(m.crumb.left - m.list.right - 24) > 2) problems.push(`trail at x=${m.crumb.left}, ${m.crumb.left - m.list.right}px right of the list rail (want 24)`);
+        if (m.crumb.top - m.contentTop > 24) problems.push(`trail ${m.crumb.top - m.contentTop}px under the content top — not the column's first row`);
+      }
+      if (m.hScroll) problems.push('horizontal page scroll');
+    }
+    record(path, problems);
+    if (problems.length) { failed += 1; console.log(`DIFFERS ${path}:`); for (const p of problems) console.log(' - ' + p); }
+    else console.log(`MATCH ${path} — list rail ${m.list.width}px at x=${m.list.left} (section rail ends ${m.section.right}), top ${m.list.top}, height ${m.list.height} of ${m.contentHeight}; trail at x=${m.crumb.left}`);
+  }
+  await browser.close();
+  process.exit(failed ? 1 : 0);
+}
+
 const SUBJECTS = (process.env.RAIL_PARITY_SUBJECT ?? '').split(',').map((v) => v.trim()).filter(Boolean);
 if (SUBJECTS.length) {
   const user = process.env.RAIL_PARITY_USER;
@@ -144,6 +231,7 @@ if (SUBJECTS.length) {
       if (m.missingShelf.length) problems.push(`shelf destinations missing: ${m.missingShelf.join(', ')}`);
       if (m.hScroll) problems.push('horizontal page scroll');
     }
+    record(path, problems);
     if (problems.length) { failed += 1; console.log(`DIFFERS ${path}:`); for (const p of problems) console.log(' - ' + p); }
     else console.log(`MATCH ${path} — chat rail ${m.railWidth}px at x=${m.railLeft}, top ${m.railTop}, height ${m.railHeight} of ${m.contentHeight}`);
   }
@@ -184,5 +272,6 @@ if (reference && subject) {
   if (subject.radius > 2 || subject.cardRadius > 2) problems.push(`subject rail has card chrome (radius ${Math.max(subject.radius, subject.cardRadius)}px)`);
   if (subject.iconRows > reference.iconRows) problems.push(`subject rows carry icons (${subject.iconRows} of ${subject.rows}) — the Org rail has ${reference.iconRows}`);
 }
+if (!OTHER) record('/assessment/workspace', problems);
 if (problems.length) { console.log('DIFFERS:'); for (const p of problems) console.log(' - ' + p); process.exit(1); }
 console.log('MATCH');

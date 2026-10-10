@@ -303,7 +303,8 @@ describe('agent commands + stop', () => {
     const res = await request(buildApp({ role: 'lead-assessor' })).get('/api/assessment/agent/commands');
     expect(res.status).toBe(200);
     const commands = res.body.commands as Array<{ name: string; allowed_tools: string[] }>;
-    expect(commands.map((c) => c.name)).toHaveLength(9);
+    // Nine original commands plus the two review-deck commands (docs/assessment-deck-goal.md).
+    expect(commands.map((c) => c.name)).toHaveLength(11);
     expect(commands.map((c) => c.name)).toContain('score-dimensions');
     // Registry lists deployed Strands tools, never fictional filesystem/Bash permissions.
     expect(commands.find(c => c.name === 'score-dimensions')?.allowed_tools).toEqual(['classify_evidence', 'score_dimension']);

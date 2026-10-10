@@ -97,22 +97,10 @@ notes: <what a person would notice: wrapping, truncation, wrong labels, dead lin
 `realtime`, `screenshot` and `pages` are required; the words TODO,
 unverified and placeholder anywhere in the file make it not count.
 
-## `pages:` (required) and freshness
+## `pages:` and freshness
 
-Every log carries a `pages:` line naming the files and/or directories its
-surface actually renders from, comma-separated. Freshness is judged by
-**content digest**, not mtime: the judge hashes the named entries and
-compares with the digest recorded in `docs/social-journeys/.pages-sha`; a log
-whose sources changed since it was sealed is stale. `--seal` records the
-current digests and is run once, after a walk, by whoever wrote the logs —
-never to make a red run green without walking. Name FILES (or the
-surface's own directory), not `portal/src/pages/social`, and leave shared
-children (the layout, a `Text.tsx`, format modules) out — naming them puts
-every log under one global rule. The header bell's log names the shell file
-that draws it (e.g. `portal/src/components/shell/ActivityBell.tsx`), not
-`Layout.tsx`. Find entries from the route in `portal/src/App.tsx` and the
-page component's imports. A `pages:` entry that does not exist makes the log
-invalid.
+Freshness and sealing follow [docs/journeys.md](../journeys.md): a log is stale when the rendered contract of a route its `url:` names changed since its walk was sealed (sweep measurements, gate, the assertions of the specs that cover it), and only `scripts/journeys/seal.sh <dir>`, after a walk, seals it. A `pages:` line is optional: it is the basis only for a log that names
+no route (the header bell's log names the shell file that draws it).
 
 ## Isolation logs
 

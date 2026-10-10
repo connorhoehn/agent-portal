@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createGatewayClient, gatewayEndpoints } from '../lib/gatewayEndpoint.ts';
+import { useSession } from '../lib/auth';
+import { useRealtimeEndpoints } from '../lib/useRealtimeEndpoints';
 import { classifyGatewayError } from './gatewayMode.ts';
 export type { GatewayMode } from './gatewayMode.ts';
 import type { GatewayMode } from './gatewayMode.ts';
@@ -8,14 +10,12 @@ import type {
   GatewayMetricsResponse,
 } from '@connorhoehnslalom/realtime-modules/proxy-client';
 
-// VITE_GATEWAY_URL is exposed to the browser bundle by Vite at build time.
-// Mirror the lookup used by GatewayStatusBadge so the URL is sourced once
-// and the badge + Settings panel stay in lockstep on which gateway they
-// describe.
-const CONFIGURED_GATEWAY_URL =
-  (import.meta as unknown as { env?: Record<string, string | undefined> })
-    .env?.VITE_GATEWAY_URL;
-const GATEWAY_URL = gatewayEndpoints(CONFIGURED_GATEWAY_URL)?.http;
+// The gateway's URL comes from the realtime-token response (`gatewayUrl`,
+// the middleware's REALTIME_GATEWAY_URL), with VITE_GATEWAY_URL as a local
+// override only (lib/useRealtimeEndpoints.ts) — the same lookup
+// GatewayStatusBadge uses, so the badge and this Settings panel describe the
+// same gateway, and one bundle serves every environment instead of baking a
+// build-time `localhost` into a deployed portal.
 
 interface UseGatewayInfoReturn {
   cluster: GatewayClusterInfo | null;
@@ -45,10 +45,20 @@ interface UseGatewayInfoReturn {
  * around it; the underlying bug is queued in docs/ui-components-queue.md.
  */
 export function useGatewayInfo(pollIntervalMs = 30_000): UseGatewayInfoReturn {
-  const client = useMemo(
-    () => createGatewayClient(CONFIGURED_GATEWAY_URL),
-    [],
-  );
+  const { session } = useSession();
+  const { gatewayUrl: configuredUrl } = useRealtimeEndpoints(!!session);
+  // A malformed URL (gatewayEndpoints throws) reads as "not configured"
+  // rather than taking the Settings page down with it.
+  const { httpUrl, client } = useMemo(() => {
+    try {
+      return {
+        httpUrl: gatewayEndpoints(configuredUrl ?? undefined)?.http ?? null,
+        client: createGatewayClient(configuredUrl ?? undefined),
+      };
+    } catch {
+      return { httpUrl: null, client: null };
+    }
+  }, [configuredUrl]);
 
   const [cluster, setCluster] = useState<GatewayClusterInfo | null>(null);
   const [metrics, setMetrics] = useState<GatewayMetricsResponse | null>(null);
@@ -57,11 +67,31 @@ export function useGatewayInfo(pollIntervalMs = 30_000): UseGatewayInfoReturn {
   const [isLoading, setIsLoading] = useState(Boolean(client));
 
   useEffect(() => {
-    if (!client) return;
+    // The URL arrives after the first render (the token fetch), so the mode
+    // follows the client rather than being fixed at mount.
+    if (!client) { setMode('bff-only'); setIsLoading(false); return; }
+    setMode('loading');
+    setIsLoading(true);
     let cancelled = false;
 
+    // The BFF itself can be the configured "gateway" (it hosts /ws but has no
+    // /cluster or /metrics). Ask its /health first so a clean mount logs no
+    // 404s; a real gateway (or an unreachable one) falls through to the probe.
+    let isBff: boolean | null = null;
     const tick = async () => {
       try {
+        if (isBff === null && httpUrl) {
+          try {
+            const res = await fetch(`${httpUrl}/health`, { signal: AbortSignal.timeout(3000) });
+            const body = res.ok ? ((await res.json()) as { service?: string }) : null;
+            isBff = body?.service === 'orgiq-middleware';
+          } catch { isBff = false; }
+        }
+        if (isBff) {
+          if (cancelled) return;
+          setMode('bff-only'); setError(null);
+          return;
+        }
         const [c, m] = await Promise.all([
           client.getClusterInfo(),
           client.getMetrics(),
@@ -87,7 +117,7 @@ export function useGatewayInfo(pollIntervalMs = 30_000): UseGatewayInfoReturn {
       cancelled = true;
       clearInterval(id);
     };
-  }, [client, pollIntervalMs]);
+  }, [client, httpUrl, pollIntervalMs]);
 
-  return { cluster, metrics, error, isLoading, gatewayUrl: GATEWAY_URL ?? 'Not configured', mode };
+  return { cluster, metrics, error, isLoading, gatewayUrl: httpUrl ?? 'Not configured', mode };
 }

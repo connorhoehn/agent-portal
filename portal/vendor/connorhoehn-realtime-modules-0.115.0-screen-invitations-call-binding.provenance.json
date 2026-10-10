@@ -1,0 +1,21 @@
+{
+  "status": "isolated-candidate-not-activated",
+  "sourceBaseCommit": "7fa168e4fa294d982b5a610556831e453e06f8e4",
+  "installedBaselinePatchSHA256": "d8992e1b33a268e45437508fb7b8d284acf6a8b7c4c319afe9c68e17ad8ead51",
+  "packageSHA256": "1bddf6a5328123cc2196b5f1f0527bf9feeba377fadc981c6bc838c60de8cb54",
+  "sourcePatchSHA256": "2d625367734e6bcb237eeb646351976d3d6684baac31ba145c1b5859f633dc3c",
+  "sourceFiles": {
+    "src/client/video/useConversationCall.ts": "2a2bff9bda4f0d136fdbb992a729c8afdc9476a10e27d34e7aa19081d6903900",
+    "src/client/video/documentCallGateway.ts": "ea30ec501dbdad1b957e9cf4518fe52b8a3ed963ff95bfdc519f684c269fb81f",
+    "test/client/conversation-calls/recordingBinding.test.tsx": "fa10384e83df90067116cc2aae0c8639c0755bc23abd888943c3ca26fbf27ddb"
+  },
+  "verification": {
+    "existingConversationHookTests": 25,
+    "newBindingTests": 6,
+    "nativeBuildExportSubpaths": 32
+  },
+  "behavior": "Opt-in immutable native recording call binding after media join; authoritative HTTP ACK; actual socket identity; bounded retries and stale tuple abort. No call/media teardown on binding failure.",
+  "sourceCommit": "849477fcb6a063d44a79f7780b25e92f8b9d9840",
+  "sourceBranch": "feat/meeting-call-binding-20261010",
+  "sourcePushedTo": "origin"
+}

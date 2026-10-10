@@ -6,6 +6,7 @@ jest.mock('../design-reviews.js', () => ({ listDesignReviews: jest.fn(), getDesi
 jest.mock('../decisions.js', () => ({ listDecisions: jest.fn(), getDecision: jest.fn() }));
 jest.mock('../distillation.js', () => ({ listItems: jest.fn(), getItem: jest.fn() }));
 jest.mock('../prompt-library.js', () => ({ listAssets: jest.fn(), getAsset: jest.fn() }));
+jest.mock('../recording-search.js', () => ({ listRecordingSearchRecords: jest.fn(async () => ({ records: [], partial: [] })), resolveRecordingSearchRecord: jest.fn() }));
 import { isAllowed } from '../../lib/authz.js';
 import { aurora } from '../index.js';
 import { listProjects, listProjectSummaries, getProject } from '../projects.js';
@@ -14,12 +15,14 @@ import { listDesignReviews, getDesignThread } from '../design-reviews.js';
 import { listDecisions } from '../decisions.js';
 import { listItems } from '../distillation.js';
 import { listAssets } from '../prompt-library.js';
-import { searchRecords, resolveSearchRecords, resolveSearchContext } from '../search.js';
+import { searchRecords, resolveSearchRecords, resolveSearchContext, recordingSearchResponse } from '../search.js';
+import { listRecordingSearchRecords, resolveRecordingSearchRecord } from '../recording-search.js';
 const principal = { sub: 'member', role: 'member', tenant: 'orgiq' };
 const mock = (fn: unknown) => fn as jest.Mock;
 beforeEach(() => {
   jest.resetAllMocks();
   mock(isAllowed).mockResolvedValue(true);
+  mock(listRecordingSearchRecords).mockResolvedValue({ records: [], partial: [] });
   mock(aurora.fetchGraph).mockResolvedValue({ peopleTotal: 2, nodes: [
     { id: 'vera', name: 'Vera Green', title: 'Engineer', department: 'Platform', skills: ['identity'] },
     { id: 'nora', name: 'Nora Chang', title: 'Engineer', department: 'Design', skills: [] },
@@ -38,6 +41,36 @@ beforeEach(() => {
   ], total: 3 });
   mock(listAssets).mockResolvedValue({ assets: [{ id: 'skill', name: 'Bring SSO up', description: '', lifecycleStatus: 'draft', kind: 'skill', usedBy: [] }], total: 1 });
 });
+test('native recording text is searchable and scoped, but only an excerpt leaves the projection', async () => {
+  mock(listRecordingSearchRecords).mockResolvedValue({ records: [{ type: 'recording', id: 'rec-native', title: 'Auth Migration huddle', href: '/iq/projects/auth?tab=docs&recording=rec-native', searchText: `${'quiet '.repeat(400)}Exact callback origin decision`, sourceRefs: [{ type: 'initiative', id: 'auth' }] }], partial: [] });
+  const result = await searchRecords(principal, { q: 'callback origin', scope: 'auth', type: 'recording' });
+  expect(result.counts.recording).toBe(1);
+  expect(result.results[0]?.description).toContain('Exact callback origin decision');
+  expect(result.results[0]?.description?.length).toBeLessThanOrEqual(1202);
+  expect(JSON.stringify(result)).not.toContain('searchText');
+  expect((await searchRecords(principal)).results.some(r => 'searchText' in r)).toBe(false);
+  expect(result.edges).toContainEqual(expect.objectContaining({ source: 'initiative:auth', target: 'recording:rec-native' }));
+});
+test('recording-only projection searches full artifacts with bounded public snippets and honest lower-bound counts', () => {
+  const projection = { records: [{ type: 'recording' as const, id: 'team-rec', title: 'Notifications Service huddle', href: '/assessment/teams/TEAM-005?tab=documents&recording=team-rec', searchText: `${'quiet '.repeat(400)}The exact notification receipt is durable`, updatedAt: '2026-10-10T10:00:00Z' }], partial: ['Recordings source window is limited'] };
+  const response = recordingSearchResponse(projection, { q: 'notification receipt', limit: 10, offset: 0 });
+  expect(response.results[0]?.description).toContain('notification receipt');
+  expect(response.results[0]?.description?.length).toBeLessThanOrEqual(1202);
+  expect(response.counts).toMatchObject({ all: 1, recording: 1, initiative: 0, person: 0 });
+  expect(response.totalIsLowerBound).toBe(true); expect(response.edges).toEqual([]);
+  expect(JSON.stringify(response)).not.toContain('searchText');
+  expect(recordingSearchResponse(projection, { q: 'unrelated' }).results).toEqual([]);
+});
+test('recording read failures disclose a partial source and selected context is re-resolved', async () => {
+  mock(listRecordingSearchRecords).mockRejectedValue(new Error('native unavailable'));
+  const result = await searchRecords(principal, { type: 'recording' });
+  expect(result.partial).toContain('Recordings unavailable');
+  expect(result.totalIsLowerBound).toBe(true);
+  mock(resolveRecordingSearchRecord).mockResolvedValue({ type: 'recording', id: 'r1', title: 'Canonical current call', href: '/iq/projects/auth?tab=docs&recording=r1', sourceRefs: [{ type: 'initiative', id: 'auth' }] });
+  const selected = await resolveSearchContext(principal, [{ type: 'initiative', id: 'auth' }, { type: 'recording', id: 'r1' }]);
+  expect(resolveRecordingSearchRecord).toHaveBeenCalledWith(principal, 'r1');
+  expect(selected.edges).toContainEqual(expect.objectContaining({ source: 'initiative:auth', target: 'recording:r1' }));
+});
 test('a question finds the existing initiative and its real owner, SME, and assigned work', async () => {
   const r = await searchRecords(principal, { q: 'Who can help finish Auth Migration?' });
   expect(r.results.map(x => x.id)).toEqual(expect.arrayContaining(['auth', 'vera', 'nora', 'cutover']));
@@ -55,6 +88,22 @@ test('type filters and pagination share permission-filtered counts', async () =>
   expect(r.results[0]?.type).toBe('person');
   expect(r.counts.all).toBeGreaterThan(r.total);
 });
+test('the total is exact only when every source window was read whole', async () => {
+  const exact = await searchRecords(principal, { q: 'Auth Migration' });
+  expect(exact.totalIsLowerBound).toBe(false);
+  expect(exact.total).toBe(exact.counts.all);
+  // A full 200-row initiative window means initiatives beyond it were never scored.
+  mock(listProjects).mockResolvedValue(Array.from({ length: 200 }, (_, i) => ({ id: `p${i}`, name: i === 0 ? 'Auth Migration' : `Initiative ${i}` })));
+  const capped = await searchRecords(principal, { q: 'Auth Migration' });
+  expect(capped.totalIsLowerBound).toBe(true);
+  expect(capped.partial).toContain('Initiatives source window is limited');
+  // A failed source read contributes nothing, so the count is a floor there too.
+  mock(listProjects).mockResolvedValue([]);
+  mock(listDecisions).mockRejectedValue(new Error('down'));
+  const failed = await searchRecords(principal, { q: 'cutover' });
+  expect(failed.totalIsLowerBound).toBe(true);
+  expect(failed.partial).toContain('Decisions unavailable');
+});
 test('denied people never appear in results, related records, counts, or graph edges', async () => {
   mock(isAllowed).mockImplementation(async (_p, action) => action !== 'ViewOrgChart');
   const r = await searchRecords(principal, { q: 'Auth Migration' });
@@ -62,6 +111,24 @@ test('denied people never appear in results, related records, counts, or graph e
   expect([...r.results, ...r.related].some(x => x.type === 'person')).toBe(false);
   expect(r.edges.some(x => x.source.startsWith('person:') || x.target.startsWith('person:'))).toBe(false);
   expect(aurora.fetchGraph).not.toHaveBeenCalled();
+});
+test('search and selection hydration preserve authorized portraits, with initials for absent faces', async () => {
+  const vera = { id: 'vera', name: 'Vera Green', title: 'Engineer', department: 'Platform', skills: ['identity'], avatarUrl: '/avatars/photos/vera.jpg', presence: 'office' };
+  mock(aurora.fetchGraph).mockResolvedValue({ peopleTotal: 2, nodes: [vera, { ...vera, id: 'nora', name: 'Nora Chang', avatarUrl: null }], edges: [] });
+  const r = await searchRecords(principal, { scope: 'auth', type: 'person' });
+  expect(r.results.find(row => row.id === 'vera')?.avatarUrl).toBe(vera.avatarUrl);
+  expect(r.results.find(row => row.id === 'nora')).not.toHaveProperty('avatarUrl');
+  expect(r.results.every(row => !('presence' in row))).toBe(true);
+  mock(aurora.fetchPersonGraph).mockResolvedValue(vera);
+  expect((await resolveSearchRecords(principal, [{ type: 'person', id: 'vera' }]))[0]?.avatarUrl).toBe(vera.avatarUrl);
+  mock(aurora.fetchPersonGraph).mockResolvedValue({ ...vera, avatarUrl: '' });
+  expect((await resolveSearchRecords(principal, [{ type: 'person', id: 'vera' }]))[0]).not.toHaveProperty('avatarUrl');
+});
+test('denied selection hydration never fetches or exposes a portrait', async () => {
+  mock(isAllowed).mockImplementation(async (_p, action) => action !== 'ViewOrgChart');
+  mock(aurora.fetchPersonGraph).mockResolvedValue({ id: 'vera', name: 'Vera Green', avatarUrl: '/secret.jpg' });
+  expect(await resolveSearchRecords(principal, [{ type: 'person', id: 'vera' }])).toEqual([]);
+  expect(aurora.fetchPersonGraph).not.toHaveBeenCalled();
 });
 test('tenant and Search denial stop all source reads', async () => {
   await expect(searchRecords({ ...principal, tenant: 'assessment' })).rejects.toMatchObject({ status: 403 });

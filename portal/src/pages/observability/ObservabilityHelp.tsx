@@ -10,10 +10,9 @@ import {
   Inline,
   Modal,
   SectionLabel,
-  Stack,
+  Stack, T,
 } from '@connorhoehnslalom/ui-components/shared';
 import { KeyValue } from '../../components/KeyValue';
-import { T } from './Text';
 
 interface HelpEntry {
   group: 'Health' | 'Runs' | 'Cost';
@@ -115,7 +114,7 @@ export function ObservabilityHelpButton() {
         title="Observability guide"
         maxWidth={960}
       >
-        <T as="div" className="text-[12px] text-text-tertiary mb-3">
+        <T size="xs" as="div" className="text-text-tertiary mb-3">
           Eighteen observability surfaces, grouped by what you're trying to do.
         </T>
         <Stack gap="md" className="overflow-y-auto">
@@ -125,12 +124,12 @@ export function ObservabilityHelpButton() {
               <Stack key={g} gap="sm" as="section">
                 <Inline gap="sm" align="baseline">
                   <SectionLabel>{g}</SectionLabel>
-                  <T className="text-[11.5px] text-text-tertiary italic">{GROUP_BLURB[g]}</T>
+                  <T size="xs" className="text-text-tertiary italic">{GROUP_BLURB[g]}</T>
                 </Inline>
                 <Inline gap="sm" wrap align="start">
                   {entries.map((e) => (
                     <Card key={e.path} padding="sm" className="flex-1 min-w-[280px] bg-bg">
-                      <T as="div" className="text-[13px] font-semibold text-text-primary mb-1">{e.label}</T>
+                      <T weight="semibold" size="sm" as="div" className="text-text-primary mb-1">{e.label}</T>
                       <Stack gap="xs">
                         <KeyValue layout="row" labelWidth="w-auto" label="When" value={e.when} />
                         <KeyValue layout="row" labelWidth="w-auto" label="Look at" value={e.look} />

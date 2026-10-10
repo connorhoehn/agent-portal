@@ -17,6 +17,7 @@ import {
   Button,
   Card,
   FilterChip,
+  Inline,
   InlineAlert,
   PageSection,
   Stack,
@@ -25,6 +26,7 @@ import {
   ToolbarLabel,
 } from '@connorhoehnslalom/ui-components/shared';
 import { KBCreateWizard } from '../../components/kb/KBCreateWizard.js';
+import { KBHealthBadge } from '../../components/kb/KBHealthBadge.js';
 import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch.js';
 import { KbRegistryTable } from './kb/KbRegistryTable';
@@ -80,10 +82,15 @@ export function KBRegistryPage() {
     <PageSection
       title="Knowledge base registry"
       description="The rows the platform keeps about Bedrock knowledge bases. Whether they match the account is answered on Knowledge."
-      actions={canManage && (
-        <Button variant="primary" size="md" onClick={() => setWizardOpen(true)}>
-          + New knowledge base
-        </Button>
+      actions={(
+        <Inline gap="sm" align="center">
+          <KBHealthBadge />
+          {canManage && (
+            <Button variant="primary" size="md" onClick={() => setWizardOpen(true)}>
+              + New knowledge base
+            </Button>
+          )}
+        </Inline>
       )}
     >
       <Stack gap="lg">

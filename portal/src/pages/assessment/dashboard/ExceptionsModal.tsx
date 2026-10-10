@@ -7,17 +7,18 @@
 import { useState } from 'react';
 import {
   Button,
+  CheckIcon,
   Chip,
+  CloseIcon,
   ConfirmDialog,
   DataTable,
   EmptyState,
-  Inline,
+  IconButton,
   InlineAlert,
   LoadingState,
-  MetaLine,
   Modal,
-  Stack,
   StatusPill,
+  T,
   type StatusPillState,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../../hooks/useFetch';
@@ -100,37 +101,34 @@ export function ExceptionsModal({ open, onClose, teamId, dimensionTitle }: Excep
         <DataTable<TeamException>
           data={data.exceptions}
           keyField={(e) => `${e.dimension_id}:${e.approved_at || 'pending'}`}
+          size="sm"
           striped
           // A modal's list of one team's N/A exceptions — 10 keeps the modal
           // from growing past a comfortable dialog height.
           pageSize={10}
           rowActions={canDecide ? (e) => (
             e.status === 'requested' ? (
-              <Inline gap="xs">
-                <Button size="sm" variant="secondary" disabled={busyDimension === e.dimension_id} onClick={() => setConfirmDecision({ dimensionId: e.dimension_id, status: 'approved' })}>
-                  Approve
-                </Button>
-                <Button size="sm" variant="danger" disabled={busyDimension === e.dimension_id} onClick={() => setConfirmDecision({ dimensionId: e.dimension_id, status: 'denied' })}>
-                  Deny
-                </Button>
-              </Inline>
+              <>
+                <IconButton size="sm" icon={<CheckIcon />} aria-label={`Approve exception for ${dimensionTitle(e.dimension_id)}`} title="Approve" disabled={busyDimension === e.dimension_id} onClick={() => setConfirmDecision({ dimensionId: e.dimension_id, status: 'approved' })} />
+                <IconButton size="sm" icon={<CloseIcon />} aria-label={`Deny exception for ${dimensionTitle(e.dimension_id)}`} title="Deny" disabled={busyDimension === e.dimension_id} onClick={() => setConfirmDecision({ dimensionId: e.dimension_id, status: 'denied' })} />
+              </>
             ) : null
           ) : undefined}
           columns={[
             { key: 'dimension_id', header: 'Dimension', render: (e) => dimensionTitle(e.dimension_id) },
             { key: 'source', header: 'Source', render: (e) => <Chip size="xs" tone="neutral">{e.source}</Chip> },
-            { key: 'reason', header: 'Reason' },
+            { key: 'reason', header: 'Reason', render: (e) => <T size="sm" title={e.reason}>{e.reason}</T> },
             {
               key: 'status',
               header: 'Status',
-              // The decision rides under the pill rather than in a sixth
-              // column, which is what pushed the row actions past the edge.
-              render: (e) => (
-                <Stack gap="none">
-                  <StatusPill state={EXCEPTION_STATUS_STATE[e.status]} label={e.status} size="sm" />
-                  {e.status !== 'requested' && <MetaLine size="xs" items={[e.approved_by, fmtDate(e.approved_at)]} />}
-                </Stack>
-              ),
+              width: '128px',
+              render: (e) => <StatusPill state={EXCEPTION_STATUS_STATE[e.status]} label={e.status} size="sm" />,
+            },
+            {
+              key: 'decided',
+              header: 'Decided',
+              numeric: true,
+              render: (e) => (e.status !== 'requested' ? <T size="sm" title={e.approved_by ?? undefined}>{fmtDate(e.approved_at)}</T> : '—'),
             },
           ]}
         />

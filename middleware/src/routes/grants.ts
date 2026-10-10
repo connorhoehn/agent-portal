@@ -82,6 +82,12 @@ grantsRouter.post('/', manageGate, asyncHandler(async (req, res) => {
 
   const grantedBy = resolveSession(req)?.sub ?? null;
   const grant = await createGrant({ orgProjectId: initiativeId, sprintId, granteePersonId, amountUsd, grantedBy, note });
+  // Lazy: the producer pulls the identity store, which this route's unit tests do not load.
+  void import('../lib/social-notify.js')
+    .then((m) => m.notifyBudgetGranted({ grantId: grant.id, initiativeId, sprintId, granteePersonId, amountUsd, actorId: grantedBy }))
+    .catch(() => undefined);
+  // Content-free live hint for the activity graph (lib/work-graph/live.ts); lazy so this router's tests do not load the bots provider.
+  void import('../lib/work-graph/live.js').then(m => m.notifyWorkGraphChanged(initiativeId, 'sprint')).catch(() => undefined);
   res.status(201).json({ grant });
 }));
 
@@ -105,6 +111,8 @@ grantsRouter.patch('/:id', manageGate, asyncHandler(async (req, res) => {
 
   const grant = await updateGrant(id, patch);
   if (!grant) throw new NotFoundError('No such grant');
+  // Content-free live hint for the activity graph (lib/work-graph/live.ts); lazy so this router's tests do not load the bots provider.
+  void import('../lib/work-graph/live.js').then(m => m.notifyWorkGraphChanged(grant.orgProjectId, 'sprint')).catch(() => undefined);
   res.json({ grant });
 }));
 
@@ -114,5 +122,7 @@ grantsRouter.delete('/:id', manageGate, asyncHandler(async (req, res) => {
   const id = String(req.params['id'] ?? '').trim();
   const ok = await revokeGrant(id);
   if (!ok) throw new NotFoundError('No such grant');
+  // Content-free live hint for the activity graph (lib/work-graph/live.ts); lazy so this router's tests do not load the bots provider.
+  void import('../lib/work-graph/live.js').then(m => m.notifyWorkGraphChanged(null, 'sprint')).catch(() => undefined);
   res.json({ ok: true });
 }));

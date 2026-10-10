@@ -7,36 +7,39 @@
 
 import { useMemo, useState } from 'react';
 import { Link, useSearchParams, useOutletContext } from 'react-router';
-import { ExplorerLayout, ScopeHeader } from '@connorhoehnslalom/ui-components';
+import { WorkListFilters, type WorkListFilterFacet, ListRailLayout } from '@connorhoehnslalom/ui-components';
 import type { DistillationOutletContext } from '../distillation/DistillationModule';
 import { promotionReviewHref } from '../distillation/distillationRoutes';
 import { AssetRelationships } from '../distillation/AssetRelationships';
 import { DetailSection,
   Button,
+  PageHeader,
   Chip,
   ConfirmDialog,
   EmptyState,
+  FilterPopover,
   FormField,
   GroupedList,
   SearchInput,
-  Select,
   Inline,
   InlineAlert,
+  Link as TextLink,
   LoadingState,
   Stack,
   StatusPill,
-  Textarea,
+  Textarea, T,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
-import { UnavailableNotice } from '../../components/UnavailableNotice';
+import { SectionHeader } from '../../components/shell/SectionContent';
+import { RecordNotFound, UnavailableNotice, isNotFoundError } from '../../components/UnavailableNotice';
+import { useUrlDraft } from '../distillation/useUrlDraft';
 import { useCapabilities } from '../../lib/capabilities';
 import { toastError, toastPending, toastSuccess } from '../../lib/toastStore';
 import { writeJson } from '../../lib/writeJson';
 import {
   KIND_TONE, PROPOSED_LABEL, STATUS_LABEL, STATUS_PILL_STATE,
-  allowedActions, filterPromotions, isTerminalStatus, nextStep, readyToPromote, supportLine,
+  allowedActions, filterPromotions, isTerminalStatus, nextStep, supportLine, type PromoteIntent,
 } from './promotionFormat';
-import { T } from './Text';
 import type { PromotionCandidate } from './types';
 
 const FILTERS: Array<{ value: string; label: string }> = [
@@ -58,7 +61,7 @@ function ObservationRow({ o }: { o: PromotionCandidate['observations'][number] }
       <T as="div" className="mt-1 text-[10.5px] text-text-tertiary">
         {o.repo ?? 'no repo'} · session {o.sessionId}
         {o.initiativeId && <> · <Link to={`/iq/projects/${encodeURIComponent(o.initiativeId)}`} className="text-primary hover:underline">Initiative</Link></>}
-        {' · '}<a href={`#observation-${o.id}`} className="text-primary hover:underline">{o.id}</a>
+        {' · '}<TextLink href={`#observation-${o.id}`}>{o.id}</TextLink>
       </T>
     </Stack>
   );
@@ -77,7 +80,7 @@ function CandidateDrawer({
    *  e.g. a 409 "already promoted" on a stale retry (DEFECTS.md #1). Cleared
    *  by the page whenever the drawer opens a (possibly different) candidate. */
   actionError: string | null;
-  onPromote: (dryRunPassed?: boolean) => void;
+  onPromote: (intent: PromoteIntent) => void;
   onDismiss: (reason: string) => void;
 }) {
   const [confirmingDismiss, setConfirmingDismiss] = useState(false);
@@ -87,13 +90,18 @@ function CandidateDrawer({
 
   return (
     <Stack gap="md">
-      <Stack as="header" gap="none">
-        <Inline gap="xs" wrap>
-          <T className="text-[15px] font-semibold text-text-primary">{candidate.title}</T>
-          <Chip tone={KIND_TONE[candidate.proposedKind]} size="xs">{PROPOSED_LABEL[candidate.proposedKind]}</Chip>
-          <StatusPill state={STATUS_PILL_STATE[candidate.status]} label={STATUS_LABEL[candidate.status]} size="sm" />
-        </Inline>
-        <T as="div" className="mt-1.5 mb-0 text-[12.5px] leading-relaxed text-text-secondary" wrap>{candidate.rationale}</T>
+      <Stack gap="none">
+        {/* The candidate's title is the page's one h1 (member #20, sme #22). */}
+        <PageHeader
+          title={candidate.title}
+          badge={(
+            <Inline gap="xs" wrap>
+              <Chip tone={KIND_TONE[candidate.proposedKind]} size="xs">{PROPOSED_LABEL[candidate.proposedKind]}</Chip>
+              <StatusPill state={STATUS_PILL_STATE[candidate.status]} label={STATUS_LABEL[candidate.status]} size="sm" />
+            </Inline>
+          )}
+          description={candidate.rationale}
+        />
         <T as="div" className="mt-1.5 text-[11px] text-text-tertiary">{supportLine(candidate)}</T>
       </Stack>
 
@@ -128,20 +136,15 @@ function CandidateDrawer({
         {!isTerminal && (
           canManage ? (
             <Inline gap="sm" className="mt-3">
-              {actions.canApproveWithDryRun && (
-                <Button size="sm" variant="secondary" disabled={busy} onClick={() => onPromote(true)}>
-                  Approve + record a passing dry run
-                </Button>
-              )}
-              {actions.canApprove && (
+              {actions.primary && (
                 <Button
                   size="sm"
                   variant="primary"
                   disabled={busy}
-                  onClick={() => onPromote()}
-                  title={!readyToPromote(candidate) && candidate.proposedKind === 'skill' ? 'Records approval — still needs a passing dry run' : undefined}
+                  onClick={() => onPromote(actions.primary!.intent)}
+                  title={actions.primary.hint}
                 >
-                  {readyToPromote(candidate) ? 'Promote' : 'Approve'}
+                  {actions.primary.label}
                 </Button>
               )}
               {actions.canDismiss && (
@@ -185,6 +188,19 @@ function CandidateDrawer({
   );
 }
 
+/** Where the rail and the drawer read from, as the clause UnavailableNotice
+ *  joins to "…, so this is unknown rather than empty." */
+const PROMOTIONS_SOURCE = 'Candidates are clustered from lab observations by the promotions service';
+
+async function readCandidate(id: string): Promise<PromotionCandidate | null> {
+  try {
+    const res = await fetch(`/api/promotions/${encodeURIComponent(id)}`, { credentials: 'include' });
+    return res.ok ? await res.json() as PromotionCandidate : null;
+  } catch {
+    return null;
+  }
+}
+
 export default function PromotionsPage() {
   const { can, ready } = useCapabilities();
   // ManageBots — the same gate the server's promote/dismiss routes enforce
@@ -194,16 +210,23 @@ export default function PromotionsPage() {
 
   const moduleCtx = useOutletContext<DistillationOutletContext | undefined>();
   const [params, setParams] = useSearchParams();
-  const filter = FILTERS.some((f) => f.value === params.get('status')) ? params.get('status')! : 'all';
+  const urlFilter = FILTERS.some((f) => f.value === params.get('status')) ? params.get('status')! : 'all';
   const repo = params.get('repo');
-  const query = params.get('q') ?? '';
+  // Both fields are written to the URL (shareable, Back restores them) but
+  // read from local drafts: the router commits in a transition, and a field
+  // bound to `params` rendered the pre-keystroke value, so each key landed on
+  // stale text ("ADOT" → "T") and the list kept the previous status's rows.
   function setFilter(key: string, value: string) {
-    const next = new URLSearchParams(params);
-    next.set(key, value);
-    next.delete('item');
-    next.delete('nav');
-    setParams(next, { replace: true });
+    setParams((current) => {
+      const next = new URLSearchParams(current);
+      if (value && !(key === 'status' && value === 'all')) next.set(key, value); else next.delete(key);
+      next.delete('item');
+      next.delete('nav');
+      return next;
+    }, { replace: true });
   }
+  const [filter, setFilterDraft] = useUrlDraft(urlFilter, (value) => setFilter('status', value), { debounceMs: 0 });
+  const [query, setQuery] = useUrlDraft(params.get('q') ?? '', (value) => setFilter('q', value));
   const openId = params.get('item');
   const setOpenId = (id: string | null) => {
     const next = new URLSearchParams(params);
@@ -235,14 +258,26 @@ export default function PromotionsPage() {
   const { data: openData, error: openError, refresh: refreshOpen } = useFetch<PromotionCandidate>(
     openId ? `/api/promotions/${encodeURIComponent(openId)}` : null, 0);
 
-  async function promote(id: string, dryRunPassed?: boolean) {
+  async function promote(id: string, intent: PromoteIntent) {
     if (busy) return;
     setBusy(true);
     setActionError(null);
-    const tid = toastPending('Promoting', 'recording approval');
+    const tid = toastPending(intent === 'approve' ? 'Recording approval' : 'Promoting');
     try {
-      const res = await writeJson<PromotionCandidate>(`/api/promotions/${encodeURIComponent(id)}/promote`, 'POST', { dryRunPassed });
-      if (!res.ok || !res.data) throw new Error(res.error ?? 'unknown error');
+      const res = await writeJson<PromotionCandidate>(`/api/promotions/${encodeURIComponent(id)}/promote`, 'POST', {});
+      if (!res.ok || !res.data) {
+        // The server records the approval even when a skill is refused for
+        // its dry-run alone (providers/promotions.ts promoteCandidate), and
+        // answers 409 with the dry-run reason. For "Record approval" that is
+        // the expected outcome, so read the candidate back and report what
+        // actually landed rather than calling a recorded approval a failure.
+        const after = intent === 'approve' && res.status === 409 ? await readCandidate(id) : null;
+        if (after?.status === 'approved') {
+          toastSuccess(tid, 'Approval recorded', nextStep(after));
+          return;
+        }
+        throw new Error(res.error ?? 'unknown error');
+      }
       toastSuccess(tid, res.data.status === 'promoted' ? 'Promoted' : 'Approval recorded', nextStep(res.data));
     } catch (err) {
       const message = (err as Error).message;
@@ -291,40 +326,72 @@ export default function PromotionsPage() {
       setOpenId(null);
     },
   };
+  // The candidates are a flush list rail beside the section rail; the content
+  // column after it opens with the module trail and the page title
+  // (docs/layout-cascade.md). Status and repository are the rail's filters.
+  const paneBody = 'w-full max-w-3xl px-6 pb-6';
+  const trail = [...(moduleCtx?.scope.breadcrumbs ?? [{ label: 'Build' }, { label: 'Distillation' }, { label: 'Review' }]),
+    ...(openId ? [listCrumb, { label: openData?.title ?? 'Candidate' }] : [{ label: 'Asset promotions' }])];
+  const filterFacets: WorkListFilterFacet[] = [
+    {
+      id: 'status', label: 'Status',
+      options: FILTERS.filter((f) => f.value !== 'all').map((f) => ({ value: f.value, label: f.label, count: filterPromotions(scoped, f.value).length })),
+      selected: filter === 'all' ? [] : [filter],
+      onChange: (sel) => setFilterDraft(sel.length > 0 ? sel[sel.length - 1]! : 'all'),
+    },
+    ...(moduleCtx ? [moduleCtx.scope.repoFacet] : []),
+  ];
+  const activeFilters = (filter === 'all' ? 0 : 1) + (repo ? 1 : 0);
   return (
-    <ExplorerLayout
-      railTitle="Asset promotions" railHeading="caption" railWidth="ms"
-      railLabel="Asset promotion candidates" panePadding="none"
-      className="min-h-0 min-w-0 flex-1" data-testid="distillation-promotions"
-      paneHeader={moduleCtx && <ScopeHeader variant="crumbs"
-        breadcrumbs={[...moduleCtx.scope.breadcrumbs, ...(openId ? [listCrumb, { label: openData?.title ?? 'Candidate' }] : [{ label: 'Asset promotions' }])]}
-        controls={moduleCtx.scope.controls} link={moduleCtx.scope.link} />}
-      railHeader={(
-        <Stack gap="sm" className="px-3 pb-2">
-          <Select size="sm" aria-label="Promotion status" value={filter}
-            options={FILTERS.map((f) => ({ value: f.value, label: `${f.label} (${filterPromotions(scoped, f.value).length})` }))}
-            onChange={(e) => setFilter('status', e.target.value)} />
-          <SearchInput size="sm" value={query} onChange={(value) => setFilter('q', value)} placeholder="Find a candidate" aria-label="Find a candidate" />
-        </Stack>
-      )}
-      rail={promotionsFailure ? <UnavailableNotice error={promotionsFailure} what="asset promotions" source="Promotion candidates" onRetry={refresh} />
-        : isLoading && !data ? <LoadingState label="Loading candidates…" />
-        : candidates.length === 0 ? <EmptyState size="sm" title="No candidates in this view" description={filter === 'dismissed' ? 'Dismissed candidates remain here with their observations and reasons.' : 'Candidates appear when observations form a reusable pattern.'} />
-        : <GroupedList size="md" currentStyle="bar" groupHeading="label"
-            groups={[{ id: 'candidates', title: FILTERS.find((f) => f.value === filter)!.label, count: candidates.length }]}
-            rows={candidates.map((c) => ({ id: c.id, groupId: 'candidates', title: c.title,
-              subline: `${PROPOSED_LABEL[c.proposedKind]} · ${STATUS_LABEL[c.status]} · ${c.supportCount} observations` }))}
-            currentId={openId} onOpenRow={(row) => openCandidate(row.id)} />}
+    <ListRailLayout
+      header={<SectionHeader breadcrumbs={trail} title="Asset promotions"
+        description="Observations that formed a reusable pattern, waiting for a decision before they join the Agent library." />}
+      list={{
+        title: filter === 'all' ? 'Candidates' : FILTERS.find((f) => f.value === filter)!.label,
+        ...(data ? { count: candidates.length } : {}),
+        label: 'Asset promotion candidates',
+        header: (
+          <Inline gap="xs" align="center" wrap={false}>
+            <SearchInput value={query} onChange={setQuery} placeholder="Find a candidate" aria-label="Find a candidate" className="min-w-0 flex-1" />
+            <FilterPopover
+              trigger="icon"
+              size="sm"
+              label="Filter"
+              activeCount={activeFilters}
+              onClear={() => { setFilterDraft('all'); moduleCtx?.scope.repoFacet.onChange([]); }}
+              panelLabel="Filter asset promotions"
+            >
+              <WorkListFilters facets={filterFacets} data-testid="promotion-filters" />
+            </FilterPopover>
+          </Inline>
+        ),
+        body: promotionsFailure ? <UnavailableNotice error={promotionsFailure} what="asset promotions" source={PROMOTIONS_SOURCE} onRetry={refresh} />
+          : isLoading && !data ? <LoadingState label="Loading candidates…" />
+          : candidates.length === 0 ? <EmptyState size="sm" title="No candidates in this view" description={filter === 'dismissed' ? 'Dismissed candidates remain here with their observations and reasons.' : 'Candidates appear when observations form a reusable pattern.'} />
+          : <GroupedList size="md" currentStyle="bar" groupHeading="label" groupCountAlign="end" hideEmptyGroups
+              groups={(Object.keys(PROPOSED_LABEL) as Array<keyof typeof PROPOSED_LABEL>).map((kind) => ({ id: kind, title: PROPOSED_LABEL[kind], count: candidates.filter((c) => c.proposedKind === kind).length }))}
+              rows={candidates.map((c) => ({ id: c.id, groupId: c.proposedKind, title: c.title,
+                subline: `${STATUS_LABEL[c.status]} · ${c.supportCount} observations` }))}
+              currentId={openId} onOpenRow={(row) => openCandidate(row.id)} />,
+      }}
+      data-testid="distillation-promotions"
     >
       {openId ? (
-        <Stack gap="md" className="mx-auto w-full max-w-3xl p-5">
-          {openError ? <UnavailableNotice error={openError} what="this candidate" source="Promotion candidates" onRetry={refreshOpen} />
+        <Stack gap="md" className={paneBody}>
+          {openError && isNotFoundError(openError) ? (
+            <RecordNotFound heading="Promotion candidate" title="Candidate not found" body={`No promotion candidate has the id "${openId}".`}
+              backLabel="All asset promotions" onBack={() => setOpenId(null)} />
+          ) : openError ? <UnavailableNotice error={openError} what="this candidate" source={PROMOTIONS_SOURCE} onRetry={refreshOpen} />
             : !openData ? <LoadingState label="Loading candidate…" />
             : <CandidateDrawer key={openId} candidate={openData} busy={busy} canManage={canManage} actionError={actionError?.id === openId ? actionError.message : null}
-                onPromote={(dryRunPassed) => void promote(openId, dryRunPassed)}
+                onPromote={(intent) => void promote(openId, intent)}
                 onDismiss={(reason) => void dismiss(openId, reason)} />}
         </Stack>
-      ) : <EmptyState size="sm" title="Review a proposed asset" description="Choose a candidate to inspect its observations, approval and dry-run result." />}
-    </ExplorerLayout>
+      ) : (
+        <Stack gap="md" className={paneBody}>
+          <EmptyState size="sm" title="Review a proposed asset" description="Choose a candidate to inspect its observations, approval and dry-run result." />
+        </Stack>
+      )}
+    </ListRailLayout>
   );
 }

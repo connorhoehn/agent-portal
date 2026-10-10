@@ -1,0 +1,250 @@
+✖ two genuine tabs racing across full BFFs receive exactly one accepted seat (36.62825ms)
+✖ a real REST job producer reaches both cookie and JWT peers, then stops for a retired cookie epoch (13.674291ms)
+✖ two full BFFs share protected huddle messages and canonical Work pages (1.201667ms)
+✖ both BFFs refuse a retired real directory epoch and retain protected history (1.142042ms)
+✖ forged caller and foreign lobby frames cannot cross the application boundary (0.86825ms)
+✖ a private channel created on one BFF is visible remotely and its remote leave revokes delivery (3.127959ms)
+✖ shared presence on the other BFF uses real identity and omits a revoked source (0.989ms)
+✖ a missed-call notification reaches a peer BFF and replays from the shared inbox (0.715875ms)
+✖ a peer DM reader avoids an unread alert and receives one after leaving (4.771166ms)
+✖ a full stored inbox replays across nodes and a later membership removal filters without deleting records (4.624416ms)
+✖ retiring the real masquerade operator blocks admission on both BFFs (1.729ms)
+✖ an abruptly lost BFF returns under a new owner and restores the same authenticated call seat (0.707375ms)
+ℹ tests 12
+ℹ suites 0
+ℹ pass 0
+ℹ fail 12
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 302.620709
+
+✖ failing tests:
+
+test at test-support/bff-cluster-acceptance.mjs:25:1
+✖ two genuine tabs racing across full BFFs receive exactly one accepted seat (36.62825ms)
+  AssertionError [ERR_ASSERTION]: actual picker login
+  
+  429 !== 200
+  
+      at login (file:///Users/connorhoehn/Projects/aws-agentcore/middleware/test-support/bff-cluster-fixture.mjs:56:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async TestContext.<anonymous> (file:///Users/connorhoehn/Projects/aws-agentcore/middleware/test-support/bff-cluster-acceptance.mjs:27:32)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 429,
+    expected: 200,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at test-support/bff-cluster-acceptance.mjs:46:1
+✖ a real REST job producer reaches both cookie and JWT peers, then stops for a retired cookie epoch (13.674291ms)
+  AssertionError [ERR_ASSERTION]: actual picker login
+  
+  429 !== 200
+  
+      at login (file:///Users/connorhoehn/Projects/aws-agentcore/middleware/test-support/bff-cluster-fixture.mjs:56:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async TestContext.<anonymous> (file:///Users/connorhoehn/Projects/aws-agentcore/middleware/test-support/bff-cluster-acceptance.mjs:48:18)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 429,
+    expected: 200,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at test-support/bff-cluster-acceptance.mjs:72:1
+✖ two full BFFs share protected huddle messages and canonical Work pages (1.201667ms)
+  AssertionError [ERR_ASSERTION]: actual picker login
+  
+  429 !== 200
+  
+      at login (file:///Users/connorhoehn/Projects/aws-agentcore/middleware/test-support/bff-cluster-fixture.mjs:56:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async TestContext.<anonymous> (file:///Users/connorhoehn/Projects/aws-agentcore/middleware/test-support/bff-cluster-acceptance.mjs:73:26)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 429,
+    expected: 200,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at test-support/bff-cluster-acceptance.mjs:109:1
+✖ both BFFs refuse a retired real directory epoch and retain protected history (1.142042ms)
+  AssertionError [ERR_ASSERTION]: actual picker login
+  
+  429 !== 200
+  
+      at login (file:///Users/connorhoehn/Projects/aws-agentcore/middleware/test-support/bff-cluster-fixture.mjs:56:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async TestContext.<anonymous> (file:///Users/connorhoehn/Projects/aws-agentcore/middleware/test-support/bff-cluster-acceptance.mjs:110:31)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 429,
+    expected: 200,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at test-support/bff-cluster-acceptance.mjs:130:1
+✖ forged caller and foreign lobby frames cannot cross the application boundary (0.86825ms)
+  AssertionError [ERR_ASSERTION]: actual picker login
+  
+  429 !== 200
+  
+      at login (file:///Users/connorhoehn/Projects/aws-agentcore/middleware/test-support/bff-cluster-fixture.mjs:56:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async TestContext.<anonymous> (file:///Users/connorhoehn/Projects/aws-agentcore/middleware/test-support/bff-cluster-acceptance.mjs:131:31)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 429,
+    expected: 200,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at test-support/bff-cluster-acceptance.mjs:143:1
+✖ a private channel created on one BFF is visible remotely and its remote leave revokes delivery (3.127959ms)
+  AssertionError [ERR_ASSERTION]: actual picker login
+  
+  429 !== 200
+  
+      at login (file:///Users/connorhoehn/Projects/aws-agentcore/middleware/test-support/bff-cluster-fixture.mjs:56:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async TestContext.<anonymous> (file:///Users/connorhoehn/Projects/aws-agentcore/middleware/test-support/bff-cluster-acceptance.mjs:145:31)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 429,
+    expected: 200,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at test-support/bff-cluster-acceptance.mjs:182:1
+✖ shared presence on the other BFF uses real identity and omits a revoked source (0.989ms)
+  AssertionError [ERR_ASSERTION]: actual picker login
+  
+  429 !== 200
+  
+      at login (file:///Users/connorhoehn/Projects/aws-agentcore/middleware/test-support/bff-cluster-fixture.mjs:56:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async TestContext.<anonymous> (file:///Users/connorhoehn/Projects/aws-agentcore/middleware/test-support/bff-cluster-acceptance.mjs:183:31)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 429,
+    expected: 200,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at test-support/bff-cluster-acceptance.mjs:202:1
+✖ a missed-call notification reaches a peer BFF and replays from the shared inbox (0.715875ms)
+  AssertionError [ERR_ASSERTION]: actual picker login
+  
+  429 !== 200
+  
+      at login (file:///Users/connorhoehn/Projects/aws-agentcore/middleware/test-support/bff-cluster-fixture.mjs:56:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async TestContext.<anonymous> (file:///Users/connorhoehn/Projects/aws-agentcore/middleware/test-support/bff-cluster-acceptance.mjs:203:31)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 429,
+    expected: 200,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at test-support/bff-cluster-acceptance.mjs:221:1
+✖ a peer DM reader avoids an unread alert and receives one after leaving (4.771166ms)
+  AssertionError [ERR_ASSERTION]: actual picker login
+  
+  429 !== 200
+  
+      at login (file:///Users/connorhoehn/Projects/aws-agentcore/middleware/test-support/bff-cluster-fixture.mjs:56:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async TestContext.<anonymous> (file:///Users/connorhoehn/Projects/aws-agentcore/middleware/test-support/bff-cluster-acceptance.mjs:224:31)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 429,
+    expected: 200,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at test-support/bff-cluster-acceptance.mjs:245:1
+✖ a full stored inbox replays across nodes and a later membership removal filters without deleting records (4.624416ms)
+  AssertionError [ERR_ASSERTION]: actual picker login
+  
+  429 !== 200
+  
+      at login (file:///Users/connorhoehn/Projects/aws-agentcore/middleware/test-support/bff-cluster-fixture.mjs:56:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async TestContext.<anonymous> (file:///Users/connorhoehn/Projects/aws-agentcore/middleware/test-support/bff-cluster-acceptance.mjs:249:31)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 429,
+    expected: 200,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at test-support/bff-cluster-acceptance.mjs:281:1
+✖ retiring the real masquerade operator blocks admission on both BFFs (1.729ms)
+  AssertionError [ERR_ASSERTION]: actual picker login
+  
+  429 !== 200
+  
+      at login (file:///Users/connorhoehn/Projects/aws-agentcore/middleware/test-support/bff-cluster-fixture.mjs:56:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async TestContext.<anonymous> (file:///Users/connorhoehn/Projects/aws-agentcore/middleware/test-support/bff-cluster-acceptance.mjs:283:20)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 429,
+    expected: 200,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at test-support/bff-cluster-acceptance.mjs:298:1
+✖ an abruptly lost BFF returns under a new owner and restores the same authenticated call seat (0.707375ms)
+  AssertionError [ERR_ASSERTION]: actual picker login
+  
+  429 !== 200
+  
+      at login (file:///Users/connorhoehn/Projects/aws-agentcore/middleware/test-support/bff-cluster-fixture.mjs:56:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async TestContext.<anonymous> (file:///Users/connorhoehn/Projects/aws-agentcore/middleware/test-support/bff-cluster-acceptance.mjs:302:31)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 429,
+    expected: 200,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

@@ -1,0 +1,7 @@
+offline (--network none) inspection of orgiq-middleware:cluster-0109-validation sha256:bb15549e...
+realtime-modules version: 0.109.0
+acceptsOriginPublishProof in dist/server/RedisRealtimeRouter.js: 1
+parseDmLobby occurrences in dist/call/lobbyChannel.js: 5
+publishProofMaxAgeMs in dist/lib/realtime-gateway.js: 2
+dmLobbyPrefix|parseDmLobby in dist/lib/social-chat.js: 4
+revokePublishProofs in dist/lib/social-chat.js: 2

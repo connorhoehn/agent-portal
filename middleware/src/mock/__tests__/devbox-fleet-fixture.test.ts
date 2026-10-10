@@ -13,9 +13,18 @@
 // that drifts into five identical boxes would still be five boxes and would
 // still exercise a third of the visibility rule.
 
+// The seed reads its task lines off the board fixture, which resolves
+// initiative names through providers/projects.ts — and that drags config.ts
+// (import.meta) into the CJS jest build unless it is stood in for.
+jest.mock('../../providers/aurora.js', () => ({ exec: jest.fn() }));
+jest.mock('../../config.js', () => ({
+  config: { region: 'us-east-1', mock: { aurora: true, agentcore: true } },
+}));
+
 import { fixtureRegistry, freezeClock, unfreezeClock } from '../core/index.js';
 import { devboxBoxes } from '../devbox-fleet.js';
 import { canSeeBox } from '../../lib/devbox-visibility.js';
+import { timeLeft, MAX_LIFETIME_MS, IDLE_TIMEOUT_MS } from '../../lib/devbox-reaper.js';
 
 const AT = '2026-09-16T15:20:00.000Z';
 let restore: () => void;
@@ -57,6 +66,47 @@ describe('devboxBoxes — the fleet Computer Lab actually shows', () => {
     expect(statuses.has('running')).toBe(true);
     expect(statuses.has('idle')).toBe(true);
     expect(statuses.has('waiting')).toBe(true);
+    expect(statuses.has('provisioning')).toBe(true);
+  });
+
+  it('groups across several initiatives, more than one computer on some', () => {
+    const byProject = new Map<string, number>();
+    for (const b of devboxBoxes.rows()) if (b.projectId) byProject.set(b.projectId, (byProject.get(b.projectId) ?? 0) + 1);
+    expect(byProject.size).toBeGreaterThanOrEqual(3);
+    expect([...byProject.values()].some((n) => n > 1)).toBe(true);
+  });
+
+  it('every box is inside the reaper\'s windows, so its meters read as a spread rather than all zero', () => {
+    const now = new Date(AT).getTime();
+    const stops = devboxBoxes.rows().map((b) => {
+      expect(now - Date.parse(b.createdAt)).toBeLessThan(MAX_LIFETIME_MS);
+      if (b.status !== 'running') expect(now - Date.parse(b.lastActivityAt)).toBeLessThan(IDLE_TIMEOUT_MS);
+      const left = timeLeft(b, now).stopsInMs;
+      expect(left).toBeGreaterThan(0);
+      return Math.round(left / 60_000);
+    });
+    expect(new Set(stops).size).toBeGreaterThanOrEqual(4);
+  });
+
+  it('Nora, an sme on Auth Migration, sees its computers', () => {
+    const auth = devboxBoxes.rows().filter((b) => b.projectId === 'p-auth-migration');
+    expect(auth.length).toBeGreaterThan(0);
+    for (const b of auth) {
+      expect(canSeeBox(b, { sub: 'u-nora', role: 'sme', attachedInitiatives: new Set(['p-auth-migration', 'p-observability']) })).toBe(true);
+    }
+  });
+
+  it('every running or finished task line is a seeded work item\'s own title or a stated mission', () => {
+    for (const b of devboxBoxes.rows()) {
+      if (b.status === 'provisioning') { expect(b.currentTask).toBeUndefined(); continue; }
+      expect(b.currentTask).toBeTruthy();
+    }
+  });
+
+  it('the demo world takes Auth Migration\'s computers off the stage for the three agents', () => {
+    const demo = devboxBoxes.rows('demo');
+    expect(demo.some((b) => b.projectId === 'p-auth-migration')).toBe(false);
+    expect(demo.length).toBe(devboxBoxes.rows('default').filter((b) => b.projectId !== 'p-auth-migration').length);
   });
 
   it('every timestamp comes from the frozen clock — no wall-clock leak', () => {

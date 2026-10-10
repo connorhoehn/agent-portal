@@ -11,8 +11,8 @@
 //   POST  /api/graph/work-items/:id/criteria         — append a criterion
 //   PATCH /api/graph/work-items/:id/criteria/:cid    — edit/check/move a criterion
 //   DELETE /api/graph/work-items/:id/criteria/:cid   — remove a criterion
-//   GET   /api/graph/work-items/:id/comments         — planning notes + status audit
-//   POST  /api/graph/work-items/:id/comments         — add a planning note
+//   GET   /api/graph/work-items/:id/comments         — the item's thread orgiq:work:<id> + status audit
+//   POST  /api/graph/work-items/:id/comments         — post on the thread (never the comments table)
 //   PUT    /api/graph/work-items/:id/decisions/:decisionId — link a decision to this item
 //   DELETE /api/graph/work-items/:id/decisions/:decisionId — unlink it
 //
@@ -26,10 +26,14 @@ import { Router, type Response } from 'express';
 import { asyncHandler } from '../lib/async-handler.js';
 import { requireAction, resolveSession } from '../lib/authz.js';
 import { getUser } from '../providers/identity.js';
+import { notifyWorkItemAssigned } from '../lib/social-notify.js';
+import { publishChannelActivity } from '../lib/gateway-run-feed.js';
+import { notifyWorkGraphChanged } from '../lib/work-graph/live.js';
 import {
   searchWorkItems,
   getProjectWorkTree,
   getProjectActivity,
+  workThreadSummary,
   getProjectDecisions,
   getPersonWorkItems,
   getWorkItem,
@@ -57,6 +61,7 @@ import {
   type PrStatus,
 } from '../providers/work-items.js';
 import { getProjectActivitySeries } from '../providers/activity.js';
+import { postInitiativeWorkComment } from '../lib/initiative-comments.js';
 
 export const workItemsRouter = Router();
 
@@ -64,6 +69,28 @@ export const workItemsRouter = Router();
 // the mount's tenant guard alone let any orgiq member create or mutate board
 // state. GETs stay tenant-open: the board is operational visibility.
 const writeGate = requireAction('DispatchAgentRun');
+
+// An explicit /comment adds a work note to the persistent initiative dialogue.
+workItemsRouter.post('/projects/:id/discussion/comments', writeGate, asyncHandler(async (req, res) => {
+  const body = req.body as Record<string, unknown>;
+  if (!body || unknownKeys(body, ['body', 'workItemId', 'clientDeliveryId']).length) {
+    res.status(400).json({ error: 'A comment contains body, workItemId and clientDeliveryId only' }); return;
+  }
+  const error = checkCommentBody(body['body']);
+  if (error || typeof body['workItemId'] !== 'string' || typeof body['clientDeliveryId'] !== 'string'
+    || !/^[a-zA-Z0-9_-]{1,128}$/.test(body['clientDeliveryId'])) {
+    res.status(400).json({ error: error ?? 'A comment needs a work item and a valid delivery id' }); return;
+  }
+  const session = resolveSession(req);
+  const user = session ? await getUser(session.sub) : null;
+  if (!session || !user) { res.status(401).json({ error: 'Sign in to comment' }); return; }
+  const message = await postInitiativeWorkComment({
+    projectId: req.params['id'] as string, workItemId: body['workItemId'],
+    userId: user.id, displayName: user.displayName, personId: user.personId,
+    body: (body['body'] as string).trim(), deliveryId: body['clientDeliveryId'],
+  });
+  res.status(201).json(message);
+}));
 
 const VALID_STATUSES: WorkItemStatus[] = ['open', 'in_progress', 'in_review', 'done', 'cancelled'];
 const VALID_PRIORITIES: WorkItemPriority[] = ['critical', 'high', 'medium', 'low'];
@@ -236,7 +263,8 @@ workItemsRouter.get(
     if (await parentMissing(res, 'project', id)) return;
     const rawLimit = parseInt(req.query['limit'] as string ?? '25', 10);
     const limit = Number.isNaN(rawLimit) ? 25 : Math.min(Math.max(rawLimit, 1), 100);
-    const activity = await getProjectActivity(id, { limit });
+    // Human comments come from each item's thread under this reader's history floor.
+    const activity = await getProjectActivity(id, { limit, viewerUserId: resolveSession(req)?.sub ?? null });
     res.json(activity);
   }),
 );
@@ -360,6 +388,11 @@ workItemsRouter.post(
         sprintId:         (body['sprintId'] as string | null | undefined) ?? null,
         estimatedCostUsd: typeof body['estimatedCostUsd'] === 'number' ? body['estimatedCostUsd'] : null,
       } satisfies CreateWorkItemInput);
+      if (item.assigneeId) {
+        void notifyWorkItemAssigned({ workItemId: item.id, title: item.title, projectId: item.projectId, assigneePersonId: item.assigneeId, actorId: req.session?.sub ?? null });
+        void publishChannelActivity(`orgiq:initiative:${item.projectId}`, 'work-item.assigned', { workItemId: item.id, title: item.title }, { userId: req.session?.sub ?? null });
+      }
+      void notifyWorkGraphChanged(item.projectId, 'work-item');
       res.status(201).json(item);
     } catch (err) {
       const mapped = toClientError(err as Error);
@@ -504,6 +537,15 @@ workItemsRouter.patch(
         }
       }
 
+      if (movingStatus && updated.projectId) {
+        void publishChannelActivity(`orgiq:initiative:${updated.projectId}`, 'work-item.status', { workItemId: updated.id, title: updated.title, from: current.status, to: updated.status }, { userId: req.session?.sub ?? null });
+      }
+
+      if ('assigneeId' in body && updated.assigneeId && updated.assigneeId !== current.assigneeId) {
+        void notifyWorkItemAssigned({ workItemId: updated.id, title: updated.title, projectId: updated.projectId, assigneePersonId: updated.assigneeId, actorId: req.session?.sub ?? null });
+        void publishChannelActivity(`orgiq:initiative:${updated.projectId}`, 'work-item.assigned', { workItemId: updated.id, title: updated.title }, { userId: req.session?.sub ?? null });
+      }
+      if (updated.projectId) void notifyWorkGraphChanged(updated.projectId, 'work-item');
       res.json(updated);
     } catch (err) {
       const mapped = toClientError(err as Error);
@@ -624,8 +666,24 @@ workItemsRouter.get(
     const id = req.params['id'] as string;
     if (!id) { res.status(400).json({ error: 'Missing work item id' }); return; }
     if (!(await getWorkItem(id))) { res.status(404).json({ error: 'Work item not found' }); return; }
-    const { comments, total } = await listWorkItemComments(id);
+    // The thread under this reader's history floor (lib/work-thread.ts: one store).
+    const { comments, total } = await listWorkItemComments(id, resolveSession(req)?.sub ?? null);
     res.json({ comments, total });
+  }),
+);
+
+// GET /api/graph/work-items/:id/comments/summary — what v_work_item_summary's
+// comment_count used to count from the table, read from the item's thread
+// (`orgiq:work:<id>`) under this reader's history floor: { commentCount,
+// lastCommentAt }. The same rule as the feed's `total` above.
+workItemsRouter.get(
+  '/work-items/:id/comments/summary',
+  asyncHandler(async (req, res) => {
+    const id = req.params['id'] as string;
+    if (!id) { res.status(400).json({ error: 'Missing work item id' }); return; }
+    if (!(await getWorkItem(id))) { res.status(404).json({ error: 'Work item not found' }); return; }
+    const summary = await workThreadSummary(id, resolveSession(req)?.sub ?? null);
+    res.json({ workItemId: id, ...summary });
   }),
 );
 
@@ -651,13 +709,17 @@ workItemsRouter.post(
     // so this is never null here — but resolveSession's return type is
     // nullable and there is no reason to assert past it blind.
     const session = resolveSession(req);
-    const personId = session ? (await getUser(session.sub))?.personId ?? null : null;
-    if (!personId) {
+    const user = session ? await getUser(session.sub) : null;
+    if (!session || !user?.personId) {
       res.status(409).json({ error: 'Link your account to a person in the org graph before commenting' });
       return;
     }
 
-    const comment = await createWorkItemComment(id, personId, (body['body'] as string).trim());
+    // The comment is a message on the item's thread `orgiq:work:<id>` — the one
+    // store a work item's conversation lives in; the sender is the session's
+    // user and its directory name, never anything in the body.
+    const comment = await createWorkItemComment(id, { userId: user.id, displayName: user.displayName, personId: user.personId },
+      (body['body'] as string).trim());
     res.status(201).json(comment);
   }),
 );
@@ -692,6 +754,7 @@ workItemsRouter.put(
     const result = await linkDecisionToWorkItem(item, decisionId);
     if (result.kind === 'not-found') { res.status(404).json({ error: 'Decision not found' }); return; }
     if (result.kind === 'refused') { res.status(result.status).json({ error: result.error }); return; }
+    void notifyWorkGraphChanged(item.projectId, 'decision');
     res.json(result.decision);
   }),
 );
@@ -704,10 +767,12 @@ workItemsRouter.delete(
     const decisionId = req.params['decisionId'] as string;
     if (!id || !decisionId) { res.status(400).json({ error: 'Missing work item or decision id' }); return; }
 
-    if (!(await getWorkItem(id))) { res.status(404).json({ error: 'Work item not found' }); return; }
+    const linked = await getWorkItem(id);
+    if (!linked) { res.status(404).json({ error: 'Work item not found' }); return; }
 
     const unlinked = await unlinkDecisionFromWorkItem(id, decisionId);
     if (!unlinked) { res.status(404).json({ error: 'Decision is not linked to this work item' }); return; }
+    void notifyWorkGraphChanged(linked.projectId, 'decision');
     res.status(204).end();
   }),
 );

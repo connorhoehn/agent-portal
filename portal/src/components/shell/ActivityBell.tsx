@@ -15,7 +15,8 @@
 
 import { useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router';
-import { useGateway, useNotifications } from '@connorhoehnslalom/realtime-modules/client';
+import type { SharedNotificationsApi } from './SharedNotifications';
+import { useSharedNotifications } from './SharedNotifications';
 import { WrappedNotificationBell } from '@connorhoehnslalom/ui-components/integrations/realtime';
 import { useSession } from '../../lib/auth';
 
@@ -30,7 +31,7 @@ const KIND_LABEL: Record<string, string> = {
   system: 'Notice',
 };
 
-type Entry = ReturnType<typeof useNotifications>['notifications'][number];
+type Entry = SharedNotificationsApi['notifications'][number];
 
 function tenantOf(entry: Entry): string | null {
   const t = entry.payload?.['tenant'];
@@ -45,8 +46,7 @@ function categoryOf(entry: Entry): string {
 }
 
 export function ActivityBell() {
-  const inbox = useNotifications();
-  const gateway = useGateway();
+  const inbox = useSharedNotifications();
   const { session } = useSession();
   const navigate = useNavigate();
 
@@ -66,23 +66,12 @@ export function ActivityBell() {
     return { ...inbox, notifications: items, unreadCount: items.filter((n) => !n.read).length };
   }, [inbox, granted]);
 
-  const tell = useCallback((frame: Record<string, unknown>) => {
-    if (gateway.connectionState !== 'connected') return;
-    try { gateway.send({ service: 'notification', ...frame }); } catch { /* offline: the local mark stands */ }
-  }, [gateway]);
-
   const onItemClick = useCallback((item: { id: string }, entry: { action?: { href?: string } } | undefined) => {
     inbox.markAsRead(item.id);
-    tell({ action: 'markRead', id: item.id });
     const href = entry?.action?.href;
     if (href && href.startsWith('/') && !href.startsWith('//')) navigate(href);
-  }, [inbox, tell, navigate]);
+  }, [inbox, navigate]);
 
-  const notifications = useMemo(() => ({
-    ...view,
-    markAllRead: () => { inbox.markAllRead(); tell({ action: 'markAllRead' }); },
-  }), [view, inbox, tell]);
-
-  return <WrappedNotificationBell notifications={notifications} onItemClick={onItemClick}
+  return <WrappedNotificationBell notifications={view} onItemClick={onItemClick}
     size="sm" label="Activity" data-testid="activity-bell" />;
 }

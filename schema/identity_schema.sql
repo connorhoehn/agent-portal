@@ -30,6 +30,10 @@ CREATE TABLE IF NOT EXISTS app_users (
 -- Idempotent add for clusters created before session_epoch existed.
 ALTER TABLE app_users ADD COLUMN IF NOT EXISTS session_epoch INTEGER NOT NULL DEFAULT 0;
 
+-- Avatar for a login that is not linked to an org-graph person (a linked user
+-- shows people.avatar_url). NULL renders initials.
+ALTER TABLE app_users ADD COLUMN IF NOT EXISTS avatar_url TEXT;
+
 CREATE UNIQUE INDEX IF NOT EXISTS app_users_external_sub_idx
   ON app_users (external_sub) WHERE external_sub IS NOT NULL;
 
@@ -46,11 +50,14 @@ CREATE INDEX IF NOT EXISTS user_tenant_roles_tenant_idx ON user_tenant_roles (te
 -- ── Seed: tenants ────────────────────────────────────────────────────────────
 
 INSERT INTO tenants (id, display_name) VALUES
-  ('orgiq', 'OrgIQ'),
+  ('orgiq', 'Work'),
   ('assessment', 'Assessment'),
   ('social', 'Social'),
   ('pipelines', 'Pipelines')
 ON CONFLICT (id) DO NOTHING;
+
+-- Existing tenants retain their ID while the product display name converges.
+UPDATE tenants SET display_name = 'Work' WHERE id = 'orgiq';
 
 -- ── Seed: demo users ─────────────────────────────────────────────────────────
 -- person_id subqueries resolve to NULL when the org graph isn't seeded yet, so
@@ -93,7 +100,12 @@ INSERT INTO app_users (id, display_name, email, person_id) VALUES
   -- holding a grant only in pipelines.
   ('u-ines',     'Ines Moreau',       'ines.moreau@orgiq.example', NULL),
   ('u-kofi',     'Kofi Mensah',       'kofi.mensah@orgiq.example', NULL),
-  ('u-dara',     'Dara Whitfield',    'dara.whitfield@orgiq.example', NULL)
+  ('u-dara',     'Dara Whitfield',    'dara.whitfield@orgiq.example', NULL),
+  -- Not part of the pure cast above: the Communication-plane walker for
+  -- pipelines (docs/communication-plane-goal.md) — a pipelines author who also
+  -- holds Social, so that tenant's plane has a granted user while u-ines/u-kofi/
+  -- u-dara keep their pipelines-only outbound isolation walks.
+  ('u-tomas',    'Tomás Ferreira',    'tomas.ferreira@orgiq.example', NULL)
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO user_tenant_roles (user_id, tenant_id, role) VALUES
@@ -138,21 +150,31 @@ INSERT INTO user_tenant_roles (user_id, tenant_id, role) VALUES
   ('u-sana',     'social',   'participant'),
   -- The curated orgiq cast and the assessment cast join social as
   -- participants, so a channel can be embedded where they already work
-  -- (design §4.1, E5). u-hr, the non-curated SMEs and the cookie-less demo
-  -- identity hold no social grant: the isolation walks need such sessions.
+  -- (design §4.1, E5). Since 2026-10-07 every orgiq cast member with a linked
+  -- person holds it too (the Communication plane, docs/communication-plane-goal.md,
+  -- is the Social tenant seen from the host tenant; SMEs appear in its calls),
+  -- and one pipelines author (u-tomas, outside the pure pipelines cast) so that
+  -- tenant's plane has a granted walker. u-hr, u-ines, u-kofi, u-dara and the cookie-less demo identity hold no
+  -- social grant: the isolation walks and the no-grant journeys need them.
   ('u-theo',     'social',   'participant'),
   ('u-vera',     'social',   'participant'),
   ('u-release',  'social',   'participant'),
   ('u-rachel',   'social',   'participant'),
   ('u-mia',      'social',   'participant'),
   ('u-nora',     'social',   'participant'),
+  ('u-eli',      'social',   'participant'),
+  ('u-layla',    'social',   'participant'),
+  ('u-caleb',    'social',   'participant'),
   ('u-asha',     'social',   'participant'),
   ('u-jonas',    'social',   'participant'),
   ('u-farah',    'social',   'participant'),
+  ('u-tomas',    'social',   'participant'),
 
   -- Pipelines tenant: author / operator / pipeline-admin, separation of duties
   -- between who writes a definition and who approves its steps.
   ('u-ines',     'pipelines', 'author'),
   ('u-kofi',     'pipelines', 'operator'),
-  ('u-dara',     'pipelines', 'pipeline-admin')
+  ('u-dara',     'pipelines', 'pipeline-admin'),
+  -- Communication-plane walker: pipelines author + social participant (above).
+  ('u-tomas',    'pipelines', 'author')
 ON CONFLICT DO NOTHING;

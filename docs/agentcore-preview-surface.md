@@ -505,16 +505,31 @@ env you hand it in step 4.
   `APPROVALS_REQUEST_SECRET`. No approval row is created and the agent never
   reads a rejected request as a decision, so a gated action is blocked, not
   auto-approved. Time step 2→4 tightly if anything is mid-workflow.
-  (Separate, pre-existing: only `POST /approvals/request` is a machine
-  callback. The tool's long-poll of `GET /approvals/:id` goes through
-  `requireTenant('orgiq') + requireAction('ViewObservability')`, which a
-  cookie-less agent can only pass in dev open-mode — so the HITL loop cannot
-  complete against a session-enforcing deployment regardless of these secrets.
-  Middleware-side; not addressed here.)
+  (The long-poll of `GET /approvals/:id` is a machine call too: the route
+  takes `serviceAuthOr(APPROVALS_SERVICE_AUTH, …)` and the tool sends the same
+  `x-approvals-auth` on every poll, so in the window a deployed agent's poll
+  falls through to the session gate and fails the same way. Rechecked
+  2026-10-01; an older note here said the poll could never pass — stale.)
 - **Run-complete — nothing in-repo is affected.** An out-of-band caller using
   `callbacks.post_run_complete()` gets `ok: false` with the same actionable
   note; its run stays `running` and holds a `RUN_CONCURRENCY_CAP` slot until
   it is re-reported or `/stop`ped.
+
+**Where the callbacks go (checked 2026-10-01).** The agents POST to
+`MIDDLEWARE_URL`, defaulting to `http://middleware:3001` — the compose service
+name. Until 2026-10-01 no stack set it on a runtime, so a deployed fleet's
+approval requests and run-complete reports went to a name that resolves
+nowhere in AWS, whatever the secrets said (traces still arrived through
+stdout → CloudWatch → the middleware's poller). Setting it is not enough by
+itself: runtimes run in PUBLIC network mode from AWS addresses that no
+`albAllowCidr` lists, and the account's custodian revokes `0.0.0.0/0`. The
+reachable path is CloudFront: with `OrgIQ-Portal` deployed
+(`--context deployPortal=true`), the ALB admits CloudFront's origin-facing
+prefix list and forwards anything carrying the portal distribution's secret
+origin header, so `https://<id>.cloudfront.net/api/...` reaches the
+middleware from anywhere. Pass `--context portalPublicUrl=https://<id>.cloudfront.net`
+(or `middlewareCallbackUrl=…`) on the runtime deploy in step 4 above and every
+runtime gets `MIDDLEWARE_URL`. Full runbook: docs/social-calls-deploy-plan.md §10.
 
 **Production rollback must retain callback authentication.** Restore the last
 matching secret values on middleware and runtimes. Since the September 19

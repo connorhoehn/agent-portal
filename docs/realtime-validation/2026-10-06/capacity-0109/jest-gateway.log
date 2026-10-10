@@ -1,0 +1,112 @@
+PASS src/lib/__tests__/realtime-gateway-tenants.test.ts
+PASS src/lib/__tests__/realtime-gateway-social.test.ts
+PASS src/lib/__tests__/realtime-gateway-notifications.test.ts
+PASS src/lib/__tests__/realtime-gateway-isolation.test.ts (6.133 s)
+  ● Console
+
+    console.log
+      [realtime-gateway] serving /ws (chat, presence, calls, notifications, work-graph); call state + inbox: memory; chat store: memory
+
+      at attachRealtimeGateway (src/lib/realtime-gateway.ts:1015:11)
+
+PASS src/lib/__tests__/realtime-gateway-social-dynamo.test.ts
+PASS src/lib/__tests__/realtime-gateway.test.ts
+  ● Console
+
+    console.log
+      [realtime-gateway] serving /ws (chat, presence, calls, notifications, work-graph); call state + inbox: memory; chat store: memory
+
+      at attachRealtimeGateway (src/lib/realtime-gateway.ts:1015:11)
+
+PASS src/lib/__tests__/call-features-cluster.integration.test.ts
+PASS src/lib/__tests__/call-chat-gateway.test.ts
+  ● Console
+
+    console.log
+      [realtime-gateway] serving /ws (chat, presence, calls, notifications, work-graph); call state + inbox: memory; chat store: memory
+
+      at attachRealtimeGateway (src/lib/realtime-gateway.ts:1015:11)
+
+    console.log
+      [realtime-gateway] serving /ws (chat, presence, calls, notifications, work-graph); call state + inbox: memory; chat store: memory
+
+      at attachRealtimeGateway (src/lib/realtime-gateway.ts:1015:11)
+
+PASS src/lib/__tests__/call-chat-durable.integration.test.ts
+PASS src/lib/__tests__/realtime-gateway-live-authority.test.ts
+PASS src/lib/__tests__/realtime-gateway-distillation.test.ts
+  ● Console
+
+    console.error
+      [authz] no policy store AND the Cedar seeds could not be read; denying every action. TSError: [96msrc/lib/role-registry.ts[0m:[93m10[0m:[93m41[0m - [91merror[0m[90m TS1343: [0mThe 'import.meta' meta-property is only allowed when the '--module' option is 'es2020', 'es2022', 'esnext', 'system', 'node16', 'node18', 'node20', or 'nodenext'.
+      
+      [7m10[0m const __dirname = dirname(fileURLToPath(import.meta.url));
+      [7m  [0m [91m                                        ~~~~~~~~~~~[0m
+
+      206 |       // Named explicitly — a bare "failed" with no cause is how the platform's
+      207 |       // tracing shutdown bug hid itself for weeks.
+    > 208 |       console.error(
+          |               ^
+      209 |         '[authz] no policy store AND the Cedar seeds could not be read; denying every action.',
+      210 |         err instanceof Error ? `${err.name}: ${err.message}` : String(err),
+      211 |       );
+
+      at seedPolicyDecision (src/lib/authz.ts:208:15)
+      at evaluate (src/lib/authz.ts:242:13)
+      at isAllowed (src/lib/authz.ts:408:11)
+      at src/lib/direct-recipient.ts:69:21
+      at NotificationService.replayUnreadForUser (node_modules/@connorhoehnslalom/realtime-modules/src/notification/NotificationService.ts:255:13)
+
+PASS src/lib/__tests__/realtime-gateway-attachments.test.ts (12.484 s)
+  ● Console
+
+    console.log
+      [realtime-gateway] serving /ws (chat, presence, calls, notifications, work-graph); call state + inbox: memory; chat store: memory
+
+      at attachRealtimeGateway (src/lib/realtime-gateway.ts:1015:11)
+
+    console.warn
+      [realtime-gateway] refused publish on channel 'orgiq:initiative:p-rag-search' for user '?' (org '?')
+
+      323 |   if (!ok) {
+      324 |     const who = ctx as Record<string, unknown> | null;
+    > 325 |     console.warn(`[realtime-gateway] refused ${kind} on channel '${channel}' for user '${String(who?.['userId'] ?? '?')}' (org '${String(who?.['org'] ?? '?')}')`);
+          |             ^
+      326 |   }
+      327 |   return ok;
+      328 | };
+
+      at authorizeChannel (src/lib/realtime-gateway.ts:325:13)
+      at LocalRealtimeRouter.sendToChannelScoped (node_modules/@connorhoehnslalom/realtime-modules/src/server/router.ts:416:28)
+      at LocalRealtimeRouter.sendToChannel (node_modules/@connorhoehnslalom/realtime-modules/src/server/router.ts:400:13)
+
+PASS src/lib/__tests__/live-principal-publish-proof.test.ts
+PASS src/lib/__tests__/realtime-gateway-plugin-scope.test.ts
+PASS src/lib/__tests__/social-deck-channel.test.ts
+PASS src/lib/__tests__/live-principal.test.ts
+PASS src/lib/__tests__/tenant-channels.test.ts
+PASS src/lib/__tests__/live-principal-scope.test.ts
+PASS src/lib/__tests__/social-notify-tenant-mentions.test.ts
+PASS src/lib/__tests__/dynamo-dispatch-optin.test.ts
+PASS src/lib/__tests__/gateway-run-feed.test.ts
+PASS src/lib/__tests__/realtime-token-provenance.test.ts
+PASS src/lib/__tests__/live-subscribers.test.ts
+PASS src/lib/__tests__/gateway-run-feed-adversarial.test.ts
+PASS src/lib/__tests__/dynamo-dispatch.test.ts
+PASS src/lib/__tests__/social-chat-dm-members.test.ts
+PASS src/lib/__tests__/social-membership-fence.test.ts
+PASS src/lib/__tests__/social-notify.test.ts
+PASS src/lib/__tests__/distillation-realtime.test.ts
+PASS src/lib/__tests__/call-chat-lifecycle.test.ts
+PASS src/lib/__tests__/call-pages-redis.integration.test.ts
+PASS src/lib/__tests__/call-pages-store.test.ts
+PASS src/lib/__tests__/call-chat-state.test.ts
+PASS src/lib/__tests__/realtime-node-ownership.test.ts
+PASS src/lib/__tests__/call-chat-redis.integration.test.ts
+
+Test Suites: 35 passed, 35 total
+Tests:       390 passed, 390 total
+Snapshots:   0 total
+Time:        35.725 s, estimated 37 s
+Ran all test suites matching /src\/lib\/__tests__\/(realtime-|live-|social-|tenant-channels|call-|gateway-|dm-|distillation-realtime|dynamo-dispatch|work-graph)/i.
+exit=0

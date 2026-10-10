@@ -17,12 +17,13 @@ import {
   EmptyState,
   ErrorState,
   Inline,
-  Input,
   MetaLine,
+  SearchInput,
   PageHeader,
   Select,
   Stack,
   StatStrip,
+  T,
   Textarea,
   StatusPill,
   type StatusPillState,
@@ -251,7 +252,7 @@ export default function FeedbackPage() {
   // counts follow-ups only; the label called a decision a question; and the
   // kind was rendered nowhere at all, so the odd row was indistinguishable
   // from the other twenty-four.
-  const { questions: openQuestions, decisions: openDecisions, teamsWithOpenQuestions: teamsWithOpen } =
+  const { questions: openQuestions, decisions: openDecisions } =
     splitOpenFeedback(tasks);
   const openCount = openQuestions.length;
   const selected = rows.find((t) => t.task_id === selectedId) ?? tasks.find((t) => t.task_id === selectedId) ?? null;
@@ -263,19 +264,21 @@ export default function FeedbackPage() {
         title="Question queue"
         description="Every question a team still owes the assessment. Answering closes the question; the evidence behind the answer is what moves verification."
       />
-      <StatStrip
-        aria-label="Queue summary"
-        items={[
-          { label: 'Open questions', value: openCount, tone: openCount > 0 ? 'danger' : 'default', hint: `across ${teamsWithOpen} team${teamsWithOpen === 1 ? '' : 's'}` },
-          // Not folded into the count above and not hidden either: these are
-          // real open work, they are just yours rather than the team's.
-          ...(openDecisions.length > 0
-            ? [{ label: 'Waiting on you', value: openDecisions.length, tone: 'accent' as const, hint: 'exception reviews to approve or deny' }]
-            : []),
-          { label: 'Showing', value: rows.length, hint: status === 'ALL' ? 'all statuses' : STATUS_OPTIONS.find((o) => o.value === status)?.label.toLowerCase() ?? '' },
-        ]}
-      />
-      <Inline align="center" gap="sm" wrap>
+      <Inline align="center" gap="md" wrap>
+        <StatStrip
+          aria-label="Queue summary"
+          variant="line"
+          size="sm"
+          items={[
+            { label: openCount === 1 ? 'open question' : 'open questions', value: openCount, ...(openCount > 0 ? { tone: 'danger' as const } : {}) },
+            // Not folded into the count above and not hidden either: these are
+            // real open work, they are just yours rather than the team's.
+            ...(openDecisions.length > 0
+              ? [{ label: 'waiting on you', value: openDecisions.length, tone: 'accent' as const }]
+              : []),
+            { label: 'showing', value: rows.length },
+          ]}
+        />
         <Select
           size="sm"
           className="w-40"
@@ -292,17 +295,18 @@ export default function FeedbackPage() {
           onChange={(e) => setTeam(e.target.value)}
           options={teamOptions}
         />
-        <Input
-          type="text"
-          value={searchText}
-          onChange={(e) => onSearchChange(e.target.value)}
-          placeholder="Search questions, dimensions or teams…"
-          className="w-[320px]"
-        />
         {(team !== 'all' || search) && (
           <Button variant="ghost" size="sm" onClick={() => { setTeam('all'); cancelSearchPending(); setSearch(''); }}>Clear filters</Button>
         )}
-        <MetaLine size="xs" tone="tertiary" className="ml-auto" items={['click a row to answer it']} />
+        <SearchInput
+          size="sm"
+          className="ml-auto w-64 shrink-0"
+          value={searchText}
+          onChange={onSearchChange}
+          onClear={() => { cancelSearchPending(); setSearch(''); }}
+          aria-label="Search questions"
+          placeholder="Search questions, dimensions or teams…"
+        />
       </Inline>
 
       {/* See the shared list-page loading pattern comment in QueuePage.tsx —
@@ -321,6 +325,7 @@ export default function FeedbackPage() {
         <DataTable<FeedbackTask>
           data={rows}
           keyField={(t) => t.task_id}
+          size="sm"
           onRowClick={(t) => setSelectedId(t.task_id)}
           striped
           loading={loading && !data}
@@ -331,16 +336,10 @@ export default function FeedbackPage() {
           columns={[
             {
               key: 'team_id', header: 'Team', sortable: true,
-              render: (t) => (
-                <Stack gap="none" align="start">
-                  <Button variant="ghost" size="sm" className="border-0 px-0 font-semibold text-text-primary" onClick={(e) => { e.stopPropagation(); setSelectedId(t.task_id); }}>
-                    {teamNameOf(t)}
-                  </Button>
-                  {t.team_id && <MetaLine size="xs" tone="tertiary" items={[t.team_id]} />}
-                </Stack>
-              ),
+              render: (t) => <T size="sm" weight="medium">{teamNameOf(t)}</T>,
             },
-            { key: 'dimension_id', header: 'Dimension', sortable: true, render: (t) => dimensionLabel(t, dimOf(t)) },
+            { key: 'id', header: 'ID', render: (t) => <T size="xs" tone="tertiary">{t.team_id ?? '—'}</T> },
+            { key: 'dimension_id', header: 'Dimension', sortable: true, render: (t) => <T size="sm">{dimensionLabel(t, dimOf(t))}</T> },
             {
               key: 'kind', header: 'Kind', sortable: true,
               render: (t) => (t.kind === 'follow_up'
@@ -349,9 +348,9 @@ export default function FeedbackPage() {
             },
             {
               key: 'question', header: 'Question',
-              render: (t) => <MetaLine size="xs" tone="secondary" items={[t.question.length > 96 ? `${t.question.slice(0, 96)}…` : t.question]} />,
+              render: (t) => <T size="sm" title={t.question}>{t.question.length > 72 ? `${t.question.slice(0, 72)}…` : t.question}</T>,
             },
-            { key: 'created_at', header: 'Raised', sortable: true, render: (t) => <MetaLine size="xs" tone="tertiary" items={[formatRelativeTime(t.created_at), t.source ?? null].filter((x): x is string => !!x)} /> },
+            { key: 'created_at', header: 'Raised', sortable: true, numeric: true, render: (t) => <T size="sm" className="justify-end" title={t.source ? `source: ${t.source}` : undefined}>{formatRelativeTime(t.created_at)}</T> },
             // Status earns its width only when the rows can disagree. Under
             // the default OPEN filter every row is open and the column just
             // restated the filter, so it was removed — but under "All

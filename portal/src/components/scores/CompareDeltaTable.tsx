@@ -58,7 +58,7 @@ export function CompareDeltaTable({ entries }: CompareDeltaTableProps) {
                     <TableTd
                       key={e.personId}
                       align="right"
-                      className={isMax ? 'font-bold' : isMin ? 'text-text-tertiary' : ''}
+                      className={isMax ? '' : isMin ? 'text-text-tertiary' : ''}
                     >
                       {/* The leader in a row is tinted with its own series
                           colour, which is the only reason this cell carries a
@@ -67,7 +67,7 @@ export function CompareDeltaTable({ entries }: CompareDeltaTableProps) {
                     </TableTd>
                   );
                 })}
-                <TableTd align="right" className="text-[11px] text-text-tertiary">
+                <TableTd align="right" className="text-text-tertiary">
                   {Math.round(delta)}
                 </TableTd>
               </TableRow>

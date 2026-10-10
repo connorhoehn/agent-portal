@@ -201,6 +201,11 @@ def main():
         'observability_approvals_schema.sql',
         'orgiq_kb_registry_schema.sql',
         'orgiq_work_items_schema.sql',
+        'work_item_key_schema.sql',
+        # Explicit work context links require both work_items and documents.
+        'work_item_documents_schema.sql',
+        # The page-thread migration ledger (work_item_comments -> orgiq:work:<id>).
+        'work_item_comment_migration_schema.sql',
         # The agentic loop: agent_jobs, agent_findings, graph_proposals. Was
         # applied only by apply_agentic_work.py, so a rebuild left the Work
         # page 500ing on missing tables.
@@ -243,6 +248,24 @@ def main():
         # kept here so a rebuilt cluster has the tables the Aurora path of
         # providers/assessment.ts will query.
         'assessment_schema.sql',
+        # Which app users are on which assessment team (the Communication plane's
+        # "My teams"); needs assessment_teams and app_users, so it loads after both.
+        'assessment_team_members_schema.sql',
+        # Review decks for an assessed team (docs/assessment-deck-goal.md).
+        # Additive; FKs assessment_teams, so it loads right after it.
+        'assessment_deck_schema.sql',
+        # Pipeline run report decks (docs/agentic-flows-migration.md slice 3).
+        # Additive and standalone (no FK to the run projection).
+        'pipeline_deck_schema.sql',
+        # Orgiq initiative status decks (docs/agentic-flows-migration.md slice 6).
+        # Additive and standalone (project_id is text, no FK).
+        'initiative_deck_schema.sql',
+        # Durable flow runs (docs/agentic-flows-migration.md slice 4a).
+        # Additive and standalone.
+        'flow_runs_schema.sql',
+        # Social /deck decks (docs/agentic-flows-migration.md slice 5). Additive,
+        # standalone (channel is text, no FK).
+        'social_deck_schema.sql',
         # bot_runs.dispatched_by — who authorized a run, which is what lets the
         # per-SME budget_grants envelope be enforced. Additive ALTER, so it
         # loads after agent_bots_schema.sql creates the table.

@@ -1,0 +1,9 @@
+ARG GATEWAY_IMAGE=orgiq-soak-gateway:local
+FROM docker:29-cli AS docker-cli
+FROM ${GATEWAY_IMAGE}
+COPY --from=docker-cli /usr/local/bin/docker /usr/local/bin/docker
+COPY . /workspace/scripts/loadtest
+ENV NODE_PATH=/app/node_modules
+WORKDIR /workspace
+ENTRYPOINT ["node", "/workspace/scripts/loadtest/realtime-calls.mjs"]
+CMD ["--help"]

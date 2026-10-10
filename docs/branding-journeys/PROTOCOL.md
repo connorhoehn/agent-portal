@@ -52,3 +52,12 @@ A card and the header share `surface`; a panel and the nav share
 `surface-panel`. The validator requires at least THREE distinct colour
 values on the `layers:` line — ground, panel and surface must each be their
 own tone — and fails a log where any two of body / nav / card are equal.
+
+## Freshness and sealing
+
+Freshness and sealing follow [docs/journeys.md](../journeys.md): a cell is
+stale when the rendered contract of the route its `url:` names changed since
+its walk was sealed, or when the theme files (`portal/src/app.css`,
+`components/shell/Layout.tsx`) changed — the tokens are what a branding walk
+proves, and no sweep measures colour yet. Only
+`scripts/journeys/seal.sh docs/branding-journeys`, after a walk, seals.

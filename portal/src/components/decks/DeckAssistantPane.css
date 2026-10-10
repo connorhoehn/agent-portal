@@ -1,0 +1,42 @@
+/* The public SidePane keeps desktop split sizing and ownership. A compact
+   presentation uses its same mounted pane as an overlay, leaving the slide
+   workspace and persistent composer at their full width. */
+@media (max-width: 1199px) {
+  .initiative-composer-dock.deck-composer-backdrop {
+    padding: 8px 12px;
+  }
+
+  [data-testid="shell-split"]:has([data-testid="deck-assistant-pane"]) {
+    position: relative;
+    isolation: isolate;
+  }
+
+  [data-testid="shell-split"]:has([data-testid="deck-assistant-pane"]) > [data-testid="shell-split-primary"] {
+    flex: 1 1 100% !important;
+    width: 100%;
+    min-width: 0;
+  }
+
+  [data-testid="shell-split"]:has([data-testid="deck-assistant-pane"]) > [data-testid="shell-split-divider"] {
+    display: none;
+  }
+
+  [data-testid="shell-split"]:has([data-testid="deck-assistant-pane"]) > [data-testid="shell-split-secondary"] {
+    position: absolute;
+    inset: 12px 12px var(--deck-assistant-composer-inset, 170px) auto;
+    width: min(400px, calc(100% - 24px));
+    height: auto;
+    max-height: calc(100% - 24px);
+    flex: none;
+    z-index: 20;
+    overflow: hidden;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    background: var(--color-surface);
+    box-shadow: 0 12px 32px color-mix(in srgb, var(--color-text-primary) 16%, transparent);
+  }
+
+  [data-testid="shell-split"]:has([data-testid="deck-assistant-pane"]) [data-testid="page-conversation-pane"] {
+    border-left: 0;
+  }
+}

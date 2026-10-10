@@ -1,7 +1,7 @@
 // Starting a call from a social page (docs/social-tenant-design.md §4.5).
 //
 // Not a second call stack: the one the shell hosts (SocialLayout →
-// projects/InitiativeCallHost), which draws the dock. A page names WHERE:
+// the library's call block host, ShellCallHost), which draws the dock. A page names WHERE:
 //
 //   - a room: its lobby `social:room:<slug>`, nobody rung — `start([])` opens
 //     (or, through platform-api's session reuse, walks into) the room's call,
@@ -13,7 +13,7 @@
 // does it.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useInitiativeCallHost } from '../projects/InitiativeCallHost';
+import { useCallHost, useCallLobby } from '../../lib/conversationCall';
 import { callAvailability } from '../../lib/conversationCallModel';
 import { dmLobby, roomLobby } from './socialPlatform';
 
@@ -38,7 +38,7 @@ export interface SocialCall {
 }
 
 export function useSocialCall(): SocialCall {
-  const host = useInitiativeCallHost();
+  const host = useCallHost();
   const [notice, setNotice] = useState<string | null>(null);
   const pending = useRef<Pending | null>(null);
   const call = host?.call ?? null;
@@ -96,4 +96,24 @@ export function useSocialCall(): SocialCall {
     notice,
     clearNotice: () => setNotice(null),
   };
+}
+
+/** What the open conversation or room is, for the shell footer's idle group. */
+export interface SocialFooterContext {
+  lobbyName: string;
+  title: string;
+  /** The same action the conversation's own call button runs. */
+  start(): void;
+}
+
+/**
+ * Register the open conversation/room with the shell's call host while
+ * nothing is in progress (realtime-parity gap 3), so the footer names it and
+ * its Huddle runs the page's own start. The lobby is the conversation itself
+ * (`social:ch:<slug>`, a team channel, `social:dm:<ids>`, `social:room:<slug>`),
+ * which the BFF gateway's lobbyGuard already admits by membership.
+ */
+export function useSocialFooterContext(context: SocialFooterContext | null, unavailable: string | null): void {
+  useCallLobby(context ? { lobbyName: context.lobbyName, title: context.title, channel: context.lobbyName, ...(unavailable ? { startBlockedReason: unavailable } : {}) } : null,
+    () => context?.start());
 }

@@ -74,3 +74,19 @@ export function focusOrgPeople<P extends { id: string }, E extends { source: str
     relationships: relationships.filter(edge => keep.has(edge.source) && keep.has(edge.target)),
   };
 }
+
+/**
+ * RecordGraph clamps a node's name to two lines and its subtitle to one
+ * 124px line, and titles the node with `description ?? title` — so hovering a
+ * long knowledge record showed its summary and never its name (orgiq
+ * program-owner #24), and a person's cut-off role was nowhere. The node's
+ * tooltip is the one place the page can put them: name, then subtitle, then
+ * the summary.
+ */
+export function withNameTooltips<R extends { title: string; subtitle?: string; description?: string }>(records: R[]): R[] {
+  return records.map(record => {
+    const head = [record.title, record.subtitle].filter(Boolean).join('\n');
+    const tooltip = record.description && record.description !== record.title ? `${head}\n\n${record.description}` : head;
+    return tooltip === (record.description ?? record.title) ? record : { ...record, description: tooltip };
+  });
+}

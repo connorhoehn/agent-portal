@@ -46,7 +46,7 @@ jest.mock('../role-registry.js', () => {
 
 import {
   assessmentDocumentHref, hrefInsideTenant, notify, notifyApprovalRequested, notifyDocumentComment,
-  notifyPipelineRun, parseDmLobby, resolveMentions, setNotificationSink, tenantLabel, usersHoldingAction,
+  notifyPipelineRun, notifyWorkItemAssigned, notifyBudgetGranted, parseDmLobby, resolveMentions, setNotificationSink, tenantLabel, usersHoldingAction,
   type NotificationInputLike,
 } from '../social-notify.js';
 
@@ -211,7 +211,7 @@ describe('the pipeline run producer (row 9)', () => {
   });
 
   it('other statuses notify nobody, and a trigger with no pipelines grant is dropped by the tenant rule', async () => {
-    for (const status of ['running', 'pending', 'cancelled', 'rejected']) {
+    for (const status of ['running', 'pending', 'rejected']) {
       expect(await notifyPipelineRun({ ...base, status, triggeredBy: 'u-ines' })).toEqual([]);
     }
     const to = await notifyPipelineRun({ ...base, status: 'completed', triggeredBy: 'u-theo', approverRoles: [] });
@@ -220,10 +220,53 @@ describe('the pipeline run producer (row 9)', () => {
   });
 });
 
+describe('pipeline cancellation', () => {
+  const base = { runId: 'job:j-2', definitionId: 'runbook:rb-1', definitionTitle: 'Rotate keys', approverRoles: ['operator'] };
+  it('notifies the trigger and approvers but never the user who cancelled', async () => {
+    const to = await notifyPipelineRun({ ...base, status: 'cancelled', triggeredBy: 'u-ines', actorId: 'u-kofi' });
+    expect(to.sort()).toEqual(['u-dara', 'u-ines']);
+    expect(sent[0]!.input).toMatchObject({ title: 'Rotate keys was cancelled', payload: { tenant: 'pipelines' } });
+  });
+});
+
+describe('orgiq work and budget producers', () => {
+  it('assignment reaches the assignee person\'s user, with a tenant-scoped deep link', async () => {
+    await notifyWorkItemAssigned({ workItemId: 'wi-1', title: 'Fix auth', projectId: 'p-auth-migration', assigneePersonId: 'p-001', actorId: 'u-release' });
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!.userId).toBe('u-theo');
+    expect(sent[0]!.input).toMatchObject({ payload: { tenant: 'orgiq', category: 'OrgIQ', kind: 'work-assigned' }, action: { href: '/iq/projects/p-auth-migration' } });
+  });
+  it('never notifies a self-assignment, an unlinked person or an unknown one', async () => {
+    await notifyWorkItemAssigned({ workItemId: 'wi-1', title: 't', projectId: 'p', assigneePersonId: 'p-001', actorId: 'u-theo' });
+    await notifyWorkItemAssigned({ workItemId: 'wi-1', title: 't', projectId: 'p', assigneePersonId: 'p-nobody', actorId: null });
+    expect(sent).toEqual([]);
+  });
+  it('a budget grant reaches the grantee only, and not when they granted it', async () => {
+    await notifyBudgetGranted({ grantId: 'g1', initiativeId: 'p-soc2', sprintId: 's1', granteePersonId: 'p-002', amountUsd: 1500, actorId: 'u-release' });
+    expect(sent.map((x) => x.userId)).toEqual(['u-vera']);
+    expect(sent[0]!.input.title).toContain('$1,500');
+    sent = [];
+    await notifyBudgetGranted({ grantId: 'g2', initiativeId: 'p-soc2', sprintId: 's1', granteePersonId: 'p-002', amountUsd: 5, actorId: 'u-vera' });
+    expect(sent).toEqual([]);
+  });
+  it('a grantee whose orgiq grant is gone is not notified (tenant rule)', async () => {
+    // p-030 maps to u-mia; strip nothing here — instead use a person whose user has no orgiq grant.
+    const { listUsers } = await import('../../providers/identity.js');
+    const u = (await listUsers()).find((x) => x.personId && (x.grants['orgiq']?.length ?? 0) === 0);
+    if (!u) return;
+    await notifyBudgetGranted({ grantId: 'g3', initiativeId: 'p-soc2', sprintId: 's1', granteePersonId: u.personId!, amountUsd: 5, actorId: null });
+    expect(sent).toEqual([]);
+  });
+});
+
 describe('DM lobby names', () => {
   it('parses <tenant>:dm:<ids>', () => {
     expect(parseDmLobby('social:dm:u-hr:u-sana')).toEqual({ tenant: 'social', members: ['u-hr', 'u-sana'] });
     expect(parseDmLobby('orgiq:initiative:p-1')).toBeNull();
     expect(parseDmLobby('dm:u-a:u-b')).toBeNull();
+    expect(parseDmLobby('social:dm:u-a:u-b:u-c')).toEqual({ tenant: 'social', members: ['u-a', 'u-b', 'u-c'] });
+    expect(parseDmLobby('social:dm:u-a')).toBeNull();
+    expect(parseDmLobby('social:dm:')).toBeNull();
+    expect(parseDmLobby('social:dmg:abc123')).toBeNull();
   });
 });

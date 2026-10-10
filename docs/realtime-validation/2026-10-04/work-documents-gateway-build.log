@@ -1,0 +1,92 @@
+ Image orgiq-soak-gateway:local Building 
+#1 [internal] load local bake definitions
+#1 reading from stdin 721B done
+#1 DONE 0.0s
+
+#2 [internal] load build definition from Dockerfile
+#2 DONE 0.0s
+
+#2 [internal] load build definition from Dockerfile
+#2 transferring dockerfile: 1.36kB done
+#2 DONE 0.0s
+
+#3 [context locked_libraries] load .dockerignore
+#3 transferring locked_libraries: 2B done
+#3 DONE 0.0s
+
+#4 [internal] load metadata for docker.io/library/node:22-slim
+#4 DONE 0.7s
+
+#5 [internal] load .dockerignore
+#5 transferring context: 75B done
+#5 DONE 0.0s
+
+#6 [deps 1/6] FROM docker.io/library/node:22-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c
+#6 resolve docker.io/library/node:22-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c done
+#6 DONE 0.0s
+
+#7 [context locked_libraries] load from client
+#7 transferring locked_libraries: 1.05kB done
+#7 DONE 0.0s
+
+#8 [internal] load build context
+#8 transferring context: 600.58kB 0.0s done
+#8 DONE 0.0s
+
+#9 [deps 4/6] COPY --from=locked_libraries / /vendor/
+#9 CACHED
+
+#10 [production 3/8] COPY --from=deps /app/node_modules ./node_modules
+#10 CACHED
+
+#11 [deps 2/6] WORKDIR /app
+#11 CACHED
+
+#12 [deps 3/6] COPY package*.json ./
+#12 CACHED
+
+#13 [deps 5/6] RUN node /vendor/install-locked.mjs
+#13 CACHED
+
+#14 [deps 6/6] RUN --mount=type=cache,target=/root/.npm npm ci --ignore-scripts --legacy-peer-deps
+#14 CACHED
+
+#15 [production 4/8] COPY package*.json ./
+#15 CACHED
+
+#16 [production 5/8] COPY src ./src
+#16 DONE 0.1s
+
+#17 [production 6/8] COPY seeds ./seeds
+#17 DONE 0.0s
+
+#18 [production 7/8] COPY tsconfig.json ./
+#18 DONE 0.0s
+
+#19 [production 8/8] RUN npm run build
+#19 0.253 
+#19 0.253 > @orgiq/middleware@0.3.0 build
+#19 0.253 > tsc
+#19 0.253 
+#19 13.07 npm notice
+#19 13.07 npm notice New major version of npm available! 10.9.9 -> 12.2.0
+#19 13.07 npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.0
+#19 13.07 npm notice To update run: npm install -g npm@12.2.0
+#19 13.07 npm notice
+#19 DONE 13.1s
+
+#20 exporting to image
+#20 exporting layers
+#20 exporting layers 0.4s done
+#20 exporting manifest sha256:52c1891888acd3ae376b7dc13c4e7f9aa6c217895fb9ff7a9e63b3b7d92e8382 done
+#20 exporting config sha256:4f4bbd141d6c14ce93db391ae74933d28f6bb64197b3a5ef43d6702e2f8943fe done
+#20 exporting attestation manifest sha256:715f6e1030b2884188a6c221524ad7cc32c20c4b80fa784b188b6dd4a4edd437 done
+#20 exporting manifest list sha256:1f09dc13407e27df8d870acdc2fceff7f2f44aaba6cefb4f18b5455e40b1f995 done
+#20 naming to docker.io/library/orgiq-soak-gateway:local done
+#20 unpacking to docker.io/library/orgiq-soak-gateway:local
+#20 unpacking to docker.io/library/orgiq-soak-gateway:local 0.2s done
+#20 DONE 0.6s
+
+#21 resolving provenance for metadata file
+#21 DONE 0.0s
+ Image orgiq-soak-gateway:local Built 

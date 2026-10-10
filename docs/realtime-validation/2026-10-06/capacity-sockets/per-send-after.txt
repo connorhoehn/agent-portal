@@ -1,0 +1,24 @@
+attrib-burst-0110b-1cpu: sends=1268 all=14387 (11.35/send) send-path=2.90/send
+  2400  1.89   ws:presence.subscribe|router.authorize.subscribe|social:dm>chat-members:QueryCommand
+  1600  1.26   ws:presence.set|router.authorize.publish|social:dm>chat-members:QueryCommand
+  1268  1.00 * ws:chat.send|chat.send.persist|social:dm>chat-messages:PutItemCommand
+  1164  0.92 * ws:chat.send|router.authorize.publish|social:dm>chat-members:QueryCommand
+   920  0.73   none|router.deliverFiltered|social:dm>chat-members:QueryCommand
+   800  0.63   ws:chat.join|chat.send.membership|social:dm>chat-members:QueryCommand
+   800  0.63   ws:chat.join|chat.join.total|other>chat-conversations:UpdateItemCommand
+   800  0.63   ws:chat.join|chat.join.total|social:dm>chat-messages:QueryCommand
+   800  0.63   peer:channel.update|router.authorize.subscribe|social:dm>chat-members:QueryCommand
+   794  0.63   ws:chat.join|chat.join.total|social:dm>chat-members:QueryCommand
+   775  0.61 * peer:channel.message|router.authorize.subscribe|social:dm>chat-members:QueryCommand
+   600  0.47   peer:direct.-|router.deliverFiltered|social:dm>chat-members:QueryCommand
+   464  0.37 * peer:subscription-check.-|router.authorize.subscribe|social:dm>chat-members:QueryCommand
+   200  0.16   ws:call.status|none|social:dm>chat-members:QueryCommand
+   200  0.16   ws:call.status|router.deliverFiltered|social:dm>chat-members:QueryCommand
+   200  0.16   ws:call.participant-state|none|social:dm>chat-members:QueryCommand
+   200  0.16   ws:call.user-status|none|social:dm>chat-members:QueryCommand
+   200  0.16   ws:call.ended|none|social:dm>chat-members:QueryCommand
+   100  0.08   ws:call.invite|none|social:dm>chat-members:QueryCommand
+   100  0.08   ws:call.accepted|none|social:dm>chat-members:QueryCommand
+     1  0.00 * peer:channel.message|redisRouter.peerReceive|social:dm>chat-members:QueryCommand
+     1  0.00   ws:presence.subscribe|redisRouter.checkChannel.publish|social:dm>chat-members:QueryCommand
+  1268  1.00 * (TransactWriteItemsCommand conversations index, from operations counters: 633+635; transactions carry no top-level TableName so the origin map omits them) => send-path 3.90/send

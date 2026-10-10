@@ -41,7 +41,7 @@ test('nothing is decided before the user mapping arrives', () => {
 
 test('the skipped notice names each person', () => {
   assert.equal(skippedNotice([]), null);
-  assert.match(skippedNotice([maya])!, /^Nora Chang has no OrgIQ sign-in/);
+  assert.match(skippedNotice([maya])!, /^Nora Chang has no Work sign-in/);
   assert.match(skippedNotice([maya, nora])!, /^Nora Chang and Nora DaSilva have no/);
 });
 

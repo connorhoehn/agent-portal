@@ -18,6 +18,7 @@
 # both is a hard 0: any finding fails the build, full stop.
 set -u
 cd "$(dirname "$0")/.."
+source scripts/lib/judges.sh  # jg_*: static gates run once per tree state
 REPO="$PWD"
 MW="$REPO/middleware"
 PORTAL="$REPO/portal"
@@ -224,8 +225,8 @@ fi
 # ── Builds ───────────────────────────────────────────────────────────────────
 section "builds"
 if [ "$QUICK" = 0 ]; then
-  (cd "$MW" && npx tsc --noEmit >/dev/null 2>&1) && ok "middleware tsc" || fail "middleware tsc errors"
-  (cd "$PORTAL" && npx tsc --noEmit >/dev/null 2>&1) && ok "portal tsc" || fail "portal tsc errors"
+  jg_mw_tsc >/dev/null 2>&1 && ok "middleware tsc" || fail "middleware tsc errors"
+  jg_portal_tsc >/dev/null 2>&1 && ok "portal tsc" || fail "portal tsc errors"
 fi
 
 printf '\n'

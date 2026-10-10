@@ -1,0 +1,71 @@
+burst-1cpu-sdefault exit=1
+  invite→incoming  p50 212.4  p95 834.1  p99 890.6  max 909.9 ms (n=100)
+  accept→accepted  p50 61.7  p95 102.4  p99 115.4  max 129.7 ms (n=100)
+  chat delivery    p50 2127.6  p95 2746  p99 2788.4  max 3005.1 ms (n=1266 of 1275 sent)
+  FAIL  invite→incoming p95: 834.1 (< 250 ms)
+  FAIL  chat delivery p95: 2746 (< 300 ms, with paired-sender evidence)
+  FAIL  background chat coverage: 797/800 (all paired senders reach their peer)
+  FAIL  event-loop proxy (/api/health p99): 204.1 (< 50 ms)
+  FAIL  peer 1: health p99: 124.1 (< 50 ms)
+  PASS  peer 1: health errors: 0 (0)
+  FAIL  steady × 2 — invite→incoming p95; chat delivery p95; background chat coverage; event-loop proxy (/api/health p99); peer 1: health p99
+soak-1cpu-sdefault exit=1
+  invite→incoming  p50 40.6  p95 55.6  p99 69.3  max 96.4 ms (n=100)
+  accept→accepted  p50 37.7  p95 51.5  p99 55.8  max 58.2 ms (n=100)
+  chat delivery    p50 19.6  p95 1840.5  p99 3399.2  max 4112.4 ms (n=11671 of 11682 sent)
+  FAIL  chat delivery p95: 1840.5 (< 300 ms, with paired-sender evidence)
+  FAIL  event-loop proxy (/api/health p99): 117.5 (< 50 ms)
+  FAIL  peer 1: health p99: 127.8 (< 50 ms)
+  PASS  peer 1: health errors: 0 (0)
+  PASS  soak protocol errors: 0 (0)
+  FAIL  soak × 2 — chat delivery p95; event-loop proxy (/api/health p99); peer 1: health p99
+burst-1cpu-s256 exit=1
+  invite→incoming  p50 219.8  p95 1101.5  p99 1183.3  max 1204.3 ms (n=100)
+  accept→accepted  p50 118.5  p95 156.3  p99 168.2  max 169.5 ms (n=100)
+  chat delivery    p50 2180.9  p95 2777.9  p99 2860.7  max 2935.5 ms (n=1292 of 1292 sent)
+    errors: {"call:Not authorized for call action: status":18}
+  FAIL  invite→incoming p95: 1101.5 (< 250 ms)
+  FAIL  invite→incoming p99: 1183.3 (< 1000 ms)
+  FAIL  chat delivery p95: 2777.9 (< 300 ms, with paired-sender evidence)
+  FAIL  AUTHZ_CHANNEL_DENIED: 20 (0)
+  FAIL  event-loop proxy (/api/health p99): 271.4 (< 50 ms)
+  FAIL  peer 1: health p99: 222.4 (< 50 ms)
+  PASS  peer 1: health errors: 0 (0)
+  FAIL  steady × 2 — invite→incoming p95; invite→incoming p99; chat delivery p95; AUTHZ_CHANNEL_DENIED; event-loop proxy (/api/health p99); peer 1: health p99
+soak-1cpu-s256 exit=1
+  invite→incoming  p50 60.7  p95 86.7  p99 98.1  max 151.1 ms (n=100)
+  accept→accepted  p50 57.5  p95 81.5  p99 112  max 119 ms (n=100)
+  chat delivery    p50 17.5  p95 2855.1  p99 3877.3  max 5521.1 ms (n=12458 of 12567 sent)
+    errors: {"chat:store-failed":94}
+  FAIL  chat delivery p95: 2855.1 (< 300 ms, with paired-sender evidence)
+  FAIL  AUTHZ_CHANNEL_DENIED: 66 (0)
+  FAIL  event-loop proxy (/api/health p99): 182.3 (< 50 ms)
+  FAIL  peer 1: health p99: 178.9 (< 50 ms)
+  PASS  peer 1: health errors: 0 (0)
+  FAIL  soak protocol errors: 94 (0)
+  FAIL  soak × 2 — chat delivery p95; AUTHZ_CHANNEL_DENIED; event-loop proxy (/api/health p99); peer 1: health p99; soak protocol errors
+burst-1cpu-s512 exit=1
+  invite→incoming  p50 136.7  p95 314  p99 329.7  max 336.7 ms (n=100)
+  accept→accepted  p50 112.5  p95 182.1  p99 186.9  max 188.1 ms (n=100)
+  chat delivery    p50 1447.4  p95 2465  p99 2543.1  max 2626.9 ms (n=1272 of 1279 sent)
+    errors: {"call:Not authorized for call action: status":13,"chat:store-failed":7}
+  FAIL  invite→incoming p95: 314 (< 250 ms)
+  FAIL  chat delivery p95: 2465 (< 300 ms, with paired-sender evidence)
+  FAIL  background chat coverage: 797/800 (all paired senders reach their peer)
+  FAIL  AUTHZ_CHANNEL_DENIED: 12 (0)
+  FAIL  event-loop proxy (/api/health p99): 182.3 (< 50 ms)
+  FAIL  peer 1: health p99: 263.3 (< 50 ms)
+  PASS  peer 1: health errors: 0 (0)
+  FAIL  steady × 2 — invite→incoming p95; chat delivery p95; background chat coverage; AUTHZ_CHANNEL_DENIED; event-loop proxy (/api/health p99); peer 1: health p99
+soak-1cpu-s512 exit=1
+  invite→incoming  p50 73.3  p95 95.3  p99 102.3  max 142.1 ms (n=100)
+  accept→accepted  p50 67.8  p95 89.2  p99 95.1  max 120.6 ms (n=100)
+  chat delivery    p50 29.8  p95 4606.2  p99 6181.7  max 8103.7 ms (n=13762 of 14126 sent)
+    errors: {"chat:store-failed":273,"call:Not authorized for call action: participant-state":69}
+  FAIL  chat delivery p95: 4606.2 (< 300 ms, with paired-sender evidence)
+  FAIL  AUTHZ_CHANNEL_DENIED: 275 (0)
+  FAIL  event-loop proxy (/api/health p99): 231 (< 50 ms)
+  FAIL  peer 1: health p99: 239.2 (< 50 ms)
+  PASS  peer 1: health errors: 0 (0)
+  FAIL  soak protocol errors: 342 (0)
+  FAIL  soak × 2 — chat delivery p95; AUTHZ_CHANNEL_DENIED; event-loop proxy (/api/health p99); peer 1: health p99; soak protocol errors

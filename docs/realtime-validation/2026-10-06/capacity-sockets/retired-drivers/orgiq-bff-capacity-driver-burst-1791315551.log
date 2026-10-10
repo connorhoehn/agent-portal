@@ -1,0 +1,35 @@
+target ws://orgiq-bff-capacity-a:3001/ws · health http://orgiq-bff-capacity-a:3001/api/health · server pid unknown (pass --server-pid) · hold 10s
+
+=== steady · group 2 · 100 calls · 1000 sockets (200 in calls, 0 second tabs, 800 chat/presence) · run tag 5d72
+  ramp: 1000/1000 connected in 20s
+  connect 1000/1000 (p95 6.9 ms) · established 84/100 · 60s
+  invite→incoming  p50 987  p95 1664.3  p99 1740.6  max 1740.6 ms (n=84)
+  accept→accepted  p50 89.5  p95 105.5  p99 106.7  max 106.7 ms (n=84)
+  chat delivery    p50 470.9  p95 3967.1  p99 4041.1  max 4050.4 ms (n=1790 of 1791 sent)
+  cross: call 0 chat 0 presence 0 · unexpected ended 0 · answered-elsewhere 0 · denied 0 · other errors 0
+  slow /api/health samples (>=50 ms): 118.6ms@20.1s/ramp, 50.6ms@20.6s/ramp, 93.6ms@23.6s/calls-starting, 136.8ms@24.1s/calls-starting
+  server orgiq-bff-capacity-a: docker-working-set peak 256.9 MiB · CPU peak 100.1% mean 23% · /api/health p50 1.1 p99 118.6 max 136.8 ms (0 errors; 0 planned-outage errors) · client loop p99 12.9 ms
+  PASS  sockets connect: 1000/1000 (100%)
+  FAIL  calls established: 84/100 (all)
+  FAIL  invite→incoming p95: 1664.3 (< 250 ms)
+  FAIL  invite→incoming p99: 1740.6 (< 1000 ms)
+  PASS  accept→accepted p95: 105.5 (< 250 ms)
+  FAIL  chat delivery p95: 3967.1 (< 300 ms, with paired-sender evidence)
+  PASS  background chat coverage: 800/800 (all paired senders reach their peer)
+  PASS  background chat admission: 800/800; 1209.8ms (all server join acknowledgements within 10 seconds)
+  PASS  cross-call/channel deliveries: 0 (0)
+  PASS  answered-elsewhere outside scenario 4: 0 (0)
+  PASS  ended before scripted hang-up: 0 (0)
+  PASS  unplanned socket disconnects: 0 (0)
+  PASS  AUTHZ_CHANNEL_DENIED: 0 (0)
+  FAIL  event-loop proxy (/api/health p99): 118.6 (< 50 ms)
+  PASS  health errors outside planned outage: 0 (0)
+  PASS  server memory peak: 256.9 (< 700 MiB)
+  PASS  container samples: 0 (no errors, at least one sample)
+  FAIL  peer 1: health p99: 147.7 (< 50 ms)
+  PASS  peer 1: health errors: 0 (0)
+  PASS  peer 1: memory peak: 274.5 (< 700 MiB)
+  PASS  peer 1: container samples: 0 (no errors, at least one sample)
+
+0/1 runs passed every threshold
+  FAIL  steady × 2 — calls established; invite→incoming p95; invite→incoming p99; chat delivery p95; event-loop proxy (/api/health p99); peer 1: health p99

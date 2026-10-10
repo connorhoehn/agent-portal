@@ -73,6 +73,16 @@ few hours after midnight.
 descriptions live in `SCENARIOS`, which is what any control-plane surface should
 render rather than a hand-typed list.
 
+Two scenarios are **stories**, not only states: switching to one also starts a
+timed director that plays a script into the live fixtures, and any reset or
+other scenario stops it. Each reports where it has got to in
+`GET /api/__mock/state`.
+
+| scenario | director | state key | guide |
+|---|---|---|---|
+| `demo` | `mock/demo-director.ts` — the Computer Lab: three agents dispatched through the governed path (`DEMO_DIRECTOR_PACE_MS`) | `demo` | the file's header |
+| `distillation-demo` | `mock/distillation-demo.ts` — run notes → patterns → review → guide → an agent runs it, on `/iq/distillation` (`DISTILL_DEMO_PACE_MS`, `DISTILL_DEMO_AUTO_DECIDE_BEATS`). Only `distillation-ingest-writers` declares a branch (the six scripted sessions); every other fixture is `default`, and simulated ingest is off in this world because the director is the write stream | `distillationDemo` | `docs/distillation-demo.md` |
+
 ```ts
 fixtureRegistry.resetAll('empty');   // switch every fixture at once
 fixtureRegistry.resetAll('default'); // and back
@@ -1081,3 +1091,34 @@ in `DOCUMENT_SERVICE_BOUNDARIES`; the existing unmocked-Aurora budget stays 25.
 New outbound functions are not implicitly covered. The wire replay refuses these
 operations because resetting Aurora fixtures cannot undo them. Isolated integration
 proof is in `research-evidence/document-workspace-live-2026-09-20.json`.
+
+## Making Social feel populated for a local demo (2026-10-06)
+
+`/social/channels` under `dev:mock` is no longer four channels and a dozen lines.
+
+**Seed (fixtures, reset-safe).** `middleware/src/mock/social-history.ts` holds
+about ten days of conversation from the twelve social-granted users, written as
+`clock.hoursAgo(n)` offsets, and `social-channels.ts` spreads it into the
+registered `social.channels`, `.channel-members`, `.channel-messages` and
+`.pins` fixtures: three added channels (`#random`, `#incidents`, `#events`),
+members added to `#general`, `#design-reviews` and `#auth-migration`
+(`#moderators` and Sana's absence from `#design-reviews` are unchanged), five
+pins, and DMs between Farah and Mira/Theo/Vera/Lena/Sana (four with unread).
+`mock/notifications.ts` derives the Mentions and Activity items from those same
+messages (an `@Display Name` in the last 72 h, the newest DM message in the last
+24 h), so nothing is counted twice by hand. Demo as **u-farah**. `u-jonas` is
+deliberately never mentioned in the window: the assessment judge needs his bell
+empty. Stored chat has no thread parent and reactions live in the gateway's
+store, so threads are replies that name each other and reactions come only from
+the simulator.
+
+**Simulator.** `node scripts/dev/social-sim.mjs` (Tilt resource `social-sim`,
+label `demo`, after `middleware`) logs in u-lena, u-sana, u-asha, u-jonas,
+u-nora and u-rachel through the picker (5 s apart, under the 15/min limit),
+switches each to `social`, fetches the realtime token, opens `/ws` with the
+bearer subprotocol, joins lobby and channel presence, and every 30-90 s posts a
+line or a reaction in a channel they belong to. It refreshes tokens a minute
+before the 10-minute expiry, reconnects with backoff, and exits 0 on SIGTERM.
+Env: `SOCIAL_SIM_BASE`, `SOCIAL_SIM_USERS`. Do not demo as a sim user: the
+tenant switch bumps the session epoch and would sign you out. What the sim
+posts lands in the same fixtures, so `POST /api/__mock/reset` clears it.

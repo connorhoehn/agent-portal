@@ -18,19 +18,25 @@ import {
   Drawer,
   EmptyState,
   ErrorState,
+  HistoryIcon,
+  IconButton,
+  Inline,
   InlinePlaceholder,
-  MetaLine,
   PageHeader,
+  SearchInput,
   Stack,
   StatStrip,
   StatusPill,
+  T,
   Toolbar,
   ToolbarLabel,
+  TrashIcon,
   Wizard,
 } from '@connorhoehnslalom/ui-components/shared';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch';
+import { useRowSearch } from '../../hooks/useRowSearch';
 import { toastError, toastSuccess } from '../../lib/toastStore';
 import { sendJson } from '../../lib/writeJson';
 import { useTeams } from './dashboard/useTeams';
@@ -147,6 +153,13 @@ export default function SubmissionsPage() {
     links_pending_total: groups.reduce((n, g) => n + (g.current.links_pending ?? 0), 0),
   }), [groups]);
 
+  // Search shares the strip's row (docs/layout-cascade.md "Tables"), so the
+  // page filters the rows rather than DataTable's own lone search field.
+  const search = useRowSearch(groups, (g) => [
+    g.teamId, g.teamName, g.submittedTeamName ?? '', g.formId ? `Form #${g.formId}` : 'Manual submission',
+    g.current.envelope_id, g.current.submitter_name ?? '', g.processed ? 'Processed' : 'Unprocessed',
+  ].join(' '));
+
   function goToAdd() {
     setParams((p) => { p.set('view', 'add'); return p; });
   }
@@ -212,14 +225,28 @@ export default function SubmissionsPage() {
       />
 
       {groups.length > 0 && (
-        <StatStrip
-          items={[
-            { label: 'Submissions', value: summary.distinct_submissions },
-            { label: 'Teams', value: summary.teams },
-            { label: 'Unprocessed', value: summary.distinct_unprocessed, tone: 'accent' },
-            { label: 'Links pending', value: summary.links_pending_total },
-          ]}
-        />
+        <Inline align="center" gap="md" wrap={false}>
+          <StatStrip
+            aria-label="Submission summary"
+            variant="line"
+            size="sm"
+            items={[
+              { label: summary.distinct_submissions === 1 ? 'submission' : 'submissions', value: summary.distinct_submissions },
+              { label: summary.teams === 1 ? 'team' : 'teams', value: summary.teams },
+              { label: 'unprocessed', value: summary.distinct_unprocessed, ...(summary.distinct_unprocessed > 0 ? { tone: 'accent' as const } : {}) },
+              { label: summary.links_pending_total === 1 ? 'link pending' : 'links pending', value: summary.links_pending_total },
+            ]}
+          />
+          <SearchInput
+            size="sm"
+            className="ml-auto w-64 shrink-0"
+            value={search.query}
+            onChange={search.setQuery}
+            onClear={() => search.setQuery('')}
+            placeholder="Search submissions"
+            aria-label="Search submissions"
+          />
+        </Inline>
       )}
 
       {canManage && selected.size > 0 && (
@@ -258,15 +285,42 @@ export default function SubmissionsPage() {
         />
       ) : (
         <DataTable<SubmissionRevisionGroup>
-          data={groups}
+          data={search.rows}
           keyField={(g) => g.key}
+          size="sm"
           striped
-          searchable
           loading={loading && !data}
+          emptyMessage={`No submission matches “${search.query.trim()}”.`}
           // Every submission ever ingested, revisions collapsed to one row
           // each — 20 is a full-page ledger's screenful, same as Runs.
           pageSize={20}
+          // One line per row (docs/layout-cascade.md "Tables"): the team id and
+          // its name are two columns, the revision count is a pill with the
+          // history behind the row's History action, and the row's controls
+          // are IconButtons — never a bordered button inside a cell.
+          rowActions={(g) => (
+            <>
+              <IconButton
+                size="sm"
+                icon={<HistoryIcon />}
+                aria-label={`Revision history for ${g.teamId}`}
+                title="Revision history"
+                onClick={() => setHistoryGroup(g)}
+              />
+              {canManage && (
+                <IconButton
+                  size="sm"
+                  icon={<TrashIcon />}
+                  aria-label={`Delete ${g.current.envelope_id}`}
+                  title="Delete submission"
+                  onClick={() => setConfirmingDelete(g)}
+                />
+              )}
+            </>
+          )}
           columns={[
+            // A bulk action ("Clear selected") exists only for managers, so
+            // only they get the selection column.
             ...(canManage
               ? [{
                   key: 'select',
@@ -285,47 +339,41 @@ export default function SubmissionsPage() {
                   ),
                 }]
               : []),
+            { key: 'team', header: 'Team', render: (g) => <T size="sm" weight="medium">{g.teamId}</T> },
             {
-              key: 'team',
-              header: 'Team',
-              // The rows are revision groups, not flat records — without an
-              // accessor the search box filters `String(row.team)`, which is
-              // "undefined" for every row, so nothing ever matched.
-              getFilterText: (g) => `${g.teamId} ${g.teamName} ${g.submittedTeamName ?? ''}`,
+              key: 'name',
+              header: 'Team name',
+              // teamName is the matched team's real name (resolveTeamName in
+              // secondaryFormat.ts); a hand-matched row's differing submitted
+              // text is the cell's tooltip, not a second line.
               render: (g) => (
-                <Stack gap="none">
-                  <strong className="font-semibold">{g.teamId}</strong>
-                  {/* teamName is the matched team's real name (resolveTeamName in
-                      secondaryFormat.ts); submittedTeamName only appears when a
-                      hand-matched row's submitted text actually differs from it. */}
-                  <MetaLine
-                    size="xs"
-                    items={g.submittedTeamName ? [g.teamName, `submitted as "${g.submittedTeamName}"`] : [g.teamName]}
-                  />
-                </Stack>
+                <T size="sm" title={g.submittedTeamName ? `submitted as “${g.submittedTeamName}”` : undefined}>
+                  {g.teamName}
+                </T>
               ),
             },
+            { key: 'submission', header: 'Submission', render: (g) => (g.formId ? `Form #${g.formId}` : 'Manual submission') },
             {
-              key: 'submission',
-              header: 'Submission',
-              getFilterText: (g) => `${g.formId ? `Form #${g.formId}` : 'Manual submission'} ${g.current.envelope_id}`,
+              key: 'revision',
+              header: 'Revision',
               render: (g) => (
-                <Stack gap="xs">
-                  {g.formId ? `Form #${g.formId}` : 'Manual submission'}
-                  {g.revisionCount > 1 && (
-                    <Button variant="ghost" size="sm" onClick={() => setHistoryGroup(g)}>
-                      {g.revisionCount} revisions — latest {revisionLabel(g.current.envelope_id)}
-                    </Button>
-                  )}
-                </Stack>
+                <Chip
+                  size="xs"
+                  mono
+                  tone={g.revisionCount > 1 ? 'info' : 'neutral'}
+                  title={g.revisionCount > 1
+                    ? `${g.revisionCount} revisions — latest ${revisionLabel(g.current.envelope_id)}; history behind the row's History action`
+                    : 'The original submission — no revisions'}
+                >
+                  {g.revisionCount > 1 ? `${revisionLabel(g.current.envelope_id)} · ${g.revisionCount}` : revisionLabel(g.current.envelope_id)}
+                </Chip>
               ),
             },
-            // getFilterText dropped: the render already returns the same string
-            // DataTable's rendered-text search fallback would extract.
             { key: 'submitter', header: 'Submitter', render: (g) => g.current.submitter_name || '—' },
             {
               key: 'received',
               header: 'Received',
+              numeric: true,
               // Rendered VERBATIM, not parsed. `submitted_at` is the export's
               // own "Completion time" string carried through untouched — the
               // source project declares it `submitted_at: str = ""  # from the
@@ -341,52 +389,29 @@ export default function SubmissionsPage() {
               render: (g) => g.current.submitted_at?.trim() || '—',
             },
             {
-              key: 'status',
-              header: 'Status',
-              getFilterText: (g) => (g.processed ? 'Processed' : 'Unprocessed'),
-              render: (g) => (
-                <StatusPill state={g.processed ? 'success' : 'warning'} label={g.processed ? 'Processed' : 'Unprocessed'} size="sm" />
-              ),
-            },
-            {
               key: 'links',
               header: 'Links',
+              numeric: true,
               render: (g) => {
                 const fetched = g.current.links_total - g.current.links_pending;
                 if (!g.processed && g.current.links_pending > 0) {
                   return (
                     <Chip tone="warning" size="xs" mono title={`${fetched}/${g.current.links_total} links fetched`}>
-                      Fetch {g.current.links_pending} link{g.current.links_pending === 1 ? '' : 's'}
+                      Fetch {g.current.links_pending}
                     </Chip>
                   );
                 }
-                return <MetaLine size="xs" items={[`${fetched}/${g.current.links_total}`]} />;
+                return `${fetched}/${g.current.links_total}`;
               },
             },
-            ...(canManage
-              ? [{
-                  key: 'actions',
-                  header: '',
-                  render: (g: SubmissionRevisionGroup) => (
-                    // Revealed on the row's hover / focus-within rather than
-                    // sitting on every row at rest. A destructive control
-                    // repeated down a table reads as part of the furniture,
-                    // which is the opposite of what a delete should read as —
-                    // and it was the loudest thing on a page whose job is to
-                    // show what arrived. The confirm dialog behind it is
-                    // unchanged; this is about what the table looks like
-                    // before you have decided to do anything.
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      className="row-reveal"
-                      onClick={() => setConfirmingDelete(g)}
-                    >
-                      Delete
-                    </Button>
-                  ),
-                }]
-              : []),
+            {
+              key: 'status',
+              header: 'Status',
+              width: '128px',
+              render: (g) => (
+                <StatusPill state={g.processed ? 'success' : 'warning'} label={g.processed ? 'Processed' : 'Unprocessed'} size="sm" />
+              ),
+            },
           ]}
         />
       )}
@@ -411,31 +436,28 @@ export default function SubmissionsPage() {
         tone="destructive"
         confirmDisabled={busy}
       />
-      <Drawer open={historyGroup !== null} onClose={() => setHistoryGroup(null)} title="Revision history">
+      <Drawer
+        open={historyGroup !== null}
+        onClose={() => setHistoryGroup(null)}
+        title={historyGroup ? `Revision history · ${historyGroup.teamId}` : 'Revision history'}
+      >
         {historyGroup && (
           <DataTable<{ envelope_id: string; ingested_at: string; current: boolean }>
             data={[historyGroup.current, ...historyGroup.superseded].map((rev, i) => ({ ...rev, current: i === 0 }))}
             keyField={(rev) => rev.envelope_id}
+            size="sm"
             // One submission's own revision history — short today, but a
             // drawer list shouldn't grow unbounded either.
             pageSize={10}
             columns={[
-              {
-                key: 'revision',
-                header: 'Revision',
-                render: (rev) => (
-                  <Stack gap="none">
-                    <strong className="font-semibold">{revisionLabel(rev.envelope_id)}</strong>
-                    <MetaLine size="xs" items={[rev.envelope_id]} />
-                  </Stack>
-                ),
-              },
+              { key: 'revision', header: 'Revision', render: (rev) => <T size="sm" weight="medium">{revisionLabel(rev.envelope_id)}</T> },
+              { key: 'envelope', header: 'Envelope', render: (rev) => <T size="xs" tone="tertiary">{rev.envelope_id}</T> },
               {
                 key: 'status',
                 header: 'Status',
                 render: (rev) => (rev.current ? <StatusPill state="info" label="Current" size="sm" /> : <Chip tone="neutral" size="xs">Superseded</Chip>),
               },
-              { key: 'when', header: 'When', render: (rev) => formatRelativeTime(rev.ingested_at) },
+              { key: 'when', header: 'When', numeric: true, render: (rev) => formatRelativeTime(rev.ingested_at) },
             ]}
           />
         )}

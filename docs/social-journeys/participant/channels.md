@@ -1,16 +1,19 @@
 surface: channels
 role: participant
-user: u-sana
+user: u-sana (Sana Iqbal)
 url: /social/channels/general
 pages: portal/src/pages/social/ChannelsPage.tsx,portal/src/pages/social/SocialChatWorkspace.tsx,portal/src/pages/social/SocialConversation.tsx,portal/src/pages/social/socialChat.ts
-audited: 2026-09-30 12:38Z → 12:40Z, Chromium 1672×941 (Playwright headless, one fresh context per user — not the shared Chrome tab), middleware dev:mock:social on :3001 with the `social` compose profile up (platform-api, DynamoDB Local, host SFU), Vite :5183
+audited: 2026-10-08 11:05Z → 2026-10-08 11:05Z, Chromium (Playwright headless from portal/node_modules, a fresh context per identity, not the shared Chrome tab), 1680×940, second context u-mira; Tilt stack: Vite :5183 over middleware :3001 (mock providers) with the real SFU :3902 and platform-api :23001
 session: /api/session/me sub u-sana, tenant social, role participant
 screenshot: channels.jpg
 verdict: pass
 console errors: 0
-layout: pass — chat rail (library ConversationRail) 300px at x=200, flush against the 200px shell rail (content col left 200, 0px from content start), top 70 = content top 70, 871px tall = the full content height (no page header, shell crumbs off); pane 1172px at x=500; no horizontal scroll (scrollWidth 1672 = innerWidth 1672); composer at y 871–913px of 941, in view with no body scroll (scrollHeight 941)
-keyboard: pass — 24 distinct Tab stops from the rail's Find box through main (first: Find a chat, social-chat-rail-shelf-activity, social-chat-rail-shelf-mentions, social-chat-rail-shelf-calls, social-chat-rail-shelf-recordings, rail-section-header-toggle…) against 41 visible controls in main — the rail's conversation rows and the tree sit behind roving tabindexes (ArrowDown walks them), so fewer stops than controls is the design; Enter on the focused #general row opened /social/channels/general
-empty-state: pass — POST /api/__mock/scenario {scenario:empty, fixture:social.channels} → 200: "No channels yet Channels are where a community talks in the open. None exist in this workspace yet; a moderator can create one."; restored with POST /api/__mock/reset {fixture:social.channels} → 200; /social/channels/no-such-channel renders "#no-such-channel is not available This channel does not exist, or it is private and you are not a member."
-realtime: pass — <0.01s: Mira Okafor's message, posted from their own context on #general, appeared in this one with no reload; this role's own reply was still there after a reload (found in <0.01s — stored, not just relayed)
-role-gating: no ManageChannels: the Channels section carries no + (social-create-channel count 0, absent from the DOM) and the empty state has no Create action; join, leave (⋯ menu), post. Rail rows under CHANNELS: #general, #auth-migration, #design-reviews
-notes: the conversation header (library WrappedConversationSurface) carries the tabs Chat | Documents | Pinned | Calls; Documents → URL ?view=documents (the view is in the URL), Chat restores it; audio-call 1 + video-call 1 actions; the ⋯ menu lists Leave #general and Escape closed it (yes). The whole page is the chat workspace: shelf (Activity, Mentions, Calls, Recordings), Active now, Teams, Rooms, Direct messages, Channels in one rail.
+layout: pass — content column x=200px, width 1480px, top 70px, bottom 893px; rail 300px at x=200, y=70, height 823; pane x=500, width 1180; scrollWidth 1680 / viewport 1680; body scrollHeight 940 / viewport height 940; composer y=824–864px, in view: true; footer row y=894–940px (1680px wide); h1 count 1
+type: title 16/400; sizes in main (size/weight×text nodes): 12/400×91, 12/600×24, 14/400×23, 11/500×13, 11/400×11, 13/600×10, 8/600×9, 13/500×8, 15/600×7, 11/600×6, 14/500×5, 16/400×5, 10/600×3, 5/600×2, 14/600×1, 20/600×1
+keyboard: pass — physical Tab sweep from the start of main reached 53 distinct controls against 52 Tab stops (195 really-visible interactive elements; roving-focus members are not Tab stops); first stops: social-chat-rail-search-toggle, social-new-dm, social-chat-rail-options, social-chat-rail-shelf-activity, social-chat-rail-shelf-mentions, social-chat-rail-shelf-calls, social-chat-rail-shelf-recordings, rail-section-header-toggle
+empty-state: pass — /social/channels/no-such-channel rendered: #no-such-channel is not available This channel does not exist, or it is private and you are not a member.
+realtime: pass — u-sana's message reached u-mira in 0.848s, the reply came back in 0.194s, no reload; own message present after reload: true
+role-gating: cannot manage channels/teams: Create channel controls in DOM 0, New team 0, New room 1, New message 1; POST /api/social/channels {} → 403, POST /api/social/teams {} → 403 (403 = refused by Cedar, 400 = validation past the gate); message actions: own row Edit 1 / Delete 1, u-mira's view of that row Edit 0 / Delete 0
+header: #g #general 13 members · Announcements and anything that does not have a home yet. Chat Documents 1 Pinned Calls Work gr; tabs present [chat, documents, pins, calls] = [true,true,true,true]
+rail-sections: Chat Activity, 9 new 9 Mentions, 1 waiting 1 Calls Recordings ACTIVE NOW 7 Asha Jonas Lena Mira Platform Rachel Vera TEAMS ROOMS 37 DIRECT MESSAGES Farah Osei Yesterday He said he would send you the model in a DM. Ping h
+notes: Every field above was observed in this pass, not carried forward. Not exercised in this pass: pins, forward, slash commands, attachments (covered by the pin/summarize specs, not by this surface log).

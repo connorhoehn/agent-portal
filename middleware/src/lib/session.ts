@@ -19,6 +19,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { Request, Response, NextFunction } from 'express';
 import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
 import { config } from '../config.js';
+import { viewerScheme } from './trusted-proxy.js';
 
 export const TENANTS = ['orgiq', 'assessment', 'social', 'pipelines'] as const;
 export type Tenant = typeof TENANTS[number];
@@ -180,9 +181,15 @@ export function mintSession(
 ): Session | null {
   const tenants = TENANTS.filter(t => rolesForTenant(grants, t).length > 0);
   if (tenants.length === 0) return null;
+  // A login lands in the user's HOME tenant: orgiq when held, else the first
+  // tenant they work in. `social` is the overlay every cast holds alongside
+  // its home (the Communication plane embeds it there), so it is the landing
+  // only for the Social-only cast — a pipelines author with a Social grant
+  // must not sign in to Social.
+  const home = tenants.find(t => t !== 'social') ?? tenants[0]!;
   const tenant = (prefer?.tenant && tenants.includes(prefer.tenant as Tenant))
     ? prefer.tenant as Tenant
-    : tenants.includes(DEFAULT_TENANT) ? DEFAULT_TENANT : tenants[0]!;
+    : tenants.includes(DEFAULT_TENANT) ? DEFAULT_TENANT : home;
   const held = rolesForTenant(grants, tenant);
   const role = (prefer?.role && held.includes(prefer.role))
     ? prefer.role as Role
@@ -353,7 +360,8 @@ export async function verifySession(cookieValue: string): Promise<Session | null
  * `trust proxy`. The two move together; changing one alone re-breaks this.
  *
  * The upside over a hardcoded flag is that it needs no revisiting: put TLS in
- * front of this service and the cookie becomes `Secure` on its own. Set
+ * front of this service and the cookie becomes `Secure` on its own (with
+ * CloudFront in front, two hops: see lib/trusted-proxy.ts `viewerScheme`). Set
  * `SESSION_COOKIE_SECURE=true|false` to override when the proxy cannot be
  * trusted to report the scheme.
  */
@@ -361,7 +369,10 @@ function cookieSecure(res: Response): boolean {
   const override = process.env['SESSION_COOKIE_SECURE'];
   if (override === 'true') return true;
   if (override === 'false') return false;
-  return res.req?.secure === true;
+  // Behind CloudFront → ALB (TRUST_PROXY_HOPS=2) `req.secure` reads the ALB's
+  // X-Forwarded-Proto, which names CloudFront's HTTP hop, not the viewer's
+  // HTTPS — `viewerScheme` reads CloudFront-Forwarded-Proto there instead.
+  return res.req ? viewerScheme(res.req) === 'https' : false;
 }
 
 export function setSessionCookie(res: Response, value: string): void {
@@ -386,6 +397,8 @@ export function clearSessionCookie(res: Response): void {
 declare module 'express-serve-static-core' {
   interface Request {
     session?: Session;
+    /** A presented credential was rejected. Never resolve it to a demo user. */
+    sessionInvalid?: boolean;
   }
 }
 
@@ -460,7 +473,7 @@ export function setGrantsResolver(fn: GrantsResolver): void {
 export function sessionMiddleware() {
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const raw = (req as Request & { cookies?: Record<string, string> }).cookies?.[COOKIE_NAME];
-    if (raw) {
+    if (typeof raw === 'string') {
       const verified = await verifySession(raw);
       if (verified) {
         const age = Math.floor(Date.now() / 1000) - verified.iat;
@@ -476,22 +489,24 @@ export function sessionMiddleware() {
           try {
             const fresh = await grantsResolver(verified.sub);
             if (!fresh) {
-              // User no longer exists — drop to the anonymous identity.
+              // A deleted account is a rejected credential, not cookie-less
+              // demo access. Recovery endpoints remain reachable below.
               clearSessionCookie(res);
-              if (demoFallbackAllowed()) req.session = demoSession();
+              req.sessionInvalid = true;
               next();
               return;
             }
             // Epoch check: a tenant/role switch or "sign out other sessions"
             // bumped this user's epoch. Any cookie minted before that bump is
             // superseded — treat it exactly like the "user no longer exists"
-            // path (drop the cookie, fall back to anonymous). A cookie minted
+            // path (drop the cookie, retain a rejected-credential marker).
+            // A cookie minted
             // before this field existed carries epoch 0, matching a user that
             // has never bumped.
             const cookieEpoch = verified.epoch ?? 0;
-            if (cookieEpoch < fresh.epoch) {
+            if (cookieEpoch !== fresh.epoch || !fresh.grants[verified.tenant]?.includes(verified.role)) {
               clearSessionCookie(res);
-              if (demoFallbackAllowed()) req.session = demoSession();
+              req.sessionInvalid = true;
               next();
               return;
             }
@@ -511,7 +526,7 @@ export function sessionMiddleware() {
             // The identity still exists but has lost its last grant. This is
             // a revocation, not an outage: never fall back to the old cookie.
             clearSessionCookie(res);
-            if (demoFallbackAllowed()) req.session = demoSession();
+            req.sessionInvalid = true;
             next();
             return;
           } catch {
@@ -523,6 +538,13 @@ export function sessionMiddleware() {
         next();
         return;
       }
+      // Bad signatures and expired/malformed credentials are just as
+      // explicit as an epoch refusal. Only an absent cookie may use the
+      // opt-in anonymous dev persona; login/config/picker still run normally.
+      clearSessionCookie(res);
+      req.sessionInvalid = true;
+      next();
+      return;
     }
     if (demoFallbackAllowed()) req.session = demoSession();
     next();

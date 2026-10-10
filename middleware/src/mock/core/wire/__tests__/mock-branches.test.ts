@@ -35,6 +35,12 @@ describe('rule 3, widened — wall-clock mints in a provider mock branch', () =>
 });
 
 describe('rule 4, widened — write routes reaching an unmocked provider', () => {
+  it('does not mistake the lobby guard\'s named RegExp exec for a database call', () => {
+    expect(writes.some(finding => finding.provider.endsWith('lobbyGuard()'))).toBe(false);
+    // Actual outbound leaves must still be reported.
+    expect(writes.some(finding => finding.provider.includes('src/providers/'))).toBe(true);
+  });
+
   it('reports durable document service boundaries explicitly without exempting new functions', () => {
     for (const [key, reason] of Object.entries(DOCUMENT_SERVICE_BOUNDARIES)) {
       expect(reason.length).toBeGreaterThan(40);

@@ -420,22 +420,24 @@ export function conversationChannelForDoc(docId: string): string {
 }
 
 /** A presence roster as `PresenceAvatars` users — the rail's per-source "who is here". */
-export function presenceAvatarUsers(roster: ReadonlyArray<{ clientId: string; status?: string; metadata?: Record<string, unknown> }>): Array<{ id: string; name: string; idle?: boolean }> {
+export function presenceAvatarUsers(roster: ReadonlyArray<{ clientId: string; status?: string; metadata?: Record<string, unknown> }>): Array<{ id: string; name: string; idle?: boolean; avatarUrl?: string }> {
   // One avatar per PERSON, not per connection (re-audit #16, 2026-09-29: a
   // reader with two tabs showed twice). Keyed by the presence metadata's
   // userId when the gateway stamped one, else by the connection; a person
   // reads idle only when every one of their connections is.
-  const byUser = new Map<string, { id: string; name: string; idle: boolean }>();
+  const byUser = new Map<string, { id: string; name: string; idle: boolean; avatarUrl?: string }>();
   for (const entry of roster) {
     const meta = entry.metadata ?? {};
     const userId = typeof meta['userId'] === 'string' && meta['userId'].length > 0 ? meta['userId'] : entry.clientId;
     const name = [meta['displayName'], meta['name'], meta['userId']].find((value): value is string => typeof value === 'string' && value.length > 0);
     const idle = !!entry.status && entry.status !== 'online';
+    // The gateway stamps the signed token's avatar on the entry; absent → initials.
+    const avatarUrl = typeof meta['avatarUrl'] === 'string' && meta['avatarUrl'].length > 0 ? meta['avatarUrl'] : undefined;
     const seen = byUser.get(userId);
-    if (seen) seen.idle = seen.idle && idle;
-    else byUser.set(userId, { id: userId, name: name ?? 'Someone', idle });
+    if (seen) { seen.idle = seen.idle && idle; seen.avatarUrl ??= avatarUrl; }
+    else byUser.set(userId, { id: userId, name: name ?? 'Someone', idle, ...(avatarUrl ? { avatarUrl } : {}) });
   }
-  return [...byUser.values()].map(({ id, name, idle }) => ({ id, name, ...(idle ? { idle: true } : {}) }));
+  return [...byUser.values()].map(({ id, name, idle, avatarUrl }) => ({ id, name, ...(idle ? { idle: true } : {}), ...(avatarUrl ? { avatarUrl } : {}) }));
 }
 
 /** One tree section's realtime channel — just a presence headcount

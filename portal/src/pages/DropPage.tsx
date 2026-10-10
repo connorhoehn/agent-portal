@@ -13,9 +13,8 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { useParams } from 'react-router';
 import {
   Banner, Card, CardHeader, ErrorState, FileUploadDrop, Inline, LoadingState,
-  MetaLine, Stack, StatusDot,
+  MetaLine, Stack, StatusDot, T,
 } from '@connorhoehnslalom/ui-components/shared';
-import { T } from './Text';
 
 interface LinkView {
   label: string;

@@ -1,4 +1,5 @@
 import { test, expect, type APIRequestContext, type Browser, type BrowserContext, type Page } from '@playwright/test';
+import { openAs } from './realSession';
 
 // The initiative call, end to end, with two real browsers: Vera Green
 // (u-vera, org-leader) starts a call from Auth Migration and Nora DaSilva
@@ -41,24 +42,14 @@ test.use({
 
 type Person = { page: Page; context: BrowserContext };
 
-async function signIn(page: Page, userId: string): Promise<void> {
-  await page.goto('/');
-  const status = await page.evaluate(async (id: string) => (await fetch('/api/session/login', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
-    body: JSON.stringify({ userId: id }),
-  })).status, userId);
-  expect(status, `demo login as ${userId}`).toBe(200);
-}
-
 async function person(browser: Browser, userId: string, path: string): Promise<Person> {
-  const context = await browser.newContext({
+  const { page, context } = await openAs(browser, userId, {
     viewport: { width: 1440, height: 900 },
-    permissions: ['camera', 'microphone'],
+    contextOptions: { permissions: ['camera', 'microphone'] },
     ...(process.env['CALL_BASE_URL'] ? { baseURL: process.env['CALL_BASE_URL'] } : {}),
+    preJoin: 'remembered',
+    url: path,
   });
-  const page = await context.newPage();
-  await signIn(page, userId);
-  await page.goto(path);
   return { page, context };
 }
 
@@ -73,6 +64,8 @@ async function gatewayHealth(request: APIRequestContext): Promise<{ realtime?: {
 }
 
 const startButton = (p: Person) => p.page.getByTestId('initiative-start-call');
+// The tile shelf is the shell's one media sink; collapsed under the footer row
+// (SocialFooter.tsx), so it is read for text/media, and the row holds Leave.
 const dock = (p: Person) => p.page.getByTestId('initiative-call-dock');
 const toast = (p: Person) => p.page.getByTestId('incoming-call-toast');
 
@@ -104,12 +97,12 @@ test.describe('initiative call', () => {
       // watch the dock leave "connecting". `data-phase="error"` ("Lost the call") is a 502
       // from platform-api — typically its VIDEO_API_URL names an SFU that is not running.
       await startButton(vera).click();
-      await expect(dock(vera)).toBeVisible({ timeout: 10_000 });
+      await expect(dock(vera)).toHaveCount(1, { timeout: 10_000 });
       await expect.poll(async () => dock(vera).getAttribute('data-phase'), { timeout: 15_000 }).not.toBe('connecting').catch(() => undefined);
       if ((await dock(vera).getAttribute('data-phase')) === 'error') {
         skipReason = 'platform-api answered the session request with an error, so the dock read "Lost the call" — it cannot reach its SFU (check VIDEO_API_URL on the platform-api container against the SFU you are running)';
       } else {
-        await dock(vera).getByRole('button', { name: /cancel|leave/i }).first().click().catch(() => undefined);
+        await vera.page.getByTestId(/^(shell-)?call-dock-leave$/).first().click().catch(() => undefined);
         await vera.page.waitForTimeout(1_000);
       }
     } finally { await vera.context.close(); }
@@ -162,7 +155,7 @@ test.describe('initiative call', () => {
       }
 
       // Leave: one click ends a two-person call for both.
-      await dock(vera).getByRole('button', { name: /leave/i }).click();
+      await vera.page.getByTestId(/^(shell-)?call-dock-leave$/).first().click();
       for (const p of [vera, nora]) await expect(dock(p)).toContainText(/Call ended/, { timeout: 15_000 });
       for (const p of [vera, nora]) await expect(dock(p)).toHaveCount(0, { timeout: 15_000 });
       // …and Vera can ring again.

@@ -1,11 +1,11 @@
-import { Button, Chip, DetailHeader, Inline, InlineAlert, InlinePlaceholder, MetaLine, SectionLabel, SkeletonCard, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { useEffect, useRef } from 'react';
+import { Button, Chip, DetailHeader, Inline, InlineAlert, InlinePlaceholder, MetaLine, SectionLabel, SkeletonCard, Stack, T } from '@connorhoehnslalom/ui-components/shared';
 import { relativeTime } from '../../../lib/relativeTime';
 import { TemplateHighlighted } from './TemplateHighlighted';
 import { VersionSelect } from './VersionSelect';
 import { arnTail, extractVariables } from './promptFormat';
 import { usePromptVersionDetail } from '../../../components/canary/usePromptLibrary.js';
 import type { Selection } from './types';
-import { T } from '../Text';
 
 /** Read-only view of one prompt version: the template, its variables, and the
  *  inference settings baked into the variant. */
@@ -15,6 +15,8 @@ export function ViewPanel({
   onEdit,
   onTest,
   canManage,
+  returnFocusTo = null,
+  onFocusReturned,
 }: {
   selection: Selection;
   onVersionChange: (v: string) => void;
@@ -22,8 +24,23 @@ export function ViewPanel({
   onTest: () => void;
   /** ManageCanary — Test/Edit affordances hide without it. */
   canManage: boolean;
+  /** The trigger that opened the panel this view replaced: it gets focus back
+   *  as soon as it is rendered, so leaving Edit or Test does not drop focus. */
+  returnFocusTo?: 'edit' | 'test' | null;
+  onFocusReturned?: () => void;
 }) {
   const { detail, loading, error } = usePromptVersionDetail(selection.promptId, selection.version);
+  const editRef = useRef<HTMLButtonElement>(null);
+  const testRef = useRef<HTMLButtonElement>(null);
+
+  // Waits for `detail`, not just `!loading`: the fetch hook's first render
+  // reports loading=false with no detail yet, then flips to the skeleton —
+  // focusing the button on that first frame is how focus was lost before.
+  useEffect(() => {
+    if (!returnFocusTo || loading || !detail) return;
+    (returnFocusTo === 'edit' ? editRef : testRef).current?.focus();
+    onFocusReturned?.();
+  }, [returnFocusTo, loading, detail, onFocusReturned]);
 
   const templateText = detail?.variant?.templateText ?? '';
   const modelId = detail?.variant?.modelId ?? '';
@@ -82,8 +99,8 @@ export function ViewPanel({
                       select and two 8px gaps filled the 420px aside exactly
                       — so BOTH wrapped to two lines. The fuller sense moves
                       into the title attribute. */}
-                  <Button variant="ghost" size="sm" data-prompt-test-trigger onClick={onTest} title="Test this prompt against a live model">Test</Button>
-                  <Button variant="primary" size="sm" data-prompt-edit-trigger onClick={onEdit} title="Edit the template and publish a new version">Edit</Button>
+                  <Button ref={testRef} variant="ghost" size="sm" data-prompt-test-trigger onClick={onTest} title="Test this prompt against a live model">Test</Button>
+                  <Button ref={editRef} variant="primary" size="sm" data-prompt-edit-trigger onClick={onEdit} title="Edit the template and publish a new version">Edit</Button>
                 </>
               )}
             </Inline>

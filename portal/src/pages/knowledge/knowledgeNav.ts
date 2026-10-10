@@ -7,8 +7,8 @@
 import type { SubNavItem } from '@connorhoehnslalom/ui-components/shared';
 
 export const KNOWLEDGE_ITEMS: SubNavItem[] = [
-  { path: '/admin/knowledge',          label: 'Overview', hint: 'Sources, ingestion, and the KBs agents retrieve from', group: 'Knowledge' },
-  { path: '/admin/knowledge/registry', label: 'Registry', hint: 'Knowledge bases',          group: 'Knowledge' },
+  { path: '/admin/knowledge',          label: 'Overview', group: 'Knowledge' },
+  { path: '/admin/knowledge/registry', label: 'Registry', group: 'Knowledge' },
 ];
 
 // The ingest pipeline, in run order: content is pulled from a source, the run
@@ -17,15 +17,18 @@ export const KNOWLEDGE_ITEMS: SubNavItem[] = [
 // /admin/ingest/* routes are hr-admin-gated, so showing these to an
 // org-leader gave them five links that all silently bounced to /.
 export const PIPELINE_ITEMS: SubNavItem[] = [
-  { path: '/admin/ingest/crawl',       label: 'Sources',  hint: 'What content is pulled in', group: 'Pipeline' },
-  { path: '/admin/ingest/history',     label: 'Runs',     hint: 'What each pull did',        group: 'Pipeline' },
-  { path: '/admin/ingest/storage',     label: 'Storage',  hint: 'Where documents land',      group: 'Pipeline' },
-  { path: '/admin/ingest/sources',     label: 'KB sync',  hint: 'Storage → knowledge base',  group: 'Pipeline' },
-  { path: '/admin/ingest/schedules',   label: 'Schedule', hint: 'How often it re-syncs',     group: 'Pipeline' },
+  { path: '/admin/ingest/crawl',       label: 'Sources',  group: 'Pipeline' },
+  { path: '/admin/ingest/history',     label: 'Runs',     group: 'Pipeline' },
+  { path: '/admin/ingest/storage',     label: 'Storage',  group: 'Pipeline' },
+  { path: '/admin/ingest/sources',     label: 'KB sync',  group: 'Pipeline' },
+  { path: '/admin/ingest/schedules',   label: 'Schedule', group: 'Pipeline' },
 ];
 
 /** The rail for a role: every role gets Knowledge; only ingest-capable roles get the Pipeline group. */
 export function knowledgeItemsFor(role: string | undefined): SubNavItem[] {
   const canIngest = role === 'hr-admin' || role === 'admin';
-  return canIngest ? [...KNOWLEDGE_ITEMS, ...PIPELINE_ITEMS] : KNOWLEDGE_ITEMS;
+  // A rail with one group draws no group heading.
+  return canIngest
+    ? [...KNOWLEDGE_ITEMS, ...PIPELINE_ITEMS]
+    : KNOWLEDGE_ITEMS.map(({ group: _group, ...rest }) => rest);
 }

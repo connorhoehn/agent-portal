@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Button, Card, Chip, DetailHeader, FormField, Inline, InlineAlert, InlinePlaceholder, Input, SectionLabel, SkeletonCard, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { Button, Card, Chip, DetailHeader, FormField, Inline, InlineAlert, InlinePlaceholder, Input, SectionLabel, SkeletonCard, Stack, T } from '@connorhoehnslalom/ui-components/shared';
 import { InferenceSettings, type InferenceSettingsValue } from './InferenceSettings';
 import { LineNumberedTextarea } from './LineNumberedTextarea';
 import { TemplateHighlighted } from './TemplateHighlighted';
@@ -15,7 +15,6 @@ import {
   usePromptVersionDetail,
 } from '../../../components/canary/usePromptLibrary.js';
 import type { Selection } from './types';
-import { T } from '../Text';
 
 /** Side-by-side baseline / challenger editor. Saves to DRAFT or publishes a
  *  numbered version. */
@@ -45,18 +44,14 @@ export function EditPanel({
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
-  // Switching modes REPLACES the "Edit / new version" button with this panel,
-  // so focus would land on <body> both ways: the editor claims it on mount
-  // (autoFocus below), and leaving hands it back to the trigger by its stable
-  // data attribute — the button is a fresh node by then, so a captured ref
-  // would point at a detached one (same fix as EstimateDrawer.handleClose).
-  const close = useCallback(() => {
-    onCancel();
-    requestAnimationFrame(() => {
-      const trigger = document.querySelector<HTMLElement>('[data-prompt-edit-trigger]');
-      trigger?.focus();
-    });
-  }, [onCancel]);
+  // Switching modes REPLACES the "Edit" button with this panel, so the editor
+  // claims focus on mount (autoFocus below) and leaving must give it back.
+  // That hand-back is NOT done here: the view that comes back remounts and
+  // fetches its version before its Edit button exists, so a lookup from this
+  // side (it was a rAF querySelector) ran against a skeleton and focus fell to
+  // <body>. PromptsPage records which trigger to return to and ViewPanel
+  // focuses it once it has rendered — see `returnFocusTo` there.
+  const close = useCallback(() => { onCancel(); }, [onCancel]);
 
   // Escape leaves the editor, the way it leaves every other panel in the app.
   // Ignored while saving: a half-published version is not a thing to abandon

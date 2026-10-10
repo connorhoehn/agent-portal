@@ -5,7 +5,7 @@
 
 import { useEffect, useState } from 'react';
 import {
-  Button, Card, CardHeader, Chip, DataTable, Inline, InlineAlert, Stack,
+  Button, Card, CardHeader, CheckIcon, Chip, CloseIcon, DataTable, ExternalLinkIcon, IconButton, Inline, InlineAlert, Stack, T,
 } from '@connorhoehnslalom/ui-components/shared';
 import type { CommitResponse, LinkStatus } from '../secondaryTypes';
 import { linksStepComplete, pendingLinksBanner } from '../secondaryFormat';
@@ -99,6 +99,7 @@ export default function FetchLinksStep({ commit, onContinue, onBack, onCompletio
           <DataTable<CommitLink>
             data={result.links}
             keyField={(link) => `${result.envelope_id}::${link.url}`}
+            size="sm"
             emptyMessage="No evidence links on this submission."
             // One submission's evidence links — small today, bounded
             // regardless of how many a form ends up carrying.
@@ -107,16 +108,7 @@ export default function FetchLinksStep({ commit, onContinue, onBack, onCompletio
               {
                 key: 'link',
                 header: 'Link',
-                render: (link) => (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-accent"
-                    onClick={() => window.open(link.url, '_blank', 'noopener,noreferrer')}
-                  >
-                    {link.label}
-                  </Button>
-                ),
+                render: (link) => <T size="sm" title={link.url}>{link.label}</T>,
               },
               {
                 key: 'dimension',
@@ -129,6 +121,8 @@ export default function FetchLinksStep({ commit, onContinue, onBack, onCompletio
                 render: (link) => {
                   const key = `${result.envelope_id}::${link.url}`;
                   const status = statuses.get(key) ?? link.status;
+                  const err = errors.get(key);
+                  if (err) return <Chip tone="danger" size="xs" title={err}>{err.length > 40 ? `${err.slice(0, 40)}…` : err}</Chip>;
                   return (
                     <Chip tone={status === 'fetched' ? 'success' : status === 'skipped' ? 'neutral' : 'warning'} size="xs">
                       {status}
@@ -136,41 +130,43 @@ export default function FetchLinksStep({ commit, onContinue, onBack, onCompletio
                   );
                 },
               },
-              {
-                key: 'actions',
-                header: '',
-                render: (link) => {
-                  const key = `${result.envelope_id}::${link.url}`;
-                  const status = statuses.get(key) ?? link.status;
-                  const busy = pending.has(key);
-                  const err = errors.get(key);
-                  if (!canManage) return null;
-                  return (
-                    <Stack gap="xs">
-                      <Inline align="center" gap="sm">
-                        <Button
-                          size="sm"
-                          variant={status === 'fetched' ? 'primary' : 'secondary'}
-                          disabled={busy}
-                          onClick={() => void setStatus(result.team_id, result.envelope_id, link.url, link.dimension_id, status === 'fetched' ? 'pending' : 'fetched')}
-                        >
-                          {status === 'fetched' ? 'Fetched ✓' : 'Mark fetched'}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          disabled={busy || status === 'fetched'}
-                          onClick={() => void setStatus(result.team_id, result.envelope_id, link.url, link.dimension_id, status === 'skipped' ? 'pending' : 'skipped')}
-                        >
-                          {status === 'skipped' ? 'Skipped ✓' : 'Skip'}
-                        </Button>
-                      </Inline>
-                      {err && <Stack gap="none" className="text-xs font-semibold text-danger">{err}</Stack>}
-                    </Stack>
-                  );
-                },
-              },
             ]}
+            rowActions={(link) => {
+              const key = `${result.envelope_id}::${link.url}`;
+              const status = statuses.get(key) ?? link.status;
+              const busy = pending.has(key);
+              return (
+                <>
+                  <IconButton
+                    size="sm"
+                    icon={<ExternalLinkIcon />}
+                    aria-label={`Open ${link.label}`}
+                    title="Open the link in a new tab"
+                    onClick={() => window.open(link.url, '_blank', 'noopener,noreferrer')}
+                  />
+                  {canManage && (
+                    <>
+                      <IconButton
+                        size="sm"
+                        icon={<CheckIcon />}
+                        aria-label={status === 'fetched' ? `Mark ${link.label} not fetched` : `Mark ${link.label} fetched`}
+                        title={status === 'fetched' ? 'Fetched — click to undo' : 'Mark fetched'}
+                        disabled={busy}
+                        onClick={() => void setStatus(result.team_id, result.envelope_id, link.url, link.dimension_id, status === 'fetched' ? 'pending' : 'fetched')}
+                      />
+                      <IconButton
+                        size="sm"
+                        icon={<CloseIcon />}
+                        aria-label={status === 'skipped' ? `Unskip ${link.label}` : `Skip ${link.label}`}
+                        title={status === 'skipped' ? 'Skipped — click to undo' : 'Skip'}
+                        disabled={busy || status === 'fetched'}
+                        onClick={() => void setStatus(result.team_id, result.envelope_id, link.url, link.dimension_id, status === 'skipped' ? 'pending' : 'skipped')}
+                      />
+                    </>
+                  )}
+                </>
+              );
+            }}
           />
         </Card>
       ))}

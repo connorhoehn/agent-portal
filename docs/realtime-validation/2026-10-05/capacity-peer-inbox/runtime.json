@@ -1,0 +1,26 @@
+[
+  {
+    "name": "/orgiq-bff-capacity-a",
+    "id": "fc08f7923405f8ddca99d6e798d1404aa0b1b8502a180bb8cbb4bbf6e1876a80",
+    "image": "sha256:9493e0964c2bc1a72f89315c4d84cf96e1fce91cc32b15d54a7b22ec0dc96ac2",
+    "status": "running",
+    "cpu": 1000000000,
+    "memoryBytes": 1073741824
+  },
+  {
+    "name": "/orgiq-bff-capacity-b",
+    "id": "46fce6c4576d749bfc7a30e87018bf14ffc58ca111663a0737cc46bcd2c43245",
+    "image": "sha256:9493e0964c2bc1a72f89315c4d84cf96e1fce91cc32b15d54a7b22ec0dc96ac2",
+    "status": "running",
+    "cpu": 1000000000,
+    "memoryBytes": 1073741824
+  },
+  {
+    "name": "/orgiq-bff-capacity-driver-burst",
+    "id": "f2ab3433f6b550288ebafa14a7b9b281fa2bc08af6ff13109fcedc07aa7507f7",
+    "image": "sha256:327192d35ce131491f02855148f02a07c5d5dd90deb8f10a68801eadfc822015",
+    "status": "exited",
+    "cpu": 1000000000,
+    "memoryBytes": 536870912
+  }
+]

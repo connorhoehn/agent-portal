@@ -7,17 +7,16 @@
 //               dependencies and decisions, planning notes — each with its
 //               action), the full section for whatever is already written,
 //               and the collapsed Run setup holding the run draft.
-//   Discussion  the whole comment thread.
+//   Docs        the item's linked documents and files.
 //   Activity    the item's history (itemActivity) — status changes, runs,
 //               estimates, comments — from data already recorded.
 //
 // The composer is not here: it docks under the whole pane (the page's
 // InitiativeComposer), so the Overview and the item share one slot.
 
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   ChecklistSection,
-  CommentList,
   DetailSection,
   Disclosure,
   KeyValue,
@@ -25,14 +24,14 @@ import {
   OutcomeSection,
   WorkActivityList,
   WorkItemMetaBar,
+  ScopeHeader,
   type CommentListItem,
   type KeyValueItem,
   type LinkedItem,
   type WorkMetaOption,
   type WorkPerson,
 } from '@connorhoehnslalom/ui-components';
-import { EditorShell } from '@connorhoehnslalom/ui-components/doc-editor';
-import { ArrowRightIcon, Banner, Button, Inline, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { ArrowRightIcon, Banner, Button, ChevronIcon, Chip, DropdownMenu, Inline, Stack, StatusPill } from '@connorhoehnslalom/ui-components/shared';
 import { DEVBOX_MODELS } from '../../lib/devboxModels';
 import type { BotRun } from '../bots/BotsPage';
 import {
@@ -50,6 +49,7 @@ import { itemActivity } from './itemActivity';
 import type { FlatWorkItem } from './projectFormat';
 import type { ProjectContributor, ProjectDecision, WorkItem } from './types';
 import type { WorkItemThread } from './useWorkItemThread';
+import { WorkDocumentLinks } from './WorkDocumentLinks';
 
 export type WorkItemPatch = Partial<Pick<WorkItem, 'status' | 'priority' | 'storyPoints' | 'assigneeId' | 'description'>>
   & { assigneeName?: string | null };
@@ -85,7 +85,7 @@ const PR_STATUS: Record<string, { label: string; tone: 'info' | 'neutral' | 'suc
 
 const modelLabel = (id: string) => DEVBOX_MODELS.find((m) => m.id === id)?.label ?? id;
 
-export type DetailTab = 'brief' | 'comments' | 'history';
+export type DetailTab = 'brief' | 'docs' | 'history';
 
 /** How a thread read reads when it has nothing to show. */
 function threadEmpty(loading: boolean, error: string | null, what: string, empty: string): string {
@@ -105,6 +105,7 @@ function RowAction({ label, disabledReason, onClick, testId }: {
     <Button
       variant="link"
       size="sm"
+      className="text-xs"
       onClick={onClick}
       disabled={disabledReason != null}
       title={disabledReason ?? undefined}
@@ -139,8 +140,22 @@ export interface WorkItemDetailProps {
   onAddContext: () => void;
   /** "Add a note": write a planning note. */
   onAddNote: () => void;
+  /** Reveal the persistent initiative dialogue, available to readers too. */
+  onOpenDiscussion: () => void;
   /** The collapsed Run setup: its hint and the run draft inside it. */
   runSetup: { hint: string; body: ReactNode };
+  /** The live gateway discussion for this item, shown under the stored comments. */
+  discussion?: ReactNode;
+  /**
+   * The item's discussion as the page's live thread lists it (the gateway's
+   * `orgiq:work:<id>`, the same messages the pane shows) — the Discussion tab
+   * and the brief's recent notes read these instead of the stored comment rows,
+   * which keep only the item's audit history. Null: not joined (yet).
+   */
+  liveNotes?: CommentListItem[] | null;
+  /** Right of the title row — the initiative's actions (presence, search,
+   *  call, repository, ⋯), so nothing stacks between the trail and the title. */
+  headActions?: ReactNode;
 }
 
 export function WorkItemDetail({
@@ -158,14 +173,29 @@ export function WorkItemDetail({
   onDraftCriteria,
   onAddContext,
   onAddNote,
+  onOpenDiscussion,
   runSetup,
+  discussion,
+  liveNotes = null,
+  headActions,
 }: WorkItemDetailProps) {
   const readOnly = canEdit ? undefined : 'Your role cannot edit work items';
+  const statusLabel = STATUS_OPTIONS.find(option => option.value === item.status)?.label ?? item.status;
+  const statusTone = ({ open: 'neutral', in_progress: 'info', in_review: 'warning', done: 'success', cancelled: 'danger' } as const)[item.status];
   // An editor with no criteria yet can also write them by hand; the list
   // opens under the table once asked for. Keyed by item so it never carries.
   const [writingCriteriaFor, setWritingCriteriaFor] = useState<string | null>(null);
+  const [runSetupFor, setRunSetupFor] = useState<string | null>(null);
+  const [focusRunSetup, setFocusRunSetup] = useState(false);
+  const runSetupElement = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!focusRunSetup || tab !== 'brief' || runSetupFor !== item.id) return;
+    runSetupElement.current?.scrollIntoView({ block: 'nearest' });
+    runSetupElement.current?.querySelector<HTMLElement>('summary')?.focus({ preventScroll: true });
+    setFocusRunSetup(false);
+  }, [focusRunSetup, tab, runSetupFor, item.id]);
   const people = useMemo<WorkPerson[]>(
-    () => contributors.map((c) => ({ id: c.personId, name: c.name })),
+    () => contributors.map((c) => ({ id: c.personId, name: c.name, ...(c.avatarUrl ? { avatarUrl: c.avatarUrl } : {}) })),
     [contributors],
   );
 
@@ -202,16 +232,6 @@ export function WorkItemDetail({
       : []),
   ];
 
-  const notes: CommentListItem[] = thread.comments
-    .filter((c) => !c.isSystem)
-    .map((c) => ({
-      id: c.id,
-      author: { id: c.authorId ?? c.id, name: c.authorName ?? 'Unknown' },
-      role: c.authorTitle,
-      createdAt: c.createdAt,
-      text: c.body,
-    }));
-
   const activity = useMemo(
     () => itemActivity(item, thread.comments, runs, modelLabel),
     [item, thread.comments, runs],
@@ -242,7 +262,7 @@ export function WorkItemDetail({
     }
   };
 
-  const briefItems: KeyValueItem[] = brief.rows.map((row) => ({
+  const briefItems: KeyValueItem[] = brief.rows.filter(row => row.id !== 'notes').map((row) => ({
     label: row.label,
     value: row.value,
     muted: row.muted,
@@ -266,47 +286,62 @@ export function WorkItemDetail({
   }));
 
   return (
-    <EditorShell
-      variant="work-item"
+    <Stack gap="none" className="h-full min-h-0" data-testid="work-item-detail">
+    <ScopeHeader
       titleSize="lg"
-      itemType={item.type === 'bug' ? 'Bug' : 'Story'}
-      itemKey={item.id}
       title={item.title}
       breadcrumbs={[{ label: item.epicTitle, onClick: onOpenEpic }]}
-      metaBar={(
+      controls={headActions}
+      statsPlacement="below"
+      stats={[
+        <Inline gap="sm" align="center" wrap key="work-metadata" className="work-item-metadata">
+        <Chip size="sm" tone="neutral" mono>{item.key ?? item.id}</Chip>
+        <Chip size="sm" tone={item.type === 'bug' ? 'danger' : 'info'}>{item.type === 'bug' ? 'Bug' : 'Story'}</Chip>
+        {canEdit ? <DropdownMenu triggerLabel="Change work status" triggerVariant="link" triggerClassName="!px-0 !py-0"
+          trigger={<Inline gap="xs" align="center"><StatusPill label={statusLabel} tone={statusTone} /><ChevronIcon size={12} dir="down" /></Inline>}
+          sections={[{ items: STATUS_OPTIONS.map(option => ({ id: option.value, label: option.label, onSelect: () => onPatch({ status: option.value as WorkItem['status'] }) })) }]}
+          triggerTestId="work-item-status" />
+          : <StatusPill label={statusLabel} tone={statusTone} />}
         <WorkItemMetaBar
-          layout="divided"
+          layout="default"
           priorityStyle="tag"
           flags={itemFlags(item)}
-          status={{ value: item.status, options: STATUS_OPTIONS, readOnlyReason: readOnly, onChange: (v) => onPatch({ status: v as WorkItem['status'] }) }}
           points={{ value: item.storyPoints, max: 21, readOnlyReason: readOnly, onChange: (v) => onPatch({ storyPoints: v }) }}
           owner={{
-            value: item.assigneeId && item.assigneeName ? { id: item.assigneeId, name: item.assigneeName } : null,
+            value: item.assigneeId && item.assigneeName ? people.find(person => person.id === item.assigneeId) ?? { id: item.assigneeId, name: item.assigneeName } : null,
             readOnlyReason: readOnly,
             onSearchPeople: (q) => people.filter((p) => p.name.toLowerCase().includes(q.trim().toLowerCase())),
             onChange: (p) => onPatch({ assigneeId: p?.id ?? null, assigneeName: p?.name ?? null }),
           }}
           priority={{ value: item.priority, options: PRIORITY_OPTIONS, readOnlyReason: readOnly, onChange: (v) => onPatch({ priority: v as WorkItem['priority'] }) }}
         />
-      )}
+        <Button variant="secondary" size="sm"
+          aria-label={canEdit ? 'Prepare computer job' : 'View computer job setup'}
+          title="Review the instruction, codebase and estimate for this work item"
+          onClick={() => { setRunSetupFor(item.id); setFocusRunSetup(true); onTabChange('brief'); }}
+          data-testid="work-item-prepare-job">
+          {canEdit ? 'Prepare job' : 'View job setup'}
+        </Button>
+        </Inline>,
+      ]}
       tabs={[
         { id: 'brief', label: 'Brief' },
-        // A count only when there is one — "Discussion 0" reads as noise.
-        { id: 'comments', label: 'Discussion', ...(thread.commentCount > 0 ? { count: thread.commentCount } : {}) },
+        { id: 'docs', label: 'Docs' },
         { id: 'history', label: 'Activity' },
       ]}
       activeTab={tab}
       onTabChange={(id) => onTabChange(id as DetailTab)}
-      surface="plain"
-      label="Work item"
-      data-testid="work-item-detail"
-    >
-      <Stack gap="lg" className="px-4 pb-6 pt-2">
+      tabSize="sm"
+      className="shrink-0 border-b border-border"
+      data-testid="work-item-header"
+    />
+      <Stack gap="lg" className="min-h-0 flex-1 overflow-y-auto px-6 pb-6 pt-4">
         {tab === 'brief' && (
           <>
             <OutcomeSection
               first
-              size="lg"
+              size="md"
+              className="text-sm"
               title={WHY_TITLE}
               value={item.description}
               placeholder="Why does this work matter?"
@@ -318,14 +353,14 @@ export function WorkItemDetail({
                 layout="callout"
                 variant="warning"
                 accent="bar"
-                size="lg"
+                size="md"
                 title={nextStep.title}
                 {...(nextStep.detail ? { meta: nextStep.detail } : {})}
                 action={(
-                  <Button variant="link" onClick={() => onTabChange('comments')} data-testid="next-step-open-discussion">
+                  <Button variant="link" size="sm" className="text-xs" onClick={onOpenDiscussion} data-testid="next-step-open-discussion">
                     <Inline gap="xs" align="center">
                       {nextStep.actionLabel}
-                      <ArrowRightIcon size={16} />
+                      <ArrowRightIcon size={14} />
                     </Inline>
                   </Button>
                 )}
@@ -356,41 +391,27 @@ export function WorkItemDetail({
                 emptyLabel="No decisions or pull requests linked yet"
               />
             )}
-            {filled('notes') && (
-              <CommentList
-                title="Planning notes"
-                comments={[...notes].reverse()}
-                total={notes.length}
-                max={2}
-                onViewAll={() => onTabChange('comments')}
-                emptyLabel="No planning notes yet"
-              />
-            )}
             {brief.showTable && (
-              <DetailSection variant="heading" size="lg" title={BRIEF_TITLE} description={BRIEF_BODY} data-testid="brief-table">
+              <DetailSection variant="heading" size="sm" title={BRIEF_TITLE} description={BRIEF_BODY} data-testid="brief-table">
                 <KeyValue layout="row" divided labelWidth="w-72" items={briefItems} aria-label={BRIEF_TITLE} />
               </DetailSection>
             )}
+            <div ref={runSetupElement}>
             <Disclosure
               variant="plain"
-              size="lg"
+              size="md"
               summary={RUN_SETUP_TITLE}
               hint={runSetup.hint}
+              open={runSetupFor === item.id}
+              onToggle={open => setRunSetupFor(open ? item.id : null)}
               data-testid="run-setup"
             >
               {runSetup.body}
             </Disclosure>
+            </div>
           </>
         )}
-        {tab === 'comments' && (
-          <CommentList
-            first
-            title="Discussion"
-            comments={notes}
-            emptyLabel={threadEmpty(thread.commentsLoading, thread.commentsError, 'discussion',
-              canEdit ? 'No comments yet — switch the composer to Chat to start one' : 'No comments yet')}
-          />
-        )}
+        {tab === 'docs' && <WorkDocumentLinks workItemId={item.id} canEdit={canEdit} />}
         {tab === 'history' && (
           <WorkActivityList
             first
@@ -400,6 +421,6 @@ export function WorkItemDetail({
           />
         )}
       </Stack>
-    </EditorShell>
+    </Stack>
   );
 }

@@ -26,12 +26,19 @@ Destinations (groups in the module's vertical sub-nav rail; each group lists its
 The rail (`SubNavLayout`, titled "Distillation") shows Knowledge → Guides &
 findings / Patterns / Run notes with tier counts, Review → Pending / Reviewed
 with counts, and Activity → Runs (amber/red when any tier is behind or
-stalled) / Tier graph. Review and Activity keep a content header
-(`ScopeHeader`: destination title, repository selector, "Open Library ↗").
-Knowledge has **no title band**: the crumb "Build › Distillation › Knowledge",
-the repository selector and Open Library sit in a crumb band at the top of the
-record pane (`ExplorerLayout paneHeader` + `ScopeHeader variant="crumbs"`).
-Counts come from live data, never literals. (Revised 2026-09-24: the first
+stalled) / Tier graph. Every destination with a list (Knowledge, Review,
+Asset promotions, Activity › Runs) draws it as a flush list rail stacked
+beside that rail (`SectionListLayout`, the Initiatives rail's structure —
+docs/layout-cascade.md rule 5), and the content column after it opens with
+the crumb band ("Build › Distillation › Review"), then the destination title,
+then the record. **No repository button in the content header** (revised
+2026-10-07, the user: "there is an All repositories button at the top that
+doesn't make sense"): repository scoping is a facet in each list rail's
+filter popover beside its search, carried in `?repo=` exactly as before and
+by every sub-nav link. "Open Library ↗" hangs on the crumb band only where it
+leads somewhere: the landing, Knowledge (guides become Library assets) and
+Asset promotions; not Review or Activity. Counts come from live data, never
+literals. (Revised 2026-09-24: the first
 build used horizontal header tabs; the mockups draw a vertical sub-nav. Revised
 again 2026-09-24 for the guide-record mockup,
 `docs/distillation-guide-record-mockup.png`.)
@@ -86,8 +93,10 @@ This guide + sources / No context — no ×), placeholder "Describe your project
 or ask about this guide…"; Agent mode only explains (no writes). Review uses
 the same light composer.
 
-**Review** — queue column: tabs Pending N / Reviewed, search, rows with the
-**resolved target title**, type, source count, sampled age (never a bare
+**Review** — queue rail: caption "PENDING N" / "REVIEWED N" (the sub-nav
+chooses the queue; no Pending/Reviewed tabs), search with the filter popover
+(repository), rows grouped by what was sampled (Pattern / Guide) with the
+**resolved target title**, source count, sampled age (never a bare
 `cl-022`; unresolvable targets say so with Retry). Claim pane: crumbs
 Review / <type>, title, "From <repo> · Sampled 3 hours ago", status; the
 question **Does this match the source run?**, the claim, "View proposed guide →"
@@ -159,9 +168,9 @@ Also bump the portal pin to HEAD to get `CanvasPaneLayout` (2.387.10).
 ### 3d. realtime-modules — live channel
 - `attachRealtime(server, { features, authorize })` in `middleware/src/index.ts` replacing `rejectUnsupportedUpgrades` **only for the realtime path**; `authorize` reads the signed session cookie and requires an orgiq session with ViewDistillation. Keep other upgrade paths rejected.
 - Channels (server push via `handle.router.sendToChannel`):
-  - `distill:levels` → `{type:'levels', levels}` on every L0 write, job transition and replica sync.
-  - `distill:jobs` → `{type:'job', job}` on each job state/progress change (`phase`, `percent`, `stepLabel`).
-  - `distill:review` → `{type:'review', pending, decided}` after any sample change.
+  - `orgiq:distill:levels` → `{type:'levels', levels}` on every L0 write, job transition and replica sync.
+  - `orgiq:distill:jobs` → `{type:'job', job}` on each job state/progress change (`phase`, `percent`, `stepLabel`).
+  - `orgiq:distill:review` → `{type:'review', pending, decided}` after any sample change.
 - Mock: the in-process router needs no infra, so the channel works under `dev:mock`.
 
 ### 3e. Schema
@@ -169,7 +178,7 @@ Add `distillation_compactions` (job rows incl. input/output ids, log, cost, dura
 
 ## 4. Portal workstream (P)
 
-- One module frame: `SubNavLayout` rail (`moduleNavModel.ts`: groups, counts, accent) beside a `ScopeHeader` (destination title + repo `controls` + Library link), inside a flush `ViewportFillRegion` (`data-shell-flush`).
+- One module frame: `SubNavLayout` rail (`moduleNavModel.ts`: groups, counts, accent), then each destination's `SectionListLayout` list rail (repository as a `WorkListFilters` facet from the module's `scope.repoFacet`) and its content column — `ScopeHeader variant="crumbs"` (+ Library link where meaningful) and the title — inside a flush `ViewportFillRegion` (`data-shell-flush`).
 - Knowledge: `ExplorerLayout` rail (`SearchInput`, view `Select`, filter popover via `WorkListFilters`, `GroupedList` rows with `FileKindMark`/icon, footer Load more + counts) · `EditorShell` record (`MarkdownView scale`, `ProcedureSteps`, `TechnicalDetails`, `KeyValue`, tabs) · `ContextColumn` Sources (`SegmentedControl` List/Graph, `SourceList`, `TypedNodeCanvas` lineage) · `RichChatComposer` footer.
 - Review: `Tabs` + `SearchInput` + `GroupedList` queue · `EditorShell` claim (`OutcomeSection` note, Buttons, `AccessNotice`, `Disclosure` + `CommentList` earlier reviews, `Disclosure` + `StatStrip` sampling) · Sources as in Knowledge.
 - Activity: `StatStrip` tier flow (connectors + status) · `Banner` status line · `SegmentedControl` Runs/Tier graph · runs `GroupedList`/`DataTable` · `TypedNodeCanvas` + `CanvasZoomControls` tier graph in `CanvasPaneLayout` · run inspector (`DetailHeader`, `StatusPill`, `KeyValue`, `DetailSection`, `LinkedItemsSection` produced, `Disclosure` + `LogStream` run log, `TechnicalDetails`).

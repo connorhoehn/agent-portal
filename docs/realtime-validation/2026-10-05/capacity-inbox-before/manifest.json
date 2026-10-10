@@ -1,0 +1,14 @@
+{
+  "capacityAccepted": false,
+  "libraryCommit": "be54e682d50d750ede04bdae5f47302039826626",
+  "compiledImage": "sha256:86d3dd3c30818d7850274eae771e3d13df42df8c54287d9bb52e271030dfea8d",
+  "scope": "count/timing-only store profiling; unread-window authority multiplication reproduced",
+  "artifacts": {
+    "docs/realtime-validation/2026-10-05/capacity-inbox-before/orgiq-capacity-profiled-burst.log": "857f9e76a7417b59a877ec4856907114e3f92a81105b5e4d20fca600472d9917",
+    "docs/realtime-validation/2026-10-05/capacity-inbox-before/orgiq-capacity-profiled-a-metrics.json": "53071e7fc9ca3b0949570694f468c00a0e5d601a715f1d78e82473f3a83841f6",
+    "docs/realtime-validation/2026-10-05/capacity-inbox-before/orgiq-capacity-profiled-b-metrics.json": "647d6a617eaeebc8991b62feb742447e2a4e9b0b775f2c821a9965fc7f4afc0a",
+    "docs/realtime-validation/2026-10-05/capacity-inbox-before/orgiq-capacity-profiled-container-launch.log": "1619d9ef650ed66638892e182e5d01524347c439afe507a961582499641b4fde",
+    "docs/realtime-validation/2026-10-05/capacity-inbox-before/orgiq-bff-container-internal-burst.json": "1076a0a2c1a38d7d03781912580d0de3fc75c84a5ca7f7d15d9a55fa3d7b145d",
+    "docs/realtime-validation/2026-10-05/capacity-inbox-before/orgiq-inbox-authority-before.log": "415edbb1e988c38df5d71488d078bd3123b26557a8da22449b6414b63a8d47f9"
+  }
+}

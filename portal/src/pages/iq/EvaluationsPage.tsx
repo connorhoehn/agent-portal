@@ -13,7 +13,7 @@ import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { relativeTime } from '../../lib/relativeTime';
 import { Link, useNavigate } from 'react-router';
 import {
-  Button, Card, Chip, CollapsibleSection, EmptyState, IconButton, Inline, ProgressBar, Select, SectionLabel, SelectableCard, Stack, StatStrip, Switch,
+  Button, Card, Chip, CollapsibleSection, EmptyState, IconButton, Inline, ProgressBar, Select, SectionLabel, SelectableCard, Stack, StatStrip, Switch, T, VisuallyHidden,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { useCanaryStream } from '../../components/canary/useCanaryStream.js';
@@ -22,7 +22,6 @@ import {
   parsePromptIdFromArn,
   type JudgeHistoryEntry,
 } from '../../components/canary/canaryStore.js';
-import { T } from './Text';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -187,7 +186,7 @@ function WeightSlider({
         <IconButton aria-label={`Decrease ${dim.label} weight by 5`} size="sm" variant="ghost" onClick={() => step(-5)} disabled={!canDecrease}>−</IconButton>
         <IconButton aria-label={`Increase ${dim.label} weight by 5`} size="sm" variant="ghost" onClick={() => step(5)} disabled={!canIncrease}>+</IconButton>
       </Inline>
-      <T className="block pl-0.5 text-[10px] leading-snug text-text-tertiary">{dim.description}</T>
+      <T size="xs" className="block pl-0.5 leading-snug text-text-tertiary">{dim.description}</T>
     </Stack>
   );
 }
@@ -219,7 +218,7 @@ function ScoreRow({ entry, i }: { entry: JudgeHistoryEntry; i: number }) {
       className="rounded-md"
       title={
         <Inline gap="sm" align="center" className="w-full">
-          <T className="w-6 shrink-0 text-[10px] text-text-tertiary">#{i + 1}</T>
+          <T size="xs" className="w-6 shrink-0 text-text-tertiary">#{i + 1}</T>
           <Chip tone={entry.side === 'A' ? 'accent' : 'success'} size="xs">{entry.side}</Chip>
           <ProgressBar
             value={composite01 * 100}
@@ -230,10 +229,10 @@ function ScoreRow({ entry, i }: { entry: JudgeHistoryEntry; i: number }) {
             className="flex-1"
             aria-label="Composite score"
           />
-          <T className={`w-7 shrink-0 text-right text-[12px] font-bold ${scoreColorClass(composite01)}`}>
+          <T size="xs" weight="semibold" className={`w-7 shrink-0 text-right   ${scoreColorClass(composite01)}`}>
             {(composite01 * 10).toFixed(1)}
           </T>
-          <T className="shrink-0 text-[10px] text-text-tertiary">{fmtTime(entry.ts)}</T>
+          <T size="xs" className="shrink-0 text-text-tertiary">{fmtTime(entry.ts)}</T>
         </Inline>
       }
     >
@@ -242,14 +241,14 @@ function ScoreRow({ entry, i }: { entry: JudgeHistoryEntry; i: number }) {
           <Stack key={k} gap="none">
             <SectionLabel className={DIM_COLOR_CLASS[k]}>{k}</SectionLabel>
             {v === undefined ? (
-              <T
-                className="text-[11px] italic leading-[1.45] text-text-tertiary"
+              <T size="xs"
+                className="text-xs italic leading-[1.45] text-text-tertiary"
                 title={`The judge abstained on ${k} — not scored, not scored zero. The composite renormalises over the dimensions that were judged.`}
               >
                 not judged
               </T>
             ) : (
-              <T className={`text-[16px] font-bold ${scoreColorClass(v)}`}>{fmt01(v)}</T>
+              <T size="sm" weight="semibold" className={`  ${scoreColorClass(v)}`}>{fmt01(v)}</T>
             )}
           </Stack>
         ))}
@@ -375,7 +374,8 @@ export default function EvaluationsPage(): React.ReactElement {
   ] as const;
 
   return (
-    <Inline gap="xl" align="start" className="-m-6 overflow-auto p-6">
+    <Inline gap="xl" align="start" className="overflow-auto">
+      <VisuallyHidden as="h1">Evals</VisuallyHidden>
       {/* ── Left column: Config ── */}
       <Stack gap="sm" className="w-[480px] shrink-0">
 
@@ -385,13 +385,13 @@ export default function EvaluationsPage(): React.ReactElement {
             <Stack gap="xs">
               <Inline gap="sm" align="center" wrap>
                 <Chip tone="accent" mono size="xs">{judgeVersionLabel}</Chip>
-                <T className="flex-1 truncate font-mono text-[10px] text-primary" title={judgeArn}>{judgeArn}</T>
+                <T size="xs" className="flex-1 truncate font-mono text-primary" title={judgeArn}>{judgeArn}</T>
               </Inline>
               <Inline gap="sm">
                 {judgePromptId
-                  ? <Link to="/iq/prompts" className="text-[11px] text-primary no-underline hover:underline">Edit in Prompt Studio ↗</Link>
-                  : <T className="text-[11px] text-primary">Edit in Prompt Studio ↗</T>}
-                <Link to="/iq/diff" className="text-[11px] text-primary no-underline hover:underline">Compare versions ↗</Link>
+                  ? <Link to="/iq/prompts" className="text-xs text-primary no-underline hover:underline">Edit in Prompt Studio ↗</Link>
+                  : <T size="xs" className="text-primary">Edit in Prompt Studio ↗</T>}
+                <Link to="/iq/diff" className="text-xs text-primary no-underline hover:underline">Compare versions ↗</Link>
               </Inline>
             </Stack>
           </Card>
@@ -401,9 +401,9 @@ export default function EvaluationsPage(): React.ReactElement {
         <Card padding="md">
           <Stack gap="xs">
             <Inline gap="sm" align="center" justify="between">
-              <T className="text-[13px] font-bold text-text-primary">LLM-as-Judge</T>
+              <T size="sm" weight="semibold" className="text-text-primary">LLM-as-Judge</T>
               <Inline gap="sm" align="center">
-                <T className={`text-[12px] font-semibold ${cfg.enabled ? 'text-success' : 'text-text-tertiary'}`}>
+                <T size="xs" weight="semibold" className={`  ${cfg.enabled ? 'text-success' : 'text-text-tertiary'}`}>
                   {cfg.enabled ? 'Enabled' : 'Disabled'}
                 </T>
                 <Switch
@@ -413,7 +413,7 @@ export default function EvaluationsPage(): React.ReactElement {
                 />
               </Inline>
             </Inline>
-            <T className="block text-[11px] leading-relaxed text-text-secondary">
+            <T size="xs" className="block leading-relaxed text-text-secondary">
               When enabled, a sample of canary invocations is automatically evaluated by the
               judge model. Scores flow live into this page via SSE.
             </T>
@@ -434,14 +434,14 @@ export default function EvaluationsPage(): React.ReactElement {
                   className="min-w-[110px] flex-1 text-left"
                 >
                   <Stack gap="none">
-                    <T className="block text-[11px] font-semibold text-text-primary">{m.label}</T>
-                    <T className="block text-[10px] text-text-tertiary">{m.hint}</T>
+                    <T size="xs" weight="semibold" className="block text-text-primary">{m.label}</T>
+                    <T size="xs" className="block text-text-tertiary">{m.hint}</T>
                   </Stack>
                 </SelectableCard>
               ))}
             </Inline>
-            <T className="block text-[11px] leading-relaxed text-text-tertiary">
-              Model ID:&nbsp;<T className="rounded bg-surface-hover px-1 py-px font-mono text-[10px] text-text-secondary">{cfg.modelId}</T>
+            <T size="xs" className="block leading-relaxed text-text-tertiary">
+              Model ID:&nbsp;<T size="xs" className="rounded bg-surface-hover px-1 py-px font-mono text-text-secondary">{cfg.modelId}</T>
             </T>
           </Stack>
         </Card>
@@ -451,9 +451,9 @@ export default function EvaluationsPage(): React.ReactElement {
           <Stack gap="xs">
             <Inline gap="sm" align="center" justify="between">
               <SectionLabel>Rubric weights</SectionLabel>
-              <T className={`text-[11px] font-semibold ${weightOk ? 'text-success' : 'text-danger'}`}>{total}% / 100%</T>
+              <T size="xs" weight="semibold" className={`  ${weightOk ? 'text-success' : 'text-danger'}`}>{total}% / 100%</T>
             </Inline>
-            <T className="block text-[11px] leading-relaxed text-text-tertiary">
+            <T size="xs" className="block leading-relaxed text-text-tertiary">
               How each dimension contributes to the overall 0–10 score.
               {judgeArn && ' Overridden by the active judge prompt when one is configured.'}
             </T>
@@ -467,7 +467,7 @@ export default function EvaluationsPage(): React.ReactElement {
                 />
               ))}
             </Stack>
-            {!weightOk && <T className="block text-[11px] font-medium text-danger">Weights must sum to exactly 100%.</T>}
+            {!weightOk && <T size="xs" weight="medium" className="block text-danger">Weights must sum to exactly 100%.</T>}
             <Button variant="ghost" size="sm" onClick={() => setCfg(c => ({ ...c, dimensions: DEFAULT_DIMENSIONS }))}>
               Reset to defaults
             </Button>
@@ -479,7 +479,7 @@ export default function EvaluationsPage(): React.ReactElement {
           <Stack gap="sm">
             <SectionLabel as="div">Sampling &amp; thresholds</SectionLabel>
             <Inline gap="sm" align="center">
-              <T className="w-[90px] shrink-0 text-[11px] font-semibold text-text-secondary">Sample rate</T>
+              <T size="xs" weight="semibold" className="w-[90px] shrink-0 text-text-secondary">Sample rate</T>
               <Select
                 value={String(cfg.minSampleRate)}
                 onChange={e => setCfg(c => ({ ...c, minSampleRate: Number(e.target.value) }))}
@@ -490,7 +490,7 @@ export default function EvaluationsPage(): React.ReactElement {
               />
             </Inline>
             <Inline gap="sm" align="center">
-              <T className="w-[90px] shrink-0 text-[11px] font-semibold text-text-secondary">Fail threshold</T>
+              <T size="xs" weight="semibold" className="w-[90px] shrink-0 text-text-secondary">Fail threshold</T>
               <Select
                 value={String(cfg.failThreshold)}
                 onChange={e => setCfg(c => ({ ...c, failThreshold: Number(e.target.value) }))}
@@ -515,7 +515,7 @@ export default function EvaluationsPage(): React.ReactElement {
               {saving ? 'Saving…' : saved ? '✓ Saved' : 'Save configuration'}
             </Button>
             {saveError && (
-              <Inline as="span" gap="none" role="alert" className="text-[12px] text-danger">Not saved — {saveError}</Inline>
+              <Inline as="span" gap="none" role="alert" className="text-xs text-danger">Not saved — {saveError}</Inline>
             )}
           </Inline>
         )}
@@ -526,8 +526,10 @@ export default function EvaluationsPage(): React.ReactElement {
 
         {/* Stat cards */}
         <StatStrip
+          variant="line"
+          size="sm"
           items={statItems.map(s => ({
-            label: s.label,
+            label: s.label.toLowerCase(),
             value: lastJudgeScores ? `${(lastJudgeScores[s.key] * 100).toFixed(0)}` : '—',
             tone: lastJudgeScores ? scoreStripTone(lastJudgeScores[s.key]) : 'default',
           }))}
@@ -535,18 +537,20 @@ export default function EvaluationsPage(): React.ReactElement {
 
         {/* Rolling means */}
         <StatStrip
+          variant="line"
+          size="sm"
           items={[
-            { label: 'Rolling mean A', value: hasScoresA ? (rollingMeanA * 10).toFixed(2) : '—', tone: hasScoresA ? scoreStripTone(rollingMeanA) : 'default' },
-            { label: 'Rolling mean B', value: hasScoresB ? (rollingMeanB * 10).toFixed(2) : '—', tone: hasScoresB ? scoreStripTone(rollingMeanB) : 'default' },
-            ...(lastJudgedAt ? [{ label: 'Last judged', value: fmtTime(lastJudgedAt) }] : []),
+            { label: 'rolling mean A', value: hasScoresA ? (rollingMeanA * 10).toFixed(2) : '—', tone: hasScoresA ? scoreStripTone(rollingMeanA) : 'default' },
+            { label: 'rolling mean B', value: hasScoresB ? (rollingMeanB * 10).toFixed(2) : '—', tone: hasScoresB ? scoreStripTone(rollingMeanB) : 'default' },
+            ...(lastJudgedAt ? [{ label: 'last judged', value: fmtTime(lastJudgedAt) }] : []),
           ]}
         />
 
         {/* Score history */}
         <Inline gap="sm" align="center">
-          <T className="text-[13px] font-bold text-text-primary">Score history</T>
+          <T size="sm" weight="semibold" className="text-text-primary">Score history</T>
           <Chip mono size="xs">{historyDesc.length}</Chip>
-          <T className="text-[10px] text-text-tertiary">live · SSE feed</T>
+          <T size="xs" className="text-text-tertiary">live · SSE feed</T>
         </Inline>
 
           {/* Was a Card + Stack + a 32px 📊 + text + Button — an EmptyState
@@ -576,10 +580,10 @@ export default function EvaluationsPage(): React.ReactElement {
 
         {/* Legend */}
         <Inline gap="md" wrap align="center" className="py-1">
-          <Inline gap="xs" align="center"><T className="text-success">●</T><T className="text-[11px] text-text-secondary">≥70 Pass</T></Inline>
-          <Inline gap="xs" align="center"><T className="text-warning">●</T><T className="text-[11px] text-text-secondary">50–69 Review</T></Inline>
-          <Inline gap="xs" align="center"><T className="text-danger">●</T><T className="text-[11px] text-text-secondary">&lt;50 Fail</T></Inline>
-          <T className="ml-auto text-[10px] text-text-tertiary">scores are 0–100 (judge outputs 0–1)</T>
+          <Inline gap="xs" align="center"><T className="text-success">●</T><T size="xs" className="text-text-secondary">≥70 Pass</T></Inline>
+          <Inline gap="xs" align="center"><T className="text-warning">●</T><T size="xs" className="text-text-secondary">50–69 Review</T></Inline>
+          <Inline gap="xs" align="center"><T className="text-danger">●</T><T size="xs" className="text-text-secondary">&lt;50 Fail</T></Inline>
+          <T size="xs" className="ml-auto text-text-tertiary">scores are 0–100 (judge outputs 0–1)</T>
         </Inline>
       </Stack>
     </Inline>

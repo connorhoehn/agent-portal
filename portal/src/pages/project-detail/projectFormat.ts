@@ -268,7 +268,7 @@ export function filterWorkItems(items: FlatWorkItem[], f: WorkFilters): FlatWork
     if (f.type && f.type !== 'all' && i.type !== f.type) return false;
     if (f.assigneeId && f.assigneeId !== 'all' && (i.assigneeId ?? '') !== f.assigneeId) return false;
     if (!q) return true;
-    return [i.title, i.epicTitle, i.assigneeName ?? '', ...(i.labels ?? [])]
+    return [i.key ?? '', i.title, i.epicTitle, i.assigneeName ?? '', ...(i.labels ?? [])]
       .join(' ').toLowerCase().includes(q);
   });
 }

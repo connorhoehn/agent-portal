@@ -1,4 +1,5 @@
 import {
+  T,
   Chip,
   DataTable,
   FilterChip,
@@ -40,8 +41,7 @@ export function RunHistoryTable({
     {
       key: 'startedAt',
       header: 'Started',
-      className: 'text-[11px] text-text-tertiary whitespace-nowrap',
-      render: (s) => absoluteTime(s.startedAt),
+      render: (s) => <T as="span" size="xs" tone="tertiary" className="whitespace-nowrap">{absoluteTime(s.startedAt)}</T>,
     },
     {
       key: 'target',
@@ -49,20 +49,14 @@ export function RunHistoryTable({
       render: (s) => {
         const target = s.targetId ? targetsById.get(s.targetId) : null;
         return (
-          <>
-            <Inline gap="none"
-              className="text-[12px] font-medium max-w-[280px] overflow-hidden truncate whitespace-nowrap"
-              title={target?.label ?? s.startUrl}
-            >
+          <Inline gap="sm" align="center" wrap={false}>
+            <T as="span" title={target?.label ?? s.startUrl} size="sm" weight="semibold" className="max-w-[200px] truncate whitespace-nowrap">
               {target?.label ?? '(ad-hoc)'}
-            </Inline>
-            <Inline gap="none"
-              className="text-[10px] font-mono text-text-tertiary max-w-[280px] overflow-hidden truncate whitespace-nowrap"
-              title={s.startUrl}
-            >
+            </T>
+            <T as="span" title={s.startUrl} size="xs" tone="tertiary" className="font-mono max-w-[240px] truncate whitespace-nowrap">
               {s.startUrl}
-            </Inline>
-          </>
+            </T>
+          </Inline>
         );
       },
     },
@@ -79,29 +73,24 @@ export function RunHistoryTable({
     {
       key: 'duration',
       header: 'Duration',
-      className: 'text-[11px] text-text-tertiary',
-      render: (s) => durationLabel(durationOf(s)),
+      render: (s) => <T as="span" size="xs" tone="tertiary" className="whitespace-nowrap">{durationLabel(durationOf(s))}</T>,
     },
     {
       key: 'pages',
       header: 'Pages',
-      align: 'right',
-      className: 'text-[12px] font-semibold',
+      numeric: true,
       render: (s) => (
-        <>
-          {s.pages.length}
-          <Inline as="span" gap="none" className="text-text-tertiary font-normal">
-            {' / '}{s.maxPages}
-          </Inline>
-        </>
+        <Inline gap="none" justify="end" wrap={false}>
+          <T as="span" size="sm" weight="semibold" tabular>{s.pages.length}</T>
+          <T as="span" size="sm" tone="tertiary" tabular>{' / '}{s.maxPages}</T>
+        </Inline>
       ),
     },
     {
       key: 'cost',
       header: 'Cost',
-      align: 'right',
-      className: 'text-[11px] text-text-secondary font-mono',
-      render: (s) => formatCost(s.estimatedCostUsd),
+      numeric: true,
+      render: (s) => <T as="span" size="xs" tone="secondary" tabular className="font-mono">{formatCost(s.estimatedCostUsd)}</T>,
     },
   ];
 
@@ -126,6 +115,7 @@ export function RunHistoryTable({
       </Inline>
 
       <DataTable
+        size="sm"
         data={filtered}
         columns={columns}
         keyField={(s) => s.id}

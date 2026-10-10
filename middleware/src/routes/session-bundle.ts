@@ -31,11 +31,15 @@ sessionBundleRouter.get('/', asyncHandler(async (_req, res) => {
   res.json({ bundles: (await listBundles()).map(withImpact) });
 }));
 
-// GET /api/session-bundle/live — what the fleet is running right now
+// GET /api/session-bundle/live — what the fleet is running right now.
+// `null` when nothing has been published yet. "Nothing is live" is an answer
+// to "what is live?", not a missing resource — as a 404 it reached Session
+// settings as an outage ("Could not load … unknown rather than empty") and
+// hid the page's own empty state. `/:id` still 404s: there the caller named
+// a bundle that does not exist.
 sessionBundleRouter.get('/live', asyncHandler(async (_req, res) => {
   const bundle = await getLiveBundle();
-  if (!bundle) throw new NotFoundError('no live session bundle');
-  res.json(withImpact(bundle));
+  res.json(bundle ? withImpact(bundle) : null);
 }));
 
 // GET /api/session-bundle/:id

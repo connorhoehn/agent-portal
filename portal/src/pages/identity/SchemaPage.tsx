@@ -5,9 +5,11 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
+  T,
   Button,
   Card,
   Chip,
+  CodeBlock,
   CollapsibleSection,
   ConfirmDialog,
   Inline,
@@ -171,11 +173,11 @@ function SchemaPage() {
             <Inline gap="xs" wrap>
               {entityTypes.length > 0
                 ? entityTypes.map(t => <Chip key={t} size="xs" mono>{t}</Chip>)
-                : <Inline as="span" className="text-[12px] text-text-tertiary">(none)</Inline>}
+                : <T as="span" size="xs" tone="tertiary">(none)</T>}
             </Inline>
-            <Stack as="p" gap="none" className="m-0 text-[11px] text-text-tertiary">
+            <T as="p" size="xs" tone="tertiary" className="m-0">
               Entity types are fixed in this schema. Edit raw JSON via the AVP API to add custom entities.
-            </Stack>
+            </T>
           </Stack>
 
           <Stack gap="xs">
@@ -188,15 +190,15 @@ function SchemaPage() {
                   placeholder="add action…"
                   lowercase={false}
                 />
-                <Stack as="p" gap="none" className="m-0 text-[11px] text-text-tertiary">
+                <T as="p" size="xs" tone="tertiary" className="m-0">
                   Type an action name and press Enter. New actions inherit appliesTo: {DEFAULT_APPLIES_TO.principalTypes.join(', ')} → {DEFAULT_APPLIES_TO.resourceTypes.join(', ')}.
-                </Stack>
+                </T>
               </>
             ) : (
               <Inline gap="xs" wrap>
                 {actions.length > 0
                   ? actions.map(a => <Chip key={a} size="xs" mono>{a}</Chip>)
-                  : <Inline as="span" className="text-[12px] text-text-tertiary">(none)</Inline>}
+                  : <T as="span" size="xs" tone="tertiary">(none)</T>}
               </Inline>
             )}
           </Stack>
@@ -204,13 +206,7 @@ function SchemaPage() {
       </Card>
 
       <CollapsibleSection title="Raw schema (JSON)" defaultOpen={false}>
-        <Stack
-          as="pre"
-          gap="none"
-          className="m-0 overflow-x-auto whitespace-pre-wrap rounded-[4px] border border-border bg-surface-hover p-3 font-mono text-[12px] leading-relaxed text-text-primary"
-        >
-          {JSON.stringify(data.schema, null, 2)}
-        </Stack>
+        <CodeBlock code={JSON.stringify(data.schema, null, 2)} language="json" ariaLabel="Raw Cedar schema" />
       </CollapsibleSection>
     </PageSection>
   );

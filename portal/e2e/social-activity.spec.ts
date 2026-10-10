@@ -1,4 +1,5 @@
 import { test, expect, type Browser, type Page } from '@playwright/test';
+import { signIn } from './realSession';
 
 // The judge for the header activity indicator (docs/social-tenant-design.md
 // §3.6; docs/social-tenant-goal.md phase N). Runs against the shared dev:mock
@@ -26,17 +27,9 @@ test.describe.configure({ mode: 'serial' });
 const DOC = 'page:100002';
 const PARENT = 'kc-rubric-01'; // u-jonas's comment on Rubric Overview (imported legacy thread)
 
-async function signIn(page: Page, userId: string) {
+async function signedIn(page: Page, userId: string) {
   await page.goto('/');
-  let status = 0;
-  for (let attempt = 0; attempt < 2 && status !== 200; attempt += 1) {
-    if (attempt) await page.waitForTimeout(10_000); // a middleware edit restarts tsx watch
-    status = await page.evaluate(async (id) => (await fetch('/api/session/login', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
-      body: JSON.stringify({ userId: id }),
-    })).status, userId);
-  }
-  expect(status, `demo login as ${userId}`).toBe(200);
+  await signIn(page, userId);
 }
 
 async function person(browser: Browser, baseURL: string | undefined, userId: string, path: string) {
@@ -44,7 +37,7 @@ async function person(browser: Browser, baseURL: string | undefined, userId: str
   const page = await context.newPage();
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
-  await signIn(page, userId);
+  await signedIn(page, userId);
   await page.goto(path);
   await expect(bell(page)).toBeVisible({ timeout: 20_000 });
   return { context, page, errors };
@@ -131,7 +124,7 @@ test('a user with no social grant receives no social item', async ({ browser, ba
   // producer fires for a social grant holder in this very run.
   const miraCtx = await browser.newContext({ baseURL });
   const mira = await miraCtx.newPage();
-  await signIn(mira, 'u-mira');
+  await signedIn(mira, 'u-mira');
   await mira.evaluate(async () => {
     const t = await (await fetch('/api/session/realtime-token', { credentials: 'include' })).json() as { token: string; gatewayUrl: string };
     const url = `${t.gatewayUrl.replace(/^http/, 'ws').replace(/\/$/, '')}/ws`;
@@ -148,7 +141,7 @@ test('a user with no social grant receives no social item', async ({ browser, ba
   // u-sana (social participant) sends one DM to u-hr and one to u-mira.
   const sanaCtx = await browser.newContext({ baseURL });
   const sana = await sanaCtx.newPage();
-  await signIn(sana, 'u-sana');
+  await signedIn(sana, 'u-sana');
   const me = await sana.evaluate(async () => (await fetch('/api/session/me', { credentials: 'include' })).json());
   expect(me.tenant, 'u-sana signs into the social tenant').toBe('social');
   const refused = await sana.evaluate(async () => {

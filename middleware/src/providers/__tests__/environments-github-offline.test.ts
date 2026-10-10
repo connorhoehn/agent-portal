@@ -36,9 +36,11 @@ afterEach(() => { fixtureRegistry.resetAll('default'); });
 
 describe('repoForInitiative, offline', () => {
   it('resolves the seeded repository instead of claiming none is linked', async () => {
+    // Private, like every initiative repo — reached through the GitHub
+    // credential the seed links it with.
     expect(await repoForInitiative('p-observability')).toEqual({
       repoFullName: 'connorhoehnslalom/orgiq-observability',
-      connectionName: null,
+      connectionName: 'orgiq-github-connorhoehnslalom',
     });
   });
 

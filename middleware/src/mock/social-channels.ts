@@ -1,7 +1,7 @@
 // The social tenant's channels and direct messages under dev:mock
 // (docs/social-tenant-design.md §4.3–§4.5, lane S1).
 //
-// Three fixtures, one per thing the chat store holds, so the mock is the same
+// One fixture per thing the chat store holds, so the mock is the same
 // shape as the durable store rather than a pile of pre-counted answers:
 //
 //   social.channels         the directory — one row per `social:ch:<slug>`
@@ -12,6 +12,7 @@
 //   social.read-cursors     ChatReadReceipt rows — how far each person has read a
 //                           DM (live: DynamoDB `chat-reads`); the DM list's unread
 //                           count is counted from these and the messages
+//   social.pins             PinnedMessage rows (live: DynamoDB `chat-pins`)
 //
 // Under MOCK_AURORA the gateway's chat stores READ AND WRITE these rows
 // (lib/social-chat.ts), so a message posted in the browser lands here, and
@@ -28,8 +29,13 @@
 //   DM Lena ↔ Sana, DM Lena ↔ Mira — so the DMs page opens on something.
 // Timestamps come from the mock clock at read time (contract rule 3).
 
-import type { ChatMember, ChatMessage, ChatReadReceipt } from '@connorhoehnslalom/realtime-modules/chat';
+import type { ChatMember, ChatMessage, ChatReadReceipt, PinnedMessage } from '@connorhoehnslalom/realtime-modules/chat';
 import { clock, defineFixture } from './core/index.js';
+import { CAST, EXTRA_CHANNELS, EXTRA_MEMBERS, HISTORY, PINS } from './social-history.js';
+import { workItemComments, type WorkItemCommentRow } from './work-item-comments.js';
+import { legacyCommentMessage, type LegacyWorkComment } from '../lib/work-thread.js';
+import { seededPeople } from './people.js';
+import { seedUserForPerson } from '../providers/identity.js';
 
 export type SocialChannelPrivacy = 'public' | 'private';
 
@@ -52,6 +58,8 @@ function seedChannels(): SocialChannelRow[] {
     { tenant: 'social', slug: 'design-reviews', name: 'Design reviews', description: 'Post a design, get eyes on it.', privacy: 'public', createdBy: 'u-lena', createdAt: clock.daysAgo(14) },
     { tenant: 'social', slug: 'moderators', name: 'Moderators', description: 'Moderation calls and escalations.', privacy: 'private', createdBy: 'u-lena', createdAt: clock.daysAgo(10) },
     { tenant: 'social', slug: 'auth-migration', name: 'Auth migration', description: 'Discussion for the auth migration initiative (bound to its overview in OrgIQ).', privacy: 'public', createdBy: 'u-vera', createdAt: clock.daysAgo(8) },
+    // The demo history's extra channels (mock/social-history.ts).
+    ...EXTRA_CHANNELS.map((c): SocialChannelRow => ({ tenant: 'social', slug: c.slug, name: c.name, description: c.description, privacy: c.privacy, createdBy: c.owner, createdAt: clock.daysAgo(c.daysAgo) })),
   ];
 }
 
@@ -76,6 +84,11 @@ function seedMembers(): ChatMember[] {
     member(ch('auth-migration'), 'u-theo', 'member', 'u-theo', clock.daysAgo(8)),
     member(ch('auth-migration'), 'u-mia', 'member', 'u-mia', clock.daysAgo(7)),
     member(ch('auth-migration'), 'u-release', 'member', 'u-release', clock.daysAgo(7)),
+    ...Object.entries(EXTRA_MEMBERS).flatMap(([slug, ids]) => ids.map((id) => member(ch(slug), id, 'member', id, clock.daysAgo(6)))),
+    ...EXTRA_CHANNELS.flatMap((c) => [
+      member(ch(c.slug), c.owner, 'owner', c.owner, clock.daysAgo(c.daysAgo)),
+      ...c.members.map((id) => member(ch(c.slug), id, 'member', c.owner, clock.daysAgo(Math.max(1, c.daysAgo - 1)))),
+    ]),
   ];
 }
 
@@ -88,6 +101,36 @@ function seedMembers(): ChatMember[] {
 function msg(key: string, channel: string, userId: string, displayName: string, text: string, timestamp: string): ChatMessage {
   const id = `${new Date(timestamp).getTime().toString(36)}seed${key.replace(/[^a-z0-9]/g, '')}`;
   return { id, clientId: 'seed', userId, channel, message: text, metadata: { displayName }, timestamp };
+}
+
+/** `social:dm:<sorted ids>` for an `a|b` pair — the library's naming (lib/social-chat.ts `dmChannelFor`). */
+const dmChannelFor = (pair: string): string => `social:dm:${pair.split('|').sort().join(':')}`;
+
+/**
+ * A work item's discussion is its gateway thread `orgiq:work:<id>` — the one the
+ * initiative page's pane and its Discussion tab both read. The seeded human
+ * comments (mock/work-item-comments.ts, mirroring schema/seed_program.sql) are
+ * that thread's history: each one is exactly what the one-time migration
+ * (lib/migrate-work-comments.ts) writes for it on the real backend — the same
+ * pure mapping (lib/work-thread.ts legacyCommentMessage), so the mock thread and
+ * a migrated one agree on ids, timestamps, provenance and sender. Authors are
+ * the person's linked login (directory row) where one exists, else a
+ * named-but-unlinked sender with no userId.
+ */
+function workThreadMessages(): ChatMessage[] {
+  return workItemComments.rows().filter((c) => !c.isSystem).map((c) => legacyCommentMessage(legacyWorkComment(c)));
+}
+
+/** A fixture comment with its author resolved from the seeded directory (the migration's join, in memory). */
+export function legacyWorkComment(c: WorkItemCommentRow): LegacyWorkComment {
+  const user = c.authorId ? seedUserForPerson(c.authorId) : null;
+  return {
+    commentId: c.id, workItemId: c.workItemId,
+    authorPersonId: c.authorId,
+    authorPersonName: c.authorId ? seededPeople.find((p) => p.id === c.authorId)?.name ?? null : null,
+    authorUserId: user?.id ?? null, authorUserDisplayName: user?.displayName ?? null,
+    body: c.body, createdAt: c.createdAt,
+  };
 }
 
 function seedMessages(): ChatMessage[] {
@@ -106,6 +149,10 @@ function seedMessages(): ChatMessage[] {
     msg('seed-dm-ls-1', dmLenaSana, 'u-lena', 'Lena Brandt', 'Hi Sana — welcome aboard. Shout if anything in #general is unclear.', clock.daysAgo(1)),
     msg('seed-dm-ls-2', dmLenaSana, 'u-sana', 'Sana Iqbal', 'Thanks Lena, will do.', clock.hoursAgo(22)),
     msg('seed-dm-lm-1', dmLenaMira, 'u-mira', 'Mira Okafor', 'Can you cover the Thursday call if I run late?', clock.hoursAgo(4)),
+    ...workThreadMessages(),
+    // Ten days of history from the whole social cast (mock/social-history.ts).
+    ...[...HISTORY].sort((a, b) => b[3] - a[3]).map(([key, where, user, hours, text]) =>
+      msg(`h-${key}`, where.includes('|') ? dmChannelFor(where) : ch(where), user, CAST[user] ?? user, text, clock.hoursAgo(hours))),
   ];
 }
 
@@ -144,6 +191,32 @@ export const socialReadCursorsFixture = defineFixture<ChatReadReceipt>({
     empty: () => [],
   },
 });
+
+/** A DM opened (POST /dms) before its first message: the person's index row (live: DynamoDB `chat-conversations`). */
+export interface SocialDmJoin { channel: string; userId: string }
+export const socialDmJoinsFixture = defineFixture<SocialDmJoin>({
+  key: 'social.dm-joins',
+  scenarios: { default: () => [], empty: () => [] },
+});
+
+/** Pins are channel state; resetting the mock clears them independently of messages. */
+export const socialPinsFixture = defineFixture<PinnedMessage>({
+  key: 'social.pins',
+  scenarios: { default: seedPins, empty: () => [] },
+});
+
+/** Pins, found by the key their message carries, so a pin cannot name a message the seed lacks. */
+function seedPins(): PinnedMessage[] {
+  const rows = socialChannelMessagesFixture.rows('default');
+  const out: PinnedMessage[] = [];
+  for (const [slug, key, by, hours] of PINS) {
+    const m = rows.find((r) => r.channel === ch(slug) && r.id.endsWith(`seedh${key}`));
+    if (!m) continue;
+    out.push({ channelId: m.channel, messageId: m.id, pinnedBy: by, pinnedAt: clock.hoursAgo(hours),
+      preview: m.message.slice(0, 140), author: String(m.metadata?.['displayName'] ?? m.userId ?? ''), sentAt: m.timestamp });
+  }
+  return out;
+}
 
 // ── Selectors (counted from the rows, never stored) ─────────────────────────
 

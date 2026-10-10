@@ -8,6 +8,7 @@
 
 import { useState } from 'react';
 import {
+  T,
   Button,
   Inline,
   InlineAlert,
@@ -65,10 +66,10 @@ export function ProvisionModal({
 
         {!started ? (
           <>
-            <Inline as="p" gap="none" className="m-0 text-[13px] text-text-secondary">
+            <T as="p" size="sm" tone="secondary" className="m-0">
               This will provision the Bedrock Knowledge Base for <strong>{kb.name}</strong>.
               The 7-step process takes about 2–3 minutes.
-            </Inline>
+            </T>
             {kb.status === 'FAILED' && kb.errorMessage && (
               <InlineAlert tone="error">
                 <strong>Previous failure:</strong> {kb.errorMessage}

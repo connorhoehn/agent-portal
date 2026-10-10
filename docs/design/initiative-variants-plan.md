@@ -242,7 +242,7 @@ The raw/button/style budgets for pages are 0 (`validate-component-discipline.sh:
 ```
 ./scripts/validate-orgiq-audit.sh && ./scripts/validate-branding.sh && ./scripts/validate-mock-floor.sh && ./scripts/validate-component-discipline.sh && ./scripts/validate-nav-parity.sh && ./scripts/validate-honest-numbers.sh
 ```
-- Update `portal/e2e/computer-lab-demo.spec.ts:108` to `?tab=work`.
+- ~~Update `portal/e2e/computer-lab-demo.spec.ts:108` to `?tab=work`.~~ Moot since 2026-10-07: the walkthrough is scenario-driven inside the Computer Lab and no longer opens the initiative page (`docs/demos/computer-lab-demo.md`).
 
 **Parallel map:**
 - `L ∥ M1 ∥ M2 ∥ M3 ∥ M4 ∥ P0`
@@ -311,7 +311,7 @@ Procedure:
    - Chat mode and the Add note/context writes follow `writeGate`.
    - "Check profile" must be reachable by member (`/settings`), with the Identity link only for `ManageUsers`.
    - Nav-parity is unaffected because `App.tsx:296-300` gating is unchanged.
-5. **Default tab change:** the `?item=` → Work rule keeps existing deep links working. `computer-lab-demo.spec.ts:108` and the demo-recording skill need `?tab=work`.
+5. **Default tab change:** the `?item=` → Work rule keeps existing deep links working. (The demo walkthrough no longer visits the initiative page — `docs/demos/computer-lab-demo.md`.)
 6. **D3 in-flight runs:** they show globally (ActiveRunsBadge, Automate, Computer Lab), consume one of the three concurrency slots, and may be settled by a mock reconcile loop. Verify they survive 10 minutes of dev:mock and that no other journey claims "nothing running". Aurora reads Idle by design.
 7. **Seed copy (D1):** `ON CONFLICT DO NOTHING` needs the explicit UPDATE. Changing RNG call order would reshuffle the whole seed. Check that the synthetic corpus does not read the old titles.
 8. **Honest numbers:**

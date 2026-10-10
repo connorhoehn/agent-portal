@@ -37,30 +37,30 @@ const CAPABILITY_LABELS: Record<string, string> = {
  *  with NAV_ITEMS in Layout.tsx. */
 const SOCIAL_GROUPS: Record<string, string> = {
   channels: 'Talk', dms: 'Talk', calls: 'Meet', rooms: 'Meet', contacts: 'People', teams: 'People',
-  profile: 'People', recordings: 'Library', configuration: 'System', settings: 'System',
+  profile: 'People', recordings: 'Library', 'work-graph': 'Library', configuration: 'System', settings: 'System',
 };
 const SOCIAL_LABELS: Record<string, string> = {
   channels: 'Channels', dms: 'Direct messages', calls: 'Calls', rooms: 'Rooms', contacts: 'Contacts',
-  teams: 'Teams', profile: 'Profile', recordings: 'Recordings', configuration: 'Configuration', settings: 'Social settings',
+  teams: 'Teams', profile: 'Profile', recordings: 'Recordings', 'work-graph': 'Work graph', configuration: 'Configuration', settings: 'Social settings',
 };
-const PIPELINES_GROUPS: Record<string, string> = {
+const PIPELINES_GROUPS: Record<string, string> = { queues: 'Runs',
   definitions: 'Catalog', runbooks: 'Catalog', runs: 'Runs', approvals: 'Runs', artifacts: 'Runs',
-  agents: 'Sources', bots: 'Sources', commands: 'Sources', configuration: 'System', settings: 'System',
+  decks: 'Runs', activity: 'Runs', communication: 'Runs', agents: 'Sources', bots: 'Sources', commands: 'Sources', configuration: 'System', settings: 'System',
 };
-const PIPELINES_LABELS: Record<string, string> = {
-  definitions: 'Definitions', runbooks: 'Runbooks', runs: 'Runs', approvals: 'Approvals', artifacts: 'Artifacts',
+const PIPELINES_LABELS: Record<string, string> = { queues: 'Queues',
+  definitions: 'Definitions', runbooks: 'Runbooks', runs: 'Runs', approvals: 'Approvals', artifacts: 'Artifacts', decks: 'Run reports', activity: 'Work graph', communication: 'Communication',
   agents: 'Agents', bots: 'Bots', commands: 'Commands', configuration: 'Configuration', settings: 'Pipeline settings',
 };
 const ASSESSMENT_GROUPS: Record<string, string> = {
-  teams: 'Assess', submissions: 'Assess',
-  reports: 'Analyze', feedback: 'Analyze',
+  teams: 'Assess', submissions: 'Assess', communication: 'Assess',
+  reports: 'Analyze', decks: 'Analyze', activity: 'Analyze', feedback: 'Analyze',
   enterprise: 'Informatics', workspace: 'Informatics', prompts: 'Informatics', rules: 'Informatics',
   runs: 'System', configuration: 'System',
 };
 const ASSESSMENT_LABELS: Record<string, string> = {
-  teams: 'Dashboard', submissions: 'Submissions', feedback: 'Feedback', reports: 'Reports',
+  teams: 'Dashboard', submissions: 'Submissions', communication: 'Communication', feedback: 'Feedback', reports: 'Reports',
   enterprise: 'Enterprise', workspace: 'Workspace', prompts: 'Prompts', rules: 'Rules',
-  runs: 'Activity', configuration: 'Configuration',
+  runs: 'Activity', activity: 'Work graph', decks: 'Review decks', configuration: 'Configuration',
 };
 // The rail's own words (iqSubNavFormat.ts PROMPT_MGMT_ITEMS) — the name a
 // person clicked is the name the trail should repeat.
@@ -84,7 +84,7 @@ export function resolveBreadcrumbs(pathname: string): Crumb[] {
 
   if (root === 'iq') {
     switch (a) {
-      case 'search': return [{ label: 'Org' }, { label: 'Search' }];
+      case 'search': return [{ label: 'Engage' }, { label: 'Search' }];
       case 'work':
         if (!b) return [{ label: 'Build' }, { label: 'Automate', path: '/iq/work' }, { label: 'Inbox' }];
         if (b === 'changes') return [{ label: 'Build' }, { label: 'Automate', path: '/iq/work' }, { label: 'Changes' }];
@@ -102,12 +102,24 @@ export function resolveBreadcrumbs(pathname: string): Crumb[] {
         return [{ label: 'Build' }, { label: 'Agent library', path: '/iq/library' }, { label: shortId(b), id: b }];
       case 'promotions': return [{ label: 'Build' }, { label: 'Distillation', path: '/iq/distillation/knowledge' }, { label: 'Review', path: '/iq/distillation/review' }, { label: 'Asset promotions' }];
       case 'release': return [{ label: 'Build' }, { label: 'Local compute', path: '/iq/local-compute' }, { label: 'Configuration' }];
+      case 'activity': return [{ label: 'Operate' }, { label: 'Work graph' }];
+      // The rail's groups (Layout.tsx NAV_ITEMS): Runs under Operate,
+      // Communication under Org. A document opens from Search; a status deck from its
+      // initiative page.
+      case 'runs':
+        if (!b) return [{ label: 'Operate' }, { label: 'Runs' }];
+        return [{ label: 'Operate' }, { label: 'Runs', path: '/iq/runs' }, { label: `Run ${shortId(b)}`, id: b }];
+      case 'communication': return [{ label: 'Engage' }, { label: 'Communication' }];
+      case 'documents':
+        return [{ label: 'Engage' }, { label: 'Search', path: '/iq/search' }, ...(b ? [{ label: shortId(b), id: b }] : [])];
+      case 'decks':
+        return [{ label: 'Initiatives', path: '/iq/projects' }, ...(b ? [{ label: `Deck ${shortId(b)}`, id: b }] : [])];
       case 'sprints': return [{ label: 'Plan' }, { label: 'Initiatives', path: '/iq/projects' }, { label: 'Sprints' }];
-      case 'invoke': return [{ label: 'Org' }, { label: 'Ask' }];
-      case 'explore': return [{ label: 'Org' }, { label: 'Explore' }];
+      case 'invoke': return [{ label: 'Engage' }, { label: 'Ask' }];
+      case 'explore': return [{ label: 'Engage' }, { label: 'Explore' }];
       case 'scores':
-        if (!b) return [{ label: 'Org' }, { label: 'Scores' }];
-        return [{ label: 'Org' }, { label: 'Scores', path: '/iq/scores' }, { label: b === 'cohorts' ? 'Cohorts' : 'Compare' }];
+        if (!b) return [{ label: 'Engage' }, { label: 'Scores' }];
+        return [{ label: 'Engage' }, { label: 'Scores', path: '/iq/scores' }, { label: b === 'cohorts' ? 'Cohorts' : 'Compare' }];
       case 'agents':
         if (!b) return [{ label: 'Operate' }, { label: 'Architecture' }];
         return [{ label: 'Operate' }, { label: 'Architecture', path: '/iq/agents' }, { label: b, id: b }];
@@ -181,6 +193,12 @@ export function resolveBreadcrumbs(pathname: string): Crumb[] {
   }
 
   if (root === 'assessment') {
+    if (a === 'workspace') return [{ label: 'Workspace' }];
+    if (a === 'decks') return [
+      { label: 'Workspace', path: '/assessment/workspace?view=library' },
+      { label: 'Presentations', path: '/assessment/workspace?view=presentations' },
+      ...(b ? [{ label: `Presentation ${shortId(b)}`, id: b }] : []),
+    ];
     // Mirrors the shell rail for this tenant (Layout.tsx NAV_ITEMS): the first
     // crumb is the GROUP the page sits under, the second the page — the same
     // shape as `Plan › Initiatives › Observability` in the org tenant, so a
@@ -202,7 +220,12 @@ export function resolveBreadcrumbs(pathname: string): Crumb[] {
   }
   if (root === 'pipelines') {
     const page = a ?? 'runs';
-    return [{ label: PIPELINES_GROUPS[page] ?? 'Pipelines' }, { label: PIPELINES_LABELS[page] ?? page }];
+    const group = PIPELINES_GROUPS[page] ?? 'Pipelines';
+    const label = PIPELINES_LABELS[page] ?? page;
+    // The Runs page sits under the Runs group; name the product instead of "Runs › Runs".
+    const trail: Crumb[] = [{ label: group === label ? 'Pipelines' : group }];
+    if (b && page === 'runs') return [...trail, { label, path: '/pipelines/runs' }, { label: `Run ${shortId(b)}`, id: b }];
+    return [...trail, { label }];
   }
 
   if (root === 'settings') return [{ label: 'System' }, { label: 'Settings' }];

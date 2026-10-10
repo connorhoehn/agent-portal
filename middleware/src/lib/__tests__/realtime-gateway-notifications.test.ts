@@ -12,6 +12,13 @@
 jest.mock('../../config.js', () => ({
   config: { region: 'us-east-1', aurora: {}, auth: { sessionSigningSecretArn: '' }, cognito: { portalOrigin: '' }, mock: { aurora: true } },
 }));
+// Match the Social seed capabilities in this CJS harness; production loads
+// the real ESM Cedar registry.
+jest.mock('../role-registry.js', () => ({ roleRegistry: () => [
+  { id: 'participant', tenant: 'social', capabilities: ['ViewSocial', 'PostMessage', 'StartCall'] },
+  { id: 'moderator', tenant: 'social', capabilities: ['ViewSocial', 'PostMessage', 'StartCall'] },
+  { id: 'community-admin', tenant: 'social', capabilities: ['ViewSocial', 'PostMessage', 'StartCall'] },
+] }));
 
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -21,6 +28,7 @@ import { notify } from '../social-notify.js';
 import { notificationsFixture } from '../../mock/notifications.js';
 import { signRealtimeToken, realtimeClaims } from '../realtime-token.js';
 import type { Session } from '../session.js';
+import { getUser } from '../../providers/identity.js';
 
 const SECRET = 'test-realtime-secret';
 type Frame = Record<string, unknown> & { type?: string };
@@ -51,7 +59,8 @@ afterAll(async () => {
 });
 
 async function connectAs(sub: string, name: string, tenant: string): Promise<Open> {
-  const session = { sub, name, role: 'member', tenant, grants: { [tenant]: ['member'] }, iat: Math.floor(Date.now() / 1000) } as Session;
+  const user = await getUser(sub, { authoritative: true });
+  const session = { sub, name, role: user?.grants[tenant]?.[0], tenant, grants: user?.grants ?? {}, epoch: user?.epoch ?? 0, iat: Math.floor(Date.now() / 1000) } as Session;
   const token = (await signRealtimeToken(realtimeClaims(session), SECRET)).token;
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(`ws://127.0.0.1:${port}${REALTIME_GATEWAY_PATH}`, ['bearer-token-v1', token]);
@@ -82,8 +91,8 @@ describe('the dev:mock seed', () => {
     const farah = await connectAs('u-farah', 'Farah Osei', 'assessment');
     try {
       await until(() => replayed(farah).length > 0);
-      expect(replayed(farah).map((n) => n['id'])).toEqual(seededFor);
-      expect(replayed(farah)[0]).toMatchObject({ payload: { tenant: 'assessment', category: 'Assessment' }, action: { href: expect.stringMatching(/^\/assessment\//) } });
+      expect(replayed(farah).map((n) => n['id']).sort()).toEqual([...seededFor].sort());
+      expect(replayed(farah).find((n) => n['id'] === 'mock-notif-reply-farah')).toMatchObject({ payload: { tenant: 'assessment', category: 'Assessment' }, action: { href: expect.stringMatching(/^\/assessment\//) } });
     } finally { farah.ws.close(); }
   });
 

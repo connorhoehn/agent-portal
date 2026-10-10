@@ -7,13 +7,12 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import {
-  Chip, CodeBlock, EmptyState, Select, SectionLabel, Stack, Inline, Tabs,
+  Chip, CodeBlock, EmptyState, Select, SectionLabel, Stack, Inline, Tabs, T, VisuallyHidden,
 } from '@connorhoehnslalom/ui-components/shared';
 import { usePromptList, usePromptVersions } from '../../components/canary/usePromptLibrary.js';
 import type { PromptLibraryEntry } from '../../components/canary/types.js';
 import { diffStats, lineDiff } from './diffFormat';
 import { DiffFrame } from './DiffFrame';
-import { T } from './Text';
 
 // ── Hooks ─────────────────────────────────────────────────────────────────────
 
@@ -100,13 +99,13 @@ function DiffViewer({ textA, textB, labelA, labelB }: {
   return (
     <Stack gap="sm" className="min-h-0 flex-1 p-4">
       <Inline gap="sm" align="center" wrap>
-        <T className="font-mono text-[12px] font-semibold text-text-secondary">{labelA} → {labelB}</T>
+        <T size="xs" weight="semibold" className="font-mono text-text-secondary">{labelA} → {labelB}</T>
         <Chip tone="success" size="xs" mono>+{stats.added}</Chip>
         <Chip tone="danger" size="xs" mono>−{stats.removed}</Chip>
         <Chip tone="neutral" size="xs" mono>{stats.unchanged} unchanged</Chip>
       </Inline>
       {identical ? (
-        <T className="p-8 text-center text-[13px] text-text-tertiary">✓ Templates are identical.</T>
+        <T size="sm" className="p-8 text-center text-text-tertiary">✓ Templates are identical.</T>
       ) : (
         <Stack gap="none" className="min-h-0 flex-1 overflow-auto">
           <DiffFrame lines={lines} />
@@ -189,7 +188,8 @@ export default function DiffPage(): React.ReactElement {
   }
 
   return (
-    <Stack gap="none" className="-m-6 h-full min-h-0">
+    <Stack gap="none" className="h-full min-h-0">
+      <VisuallyHidden as="h1">Prompt diff</VisuallyHidden>
       {/* ── Toolbar ── */}
       <Inline gap="md" align="end" wrap className="shrink-0 flex-wrap border-b border-border bg-surface px-5 py-4">
         <PromptVersionPicker
@@ -202,7 +202,7 @@ export default function DiffPage(): React.ReactElement {
           onVersionChange={setVersionA}
         />
 
-        <T className="shrink-0 pb-1.5 text-lg text-text-tertiary">↔</T>
+        <T size="sm" className="shrink-0 pb-1.5 text-text-tertiary">↔</T>
 
         <PromptVersionPicker
           label="Version B (challenger)"
@@ -238,7 +238,7 @@ export default function DiffPage(): React.ReactElement {
         )}
 
         {canCompare && loading && (
-          <T className="flex-1 p-10 text-center text-[13px] text-text-tertiary">Loading templates…</T>
+          <T size="sm" className="flex-1 p-10 text-center text-text-tertiary">Loading templates…</T>
         )}
 
         {canCompare && !loading && viewMode === 'diff' && (

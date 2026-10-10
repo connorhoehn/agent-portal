@@ -1,0 +1,60 @@
+commit d948047cc962fa3d0349a090da27b8f88fd45032
+Author: Connor Hoehn <connorhoehn@Connors-MacBook-Pro.local>
+Date:   Tue Oct 6 14:04:13 2026 -0400
+
+    release: realtime-modules 0.109.0
+    
+    - Presence frame lane (from perf/presence-frame-lane b365d49c).
+    - Opt-in publish proofs (publishProofMaxAgeMs): one sender-side publish
+      authorize per (client, channel) per AuthorityScope, revocable by the host
+      (revokePublishProofs), bounded by age and bound to the connection context;
+      subscribe/recipient checks are never shared. A content-free proofAt lets a
+      peer with the option on skip only the redundant publisher re-check while
+      it is fresh; recipient checks always run. Contract P1-P5 in
+      authorityScope.ts. One two-node chat send: 7+1 publish authorizes -> 1+0.
+    - parseDmLobby(lobby, { prefix }) and dmLobbyPrefix({ prefix, group }).
+    
+    Gate: full jest 2,097 passed / 9 skipped (native Redis router 35 + call
+    recovery 5 included), build + verify-exports, packed consumer.
+    
+    Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+
+ CHANGELOG.md                                 |  34 ++++
+ dist/call/index.d.ts                         |   3 +-
+ dist/call/index.d.ts.map                     |   2 +-
+ dist/call/index.js                           |   4 +-
+ dist/call/index.js.map                       |   2 +-
+ dist/call/lobbyChannel.d.ts                  |  40 +++++
+ dist/call/lobbyChannel.d.ts.map              |   2 +-
+ dist/call/lobbyChannel.js                    |  62 +++++++
+ dist/call/lobbyChannel.js.map                |   2 +-
+ dist/client/video/conversationLobby.d.ts     |   3 +-
+ dist/client/video/conversationLobby.d.ts.map |   2 +-
+ dist/client/video/conversationLobby.js       |   4 +-
+ dist/client/video/conversationLobby.js.map   |   2 +-
+ dist/client/video/index.d.ts                 |   3 +-
+ dist/client/video/index.d.ts.map             |   2 +-
+ dist/client/video/index.js                   |   5 +-
+ dist/client/video/index.js.map               |   2 +-
+ dist/server-ws/authorityScope.d.ts           |  26 +++
+ dist/server-ws/authorityScope.d.ts.map       |   2 +-
+ dist/server-ws/authorityScope.js             | 136 ++++++++++++++-
+ dist/server-ws/authorityScope.js.map         |   2 +-
+ dist/server-ws/index.d.ts                    |   2 +-
+ dist/server-ws/index.d.ts.map                |   2 +-
+ dist/server-ws/index.js                      |   5 +-
+ dist/server-ws/index.js.map                  |   2 +-
+ dist/server/RedisRealtimeRouter.d.ts         |   8 +
+ dist/server/RedisRealtimeRouter.d.ts.map     |   2 +-
+ dist/server/RedisRealtimeRouter.js           |  14 +-
+ dist/server/RedisRealtimeRouter.js.map       |   2 +-
+ dist/server/attach.d.ts                      |   8 +
+ dist/server/attach.d.ts.map                  |   2 +-
+ dist/server/attach.js                        |   4 +-
+ dist/server/attach.js.map                    |   2 +-
+ dist/server/index.d.ts                       |   2 +-
+ dist/server/index.d.ts.map                   |   2 +-
+ dist/server/index.js                         |   5 +-
+ dist/server/index.js.map                     |   2 +-
+ dist/server/router.d.ts                      |  12 ++
+ dist/server/router.d.ts.map                  |   2 +-

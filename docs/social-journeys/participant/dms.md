@@ -1,17 +1,19 @@
 surface: dms
 role: participant
-user: u-sana
+user: u-sana (Sana Iqbal)
 url: /social/dms/social%3Adm%3Au-mira%3Au-sana
 pages: portal/src/pages/social/DmsPage.tsx,portal/src/pages/social/SocialChatWorkspace.tsx,portal/src/pages/social/SocialConversation.tsx,portal/src/pages/social/socialChat.ts
-audited: 2026-09-30 12:38Z → 12:40Z, Chromium 1672×941 (Playwright headless, one fresh context per user — not the shared Chrome tab), middleware dev:mock:social on :3001 with the `social` compose profile up (platform-api, DynamoDB Local, host SFU), Vite :5183
+audited: 2026-10-08 11:05Z → 2026-10-08 11:05Z, Chromium (Playwright headless from portal/node_modules, a fresh context per identity, not the shared Chrome tab), 1680×940, second context u-mira; Tilt stack: Vite :5183 over middleware :3001 (mock providers) with the real SFU :3902 and platform-api :23001
 session: /api/session/me sub u-sana, tenant social, role participant
 screenshot: dms.jpg
 verdict: pass
 console errors: 0
-layout: pass — chat rail (library ConversationRail) 300px at x=200, flush against the 200px shell rail (content col left 200, 0px from content start), top 70 = content top 70, 871px tall = the full content height (no page header, shell crumbs off); pane 1172px at x=500; no horizontal scroll (scrollWidth 1672 = innerWidth 1672); composer at y 794–913px of 941, in view with no body scroll (scrollHeight 941)
-keyboard: pass — 23 distinct Tab stops from the rail's Find box through main (first: Find a chat, social-chat-rail-shelf-activity, social-chat-rail-shelf-mentions, social-chat-rail-shelf-calls, social-chat-rail-shelf-recordings, rail-section-header-toggle…) against 42 visible controls in main — the rail's conversation rows and the tree sit behind roving tabindexes (ArrowDown walks them), so fewer stops than controls is the design; Enter on the focused row opened /social/dms/social%3Adm%3Au-mira%3Au-sana; Escape closed the New message picker
-empty-state: pass — POST /api/__mock/scenario {scenario:empty, fixture:social.channel-messages} → 200: "No direct messages yet A direct message is visible only to the people in it. You have not started one here. New message"; restored with POST /api/__mock/reset → 200; a lobby that does not name this user (/social/dms/social%3Adm%3Au-farah%3Au-theo) renders "This conversation is not yours A direct message opens only for the people it names."
-realtime: pass — <0.01s out to u-mira, <0.01s back, both without a reload
-role-gating: every social role may DM (PostMessage); nothing on this page is role-gated. New message (the rail caption's +, and the DIRECT MESSAGES section's +) → the roster picker → POST /api/social/dms → the sorted lobby social:dm:u-mira:u-sana
-unread: pass — while this user was on /social/channels, u-mira wrote again; on /social/dms the row read "MO Mira Okafor 08:39 walk participant unread 1790771942284 1" with the library's unread badge (conversation-unread:1; GET /api/social/dms unreadCount 1); opening the DM (POST /api/social/dms/read) took it to 0
-notes: the conversation header (library WrappedConversationSurface) carries the tabs Chat | Documents | Pinned | Calls; Documents → URL ?view=documents (the view is in the URL), Chat restores it; audio-call 1 + video-call 1 actions; the DM carries no ⋯ menu (nothing to leave). The DM row carries the peer's avatar with a presence dot (online while they stand in the workspace).
+layout: pass — content column x=200px, width 1480px, top 70px, bottom 893px; rail 300px at x=200, y=70, height 823; pane x=500, width 1180; scrollWidth 1680 / viewport 1680; body scrollHeight 940 / viewport height 940; composer y=824–864px, in view: true; footer row y=894–940px (1680px wide); h1 count 1
+type: title 16/400; sizes in main (size/weight×text nodes): 13/600×11, 11/400×9, 12/400×9, 13/500×9, 11/500×8, 15/600×7, 11/600×6, 14/500×5, 16/400×5, 12/600×4, 14/400×3, 10/600×2, 14/600×1, 20/600×1
+keyboard: pass — physical Tab sweep from the start of main reached 31 distinct controls against 30 Tab stops (50 really-visible interactive elements; roving-focus members are not Tab stops); first stops: social-chat-rail-search-toggle, social-new-dm, social-chat-rail-options, social-chat-rail-shelf-activity, social-chat-rail-shelf-mentions, social-chat-rail-shelf-calls, social-chat-rail-shelf-recordings, rail-section-header-toggle
+empty-state: pass — /social/dms/social%3Adm%3Au-nobody%3Au-nothere rendered: This conversation is not yours A direct message opens only for the people it names.
+realtime: pass — u-sana's message reached u-mira in 0.200s, the reply came back in 0.208s, no reload; own message present after reload: true
+role-gating: cannot manage channels/teams: Create channel controls in DOM 0, New team 0, New room 1, New message 1; POST /api/social/channels {} → 403, POST /api/social/teams {} → 403 (403 = refused by Cedar, 400 = validation past the gate); message actions: own row Edit 1 / Delete 1, u-mira's view of that row Edit 0 / Delete 0
+header: MO Mira Okafor Chat Documents Pinned Calls Work graph; tabs present [chat, documents, pins, calls] = [true,true,true,true]
+picker: New message picker opened: true; Escape closed it: true
+notes: Every field above was observed in this pass, not carried forward. Not exercised in this pass: pins, forward, slash commands, attachments (covered by the pin/summarize specs, not by this surface log).

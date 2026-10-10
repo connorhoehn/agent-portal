@@ -2,10 +2,32 @@
 
 ## Open
 
+## Closed 2026-10-08 (second re-walk, after the fixes)
+
+- **25 (Activity run rows clipped).** Each row now has its facts in the library row's `meta` line ("13 run notes → 4 patterns", `title` set) and "started 2h ago" as the subline; the row's aria-label names all three. Clipped-text sweep: 0. Fix: `ActivityTab.tsx` + `activityModel.ts`.
+- **26 (Review: two h1, record title 20/700).** The sampled target's title is now the page title (`SectionHeader` → `PageHeader`, 20/600, one h1) with the verdict pill, kind line and Sources on the title row; the `EditorShell` headline is gone. Type-scale ledger no longer lists `title-scale content 20/700`. Fix: `ReviewTab.tsx`.
+
+## Update 2026-10-06 14:35 (fresh walk, :5183)
+
+- **Open 23 no longer reproduces.** Explain this guide x5 and the docked composer x3 each reached /iq/search with exactly one invoke and a clean answer, as this role. Its text below is kept as history; do not treat it as open without a new repro.
+- **24 (reclassified: walk-environment artefact, not a product defect).** `GET /api/social/embedded` and `/ws` answered 401 ("session is no longer current") ~30s after a sign-in as this user. This is the designed session-epoch revocation: login does not bump the epoch, but a tenant/role switch does (`nextEpochForSwitch`, `middleware/src/routes/session.ts`), and other journey walkers were signed in as the same seeded user switching tenants concurrently, so this walk's older cookie fell below the stored epoch at the next grants refresh. Not reproduced with a single session of that user.
+
+### 23. The guide and review hand-offs to the agent either do nothing or send twice (2026-10-01 walk — knowledge, review)
+Repro: as Vera Green (u-vera), open `/iq/distillation/knowledge?item=art-011` and click "Explain this guide"; or type into the record's / the review's docked composer and press Enter. Both navigate to `/iq/invoke?prompt=…` (`KnowledgeRecord.tsx` onExplain → KnowledgeTab `openHref` → `navigate`; `ExplainComposer.tsx` onSend → `navigate`). Observed outcomes:
+- nothing happens (guide stays, URL /iq/invoke?prompt=…, no invoke) — seen as member in 7 of 10 clicks; not seen as this role in 3 clicks;
+- the hop reaches `/iq/search?tab=answer&q=…` but fires two `POST /api/agents/orgiq-supervisor/invoke` and the two streams interleave word by word ("Here's anHere's an overview overview of yourof your organization", "I searchedI searched the the knowledge baseknowledge base") — 3 of 3 Explain clicks and 3 of 3 review-composer Asks as this role.
+"Draft a plan for my project" (prefill, then Enter) sent once and read cleanly in the one run tried. Suspects: the deep-link effect in `portal/src/pages/InvokePage.tsx` (~line 631) that sends `prompt` with no once-guard (double send), and the client-side hop through the `/iq/invoke` → `LegacySearchRedirect` route when entered from inside `DistillationModule` (stuck); a fresh load of an `/iq/invoke?prompt=` URL does redirect. Evidence: member/knowledge-explain-stuck.png, member/knowledge-explain-garbled.png. Filed for Search too (search-journeys DEFECTS Open 3).
+
+
 ### 4. Two `<main>` landmarks on every distillation page (minor, shared composite)
 Unchanged and still open — inherited from the shared `SubNavLayout` composite, which this
 repo must not edit (queued in `docs/ui-components-queue.md`). Re-confirmed this pass.
 
+
+## Observed, not defects (2026-10-01 walk)
+- **The explorer and review searches apply late.** The list request (`GET /api/distillation/items?level=L2&q=…`) went out 3.3s and 5.3s after typing stopped in two traced runs with a record open, ~1s in another without one; the review queue's "No matches" appeared ~6s after typing in one run. Until then the old list stays on screen with no pending indicator. The search does apply; it is just slow and uneven.
+- **Escape does not close the Activity run inspector.** `?run=comp-101` stays after Escape; the pane is inline (not modal) and has a keyboard-reachable "Close run", which works. Noted, not failed.
+- **#4 (two `<main>`) no longer reproduces:** `document.querySelectorAll('main').length` is 1 on Knowledge, Review and Activity for both roles on this walk.
 
 ## Open (earlier passes)
 See member/DEFECTS.md for the shared findings (Tiers/Artifacts are role-agnostic, so a

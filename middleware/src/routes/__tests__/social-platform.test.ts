@@ -37,7 +37,7 @@ import { requireTenant } from '../../lib/authz.js';
 import { errorHandler } from '../../lib/async-handler.js';
 import { type Role, type Session } from '../../lib/session.js';
 import {
-  socialCallLogFixture, socialRecordingsFixture, socialRoomMembersFixture, socialRoomsFixture,
+  socialCallLogFixture, socialRecordingsFixture, socialRecordingTranscriptsFixture, socialRoomMembersFixture, socialRoomsFixture,
   socialTeamMembersFixture, socialTeamsFixture,
 } from '../../mock/social-platform.js';
 import { socialPlatformBackend, socialRecordingSharesFixture, standaloneRooms } from '../../providers/social-platform.js';
@@ -57,7 +57,7 @@ const sana = () => appAs('u-sana', 'participant');
 const lena = () => appAs('u-lena', 'moderator');
 const mira = () => appAs('u-mira', 'community-admin', 'social', 'Mira Okafor');
 
-const FIXTURES = [socialRoomsFixture, socialRoomMembersFixture, socialTeamsFixture, socialTeamMembersFixture, socialRecordingsFixture, socialCallLogFixture, socialRecordingSharesFixture];
+const FIXTURES = [socialRoomsFixture, socialRoomMembersFixture, socialTeamsFixture, socialTeamMembersFixture, socialRecordingsFixture, socialRecordingTranscriptsFixture, socialCallLogFixture, socialRecordingSharesFixture];
 afterEach(() => { for (const f of FIXTURES) f.reset(); });
 
 describe('dev:mock backend (no platform-api)', () => {
@@ -137,6 +137,32 @@ describe('dev:mock backend (no platform-api)', () => {
       expect((await request(sana()).get('/api/social/teams/mock-team-moderation')).status).toBe(404);
     });
 
+    it('PATCH /api/social/teams/:teamId/me pins only the caller membership and refetch returns that preference', async () => {
+      const pinned = await request(sana()).patch('/api/social/teams/mock-team-community/me').send({ favorite: true });
+      expect(pinned.status).toBe(200);
+      expect(pinned.body.member).toMatchObject({ teamId: 'mock-team-community', userId: 'u-sana', favorite: true });
+      expect((await request(sana()).get('/api/social/teams')).body.teams[0].favorite).toBe(true);
+      expect((await request(sana()).get('/api/social/teams/mock-team-community')).body.team.favorite).toBe(true);
+      const ownerTeams = (await request(mira()).get('/api/social/teams')).body.teams;
+      expect(ownerTeams.find((team: { teamId: string }) => team.teamId === 'mock-team-community').favorite).toBe(false);
+      const unpinned = await request(sana()).patch('/api/social/teams/mock-team-community/me').send({ favorite: false });
+      expect(unpinned.status).toBe(200); expect(unpinned.body.member.favorite).toBe(false);
+    });
+
+    it('PATCH team preferences rejects forged bodies and a private team outside the caller membership', async () => {
+      expect((await request(sana()).patch('/api/social/teams/mock-team-community/me').send({ favorite: 'true' })).status).toBe(400);
+      expect((await request(sana()).patch('/api/social/teams/mock-team-community/me').send({ favorite: true, userId: 'u-mira' })).status).toBe(400);
+      expect((await request(sana()).patch('/api/social/teams/mock-team-moderation/me').send({ favorite: true })).status).toBe(404);
+      expect((await request(sana()).get('/api/social/teams')).body.teams[0].favorite).toBe(false);
+    });
+
+    it('a participant can leave their own team while removing another person still needs ManageTeams', async () => {
+      expect((await request(sana()).delete('/api/social/teams/mock-team-community/members/u-mira')).status).toBe(403);
+      expect((await request(sana()).delete('/api/social/teams/mock-team-community/members/u-sana')).status).toBe(204);
+      expect((await request(sana()).get('/api/social/teams')).body.teams).toEqual([]);
+      expect((await request(sana()).patch('/api/social/teams/mock-team-community/me').send({ favorite: true })).status).toBe(403);
+    });
+
     it('POST /api/social/teams creates the team with its General channel (ManageTeams)', async () => {
       const res = await request(lena()).post('/api/social/teams').send({ name: 'Events crew' });
       expect(res.status).toBe(201);
@@ -179,6 +205,36 @@ describe('dev:mock backend (no platform-api)', () => {
       const res = await request(sana()).get('/api/social/recordings/mock-rec-town-hall-1/playback');
       expect(res.body).toEqual({ recordingId: 'mock-rec-town-hall-1', playlistUrl: null, mediaState: 'unavailable' });
       expect((await request(lena()).get('/api/social/recordings/mock-rec-town-hall-2/playback')).status).toBe(404);
+    });
+
+    it('GET /api/social/recordings/:recordingId/transcript serves speech to someone who was on the call, with the conversation it belongs to', async () => {
+      const res = await request(sana()).get('/api/social/recordings/mock-rec-town-hall-1/transcript');
+      expect(res.status).toBe(200);
+      // Reactions are not speech; indexes keep their place in the document so a citation stays stable.
+      expect(res.body.segments.map((s: { index: number }) => s.index)).toEqual([0, 1, 2, 4]);
+      expect(res.body.segments[1]).toMatchObject({ speaker: 'Lena Brandt', text: expect.stringContaining('Moderation volume') });
+      expect(res.body).toMatchObject({ status: 'ready', conversation: null, lobbyName: 'social:room:town-hall' });
+      const dm = await request(sana()).get('/api/social/recordings/mock-rec-dm-lena-sana/transcript');
+      expect(dm.body.conversation).toBe('social:dm:u-lena:u-sana');
+    });
+
+    it('the transcript has the playback proxy\'s authority: a recording you were not on is a 404, another tenant is a 403, and another lobby family does not exist', async () => {
+      expect((await request(lena()).get('/api/social/recordings/mock-rec-town-hall-2/transcript')).status).toBe(404);
+      expect((await request(mira()).get('/api/social/recordings/mock-rec-dm-lena-sana/transcript')).status).toBe(404);
+      expect((await request(appAs('u-theo', 'member', 'orgiq')).get('/api/social/recordings/mock-rec-town-hall-1/transcript')).status).toBe(403);
+      socialRecordingsFixture.rows().push({ ...socialRecordingsFixture.rows()[0]!, recordingId: 'orgiq-one', lobbyName: 'orgiq:dm:u-sana:u-theo' });
+      expect((await request(sana()).get('/api/social/recordings/orgiq-one/transcript')).status).toBe(404);
+      expect((await request(sana()).get('/api/social/recordings/nope/transcript')).status).toBe(404);
+    });
+
+    it('a transcript still being made is a 202 with whether to ask again; the fixture reset restores the seed', async () => {
+      const t = socialRecordingTranscriptsFixture.rows().find((r) => r.recordingId === 'mock-rec-dm-lena-sana')!;
+      t.transcriptStatus = 'pending';
+      const res = await request(sana()).get('/api/social/recordings/mock-rec-dm-lena-sana/transcript');
+      expect(res.status).toBe(202);
+      expect(res.body).toMatchObject({ status: 'pending', terminal: false, retryAfterMs: 5000 });
+      socialRecordingTranscriptsFixture.reset();
+      expect((await request(sana()).get('/api/social/recordings/mock-rec-dm-lena-sana/transcript')).status).toBe(200);
     });
 
     it('POST /api/social/recordings/:recordingId/share mints a link (ManageRecordings)', async () => {
@@ -244,6 +300,25 @@ describe('platform-api configured — the BFF proxies with the caller\'s token',
     expect(claims).toMatchObject({ sub: 'u-sana', org: 'social', tokenKind: 'orgiq-hs256' });
   });
 
+  it('Social uses its private service when document and browser platform endpoints are also configured', async () => {
+    const keys = ['DOCUMENT_PLATFORM_INTERNAL_URL', 'REALTIME_PLATFORM_PUBLIC_URL', 'PLATFORM_API_URL'] as const;
+    const previous = keys.map(key => process.env[key]);
+    try {
+      process.env['DOCUMENT_PLATFORM_INTERNAL_URL'] = 'http://workspace-platform.orgiq-documents.local:3001';
+      process.env['REALTIME_PLATFORM_PUBLIC_URL'] = 'https://platform.public.test';
+      process.env['PLATFORM_API_URL'] = 'http://work-graph.internal:3001';
+      reply = () => ({ status: 200, body: { rooms: [room('town-hall')] } });
+      const res = await request(sana()).get('/api/social/rooms');
+      expect(res.status).toBe(200);
+      expect(calls.map(call => call.url)).toEqual(['http://platform.test:3001/api/rooms?limit=200&tenant=social']);
+    } finally {
+      keys.forEach((key, i) => {
+        if (previous[i] === undefined) delete process.env[key];
+        else process.env[key] = previous[i];
+      });
+    }
+  });
+
   it('POST /api/social/rooms carries tenant in the body; a platform 403 on a private room passes through', async () => {
     reply = (_url, method) => (method === 'POST' ? { status: 201, body: { room: room('quiet', { visibility: 'private' }) } } : { status: 403, body: { error: 'Access denied to room: quiet' } });
     const res = await request(mira()).post('/api/social/rooms').send({ name: 'Quiet', visibility: 'private' });
@@ -253,6 +328,35 @@ describe('platform-api configured — the BFF proxies with the caller\'s token',
     const denied = await request(sana()).get('/api/social/teams/t-private');
     expect(denied.status).toBe(403);
     expect(denied.body.error).toBe('Access denied to room: quiet');
+  });
+
+  it('GET /api/social/recordings/:recordingId/transcript asks platform-api for the recording first (404 for a non-social lobby), then its transcript, as the caller', async () => {
+    reply = (url) => {
+      if (url.includes('/recordings/rec-dm/transcript')) return { status: 200, body: { segments: [
+        { startMs: 0, endMs: 5000, speakerId: 'u-lena', speakerLabel: 'Lena', text: ' Ship it  Friday. ' }, { startMs: 6000, endMs: 7000, speakerId: 'u-sana', speakerLabel: 'Sana', text: 'reacted with 👍', kind: 'reaction' },
+      ] } };
+      if (url.includes('/recordings/rec-dm')) return { status: 200, body: { recordingId: 'rec-dm', lobbyName: 'social:dm:u-lena:u-sana', startedAt: '2026-10-01T10:00:00.000Z' } };
+      if (url.includes('/recordings/rec-pending/transcript')) return { status: 202, body: { status: 'processing', terminal: false, retryAfterMs: 7000, error: null } };
+      if (url.includes('/recordings/rec-pending')) return { status: 200, body: { recordingId: 'rec-pending', lobbyName: 'social:dm:u-lena:u-sana', startedAt: '2026-10-01T10:00:00.000Z' } };
+      if (url.includes('/recordings/rec-other')) return { status: 200, body: { recordingId: 'rec-other', lobbyName: 'orgiq:dm:u-a:u-b', startedAt: '2026-10-01T10:00:00.000Z' } };
+      return { status: 404, body: { error: 'recording not found' } };
+    };
+    const ok = await request(sana()).get('/api/social/recordings/rec-dm/transcript');
+    expect(ok.status).toBe(200);
+    expect(ok.body.segments).toEqual([{ index: 0, startMs: 0, endMs: 5000, speakerId: 'u-lena', speaker: 'Lena', text: 'Ship it Friday.' }]);
+    expect(ok.body.conversation).toBe('social:dm:u-lena:u-sana');
+    expect(calls.map((c) => c.url)).toEqual([
+      'http://platform.test:3001/api/recordings/rec-dm?tenant=social', 'http://platform.test:3001/api/recordings/rec-dm/transcript?tenant=social']);
+    expect(decodeJwt(calls[1]!.auth.replace(/^Bearer /, ''))).toMatchObject({ sub: 'u-sana', org: 'social' });
+    const pending = await request(sana()).get('/api/social/recordings/rec-pending/transcript');
+    expect(pending.status).toBe(202);
+    expect(pending.body).toMatchObject({ status: 'processing', terminal: false, retryAfterMs: 7000 });
+    expect((await request(sana()).get('/api/social/recordings/rec-other/transcript')).status).toBe(404);
+    expect((await request(sana()).get('/api/social/recordings/rec-gone/transcript')).status).toBe(404);
+    // Fresh per request: asking again asks platform-api again.
+    calls = [];
+    await request(sana()).get('/api/social/recordings/rec-dm/transcript');
+    expect(calls).toHaveLength(2);
   });
 
   it('GET /api/social/recordings and /calls keep social: lobbies only; a 5xx upstream is a 502', async () => {

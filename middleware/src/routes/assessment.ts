@@ -19,6 +19,7 @@
 import express, { Router } from 'express';
 import { asyncHandler, ValidationError, NotFoundError } from '../lib/async-handler.js';
 import { requireAction, requireTenant } from '../lib/authz.js';
+import { assessmentWorkGraphRouter, changeHints } from './assessment-work-graph.js';
 import { ASSESSMENT_RUN_COMPLETE_SERVICE_AUTH, requireServiceAuth } from '../lib/service-auth.js';
 import { ADMIN_ROLE } from '../lib/session.js';
 import { logAuthz } from '../lib/audit.js';
@@ -29,6 +30,9 @@ import { isValidTeamId } from '../providers/assessment.js';
 import { documentCommentTargetIds } from '../providers/document-comments.js';
 import { assessmentDocumentHref, notificationSinkActive, notifyDocumentComment } from '../lib/social-notify.js';
 import { runReadHandlers } from './pipelines.js';
+import { assessmentDecksRouter } from './assessment-decks.js';
+import { assessmentDraftsRouter } from './assessment-drafts.js';
+import { assessmentRecordingSearchRouter } from './assessment-recording-search.js';
 import type { Cohort, MotionConfig, ScoringLogEntry } from '../mock/assessment.js';
 
 export const assessmentRouter: Router = Router();
@@ -55,12 +59,27 @@ assessmentRouter.use((req, res, next) => {
 });
 
 const viewGate = requireAction('ViewAssessment');
+assessmentRouter.use('/recordings', assessmentRecordingSearchRouter);
 const scoreGate = requireAction('ScoreAssessment');
 const approveGate = requireAction('ApproveException');
 const configGate = requireAction('ManageAssessmentConfig');
 const knowledgeGate = requireAction('ManageKnowledge');
 const runGate = requireAction('RunAssessmentAgent');
 const submissionsGate = requireAction('ManageSubmissions');
+
+// A successful write on a score/evidence/draft/deck/run path hints the activity graph (content-free).
+// (A factory call, not a bare imported identifier: the route enumerator reads `use(<import>)` as a router mount.)
+assessmentRouter.use(changeHints());
+
+// Review decks (docs/assessment-deck-goal.md) — behind the tenant gate above;
+// each route carries its own action gate.
+assessmentRouter.use(assessmentDecksRouter);
+
+// The activity graph (docs/activity-graph-migration.md §9): same assembly and stream as orgiq's and pipelines'.
+assessmentRouter.use('/work-graph', assessmentWorkGraphRouter);
+
+// Evidence summary / follow-up drafts (docs/agentic-flows-migration.md slice 8).
+assessmentRouter.use(assessmentDraftsRouter);
 
 // Same silent-clamp convention routes/work-items.ts and routes/harness.ts
 // already use: a non-numeric or missing `limit` falls back to a generous
@@ -92,6 +111,7 @@ const VALID_TEAM_STATUSES = new Set(['NEW', 'IN_PROGRESS', 'ASSESSED']);
 
 // ─── Teams ──────────────────────────────────────────────────────────────────
 
+// The teams the signed-in assessor is on are GET /api/me/groups?kind=assessment-team (lib/mine.ts), not a ?scope here.
 assessmentRouter.get('/teams', viewGate, asyncHandler(async (req, res) => {
   const limit = clampLimit(req.query['limit'], 500, 2000);
   const teams = await provider.listTeams();
@@ -440,6 +460,8 @@ assessmentRouter.post('/runs/:runId/complete', requireRunCompleteAuth, asyncHand
     error?: string;
     files_written?: unknown;
     scoring_log?: unknown;
+    /** A review-deck command's drafter JSON (merged by providers/assessment-decks.ts). */
+    deck_result?: unknown;
   };
   if (body.status !== 'completed' && body.status !== 'failed') {
     throw new ValidationError('status must be "completed" or "failed"');
@@ -457,6 +479,7 @@ assessmentRouter.post('/runs/:runId/complete', requireRunCompleteAuth, asyncHand
     ...(body.error !== undefined && { error: body.error }),
     ...(body.files_written !== undefined && { files_written: body.files_written as string[] }),
     ...(body.scoring_log !== undefined && { scoring_log: body.scoring_log as ScoringLogEntry[] }),
+    ...(body.deck_result !== undefined && { deck_result: body.deck_result }),
   });
   if (!result.ok) { res.status(result.status).json({ error: result.reason }); return; }
   res.json(result.run);

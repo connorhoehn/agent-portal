@@ -53,6 +53,10 @@ CREATE TABLE IF NOT EXISTS projects (
   created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Portrait avatar (schema/synth/avatars.py writes it; the portal falls back to
+-- initials when NULL). ADD COLUMN so a cluster created before it converges.
+ALTER TABLE people ADD COLUMN IF NOT EXISTS avatar_url TEXT;
+
 -- Idempotent for databases created before summary/sponsor existed.
 ALTER TABLE projects ADD COLUMN IF NOT EXISTS summary            TEXT;
 ALTER TABLE projects ADD COLUMN IF NOT EXISTS sponsor_person_id  TEXT REFERENCES people(id) ON DELETE SET NULL;

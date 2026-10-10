@@ -1,0 +1,50 @@
+pg16: Pulling from pgvector/pgvector
+3e1f3030b9b2: Pulling fs layer
+468112372004: Pulling fs layer
+795f6346f0e8: Pulling fs layer
+52e8f99a6966: Pulling fs layer
+f76ce474d96b: Pulling fs layer
+8bf3e57b20f0: Pulling fs layer
+733e45b40f19: Pulling fs layer
+d2a00f227948: Pulling fs layer
+42386584ed67: Pulling fs layer
+803a57fb61c0: Pulling fs layer
+cfd87942d979: Pulling fs layer
+3178bf6d70ff: Pulling fs layer
+f499036e4178: Pulling fs layer
+4a4a862677f3: Pulling fs layer
+bfed6dc69564: Pulling fs layer
+e67bfbef65c3: Download complete
+f76ce474d96b: Download complete
+795f6346f0e8: Download complete
+bfed6dc69564: Download complete
+3178bf6d70ff: Download complete
+d2a00f227948: Download complete
+f499036e4178: Download complete
+52e8f99a6966: Download complete
+733e45b40f19: Download complete
+f499036e4178: Pull complete
+8bf3e57b20f0: Download complete
+3e1f3030b9b2: Download complete
+42386584ed67: Download complete
+468112372004: Download complete
+cfd87942d979: Download complete
+4a4a862677f3: Download complete
+468112372004: Pull complete
+4a4a862677f3: Pull complete
+cfd87942d979: Pull complete
+bfed6dc69564: Pull complete
+733e45b40f19: Pull complete
+8bf3e57b20f0: Pull complete
+803a57fb61c0: Download complete
+803a57fb61c0: Pull complete
+f76ce474d96b: Pull complete
+795f6346f0e8: Pull complete
+3178bf6d70ff: Pull complete
+d2a00f227948: Pull complete
+52e8f99a6966: Pull complete
+3e1f3030b9b2: Pull complete
+42386584ed67: Pull complete
+Digest: sha256:7b822b0aac60967beb1ea5e576b8602c94c300a157d187f385ae3e0da199b90a
+Status: Downloaded newer image for pgvector/pgvector:pg16
+docker.io/pgvector/pgvector:pg16

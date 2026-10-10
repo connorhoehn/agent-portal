@@ -1,0 +1,70 @@
+{
+  "assertionResults": [
+    {
+      "ancestorTitles": [
+        "call pages and huddle chat across native gateway nodes"
+      ],
+      "duration": 271,
+      "failureDetails": [],
+      "failureMessages": [],
+      "fullName": "call pages and huddle chat across native gateway nodes reads remote seats and delivers a canonical pinned page to the other gateway",
+      "invocations": 1,
+      "location": null,
+      "numPassingAsserts": 6,
+      "retryReasons": [],
+      "status": "passed",
+      "title": "reads remote seats and delivers a canonical pinned page to the other gateway"
+    },
+    {
+      "ancestorTitles": [
+        "call pages and huddle chat across native gateway nodes"
+      ],
+      "duration": 559,
+      "failureDetails": [],
+      "failureMessages": [],
+      "fullName": "call pages and huddle chat across native gateway nodes delivers huddle messages and shares immutable receipts/history across gateways",
+      "invocations": 1,
+      "location": null,
+      "numPassingAsserts": 3,
+      "retryReasons": [],
+      "status": "passed",
+      "title": "delivers huddle messages and shares immutable receipts/history across gateways"
+    },
+    {
+      "ancestorTitles": [
+        "call pages and huddle chat across native gateway nodes"
+      ],
+      "duration": 267,
+      "failureDetails": [],
+      "failureMessages": [],
+      "fullName": "call pages and huddle chat across native gateway nodes fences a remote recipient revoked during an awaited socket delivery and denies stale REST readers",
+      "invocations": 1,
+      "location": null,
+      "numPassingAsserts": 5,
+      "retryReasons": [],
+      "status": "passed",
+      "title": "fences a remote recipient revoked during an awaited socket delivery and denies stale REST readers"
+    },
+    {
+      "ancestorTitles": [
+        "call pages and huddle chat across native gateway nodes"
+      ],
+      "duration": 253,
+      "failureDetails": [],
+      "failureMessages": [],
+      "fullName": "call pages and huddle chat across native gateway nodes keeps shared pages and history floors intact while the connection directory is unavailable",
+      "invocations": 1,
+      "location": null,
+      "numPassingAsserts": 6,
+      "retryReasons": [],
+      "status": "passed",
+      "title": "keeps shared pages and history floors intact while the connection directory is unavailable"
+    }
+  ],
+  "endTime": 1791202639785,
+  "message": "",
+  "name": "/Users/connorhoehn/Projects/aws-agentcore/middleware/src/lib/__tests__/call-features-cluster.integration.test.ts",
+  "startTime": 1791202636132,
+  "status": "passed",
+  "summary": ""
+}

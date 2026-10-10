@@ -18,7 +18,12 @@
 
 import { parseReportedCost } from './run-cost.js';
 
-export type BoxStatus = 'idle' | 'running' | 'waiting' | 'stopped' | 'error';
+/**
+ * `provisioning` — the box is minted in the registry but its microVM is not up
+ * yet (the clone that boots it is still in flight). The first `task_started`
+ * moves it to `running`, exactly as it moves an idle box.
+ */
+export type BoxStatus = 'provisioning' | 'idle' | 'running' | 'waiting' | 'stopped' | 'error';
 
 export interface FleetBox {
   id: string;
@@ -128,6 +133,8 @@ interface BoxState {
    */
   contextTokens: number;
 }
+
+import { mockRestartMirror } from '../mock/restart-state.js';
 
 const boxes = new Map<string, BoxState>();
 const bySession = new Map<string, string>(); // sessionId → boxId
@@ -297,6 +304,9 @@ function labelForProject(projectId: string): string {
 export function registerBox(opts: {
   sessionId: string; label?: string; id?: string; createdAt?: string;
   ownerId?: string; projectId?: string; source?: string;
+  /** Only `provisioning` may be asked for: a box minted before its microVM is
+   *  up. Anything else is derived from the event flow, never claimed. */
+  status?: 'provisioning';
 }): FleetBox {
   const id = opts.id ?? opts.sessionId.slice(-8);
   const existing = boxes.get(id);
@@ -309,7 +319,7 @@ export function registerBox(opts: {
     ...(opts.ownerId ? { ownerId: opts.ownerId } : {}),
     ...(opts.projectId ? { projectId: opts.projectId } : {}),
     ...(opts.source ? { source: opts.source } : {}),
-    status: 'idle',
+    status: opts.status ?? 'idle',
     lastActivityAt: now(),
   };
   boxes.set(id, { box, events: [], subscribers: new Set(), lastResultText: '', contextTokens: 0 });
@@ -386,6 +396,22 @@ export function removeBox(id: string): boolean {
 /** Snapshot of a box's event buffer (oldest-first). */
 export function replayEvents(id: string): FleetEvent[] {
   return [...(boxes.get(id)?.events ?? [])];
+}
+
+/**
+ * Fill a box's replay buffer with history, WITHOUT the status machine.
+ *
+ * For the offline seed only (mock/devbox-tail.ts): a hydrated box's row
+ * already says what state it is in and what it cost, so replaying its history
+ * through `appendEvent` would flip it to running and accrue its tokens a
+ * second time. Subscribers are not notified — this is the past, not news.
+ * Capped like any buffer; a no-op for an unknown box.
+ */
+export function seedEventLog(id: string, events: readonly FleetEvent[]): void {
+  const s = boxes.get(id);
+  if (!s) return;
+  s.events.push(...events);
+  if (s.events.length > EVENT_BUFFER_CAP) s.events.splice(0, s.events.length - EVENT_BUFFER_CAP);
 }
 
 export function subscribe(id: string, cb: (ev: FleetEvent) => void): () => void {
@@ -555,10 +581,55 @@ export function appendEvent(id: string, ev: FleetEvent): void {
   }
 }
 
+// ─── Reservations ────────────────────────────────────────────────────────────
+//
+// Status says what a box is DOING; it cannot say who is still counting on it.
+// A governed run waiting on its operator reads `waiting`, and the box a run
+// just finished on reads `idle` — and both claimers (lib/job-dispatcher.ts,
+// lib/mock-bot-runner.ts) took exactly those statuses as "free", so a queued
+// job could land in the middle of somebody's open run. A reservation is the
+// missing fact: a holder names the box as theirs until it releases it, and
+// every claimer asks `isReserved` before taking one. Several holders may hold
+// one box; it is free when the last lets go.
+
+const reservations = new Map<string, Set<string>>(); // boxId → holders
+
+export function reserveBox(id: string, holder: string): void {
+  let holders = reservations.get(id);
+  if (!holders) { holders = new Set(); reservations.set(id, holders); }
+  holders.add(holder);
+}
+
+export function releaseBox(id: string, holder: string): void {
+  const holders = reservations.get(id);
+  if (!holders) return;
+  holders.delete(holder);
+  if (holders.size === 0) reservations.delete(id);
+}
+
+/** Whether anyone holds this box — claimers must leave it alone. */
+export function isReserved(id: string): boolean {
+  return (reservations.get(id)?.size ?? 0) > 0;
+}
+
 /** Test hook — wipe all fleet state. */
 export function _resetFleet(): void {
   boxes.clear();
   bySession.clear();
+  reservations.clear();
   store = null;
   lifecycleSubscribers.clear();
+}
+
+/** A private local restart restores stopped fleet history, without subscribers or a new live run. */
+export function restoreMockFleetRestart(): void {
+  const states = mockRestartMirror('fleet');
+  if (!states) return;
+  for (const state of states) {
+    const current = boxes.get(state.id);
+    if (!current) throw Error('mock restart fleet hydration missing box');
+    current.events = state.events as FleetEvent[];
+    current.lastResultText = state.lastResultText;
+    current.contextTokens = state.contextTokens;
+  }
 }

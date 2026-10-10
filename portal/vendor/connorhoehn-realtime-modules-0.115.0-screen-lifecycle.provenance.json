@@ -1,0 +1,38 @@
+{
+  "package": "@connorhoehn/realtime-modules",
+  "version": "0.115.0",
+  "sourceRepo": "/Users/connorhoehn/Projects/realtime-modules",
+  "sourceBaseCommit": "7fa168e4fa294d982b5a610556831e453e06f8e4",
+  "sourcePatch": "connorhoehn-realtime-modules-0.115.0-screen-lifecycle.patch",
+  "sourcePatchSHA256": "88193965e7de4fd7da6a4ad7cafc022b0a4e2f14100518aef13389cf798180c4",
+  "sourceFiles": {
+    "src/client/video/useLVSHangout.ts": "656d0177fd3227c925a2488adc4476aabb4cabce4fc702ead6d1041f9b2a4322",
+    "test/client/useLVSHangout.test.tsx": "56130a2dde50cd2c72b4c4d6da83cb471f183a6c9647a0fc78ba385f80d1c681"
+  },
+  "packedCompiledHookSHA256": "04ba528f0e0621a1d1001f547312f7394128676f7350d30e39a94a0245d1ad2c",
+  "archive": "connorhoehn-realtime-modules-0.115.0-screen-lifecycle.tgz",
+  "archiveSHA256": "75548d93658b5f41eb701d7780b590d7079ea85681ff286256e85b5cc18879ef",
+  "archiveNpmIntegrity": "sha512-BsNHNkL2oc5bT7z9NTvRHXR1PCboHM/7mFoLWlh48qQ2eEHBklcwBMuzhm/MHSZtPC+L+ccDqsYtKI9gOrk4Wg==",
+  "checks": {
+    "baselineFocused": {
+      "passed": 0,
+      "failed": 6
+    },
+    "fixedVideoRegressionSuites": 3,
+    "fixedVideoTestsPassed": 44,
+    "buildAnd32ExportChecks": "passed",
+    "portalTypecheck": "passed"
+  },
+  "published": false,
+  "committed": false,
+  "identityFromPidSuffix": false,
+  "portalInstalled": true,
+  "portalManifestBinding": "file:vendor/connorhoehn-realtime-modules-0.115.0-screen-lifecycle.tgz",
+  "portalLockBinding": {
+    "name": "@connorhoehn/realtime-modules",
+    "version": "0.115.0",
+    "resolved": "file:vendor/connorhoehn-realtime-modules-0.115.0-screen-lifecycle.tgz",
+    "integrity": "sha512-BsNHNkL2oc5bT7z9NTvRHXR1PCboHM/7mFoLWlh48qQ2eEHBklcwBMuzhm/MHSZtPC+L+ccDqsYtKI9gOrk4Wg=="
+  },
+  "installedCompiledHookSHA256": "04ba528f0e0621a1d1001f547312f7394128676f7350d30e39a94a0245d1ad2c"
+}

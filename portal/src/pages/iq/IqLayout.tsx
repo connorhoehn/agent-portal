@@ -1,8 +1,7 @@
 import { BuildSectionLayout } from '../../components/shell/BuildSectionLayout';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router';
-import { SubNavLayout, activeNavItemClassName, inactiveNavItemClassName } from '@connorhoehnslalom/ui-components/shared';
+import { activeNavItemClassName, inactiveNavItemClassName } from '@connorhoehnslalom/ui-components/shared';
 import { useIqSubNav } from './iqSubNavCatalog';
-import { InitiativeCallHost } from '../projects/InitiativeCallHost';
 
 // Reproduces SubNavLayout's own default active/inactive nav-item look (see
 // the library's `renderNavItem` doc comment, and its `activeNavItemStyle`
@@ -10,14 +9,8 @@ import { InitiativeCallHost } from '../projects/InitiativeCallHost';
 
 // See Layout.tsx for why these come from the library rather than local copies.
 
-// The orgiq shell hosts the tenant's call: one conversation call for every
-// /iq page, incoming rings on any of them, LVS media when configured
-// (projects/InitiativeCallHost.tsx).
+// The authenticated Layout owns calls across /iq, /admin and Settings.
 function IqLayout() {
-  return <InitiativeCallHost><IqLayoutFrame /></InitiativeCallHost>;
-}
-
-function IqLayoutFrame() {
   const { pathname, search } = useLocation();
   const navigate = useNavigate();
   const spec = useIqSubNav(pathname);
@@ -35,7 +28,7 @@ function IqLayoutFrame() {
     const view = spec.items.find((item) => new URLSearchParams(item.path.split('?')[1]).get('entities') === entities);
     return <BuildSectionLayout title={spec.title} items={spec.items} storageKey={spec.storageKey} contentPadding="none"
       breadcrumbs={[
-        { label: 'Org' },
+        { label: 'Engage' },
         { label: 'Explore', href: '/iq/explore', onClick: (event) => {
           if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
           event.preventDefault();
@@ -47,8 +40,12 @@ function IqLayoutFrame() {
     </BuildSectionLayout>;
   }
 
+  // Flush workspaces (a version timeline, a diff, the canary graph) own their
+  // toolbars and gutters; they sit straight under the trail.
+  const flush = ['/iq/history', '/iq/diff', '/iq/canary'].some((p) => pathname.startsWith(p));
   return (
-    <SubNavLayout
+    <BuildSectionLayout
+      contentPadding={flush ? 'none' : 'md'}
       title={spec.title}
       items={spec.items}
       storageKey={spec.storageKey}
@@ -61,7 +58,6 @@ function IqLayoutFrame() {
       // 1024–1279px.
       railWidth={200}
       secondaryRailWidth={160}
-      contentAs="section"
       contentLabel={spec.title}
       renderNavItem={(item, children) => {
         const href = item.path.startsWith('/') ? item.path : `/iq/${item.path}`;
@@ -88,7 +84,7 @@ function IqLayoutFrame() {
       }}
     >
       <Outlet />
-    </SubNavLayout>
+    </BuildSectionLayout>
   );
 }
 

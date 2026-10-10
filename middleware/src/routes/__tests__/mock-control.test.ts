@@ -42,7 +42,7 @@ import { createFixtureRegistry, defineFixture, describeScenario } from '../../mo
 
 interface Row { id: string }
 
-const SIZES: Record<ScenarioName, number> = { default: 3, empty: 0, error: 0, large: 25, fresh: 1 };
+const SIZES: Record<ScenarioName, number> = { default: 3, empty: 0, error: 0, large: 25, fresh: 1, demo: 3, 'distillation-demo': 3 };
 
 function rowsOf(key: string, scenario: ScenarioName): () => Row[] {
   return () => Array.from({ length: SIZES[scenario] }, (_, i) => ({ id: `${key}-${i}` }));
@@ -175,13 +175,13 @@ describe('gating', () => {
 // ── The menu ───────────────────────────────────────────────────────────────
 
 describe('GET /api/__mock/scenarios', () => {
-  it('lists the five worlds with a sentence each', async () => {
+  it('lists the six worlds with a sentence each', async () => {
     withFixtures(['bots', 'people']);
     const res = await request(buildApp()).get('/api/__mock/scenarios');
 
     expect(res.status).toBe(200);
     expect(res.body.scenarios.map((s: Scenario) => s.name))
-      .toEqual(['default', 'empty', 'error', 'large', 'fresh']);
+      .toEqual(['default', 'empty', 'error', 'large', 'fresh', 'demo', 'distillation-demo']);
     for (const s of res.body.scenarios) expect(s.describes.length).toBeGreaterThan(10);
   });
 
@@ -205,7 +205,7 @@ describe('GET /api/__mock/scenarios', () => {
     expect(res.status).toBe(200);
     expect(res.body.registryLoaded).toBe(false);
     expect(res.body.fixtures).toEqual([]);
-    expect(res.body.scenarios).toHaveLength(5);
+    expect(res.body.scenarios).toHaveLength(7);
   });
 });
 
@@ -241,7 +241,7 @@ describe('POST /api/__mock/scenario', () => {
     withFixtures(['bots']);
     const res = await request(buildApp()).post('/api/__mock/scenario').send({ scenario: 'chaos' });
     expect(res.status).toBe(400);
-    expect(res.body.known).toEqual(['default', 'empty', 'error', 'large', 'fresh']);
+    expect(res.body.known).toEqual(['default', 'empty', 'error', 'large', 'fresh', 'demo', 'distillation-demo']);
   });
 
   it('404s an unknown fixture key and names the keys that exist', async () => {

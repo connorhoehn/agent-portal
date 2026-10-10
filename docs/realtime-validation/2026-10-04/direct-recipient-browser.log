@@ -1,0 +1,26 @@
+
+Running 17 tests using 1 worker
+
+(node:40998) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:40998) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 [chromium] › e2e/embedded-social-real.spec.ts:76:1 › To-person uses the canonical DM, delivers live and replays without changing source or writing Discussion (6.4s)
+  ✓   2 [chromium] › e2e/embedded-social-real.spec.ts:108:1 › To-person page attachments resolve canonically for peers and survive reload independently of the shared huddle page (6.0s)
+  ✓   3 [chromium] › e2e/embedded-social-real.spec.ts:146:1 › a Social workspace reader opens an attached Org page through explicit workspace selection (5.5s)
+  ✓   4 [chromium] › e2e/embedded-social-real.spec.ts:166:1 › a held real persisted DM receipt cannot clear the draft after its composer destination changes (4.0s)
+  ✓   5 [chromium] › e2e/embedded-social-real.spec.ts:188:1 › Search Message during a huddle preserves the source URL, shared page, call and media instance (8.6s)
+  ✓   6 [chromium] › e2e/huddle-chat-real.spec.ts:102:1 › protected persisted huddle messages reach peers live, replay, and retain exact references across navigation (4.7s)
+  ✓   7 [chromium] › e2e/huddle-chat-real.spec.ts:160:1 › unjoined and outsider users cannot read or post, and delivery retries are persisted without duplicates (7.4s)
+  ✓   8 [chromium] › e2e/huddle-chat-real.spec.ts:192:1 › explicit To keeps Discussion separate from the huddle and removing draft context leaves the shared pin intact (4.6s)
+  ✓   9 [chromium] › e2e/huddle-chat-real.spec.ts:229:3 › a real persisted acknowledgement clears the locked composer draft only after confirmation (4.4s)
+  ✓  10 [chromium] › e2e/huddle-chat-real.spec.ts:229:3 › a real persisted acknowledgement keeps the composer draft when its recipient changes (4.4s)
+  ✓  11 [chromium] › e2e/huddle-chat-real.spec.ts:273:1 › a real delayed panel acknowledgement preserves text typed for the next huddle message (3.9s)
+  ✓  12 [chromium] › e2e/huddle-chat-real.spec.ts:295:1 › an explicitly selected huddle that ends retains its draft instead of retargeting Discussion (4.2s)
+  ✓  13 [chromium] › e2e/huddle-page-sharing.spec.ts:62:1 › a pinned page reaches joined peers, survives shell navigation, and changes only through explicit actions (6.2s)
+  ✓  14 [chromium] › e2e/huddle-page-sharing.spec.ts:112:1 › rejected replacement retains the pin and concurrent writers cannot overwrite the same revision (4.2s)
+  ✓  15 [chromium] › e2e/work-documents-real.spec.ts:8:1 › an explicit document association saves, survives reload, opens the exact corpus record and removes without deleting it (2.9s)
+  ✓  16 [chromium] › e2e/work-documents-real.spec.ts:39:1 › a work reader sees a saved canonical document and has no association mutation controls (3.2s)
+  ✓  17 [chromium] › e2e/work-documents-real.spec.ts:60:1 › a held association receipt cannot restore the old work context after navigation (2.2s)
+
+  17 passed (1.4m)

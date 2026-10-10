@@ -16,7 +16,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import {
-  Banner, Chip, DataTable, Inline, MetaLine, Select, Stack,
+  Banner, Chip, DataTable, Inline, MetaLine, Select, Stack, T,
   type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
@@ -31,22 +31,19 @@ import {
 
 function columns(showWorkspace: boolean): DataTableColumn<PipelineRun>[] {
   return [
-    { key: 'title', header: 'Run', render: (r) => r.context.title, sortable: true, compare: (a, b) => a.context.title.localeCompare(b.context.title) },
+    { key: 'title', header: 'Run', render: (r) => <T size="sm" title={r.context.title} className="block max-w-[32rem] truncate">{r.context.title}</T>, sortable: true, compare: (a, b) => a.context.title.localeCompare(b.context.title) },
     {
-      key: 'status', header: 'Status', sortable: true,
+      key: 'status', header: 'Status', width: '128px', sortable: true,
       render: (r) => (
-        <Inline gap="xs" align="center">
-          <PipelineRunStatusChip status={r.status} />
-          {sourceStatusNote(r) && <MetaLine size="xs" tone="tertiary" items={[sourceStatusNote(r)]} />}
-        </Inline>
+        <PipelineRunStatusChip status={r.status} title={sourceStatusNote(r) ?? undefined} />
       ),
     },
     { key: 'kind', header: 'Kind', render: (r) => kindLabel(r.context.kind) },
     ...(showWorkspace ? [{ key: 'tenant', header: 'Workspace', render: (r: PipelineRun) => <Chip tone="neutral" size="xs">{r.context.tenant}</Chip> }] : []),
     { key: 'triggerType', header: 'Trigger', render: (r) => r.context.trigger ?? r.triggerType },
-    { key: 'costUsd', header: 'Cost', align: 'right', render: (r) => (r.costUsd != null ? usd(r.costUsd, { precision: 4 }) : '—') },
+    { key: 'costUsd', header: 'Cost', numeric: true, render: (r) => (r.costUsd != null ? usd(r.costUsd, { precision: 4 }) : '—') },
     {
-      key: 'startedAt', header: 'Started', sortable: true,
+      key: 'startedAt', header: 'Started', numeric: true, sortable: true,
       compare: (a, b) => (a.startedAt ?? '').localeCompare(b.startedAt ?? ''),
       render: (r) => (r.startedAt ? relativeTime(r.startedAt) : '—'),
     },
@@ -95,6 +92,7 @@ export function RunsLedger({ endpoint, detailBase, showWorkspace = false, pageSi
       ) : (
         <DataTable
           data-testid={testId}
+          size="sm"
           data={runs}
           columns={columns(showWorkspace)}
           keyField={(r) => r.id}

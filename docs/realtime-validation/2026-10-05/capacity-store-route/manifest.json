@@ -1,0 +1,12 @@
+{
+  "capacityAccepted": false,
+  "scope": "read-only native route pilot and warmed counterbalanced comparison; first apparent improvement did not reproduce; only additional pilot network attachment removed",
+  "conclusion": "No repeatable warmed route improvement; retain current application store path and investigate authority query pressure",
+  "artifacts": {
+    "docs/realtime-validation/2026-10-05/capacity-store-route/orgiq-store-route-counterbalanced.json": "5356b11622b362550a0c21a6848f4c5692ac6ce09281a43ac06bf2fc6c066cf3",
+    "docs/realtime-validation/2026-10-05/capacity-store-route/orgiq-store-route-pilot-runtime.json": "d0c328275e9ab550cbe9085abdcc55be3e37b9fa8a4938987229f4a9a5ad710c",
+    "docs/realtime-validation/2026-10-05/capacity-store-route/orgiq-store-route-pilot-error.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "docs/realtime-validation/2026-10-05/capacity-store-route/orgiq-store-route-pilot.json": "0e25fba6e04b42ba0e442816c507091a44c5c26eb782fb9fc9da9e7e5c708a78",
+    "docs/realtime-validation/2026-10-05/capacity-store-route/orgiq-store-route-counterbalanced-error.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
+}

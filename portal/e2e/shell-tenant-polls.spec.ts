@@ -9,6 +9,7 @@
 //
 // Headless, against the running dev:mock middleware (:3001) and portal (:5183).
 import { expect, test, type Page } from '@playwright/test';
+import { signIn } from './realSession';
 
 const ORGIQ_POLLS = /\/api\/(bots\/active-runs|local-compute\/nodes|work\/summary)(\?|$)/;
 // Longer than the slowest shell poll (work/summary, 15 s), so a gated poll
@@ -23,22 +24,12 @@ function recordOrgiqPolls(page: Page): Array<{ path: string; status: number; at:
   return seen;
 }
 
-async function login(page: Page, userId: string): Promise<void> {
-  const status = await page.evaluate(async (id: string) => (await fetch('/api/session/login', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'include',
-    body: JSON.stringify({ userId: id }),
-  })).status, userId);
-  expect(status).toBe(200);
-}
-
 test.describe('shell polls follow the tenant', () => {
   test.setTimeout(120_000);
 
   test('an assessment user never polls the orgiq APIs', async ({ page }) => {
-    await page.goto('/select');
-    await login(page, 'u-jonas');
+    await page.goto('/workspaces');
+    await signIn(page, 'u-jonas');
     const seen = recordOrgiqPolls(page);
     await page.goto('/assessment');
     await page.waitForTimeout(SETTLE_MS / 2);
@@ -52,15 +43,15 @@ test.describe('shell polls follow the tenant', () => {
     test.setTimeout(150_000);
     // The cookie is shared by every tab; the orgiq tab's React session is not.
     const orgiqTab = await context.newPage();
-    await orgiqTab.goto('/select');
-    await login(orgiqTab, 'u-theo');
+    await orgiqTab.goto('/workspaces');
+    await signIn(orgiqTab, 'u-theo');
     await orgiqTab.goto('/iq/projects');
     const seen = recordOrgiqPolls(orgiqTab);
     await expect.poll(() => seen.length, { timeout: SETTLE_MS }).toBeGreaterThan(0);
 
     const otherTab = await context.newPage();
-    await otherTab.goto('/select');
-    await login(otherTab, 'u-farah');
+    await otherTab.goto('/workspaces');
+    await signIn(otherTab, 'u-farah');
     await otherTab.close();
 
     // Two full rounds of the slowest poll. Each shell poll may be refused
@@ -72,8 +63,8 @@ test.describe('shell polls follow the tenant', () => {
   });
 
   test('an orgiq user still gets all three', async ({ page }) => {
-    await page.goto('/select');
-    await login(page, 'u-theo');
+    await page.goto('/workspaces');
+    await signIn(page, 'u-theo');
     const seen = recordOrgiqPolls(page);
     await page.goto('/iq/projects');
     await expect.poll(() => new Set(seen.map((s) => s.path)).size, { timeout: SETTLE_MS }).toBe(3);

@@ -1,6 +1,7 @@
 import cors from 'cors';
 import type { RequestHandler } from 'express';
 import { config } from '../config.js';
+import { viewerScheme } from './trusted-proxy.js';
 
 function originOf(value: string): string | null {
   try {
@@ -34,7 +35,9 @@ export function isAllowedBrowserOrigin(origin: string, selfOrigin: string): bool
 export const browserOrigin: RequestHandler = (req, res, next) => {
   const origin = req.get('origin');
   if (!origin) { next(); return; }
-  if (!isAllowedBrowserOrigin(origin, `${req.protocol}://${req.get('host') ?? ''}`)) {
+  // The viewer's scheme, not the last hop's: behind CloudFront the ALB reports
+  // `http` for an `https://` page (lib/trusted-proxy.ts `viewerScheme`).
+  if (!isAllowedBrowserOrigin(origin, `${viewerScheme(req)}://${req.get('host') ?? ''}`)) {
     res.status(403).json({ error: 'Browser origin is not allowed' });
     return;
   }

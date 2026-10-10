@@ -208,7 +208,8 @@ describe('GET /api/session/realtime-token', () => {
     const claims = await verify(res.body.token);
     expect(claims['sub']).toBe('u-alice');
     expect(claims['role']).toBe('member');
-    expect(claims['act']).toEqual({ sub: 'u-operator' });
+    expect(claims['epoch']).toBe(0);
+    expect(claims['act']).toEqual({ sub: 'u-operator', epoch: 0 });
   });
 
   it('carries external_sub, email and the split name from the directory', async () => {

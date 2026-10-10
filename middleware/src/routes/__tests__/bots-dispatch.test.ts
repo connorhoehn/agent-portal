@@ -75,7 +75,7 @@ import { getUser } from '../../providers/identity.js';
 import { dispatchedSpendInWindow } from '../../providers/bots.js';
 import { getWorkItem } from '../../providers/work-items.js';
 import { listAgentProjects } from '../../providers/agent-projects.js';
-import { dispatchWorkItem } from '../../lib/bot-runner.js';
+import { dispatchWorkItem, grantScopedDispatchVerdict } from '../../lib/bot-runner.js';
 
 const runSamples = runCostSamples as unknown as jest.Mock;
 const pointSamples = perPointCostSamples as unknown as jest.Mock;
@@ -561,5 +561,47 @@ describe('grant-scoped authorization runs before the codebase preflight', () => 
     const res = await post(BODY);
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('no codebase delivers this initiative — link one in Codebases');
+  });
+});
+
+
+describe('unavailable authoritative sprint access does not start work', () => {
+  it('503s a linked SME before preflight or dispatch when the grants store fails', async () => {
+    session = { sub: 'u-layla', role: 'sme' };
+    grants.mockRejectedValue(new Error('grant database unavailable'));
+    const res = await post(BODY);
+    expect(res.status).toBe(503);
+    expect(res.body.gate).toBe('grant-authorization');
+    expect(res.body.error).toMatch(/could not be verified.*No work was started/);
+    expect(projects).not.toHaveBeenCalled();
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
+  it('503s an SME when the current identity lookup fails without fabricating a grant denial', async () => {
+    session = { sub: 'u-layla', role: 'sme' };
+    user.mockRejectedValue(new Error('identity database unavailable'));
+    const res = await post(BODY);
+    expect(res.status).toBe(503);
+    expect(res.body.gate).toBe('grant-authorization');
+    expect(res.body.error).not.toMatch(/no active sprint grant/);
+    expect(grants).not.toHaveBeenCalled();
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
+  it('does not authorize an SME whose identity cannot be linked to a person', async () => {
+    session = { sub: 'u-unlinked', role: 'sme' };
+    user.mockResolvedValue({ id: 'u-unlinked', personId: null });
+    const res = await post(BODY);
+    expect(res.status).toBe(503);
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
+  it('retains the separate non-SME capability policy without consulting a sprint grant', async () => {
+    grants.mockRejectedValue(new Error('grant database unavailable'));
+    for (const role of ['org-leader', 'hr-admin', 'admin', undefined]) {
+      expect(await grantScopedDispatchVerdict('p-rag-search', { sub: 'u-operator', role })).toEqual({ kind: 'allow' });
+    }
+    expect(user).not.toHaveBeenCalled();
+    expect(grants).not.toHaveBeenCalled();
   });
 });

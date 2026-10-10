@@ -20,6 +20,8 @@ export type WorkView = 'items' | 'board' | 'epics';
 
 export interface WorkItem {
   id: string;
+  /** Stored public reference for commits and PRs; nullable before migration. */
+  key?: string | null;
   projectId: string;
   projectName: string;
   parentId: string | null;
@@ -91,6 +93,8 @@ export interface ProjectContributor {
   title: string | null;
   role: string | null;
   weight: number;
+  /** people.avatar_url — null renders initials. */
+  avatarUrl?: string | null;
 }
 
 export interface ProjectDetail {

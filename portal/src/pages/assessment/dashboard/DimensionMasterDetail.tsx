@@ -1,31 +1,36 @@
-// The centrepiece: a persistent 17-dimension rail paired with a tabbed detail
-// pane for whichever dimension is selected. Built on the library's
-// `MasterDetail` primitive (rail + pane, collapsible rail, persisted mode) —
-// see docs/assessment-tenant.md "Primitives the library lacks" for its
-// contract. Reproduces the source's DimensionMasterDetail.tsx.
+// The centrepiece: the 17-dimension rail paired with a tabbed detail pane for
+// whichever dimension is selected, on the library `ExplorerLayout` — the rail
+// flush at the frame's left edge (300px, `md`, with wrapped rubric names),
+// its rows the library `GroupedList` grouped by where each dimension stands
+// (claims to verify, verified, not yet assessed, not applicable), which owns
+// the rows' focus, ArrowUp/Down/Home/End movement and Enter/Space activation.
+// No search box: 17 rows do not need one (the user, 2026-10-07). "Open
+// claims" is the rail's own control, in its header row. The docked composer
+// is the pane's footer, so Chat | Agent stays put while the detail scrolls.
+// Reproduces the source's DimensionMasterDetail.tsx.
 //
-// Rail rows and the detail-pane header have no matching library composite
-// (see DimensionRow.tsx / DimensionDetailHeader.tsx, and
-// docs/ui-components-queue.md) — everything else here is composed from
-// Stack/Inline/Card/DetailSection/Chip, per docs/assessment-goal.md
-// "De-hand-roll every page".
+// The detail-pane header has no matching library composite (see
+// DimensionDetailHeader.tsx and docs/ui-components-queue.md) — everything
+// else here is composed from Stack/Inline/Card/DetailSection/Chip, per
+// docs/assessment-goal.md "De-hand-roll every page".
 
-import { useEffect, useState } from 'react';
-import { Link as RouterLink } from 'react-router';
+import { useEffect, useMemo, useState } from 'react';
+import { Link as RouterLink, useNavigate } from 'react-router';
+import { ExplorerLayout } from '@connorhoehnslalom/ui-components';
 import {
+  Button,
   Card,
+  InlineAlert,
+  T,
   Chip,
   DetailSection,
   Inline,
   InlinePlaceholder,
-  Input,
-  Button,
-  Toolbar,
-  MasterDetail,
   MetaLine,
   SectionLabel,
   Stack,
   Tabs,
+  useRailFold,
   type TabItem,
 } from '@connorhoehnslalom/ui-components/shared';
 import { isOpenFollowUp } from '../assessmentFormat';
@@ -40,10 +45,19 @@ import {
   hasOpenClaim,
   type Dimension,
 } from '../types';
-import { DimensionCompactRailRow, DimensionRailRow } from './DimensionRow';
+import { DimensionRailControls, DimensionRailList } from './DimensionRail';
 import { DimensionDetailHeader } from './DimensionDetailHeader';
 import { LevelBadge } from './LevelBadge';
+import { EvidenceDraftsPanel } from './EvidenceDraftsPanel';
+import { usePageHuddleComposer } from '../../../components/shell/HuddleComposerDock';
+import type { ConversationRuntime } from '../../../components/chat/ConversationThread';
+import { ConversationComposer } from '../../../lib/conversationComposer';
+import { useCallBlock, useCallHost } from '../../../lib/conversationCall';
+import { createDeck } from '../decks/decksApi';
+import { AGENT_COMMANDS, AGENT_HELP, composerAccess, dimensionPageReference, routeAgentText, teamDiscussionChannel } from './dimensionComposerModel';
 import { useCapabilities } from '../../../lib/capabilities';
+import { useSession } from '../../../lib/auth';
+import { filterRailDimensions } from './scorecardHeaderModel';
 
 const confidenceLabel = (confidence: string) => confidence.replace(/_/g, ' ');
 
@@ -147,7 +161,9 @@ function MeasuredAgainst({ dimension }: { dimension: Dimension }) {
   );
 }
 
-function ProgressTab({ dimension }: { dimension: Dimension }) {
+type DraftCommand = { nonce: number; kind: 'summary' | 'followups' } | null;
+
+function ProgressTab({ dimension, teamId, onChanged, command }: { dimension: Dimension; teamId: string; onChanged: () => void; command: DraftCommand }) {
   const openFollowUps = dimension.follow_up_questions.filter((q) => isOpenFollowUp(q.status));
   return (
     <Stack gap="lg">
@@ -165,6 +181,10 @@ function ProgressTab({ dimension }: { dimension: Dimension }) {
             {dimension.is_na ? 'Not applicable for this team.' : 'No level-up criteria recorded.'}
           </InlinePlaceholder>
         )}
+      </DetailSection>
+
+      <DetailSection title="Assistant drafts" hint="Nova drafts; nothing changes until you accept">
+        <EvidenceDraftsPanel teamId={teamId} dimensionId={dimension.id} onChanged={onChanged} command={command} />
       </DetailSection>
 
       <DetailSection
@@ -332,8 +352,7 @@ function HistoryTab({ dimension }: { dimension: Dimension }) {
 
 type DetailTabKey = 'progress' | 'assessed' | 'evidence' | 'definition' | 'history';
 
-function DetailPane({ dimension, index }: { dimension: Dimension; index: number }) {
-  const [tab, setTab] = useState<DetailTabKey>('progress');
+function DetailPane({ dimension, index, teamId, tab, onTabChange, command, onChanged }: { dimension: Dimension; index: number; teamId: string; tab: DetailTabKey; onTabChange: (tab: DetailTabKey) => void; command: DraftCommand; onChanged: () => void }) {
   const tabs: TabItem[] = [
     { id: 'progress', label: 'Progress & follow-ups' },
     { id: 'assessed', label: 'How it was assessed' },
@@ -355,11 +374,11 @@ function DetailPane({ dimension, index }: { dimension: Dimension; index: number 
       </Stack>
 
       <Stack gap="none" className="px-5 pt-3">
-        <Tabs idPrefix="dim-detail" items={tabs} value={tab} onValueChange={(id) => setTab(id as DetailTabKey)} size="sm" />
+        <Tabs idPrefix="dim-detail" items={tabs} value={tab} onValueChange={(id) => onTabChange(id as DetailTabKey)} size="sm" />
       </Stack>
 
       <Stack gap="none" className="p-5">
-        {tab === 'progress' && <ProgressTab dimension={dimension} />}
+        {tab === 'progress' && <ProgressTab dimension={dimension} teamId={teamId} onChanged={onChanged} command={command} />}
         {tab === 'assessed' && <HowAssessedTab dimension={dimension} />}
         {tab === 'evidence' && <EvidenceTab dimension={dimension} />}
         {tab === 'definition' && <DefinitionTab dimension={dimension} />}
@@ -369,104 +388,162 @@ function DetailPane({ dimension, index }: { dimension: Dimension; index: number 
   );
 }
 
-// ─── Master-detail shell ────────────────────────────────────────────────────
-
-// MasterDetail (ui-components) renders its rail as a plain `<nav aria-label>`
-// with no `list`/`listbox` role, and each row as `<div role="button"
-// tabIndex={0} aria-current={selected}>` — see
-// docs/assessment-journeys/stretch/accessibility.md: selection is announced
-// (aria-current) but the rail gives assistive tech no "3 of 17" positional
-// context, since nothing marks the rows as a group. `renderRow`/
-// `renderCompactRow` only supply a row's CHILDREN — the wrapping div (role,
-// tabIndex, aria-current, the click/keydown handlers) is the library's own
-// and isn't reachable through any prop (see docs/ui-components-queue.md).
-// This repo cannot edit the library (CLAUDE.md), so this patches the rendered DOM
-// directly via the stable `data-testid`s MasterDetail already emits
-// (`${testId}-rail`, `${testId}-row-<key>`): `role="listbox"` + a fixed
-// `aria-label` on the rail, `role="option"` + `aria-selected`/
-// `aria-setsize`/`aria-posinset` on each row. A MutationObserver re-applies
-// it because React rewrites `aria-label`/`role`/`aria-current` back to the
-// library's own values on every re-render (e.g. every selection change) —
-// disconnecting before each sync and reconnecting after avoids the observer
-// reacting to its own writes. `aria-current` and each row's own `tabIndex={0}`
-// are left exactly as MasterDetail renders them, so Enter/Space activation
-// and tab order are unchanged from today — only the role model moves from
-// bare `button` rows to `option` rows inside a `listbox`, which is the one
-// APG pattern that matches what's actually here (individually focusable,
-// non-modal single selection).
-const DIMENSION_RAIL_TEST_ID = 'assessment-dimension-master-detail';
-
-function useDimensionListboxSemantics(testId: string, dimensionCount: number): void {
-  useEffect(() => {
-    if (dimensionCount === 0) return;
-    const root = document.querySelector<HTMLElement>(`[data-testid="${testId}-rail"]`);
-    if (!root) return;
-    const rowPrefix = `${testId}-row-`;
-    const observerOptions: MutationObserverInit = {
-      childList: true, subtree: true, attributes: true,
-      attributeFilter: ['role', 'aria-current', 'aria-label'],
-    };
-
-    const sync = () => {
-      root.setAttribute('role', 'listbox');
-      root.setAttribute('aria-label', 'Dimensions');
-      const rows = Array.from(root.querySelectorAll<HTMLElement>(`[data-testid^="${rowPrefix}"]`));
-      rows.forEach((row, i) => {
-        row.setAttribute('role', 'option');
-        row.setAttribute('aria-selected', row.getAttribute('aria-current') === 'true' ? 'true' : 'false');
-        row.setAttribute('aria-setsize', String(rows.length));
-        row.setAttribute('aria-posinset', String(i + 1));
-      });
-    };
-
-    const observer = new MutationObserver(() => {
-      observer.disconnect();
-      sync();
-      observer.observe(root, observerOptions);
-    });
-    sync();
-    observer.observe(root, observerOptions);
-    return () => observer.disconnect();
-  }, [testId, dimensionCount]);
-}
+// ─── The rail and the pane ──────────────────────────────────────────────────
 
 interface DimensionMasterDetailProps {
   dimensions: Dimension[];
   selectedId: string | null;
   onSelect: (id: string) => void;
+  teamId: string;
+  teamName: string;
+  /** Re-read the team after a draft changed it (follow-ups added). */
+  onChanged: () => void;
+  /** The Certification tab is on screen: only then is the docked composer the page's input. */
+  active: boolean;
+  /** The team's Discussion (the page's one runtime, shared with the right pane's thread). */
+  conversation: ConversationRuntime | null;
 }
 
-export function DimensionMasterDetail({ dimensions, selectedId, onSelect }: DimensionMasterDetailProps) {
-  const [query, setQuery] = useState('');
+/**
+ * Docked under a dimension's detail (MasterDetail's `paneFooter`, as the
+ * initiative page's composer is docked): the library ConversationComposer for
+ * this dimension.
+ *
+ *   Chat   posts to the team's Discussion (`assessment:team:<id>`, the thread
+ *          the right pane shows) with the dimension as its page reference
+ *          (`{kind: 'assessment-dimension', id}` only — each reader resolves the
+ *          title), or — while this page's huddle is live — to the huddle beside
+ *          the block. On Certification it is those conversations' one input.
+ *   Agent  /summarize and /followups start the assessment drafter (the cards
+ *          are the drafts panel's), /deck builds the team's review deck.
+ *
+ * The shared call block keeps tiles in the composer; the team's right pane
+ * switches between the team discussion and the current call transcript.
+ */
+function DimensionFooter({ teamId, teamName, dimension, onChanged, cardsShownElsewhere, onDraft, command, active, conversation }: {
+  teamId: string; teamName: string; dimension: { id: string; title: string }; onChanged: () => void; cardsShownElsewhere: boolean;
+  onDraft: (kind: 'summary' | 'followups') => void; command: DraftCommand; active: boolean; conversation: ConversationRuntime | null;
+}) {
+  const navigate = useNavigate();
+  const { session } = useSession();
+  const { can } = useCapabilities();
+  const access = composerAccess({ mayRead: can('ViewAssessment'), canScore: can('ScoreAssessment'), canRunAgent: can('RunAssessmentAgent') });
+  const channel = teamDiscussionChannel(teamId);
+  const host = useCallHost();
+  const huddleComposer = usePageHuddleComposer('agent');
+  const [note, setNote] = useState<string | null>(null);
+  const reference = useMemo(() => dimensionPageReference({ id: teamId, name: teamName }, dimension), [teamId, teamName, dimension]);
+  const huddleLive = !!host?.lobby && host.lobby.lobbyName === channel && !['idle', 'ended', 'failed'].includes(host.call.phase);
+  // The call bar and tiles above the input, from the caller's ring to the ended notice.
+  const { block } = useCallBlock(channel, { enabled: active });
+  const runAgent = async (text: string): Promise<boolean | string> => {
+    const { action } = routeAgentText(text);
+    if (!action || !access.canAgent) { setNote(AGENT_HELP); return false; }
+    if (action === 'deck') {
+      try {
+        const { deckId } = await createDeck(teamId, {});
+        navigate(`/assessment/decks/${encodeURIComponent(deckId)}`);
+        return true;
+      } catch (cause) { return cause instanceof Error ? cause.message : 'The review deck could not be started.'; }
+    }
+    onDraft(action);
+    return true;
+  };
+  const composer = (
+    <ConversationComposer
+      key={huddleComposer.editorKey}
+      channel={channel}
+      chat={conversation?.chat ?? null}
+      context={{ kind: 'conversation', id: reference.id, title: '', reference: { id: reference.id, label: reference.label, page: reference.page } }}
+      capabilities={{ maySend: access.canChat, ...(access.readOnlyReason ? { readOnlyReason: access.readOnlyReason } : {}),
+        agent: { allowed: access.canAgent && !huddleComposer.unavailableHuddle, reason: huddleComposer.unavailableHuddle ? 'Choose a current destination before changing this draft’s mode.' : 'Your role cannot run the assessment agent' } }}
+      offline={conversation && !conversation.connected ? 'The realtime gateway is not connected, so the discussion is unavailable.' : null}
+      // The draft belongs to the signed person even before chat is ready.
+      identity={session ? { userId: session.sub, displayName: session.name ?? session.sub } : null}
+      recipients={[
+        { id: 'discussion', label: 'Team discussion', channel, placeholder: 'Add to this team’s Discussion…',
+          send: out => { conversation?.chat.sendMessage(out.text, out.metadata); setNote('Sent to the team’s Discussion.'); return !!conversation; } },
+        // Call chat is the same destination and draft on every page, even after navigation.
+        ...(huddleComposer.recipient ? [huddleComposer.recipient] : []),
+      ]}
+      {...huddleComposer.composerProps}
+      defaultMode="agent"
+      modePlaceholders={{ agent: '/summarize, /followups or /deck for this dimension…' }}
+      commands={AGENT_COMMANDS.map(c => ({ trigger: c.trigger, label: c.label, hint: c.description, disabled: !access.canAgent, modes: ['agent' as const],
+        run: (input: { text: string }) => runAgent(input.text) }))}
+      onAgent={text => runAgent(text)}
+      callBlock={block}
+      // A reader's composer claims too (read-only, with its reason): one input on screen either way.
+      claim={{ label: 'the dimension composer', enabled: active }}
+      answersFocus={active && access.canChat}
+      label="Dimension composer"
+      data-testid="dimension-composer"
+      className="@container bg-surface pt-3 [--dock-inset:1.5rem]"
+      expanded
+      allowEmoji={false}
+      draftKey={`assessment-dimension:${reference.id}`}
+    />
+  );
+  return (
+    <Stack gap="sm" className="max-h-[60dvh] overflow-y-auto border-t border-border bg-surface" data-testid="dimension-composer-block" data-live-huddle={huddleLive ? 'true' : 'false'}>
+      {!cardsShownElsewhere && access.canAgent && (
+        <Stack gap="none" className="px-5 pt-3">
+          <EvidenceDraftsPanel teamId={teamId} dimensionId={dimension.id} onChanged={onChanged} showControls={false}
+            command={command} onStartError={setNote} data-testid="dimension-composer-drafts" />
+        </Stack>
+      )}
+      {access.readOnlyReason && <T size="xs" tone="secondary" className="px-5 pt-2" wrap data-testid="dimension-composer-read-only">{access.readOnlyReason}</T>}
+      {note && <InlineAlert tone="info" className="mx-5" data-testid="dimension-composer-note" onDismiss={() => setNote(null)}>{note}</InlineAlert>}
+      {/* TeamScorecard owns the single right pane for both conversations. */}
+      {composer}
+    </Stack>
+  );
+}
+
+export function DimensionMasterDetail({ dimensions, selectedId, onSelect, teamId, teamName, onChanged, active, conversation }: DimensionMasterDetailProps) {
   const [onlyClaims, setOnlyClaims] = useState(false);
-  const filtered = dimensions.filter((dimension) =>
-    `${dimension.id} ${dimension.title}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()) &&
-    (!onlyClaims || (dimension.certification != null && hasOpenClaim(dimension.certification))));
+  const filtered = filterRailDimensions(dimensions, onlyClaims);
   const fallbackId = filtered.length > 0 ? filtered[0].id : null;
   const effectiveId = filtered.some((dimension) => dimension.id === selectedId) ? selectedId : fallbackId;
-  useDimensionListboxSemantics(DIMENSION_RAIL_TEST_ID, filtered.length);
-
+  // The rail folds to a strip (the library rail fold, remembered per device and band).
+  const fold = useRailFold({ storageKey: 'assessment.dimension-rail' });
+  // The tab and drafter command live here, not in the pane, because the docked
+  // composer (the pane's footer) needs both; a new dimension starts on Progress.
+  const [tab, setTab] = useState<DetailTabKey>('progress');
+  const [command, setCommand] = useState<DraftCommand>(null);
+  useEffect(() => { setTab('progress'); }, [effectiveId]);
+  const effective = filtered.find((dimension) => dimension.id === effectiveId) ?? null;
+  const indexOf = (id: string) => dimensions.findIndex((item) => item.id === id);
   return (
-    <Stack gap="none">
-      <Toolbar aria-label="Dimension filters" wrap end={<Button size="sm" variant={onlyClaims ? 'primary' : 'secondary'} aria-pressed={onlyClaims} onClick={() => setOnlyClaims((value) => !value)}>Open claims</Button>}>
-        <Input aria-label="Find a dimension" placeholder="Find a dimension…" value={query} onChange={(event) => setQuery(event.target.value)} />
-      </Toolbar>
-      <MasterDetail<Dimension>
-        className="max-lg:flex-col max-lg:[&>nav]:!w-full max-lg:[&>nav]:max-h-64 max-lg:[&>nav]:border-r-0 max-lg:[&>nav]:border-b"
-        items={filtered}
-        keyOf={(d: Dimension) => d.id}
-        selectedKey={effectiveId}
-        onSelect={onSelect}
-        railTitle={`${filtered.length} of ${dimensions.length} dimensions`}
-        railWidth={340}
-        compactWidth={72}
-        storageKey="assessment-dimension-rail-mode"
-        data-testid={DIMENSION_RAIL_TEST_ID}
-        renderRow={(d: Dimension) => <DimensionRailRow dimension={d} index={dimensions.findIndex((item) => item.id === d.id)} />}
-        renderCompactRow={(d: Dimension) => <DimensionCompactRailRow dimension={d} index={dimensions.findIndex((item) => item.id === d.id)} />}
-        renderDetail={(d: Dimension) => <DetailPane dimension={d} index={dimensions.findIndex((item) => item.id === d.id)} />}
-        emptyDetail={<InlinePlaceholder size="sm" align="center" className="p-5">No dimensions match these filters.</InlinePlaceholder>}
-      />
-    </Stack>
+    <ExplorerLayout
+      className="assessment-dimension-layout min-h-0 flex-1"
+      railWidth="md"
+      railTitle="Dimensions"
+      railHeading="compact"
+      railCount={filtered.length}
+      railCountStyle="plain"
+      railLabel="dimensions"
+      railCollapsed={fold.folded}
+      onToggleRail={fold.toggle}
+      railHeader={<DimensionRailControls dimensions={dimensions} onlyClaims={onlyClaims} onChange={setOnlyClaims} />}
+      rail={filtered.length === 0 ? (
+        <InlinePlaceholder size="sm" align="center" className="p-5">No dimension has an open claim.</InlinePlaceholder>
+      ) : (
+        <DimensionRailList dimensions={filtered} allDimensions={dimensions} selectedId={effectiveId} onSelect={onSelect} />
+      )}
+      panePadding="none"
+      paneFooter={effective ? (
+        <DimensionFooter key={effective.id} teamId={teamId} teamName={teamName} dimension={effective} onChanged={onChanged}
+          cardsShownElsewhere={tab === 'progress'} command={command} active={active} conversation={conversation}
+          onDraft={(kind) => setCommand((prev) => ({ nonce: (prev?.nonce ?? 0) + 1, kind }))} />
+      ) : undefined}
+      data-testid="assessment-dimension-master-detail"
+    >
+      {effective ? (
+        <DetailPane key={effective.id} dimension={effective} index={indexOf(effective.id)} teamId={teamId} tab={tab} onTabChange={setTab} command={command} onChanged={onChanged} />
+      ) : (
+        <InlinePlaceholder size="sm" align="center" className="p-5">No dimensions match these filters.</InlinePlaceholder>
+      )}
+    </ExplorerLayout>
   );
 }

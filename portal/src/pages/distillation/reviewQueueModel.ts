@@ -161,3 +161,10 @@ export function sourceCountLabel(n: number | null): string {
   if (n == null) return '';
   return `${n} ${n === 1 ? 'source' : 'sources'}`;
 }
+
+/** What the screen reader hears when samples are drawn while the queue is
+ *  open: "2 new samples to review", or nothing. */
+export function reviewArrivalAnnouncement(count: number): string {
+  if (count <= 0) return '';
+  return `${count} new ${count === 1 ? 'sample' : 'samples'} to review`;
+}

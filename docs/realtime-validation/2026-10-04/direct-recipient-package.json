@@ -1,0 +1,12 @@
+{
+  "name": "@connorhoehn/realtime-modules",
+  "version": "0.101.0",
+  "filename": "connorhoehn-realtime-modules-0.101.0.tgz",
+  "size": 1253517,
+  "unpackedSize": 5377644,
+  "shasum": "bb3a79c569b18f5b688dff24194351c781d11a40",
+  "integrity": "sha512-S+WiT0YRidTMDrfEjgGUJdHrH8j/0bV5AFPmlhlHEKZSKHNQOSZd1MhKUMv5wyST1zq0mKMy7QuDByJdqMSWiA==",
+  "entryCount": 1038,
+  "sha256": "ded1eebee4d8e6c069f3253a89829d74ba6e482d7b074cfe02e0f4e2592f83a5",
+  "realtimePin": "6fcb05171634767653b8a75be3a66ab442d12838"
+}

@@ -1,0 +1,22 @@
+✔ losing a subscriber connection permanently removes both leased BFFs from health admission (688.632125ms)
+✖ retirement after peer connection loss preserves page ownership and both users' huddle history (2167.324916ms)
+✔ a stalled Redis command path fences health within its bounded renewal deadline (45505.935ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 2
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 48612.081042
+
+✖ failing tests:
+
+test at middleware/test-support/bff-cluster-redis-failures.mjs:49:1
+✖ retirement after peer connection loss preserves page ownership and both users' huddle history (2167.324916ms)
+  SyntaxError: Unexpected token '<', "<!DOCTYPE "... is not valid JSON
+      at JSON.parse (<anonymous>)
+      at parseJSONFromBytes (node:internal/deps/undici/undici:4319:19)
+      at successSteps (node:internal/deps/undici/undici:6967:27)
+      at readAllBytes (node:internal/deps/undici/undici:5890:13)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)

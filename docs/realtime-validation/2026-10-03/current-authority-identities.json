@@ -1,0 +1,119 @@
+[
+  {
+    "userId": "u-theo",
+    "displayName": "Theo Chang",
+    "role": "participant",
+    "epoch": 0,
+    "tenants": [
+      "orgiq",
+      "social"
+    ]
+  },
+  {
+    "userId": "u-vera",
+    "displayName": "Vera Green",
+    "role": "participant",
+    "epoch": 0,
+    "tenants": [
+      "orgiq",
+      "social"
+    ]
+  },
+  {
+    "userId": "u-release",
+    "displayName": "Sienna Garcia",
+    "role": "participant",
+    "epoch": 0,
+    "tenants": [
+      "orgiq",
+      "social"
+    ]
+  },
+  {
+    "userId": "u-rachel",
+    "displayName": "Rachel Kowalski",
+    "role": "participant",
+    "epoch": 0,
+    "tenants": [
+      "orgiq",
+      "social"
+    ]
+  },
+  {
+    "userId": "u-mia",
+    "displayName": "Mia Singh",
+    "role": "participant",
+    "epoch": 0,
+    "tenants": [
+      "orgiq",
+      "social"
+    ]
+  },
+  {
+    "userId": "u-nora",
+    "displayName": "Nora DaSilva",
+    "role": "participant",
+    "epoch": 0,
+    "tenants": [
+      "orgiq",
+      "social"
+    ]
+  },
+  {
+    "userId": "u-asha",
+    "displayName": "Asha Nair",
+    "role": "participant",
+    "epoch": 0,
+    "tenants": [
+      "assessment",
+      "social"
+    ]
+  },
+  {
+    "userId": "u-jonas",
+    "displayName": "Jonas Lindqvist",
+    "role": "participant",
+    "epoch": 0,
+    "tenants": [
+      "assessment",
+      "social"
+    ]
+  },
+  {
+    "userId": "u-farah",
+    "displayName": "Farah Osei",
+    "role": "participant",
+    "epoch": 0,
+    "tenants": [
+      "assessment",
+      "social"
+    ]
+  },
+  {
+    "userId": "u-mira",
+    "displayName": "Mira Okafor",
+    "role": "community-admin",
+    "epoch": 0,
+    "tenants": [
+      "social"
+    ]
+  },
+  {
+    "userId": "u-lena",
+    "displayName": "Lena Brandt",
+    "role": "moderator",
+    "epoch": 0,
+    "tenants": [
+      "social"
+    ]
+  },
+  {
+    "userId": "u-sana",
+    "displayName": "Sana Iqbal",
+    "role": "participant",
+    "epoch": 0,
+    "tenants": [
+      "social"
+    ]
+  }
+]

@@ -1,0 +1,9 @@
+    const maxSockets = Number(process.env['SOCIAL_CHAT_MAX_SOCKETS'] ?? 50);
+    if (!Number.isSafeInteger(maxSockets) || maxSockets < 1 || maxSockets > 1024)
+        throw new Error('SOCIAL_CHAT_MAX_SOCKETS must be an integer from 1 to 1024');
+    const sdk = new DynamoDBClient({
+        region: cfg.region,
+        // Keep the established SDK concurrency by default. Load profiles can
+        // select a bounded pool explicitly; stalled replies have a deadline.
+        requestHandler: { httpAgent: { keepAlive: true, maxSockets }, httpsAgent: { keepAlive: true, maxSockets },
+            connectionTimeout: 2000, requestTimeout: 5000, throwOnRequestTimeout: true },

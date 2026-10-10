@@ -20,6 +20,9 @@ jest.mock('@aws-sdk/client-verifiedpermissions', () => ({
   IsAuthorizedCommand: class {},
 }));
 
+jest.mock('../../lib/pipeline-queues.js', () => ({ readPipelineQueues: jest.fn(async () => ({ backend: 'memory', observedAt: '2026-10-10T12:00:00Z', queues: [] })) }));
+
+import { readPipelineQueues } from '../../lib/pipeline-queues.js';
 import express from 'express';
 import request from '../../test-support/http.js';
 import { pipelinesRouter } from '../pipelines.js';
@@ -86,8 +89,9 @@ describe('GET /api/pipelines/summary', () => {
     const rows = pipelinesSurfaces.rows();
     expect(res.body.surfaces).toEqual({ total: rows.length, live: rows.filter((r) => r.live).length, pending: rows.filter((r) => !r.live).length });
     // One seeded user per role, plus the cross-tenant operator.
-    expect(res.body.members.byRole).toEqual({ author: 1, operator: 1, 'pipeline-admin': 1, admin: 1 });
-    expect(res.body.members.total).toBe(4);
+    // Two authors since the 2026-10-07 seed: u-ines and u-tomas (the Communication plane's pipelines walker).
+    expect(res.body.members.byRole).toEqual({ author: 2, operator: 1, 'pipeline-admin': 1, admin: 1 });
+    expect(res.body.members.total).toBe(5); // five grant holders with u-tomas
   });
 
   it('the empty scenario reads zero surfaces', async () => {
@@ -187,5 +191,21 @@ describe('GET /api/pipelines/runs*', () => {
         expect({ path, status: res.status }).toEqual({ path, status: 403 });
       }
     }
+  });
+});
+
+
+describe('GET /api/pipelines/queues', () => {
+  beforeEach(() => jest.mocked(readPipelineQueues).mockClear());
+  it.each(OUTSIDE)('refuses $tenant/$role before reading metadata', async session => {
+    const res = await request(appAs(session)).get('/api/pipelines/queues');
+    expect(res.status).toBe(403);
+    expect(readPipelineQueues).not.toHaveBeenCalled();
+  });
+  it.each(['author', 'operator', 'pipeline-admin'] as Role[])('allows governed metadata for %s without caching it', async role => {
+    const res = await request(appAs({ role, tenant: 'pipelines', sub: 'u-kofi' })).get('/api/pipelines/queues');
+    expect(res.status).toBe(200);
+    expect(res.headers['cache-control']).toBe('no-store');
+    expect(readPipelineQueues).toHaveBeenCalledTimes(1);
   });
 });

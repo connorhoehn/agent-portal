@@ -8,8 +8,7 @@
 // docs/ui-components-queue.md; the `<pre>`/`<span>` per-line markup below is
 // the actual highlighting technique, not hand-rolled chrome, so it stays raw.
 
-import { Inline } from '@connorhoehnslalom/ui-components/shared';
-import { T } from '../Text';
+import { Inline, T } from '@connorhoehnslalom/ui-components/shared';
 
 const LINE_CLASS = 'block min-h-[1.7em]';
 

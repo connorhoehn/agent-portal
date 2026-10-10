@@ -34,9 +34,10 @@ import { AppError, NotFoundError, ValidationError } from '../lib/async-handler.j
 import { realtimeClaims, realtimeSigningSecret, signRealtimeToken } from '../lib/realtime-token.js';
 import type { Session } from '../lib/session.js';
 import { slugify } from '../lib/social-chat.js';
+import { recordingConversation, speechSegments, type TranscriptSegmentView } from '../lib/recording-transcript.js';
 import { clock, defineFixture } from '../mock/core/index.js';
 import {
-  socialCallLogFixture, socialRecordingsFixture, socialRoomMembersFixture, socialRoomsFixture,
+  socialCallLogFixture, socialRecordingsFixture, socialRecordingTranscriptsFixture, socialRoomMembersFixture, socialRoomsFixture,
   socialTeamMembersFixture, socialTeamsFixture,
   type SocialCallLogRow, type SocialRecordingRow, type SocialRoomRow, type SocialTeamMemberRow, type SocialTeamRow,
 } from '../mock/social-platform.js';
@@ -76,6 +77,19 @@ export interface SocialTeamView extends SocialTeamRow {
   channels: SocialTeamChannelView[];
 }
 export interface SocialTeamMemberView { userId: string; role: 'owner' | 'member'; addedAt: string }
+/** The upstream preference response preserves its membership timestamp shape. */
+export interface SocialTeamPreferenceMember {
+  teamId: string;
+  userId: string;
+  role: 'owner' | 'member';
+  favorite: boolean;
+  addedBy: string;
+  addedAt?: string;
+  joinedAt?: string;
+}
+export type SocialTranscript =
+  | { status: 'ready'; recordingId: string; lobbyName: string; conversation: string | null; startedAt: string; segments: TranscriptSegmentView[] }
+  | { status: string; recordingId: string; lobbyName: string; conversation: string | null; startedAt: string; terminal: boolean; retryAfterMs: number | null; error: string | null };
 export interface SocialPlayback { recordingId: string; playlistUrl: string | null; mediaState: string }
 export interface SocialShareLink { shareToken: string; shareUrl: string; expiresAt: string }
 
@@ -207,6 +221,10 @@ export async function createRoom(session: Session, input: CreateRoomInput): Prom
 
 const teamRosterMirror = new Map<string, Set<string>>(); // team slug → user ids
 const teamSlugById = new Map<string, string>();
+// An in-flight read from before a membership write cannot undo its roster.
+const teamRosterGeneration = new Map<string, number>();
+const rosterGeneration = (teamId: string): number => teamRosterGeneration.get(teamId) ?? 0;
+const advanceRosterGeneration = (teamId: string): void => { teamRosterGeneration.set(teamId, rosterGeneration(teamId) + 1); };
 
 function mirrorTeam(teamId: string, slug: string): void { teamSlugById.set(teamId, slug); }
 function mirrorAdd(slug: string, userId: string): void {
@@ -219,33 +237,44 @@ function mirrorAdd(slug: string, userId: string): void {
 export function isSocialTeamMember(teamSlug: string, userId: string): boolean {
   if (!teamSlug || !userId) return false;
   if (socialPlatformBackend() === 'mock') {
-    const team = socialTeamsFixture.rows().find((t) => t.slug === teamSlug && t.state === 'active');
+    const team = socialTeamsFixture.rows().find((t) => t.orgId === SOCIAL_PARTITION && t.slug === teamSlug && t.state === 'active');
     return !!team && !!teamMember(team.teamId, userId);
   }
   return teamRosterMirror.get(teamSlug)?.has(userId) ?? false;
 }
 
 /** Tests only. */
-export function resetSocialTeamMirror(): void { teamRosterMirror.clear(); teamSlugById.clear(); }
+export function resetSocialTeamMirror(): void { teamRosterMirror.clear(); teamSlugById.clear(); teamRosterGeneration.clear(); }
 
 // ── Teams ───────────────────────────────────────────────────────────────────
 
 interface PlatformTeamListItem extends SocialTeamRow { role?: 'owner' | 'member'; favorite?: boolean; channels?: SocialRoomRow[] }
+interface PlatformTeamDetail { team: SocialTeamRow; role?: 'owner' | 'member'; channels?: SocialRoomRow[]; members?: SocialTeamMemberRow[] }
+
+/** Mutation preflights must not refresh the gateway roster from an old read. */
+async function readPlatformTeam(session: Session, teamId: string): Promise<PlatformTeamDetail> {
+  const body = await platformRequest<PlatformTeamDetail>(session, 'GET', `/api/teams/${encodeURIComponent(teamId)}`);
+  if (!body?.team || body.team.teamId !== teamId || body.team.orgId !== SOCIAL_PARTITION || body.team.state !== 'active') throw new NotFoundError(`no team ${teamId}`);
+  return body;
+}
 
 export async function listTeams(session: Session): Promise<SocialTeamView[]> {
   const backend = socialPlatformBackend();
   if (backend === 'platform') {
+    const generations = new Map(teamRosterGeneration);
     const body = await platformRequest<{ teams?: PlatformTeamListItem[] }>(session, 'GET', '/api/teams');
     return (body?.teams ?? []).filter((t) => t.orgId === SOCIAL_PARTITION).map((t) => {
       const { channels, role, favorite, ...team } = t;
-      mirrorTeam(team.teamId, team.slug);
-      if (role) mirrorAdd(team.slug, session.sub);
+      if (rosterGeneration(team.teamId) === (generations.get(team.teamId) ?? 0)) {
+        mirrorTeam(team.teamId, team.slug);
+        if (role) mirrorAdd(team.slug, session.sub);
+      }
       return { ...team, role: role ?? null, favorite: !!favorite, channels: (channels ?? []).filter((c) => c.state !== 'archived').map(channelView) };
     });
   }
   if (backend === 'none') throw new AppError(503, 'teams need platform-api (none configured)');
   return socialTeamsFixture.rows()
-    .filter((t) => t.state === 'active' && !!teamMember(t.teamId, session.sub))
+    .filter((t) => t.orgId === SOCIAL_PARTITION && t.state === 'active' && !!teamMember(t.teamId, session.sub))
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
     .map((t) => {
       const m = teamMember(t.teamId, session.sub)!;
@@ -258,12 +287,13 @@ export interface SocialTeamDetail { team: SocialTeamView; members: SocialTeamMem
 export async function getTeam(session: Session, teamId: string): Promise<SocialTeamDetail> {
   const backend = socialPlatformBackend();
   if (backend === 'platform') {
-    const body = await platformRequest<{ team: SocialTeamRow; role?: 'owner' | 'member'; channels?: SocialRoomRow[]; members?: SocialTeamMemberRow[] }>(
-      session, 'GET', `/api/teams/${encodeURIComponent(teamId)}`);
-    if (!body?.team || body.team.orgId !== SOCIAL_PARTITION) throw new NotFoundError(`no team ${teamId}`);
+    const generation = rosterGeneration(teamId);
+    const body = await readPlatformTeam(session, teamId);
     const members = body.members ?? [];
-    mirrorTeam(body.team.teamId, body.team.slug);
-    teamRosterMirror.set(body.team.slug, new Set(members.map((m) => m.userId)));
+    if (rosterGeneration(teamId) === generation) {
+      mirrorTeam(body.team.teamId, body.team.slug);
+      teamRosterMirror.set(body.team.slug, new Set(members.map((m) => m.userId)));
+    }
     const mine = members.find((m) => m.userId === session.sub);
     return {
       team: { ...body.team, role: body.role ?? null, favorite: !!mine?.favorite, channels: (body.channels ?? []).filter((c) => c.state !== 'archived').map(channelView) },
@@ -271,7 +301,7 @@ export async function getTeam(session: Session, teamId: string): Promise<SocialT
     };
   }
   if (backend === 'none') throw new AppError(503, 'teams need platform-api (none configured)');
-  const team = socialTeamsFixture.rows().find((t) => t.teamId === teamId && t.state === 'active');
+  const team = socialTeamsFixture.rows().find((t) => t.orgId === SOCIAL_PARTITION && t.teamId === teamId && t.state === 'active');
   const mine = team ? teamMember(team.teamId, session.sub) : undefined;
   // Upstream: a private team 404s for a non-member (no existence leak).
   if (!team || (team.visibility === 'private' && !mine)) throw new NotFoundError(`no team ${teamId}`);
@@ -280,12 +310,42 @@ export async function getTeam(session: Session, teamId: string): Promise<SocialT
   return { team: { ...team, role: mine?.role ?? null, favorite: !!mine?.favorite, channels: mockTeamChannels(team, session.sub) }, members };
 }
 
+/** A preference belongs to the caller's membership, never the shared team. */
+export async function setTeamFavorite(session: Session, teamId: string, favorite: boolean): Promise<SocialTeamPreferenceMember> {
+  if (typeof favorite !== 'boolean') throw new ValidationError('favorite is required (boolean)');
+  const backend = socialPlatformBackend();
+  const detail = backend === 'platform' ? await readPlatformTeam(session, teamId) : await getTeam(session, teamId);
+  const team = detail.team;
+  if (!detail.members?.some(member => member.userId === session.sub)) {
+    if (team.visibility === 'private') throw new NotFoundError(`no team ${teamId}`);
+    throw new AppError(403, 'only a team member can change their preference');
+  }
+  if (backend === 'platform') {
+    const body = await platformRequest<{ member: SocialTeamPreferenceMember }>(session, 'PATCH', `/api/teams/${encodeURIComponent(teamId)}/me`, { favorite });
+    if (!body?.member || body.member.teamId !== teamId || body.member.userId !== session.sub || body.member.favorite !== favorite) {
+      throw new AppError(502, 'platform-api returned an invalid team preference');
+    }
+    return body.member;
+  }
+  if (!socialTeamsFixture.rows().some(row => row.teamId === teamId && row.orgId === SOCIAL_PARTITION && row.state === 'active')) {
+    throw new NotFoundError(`no team ${teamId}`);
+  }
+  const mine = teamMember(teamId, session.sub);
+  if (!mine) {
+    if (team.visibility === 'private') throw new NotFoundError(`no team ${teamId}`);
+    throw new AppError(403, 'only a team member can change their preference');
+  }
+  mine.favorite = favorite;
+  return { ...mine, favorite };
+}
+
 export interface CreateTeamInput { name: string; description?: string; visibility: 'org' | 'private'; byName?: string }
 
 export async function createTeam(session: Session, input: CreateTeamInput): Promise<SocialTeamView> {
   const backend = socialPlatformBackend();
   if (backend === 'platform') {
     const body = await platformRequest<{ team: SocialTeamRow; channels?: SocialRoomRow[] }>(session, 'POST', '/api/teams', input);
+    advanceRosterGeneration(body.team.teamId);
     mirrorTeam(body.team.teamId, body.team.slug);
     mirrorAdd(body.team.slug, session.sub);
     return { ...body.team, role: 'owner', favorite: false, channels: (body.channels ?? []).map(channelView) };
@@ -300,7 +360,7 @@ export async function createTeam(session: Session, input: CreateTeamInput): Prom
     visibility: input.visibility, createdBy: session.sub, createdAt: now, updatedAt: now, state: 'active',
   };
   teams.push(team);
-  socialTeamMembersFixture.rows().push({ teamId: team.teamId, userId: session.sub, role: 'owner', addedAt: now, addedBy: session.sub });
+  socialTeamMembersFixture.rows().push({ teamId: team.teamId, userId: session.sub, role: 'owner', favorite: false, addedAt: now, addedBy: session.sub });
   // A team with no channel is not a team: its General, as upstream.
   socialRoomsFixture.rows().push({
     orgId: SOCIAL_PARTITION, roomId: mockId('room'), slug: `${slug}-general`, name: 'General', createdBy: session.sub, createdAt: now,
@@ -316,6 +376,7 @@ export async function addTeamMember(session: Session, teamId: string, userId: st
     const body = await platformRequest<{ member: SocialTeamMemberRow }>(session, 'POST', `/api/teams/${encodeURIComponent(teamId)}/members`, {
       userId, ...(displayName ? { displayName } : {}), ...(session.name ? { byName: session.name } : {}),
     });
+    advanceRosterGeneration(teamId);
     const slug = teamSlugById.get(teamId);
     if (slug) mirrorAdd(slug, body.member.userId);
     return { userId: body.member.userId, role: body.member.role, addedAt: body.member.addedAt };
@@ -327,24 +388,26 @@ export async function addTeamMember(session: Session, teamId: string, userId: st
   const members = socialTeamMembersFixture.rows();
   const existing = members.find((m) => m.teamId === teamId && m.userId === userId);
   if (existing) return { userId, role: existing.role, addedAt: existing.addedAt };
-  const row: SocialTeamMemberRow = { teamId, userId, role: 'member', addedAt: clock.nowIso(), addedBy: session.sub };
+  const row: SocialTeamMemberRow = { teamId, userId, role: 'member', favorite: false, addedAt: clock.nowIso(), addedBy: session.sub };
   members.push(row);
   return { userId, role: row.role, addedAt: row.addedAt };
 }
 
 export async function removeTeamMember(session: Session, teamId: string, userId: string): Promise<void> {
   const backend = socialPlatformBackend();
+  const detail = backend === 'platform' ? await readPlatformTeam(session, teamId) : await getTeam(session, teamId);
+  if (detail.team.orgId !== SOCIAL_PARTITION || detail.team.state !== 'active') throw new NotFoundError(`no team ${teamId}`);
+  const caller = detail.members?.find(member => member.userId === session.sub);
+  if (!caller) throw new NotFoundError(`no team ${teamId}`);
+  if (userId !== session.sub && caller.role !== 'owner') throw new AppError(403, `only the team's owner can remove someone else`);
   if (backend === 'platform') {
     await platformRequest<unknown>(session, 'DELETE', `/api/teams/${encodeURIComponent(teamId)}/members/${encodeURIComponent(userId)}`);
-    const slug = teamSlugById.get(teamId);
+    advanceRosterGeneration(teamId);
+    const slug = teamSlugById.get(teamId) ?? detail.team.slug;
     if (slug) teamRosterMirror.get(slug)?.delete(userId);
     return;
   }
   if (backend === 'none') throw new AppError(503, 'teams need platform-api (none configured)');
-  await getTeam(session, teamId);
-  const caller = teamMember(teamId, session.sub);
-  if (!caller) throw new NotFoundError(`no team ${teamId}`);
-  if (userId !== session.sub && caller.role !== 'owner') throw new AppError(403, `only the team's owner can remove someone else`);
   const members = socialTeamMembersFixture.rows();
   const i = members.findIndex((m) => m.teamId === teamId && m.userId === userId);
   if (i >= 0) members.splice(i, 1);
@@ -385,6 +448,43 @@ export async function recordingPlayback(session: Session, recordingId: string): 
   return { recordingId, playlistUrl: null, mediaState: 'unavailable' };
 }
 
+
+/**
+ * A recording's transcript, under the authority the list and playback proxies
+ * apply: a `social:` lobby only, and a recording you were not on does not
+ * exist for you (upstream `requireOwnRecording`, 404). platform-api's
+ * `GET /api/recordings/:id` is asked first (it carries the lobby and answers
+ * that same 404), then `GET /api/recordings/:id/transcript` (src/routes/
+ * recordings.ts:902), which answers 202 + progress until the transcript is ready.
+ * Nothing is cached: every call asks again.
+ */
+export async function recordingTranscript(session: Session, recordingId: string): Promise<SocialTranscript> {
+  const backend = socialPlatformBackend();
+  if (backend === 'none') throw new AppError(503, 'recordings need platform-api (none configured)');
+  const id = encodeURIComponent(recordingId);
+  let row: Pick<SocialRecordingRow, 'lobbyName' | 'startedAt'>;
+  if (backend === 'platform') {
+    const detail = await platformRequest<{ lobbyName?: string; startedAt?: string } | null>(session, 'GET', `/api/recordings/${id}`);
+    if (!detail || !isSocialLobby(detail.lobbyName)) throw new NotFoundError(`no recording ${recordingId}`);
+    row = { lobbyName: detail.lobbyName!, startedAt: detail.startedAt ?? new Date(0).toISOString() };
+  } else {
+    row = mockOwnRecording(session, recordingId);
+  }
+  const head = { recordingId, lobbyName: row.lobbyName, conversation: recordingConversation(row.lobbyName), startedAt: row.startedAt };
+  type Doc = { segments?: Array<Parameters<typeof speechSegments>[0][number]>; status?: string; transcriptStatus?: string; terminal?: boolean; retryAfterMs?: number | null; error?: string | null };
+  let doc: Doc | null;
+  if (backend === 'platform') {
+    doc = await platformRequest<Doc | null>(session, 'GET', `/api/recordings/${id}/transcript`);
+  } else {
+    const t = socialRecordingTranscriptsFixture.rows().find((r) => r.recordingId === recordingId);
+    if (!t) throw new NotFoundError('transcription not requested for this recording');
+    doc = t.transcriptStatus === 'ready' ? { segments: t.segments }
+      : { status: t.transcriptStatus, terminal: t.transcriptStatus === 'failed', retryAfterMs: t.transcriptStatus === 'failed' ? null : 5000, error: null };
+  }
+  if (doc && Array.isArray(doc.segments)) return { status: 'ready', ...head, segments: speechSegments(doc.segments) };
+  return { status: doc?.status ?? 'pending', ...head, terminal: doc?.terminal === true, retryAfterMs: doc?.retryAfterMs ?? null, error: doc?.error ?? null };
+}
+
 /** Share links minted under dev:mock (upstream: `video-recording-share-links`). */
 export const socialRecordingSharesFixture = defineFixture<SocialShareLink & { recordingId: string; createdBy: string }>({
   key: 'social.recording-shares',
@@ -420,15 +520,24 @@ export async function deleteRecording(session: Session, recordingId: string): Pr
 
 // ── Call log ────────────────────────────────────────────────────────────────
 
-/** Your calls in `social:` lobbies, newest first. */
-export async function listCalls(session: Session): Promise<SocialCallLogRow[]> {
+/**
+ * Every call-log row of the caller, any lobby, newest first. platform-api keys
+ * the log by user, not tenant; callers keep the lobbies they may show
+ * (`listCalls`: Social's; routes/page-calls.ts: a page's or a tenant's).
+ */
+export async function listCallRows(session: Session): Promise<SocialCallLogRow[]> {
   const backend = socialPlatformBackend();
   let rows: SocialCallLogRow[];
   if (backend === 'platform') {
-    const body = await platformRequest<{ calls?: SocialCallLogRow[] }>(session, 'GET', '/api/calls/log?limit=200');
+    const body = await platformRequest<{ calls?: SocialCallLogRow[] }>(session, 'GET', '/api/calls/log?limit=500');
     rows = body?.calls ?? [];
   } else if (backend === 'mock') {
     rows = socialCallLogFixture.rows().filter((r) => r.userId === session.sub);
   } else throw new AppError(503, 'the call log needs platform-api (none configured)');
-  return rows.filter((r) => isSocialLobby(r.lobbyName)).sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+  return [...rows].sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+}
+
+/** Your calls in `social:` lobbies, newest first. */
+export async function listCalls(session: Session): Promise<SocialCallLogRow[]> {
+  return (await listCallRows(session)).filter((r) => isSocialLobby(r.lobbyName));
 }

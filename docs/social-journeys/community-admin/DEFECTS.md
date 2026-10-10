@@ -38,3 +38,97 @@ Found walking the S2 surfaces headless against dev:mock:social with the
 - #1 teardown 404s — closed: Leave's DELETEs now go to the SFU (http://localhost:3901/api/channels/arn%3Alocal%3Aivs%3Achannel%2F<id>/whep/<id>; http://localhost:3901/api/channels/arn%3Alocal%3Aivs%3Achannel%2F<id>/whip/<id>); 0 console errors, no WHIP/WHEP response ≥400.
 - #2 second arrival ~3s — closed: 0.15s from the peer going live to “2 people” on this dock (bar 2s).
 - #3 tiles named by SFU id — closed: the remote tile reads the display name (“Town hall 2 people Share People 2 Leave You Sana Iqbal”).
+
+## Closed during the 2026-10-01 local conversation re-walk
+
+6. **A valid new team's General channel exceeded the inherited 50-character chat limit** [middleware].
+   The create flow accepted `Audit community-admin 1790886946630`, but its
+   55-character channel `social:team:audit-community-admin-1790886946630:general`
+   was refused at chat join. Presence succeeded, so the pane looked connected;
+   the attempted send cleared the composer and produced no message. Captured
+   gateway frames showed “Channel name must be a string between 1 and 50
+   characters”, then “You must join the channel before sending messages”.
+   Closed: the middleware configures the library's chat name limit to 256.
+   The final two-context re-walk created another equally long team, added
+   Sana, delivered both directions, retained history after reload, and passed
+   pin/reload/jump/peer-unpin with zero application errors. See `teams.md` and
+   `teams.jpg`; the gateway regression also exercises a 58-character private
+   team channel.
+
+7. **A rejected chat send discarded the draft without showing the server's error** [portal].
+   The same captured nested chat errors were absent from the page. Closed:
+   the composer waits for a joined channel and a persisted send acknowledgement,
+   correlates acknowledgements to each send, and keeps the draft when the server
+   refuses it. The rejection and untouched-retry behavior has a real-server
+   browser regression in `portal/e2e/social-pins.spec.ts`; the final role walk's
+   normal sends and reload history also pass.
+
+The fresh calls, rooms and recordings logs explicitly limit acceptance to local
+UI/role/empty-state checks. No platform-api/SFU or playable media was available
+in the dedicated mock stack; the earlier media observations above are historical.
+
+# Defects — headless re-walk (2026-10-06, Tilt stack :5183/:3001 with the real SFU and platform-api)
+
+Found re-observing every conversation, calls, rooms, recordings, contacts,
+teams and bell log. Numbered per this walk; no product code was changed.
+
+1. **A DM's rail row and unread badge do not update live while another
+   conversation is open** [portal / realtime-modules]. With the viewer on
+   `#general`, the peer's DM reached the BFF (`GET /api/social/dms` showed the
+   new `lastMessagePreview` and `unreadCount: 2`), but the rail row kept its old
+   preview and the shell bell stayed at its old count for 40–55s; a reload showed
+   the row. The 2026-10-01 walk saw the badge arrive live. The dms log records
+   the measured delay as `verdict: fail — unread`.
+2. **`/summarize last banana` is refused silently** [portal / ui-components].
+   The command is not run and nothing is sent; the draft stays in the composer,
+   but the old "Give a range like …" explanation no longer renders anywhere
+   (`portal/e2e/social-summarize.spec.ts` still expects it).
+3. **"Maximum update depth exceeded" logged intermittently** [unconfirmed owner:
+   shell or ui-components]. Seen five times across the walk: community-admin
+   Teams and Rooms, moderator Calls and DMs, participant Teams. Each was in a
+   run that also had a middleware restart (`ws://localhost:3001/ws`
+   `ERR_CONNECTION_REFUSED`) or a live call/team chat in flight. NOT reproduced
+   in a stable-server pass: four page loads as u-mira (`/social/teams`,
+   `/social/rooms`, a team channel, a room), five loads of every Social
+   route, and a full DM call + hang-up + Calls page cycle as u-lena/u-sana all
+   logged 0 such errors. Logs for the affected surfaces were re-run on a stable
+   server and record the result of that run.
+   **Root cause found 2026-10-06 (reproduced):** a burst of `social:lobby`
+   presence frames (reconnects and call joins send them) re-mirrored the roster
+   from a passive effect in the shell's `ShellSocialPresence`
+   (`portal/src/components/shell/EmbeddedSocial.tsx`) on every frame, and the
+   ui-components `AddPeoplePicker` effect re-set its picked list on every
+   workspace render. Together they chained more than 50 passive updates (measured
+   up to 142). The mirror now publishes only a changed list, from the layout
+   phase (chain now 2-3); regression `portal/e2e/social-presence-burst.spec.ts`.
+   The `AddPeoplePicker` effect is still queued for ui-components.
+4. **No recordings to observe** [environment, same as #5 above]. platform-api
+   returns zero recordings for these users, so the Recordings list, player,
+   Share/Delete and the Summarize action cannot be observed; the three
+   recordings logs stay `verdict: limited`.
+5. **Middleware restarts during walks** [environment]. Another agent's edits
+   restart the BFF every few minutes; each restart drops `/ws` and fails the
+   page-visible console with `ERR_CONNECTION_REFUSED`. Surfaces hit by one were
+   re-run.
+
+## Closed in the 2026-10-06 evening re-walk (headless Chromium 1680x940, two sessions, no code changes)
+
+- #1 DM rail row / unread badge not live: closed. With u-mira on #general; u-sana DMs her, the rail row updated with no navigation in 0.14s: "SI Sana Iqbal 14:58 journey unread mux1kwnu 1" (unread badge 1). Observed in the dms log's `unread:` field (socialRailLive.ts refetch).
+- #2 `/summarize last banana` refused silently: closed. The "Give a range like ..." explanation renders, the draft stays in the composer, and nothing is sent as a message (channels log, `slash-bad-range`).
+- #3 "Maximum update depth exceeded": still open and now reproducible for the participant and community-admin roles on the Calls and Channels pages (participant calls 5, channels 1; community-admin calls 3, channels 1). Those four logs are `verdict: fail — console errors`. Not seen for moderator or admin in this pass.
+- Environment: BFF restarts by other sessions again dropped `/ws` mid-walk (ERR_CONNECTION_REFUSED); affected surfaces were re-run on a stable server where that was possible.
+
+
+## #3 closed (re-walk 2026-10-06 20:03Z, ui-components 2.422.0, shell roster copy fix)
+
+Re-walked calls and channels as community-admin with a real DM call (fake devices), a
+second ring hung up unanswered, and a 6s offline/online reconnect: 0
+"Maximum update depth exceeded" errors in either run (only the deliberate 400
+from the empty-body create probe). The previous records of the error predate the
+fix. Moderator and admin logs were not re-observed for #3 in this pass.
+
+## Open — 2026-10-08 re-walk
+
+1. `/social/channels`, `/social/dms`, `/social/teams`, `/social/calls` · type scale · chat rail and conversation use 11/400, 11/500, 11/600, 13/500, 13/600, 15/600 (contract offenders "scale rail …"), plus 8/600 and 5/600 badge text and 10/600 labels; the conversation page has no 20/600 title (its h1 measures 16/400).
+2. Call dock · after Leave the dock stays in an "ended" state until Dismiss is clicked (new behaviour; the earlier logs expected it to vanish). Recorded, not a failure.
+3. `/social/channels/general` as admin (`u-operator`) · the admin is not a member, so the pane reads "You are not in #general" with a Join button; the walk joined to test chat (membership write left in place).

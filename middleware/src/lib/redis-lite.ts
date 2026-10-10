@@ -1,35 +1,24 @@
 // A minimal Redis (RESP2) client — just enough for realtime-modules'
 // `RedisCallStateStore` and `RedisNotificationStore` (lib/realtime-gateway.ts).
 //
-// Why not `redis`/`ioredis`: neither is installed in this workspace, and the
-// `github:` pins make an `npm install` here a multi-minute operation that can
-// wedge mid-way (see CLAUDE.md, "A pin bump can report success…"). The store
-// only needs a dozen commands on one connection, which RESP makes small:
+// The original single-gateway state connection needs a dozen commands,
+// which RESP makes small:
 // requests are arrays of bulk strings, replies arrive in order, so a FIFO of
 // pending promises is the whole protocol state. Swap this for a real client
 // the next time the dependency tree is being moved anyway — the store takes
-// any object with these method names.
+// any object with these method names. Cluster routing uses the bounded
+// node-redis adapter in gateway-redis.ts, including TLS and pub/sub.
 //
-// Scope, deliberately: no pipelining API, no cluster, no TLS (`rediss://` is
-// refused rather than silently downgraded). A dropped connection rejects
-// everything in flight and reconnects on the next command.
-//
-// Pub/sub lives in `RedisSubscriber`, a SEPARATE connection, because Redis puts
-// a subscribed connection into a mode where it accepts only (P)SUBSCRIBE,
-// (P)UNSUBSCRIBE, PING and QUIT — issuing a GET on it is a protocol error. It
-// also pushes `message` frames the client never asked for, which `RedisLite`
-// would mis-pair with the next pending request (its `data` handler shifts the
-// FIFO for every reply). Both facts make "one socket for everything" wrong
-// rather than merely untidy, so the two connections are different classes.
-//
-// The adapters at the bottom exist so distributed-core's horizontal-scaling
-// components can drive this client instead of pulling in ioredis:
-// `lockRedisClient` satisfies its `cluster/locks` RedisClient (SET NX PX, EVAL,
-// INCR) and `pubSubRedisClient` its `gateway/pubsub` RedisLikeClient.
+// Scope, deliberately: one connection, no pipelining API, no pub/sub, no
+// cluster, no TLS (`rediss://` is refused rather than silently downgraded).
+// A dropped connection rejects everything in flight and reconnects on the
+// next command; so does a command that outlives its deadline
+// (REDIS_COMMAND_TIMEOUT_MS, default 2 s).
 
 import net from 'node:net';
 
-type Reply = string | number | null | Reply[];
+export type RedisReply = string | number | null | RedisReply[];
+type Reply = RedisReply;
 
 class RespParser {
   private buf: Buffer = Buffer.alloc(0);
@@ -96,6 +85,19 @@ function encode(args: readonly (string | number)[]): string {
   return out;
 }
 
+/** Per-command and connect deadlines (`REDIS_COMMAND_TIMEOUT_MS`, default 2 s). */
+export interface RedisLiteOptions {
+  commandTimeoutMs?: number;
+  connectTimeoutMs?: number;
+}
+
+function envMs(key: string, fallback: number): number {
+  const n = Number((process.env[key] ?? '').trim());
+  return (process.env[key] ?? '').trim() !== '' && Number.isFinite(n) && n >= 0 ? n : fallback;
+}
+
+type Pending = { resolve: (r: Reply) => void; reject: (e: Error) => void; timer?: ReturnType<typeof setTimeout> };
+
 interface RedisEndpoint {
   host: string;
   port: number;
@@ -120,43 +122,78 @@ function parseRedisUrl(url: string): RedisEndpoint {
 export class RedisLite {
   private socket: net.Socket | null = null;
   private ready: Promise<void> | null = null;
-  private pending: Array<{ resolve: (r: Reply) => void; reject: (e: Error) => void }> = [];
+  private pending: Pending[] = [];
   private parser = new RespParser();
+  /** Bumped whenever a connection is abandoned, so its late events are ignored. */
+  private generation = 0;
   private readonly host: string;
   private readonly port: number;
   private readonly password: string | null;
   private readonly username: string | null;
   private readonly db: number;
+  private readonly commandTimeoutMs: number;
+  private readonly connectTimeoutMs: number;
 
-  constructor(url: string) {
-    const e = parseRedisUrl(url);
-    this.host = e.host;
-    this.port = e.port;
-    this.username = e.username;
-    this.password = e.password;
-    this.db = e.db;
+  constructor(url: string, opts: RedisLiteOptions = {}) {
+    const u = new URL(url);
+    if (u.protocol !== 'redis:') throw new Error(`unsupported Redis URL scheme '${u.protocol}' (only redis:// — no TLS support)`);
+    this.host = u.hostname || '127.0.0.1';
+    this.port = Number(u.port || 6379);
+    this.username = u.username ? decodeURIComponent(u.username) : null;
+    this.password = u.password ? decodeURIComponent(u.password) : null;
+    this.db = Number(u.pathname.replace(/^\//, '') || 0);
+    // A Redis that accepts TCP and then stalls (a failover in progress, a
+    // saturated node) used to hang every awaited command — every call frame
+    // that touches call state — forever: there was no deadline anywhere.
+    // Replies on one connection arrive in order, so one late reply cannot be
+    // skipped; a timeout therefore ABANDONS the connection (rejecting all in
+    // flight) and the next command reconnects. 0 disables either deadline.
+    this.commandTimeoutMs = opts.commandTimeoutMs ?? envMs('REDIS_COMMAND_TIMEOUT_MS', 2_000);
+    this.connectTimeoutMs = opts.connectTimeoutMs ?? envMs('REDIS_CONNECT_TIMEOUT_MS', 5_000);
+  }
+
+  /** Drop the current connection and reject everything waiting on it. */
+  private abandon(err: Error): void {
+    this.generation += 1;
+    const socket = this.socket;
+    this.socket = null;
+    this.ready = null;
+    const inflight = this.pending;
+    this.pending = [];
+    for (const p of inflight) { if (p.timer) clearTimeout(p.timer); p.reject(err); }
+    socket?.destroy();
   }
 
   private connect(): Promise<void> {
     if (this.ready) return this.ready;
+    const gen = ++this.generation;
     this.ready = new Promise<void>((resolve, reject) => {
       const socket = net.createConnection({ host: this.host, port: this.port });
       socket.setNoDelay(true);
       this.parser = new RespParser();
+      const deadline = this.connectTimeoutMs > 0
+        ? setTimeout(() => socket.destroy(new Error(`redis connect timed out after ${this.connectTimeoutMs}ms`)), this.connectTimeoutMs)
+        : undefined;
+      deadline?.unref?.();
       const fail = (err: Error): void => {
-        this.socket = null;
-        this.ready = null;
-        const inflight = this.pending;
-        this.pending = [];
-        for (const p of inflight) p.reject(err);
+        if (deadline) clearTimeout(deadline);
         reject(err);
+        if (gen !== this.generation) return; // already abandoned; a newer connection owns the state
+        this.abandon(err);
       };
-      socket.once('connect', () => { this.socket = socket; resolve(); });
+      socket.once('connect', () => {
+        if (deadline) clearTimeout(deadline);
+        if (gen !== this.generation) { socket.destroy(); return; }
+        this.socket = socket;
+        resolve();
+      });
       socket.on('data', (chunk: Buffer) => {
+        if (gen !== this.generation) return;
         this.parser.push(chunk);
         for (let r = this.parser.next(); r !== undefined; r = this.parser.next()) {
           const p = this.pending.shift();
           if (!p) continue;
+          if (p.timer) clearTimeout(p.timer);
           if (r instanceof Error) p.reject(r); else p.resolve(r);
         }
       });
@@ -166,9 +203,11 @@ export class RedisLite {
       if (this.password) await this.raw(this.username ? ['AUTH', this.username, this.password] : ['AUTH', this.password]);
       if (this.db) await this.raw(['SELECT', this.db]);
     }).catch((err: unknown) => {
-      this.socket?.destroy();
-      this.socket = null;
-      this.ready = null;
+      if (gen === this.generation) {
+        this.socket?.destroy();
+        this.socket = null;
+        this.ready = null;
+      }
       throw err;
     });
     return this.ready;
@@ -178,7 +217,15 @@ export class RedisLite {
     const socket = this.socket;
     if (!socket) return Promise.reject(new Error('redis not connected'));
     return new Promise<Reply>((resolve, reject) => {
-      this.pending.push({ resolve, reject });
+      const entry: Pending = { resolve, reject };
+      if (this.commandTimeoutMs > 0) {
+        entry.timer = setTimeout(
+          () => this.abandon(new Error(`redis ${String(args[0])} timed out after ${this.commandTimeoutMs}ms`)),
+          this.commandTimeoutMs,
+        );
+        entry.timer.unref?.();
+      }
+      this.pending.push(entry);
       socket.write(encode(args));
     });
   }
@@ -191,6 +238,7 @@ export class RedisLite {
   async quit(): Promise<void> {
     if (!this.socket) return;
     try { await this.raw(['QUIT']); } catch { /* closing anyway */ }
+    this.generation += 1;
     this.socket?.destroy();
     this.socket = null;
     this.ready = null;
@@ -478,7 +526,10 @@ export function pubSubRedisClient(url: string): PubSubRedisLike {
   };
 }
 
-export function notificationRedisClient(r: RedisLite): NotificationRedisLike {
+export type GatewayRedisStore = Pick<RedisLite, 'command' | 'quit' | 'ping' | 'get' | 'hset' | 'hsetnx' | 'hgetall'
+  | 'hdel' | 'sadd' | 'srem' | 'smembers' | 'del' | 'expire' | 'setNX' | 'zadd' | 'zrange' | 'zcard' | 'zremrangebyrank'>;
+
+export function notificationRedisClient(r: Pick<GatewayRedisStore, 'zadd' | 'zrange' | 'zcard' | 'zremrangebyrank' | 'hset' | 'hgetall' | 'expire' | 'del'>): NotificationRedisLike {
   return {
     zAdd: (key, m) => r.zadd(key, m.score, m.value),
     zRange: (key, start, stop) => r.zrange(key, start, stop),

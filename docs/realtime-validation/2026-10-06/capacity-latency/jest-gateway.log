@@ -1,0 +1,8 @@
+PASS src/lib/__tests__/social-membership-fence.test.ts
+PASS src/lib/__tests__/social-notify.test.ts
+
+Test Suites: 4 skipped, 26 passed, 26 of 30 total
+Tests:       11 skipped, 290 passed, 301 total
+Snapshots:   0 total
+Time:        34.603 s, estimated 40 s
+Ran all test suites matching /src\/lib\/__tests__\/realtime|src\/lib\/__tests__\/distillation-realtime|src\/lib\/__tests__\/call|src\/lib\/__tests__\/social|src\/lib\/__tests__\/live-principal|src\/lib\/__tests__\/gateway/i.

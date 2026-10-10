@@ -1,0 +1,20 @@
+{
+  "recordedAt": "2026-10-05T16:45:33.954891+00:00",
+  "capacityAccepted": false,
+  "inProgressSteadyLog": "/tmp/orgiq-capacity-internal-steady.log",
+  "image": "sha256:478a732b3ee21b9e997e2411f782bc86766b42b8198e80499511292c30c8dd35",
+  "evidenceDigests": {
+    "orgiq-capacity-container-image-build.log": "6691fd1c69a95c98c0a77a5b838ac42cbee4ee7b52bee1ff53e0021ab6d09198",
+    "orgiq-capacity-container-image-metadata.json": "255b726b1d76cd821513eed512dbe649832c33dd368a82055ead4e48c2085fb7",
+    "orgiq-capacity-internal-driver-build.log": "c30bc03eedb92867c380cac08fe3f1920abc2f6957cb6dcd13fbfadf4247269f",
+    "orgiq-capacity-internal-pilot-retry.log": "d7caa0918152e1875d7d32efb775954bd9ccfce206d33a9a71b18b18d9a78381",
+    "orgiq-bff-container-internal-pilot.json": "ef6f283e7060463d7c1e25f4cf64c96ae9c56d9a430ff589fbec06bb813da896",
+    "orgiq-capacity-container-driver-tests.log": "2ca50e4a83e003e2d0b713e34b49b0bc034f06b895770b4ccf0ce89a96d87fe5",
+    "orgiq-capacity-store-outage-types.log": "a6aacf3de309c23e5aeb92922e8082e8eb964285a805f031247d7ef19849931b",
+    "orgiq-capacity-store-outage-build.log": "890dd11b16e4a3386f08a4fa8529271130230f259e3188a13da295ba4ce5d33b",
+    "orgiq-capacity-store-outage-tests.log": "f14ef94e23cfda1f799f527260e4f6913d44affab6240ec6b935f8678d720ae0",
+    "orgiq-capacity-dynamo-failure-before.log": "426c786daf8074c6b52288c4c59965e3dddc9389ef232900cb5c3860c1cb15c8",
+    "orgiq-capacity-dynamo-failure-after.log": "9c9baa061646c5c6ff9b24a389ec2a71c84a18afffc9843f6610c7a1ace0e3a4",
+    "orgiq-capacity-forwarder-failed.log": "9d2d43c83a3082097e893ad1a0b989cf5ef19646c45fd9da0005260a3fb368e4"
+  }
+}

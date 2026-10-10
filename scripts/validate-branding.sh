@@ -2,10 +2,12 @@
 # Definition of done for docs/branding-goal.md. Exit 0 only when every check passes.
 set -u
 cd "$(dirname "$0")/.."
+source scripts/lib/judges.sh  # jg_*: static gates run once per tree state
 FAILS=(); ok(){ printf '  ✓ %s\n' "$1"; }; fail(){ printf '  ✗ %s\n' "$1"; FAILS+=("$1"); }; section(){ printf '\n== %s ==\n' "$1"; }
 CSS=portal/src/app.css
 QUICK=0; for a in "$@"; do case "$a" in --quick) QUICK=1;; esac; done
-SEAL=0; for a in "$@"; do case "$a" in --seal) SEAL=1;; esac; done
+source scripts/lib/journeys.sh  # jr_*: journey freshness (docs/journeys.md)
+jr_refuse_seal_flag "$@"
 
 section "tokens (portal/src/app.css @theme)"
 theme_block=$(awk '/^@theme *\{/{f=1;next} f&&/^\}/{f=0} f' "$CSS")
@@ -85,25 +87,11 @@ grep -qE 'className="h-full( flex flex-col)? bg-bg"' "$L" && ! grep -q 'fullBlee
 
 section "builds"
 if [ "$QUICK" = 0 ]; then
-  (cd portal && npx tsc --noEmit >/dev/null 2>&1) && ok "portal tsc" || fail "portal tsc errors"
-  (cd portal && npx vite build >/dev/null 2>&1) && ok "portal vite build" || fail "portal vite build failed"
+  jg_portal_tsc >/dev/null 2>&1 && ok "portal tsc" || fail "portal tsc errors"
+  jg_vite_build >/dev/null 2>&1 && ok "portal vite build" || fail "portal vite build failed"
 fi
 
 
-# ── Freshness is about CONTENT, not mtime ────────────────────────────────
-# See docs/orgiq-journeys/PROTOCOL.md § "Freshness is about content": a bulk
-# operation on 2026-09-07 stamped 134 portal files with one identical mtime
-# while changing none of them, and logs "went stale" against edits that never
-# happened. A digest that moves is a change; an mtime alone is not.
-SHA_CACHE=docs/branding-journeys/.pages-sha
-theme_sha() { printf '%s' "$(shasum -a 256 "$CSS" "$L" 2>/dev/null)" | shasum -a 256 | cut -d' ' -f1; }
-sha_recorded() { grep -F "$1 " "$SHA_CACHE" 2>/dev/null | tail -1 | cut -d' ' -f2; }
-sha_record() {
-  [ -f "$SHA_CACHE" ] || : > "$SHA_CACHE"
-  grep -vF "$1 " "$SHA_CACHE" > "$SHA_CACHE.tmp" 2>/dev/null || : > "$SHA_CACHE.tmp"
-  printf '%s %s\n' "$1" "$2" >> "$SHA_CACHE.tmp"
-  sort -o "$SHA_CACHE" "$SHA_CACHE.tmp" && rm -f "$SHA_CACHE.tmp"
-}
 section "journeys (docs/branding-journeys)"
 J=docs/branding-journeys
 for cell in orgiq-light orgiq-dark assessment-light assessment-dark; do
@@ -128,12 +116,14 @@ for cell in orgiq-light orgiq-dark assessment-light assessment-dark; do
     sizes=$(echo "$rl" | grep -oE 'title [0-9]+px' | sort -u | wc -l | tr -d ' '); [ "$sizes" = 1 ] || bad="$bad rhythm(title-sizes-$sizes)"
   fi
   shot=$(grep -iE '^screenshot:' "$f" | head -1 | sed -E 's/^screenshot: *//'); { [ -n "$shot" ] && [ -f "$J/$shot" ]; } || bad="$bad screenshot"
-  cur_sha=$(theme_sha)
-  [ "$(sha_recorded "$f")" = "$cur_sha" ] || bad="$bad stale(content-digest)"
-  [ "$SEAL" = 1 ] && sha_record "$f" "$cur_sha"
   grep -qiE 'TODO|unverified|placeholder' "$f" && bad="$bad TODO"
   [ -z "$bad" ] && ok "$cell" || fail "$cell:$bad"
 done
+# Freshness (docs/journeys.md): each cell's rendered contract — its route's
+# measured contract plus the theme files' digest (the tokens are what a
+# branding walk proves) — must match its sealed walk.
+jr_freshness "$J" $(for cell in orgiq-light orgiq-dark assessment-light assessment-dark; do [ -f "$J/$cell.md" ] && echo "$J/$cell.md"; done)
+jr_report
 
 section "docs"
 [ -f docs/branding.md ] && grep -q -- '--color-surface-panel' docs/branding.md && ok "docs/branding.md documents the layers" || fail "docs/branding.md missing or does not document the layers"

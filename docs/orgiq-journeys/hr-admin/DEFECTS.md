@@ -13,16 +13,162 @@ hr-admin, or are new to this role's write/admin surfaces, are listed.
 
 ## Open
 
-Nothing is open for this role right now — #32 was closed on 2026-09-15 (see Closed).
+Found on the 2026-10-01 re-walk (headless Chromium 1680x940 via Playwright,
+own middleware dev:mock on :3045 + Vite :5245, signed in as u-rachel /
+orgiq / hr-admin, ui-components 2.407.40). Each was reproduced at least twice.
 
-_(Otherwise nothing is open for hr-admin. The Prompt Studio header squeeze that was
-filed under org-leader as **#29** was re-audited and closed there on
-2026-09-06; `hr-admin/prompt-studio.md` still records the measurement in its
-`layout:` line and keeps `verdict: pass`, because the surface answers its
-question. #24 — Prompt Studio's focus hand-backs — also stays closed: all four
-legs (Test enter/exit, Edit enter/exit) hold for hr-admin.)_
+
+#33–#40 were closed on 2026-10-06 (see Closed); #41–#46 were found on the
+2026-10-06 11:50 headless re-walk (Chromium 1680x940, shared dev:mock, u-rachel).
 
 ## Closed
+
+47. ~~Search › Connections (`/iq/explore` lands here): a mouse cannot click or hover a node on the all-types graph.~~ **Closed 2026-10-06 12:50** — re-observed with real mouse clicks (Playwright click() and hover; ui-components 2.418.0): the record graph node buttons compute pointer-events auto, elementFromPoint over a node returns the node, and a click took the graph from 53–55 to 15 nodes ("1 selected", zoom 54% to 97%); a second click made "2 selected".
+
+48. ~~People org graph: after two or three picks the drawing sits on the 40% zoom floor with unreadable captions and can run under the detail card.~~ **Closed 2026-10-06 12:50** — re-observed with real mouse clicks: people-graph picks re-fit at 102% / 90% / 90% (three picks) and 100% for a single pick, not the 40% floor; the selected person is on screen and legible, earlier far picks scroll out of view by design. One click timed out on Playwright's stability wait in the first pass and passed on rerun.
+
+41. **Settings logs two 404 console errors on every load.** `/settings` — `GET
+    http://localhost:3001/metrics` and `/cluster` both 404 on mount (BFF root, not
+    `/api`); same cause as org-leader #38. Repro: open /settings as u-rachel with the
+    console open.
+
+    *Closed 2026-10-06 12:45 (headless Chromium 1680x940, shared dev:mock, ui-components 2.418.0, u-rachel): /settings loads with 0 console errors and 0 4xx responses; no /metrics or /cluster request.*
+
+42. **Automate Inbox: the Recent runs table starts 716px down for hr-admin.** `/iq/work`
+    — the open agent question carries an answer textarea and a disabled "Send answer" button,
+    which pushes the first `tbody tr` of Recent runs to 716px (org-leader sees the same page
+    without the answer box: 618px). Over the 640px budget. Suspect the Inbox composition in
+    `portal/src/pages/work` (the question card's answer box height or its position above
+    the queue counters).
+
+    *Closed 2026-10-06 12:45 (headless Chromium 1680x940, shared dev:mock, ui-components 2.418.0, u-rachel): the open question is a collapsed Disclosure; the first Recent runs row is at 540px (opened it moves to 746px, by choice).*
+
+43. **Identity > Roles logs a 503 console error on every load.** `/admin/identity/roles`
+    — `GET /api/identity/schema` answers 503 (twice per load in this walk). The matrix
+    renders; the page shows no message about the failure. Suspect the schema request
+    the Identity layout makes for the Schema sibling
+    (`portal/src/pages/admin/identity`) against the mock identity router.
+
+    *Closed 2026-10-06 12:45 (headless Chromium 1680x940, shared dev:mock, ui-components 2.418.0, u-rachel): /admin/identity/roles loads with 0 console errors; GET /api/identity/schema no longer answers 503 under dev:mock.*
+
+44. **Identity > Users: the four tenant tiles cut their role lists with no title.**
+    `/admin/identity/users` — "orgiq · ACTIVE · roles: hr-adm…" (234px of 390px), "assessment ·
+    ACTIVE · roles: a…" (245/356), "social · ACTIVE · roles: commu…" (234/339), "pipelines · ACTIVE ·
+    roles: au…" (245/306); no `title`/`aria-label`. The role lists are what the tiles are for.
+    Suspect the tenant `StatStrip` hints in `portal/src/pages/admin/identity`.
+
+    *Closed 2026-10-06 12:45 (headless Chromium 1680x940, shared dev:mock, ui-components 2.418.0, u-rachel): the four tenant tiles still cut the role list visually (234px of 390px) but each tile carries the full "<tenant> · ACTIVE · roles: …" text as its title.*
+
+45. **Capabilities > Crawl: the page-screenshot request 404s and logs a console error.**
+    Reached from `/admin/capabilities` (Enter on the first link as hr-admin → `/admin/ingest/crawl`):
+    `GET /api/ingest/crawl/crawl-mock-0004/page/0/screenshot` → 404. The Capabilities page itself
+    logs none. Suspect the mock crawl fixture lacking screenshots for the latest crawl.
+
+    *Closed 2026-10-06 12:45 (headless Chromium 1680x940, shared dev:mock, ui-components 2.418.0, u-rachel): /admin/capabilities then /admin/ingest/crawl: 0 console errors, GET /api/ingest/crawl/crawl-mock-0004/page/0/screenshot answers 200.*
+
+
+46. **Initiative detail: six work-graph node headers are cut with no title.** Same as
+    org-leader #39 (`/iq/projects/p-observability`, 1,250–1,830px down the Overview tab);
+    re-check after the work-graph change lands.
+
+    *Closed 2026-10-06 14:10 (ui-components 2.416.0, headless Chromium 1680x940, u-rachel): the work-graph node header now carries a `title` holding the full name. The sweep still reports the strings clipped by their single-line ellipsis box (e.g. "Span-metrics connector feeding RED dashboards" 130 of 292px) but every one is titled with its whole text, the deliberate ellipsis-with-hover pattern the protocol accepts. Checked by reading the `title` attribute, not by a physical hover (headless).*
+
+33. **Initiatives: the program table is wider than its pane, so the Updated
+    column is cut.** `/iq/projects` at 1680px — the table is 969px inside a
+    948px `overflow-x: auto` wrapper; the "UPDATED" header reads "UPDATEI" and
+    every value reads "1h ag" / "24m ag" at the pane's right edge. Reachable
+    only by scrolling the wrapper sideways. Cause: the list page stacks the
+    220px "INITIATIVES" view rail (All initiatives / My initiatives / Sprints)
+    beside the 264px explorer rail, while the detail page folds the same view
+    list into the explorer rail. Suspect `portal/src/pages/ProjectsPage.tsx`
+    and the Initiatives sub-nav in `portal/src/pages/iq/IqLayout.tsx` /
+    `iqSubNavCatalog`. The 2026-09-30 lane-E screenshot at 1552px already shows
+    it, worse.
+    **Closed 2026-10-06 11:55** — re-observed as u-rachel (hr-admin), 1680x940. The program table fits its pane (no overflow wrapper wider than its client width) and the Updated column is now a status pill with a relative time under it; first `tbody tr` at 302px.
+
+34. **Promotions: "Find a candidate" keeps only the last key typed.**
+    `/iq/promotions` (lands on `/iq/distillation/review?view=promotions`).
+    Click the field, type `ADOT` one key at a time (tested at 0, 120 and 250ms
+    per key): the field reads `T`, the URL reads `q=T` and all four
+    candidates stay listed. Pasting `ADOT` (or opening `?q=ADOT`) filters to the
+    one ADOT candidate correctly, and the Distillation knowledge search on
+    the same module keeps `Aurora` intact, so the fault is local to this field.
+    Suspect `portal/src/pages/promotions/PromotionsPage.tsx:308` — the
+    `SearchInput` is bound straight to the URL `q` via `setFilter` →
+    `setParams(next, { replace: true })`.
+    **Closed 2026-10-06 11:55** — re-observed as u-rachel. Typing "zzznope" one key at a time at 250ms leaves the box `zzznope` and the URL `?view=promotions&q=zzznope`; the list reads "No candidates in this view".
+
+35. **A not-found id reads as an outage on Library, Designs and Promotions,
+    and Session config's "no bundle" 404 does too.** `/iq/library/nope-asset`
+    → "Could not load this asset · 404 Not Found — asset not found. Assets are
+    read from the library catalog, so this is unknown rather than empty. Try
+    again"; `/iq/designs/des-nope` → the same shape for designs;
+    `/iq/promotions/nope-cand` → "…promotion candidate not found. Promotion
+    candidates, so this is unknown rather than empty."; with
+    `session-bundles` on its `empty` scenario `/iq/release` → "Could not load
+    configuration preview · 404 Not Found — no live session bundle. Session
+    bundle provider, so this is unknown rather than empty." All four use
+    `UnavailableNotice` (outage framing + Try again) for a definite 404.
+    Initiative detail does it right ("Initiative not found / No initiative has
+    the id … / ← Back to Initiatives"). Second fault, same component:
+    `source` is meant to be a clause ("X are read from Y"), and three call
+    sites pass a bare noun, producing the broken sentences quoted above —
+    `PromotionsPage.tsx:311,322`, `DesignsPage.tsx:108` (the rail; the pane at
+    :120 is right), `local-compute/ConfigurationPage.tsx:98,102`.
+    **Closed 2026-10-06 11:55** — re-observed as u-rachel. /iq/library/lib-nope → "Asset not found / No library asset has the id … ← All assets"; /iq/designs/des-nope → "Design not found … ← All designs"; /iq/promotions/nope-cand → "Candidate not found …" (item=nope-cand); with session-bundles on its empty scenario (that fixture only, restored) Session settings reads "No configuration preview / No session bundle has been published yet, so sessions run with the settings baked into their image." No outage framing, no Try again, no broken sentence.
+
+36. **Library: opening a never-distilled asset logs a console error.**
+    Open the first row ("Review a PR diff-scoped") from `/iq/library` →
+    `GET /api/distillation/library/skill-pr-review-scoped/provenance` 404 →
+    "Failed to load resource … 404" in the console. 5 of the 12 seeded assets
+    do it (skill-pr-review-scoped, lib-stakeholder-email, lib-adr-summary,
+    orgiq-supervisor-system-prompt, orgiq-search-system-prompt).
+    `portal/src/pages/library/DistillationProvenance.tsx` documents 404 as the
+    normal "never distilled" answer; the API should answer that case with a
+    200 and an empty body instead of an error status.
+    **Closed 2026-10-06 11:55** — re-observed as u-rachel. Clicking the first library row (Review a PR diff-scoped) lands on /iq/library/skill-pr-review-scoped with zero console errors and no response >= 400 (the provenance request no longer 404s).
+
+37. **Local compute: the "Pair a machine" modal opens with focus left on
+    `<body>`.** `/iq/local-compute` → focus "Pair a machine" → Enter. The
+    `aria-modal` dialog opens with its code, but `document.activeElement` is
+    `<body>` at 100, 600 and 1500ms and after two forced frames
+    (`requestAnimationFrame` verified firing). Tab then enters the dialog and
+    Escape returns focus to the trigger, so the close half works. The
+    2026-09-16 walk recorded focus landing inside. `PairMachineDialog.tsx` has
+    not changed since 2026-09-16, so suspect the library `Modal` at
+    ui-components 2.407.40.
+    **Closed 2026-10-06 11:55** — re-observed as u-rachel. Enter on "Pair a machine" opens the dialog with focus on its "Done" button (two forced frames); Tab → "Copy code"; Escape closes and returns focus to "Pair a machine".
+
+38. **Prompt Studio: the focus hand-backs are lost again (#24's legs).**
+    `/iq/prompts` → Edit → Cancel, Test → Close, and Test → Escape each leave
+    focus on `<body>` (after forced frames, rAF verified firing). Entering
+    each mode is fine (Edit lands in "Prompt template", Test in the first
+    variable input). The triggers do carry `data-prompt-edit-trigger` /
+    `data-prompt-test-trigger`; the rAF lookups in
+    `portal/src/pages/capabilities/prompts/EditPanel.tsx:53-58` and
+    `TestPanel.tsx:24-28` run before the fresh trigger is in the DOM, or the
+    trigger is replaced again after it.
+    **Closed 2026-10-06 11:55** — re-observed as u-rachel. Prompt Studio: Edit → Cancel returns focus to Edit; Edit → Escape returns to Edit; Test → Close returns to Test; Test → Escape returns to Test (each read after two forced frames and again after a second wait).
+
+39. **Prompt Studio: every prompt row clips its name and description with no
+    way to read the rest.** The rail column gives 179px; the six names need
+    186–232px ("orgiq-supervisor-system-…", "orgiq-graph-builder-syste…")
+    and every description is cut after a few words. No `title` on the text or
+    on any ancestor. Selecting a row shows the full name in the editor header,
+    but the description appears nowhere else on the page. The rows are the
+    library's `ChoiceRow` (`portal/src/pages/capabilities/prompts/PromptSidebar.tsx:59`),
+    so the fix is probably a `title` in the library or a wider rail.
+    **Closed 2026-10-06 11:55** — re-observed as u-rachel. The Prompt Studio list wraps names and descriptions; the clipped-text sweep over the whole <main> reports 0 cut strings.
+
+40. **Automate: "New run" opens the Runs list with the new-run form 1,500px
+    below the fold.** `/iq/work` → New run → `/iq/work/queue?compose=1#new-run`.
+    The `#new-run` form ("NEW RUN … Title … What should the worker do? … Queue
+    run") sits at top 1651px under the ~77-row runs table. The content pane
+    is scrolled only 135px, so the screen shows a slice of the runs table
+    with the page title scrolled off, and focus is on `<body>`. The button's
+    promise is not on screen. Suspect `portal/src/pages/work/QueuePage.tsx`:
+    the compose form should open where it is seen and take focus.
+    **Closed 2026-10-06 11:55** — re-observed as u-rachel. /iq/work → "New run" (Enter) goes to /iq/work/queue?compose=1 under the H1 "Runs" with focus on an input at 428px from the top of a 940px viewport; there is no #new-run anchor and no scroll offset, so the form is on screen and focused.
 
 32. **Computer Lab: the terminal pane is a keyboard trap, and it strands the
     user before the Broadcast instruction box.** `/admin/devbox` — the surface

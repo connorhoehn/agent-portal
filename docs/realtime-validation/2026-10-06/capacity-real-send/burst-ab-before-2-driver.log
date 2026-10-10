@@ -1,0 +1,39 @@
+Owned compiled HTTP listeners and leased routers ready; preflight 26ms
+Started internal compiled load profile burst driver 797445d97455f0510c54a1b25593d1304d270187449b72ec590059ad0b5fa916
+target ws://orgiq-bff-capacity-a:3001/ws · health http://orgiq-bff-capacity-a:3001/api/health · server pid unknown (pass --server-pid) · hold 10s
+
+=== steady · group 2 · 100 calls · 1000 sockets (200 in calls, 0 second tabs, 800 chat/presence) · run tag 5f1a
+  ramp: 1000/1000 connected in 20s
+  connect 1000/1000 (p95 7 ms) · established 100/100 · 41.7s
+  invite→incoming  p50 715  p95 1365.2  p99 1446.2  max 1465.7 ms (n=100)
+  accept→accepted  p50 76.2  p95 106.6  p99 165.2  max 190.8 ms (n=100)
+  chat delivery    p50 2253  p95 2920.3  p99 3407.3  max 3770.1 ms (n=1287 of 1289 sent)
+  cross: call 0 chat 0 presence 0 · unexpected ended 0 · answered-elsewhere 0 · denied 0 · other errors 0
+  slow /api/health samples (>=50 ms): 60.4ms@22s/ramp, 99.3ms@22.5s/ramp, 193.6ms@23s/ramp, 225.9ms@24s/ramp, 81.2ms@24.5s/calls-starting
+  server orgiq-bff-capacity-a: docker-working-set peak 226.6 MiB · CPU peak 103.6% mean 37.4% · /api/health p50 1.2 p99 225.9 max 225.9 ms (0 errors; 0 planned-outage errors) · client loop p99 11.9 ms
+  PASS  sockets connect: 1000/1000 (100%)
+  PASS  calls established: 100/100 (all)
+  FAIL  invite→incoming p95: 1365.2 (< 250 ms)
+  FAIL  invite→incoming p99: 1446.2 (< 1000 ms)
+  PASS  accept→accepted p95: 106.6 (< 250 ms)
+  FAIL  chat delivery p95: 2920.3 (< 300 ms, with paired-sender evidence)
+  PASS  background chat coverage: 800/800 (all paired senders reach their peer)
+  PASS  background chat admission: 800/800; 2469.8ms (all server join acknowledgements within 10 seconds)
+  PASS  cross-call/channel deliveries: 0 (0)
+  PASS  answered-elsewhere outside scenario 4: 0 (0)
+  PASS  ended before scripted hang-up: 0 (0)
+  PASS  unplanned socket disconnects: 0 (0)
+  PASS  AUTHZ_CHANNEL_DENIED: 0 (0)
+  FAIL  event-loop proxy (/api/health p99): 225.9 (< 50 ms)
+  PASS  health errors outside planned outage: 0 (0)
+  PASS  server memory peak: 226.6 (< 700 MiB)
+  PASS  container samples: 0 (no errors, at least one sample)
+  FAIL  peer 1: health p99: 69.7 (< 50 ms)
+  PASS  peer 1: health errors: 0 (0)
+  PASS  peer 1: memory peak: 227.6 (< 700 MiB)
+  PASS  peer 1: container samples: 0 (no errors, at least one sample)
+
+0/1 runs passed every threshold
+  FAIL  steady × 2 — invite→incoming p95; invite→incoming p99; chat delivery p95; event-loop proxy (/api/health p99); peer 1: health p99
+Copied complete result to /tmp/orgiq-bff-container-internal-burst.json
+exit=1

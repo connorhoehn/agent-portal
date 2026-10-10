@@ -8,7 +8,8 @@ export interface Person {
   department: string;
   skills: string[];
   influenceScore: number;
-  imageUrl?: string;
+  /** people.avatar_url — a portrait URL, or null/absent for initials. */
+  avatarUrl?: string | null;
 }
 
 /**
@@ -433,3 +434,30 @@ export const departments = [
   { id: 'ml-ai', name: 'ML / AI', color: '#0891b2' },
   { id: 'security', name: 'Security', color: '#dc2626' },
 ];
+
+/**
+ * The seed's `teams` rows (schema/seed.sql, six teams, no parents yet) under
+ * their SEED ids — what `GET /api/graph/teams?scope=mine` (routes/org-teams.ts)
+ * answers from under MOCK_AURORA. Membership is not restated here: the same
+ * fact already lives in `people.department` (the `team_memberships` half the
+ * parity table reads, mock/core/parity/entities.ts), and a person's team role
+ * is their title, so providers/org-teams.ts derives both from `graphPeople`.
+ * `departments` above keeps the slug ids the graph canvases colour by; the two
+ * are joined by name, the way the parity audit joins them.
+ */
+export interface OrgTeamRow { id: string; name: string; parentId: string | null }
+
+export const graphTeams = defineFixture<OrgTeamRow>({
+  key: 'graph.teams',
+  scenarios: {
+    default: () => [
+      { id: 't-platform', name: 'Platform Engineering', parentId: null },
+      { id: 't-data', name: 'Data Platform', parentId: null },
+      { id: 't-product', name: 'Product', parentId: null },
+      { id: 't-design', name: 'Design Systems', parentId: null },
+      { id: 't-ml', name: 'ML / AI', parentId: null },
+      { id: 't-security', name: 'Security', parentId: null },
+    ],
+    empty: () => [],
+  },
+});

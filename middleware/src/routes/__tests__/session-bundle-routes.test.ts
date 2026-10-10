@@ -108,11 +108,11 @@ describe('GET /api/session-bundle/live', () => {
     expect(res.body.sessionsAffected).toBe(2);
   });
 
-  it('404s when nothing is live yet', async () => {
+  it('answers null, not a 404, when nothing is live yet', async () => {
     liveMock.mockResolvedValue(null);
     const res = await request(buildApp()).get('/api/session-bundle/live');
-    expect(res.status).toBe(404);
-    expect(res.body.error).toMatch(/no live session bundle/);
+    expect(res.status).toBe(200);
+    expect(res.body).toBeNull();
   });
 });
 

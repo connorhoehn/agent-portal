@@ -2,13 +2,15 @@ surface: definitions
 role: author
 user: u-ines (Ines Moreau)
 url: /pipelines/definitions
-pages: portal/src/pages/pipelines/DefinitionsPage.tsx,portal/src/pages/pipelines/DefinitionDrawer.tsx,portal/src/pages/pipelines/useDryRun.ts,portal/src/lib/pipelineDefinitions.ts
-audited: 2026-09-30 05:04Z, Chromium 148.0.7778.96 1456×958 (Playwright headless, one context per identity — not the shared Chrome tab), middleware dev:mock:social on :3001, Vite :5183; GET /api/session/me: sub u-ines, tenant pipelines, role author, grants {"pipelines":["author"]}
+pages: portal/src/pages/pipelines/DefinitionsPage.tsx,portal/src/lib/pipelineDefinitions.ts
+audited: 2026-10-08 10:50Z → 2026-10-08 10:50Z, Chromium (Playwright headless from portal/node_modules, a fresh context per identity, not the shared Chrome tab), 1680×940, Tilt stack: middleware dev:mock on :3001, Vite :5183
+session: /api/session/me sub u-ines, tenant pipelines, role author, grants {"pipelines":["author"]}
 screenshot: definitions.jpg
 verdict: pass
 console errors: 0
-layout: pass — content col left 224px w 1208px; no horizontal scroll (scrollWidth 1456 = innerWidth 1456); h1 "Definitions"; first table row top 286px; one filter row (search · kind · count · "unnamed approvers default to operator") above the table, 25 rows on the first page
-keyboard: pass — 28 really-visible focusables in main, Tab visited 28; rows carry tabindex=0, Enter on the first row opened the drawer (/pipelines/definitions?open=runbook%3Apromo-custodian-sg-drift); Escape closed it (closed)
-empty-state: pass — search "zzzz-no-such-thing" leaves the table reading "No definition matches this search and kind."; /pipelines/definitions?open=bot:nope renders "Definition | bot:nope | Definition not found | No definition with id bot:nope — its source may have been removed." (the one 404 the browser logs there is that deliberate probe's fetch, counted apart from the surface)
-role-gating: pass — author holds ViewPipelines, AuthorDefinition, RunPipeline; forbidden ApproveStep, CancelRun, ManagePipelineConfig. The open runbook's drawer shows Dry-run (RunPipeline) and the Approvers editor (AuthorDefinition). No Approve, Cancel or configuration control exists on this surface.
-notes: 33 definitions: 3 runbooks, 12 bots, 9 assessment commands, 9 agents — each derived from its source (lib/pipeline-definitions.ts), the nine commands recorded at v1 by the seed. Kind=Runbook narrows to 3 rows. The screenshot is the Aurora cold-start runbook opened: its three steps are its observations oldest first (Recognise / Decide / Apply), the verdict reads "Needs a completed dry-run — a skill needs a completed dry-run of runbook:promo-aurora-cold-start — start one from /pipelines/runbooks". As author, the Approvers editor recorded pipeline approvers on the custodian runbook (pipeline-admin → operator); the drawer then read "Version v3 (recorded)" — an AuthorDefinition write, one version up.
+layout: pass — content col left 224px w 1432px, top 70px, bottom 893px; no horizontal scroll (scrollWidth 1680 / innerWidth 1680); h1 “Definitions”; 1 <main>
+type: title 20/600; sizes in main (size/weight×text nodes): 14/400×182, 10/600×71, 12/400×14, 12/600×10, 11/400×3, 14/500×1, 20/600×1
+keyboard: pass — 29 really-visible focusables in main (28 Tab stops, the rest roving tabindex=-1 members), Tab visited 28; Enter on the first row (focus on TR) opened /pipelines/definitions?open=runbook%3Apromo-custodian-sg-drift; browser Back returned to /pipelines/definitions
+empty-state: n/a — no filter value of this table produced an empty result in the live data (nothing to provoke without damaging shared state)
+role-gating: pass — holds ViewPipelines, AuthorDefinition, RunPipeline; forbidden ApproveStep, CancelRun, ManagePipelineConfig. Controls in main: ["Prev","Next"]; Approve/Reject absent from the DOM, Cancel run absent, New definition absent, Configuration rail row absent; invalid-body write probes (403 = refused by Cedar, anything else = past the gate, nothing written): PUT /configuration {} → 403; PUT /definitions/no-such-definition/approvers {} → 400; POST /approvals/no-such-step/decide {} → 403; POST /runs/no-such-run/cancel {} → 403
+notes: Every field above was observed in this pass, not carried forward.  Main text on arrival: Catalog › Definitions Definitions What can run: every bot, assessment command, runbook and agent, with its triggers, steps and runs. Any kind Runbook Bot Assessment command Agent 35 definitions · unnamed approvers default to operator DEFINI

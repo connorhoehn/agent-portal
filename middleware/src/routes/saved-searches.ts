@@ -5,7 +5,7 @@ import { createSavedSearch, deleteSavedSearch, listSavedSearches, updateSavedSea
 
 export const savedSearchesRouter = Router();
 savedSearchesRouter.use(requireTenant('orgiq'), requireAction('Search'));
-const TYPES = new Set(['person', 'initiative', 'work', 'decision', 'knowledge', 'asset']);
+const TYPES = new Set(['person', 'initiative', 'work', 'decision', 'knowledge', 'asset', 'recording']);
 const TABS = new Set(['results', 'answer', 'connections']);
 function text(value: unknown, field: string, max: number, allowEmpty = false): string {
   if (typeof value !== 'string' || value.length > max || (!allowEmpty && !value.trim())) throw new ValidationError(`${field} must be ${allowEmpty ? 'a' : 'a nonempty'} string of at most ${max} characters`);
@@ -33,7 +33,7 @@ function validate(raw: unknown, partial = false): Partial<SavedSearchInput> {
   }
   if (!partial || input['selectedKeys'] !== undefined) {
     const keys = input['selectedKeys'] ?? [];
-    if (!Array.isArray(keys) || keys.length > 50 || !keys.every(key => typeof key === 'string' && key.length <= 280 && /^(person|initiative|work|decision|knowledge|asset):[^\s]+$/.test(key))) throw new ValidationError('selectedKeys must contain at most 50 typed record keys');
+    if (!Array.isArray(keys) || keys.length > 50 || !keys.every(key => typeof key === 'string' && key.length <= 280 && /^(person|initiative|work|decision|knowledge|asset|recording):[^\s]+$/.test(key))) throw new ValidationError('selectedKeys must contain at most 50 typed record keys');
     result.selectedKeys = [...new Set(keys as string[])];
   }
   if (partial && !Object.keys(result).length) throw new ValidationError('No changes supplied');

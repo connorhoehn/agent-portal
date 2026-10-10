@@ -1,0 +1,69 @@
+Owned compiled HTTP listeners and leased routers ready; preflight 26ms
+Started internal compiled load profile ring-storm driver 18c4fbe20b0d916c17287488f183666ea23be67363f8a2b6cfa0aec0a892229c
+target ws://orgiq-bff-capacity-a:3001/ws · health http://orgiq-bff-capacity-a:3001/api/health · server pid unknown (pass --server-pid) · hold 60s
+
+=== ring-storm · group 2 · 100 calls · 1000 sockets (200 in calls, 0 second tabs, 800 chat/presence) · run tag 6bf2
+  ramp: 1000/1000 connected in 20s
+  connect 1000/1000 (p95 5.6 ms) · established 100/100 · 90.9s
+  invite→incoming  p50 50.9  p95 69.4  p99 79  max 80.7 ms (n=100)
+  accept→accepted  p50 52.1  p95 67  p99 70.2  max 70.6 ms (n=100)
+  chat delivery    p50 31  p95 50.4  p99 83  max 473.2 ms (n=1776 of 1777 sent)
+  cross: call 0 chat 0 presence 0 · unexpected ended 0 · answered-elsewhere 0 · denied 0 · other errors 0
+  server orgiq-bff-capacity-a: docker-working-set peak 227.5 MiB · CPU peak 98.3% mean 24.4% · /api/health p50 0.9 p99 20.8 max 29.2 ms (0 errors; 0 planned-outage errors) · client loop p99 12.1 ms
+  PASS  sockets connect: 1000/1000 (100%)
+  PASS  calls established: 100/100 (all)
+  PASS  invite→incoming p95: 69.4 (< 250 ms)
+  PASS  invite→incoming p99: 79 (< 1000 ms)
+  PASS  accept→accepted p95: 67 (< 250 ms)
+  PASS  chat delivery p95: 50.4 (< 300 ms, with paired-sender evidence)
+  PASS  background chat coverage: 800/800 (all paired senders reach their peer)
+  PASS  background chat admission: 800/800; 2649ms (all server join acknowledgements within 10 seconds)
+  PASS  cross-call/channel deliveries: 0 (0)
+  PASS  answered-elsewhere outside scenario 4: 0 (0)
+  PASS  ended before scripted hang-up: 0 (0)
+  PASS  unplanned socket disconnects: 0 (0)
+  PASS  AUTHZ_CHANNEL_DENIED: 0 (0)
+  PASS  event-loop proxy (/api/health p99): 20.8 (< 50 ms)
+  PASS  health errors outside planned outage: 0 (0)
+  PASS  server memory peak: 227.5 (< 700 MiB)
+  PASS  container samples: 0 (no errors, at least one sample)
+  PASS  peer 1: health p99: 25.9 (< 50 ms)
+  PASS  peer 1: health errors: 0 (0)
+  PASS  peer 1: memory peak: 217.6 (< 700 MiB)
+  PASS  peer 1: container samples: 0 (no errors, at least one sample)
+
+=== ring-storm · group 4 · 100 calls · 1000 sockets (400 in calls, 0 second tabs, 600 chat/presence) · run tag 74c1
+  ramp: 1000/1000 connected in 20s
+  connect 1000/1000 (p95 5.5 ms) · established 100/100 · 90.7s
+  invite→incoming  p50 128.4  p95 305.4  p99 334.5  max 336.4 ms (n=300)
+  accept→accepted  p50 126.8  p95 243.7  p99 263.8  max 285.9 ms (n=300)
+  chat delivery    p50 31.7  p95 73.6  p99 200.3  max 486.4 ms (n=1340 of 1340 sent)
+  cross: call 0 chat 0 presence 0 · unexpected ended 0 · answered-elsewhere 0 · denied 0 · other errors 0
+  server orgiq-bff-capacity-a: docker-working-set peak 227.7 MiB · CPU peak 105.8% mean 27.1% · /api/health p50 0.8 p99 26.3 max 28.2 ms (0 errors; 0 planned-outage errors) · client loop p99 12.4 ms
+  PASS  sockets connect: 1000/1000 (100%)
+  PASS  calls established: 100/100 (all)
+  FAIL  invite→incoming p95: 305.4 (< 250 ms)
+  PASS  invite→incoming p99: 334.5 (< 1000 ms)
+  PASS  accept→accepted p95: 243.7 (< 250 ms)
+  PASS  chat delivery p95: 73.6 (< 300 ms, with paired-sender evidence)
+  PASS  background chat coverage: 600/600 (all paired senders reach their peer)
+  PASS  background chat admission: 600/600; 2114.1ms (all server join acknowledgements within 10 seconds)
+  PASS  cross-call/channel deliveries: 0 (0)
+  PASS  answered-elsewhere outside scenario 4: 0 (0)
+  PASS  ended before scripted hang-up: 0 (0)
+  PASS  unplanned socket disconnects: 0 (0)
+  PASS  AUTHZ_CHANNEL_DENIED: 0 (0)
+  PASS  event-loop proxy (/api/health p99): 26.3 (< 50 ms)
+  PASS  health errors outside planned outage: 0 (0)
+  PASS  server memory peak: 227.7 (< 700 MiB)
+  PASS  container samples: 0 (no errors, at least one sample)
+  FAIL  peer 1: health p99: 59.2 (< 50 ms)
+  PASS  peer 1: health errors: 0 (0)
+  PASS  peer 1: memory peak: 218.6 (< 700 MiB)
+  PASS  peer 1: container samples: 0 (no errors, at least one sample)
+
+1/2 runs passed every threshold
+  PASS  ring-storm × 2
+  FAIL  ring-storm × 4 — invite→incoming p95; peer 1: health p99
+Copied complete result to /tmp/orgiq-bff-container-internal-ring-storm.json
+exit=1

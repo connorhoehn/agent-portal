@@ -24,13 +24,12 @@ import {
   TableHead,
   TableRow,
   TableTd,
-  TableTh,
+  TableTh, T,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../../hooks/useFetch';
 import { useCrumbLabel } from '../../../lib/crumbLabels';
 import { CostChip } from '../../../components/observability/CostChip';
 import { ModeChip } from '../../../components/observability/ModeChip';
-import { T } from '../Text';
 import { RowEmpty } from '../ReadState';
 import {
   PassChip, SchemaChip, ErrorBlock, RunIdLine,
@@ -316,30 +315,30 @@ function RunDetailPage() {
               <Inline
                 as="span"
                 gap="xs"
-                className="text-[11px] text-text-tertiary"
+                className="text-xs text-text-tertiary"
                 title="total cost across all results in this run"
               >
                 <CostChip cost={run.totalCostUsd} />
                 <T>total</T>
               </Inline>
             </Inline>
-            <Inline gap="sm" align="center" className="text-[12px] text-text-secondary">
-              <T>started&nbsp;<strong>{new Date(run.startedAt).toLocaleString()}</strong></T>
+            <Inline gap="sm" align="center" className="text-xs text-text-secondary">
+              <T>started&nbsp;<T size="sm" weight="semibold">{new Date(run.startedAt).toLocaleString()}</T></T>
               {run.finishedAt && (
                 <>
                   <T className="text-text-tertiary">·</T>
-                  <T>finished&nbsp;<strong>{new Date(run.finishedAt).toLocaleString()}</strong></T>
+                  <T>finished&nbsp;<T size="sm" weight="semibold">{new Date(run.finishedAt).toLocaleString()}</T></T>
                   <T className="text-text-tertiary">·</T>
-                  <T>duration&nbsp;<strong>{durationStr(run.startedAt, run.finishedAt)}</strong></T>
+                  <T>duration&nbsp;<T size="sm" weight="semibold">{durationStr(run.startedAt, run.finishedAt)}</T></T>
                 </>
               )}
             </Inline>
-            <Inline gap="sm" align="center" className="text-[12px] text-text-secondary">
-              <T>judge:</T> <T className="font-mono text-[11.5px]">{run.judgeModelId}</T>
+            <Inline gap="sm" align="center" className="text-xs text-text-secondary">
+              <T>judge:</T> <T size="xs" className="font-mono">{run.judgeModelId}</T>
               {run.gitSha && (
                 <>
                   <T className="text-text-tertiary">·</T>
-                  <T>git:</T> <T className="font-mono text-[11.5px]">{shortSha(run.gitSha)}</T>
+                  <T>git:</T> <T size="xs" className="font-mono">{shortSha(run.gitSha)}</T>
                 </>
               )}
               <T className="text-text-tertiary">·</T>
@@ -349,7 +348,7 @@ function RunDetailPage() {
               </Chip>
             </Inline>
             {run.notes && (
-              <T as="div" className="text-[12px] text-text-secondary italic">{run.notes}</T>
+              <T as="div" size="xs" className="text-text-secondary italic">{run.notes}</T>
             )}
           </Stack>
           <Inline gap="sm" align="center" wrap>
@@ -375,7 +374,7 @@ function RunDetailPage() {
             )}
             <Link
               to="/admin/observability/harness"
-              className="text-[12px] text-primary no-underline px-2 py-0.5 rounded hover:underline"
+              className="text-xs text-primary no-underline px-2 py-0.5 rounded hover:underline"
             >
               ← Back to harness
             </Link>
@@ -397,7 +396,7 @@ function RunDetailPage() {
             title="Regressions vs. previous run"
             subtitle={`${regressions.length} test${regressions.length === 1 ? '' : 's'} scored lower · sorted by |Δ|`}
           />
-          <Table>
+          <Table size="sm">
             <TableHead>
               <TableRow>
                 <TableTh>Test</TableTh>
@@ -411,8 +410,8 @@ function RunDetailPage() {
             <TableBody>
               {regressions.map((r) => (
                 <TableRow key={r.testId}>
-                  <TableTd className="text-[11px] text-text-tertiary font-mono whitespace-nowrap">{r.testId}</TableTd>
-                  <TableTd className="text-[12px] font-medium whitespace-nowrap">{r.agentId ?? '—'}</TableTd>
+                  <TableTd className="text-text-tertiary font-mono whitespace-nowrap">{r.testId}</TableTd>
+                  <TableTd className="whitespace-nowrap">{r.agentId ?? '—'}</TableTd>
                   <TableTd>
                     <Chip tone={judgeTone(r.prev)} size="xs">
                       {fmt(r.prev)}
@@ -429,7 +428,7 @@ function RunDetailPage() {
                     </Chip>
                   </TableTd>
                   <TableTd
-                    className="text-[12px] max-w-[320px] truncate"
+                    className="text-xs max-w-[320px] truncate"
                     title={r.responseSnippet ?? undefined}
                   >
                     {snip(r.responseSnippet)}
@@ -452,7 +451,7 @@ function RunDetailPage() {
           >
             {matrixIsOpen ? '▾' : '▸'} Full matrix
           </Button>
-          <T className="text-[11px] text-text-tertiary">
+          <T size="xs" className="text-text-tertiary">
             {sortedResults.length} result{sortedResults.length === 1 ? '' : 's'} · sorted by
             ascending score · click a row to expand
           </T>
@@ -462,7 +461,7 @@ function RunDetailPage() {
           sortedResults.length === 0 ? (
             <RowEmpty text="No results yet for this run." />
           ) : (
-            <Table>
+            <Table size="sm">
               <TableHead>
                 <TableRow>
                   <TableTh>Test</TableTh>
@@ -486,20 +485,20 @@ function RunDetailPage() {
                         onClick={() => setExpanded(isOpen ? null : r.testId)}
                         className="cursor-pointer"
                       >
-                        <TableTd className="text-[11px] text-text-tertiary font-mono whitespace-nowrap">
+                        <TableTd className="text-text-tertiary font-mono whitespace-nowrap">
                           {r.testId}
                           {r.invocationId && (
                             <Link
                               to={`/admin/observability/invocations/${r.invocationId}`}
                               onClick={(e) => e.stopPropagation()}
                               title="Open invocation detail"
-                              className="ml-1.5 text-primary no-underline text-[11px]"
+                              className="text-xs ml-1.5 text-primary no-underline"
                             >
                               →
                             </Link>
                           )}
                         </TableTd>
-                        <TableTd className="text-[12px] font-medium whitespace-nowrap">{r.agentId ?? '—'}</TableTd>
+                        <TableTd className="whitespace-nowrap">{r.agentId ?? '—'}</TableTd>
                         <TableTd>
                           <PassChip passed={r.passed} labeled />
                         </TableTd>
@@ -516,14 +515,14 @@ function RunDetailPage() {
                             {tagSummary(r.tagHits)}
                           </Chip>
                         </TableTd>
-                        <TableTd className="text-[12px] text-text-secondary whitespace-nowrap">
+                        <TableTd className="text-text-secondary whitespace-nowrap">
                           {r.durationMs != null ? `${r.durationMs}ms` : '—'}
                         </TableTd>
                         <TableTd className="whitespace-nowrap">
                           <CostChip cost={r.estCostUsd} />
                         </TableTd>
                         <TableTd
-                          className="text-[12px] max-w-[320px] truncate"
+                          className="text-xs max-w-[320px] truncate"
                           title={r.responseSnippet ?? undefined}
                         >
                           {snip(r.responseSnippet, 60)}
@@ -552,10 +551,10 @@ function RunDetailPage() {
             title="Cases without results"
             subtitle={`${missingCount} test${missingCount === 1 ? '' : 's'} did not produce a result · runner may have crashed`}
           />
-          <Card padding="sm" className="text-[12px] text-text-secondary">
-            Total cases: <strong>{run.totalCases}</strong>, completed:{' '}
-            <strong>{run.completed}</strong>, missing: <strong>{missingCount}</strong>.
-            Inspect the runner logs (<T className="font-mono text-[11.5px]">infra/scripts/harness.py</T>) for
+          <Card padding="sm" className="text-xs text-text-secondary">
+            Total cases: <T size="sm" weight="semibold">{run.totalCases}</T>, completed:{' '}
+            <T size="sm" weight="semibold">{run.completed}</T>, missing: <T size="sm" weight="semibold">{missingCount}</T>.
+            Inspect the runner logs (<T size="xs" className="font-mono">infra/scripts/harness.py</T>) for
             crashes.
           </Card>
         </Card>
@@ -572,39 +571,39 @@ function ResultDetail({ result }: { result: TestResult }) {
     <Stack gap="md">
       {result.prompt && (
         <Stack gap="xs">
-          <T as="div" className="text-[10px] font-bold text-text-tertiary tracking-wide">PROMPT</T>
+          <T as="div" size="xs" weight="semibold" className="text-text-tertiary tracking-wide">PROMPT</T>
           <CodeBlock code={result.prompt} language="text" />
         </Stack>
       )}
       <Stack gap="xs">
-        <T as="div" className="text-[10px] font-bold text-text-tertiary tracking-wide">RESPONSE</T>
+        <T as="div" size="xs" weight="semibold" className="text-text-tertiary tracking-wide">RESPONSE</T>
         <CodeBlock code={result.responseSnippet ?? '(no response captured)'} language="text" />
       </Stack>
       <Inline gap="md" align="start">
         <Stack gap="xs" className="flex-1 min-w-0">
-          <T as="div" className="text-[10px] font-bold text-text-tertiary tracking-wide">JUDGE RATIONALE</T>
+          <T as="div" size="xs" weight="semibold" className="text-text-tertiary tracking-wide">JUDGE RATIONALE</T>
           {result.judgeRationale ? (
             <CodeBlock code={result.judgeRationale} language="text" />
           ) : (
-            <T className="text-[11px] text-text-tertiary italic">(no rationale)</T>
+            <T size="xs" className="text-text-tertiary italic">(no rationale)</T>
           )}
         </Stack>
         <Stack gap="xs" className="flex-1 min-w-0">
-          <T as="div" className="text-[10px] font-bold text-text-tertiary tracking-wide">FAIL REASONS</T>
+          <T as="div" size="xs" weight="semibold" className="text-text-tertiary tracking-wide">FAIL REASONS</T>
           {result.failReasons && result.failReasons.length > 0 ? (
-            <Stack as="ul" gap="xs" className="m-0 pl-4 text-[12px] text-danger list-disc">
+            <Stack as="ul" gap="xs" className="text-xs m-0 pl-4 text-danger list-disc">
               {result.failReasons.map((r, i) => (
                 <li key={i}>{r}</li>
               ))}
             </Stack>
           ) : (
-            <T className="text-[11px] text-text-tertiary italic">(none)</T>
+            <T size="xs" className="text-text-tertiary italic">(none)</T>
           )}
         </Stack>
       </Inline>
       {tagEntries.length > 0 && (
         <Stack gap="xs">
-          <T as="div" className="text-[10px] font-bold text-text-tertiary tracking-wide">TAG BREAKDOWN</T>
+          <T as="div" size="xs" weight="semibold" className="text-text-tertiary tracking-wide">TAG BREAKDOWN</T>
           <Inline gap="xs">
             {tagEntries.map(([tag, hit]) => (
               <Chip key={tag} tone={hit ? 'success' : 'danger'} size="xs">
@@ -614,16 +613,16 @@ function ResultDetail({ result }: { result: TestResult }) {
           </Inline>
         </Stack>
       )}
-      <Inline gap="sm" align="center" className="text-[11px] text-text-tertiary">
-        <T>reference similarity:&nbsp;<strong>{fmt(result.referenceSimilarity)}</strong></T>
+      <Inline gap="sm" align="center" className="text-xs text-text-tertiary">
+        <T>reference similarity:&nbsp;<T size="sm" weight="semibold">{fmt(result.referenceSimilarity)}</T></T>
         {(result.inputTokens != null || result.outputTokens != null) && (
           <>
             <T>·</T>
             <T>
               tokens:{' '}
-              <strong>
+              <T size="sm" weight="semibold">
                 input: {result.inputTokens ?? '—'} · output: {result.outputTokens ?? '—'}
-              </strong>
+              </T>
             </T>
           </>
         )}
@@ -639,7 +638,7 @@ function ResultDetail({ result }: { result: TestResult }) {
             <T>invocation:</T>
             <Link
               to={`/admin/observability/invocations/${result.invocationId}`}
-              className="font-mono text-[11.5px] text-primary"
+              className="text-xs font-mono text-primary"
               title="Open invocation detail"
             >
               {result.invocationId} →
@@ -674,7 +673,7 @@ function BaselinePicker({
       as="label"
       gap="xs"
       align="center"
-      className="text-[11px]"
+
       title="Pick another run to side-by-side compare against this one"
     >
       <T className="text-text-tertiary">Compare to baseline:</T>
@@ -743,7 +742,7 @@ function PromoteModal({
 
   return (
     <Modal open onClose={onClose} title="Promote prompt versions" maxWidth={520} rawChildren>
-      <Stack gap="md" className="p-4 overflow-y-auto text-[12px]">
+      <Stack gap="md" className="text-xs p-4 overflow-y-auto">
         <Stack as="p" gap="none" className="mb-2 text-text-secondary">
           Mark these prompt versions as production-blessed. Promote per-agent so a
           partial decision (some agents OK, others still under review) stays clean.
@@ -759,8 +758,8 @@ function PromoteModal({
             return (
               <Inline key={agentId} justify="between" align="center" gap="md" className="py-2 border-b border-border">
                 <Stack gap="none">
-                  <T className="text-[12px] font-medium">{agentId}</T>
-                  <T className="font-mono text-[11.5px] text-text-tertiary">
+                  <T size="xs" weight="medium">{agentId}</T>
+                  <T size="xs" className="font-mono text-text-tertiary">
                     p:{short}
                   </T>
                 </Stack>

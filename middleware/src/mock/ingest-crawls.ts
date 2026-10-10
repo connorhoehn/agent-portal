@@ -200,3 +200,14 @@ export const crawlSessionRows = defineFixture<CrawlSession>({
     empty: () => [],
   },
 });
+
+/**
+ * The image `GET /api/ingest/crawl/:id/page/:idx/screenshot` serves under
+ * MOCK_AURORA for any page that carries an `s3ScreenshotKey`. Offline there is
+ * no documents bucket to proxy, so every listed screenshot resolves to this
+ * one fixed grey 8x8 PNG instead of 404ing. A page with a null key still 404s.
+ */
+export const MOCK_SCREENSHOT_PNG = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEUlEQVR4nGM4ceYSVsQwtCQA972ZgWOUTpoAAAAASUVORK5CYII=',
+  'base64',
+);

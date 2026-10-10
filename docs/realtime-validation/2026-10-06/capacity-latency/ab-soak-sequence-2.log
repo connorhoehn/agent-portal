@@ -1,0 +1,24 @@
+soak-frames-before-3 exit=1
+  invite→incoming  p50 41.7  p95 51.5  p99 59.9  max 69 ms (n=100)
+  accept→accepted  p50 38.4  p95 55.9  p99 59.4  max 59.9 ms (n=100)
+  chat delivery    p50 31.8  p95 3992  p99 5253.7  max 6272.1 ms (n=13666 of 13670 sent)
+  FAIL  chat delivery p95: 3992 (< 300 ms, with paired-sender evidence)
+  PASS  peer 1: health errors: 0 (0)
+  PASS  soak protocol errors: 0 (0)
+  FAIL  soak × 2 — chat delivery p95; event-loop proxy (/api/health p99); peer 1: health p99
+soak-frames-lane-1 exit=1
+  invite→incoming  p50 39.3  p95 55.9  p99 635.1  max 835.7 ms (n=100)
+  accept→accepted  p50 36  p95 44.5  p99 46.8  max 51.8 ms (n=100)
+  chat delivery    p50 25.4  p95 3094.4  p99 3501.8  max 4573.3 ms (n=12392 of 12394 sent)
+  FAIL  chat delivery p95: 3094.4 (< 300 ms, with paired-sender evidence)
+  PASS  peer 1: health errors: 0 (0)
+  PASS  soak protocol errors: 0 (0)
+  FAIL  soak × 2 — chat delivery p95; event-loop proxy (/api/health p99); peer 1: health p99
+soak-ab-lane-2 exit=1
+  invite→incoming  p50 38.2  p95 49.2  p99 50.9  max 51.1 ms (n=100)
+  accept→accepted  p50 35.6  p95 46.4  p99 66.2  max 86.4 ms (n=100)
+  chat delivery    p50 23.8  p95 2438.4  p99 2931.2  max 3854.4 ms (n=12170 of 12175 sent)
+  FAIL  chat delivery p95: 2438.4 (< 300 ms, with paired-sender evidence)
+  PASS  peer 1: health errors: 0 (0)
+  PASS  soak protocol errors: 0 (0)
+  FAIL  soak × 2 — chat delivery p95; event-loop proxy (/api/health p99); peer 1: health p99

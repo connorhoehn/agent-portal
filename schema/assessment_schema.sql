@@ -252,6 +252,34 @@ CREATE TABLE IF NOT EXISTS assessment_document_mappings (
   PRIMARY KEY (tenant_id, source_namespace, source_id)
 );
 
+-- Completed drafter replies are draft metadata, separate from the rich Yjs
+-- document and source mirror. Apply claims use the version as a CAS; an
+-- interrupted claim is never silently returned to ready and inserted twice.
+CREATE TABLE IF NOT EXISTS assessment_document_proposals (
+  document_id uuid NOT NULL REFERENCES assessment_document_mappings(document_id),
+  proposal_id text NOT NULL,
+  source_id text NOT NULL,
+  kind text NOT NULL CHECK (kind IN ('insert', 'replace')),
+  anchor jsonb NOT NULL,
+  content text NOT NULL,
+  original_text text NOT NULL,
+  cursor_position integer NOT NULL CHECK (cursor_position >= 0),
+  instruction text NOT NULL,
+  summary text,
+  status text NOT NULL DEFAULT 'ready' CHECK (status IN ('ready', 'applying', 'applied', 'discarded')),
+  version integer NOT NULL DEFAULT 1 CHECK (version > 0),
+  created_by text NOT NULL,
+  producer_agent text,
+  decided_by text,
+  created_at timestamptz NOT NULL DEFAULT NOW(),
+  updated_at timestamptz NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (document_id, proposal_id)
+);
+-- The agent that drafted the edit; NULL on rows stored before it was recorded.
+ALTER TABLE assessment_document_proposals ADD COLUMN IF NOT EXISTS producer_agent text;
+CREATE INDEX IF NOT EXISTS idx_assessment_document_proposals_document
+  ON assessment_document_proposals(document_id, created_at DESC);
+
 -- One-time import of a document's legacy comment thread
 -- (assessment_knowledge_comments + the reactions keyed to it) into
 -- platform-api's document comments, where the Comments tab now reads

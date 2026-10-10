@@ -1,4 +1,5 @@
 import { test, expect, type APIRequestContext, type Browser, type BrowserContext, type Page } from '@playwright/test';
+import { openAs } from './realSession';
 
 // Document conversation on the BFF's own realtime gateway (/ws): two
 // assessment people on one document see each other's messages, attributed by
@@ -29,15 +30,6 @@ async function gatewayHealth(request: APIRequestContext): Promise<{ realtime?: {
 
 type Person = { page: Page; context: BrowserContext; userId: string; name: string };
 
-async function signIn(page: Page, userId: string): Promise<void> {
-  await page.goto('/');
-  const status = await page.evaluate(async (id: string) => (await fetch('/api/session/login', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
-    body: JSON.stringify({ userId: id }),
-  })).status, userId);
-  expect(status, `demo login as ${userId}`).toBe(200);
-}
-
 /** The display name the gateway will stamp: the realtime token's own claim. */
 async function tokenName(page: Page): Promise<string> {
   return page.evaluate(async () => {
@@ -48,9 +40,7 @@ async function tokenName(page: Page): Promise<string> {
 }
 
 async function open(browser: Browser, userId: string): Promise<Person> {
-  const context = await browser.newContext({ viewport: { width: 1672, height: 941 } });
-  const page = await context.newPage();
-  await signIn(page, userId);
+  const { context, page } = await openAs(browser, userId, { viewport: { width: 1672, height: 941 } });
   const name = await tokenName(page);
   await page.goto(DOC_URL);
   await expect(page.getByTestId('document-shell')).toBeVisible({ timeout: 20_000 });

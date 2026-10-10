@@ -115,5 +115,4 @@ notes: <what a person would notice: wrapping, truncation, wrong labels, dead lin
 
 `verdict`, `console errors`, `layout`, `keyboard`, `empty-state` and
 `screenshot` are required; the words TODO, unverified and placeholder
-anywhere in the file make it not count. Every log is judged stale the moment
-any `.tsx` under `portal/src/pages/search/` is newer than it.
+anywhere in the file make it not count. Freshness and sealing follow [docs/journeys.md](../journeys.md): a log is stale when the rendered contract of a route its `url:` names changed since its walk was sealed (sweep measurements, gate, the assertions of the specs that cover it), and only `scripts/journeys/seal.sh <dir>`, after a walk, seals it.

@@ -578,7 +578,7 @@ export default function LocalComputePage() {
   ];
 
   if (view === 'runs') return <PageSection title="Runs" description="Work handed to your paired machines.">
-    {runsFailure ? <UnavailableNotice error={runsFailure} what="run history" source="Local compute runs" onRetry={refreshRuns} /> : <DataTable data={runs} keyField={(run) => run.id} columns={runColumns} frameless pageSize={20} onRowClick={(run) => setSelectedRunId(run.id)} emptyMessage="No runs yet" />}
+    {runsFailure ? <UnavailableNotice error={runsFailure} what="run history" source="Runs on your machines are read from the job queue in Aurora" onRetry={refreshRuns} /> : <DataTable data={runs} keyField={(run) => run.id} columns={runColumns} frameless pageSize={20} onRowClick={(run) => setSelectedRunId(run.id)} emptyMessage="No runs yet" />}
     {selectedRunId && <DetailSection title="Run log" actions={<Button size="sm" variant="ghost" onClick={() => setSelectedRunId(null)}>Close</Button>}><RunLog key={selectedRunId} jobId={selectedRunId} /></DetailSection>}
   </PageSection>;
 

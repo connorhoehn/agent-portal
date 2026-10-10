@@ -34,6 +34,10 @@ import {
   TableTd,
   Chip,
   CodeBlock,
+  EditIcon,
+  IconButton,
+  StatStrip,
+  TrashIcon,
   Inline,
   InlineAlert,
   Modal as UIModal,
@@ -47,7 +51,7 @@ import {
   ConfirmDialog,
   PageSection,
   Stack,
-  useToast,
+  useToast, T,
 } from '@connorhoehnslalom/ui-components/shared';
 import {
   CartesianGrid,
@@ -66,7 +70,6 @@ import { useFetch } from '../../hooks/useFetch';
 import { SmartEmptyState } from '../../components/observability/SmartEmptyState';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { firstDegraded } from '../../lib/degraded';
-import { T } from './Text';
 import { RowEmpty } from './ReadState';
 import { parsePgTimestamp } from '../../lib/pgTimestamp';
 
@@ -299,24 +302,23 @@ function CalibrationPage() {
       )}
 
       {/* Header */}
-      <Card padding="md">
-        <Inline gap="sm" align="center" className="text-[12px] text-text-secondary">
-          <T><strong>{cases.length}</strong>&nbsp;active case{cases.length === 1 ? '' : 's'}</T>
-          <T className="text-text-tertiary">·</T>
-          <T>judge <T className="font-mono text-[11.5px]">{judgeModelId}</T></T>
-          <T className="text-text-tertiary">·</T>
-          <T>last MAE</T>
-          <Chip tone={maeTone(lastMae)} size="xs">{fmt(lastMae)}</Chip>
-          {runs[0]?.startedAt ? (
-            <>
-              <T className="text-text-tertiary">·</T>
-              <T className="text-[11px] text-text-tertiary">
-                {parsePgTimestamp(runs[0].startedAt)?.toLocaleString() ?? runs[0].startedAt}
-              </T>
-            </>
-          ) : null}
-        </Inline>
-      </Card>
+      <StatStrip
+        variant="line"
+        size="sm"
+        aria-label="Calibration summary"
+        items={[
+          { label: `active case${cases.length === 1 ? '' : 's'}`, value: cases.length },
+          { label: 'judge', value: judgeModelId },
+          {
+            label: 'last MAE',
+            value: fmt(lastMae),
+            tone: maeTone(lastMae) === 'danger' ? 'danger' : 'default',
+            title: runs[0]?.startedAt
+              ? `last run ${parsePgTimestamp(runs[0].startedAt)?.toLocaleString() ?? runs[0].startedAt}`
+              : undefined,
+          },
+        ]}
+      />
 
       {/* MAE trend */}
       <Card padding="md">
@@ -477,14 +479,14 @@ function CalibrationPage() {
         {worstResults.length === 0 ? (
           <RowEmpty text="No disagreements yet — run a calibration first." degraded={calibrationDegraded} />
         ) : (
-          <Table>
+          <Table size="sm">
             <TableHead>
               <TableRow>
                 <TableTh>Agent</TableTh>
                 <TableTh>Prompt</TableTh>
-                <TableTh>Human</TableTh>
-                <TableTh>Judge</TableTh>
-                <TableTh>|Δ|</TableTh>
+                <TableTh numeric>Human</TableTh>
+                <TableTh numeric>Judge</TableTh>
+                <TableTh numeric>|Δ|</TableTh>
                 <TableTh>Rationale</TableTh>
               </TableRow>
             </TableHead>
@@ -500,16 +502,16 @@ function CalibrationPage() {
                       }
                       className="cursor-pointer"
                     >
-                      <TableTd className="text-[12px] font-medium whitespace-nowrap">{r.agentId ?? '—'}</TableTd>
-                      <TableTd className="text-[12px] max-w-[320px] truncate" title={r.prompt}>
+                      <TableTd className="whitespace-nowrap">{r.agentId ?? '—'}</TableTd>
+                      <TableTd className="max-w-[320px] truncate" title={r.prompt}>
                         {snip(r.prompt, 80) || '(empty)'}
                       </TableTd>
-                      <TableTd className="text-[12px] text-text-secondary tabular-nums">{fmt2(r.humanScore)}</TableTd>
-                      <TableTd className="text-[12px] text-text-secondary tabular-nums">{fmt2(r.judgeScore)}</TableTd>
+                      <TableTd numeric>{fmt2(r.humanScore)}</TableTd>
+                      <TableTd numeric>{fmt2(r.judgeScore)}</TableTd>
                       <TableTd>
                         <Chip tone={maeTone(r.absError)} size="xs">{fmt(r.absError)}</Chip>
                       </TableTd>
-                      <TableTd className="text-[12px] max-w-[320px] truncate" title={r.judgeRationale ?? ''}>
+                      <TableTd className="max-w-[320px] truncate" title={r.judgeRationale ?? ''}>
                         {snip(r.judgeRationale, 60) || '—'}
                       </TableTd>
                     </TableRow>
@@ -518,20 +520,20 @@ function CalibrationPage() {
                         <TableTd colSpan={6} className="p-3 bg-bg">
                           <Inline gap="md" align="start">
                             <Stack gap="xs" className="flex-1 min-w-0">
-                              <T as="div" className="text-[10px] font-bold text-text-tertiary tracking-wide">
+                              <T as="div" size="xs" weight="semibold" tone="tertiary">
                                 PROMPT · agent={r.agentId ?? '—'}
                               </T>
                               <CodeBlock code={r.prompt ?? '(no prompt)'} language="text" />
-                              <T as="div" className="text-[10px] font-bold text-text-tertiary tracking-wide mt-3">RESPONSE</T>
+                              <T as="div" size="xs" weight="semibold" tone="tertiary" className="mt-3">RESPONSE</T>
                               <CodeBlock code={r.response ?? '(no response)'} language="text" />
                             </Stack>
                             <Stack gap="xs" className="flex-1 min-w-0">
-                              <T as="div" className="text-[10px] font-bold text-text-tertiary tracking-wide">
-                                HUMAN <T className="font-mono text-[11.5px]">{fmt2(r.humanScore)}</T>
+                              <T as="div" size="xs" weight="semibold" tone="tertiary">
+                                HUMAN <T size="xs" className="font-mono">{fmt2(r.humanScore)}</T>
                               </T>
                               <CodeBlock code={r.humanRationale ?? '(no rationale recorded)'} language="text" />
-                              <T as="div" className="text-[10px] font-bold text-text-tertiary tracking-wide mt-3">
-                                JUDGE <T className="font-mono text-[11.5px]">{fmt2(r.judgeScore)}</T>
+                              <T as="div" size="xs" weight="semibold" tone="tertiary" className="mt-3">
+                                JUDGE <T size="xs" className="font-mono">{fmt2(r.judgeScore)}</T>
                               </T>
                               <CodeBlock code={r.judgeRationale ?? '(no rationale returned)'} language="text" />
                             </Stack>
@@ -567,12 +569,12 @@ function CalibrationPage() {
             degraded={calibrationDegraded}
           />
         ) : (
-          <Table>
+          <Table size="sm">
             <TableHead>
               <TableRow>
                 <TableTh>Agent</TableTh>
                 <TableTh>Prompt</TableTh>
-                <TableTh>Human</TableTh>
+                <TableTh numeric>Human</TableTh>
                 <TableTh>Updated</TableTh>
                 <TableTh></TableTh>
               </TableRow>
@@ -580,32 +582,33 @@ function CalibrationPage() {
             <TableBody>
               {cases.map((c) => (
                 <TableRow key={c.calibrationId}>
-                  <TableTd className="text-[12px] font-medium whitespace-nowrap">{c.agentId}</TableTd>
-                  <TableTd className="text-[12px] max-w-[320px] truncate" title={c.prompt}>{snip(c.prompt, 100)}</TableTd>
-                  <TableTd className="text-[12px] text-text-secondary tabular-nums">{fmt2(c.humanScore)}</TableTd>
-                  <TableTd className="text-[11px] text-text-tertiary whitespace-nowrap">
+                  <TableTd className="whitespace-nowrap">{c.agentId}</TableTd>
+                  <TableTd className="max-w-[320px] truncate" title={c.prompt}>{snip(c.prompt, 100)}</TableTd>
+                  <TableTd numeric>{fmt2(c.humanScore)}</TableTd>
+                  <TableTd className="whitespace-nowrap">
                     {c.updatedAt
                       ? (parsePgTimestamp(c.updatedAt)?.toLocaleDateString() ?? c.updatedAt)
                       : '—'}
                   </TableTd>
                   <TableTd className="whitespace-nowrap text-right">
-                    <Button
+                    <IconButton
                       variant="ghost"
                       size="sm"
+                      icon={<EditIcon size={14} />}
+                      aria-label={`Edit case ${c.agentId}`}
+                      title="Edit"
                       onClick={() =>
                         setCaseDialog({ open: true, busy: false, err: null, editing: c })
                       }
-                    >
-                      Edit
-                    </Button>
-                    <T className="text-text-tertiary mx-1.5">·</T>
-                    <Button
-                      variant="danger"
+                    />
+                    <IconButton
+                      variant="ghost"
                       size="sm"
+                      icon={<TrashIcon size={14} />}
+                      aria-label={`Archive case ${c.agentId}`}
+                      title="Archive"
                       onClick={() => setArchiveTarget(c)}
-                    >
-                      Archive
-                    </Button>
+                    />
                   </TableTd>
                 </TableRow>
               ))}
@@ -632,7 +635,7 @@ function CalibrationPage() {
               />
             )}
           </FormField>
-          <T as="div" className="text-[11px] text-text-tertiary">
+          <T as="div" size="xs" tone="tertiary">
             The judge will be re-run over all {cases.length} active case
             {cases.length === 1 ? '' : 's'}. ~1 second per case. Cost is one
             Nova-Pro call per case (≈ $0.001 / 20 cases).
@@ -813,7 +816,7 @@ function CaseEditor({
           )}
         </FormField>
         <Stack gap="xs" data-testid="case-editor-prompt-wrap">
-          <T as="div" className="text-[11px] font-semibold text-text-secondary tracking-[0.3px]">Prompt</T>
+          <T as="div" size="xs" weight="semibold" tone="secondary">Prompt</T>
           <CodeEditor
             language="template"
             value={prompt}
@@ -826,7 +829,7 @@ function CaseEditor({
           />
         </Stack>
         <Stack gap="xs" data-testid="case-editor-response-wrap">
-          <T as="div" className="text-[11px] font-semibold text-text-secondary tracking-[0.3px]">Response</T>
+          <T as="div" size="xs" weight="semibold" tone="secondary">Response</T>
           <CodeEditor
             language="plain"
             value={response}

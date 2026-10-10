@@ -96,6 +96,8 @@ sdlcRouter.post('/changes/:id/decide', asyncHandler(async (req, res) => {
     note: body.note ?? null,
   });
   if (!out.ok) throw new ValidationError(out.error ?? 'could not decide');
+  // An approval left the queue (pipelines activity graph, content-free hint). Loaded lazily: the graph is a reader of this route, not its dependency.
+  void import('../lib/work-graph/live.js').then(m => m.notifyPipelinesWorkGraphChanged(null, 'approval')).catch(() => undefined);
   res.json({ ok: true, status: out.status });
 }));
 

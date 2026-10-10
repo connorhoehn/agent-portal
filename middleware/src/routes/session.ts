@@ -6,7 +6,8 @@
 // server-side at login.
 
 import { Router } from 'express';
-import { asyncHandler } from '../lib/async-handler.js';
+import { asyncHandler, SessionInvalidError } from '../lib/async-handler.js';
+import { currentLiveSession } from '../lib/live-principal.js';
 import {
   TENANTS,
   ADMIN_ROLE,
@@ -32,12 +33,22 @@ import { rateLimit } from '../lib/rate-limit.js';
 import { cognitoEnabled } from '../lib/oidc.js';
 import { demoModeEnabled, ssoAvailable } from '../lib/session.js';
 import { listUsers, getUser, bumpSessionEpoch } from '../providers/identity.js';
+import { userAvatars } from '../providers/user-avatars.js';
 
 export const sessionRouter = Router();
 
 // Identity switching is the credential surface of this app — brake it.
 // Reads (/me, /users) stay unthrottled; the portal polls them.
-const loginLimit = rateLimit('session-login', 15, 60_000);
+// The limiter keys on client IP, so every headless walk, e2e spec and curl
+// jar on a developer's machine shares one 127.0.0.1 bucket — with several
+// running at once they starve each other on 429s. `LOGIN_RATE_LIMIT_PER_MIN`
+// widens the bucket for that case and is honoured only outside production;
+// the shipped brake stays 15/min.
+const loginPerMin = (() => {
+  const raw = Number(process.env.LOGIN_RATE_LIMIT_PER_MIN);
+  return process.env.NODE_ENV !== 'production' && Number.isFinite(raw) && raw > 0 ? raw : 15;
+})();
+const loginLimit = rateLimit('session-login', loginPerMin, 60_000);
 const switchLimit = rateLimit('session-switch', 30, 60_000);
 
 function publicView(session: Session) {
@@ -85,18 +96,28 @@ async function nextEpochForSwitch(session: Session): Promise<number | undefined>
  * means anonymous with a real IdP configured — respond 401 { ssoRequired } so
  * the portal routes through Cognito instead of showing demo-user forever. */
 function sessionOrNull(req: import('express').Request): Session | null {
-  return req.session ?? (demoFallbackAllowed() ? demoSession() : null);
+  return resolveSession(req);
 }
 
 function unauthenticated(res: import('express').Response): void {
-  res.status(401).json({ error: 'Unauthenticated', ssoRequired: ssoAvailable() });
+  res.status(401).json({ error: 'Unauthenticated', code: 'SESSION_INVALID', ssoRequired: ssoAvailable() });
 }
 
-sessionRouter.get('/me', (req, res) => {
-  const session = sessionOrNull(req);
-  if (!session) { unauthenticated(res); return; }
-  res.json(publicView(session));
-});
+sessionRouter.get('/me', asyncHandler(async (req, res) => {
+  const signed = sessionOrNull(req);
+  if (!signed) { unauthenticated(res); return; }
+  // Strict conversation routes check the directory immediately. Publishing
+  // the cookie's cached identity here would leave the shell signed in for
+  // the 120-second grants-refresh window after those same routes refused it.
+  try {
+    const session = await currentLiveSession(signed);
+    res.set('Cache-Control', 'no-store');
+    res.json(publicView(session));
+  } catch (error) {
+    if (!(error instanceof SessionInvalidError)) throw error;
+    res.status(401).json({ error: error.message, code: error.code, ssoRequired: ssoAvailable() });
+  }
+}));
 
 // Which org-graph person this session's account is connected to
 // (app_users.person_id), if any.
@@ -173,8 +194,9 @@ sessionRouter.get('/realtime-token', requireSession('RealtimeToken'), asyncHandl
   // email / external_sub are a directory read; a miss (demo-user, picker-only
   // account, Aurora blip) just leaves those claims off rather than failing.
   const user = await getUser(session.sub).catch(() => null);
+  const avatarUrl = user ? (await userAvatars([user]).catch(() => new Map<string, string | null>())).get(user.id) ?? null : null;
   const { token, expiresAt } = await signRealtimeToken(
-    realtimeClaims(session, { externalSub: user?.externalSub, email: user?.email }), secret);
+    realtimeClaims(session, { externalSub: user?.externalSub, email: user?.email, avatarUrl }), secret);
   const gatewayUrl = config.realtime?.gatewayUrl;
   const platformApiUrl = config.realtime?.platformApiUrl;
   const videoUrl = config.realtime?.videoUrl;
@@ -203,10 +225,12 @@ function requireDemoPicker(res: import('express').Response): boolean {
 sessionRouter.get('/users', asyncHandler(async (_req, res) => {
   if (!requireDemoPicker(res)) return;
   const users = await listUsers();
+  const avatars = await userAvatars(users);
   res.json(users.map(u => ({
     id: u.id,
     displayName: u.displayName,
     email: u.email,
+    avatarUrl: avatars.get(u.id) ?? null,
     tenants: Object.entries(u.grants).map(([tenant, roles]) => ({ tenant, roles })),
   })));
 }));

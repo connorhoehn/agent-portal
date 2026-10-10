@@ -1,0 +1,2 @@
+Compiled deadline artifact discards 1000 expired jobs despite stalled timer callbacks and admits fresh work
+Controlled client only; native store and capacity verification remains pending

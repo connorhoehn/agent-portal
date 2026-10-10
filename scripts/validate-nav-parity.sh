@@ -22,6 +22,7 @@
 # codebase's history, so any finding fails the build.
 set -u
 cd "$(dirname "$0")/.."
+source scripts/lib/judges.sh  # jg_*: static gates run once per tree state
 REPO="$PWD"
 QUICK=0; for a in "$@"; do case "$a" in --quick) QUICK=1;; esac; done
 
@@ -144,6 +145,7 @@ if git -C "$REPO" cat-file -e dd95c1b^:portal/src/App.tsx 2>/dev/null; then
   ln -sfn "$REPO/middleware/node_modules" "$CAL/middleware/node_modules"
   ln -sfn "$REPO/middleware/seeds" "$CAL/middleware/seeds"
   cp "$REPO/scripts/lib/nav-route-parity.cjs" "$CAL/scripts/lib/"
+  mkdir -p "$CAL/portal/e2e" && cp "$REPO/portal/e2e/route-sources.ts" "$CAL/portal/e2e/"
   caln=$(node "$CAL/scripts/lib/nav-route-parity.cjs" 2>/dev/null | grep -c . ); caln=${caln:-0}
   if [ "$caln" -ge 4 ]; then
     ok "catches the pre-dd95c1b drift: $caln mismatches flagged (3 × /iq/scores + assessment Configuration)"
@@ -175,6 +177,7 @@ cp "$REPO/portal/src/App.tsx" "$RCAL/portal/src/App.tsx"
 ln -sfn "$REPO/middleware/node_modules" "$RCAL/middleware/node_modules"
 ln -sfn "$REPO/middleware/seeds" "$RCAL/middleware/seeds"
 cp "$REPO/scripts/lib/nav-route-parity.cjs" "$RCAL/scripts/lib/"
+mkdir -p "$RCAL/portal/e2e" && cp "$REPO/portal/e2e/route-sources.ts" "$RCAL/portal/e2e/"
 cat > "$RCAL/portal/src/components/shell/Layout.tsx" <<'EOF_RCAL'
 const RAIL = [
   { path: '/admin/budgets', label: 'Budgets', tenant: 'admin', requireRoles: ['hr-admin'], group: 'Plan' },
@@ -195,7 +198,7 @@ fi
 # ── Build ───────────────────────────────────────────────────────────────────
 if [ "$QUICK" = 0 ]; then
   section "builds"
-  if (cd "$REPO/portal" && npx tsc --noEmit >"$TMP/tsc.log" 2>&1); then ok "portal tsc"; else
+  if jg_portal_tsc >"$TMP/tsc.log" 2>&1; then ok "portal tsc"; else
     fail "portal tsc"; sed 's/^/      /' "$TMP/tsc.log" | head -20
   fi
 fi

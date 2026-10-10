@@ -8,9 +8,10 @@
 //
 //   cd portal && npx playwright test --config playwright.demo.config.ts
 //
-// The video lands in e2e-demo/<test>/*.webm. Needs the mock stack up:
-//   node scripts/document-workspace.mjs middleware   # or: cd middleware && npm run dev:mock
-//   cd portal && npm run dev -- --port 5183
+// The video lands in e2e-demo/<test>/*.webm. Needs the mock stack up (the Tilt
+// stack, or `cd middleware && npm run dev:mock` + `cd portal && npm run dev -- --port 5183`);
+// the walkthrough starts the `demo` scenario itself. Script, knobs and the
+// presenter's click script: docs/demos/computer-lab-demo.md.
 import { defineConfig } from '@playwright/test';
 
 /** Slow every action down so a viewer can follow the pointer. Override with
@@ -25,8 +26,9 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   retries: 0,
-  // The walkthrough waits on real dispatches and paced agent runs.
-  timeout: 5 * 60_000,
+  // The walkthrough waits on real dispatches and paced agent runs: at the
+  // director's default 4s beat the story alone takes ~3¼ minutes.
+  timeout: 8 * 60_000,
   reporter: [['list']],
   use: {
     baseURL: process.env['DEMO_BASE_URL'] ?? 'http://localhost:5183',

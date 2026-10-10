@@ -8,10 +8,9 @@
 // PersonRef — the same link-plus-people-card every other person on this page
 // renders as.
 
-import { DataTable, Inline, InlinePlaceholder, ProgressBar } from '@connorhoehnslalom/ui-components/shared';
+import { DataTable, InlinePlaceholder, T } from '@connorhoehnslalom/ui-components/shared';
 import type { DataTableColumn } from '@connorhoehnslalom/ui-components/shared';
 import { PersonRef } from './PersonRef';
-import { T } from './Text';
 import { RoleCycleChip } from '../../components/marketplace/GovernanceEditor';
 import type { ProjectContributor } from './types';
 
@@ -46,6 +45,7 @@ export function ContributorsTable({
             personId={c.personId}
             name={c.name}
             title={c.title}
+            avatarUrl={c.avatarUrl}
             avatarSize={24}
             className="text-[13px] font-medium text-text-primary"
           />
@@ -69,21 +69,11 @@ export function ContributorsTable({
       ),
     },
     {
-      key: 'weight', header: 'Weight', align: 'right', sortable: true,
+      key: 'weight', header: 'Weight', numeric: true, sortable: true,
       render: (c) => (
-        <Inline gap="xs" align="center" justify="end" wrap={false}>
-          <ProgressBar
-            className="w-[60px]"
-            value={Math.min(c.weight * 100, 100)}
-            max={100}
-            size="sm"
-            showRatio={false}
-            aria-label={`${(c.weight * 100).toFixed(0)}% attribution`}
-          />
-          <T className="min-w-[36px] text-right text-[13px] font-medium text-text-secondary tabular-nums">
-            {(c.weight * 100).toFixed(0)}%
-          </T>
-        </Inline>
+        <T className="font-medium text-text-secondary tabular-nums" title={`${(c.weight * 100).toFixed(0)}% attribution`}>
+          {(c.weight * 100).toFixed(0)}%
+        </T>
       ),
     },
   ];
@@ -91,6 +81,7 @@ export function ContributorsTable({
   return (
     <DataTable
       striped
+      size="sm"
       data={contributors}
       columns={columns}
       keyField={(c) => c.personId}

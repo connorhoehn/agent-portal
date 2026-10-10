@@ -9,7 +9,7 @@
 import { useState } from 'react';
 import { useSearchParams } from 'react-router';
 import {
-  Banner, Chip, DataTable, Inline, MetaLine, PageHeader, SearchInput, Select, Stack, type DataTableColumn,
+  Banner, Chip, DataTable, Inline, MetaLine, PageHeader, SearchInput, Select, Stack, T, type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { relativeTime } from '../../lib/relativeTime';
@@ -24,29 +24,27 @@ import { DefinitionDrawer } from './DefinitionDrawer';
 const COLUMNS: DataTableColumn<PipelineDefinition>[] = [
   {
     key: 'title', header: 'Definition', sortable: true, compare: (a, b) => a.title.localeCompare(b.title),
-    render: (d) => (
-      <Inline gap="xs" align="center">
-        {d.title}
-        {!d.enabled && <Chip tone="neutral" size="xs">{d.orphaned ? 'orphaned' : 'inactive'}</Chip>}
-      </Inline>
-    ),
+    render: (d) => <T size="sm" title={d.title} className="block max-w-[26rem] truncate">{d.title}</T>,
+  },
+  {
+    key: 'state', header: 'State', width: '96px',
+    render: (d) => (d.enabled ? <Chip tone="success" size="xs">active</Chip> : <Chip tone="neutral" size="xs">{d.orphaned ? 'orphaned' : 'inactive'}</Chip>),
   },
   { key: 'kind', header: 'Kind', render: (d) => kindLabel(d.kind) },
   { key: 'contextTenant', header: 'Workspace', render: (d) => <Chip tone="neutral" size="xs">{d.contextTenant}</Chip> },
   { key: 'triggers', header: 'Triggers', render: (d) => triggerSummary(d.triggers) },
   { key: 'approvers', header: 'Approved by', render: (d) => approverSummary(d.effectiveApproverRoles, d.approversDefaulted) },
-  { key: 'runCount', header: 'Runs', align: 'right', sortable: true, compare: (a, b) => a.runCount - b.runCount, render: (d) => d.runCount },
+  { key: 'runCount', header: 'Runs', numeric: true, sortable: true, compare: (a, b) => a.runCount - b.runCount, render: (d) => d.runCount },
   {
-    key: 'lastRun', header: 'Last run', sortable: true,
-    compare: (a, b) => (a.lastRun?.startedAt ?? '').localeCompare(b.lastRun?.startedAt ?? ''),
-    render: (d) => (d.lastRun ? (
-      <Inline gap="xs" align="center">
-        <PipelineRunStatusChip status={d.lastRun.status} />
-        <MetaLine size="xs" tone="tertiary" items={[d.lastRun.startedAt ? relativeTime(d.lastRun.startedAt) : null]} />
-      </Inline>
-    ) : '—'),
+    key: 'lastRunStatus', header: 'Last run', width: '112px',
+    render: (d) => (d.lastRun ? <PipelineRunStatusChip status={d.lastRun.status} /> : '—'),
   },
-  { key: 'version', header: 'Version', align: 'right', render: (d) => `v${d.version}` },
+  {
+    key: 'lastRun', header: 'Last run at', numeric: true, sortable: true,
+    compare: (a, b) => (a.lastRun?.startedAt ?? '').localeCompare(b.lastRun?.startedAt ?? ''),
+    render: (d) => (d.lastRun?.startedAt ? relativeTime(d.lastRun.startedAt) : '—'),
+  },
+  { key: 'version', header: 'Version', numeric: true, render: (d) => `v${d.version}` },
 ];
 
 export default function DefinitionsPage() {
@@ -84,6 +82,7 @@ export default function DefinitionsPage() {
       ) : (
         <DataTable
           data-testid="pipelines-definitions-table"
+          size="sm"
           data={rows}
           columns={COLUMNS}
           keyField={(d) => d.id}

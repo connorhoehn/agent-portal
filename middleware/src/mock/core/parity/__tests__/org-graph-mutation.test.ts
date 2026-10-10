@@ -34,6 +34,10 @@ jest.mock('../../../people.js', () => ({
   get departments() {
     return (jest.requireActual('../../../people.js') as { departments: unknown }).departments;
   },
+  // mock/avatars.ts keys its rows on the seeded cast (project contributors carry faces).
+  get seededPeople() {
+    return (jest.requireActual('../../../people.js') as { seededPeople: unknown }).seededPeople;
+  },
 }));
 
 import { PARITY_ENTITIES } from '../entities.js';

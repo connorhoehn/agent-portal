@@ -23,6 +23,7 @@ import {
   PageSection,
   Stack,
   StatStrip,
+  T,
   Table,
   TableBody,
   TableHead,
@@ -56,7 +57,7 @@ function dimensionColumns(index: ReturnType<typeof useHeatmapIndex>['index']): H
 }
 
 function HeatmapCell({ dim }: { dim: HeatmapDimension | undefined }) {
-  if (!dim) return <TableTd className="px-1.5 py-1 text-center" data-verified="" data-claimed="">—</TableTd>;
+  if (!dim) return <TableTd className="px-1.5 text-center" data-verified="" data-claimed="">—</TableTd>;
   const cert = dim.certification;
   const verified = cert?.verified_level ?? dim.current_level;
   const claimed = cert?.claimed_level ?? null;
@@ -69,7 +70,7 @@ function HeatmapCell({ dim }: { dim: HeatmapDimension | undefined }) {
   ].filter(Boolean).join(' · ');
   return (
     <TableTd
-      className="px-1.5 py-1 text-center whitespace-nowrap"
+      className="px-1.5 text-center whitespace-nowrap"
       title={title}
       data-verified={dim.is_na ? 'na' : verified ?? ''}
       data-claimed={claimed ?? ''}
@@ -104,7 +105,7 @@ function MaturityHeatmap({ teams, onSelectTeam }: { teams: TeamSummary[]; onSele
           for the equally wide scorecard grid (dashboard/TeamScorecard.tsx) and
           the budgets report — the heatmap simply never got it. */}
       <Card padding="none" className="overflow-x-auto">
-      <Table data-testid="maturity-heatmap" className="text-xs">
+      <Table data-testid="maturity-heatmap" size="sm">
         <TableHead>
           <TableRow>
             <TableTh scope="col" className="px-3 py-2">Team</TableTh>
@@ -121,19 +122,16 @@ function MaturityHeatmap({ teams, onSelectTeam }: { teams: TeamSummary[]; onSele
             const dims = index.get(t.id);
             const top = highestVerifiedLevel(t.certification);
             return (
-              <TableRow key={t.id}>
-                <TableTd className="px-3 py-1 whitespace-nowrap">
-                  <Stack gap="none" align="start">
-                    <Button variant="ghost" size="sm" className="border-0 px-0 font-semibold text-text-primary" onClick={() => onSelectTeam(t.id)}>{t.name}</Button>
-                    <MetaLine size="xs" tone="tertiary" items={[t.id, motionFor(t.cohort).title]} />
-                  </Stack>
+              <TableRow key={t.id} clickable onClick={() => onSelectTeam(t.id)}>
+                <TableTd className="px-3 whitespace-nowrap" title={`${t.id} · ${motionFor(t.cohort).title}`}>
+                  <T size="sm" weight="semibold">{t.name}</T>
                 </TableTd>
                 {columns.map((d) => <HeatmapCell key={d.id} dim={dims?.get(d.id)} />)}
                 <TableTd className="px-3 py-1 text-right whitespace-nowrap">
                   <Inline gap="xs" align="center" justify="end" wrap={false}>
                     <LevelBadge level={top} size="xs" />
                     {(t.certification?.claims_open ?? 0) > 0 && (
-                      <MetaLine size="xs" tone="tertiary" items={[`${t.certification!.claims_open} claim${t.certification!.claims_open === 1 ? '' : 's'} open`]} />
+                      <Chip size="xs" tone="warning" mono title={`${t.certification!.claims_open} claim${t.certification!.claims_open === 1 ? '' : 's'} open`}>{t.certification!.claims_open}</Chip>
                     )}
                   </Inline>
                 </TableTd>
@@ -169,6 +167,7 @@ function WhereToStart({ onSelectTeam, teamId }: { onSelectTeam: (id: string) => 
     <DataTable<RecommendationTeamGroup>
       data={groups}
       keyField={(g) => g.id}
+      size="sm"
       striped
       onRowClick={(g) => onSelectTeam(g.id)}
       // Every team with an open recommendation, program-wide — 20 is a
@@ -177,19 +176,15 @@ function WhereToStart({ onSelectTeam, teamId }: { onSelectTeam: (id: string) => 
       columns={[
         {
           key: 'name', header: 'Team',
-          render: (g) => (
-            <Stack gap="none" align="start">
-              <Button variant="ghost" size="sm" className="border-0 px-0 font-semibold text-text-primary" onClick={(e) => { e.stopPropagation(); onSelectTeam(g.id); }}>{g.name}</Button>
-              <MetaLine size="xs" tone="tertiary" items={[g.id]} />
-            </Stack>
-          ),
+          render: (g) => <T size="sm" weight="medium">{g.name}</T>,
         },
+        { key: 'id', header: 'ID', render: (g) => <T size="xs" tone="tertiary">{g.id}</T> },
         { key: 'kind', header: 'Start by', render: (g) => <Chip tone={KIND_TONE[g.top!.kind]} size="xs" dot="static">{RECOMMENDATION_KIND_LABEL[g.top!.kind]}</Chip> },
-        { key: 'dimension', header: 'Dimension', render: (g) => <MetaLine size="xs" tone="secondary" items={[g.top!.title, `dim ${g.top!.dimension_id}`]} /> },
-        { key: 'what', header: 'What it takes', render: (g) => <MetaLine size="xs" tone="secondary" items={[g.top!.headline ?? g.top!.summary ?? '—']} /> },
-        { key: 'close_claim', header: 'Close', align: 'right', render: (g) => g.counts.close_claim ?? 0 },
-        { key: 'advance', header: 'Advance', align: 'right', render: (g) => g.counts.advance ?? 0 },
-        { key: 'answer', header: 'Answer', align: 'right', render: (g) => g.counts.answer ?? 0 },
+        { key: 'dimension', header: 'Dimension', render: (g) => <T size="sm" title={`dim ${g.top!.dimension_id}`}>{g.top!.title}</T> },
+        { key: 'what', header: 'What it takes', render: (g) => { const w = g.top!.headline ?? g.top!.summary ?? '—'; return <T size="sm" title={w}>{w.length > 80 ? `${w.slice(0, 80)}…` : w}</T>; } },
+        { key: 'close_claim', header: 'Close', numeric: true, render: (g) => g.counts.close_claim ?? 0 },
+        { key: 'advance', header: 'Advance', numeric: true, render: (g) => g.counts.advance ?? 0 },
+        { key: 'answer', header: 'Answer', numeric: true, render: (g) => g.counts.answer ?? 0 },
       ]}
     />
   );
@@ -244,8 +239,8 @@ export default function ReportsPage() {
         }
         actions={
           isScoped ? (
-            <Link to="/assessment/reports" className="text-[12px] text-[var(--color-primary)] no-underline">
-              ← Portfolio
+            <Link to="/assessment/reports" className="no-underline">
+              <T size="xs" tone="primary">← Portfolio</T>
             </Link>
           ) : canPublish ? (
             <Button onClick={() => void publish()} disabled={publishing}>{publishing ? 'Publishing…' : 'Publish report'}</Button>
@@ -268,6 +263,8 @@ export default function ReportsPage() {
           {!isScoped && (
             <StatStrip
               aria-label="Portfolio summary"
+              variant="line"
+              size="sm"
               items={[
                 { label: 'Teams', value: rollup.teams_total },
                 { label: 'Dimensions assessed', value: `${rollup.dimensions_assessed} / ${rollup.dimensions_applicable}`, hint: 'of applicable' },
@@ -290,12 +287,13 @@ export default function ReportsPage() {
               <DataTable<[string, RollupResponse['by_cohort'][string]]>
                 data={Object.entries(rollup.by_cohort)}
                 keyField={([cohort]) => cohort}
+                size="sm"
                 striped
                 columns={[
                   { key: 'cohort', header: 'Cohort', render: ([cohort]) => cohort.replace('_', ' ') },
-                  { key: 'teams', header: 'Teams', align: 'right', render: ([, c]) => c.teams },
-                  { key: 'assessed', header: 'Assessed', align: 'right', render: ([, c]) => `${c.assessed} / ${c.applicable}` },
-                  { key: 'target', header: `At or above L${rollup.target_level}`, align: 'right', render: ([, c]) => c.at_or_above_target },
+                  { key: 'teams', header: 'Teams', numeric: true, render: ([, c]) => c.teams },
+                  { key: 'assessed', header: 'Assessed', numeric: true, render: ([, c]) => `${c.assessed} / ${c.applicable}` },
+                  { key: 'target', header: `At or above L${rollup.target_level}`, numeric: true, render: ([, c]) => c.at_or_above_target },
                 ]}
               />
             </PageSection>

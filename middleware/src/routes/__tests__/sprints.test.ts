@@ -9,6 +9,8 @@ const cedarAllow = { value: false };
 // write is refused before the provider is touched.
 const manageAllow = { value: true };
 
+// lib/mine.ts (the one "mine" viewer this route resolves through) reaches config through its providers.
+jest.mock('../../config.js', () => ({ config: { region: 'us-east-1', auth: { sessionSigningSecretArn: '', policyStoreId: undefined, cognito: null }, cognito: { portalOrigin: '' }, mock: { aurora: true, agentcore: true } } }));
 jest.mock('../../lib/authz.js', () => ({
   resolveSession: (req: { session?: unknown }) => req.session ?? null,
   isAllowed: jest.fn(async () => cedarAllow.value),
@@ -35,6 +37,8 @@ jest.mock('../../providers/work-items.js', () => ({ getWorkItem: jest.fn(), upda
 
 jest.mock('../../providers/identity.js', () => ({ getUser: jest.fn() }));
 jest.mock('../../providers/projects.js', () => ({ getProject: jest.fn() }));
+// The envelope read is a lazy import of bot-runner (see envelopeReader in the router).
+jest.mock('../../lib/bot-runner.js', () => ({ listActiveEnvelopes: jest.fn() }));
 
 import express, { type Request, type Response, type NextFunction } from 'express';
 import request from '../../test-support/http.js';
@@ -45,6 +49,7 @@ import { initiativeExists } from '../../providers/budgets.js';
 import { getWorkItem, updateWorkItem } from '../../providers/work-items.js';
 import { getUser } from '../../providers/identity.js';
 import { getProject } from '../../providers/projects.js';
+import { listActiveEnvelopes } from '../../lib/bot-runner.js';
 
 const listMock = listSprints as unknown as jest.Mock;
 const createSprintMock = createSprint as unknown as jest.Mock;
@@ -493,5 +498,54 @@ describe('item routes — initiative ownership scoping', () => {
     const res = await request(buildApp(leader)).patch('/api/sprints/spr-obs-s3/items').send({ workItemId: 'wi-k8s-s5' });
     expect(res.status).toBe(200);
     expect(getProjectMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('GET /api/sprints/envelopes', () => {
+  const envelopesMock = listActiveEnvelopes as unknown as jest.Mock;
+  const ENVELOPE = {
+    grantId: 'g-1', granteePersonId: 'p-004', orgProjectId: 'p-observability', orgProjectName: 'Observability Platform',
+    sprintId: 'spr-obs-s3', sprintName: 'Sprint 98', sprintStatus: 'active',
+    startsOn: '2026-08-10', endsOn: '2026-08-24', allocatedUsd: 30, attributedSpentUsd: 12.345, attributionAvailable: true,
+  };
+  beforeEach(() => { envelopesMock.mockReset(); });
+
+  it('401s without a session and never reads envelopes', async () => {
+    const res = await request(buildApp(null)).get('/api/sprints/envelopes');
+    expect(res.status).toBe(401);
+    expect(envelopesMock).not.toHaveBeenCalled();
+  });
+
+  it("reads the caller's own envelopes with spent and floored remaining money", async () => {
+    envelopesMock.mockResolvedValue([ENVELOPE, { ...ENVELOPE, grantId: 'g-2', allocatedUsd: 10, attributedSpentUsd: 14 }]);
+    const res = await request(buildApp(sme)).get('/api/sprints/envelopes');
+    expect(res.status).toBe(200);
+    expect(envelopesMock).toHaveBeenCalledWith('u-nora');
+    expect(res.body).toMatchObject({ personId: 'p-004', resolved: true, attributionAvailable: true, note: expect.stringContaining('dispatched by you') });
+    expect(res.body.envelopes[0]).toMatchObject({ grantId: 'g-1', allocatedUsd: 30, spentUsd: 12.345, remainingUsd: 17.66 });
+    // An overrun envelope has nothing left, not negative money.
+    expect(res.body.envelopes[1]).toMatchObject({ grantId: 'g-2', spentUsd: 14, remainingUsd: 0 });
+  });
+
+  it('one unattributed envelope makes the burn unknown, not zero — for every row', async () => {
+    envelopesMock.mockResolvedValue([ENVELOPE, { ...ENVELOPE, grantId: 'g-2', attributionAvailable: false, attributedSpentUsd: 0 }]);
+    const res = await request(buildApp(sme)).get('/api/sprints/envelopes');
+    expect(res.body.attributionAvailable).toBe(false);
+    expect(res.body.note).toMatch(/unknown, not zero/);
+    expect(res.body.envelopes[1]).toMatchObject({ spentUsd: null, remainingUsd: null });
+  });
+
+  it('an unresolvable caller is said to be unresolved, distinguishing "unlinked" from "read failed"', async () => {
+    envelopesMock.mockResolvedValue(null);
+    getUserMock.mockResolvedValue({ id: 'u-x', personId: null });
+    const unlinked = await request(buildApp({ sub: 'u-x', role: 'member', tenant: 'orgiq' })).get('/api/sprints/envelopes');
+    expect(unlinked.status).toBe(200);
+    expect(unlinked.body).toMatchObject({ personId: null, resolved: false, attributionAvailable: null, envelopes: [] });
+    expect(unlinked.body.reason).toMatch(/not linked to a person/);
+
+    getUserMock.mockResolvedValue({ id: 'u-nora', personId: 'p-004' });
+    const failed = await request(buildApp(sme)).get('/api/sprints/envelopes');
+    expect(failed.body).toMatchObject({ personId: 'p-004', resolved: false, envelopes: [] });
+    expect(failed.body.reason).toMatch(/could not be read/);
   });
 });

@@ -1,0 +1,414 @@
+{
+  "generator": "scripts/avatars/generate-local.mjs",
+  "note": "Photographic synthetic portraits from photos/personas.json; initials for people awaiting a photo. Legacy SVG assets are retained but are not selected by the app.",
+  "avatars": [
+    {
+      "id": "p-001",
+      "kind": "person",
+      "name": "Theo Chang",
+      "url": "/avatars/photos/p-001.jpg"
+    },
+    {
+      "id": "p-002",
+      "kind": "person",
+      "name": "Vera Green",
+      "url": "/avatars/photos/p-002.jpg"
+    },
+    {
+      "id": "p-003",
+      "kind": "person",
+      "name": "Marcus O'Brien",
+      "url": null
+    },
+    {
+      "id": "p-004",
+      "kind": "person",
+      "name": "Nora DaSilva",
+      "url": "/avatars/photos/p-004.jpg"
+    },
+    {
+      "id": "p-005",
+      "kind": "person",
+      "name": "Sienna Garcia",
+      "url": "/avatars/photos/p-005.jpg"
+    },
+    {
+      "id": "p-006",
+      "kind": "person",
+      "name": "Maria Johnson",
+      "url": null
+    },
+    {
+      "id": "p-007",
+      "kind": "person",
+      "name": "Marcus Müller",
+      "url": null
+    },
+    {
+      "id": "p-008",
+      "kind": "person",
+      "name": "Layla Hassan",
+      "url": "/avatars/photos/p-008.jpg"
+    },
+    {
+      "id": "p-009",
+      "kind": "person",
+      "name": "Marcus Shah",
+      "url": null
+    },
+    {
+      "id": "p-010",
+      "kind": "person",
+      "name": "Tara Chen",
+      "url": null
+    },
+    {
+      "id": "p-011",
+      "kind": "person",
+      "name": "Eli Garcia",
+      "url": "/avatars/photos/p-011.jpg"
+    },
+    {
+      "id": "p-012",
+      "kind": "person",
+      "name": "Rachel Kowalski",
+      "url": "/avatars/photos/p-012.jpg"
+    },
+    {
+      "id": "p-013",
+      "kind": "person",
+      "name": "Caleb Turner",
+      "url": null
+    },
+    {
+      "id": "p-014",
+      "kind": "person",
+      "name": "Sarah Singh",
+      "url": null
+    },
+    {
+      "id": "p-015",
+      "kind": "person",
+      "name": "Raj Mehta",
+      "url": null
+    },
+    {
+      "id": "p-016",
+      "kind": "person",
+      "name": "Tara Wright",
+      "url": null
+    },
+    {
+      "id": "p-017",
+      "kind": "person",
+      "name": "Daniel Chang",
+      "url": null
+    },
+    {
+      "id": "p-018",
+      "kind": "person",
+      "name": "Sarah Ahmed",
+      "url": null
+    },
+    {
+      "id": "p-019",
+      "kind": "person",
+      "name": "Lena Dubois",
+      "url": null
+    },
+    {
+      "id": "p-020",
+      "kind": "person",
+      "name": "Henry Hassan",
+      "url": null
+    },
+    {
+      "id": "p-021",
+      "kind": "person",
+      "name": "James Thompson",
+      "url": null
+    },
+    {
+      "id": "p-022",
+      "kind": "person",
+      "name": "Sarah Thompson",
+      "url": null
+    },
+    {
+      "id": "p-023",
+      "kind": "person",
+      "name": "Hiro Green",
+      "url": null
+    },
+    {
+      "id": "p-024",
+      "kind": "person",
+      "name": "Theo Williams",
+      "url": null
+    },
+    {
+      "id": "p-025",
+      "kind": "person",
+      "name": "Aisha Mehta",
+      "url": null
+    },
+    {
+      "id": "p-026",
+      "kind": "person",
+      "name": "Mateo Green",
+      "url": null
+    },
+    {
+      "id": "p-027",
+      "kind": "person",
+      "name": "Sasha Kim",
+      "url": null
+    },
+    {
+      "id": "p-028",
+      "kind": "person",
+      "name": "Theo Rivera",
+      "url": null
+    },
+    {
+      "id": "p-029",
+      "kind": "person",
+      "name": "Ezra Park",
+      "url": null
+    },
+    {
+      "id": "p-030",
+      "kind": "person",
+      "name": "Mia Singh",
+      "url": "/avatars/photos/p-030.jpg"
+    },
+    {
+      "id": "p-031",
+      "kind": "person",
+      "name": "Sasha Ahmed",
+      "url": null
+    },
+    {
+      "id": "p-032",
+      "kind": "person",
+      "name": "Nora Foster",
+      "url": null
+    },
+    {
+      "id": "p-033",
+      "kind": "person",
+      "name": "Iris Patel",
+      "url": null
+    },
+    {
+      "id": "p-034",
+      "kind": "person",
+      "name": "Asher Wright",
+      "url": null
+    },
+    {
+      "id": "p-035",
+      "kind": "person",
+      "name": "Ben Okafor",
+      "url": null
+    },
+    {
+      "id": "p-036",
+      "kind": "person",
+      "name": "David Tanaka",
+      "url": null
+    },
+    {
+      "id": "p-037",
+      "kind": "person",
+      "name": "Hugo Foster",
+      "url": null
+    },
+    {
+      "id": "p-038",
+      "kind": "person",
+      "name": "Isabel Vasquez",
+      "url": null
+    },
+    {
+      "id": "p-039",
+      "kind": "person",
+      "name": "Hugo Andersson",
+      "url": null
+    },
+    {
+      "id": "p-040",
+      "kind": "person",
+      "name": "Jordan O'Brien",
+      "url": null
+    },
+    {
+      "id": "p-041",
+      "kind": "person",
+      "name": "Vera Ahmed",
+      "url": null
+    },
+    {
+      "id": "p-042",
+      "kind": "person",
+      "name": "Vera Petrov",
+      "url": null
+    },
+    {
+      "id": "p-043",
+      "kind": "person",
+      "name": "Bria Petrov",
+      "url": null
+    },
+    {
+      "id": "p-044",
+      "kind": "person",
+      "name": "Aisha Thompson",
+      "url": null
+    },
+    {
+      "id": "p-045",
+      "kind": "person",
+      "name": "Noah Vasquez",
+      "url": null
+    },
+    {
+      "id": "p-046",
+      "kind": "person",
+      "name": "Caleb Patel",
+      "url": null
+    },
+    {
+      "id": "p-047",
+      "kind": "person",
+      "name": "Nina Rivera",
+      "url": null
+    },
+    {
+      "id": "p-048",
+      "kind": "person",
+      "name": "Lucas Kim",
+      "url": null
+    },
+    {
+      "id": "p-049",
+      "kind": "person",
+      "name": "Hiro Mancini",
+      "url": null
+    },
+    {
+      "id": "p-050",
+      "kind": "person",
+      "name": "Ava Lee",
+      "url": null
+    },
+    {
+      "id": "p-051",
+      "kind": "person",
+      "name": "Nora Chang",
+      "url": null
+    },
+    {
+      "id": "p-052",
+      "kind": "person",
+      "name": "Hugo DaSilva",
+      "url": null
+    },
+    {
+      "id": "p-053",
+      "kind": "person",
+      "name": "Rachel Turner",
+      "url": null
+    },
+    {
+      "id": "p-054",
+      "kind": "person",
+      "name": "Kevin Garcia",
+      "url": null
+    },
+    {
+      "id": "p-055",
+      "kind": "person",
+      "name": "Mia Chen",
+      "url": null
+    },
+    {
+      "id": "p-056",
+      "kind": "person",
+      "name": "Hugo Lee",
+      "url": null
+    },
+    {
+      "id": "u-operator",
+      "kind": "user",
+      "name": "Platform Operator",
+      "url": "/avatars/photos/u-operator.jpg"
+    },
+    {
+      "id": "u-hr",
+      "kind": "user",
+      "name": "Priya Desai",
+      "url": null
+    },
+    {
+      "id": "u-asha",
+      "kind": "user",
+      "name": "Asha Nair",
+      "url": "/avatars/photos/u-asha.jpg"
+    },
+    {
+      "id": "u-jonas",
+      "kind": "user",
+      "name": "Jonas Lindqvist",
+      "url": "/avatars/photos/u-jonas.jpg"
+    },
+    {
+      "id": "u-farah",
+      "kind": "user",
+      "name": "Farah Osei",
+      "url": "/avatars/photos/u-farah.jpg"
+    },
+    {
+      "id": "u-mira",
+      "kind": "user",
+      "name": "Mira Okafor",
+      "url": "/avatars/photos/u-mira.jpg"
+    },
+    {
+      "id": "u-lena",
+      "kind": "user",
+      "name": "Lena Brandt",
+      "url": "/avatars/photos/u-lena.jpg"
+    },
+    {
+      "id": "u-sana",
+      "kind": "user",
+      "name": "Sana Iqbal",
+      "url": "/avatars/photos/u-sana.jpg"
+    },
+    {
+      "id": "u-ines",
+      "kind": "user",
+      "name": "Ines Moreau",
+      "url": "/avatars/photos/u-ines.jpg"
+    },
+    {
+      "id": "u-kofi",
+      "kind": "user",
+      "name": "Kofi Mensah",
+      "url": "/avatars/photos/u-kofi.jpg"
+    },
+    {
+      "id": "u-dara",
+      "kind": "user",
+      "name": "Dara Whitfield",
+      "url": "/avatars/photos/u-dara.jpg"
+    },
+    {
+      "id": "u-tomas",
+      "kind": "user",
+      "name": "Tomás Ferreira",
+      "url": "/avatars/photos/u-tomas.jpg"
+    }
+  ]
+}

@@ -56,6 +56,9 @@ const SEEDED: Array<{ id: string; repoFullName: string; orgProjectId: string; li
   { id: '340cfae2-476d-533d-a291-49d29d3f1496', repoFullName: 'connorhoehnslalom/orgiq-zero-trust', orgProjectId: 'p-zero-trust', linkedDaysAgo: 29 },
 ];
 
+/** providerNameFor('github', 'connorhoehnslalom') — see mock/connected-sources.ts. */
+const SEEDED_CONNECTION = 'orgiq-github-connorhoehnslalom';
+
 function seedRow(s: (typeof SEEDED)[number]): AgentProject {
   return {
     id: s.id,
@@ -64,7 +67,12 @@ function seedRow(s: (typeof SEEDED)[number]): AgentProject {
     orgProjectName: null,
     owners: [],
     defaultBranch: 'main',
-    connectionName: null,
+    // Every seeded repository is private (flipped 2026-09-29) and linked
+    // through the GitHub credential — the same row schema/seed_program.sql
+    // writes (GH_CONNECTION in its generator) and the one the
+    // `connected-sources` fixture lists. Null here read as "public" on
+    // Codebases, which no initiative repo is.
+    connectionName: SEEDED_CONNECTION,
     sessionId: null,
     workspacePath: '/mnt/workspace',
     clonedAt: null,
@@ -76,7 +84,8 @@ function seedRow(s: (typeof SEEDED)[number]): AgentProject {
  * Linked codebases.
  *
  * `default` — the 14 repositories `schema/seed_program.sql` links, one per
- *             initiative, none of them cloned into a workspace yet.
+ *             initiative, all private behind the GitHub connection, none of
+ *             them cloned into a workspace yet.
  * `empty`   — the fleet exists but nothing has been linked. Declared
  *             explicitly: an undeclared scenario falls back to `default`, so an
  *             unwritten `empty` would not be empty — and this is the state the

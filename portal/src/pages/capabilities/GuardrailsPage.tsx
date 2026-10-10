@@ -27,12 +27,11 @@ import {
   TableTd,
   TableTh,
   Textarea,
-  useToast,
+  useToast, T,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch';
 import { writeJson } from '../../lib/writeJson';
-import { T } from './Text';
 import { Link } from 'react-router';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -187,7 +186,7 @@ function GuardrailsPage() {
           quietly implying it is per-role. */}
       <Banner variant="warning" data-testid="guardrails-live-banner">
         {`Changes apply immediately to the live DRAFT of ${guardrail.name}. Per-role guardrails (member, org leader, HR admin) are separate resources and are not edited here — `}
-        <Link to="/admin/capabilities" className="font-medium text-primary no-underline hover:underline">Capabilities</Link>
+        <Link to="/admin/capabilities" className="text-primary no-underline hover:underline">Capabilities</Link>
         {' lists which id each role uses.'}
       </Banner>
 
@@ -200,13 +199,14 @@ function GuardrailsPage() {
           />
           <Stack gap="md" className="px-3.5 py-3">
             <StatStrip
-              frameless
+              variant="line"
+              size="sm"
               items={[
-                { label: 'Grounding threshold', value: `${(guardrail.groundingThreshold * 100).toFixed(0)}%` },
-                { label: 'Relevance threshold', value: `${(guardrail.relevanceThreshold * 100).toFixed(0)}%` },
-                { label: 'Invocations (6h)', value: metrics?.totalInvocations ?? 0 },
-                { label: 'Interventions (6h)', value: metrics?.totalInterventions ?? 0, tone: (metrics?.totalInterventions ?? 0) > 0 ? 'danger' : 'default' },
-                { label: 'Rate (6h)', value: `${metrics?.interventionRate ?? '0.0'}%` },
+                { label: 'grounding threshold', value: `${(guardrail.groundingThreshold * 100).toFixed(0)}%` },
+                { label: 'relevance threshold', value: `${(guardrail.relevanceThreshold * 100).toFixed(0)}%` },
+                { label: 'invocations (6h)', value: metrics?.totalInvocations ?? 0 },
+                { label: 'interventions (6h)', value: metrics?.totalInterventions ?? 0, tone: (metrics?.totalInterventions ?? 0) > 0 ? 'danger' : 'default' },
+                { label: 'intervention rate (6h)', value: `${metrics?.interventionRate ?? '0.0'}%` },
               ]}
             />
             <Stack gap="xs">
@@ -220,7 +220,7 @@ function GuardrailsPage() {
         {/* PII Filters */}
         <PageSection title="PII Filters" description="Per-entity action (BLOCK | ANONYMIZE | NONE) and on/off toggle.">
           <Card padding="md" data-testid="pii-filters-card">
-            <Table>
+            <Table size="sm">
               <TableHead>
                 <TableRow>
                   <TableTh>Type</TableTh>
@@ -231,7 +231,7 @@ function GuardrailsPage() {
               <TableBody>
                 {guardrail.piiFilters.map(filter => (
                   <TableRow key={filter.type}>
-                    <TableTd className="font-medium">{filter.type}</TableTd>
+                    <TableTd >{filter.type}</TableTd>
                     <TableTd>
                       {canEdit ? (
                         <Select
@@ -243,7 +243,7 @@ function GuardrailsPage() {
                           size="sm"
                         />
                       ) : (
-                        <T className="text-xs">{filter.action}</T>
+                        <T size="xs">{filter.action}</T>
                       )}
                     </TableTd>
                     <TableTd>
@@ -336,7 +336,7 @@ function GuardrailsPage() {
               </Card>
             )}
 
-            <Table>
+            <Table size="sm">
               <TableHead>
                 <TableRow>
                   <TableTh>Topic</TableTh>
@@ -348,8 +348,8 @@ function GuardrailsPage() {
               <TableBody>
                 {guardrail.deniedTopics.map(topic => (
                   <TableRow key={topic.name} data-testid={`topic-row-${topic.name}`}>
-                    <TableTd className="whitespace-nowrap font-medium">{topic.name}</TableTd>
-                    <TableTd className="max-w-[360px] truncate text-xs text-text-secondary" title={topic.definition}>
+                    <TableTd className="whitespace-nowrap">{topic.name}</TableTd>
+                    <TableTd className="max-w-[360px] truncate text-text-secondary" title={topic.definition}>
                       {topic.definition}
                     </TableTd>
                     <TableTd>

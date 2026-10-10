@@ -91,7 +91,8 @@ import { resetRateLimits } from '../../lib/rate-limit.js';
 import { freezeClock, unfreezeClock } from '../../mock/core/index.js';
 import { _resetLocalComputeMocks } from '../../providers/local-compute.js';
 import { _resetLocalFleet } from '../../lib/local-compute-fleet.js';
-import { enqueueJob, getJob, _resetMockQueue } from '../../providers/agent-jobs.js';
+import { enqueueJob, getJob, listJobs, _resetMockQueue } from '../../providers/agent-jobs.js';
+import * as budgets from '../../providers/budgets.js';
 import { _resetLocalComputeLogs } from '../../lib/local-compute-logs.js';
 import { _resetLocalComputeNodeLogs } from '../../lib/local-compute-node-logs.js';
 import { exec } from '../../providers/aurora.js';
@@ -1959,6 +1960,18 @@ describe('handing a machine work', () => {
       // …unless the caller asks for a look anyway.
       const asked = await hand(as('member', 'u-mia'), node.nodeId, { prompt: 'summarise', requiresReview: true });
       expect((await getJob(asked.body.id))!.payload).toMatchObject({ requiresReview: true });
+    });
+
+    it('does not hand a work item to an SME machine when authoritative grant access is unavailable', async () => {
+      const node = await readyWorker({ sub: 'u-nora', label: 'nora-audit' });
+      const before = await listJobs({ limit: 1_000 });
+      const unavailable = jest.spyOn(budgets, 'listGrants').mockRejectedValueOnce(new Error('grant database unavailable'));
+      try {
+        const res = await hand(as('sme', 'u-nora'), node.nodeId, { workItemId: 'wi-auth-e2' });
+        expect(res.status).toBe(503);
+        expect(res.body.gate).toBe('grant-authorization');
+        expect(await listJobs({ limit: 1_000 })).toEqual(before);
+      } finally { unavailable.mockRestore(); }
     });
 
     it('hands a machine an initiative work item — title, prompt and origin from the item, no typed prompt', async () => {

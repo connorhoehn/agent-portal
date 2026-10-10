@@ -4,7 +4,7 @@ jest.mock('../../lib/authz.js', () => ({
   resolveSession: jest.fn(() => ({ sub: 'person', tenant: 'orgiq', role: 'member' })),
 }));
 jest.mock('../../providers/search.js', () => ({
-  SEARCH_TYPES: ['person', 'initiative', 'work', 'decision', 'knowledge', 'asset'],
+  SEARCH_TYPES: ['person', 'initiative', 'work', 'decision', 'knowledge', 'asset', 'recording'],
   SEARCH_SORTS: ['relevance', 'recent'],
   resolveSearchContext: jest.fn(async (_p, refs) => ({ records: refs, edges: [] })),
   searchRecords: jest.fn(async (_p, opts) => ({ query: opts.q, results: [], total: 0, counts: {}, related: [], edges: [] })),
@@ -42,6 +42,15 @@ test('resolves selected existing record keys outside the current search page', a
   const r = await request(app).get('/api/search/records?keys=person:nora,work:cutover');
   expect(r.status).toBe(200);
   expect(r.body.records).toEqual([{ type: 'person', id: 'nora' }, { type: 'work', id: 'cutover' }]);
+});
+test('recording filters and canonical context keys are supported with private cache control', async () => {
+  const filtered = await request(app).get('/api/search?type=recording&scope=p-observability');
+  expect(filtered.status).toBe(200);
+  expect(filtered.headers['cache-control']).toBe('private, no-store');
+  const selected = await request(app).get('/api/search/records?keys=recording:rec-native');
+  expect(selected.status).toBe(200);
+  expect(selected.body.records).toEqual([{ type: 'recording', id: 'rec-native' }]);
+  expect(selected.headers['cache-control']).toBe('private, no-store');
 });
 test.each(['unknown:id', 'person:', 'missingtype'])('rejects malformed record key %s', async key => {
   expect((await request(app).get(`/api/search/records?keys=${key}`)).status).toBe(400);

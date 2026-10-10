@@ -1,0 +1,72 @@
+✖ losing a subscriber connection permanently removes both leased BFFs from health admission (12.099542ms)
+✖ retirement after peer connection loss preserves page ownership and both users' huddle history (2312.084417ms)
+✖ a stalled Redis command path fences health within its bounded renewal deadline (1653.391417ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 0
+ℹ fail 3
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4186.710334
+
+✖ failing tests:
+
+test at test-support/bff-cluster-redis-failures.mjs:33:1
+✖ losing a subscriber connection permanently removes both leased BFFs from health admission (12.099542ms)
+  Error: Command failed: docker inspect orgiq-bff-cluster-redis
+  Cannot connect to the Docker daemon at unix:///Users/connorhoehn/.colima/default/docker.sock. Is the docker daemon running?
+  
+      at genericNodeError (node:internal/errors:998:15)
+      at wrappedFn (node:internal/errors:543:14)
+      at ChildProcess.exithandler (node:child_process:417:12)
+      at ChildProcess.emit (node:events:509:20)
+      at maybeClose (node:internal/child_process:1108:16)
+      at ChildProcess._handle.onexit (node:internal/child_process:305:5) {
+    code: 1,
+    killed: false,
+    signal: null,
+    cmd: 'docker inspect orgiq-bff-cluster-redis',
+    stdout: '[]\n',
+    stderr: 'Cannot connect to the Docker daemon at unix:///Users/connorhoehn/.colima/default/docker.sock. Is the docker daemon running?\n'
+  }
+
+test at test-support/bff-cluster-redis-failures.mjs:49:1
+✖ retirement after peer connection loss preserves page ownership and both users' huddle history (2312.084417ms)
+  Error: Command failed: docker inspect orgiq-bff-cluster-redis
+  Cannot connect to the Docker daemon at unix:///Users/connorhoehn/.colima/default/docker.sock. Is the docker daemon running?
+  
+      at genericNodeError (node:internal/errors:998:15)
+      at wrappedFn (node:internal/errors:543:14)
+      at ChildProcess.exithandler (node:child_process:417:12)
+      at ChildProcess.emit (node:events:509:20)
+      at maybeClose (node:internal/child_process:1108:16)
+      at Socket.<anonymous> (node:internal/child_process:480:11)
+      at Socket.emit (node:events:509:20)
+      at Pipe.<anonymous> (node:net:350:12) {
+    code: 1,
+    killed: false,
+    signal: null,
+    cmd: 'docker inspect orgiq-bff-cluster-redis',
+    stdout: '[]\n',
+    stderr: 'Cannot connect to the Docker daemon at unix:///Users/connorhoehn/.colima/default/docker.sock. Is the docker daemon running?\n'
+  }
+
+test at test-support/bff-cluster-redis-failures.mjs:88:1
+✖ a stalled Redis command path fences health within its bounded renewal deadline (1653.391417ms)
+  Error: Command failed: docker inspect orgiq-bff-cluster-redis
+  Cannot connect to the Docker daemon at unix:///Users/connorhoehn/.colima/default/docker.sock. Is the docker daemon running?
+  
+      at genericNodeError (node:internal/errors:998:15)
+      at wrappedFn (node:internal/errors:543:14)
+      at ChildProcess.exithandler (node:child_process:417:12)
+      at ChildProcess.emit (node:events:509:20)
+      at maybeClose (node:internal/child_process:1108:16)
+      at ChildProcess._handle.onexit (node:internal/child_process:305:5) {
+    code: 1,
+    killed: false,
+    signal: null,
+    cmd: 'docker inspect orgiq-bff-cluster-redis',
+    stdout: '[]\n',
+    stderr: 'Cannot connect to the Docker daemon at unix:///Users/connorhoehn/.colima/default/docker.sock. Is the docker daemon running?\n'
+  }

@@ -1,0 +1,1758 @@
+{
+ "measured": {
+  "sourceDigest": "95f885bbdd1322e19464db981b137478d9f6d4c0e9f92aae2fbc3bd85dc9efbf",
+  "at": "2026-10-08T12:24:10.083Z"
+ },
+ "routes": {
+  "/admin/bots": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale content 10/400",
+     "scale content 11/400",
+     "scale rail 11/600",
+     "scale rail 13/500"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/admin/bots/:id": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale content 10/500",
+     "scale content 10/600",
+     "scale content 11/400",
+     "scale content 11/700",
+     "scale content 13/400",
+     "scale content 18/400",
+     "scale rail 11/600",
+     "scale rail 13/500"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/admin/budgets": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale rail 11/600",
+     "scale rail 13/500"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/admin/capabilities": {
+   "value": {
+    "title": "20/600",
+    "offenders": []
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/admin/changes": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale content 11/400",
+     "scale content 11/700",
+     "scale rail 11/600",
+     "scale rail 13/500"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/admin/devbox": {
+   "value": {
+    "title": null,
+    "offenders": [
+     "scale content 11/400",
+     "scale content 12.5/400",
+     "scale content 12.5/600",
+     "scale content 12.5/700",
+     "scale content 16/400",
+     "scale content 9/400"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/admin/identity": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale content 10/600",
+     "scale rail 11/600",
+     "scale rail 13/500"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/admin/identity/roles": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale content 10/600",
+     "scale rail 11/600",
+     "scale rail 13/500"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/admin/identity/test": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale rail 11/600",
+     "scale rail 13/500"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/admin/identity/users": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale rail 11/600",
+     "scale rail 13/500"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/admin/ingest/crawl": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale content 11/400",
+     "scale content 11/700",
+     "scale rail 11/600",
+     "scale rail 13/500"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/admin/ingest/history": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale rail 11/600",
+     "scale rail 13/500"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/admin/ingest/schedules": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale rail 11/600",
+     "scale rail 13/500"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/admin/ingest/sources": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale rail 11/600",
+     "scale rail 13/500"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/admin/ingest/storage": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale rail 11/600",
+     "scale rail 13/500"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/admin/knowledge": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale content 11/400",
+     "scale content 11/700",
+     "scale content 13/400",
+     "scale content 13/700",
+     "scale rail 11/600",
+     "scale rail 13/500"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/admin/observability": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "above-title content 24/700",
+     "scale content 10/600",
+     "scale content 11/400",
+     "scale content 11/700",
+     "scale content 17/700",
+     "scale content 24/700",
+     "scale rail 11/600",
+     "scale rail 13/500",
+     "title-scale content 24/700"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/admin/observability/agents": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale rail 11/600",
+     "scale rail 13/500"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/admin/observability/approvals": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale rail 11/600",
+     "scale rail 13/500"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/admin/observability/authz": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale content 11/400",
+     "scale content 11/700",
+     "scale rail 11/600",
+     "scale rail 13/500"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/admin/observability/calibration": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "actions content size=md",
+     "scale content 11/400",
+     "scale rail 11/600",
+     "scale rail 13/500"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/admin/observability/capability-events": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale rail 11/600",
+     "scale rail 13/500"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/admin/observability/cost": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "grows content 12/700 in 11/700",
+     "scale content 11/400",
+     "scale content 11/700",
+     "scale rail 11/600",
+     "scale rail 13/500"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/admin/observability/drift": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale content 11/400",
+     "scale rail 11/600",
+     "scale rail 13/500"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/admin/observability/guardrail-rules": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale rail 11/600",
+     "scale rail 13/500"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/admin/observability/harness": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "grows content 14/600 in 12/400",
+     "scale content 16/400",
+     "scale rail 11/600",
+     "scale rail 13/500"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/admin/observability/invocations": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "grows content 12/400 in 11/700",
+     "scale content 11/700",
+     "scale content 13/400",
+     "scale rail 11/600",
+     "scale rail 13/500"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/admin/observability/invocations/search": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale rail 11/600",
+     "scale rail 13/500"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/admin/observability/memory": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale rail 11/600",
+     "scale rail 13/500"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/admin/observability/model-compare": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale content 16/400",
+     "scale rail 11/600",
+     "scale rail 13/500"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/admin/observability/oncall": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale content 11/400",
+     "scale rail 11/600",
+     "scale rail 13/500"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/admin/observability/quality": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale content 11/700",
+     "scale rail 11/600",
+     "scale rail 13/500"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/admin/observability/sessions": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale rail 11/600",
+     "scale rail 13/500"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/admin/observability/summary": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "above-title content 24/700",
+     "scale content 10/600",
+     "scale content 11/400",
+     "scale content 11/700",
+     "scale content 17/700",
+     "scale content 24/700",
+     "scale rail 11/600",
+     "scale rail 13/500",
+     "title-scale content 24/700"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/admin/observability/tools": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale rail 11/600",
+     "scale rail 13/500"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/admin/observability/traffic": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale content 11/400",
+     "scale rail 11/600",
+     "scale rail 13/500"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/admin/projects": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale content 11/400"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/assessment": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale content 10/400",
+     "scale content 11/400"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/assessment/activity": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale content 10/400",
+     "scale content 10/600",
+     "scale content 11/400",
+     "scale content 11/600"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/assessment/communication": {
+   "value": {
+    "title": "14/600",
+    "offenders": [
+     "above-title content 20/600",
+     "scale content 11/400",
+     "scale rail 11/400",
+     "scale rail 11/600",
+     "scale rail 13/400",
+     "scale rail 13/500",
+     "scale rail 13/600",
+     "scale rail 15/600",
+     "title-scale content 20/600"
+    ]
+   },
+   "changedAt": "2026-10-08T12:12:22.405Z"
+  },
+  "/assessment/communication/channels/:slug": {
+   "value": {
+    "title": "14/600",
+    "offenders": [
+     "above-title content 20/600",
+     "scale content 11/700",
+     "scale rail 11/400",
+     "scale rail 11/600",
+     "scale rail 13/400",
+     "scale rail 13/500",
+     "scale rail 13/600",
+     "scale rail 15/600",
+     "title-scale content 20/600"
+    ]
+   },
+   "changedAt": "2026-10-08T12:12:22.405Z"
+  },
+  "/assessment/configuration": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "title-scale content 20/600"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/assessment/decks": {
+   "value": {
+    "title": "20/600",
+    "offenders": []
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/assessment/decks/:deckId": {
+   "value": {
+    "title": "20/700",
+    "offenders": [
+     "scale content 11/400",
+     "scale content 13/400"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/assessment/enterprise": {
+   "value": {
+    "title": "20/700",
+    "offenders": [
+     "scale content 10/400",
+     "scale content 13/400",
+     "scale content 13/500",
+     "scale content 16/400",
+     "scale content 16/600",
+     "scale rail 11/600",
+     "scale rail 13/500",
+     "siblings content 40|22"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/assessment/feedback": {
+   "value": {
+    "title": "20/600",
+    "offenders": []
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/assessment/prompts": {
+   "value": {
+    "title": "20/700",
+    "offenders": [
+     "scale content 10/400",
+     "scale content 11/400",
+     "scale content 13/400",
+     "scale content 13/500",
+     "scale content 13/600",
+     "scale content 16/400",
+     "scale content 16/600",
+     "scale rail 11/600",
+     "scale rail 13/500",
+     "siblings content 40|22|22|22"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/assessment/reports": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "actions content size=md",
+     "scale content 11/400",
+     "title-scale content 20/600"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/assessment/rules": {
+   "value": {
+    "title": "20/700",
+    "offenders": [
+     "scale content 10/400",
+     "scale content 13/400",
+     "scale content 13/500",
+     "scale content 16/400",
+     "scale content 16/600",
+     "scale rail 11/600",
+     "scale rail 13/500"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/assessment/runs": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale content 11/400",
+     "scale content 16/400",
+     "title-scale content 20/600"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/assessment/submissions": {
+   "value": {
+    "title": "20/600",
+    "offenders": []
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/assessment/teams": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale content 10/400",
+     "scale content 11/400"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/assessment/teams/:teamId": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "actions content 16/600",
+     "scale content 10/400",
+     "scale content 10/600",
+     "scale content 11/400",
+     "scale content 11/700",
+     "scale content 16/400",
+     "scale content 16/600",
+     "scale content 18/700",
+     "siblings content 12|16"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/assessment/workspace": {
+   "value": {
+    "title": "20/700",
+    "offenders": [
+     "scale content 10/400",
+     "scale content 11/400",
+     "scale content 13/400",
+     "scale content 13/500",
+     "scale content 13/600",
+     "scale content 16/400",
+     "scale content 16/600",
+     "scale rail 11/600",
+     "scale rail 13/500",
+     "siblings content 40|22|22"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/iq": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale content 10/400",
+     "scale content 11/400",
+     "scale content 11/700",
+     "scale content 13/400",
+     "scale rail 11/600",
+     "scale rail 13/500"
+    ]
+   },
+   "changedAt": "2026-10-08T12:12:22.405Z"
+  },
+  "/iq/activity": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale content 10/400",
+     "scale content 10/600",
+     "scale content 11/400",
+     "scale content 11/600"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/iq/agents": {
+   "value": {
+    "title": null,
+    "offenders": [
+     "scale content 10.5/400",
+     "scale content 10/400",
+     "scale content 10/600",
+     "scale content 10/700",
+     "scale content 11/400",
+     "scale content 11/600",
+     "scale content 13/700",
+     "scale content 17/700",
+     "scale content 9/400"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/iq/agents/:agentId": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale content 10/600",
+     "scale content 11/400",
+     "scale content 11/600",
+     "scale content 13/400",
+     "scale content 17/700"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/iq/canary": {
+   "value": {
+    "title": null,
+    "offenders": [
+     "scale content 10.5/400",
+     "scale content 10/400",
+     "scale content 11/400",
+     "scale content 11/600",
+     "scale content 11/700",
+     "scale content 12.5/400",
+     "scale content 22/700",
+     "scale content 9/400",
+     "scale content 9/700",
+     "scale rail 11/600",
+     "scale rail 13/500",
+     "title-scale content 22/700"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/iq/communication": {
+   "value": {
+    "title": "14/600",
+    "offenders": [
+     "above-title content 20/600",
+     "scale content 11/400",
+     "scale rail 11/400",
+     "scale rail 11/600",
+     "scale rail 13/500",
+     "scale rail 13/600",
+     "scale rail 15/600",
+     "title-scale content 20/600"
+    ]
+   },
+   "changedAt": "2026-10-08T12:12:22.405Z"
+  },
+  "/iq/communication · no grant (u-hr)": {
+   "value": {
+    "title": "20/600",
+    "offenders": []
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/iq/communication/channels/:slug": {
+   "value": {
+    "title": "14/600",
+    "offenders": [
+     "above-title content 20/600",
+     "scale content 11/700",
+     "scale rail 11/400",
+     "scale rail 11/600",
+     "scale rail 13/500",
+     "scale rail 13/600",
+     "scale rail 15/600",
+     "title-scale content 20/600"
+    ]
+   },
+   "changedAt": "2026-10-08T12:12:22.405Z"
+  },
+  "/iq/decisions/:id": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale content 10/400",
+     "scale content 11/400",
+     "scale content 13/600",
+     "scale rail 11/500",
+     "scale rail 11/600",
+     "scale rail 13/400",
+     "scale rail 13/500",
+     "scale rail 13/600",
+     "siblings rail 11|16"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/iq/decks/:deckId": {
+   "value": {
+    "title": null,
+    "offenders": [
+     "scale content 13/400",
+     "scale content 17/600",
+     "scale content 52/400",
+     "title-scale content 52/400"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/iq/designs": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale content 11/400",
+     "scale content 11/600",
+     "scale content 13/600",
+     "scale rail 11/600",
+     "scale rail 13/500"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/iq/designs?nav=section": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale content 11/400",
+     "scale content 11/600",
+     "scale content 13/600",
+     "scale rail 11/600",
+     "scale rail 13/500"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/iq/designs/:id": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale content 10.5/400",
+     "scale content 11/400",
+     "scale content 11/600",
+     "scale content 11/700",
+     "scale content 12.5/500",
+     "scale content 13/400",
+     "scale content 18/400",
+     "scale rail 11/500",
+     "scale rail 11/600",
+     "scale rail 13/500",
+     "siblings rail 11|16",
+     "title-scale content 20/600"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/iq/diff": {
+   "value": {
+    "title": null,
+    "offenders": [
+     "scale content 11/700",
+     "scale content 13/400",
+     "scale content 18/600",
+     "scale content 52/400",
+     "scale rail 11/600",
+     "scale rail 13/500",
+     "title-scale content 52/400"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/iq/distillation/activity": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale content 10/600",
+     "scale content 11/400",
+     "scale content 13/400",
+     "scale content 13/700",
+     "scale content 17/700",
+     "scale rail 11/500",
+     "scale rail 11/600",
+     "scale rail 13/500",
+     "siblings rail 12|16"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/iq/distillation/activity?view=graph": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "above-title content 24/700",
+     "scale content 10/600",
+     "scale content 11/400",
+     "scale content 13/400",
+     "scale content 13/700",
+     "scale content 15/400",
+     "scale content 17/700",
+     "scale content 24/700",
+     "scale rail 11/600",
+     "scale rail 13/500",
+     "title-scale content 24/700"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/iq/distillation/knowledge": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale content 13/400",
+     "scale content 13/500",
+     "scale content 18/600",
+     "scale rail 11/500",
+     "scale rail 11/600",
+     "scale rail 13/400",
+     "scale rail 13/500",
+     "siblings rail 11|16"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/iq/distillation/knowledge?item=": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "above-title content 26/600",
+     "scale content 10/600",
+     "scale content 13/400",
+     "scale content 13/500",
+     "scale content 15/400",
+     "scale content 18/700",
+     "scale content 26/600",
+     "scale rail 11/500",
+     "scale rail 11/600",
+     "scale rail 13/400",
+     "scale rail 13/500",
+     "siblings content 10|18",
+     "siblings rail 11|16",
+     "title-scale content 26/600"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/iq/distillation/knowledge?nav=distillation": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale content 10/600",
+     "scale content 11/400",
+     "scale content 11/500",
+     "scale content 11/600",
+     "scale content 13/500",
+     "scale content 16/600",
+     "scale content 17/700",
+     "scale rail 11/600",
+     "scale rail 13/500"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/iq/distillation/knowledge?view=notes": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale content 13/400",
+     "scale content 13/500",
+     "scale content 18/600",
+     "scale rail 11/500",
+     "scale rail 11/600",
+     "scale rail 13/400",
+     "scale rail 13/500",
+     "siblings rail 11|16"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/iq/distillation/review": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale content 10/600",
+     "scale content 11/400",
+     "scale content 15/400",
+     "scale content 16/600",
+     "scale content 17/700",
+     "scale rail 11/500",
+     "scale rail 11/600",
+     "scale rail 13/400",
+     "scale rail 13/500",
+     "siblings rail 11|16"
+    ]
+   },
+   "changedAt": "2026-10-08T12:12:22.405Z"
+  },
+  "/iq/distillation/review?sample=": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale content 10/600",
+     "scale content 11/400",
+     "scale content 15/400",
+     "scale content 16/600",
+     "scale content 17/700",
+     "scale rail 11/500",
+     "scale rail 11/600",
+     "scale rail 13/400",
+     "scale rail 13/500",
+     "siblings rail 11|16"
+    ]
+   },
+   "changedAt": "2026-10-08T12:12:22.405Z"
+  },
+  "/iq/distillation/review?view=promotions": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale rail 11/500",
+     "scale rail 11/600",
+     "scale rail 13/500",
+     "siblings rail 11|16"
+    ]
+   },
+   "changedAt": "2026-10-08T12:12:22.405Z"
+  },
+  "/iq/documents/:documentId": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale content 13/600"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/iq/evaluations": {
+   "value": {
+    "title": null,
+    "offenders": [
+     "scale content 11/700",
+     "scale content 13/400",
+     "scale content 16/400",
+     "scale content 18/600",
+     "scale rail 11/600",
+     "scale rail 13/500"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/iq/history": {
+   "value": {
+    "title": null,
+    "offenders": [
+     "scale content 13/400",
+     "scale content 18/600",
+     "scale rail 11/600",
+     "scale rail 13/500"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/iq/library": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale content 11/600",
+     "scale content 13/400",
+     "scale content 13/600",
+     "scale rail 11/600",
+     "scale rail 13/500"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/iq/library?nav=section": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale content 11/600",
+     "scale content 13/400",
+     "scale content 13/600",
+     "scale rail 11/600",
+     "scale rail 13/500"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/iq/library/:assetId": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale content 10/600",
+     "scale content 11/400",
+     "scale content 13/600",
+     "scale content 16/400",
+     "scale rail 11/500",
+     "scale rail 11/600",
+     "scale rail 13/500",
+     "siblings rail 11|16",
+     "title-scale content 20/600"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/iq/local-compute": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale content 10/400",
+     "scale content 10/600",
+     "scale content 11/400",
+     "scale content 11/600",
+     "scale rail 11/600",
+     "scale rail 13/500"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/iq/local-compute/configuration": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale content 11/600",
+     "scale content 13/400",
+     "scale content 13/500",
+     "scale rail 11/600",
+     "scale rail 13/500"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/iq/projects": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale content 10/400",
+     "scale content 11/400",
+     "scale content 13/600",
+     "scale rail 11/500",
+     "scale rail 11/600",
+     "scale rail 13/400",
+     "scale rail 13/500",
+     "scale rail 13/600",
+     "siblings rail 11|16"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/iq/projects?nav=section": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale content 10/400",
+     "scale content 11/400",
+     "scale content 13/600",
+     "scale rail 11/500",
+     "scale rail 11/600",
+     "scale rail 13/400",
+     "scale rail 13/500",
+     "scale rail 13/600",
+     "siblings rail 11|16"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/iq/projects/:id": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "actions content 16/600",
+     "scale content 11/600",
+     "scale content 16/600",
+     "scale rail 11/500",
+     "scale rail 11/600",
+     "scale rail 13/400",
+     "scale rail 13/500",
+     "scale rail 13/600",
+     "siblings rail 12|16"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/iq/projects/:id?item=": {
+   "value": {
+    "title": "26/600",
+    "offenders": [
+     "scale content 11/400",
+     "scale content 13/400",
+     "scale content 13/600",
+     "scale content 15/400",
+     "scale content 15/600",
+     "scale content 16/600",
+     "scale content 18/600",
+     "scale content 19/600",
+     "scale content 26/600",
+     "scale rail 13/400",
+     "scale rail 13/500",
+     "scale rail 15/600",
+     "scale rail 16/600",
+     "siblings content 16|16|14"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/iq/prompt-ops": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale rail 11/600",
+     "scale rail 13/500"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/iq/prompts": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale content 11/400",
+     "scale content 11/700",
+     "scale content 13/400",
+     "scale content 13/600",
+     "scale content 18/400",
+     "scale rail 11/600",
+     "scale rail 13/500"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/iq/runs": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale content 11/400"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/iq/runs/:id": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale content 10/500",
+     "scale content 10/600",
+     "scale content 11/400",
+     "scale content 11/700",
+     "scale content 13/400",
+     "scale content 18/400"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/iq/scores": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale content 11/400",
+     "scale rail 11/600",
+     "scale rail 13/500"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/iq/scores/cohorts": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale content 11/400",
+     "scale content 11/700",
+     "scale rail 11/600",
+     "scale rail 13/500"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/iq/scores/compare": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale content 11/400",
+     "scale rail 11/600",
+     "scale rail 13/500"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/iq/search": {
+   "value": {
+    "title": "18/600",
+    "offenders": [
+     "actions content 16/600",
+     "actions content 47px tall",
+     "scale content 11/400",
+     "scale content 13/400",
+     "scale content 13/500",
+     "scale content 16/600",
+     "scale content 18/600",
+     "scale rail 11/600",
+     "scale rail 13/500",
+     "scale rail 13/600",
+     "siblings rail 12|11"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/iq/work": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale content 10/400",
+     "scale content 11/400",
+     "scale content 11/700",
+     "scale content 13/400",
+     "scale rail 11/600",
+     "scale rail 13/500"
+    ]
+   },
+   "changedAt": "2026-10-08T12:12:22.405Z"
+  },
+  "/iq/work/:jobId": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale content 11/700",
+     "scale content 13/400",
+     "scale rail 11/600",
+     "scale rail 13/500"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/iq/work/changes": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale content 13/400",
+     "scale content 18/600",
+     "scale rail 11/600",
+     "scale rail 13/500"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/iq/work/findings": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale content 11/400",
+     "scale content 12.5/600",
+     "scale content 13/600",
+     "scale rail 11/600",
+     "scale rail 13/500"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/iq/work/queue": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale content 11/400",
+     "scale content 12.5/500",
+     "scale content 13/600",
+     "scale rail 11/600",
+     "scale rail 13/500"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/pipelines": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale content 11/400"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/pipelines/activity": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale content 10/400",
+     "scale content 10/600",
+     "scale content 11/400",
+     "scale content 11/600"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/pipelines/agents": {
+   "value": {
+    "title": "20/600",
+    "offenders": []
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/pipelines/approvals": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale content 11/400"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/pipelines/artifacts": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale content 11/400"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/pipelines/bots": {
+   "value": {
+    "title": "20/600",
+    "offenders": []
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/pipelines/commands": {
+   "value": {
+    "title": "20/600",
+    "offenders": []
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/pipelines/communication": {
+   "value": {
+    "title": "14/600",
+    "offenders": [
+     "above-title content 20/600",
+     "scale content 11/400",
+     "scale rail 11/400",
+     "scale rail 11/600",
+     "scale rail 13/400",
+     "scale rail 13/500",
+     "scale rail 13/600",
+     "scale rail 15/600",
+     "title-scale content 20/600"
+    ]
+   },
+   "changedAt": "2026-10-08T12:12:22.405Z"
+  },
+  "/pipelines/communication · no grant (u-kofi)": {
+   "value": {
+    "title": "20/600",
+    "offenders": []
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/pipelines/communication/channels/:slug": {
+   "value": {
+    "title": "14/600",
+    "offenders": [
+     "above-title content 20/600",
+     "scale content 11/700",
+     "scale rail 11/400",
+     "scale rail 11/600",
+     "scale rail 13/400",
+     "scale rail 13/500",
+     "scale rail 13/600",
+     "scale rail 15/600",
+     "title-scale content 20/600"
+    ]
+   },
+   "changedAt": "2026-10-08T12:12:22.405Z"
+  },
+  "/pipelines/configuration": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale content 13/400",
+     "title-scale content 20/600"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/pipelines/decks/:deckId": {
+   "value": {
+    "title": null,
+    "offenders": [
+     "scale content 13/400",
+     "scale content 17/600",
+     "scale content 52/400",
+     "title-scale content 52/400"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/pipelines/definitions": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale content 11/400"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/pipelines/runbooks": {
+   "value": {
+    "title": "20/600",
+    "offenders": []
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/pipelines/runs": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale content 11/400"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/pipelines/runs/:id": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale content 10/400",
+     "scale content 10/500",
+     "scale content 10/600",
+     "scale content 11/400",
+     "scale content 11/500",
+     "scale content 13/400",
+     "scale content 18/400"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/pipelines/settings": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale content 16/400",
+     "scale content 18/600"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/settings": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale content 11/500",
+     "scale content 11/700",
+     "scale content 13/400",
+     "scale content 13/500"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/social": {
+   "value": {
+    "title": null,
+    "offenders": [
+     "scale rail 11/400",
+     "scale rail 11/600",
+     "scale rail 13/500",
+     "scale rail 13/600",
+     "scale rail 15/600"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/social/calls": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale content 11/600",
+     "scale rail 11/400",
+     "scale rail 11/600",
+     "scale rail 13/500",
+     "scale rail 13/600",
+     "scale rail 15/600"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/social/channels": {
+   "value": {
+    "title": null,
+    "offenders": [
+     "scale rail 11/400",
+     "scale rail 11/600",
+     "scale rail 13/500",
+     "scale rail 13/600",
+     "scale rail 15/600"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/social/channels/:slug": {
+   "value": {
+    "title": null,
+    "offenders": [
+     "scale content 11/400",
+     "scale rail 11/400",
+     "scale rail 11/600",
+     "scale rail 13/500",
+     "scale rail 13/600",
+     "scale rail 15/600",
+     "title-scale content 20/600"
+    ]
+   },
+   "changedAt": "2026-10-08T12:12:22.405Z"
+  },
+  "/social/configuration": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale content 11/600",
+     "scale content 13/400",
+     "title-scale content 20/600"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/social/contacts": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale content 11/600",
+     "title-scale content 20/600"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/social/decks/:deckId": {
+   "value": {
+    "title": null,
+    "offenders": [
+     "scale content 13/400",
+     "scale content 17/600",
+     "scale content 52/400",
+     "title-scale content 52/400"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/social/dms": {
+   "value": {
+    "title": null,
+    "offenders": [
+     "scale rail 11/400",
+     "scale rail 11/600",
+     "scale rail 13/500",
+     "scale rail 13/600",
+     "scale rail 15/600"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/social/dms/:lobby": {
+   "value": {
+    "title": null,
+    "offenders": [
+     "scale rail 11/400",
+     "scale rail 11/600",
+     "scale rail 13/500",
+     "scale rail 13/600",
+     "scale rail 15/600",
+     "title-scale content 20/600"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/social/profile": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale content 16/400",
+     "scale content 18/600"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/social/recordings": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale content 16/400",
+     "scale content 18/600",
+     "scale rail 11/400",
+     "scale rail 11/600",
+     "scale rail 13/500",
+     "scale rail 13/600",
+     "scale rail 15/600"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/social/rooms": {
+   "value": {
+    "title": null,
+    "offenders": [
+     "scale content 16/400",
+     "scale content 18/600",
+     "scale rail 11/400",
+     "scale rail 11/600",
+     "scale rail 13/500",
+     "scale rail 13/600",
+     "scale rail 15/600"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/social/settings": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale content 16/400",
+     "scale content 18/600"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/social/teams": {
+   "value": {
+    "title": null,
+    "offenders": [
+     "scale rail 11/400",
+     "scale rail 11/600",
+     "scale rail 13/400",
+     "scale rail 13/500",
+     "scale rail 13/600",
+     "scale rail 15/600"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "/social/work-graph": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale content 10/400",
+     "scale content 10/600",
+     "scale content 11/400",
+     "scale content 11/600"
+    ]
+   },
+   "changedAt": "2026-10-08T12:12:22.405Z"
+  },
+  "assessment · primary rail": {
+   "value": {
+    "title": null,
+    "offenders": [
+     "scale primary 11/600",
+     "scale primary 13/500"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "orgiq · primary rail": {
+   "value": {
+    "title": null,
+    "offenders": [
+     "scale primary 11/600",
+     "scale primary 13/500"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "pipelines · primary rail": {
+   "value": {
+    "title": null,
+    "offenders": [
+     "scale primary 11/600",
+     "scale primary 13/500"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  },
+  "social · primary rail": {
+   "value": {
+    "title": null,
+    "offenders": [
+     "scale primary 11/600",
+     "scale primary 13/500"
+    ]
+   },
+   "changedAt": "2026-10-08T09:34:19.909Z"
+  }
+ }
+}

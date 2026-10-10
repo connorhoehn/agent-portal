@@ -60,8 +60,18 @@ export interface ReceiveOptions {
   waitSeconds?: number;
 }
 
+export interface QueueSnapshot {
+  ready: number | null;
+  inFlight: number | null;
+  delayed: number | null;
+  visibilityTimeoutSeconds: number | null;
+  fifo: boolean | null;
+}
+
 export interface MessageQueue {
   readonly backend: 'memory' | 'http';
+  /** Metadata only: never receives, leases, acknowledges or creates messages. */
+  inspect?(queue: string): Promise<QueueSnapshot | null>;
   ensureQueue(def: QueueDefinition): Promise<void>;
   send(queue: string, body: string, opts?: SendOptions): Promise<{ message_id: string }>;
   receive(queue: string, opts?: ReceiveOptions): Promise<QueueMessage[]>;
@@ -112,11 +122,12 @@ export class HttpMessageQueue implements MessageQueue {
     };
   }
 
-  private async call<T>(method: string, path: string, payload?: unknown, okStatuses: number[] = []): Promise<{ status: number; body: T }> {
+  private async call<T>(method: string, path: string, payload?: unknown, okStatuses: number[] = [], signal?: AbortSignal): Promise<{ status: number; body: T }> {
     const target = `${API}${path}`;
     const body = payload === undefined ? '' : JSON.stringify(payload);
     const res = await this.fetchImpl(`${this.base}${target}`, {
       method,
+      ...(signal ? { signal } : {}),
       headers: {
         ...(payload === undefined ? {} : { 'content-type': 'application/json' }),
         ...this.authHeaders(method, target, body),
@@ -129,6 +140,23 @@ export class HttpMessageQueue implements MessageQueue {
       throw new MessageQueueError(`message-queue ${method} ${target} → ${res.status} ${text.slice(0, 200)}`, res.status);
     }
     return { status: res.status, body: parsed };
+  }
+
+  async inspect(queue: string): Promise<QueueSnapshot | null> {
+    const { status, body } = await this.call<{ attributes?: Record<string, unknown> }>(
+      'GET', `/queues/${encodeURIComponent(queue)}/attributes`, undefined, [404], AbortSignal.timeout(4000));
+    if (status === 404) return null;
+    const attrs = body.attributes;
+    if (!attrs || typeof attrs !== 'object') throw new Error('Queue attributes unavailable');
+    const count = (key: string): number | null => {
+      const raw = attrs[key];
+      if (typeof raw !== 'number' && (typeof raw !== 'string' || !/^\d+$/.test(raw))) return null;
+      const value = Number(raw);
+      return Number.isSafeInteger(value) && value >= 0 ? value : null;
+    };
+    return { ready: count('ApproximateNumberOfMessages'), inFlight: count('ApproximateNumberOfMessagesNotVisible'), delayed: count('ApproximateNumberOfMessagesDelayed'),
+      visibilityTimeoutSeconds: count('VisibilityTimeout'), fifo: attrs.FifoQueue === 'true' || attrs.FifoQueue === true ? true
+        : attrs.FifoQueue === 'false' || attrs.FifoQueue === false ? false : null };
   }
 
   async ensureQueue(def: QueueDefinition): Promise<void> {

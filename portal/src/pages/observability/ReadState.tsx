@@ -20,7 +20,7 @@ export function RowEmpty({ text, degraded }: { text: string; degraded?: string |
     );
   }
   return (
-    <InlinePlaceholder align="center" className="p-6 text-[12px]">
+    <InlinePlaceholder align="center" className="text-xs p-6">
       {text}
     </InlinePlaceholder>
   );

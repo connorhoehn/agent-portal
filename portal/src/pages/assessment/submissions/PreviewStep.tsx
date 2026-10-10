@@ -4,7 +4,7 @@
 // hand-rolled table.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Button, Checkbox, Chip, DataTable, InlineAlert, MetaLine, Select, Stack, Toolbar, ToolbarGroup, ToolbarLabel } from '@connorhoehnslalom/ui-components/shared';
+import { Button, Checkbox, Chip, DataTable, InlineAlert, MetaLine, Select, Stack, T, Toolbar, ToolbarGroup, ToolbarLabel } from '@connorhoehnslalom/ui-components/shared';
 import { formatRelativeTime, resolveRowStatusDisplay } from '../secondaryFormat';
 import type { CommitResponse, CommitSelection, ParsedRow, ParseResponse, TeamOption } from '../secondaryTypes';
 import { useCapabilities } from '../../../lib/capabilities';
@@ -98,6 +98,7 @@ export default function PreviewStep({ parse, onCommitted, onBack }: PreviewStepP
       <DataTable<ParsedRow>
         data={parse.rows}
         keyField={(row) => String(row.row_index)}
+        size="sm"
         striped
         emptyMessage="No data rows found in this file."
         // A bulk form export can carry far more rows than a screen — 25
@@ -117,7 +118,7 @@ export default function PreviewStep({ parse, onCommitted, onBack }: PreviewStepP
               />
             ),
           },
-          { key: 'form_id', header: 'Form Id', render: (row) => <strong className="font-mono text-xs">{row.form_id}</strong> },
+          { key: 'form_id', header: 'Form Id', render: (row) => <T size="sm" weight="medium">{row.form_id}</T> },
           {
             key: 'status',
             header: 'Status',
@@ -152,16 +153,11 @@ export default function PreviewStep({ parse, onCommitted, onBack }: PreviewStepP
           {
             key: 'submitter',
             header: 'Submitter',
-            render: (row) => (
-              <Stack gap="none">
-                {row.submitter_name}
-                <MetaLine size="xs" items={[row.submitter_email]} />
-              </Stack>
-            ),
+            render: (row) => <T size="sm" title={row.submitter_email}>{row.submitter_name}</T>,
           },
-          { key: 'submitted_at', header: 'Submitted', render: (row) => formatRelativeTime(row.submitted_at) },
-          { key: 'dimensions', header: 'Dimensions', render: (row) => `${row.dimensions_informed} informed` },
-          { key: 'links', header: 'Links', render: (row) => `${row.links.length} link${row.links.length === 1 ? '' : 's'}` },
+          { key: 'submitted_at', header: 'Submitted', numeric: true, render: (row) => formatRelativeTime(row.submitted_at) },
+          { key: 'dimensions', header: 'Dimensions', numeric: true, render: (row) => `${row.dimensions_informed} informed` },
+          { key: 'links', header: 'Links', numeric: true, render: (row) => `${row.links.length} link${row.links.length === 1 ? '' : 's'}` },
         ]}
       />
 

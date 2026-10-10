@@ -90,3 +90,45 @@ describe('HttpMessageQueue', () => {
     expect(await q.ack('distill-compact-l1', 'stale')).toBe(false);
   });
 });
+
+
+describe('read-only queue attributes', () => {
+  it('uses signed metadata GET, never the message receive endpoint', async () => {
+    const { calls, impl } = fakeFetch(() => ({ status: 200, body: { attributes: {
+      ApproximateNumberOfMessages: '7', ApproximateNumberOfMessagesNotVisible: 2,
+      ApproximateNumberOfMessagesDelayed: '0', VisibilityTimeout: '60',
+    } } }));
+    const q = new HttpMessageQueue({ baseUrl: 'http://mq:3000', serviceId: 'orgiq-middleware', secret: 'test-secret', fetchImpl: impl });
+    expect(await q.inspect('scope:queue')).toEqual({ ready: 7, inFlight: 2, delayed: 0, visibilityTimeoutSeconds: 60, fifo: null });
+    expect(calls).toHaveLength(1);
+    const call = calls[0]!;
+    expect(call.method).toBe('GET');
+    expect(call.url).toBe('http://mq:3000/api/v1/queues/scope%3Aqueue/attributes');
+    expect(call.body).toBe('');
+    expect(verifyServiceRequest(call.headers[SERVICE_AUTH_HEADER]!,
+      { method: 'GET', target: '/api/v1/queues/scope%3Aqueue/attributes', body: '' },
+      { secret: 'test-secret', allowedServices: ['orgiq-middleware'], audience: 'message-queue' },
+    ).ok).toBe(true);
+  });
+
+  it('keeps malformed or omitted metrics unknown and missing queues absent', async () => {
+    const { impl } = fakeFetch(call => call.url.includes('absent') ? { status: 404 } : { status: 200, body: { attributes: {
+      ApproximateNumberOfMessages: -1, ApproximateNumberOfMessagesNotVisible: 'NaN',
+      ApproximateNumberOfMessagesDelayed: 1.5, VisibilityTimeout: '', FifoQueue: 'false',
+    } } });
+    const q = new HttpMessageQueue({ baseUrl: 'http://mq', serviceId: 'test', fetchImpl: impl });
+    expect(await q.inspect('bad')).toEqual({ ready: null, inFlight: null, delayed: null, visibilityTimeoutSeconds: null, fifo: false });
+    expect(await q.inspect('absent')).toBeNull();
+  });
+
+  it('bounds a metadata request and rejects a malformed response', async () => {
+    let signal: AbortSignal | undefined;
+    const impl = (async (_url: unknown, init: RequestInit) => {
+      signal = init.signal ?? undefined;
+      return { status: 200, ok: true, text: async () => '{}' };
+    }) as typeof fetch;
+    const q = new HttpMessageQueue({ baseUrl: 'http://mq', serviceId: 'test', fetchImpl: impl });
+    await expect(q.inspect('bad')).rejects.toThrow();
+    expect(signal).toBeInstanceOf(AbortSignal);
+  });
+});

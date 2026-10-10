@@ -16,13 +16,11 @@ import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { AssessorDesk } from './dashboard/AssessorDesk';
 import { NewTeamModal } from './dashboard/NewTeamModal';
 import { TeamScorecard } from './dashboard/TeamScorecard';
+import { scorecardTabFromParam } from './dashboard/scorecardHeaderModel';
 import { useTeams } from './dashboard/useTeams';
 import type { Cohort } from './types';
 
 const COHORTS: Array<Cohort | 'all'> = ['all', 'white_glove', 'self_service', 'general'];
-
-type ScorecardTab = 'scorecard' | 'plan' | 'stories' | 'evidence' | 'documents';
-const VALID_TABS: ScorecardTab[] = ['scorecard', 'plan', 'stories', 'evidence', 'documents'];
 
 function DashboardPage() {
   const { teamId } = useParams<{ teamId?: string }>();
@@ -36,15 +34,14 @@ function DashboardPage() {
 
   // ── View 3: scorecard ──────────────────────────────────────────────────
   if (teamId) {
-    const requestedTab = searchParams.get('tab');
-    const tab: ScorecardTab = VALID_TABS.includes(requestedTab as ScorecardTab)
-      ? (requestedTab as ScorecardTab)
-      : 'scorecard';
+    // `?tab=discussion` is retired: the discussion is the right pane, revealed on arrival.
+    const { tab, revealDiscussion } = scorecardTabFromParam(searchParams.get('tab'));
 
     return (
       <TeamScorecard
         teamId={teamId}
         tab={tab}
+        revealDiscussion={revealDiscussion}
         onTabChange={(next) => {
           const params = new URLSearchParams(searchParams);
           if (next === 'scorecard') params.delete('tab');

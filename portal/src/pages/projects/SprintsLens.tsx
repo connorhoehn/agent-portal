@@ -14,7 +14,9 @@ import {
   Button,
   CatalogGrid,
   EmptyState,
+  Inline,
   LoadingState,
+  SearchInput,
   SegmentedControl,
   Stack,
   StatStrip,
@@ -23,6 +25,7 @@ import {
   ToolbarLabel,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
+import { useRowSearch } from '../../hooks/useRowSearch';
 import { useUrlState } from '../../lib/useUrlState';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { useSession } from '../../lib/auth';
@@ -132,6 +135,8 @@ export function SprintsLens({ view, lens }: { view: 'grid' | 'list'; lens: Sprin
   const personId = data?.personId ?? null;
   const totals = useMemo(() => sprintTotals(sprints), [sprints]);
   const needsAttention = useMemo(() => atRiskCount(sprints), [sprints]);
+  // The search shares the strip's row (docs/layout-cascade.md "Tables").
+  const search = useRowSearch(sprints, (s) => [s.name, s.orgProjectName, s.stewardName, s.status].filter(Boolean).join(' '));
 
   // The detail tracks the live list — a refetch that drops the open sprint
   // (scope switch, filter change) closes it rather than showing stale data.
@@ -211,34 +216,35 @@ export function SprintsLens({ view, lens }: { view: 'grid' | 'list'; lens: Sprin
         data={envelopeData}
       />
 
+      {/* One line of prose stats, as the initiative detail page draws them.
+          The KPI-card strip gave each cluster ~140px of a 708px pane at
+          1440px, so every hint was cut ("of $65.00 granted" in 51px); the
+          line variant wraps between clusters, never inside one, so each
+          hint now reads as the rest of its sentence. */}
+      <Inline align="center" gap="md" wrap>
       {!open && <StatStrip
+        variant="line"
+        size="sm"
         aria-label="Sprint rollup"
         items={[
           {
-            label: scope === 'mine' ? 'My sprints' : 'Sprints',
+            label: `${activeOnly ? 'active ' : ''}sprint${sprints.length === 1 ? '' : 's'}${scope === 'mine' ? ' of yours' : ''}`,
             value: sprints.length,
-            hint: activeOnly ? 'active only' : 'all statuses',
           },
           {
-            label: 'Needs attention',
+            label: 'late or over envelope',
             value: needsAttention,
-            ...(needsAttention > 0 ? { tone: 'danger' as const } : {}),
-            // The pane beside the explorer rail gives each cell ~153px of hint;
-            // the long form lives in the tooltip rather than being cut.
-            hint: needsAttention > 0 ? 'late or over envelope' : 'all on track',
-            ...(needsAttention > 0 ? { title: 'Behind its window or over its envelope' } : {}),
+            ...(needsAttention > 0 ? { tone: 'danger' as const, title: 'Behind its window or over its envelope' } : {}),
           },
           {
-            label: 'Points',
+            label: 'points done',
             value: `${totals.pointsDone} / ${totals.pointsTotal}`,
-            hint: 'done / committed',
             title: 'Points delivered vs points committed',
           },
           {
-            label: 'Spend in windows',
+            label: `spent in windows of ${usd(totals.granted)} granted`,
             value: usd(totals.spend),
             ...(totals.granted > 0 && totals.spend > totals.granted ? { tone: 'danger' as const } : {}),
-            hint: `of ${usd(totals.granted)} granted`,
           },
           // The reader's OWN envelope, last because it is personal rather than
           // programme-wide — and in the strip rather than a card of its own so
@@ -246,18 +252,30 @@ export function SprintsLens({ view, lens }: { view: 'grid' | 'list'; lens: Sprin
           // the summary decides whether the value is money or a word, because
           // an unattributed burn has no number to print.
           ...(envelopes ? [{
-            label: 'My envelope',
+            // The reason sentence for an unknown burn is the tooltip, not the label — it
+            // wrapped the strip onto a second row beside the filters and the search.
+            label: envelopes.kind === 'known' ? `left in my envelope${envelopes.count === 1 ? '' : 's'} ${envelopes.hint}` : 'my envelope',
             value: envelopes.value,
-            hint: envelopes.hint,
-            // Names the initiative, so it can outrun the cell: whole on hover.
-            title: typeof envelopes.hint === 'string' ? envelopes.hint : undefined,
+            // A reason sentence can outrun the pane: whole on hover.
+            title: envelopes.hint,
             ...(envelopes.tone ? { tone: envelopes.tone } : {}),
             ...(envelopes.openable ? { onSelect: () => setEnvelopesOpen(true) } : {}),
           }] : []),
         ]}
       />}
-
       {filters}
+      {!open && sprints.length > 0 && (
+        <SearchInput
+          size="sm"
+          className="ml-auto w-64 shrink-0"
+          value={search.query}
+          onChange={search.setQuery}
+          onClear={() => search.setQuery('')}
+          placeholder="Search sprints"
+          aria-label="Search sprints"
+        />
+      )}
+      </Inline>
 
       {open ? (
         <SprintDetail
@@ -283,10 +301,10 @@ export function SprintsLens({ view, lens }: { view: 'grid' | 'list'; lens: Sprin
           }
         />
       ) : view === 'list' ? (
-        <SprintTable sprints={sprints} onSelect={setOpenId} />
+        <SprintTable sprints={search.rows} onSelect={setOpenId} emptyMessage={`No sprint matches “${search.query.trim()}”.`} />
       ) : (
         <CatalogGrid columns={3} dense>
-          {sprints.map((s) => (
+          {search.rows.map((s) => (
             <SprintCard
               key={s.id}
               s={s}

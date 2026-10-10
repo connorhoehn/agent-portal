@@ -1,16 +1,19 @@
 surface: calls
 role: community-admin
-user: u-mira
-url: /social/calls
+user: u-mira (Mira Okafor)
+url: /social/calls (plus a DM call from /social/dms/social%3Adm%3Au-mira%3Au-sana)
 pages: portal/src/pages/social/CallsPage.tsx,portal/src/pages/social/SocialChatWorkspace.tsx,portal/src/pages/social/CallLogPane.tsx,portal/src/pages/social/useSocialCall.ts,portal/src/pages/social/socialCallLog.ts
-audited: 2026-09-30 12:36Z → 12:38Z, Chromium 1672×941 (Playwright headless, one fresh context per user — not the shared Chrome tab), middleware dev:mock:social on :3001 with the `social` compose profile up (platform-api, DynamoDB Local, host SFU), Vite :5183
+audited: 2026-10-08 11:44Z → 2026-10-08 11:45Z, Chromium (Playwright headless from portal/node_modules, a fresh context per identity, not the shared Chrome tab), 1680×940, fake capture devices, second context u-sana; Tilt stack: Vite :5183 over middleware :3001 (mock providers) with the real SFU :3902 and platform-api :23001
 session: /api/session/me sub u-mira, tenant social, role community-admin
 screenshot: calls.jpg
 verdict: pass
-console errors: 0
-layout: pass — chat rail (library ConversationRail) 300px at x=200, flush against the 200px shell rail (content col left 200, 0px from content start), top 70 = content top 70, 871px tall = the full content height (no page header, shell crumbs off); pane 1172px at x=500; no horizontal scroll (scrollWidth 1672 = innerWidth 1672); the call log (library DataTable under a SegmentedControl) fills the pane
-keyboard: pass — 23 distinct Tab stops from the rail's Find box through main (first: Find a chat, social-chat-rail-shelf-activity, social-chat-rail-shelf-mentions, social-chat-rail-shelf-calls, social-chat-rail-shelf-recordings, rail-section-header-toggle…) against 46 visible controls in main — the rail's conversation rows and the tree sit behind roving tabindexes (ArrowDown walks them), so fewer stops than controls is the design; the Missed segment filtered to 2 row(s) and All restored the log
-empty-state: pass — this user's log is not empty (13 rows, 1 missed); the Missed filter with no missed rows reads "No missed calls.", and an empty log renders "No calls yet — Calls you place or receive in this workspace, and the ones you missed, are listed here." with Call someone (observed as u-operator, admin log)
-realtime: pass — 0.04s: Sana Iqbal pressed the new audio-call action in the DM's conversation header and the shell's IncomingCallToast ("Sana Iqbal is calling Audio call Decline Accept") appeared on /social/calls with no reload; Decline by keyboard (focus + Enter) removed it (True)
-role-gating: every social role holds StartCall — 13 Call back / Open room controls render; "Call someone" goes to Contacts. The shelf's Calls is the selected rail item on this route, with the missed count as its badge
-notes: Rows come from platform-api's /api/calls/log through GET /api/social/calls, which keeps social: lobbies only. The page is the chat workspace with the shelf's Calls destination open; the ring came from a DM header's audio-call action (SocialConversation → useSocialCall.callPeople, audioOnly).
+console errors: 0 — plus 9 expected browser resource error line(s) (404 while a call leg is torn down / refusal probes)
+layout: pass — content column x=200px, width 1480px, top 70px, bottom 893px; rail 300px at x=200, y=70, height 823; pane x=500, width 1180; scrollWidth 1680 / viewport 1680; body scrollHeight 940 / viewport height 940; footer row y=894–940px (1680px wide)
+type: title 16/400; sizes in main (size/weight×text nodes): 14/400×91, 12/600×24, 10/600×24, 13/500×15, 13/600×15, 12/400×13, 11/400×12, 11/600×11, 15/600×8, 16/400×5, 14/500×3, 11/500×2, 20/600×1
+keyboard: pass — physical Tab sweep from the start of main reached 44 distinct controls against 44 Tab stops (72 really-visible interactive elements); first stops: social-chat-rail-search-toggle, social-new-dm, social-chat-rail-options, social-chat-rail-shelf-activity, social-chat-rail-shelf-mentions, social-chat-rail-shelf-calls, social-chat-rail-shelf-recordings, rail-section-header-toggle
+empty-state: pass — the Missed filter shows 1 row(s); All shows 22 row(s) (the live platform-api log; the empty list itself was not forced because that needs a mock scenario on the shared stack)
+realtime: pass — real DM call: the callee's incoming-call toast appeared in 0.22s, Accept + Join drew the call dock on both sides (0.10s); second ring: caller hung up before an answer, the callee's toast appeared in 0.28s and cleared in 0.02s
+role-gating: StartCall: the DM header's audio and video call buttons are enabled; the call log is readable; Create channel controls 1, New team 1, New room 1
+call-log: source platform; 22 rows before the walk, 23 after; newest: ["Sana Iqbal Outgoing Answered Oct 8, 7:45 AM 4s Call back","Sana Iqbal Incoming Answered Oct 8, 7:44 AM 4s Call back","Sana Iqbal Outgoing Answered Oct 8, 7:42 AM 4s Call back"]; page: Calls Call someone Calls you placed, answered or missed in this workspace. Start a new one from a person or a conversation, or join a room. All Missed WHO DIRECTION OUTCOME WHEN LENGTH ACTIONS Sana Iq
+media: callee toast: “Mira Okafor is calling Audio call Decline Accept”. with fake devices both docks drew (0.10s after Join), dock reads “Sana Iqbal 2 people · 00:03 Share People 2 Leave You Sana Iqbal”, 8 tile/video element(s) on the caller's side, mic control present: 1. Real SFU media with fake capture devices; no audio content is verifiable headless. After Leave the dock shows its ended state (1) and Dismiss clears it.
+notes: Every field above was observed in this pass, not carried forward. Recording playback is a separate surface (recordings logs).

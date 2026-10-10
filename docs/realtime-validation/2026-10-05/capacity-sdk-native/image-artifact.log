@@ -1,0 +1,9 @@
+/app
+dist/lib/dynamo-dispatch.js
+1
+3
+0.106.0
+v22.23.3
+ef24da83f486af1c3e199a3407b9ecfcfa8e00958f13e1fe4639fde0d1ebc8d8  dist/lib/dynamo-dispatch.js
+18a4372e43fef55d4de21e3b34fa33afde04a22f30c0f512fc067f695da6766c  dist/lib/social-chat.js
+3f5ff93c99b3fc212e0601f9cd9d38950ca56f9e1811c7dfc186b5813a6cd535  dist/lib/realtime-gateway.js

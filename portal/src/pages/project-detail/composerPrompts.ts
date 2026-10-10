@@ -37,6 +37,29 @@ export function composerChip(s: ComposerSubject): ComposerChip {
   }
 }
 
+/**
+ * The draft's page reference as the composer header draws it — "Work ›
+ * Initiatives › Auth Migration › Work › Logout leaves…". Titles come from the
+ * rows this viewer just read; `page` is the only thing a Chat send carries
+ * (`{kind,id}`), and each recipient's reader re-resolves titles from its own
+ * authority. The initiatives list is not a page: it has no descriptor.
+ */
+export interface ComposerPageReference {
+  id: string;
+  crumbs: string[];
+  label: string;
+  page: { kind: 'initiative' | 'work-item'; id: string } | null;
+}
+
+export function composerPageReference(s: ComposerSubject): ComposerPageReference {
+  const crumbs = s.kind === 'initiatives' ? ['Initiatives']
+    : s.kind === 'initiative' ? [s.project.name]
+    : [s.project.name, s.item.key ?? s.item.title];
+  const page = s.kind === 'initiative' ? { kind: 'initiative' as const, id: s.project.id }
+    : s.kind === 'item' ? { kind: 'work-item' as const, id: s.item.id } : null;
+  return { id: page ? `${page.kind}:${page.id}` : 'initiatives', crumbs, label: crumbs.join(' › '), page };
+}
+
 // ─── Prefill and placeholder ─────────────────────────────────────────────────
 
 export const INITIATIVE_PREFILL = 'Help me prioritize the next changes and explain the tradeoffs.';
@@ -167,7 +190,7 @@ function itemLine(r: FlatWorkItem): string {
   const parts = [r.assigneeName ?? 'unassigned', r.priority];
   if (r.storyPoints != null) parts.push(`${r.storyPoints} ${r.storyPoints === 1 ? 'point' : 'points'}`);
   if (r.labels.includes('blocked')) parts.push('blocked');
-  return `- ${r.title} (${parts.join(', ')})`;
+  return `- ${r.key ? `${r.key}: ` : ''}${r.title} (${parts.join(', ')})`;
 }
 
 function initiativeLine(p: ProjectSummary): string {
@@ -235,17 +258,23 @@ export function invokeHref(prompt: string): string {
   return `/iq/invoke?${new URLSearchParams({ prompt }).toString()}`;
 }
 
-/** Composer text → the Ask link, or null when there is nothing to ask. A
+/** Composer text → a question, or null when there is nothing to ask. A
  *  leading "/workflow" expands to that workflow's prompt, then any text typed
  *  after the command is appended as the question. */
-export function askHref(text: string, s: ComposerSubject, withContext = true): string | null {
+export function composerAsk(text: string, s: ComposerSubject, withContext = true): string | null {
   const cmd = commandIn(text);
   if (cmd) {
     const built = workflowPrompt(cmd, s);
     if (!built) return null;
     const rest = text.trim().replace(/^\/\w+\s*/, '').trim();
-    return invokeHref(askPrompt(rest ? `${built}\n\n${rest}` : built, s, withContext));
+    return askPrompt(rest ? `${built}\n\n${rest}` : built, s, withContext);
   }
   const prompt = askPrompt(text, s, withContext);
+  return prompt || null;
+}
+
+/** Standalone Ask views can still use a deep link; initiative details run in their pane. */
+export function askHref(text: string, s: ComposerSubject, withContext = true): string | null {
+  const prompt = composerAsk(text, s, withContext);
   return prompt ? invokeHref(prompt) : null;
 }

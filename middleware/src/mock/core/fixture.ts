@@ -14,6 +14,7 @@
 //     next auditor in their log.
 
 import type { Fixture, FixtureRegistry, Scenario, ScenarioName } from './contract.js';
+import { mockRestartSnapshot, restoredFixtureRows } from '../restart-state.js';
 
 /** Produces a fresh, mutable row set. Called on first read and on every reset. */
 export type RowsFactory<Row> = () => Row[];
@@ -65,6 +66,14 @@ export const SCENARIOS: Record<ScenarioName, Scenario> = {
     name: 'fresh',
     describes: 'A brand-new tenant: the cast exists, no history yet.',
   },
+  demo: {
+    name: 'demo',
+    describes: 'The Computer Lab demo: three agents pick up Auth Migration\'s open items through the governed dispatch path — one asks a question, one posts a change for review, one is held at a money gate. Starts a ~3–4 minute director; reset or any other scenario stops it.',
+  },
+  'distillation-demo': {
+    name: 'distillation-demo',
+    describes: 'The Distillation demo: three Auth Migration lab sessions write run notes live, a compaction turns them into patterns, reviewers agree with three and reject one (one waits for you), the agreed patterns become a cutover guide that is published and then run by an agent. Starts a ~3-minute director; reset or any other scenario stops it.',
+  },
 };
 
 export const SCENARIO_NAMES: ScenarioName[] = Object.keys(SCENARIOS) as ScenarioName[];
@@ -79,7 +88,7 @@ export function describeScenario(name: ScenarioName): Scenario {
 
 class Registry implements MockFixtureRegistry {
   private readonly fixtures = new Map<string, Fixture<never>>();
-  private active: ScenarioName = 'default';
+  private active: ScenarioName = (mockRestartSnapshot()?.scenario as ScenarioName | undefined) ?? 'default';
 
   register<Row>(fixture: Fixture<Row>): Fixture<Row> {
     const existing = this.fixtures.get(fixture.key);
@@ -143,6 +152,7 @@ export function defineFixture<Row>(spec: FixtureSpec<Row>): Fixture<Row> {
   // been read holds nothing, so defining a fixture costs no clock reads and
   // no allocation.
   const live = new Map<ScenarioName, Row[]>();
+  if (registry === fixtureRegistry) for (const restored of restoredFixtureRows(key) ?? []) live.set(restored.scenario as ScenarioName, restored.rows as Row[]);
 
   const factoryFor = (scenario: ScenarioName): RowsFactory<Row> =>
     spec.scenarios[scenario] ?? spec.scenarios.default;

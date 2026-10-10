@@ -1,10 +1,18 @@
+import { getDemoState } from './mock/demo-director.js';
+import { getDistillationDemoState } from './mock/distillation-demo.js';
 import { startAssessmentDispatcher } from './lib/assessment-dispatcher.js';
+import { startFlowRunDispatcher } from './lib/flow-runs/index.js';
 import express from 'express';
+import { createServer, type IncomingMessage } from 'node:http';
 import { browserOrigin } from './lib/browser-origin.js';
 import cookieParser from 'cookie-parser';
 import { rejectUnsupportedUpgrades } from './lib/unsupported-upgrades.js';
-import { attachDistillationRealtime, REALTIME_PATH } from './lib/distillation-realtime.js';
-import { attachRealtimeGateway, realtimeGatewayEnabled, realtimeGatewayStatus, REALTIME_GATEWAY_PATH } from './lib/realtime-gateway.js';
+import { startDistillationRealtime, distillationRealtimeStatus, REALTIME_PATH } from './lib/distillation-realtime.js';
+import { linkNodeOwnership, type LeasedOwner } from './lib/realtime-node-ownership.js';
+import { startRealtimeGateway, realtimeGatewayEnabled, realtimeGatewayStatus, REALTIME_GATEWAY_PATH, authenticateGatewayUpgrade } from './lib/realtime-gateway.js';
+import { channelGuards } from './lib/gateway/authority.js';
+import { createUploadsRouter, gatewayUploadConfig } from './lib/gateway-attachments.js';
+import { realtimeClaims, realtimeSigningSecret, signRealtimeToken } from './lib/realtime-token.js';
 import { startCompactionConsumer, startCompactionScheduler, startReplicaSync } from './providers/distillation.js';
 import { config } from './config.js';
 import { errorHandler } from './lib/async-handler.js';
@@ -13,6 +21,7 @@ import { getUser as getIdentityUser } from './providers/identity.js';
 import { agentsRouter } from './routes/agents.js';
 import { savedSearchesRouter } from './routes/saved-searches.js';
 import { graphRouter } from './routes/graph.js';
+import { meGroupsRouter } from './routes/me-groups.js';
 import { searchRouter } from './routes/search.js';
 import { rosterRouter } from './routes/roster.js';
 import { scoresRouter } from './routes/scores.js';
@@ -28,8 +37,23 @@ import { distillationRouter } from './routes/distillation.js';
 import { knowledgeBaseRouter } from './routes/knowledge-base.js';
 import { assessmentRouter } from './routes/assessment.js';
 import { socialEmbedRouter, socialRouter } from './routes/social.js';
+import { socialPlaneRouter } from './routes/social-plane.js';
+import { peopleRouter } from './routes/people.js';
+import { discussionsRouter } from './routes/discussions.js';
+import { dmPageReferencesRouter } from './routes/dm-page-references.js';
+import { pageReferencesRouter } from './routes/page-references.js';
+import { chatPinsRouter } from './routes/chat-pins.js';
+import { pageCallsRouter } from './routes/page-calls.js';
+import { socialSummarizeRouter } from './routes/social-summarize.js';
+import { conversationSummarizeRouter } from './routes/conversation-summarize.js';
+import { conversationArtifactRouter, socialArtifactRouter } from './routes/conversation-artifact.js';
+import { conversationAgentRouter, socialAgentRouter } from './routes/agent-loop.js';
+import { socialDeckRouter } from './routes/social-deck.js';
+import { callPagesRouter } from './routes/call-pages.js';
+import { callChatRouter } from './routes/call-chat.js';
 import { pipelinesRouter } from './routes/pipelines.js';
 import { runsFacadeRouter } from './routes/runs.js';
+import { initiativeDecksRouter } from './routes/initiative-decks.js';
 import { ingestRouter } from './routes/ingest.js';
 import { observabilityRouter } from './routes/observability.js';
 import { approvalsRouter } from './routes/approvals.js';
@@ -58,10 +82,13 @@ import { workRouter } from './routes/work.js';
 import { startJobDispatcher } from './lib/job-dispatcher.js';
 import { startMockBotRunner } from './lib/mock-bot-runner.js';
 import { runAllSweeps } from './providers/org-sweeps.js';
-import { checkAwsCredentials } from './lib/aws-creds-probe.js';
-import { checkDatastore } from './lib/datastore-probe.js';
+import { readAwsCredentialsStatus } from './lib/aws-creds-probe.js';
+import { readDatastoreStatus } from './lib/datastore-probe.js';
+import { createHealthHandler } from './lib/health-handler.js';
 import { promptHistoryRouter } from './routes/prompt-history.js';
 import { workItemsRouter } from './routes/work-items.js';
+import { workDocumentsRouter } from './routes/work-documents.js';
+import { workGraphRouter } from './routes/work-graph.js';
 import { kbAdminRouter } from './routes/kb-admin.js';
 import { gatewayProxyRouter } from './routes/gateway-proxy.js';
 import { devboxRouter } from './routes/devbox.js';
@@ -77,7 +104,8 @@ import { sprintsRouter } from './routes/sprints.js';
 import { grantsRouter } from './routes/grants.js';
 import { botsRouter } from './routes/bots.js';
 import { mockControlRouter } from './routes/mock-control.js';
-import { requireAction, requireTenant, readForRolesElseAction, requireSession } from './lib/authz.js';
+import { assertMockRestartAdopted, completeMockRestartReplay, mockRestartSnapshot, assertMockRestartIdleDirectors, consumeMockRestartHandoff } from './mock/restart-state.js';
+import { requireAction, requireTenant, readForRolesElseAction, requireSession, resolveSession } from './lib/authz.js';
 import { HARNESS_RUNNER_SERVICE_AUTH, serviceAuthOr } from './lib/service-auth.js';
 import { initScheduler } from './lib/ingest-scheduler.js';
 import { initBotScheduler } from './lib/bot-scheduler.js';
@@ -93,10 +121,12 @@ import { startLocalController } from './lib/canary-local-controller.js';
 import { startComputeWorkGraphProducer } from './work-graph/compute-emitter.js';
 import { internalWorkGraphComputeRouter } from './routes/internal-work-graph-compute.js';
 import { internalDocumentGrantsRouter } from './routes/internal-document-grants.js';
+import { realtimeLobbyAccessRouter } from './routes/realtime-lobby-access.js';
 import { internalDevboxRouter } from './routes/internal-devbox.js';
 import { assessmentCanvasRouter } from './routes/assessment-canvas.js';
 import { assessmentDocumentWorkflowsRouter } from './routes/assessment-document-workflows.js';
 import { assessmentDocumentSourceRouter } from './routes/assessment-document-source.js';
+import { assessmentDocumentProposalsRouter } from './routes/assessment-document-proposals.js';
 
 import { trustedProxyHops } from './lib/trusted-proxy.js';
 
@@ -114,6 +144,9 @@ app.use(cookieParser());
 // session as an alternate authorization path.
 app.use('/internal/work-graph/compute-capabilities', internalWorkGraphComputeRouter);
 app.use('/internal/document-grants', internalDocumentGrantsRouter);
+// platform-api's per-lobby admission question, authenticated by the caller's
+// realtime token alone (routes/realtime-lobby-access.ts); never a cookie.
+app.use('/api/realtime', realtimeLobbyAccessRouter);
 // Computer-lab surface for platform-api's chat agent loop — see
 // routes/internal-devbox.ts for why this must live here, before any
 // session/cookie middleware, exactly like its siblings above.
@@ -129,28 +162,12 @@ app.use(sessionMiddleware());
 // the /api/observability block can share it.
 const viewObs = [requireTenant('orgiq'), requireAction('ViewObservability')];
 
-function healthHandler(_req: express.Request, res: express.Response): void {
-  // Fire-and-report: don't block health on STS when mocks are on.
-  const wantsAws = !Object.values(config.mock).every(Boolean);
-  void Promise.all([
-    wantsAws ? checkAwsCredentials() : Promise.resolve({ ok: true } as const),
-    // Valid credentials say nothing about the database existing. Without this
-    // the status line reported "ok" against a torn-down cluster while every
-    // Aurora-backed route 500'd.
-    checkDatastore(),
-  ]).then(([creds, datastore]) => {
-    res.json({
-      status: creds.ok && datastore.ok ? 'ok' : 'degraded',
-      service: 'orgiq-middleware',
-      mocks: config.mock,
-      region: config.region,
-      awsCredentials: creds,
-      datastore,
-      // lib/realtime-gateway.ts: whether /ws is served, and where call state lives.
-      realtime: realtimeGatewayStatus(),
-    });
-  });
-}
+const healthHandler = createHealthHandler({ readRealtime: () => {
+  const realtime = realtimeGatewayStatus(), distillation = distillationRealtimeStatus();
+  return { ...realtime, distillation, ...(distillation.ready === false ? { ready: false } : {}) };
+},
+  readAws: () => Object.values(config.mock).every(Boolean) ? { ok: true } : readAwsCredentialsStatus(),
+  readDatastore: readDatastoreStatus, mocks: config.mock, region: config.region });
 app.get('/health', healthHandler);
 app.get('/api/health', healthHandler);
 
@@ -163,6 +180,7 @@ app.use('/api/session', sessionRouter);
 app.use('/api/assessment/knowledge', assessmentCanvasRouter);
 app.use('/api/assessment/knowledge', assessmentDocumentWorkflowsRouter);
 app.use('/api/assessment/knowledge', assessmentDocumentSourceRouter);
+app.use('/api/assessment/knowledge', assessmentDocumentProposalsRouter);
 // Enterprise SSO (Cognito OIDC). Inert unless COGNITO_* are configured.
 app.use('/api/auth', authRouter);
 app.use('/api/identity', identityRouter);
@@ -177,6 +195,10 @@ app.use('/api/agents', requireSession('ViewAgents'), agentsRouter);
 app.use('/api/search', searchRouter);
 app.use('/api/graph/decisions', requireTenant('orgiq'), decisionsRouter);
 app.use('/api/graph/projects', requireTenant('orgiq'), projectsRouter);
+// The groups the signed-in user belongs to, one shape for every kind (lib/mine.ts): session floor here, then the
+// kind's own tenant boundary and read action inside (routes/me-groups.ts) — the Communication plane's My initiatives /
+// My teams / My pipelines / My org teams.
+app.use('/api/me/groups', requireSession('MyGroups'), meGroupsRouter);
 // Design reviews — the ADR threads that gate initiative designs. Session
 // floor: readable by every signed-in orgiq role, writes gated per-route.
 app.use('/api/designs', requireTenant('orgiq'), requireSession('ViewDesigns'), designsRouter);
@@ -208,7 +230,11 @@ app.use('/api/distillation', requireTenant('orgiq'), requireSession('ViewDistill
 // DispatchAgentRun so board writes need the marketplace authority, not
 // merely a seat in the tenant.
 app.use('/api/saved-searches', savedSearchesRouter);
+app.use('/api/graph', requireTenant('orgiq'), workDocumentsRouter);
 app.use('/api/graph', requireTenant('orgiq'), workItemsRouter);
+// The activity/work graph (docs/activity-graph-migration.md): each part is
+// re-decided per request with the REST read gates of the entity it draws.
+app.use('/api/work-graph', requireTenant('orgiq'), workGraphRouter);
 // The org roster + relationship graph is the org-chart surface: tenant-scoped
 // AND gated on ViewOrgChart (every orgiq role holds it; a grantless anonymous
 // production session does not — closing the roster leak).
@@ -249,13 +275,51 @@ app.use('/api/assessment', assessmentRouter);
 // a DM are gated on the caller's GRANTS (social + the context's tenant), so an
 // orgiq page can show its bound channel. Every other /api/social path falls
 // through to the tenant-gated router below.
+// Tenant-neutral shell presence/DM directory: session floor + shared active tenant.
+app.use('/api/people', peopleRouter);
+// Page discussions with new messages for the active tenant's rail and palette (session floor; per-thread read gate).
+app.use('/api/discussions', discussionsRouter);
 app.use('/api/social', socialEmbedRouter);
+// The Social application plane in orgiq/assessment/pipelines (Communication): the tenant router's own handlers, each
+// gated on the caller's CURRENT Social grants (live-principal.ts) instead of the session's tenant (routes/social-plane.ts).
+app.use('/api/social/plane', socialPlaneRouter);
+app.use('/api/social', dmPageReferencesRouter);
+// Chat page references resolved per reader (assessment dimensions): session floor, `unavailable` without authority.
+app.use('/api/page-references', requireSession('ReadPageReference'), pageReferencesRouter);
+app.use('/api/chat', chatPinsRouter);
+// Call history of page huddles (orgiq/assessment/pipelines): the Social call-log rows, read per lobby or per tenant under the lobby's own authority.
+app.use('/api/calls', pageCallsRouter);
+app.use('/api/chat/commands', socialSummarizeRouter);
+// /diagram and /doc: the same two authorities as /summarize (Social chatAccess; tenant chat history), private durable runs.
+app.use('/api/chat/commands', socialArtifactRouter);
+// /agent: a plan the requester approves, then existing flows run as them (routes/agent-loop.ts).
+app.use('/api/chat/commands', socialAgentRouter);
+// /summarize on tenant conversations and huddles: the conversation's own chat authority, per request.
+app.use('/api/conversations/summarize', conversationSummarizeRouter);
+app.use('/api/conversations', conversationArtifactRouter);
+app.use('/api/conversations', conversationAgentRouter);
+app.use('/api/chat', socialDeckRouter);
+// Bytes for the gateway's file-upload verbs; authenticated by the realtime bearer token.
+app.use('/api/uploads', createUploadsRouter(
+  token => authenticateGatewayUpgrade({ headers: { 'sec-websocket-protocol': `bearer-token-v1, ${token}` } } as IncomingMessage),
+  channelGuards,
+  gatewayUploadConfig(),
+  async req => {
+    const session = resolveSession(req); const secret = realtimeSigningSecret();
+    if (!session || !secret) return null;
+    return (await signRealtimeToken(realtimeClaims(session, {}), secret)).token;
+  }));
+app.use('/api/calls', callPagesRouter);
+app.use('/api/calls', callChatRouter);
 app.use('/api/social', requireTenant('social'), socialRouter);
 app.use('/api/pipelines', requireTenant('pipelines'), pipelinesRouter);
 // The orgiq read of the pipelines run projection — only runs whose
 // context.tenant is 'orgiq' (docs/pipelines-tenant-goal.md §"The vertical
 // slice"). The bot detail page reads its runs here, never /api/pipelines/*.
 app.use('/api/runs', requireTenant('orgiq'), runsFacadeRouter);
+// Initiative status decks (docs/agentic-flows-migration.md slice 6); a deck built
+// with budget figures is visible only at the budgets read tier (routes/initiative-decks.ts).
+app.use('/api/initiative-decks', requireTenant('orgiq'), initiativeDecksRouter);
 // Ingest — reading jobs/storage/crawl status is operational visibility that the
 // Knowledge page surfaces to org-leaders; starting crawls, editing schedules and
 // other mutations still require ManageIngest (hr-admin).
@@ -407,6 +471,7 @@ app.use('/api/gateway', requireTenant('orgiq'), requireSession('ViewGateway'), g
 
 app.use(errorHandler);
 
+assertMockRestartAdopted();
 initScheduler();
 initCrawlTargets();
 
@@ -426,7 +491,8 @@ initCrawlTargets();
 // missing the table must not delay the listen() below or fail the boot.
 // The compute registry adopts shared registrations and publishes this
 // replica's fleet, so it runs after the fleet's own hydration settles.
-void initFleetPersistence().catch(() => 0).then(() => initComputeRegistry());
+const fleetLoad = initFleetPersistence();
+const fleetInitialization = (mockRestartSnapshot() ? fleetLoad : fleetLoad.catch(() => 0)).then(() => initComputeRegistry());
 // Cloud boxes/jobs and paired local-machine sessions now emit only through the
 // authenticated platform ingestion boundary. The producer stays inert unless
 // its server-owned org/credential configuration is complete.
@@ -464,6 +530,8 @@ startLocalController();
 // on demand from the Work surface).
 startJobDispatcher();
 startAssessmentDispatcher();
+// Durable flow runs (Social /summarize today): startup recovery of lapsed leases, then a poll.
+startFlowRunDispatcher();
 // Offline only: gives the Computer Lab's tail pane and activity list something
 // real to show without a deployed runtime. No-op unless MOCK_AGENTCORE.
 startMockBotRunner();
@@ -491,24 +559,44 @@ ensureSchema()
   .then(() => seedPoliciesIfMissing())
   .catch(err => console.error('[seed] failed:', err));
 
-const server = app.listen(config.port, '0.0.0.0', () => {
-  const mockedDomains = Object.entries(config.mock).filter(([, v]) => v).map(([k]) => k);
-  const mockSuffix = mockedDomains.length > 0 ? `mock=${mockedDomains.join(',')}` : 'mocks=off';
-  console.log(`orgiq-middleware listening on :${config.port} (${mockSuffix})`);
-});
+const server = createServer(app);
 
 // This BFF serves SSE plus two realtime-modules WebSocket paths:
-// REALTIME_PATH pushes the distillation channels (distill:levels / distill:jobs
-// / distill:review) to a signed-in orgiq session (cookie auth), and — when
+// REALTIME_PATH pushes the distillation channels (orgiq:distill:levels / orgiq:distill:jobs
+// / orgiq:distill:review) to a signed-in orgiq session (cookie auth), and — when
 // REALTIME_GATEWAY is on (default outside production) — REALTIME_GATEWAY_PATH
 // (/ws) is the chat/presence/calls gateway, authenticated by the realtime
 // token over `Sec-WebSocket-Protocol` (lib/realtime-gateway.ts). Every other
 // upgrade is still refused before a socket is accepted.
-attachDistillationRealtime(server);
+const distillationHandle = await startDistillationRealtime(server);
 const gatewayOn = realtimeGatewayEnabled();
-if (gatewayOn) attachRealtimeGateway(server);
-else console.log('[realtime-gateway] off (REALTIME_GATEWAY) — /ws upgrades are refused');
+const gatewayHandle = gatewayOn ? await startRealtimeGateway(server) : null;
+if (mockRestartSnapshot()) { await fleetInitialization; assertMockRestartIdleDirectors(getDemoState(), getDistillationDemoState()); completeMockRestartReplay(); }
+if (!gatewayHandle) console.log('[realtime-gateway] off (REALTIME_GATEWAY) — /ws upgrades are refused');
+// A node is one owner: the first leased router to fence retires the other
+// (lib/realtime-node-ownership.ts), so /health's 503 never leaves half a lease alive.
+const stopOwnershipLink = linkNodeOwnership([gatewayHandle?.ownership, 'ownership' in distillationHandle ? distillationHandle.ownership : undefined]
+  .filter((owner): owner is LeasedOwner => !!owner));
 rejectUnsupportedUpgrades(server, { allowPaths: gatewayOn ? [REALTIME_PATH, REALTIME_GATEWAY_PATH] : [REALTIME_PATH] });
+server.listen(config.port, '0.0.0.0', () => {
+  consumeMockRestartHandoff();
+  const mockedDomains = Object.entries(config.mock).filter(([, v]) => v).map(([k]) => k);
+  const mockSuffix = mockedDomains.length > 0 ? `mock=${mockedDomains.join(',')}` : 'mocks=off';
+  console.log(`orgiq-middleware listening on :${config.port} (${mockSuffix})`);
+});
+let closing = false;
+const shutdown = async () => {
+  if (closing) return; closing = true;
+  const deadline = setTimeout(() => process.exit(1), 10000); deadline.unref();
+  stopOwnershipLink();
+  try {
+    await gatewayHandle?.dispose(); await distillationHandle.detach();
+    await new Promise<void>(resolve => server.close(() => resolve()));
+    process.exit(0);
+  } catch (error) { console.error('[shutdown] gateway cleanup failed', error); process.exit(1); }
+};
+process.once('SIGTERM', () => { void shutdown(); });
+process.once('SIGINT', () => { void shutdown(); });
 
 // Distillation's background work: the compaction consumer (claims passes off
 // distill-compact-l1|l2 — message-queue, or in process under MOCK_QUEUE), the

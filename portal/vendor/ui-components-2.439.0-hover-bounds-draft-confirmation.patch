@@ -1,0 +1,365 @@
+diff --git a/src/components/shared/HoverCard.tsx b/src/components/shared/HoverCard.tsx
+index 822dbdf3..7d966bc3 100644
+--- a/src/components/shared/HoverCard.tsx
++++ b/src/components/shared/HoverCard.tsx
+@@ -103,18 +103,48 @@ export function HoverCard({
+     return () => { document.removeEventListener('keydown', onKey); document.removeEventListener('mousedown', onDown); };
+   }, [open, dismiss]);
+ 
+-  // Placed before paint under the trigger, inside the viewport.
++  // Prefer below the trigger, then above; bound long or asynchronously loaded
++  // content to the viewport. A pinned card follows its anchor across scrolls
++  // and layout changes without changing disclosure or focus ownership.
+   useLayoutEffect(() => {
+     if (!open) return;
+     const a = anchor.current, p = panel.current;
+     if (!a || !p) return;
+-    const r = a.getBoundingClientRect();
+-    const w = p.offsetWidth || 0;
+-    const left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8));
+     p.style.position = 'fixed';
+-    p.style.top = `${r.bottom + 6}px`;
+-    p.style.left = `${left}px`;
+     p.style.zIndex = '9500';
++    p.style.overflowY = 'auto';
++    let frame = 0;
++    const place = () => {
++      const gutter = 8, gap = 6;
++      const width = document.documentElement.clientWidth || window.innerWidth;
++      const height = document.documentElement.clientHeight || window.innerHeight;
++      p.style.maxWidth = `${Math.max(1, width - gutter * 2)}px`;
++      p.style.maxHeight = `${Math.max(1, height - gutter * 2)}px`;
++      const r = a.getBoundingClientRect();
++      const below = r.bottom + gap, above = r.top - gap - p.offsetHeight;
++      const lastTop = height - gutter - p.offsetHeight;
++      const placement = below >= gutter && below <= lastTop ? 'below'
++        : above >= gutter && above <= lastTop ? 'above' : 'bounded';
++      const top = placement === 'below' ? below : placement === 'above' ? above
++        : Math.max(gutter, Math.min(below, lastTop));
++      p.style.top = `${top}px`;
++      p.style.left = `${Math.max(gutter, Math.min(r.left, width - gutter - p.offsetWidth))}px`;
++      p.dataset.viewportPlacement = placement;
++    };
++    const schedule = () => {
++      if (!frame) frame = requestAnimationFrame(() => { frame = 0; place(); });
++    };
++    place();
++    const observer = new ResizeObserver(place);
++    observer.observe(p); observer.observe(a);
++    window.addEventListener('resize', schedule);
++    document.addEventListener('scroll', schedule, true);
++    return () => {
++      observer.disconnect();
++      window.removeEventListener('resize', schedule);
++      document.removeEventListener('scroll', schedule, true);
++      if (frame) cancelAnimationFrame(frame);
++    };
+   }, [open]);
+ 
+   const trigger: HoverCardTriggerProps = {
+diff --git a/src/components/social/ConversationComposer.tsx b/src/components/social/ConversationComposer.tsx
+index bbad0e87..adff8abc 100644
+--- a/src/components/social/ConversationComposer.tsx
++++ b/src/components/social/ConversationComposer.tsx
+@@ -377,6 +377,16 @@ function ConversationComposerImpl({
+ 
+   // ── draft (remembered per conversation) ──
+   const generation = useRef(0);
++  // A receipt belongs to the scope that submitted it, even if this component
++  // remains mounted as the host changes actor, conversation or destination.
++  const scopeKey = JSON.stringify([draftKey, channel ?? null, identity?.userId ?? null, recipient?.id ?? null, recipient?.channel ?? null]);
++  const currentScope = useRef(scopeKey);
++  if (currentScope.current !== scopeKey) {
++    currentScope.current = scopeKey;
++    generation.current += 1;
++  }
++  const currentControlledDraft = useRef(draftProp);
++  currentControlledDraft.current = draftProp;
+   const controlled = draftProp !== undefined;
+   const initialDraft = useMemo<string | RichChatDraft | undefined>(() => {
+     if (controlled || !persistDraft) return defaultDraft;
+@@ -521,6 +531,7 @@ function ConversationComposerImpl({
+     if (message.files.length && !uploadChannel) return false;
+     chat?.setTyping?.(false);
+     const started = generation.current;
++    const startedScope = currentScope.current;
+     const uploaded = message.files.length ? await uploadAll(message.files) : [];
+     const toConversation = !!recipient.channel && recipient.channel === channel;
+     const metadata = outgoingMetadata({
+@@ -535,9 +546,15 @@ function ConversationComposerImpl({
+     if (recipient.send) sent = await recipient.send(out);
+     else if (chat) { chat.sendMessage(body, metadata); sent = true; } else sent = false;
+     if (!sent) return false;
++    // Keep the editor AND its saved draft together when a newer revision or
++    // scope arrived while sending. Clearing storage first loses that newer
++    // draft on reload even though RichChatComposer correctly keeps it visible.
++    if (generation.current !== started || currentControlledDraft.current !== draftProp) {
++      if (currentScope.current === startedScope) setNote(SENT_KEPT);
++      return false;
++    }
+     if (toConversation) reply?.clear();
+     if (persistDraft && !controlled) writeStoredDraft(storage(), draftKey, '');
+-    if (generation.current !== started) { setNote(SENT_KEPT); return false; }
+     return true;
+   };
+ 
+diff --git a/src/components/social/__tests__/ConversationComposer.test.tsx b/src/components/social/__tests__/ConversationComposer.test.tsx
+index 0c21a1d2..c80ecaea 100644
+--- a/src/components/social/__tests__/ConversationComposer.test.tsx
++++ b/src/components/social/__tests__/ConversationComposer.test.tsx
+@@ -218,3 +218,135 @@ describe('ConversationComposer — the injected hook', () => {
+     expect(typeof createConversationComposer(client)).toBe('function');
+   });
+ });
++
++
++describe('ConversationComposer — confirmed sends preserve current drafts', () => {
++  function pendingSend() {
++    let resolve!: (accepted: boolean) => void;
++    let reject!: (error: Error) => void;
++    const send = vi.fn(() => new Promise<boolean>((yes, no) => { resolve = yes; reject = no; }));
++    return { send, resolve: (accepted: boolean) => resolve(accepted), reject: (error: Error) => reject(error) };
++  }
++  const recipient = (confirmed: ReturnType<typeof pendingSend>) => [{ id: 'discussion', label: 'Discussion', channel: CHANNEL, send: confirmed.send }];
++  const saved = (key = CHANNEL) => window.localStorage.getItem(draftStorageKey(key));
++
++  it('clears a confirmed unchanged draft and its storage once', async () => {
++    const confirmed = pendingSend();
++    const clearReply = vi.fn();
++    const { handle } = setup({ recipients: recipient(confirmed), reply: { reply: null, clear: clearReply } });
++    await type(handle, '<p>submitted thought</p>');
++    await send();
++    await waitFor(() => expect(confirmed.send).toHaveBeenCalledTimes(1));
++    expect(saved()).toContain('submitted thought');
++    await act(async () => { confirmed.resolve(true); });
++    await waitFor(() => expect(input().textContent).toBe(''));
++    expect(saved()).toBeNull();
++    expect(clearReply).toHaveBeenCalledTimes(1);
++  });
++
++  it('keeps a newer host-inserted draft in storage and restores it after a late acknowledgement', async () => {
++    const confirmed = pendingSend();
++    const clearReply = vi.fn();
++    const { handle, unmount } = setup({ recipients: recipient(confirmed), reply: { reply: null, clear: clearReply } });
++    await type(handle, '<p>submitted thought</p>');
++    await send();
++    await waitFor(() => expect(confirmed.send).toHaveBeenCalledTimes(1));
++    // A host can seed a newer question or mention while the receipt is pending.
++    await type(handle, '<p>newer thought</p>');
++    expect(saved()).toContain('newer thought');
++    await act(async () => { confirmed.resolve(true); });
++    expect(input().textContent).toBe('newer thought');
++    expect(saved()).toContain('newer thought');
++    expect(clearReply).not.toHaveBeenCalled();
++    expect(screen.getByTestId('conversation-composer-note')).toHaveTextContent('Your current draft has been kept');
++    unmount();
++    setup();
++    await waitFor(() => expect(input().textContent).toBe('newer thought'));
++  });
++
++  it.each(['refused', 'error'] as const)('keeps the saved draft on a %s receipt and reload', async (outcome) => {
++    const confirmed = pendingSend();
++    const { handle, unmount } = setup({ recipients: recipient(confirmed) });
++    await type(handle, '<p>keep this thought</p>');
++    await send();
++    await waitFor(() => expect(confirmed.send).toHaveBeenCalledTimes(1));
++    await act(async () => {
++      if (outcome === 'refused') confirmed.resolve(false);
++      else confirmed.reject(new Error('Receipt not accepted'));
++    });
++    expect(saved()).toContain('keep this thought');
++    expect(input().textContent).toBe('keep this thought');
++    if (outcome === 'error') expect(screen.getByRole('alert')).toHaveTextContent('Your draft and attachments are saved');
++    unmount();
++    setup();
++    await waitFor(() => expect(input().textContent).toBe('keep this thought'));
++  });
++
++  it.each(['channel', 'actor'] as const)('does not let an old receipt clear drafts after a %s scope switch', async (scope) => {
++    const confirmed = pendingSend();
++    const oldKey = scope === 'actor' ? `u-vera:${CHANNEL}` : CHANNEL;
++    const nextChannel = scope === 'channel' ? 'orgiq:initiative:p-2' : CHANNEL;
++    const nextKey = scope === 'actor' ? `u-nora:${CHANNEL}` : nextChannel;
++    const clearReply = vi.fn();
++    const { handle, props, rerender, unmount } = setup({ draftKey: oldKey, recipients: recipient(confirmed), reply: { reply: null, clear: clearReply } });
++    await type(handle, '<p>first scope draft</p>');
++    await send();
++    await waitFor(() => expect(confirmed.send).toHaveBeenCalledTimes(1));
++    window.localStorage.setItem(draftStorageKey(nextKey), JSON.stringify({ html: '<p>next scope draft</p>' }));
++    rerender(<ConversationInputProvider><ConversationComposer {...props}
++      channel={nextChannel} draftKey={nextKey}
++      context={{ ...context, id: nextChannel }}
++      identity={scope === 'actor' ? { userId: 'u-nora', displayName: 'Nora DaSilva' } : props.identity}
++      recipients={[{ id: 'discussion', label: 'Discussion', channel: nextChannel, send: async () => true }]}
++    /></ConversationInputProvider>);
++    await waitFor(() => expect(input().textContent).toBe('next scope draft'));
++    await act(async () => { confirmed.resolve(true); });
++    expect(saved(oldKey)).toContain('first scope draft');
++    expect(saved(nextKey)).toContain('next scope draft');
++    expect(input().textContent).toBe('next scope draft');
++    expect(clearReply).not.toHaveBeenCalled();
++    expect(screen.queryByTestId('conversation-composer-note')).toBeNull();
++    unmount();
++    setup({ channel: nextChannel, draftKey: nextKey, context: { ...context, id: nextChannel } });
++    await waitFor(() => expect(input().textContent).toBe('next scope draft'));
++  });
++
++  it.each(['identity', 'destination'] as const)('ignores a pending receipt after only the %s changed', async (changed) => {
++    const confirmed = pendingSend();
++    const clearReply = vi.fn();
++    const recipients = [
++      ...recipient(confirmed),
++      { id: 'person:u-nora', label: 'Nora DaSilva', channel: 'orgiq:dm:u-nora:u-vera', send: async () => true },
++    ];
++    const { handle, props, rerender } = setup({ recipients, recipient: 'discussion', reply: { reply: null, clear: clearReply } });
++    await type(handle, '<p>scope-bound thought</p>');
++    await send();
++    await waitFor(() => expect(confirmed.send).toHaveBeenCalledTimes(1));
++    rerender(<ConversationInputProvider><ConversationComposer {...props}
++      identity={changed === 'identity' ? { userId: 'u-nora', displayName: 'Nora DaSilva' } : props.identity}
++      recipient={changed === 'destination' ? 'person:u-nora' : 'discussion'}
++    /></ConversationInputProvider>);
++    await act(async () => { confirmed.resolve(true); });
++    expect(saved()).toContain('scope-bound thought');
++    expect(input().textContent).toBe('scope-bound thought');
++    expect(clearReply).not.toHaveBeenCalled();
++    expect(screen.queryByTestId('conversation-composer-note')).toBeNull();
++  });
++
++  it('leaves a controlled newer draft with its host after confirmation', async () => {
++    const confirmed = pendingSend();
++    const changeDraft = vi.fn();
++    const clearReply = vi.fn();
++    const { props, rerender } = setup({ recipients: recipient(confirmed), reply: { reply: null, clear: clearReply }, draft: { html: '<p>submitted thought</p>', files: [] }, onDraftChange: changeDraft });
++    await send();
++    await waitFor(() => expect(confirmed.send).toHaveBeenCalledTimes(1));
++    rerender(<ConversationInputProvider><ConversationComposer {...props} draft={{ html: '<p>new controlled thought</p>', files: [] }} /></ConversationInputProvider>);
++    await waitFor(() => expect(input().textContent).toBe('new controlled thought'));
++    changeDraft.mockClear();
++    await act(async () => { confirmed.resolve(true); });
++    expect(input().textContent).toBe('new controlled thought');
++    expect(clearReply).not.toHaveBeenCalled();
++    expect(changeDraft).not.toHaveBeenCalledWith(expect.objectContaining({ html: '' }), expect.anything());
++    expect(saved()).toBeNull();
++  });
++});
+diff --git a/src/components/shared/__tests__/HoverCardBounds.test.tsx b/src/components/shared/__tests__/HoverCardBounds.test.tsx
+new file mode 100644
+index 00000000..954fd62c
+--- /dev/null
++++ b/src/components/shared/__tests__/HoverCardBounds.test.tsx
+@@ -0,0 +1,114 @@
++import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
++import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
++import { HoverCard } from '../HoverCard';
++
++let anchor = { left: 20, top: 30, bottom: 50 };
++let contentWidth = 288, contentHeight = 100;
++const observers: Array<{ callback: ResizeObserverCallback; disconnect: ReturnType<typeof vi.fn> }> = [];
++
++beforeEach(() => {
++  vi.useFakeTimers();
++  anchor = { left: 20, top: 30, bottom: 50 };
++  contentWidth = 288; contentHeight = 100; observers.length = 0;
++  vi.stubGlobal('innerWidth', 1024); vi.stubGlobal('innerHeight', 768);
++  vi.stubGlobal('ResizeObserver', class {
++    disconnect = vi.fn();
++    observe() {}
++    unobserve() {}
++    constructor(callback: ResizeObserverCallback) { observers.push({ callback, disconnect: this.disconnect }); }
++  });
++  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
++    return { ...anchor, right: anchor.left + 80, width: 80, height: anchor.bottom - anchor.top } as DOMRect;
++  });
++  // jsdom has no layout. Apply the real browser's max-dimension constraint
++  // here; the downstream browser cases prove actual CSS, scrolling and focus.
++  vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockImplementation(function (this: HTMLElement) {
++    return Math.min(contentWidth, parseFloat(this.style.maxWidth) || Infinity);
++  });
++  vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(function (this: HTMLElement) {
++    return Math.min(contentHeight, parseFloat(this.style.maxHeight) || Infinity);
++  });
++});
++afterEach(() => {
++  cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers();
++});
++
++function open() {
++  render(<HoverCard label="Details" openOnFocus={false} content={<a href="#last">Last detail</a>}>
++    {trigger => <button {...trigger}>Show details</button>}
++  </HoverCard>);
++  const trigger = screen.getByRole('button', { name: 'Show details' });
++  act(() => trigger.focus());
++  fireEvent.keyDown(trigger, { key: 'Enter' });
++  return { trigger, panel: screen.getByRole('dialog', { name: 'Details' }) };
++}
++function resizedContent() {
++  act(() => observers.forEach(observer => observer.callback([], {} as ResizeObserver)));
++}
++function flushFrame() { act(() => vi.advanceTimersByTime(20)); }
++
++describe('HoverCard viewport placement', () => {
++  it('opens below the anchor without moving focus', () => {
++    const { trigger, panel } = open();
++    expect(panel.style.top).toBe('56px'); expect(panel.style.left).toBe('20px');
++    expect(panel).toHaveAttribute('data-viewport-placement', 'below');
++    expect(panel).toHaveAttribute('aria-modal', 'false');
++    expect(document.activeElement).toBe(trigger);
++  });
++
++  it('opens above a lower-edge anchor and keeps its right edge in view', () => {
++    anchor = { left: 980, top: 720, bottom: 740 };
++    const { panel } = open();
++    expect(panel.style.top).toBe('614px'); expect(panel.style.left).toBe('728px');
++    expect(panel).toHaveAttribute('data-viewport-placement', 'above');
++  });
++
++  it('bounds an oversized panel to a short, narrow viewport and permits scrolling', () => {
++    vi.stubGlobal('innerWidth', 240); vi.stubGlobal('innerHeight', 300);
++    anchor = { left: 200, top: 140, bottom: 160 };
++    contentHeight = 1000;
++    const { panel } = open();
++    expect(panel.style.maxWidth).toBe('224px'); expect(panel.style.maxHeight).toBe('284px');
++    expect(panel.style.top).toBe('8px'); expect(panel.style.left).toBe('8px');
++    expect(panel.style.overflowY).toBe('auto');
++    expect(panel).toHaveAttribute('data-viewport-placement', 'bounded');
++  });
++
++  it('repositions a pinned panel when asynchronous content grows', () => {
++    anchor = { left: 20, top: 500, bottom: 520 };
++    const { panel } = open();
++    expect(panel.style.top).toBe('526px');
++    contentHeight = 300; resizedContent();
++    expect(panel.style.top).toBe('194px');
++    expect(panel).toHaveAttribute('data-pinned', 'true');
++  });
++
++  it('follows nested scrolling and viewport resizing while pinned', () => {
++    const { panel } = open();
++    anchor = { left: 980, top: 720, bottom: 740 };
++    fireEvent.scroll(screen.getByRole('button', { name: 'Show details' })); flushFrame();
++    expect(panel.style.top).toBe('614px'); expect(panel.style.left).toBe('728px');
++    vi.stubGlobal('innerWidth', 440); vi.stubGlobal('innerHeight', 480);
++    fireEvent(window, new Event('resize')); flushFrame();
++    expect(panel.style.top).toBe('372px'); expect(panel.style.left).toBe('144px');
++    expect(panel).toHaveAttribute('data-pinned', 'true');
++  });
++
++  it('disconnects observation and queued placement when Escape closes the card', () => {
++    const { trigger, panel } = open();
++    fireEvent(window, new Event('resize'));
++    fireEvent.keyDown(trigger, { key: 'Escape' });
++    flushFrame();
++    expect(panel.isConnected).toBe(false);
++    expect(observers.every(observer => observer.disconnect.mock.calls.length > 0)).toBe(true);
++    expect(document.activeElement).toBe(trigger);
++  });
++
++  it('keeps a pinned card in view after its anchor scrolls above the viewport', () => {
++    const { panel } = open();
++    anchor = { left: -40, top: -80, bottom: -60 };
++    fireEvent.scroll(document); flushFrame();
++    expect(panel.style.top).toBe('8px'); expect(panel.style.left).toBe('8px');
++    expect(panel).toHaveAttribute('data-viewport-placement', 'bounded');
++  });
++});

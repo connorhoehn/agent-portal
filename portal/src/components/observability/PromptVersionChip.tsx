@@ -144,7 +144,7 @@ function PromptVersionBody({ promptVersion }: { promptVersion: string }) {
           {/* CodeBlock owns the mono face, the scroll and the wrapping. */}
           <CodeBlock
             code={detail.content}
-            className="max-h-[50vh] overflow-y-auto text-[11.5px] whitespace-pre-wrap break-words"
+            className="text-xs max-h-[50vh] overflow-y-auto whitespace-pre-wrap break-words"
             ariaLabel="System prompt content"
           />
         </Stack>

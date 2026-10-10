@@ -10,7 +10,7 @@
 // change of direction is a new design that supersedes this one.
 
 import { useState } from 'react';
-import { Link, useParams } from 'react-router';
+import { Link, useNavigate, useParams } from 'react-router';
 import {
   Avatar,
   Button,
@@ -27,17 +27,16 @@ import {
   ReviewThread,
   SectionLabel,
   SignoffPanel,
-  Stack,
+  Stack, T,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
-import { UnavailableNotice } from '../../components/UnavailableNotice';
+import { RecordNotFound, UnavailableNotice, isNotFoundError } from '../../components/UnavailableNotice';
 import { useCrumbLabel } from '../../lib/crumbLabels';
 import { useCapabilities } from '../../lib/capabilities';
 import { relativeTime } from '../../lib/relativeTime';
 import { toastError, toastPending, toastSuccess } from '../../lib/toastStore';
 import { writeJson } from '../../lib/writeJson';
-import { STATUS_LABEL, STATUS_TONE, latestSignoffs, nextStep } from './designFormat';
-import { T } from './Text';
+import { DESIGNS_SOURCE, STATUS_LABEL, STATUS_TONE, latestSignoffs, nextStep } from './designFormat';
 import type { DesignThread } from './types';
 
 interface InitiativeLite {
@@ -47,6 +46,7 @@ interface InitiativeLite {
 
 export default function DesignThreadPage() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const { can, ready } = useCapabilities();
   const canSteer = ready && can('DispatchAgentRun');
   const [busy, setBusy] = useState(false);
@@ -93,7 +93,10 @@ export default function DesignThreadPage() {
     } finally { setBusy(false); }
   }
 
-  if (error) return <UnavailableNotice error={error} what="this design" source="Design reviews are read from Aurora" onRetry={refresh} />;
+  if (error && isNotFoundError(error)) {
+    return <RecordNotFound heading="Design" title="Design not found" body={`No design review has the id "${id}".`} backLabel="All designs" onBack={() => navigate('/iq/designs')} />;
+  }
+  if (error) return <UnavailableNotice error={error} what="this design" source={DESIGNS_SOURCE} onRetry={refresh} />;
   if (isLoading || !thread) return <LoadingState label="Loading design review…" />;
 
   const signoffs = latestSignoffs(thread.signoffs);

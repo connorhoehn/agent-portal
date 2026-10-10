@@ -1,8 +1,14 @@
-// Distillation → Review (spec §1): queue · claim · Sources.
+// Distillation → Review (spec §1): crumbs · title · queue · claim · Sources.
 //
-//   rail    Tabs Pending N / Reviewed N · SearchInput · GroupedList rows with
-//           the server-resolved target title · type · N notes · age (an
-//           unresolvable target says so, with Retry)
+//   frame   ListRailLayout (docs/layout-cascade.md): the queue is a flush
+//           list rail beside the module's section rail (the Initiatives rail's
+//           structure); the content column after it opens with the module
+//           trail, then "Knowledge pending" / "Knowledge reviewed"
+//   list    "PENDING 7" caption + count · SearchInput + filter popover
+//           (repository, `?repo=`) · GroupedList rows with the server-resolved
+//           target title · type · N notes · age (an unresolvable target says
+//           so, with Retry) · "7 pending" footer. No Pending/Reviewed tabs:
+//           the section rail already chooses the queue
 //   pane    the claim on EditorShell — "Does this match the source run?",
 //           the claim, "View proposed guide →", Your review, Agree /
 //           Disagree for ManageBots (else a read-only AccessNotice), Earlier
@@ -14,17 +20,19 @@
 // rolls the sample back and reopens it. `?sample=` is the selection.
 import PromotionsPage from '../promotions/PromotionsPage';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useUrlDraft } from './useUrlDraft';
 import { useLocation, useNavigate, useOutletContext } from 'react-router';
 import {
-  AccessNotice, CommentList, ContextColumn, Disclosure, ExplorerLayout,
+  AccessNotice, CommentList, ContextColumn, Disclosure, WorkListFilters,
   type CommentListItem, type ContextColumnState,
+  ListRailLayout,
 } from '@connorhoehnslalom/ui-components';
-import { EditorShell } from '@connorhoehnslalom/ui-components/doc-editor';
 import {
-  Button, DetailSection, EmptyState, FileKindMark, FormField, GroupedList, Inline, LinkIcon, LoadingState, SearchInput,
-  Stack, StatStrip, StatusPill, T, Tabs, Textarea,
+  Button, DetailSection, EmptyState, FilterPopover, FormField, GroupedList, Inline, LinkIcon, LiveRegion, LoadingState, SearchInput,
+  Stack, StatStrip, StatusPill, T, Textarea,
 } from '@connorhoehnslalom/ui-components/shared';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
+import { SectionHeader } from '../../components/shell/SectionContent';
 import { useDistillationChannel } from '../../hooks/useDistillationChannel';
 import type { DistillationOutletContext } from './DistillationModule';
 import { useFetch } from '../../hooks/useFetch';
@@ -35,13 +43,12 @@ import { toastError, toastSuccess } from '../../lib/toastStore';
 import { sendJson } from '../../lib/writeJson';
 import { knowledgeItemHref, parseReview, reviewHref, type ReviewState } from './distillationRoutes';
 import { RecordExplainComposer } from './ExplainComposer';
-import { compactAge, shortRepo } from './knowledgeModel';
+import { agoPhrase, freshIds, shortRepo } from './knowledgeModel';
 import {
-  applyOptimisticVerdict, nextSampleAfterVerdict, queueCounts, queueRows, rollbackVerdict, toQueueRow,
+  applyOptimisticVerdict, nextSampleAfterVerdict, queueCounts, queueRows, reviewArrivalAnnouncement, rollbackVerdict, toQueueRow,
   type ReviewQueueRow,
 } from './reviewQueueModel';
 import { SourcesPanel, useItemSources } from './SourcesPanel';
-import { recordFileKind } from './sourcesModel';
 import { SAMPLING_LABEL } from './distillationFormat';
 import type { Item, Lineage, ReviewSampleWithTarget, SamplingResponse } from './types';
 
@@ -81,7 +88,7 @@ function samplingItems(s: SamplingResponse) {
 }
 
 function Claim({
-  sample, row, all, canReview, sampling, onVerdict, onRetry, onOpenSources, sourceCount, onOpen,
+  sample, row, all, canReview, sampling, onVerdict, onRetry, onOpen,
 }: {
   sample: ReviewSampleWithTarget;
   row: ReviewQueueRow;
@@ -90,8 +97,6 @@ function Claim({
   sampling: SamplingResponse | null;
   onVerdict: (id: string, verdict: Verdict, note: string) => void;
   onRetry: () => void;
-  onOpenSources: () => void;
-  sourceCount: number | null;
   onOpen: (href: string) => void;
 }) {
   const [note, setNote] = useState('');
@@ -111,32 +116,12 @@ function Claim({
       text: s.note ?? (s.verdict === 'agree' ? 'Agreed with no note.' : 'Disagreed with no note.'),
     }));
 
-  const pill = VERDICT_PILL[sample.verdict];
-
+  // The record's headline is the page title (SectionHeader, one h1); this is
+  // its body and the explain-only composer docked under it.
   return (
-    <EditorShell
-      title={row.title}
-      kind={recordFileKind(kind, sample.target?.type)}
-      breadcrumbs={[{ label: 'Review' }, { label: row.typeLabel }]}
-      statusPill={<StatusPill tone={pill.tone} label={pill.label} size="sm" />}
-      subtitle={[row.repo ? `From ${shortRepo(row.repo)}` : null, `Sampled ${relativeTime(row.sampledAt)}`].filter(Boolean).join(' · ')}
-      headActions={(
-        <Button size="sm" variant="secondary" onClick={onOpenSources}>
-          Sources{sourceCount != null ? ` ${sourceCount}` : ''}
-        </Button>
-      )}
-      surface="plain"
-      label="Review claim"
-      data-testid="review-claim"
-      footer={(
-        <RecordExplainComposer
-          subject={{ kind: row.typeLabel.toLowerCase(), id: row.targetId, title: row.title }}
-          referenceLabel="This review"
-          placeholder="Show the evidence for this finding…"
-        />
-      )}
-    >
-      <Stack gap="md" className="mx-auto w-full max-w-3xl px-6 py-4">
+    <Stack gap="none" className="h-full min-h-0 min-w-0 flex-1" data-testid="review-claim">
+      <Stack gap="none" className="min-h-0 flex-1 overflow-auto">
+      <Stack gap="md" className="w-full max-w-3xl px-5 py-4">
         {!row.resolved ? (
           <AccessNotice
             tone="warning"
@@ -202,7 +187,7 @@ function Claim({
         {!pending && (
           <DetailSection title="This review">
             <T className="text-[13px] text-text-secondary" wrap>
-              {pill.label}{sample.reviewer ? ` by ${sample.reviewer}` : ''}{sample.reviewed_at ? ` · ${relativeTime(sample.reviewed_at)}` : ''}
+              {VERDICT_PILL[sample.verdict].label}{sample.reviewer ? ` by ${sample.reviewer}` : ''}{sample.reviewed_at ? ` · ${relativeTime(sample.reviewed_at)}` : ''}
               {sample.note ? ` — “${sample.note}”` : ''}
             </T>
           </DetailSection>
@@ -225,8 +210,16 @@ function Claim({
             <T className="text-[12px] text-text-tertiary">Sampling figures are not available right now.</T>
           )}
         </Disclosure>
+        </Stack>
       </Stack>
-    </EditorShell>
+      <Stack gap="none" className="shrink-0 px-5 pb-4">
+        <RecordExplainComposer
+          subject={{ kind: row.typeLabel.toLowerCase(), id: row.targetId, title: row.title }}
+          referenceLabel="This review"
+          placeholder="Show the evidence for this finding…"
+        />
+      </Stack>
+    </Stack>
   );
 }
 
@@ -253,13 +246,9 @@ function KnowledgeReview() {
   const moduleCtx = useOutletContext<DistillationOutletContext | undefined>();
   const sampling = useFetch<SamplingResponse>('/api/distillation/sampling', 60_000);
 
-  const [query, setQuery] = useState(state.q ?? '');
-  useEffect(() => {
-    const next = query.trim() || null;
-    if (next === stateRef.current.q) return undefined;
-    const t = setTimeout(() => go({ q: next }), 250);
-    return () => clearTimeout(t);
-  }, [query, go]);
+  // Typed locally and written to ?q= after a pause (see useUrlDraft): a
+  // Back/Forward that changes ?q= now reaches the box too.
+  const [query, setQuery] = useUrlDraft(state.q ?? '', (value) => go({ q: value || null }));
 
   const all = useMemo(() => review.data?.samples ?? [], [review.data]);
   // The header's repository scope narrows the queue; a target that could not
@@ -269,6 +258,21 @@ function KnowledgeReview() {
     [all, state.repo],
   );
   const counts = queueCounts(scoped);
+
+  // Samples drawn while the queue is open (a compaction pass, or someone's
+  // "Request review") are marked New and announced. The first load marks
+  // nothing; a sample stays New until it is decided or the page reloads.
+  const pendingNow = useMemo(() => all.filter((s) => s.verdict === 'pending'), [all]);
+  const seenPending = useRef<ReviewSampleWithTarget[] | null>(null);
+  const [freshSamples, setFreshSamples] = useState<ReadonlySet<string>>(() => new Set());
+  const [arrivals, setArrivals] = useState('');
+  useEffect(() => {
+    if (review.isLoading && !review.data) return;
+    const arrived = freshIds(seenPending.current, pendingNow);
+    seenPending.current = pendingNow;
+    setArrivals(reviewArrivalAnnouncement(arrived.size));
+    if (arrived.size > 0) setFreshSamples((prev) => new Set([...prev, ...arrived]));
+  }, [pendingNow, review.isLoading, review.data]);
   const rows = useMemo(() => queueRows(scoped, state.tab, state.q), [scoped, state.tab, state.q]);
   const unresolved = rows.filter((r) => !r.resolved).length;
   const selectedSample = scoped.find((s) => s.id === state.sample) ?? null;
@@ -315,20 +319,26 @@ function KnowledgeReview() {
     [selectedRow?.targetId, selectedRow?.resolved, selectedRow?.title, selectedSample?.target?.kind, selectedSample?.target_kind],
   );
 
+  const repoFacet = moduleCtx?.scope.repoFacet;
   const railHeader = (
-    <Stack gap="xs" className="px-3 pb-2">
-      <Tabs
-        size="sm"
-        aria-label="Review queue"
-        value={state.tab}
-        onValueChange={(id) => go({ tab: id === 'decided' ? 'decided' : 'pending', sample: null })}
-        items={[
-          { id: 'pending', label: 'Pending', badge: counts.pending },
-          { id: 'decided', label: 'Reviewed', badge: counts.decided },
-        ]}
-      />
-      <SearchInput value={query} onChange={setQuery} placeholder="Find a review" aria-label="Find a review" size="sm" />
-      <T className="text-[11px] text-text-tertiary">Check findings against their sources.</T>
+    <Stack gap="xs">
+      <Inline gap="xs" align="center" wrap={false}>
+        <SearchInput value={query} onChange={setQuery} placeholder="Find a review" aria-label="Find a review" className="min-w-0 flex-1" />
+        {repoFacet && (
+          <FilterPopover
+            trigger="icon"
+            size="sm"
+            label="Filter"
+            activeCount={state.repo ? 1 : 0}
+            onClear={() => repoFacet.onChange([])}
+            panelLabel="Filter the review queue"
+          >
+            <WorkListFilters facets={[repoFacet]} data-testid="review-filters" />
+          </FilterPopover>
+        )}
+      </Inline>
+      <T className="text-[12px] text-text-tertiary">Check findings against their sources.</T>
+      <LiveRegion message={arrivals} data-testid="review-arrivals" />
     </Stack>
   );
 
@@ -355,18 +365,22 @@ function KnowledgeReview() {
       size="md"
       currentStyle="bar"
       groupHeading="label"
-      groups={[{ id: state.tab, title: state.tab === 'pending' ? 'Pending' : 'Reviewed', count: rows.length }]}
+      // Grouped by what was sampled ("PATTERN 5", "GUIDE 2"): the rail's own
+      // caption already names the queue and its count.
+      groupCountAlign="end"
+      groups={[...new Set(rows.map((r) => r.typeLabel))].map((type) => ({ id: type, title: type, count: rows.filter((r) => r.typeLabel === type).length }))}
       rows={rows.map((r) => ({
         id: r.id,
-        groupId: state.tab,
-        icon: <FileKindMark kind={recordFileKind(r.typeLabel === 'Pattern' ? 'cluster' : 'artifact')} size="sm" variant="glyph" />,
+        groupId: r.typeLabel,
         title: r.title,
         subline: [
-          r.resolved ? r.typeLabel : (r.error ?? 'Target could not be loaded'),
+          r.resolved ? null : (r.error ?? 'Target could not be loaded'),
           r.sourceCount != null ? `${r.sourceCount} ${r.sourceCount === 1 ? 'note' : 'notes'}` : null,
-          compactAge(r.sampledAt, nowMs) ? `${compactAge(r.sampledAt, nowMs)} ago` : null,
+          agoPhrase(r.sampledAt, nowMs) || null,
         ].filter(Boolean).join(' · '),
-        pill: state.tab === 'decided' ? <StatusPill tone={VERDICT_PILL[r.verdict].tone} label={VERDICT_PILL[r.verdict].label} size="sm" /> : undefined,
+        pill: state.tab === 'decided'
+          ? <StatusPill tone={VERDICT_PILL[r.verdict].tone} label={VERDICT_PILL[r.verdict].label} size="sm" />
+          : freshSamples.has(r.id) ? <StatusPill tone="info" label="New" size="sm" data-testid="review-row-new" /> : undefined,
         trailing: r.resolved ? undefined : <Button size="sm" variant="ghost" onClick={review.refresh}>Retry</Button>,
       }))}
       currentId={state.sample}
@@ -376,25 +390,43 @@ function KnowledgeReview() {
   );
 
   const railFooter = (
-    <Inline gap="sm" align="center" justify="between" className="px-3 py-2">
-      <T className="text-[12px] text-text-tertiary">
-        {counts.pending} pending{unresolved > 0 ? ` · ${unresolved} could not be loaded` : ''}
-      </T>
-    </Inline>
+    <T className="text-[13px] text-text-secondary" data-testid="review-rail-footer">
+      {counts.pending} pending{unresolved > 0 ? ` · ${unresolved} could not be loaded` : ''}
+    </T>
   );
 
+  // The queue is a flush list rail beside the section rail; the content
+  // column after it opens with the module trail and the queue's title
+  // (docs/layout-cascade.md). No repository button in the header: the
+  // repository is the rail's filter.
+  // With a sample open its target's title IS the page title (one h1, 20/600);
+  // the verdict, the kind line and Sources ride the title row.
+  const queueTitle = state.tab === 'pending' ? 'Knowledge pending' : 'Knowledge reviewed';
+  const sourceCount = sources.data?.sources ? sources.data.sources.length : null;
+  const headerProps = selectedSample && selectedRow
+    ? {
+        title: selectedRow.title,
+        description: [selectedRow.typeLabel, selectedRow.repo ? `From ${shortRepo(selectedRow.repo)}` : null, `Sampled ${relativeTime(selectedRow.sampledAt)}`].filter(Boolean).join(' · '),
+        badge: <StatusPill tone={VERDICT_PILL[selectedSample.verdict].tone} label={VERDICT_PILL[selectedSample.verdict].label} size="sm" />,
+        actions: (
+          <Button size="sm" variant="secondary" onClick={() => go({ panel: 'sources' }, { push: true })}>
+            Sources{sourceCount != null ? ` ${sourceCount}` : ''}
+          </Button>
+        ),
+      }
+    : { title: queueTitle };
+  const trail = moduleCtx?.scope.breadcrumbs ?? [{ label: 'Build' }, { label: 'Distillation' }, { label: 'Review' }];
   return (
-    <ExplorerLayout
-      railWidth="ms"
-      railTitle="Knowledge review"
-      railHeading="caption"
-      railLabel="review queue"
-      railHeader={railHeader}
-      rail={railBody}
-      railFooter={railFooter}
-      panePadding="none"
-      asidePlacement="beside"
-      className="min-h-0 flex-1"
+    <ListRailLayout
+      header={<SectionHeader breadcrumbs={trail} {...headerProps} />}
+      list={{
+        title: state.tab === 'pending' ? 'Pending' : 'Reviewed',
+        count: state.tab === 'pending' ? counts.pending : counts.decided,
+        header: railHeader,
+        body: railBody,
+        footer: railFooter,
+        label: 'review queue',
+      }}
       data-testid="distillation-review"
       aside={selectedSample ? (
         <ContextColumn
@@ -428,16 +460,18 @@ function KnowledgeReview() {
           sampling={sampling.data}
           onVerdict={decide}
           onRetry={review.refresh}
-          onOpenSources={() => go({ panel: 'sources' }, { push: true })}
-          sourceCount={sources.data?.sources ? sources.data.sources.length : null}
           onOpen={openHref}
         />
       ) : (
-        <EmptyState
-          title={review.isLoading ? 'Loading…' : counts.pending === 0 && state.tab === 'pending' ? 'The queue is empty' : 'Nothing selected'}
-          description="Pick a sample from the queue to compare its claim with the evidence."
-        />
+        // With no sample open the pane says what to do; the queue's name is the
+        // page title above the explorer, as on Knowledge.
+        <Stack gap="md" className="w-full max-w-3xl px-6 pb-6">
+          <EmptyState
+            title={review.isLoading ? 'Loading…' : counts.pending === 0 && state.tab === 'pending' ? 'The queue is empty' : 'Nothing selected'}
+            description="Pick a sample from the queue to compare its claim with the evidence."
+          />
+        </Stack>
       )}
-    </ExplorerLayout>
+    </ListRailLayout>
   );
 }

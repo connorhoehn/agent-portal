@@ -79,6 +79,8 @@ export function QueuePulse({ summary, jobs, degraded }: {
       {/* A single stat-strip row, not a stack of KPI cards — the job list
           below is the page. */}
       <StatStrip
+        variant="line"
+        size="sm"
         aria-label="Queue pulse"
         items={[
           {

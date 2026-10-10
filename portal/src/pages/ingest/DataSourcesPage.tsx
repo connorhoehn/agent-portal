@@ -2,14 +2,13 @@ import { Fragment, useEffect, useRef, useState } from 'react';
 import {
   Button, Card, CardHeader, Chip, Inline, InlineAlert, InlinePlaceholder, LoadingState,
   PageSection, ProgressBar, Stack, StatStrip, Table, TableBody, TableHead, TableRow,
-  TableTd, TableTh,
+  TableTd, TableTh, T,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { writeJson } from '../../lib/writeJson';
 import { useFetch } from '../../hooks/useFetch';
 import { EmptyState, StatusDot } from '../../components/ingest/ui';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
-import { T } from './Text';
 import { JOB_STATUS_TONE } from './ingestFormat';
 
 interface DataSource {
@@ -150,7 +149,7 @@ function DataSourcesPage() {
           ) : sources.length === 0 ? (
             <EmptyState title="No data sources" body="No data sources attached to this Knowledge Base." />
           ) : (
-            <Table>
+            <Table size="sm">
               <TableHead>
                 <TableRow>
                   <TableTh>Name</TableTh><TableTh>Type</TableTh>
@@ -161,16 +160,16 @@ function DataSourcesPage() {
                 {sources.map(ds => (
                   <TableRow key={ds.id}>
                     <TableTd>
-                      <T className="block font-medium">{ds.name}</T>
-                      <T className="block font-mono text-[10px] text-text-tertiary">{ds.id}</T>
+                      <Inline gap="sm" align="center" wrap={false}>
+                        <T as="span" size="sm" weight="semibold">{ds.name}</T>
+                        <T as="span" size="xs" tone="tertiary" className="font-mono">{ds.id}</T>
+                      </Inline>
                     </TableTd>
-                    <TableTd className="text-[11px] text-text-secondary">{ds.type}</TableTd>
+                    <TableTd><T as="span" size="xs" tone="secondary">{ds.type}</T></TableTd>
                     <TableTd
-                      className="max-w-[320px] overflow-hidden text-ellipsis whitespace-nowrap font-mono text-[11px] text-text-secondary"
-                      title={ds.sourceUri}
-                    >
+                      title={ds.sourceUri} className="max-w-[320px] overflow-hidden text-ellipsis whitespace-nowrap font-mono"><T as="span" size="xs" tone="secondary">
                       {ds.sourceUri || '—'}
-                    </TableTd>
+                    </T></TableTd>
                     <TableTd>
                       <Chip tone={ds.status === 'AVAILABLE' ? 'success' : 'warning'} size="xs">{ds.status}</Chip>
                     </TableTd>
@@ -199,7 +198,7 @@ function DataSourcesPage() {
             title="KB Job History"
             subtitle="10s refresh"
             action={jobs[0]
-              ? <T className="text-[11px] text-text-tertiary">last: {new Date(jobs[0].startedAt).toLocaleString()}</T>
+              ? <T size="xs" tone="tertiary">last: {new Date(jobs[0].startedAt).toLocaleString()}</T>
               : undefined}
           />
           {jobsFailure ? (
@@ -239,7 +238,7 @@ function LiveJobMonitor({
           meta={(
             <Inline gap="sm" align="center">
               <StatusDot pulse={!streamDone} color={barColor} />
-              <T className="font-mono text-[11px] text-text-tertiary">{job.jobId.slice(0, 12)}…</T>
+              <T size="xs" tone="tertiary" className="font-mono">{job.jobId.slice(0, 12)}…</T>
             </Inline>
           )}
           action={<Chip tone={JOB_STATUS_TONE[job.status] ?? 'neutral'} size="xs">{job.status}</Chip>}
@@ -255,13 +254,14 @@ function LiveJobMonitor({
         )}
 
         <StatStrip
-          frameless
+          variant="line"
+          size="sm"
           aria-label="Job document counts"
           items={[
-            { label: 'Scanned', value: job.documentsScanned },
-            { label: 'Indexed', value: job.documentsIndexed },
-            { label: 'Failed', value: job.documentsFailed, ...(job.documentsFailed > 0 ? { tone: 'danger' as const } : {}) },
-            { label: 'Deleted', value: job.documentsDeleted },
+            { label: 'scanned', value: job.documentsScanned },
+            { label: 'indexed', value: job.documentsIndexed },
+            { label: 'failed', value: job.documentsFailed, ...(job.documentsFailed > 0 ? { tone: 'danger' as const } : {}) },
+            { label: 'deleted', value: job.documentsDeleted },
           ]}
         />
       </Stack>
@@ -284,15 +284,15 @@ function JobHistoryTable({ jobs }: { jobs: IngestionJob[] }) {
   }
 
   return (
-    <Table>
+    <Table size="sm">
       <TableHead>
         <TableRow>
           <TableTh>Job</TableTh><TableTh>Started</TableTh><TableTh>Status</TableTh>
           <TableTh>Duration</TableTh>
-          <TableTh className="text-right">Indexed</TableTh>
-          <TableTh className="text-right">Scanned</TableTh>
-          <TableTh className="text-right">Failed</TableTh>
-          <TableTh className="text-right">Deleted</TableTh>
+          <TableTh numeric>Indexed</TableTh>
+          <TableTh numeric>Scanned</TableTh>
+          <TableTh numeric>Failed</TableTh>
+          <TableTh numeric>Deleted</TableTh>
           <TableTh></TableTh>
         </TableRow>
       </TableHead>
@@ -300,24 +300,26 @@ function JobHistoryTable({ jobs }: { jobs: IngestionJob[] }) {
         {jobs.map(j => (
           <Fragment key={j.jobId}>
             <TableRow>
-              <TableTd className="font-mono text-[10px] text-text-tertiary">
+              <TableTd className="font-mono"><T as="span" size="xs" tone="tertiary">
                 {j.jobId.slice(0, 12)}…
-              </TableTd>
-              <TableTd className="whitespace-nowrap text-[11px] text-text-tertiary">
+              </T></TableTd>
+              <TableTd className="whitespace-nowrap"><T as="span" size="xs" tone="tertiary">
                 {new Date(j.startedAt).toLocaleString()}
-              </TableTd>
+              </T></TableTd>
               <TableTd>
                 <Chip tone={JOB_STATUS_TONE[j.status] ?? 'neutral'} size="xs">{j.status}</Chip>
               </TableTd>
-              <TableTd className="text-[11px] text-text-tertiary">
+              <TableTd><T as="span" size="xs" tone="tertiary">
                 {j.durationMs > 0 ? `${(j.durationMs / 1000).toFixed(1)}s` : '—'}
+              </T></TableTd>
+              <TableTd numeric><T as="span" size="sm" weight="semibold">{j.documentsIndexed}</T></TableTd>
+              <TableTd numeric><T as="span" size="xs" tone="secondary">{j.documentsScanned}</T></TableTd>
+              <TableTd numeric>
+                <T as="span" size="xs" tone={j.documentsFailed > 0 ? 'inherit' : 'secondary'} tabular className={j.documentsFailed > 0 ? 'text-danger' : undefined}>
+                  {j.documentsFailed}
+                </T>
               </TableTd>
-              <TableTd className="text-right font-semibold">{j.documentsIndexed}</TableTd>
-              <TableTd className="text-right text-[12px] text-text-secondary">{j.documentsScanned}</TableTd>
-              <TableTd className={`text-right text-[12px] ${j.documentsFailed > 0 ? 'text-danger' : 'text-text-secondary'}`}>
-                {j.documentsFailed}
-              </TableTd>
-              <TableTd className="text-right text-[12px] text-text-secondary">{j.documentsDeleted}</TableTd>
+              <TableTd numeric><T as="span" size="xs" tone="secondary">{j.documentsDeleted}</T></TableTd>
               <TableTd>
                 {j.status === 'FAILED' && (
                   <Button variant="ghost" size="sm" onClick={() => loadDetails(j.jobId, j.dataSourceId)}>
@@ -330,12 +332,12 @@ function JobHistoryTable({ jobs }: { jobs: IngestionJob[] }) {
               <TableRow>
                 <TableTd colSpan={9} className="bg-danger-bg px-4 py-2.5">
                   <Stack gap="xs">
-                    <T className="text-[12px] font-semibold text-danger">Failure reasons</T>
+                    <T size="xs" weight="semibold" tone="inherit" className="text-danger">Failure reasons</T>
                     {(details[j.jobId]?.failureReasons ?? j.failureReasons ?? []).length === 0 ? (
                       <InlinePlaceholder tone="surface" className="text-danger">No details returned by Bedrock.</InlinePlaceholder>
                     ) : (
                       (details[j.jobId]?.failureReasons ?? j.failureReasons).map((r, i) => (
-                        <T key={i} className="text-[12px] text-danger">· {r}</T>
+                        <T key={i} size="xs" tone="inherit" className="text-danger">· {r}</T>
                       ))
                     )}
                   </Stack>

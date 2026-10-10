@@ -17,6 +17,8 @@ type Target = ComputeCapabilityTarget & { box?: FleetBox; job?: AgentJob };
 
 function cloudStatus(box: FleetBox): ComputeCapabilityTarget['status'] {
   if (box.status === 'idle') return 'available';
+  // Minted, microVM not up yet: it will take work, it just has not started.
+  if (box.status === 'provisioning') return 'available';
   if (box.status === 'error') return 'failed';
   return box.status;
 }

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
+  T,
   Chip,
   Drawer,
   EmptyState,
@@ -114,12 +115,13 @@ export function RunDetailDrawer({
               </Inline>
 
               <StatStrip
-                frameless
+                variant="line"
+                size="sm"
                 items={[
-                  { label: 'Pages', value: `${session.pages.length} / ${session.maxPages}` },
-                  { label: 'Duration', value: durationLabel(durationOf(session)) },
-                  { label: 'Cost', value: formatCost(session.estimatedCostUsd) },
-                  { label: 'Stored', value: formatBytes(session.totalScreenshotBytes + session.totalMarkdownBytes) },
+                  { label: 'pages', value: `${session.pages.length} / ${session.maxPages}` },
+                  { label: 'duration', value: durationLabel(durationOf(session)) },
+                  { label: 'cost', value: formatCost(session.estimatedCostUsd) },
+                  { label: 'stored', value: formatBytes(session.totalScreenshotBytes + session.totalMarkdownBytes) },
                 ]}
               />
 
@@ -206,35 +208,29 @@ function TimelineRow({
       />
       <Inline gap="none" className="flex-1 min-w-0">
         <Inline gap="none" className="flex items-center gap-2 mb-1">
-          <Inline as="span" gap="none"
-            className="text-[12px] font-semibold truncate cursor-pointer"
+          <T as="span"
             onClick={onOpen}
-            title={page.title || page.url}
-          >
+            title={page.title || page.url} size="xs" weight="semibold" className="truncate cursor-pointer">
             {page.title || page.url}
-          </Inline>
+          </T>
           <Chip tone={PAGE_STATUS_TONE[page.status]} size="xs">{page.status}</Chip>
           {page.depth > 0 && (
-            <Inline as="span" gap="none" className="text-[10px] text-text-tertiary">depth {page.depth}</Inline>
+            <T as="span" size="xs" tone="tertiary">depth {page.depth}</T>
           )}
         </Inline>
-        <Inline gap="none"
-          className="text-[11px] font-mono text-text-tertiary overflow-hidden truncate whitespace-nowrap mb-1"
-          title={page.url}
-        >
+        <T as="span"
+          title={page.url} size="xs" tone="tertiary" className="font-mono overflow-hidden truncate whitespace-nowrap mb-1">
           {page.url}
-        </Inline>
+        </T>
         {page.summary && (
-          <Inline gap="none"
-            className="text-[12px] text-text-secondary overflow-hidden [display:-webkit-box] [-webkit-line-clamp:2] [-webkit-box-orient:vertical]"
-          >
+          <T as="span" size="xs" tone="secondary" className="overflow-hidden [display:-webkit-box] [-webkit-line-clamp:2] [-webkit-box-orient:vertical]">
             {page.summary}
-          </Inline>
+          </T>
         )}
         {page.error && (
-          <Inline gap="none" className="text-[11px] text-danger mt-1">
+          <T as="span" size="xs" tone="inherit" className="text-danger mt-1">
             {page.error}
-          </Inline>
+          </T>
         )}
         <Inline gap="none" className="flex gap-2.5 mt-1.5">
           <Button variant="secondary" size="sm" onClick={onOpen}>Details</Button>

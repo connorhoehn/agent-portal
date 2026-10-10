@@ -6,8 +6,7 @@
 // template. Composed here once, fed pre-bucketed cell classes from
 // `trafficFormat.ts` (so no runtime `style=` is needed for the color scale).
 // ≤ 12 raw elements: 1 header-row grid + 1 per-day-row grid template (map) = 2.
-import { T } from './Text';
-import { Inline, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { Inline, Stack, T } from '@connorhoehnslalom/ui-components/shared';
 import { heatmapBucketClass } from './trafficFormat';
 
 const GRID_COLS = 'grid-cols-[40px_repeat(24,minmax(20px,1fr))]';
@@ -37,18 +36,18 @@ function HeatmapCell({
 
 export function TrafficHeatmapFrame({ grid, max }: { grid: number[][]; max: number }) {
   return (
-    <Stack gap="xs" className="text-[10px] text-text-tertiary overflow-x-auto">
+    <Stack gap="xs" className="overflow-x-auto">
       <div className={`grid ${GRID_COLS} gap-0.5 items-center`}>
         <T className="w-10" />
         {Array.from({ length: 24 }).map((_, h) => (
-          <T key={h} as="div" className="text-center text-[9px] text-text-tertiary">
+          <T key={h} as="div" size="xs" tone="tertiary" className="text-center">
             {h % 3 === 0 ? h : ''}
           </T>
         ))}
       </div>
       {grid.map((row, rIdx) => (
         <div key={rIdx} className={`grid ${GRID_COLS} gap-0.5 items-center`}>
-          <T className="text-[10px] font-semibold text-text-secondary w-10">{DOW_LABELS[rIdx]}</T>
+          <T size="xs" weight="semibold" tone="secondary" className="w-10">{DOW_LABELS[rIdx]}</T>
           {row.map((count, h) => (
             <HeatmapCell
               key={h}
@@ -60,12 +59,12 @@ export function TrafficHeatmapFrame({ grid, max }: { grid: number[][]; max: numb
           ))}
         </div>
       ))}
-      <Inline gap="xs" align="center" className="mt-2 ml-[42px] text-[10px] text-text-tertiary">
-        <T className="tabular-nums">0</T>
+      <Inline gap="xs" align="center" className="mt-2 ml-[42px]">
+        <T size="xs" tone="tertiary" tabular>0</T>
         {LEGEND_STOPS.map((t) => (
           <HeatmapCell key={t} count={Math.ceil(t * max)} max={max} />
         ))}
-        <T className="tabular-nums">{max.toLocaleString()}</T>
+        <T size="xs" tone="tertiary" tabular>{max.toLocaleString()}</T>
       </Inline>
     </Stack>
   );

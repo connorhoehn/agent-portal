@@ -39,15 +39,17 @@ export function StatCards({ peopleScoredLabel, avgComposite, topScore, departmen
   return (
     <StatStrip
       aria-label="Scoring summary"
+      variant="line"
+      size="sm"
       items={[
-        { label: 'People Scored', value: peopleScoredLabel },
-        { label: 'Avg Composite', value: String(avgComposite) },
-        { label: 'Top Score', value: String(topScore) },
-        { label: 'Departments', value: String(departmentCount) },
+        { label: 'people scored', value: peopleScoredLabel },
+        { label: 'avg composite', value: String(avgComposite) },
+        { label: 'top score', value: String(topScore) },
+        { label: 'departments', value: String(departmentCount) },
         {
-          label: 'Updated',
+          label: 'updated',
           value: relativeTime(mostRecentScoredAt),
-          hint: mostRecentScoredAt === null ? staleHint : undefined,
+          ...(mostRecentScoredAt === null && staleHint ? { title: staleHint } : {}),
         },
       ]}
     />

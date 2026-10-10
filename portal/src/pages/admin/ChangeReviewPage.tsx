@@ -19,6 +19,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import {
+  T,
   Button,
   Card,
   Chip,
@@ -160,9 +161,9 @@ export default function ChangeReviewPage() {
               <KeyValue layout="row" labelWidth="w-[72px]" label="Decided by" value={c.decidedBy} />
               {c.decidedAt && <KeyValue layout="row" labelWidth="w-[72px]" label="Decided" value={absoluteTime(c.decidedAt)} />}
               {c.decisionNote && (
-                <Inline as="span" gap="none" className="mt-1 border-l-2 border-border pl-2 text-[11.5px] leading-snug text-text-secondary">
+                <T as="span" size="xs" tone="secondary" className="mt-1 border-l-2 border-border pl-2">
                   {c.decisionNote}
-                </Inline>
+                </T>
               )}
             </>
           )}
@@ -177,15 +178,15 @@ export default function ChangeReviewPage() {
               <Stack key={r.id} gap="none">
                 <Inline gap="xs" align="baseline">
                   <Chip tone={VERDICT_TONE[r.verdict]} size="xs">{VERDICT_LABEL[r.verdict]}</Chip>
-                  <Inline as="span" gap="none" className="text-[11px] text-text-tertiary">{r.model ?? r.reviewer}</Inline>
+                  <T as="span" size="xs" tone="tertiary">{r.model ?? r.reviewer}</T>
                 </Inline>
                 {r.summary && (
-                  <Inline as="span" gap="none" className="text-[11.5px] leading-snug text-text-secondary">{r.summary}</Inline>
+                  <T as="span" size="xs" tone="secondary">{r.summary}</T>
                 )}
                 {r.findings.length > 0 && (
-                  <Inline as="span" gap="none" className="text-[10.5px] text-text-tertiary">
+                  <T as="span" size="xs" tone="tertiary">
                     {r.findings.length} finding{r.findings.length === 1 ? '' : 's'} — pinned in the diff.
-                  </Inline>
+                  </T>
                 )}
               </Stack>
             ))}
@@ -200,7 +201,7 @@ export default function ChangeReviewPage() {
             {c.gates.map((g, i) => (
               <Inline key={i} gap="xs" align="baseline" wrap>
                 <Chip tone={GATE_TONE[g.outcome] ?? 'warning'} size="xs" dot="static">{g.policyName}</Chip>
-                <Inline as="span" gap="none" className="text-[11.5px] text-text-secondary">{g.detail}</Inline>
+                <T as="span" size="xs" tone="secondary">{g.detail}</T>
               </Inline>
             ))}
           </Stack>
@@ -209,7 +210,7 @@ export default function ChangeReviewPage() {
 
       {c.error && (
         <Card padding="md">
-          <Inline as="span" gap="none" className="text-[11.5px] leading-snug text-danger">{c.error}</Inline>
+          <T as="span" size="xs" tone="inherit" className="text-danger">{c.error}</T>
         </Card>
       )}
 
@@ -259,22 +260,22 @@ export default function ChangeReviewPage() {
       title={c.title}
       description={`${c.repoFullName ?? 'unknown repo'} — every agent change is reviewed and gated before it can ship.`}
       actions={
-        <Link to="/admin/changes" className="whitespace-nowrap text-[12px] text-primary no-underline hover:underline">
+        <Link to="/admin/changes" className="whitespace-nowrap text-primary no-underline hover:underline"><T as="span" size="xs" tone="inherit">
           ← back to the queue
-        </Link>
+        </T></Link>
       }
     >
       <Inline gap="sm" wrap className="mb-4">
         <Chip tone={STATUS_TONE[c.status] ?? 'neutral'} size="xs" uppercase>{STATUS_LABEL[c.status] ?? c.status}</Chip>
         {c.orgProjectName && c.orgProjectId && (
-          <Link to={`/iq/projects/${c.orgProjectId}`} className="text-[11px] text-text-secondary no-underline hover:text-primary hover:underline">
+          <Link to={`/iq/projects/${c.orgProjectId}`} className="no-underline hover:text-primary hover:underline"><T as="span" size="xs" tone="secondary">
             delivering {c.orgProjectName}
-          </Link>
+          </T></Link>
         )}
         {c.prUrl && (
-          <ExternalLink external href={c.prUrl} className="text-[11px] text-primary no-underline hover:underline">
+          <ExternalLink external href={c.prUrl} className="text-primary no-underline hover:underline"><T as="span" size="xs" tone="inherit">
             pull request →
-          </ExternalLink>
+          </T></ExternalLink>
         )}
       </Inline>
 
@@ -287,7 +288,7 @@ export default function ChangeReviewPage() {
           />
         ) : (
           <Card padding="md">
-            <Inline as="span" gap="none" className="text-[12px] text-text-tertiary">This change has no stored diff.</Inline>
+            <T as="span" size="xs" tone="tertiary">This change has no stored diff.</T>
           </Card>
         )}
       </RailLayout>

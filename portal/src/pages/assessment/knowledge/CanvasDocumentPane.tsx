@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { CanvasDocumentView, DocumentHeader, DocumentLifecyclePill, DocumentOutline, useDocumentOutline, DocumentImageProvider, createAuthenticatedDocumentImage, WorkspaceDocumentHeaderNotices, FollowModeBar } from '@connorhoehnslalom/ui-components/doc-editor';
 import { Button, Chip, ErrorState, Inline, InlineAlert, LoadingState, Stack, Modal, FileUploadDrop, ConfirmDialog } from '@connorhoehnslalom/ui-components/shared';
-import { useLocation } from 'react-router';
-import { GatewaySocketProvider, useCanvasDocument, useGateway, useYjsDoc, useFileUpload } from '@connorhoehnslalom/realtime-modules/client';
+import { useLocation, useSearchParams } from 'react-router';
+import { WrappedCursorOverlay } from '@connorhoehnslalom/ui-components/integrations/realtime';
+import { GatewaySocketProvider, useCanvasDocument, useCursor, useGateway, useYjsDoc, useFileUpload } from '@connorhoehnslalom/realtime-modules/client';
 import { createCanvasExtensions, MacroNode, HeadingAnchor, MarkdownClipboard, Callout, CanvasTextAlign } from '@connorhoehnslalom/realtime-modules/adapters/tiptap';
 import { TextStyleKit } from '@tiptap/extension-text-style';
 import { TableKit } from '@tiptap/extension-table';
@@ -13,6 +14,7 @@ import { useDocumentImageUpload, MAX_IMAGE_BYTES } from '@connorhoehnslalom/ui-c
 import { useFetch } from '../../../hooks/useFetch';
 import { useSession } from '../../../lib/auth';
 import { useCapabilities } from '../../../lib/capabilities';
+import { DocumentRecordings } from '../../../components/recordings/DocumentRecordings';
 import { sendJson } from '../../../lib/writeJson';
 import { usePendingDocumentChanges } from './DocumentNavigation';
 import { DocumentContextPanel, useDocumentContext } from './ExplorerFrame';
@@ -33,7 +35,8 @@ import { DocumentHistory } from './DocumentHistory';
 import { DocumentReviews } from './DocumentReviews';
 import { DocumentChatPanel, DocumentComposerDock, useDocumentConversation } from './DocumentConversation';
 import { documentAssetRoute } from './documentAssetRoute';
-import { publishDocumentEditor, useDocumentAgentEdit } from './useDocumentAgentEdit';
+import { publishDocumentEditor, publishDocumentPersistence, publishDocumentProposalCanvas, useDocumentAgentEdit } from './useDocumentAgentEdit';
+import { confirmDocumentProposalReceipt, proposalReceiptMatches, waitForDocumentProposalSave } from './documentProposalClient';
 import type { DocPaneProps } from './DocPane';
 import type { KnowledgeDoc } from './types';
 
@@ -56,13 +59,19 @@ export function CanvasDocumentPane(props: DocPaneProps) {
   // platform-api threads through the BFF (the legacy thread was imported once).
   const comments = useDocumentComments(node.id, sseEvents);
   const location = useLocation();
+  const [params, setParams] = useSearchParams();
+  const requestedTab = params.get('tab');
+  const requestedRecording = params.get('recording');
+  const requestedProposal = params.get('proposal');
+  const [tab, setTab] = useState<DocumentTab>(() => requestedRecording ? 'recordings' : (DOCUMENT_TABS as readonly string[]).includes(requestedTab ?? '') ? requestedTab as DocumentTab : 'editor');
+  const wantsCanvas = tab !== 'recordings';
   const [grant, setGrant] = useState<DocumentCanvasGrant | null>(null);
   const [grantError, setGrantError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const mounted = useRef(true);
   const refreshInFlight = useRef(false);
   const refreshGrant = useCallback(async () => {
-    if (refreshInFlight.current) return;
+    if (!wantsCanvas || refreshInFlight.current) return;
     refreshInFlight.current = true;
     setRefreshing(true);
     try {
@@ -77,26 +86,32 @@ export function CanvasDocumentPane(props: DocPaneProps) {
       refreshInFlight.current = false;
       if (mounted.current) setRefreshing(false);
     }
-  }, [node.id, node.title]);
+  }, [node.id, node.title, wantsCanvas]);
   useEffect(() => {
     mounted.current = true;
     void refreshGrant();
     return () => { mounted.current = false; };
   }, [refreshGrant]);
   useEffect(() => {
-    if (!grant) return;
+    if (!grant || !wantsCanvas) return;
     const timer = window.setTimeout(() => void refreshGrant(), Math.max(1000, grant.expiresAt - Date.now() - 30_000));
     const expiry = window.setTimeout(() => setGrantError('Your document session expired. Reconnect to continue editing.'), Math.max(1000, grant.expiresAt - Date.now()));
     return () => { window.clearTimeout(timer); window.clearTimeout(expiry); };
-  }, [grant, refreshGrant]);
+  }, [grant, refreshGrant, wantsCanvas]);
 
   // `?tab=comments` (the header bell's reply/mention links) opens on that tab;
   // a later navigation to the same document with a tab switches to it.
-  const requestedTab = new URLSearchParams(location.search).get('tab');
-  const [tab, setTab] = useState<DocumentTab>(() => (DOCUMENT_TABS as readonly string[]).includes(requestedTab ?? '') ? requestedTab as DocumentTab : 'editor');
   useEffect(() => {
-    if (requestedTab && (DOCUMENT_TABS as readonly string[]).includes(requestedTab)) setTab(requestedTab as DocumentTab);
-  }, [requestedTab, location.key]);
+    if (requestedRecording) setTab('recordings');
+    else if (requestedProposal) setTab('editor');
+    else if (requestedTab && (DOCUMENT_TABS as readonly string[]).includes(requestedTab)) setTab(requestedTab as DocumentTab);
+  }, [requestedTab, requestedRecording, requestedProposal, location.key]);
+  const changeTab = (nextTab: DocumentTab) => {
+    setTab(nextTab);
+    if (nextTab === 'recordings' || requestedRecording || requestedTab === 'recordings') {
+      const next = new URLSearchParams(params); next.set('doc', node.id); next.set('tab', nextTab); next.delete('recording'); next.delete('proposal'); next.delete('view'); setParams(next);
+    }
+  };
   const title = doc.data?.title ?? node.title;
   // Document-level reactions sit with the discussion, not in the head row.
   const commentsTab = <DocumentComments key={node.id} sourceId={node.id} title={title} userId={session?.sub ?? ''}
@@ -105,19 +120,33 @@ export function CanvasDocumentPane(props: DocPaneProps) {
   const outlineMenu = context ? [{ id: 'show-outline', label: 'Show outline', onSelect: () => context.open('outline') }] : [];
   // The page's conversation lives on the BFF gateway, so it is joined here —
   // outside the canvas's document-grant socket below.
-  const conversation = useDocumentConversation(node.id, session?.name ?? 'Reader');
+  const conversation = useDocumentConversation(node.id);
+  // Pointers ride the same BFF gateway channel as the conversation (and under
+  // its authority), so the hook lives out here, not inside the grant socket.
+  const cursor = useCursor(conversation.channel, { mode: 'canvas' });
   // Agent edits from the dock (decision 8): the drafter's reply lands in the
   // frame's proposal slot as a proposed edit with Apply / Discard.
-  const agentEdit = useDocumentAgentEdit(node.id, title);
+  const agentEdit = useDocumentAgentEdit(node.id, title, sseEvents, props.sseGapped, {
+    proposalId: requestedProposal, navigationKey: location.key, focus: tab === 'editor',
+    documentText: doc.data?.markdown,
+  });
   const composer = <DocumentComposerDock docId={node.id} title={title} conversation={conversation} agentEdit={agentEdit} agentEditable={!!grant?.canEdit} />;
-  const chatPanel = <DocumentChatPanel title={title} userId={session?.sub ?? ''} conversation={conversation} />;
-  const frame = { title, path: props.path, tab, onTab: setTab, commentCount: comments.openCount, comments: commentsTab, history, composer, proposal: agentEdit.strip };
+  const chatPanel = <DocumentChatPanel title={title} conversation={conversation} />;
+  const recordings = doc.error ? <InlineAlert tone="warning">This source could not be read. Reopen the document before viewing its recordings.</InlineAlert>
+    : doc.data && doc.data.id !== node.id ? <InlineAlert tone="warning">The source document identity could not be confirmed. Reopen the document before viewing its recordings.</InlineAlert>
+    : !doc.data ? <LoadingState label="Checking source document…" />
+    : <DocumentRecordings sourceId={node.id} title={title} />;
+  const frame = { title, path: props.path, tab, onTab: changeTab, commentCount: comments.openCount, comments: commentsTab, history, composer, recordings, proposal: agentEdit.strip };
   const href = `${location.pathname}?doc=${encodeURIComponent(node.id)}`;
+
+  // Saved artifacts use the source reader and native participant checks. A
+  // deep link does not open a canvas grant/socket or request capture devices.
+  if (!wantsCanvas && !grant) return <DocumentShell {...frame} headActions={null} editor={null} />;
 
   if (grant) return <>{chatPanel}<GatewaySocketProvider url={grant.gatewayUrl} token={grant.token} authProtocol="document-grant-v1" rest={null}>
     <ConnectedCanvas key={grant.documentId} grant={grant} mode={props.mode} sourceConfigured={props.sourceConfigured} accessValid={!grantError}
       userId={session?.sub ?? ''} tenant={session?.tenant ?? ''} userName={session?.name ?? 'Reader'} frame={frame} menuItems={outlineMenu}
-      comments={comments} href={href}
+      comments={comments} href={href} cursor={cursor}
       accessNotice={grantError && <InlineAlert tone="warning"><Inline gap="sm" align="center" wrap>{grantError}
         <Button size="sm" variant="secondary" disabled={refreshing} onClick={() => void refreshGrant()}>Retry connection</Button>
       </Inline></InlineAlert>}
@@ -139,11 +168,11 @@ export function CanvasDocumentPane(props: DocPaneProps) {
     </Stack> : <LoadingState label="Opening document workspace…" />} /></>;
 }
 
-type ShellFrame = Pick<Parameters<typeof DocumentShell>[0], 'title' | 'path' | 'tab' | 'onTab' | 'commentCount' | 'comments' | 'history' | 'composer'>;
+type ShellFrame = Pick<Parameters<typeof DocumentShell>[0], 'title' | 'path' | 'tab' | 'onTab' | 'commentCount' | 'comments' | 'history' | 'composer' | 'recordings'>;
 
-function ConnectedCanvas({ grant, mode, sourceConfigured, accessValid, userId, tenant, userName, frame, menuItems, comments, href, accessNotice, onWorkflowChanged, onPublished }: {
+function ConnectedCanvas({ grant, mode, sourceConfigured, accessValid, userId, tenant, userName, frame, menuItems, comments, href, cursor, accessNotice, onWorkflowChanged, onPublished }: {
   grant: DocumentCanvasGrant; mode: DocPaneProps['mode']; sourceConfigured: boolean; accessValid: boolean; userId: string; tenant: string; userName: string;
-  comments: DocumentCommentsState; href: string;
+  comments: DocumentCommentsState; href: string; cursor: ReturnType<typeof useCursor>;
   frame: ShellFrame; menuItems: Array<{ id: string; label: string; onSelect: () => void }>; accessNotice: ReactNode;
   onWorkflowChanged: () => void; onPublished: () => void;
 }) {
@@ -170,6 +199,30 @@ function ConnectedCanvas({ grant, mode, sourceConfigured, accessValid, userId, t
   const recovery = useCanvasRecovery(tenant, userId, grant.documentId);
   const [confirmRecovery, setConfirmRecovery] = useState(false);
   const doc = useYjsDoc({ documentId: grant.documentId, ws: gateway, onMessage: gateway.onMessage, onUnpersistedChanges: recovery.retain });
+  useEffect(() => {
+    const provider = doc.provider;
+    if (!provider) return;
+    publishDocumentPersistence(grant.sourceId, retry => waitForDocumentProposalSave(provider, retry));
+    return () => publishDocumentPersistence(grant.sourceId, null);
+  }, [grant.sourceId, doc.provider]);
+  useEffect(() => {
+    const ydoc = doc.ydoc, provider = doc.provider;
+    if (!ydoc || !provider || !doc.synced) return;
+    publishDocumentProposalCanvas(grant.sourceId, {
+      // The outer transaction decides the origin of the nested editor sync, so
+      // it must carry the sync plugin's own: the editor's undo history tracks
+      // only that origin, and an untagged wrapper made Apply un-undoable.
+      apply: (proposal, insert) => ydoc.transact(() => {
+        insert();
+        ydoc.getMap('agentProposalReceipts').set(proposal.id, {
+          id: proposal.id, sourceId: proposal.sourceId, version: proposal.version, by: proposal.decidedBy,
+        });
+      }, ySyncPluginKey),
+      hasReceipt: proposal => proposalReceiptMatches(ydoc.getMap('agentProposalReceipts').get(proposal.id), proposal),
+      confirmReceipt: (proposal, retry) => confirmDocumentProposalReceipt(provider, ydoc.getMap('agentProposalReceipts'), proposal, retry),
+    });
+    return () => publishDocumentProposalCanvas(grant.sourceId, null);
+  }, [grant.sourceId, doc.ydoc, doc.provider, doc.synced, doc.persistenceState, doc.pendingUpdateCount]);
   const [changeSequence, setChangeSequence] = useState(0);
   useEffect(() => {
     setChangeSequence(value => value + 1);
@@ -309,7 +362,7 @@ function ConnectedCanvas({ grant, mode, sourceConfigured, accessValid, userId, t
     participants={people.participants} onParticipantClick={people.onParticipantClick}
     onFollowParticipant={people.onFollowParticipant} followingParticipantId={people.following}
     {...(lifecycle ? { statusPill: <DocumentLifecyclePill status={lifecycle.status} variant="tag" /> } : {})}
-    editor={<>{notices}<Stack gap="none" className="min-h-0 flex-1" data-testid="document-canvas-slot">{editor}</Stack></>}
+    editor={<>{notices}<Stack gap="none" className="min-h-0 flex-1" data-testid="document-canvas-slot"><WrappedCursorOverlay cursor={cursor} className="flex min-h-0 flex-1 flex-col">{editor}</WrappedCursorOverlay></Stack></>}
     versions={<DocumentHistory documentId={grant.documentId} onClose={() => frame.onTab('editor')}
       extensions={EXTENSIONS} pending={doc.pendingUpdateCount > 0 || !online}
       {...(canEdit && workflow.data?.canManageWorkflow ? {

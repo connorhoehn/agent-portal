@@ -83,9 +83,19 @@ export default function DevboxPage() {
           section headings overlapped. They reach the lab through the fleet the
           ComputeProvider serves; see components/compute/localMachines.tsx. */}
       <Stack gap="none" className="min-h-0 flex-1">
+        {/* `workspace`: status pills, + Computer and Keys in the lab's own
+            header; a tabbed, numbered rail grouped by initiative; Shell / Bot
+            logs / Agent panes; and a Nudge bar aimed at the focused pane, a
+            selection or the whole fleet. `title={null}` because the shell's
+            breadcrumb already names the page. Nudge needs no `onInstruct`:
+            the library's default is a resumed task on each targeted box
+            through this provider's client — POST /api/devbox/:sessionId/task,
+            the ManageDevbox-gated route the composer always used. */}
         <ComputerLab
           open
           variant="inline"
+          appearance="workspace"
+          title={null}
           onClose={() => {}}
           focusComputerId={focusComputerId}
         />

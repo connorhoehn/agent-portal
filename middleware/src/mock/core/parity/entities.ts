@@ -507,6 +507,7 @@ export const PARITY_ENTITIES: Array<ParityEntity<any>> = [
     mockRows: async () => (await import('../../../providers/work-items.js')).searchWorkItems({ limit: 1000 }),
     mockId: (i: { id: string }) => i.id,
     fields: [
+      { seed: 'work_item_key', mock: (i: { key?: string | null }) => i.key ?? null },
       { seed: 'project_id', mock: (i: { projectId: string }) => i.projectId },
       { seed: 'parent_id', mock: (i: { parentId: string | null }) => i.parentId },
       { seed: 'type', mock: (i: { type: string }) => i.type },
@@ -680,6 +681,13 @@ export const PARITY_ENTITIES: Array<ParityEntity<any>> = [
       { seed: 'repo_full_name', mock: (p: { repoFullName: string }) => p.repoFullName },
       { seed: 'org_project_id', mock: (p: { orgProjectId: string | null }) => p.orgProjectId },
       { seed: 'default_branch', mock: (p: { defaultBranch: string }) => p.defaultBranch },
+      /**
+       * The only visibility signal a linked repo carries: null reads as
+       * "public, no credential" on /admin/projects and sends clones and pushes
+       * out with no token. Every initiative repo is private, so a mock that
+       * drifted back to null would show all fourteen as public again.
+       */
+      { seed: 'connection_name', mock: (p: { connectionName: string | null }) => p.connectionName },
     ],
   },
   {
@@ -900,7 +908,10 @@ export const PARITY_ENTITIES: Array<ParityEntity<any>> = [
       const { loadDefinitions } = await import('../../../providers/pipeline-definitions.js');
       // The registry's commands only: its bots, runbooks and agents are
       // derived from tables the seed does not write here (their own entities).
-      return (await loadDefinitions()).definitions.filter((d) => d.kind === 'assessment-command');
+      // Only those the seed RECORDS: the deck commands (draft-/revise-review-deck)
+      // are derived from the worker's command list and have no pipeline_definitions
+      // row by design, so a subset check must not call them invented.
+      return (await loadDefinitions()).definitions.filter((d) => d.kind === 'assessment-command' && d.recorded);
     },
     mockId: (d: { id: string }) => d.id,
     fields: [

@@ -24,7 +24,7 @@ import {
   stopDevboxSessionForSourceControl,
 } from '../devbox.js';
 import { type Session } from '../../lib/session.js';
-import { registerBox, _resetFleet, getBoxBySession } from '../../lib/devbox-fleet.js';
+import { registerBox, _resetFleet, getBoxBySession, getBox } from '../../lib/devbox-fleet.js';
 import { decideReaping, MAX_LIFETIME_MS } from '../../lib/devbox-reaper.js';
 
 const SESSION = 'devbox-0123456789abcdef0123456789abcdef';
@@ -500,5 +500,122 @@ describe('per-computer scoping', () => {
       .post('/api/devbox/boxes')
       .send({ sessionId: 'devbox-4444444444444444444444444444', ownerId: 'u-someone-else' });
     expect(res.body.ownerId).toBe('u-nora');
+  });
+});
+
+// ─── 9. Status, shell URL, and removing a computer ───────────────────────────
+
+describe('GET /api/devbox/status', () => {
+  afterEach(() => _internal.setControlClient(null));
+
+  it('reports the deployed runtime and its per-task model capability from the runtime env', async () => {
+    const control = { send: jest.fn(async () => ({ environmentVariables: { ANTHROPIC_MODEL: 'us.anthropic.claude-haiku-4-5', DEVBOX_ALLOWED_MODELS: 'a, b' } })) };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    _internal.setControlClient(control as any);
+    const res = await request(buildApp()).get('/api/devbox/status');
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      deployed: true, runtimeArn: ARN, runtimeName: 'orgiq_devbox', workspace: '/mnt/workspace',
+      defaultModel: 'us.anthropic.claude-haiku-4-5', allowedModels: ['a', 'b'], perTaskModel: true,
+    });
+    expect(Array.isArray(res.body.commandAllowlist)).toBe(true);
+    expect(typeof res.body.fullExecEnabled).toBe('boolean');
+    expect((control.send.mock.calls[0] as unknown[])[0]).toMatchObject({ input: { agentRuntimeId: 'orgiq_devbox-abc123' } });
+  });
+
+  it('does not promise model switching when the runtime env cannot be read', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    _internal.setControlClient({ send: jest.fn(async () => { throw new Error('stale ARN'); }) } as any);
+    const res = await request(buildApp()).get('/api/devbox/status');
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ deployed: true, defaultModel: null, allowedModels: [], perTaskModel: false });
+  });
+
+  it('offline (MOCK_AGENTCORE) reports a fake deployed runtime without any control-plane call', async () => {
+    delete process.env['DEVBOX_RUNTIME_ARN'];
+    process.env['MOCK_AGENTCORE'] = 'true';
+    const control = { send: jest.fn(async () => ({})) };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    _internal.setControlClient(control as any);
+    const res = await request(buildApp()).get('/api/devbox/status');
+    expect(res.body.deployed).toBe(true);
+    expect(res.body.runtimeArn).toMatch(/runtime\/orgiq_devbox-MOCK$/);
+  });
+});
+
+describe('POST /api/devbox/:sessionId/shell-url', () => {
+  const SME = { sub: 'u-nora', role: 'sme' as const };
+  const THEIRS = 'devbox-1111111111111111111111111111';
+  beforeEach(() => {
+    _resetFleet();
+    registerBox({ id: 'own', sessionId: SESSION, ownerId: 'u-nora' });
+    registerBox({ id: 'theirs', sessionId: THEIRS, ownerId: 'u-eli' });
+  });
+  afterEach(() => _resetFleet());
+
+  it('mints a mock-shell URL for the owner, with a stable per-session default shellId', async () => {
+    process.env['MOCK_AGENTCORE'] = 'true';
+    const res = await request(buildApp(SME)).post(`/api/devbox/${SESSION}/shell-url`).send({});
+    expect(res.status).toBe(200);
+    const shellId = `portal-${SESSION.slice(-12)}`;
+    expect(res.body).toMatchObject({ url: `mock-shell://${SESSION}?shell=${shellId}`, shellId, mock: true });
+  });
+
+  it('403s an SME on someone else\'s computer and 400s a short id or a bad shellId', async () => {
+    process.env['MOCK_AGENTCORE'] = 'true';
+    expect((await request(buildApp(SME)).post(`/api/devbox/${THEIRS}/shell-url`).send({})).status).toBe(403);
+    expect((await request(buildApp(SME)).post('/api/devbox/short/shell-url').send({})).status).toBe(400);
+    const bad = await request(buildApp(SME)).post(`/api/devbox/${SESSION}/shell-url`).send({ shellId: 'has spaces' });
+    expect(bad.status).toBe(400);
+    expect(bad.body.error).toMatch(/invalid shellId/);
+  });
+
+  it('503s honestly when no devbox runtime is deployed (real mode)', async () => {
+    delete process.env['DEVBOX_RUNTIME_ARN'];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    _internal.setControlClient({ send: jest.fn(async () => ({ agentRuntimes: [] })) } as any);
+    try {
+      const res = await request(buildApp(SME)).post(`/api/devbox/${SESSION}/shell-url`).send({});
+      expect(res.status).toBe(503);
+      expect(res.body.error).toMatch(/not deployed/);
+    } finally { _internal.setControlClient(null); }
+  });
+});
+
+describe('DELETE /api/devbox/boxes/:boxId', () => {
+  const SME = { sub: 'u-nora', role: 'sme' as const };
+  beforeEach(() => {
+    _resetFleet();
+    registerBox({ id: 'own', sessionId: SESSION, ownerId: 'u-nora' });
+    registerBox({ id: 'theirs', sessionId: 'devbox-1111111111111111111111111111', ownerId: 'u-eli' });
+  });
+  afterEach(() => _resetFleet());
+
+  it('stops the owner\'s runtime session and removes the computer from the fleet', async () => {
+    const { calls } = mockDataClient(async () => ({}));
+    const res = await request(buildApp(SME)).delete('/api/devbox/boxes/own');
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ removed: true, boxId: 'own' });
+    expect(calls[0]!.input).toMatchObject({ agentRuntimeArn: ARN, runtimeSessionId: SESSION });
+    expect(getBox('own')).toBeNull();
+    expect(getBoxBySession(SESSION)).toBeNull();
+  });
+
+  it('still removes the computer when the best-effort stop fails', async () => {
+    mockDataClient(async () => { throw new Error('throttled'); });
+    const res = await request(buildApp(SME)).delete('/api/devbox/boxes/own');
+    expect(res.status).toBe(200);
+    expect(getBox('own')).toBeNull();
+  });
+
+  it('403s an SME removing someone else\'s computer and leaves it in the fleet; 404s an unknown one', async () => {
+    const { client } = mockDataClient(async () => ({}));
+    const denied = await request(buildApp(SME)).delete('/api/devbox/boxes/theirs');
+    expect(denied.status).toBe(403);
+    expect(getBox('theirs')).not.toBeNull();
+    expect(client.send).not.toHaveBeenCalled();
+    const missing = await request(buildApp(SME)).delete('/api/devbox/boxes/nope');
+    expect(missing.status).toBe(404);
+    expect(missing.body).toEqual({ error: 'computer not found' });
   });
 });

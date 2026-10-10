@@ -11,16 +11,14 @@ import {
   DataTable,
   EmptyState,
   LoadingState,
-  PageSection,
   Stack,
-  type DataTableColumn,
+  type DataTableColumn, T,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { useUrlState } from '../../lib/useUrlState';
 import { relativeTime } from '../../lib/relativeTime';
-import { STATUS_LABEL, STATUS_TONE, filterDesigns, reviewStateLine } from './designFormat';
-import { T } from './Text';
+import { DESIGNS_SOURCE, STATUS_LABEL, STATUS_TONE, filterDesigns, reviewStateLine } from './designFormat';
 import type { DesignReview, DesignStatus } from './types';
 
 const FILTERS: Array<{ value: string; label: string }> = [
@@ -98,26 +96,26 @@ export default function DesignsPage() {
     },
   ];
 
+  // The register is the catalog overview: status rail, then the table, with
+  // the title in the layout's own header (one h1, aligned with its crumbs).
+  // The record-list rail appears only beside an open design — the Library's
+  // shape (docs/rail-parity-goal.md). Drawn on the list too, it repeated the
+  // table's rows side by side and pushed the title 4px off its breadcrumb.
   return (
     <StackedCatalogLayout
-      title="Designs" basePath="/iq/designs" listTitle={filter === 'all' ? 'All designs' : FILTERS.find((f) => f.value === filter)?.label ?? 'Designs'}
+      catalogOverview title="Designs" basePath="/iq/designs" listTitle={filter === 'all' ? 'All designs' : FILTERS.find((f) => f.value === filter)?.label ?? 'Designs'}
+      overviewDescription="Agents restate the problem, iterate a plan, and raise questions when intent is unclear; people answer and sign off. An approved design is an ADR — logged to the knowledge base, and a gate for the designs built on it."
       items={FILTERS.map((f) => ({ path: `/iq/designs?${new URLSearchParams({ status: f.value, ...(initiative ? { initiative } : {}) })}`, label: f.label === 'All' ? 'All designs' : f.label, group: 'Status', active: filter === f.value }))}
       rows={reviews.map((review) => ({ id: review.id, title: review.title, subline: STATUS_LABEL[review.status] }))}
       selectedId={id} selectedTitle={data?.reviews.find((review) => review.id === id)?.title}
       onSelect={(next) => navigate(`/iq/designs/${encodeURIComponent(next)}?${searchParams}`)}
-      railNotice={designsFailure ? <UnavailableNotice error={designsFailure} what="designs" source="Design reviews" onRetry={refresh} /> : isLoading && !data ? <LoadingState label="Loading designs…" /> : reviews.length === 0 ? <EmptyState size="sm" title="No designs in this view" /> : undefined}
+      railNotice={designsFailure ? <UnavailableNotice error={designsFailure} what="designs" source={DESIGNS_SOURCE} onRetry={refresh} /> : isLoading && !data ? <LoadingState label="Loading designs…" /> : reviews.length === 0 ? <EmptyState size="sm" title="No designs in this view" /> : undefined}
     >
-    {id ? <DesignThreadPage key={id} /> :
-    <PageSection
-      title="Designs"
-      description="Agents restate the problem, iterate a plan, and raise questions when intent is unclear; people answer and sign off. An approved design is an ADR — logged to the knowledge base, and a gate for the designs built on it."
-    >
-
-      {designsFailure ? (
+    {id ? <DesignThreadPage key={id} /> : designsFailure ? (
         <UnavailableNotice
           error={designsFailure}
           what="designs"
-          source="Design reviews are read from Aurora"
+          source={DESIGNS_SOURCE}
           onRetry={refresh}
         />
       ) : isLoading && !data ? (
@@ -146,7 +144,6 @@ export default function DesignsPage() {
           emptyMessage="No design reviews"
         />
       )}
-    </PageSection>}
     </StackedCatalogLayout>
   );
 }

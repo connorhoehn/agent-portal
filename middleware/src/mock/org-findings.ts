@@ -31,6 +31,7 @@
 
 import { clock, defineFixture } from './core/index.js';
 import { liveRows } from './live.js';
+import { devboxBoxes } from './devbox-fleet.js';
 // Type-only, so it is erased at compile: providers/org-sweeps.ts imports the
 // rows below at run time, and a value import back the other way would be a
 // genuine cycle rather than a shared shape.
@@ -182,7 +183,10 @@ function seedFindings(): Finding[] {
     {
       id: 'find-mock-8',
       sweep: LAB_SWEEP, severity: 'warning',
-      title: 'auth-migration-1 has been on one task for 5 hours with context at 39%',
+      // Read off the box the finding is about — its age and context are the
+      // fleet row's, never a second copy that drifts from it (rule 1). It
+      // said "5 hours" while the reaper caps a box at 60 minutes.
+      title: longTaskTitle(),
       detail: 'The session has not checkpointed or opened a PR. Either the task is larger than it looked and wants splitting, or the box is stuck and should be recycled before its context fills.',
       entityType: 'repo', entityId: 'orgiq-auth-service',
       evidence: {
@@ -190,7 +194,8 @@ function seedFindings(): Finding[] {
         boxId: 'box-mock-0001', repo: 'orgiq-auth-service', initiativeId: 'p-auth-migration',
       },
       status: 'open', jobId: null,
-      firstSeenAt: clock.hoursAgo(5), lastSeenAt: clock.hoursAgo(0.2),
+      firstSeenAt: devboxBoxes.rows('default').find((b) => b.id === 'box-mock-0001')?.createdAt ?? clock.hoursAgo(0.5),
+      lastSeenAt: clock.hoursAgo(0.05),
       fingerprint: 'lab:long-running-task:box-mock-0001',
     },
   ];
@@ -265,4 +270,13 @@ export function nextMockFindingId(): string {
     if (m) max = Math.max(max, Number(m[1]));
   }
   return `find-mock-${max + 1}`;
+}
+
+/** The long-running-task finding's headline, from the box row it describes. */
+function longTaskTitle(): string {
+  const box = devboxBoxes.rows('default').find((b) => b.id === 'box-mock-0001');
+  if (!box) return 'A computer has been on one task for most of its lifetime';
+  const minutes = Math.round((clock.now().getTime() - Date.parse(box.createdAt)) / 60_000);
+  const context = Math.round((box.contextUsed ?? 0) * 100);
+  return `${box.label} has been on one task for ${minutes} minutes with context at ${context}%`;
 }

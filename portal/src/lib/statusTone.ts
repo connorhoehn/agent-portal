@@ -27,6 +27,7 @@ export type RunState =
   | 'claimed'
   | 'running'
   | 'awaiting_review'
+  | 'waiting-approval'
   | 'done'
   | 'failed'
   | 'cancelled'
@@ -43,6 +44,7 @@ const RUN_STATE_CHIP: Record<RunState, RunStateChip> = {
   claimed: { tone: 'accent', label: 'claimed' },
   running: { tone: 'accent', label: 'running', solid: true },
   awaiting_review: { tone: 'warning', label: 'awaiting review' },
+  'waiting-approval': { tone: 'warning', label: 'waiting for approval' },
   done: { tone: 'success', label: 'done' },
   failed: { tone: 'danger', label: 'failed' },
   cancelled: { tone: 'neutral', label: 'cancelled' },

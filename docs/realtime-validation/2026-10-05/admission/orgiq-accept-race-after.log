@@ -1,0 +1,9 @@
+
+> @connorhoehn/realtime-modules@0.104.0 test
+> jest --runInBand --runTestsByPath test/server/redis-router.integration.test.ts --testNamePattern same-user accepts
+
+Test Suites: 1 passed, 1 total
+Tests:       27 skipped, 1 passed, 28 total
+Snapshots:   0 total
+Time:        4.621 s
+Ran all test suites within paths "test/server/redis-router.integration.test.ts".

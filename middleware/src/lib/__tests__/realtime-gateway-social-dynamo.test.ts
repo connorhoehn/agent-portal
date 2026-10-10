@@ -13,6 +13,13 @@
 jest.mock('../../config.js', () => ({
   config: { region: 'us-east-1', aurora: {}, auth: { sessionSigningSecretArn: '' }, cognito: { portalOrigin: '' }, mock: { aurora: true } },
 }));
+// Production reads the Cedar registry through ESM; this CJS harness declares
+// the same Social capabilities without importing the registry's import.meta.
+jest.mock('../role-registry.js', () => ({ roleRegistry: () => [
+  { id: 'participant', tenant: 'social', capabilities: ['ViewSocial', 'PostMessage', 'StartCall'] },
+  { id: 'moderator', tenant: 'social', capabilities: ['ViewSocial', 'PostMessage', 'StartCall'] },
+  { id: 'community-admin', tenant: 'social', capabilities: ['ViewSocial', 'PostMessage', 'StartCall'] },
+] }));
 
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -23,6 +30,7 @@ import { attachRealtimeGateway, createSocialChatBackend, REALTIME_GATEWAY_PATH }
 import { socialChatConfig, type SocialChatBackend } from '../social-chat.js';
 import { signRealtimeToken, realtimeClaims } from '../realtime-token.js';
 import type { Session } from '../session.js';
+import { getUser } from '../../providers/identity.js';
 
 const SECRET = 'test-realtime-secret';
 type Frame = Record<string, unknown> & { type?: string; action?: string };
@@ -61,7 +69,8 @@ async function serve(backend: SocialChatBackend) {
   const port = (server.address() as AddressInfo).port;
   const sockets: WebSocket[] = [];
   const connectAs = async (sub: string, name: string): Promise<Open> => {
-    const session = { sub, name, role: 'participant', tenant: 'social', grants: { social: ['participant'] }, iat: Math.floor(Date.now() / 1000) } as Session;
+    const user = await getUser(sub, { authoritative: true });
+    const session = { sub, name, role: user?.grants['social']?.[0], tenant: 'social', grants: user?.grants ?? {}, epoch: user?.epoch ?? 0, iat: Math.floor(Date.now() / 1000) } as Session;
     const { token } = await signRealtimeToken(realtimeClaims(session), SECRET);
     return new Promise((resolve, reject) => {
       const ws = new WebSocket(`ws://127.0.0.1:${port}${REALTIME_GATEWAY_PATH}`, ['bearer-token-v1', token]);
@@ -138,6 +147,12 @@ describe('the DynamoChatStore wiring (recording client)', () => {
       const indexed = client.sent.filter((c) => c.input['TableName'] === 'test-chat-conversations').map((c) => JSON.stringify(c.input));
       expect(indexed.some((k) => k.includes('u-mira'))).toBe(true);
       expect(indexed.some((k) => k.includes('u-sana'))).toBe(true);
+      // One conversation row write per member, never the library's channel
+      // hook and the host's DM index both (that doubled every DM send's writes).
+      await settle();
+      const writes = client.sent.filter((c) => c.name === 'UpdateItemCommand' && c.input['TableName'] === 'test-chat-conversations')
+        .map((c) => c.input['Key']?.userId?.S).sort();
+      expect(writes).toEqual(['u-mira', 'u-sana']);
     } finally { await close(); }
   });
 

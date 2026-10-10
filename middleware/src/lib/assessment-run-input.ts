@@ -1,5 +1,11 @@
 import type * as M from '../mock/assessment.js';
 
+/**
+ * Review-deck commands (docs/assessment-deck-goal.md decision 4): a completed
+ * run writes one deck revision through providers/assessment-decks.ts.
+ */
+export const DECK_COMMANDS: ReadonlySet<string> = new Set(['draft-review-deck', 'revise-review-deck']);
+
 export interface AssessmentDispatchInput {
   agentId: string;
   payload: Record<string, unknown>;
@@ -9,8 +15,16 @@ export function assessmentRunInput(
   command: string, args: Record<string, unknown>, teamId: string | null,
   evidence: M.EvidenceLogItem[], submission: M.SubmissionEnvelope | undefined,
   rubric: M.RubricDimensionDef[],
+  // The grounded drafter input a review-deck command carries, built by
+  // providers/assessment-decks.ts from the provider's facts (decision 3 of
+  // docs/assessment-deck-goal.md) — never read from the request body.
+  deckInput?: Record<string, unknown>,
 ): AssessmentDispatchInput {
   const base = { tenant: 'assessment', team_id: teamId, command };
+  if (DECK_COMMANDS.has(command)) {
+    if (!teamId || !deckInput) throw new Error(`${command} is launched from the review-deck routes, which supply its input`);
+    return { agentId: 'orgiq-assessment-drafter', payload: { ...base, mode: command, ...deckInput } };
+  }
   if (['score-dimensions', 'process-self-assessment', 'classify-transcript'].includes(command)) {
     const sourceDocument = args['document'];
     const explicitText = sourceDocument && typeof sourceDocument === 'object' && 'text' in sourceDocument

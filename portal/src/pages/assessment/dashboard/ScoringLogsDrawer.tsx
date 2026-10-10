@@ -7,6 +7,7 @@
 import { useEffect, useState } from 'react';
 import {
   Button,
+  T,
   Card,
   CardHeader,
   Chip,
@@ -121,6 +122,8 @@ export function ScoringLogsDrawer({ open, onClose, teamId, dimensionTitle }: Sco
         <DataTable<ScoringLogSummary>
           data={list.logs}
           keyField={(l) => l.stamp}
+          size="sm"
+          onRowClick={(l) => setSelectedStamp(l.stamp)}
           striped
           // A drawer's list of past scoring runs for one team — 10 keeps it
           // to the drawer's own height instead of growing past it.
@@ -129,13 +132,8 @@ export function ScoringLogsDrawer({ open, onClose, teamId, dimensionTitle }: Sco
             {
               key: 'stamp',
               header: 'Run',
-              // A real Button, not just a row onClick — see TeamList.tsx's
-              // identical note on DataTable's keyboard gap.
-              render: (l) => (
-                <Button variant="ghost" size="sm" className="font-mono text-xs" onClick={() => setSelectedStamp(l.stamp)}>
-                  {l.stamp}
-                </Button>
-              ),
+              // Rows with onRowClick are keyboard-reachable on their own.
+              render: (l) => <T size="sm" tabular>{l.stamp}</T>,
             },
             { key: 'source', header: 'Source', render: (l) => <Chip size="xs">{l.source}</Chip> },
             { key: 'envelope_id', header: 'Envelope', render: (l) => l.envelope_id ?? '—' },

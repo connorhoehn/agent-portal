@@ -28,13 +28,12 @@ import {
   TableHead,
   TableRow,
   TableTd,
-  TableTh,
+  TableTh, T,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { SmartEmptyState } from '../../components/observability/SmartEmptyState';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { firstDegraded, readDegraded } from '../../lib/degraded';
-import { T } from './Text';
 import { KeyValue } from '../../components/KeyValue';
 import { WindowPicker, useWindowUrlState } from './WindowPicker';
 import { relativeTime } from '../../lib/relativeTime';
@@ -214,12 +213,12 @@ function MemoryPage() {
             ]}
           />
         ) : (
-          <Table>
+          <Table size="sm">
             <TableHead>
               <TableRow>
                 <TableTh>Agent</TableTh>
-                <TableTh>Retrieves</TableTh>
-                <TableTh>Writes</TableTh>
+                <TableTh numeric>Retrieves</TableTh>
+                <TableTh numeric>Writes</TableTh>
                 <TableTh>P50 latency</TableTh>
                 <TableTh>P99 latency</TableTh>
                 <TableTh>Error rate</TableTh>
@@ -229,9 +228,9 @@ function MemoryPage() {
             <TableBody>
               {stats.map((s) => (
                 <TableRow key={s.agentId}>
-                  <TableTd className="text-[12px] font-medium whitespace-nowrap">{s.agentId}</TableTd>
-                  <TableTd className="text-[12px] text-text-secondary">{s.retrieves}</TableTd>
-                  <TableTd className="text-[12px] text-text-secondary">{s.writes}</TableTd>
+                  <TableTd className="whitespace-nowrap">{s.agentId}</TableTd>
+                  <TableTd numeric>{s.retrieves}</TableTd>
+                  <TableTd numeric>{s.writes}</TableTd>
                   <TableTd>
                     <Chip tone={latencyTone(s.p50RetrieveMs)} size="xs">
                       {fmtMs(s.p50RetrieveMs)}
@@ -288,15 +287,15 @@ function MemoryPage() {
         {events.length === 0 ? (
           <EmptyState text="No matching memory events in this window." degraded={memoryDegraded} />
         ) : (
-          <Table>
+          <Table size="sm">
             <TableHead>
               <TableRow>
                 <TableTh>Agent</TableTh>
                 <TableTh>When</TableTh>
                 <TableTh>Kind</TableTh>
                 <TableTh>Query / memory</TableTh>
-                <TableTh>Results</TableTh>
-                <TableTh>Duration</TableTh>
+                <TableTh numeric>Results</TableTh>
+                <TableTh numeric>Duration</TableTh>
                 <TableTh>Status</TableTh>
               </TableRow>
             </TableHead>
@@ -309,20 +308,20 @@ function MemoryPage() {
                       onClick={() => setExpanded(isOpen ? null : e.memoryEventId)}
                       className="cursor-pointer"
                     >
-                      <TableTd className="text-[12px] font-medium whitespace-nowrap">{e.agentId}</TableTd>
-                      <TableTd className="text-[11px] text-text-tertiary whitespace-nowrap" title={new Date(e.ts).toLocaleString()}>
+                      <TableTd className="whitespace-nowrap">{e.agentId}</TableTd>
+                      <TableTd className="whitespace-nowrap" title={new Date(e.ts).toLocaleString()}>
                         {relativeTime(e.ts)}
                       </TableTd>
                       <TableTd>
                         <Chip tone={kindTone(e.kind)} size="xs">{e.kind}</Chip>
                       </TableTd>
-                      <TableTd className="text-[12px] max-w-[320px] truncate" title={e.queryText ?? e.memoryId ?? ''}>
+                      <TableTd className="max-w-[320px] truncate" title={e.queryText ?? e.memoryId ?? ''}>
                         {e.queryText ?? e.memoryId ?? '—'}
                       </TableTd>
-                      <TableTd className="text-[12px] text-text-secondary">
+                      <TableTd numeric>
                         {e.resultCount == null ? '—' : e.resultCount}
                       </TableTd>
-                      <TableTd className="text-[12px] text-text-secondary">{fmtMs(e.durationMs)}</TableTd>
+                      <TableTd numeric>{fmtMs(e.durationMs)}</TableTd>
                       <TableTd>
                         {e.errored ? (
                           <Chip tone="danger" size="xs">error</Chip>
@@ -364,7 +363,7 @@ function EventDetail({ event }: { event: MemoryEvent }) {
         </Stack>
       </Stack>
       <Stack gap="xs" className="flex-1 min-w-0">
-        <T as="div" className="text-[10px] font-bold text-text-tertiary tracking-wide">
+        <T as="div" size="xs" weight="semibold" tone="tertiary">
           {event.errored ? 'ERROR' : 'RETRIEVED SUMMARY'}
         </T>
         {event.errored ? (
@@ -372,7 +371,7 @@ function EventDetail({ event }: { event: MemoryEvent }) {
         ) : event.retrievedSummary ? (
           <CodeBlock code={event.retrievedSummary} language="text" />
         ) : (
-          <T className="text-[11.5px] text-text-tertiary italic">(no payload captured)</T>
+          <T size="xs" tone="tertiary" className="italic">(no payload captured)</T>
         )}
       </Stack>
     </Inline>
@@ -384,13 +383,13 @@ function EventDetail({ event }: { event: MemoryEvent }) {
 function EmptyState({ text, degraded }: { text: string; degraded?: string | null }) {
   if (degraded) {
     return (
-      <T as="div" className="p-6 text-center text-[12px] text-danger">
+      <T as="div" size="xs" className="p-6 text-center text-danger">
         Unknown — this read failed ({degraded}).
       </T>
     );
   }
   return (
-    <T as="div" className="p-6 text-center text-[12px] text-text-tertiary">
+    <T as="div" size="xs" tone="tertiary" className="p-6 text-center">
       {text}
     </T>
   );

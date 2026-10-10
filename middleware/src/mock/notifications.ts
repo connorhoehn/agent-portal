@@ -22,25 +22,84 @@
 // replay after reset does not mint a second copy of the same row.
 
 import { clock, defineFixture } from './core/index.js';
+import { socialChannelMembersFixture, socialChannelMessagesFixture } from './social-channels.js';
+import { CAST } from './social-history.js';
 
 export interface MockNotificationRow {
   id: string;
   /** The recipient. */
   userId: string;
   tenant: string;
-  type: 'reply' | 'mention' | 'call-missed' | 'approval-requested';
+  type: 'reply' | 'mention' | 'message' | 'call-missed' | 'approval-requested';
   title: string;
   body: string;
   /** A portal path inside `tenant`. */
   href: string;
   actionLabel: string;
   timestamp: string;
+  /** The chat channel the item is about (the Mentions shelf groups on it). */
+  channel?: string;
   /** Extra payload fields (documentId, actorId, …) — the same keys the live producers write. */
   extra: Record<string, unknown>;
 }
 
+/**
+ * The social workspace's Activity and Mentions, derived from the seeded chat
+ * rows rather than typed beside them: a mention in the last three days becomes
+ * an unread `mention` for each channel member it names, and the newest message
+ * of a direct conversation from the last day becomes an unread `message` for
+ * the person it was sent to. Same shapes the gateway's live producers make
+ * (lib/realtime-gateway.ts notifyChannelMessage, dmNotifyPlugin).
+ */
+function socialNotifications(): MockNotificationRow[] {
+  const messages = socialChannelMessagesFixture.rows('default');
+  const members = socialChannelMembersFixture.rows('default');
+  const recent = clock.hoursAgo(72);
+  const dayAgo = clock.hoursAgo(24);
+  const out: MockNotificationRow[] = [];
+  const excerpt = (t: string) => (t.length > 140 ? `${t.slice(0, 139)}…` : t);
+  for (const m of messages) {
+    if (!m.userId || m.timestamp < recent) continue;
+    const actorName = CAST[m.userId] ?? m.userId;
+    const slug = m.channel.startsWith('social:ch:') ? m.channel.slice('social:ch:'.length) : null;
+    if (!slug) continue;
+    const text = m.message.toLowerCase();
+    for (const mem of members) {
+      if (mem.channel !== m.channel || mem.removedAt || mem.userId === m.userId) continue;
+      if (!text.includes(`@${(CAST[mem.userId] ?? '\u0000').toLowerCase()}`)) continue;
+      out.push({
+        id: `mock-notif-mention-${m.id}-${mem.userId}`, userId: mem.userId, tenant: 'social', type: 'mention',
+        title: `${actorName} mentioned you in #${slug}`, body: excerpt(m.message), channel: m.channel,
+        href: `/social/channels/${encodeURIComponent(slug)}`, actionLabel: 'Open the channel', timestamp: m.timestamp,
+        extra: { kind: 'mention', channel: m.channel, actorId: m.userId, actorName },
+      });
+    }
+  }
+  const newestPerDm = new Map<string, (typeof messages)[number]>();
+  for (const m of messages) {
+    if (!m.channel.startsWith('social:dm:') || m.timestamp < dayAgo) continue;
+    const seen = newestPerDm.get(m.channel);
+    if (!seen || m.timestamp > seen.timestamp) newestPerDm.set(m.channel, m);
+  }
+  for (const m of newestPerDm.values()) {
+    if (!m.userId) continue;
+    const actorName = CAST[m.userId] ?? m.userId;
+    for (const to of m.channel.slice('social:dm:'.length).split(':')) {
+      if (to === m.userId || !CAST[to]) continue;
+      out.push({
+        id: `mock-notif-dm-${m.id}-${to}`, userId: to, tenant: 'social', type: 'message',
+        title: `${actorName} sent you a message`, body: excerpt(m.message), channel: m.channel,
+        href: `/social/dms/${encodeURIComponent(m.channel)}`, actionLabel: 'Open the conversation', timestamp: m.timestamp,
+        extra: { kind: 'message', channel: m.channel, actorId: m.userId, actorName },
+      });
+    }
+  }
+  return out;
+}
+
 function seedNotifications(): MockNotificationRow[] {
   return [
+    ...socialNotifications(),
     {
       id: 'mock-notif-reply-farah', userId: 'u-farah', tenant: 'assessment', type: 'reply',
       title: 'Jonas Lindqvist replied to your comment',

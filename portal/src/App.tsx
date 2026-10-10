@@ -5,8 +5,9 @@ import { RequireRole, RequireTenant } from './lib/auth';
 import { RouteErrorBoundary } from './components/shell/RouteErrorBoundary';
 import { useSession } from './lib/auth';
 import { ASSESSMENT_ENABLED, PIPELINES_ENABLED, SOCIAL_ENABLED } from './lib/features';
-import { resolveHome } from './lib/tenantHome';
+import { CHOOSER, resolveHome } from './lib/tenantHome';
 import { OptionalGatewayProvider } from './components/OptionalGatewayProvider';
+import { SharedNotificationsProvider } from './components/shell/SharedNotifications';
 // Eager: a redirect has nothing to lazy-load and must not flash a spinner.
 import DistillationLegacyRedirect from './pages/distillation/LegacyRedirect';
 import { ComputeHost } from './components/compute/ComputeHost';
@@ -19,6 +20,8 @@ const ScoresCohortPage = lazy(() => import('./pages/ScoresCohortPage'));
 const ScoresComparePage = lazy(() => import('./pages/ScoresComparePage'));
 const ProjectsPage = lazy(() => import('./pages/ProjectsPage'));
 const ProjectDetailPage = lazy(() => import('./pages/ProjectDetailPage'));
+const InitiativeDeckPage = lazy(() => import('./pages/projects/decks/InitiativeDeckPage'));
+const DocumentRecordPage = lazy(() => import('./pages/iq/DocumentRecordPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const IqLayout = lazy(() => import('./pages/iq/IqLayout'));
 const AdminLayout = lazy(() => import('./pages/admin/AdminLayout'));
@@ -32,27 +35,37 @@ const AssessmentWorkspacePage = lazy(() => import('./pages/assessment/WorkspaceP
 const AssessmentPromptsPage = lazy(() => import('./pages/assessment/PromptsPage'));
 const AssessmentRulesPage = lazy(() => import('./pages/assessment/RulesPage'));
 const AssessmentRunsPage = lazy(() => import('./pages/assessment/RunsPage'));
+const AssessmentActivityPage = lazy(() => import('./pages/assessment/ActivityPage'));
+const AssessmentDecksPage = lazy(() => import('./pages/assessment/decks/DecksListPage'));
+const AssessmentDeckPage = lazy(() => import('./pages/assessment/decks/DeckPage'));
 const AssessmentConfigurationPage = lazy(() => import('./pages/assessment/ConfigurationPage'));
 const SocialLayout = lazy(() => import('./pages/social/SocialLayout'));
 const SocialSurfacePage = lazy(() => import('./pages/social/SocialSurfacePage'));
 const SocialChannelsPage = lazy(() => import('./pages/social/ChannelsPage'));
 const SocialDmsPage = lazy(() => import('./pages/social/DmsPage'));
 const SocialCallsPage = lazy(() => import('./pages/social/CallsPage'));
+const CommunicationPlane = lazy(() => import('./pages/communication/CommunicationPlane'));
 const SocialRoomsPage = lazy(() => import('./pages/social/RoomsPage'));
 const SocialContactsPage = lazy(() => import('./pages/social/ContactsPage'));
 const SocialTeamsPage = lazy(() => import('./pages/social/TeamsPage'));
 const SocialRecordingsPage = lazy(() => import('./pages/social/RecordingsPage'));
 const SocialConfigurationPage = lazy(() => import('./pages/social/ConfigurationPage'));
+const SocialWorkGraphPage = lazy(() => import('./pages/social/WorkGraphPage'));
+const SocialDeckPage = lazy(() => import('./pages/social/decks/SocialDeckPage'));
 const PipelinesLayout = lazy(() => import('./pages/pipelines/PipelinesLayout'));
 const PipelinesSurfacePage = lazy(() => import('./pages/pipelines/PipelinesSurfacePage'));
 const PipelinesRunsPage = lazy(() => import('./pages/pipelines/RunsPage'));
 const PipelinesRunDetailPage = lazy(() => import('./pages/pipelines/RunDetailPage'));
+const PipelinesActivityPage = lazy(() => import('./pages/pipelines/ActivityPage'));
+const PipelinesRunDeckPage = lazy(() => import('./pages/pipelines/decks/PipelineDeckPage'));
 const PipelinesConfigurationPage = lazy(() => import('./pages/pipelines/ConfigurationPage'));
 const IqRunsPage = lazy(() => import('./pages/iq/RunsPage'));
+const IqActivityPage = lazy(() => import('./pages/iq/ActivityPage'));
 const PipelinesArtifactsPage = lazy(() => import('./pages/pipelines/ArtifactsPage'));
 const PipelinesDefinitionsPage = lazy(() => import('./pages/pipelines/DefinitionsPage'));
 const PipelinesRunbooksPage = lazy(() => import('./pages/pipelines/RunbooksPage'));
 const PipelinesApprovalsPage = lazy(() => import('./pages/pipelines/ApprovalsPage'));
+const PipelinesQueuesPage = lazy(() => import('./pages/pipelines/QueuesPage'));
 const PipelinesSourcesPage = lazy(() => import('./pages/pipelines/SourcesPage'));
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
 const KnowledgeHomePage = lazy(() => import('./pages/knowledge/KnowledgeHomePage'));
@@ -169,6 +182,11 @@ function KbDetailRedirect() {
   return <Navigate to={`/admin/knowledge/registry/${id ?? ''}`} replace />;
 }
 
+function LegacyWorkspaceRedirect() {
+  const { search, hash } = useLocation();
+  return <Navigate to={`${CHOOSER}${search}${hash}`} replace />;
+}
+
 /**
  * Send this identity home — the one resolution in lib/tenantHome.ts, used
  * both for `/` and for every guard that refuses entry to a route tree.
@@ -192,6 +210,7 @@ function HomeRedirect() {
 export function App() {
   return (
     <OptionalGatewayProvider url={GATEWAY_URL}>
+    <SharedNotificationsProvider>
     {/* One fleet for the whole app. Above the router because a shell must
         survive navigation, and because the Computers page, the ⌘K palette, the
         ⌘I switcher and Codebases all have to agree about which computers
@@ -226,7 +245,8 @@ export function App() {
 
       {/* Workspace chooser — outside Layout: it's the pre-app "select account +
           role" step, shown once after login for multi-context identities. */}
-      <Route path="select" element={<Page element={<SelectContextPage />} />} />
+      <Route path="workspaces" element={<Page element={<SelectContextPage />} />} />
+      <Route path="select" element={<LegacyWorkspaceRedirect />} />
 
       <Route element={<Layout />}>
         <Route index element={<HomeRedirect />} />
@@ -249,6 +269,8 @@ export function App() {
             <Route path="teams" element={<Page element={<AssessmentDashboardPage />} />} />
             <Route path="teams/:teamId" element={<Page element={<AssessmentDashboardPage />} />} />
             <Route path="submissions" element={<Page element={<AssessmentSubmissionsPage />} />} />
+            <Route path="decks" element={<Page element={<AssessmentDecksPage />} />} />
+            <Route path="decks/:deckId" element={<Page element={<AssessmentDeckPage />} />} />
             <Route path="feedback" element={<Page element={<AssessmentFeedbackPage />} />} />
             <Route path="reports" element={<Page element={<AssessmentReportsPage />} />} />
             <Route path="enterprise" element={<Page element={<AssessmentEnterprisePage />} />} />
@@ -256,6 +278,22 @@ export function App() {
             <Route path="prompts" element={<Page element={<AssessmentPromptsPage />} />} />
             <Route path="rules" element={<Page element={<AssessmentRulesPage />} />} />
             <Route path="runs" element={<Page element={<AssessmentRunsPage />} />} />
+            <Route path="activity" element={<Page element={<AssessmentActivityPage />} />} />
+            {/* Communication: the Social plane embedded here (docs/social-tenant-design.md §4.6). Every assessment role opens it;
+                Social reads are gated on the caller's Social grant at the BFF, and the Calls shelf (GET /api/calls/tenant) on ViewAssessment.
+                The former Calls page lands on its Calls destination. Sub-routes mirror /social/* (one workspace, two mounts). */}
+            <Route path="communication">
+              <Route index element={<Page element={<CommunicationPlane route="channels" />} />} />
+              <Route path="channels" element={<Page element={<CommunicationPlane route="channels" />} />} />
+              <Route path="channels/:slug" element={<Page element={<CommunicationPlane route="channels" />} />} />
+              <Route path="dms" element={<Page element={<CommunicationPlane route="dms" />} />} />
+              <Route path="dms/:lobby" element={<Page element={<CommunicationPlane route="dms" />} />} />
+              <Route path="teams" element={<Page element={<CommunicationPlane route="teams" />} />} />
+              <Route path="rooms" element={<Page element={<CommunicationPlane route="rooms" />} />} />
+              <Route path="calls" element={<Page element={<CommunicationPlane route="calls" />} />} />
+              <Route path="recordings" element={<Page element={<CommunicationPlane route="recordings" />} />} />
+            </Route>
+            <Route path="calls" element={<Navigate to="/assessment/communication/calls" replace />} />
             <Route path="configuration" element={<Page element={<AssessmentConfigurationPage />} />} />
           </Route>
         ) : (
@@ -285,7 +323,10 @@ export function App() {
             <Route path="teams" element={<Page element={<SocialTeamsPage />} />} />
             <Route path="profile" element={<Page element={<SocialSurfacePage surface="profile" />} />} />
             <Route path="recordings" element={<Page element={<SocialRecordingsPage />} />} />
+            {/* The work graph: open to every social role (ViewSocial), like /api/social/work-graph. */}
+            <Route path="work-graph" element={<Page element={<SocialWorkGraphPage />} />} />
             <Route path="configuration" element={<Page element={<SocialConfigurationPage />} />} />
+            <Route path="decks/:deckId" element={<Page element={<SocialDeckPage />} />} />
             <Route path="settings" element={<Page element={<SocialSurfacePage surface="settings" />} />} />
           </Route>
         ) : (
@@ -309,9 +350,26 @@ export function App() {
           >
             <Route index element={<Navigate to="runs" replace />} />
             <Route path="definitions" element={<Page element={<PipelinesDefinitionsPage />} />} />
+            <Route path="queues" element={<Page element={<PipelinesQueuesPage />} />} />
             <Route path="runbooks" element={<Page element={<PipelinesRunbooksPage />} />} />
             <Route path="runs" element={<Page element={<PipelinesRunsPage />} />} />
             <Route path="runs/:id" element={<Page element={<PipelinesRunDetailPage />} />} />
+            {/* The activity graph: open to every pipelines role (ViewPipelines), like /api/pipelines/work-graph. */}
+            <Route path="activity" element={<Page element={<PipelinesActivityPage />} />} />
+            {/* Communication: the Social plane embedded here; Social reads gated on the Social grant, the Calls shelf on ViewPipelines. */}
+            <Route path="communication">
+              <Route index element={<Page element={<CommunicationPlane route="channels" />} />} />
+              <Route path="channels" element={<Page element={<CommunicationPlane route="channels" />} />} />
+              <Route path="channels/:slug" element={<Page element={<CommunicationPlane route="channels" />} />} />
+              <Route path="dms" element={<Page element={<CommunicationPlane route="dms" />} />} />
+              <Route path="dms/:lobby" element={<Page element={<CommunicationPlane route="dms" />} />} />
+              <Route path="teams" element={<Page element={<CommunicationPlane route="teams" />} />} />
+              <Route path="rooms" element={<Page element={<CommunicationPlane route="rooms" />} />} />
+              <Route path="calls" element={<Page element={<CommunicationPlane route="calls" />} />} />
+              <Route path="recordings" element={<Page element={<CommunicationPlane route="recordings" />} />} />
+            </Route>
+            <Route path="calls" element={<Navigate to="/pipelines/communication/calls" replace />} />
+            <Route path="decks/:deckId" element={<Page element={<PipelinesRunDeckPage />} />} />
             <Route path="approvals" element={<Page element={<PipelinesApprovalsPage />} />} />
             <Route path="artifacts" element={<Page element={<PipelinesArtifactsPage />} />} />
             <Route path="agents" element={<Page element={<PipelinesSourcesPage source="agents" />} />} />
@@ -371,6 +429,25 @@ export function App() {
             </RequireRole>
           } />
           <Route path="search" element={<Page element={<SearchPage />} />} />
+          <Route path="documents/:documentId" element={<Page element={<DocumentRecordPage />} />} />
+          {/* Activity/work graph, full page (docs/activity-graph-migration.md):
+              reached from the initiative overview's pop-out, not the rail —
+              like the reference's standalone page. Every orgiq role, as the API. */}
+          <Route path="activity" element={<Page element={<IqActivityPage />} />} />
+          {/* Communication (Org): the Social plane embedded in orgiq — every orgiq role opens it; Social reads are gated on the
+              caller's Social grant at the BFF, the Calls shelf on GET /api/calls/tenant. The former Calls page lands on its Calls destination. Sub-routes mirror /social/* (one workspace, two mounts). */}
+          <Route path="communication">
+            <Route index element={<Page element={<CommunicationPlane route="channels" />} />} />
+            <Route path="channels" element={<Page element={<CommunicationPlane route="channels" />} />} />
+            <Route path="channels/:slug" element={<Page element={<CommunicationPlane route="channels" />} />} />
+            <Route path="dms" element={<Page element={<CommunicationPlane route="dms" />} />} />
+            <Route path="dms/:lobby" element={<Page element={<CommunicationPlane route="dms" />} />} />
+            <Route path="teams" element={<Page element={<CommunicationPlane route="teams" />} />} />
+            <Route path="rooms" element={<Page element={<CommunicationPlane route="rooms" />} />} />
+            <Route path="calls" element={<Page element={<CommunicationPlane route="calls" />} />} />
+            <Route path="recordings" element={<Page element={<CommunicationPlane route="recordings" />} />} />
+          </Route>
+          <Route path="calls" element={<Navigate to="/iq/communication/calls" replace />} />
           <Route path="invoke" element={<Page element={<LegacySearchRedirect />} />} />
           {/* Find Help folded into Ask — the chat is the org search. */}
           <Route path="help" element={<Page element={<LegacySearchRedirect />} />} />
@@ -396,6 +473,9 @@ export function App() {
           <Route path="decisions/:id" element={<Navigate to="/iq/projects" replace />} />
           <Route path="projects" element={<Page element={<ProjectsPage />} />} />
           <Route path="projects/:id" element={<Page element={<ProjectDetailPage />} />} />
+          {/* Initiative status deck (agentic-flows slice 6): reached from the
+              initiative page, not the rail. The server gates every read. */}
+          <Route path="decks/:deckId" element={<Page element={<InitiativeDeckPage />} />} />
           {/* Sprints merged into Initiatives as a lens — one program surface,
               two zooms. The old URL keeps working. */}
           <Route path="sprints" element={<Navigate to="/iq/projects?lens=sprints" replace />} />
@@ -678,6 +758,7 @@ export function App() {
       </Route>
     </Routes>
     </ComputeHost>
+    </SharedNotificationsProvider>
     </OptionalGatewayProvider>
   );
 }

@@ -12,10 +12,10 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import {
-  Button, Card, Checkbox, Chip, EntityCell, FormField, Inline, InlineAlert,
-  Input, MetaLine, SectionLabel, Select, Stack, Toolbar,
+  Button, Card, Checkbox, Chip, Disclosure, EntityCell, FormField, Inline, InlineAlert,
+  Input, MetaLine, SectionLabel, Select, Stack, Toolbar, TreeView,
 } from '@connorhoehnslalom/ui-components/shared';
-import type { ChipTone } from '@connorhoehnslalom/ui-components/shared';
+import type { ChipTone, TreeNode } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { toastError, toastSuccess, toastPending } from '../../lib/toastStore';
 
@@ -301,23 +301,15 @@ export function SiteSurveyPanel({ onTargetCreated }: { onTargetCreated?: () => v
           )}
 
           {survey.tree && (
-            // <details> stays: the library has no disclosure primitive, and the
-            // native element already does the keyboard and ARIA work a
-            // hand-rolled button+state pair would have to re-earn. Neither tag
-            // carries a className, so nothing here is a styled raw element.
-            <details className="border-b border-border">
-              <summary>
-                <MetaLine
-                  size="xs"
-                  tone="secondary"
-                  className="inline-flex px-3.5 py-2 cursor-pointer select-none"
-                  items={[`Structure (${survey.tree.pageCount} pages)`]}
-                />
-              </summary>
-              <Stack gap="none" className="px-3.5 pb-3 max-h-[320px] overflow-auto">
-                <TreeNode node={survey.tree} depth={0} selected={selected} defaultOpen />
-              </Stack>
-            </details>
+            <Disclosure
+              variant="plain"
+              density="compact"
+              className="border-b border-border"
+              summary={`Structure (${survey.tree.pageCount} pages)`}
+              bodyClassName="px-3.5 pb-3 max-h-[320px] overflow-auto"
+            >
+              <SurveyTree root={survey.tree} selected={selected} />
+            </Disclosure>
           )}
 
           {survey.status === 'completed' && (
@@ -346,73 +338,67 @@ export function SiteSurveyPanel({ onTargetCreated }: { onTargetCreated?: () => v
 }
 
 /**
- * One level of the path tree.
+ * The path tree, as the library's TreeView.
  *
- * Branches under a selected section are tinted, so the tree and the checkboxes
- * above it are visibly the same decision rather than two unrelated lists.
+ * Nodes under a selected section carry an "in scope" chip, so the tree and the
+ * checkboxes above it are visibly the same decision rather than two unrelated
+ * lists. The page title, size and failure chips ride in the trailing slot.
  */
-function TreeNode({ node, depth, selected, defaultOpen = false }: {
-  node: SurveyNode; depth: number; selected: Set<string>; defaultOpen?: boolean;
-}) {
-  const [open, setOpen] = useState(defaultOpen || depth < 1);
-  const inScope = [...selected].some((p) => node.path === p || node.path.startsWith(`${p}/`));
-  const hasChildren = node.children.length > 0;
+function SurveyTree({ root, selected }: { root: SurveyNode; selected: Set<string> }) {
+  const nodes: TreeNode[] = [];
+  const byId = new Map<string, SurveyNode>();
+  const walk = (n: SurveyNode, parentId: string | null) => {
+    const id = n.path || '/';
+    byId.set(id, n);
+    const inScope = [...selected].some((p) => n.path === p || n.path.startsWith(`${p}/`));
+    nodes.push({
+      id,
+      title: n.segment || '/',
+      parentId,
+      isDir: n.children.length > 0,
+      badge: inScope ? <Chip tone="success" size="xs">in scope</Chip> : undefined,
+    });
+    n.children.forEach((c) => walk(c, id));
+  };
+  walk(root, null);
 
   return (
-    <Stack gap="none">
-      <Inline
-        gap="xs"
-        wrap={false}
-        className={`py-0.5 text-[11px] ${inScope ? 'text-text-primary' : 'text-text-tertiary'}`}
-        // Runtime-derived: Tailwind cannot build a class from `depth * 14`, and
-        // enumerating a padding class per depth would cap the tree's depth.
-        style={{ paddingLeft: depth * 14 }}
-      >
-        {hasChildren ? (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setOpen((v) => !v)}
-            aria-label={open ? 'Collapse' : 'Expand'}
-            className="w-3 shrink-0 p-0 leading-none"
-          >
-            {open ? '▾' : '▸'}
-          </Button>
-        ) : (
-          <Inline gap="none" className="w-3 shrink-0" aria-hidden />
-        )}
-        <EntityCell mono label={node.segment} labelClassName={inScope ? 'font-semibold' : undefined} />
-        {node.page && (
-          <MetaLine
-            size="xs"
-            className="truncate flex-1 min-w-0"
-            items={[node.page.title]}
-          />
-        )}
-        {node.page?.via === 'browser' && (
-          <Chip tone="info" size="xs" className="shrink-0" title="Only visible through the browser">
-            browser
-          </Chip>
-        )}
-        {/* The "N unreadable" strip above says how many pages failed but not
-            why — a page that failed because the browser capability is
-            misconfigured (see the BROWSER_ID drift gotcha) looked identical
-            to one that is genuinely bot-blocked. The reason the survey
-            already computed is now on the node it happened to. */}
-        {node.page?.status === 'failed' && (
-          <Chip tone="danger" size="xs" className="shrink-0" title={node.page.error || 'Could not read this page'}>
-            unreadable
-          </Chip>
-        )}
-        <MetaLine
-          size="xs"
-          className="ml-auto shrink-0 tabular-nums"
-          items={[`${hasChildren ? `${node.pageCount} · ` : ''}${chars(node.contentChars)}`]}
-        />
-      </Inline>
-      {open && node.children.map((c) => (
-        <TreeNode key={c.path} node={c} depth={depth + 1} selected={selected} />
-      ))}
-    </Stack>
+    <TreeView
+      nodes={nodes}
+      selectedId={null}
+      onSelect={() => undefined}
+      defaultExpanded={[root.path || '/']}
+      renderTrailing={(tn) => {
+        const node = byId.get(tn.id);
+        if (!node) return null;
+        return (
+          <Inline gap="xs" wrap={false} className="min-w-0">
+            {node.page && (
+              <MetaLine size="xs" className="truncate min-w-0" items={[node.page.title]} />
+            )}
+            {node.page?.via === 'browser' && (
+              <Chip tone="info" size="xs" className="shrink-0" title="Only visible through the browser">
+                browser
+              </Chip>
+            )}
+            {/* The "N unreadable" strip above says how many pages failed but not
+                why — a page that failed because the browser capability is
+                misconfigured (see the BROWSER_ID drift gotcha) looked identical
+                to one that is genuinely bot-blocked. The reason the survey
+                already computed is on the node it happened to. */}
+            {node.page?.status === 'failed' && (
+              <Chip tone="danger" size="xs" className="shrink-0" title={node.page.error || 'Could not read this page'}>
+                unreadable
+              </Chip>
+            )}
+            <MetaLine
+              size="xs"
+              className="shrink-0 tabular-nums"
+              items={[`${node.children.length > 0 ? `${node.pageCount} · ` : ''}${chars(node.contentChars)}`]}
+            />
+          </Inline>
+        );
+      }}
+    />
   );
 }

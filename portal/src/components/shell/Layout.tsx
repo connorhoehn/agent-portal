@@ -15,7 +15,20 @@ import {
   activeNavItemClassName,
   inactiveNavItemClassName,
   RAIL_CURRENT_FILL,
+  ChevronIcon,
+  IconButton,
+  RAIL_FOLD_PRIMARY_BELOW,
+  RAIL_FOLD_SECTION_BELOW,
+  RailBandProvider,
+  railBand,
+  railDepth,
+  useRailFold,
+  useViewportWidth,
+  type RailDepthSpec,
 } from '@connorhoehnslalom/ui-components/shared';
+import { SidePaneProvider, useSidePaneHost } from '@connorhoehnslalom/ui-components';
+import { useDialogueRailFold } from './useDialogueRailFold';
+import { ConversationInputProvider } from '@connorhoehnslalom/ui-components/social/rich-composer';
 
 // activeNavItemClassName / inactiveNavItemClassName come from the library, not
 // from local copies. They were briefly replaced with local strings on the
@@ -35,25 +48,31 @@ import { useFetch } from '../../hooks/useFetch';
 import { useSession } from '../../lib/auth';
 import { Breadcrumbs } from './Breadcrumbs';
 import { MasqueradeMenu } from './MasqueradeMenu';
-import { GatewayStatusBadge } from './GatewayStatusBadge';
-import { ActiveRunsBadge } from './ActiveRunsBadge';
-import { LocalComputeBadge } from './LocalComputeBadge';
+import { FleetIndicator } from './FleetIndicator';
 import { ActivityBell } from './ActivityBell';
 import { useOrgiqShellPolls, useRefreshSessionOnDeny } from './orgiqShellPolls';
 import { usePortalCommands, usePortalDynamicCommands, groupRank } from './portalCommands';
+import { useDiscussionUnread } from './useDiscussionUnread';
+import { discussionCommandLabel, railCount } from './discussionUnreadModel';
 import { DevboxQuickSwitch, type PaletteScope } from './DevboxQuickSwitch';
 import { brandMarkUri, gradientStops } from './brandMark';
 import { ToastHost } from './ToastHost';
 import { ComputeDock } from '@connorhoehnslalom/ui-components/compute';
 import { tenantEnabled } from '../../lib/features';
+import { ShellCallHost } from './ShellCallHost';
+import { CallBlock } from '../../lib/conversationCall';
+import { EmbeddedSocialProvider } from './EmbeddedSocial';
+import { SocialFooter } from './SocialFooter';
+import { HuddleChatSplit } from './HuddleChat';
+import { healthFailed, healthPending, type DependencyHealth } from '../../lib/healthStatus';
 
 interface Health {
   status: string;
   service: string;
   mocks: Record<string, boolean>;
   region: string;
-  awsCredentials?: { ok: boolean; error?: string };
-  datastore?: { ok: boolean; error?: string };
+  awsCredentials?: DependencyHealth;
+  datastore?: DependencyHealth;
 }
 
 interface WorkSummary {
@@ -109,13 +128,16 @@ const NAV_ITEMS: NavItem[] = [
   { path: '/iq/distillation/knowledge', label: 'Distillation', tenant: 'orgiq',   group: 'Build' },
   { path: '/iq/library', label: 'Agent library', tenant: 'orgiq', group: 'Build' },
   { path: '/iq/local-compute', label: 'Local compute', tenant: 'orgiq', group: 'Build' },
-  { path: '/iq/search',     label: 'Search',         tenant: 'orgiq',     group: 'Org' },
+  { path: '/iq/search',     label: 'Search',         tenant: 'orgiq',     group: 'Engage' },
+  // Communication: the Social plane embedded in orgiq, with the call log as its Calls shelf. Every orgiq role
+  // (Social reads gate on the Social grant at the BFF; no grant → the plane's own denied state).
+  { path: '/iq/communication', label: 'Communication', tenant: 'orgiq',  group: 'Engage' },
   // Ask is also the "find help" surface: its empty state offers questions
   // from your own work, and answers grow an evidence rail (people + matched
   // skills + documents, score-free) via /api/graph/help. Scores stays the
   // separate HR analytics view — ViewLeaderboard tier, leadership only; an
   // ungated nav item just handed every SME a 403'd leaderboard.
-  { path: '/iq/scores',     label: 'Scores',      tenant: 'orgiq',     group: 'Org', requireRoles: ['org-leader', 'hr-admin'] },
+  { path: '/iq/scores',     label: 'Scores',      tenant: 'orgiq',     group: 'Engage', requireRoles: ['org-leader', 'hr-admin'] },
   // Initiative design discussions remain separate from reusable assets.
   { path: '/iq/designs', label: 'Designs', tenant: 'orgiq', group: 'Design' },
   // OPERATE — the runs this workspace produced (bots, agents, the queue),
@@ -133,8 +155,12 @@ const NAV_ITEMS: NavItem[] = [
   // exactly as the source app's sidebar is — there is no second rail inside.
   { path: '/assessment/teams',         label: 'Dashboard',     tenant: 'assessment', group: 'Assess' },
   { path: '/assessment/submissions',   label: 'Submissions',   tenant: 'assessment', group: 'Assess' },
+  // Communication: the Social plane, with team/document huddles as its Calls shelf; every assessment role, so no roles.
+  { path: '/assessment/communication', label: 'Communication', tenant: 'assessment', group: 'Assess' },
   { path: '/assessment/reports',       label: 'Reports',       tenant: 'assessment', group: 'Analyze' },
   { path: '/assessment/feedback',      label: 'Feedback',      tenant: 'assessment', group: 'Analyze' },
+  // The activity graph: ViewAssessment, which every assessment role holds (route and API), so no roles.
+  { path: '/assessment/activity',      label: 'Work graph',     tenant: 'assessment', group: 'Analyze' },
   { path: '/assessment/enterprise',    label: 'Enterprise',    tenant: 'assessment', group: 'Informatics' },
   { path: '/assessment/workspace',     label: 'Workspace',     tenant: 'assessment', group: 'Informatics' },
   { path: '/assessment/prompts',       label: 'Prompts',       tenant: 'assessment', group: 'Informatics' },
@@ -160,6 +186,8 @@ const NAV_ITEMS: NavItem[] = [
   { path: '/social/contacts',      label: 'Contacts',        tenant: 'social', group: 'People' },
   { path: '/social/teams',         label: 'Teams',           tenant: 'social', group: 'People' },
   { path: '/social/recordings',    label: 'Recordings',      tenant: 'social', group: 'Library' },
+  // The work graph: ViewSocial, which every social role holds (route and API), so no roles.
+  { path: '/social/work-graph',       label: 'Work graph',      tenant: 'social', group: 'Library' },
   { path: '/social/configuration', label: 'Configuration',   tenant: 'social', group: 'System' },
   // The pipelines tenant's own map (docs/social-tenant-design.md §5.3):
   // CATALOG (what can run) → RUNS (what ran, what waits on a person, what it
@@ -167,8 +195,12 @@ const NAV_ITEMS: NavItem[] = [
   // reads every page (ViewPipelines).
   { path: '/pipelines/definitions',   label: 'Definitions',   tenant: 'pipelines', group: 'Catalog' },
   { path: '/pipelines/runbooks',      label: 'Runbooks',      tenant: 'pipelines', group: 'Catalog' },
+  { path: '/pipelines/queues', label: 'Queues', tenant: 'pipelines', group: 'Runs' },
   { path: '/pipelines/runs',          label: 'Runs',          tenant: 'pipelines', group: 'Runs' },
+  { path: '/pipelines/activity',      label: 'Work graph',    tenant: 'pipelines', group: 'Runs' },
   { path: '/pipelines/approvals',     label: 'Approvals',     tenant: 'pipelines', group: 'Runs' },
+  // Communication: the Social plane, with run huddles as its Calls shelf; every pipelines role, so no roles.
+  { path: '/pipelines/communication', label: 'Communication', tenant: 'pipelines', group: 'Runs' },
   { path: '/pipelines/artifacts',     label: 'Artifacts',     tenant: 'pipelines', group: 'Runs' },
   { path: '/pipelines/agents',        label: 'Agents',        tenant: 'pipelines', group: 'Sources' },
   { path: '/pipelines/bots',          label: 'Bots',          tenant: 'pipelines', group: 'Sources' },
@@ -225,14 +257,39 @@ const PLATFORM_ITEMS: NavItem[] = [
 ];
 
 const TENANT_LABELS: Record<Tenant, string> = {
-  orgiq: 'Org',
+  orgiq: 'Work',
   assessment: 'Assessment',
   social: 'Social',
   pipelines: 'Pipelines',
   admin: 'Admin',
 };
 
+/**
+ * How deep a route sits (docs/layout-cascade.md rule 8), declared for the
+ * library rail model (`railDepth`): the tenant prefixes, the query params that
+ * open a record beside a page's list (a selection is one level below its
+ * page), and the records that are always deep — a run, a document opened from
+ * its source, a deck, a catalog record open beside its list rail. A side pane
+ * exploring a selection (an initiative's Details/Log, Search's Ask about
+ * selection) is two more levels: the library pane host says so.
+ */
+const SHELL_RAIL_DEPTH: RailDepthSpec = {
+  prefixes: ['iq', 'assessment', 'social', 'pipelines', 'admin'],
+  drillParams: ['item', 'dimension', 'step', 'sample', 'run', 'candidate'],
+  leafRoutes: [
+    /^\/(iq|pipelines)\/runs\/[^/]+$/,
+    /^\/iq\/documents\/[^/]+$/,
+    /^\/(iq|assessment|social|pipelines)\/decks\/[^/]+$/,
+    /^\/iq\/(designs|library)\/[^/]+$/,
+  ],
+};
+
+/** The shell's right pane host (library `SidePaneProvider`) sits above the rails, so the rail rule can read it. */
 export function Layout() {
+  return <SidePaneProvider storageKey="shell.conversation-pane" bounds={{ minSecondaryPx: 480, fitPrimaryPx: 640 }}><ShellLayout /></SidePaneProvider>;
+}
+
+function ShellLayout() {
   const { session } = useSession();
   const { data: health } = useFetch<Health>('/api/health', 30_000);
   // /api/work is orgiq-only (requireTenant('orgiq')); polling it from an
@@ -242,7 +299,25 @@ export function Layout() {
   const { data: work, error: workError } = useFetch<WorkSummary>(
     orgiqPolls ? '/api/work/summary' : null, 15_000);
   useRefreshSessionOnDeny(workError);
-  const { pathname } = useLocation();
+  const location = useLocation();
+  const { pathname } = location;
+  // Which rail gives way on a deep page (the library rail model): from three
+  // levels down the primary rail folds to its strip and the section rail
+  // stays open; narrow windows fold the primary first, the section second.
+  // The reader's own toggle wins, remembered per device per depth band.
+  const sidePane = useSidePaneHost();
+  const depth = railDepth(location, { ...SHELL_RAIL_DEPTH, explored: sidePane.explored });
+  const band = railBand(depth);
+  const viewportWidth = useViewportWidth();
+  const primaryRail = useRailFold({ storageKey: 'shell.primary-rail', band, defaultFolded: band === 'deep' || viewportWidth < RAIL_FOLD_PRIMARY_BELOW });
+  const [huddleDialogueOpen, setHuddleDialogueOpen] = useState(false);
+  const dialogueRail = useDialogueRailFold(sidePane.shown || huddleDialogueOpen, primaryRail, pathname);
+  const rails = {
+    primary: dialogueRail.folded ? 'collapsed' : 'open',
+    section: viewportWidth < RAIL_FOLD_SECTION_BELOW ? 'collapsed' : 'open',
+    depth,
+    togglePrimary: dialogueRail.toggle,
+  } as const;
   const navigate = useNavigate();
 
   // Routes that render their own SubNavLayout (iq/admin) go
@@ -270,9 +345,22 @@ export function Layout() {
     }),
     [paletteScope],
   );
+  // Page discussions with new messages (server-counted, re-gated per read):
+  // a badge on the rail door each sits behind, and a palette row per thread.
+  const discussionUnread = useDiscussionUnread();
   const commands = useMemo(
-    () => rawCommands.map(scopeCommand),
-    [rawCommands, scopeCommand],
+    () => [
+      ...rawCommands,
+      ...discussionUnread.threads.map((t): Command => ({
+        id: `discussion-unread:${t.channel}`,
+        label: discussionCommandLabel(t),
+        group: 'New messages',
+        ...(t.lastMessagePreview ? { hint: t.lastMessagePreview } : {}),
+        keywords: ['unread', 'new messages', 'discussion', t.channel],
+        run: () => { navigate(t.href); },
+      })),
+    ].map(scopeCommand),
+    [rawCommands, discussionUnread, navigate, scopeCommand],
   );
   const getDynamicCommands = useCallback(
     (query: string) => rawGetDynamicCommands(query).map(scopeCommand),
@@ -331,32 +419,15 @@ export function Layout() {
       ...(i.group ? { group: i.group } : {}),
       // The blocked-on-a-human count rides the Delivery door now that the
       // Work queue lives behind it rather than beside it.
-      ...(i.path === '/iq/projects' && needsYou > 0 ? { count: needsYou } : {}),
+      // Each door also counts the page discussions behind it with new messages.
+      ...(() => { const count = railCount(i.path, i.path === '/iq/projects' ? needsYou : 0, discussionUnread); return count ? { count } : {}; })(),
     }))
     // Group order is the tenant's (shared with the palette, portalCommands.ts).
     .sort((a, b) => groupRank(session?.tenant ?? 'orgiq', a.group) - groupRank(session?.tenant ?? 'orgiq', b.group));
 
-  // Guard on shape, not presence: a /api/health body from a restarting or
-  // misrouted backend can arrive without `mocks`, and this line used to
-  // white-screen the whole shell on it (Object.entries(undefined)).
-  const mockedSubsystems = health?.mocks && typeof health.mocks === 'object'
-    ? Object.entries(health.mocks).filter(([, v]) => v).map(([k]) => k)
-    : [];
-  const credsExpired = health?.awsCredentials?.ok === false;
-  const dbDown = health?.datastore?.ok === false;
-  // Credentials first: an expired session explains a dead database, but not
-  // the other way round, so leading with the database would send someone
-  // chasing the wrong thing.
-  const statusLabel = !health
-    ? '…'
-    : credsExpired
-      ? 'AWS credentials expired — re-login, then restart the middleware'
-      : dbDown
-        ? `Database unavailable — ${health.datastore?.error ?? 'Aurora unreachable'}`
-        : mockedSubsystems.length === 0
-          ? `Live · ${health.region}`
-          : `Mock: ${mockedSubsystems.join(', ')}`;
-
+  const credsExpired = healthFailed(health?.awsCredentials);
+  const dbDown = healthFailed(health?.datastore);
+  const checkingHealth = healthPending(health?.awsCredentials) || healthPending(health?.datastore);
   const tenantLabel = TENANT_LABELS[session?.tenant ?? 'orgiq'];
 
   // The tenant mark: the brand gradient's stops, read from this shell's own
@@ -392,6 +463,9 @@ export function Layout() {
   }, [tenantLabel, session?.tenant]);
 
   return (
+    <ConversationInputProvider>
+    <ShellCallHost onDialogueChange={setHuddleDialogueOpen}>
+    <EmbeddedSocialProvider>
     <CommandPaletteProvider commands={commands} getDynamicCommands={getDynamicCommands}>
       <Stack ref={shellRef} gap="none" data-tenant={tenantAttr} className="h-screen">
         {/* First in the tab order, visible only while focused: a keyboard
@@ -403,8 +477,7 @@ export function Layout() {
           className="shell-header"
           avatarUrl={brandMark}
           name={tenantLabel}
-          description={statusLabel}
-          online={mockedSubsystems.length === 0 && !!health && !credsExpired && !dbDown}
+          online={health?.status === 'ok' && !credsExpired && !dbDown && !checkingHealth}
           actions={
             <Inline gap="md" wrap>
               <DropdownMenu
@@ -434,22 +507,33 @@ export function Layout() {
                   nothing runs. Its poll is orgiq-only (`/api/bots` is
                   requireTenant('orgiq')), so in the assessment shell it
                   never fetches and never renders. */}
-              <ActiveRunsBadge />
-              {session?.tenant === 'orgiq' && <LocalComputeBadge />}
+              <FleetIndicator />
               {/* Replies, mentions, DMs, missed calls, approvals — addressed
                   to this user, filtered to the tenants they hold a grant in
                   (docs/social-tenant-design.md §3). */}
               <ActivityBell />
-              <GatewayStatusBadge />
               <MasqueradeMenu />
             </Inline>
           }
         />
-        <Stack gap="none" className="flex-1 min-h-0" data-shell-nav>
+        <Stack gap="none" className="flex-1 min-h-0" data-shell-nav
+          data-primary-rail={rails.primary} data-section-rail={rails.section} data-drill-depth={rails.depth}>
           <SubNavLayout
             title={tenantLabel}
             items={subNavItems}
             railWidth={200}
+            collapsed={dialogueRail.folded}
+            titleAction={(
+              <IconButton
+                size="sm"
+                variant="ghost"
+                aria-label={rails.primary === 'open' ? `Collapse ${tenantLabel} navigation` : `Expand ${tenantLabel} navigation`}
+                aria-expanded={rails.primary === 'open'}
+                icon={<ChevronIcon size={14} dir={rails.primary === 'open' ? 'left' : 'right'} />}
+                onClick={rails.togglePrimary}
+                data-testid="shell-rail-toggle"
+              />
+            )}
             storageKey="orgiq-shell"
             railLabel={`${tenantLabel} navigation`}
             renderNavItem={(item, children) => (
@@ -466,6 +550,8 @@ export function Layout() {
                   // the sprints lens (keep Initiatives lit for that instant),
                   // and Bots/Changes live BEHIND the Automate door.
                   const active = isActive || (
+                    item.path === '/assessment/workspace' && pathname.startsWith('/assessment/decks')
+                  ) || (
                     item.path === '/iq/projects' && pathname.startsWith('/iq/sprints')
                   ) || (
                     item.path === '/iq/work' &&
@@ -511,16 +597,32 @@ export function Layout() {
               </NavLink>
             )}
           >
+            <RailBandProvider band={band}>
             <Stack gap="none" className="h-full bg-bg">
               {/* Where you are, once you're 3+ levels deep — stacked rails say
                   what you can open, the trail says where you stand. */}
               <Breadcrumbs />
-              <Stack id="main-content" tabIndex={-1} gap="none" className="flex-1 min-h-0 overflow-auto outline-none">
-                <Outlet />
+              {/* The huddle chat opens in the right split pane beside the page
+                  (HuddleChat.tsx); with no pane open the page takes the width. */}
+              <Stack gap="none" className="flex-1 min-h-0">
+                <HuddleChatSplit>
+                  <Stack gap="none" className="h-full min-h-0">
+                    <Stack id="main-content" tabIndex={-1} gap="none" className="min-h-0 flex-1 overflow-auto outline-none">
+                      <Outlet />
+                    </Stack>
+                    {/* The call bar and tiles for a call no on-screen composer carries, docked under the page. */}
+                    <CallBlock placement="block" />
+                  </Stack>
+                </HuddleChatSplit>
               </Stack>
             </Stack>
+            </RailBandProvider>
           </SubNavLayout>
         </Stack>
+        {/* One footer row (docs/design/initiative-huddle-shell-plan.md, "Global
+            footer"): a nonshrinking sibling after the shell body, never an
+            overlay; it also holds the call's single media sink. */}
+        <SocialFooter />
         <CommandPalette
           placeholder={
             paletteScope === 'devbox'
@@ -538,5 +640,8 @@ export function Layout() {
         {session?.tenant === 'orgiq' && <ComputeDock />}
       </Stack>
     </CommandPaletteProvider>
+    </EmbeddedSocialProvider>
+    </ShellCallHost>
+    </ConversationInputProvider>
   );
 }

@@ -57,34 +57,49 @@ export function isTerminalStatus(status: PromotionStatus): boolean {
   return status === 'promoted' || status === 'dismissed';
 }
 
+export type PromoteIntent = 'approve' | 'promote';
+
+export interface PrimaryAction {
+  /** What the click asks the server for — the same POST either way, but the
+   *  page reports a recorded approval differently from a promotion. */
+  intent: PromoteIntent;
+  label: string;
+  /** The button's tooltip: what the click will and will not do. */
+  hint?: string;
+}
+
 export interface AllowedActions {
-  /** The plain Approve/Promote button. */
-  canApprove: boolean;
-  /** "Approve + record a passing dry run" — the one-shot skill path. */
-  canApproveWithDryRun: boolean;
+  /** The one approve/promote button, or null when there is nothing to ask. */
+  primary: PrimaryAction | null;
   canDismiss: boolean;
 }
 
 /**
- * Which drawer actions are worth showing right now — mirrors the server's
- * `decidePromotion` gate (middleware/src/providers/promotions.ts) so the UI
- * never presents a button whose click is guaranteed to 409. A skill with no
- * passing dry run fails that gate on a plain Approve every time, but the
- * mock provider still flips status candidate→approved as a side effect of
- * the failed call — which is exactly how DEFECTS.md #1 happened: a plain
- * "Approve" button sat there looking clickable, always 409'd, and silently
- * mutated status underneath the stale drawer. The fix is to never show that
- * button for an unready skill in the first place; only the dry-run-carrying
- * action can actually clear the gate.
+ * Which drawer actions are worth showing right now, labelled for what the
+ * server's `decidePromotion` gate (middleware/src/providers/promotions.ts)
+ * will actually do with the click.
+ *
+ * A skill graduates only on a completed dry-run RUN of its own runbook
+ * definition — a client cannot assert one, so there is no "record a passing
+ * dry run" button (that label once promised exactly that and recorded only
+ * the approval, sme DEFECTS #19). What a reviewer here CAN do for an unready
+ * skill is record the human half: the server keeps that approval even while
+ * it refuses promotion for the missing run, so the button says "Record
+ * approval". Once approved, "Promote" re-asks the gate, which looks for the
+ * newest completed dry-run itself — one may have finished since this
+ * candidate was read.
  */
 export function allowedActions(c: Pick<PromotionCandidate, 'status' | 'proposedKind' | 'dryRunPassed'>): AllowedActions {
-  if (isTerminalStatus(c.status)) {
-    return { canApprove: false, canApproveWithDryRun: false, canDismiss: false };
-  }
+  if (isTerminalStatus(c.status)) return { primary: null, canDismiss: false };
   if (c.proposedKind === 'skill' && c.dryRunPassed !== true) {
-    return { canApprove: false, canApproveWithDryRun: true, canDismiss: true };
+    return {
+      primary: c.status === 'candidate'
+        ? { intent: 'approve', label: 'Record approval', hint: 'Records your approval. Promotion also needs a completed dry-run of this runbook; the approval is kept until one is recorded.' }
+        : { intent: 'promote', label: 'Promote', hint: 'Promotes only if a completed dry-run of this runbook is recorded; otherwise the reason is shown and the approval stays.' },
+      canDismiss: true,
+    };
   }
-  return { canApprove: true, canApproveWithDryRun: false, canDismiss: true };
+  return { primary: { intent: 'promote', label: 'Promote' }, canDismiss: true };
 }
 
 /** The Status filter row's predicate — `'all'` keeps everything, any other
@@ -134,6 +149,6 @@ export function nextStep(c: Pick<PromotionCandidate, 'status' | 'proposedKind' |
   if (c.dryRunPassed === false) return 'Dry run failed — fix the procedure and rerun before promoting.';
   if (c.dryRunPassed === true) return 'Dry run passed — promote to ship it as a skill.';
   return c.status === 'approved'
-    ? 'Approved — waiting on a passing dry run before promotion.'
-    : 'Approve, then run a dry run — a skill needs both before promotion.';
+    ? 'Approved — promotion waits for a completed dry-run of this runbook.'
+    : 'Record approval — a skill also needs a completed dry-run of its runbook before promotion.';
 }

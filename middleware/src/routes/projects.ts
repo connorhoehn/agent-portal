@@ -15,7 +15,7 @@ import {
 } from '../providers/projects.js';
 import { asyncHandler, ValidationError } from '../lib/async-handler.js';
 import { requireAction, resolveSession } from '../lib/authz.js';
-import { getUser } from '../providers/identity.js';
+import { mineViewer } from '../lib/mine.js';
 
 export const projectsRouter = Router();
 
@@ -24,10 +24,13 @@ const governGate = requireAction('DispatchAgentRun');
 // GET /api/graph/projects?status=&limit=N&scope=mine|all
 //
 // `scope=mine` narrows to initiatives the session's linked person owns or
-// contributes to — the same person-keyed "mine" /api/sprints resolves, so the
-// two Delivery surfaces agree about whose work is whose. Default is `all`
-// (this list has always been tenant-open); an unlinked account asking for
-// `mine` gets an empty list, and the portal's empty state names the fix.
+// contributes to — the one "mine" viewer every such read resolves (lib/mine.ts
+// `mineViewer`; GET /api/me/groups?kind=initiative answers the same rows in the
+// shared `MineReply` shape), so the Delivery surfaces agree about whose work is
+// whose. Default is `all` (this list has always been tenant-open); an unlinked
+// account asking for `mine` gets an empty list, and the portal's empty state
+// names the fix. This route keeps the project-summary array the Initiatives
+// page reads.
 projectsRouter.get('/', asyncHandler(async (req, res) => {
   const status = req.query['status'] as string | undefined;
   const rawLimit = parseInt(req.query['limit'] as string ?? '50', 10);
@@ -40,7 +43,7 @@ projectsRouter.get('/', asyncHandler(async (req, res) => {
   let personId: string | null = null;
   if (scope === 'mine') {
     const session = resolveSession(req);
-    personId = session ? ((await getUser(session.sub))?.personId ?? null) : null;
+    personId = session ? (await mineViewer(session)).personId : null;
   }
 
   const projects = await listProjects({

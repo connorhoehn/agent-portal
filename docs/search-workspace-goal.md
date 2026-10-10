@@ -158,6 +158,28 @@ connection path) and `portal/src/components/multi-entity-graph/` (~500).
    and can expand inline or open the full Connections view; in the
    Connections view the assistant strip still expands the text.
 
+   **Amended 2026-10-07 (the user, on Connections with Tara Wright
+   selected): four panes, and a trail that reads whole.** (a) The one-row
+   form applies only when it fits. When the trail is longer than
+   Org › Search › title (a scope, a selection, or the right pane open), the
+   trail — the library `Breadcrumbs`, never collapsed to "…" and never
+   truncated, wrapping if it must — takes the content column's first row to
+   itself, ending at the selection ("Org › Search › LLM Application Platform
+   › k.kl › Tara Wright"); the title, the tabs and the controls are
+   `ScopeHeader variant="inline"` on the row below. (b) "Ask about
+   selection" opens the conversation in the shell's RIGHT pane
+   (`PageConversationPane kind="search"`, 320–380px so the graph keeps the
+   width): the reply and the ONE composer with its context chips live
+   there, with the selected record as a pane tab ("Open page" goes to the
+   record's own route). The content column then holds only the graph and its
+   pinned toolbar — no assistant strip, no composer, no Start call (the
+   footer owns calls), no "Session history is unavailable" line (that
+   notice is the pane's empty state). Without the pane, the Connections
+   strip's action opens the conversation in the pane instead of expanding
+   inline. (c) With the pane open on a selection the page is deep: the
+   primary rail folds (`railCollapseModel.drillDepth` `paneOpen`). Judged
+   by `portal/e2e/search-selection-pane.spec.ts`.
+
 ## Ownership map (what the portal may import, and where it comes from)
 
 | panel element | library composite | status |

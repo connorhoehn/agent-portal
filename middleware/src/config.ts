@@ -79,6 +79,7 @@ export const config = {
   messageQueue: {
     url: env('MESSAGE_QUEUE_URL'),
     serviceId: env('MESSAGE_QUEUE_SERVICE_ID', 'orgiq-middleware'),
+    observedQueues: env('PIPELINES_QUEUE_NAMES'),
     secret: env('MESSAGE_QUEUE_AUTH_SECRET'),
     mock: flag('MOCK_QUEUE'),
   },
@@ -131,10 +132,15 @@ export const config = {
   // The browser-facing endpoints the realtime token response carries (the
   // portal reads them instead of build-time VITE_* URLs, deploy plan §5).
   // REALTIME_PLATFORM_PUBLIC_URL is the public platform-api origin; the
-  // older PLATFORM_API_URL is the server-side URL and only a fallback.
+  // older PLATFORM_API_URL is the server-side URL (work-graph/producer.ts) and
+  // a fallback only OUTSIDE production — locally the two are the same host,
+  // in AWS PLATFORM_API_URL is a Cloud Map name no browser can resolve, and
+  // echoing it would hand every browser an internal hostname.
   realtime: {
     gatewayUrl: env('REALTIME_GATEWAY_URL') || undefined,
-    platformApiUrl: env('REALTIME_PLATFORM_PUBLIC_URL') || env('PLATFORM_API_URL') || undefined,
+    platformApiUrl: env('REALTIME_PLATFORM_PUBLIC_URL')
+      || (env('NODE_ENV') === 'production' ? '' : env('PLATFORM_API_URL'))
+      || undefined,
     videoUrl: env('REALTIME_VIDEO_PUBLIC_URL') || undefined,
   },
 

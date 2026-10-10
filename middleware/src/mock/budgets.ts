@@ -152,8 +152,23 @@ export const budgetGrants = defineFixture<MockGrantSeed>({
   scenarios: {
     default: () => seededGrants(),
     empty: () => [],
+    demo: () => demoGrants(),
   },
 });
+
+/**
+ * The Computer Lab demo's envelopes (mock/demo-director.ts): the seed's, with
+ * Nora DaSilva's sprint-42 envelope on Auth Migration sized to the demo's
+ * story. Her three agents' dispatches each fit it (nothing has burned yet, and
+ * a run burns only once it settles); once two of them have settled, what is
+ * left no longer covers the forecast for a fourth item, so the real envelope
+ * brake in `POST /api/bots/dispatch-work` holds it. The size is the only
+ * thing changed — the gate, the forecast and the burn are all the real ones.
+ */
+export const DEMO_ENVELOPE_USD = 0.7;
+function demoGrants(): MockGrantSeed[] {
+  return seededGrants().map((g) => (g.id === 'bg-auth-3' ? { ...g, allocatedUsd: DEMO_ENVELOPE_USD } : g));
+}
 
 /** The allocations, live — see mock/live-view.ts for why this is not an array. */
 export const MOCK_BUDGETS: MockBudget[] = liveArrayView(() => initiativeBudgets.rows());

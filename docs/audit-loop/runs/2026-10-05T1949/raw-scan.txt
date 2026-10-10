@@ -1,0 +1,68 @@
+files with raw: 90 of 374 total raw tags 146
+{"input":7,"div":30,"span":47,"pre":4,"label":7,"details":3,"summary":2,"img":5,"svg":5,"main":2,"code":11,"table":2,"h2":4,"nav":1,"h1":2,"tr":9,"a":1,"ul":1,"form":1,"li":1,"p":1}
+pages/assessment 15
+pages/capabilities 14
+pages/observability 13
+components/scores 11
+components/ingest 11
+components/marketplace 8
+components/canary 7
+pages/identity 6
+pages/project-detail 6
+pages/work 6
+pages/iq 5
+components/kb 5
+pages/admin 5
+components/UnavailableNotice.tsx 3
+components/runs 3
+pages/designs 3
+pages/projects 3
+components/shell 3
+pages/library 3
+pages/sprints 2
+components/ChatSessionPicker.tsx 1
+components/Markdown.tsx 1
+components/observability 1
+components/settings 1
+pages/AgentFlowFrame.tsx 1
+--top files
+8 0 components/scores/SkillFilter.tsx {"input":5,"div":2,"span":1}
+6 6 pages/assessment/dashboard/DimensionRow.tsx {"div":2,"span":4}
+6 3 pages/capabilities/prompts/TemplateHighlighted.tsx {"pre":2,"span":3,"div":1}
+4 1 components/ingest/SiteSurveyPanel.tsx {"label":1,"details":2,"summary":1}
+4 4 pages/iq/DiffFrame.tsx {"div":2,"span":2}
+3 3 components/UnavailableNotice.tsx {"div":3}
+3 1 components/ingest/PageDetailModal.tsx {"span":2,"img":1}
+3 0 components/kb/KBCreateWizard.tsx {"div":3}
+3 0 components/marketplace/InitiativeAgentRail.tsx {"span":3}
+3 1 components/runs/RunTimeline.tsx {"svg":2,"span":1}
+3 2 pages/capabilities/PromptsFrame.tsx {"main":1,"div":2}
+3 0 pages/identity/PolicyTestPage.tsx {"code":3}
+3 0 pages/observability/DriftPage.tsx {"div":1,"span":2}
+3 0 pages/observability/harness/HarnessHomePage.tsx {"span":2,"div":1}
+3 0 pages/project-detail/ContributorsTable.tsx {"table":1,"span":2}
+2 0 components/canary/setup/PromptEditorStep.tsx {"pre":1,"span":1}
+2 0 components/canary/setup/VersionPickerStep.tsx {"label":1,"input":1}
+2 0 components/marketplace/GovernanceEditor.tsx {"div":1,"span":1}
+2 0 components/marketplace/InitiativeLabMemoryRail.tsx {"span":2}
+2 2 components/scores/ScoreAnalysisPanel.tsx {"details":1,"summary":1}
+2 0 pages/admin/KBDetailPage.tsx {"h2":2}
+2 0 pages/assessment/dashboard/DimensionMasterDetail.tsx {"nav":1,"div":1}
+2 2 pages/assessment/dashboard/WorkflowTimeline.tsx {"span":2}
+2 0 pages/assessment/knowledge/DocumentLibrary.tsx {"span":2}
+2 0 pages/designs/DesignThreadPage.tsx {"h1":1,"h2":1}
+2 2 pages/observability/TrafficHeatmapFrame.tsx {"div":2}
+2 0 pages/projects/ProjectStatusChip.tsx {"span":2}
+2 0 pages/work/QueuePage.tsx {"tr":2}
+1 0 components/ChatSessionPicker.tsx {"div":1}
+1 0 components/Markdown.tsx {"h1":1}
+1 0 components/canary/DecisionRow.tsx {"span":1}
+1 0 components/canary/setup/CanarySetupFlow.tsx {"svg":1}
+1 0 components/canary/setup/ExperimentConfigStep.tsx {"label":1}
+1 0 components/ingest/ActiveRunsStrip.tsx {"span":1}
+1 0 components/ingest/StorageBreakdownCard.tsx {"span":1}
+1 0 components/ingest/TargetsTable.tsx {"span":1}
+1 1 components/ingest/Thumbnail.tsx {"img":1}
+1 0 components/kb/LandingZoneBrowser.tsx {"input":1}
+1 0 components/kb/ProvisioningProgress.tsx {"div":1}
+1 0 components/marketplace/InitiativeComputeRail.tsx {"span":1}

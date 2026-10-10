@@ -1,5 +1,15 @@
 # Defects found — program-lead journey audit (u-farah)
 
+## Closed — 2026-10-07 08:08 — the dimension composer is below the fold on arrival (ui-components 2.427.0 MasterDetail paneFooter)
+
+Re-measured as u-farah (program-lead) on /assessment/teams/TEAM-001 at 1680x940 after MasterDetail took the remaining height: on arrival, host column at scroll 0 and window scrollY 0, the composer input is at y=754-794 and its block at y=705-868, above the shell footer bar (top y=893) and inside the 940px viewport. Scrolling the dimension list (0 to 495) leaves the input at y=754; selecting another row leaves it at y=754. Zero console errors. The earlier record (input y=961-1001, block y=911-1075) is superseded. Detail: team-scorecard.md.
+
+Previous entry, kept as history:
+
+### Was open — 2026-10-07 07:58 — the dimension composer is below the fold on arrival (ui-components 2.427.0 MasterDetail paneFooter)
+
+Found as u-farah (program-lead) on /assessment/teams/TEAM-001 at 1680x940: the composer's input is at y=961-1001 and its block at y=911-1075, past the 940px viewport and under the shell footer (starts y=893). The master-detail is 576px tall starting at y=500 inside a host column that ends at y=869 (scrollHeight 939, clientHeight 732); the host scrolls, and at scrollTop 207 the input reads y=754-794. The list itself behaves: the rail scrolls inside the pane (0 to 289) and the composer does not move while it does. The previous record had the composer top at y=707 on arrival. Likely cause: the pane is sized to a fixed height that does not account for the header, stat strip and tab rows above it. Not fixed here (audit rule). Detail: team-scorecard.md.
+
 All 12 surfaces pass. No new functional defects were found for this role beyond
 what assessor/lead-assessor already documented, and every defect those two
 audits found already fixed remains fixed here too. One transient issue was
@@ -268,7 +278,7 @@ reading the fix. Numbering follows the Open entries they replace.
    re-render re-reads the real age; the 15-second presence heartbeat supplies
    the re-renders. Two tabs as u-jonas on
    `/assessment/rules?doc=rule:scoring-guardrails.md`, tab B saving at
-   `2026-09-07T08:41:43.616Z` and tab A left untouched and read repeatedly:
+   `2026-09-07T08:08:43.616Z` and tab A left untouched and read repeatedly:
 
    | elapsed since the save | banner text |
    |---|---|
@@ -622,3 +632,45 @@ re-observed 2026-09-18 (dead code from the chrome removal): removing the "Live" 
 ## Open — found 2026-09-29 21:02–21:05, the StackedRail re-walk
 
 - **Source group labels truncate at the 220px documents rail with no title or tooltip** (workspace: “ENGINEERIN…”, “WORKSPACE DRA…”; enterprise: “ENTERPRISE CONTE…”) — seen as this role on `/assessment/workspace` and `/assessment/enterprise`; recorded once, with measurements and owner (ui-components `StackedRail`), as lead-assessor/DEFECTS.md #15. The two logs are `verdict: fail` on it.
+
+## Open — found 2026-10-06 15:50, document dock re-walk
+
+1. **[CLOSED 2026-10-06 16:32 — verified fixed] Apply of an insert proposal joins the new text to the sentence before it.** Signed in as u-farah on a scratch draft ("Journey walk scratch 2026-10-06"), Agent mode, no selection: with the caret directly after "Scratch paragraph for the drafter to rewrite." the drafter's "Next step: confirm an owner for each practice before the scoring window opens." was inserted with no space or paragraph break ("…rewrite.Next step: …"); from an empty line it became its own paragraph. Files to start from: `portal/src/pages/assessment/knowledge/documentAgentEditModel.ts` (`applyTarget`, insert branch) and `useDocumentAgentEdit.tsx` (the insert callback handed to `publishDocumentProposalCanvas`). Low severity; Undo restores the page exactly.
+
+   Re-driven 2026-10-06 16:32 as u-farah on a fresh scratch draft ("Journey walk scratch 2026-10-06", draft:613335d3-bdfa-466d-b47c-e91fda0a1a34): caret directly after "Scratch paragraph for the drafter to rewrite.", Agent mode, instruction "Add one closing sentence", Apply. The page read "Scratch paragraph for the drafter to rewrite. Next step: confirm an owner for each practice before the scoring window opens." (one space between the sentences), and the editor Undo returned the exact earlier text. 0 console errors, 0 5xx. `insertContentFor(markdown, charBefore)` now receives the character before the caret (`useDocumentAgentEdit.tsx:440`). The empty-line case was not re-driven in this pass. Closed.
+
+## 2026-10-06 footer re-walk
+
+- Minor: the workspace Explorer section heading "Engineering Space (Confluence)" is cut with an ellipsis (141px into 213px) and has no title, so the full name is unreachable. Repro: /assessment/workspace?doc=page%3A100002 at 1680px; likely the library StackedRail section header (portal/src/pages/assessment/knowledge/DocumentRail.tsx). Not a regression of the footer work.
+
+## 2026-10-06 dimension composer re-walk
+
+- CLOSED 2026-10-06 19:00 (final re-walk: Pinned view reads "Nothing pinned yet", GET /api/chat/pins 200, 0 console errors; a pin and unpin by u-jonas both returned 200). Was: on /assessment/teams/TEAM-001 the Discussion tab's Pinned view reads "Pinned messages are unavailable: gateway request failed: 400" and logs one 400 console error as every assessment role. Repro: open the Discussion tab (any role), then the Pinned sub-tab area renders the message. Matches the known queued gap that Pinned needs /api/chat/pins for assessment channels.
+- CLOSED 2026-10-06 19:00 (composer docked at y=707-869 of 940, visible on arrival). Was: the dimension composer's top edge is at y=1593 in a 940px viewport, so on arrival the Chat | Agent block is not visible and has to be found by scrolling the page.
+
+## 2026-10-06 20:16 activity graph re-walk
+
+- Minor, open: the assessment rail now has two near-identical entries, 'Activity graph' (/assessment/activity, the work graph) and 'Activity' (/assessment/runs, the agent run ledger); the command palette query 'Activity' returns both ('Activity graph' and 'Activity — Agent run ledger'). A person scanning the rail cannot tell which is which without hovering. Repro: sign in as this role, open /assessment/teams, read the rail. Not fixed here (no code changes in a re-walk).
+- Observation, not a defect: /assessment/activity shows 6 nodes at 1680x940 while GET /api/assessment/work-graph/workspace/graph returns 27; the canvas windows to the viewer's visible region, and the team Activity tab shows its 3 (TEAM-001) or 20 (TEAM-006 after a run) nodes.
+
+## Open — 2026-10-08 — type-scale and layout-cascade findings on the re-walked routes
+
+Recorded from the 2026-10-08 re-walk as program-lead (live type census per route is in each log's notes) and the measured sweep contract (docs/journeys/contracts/type-scale.json, 09:34Z). The cascade sweep reports no violations for any of these routes. Not fixed here; no product code was edited.
+
+- /assessment/teams · title 20/600 · scale content 10/400; scale content 11/400 · rule: type scale (14/600 headings, 14/400 body, 12/400 meta, 20/600 page title; docs/journeys.md type-scale contract)
+- /assessment/enterprise · title 20/700 · scale content 10/400; scale content 13/400; scale content 13/500; scale content 16/400; scale content 16/600; scale rail 11/600; scale rail 13/500; siblings content 40|22 · rule: type scale (14/600 headings, 14/400 body, 12/400 meta, 20/600 page title; docs/journeys.md type-scale contract)
+- /assessment/feedback · title 20/600 · no sweep offenders · rule: type scale (14/600 headings, 14/400 body, 12/400 meta, 20/600 page title; docs/journeys.md type-scale contract)
+- /assessment/prompts · title 20/700 · scale content 10/400; scale content 11/400; scale content 13/400; scale content 13/500; scale content 13/600; scale content 16/400; scale content 16/600; scale rail 11/600; scale rail 13/500; siblings content 40|22|22|22 · rule: type scale (14/600 headings, 14/400 body, 12/400 meta, 20/600 page title; docs/journeys.md type-scale contract)
+- /assessment/reports · title 20/600 · actions content size=md; scale content 11/400; title-scale content 20/600 · rule: type scale (14/600 headings, 14/400 body, 12/400 meta, 20/600 page title; docs/journeys.md type-scale contract)
+- /assessment/rules · title 20/700 · scale content 10/400; scale content 13/400; scale content 13/500; scale content 16/400; scale content 16/600; scale rail 11/600; scale rail 13/500 · rule: type scale (14/600 headings, 14/400 body, 12/400 meta, 20/600 page title; docs/journeys.md type-scale contract)
+- /assessment/runs · title 20/600 · scale content 11/400; scale content 16/400; title-scale content 20/600 · rule: type scale (14/600 headings, 14/400 body, 12/400 meta, 20/600 page title; docs/journeys.md type-scale contract)
+- /assessment/submissions · title 20/600 · no sweep offenders · rule: type scale (14/600 headings, 14/400 body, 12/400 meta, 20/600 page title; docs/journeys.md type-scale contract)
+- /assessment/submissions?view=add · title 20/600 · no sweep offenders · rule: type scale (14/600 headings, 14/400 body, 12/400 meta, 20/600 page title; docs/journeys.md type-scale contract)
+- /assessment/teams/TEAM-001 · title 20/600 · actions content 16/600; scale content 10/400; scale content 10/600; scale content 11/400; scale content 11/700; scale content 16/400; scale content 16/600; scale content 18/700; siblings content 12|16 · rule: type scale (14/600 headings, 14/400 body, 12/400 meta, 20/600 page title; docs/journeys.md type-scale contract)
+- /assessment/workspace · title 20/700 · scale content 10/400; scale content 11/400; scale content 13/400; scale content 13/500; scale content 13/600; scale content 16/400; scale content 16/600; scale rail 11/600; scale rail 13/500; siblings content 40|22|22 · rule: type scale (14/600 headings, 14/400 body, 12/400 meta, 20/600 page title; docs/journeys.md type-scale contract)
+
+Scorecard dimension rail, measured live as program-lead: sibling group headings in one rail carry different sizes — Dimensions17 12/600; Claims to verify6 16/400; Verified9 16/400; Not applicable2 16/400; Testing & QE – Automated Tes 18/700. The sweep's `siblings content 12|16` offender is exactly this (the "Dimensions" heading is 12/600 while "Claims to verify / Verified / Not applicable" are 16/400). Rule: sibling headings share one size (layout cascade / type scale).
+
+Explorer pages (workspace, enterprise, rules, prompts): the page title is 20/700 where every other page is 20/600, and the content region draws 10/11/13/16/22/40px text outside the scale (sweep offenders above). The Explorer rail has no search control (menu offers only "Refresh library"); PROTOCOL.md still describes a searchable tree rail — open question, not a regression I can date.
+
+The earlier "composer below the fold" defect stays closed: the dimension composer input measured y=779-819 against the footer at y=893 on arrival.

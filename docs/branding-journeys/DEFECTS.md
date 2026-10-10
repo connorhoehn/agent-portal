@@ -9,6 +9,8 @@ names the log that carries the measurement.
 
 ## Open
 
+None open. (7, `/iq/promotions` title 8px under the trail, closed 2026-10-08: `PromotionsPage` no longer hangs the Agent library link in the trail band, which is what put the title at the hung band's 8px; it now measures 16px like the other distillation tabs. The same hang still puts the Knowledge tab's title at 8px; `SectionContent`'s band is in `components/shell/`, outside this lane.)
+
 ### 2. Primary buttons fail WCAG AA in three of four tenant x theme cells
 
 Measured 2026-09-18 on live primary buttons at 12px/400, where AA requires
@@ -68,7 +70,60 @@ Excluded from the `rhythm:` line in all four journey logs, named in each one.
  Every item below was re-observed closed on 2026-09-06 08:16–08:22
 EDT; the four logs carry `verdict: pass`.
 
+## Observed, needs a decision (2026-10-01 walk)
+
+- **Assessment's Enterprise explorer sits outside the rhythm.** /assessment/enterprise
+  (lands on `?doc=ec:standards/ci-cd-standards.md`) collapses the shell trail
+  to 0×0 like Org does, and its first `<h1>` is the open document's title
+  "CI/CD Standards" at 20px/700, 24px under the document's own crumb band —
+  against 16px and 20px/600 on the seven page-header surfaces. Not counted in
+  the assessment logs' rhythm line because it is a document title, not a page
+  header; if explorer pages are meant to follow the page rhythm, it is a defect.
+- **Today's FollowModeBar colour change was not observable.** The assessment
+  canvas (/assessment/workspace?doc=page:100002) gets 503 from
+  /api/assessment/knowledge/canvas on a plain dev:mock stack (no document
+  backend), so no participants render; it needs the social/document profile.
+
 ## Closed
+
+### 3. Org page titles share one size and offset — Closed 2026-10-01
+
+Closed by a fresh headless walk at 2026-10-01 13:39 local: nine Org surfaces in light
+and dark render 20px/600 titles, eight at 16px under the visible trail and
+initiative detail at 17px (spread 1px). Initiatives now composes
+`InitiativeHeaderFrame`; the shared layouts and Inbox header hold the same
+rule. Member, org-leader and hr-admin checks also confirmed the family at
+1680px, and org-leader at 1440px. Evidence: orgiq-light.md and orgiq-dark.md.
+
+Original finding:
+
+Measured headless (Playwright, 1680×940, dev:mock) as Theo Chang. On every Org
+surface walked the shell's own trail (`nav.shell-breadcrumbs`, the content
+slot's first child) is collapsed to 0×0 and the page draws its own breadcrumb
+band; the first `<h1>` under that band then lands at a different distance and
+in a different type size per page:
+
+| surface | url | title | size / weight | title top − trail bottom |
+|---|---|---|---|---|
+| initiatives | /iq/projects | My initiatives | 22px / 600 | 114 − 102 = 12px |
+| library | /iq/library | Agent library | 22px / 600 | 108 − 102 = 6px |
+| designs | /iq/designs | Designs | 20px / 600 | 122 − 98 = 24px |
+| work | /iq/work | Inbox | 28px / 700 | 102 − 98 = 4px |
+| work-queue | /iq/work/queue | Runs | 20px / 600 | 102 − 98 = 4px |
+| session-config | /iq/local-compute/configuration | Session settings | 20px / 600 | 4px |
+| local-compute | /iq/local-compute | Local compute | 20px / 600 | 4px |
+| initiative-detail | /iq/projects/p-design-system-api | Design System API | 28px / 700 | 122 − 106 = 16px |
+| job-detail | /iq/work/job-inf-maint-1 | inference-canary-nightly | 28px / 700 | 128 − 98 = 30px |
+
+Identical in light and dark. The protocol asks for one title size and offsets
+within 2px; this is three sizes and a 26px spread. Assessment, by contrast,
+keeps the shell trail on its pages and holds 16px / 20px 600 on all seven
+rhythm surfaces. Repro: sign in as u-theo, open the URLs above, read
+`getComputedStyle(h1)` and the visible `nav[aria-label="Breadcrumb"]` bottom.
+Suspects: the pages' own header composites (ScopeHeader / EditorShell /
+PageHeader sizes) now that the shell trail is collapsed on these routes — I
+did not trace which change introduced it or what collapses the shell trail.
+
 
 1. **`--color-primary` did not follow the tenant brand.** Closed
    2026-09-06 00:11–00:13: on `[data-tenant="assessment"]` `--color-brand`

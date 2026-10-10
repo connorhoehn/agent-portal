@@ -18,11 +18,10 @@
 // SSM, runtimes from the AgentCore control plane, experiments from Aurora.
 
 import { Link, useNavigate } from 'react-router';
-import { Badge, Button, Card, CardHeader, CatalogGrid, Chip, EmptyState, Inline, InlineAlert, PageSection, Stack, StatCard, StatusDot, Tooltip } from '@connorhoehnslalom/ui-components/shared';
+import { Badge, Button, Card, CardHeader, CatalogGrid, Chip, EmptyState, Inline, InlineAlert, PageSection, Stack, StatStrip, StatusDot, Tooltip, T } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { useSession } from '../../lib/auth';
-import { T } from './Text';
 import { parseArn, runtimeForSystemPrompt, subjectLabel, systemPromptForRuntime } from './promptOpsFormat';
 
 interface LibraryPrompt { id: string; name: string; updatedAt?: string; description?: string }
@@ -105,7 +104,7 @@ export default function PromptOpsHomePage() {
               <>
                 Authoring, testing and rolling out prompts — Studio, Versions, Evals and
                 Rollout — is limited to the org-leader and HR Admin roles.{' '}
-                <Link to="/iq/library" className="font-semibold text-primary no-underline hover:underline">
+                <Link to="/iq/library" className="text-primary no-underline hover:underline">
                   Browse Agent library
                 </Link>{' '}
                 instead, or switch role from the identity menu, top right.
@@ -122,11 +121,11 @@ export default function PromptOpsHomePage() {
   // that reads as "nothing is deployed".
   if (libraryError) {
     return (
-      <PageSection title="What is deployed">
+      <PageSection title="What is deployed" description="Prompt management is limited to the org-leader and HR Admin roles.">
         <UnavailableNotice
           error={libraryError}
           what="the prompt library"
-          source="Prompt management is limited to the org-leader and HR Admin roles"
+          source="The prompt library is read from Bedrock Prompt Management"
         />
       </PageSection>
     );
@@ -134,7 +133,7 @@ export default function PromptOpsHomePage() {
 
   return (
     <PageSection title="What is deployed">
-      <T className="mt-1 mb-5 max-w-3xl text-[13px] leading-relaxed text-text-secondary" wrap>
+      <T size="sm" className="mt-1 mb-5 max-w-3xl leading-relaxed text-text-secondary" wrap>
         Every prompt here is wired to something running. <b>Agent system prompts</b> are resolved
         from this library by each deployed agent on every invocation (60&nbsp;s cache) — edit one and
         the live fleet picks it up within a minute, no rebuild. <b>Canary prompts</b> are invoked by
@@ -147,7 +146,7 @@ export default function PromptOpsHomePage() {
         <Card padding="md">
           <Stack gap="sm">
             <CardHeader title="Deployed agents" meta={<Chip tone="success" size="xs">prompt resolved from library</Chip>} />
-            <StatCard label="Deployed" value={deployedRuntimes.length} hint={`runtimes · ${healthy} healthy`} />
+            <StatStrip variant="line" size="sm" aria-label="Deployed runtimes" items={[{ label: 'runtimes', value: deployedRuntimes.length }, { label: 'healthy', value: healthy }]} />
             <Inline gap="xs" wrap>
               {deployedRuntimes.map((r) => {
                 const shortName = r.name.replace(/^orgiq_/, '');
@@ -165,10 +164,10 @@ export default function PromptOpsHomePage() {
                 );
               })}
               {deployedRuntimes.length === 0 && (
-                <T className="text-[12px] text-text-tertiary">no runtimes deployed</T>
+                <T size="xs" className="text-text-tertiary">no runtimes deployed</T>
               )}
             </Inline>
-            <T className="text-[11px] leading-snug text-text-tertiary" wrap>
+            <T size="xs" className="leading-snug text-text-tertiary" wrap>
               Each runtime reads <code>orgiq-&lt;agent&gt;-system-prompt</code> from the library on every
               invocation and rebuilds itself when the text changes. Tool wiring and model choice still
               require a code change and redeploy.
@@ -179,20 +178,20 @@ export default function PromptOpsHomePage() {
         <Card padding="md">
           <Stack gap="sm">
             <CardHeader title="Canary prompts" meta={<Chip tone="success" size="xs">edits apply immediately</Chip>} />
-            <StatCard label="Live" value={livePrompts.length} hint="invoked by ARN by the rollout surface" />
+            <StatStrip variant="line" size="sm" aria-label="Live prompts" items={[{ label: 'live prompts', value: livePrompts.length, title: 'Invoked by ARN by the rollout surface' }]} />
             <Stack gap="xs">
               {livePrompts.map((p) => (
                 <Inline key={p.id} gap="sm" align="center">
                   <StatusDot color="var(--color-success)" size="xs" />
-                  <T className="min-w-0 truncate text-[12px] font-semibold text-text-primary">{p.name}</T>
-                  <T className="min-w-0 truncate text-[11px] text-text-tertiary">{p.description ?? ''}</T>
+                  <T size="xs" weight="semibold" className="min-w-0 truncate text-text-primary">{p.name}</T>
+                  <T size="xs" className="min-w-0 truncate text-text-tertiary">{p.description ?? ''}</T>
                 </Inline>
               ))}
               {livePrompts.length === 0 && (
-                <T className="text-[12px] text-text-tertiary">none — start a canary to wire prompts live</T>
+                <T size="xs" className="text-text-tertiary">none — start a canary to wire prompts live</T>
               )}
             </Stack>
-            <T className="text-[11px] leading-snug text-text-tertiary" wrap>
+            <T size="xs" className="leading-snug text-text-tertiary" wrap>
               The canary subjects and judge. Used by the A/B rollout surface, not by the agent fleet.
             </T>
           </Stack>
@@ -208,13 +207,13 @@ export default function PromptOpsHomePage() {
               <Stack gap="sm">
                 <Inline gap="sm" align="center">
                   <StatusDot color={halted ? 'var(--color-danger)' : 'var(--color-success)'} size="sm" />
-                  <T className="text-[15px] font-bold text-text-primary">
+                  <T size="sm" weight="semibold" className="text-text-primary">
                     {halted ? 'Halted' : `${100 - weightB}% A / ${weightB}% B`}
                   </T>
                 </Inline>
                 <Stack gap="none">
-                  <T className="truncate text-[12px] text-text-secondary" title={aArn}>A · {subjectLabel(aArn, promptNames)}</T>
-                  <T className="truncate text-[12px] text-text-secondary" title={bArn}>B · {subjectLabel(bArn, promptNames)}</T>
+                  <T size="xs" className="truncate text-text-secondary" title={aArn}>A · {subjectLabel(aArn, promptNames)}</T>
+                  <T size="xs" className="truncate text-text-secondary" title={bArn}>B · {subjectLabel(bArn, promptNames)}</T>
                 </Stack>
                 {degenerate && (
                   <InlineAlert tone="warning">
@@ -223,14 +222,14 @@ export default function PromptOpsHomePage() {
                     and restart the experiment.
                   </InlineAlert>
                 )}
-                <Link to="/iq/canary" className="text-[12px] font-semibold text-primary no-underline hover:underline">
+                <Link to="/iq/canary" className="text-xs text-primary no-underline hover:underline">
                   Open live experiment →
                 </Link>
               </Stack>
             ) : (
               <Stack gap="sm">
-                <T className="text-[15px] font-bold text-text-primary">No experiment running</T>
-                <T className="text-[12px] text-text-secondary">100% of canary traffic on the baseline prompt</T>
+                <T size="sm" weight="semibold" className="text-text-primary">No experiment running</T>
+                <T size="xs" className="text-text-secondary">100% of canary traffic on the baseline prompt</T>
                 <Button variant="primary" size="sm" onClick={() => void navigate('/iq/canary')} className="self-start">
                   Start an experiment
                 </Button>
@@ -242,15 +241,11 @@ export default function PromptOpsHomePage() {
         <Card padding="md">
           <Stack gap="sm">
             <CardHeader title="Past experiments" />
-            <StatCard
-              label="Past"
-              value={experimentsError ? '—' : pastCount}
-              hint={experimentsError ? 'unknown' : pastCount === 0 ? 'none completed yet' : 'completed rollouts'}
-            />
+            <StatStrip variant="line" size="sm" aria-label="Past experiments" items={[{ label: 'completed rollouts', value: experimentsError ? '—' : pastCount, title: experimentsError ? 'unknown' : pastCount === 0 ? 'none completed yet' : 'completed rollouts' }]} />
             {/* Experiment history lives in Aurora. A failed load used to render
                 a confident 0 and tell you to go run a canary, when the truth
                 was that we could not see the ones already there. */}
-            <T className="text-[12px] leading-snug text-text-tertiary" wrap>
+            <T size="xs" className="leading-snug text-text-tertiary" wrap>
               {experimentsError
                 ? 'Experiment history is unreachable, so this is unknown rather than none.'
                 : pastCount === 0
@@ -258,7 +253,7 @@ export default function PromptOpsHomePage() {
                   : 'Recorded outcomes with judge scores and controller decisions.'}
             </T>
             {pastCount > 0 && (
-              <Link to="/iq/history" className="text-[12px] font-semibold text-primary no-underline hover:underline">
+              <Link to="/iq/history" className="text-xs text-primary no-underline hover:underline">
                 View history →
               </Link>
             )}
@@ -276,10 +271,10 @@ export default function PromptOpsHomePage() {
                 <Stack gap="xs">
                   <Inline gap="sm" align="center">
                     <Badge variant="count" value={step.n} color="accent" />
-                    <T className="text-[13px] font-bold text-text-primary">{step.title}</T>
+                    <T size="sm" weight="semibold" className="text-text-primary">{step.title}</T>
                   </Inline>
-                  <T className="text-[12px] leading-relaxed text-text-secondary" wrap>{step.body}</T>
-                  <Link to={step.to} className="text-[12px] font-semibold text-primary no-underline hover:underline">
+                  <T size="xs" className="leading-relaxed text-text-secondary" wrap>{step.body}</T>
+                  <Link to={step.to} className="text-xs text-primary no-underline hover:underline">
                     {step.cta} →
                   </Link>
                 </Stack>
@@ -295,7 +290,7 @@ export default function PromptOpsHomePage() {
           className="px-3.5 pt-3 pb-2.5 border-b border-border"
           title="Prompt library"
           subtitle={`${allPrompts.length} in Bedrock`}
-          action={<Link to="/iq/prompts" className="text-[12px] font-semibold text-primary no-underline hover:underline">Open Prompt Studio →</Link>}
+          action={<Link to="/iq/prompts" className="text-xs text-primary no-underline hover:underline">Open Prompt Studio →</Link>}
         />
         <Stack gap="none">
           {[
@@ -310,9 +305,9 @@ export default function PromptOpsHomePage() {
                 className="flex min-w-0 items-center gap-3 border-b border-border px-3.5 py-2 no-underline last:border-b-0 hover:bg-surface-hover"
               >
                 <Chip tone={tone} size="xs">{badge}</Chip>
-                <T className="min-w-0 truncate text-[12.5px] font-semibold text-text-primary">{p.name}</T>
-                <T className="min-w-0 flex-1 truncate text-[11px] text-text-tertiary">{p.description ?? ''}</T>
-                <T className="hidden shrink-0 text-[10px] text-text-tertiary md:inline">{note}</T>
+                <T size="xs" weight="semibold" className="min-w-0 truncate text-text-primary">{p.name}</T>
+                <T size="xs" className="min-w-0 flex-1 truncate text-text-tertiary">{p.description ?? ''}</T>
+                <T size="xs" className="hidden shrink-0 text-text-tertiary md:inline">{note}</T>
               </Link>
             )),
           )}

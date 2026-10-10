@@ -20,7 +20,7 @@
 import type { ReactNode } from 'react';
 import { Link as RouterLink } from 'react-router';
 import {
-  Card, CodeBlock, Inline, Link, MetaLine, Stack,
+  Card, CodeBlock, Inline, Link, MetaLine, Stack, T,
 } from '@connorhoehnslalom/ui-components/shared';
 
 import { UnavailableNotice } from '../UnavailableNotice';
@@ -82,7 +82,7 @@ export function SmartEmptyState({
           there is nothing" from UnavailableNotice's solid danger border. */}
       <Card className="max-w-[560px] w-full px-5.5 py-5 border-dashed">
         <Stack gap="none" className="gap-2.5">
-          <Inline as="div" gap="none" className="text-[14px] font-semibold text-text-primary">{title}</Inline>
+          <T as="div" size="sm" weight="semibold">{title}</T>
           {detail && <MetaLine tone="secondary" className="leading-normal" items={[detail]} />}
           {actions.length > 0 && (
             <Stack gap="none" className="gap-2.5 mt-1">
@@ -101,24 +101,24 @@ export function SmartEmptyState({
 function ActionRow({ action }: { action: SmartEmptyAction }) {
   const labelNode = action.href ? (
     action.href.startsWith('/') ? (
-      <RouterLink to={action.href} className="text-primary font-medium no-underline hover:underline">
+      <RouterLink to={action.href} className="text-primary no-underline hover:underline">
         {action.label}
       </RouterLink>
     ) : (
       // The library Link forces rel="noopener noreferrer"; the raw anchor this
       // replaces set only rel="noreferrer".
-      <Link href={action.href} external className="font-medium">
+      <Link href={action.href} external>
         {action.label}
       </Link>
     )
   ) : (
-    <Inline as="span" gap="none" className="text-text-primary font-medium">{action.label}</Inline>
+    <T weight="semibold">{action.label}</T>
   );
 
   return (
     <Stack gap="none" className="gap-1">
-      <Inline gap="xs" align="baseline" wrap={false} className="text-[12.5px]">
-        <Inline as="span" gap="none" className="text-text-tertiary font-mono">›</Inline>
+      <Inline gap="xs" align="baseline" wrap={false}>
+        <T tone="tertiary" className="font-mono">›</T>
         {labelNode}
       </Inline>
       {action.detail && (

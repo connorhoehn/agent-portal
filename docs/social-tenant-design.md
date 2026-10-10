@@ -155,7 +155,7 @@ existing write path):
 | A DM message while you have no live subscription to that lobby | router plugin `onMessage` on `chat` publish to `<t>:dm:<a>:<b>` — the lobby name carries the member ids; the sender is `message.metadata.userId` (server-stamped since 0.98.5, authoritative; the hook's `clientId` is the connection, or `'server'`) | the other member(s) not currently subscribed to the channel | `message` → `/social/dms/<lobby>` |
 | A channel message in a channel you are a member of but not viewing | same plugin, `social:ch:*`, membership from the `ChatStore` (§4.4) — **phase S1** | members minus current subscribers | `message` → `/social/channels/<slug>` |
 | Missed call (invite cancelled, declined, or unanswered) | `calls({ onCallMissed })` — in the library since 0.97.10 (`src/call/types.ts:468`: `{ callId, lobbyName, callerId, targetUserIds, reason: 'cancelled' \| 'declined' \| 'no-answer' }`; `onCallStarted`/`onCallEnded` beside it), wired in the gateway | the callee(s) | `call-missed` → the page the invite carried (`channel: initiative:<id>` / a doc / a DM) |
-| A proposed edit waiting on you (the drafter's `ProposedEditStrip`) | client-side today; server-side once P2's reply is stored — **not wired (lane E, 2026-09-30)**: the proposal exists only in the proposing browser tab (`ProposedEditStrip` state), no BFF route ever sees it, so there is no write path to hang a producer on. It gets one the day the drafter's reply is persisted server-side; until then a second tab could not open the proposal the item would point at anyway | the document's editor | `approval-requested` → the doc |
+| A proposed edit waiting on you (the drafter's `ProposedEditStrip`) | **implemented 2026-10-01:** a completed reply is stored as draft metadata by `POST /api/assessment/knowledge/doc/proposals?id=<source>`. A new durable ready row emits `knowledge.proposal.changed` and notifies the canonical document lifecycle owner; replaying the same proposal id/body emits neither twice. Authorized readers can recover the draft in another tab or after reload. The notification opens and focuses its exact proposal in Editor through a source-scoped lookup, including retained applied/discarded targets and drafts beyond the active-list cap. Read-only targets show their content; lookup failures offer Retry, source navigation clears the target, and delayed reads cannot revive older decision controls. Apply/Discard decisions compare the stored version; Apply claims before the editor change and completes after the canonical provider acknowledges persistence. Aurora proposal metadata never substitutes for the Yjs document or a document save. The additive schema has not been deployed. | the canonical document owner (when another editor proposed the edit), subject to current assessment grants | `approval-requested` → the doc's Editor tab and proposal |
 | An approval request (orgiq) | `POST /api/observability/approvals/request` (agent callback) | every user whose role holds `ApproveTransaction` in orgiq | `approval-requested` → `/iq/approvals` |
 | Pipeline run needs approval / finished / failed | the pipelines tenant, §5 — **wired (lane E)**: `providers/pipeline-definitions.ts` `updateRecord` announces a `pipeline_runs` row only when its status actually MOVES into `awaiting_approval`, `completed` or `failed` (`lib/social-notify.ts` `notifyPipelineRun`) | `triggeredBy`, and the holders of the definition's effective approver roles (its own, else the tenant default) plus `pipeline-admin`; the tenant rule drops anyone without a pipelines grant | `approval-requested` / `system` → `/pipelines/runs/<id>` |
 
@@ -207,7 +207,10 @@ access, and it is why the picker will show three tiles to most users. The
 demo user gets none: `permissiveGrants()` (`lib/session.ts`) hands the
 cookie-less demo identity every tenant in `TENANTS`, so it must leave
 `social` out explicitly — the isolation walks need a session with no social
-grant. `u-hr` stays outside the cast for the same reason.
+grant. `u-hr` stays outside the cast for the same reason. The pure pipelines
+cast (`u-ines`, `u-kofi`, `u-dara`) holds no `social` grant either; a fourth
+pipelines author, `u-tomas` Tomás Ferreira, holds `pipelines: author` AND
+`social: participant` as the Communication plane's granted pipelines walker.
 
 Rail (`GROUP_ORDER_BY_TENANT.social`): **Talk** (Channels `/social/channels`,
 Direct messages `/social/dms`), **Meet** (Calls `/social/calls`, Rooms
@@ -266,7 +269,8 @@ never mint `social:` names of their own.
 
 | State | Store | Owner |
 |---|---|---|
-| channels, DMs, messages, membership, reads, pins | `chat-messages` / `chat-conversations` / `chat-members` (DynamoDB, `OrgIQ-Social`; DynamoDB Local under the `social` compose profile) through the **library's** `DynamoChatStore` (realtime-modules 0.99.0, `server/stores/dynamo`, a faithful extraction of realtime-examples' chat persistence with the SDK v3 DocumentClient injected), landed as realtime-modules **0.99.0** (`c09930f`, tag `realtime-modules-v0.99.0`; entry `server/stores/dynamo`; `new DynamoChatStore({ client, tables?, tablePrefix?, channelIndexName?, ttlSeconds? })`, `client` any SDK v3 client with `send`; tables `chat-messages` / `chat-conversations` (GSI `channel-index`) / `chat-members` / `chat-reads`; wire `chat(store.chatOptions(extra))` so membership, read receipts and the conversations index ride along, the notification hooks in `extra`; server-posted cards need `store.conversations.recordSystemMessage`; a 53-operation parity test against realtime-examples' repositories; `FeaturePlugin.onMessage`/`onConnect` now carry `userId`; `onReaction` carries the sender's `org` — our gateway builds its own event and must forward it) — the middleware does not write its own | realtime-modules (store), middleware (wiring) |
+| channels, DMs, messages, membership, reads | `chat-messages` / `chat-conversations` / `chat-members` (DynamoDB, `OrgIQ-Social`; DynamoDB Local under the `social` compose profile) through the **library's** `DynamoChatStore` (realtime-modules 0.99.0, `server/stores/dynamo`, a faithful extraction of realtime-examples' chat persistence with the SDK v3 DocumentClient injected), landed as realtime-modules **0.99.0** (`c09930f`, tag `realtime-modules-v0.99.0`; entry `server/stores/dynamo`; `new DynamoChatStore({ client, tables?, tablePrefix?, channelIndexName?, ttlSeconds? })`, `client` any SDK v3 client with `send`; tables `chat-messages` / `chat-conversations` (GSI `channel-index`) / `chat-members` / `chat-reads`; wire `chat(store.chatOptions(extra))` so membership, read receipts and the conversations index ride along, the notification hooks in `extra`; server-posted cards need `store.conversations.recordSystemMessage`; a 53-operation parity test against realtime-examples' repositories; `FeaturePlugin.onMessage`/`onConnect` now carry `userId`; `onReaction` carries the sender's `org` — our gateway builds its own event and must forward it) — the middleware does not write its own | realtime-modules (store), middleware (wiring) |
+| pins | `chat-pins` (DynamoDB, PK `channelId`, SK `messageId`, 90-day TTL) through the library's `DynamoChatPinsStore`; `MemoryChatPinsStore` uses registered `social.pins` fixture rows under mock mode. Implemented 2026-10-01 in realtime-modules 0.100.1, branch `feat/chat-pins`, commit `270183c2344b2320108f9a773a0480b49feb309c`, pinned by both consumers. `/api/chat/pins` authenticates the caller and checks current Social grants plus conversation membership before every read/write. Pin content comes from the stored original and respects member history floors; missing/deleted originals are hidden. Authenticated `/api/chat/message` retrieves an older original for Jump, with the UI explaining any intervening history gap. Store completion precedes the channel-scoped `chat:pins-changed` refresh hint. | realtime-modules (store), middleware (authorization/wiring) |
 | rooms, teams, recordings, call sessions, call log | platform-api + DynamoDB; add `teams`, `team-members`, `social-relationships`, `video-recording-share-links` to `social-stack.ts` | platform-api (upstream), stack here |
 | notifications | Redis via the gateway feature (§3.3) | middleware |
 | context bindings | Aurora `social_bindings (tenant, context_kind, context_id, channel, created_by, created_at)` | middleware |
@@ -285,10 +289,149 @@ the same forms family the assessment configuration page uses. Anything
 missing goes to `docs/ui-components-queue.md` as a row before a local
 composition.
 
+Pinning uses the installed `usePins`, `WrappedChatPanel` message actions and
+`WrappedConversationSurface` Pinned view. The same state feeds both views;
+peers refresh on the channel hint and after reconnecting. The original
+message time and the pinner's display name appear on the pin. Jump opens Chat
+and scrolls to the message; an unavailable message produces an explanation.
+Failed writes roll back and remain visible on the Pinned view.
+
 ### 4.6 Embedding (phase S3)
 
-The `ChannelBinding` strip ("Discussion · #auth-migration · Open in Social")
-on the initiative overview, the Search connections tab (people → DM), and the
+**Decision, 2026-10-06 (the user):** "i never wanted the social stuff floating
+on the top fyi. the social bar is supposed to be on bottom with section tabs
+and stuff like my original design." The original design is the huddle shell
+footer (`docs/design/initiative-huddle-shell-plan.md`, "Global footer";
+`docs/design/initiative-huddle-shell-mockup.png`): Social entry, workspace
+presence, Social activity and the huddle controls in one bottom row, with
+footer menus opening upward. So:
+
+- No page draws a binding strip at its top. A page names its binding context
+  with `usePageSocialChannel` (`portal/src/components/shell/EmbeddedSocial.tsx`;
+  the initiative page through `useInitiativeSocialChannel`), and the bottom
+  Social bar offers the bound channel as its own tab (`#auth-migration`) beside
+  Social, who is online and Activity. Off that page the tab disappears.
+- The tab opens the embedded Social panel, anchored upward from the bar (not
+  top-right), on a `#channel` shelf row: the library `ChannelBindingStrip`
+  (Bind / Unbind for a caller with `canManage`, the newest message, the
+  member notice, Open in Social) over the channel's own conversation —
+  the same `SocialConversation` composition the Social workspace uses — for a
+  member. A non-member sees the strip and the reason.
+- The shell's tenant DMs for a session without a Social grant use that same
+  `SocialConversation` composition (chat view only; Social's `/summarize`
+  and `/deck` and pins are Social routes, so they are off there), not a
+  bare `WrappedChatPanel` — the user, same day: "its using the wrong chat
+  components too".
+- Unchanged and pending a product decision: the overview's live orgiq
+  Discussion (`orgiq:initiative:<id>`, `ScopeDiscussion`) and the initiative
+  composer. The mockups show neither a Discussion section nor a top strip on
+  the overview; whether that discussion should move into the bar is the
+  user's call.
+
+**Communication — the Social plane as a rail page (2026-10-07, the user):**
+"Org calls should be renamed Communication and be the social app plane like
+the tenant features." Org › Calls (`/iq/calls`) is now **Org › Communication**
+(`/iq/communication`), and for parity the same rename applies to
+`/assessment/calls` → Assess › Communication and `/pipelines/calls` → Runs ›
+Communication. Social's own Meet › Calls is unchanged.
+
+- **One workspace, two mounts.** The page
+  (`portal/src/pages/communication/CommunicationPlane.tsx`) renders the Social
+  tenant's own `SocialChatWorkspace` — the full `ConversationRail` (Activity,
+  Mentions, Calls, Recordings; Active now; Teams with pin/unpin and Leave;
+  Rooms; Direct messages; Channels with the public directory, Join and Create)
+  and the conversation surface with Chat | Files | Documents | Pinned | Calls —
+  through `SocialPlaneContext` (`pages/social/socialPlane.ts`): API prefix
+  `/api/social/plane` instead of `/api/social`, route base
+  `/<tenant>/communication` instead of `/social`, and Social capabilities from
+  `GET /api/social/plane/capabilities` instead of the session tenant's
+  `can()`. Sub-routes mirror Social's (`…/communication/channels/:slug`,
+  `/dms/:lobby`, `/teams`, `/rooms`, `/calls`, `/recordings`). Embedded, the
+  pane is `SectionContent` — trail "Org › Communication" first, then the
+  title — and "Open in Social ↗" is only a secondary link.
+- **The authority is ONE gate on both mounts (2026-10-08, audit D1).**
+  `routes/social-plane.ts` (mounted at `/api/social/plane` before the
+  `requireTenant('social')` mount) serves the SAME handlers as
+  `routes/social.ts` (`sharedSocialHandler` — no second copy of any read or
+  write), and both mounts — and the bindings / DM routes of the cross-tenant
+  half — gate every route on `socialGate(A)` from `lib/social-authority.ts`:
+  the actor's current directory grants, epoch and masquerade actor, the action
+  asked against each granted Social role and rechecked after the policy call,
+  fresh per request. The tenant mount only adds the `requireTenant('social')`
+  boundary in front. For one (user, action, epoch) the verdict is the same on
+  every URL; a cookie whose signed role the directory no longer grants is 401
+  everywhere (it used to be 403 on the personal-team routes).
+  `A` is the action the tenant router asks (`ViewSocial`, `PostMessage` to
+  join, `ManageChannels` to create a channel or room, `ManageTeams`,
+  `ManageRecordings`; leaving a team yourself is `ViewSocial`). The session
+  keeps its source tenant; handlers read its `sub`; platform-api receives the
+  caller's own realtime token. `requireTenant('social')` and the gateway's
+  channel and lobby guards are unchanged: a join makes the caller a member,
+  and only then does the gateway admit the subscribe.
+- **The former call log** is the first section of the plane's Calls
+  destination ("On this workspace's pages", `GET /api/calls/tenant` under the
+  source tenant's own read action), above the Social call log;
+  `/<tenant>/calls` redirects to `…/communication/calls`.
+- **No Social grant** (u-hr, the non-curated SMEs, the pipelines cast, the
+  cookie-less demo identity): the workspace never mounts, the page makes no
+  `/api/social` request, and the library `EmptyState` "Ask an admin for
+  Social access" stands beside a rail whose only destination is Calls (the
+  tenant's own page huddles).
+- **The rail door's count** is the number of Social DMs with new messages from
+  the shell's `/embedded` snapshot (server-counted), published through
+  `communicationUnread` (`portal/src/lib/communicationPlane.ts`) into
+  `useDiscussionUnread`'s section counts for the active tenant's door.
+
+Evidence: `middleware/src/routes/__tests__/communication-plane-authority.test.ts`
+(every plane read and write for a grant holder, a manager, no grant, a forged
+cookie grant, a forged tenant/role, a revoked grant, an epoch bump between and
+during requests), `portal/src/lib/__tests__/communicationPlane.test.ts`, and
+`portal/e2e/communication-plane.spec.ts` (an org-leader joins u-mira's public
+channel from orgiq and posts, u-mira sees the join and the post; zero
+`/api/social` requests without a grant; the assessment plane as u-asha, the
+pipelines plane as u-tomas).
+
+**Communication plane — shaped by the signed-in user's org context
+(2026-10-07, the user):** "Communication should be a representation of the
+social tenant for enabled users. Like you should be able to see your team and
+initiative groups, the realtime-modules 'Active now' style thing of people,
+and see the work they have shared (graphs) etc." Goal and judge:
+`docs/communication-plane-goal.md`, `scripts/validate-communication-plane.sh`.
+
+- **Rail shape.** One flush `ConversationRail`, top to bottom: the shelf
+  (Activity, Mentions, Calls, Recordings); **Active now** (`ActivePeopleGrid`
+  over the shell's single presence roster, enriched by
+  `GET /api/social/plane/active` with status, in-call, latest readable work
+  and work-sharing state — never a second presence subscription); the
+  host-tenant groups; **My org teams** (orgiq only); then Teams, Rooms,
+  Direct messages, Channels unchanged.
+- **Host-tenant groups.** **My initiatives** (orgiq), **My teams**
+  (assessment), **My pipelines** (pipelines): the groups the user belongs to
+  in the tenant they stand in. Each row shows its bound Social channel
+  (`social_bindings`), page-discussion unread and a live-call dot; a bound row
+  opens the channel, an unbound row opens the group's page discussion in the
+  plane with "Bind a Social channel" for `ManageChannels`. Org teams come from
+  `GET /api/me/groups?kind=org-team` (the one "mine" reader, `lib/mine.ts`) and may bind as `context_kind='team'`
+  (`BINDING_CONTEXT_TENANT.team = 'orgiq'`), with "Create team channel" for
+  `ManageTeams`.
+- **Shared work.** A conversation's **Shared work** view (`?view=shared`)
+  lists what was shared into it (page references, deck shares, files, the
+  conversation work graph) as `WorkGraph` plus a `RowList`, each item resolved
+  by the existing reader-authority resolvers and opened in the far-right pane.
+  A person's shared work (`/api/social/plane/people/:userId/shared-work`) is
+  their work-graph subject filtered with the library's `filterForViewer`
+  against sharing grants plus the implicit "referenced in a conversation the
+  viewer is a member of"; revoked grants stay visible as `historical`; an
+  outsider gets an empty graph, not a 403.
+- **Authority rule.** Every plane read is a Social handler re-gated on the
+  actor's current Social grants (`currentSocialActionSession`), or a
+  host-tenant route under its own gate; the session never leaves its source
+  tenant. "Mine" derives from `app_users.person_id` on the server (an account
+  with no linked person gets one honest "Link your account to a person" row);
+  person-scoped reads are filtered per viewer on the server. Epoch bump,
+  revoked grant, forged tenant/role and cross-tenant forgery each refuse.
+
+The Search connections tab (people → DM), and the
 document pane (its conversation may become a `social:` channel, or keep
 `assessment:doc:*` alongside — decided when S3 starts, on what the walks
 show). The composer discipline in `docs/social-calls-plan.md` stands: one

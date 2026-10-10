@@ -8,9 +8,9 @@ import { EditorShell, type DocumentSaveState, type EditorShellProps, type Editor
 import type { BreadcrumbItem } from '@connorhoehnslalom/ui-components/shared';
 import { Stack } from '@connorhoehnslalom/ui-components/shared';
 
-export const DOCUMENT_TABS = ['editor', 'comments', 'versions', 'history', 'reviews'] as const;
+export const DOCUMENT_TABS = ['editor', 'comments', 'versions', 'history', 'reviews', 'recordings'] as const;
 export type DocumentTab = (typeof DOCUMENT_TABS)[number];
-const TAB_LABEL: Record<DocumentTab, string> = { editor: 'Editor', comments: 'Comments', versions: 'Versions', history: 'History', reviews: 'Reviews' };
+const TAB_LABEL: Record<DocumentTab, string> = { editor: 'Editor', comments: 'Comments', versions: 'Versions', history: 'History', reviews: 'Reviews', recordings: 'Recordings' };
 
 export interface DocumentShellProps {
   title: string;
@@ -29,6 +29,8 @@ export interface DocumentShellProps {
   /** Absent while the collaborative workspace is unavailable: the tab is shown disabled. */
   versions?: ReactNode;
   reviews?: ReactNode;
+  /** Participant recordings from this exact source, independent of canvas availability. */
+  recordings?: ReactNode;
   /** The composer dock — EditorShell's last row, on the Editor tab only (the Comments tab has its own reply field). */
   composer?: ReactNode;
   /** An agent's pending edits (a `ProposedEditStrip`) — EditorShell's `proposal` row, between the page and the dock, on the Editor tab only. */
@@ -40,8 +42,8 @@ export interface DocumentShellProps {
   followingParticipantId?: string | null;
 }
 
-export function DocumentShell({ title, path, tab, onTab, commentCount, statusPill, saveState, headActions, editor, comments, history, versions, reviews, composer, proposal, participants, onParticipantClick, onFollowParticipant, followingParticipantId }: DocumentShellProps) {
-  const panels: Record<DocumentTab, ReactNode | undefined> = { editor, comments, versions, history, reviews };
+export function DocumentShell({ title, path, tab, onTab, commentCount, statusPill, saveState, headActions, editor, comments, history, versions, reviews, recordings, composer, proposal, participants, onParticipantClick, onFollowParticipant, followingParticipantId }: DocumentShellProps) {
+  const panels: Record<DocumentTab, ReactNode | undefined> = { editor, comments, versions, history, reviews, recordings };
   const tabs: EditorShellTab[] = DOCUMENT_TABS.map(id => ({
     id, label: TAB_LABEL[id],
     ...(id === 'comments' ? { count: commentCount } : {}),
@@ -60,6 +62,6 @@ export function DocumentShell({ title, path, tab, onTab, commentCount, statusPil
     surface={active === 'editor' ? 'workspace' : 'plain'} className="min-h-0 flex-1" data-testid="document-shell">
     {active === 'editor'
       ? <Stack gap="none" className="h-full min-h-0" data-testid="document-surface">{editor}</Stack>
-      : <Stack gap="md" className="mx-auto h-full min-h-0 w-full max-w-3xl p-4" data-testid={`document-tab-${active}`}>{panels[active]}</Stack>}
+      : <Stack gap="md" className={`mx-auto h-full min-h-0 w-full max-w-3xl p-4${active === 'recordings' ? ' overflow-y-auto' : ''}`} data-testid={`document-tab-${active}`}>{panels[active]}</Stack>}
   </EditorShell>;
 }

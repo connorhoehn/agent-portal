@@ -3,6 +3,7 @@ import {
   Button, ChoiceList, ChoiceRow, Inline, InlineAlert, InlinePopover, MetaLine, SectionLabel, Stack, StatusDot,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useSession, type SessionRole } from '../../lib/auth';
+import { CHOOSER } from '../../lib/tenantHome';
 
 const ROLE_LABELS: Record<string, string> = {
   member: 'Member',
@@ -44,7 +45,7 @@ const ROLE_HINTS: Record<string, string> = {
   'pipeline-admin': 'Operator plus configuration and users.',
 };
 
-const TENANT_LABELS: Record<string, string> = { orgiq: 'Org', assessment: 'Assessment', social: 'Social', pipelines: 'Pipelines' };
+const TENANT_LABELS: Record<string, string> = { orgiq: 'Work', assessment: 'Assessment', social: 'Social', pipelines: 'Pipelines' };
 
 function roleLabel(role: string): string {
   return ROLE_LABELS[role] ?? role;
@@ -158,7 +159,7 @@ export function MasqueradeMenu() {
 
           {/* ROLE — within the current account only. Switching the account
               (tenant) is deliberately NOT offered here: the workspace boundary
-              lives on /select, reached via "Switch workspace…" below. */}
+              lives on /workspaces, reached via "Switch workspace…" below. */}
           <SectionLabel className="px-2.5 pt-2 pb-1.5">Role in {tenantLabel(session.tenant)}</SectionLabel>
           <ChoiceList data-testid="account-menu-roles">
             {session.availableRoles.map(role => {
@@ -201,7 +202,7 @@ export function MasqueradeMenu() {
               size="sm"
               fullWidth
               className="border-0 justify-start text-left text-primary font-semibold"
-              onClick={() => { close(); window.location.assign('/select'); }}
+              onClick={() => { close(); window.location.assign(CHOOSER); }}
             >
               Switch workspace…
             </Button>

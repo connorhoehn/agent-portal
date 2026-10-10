@@ -1,0 +1,137 @@
+
+> @connorhoehnslalom/ui-components@2.409.0 test
+> vitest run
+
+
+ RUN  v4.1.11 /private/tmp/orgiq-ui-work-title-candidate
+
+Not implemented: HTMLMediaElement's play() method
+Not implemented: HTMLMediaElement's play() method
+Not implemented: HTMLMediaElement's play() method
+Not implemented: HTMLMediaElement's play() method
+Not implemented: HTMLMediaElement's play() method
+Not implemented: HTMLMediaElement's play() method
+Not implemented: HTMLMediaElement's play() method
+Not implemented: HTMLMediaElement's play() method
+Not implemented: HTMLMediaElement's play() method
+Not implemented: HTMLMediaElement's play() method
+Not implemented: HTMLMediaElement's play() method
+Not implemented: HTMLMediaElement's play() method
+Not implemented: HTMLMediaElement's play() method
+Not implemented: HTMLMediaElement's play() method
+Not implemented: HTMLMediaElement's play() method
+Not implemented: HTMLMediaElement's play() method
+Not implemented: HTMLMediaElement's play() method
+Not implemented: HTMLMediaElement's play() method
+Not implemented: HTMLMediaElement's load() method
+Not implemented: HTMLMediaElement's load() method
+Not implemented: HTMLMediaElement's load() method
+Not implemented: HTMLMediaElement's load() method
+Not implemented: HTMLMediaElement's load() method
+Not implemented: HTMLMediaElement's load() method
+Not implemented: HTMLMediaElement's load() method
+Not implemented: HTMLMediaElement's load() method
+Not implemented: HTMLMediaElement's load() method
+Not implemented: HTMLMediaElement's load() method
+Not implemented: HTMLMediaElement's load() method
+Not implemented: HTMLMediaElement's load() method
+Not implemented: HTMLMediaElement's load() method
+Not implemented: HTMLMediaElement's load() method
+Not implemented: HTMLMediaElement's load() method
+Not implemented: HTMLMediaElement's play() method
+Not implemented: HTMLMediaElement's play() method
+Not implemented: HTMLMediaElement's pause() method
+Not implemented: HTMLMediaElement's pause() method
+Not implemented: HTMLMediaElement's play() method
+Not implemented: HTMLMediaElement's play() method
+Not implemented: HTMLMediaElement's pause() method
+Not implemented: HTMLMediaElement's pause() method
+Not implemented: HTMLMediaElement's play() method
+Not implemented: HTMLMediaElement's pause() method
+Not implemented: HTMLMediaElement's play() method
+Not implemented: HTMLMediaElement's pause() method
+Not implemented: HTMLMediaElement's play() method
+Not implemented: HTMLMediaElement's play() method
+Not implemented: HTMLMediaElement's pause() method
+Not implemented: HTMLMediaElement's pause() method
+Not implemented: HTMLMediaElement's play() method
+Not implemented: HTMLMediaElement's play() method
+Not implemented: HTMLMediaElement's pause() method
+Not implemented: HTMLMediaElement's pause() method
+Not implemented: HTMLMediaElement's play() method
+Not implemented: HTMLMediaElement's pause() method
+Not implemented: HTMLMediaElement's play() method
+Not implemented: HTMLMediaElement's pause() method
+Not implemented: HTMLMediaElement's play() method
+Not implemented: HTMLMediaElement's play() method
+Not implemented: HTMLMediaElement's pause() method
+Not implemented: HTMLMediaElement's play() method
+Not implemented: HTMLMediaElement's play() method
+Not implemented: HTMLMediaElement's pause() method
+Not implemented: HTMLMediaElement's play() method
+Not implemented: HTMLMediaElement's pause() method
+Not implemented: HTMLMediaElement's play() method
+Not implemented: HTMLMediaElement's pause() method
+Not implemented: HTMLMediaElement's play() method
+Not implemented: HTMLMediaElement's play() method
+Not implemented: HTMLMediaElement's pause() method
+Not implemented: HTMLMediaElement's play() method
+Not implemented: HTMLMediaElement's play() method
+Not implemented: HTMLMediaElement's pause() method
+Not implemented: HTMLMediaElement's play() method
+Not implemented: HTMLMediaElement's pause() method
+Not implemented: HTMLMediaElement's play() method
+Not implemented: HTMLMediaElement's pause() method
+Not implemented: HTMLMediaElement's play() method
+Not implemented: HTMLMediaElement's pause() method
+Not implemented: HTMLMediaElement's play() method
+Not implemented: HTMLMediaElement's pause() method
+Not implemented: HTMLMediaElement's play() method
+Not implemented: HTMLMediaElement's pause() method
+Not implemented: HTMLMediaElement's play() method
+Not implemented: HTMLMediaElement's pause() method
+Not implemented: HTMLMediaElement's play() method
+Not implemented: HTMLMediaElement's play() method
+Not implemented: HTMLMediaElement's play() method
+Not implemented: HTMLMediaElement's pause() method
+Not implemented: HTMLMediaElement's play() method
+Not implemented: HTMLMediaElement's pause() method
+Not implemented: HTMLMediaElement's play() method
+Not implemented: HTMLMediaElement's pause() method
+Not implemented: HTMLMediaElement's play() method
+Not implemented: HTMLMediaElement's pause() method
+Not implemented: HTMLMediaElement's play() method
+Not implemented: HTMLMediaElement's pause() method
+Not implemented: HTMLMediaElement's play() method
+Not implemented: HTMLMediaElement's play() method
+Not implemented: HTMLMediaElement's play() method
+Not implemented: HTMLMediaElement's play() method
+Not implemented: HTMLMediaElement's play() method
+Not implemented: HTMLMediaElement's play() method
+Not implemented: HTMLMediaElement's play() method
+Not implemented: HTMLMediaElement's play() method
+Not implemented: HTMLMediaElement's play() method
+Not implemented: HTMLMediaElement's play() method
+Not implemented: HTMLMediaElement's play() method
+Not implemented: HTMLMediaElement's play() method
+Not implemented: HTMLMediaElement's play() method
+Not implemented: HTMLMediaElement's play() method
+Not implemented: HTMLMediaElement's play() method
+Not implemented: HTMLMediaElement's play() method
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+Not implemented: HTMLMediaElement's play() method
+Not implemented: HTMLMediaElement's play() method
+Not implemented: HTMLMediaElement's play() method
+Not implemented: HTMLMediaElement's play() method
+Not implemented: HTMLMediaElement's play() method
+Not implemented: HTMLMediaElement's play() method
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+
+ Test Files  946 passed (946)
+      Tests  10444 passed | 2 skipped (10446)
+   Start at  22:01:53
+   Duration  147.56s (transform 9.15s, setup 42.98s, import 25.01s, tests 156.94s, environment 260.10s)
+

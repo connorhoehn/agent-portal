@@ -1,0 +1,14 @@
+
+> @orgiq/middleware@0.3.0 test
+> node node_modules/.bin/jest --config jest.config.cjs --runInBand --runTestsByPath src/lib/__tests__/direct-recipient.test.ts src/lib/__tests__/live-subscribers.test.ts src/lib/__tests__/realtime-gateway-notifications.test.ts src/lib/__tests__/live-principal.test.ts
+
+PASS src/lib/__tests__/realtime-gateway-notifications.test.ts
+PASS src/lib/__tests__/live-subscribers.test.ts
+PASS src/lib/__tests__/live-principal.test.ts
+PASS src/lib/__tests__/direct-recipient.test.ts
+
+Test Suites: 4 passed, 4 total
+Tests:       50 passed, 50 total
+Snapshots:   0 total
+Time:        14.845 s
+Ran all test suites within paths "src/lib/__tests__/direct-recipient.test.ts", "src/lib/__tests__/live-subscribers.test.ts", "src/lib/__tests__/realtime-gateway-notifications.test.ts", "src/lib/__tests__/live-principal.test.ts".

@@ -127,10 +127,10 @@ export const PROPOSAL_STATUS_CHIP: Record<string, ChipTone> = {
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 /** What a job is for, in the words the board uses. */
-export function serves(job: Job): { itemTitle: string; initiativeId: string; initiativeName: string } | null {
+export function serves(job: Job): { itemTitle: string; initiativeId: string; initiativeName: string; workItemId?: string } | null {
   const p = job.payload;
   if (!p?.workItemTitle || !p.initiativeId || !p.initiativeName) return null;
-  return { itemTitle: p.workItemTitle, initiativeId: p.initiativeId, initiativeName: p.initiativeName };
+  return { itemTitle: p.workItemTitle, initiativeId: p.initiativeId, initiativeName: p.initiativeName, ...(p.workItemId ? { workItemId: p.workItemId } : {}) };
 }
 
 export function money(n: number | undefined): string {
@@ -179,9 +179,9 @@ export function ServesItem({ job }: { job: Job }) {
   if (!s) return null;
   return (
     <Link
-      to={`/iq/projects/${s.initiativeId}`}
+      to={`/iq/projects/${encodeURIComponent(s.initiativeId)}${s.workItemId ? `?${new URLSearchParams({ tab: 'work', item: s.workItemId })}` : ''}`}
       onClick={(e: React.MouseEvent) => e.stopPropagation()}
-      title={`Serving “${s.itemTitle}” on ${s.initiativeName} — open the initiative`}
+      title={`Serving “${s.itemTitle}” on ${s.initiativeName} — open ${s.workItemId ? 'the work item' : 'the initiative'}`}
       className="text-[10px] px-1.5 py-0.5 rounded bg-surface-hover text-text-secondary shrink-0 max-w-[220px] truncate no-underline hover:text-primary"
     >
       ↳ {s.itemTitle} · {s.initiativeName}

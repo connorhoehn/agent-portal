@@ -1,0 +1,26 @@
+{
+  "recordedAt": "2026-10-05T15:39:25.798960+00:00",
+  "sourceDigests": {
+    "middleware/src/providers/identity.ts": "0cbe596ed6ff4104a62748044915dc60e5f7bf0fb1f25052e3b5537e8df6f3c0",
+    "middleware/src/lib/social-chat.ts": "333875f0e42ab14586c60b0ae019f466bd108af45cb441df2da7400a204a2348",
+    "middleware/src/providers/__tests__/identity-authoritative.test.ts": "14bd21be1f4e552f49aec68450d0c05143c1d076c9ed6347b078093252adb754",
+    "middleware/src/lib/__tests__/social-membership-fence.test.ts": "c496a4de46f10d2f933a13acaa47971a05f80bf0b3c30c671271e376fcca6536",
+    "middleware/test-support/native-rds-preload.mjs": "e43305b22dc4a4750104a3acc7edc85265e1090228f6e00ea7b5fe29bb038524",
+    "middleware/test-support/bff-cluster-capacity.mjs": "0f2245cc74d234533230be24d97dd832aa698d3e96ec41a67480b4b5e91d3d93",
+    "middleware/test-support/bff-cluster-processes.py": "fceaec8d0b4d42f3656bc228bb8e8ab5c540a85a0c130c54fe2bf4e9634ed4d1",
+    "scripts/loadtest/realtime-calls.mjs": "b773a97bca1f55d7c54e8b73b0f827b3485230b1f3df27f69ad75ecd11734a21"
+  },
+  "runtime": [
+    {
+      "node": "a",
+      "pid": 50056,
+      "process": "Mon Oct  5 11:38:08 2026     node --import ./test-support/native-rds-preload.mjs --import tsx src/index.ts"
+    },
+    {
+      "node": "b",
+      "pid": 50066,
+      "process": "Mon Oct  5 11:38:08 2026     node --import ./test-support/native-rds-preload.mjs --import tsx src/index.ts"
+    }
+  ],
+  "phase": "directory batching and pending membership reads; native two-BFF steady comparison"
+}

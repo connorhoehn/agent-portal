@@ -39,8 +39,12 @@ import { describe, fieldName, sortShape, type ShapeResult } from './shape.js';
  * for want of a parameter is reported as `skipped` so the gap stays visible.
  */
 const QUERY_HINTS: Record<string, string> = {
+  // A page huddle's call history (routes/page-calls.ts): the seeded initiative lobby's rows.
+  'GET /api/calls': 'lobby=orgiq%3Ainitiative%3Ap-auth-migration',
   'GET /api/assessment/knowledge/doc': 'id=ec%3Astandards%2Fci-cd-standards.md',
   'GET /api/assessment/knowledge/doc/versions': 'id=ec%3Astandards%2Fci-cd-standards.md',
+  'GET /api/assessment/knowledge/doc/proposals': 'id=ec%3Astandards%2Fci-cd-standards.md',
+  'GET /api/assessment/knowledge/doc/proposals/:proposalId': 'id=ec%3Astandards%2Fci-cd-standards.md',
   // Use the populated thread so root/reply fields are actually witnessed.
   'GET /api/assessment/knowledge/doc/comments': 'id=prompt%3Aclassify-transcript.md',
   'GET /api/assessment/knowledge/doc/reactions': 'id=ec%3Astandards%2Fci-cd-standards.md',
@@ -49,6 +53,22 @@ const QUERY_HINTS: Record<string, string> = {
   // `import` status in platform-api's comment shape.
   'GET /api/assessment/knowledge/doc/workflows/comments': 'id=page%3A100002',
   'GET /api/graph/help': 'q=auth',
+  // The activity/work graph needs a calendar day and zone; today in UTC, so the
+  // capture witnesses the day's real rows rather than an empty past day.
+  'GET /api/work-graph/initiatives/:id/graph': `day=${new Date().toISOString().slice(0, 10)}&timezone=UTC`,
+  'GET /api/work-graph/people/:id/graph': `day=${new Date().toISOString().slice(0, 10)}&timezone=UTC`,
+  'GET /api/work-graph/workspace/graph': `day=${new Date().toISOString().slice(0, 10)}&timezone=UTC`,
+  // The pipelines tenant's counterpart (routes/pipelines-work-graph.ts), same day and zone.
+  'GET /api/pipelines/work-graph/runs/:id/graph': `day=${new Date().toISOString().slice(0, 10)}&timezone=UTC`,
+  'GET /api/pipelines/work-graph/workspace/graph': `day=${new Date().toISOString().slice(0, 10)}&timezone=UTC`,
+  // The social tenant's counterpart (routes/social-work-graph.ts), same day and zone.
+  'GET /api/social/work-graph/conversations/:id/graph': `day=${new Date().toISOString().slice(0, 10)}&timezone=UTC`,
+  'GET /api/social/work-graph/workspace/graph': `day=${new Date().toISOString().slice(0, 10)}&timezone=UTC`,
+  // The Communication plane's mount of the same conversation graph (routes/social-plane.ts), same day and zone;
+  // shared-work takes the person-graph query too (today in UTC when absent — given here so the day is witnessed).
+  'GET /api/social/plane/work-graph/conversations/:id/graph': `day=${new Date().toISOString().slice(0, 10)}&timezone=UTC`,
+  'GET /api/social/plane/people/:userId/shared-work': `day=${new Date().toISOString().slice(0, 10)}&timezone=UTC`,
+  'GET /api/graph/teams': 'scope=mine',
   'GET /api/scores/by-skill': 'skill=Kubernetes',
   'GET /api/scores/radar': 'personId=p-001',
   // The route requires a sprint and 400s without one — `scope=all` was a
@@ -58,6 +78,10 @@ const QUERY_HINTS: Record<string, string> = {
   // The seeded binding (mock/social-bindings.ts), so the capture witnesses a
   // bound context rather than `binding: null`.
   'GET /api/social/bindings': 'context=initiative%3Ap-auth-migration',
+  // Pins still require membership for admins. This caller-addressed DM can
+  // be read without granting the capture persona access to a private channel.
+  'GET /api/chat/pins': 'channel=social%3Adm%3Au-operator%3Au-theo',
+  'GET /api/chat/message': 'channel=social%3Adm%3Au-operator%3Au-theo&messageId=missing-capture-message',
 };
 
 interface Capture {

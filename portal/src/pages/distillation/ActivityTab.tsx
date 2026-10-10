@@ -5,8 +5,13 @@
 //           Compact L0→L1 / L1→L2 (ManageBots) · the health status line
 //           (Banner, from the server's verdicts — never inferred) · the
 //           tier-flow StatStrip with Compact / Compact / Publish connectors
-//   body    CanvasPaneLayout: the runs list or the tier graph
-//           (TypedNodeCanvas + its CanvasZoomControls), and the run inspector
+//   runs    ListRailLayout (docs/layout-cascade.md): the runs are a flush
+//           list rail beside the module's section rail ("RUNS 12", filter
+//           popover: transformation, status, repository); the content column
+//           after it opens with the trail and the title, then the health line,
+//           the tier-flow strip and the run inspector
+//   graph   SectionContent: the tier graph (TypedNodeCanvas + its
+//           CanvasZoomControls) and the run inspector in CanvasPaneLayout
 //
 // `?view=runs|graph` and `?run=` are both kept when switching views; the
 // live `distill:levels` / `distill:jobs` channels patch the snapshots.
@@ -15,11 +20,13 @@ import { useLocation, useNavigate, useOutletContext } from 'react-router';
 import type { DistillationOutletContext } from './DistillationModule';
 import {
   CanvasPaneLayout, TypedNodeCanvas, WorkListFilters, type TypedCanvasNode,
+  ListRailLayout,
 } from '@connorhoehnslalom/ui-components';
 import {
-  Banner, Button, EmptyState, FilterPopover, GroupedList, Inline, LoadingState, PageHeader, SegmentedControl, Stack,
+  Banner, Button, EmptyState, FilterPopover, GroupedList, Inline, LoadingState, SegmentedControl, Stack,
   StatCard, StatStrip, StatusPill, T, type StatStripItem,
 } from '@connorhoehnslalom/ui-components/shared';
+import { SECTION_CANVAS_FRAME, SectionContent, SectionHeader } from '../../components/shell/SectionContent';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { useDistillationChannel } from '../../hooks/useDistillationChannel';
 import { useFetch } from '../../hooks/useFetch';
@@ -179,37 +186,9 @@ export default function ActivityTab() {
     if (latest) go({ run: latest.id });
   };
 
-  const header = (
-    <Stack gap="sm" className="border-b border-border px-4 py-3">
-      {/* PageHeader owns the title typography; the view switch rides in its
-          badge slot beside the title, the actions on the right. */}
-      <PageHeader
-        title="Compaction activity"
-        badge={(
-          <SegmentedControl
-            size="sm"
-            aria-label="Activity view"
-            value={state.view}
-            onChange={(v) => go({ view: v === 'graph' ? 'graph' : 'runs' })}
-            options={[{ value: 'runs', label: 'Runs' }, { value: 'graph', label: 'Tier graph' }]}
-          />
-        )}
-        actions={(
-        <Inline gap="sm" align="center" wrap>
-          {rep && <StatusPill tone={rep.tone} label={rep.text} size="sm" data-testid="replication-status" />}
-          {canCompact && (
-            <>
-              <Button size="sm" variant="secondary" disabled={busy != null} onClick={() => { void compact('L1'); }}>
-                {busy === 'L1' ? 'Compacting…' : 'Compact L0 → L1'}
-              </Button>
-              <Button size="sm" variant="secondary" disabled={busy != null} onClick={() => { void compact('L2'); }}>
-                {busy === 'L2' ? 'Compacting…' : 'Compact L1 → L2'}
-              </Button>
-            </>
-          )}
-        </Inline>
-        )}
-      />
+  // Under the page title: the tier-health line and the tier flow strip.
+  const summary = (
+    <Stack gap="sm" className="shrink-0">
       {flow.attention && (
         <Banner
           variant={flow.attention.tone === 'danger' ? 'error' : 'warning'}
@@ -233,63 +212,74 @@ export default function ActivityTab() {
     </Stack>
   );
 
-  const runsView = jobsFeed.error ? (
-    <Stack className="p-4">
+  const runFacets = [
+    {
+      id: 'level', label: 'Transformation',
+      options: [{ value: 'L1', label: 'Run notes → Patterns' }, { value: 'L2', label: 'Patterns → Guides' }],
+      selected: state.level ? [state.level] : [],
+      onChange: (sel: string[]) => { const v = sel[sel.length - 1]; go({ level: v === 'L1' || v === 'L2' ? v : null }); },
+    },
+    {
+      id: 'status', label: 'Status',
+      options: STATUS_FILTERS,
+      selected: state.status ? [state.status] : [],
+      onChange: (sel: string[]) => go({ status: sel[sel.length - 1] ?? null }),
+    },
+    ...(moduleCtx ? [moduleCtx.scope.repoFacet] : []),
+  ];
+  const runsHeader = (
+    <Inline gap="xs" align="center" justify="between" wrap={false}>
+      <T className="text-[12px] text-text-tertiary">{rows.length} of {jobs.length} runs{state.level || state.status || state.repo ? ' match the filters' : ''}</T>
+      <FilterPopover
+        trigger="icon"
+        size="sm"
+        label="Filter runs"
+        activeCount={[state.level, state.status, state.repo].filter(Boolean).length}
+        onClear={() => { go({ level: null, status: null }); if (state.repo) moduleCtx?.scope.repoFacet.onChange([]); }}
+        panelLabel="Filter runs"
+      >
+        <WorkListFilters facets={runFacets} data-testid="activity-filters" />
+      </FilterPopover>
+    </Inline>
+  );
+  const runsList = jobsFeed.error ? (
+    <Stack className="px-5 py-3">
       <UnavailableNotice error={jobsFeed.error} what="compaction history" source="Compaction jobs are read from Aurora" onRetry={jobsFeed.refresh} />
     </Stack>
   ) : jobsFeed.isLoading && !jobsFeed.data ? (
     <LoadingState label="Loading runs…" />
-  ) : (
-    <Stack gap="sm" className="h-full min-h-0 overflow-y-auto p-4">
-      <Inline gap="sm" align="center" justify="between">
-        <T className="text-[12px] text-text-tertiary">{rows.length} of {jobs.length} runs{state.level || state.status || state.repo ? ' match the filters' : ''}</T>
-        <FilterPopover
-          size="sm"
-          label="Filter runs"
-          activeCount={[state.level, state.status].filter(Boolean).length}
-          onClear={() => go({ level: null, status: null })}
-        >
-          <WorkListFilters facets={[
-            {
-              id: 'level', label: 'Transformation',
-              options: [{ value: 'L1', label: 'Run notes → Patterns' }, { value: 'L2', label: 'Patterns → Guides' }],
-              selected: state.level ? [state.level] : [],
-              onChange: (sel) => { const v = sel[sel.length - 1]; go({ level: v === 'L1' || v === 'L2' ? v : null }); },
-            },
-            {
-              id: 'status', label: 'Status',
-              options: STATUS_FILTERS,
-              selected: state.status ? [state.status] : [],
-              onChange: (sel) => go({ status: sel[sel.length - 1] ?? null }),
-            },
-          ]} />
-        </FilterPopover>
-      </Inline>
-      {rows.length === 0 ? (
-        <EmptyState
-          title={jobs.length > 0 ? 'No runs match' : 'No compaction runs yet'}
-          description={jobs.length > 0
-            ? 'Clear the filters to see every run.'
-            : 'A run merges run notes into patterns, or patterns into guides. The scheduler starts them; ManageBots can start one by hand.'}
-        />
-      ) : (
-        <GroupedList
-          size="sm"
-          groups={RUN_GROUPS.map((g) => ({ id: g.id, title: g.title, count: rows.filter((r) => r.groupId === g.id).length }))}
-          hideEmptyGroups
-          rows={rows.map((r) => ({
-            id: r.id,
-            groupId: r.groupId,
-            title: r.title,
-            subline: r.subline,
-            pill: <StatusPill tone={r.status.tone} label={r.status.label} size="sm" />,
-          }))}
-          currentId={state.run}
-          onOpenRow={(row) => go({ run: row.id })}
-          data-testid="activity-runs"
-        />
-      )}
+  ) : rows.length === 0 ? (
+    <Stack className="px-5 py-3">
+      <EmptyState
+        align="start"
+        size="sm"
+        title={jobs.length > 0 ? 'No runs match' : 'No compaction runs yet'}
+        description={jobs.length > 0
+          ? 'Clear the filters to see every run.'
+          : 'A run merges run notes into patterns, or patterns into guides. The scheduler starts them; ManageBots can start one by hand.'}
+      />
     </Stack>
+  ) : (
+    <GroupedList
+      size="md"
+      currentStyle="bar"
+      groupHeading="label"
+      groupCountAlign="end"
+      groups={RUN_GROUPS.map((g) => ({ id: g.id, title: g.title, count: rows.filter((r) => r.groupId === g.id).length }))}
+      hideEmptyGroups
+      rows={rows.map((r) => ({
+        id: r.id,
+        groupId: r.groupId,
+        title: r.title,
+        meta: <T size="xs" tone="tertiary" title={r.meta}>{r.meta}</T>,
+        subline: r.subline,
+        ariaLabel: [r.title, r.meta, r.subline].filter(Boolean).join(', '),
+        pill: <StatusPill tone={r.status.tone} label={r.status.label} {...(r.status.meta ? { meta: r.status.meta } : {})} size="sm" />,
+      }))}
+      currentId={state.run}
+      onOpenRow={(row) => go({ run: row.id })}
+      data-testid="activity-runs"
+    />
   );
 
   const graphView = (
@@ -318,19 +308,78 @@ export default function ActivityTab() {
     />
   );
 
+  // The title band is the same on both views: the view switch and the
+  // compaction actions. No repository button: on Runs the repository is the
+  // list rail's filter; the tier graph shows every repository's tiers.
+  const header = {
+    breadcrumbs: moduleCtx?.scope.breadcrumbs ?? [{ label: 'Build' }, { label: 'Distillation' }, { label: 'Activity' }],
+    title: 'Compaction activity',
+    badge: (
+      <SegmentedControl
+        size="sm"
+        aria-label="Activity view"
+        value={state.view}
+        onChange={(v) => go({ view: v === 'graph' ? 'graph' : 'runs' })}
+        options={[{ value: 'runs', label: 'Runs' }, { value: 'graph', label: 'Tier graph' }]}
+      />
+    ),
+    actions: (
+      <Inline gap="sm" align="center" wrap>
+        {rep && <StatusPill tone={rep.tone} label={rep.text} size="sm" data-testid="replication-status" />}
+        {canCompact && (
+          <>
+            <Button size="sm" variant="secondary" disabled={busy != null} onClick={() => { void compact('L1'); }}>
+              {busy === 'L1' ? 'Compacting…' : 'Compact L0 → L1'}
+            </Button>
+            <Button size="sm" variant="secondary" disabled={busy != null} onClick={() => { void compact('L2'); }}>
+              {busy === 'L2' ? 'Compacting…' : 'Compact L1 → L2'}
+            </Button>
+          </>
+        )}
+      </Inline>
+    ),
+  };
+
+  if (state.view === 'runs') {
+    // The runs are a flush list rail beside the section rail; the content
+    // column after it opens with the trail and the title (docs/layout-cascade.md).
+    return (
+      <ListRailLayout
+        header={<SectionHeader {...header} />}
+        list={{
+          title: 'Runs',
+          ...(jobsFeed.data ? { count: rows.length } : {}),
+          header: runsHeader,
+          body: runsList,
+          label: 'compaction runs',
+        }}
+        data-testid="distillation-activity"
+      >
+        <Stack gap="md" className="px-6 pb-6">
+          {summary}
+          {selected ? (
+            <RunInspector job={selected} onClose={() => go({ run: null })} onOpen={(href) => navigate(href)} />
+          ) : (
+            <EmptyState size="sm" title="Pick a run" description="Choose a run from the list to see its inputs, outputs and log." />
+          )}
+        </Stack>
+      </ListRailLayout>
+    );
+  }
+
   return (
-    <Stack gap="none" className="min-h-0 flex-1" data-testid="distillation-activity">
-      {header}
+    <SectionContent {...header} body="fill" data-testid="distillation-activity">
+      {summary}
       <CanvasPaneLayout
-        className="min-h-0 flex-1"
+        className={SECTION_CANVAS_FRAME}
         paneLabel="run details"
         expandKey={state.run}
         pane={selected ? (
           <RunInspector job={selected} onClose={() => go({ run: null })} onOpen={(href) => navigate(href)} />
         ) : null}
       >
-        {state.view === 'graph' ? graphView : runsView}
+        {graphView}
       </CanvasPaneLayout>
-    </Stack>
+    </SectionContent>
   );
 }

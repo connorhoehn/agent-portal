@@ -288,6 +288,7 @@ async function evaluate(principal: PrincipalRef, action: string, resourceAttrs?:
  * real login exists — guards must 401 with ssoRequired so the client routes
  * through Cognito instead of silently demoting to demo-user. */
 export function resolveSession(req: Request): Session | null {
+  if (req.sessionInvalid) return null;
   return req.session ?? (demoFallbackAllowed() ? demoSession() : null);
 }
 
@@ -298,7 +299,7 @@ function denyUnauthenticated(req: Request, res: Response, action: string): void 
   });
   // ssoRequired only when an IdP actually exists — pointing a client at a
   // sign-in flow that isn't wired up is worse than a plain 401.
-  res.status(401).json({ error: 'Unauthenticated', ssoRequired: ssoAvailable() });
+  res.status(401).json({ error: 'Unauthenticated', code: 'SESSION_INVALID', ssoRequired: ssoAvailable() });
 }
 
 /**

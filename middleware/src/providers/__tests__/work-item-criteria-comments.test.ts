@@ -16,7 +16,9 @@ import {
   deleteWorkItemCriterion,
   listWorkItemComments,
   createWorkItemComment,
+  addWorkItemComment,
 } from '../work-items.js';
+import { socialChannelMembersFixture, socialChannelMessagesFixture } from '../../mock/social-channels.js';
 import { workItemCriteria } from '../../mock/work-item-criteria.js';
 import { workItemComments } from '../../mock/work-item-comments.js';
 import { fixtureRegistry, freezeClock } from '../../mock/core/index.js';
@@ -27,7 +29,11 @@ beforeEach(() => {
   freezeClock(NOON);
   workItemCriteria.reset();
   workItemComments.reset();
+  socialChannelMessagesFixture.reset();
+  socialChannelMembersFixture.reset();
 });
+
+const LAYLA = { userId: 'u-layla', displayName: 'Layla Hassan', personId: 'p-008' };
 
 describe('registration', () => {
   it('registers with the real fixture registry the control plane resets', () => {
@@ -184,13 +190,19 @@ describe('listWorkItemComments', () => {
   });
 });
 
-describe('createWorkItemComment', () => {
-  it('appends a comment with the author resolved and the clock timestamp', async () => {
-    const comment = await createWorkItemComment('wi-obs-e1-s4', 'p-008', 'Sequencing looks right to me.');
+describe('createWorkItemComment — one store: the thread', () => {
+  it('posts on orgiq:work:<id> with the session user as sender and the clock timestamp', async () => {
+    const before = workItemComments.rows().length;
+    const comment = await createWorkItemComment('wi-obs-e1-s4', LAYLA, 'Sequencing looks right to me.');
     expect(comment.authorName).toBe('Layla Hassan');
     expect(comment.authorTitle).toBe('SRE Lead');
     expect(comment.isSystem).toBe(false);
     expect(comment.createdAt).toBe(NOON);
+    // The comments table is audit history: the write never lands there.
+    expect(workItemComments.rows()).toHaveLength(before);
+    const stored = socialChannelMessagesFixture.rows().find((m) => m.id === comment.id)!;
+    expect(stored).toMatchObject({ channel: 'orgiq:work:wi-obs-e1-s4', userId: 'u-layla', message: 'Sequencing looks right to me.',
+      metadata: { displayName: 'Layla Hassan', authorPersonId: 'p-008' } });
 
     const { comments, total } = await listWorkItemComments('wi-obs-e1-s4');
     expect(comments).toHaveLength(3);
@@ -198,10 +210,30 @@ describe('createWorkItemComment', () => {
     expect(total).toBe(3);
   });
 
-  it('reset undoes the append', async () => {
-    await createWorkItemComment('wi-obs-e1-s4', 'p-008', 'Temporary note.');
-    workItemComments.reset();
+  it('reset of the thread fixture undoes the post', async () => {
+    await createWorkItemComment('wi-obs-e1-s4', LAYLA, 'Temporary note.');
+    socialChannelMessagesFixture.reset();
     const { comments } = await listWorkItemComments('wi-obs-e1-s4');
     expect(comments).toHaveLength(2);
+  });
+
+  it('the table refuses a human row: addWorkItemComment is audit-only', async () => {
+    await expect(addWorkItemComment('wi-obs-e1-s4', 'a human note', { authorId: 'p-008' })).rejects.toThrow(/audit-only/);
+    await addWorkItemComment('wi-obs-e1-s4', 'Status changed from open to done', { authorId: 'p-008', isSystem: true });
+    const { comments, total } = await listWorkItemComments('wi-obs-e1-s4');
+    expect(comments.filter((c) => c.isSystem).map((c) => c.body)).toEqual(['Status changed from open to done']);
+    expect(total).toBe(2);
+  });
+});
+
+describe('listWorkItemComments — history floor', () => {
+  it('a reader whose history starts after a comment does not read it (strictly after historyFrom)', async () => {
+    const channel = 'orgiq:work:wi-obs-e1-b5';
+    const [first, second] = socialChannelMessagesFixture.rows().filter((m) => m.channel === channel)
+      .sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+    socialChannelMembersFixture.rows().push({ channel, userId: 'u-late', role: 'member', addedBy: 'u-nora',
+      addedAt: second!.timestamp, historyFrom: first!.timestamp, removedAt: null });
+    expect((await listWorkItemComments('wi-obs-e1-b5', 'u-late')).comments.map((c) => c.id)).toEqual(['wic-prog-2']);
+    expect((await listWorkItemComments('wi-obs-e1-b5', null)).comments.map((c) => c.id)).toEqual(['wic-prog-1', 'wic-prog-2']);
   });
 });

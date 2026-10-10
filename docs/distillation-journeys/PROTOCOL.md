@@ -95,14 +95,7 @@ notes: <what a person would notice: wrapping, truncation, wrong labels, dead lin
 `screenshot` are required; the words TODO, unverified and placeholder anywhere
 in the file make it not count.
 
-## `pages:` (required)
+## `pages:` and freshness
 
-Every log carries a `pages:` line naming the files and/or directories its
-surface actually renders from, comma-separated — e.g.
-`pages: portal/src/pages/distillation/LineagePage.tsx,portal/src/pages/distillation/LineageFrame.tsx`.
-Freshness is judged per surface against those entries: an edit to the
-lineage canvas stales the two lineage logs, not all twelve. A log with no
-`pages:` line is judged against the newest edit anywhere under
-`portal/src/pages/distillation`, so leaving it off makes a log stale sooner,
-never later. Find the entries from the route in `portal/src/App.tsx` and the
-page component's imports.
+Freshness and sealing follow [docs/journeys.md](../journeys.md): a log is stale when the rendered contract of a route its `url:` names changed since its walk was sealed (sweep measurements, gate, the assertions of the specs that cover it), and only `scripts/journeys/seal.sh <dir>`, after a walk, seals it. A `pages:` line is optional: it is the basis only for a log that names
+no route (a stretch proof, the review).

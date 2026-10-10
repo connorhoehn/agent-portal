@@ -1,0 +1,40 @@
+Owned compiled HTTP listeners and leased routers ready; preflight 25ms
+Started internal compiled load profile double-accept driver a05e3a54d43503718b9ceed918d616d6b032a7c2088e276e1d328a505d303bee
+target ws://orgiq-bff-capacity-a:3001/ws · health http://orgiq-bff-capacity-a:3001/api/health · server pid unknown (pass --server-pid) · hold 30s
+
+=== double-accept · group 2 · 100 calls · 1000 sockets (200 in calls, 10 second tabs, 790 chat/presence) · run tag eda3
+  ramp: 1000/1000 connected in 20s
+  connect 1000/1000 (p95 8.4 ms) · established 100/100 · 68.3s
+  invite→incoming  p50 59.7  p95 97.7  p99 118.3  max 120.6 ms (n=100)
+  accept→accepted  p50 54.7  p95 91.1  p99 116.8  max 119.4 ms (n=100)
+  chat delivery    p50 38.6  p95 247  p99 1301.6  max 1534.9 ms (n=1580 of 1580 sent)
+  cross: call 0 chat 0 presence 0 · unexpected ended 0 · answered-elsewhere 10 · denied 0 · other errors 0
+  double accept: 10/10 exactly one winner; duplicate accepted at caller 0
+  slow /api/health samples (>=50 ms): 153.1ms@20.5s/ramp, 66.6ms@21.5s/ramp
+  server orgiq-bff-capacity-a: docker-working-set peak 238.2 MiB · CPU peak 87.6% mean 25.8% · /api/health p50 1.1 p99 66.6 max 153.1 ms (0 errors; 0 planned-outage errors) · client loop p99 11.9 ms
+  PASS  sockets connect: 1000/1000 (100%)
+  PASS  calls established: 100/100 (all)
+  PASS  invite→incoming p95: 97.7 (< 250 ms)
+  PASS  invite→incoming p99: 118.3 (< 1000 ms)
+  PASS  accept→accepted p95: 91.1 (< 250 ms)
+  PASS  chat delivery p95: 247 (< 300 ms, with paired-sender evidence)
+  PASS  background chat coverage: 790/790 (all paired senders reach their peer)
+  PASS  background chat admission: 790/790; 1143.3ms (all server join acknowledgements within 10 seconds)
+  PASS  cross-call/channel deliveries: 0 (0)
+  PASS  double accept: exactly one winner: 10/10 (all)
+  PASS  ended before scripted hang-up: 0 (0)
+  PASS  unplanned socket disconnects: 0 (0)
+  PASS  AUTHZ_CHANNEL_DENIED: 0 (0)
+  FAIL  event-loop proxy (/api/health p99): 66.6 (< 50 ms)
+  PASS  health errors outside planned outage: 0 (0)
+  PASS  server memory peak: 238.2 (< 700 MiB)
+  PASS  container samples: 0 (no errors, at least one sample)
+  PASS  peer 1: health p99: 20.9 (< 50 ms)
+  PASS  peer 1: health errors: 0 (0)
+  PASS  peer 1: memory peak: 250 (< 700 MiB)
+  PASS  peer 1: container samples: 0 (no errors, at least one sample)
+
+0/1 runs passed every threshold
+  FAIL  double-accept × 2 — event-loop proxy (/api/health p99)
+Copied complete result to /tmp/orgiq-bff-container-internal-double-accept.json
+exit=1

@@ -44,7 +44,10 @@ test('preview compares explicit versions without offering unsupported publishing
   assert.match(html, /v3/);
   assert.match(html, /Example data/);
   assert.match(html, /Machine assignments: not reported/);
-  assert.match(html, /Review changes/);
+  // No content diff exists (the bundle records versions only), so the control
+  // offers details, never a review.
+  assert.match(html, /Show details/);
+  assert.doesNotMatch(html, /Review changes/);
   assert.doesNotMatch(html, /skill stale|Active configuration|Publish to fleet|restarts 2/);
 });
 

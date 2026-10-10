@@ -21,7 +21,7 @@ import {
   PageSection,
   SectionLabel,
   Stack,
-  useToast,
+  useToast, T,
 } from '@connorhoehnslalom/ui-components/shared';
 import { CostChip } from '../../components/observability/CostChip';
 import { PromptVersionChip } from '../../components/observability/PromptVersionChip';
@@ -34,7 +34,6 @@ import { GuardrailRuleBadge } from '../../components/observability/GuardrailRule
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { readDegraded } from '../../lib/degraded';
 import { SaveAsTestCaseModal } from '../../components/observability/SaveAsTestCaseModal';
-import { T } from './Text';
 
 // The "invocation" payload is intentionally permissive — Agent A's backend
 // returns every column from invocation_traces, so we type the known fields
@@ -197,7 +196,7 @@ function InvocationDetailPage() {
     return (
       <PageSection title="Invocation">
         <Card padding="md">
-          <T className="text-[12px] text-[var(--color-text-tertiary)]">Loading invocation…</T>
+          <T size="xs" className="text-[var(--color-text-tertiary)]">Loading invocation…</T>
         </Card>
       </PageSection>
     );
@@ -279,11 +278,11 @@ function InvocationDetailPage() {
         <Inline align="start" justify="between" wrap gap="sm">
           <Stack gap="sm" className="min-w-0 flex-1">
             {ts && (
-              <T className="text-[12px] text-[var(--color-text-secondary)]">
+              <T size="xs" className="text-[var(--color-text-secondary)]">
                 {new Date(ts).toLocaleString()}
               </T>
             )}
-            <T as="div" className="break-all font-mono text-[11px] text-[var(--color-text-tertiary)]">
+            <T size="xs" as="div" className="break-all font-mono text-[var(--color-text-tertiary)]">
               {invocationId}
             </T>
             <Inline gap="sm" wrap align="center">
@@ -303,11 +302,11 @@ function InvocationDetailPage() {
               <CostChip cost={totalCost} />
               <PromptVersionChip promptVersion={inv.promptVersion ?? null} />
               {inv.modelId && (
-                <T title="model id" className="font-mono text-[11px] text-[var(--color-text-tertiary)]">
+                <T size="xs" title="model id" className="font-mono text-[var(--color-text-tertiary)]">
                   {String(inv.modelId)}
                 </T>
               )}
-              <T className="text-[11px] text-[var(--color-text-tertiary)]">
+              <T size="xs" className="text-[var(--color-text-tertiary)]">
                 · duration {fmtDur(inv.durationMs)}
               </T>
             </Inline>
@@ -315,7 +314,7 @@ function InvocationDetailPage() {
           <Stack gap="xs" align="end">
             <Link
               to="/admin/observability/invocations/search"
-              className="px-2 py-[2px] text-[12px] text-[var(--color-primary)] no-underline"
+              className="text-xs px-2 py-[2px] text-[var(--color-primary)] no-underline"
             >
               ← Back to search
             </Link>
@@ -356,7 +355,7 @@ function InvocationDetailPage() {
       <Card padding="md">
         <SectionLabel as="div" className="mb-3">
           Tool calls{' '}
-          <T className="text-[11px] font-normal text-[var(--color-text-tertiary)]">
+          <T weight="normal" size="xs" className="text-[var(--color-text-tertiary)]">
             {toolCalls.length} call{toolCalls.length === 1 ? '' : 's'}
           </T>
         </SectionLabel>
@@ -405,11 +404,11 @@ function InvocationDetailPage() {
               : '—'}
           </Chip>
           {inv.judgeRationale ? (
-            <T as="div" className="text-[12px] leading-[1.5] text-[var(--color-text-secondary)]">
+            <T size="xs" as="div" className="leading-[1.5] text-[var(--color-text-secondary)]">
               {inv.judgeRationale}
             </T>
           ) : (
-            <T className="text-[11px] text-[var(--color-text-tertiary)]">(no rationale recorded)</T>
+            <T size="xs" className="text-[var(--color-text-tertiary)]">(no rationale recorded)</T>
           )}
         </Inline>
       </Card>
@@ -488,7 +487,7 @@ function MemoryOperationsCard({ invocationId }: { invocationId: string }) {
     <Card padding="md">
       <SectionLabel as="div" className="mb-3">
         Memory operations{' '}
-        <T className="text-[11px] font-normal text-[var(--color-text-tertiary)]">
+        <T weight="normal" size="xs" className="text-[var(--color-text-tertiary)]">
           {events == null ? 'loading…' : `${count} op${count === 1 ? '' : 's'}`}
         </T>
       </SectionLabel>
@@ -523,22 +522,22 @@ function MemoryOperationsCard({ invocationId }: { invocationId: string }) {
                   >
                     {e.kind}
                   </Chip>
-                  <T className="text-[11px] text-[var(--color-text-tertiary)]">
+                  <T size="xs" className="text-[var(--color-text-tertiary)]">
                     {e.resultCount == null ? '—' : `${e.resultCount} result${e.resultCount === 1 ? '' : 's'}`}
                   </T>
-                  <T className="text-[11px] text-[var(--color-text-tertiary)]">·</T>
-                  <T className="text-[11px] text-[var(--color-text-tertiary)]">
+                  <T size="xs" className="text-[var(--color-text-tertiary)]">·</T>
+                  <T size="xs" className="text-[var(--color-text-tertiary)]">
                     {e.durationMs == null ? '—' : `${e.durationMs}ms`}
                   </T>
                   {e.sessionId && (
                     <>
-                      <T className="text-[11px] text-[var(--color-text-tertiary)]">·</T>
-                      <T className="text-[11px] text-[var(--color-text-tertiary)]">session {e.sessionId}</T>
+                      <T size="xs" className="text-[var(--color-text-tertiary)]">·</T>
+                      <T size="xs" className="text-[var(--color-text-tertiary)]">session {e.sessionId}</T>
                     </>
                   )}
                 </Inline>
                 {e.queryText && (
-                  <T as="div" className="text-[12px] italic text-[var(--color-text-secondary)]">
+                  <T size="xs" as="div" className="italic text-[var(--color-text-secondary)]">
                     {e.queryText}
                   </T>
                 )}
@@ -611,7 +610,7 @@ function GuardrailTraceCard({ invocationId }: { invocationId: string }) {
     <Card padding="md">
       <SectionLabel as="div" className="mb-3">
         Guardrail trace{' '}
-        <T className="text-[11px] font-normal text-[var(--color-text-tertiary)]">
+        <T weight="normal" size="xs" className="text-[var(--color-text-tertiary)]">
           {rows == null ? 'loading…' : `${rows.length} rule${rows.length === 1 ? '' : 's'} fired`}
         </T>
       </SectionLabel>
@@ -640,10 +639,10 @@ function GuardrailTraceCard({ invocationId }: { invocationId: string }) {
                     severity={r.severity}
                   />
                   {r.ruleCategory && (
-                    <T className="text-[11px] text-[var(--color-text-tertiary)]">{r.ruleCategory}</T>
+                    <T size="xs" className="text-[var(--color-text-tertiary)]">{r.ruleCategory}</T>
                   )}
                   {r.severity && (
-                    <T className="text-[11px] text-[var(--color-text-tertiary)]">severity {r.severity}</T>
+                    <T size="xs" className="text-[var(--color-text-tertiary)]">severity {r.severity}</T>
                   )}
                 </Inline>
                 {r.matchedText && (
@@ -697,7 +696,7 @@ function RawMetadataCard({ invocation }: { invocation: InvocationRow }) {
         <Button variant="ghost" size="sm" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
           {open ? '▾' : '▸'} Raw metadata
         </Button>
-        <T className="text-[11px] font-normal text-[var(--color-text-tertiary)]">
+        <T weight="normal" size="xs" className="text-[var(--color-text-tertiary)]">
           full invocation_traces row · JSON
         </T>
       </Inline>
@@ -723,7 +722,7 @@ function ErrorBlock({
       actions={
         <Link
           to="/admin/observability/invocations/search"
-          className="px-2 py-[2px] text-[12px] text-[var(--color-primary)] no-underline"
+          className="text-xs px-2 py-[2px] text-[var(--color-primary)] no-underline"
         >
           ← Back to search
         </Link>
@@ -731,11 +730,11 @@ function ErrorBlock({
     >
       <Card padding="md">
         {invocationId && (
-          <T as="div" className="break-all font-mono text-[11px] text-[var(--color-text-tertiary)]">
+          <T size="xs" as="div" className="break-all font-mono text-[var(--color-text-tertiary)]">
             id: {invocationId}
           </T>
         )}
-        <T as="div" className="mt-1 text-[12px] text-[var(--color-text-secondary)]">{detail}</T>
+        <T size="xs" as="div" className="mt-1 text-[var(--color-text-secondary)]">{detail}</T>
       </Card>
     </PageSection>
   );

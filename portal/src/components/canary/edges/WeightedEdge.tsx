@@ -51,9 +51,10 @@ function WeightedEdgeImpl({
       <BaseEdge
         path={edgePath}
         markerEnd={markerEnd}
-        className={isAnimated ? 'canary-weighted-edge--animated' : undefined}
+        className={isAnimated ? 'canary-weighted-edge canary-weighted-edge--animated' : 'canary-weighted-edge'}
+        // Data-driven geometry (traffic weight -> stroke width), not presentation:
+        // see the `@xyflow/react` edge helpers row in docs/ui-components-queue.md.
         style={{
-          stroke: 'var(--color-primary, #6366f1)',
           strokeWidth,
           ...style,
         }}

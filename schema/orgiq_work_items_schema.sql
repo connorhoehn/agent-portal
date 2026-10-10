@@ -168,8 +168,15 @@ SELECT
   -- child counts
   (SELECT COUNT(*) FROM work_items c WHERE c.parent_id = wi.id)               AS child_count,
   (SELECT COUNT(*) FROM work_items c WHERE c.parent_id = wi.id AND c.status = 'done') AS child_done_count,
-  -- comment count
-  (SELECT COUNT(*) FROM work_item_comments wic WHERE wic.work_item_id = wi.id AND NOT wic.is_system) AS comment_count
+  -- comment count: a work item's conversation is the gateway chat thread
+  -- orgiq:work:<id> (work_item_comment_migration_schema.sql), which SQL cannot
+  -- see, so this column no longer counts the table — that count froze at the
+  -- migration and hid every comment posted after it. NULL means "not known
+  -- here", never zero. The count is GET /api/graph/work-items/:id/comments/summary
+  -- (providers/work-items.ts workThreadSummary), read from the thread under the
+  -- reader's history floor. Name, type (bigint) and position are kept, so
+  -- CREATE OR REPLACE VIEW applies over the old definition.
+  NULL::bigint AS comment_count
 FROM work_items wi
 JOIN projects p ON p.id = wi.project_id
 LEFT JOIN people a ON a.id = wi.assignee_id;
