@@ -1,0 +1,62 @@
+{
+  "result": "PASS",
+  "browserTests": 8,
+  "durationSeconds": 12.6,
+  "command": "cd portal && node node_modules/@playwright/test/cli.js test --config playwright.footer-today.config.ts",
+  "fixtureBoundary": "Managed loopback5293, API proxy port9, all API routes intercepted; synthetic signed identities and native inert call models only. No production actor, call, message or authorization write.",
+  "verified": [
+    "Five ticker cases: sample disclosure/native icons/anchored detail/safe navigation, rotation+speed+pause+engagement, actor+tenant preferences+hide/dim+focus restoration, reduced motion+empty categories, width420\u20131440 call controls/no ticker height contribution",
+    "Three footer cases: native contextual actions/keyboard/floor measurement, active toggles/retry/single bar, 4-tenant light/dark contrast >=4.5"
+  ],
+  "styles": "Both fixture styles import native CSS before app.css, matching production main.tsx. Panels are tested relative to actual ticker anchor. Height compares identical native call state with ticker present vs omitted.",
+  "visualReview": "today-demo-details.png reviewed; sample label and compact panel above ticker.",
+  "sourceFiles": [
+    {
+      "path": "portal/src/components/shell/FooterTodayStrip.tsx",
+      "sha256": "775612c49b5f117946119f12a4d163bfeaaebadcc9e2d68f7518fc52df0e833c"
+    },
+    {
+      "path": "portal/src/components/shell/footerTodayModel.ts",
+      "sha256": "63df7265163a56a67897db497ccd556d68de0c51b66413963361f94f9882b76c"
+    },
+    {
+      "path": "portal/src/components/shell/SocialFooter.tsx",
+      "sha256": "24ece4e28416da06257623b742eadf1da4bddb642d2cb7973efd0d760ca0af14"
+    },
+    {
+      "path": "portal/e2e/fixtures/footer-today.tsx",
+      "sha256": "00b5d216cb50022e7a5b43a2e8ef4ce9a48aa77c74d6aa216e1104f36f0514a9"
+    },
+    {
+      "path": "portal/e2e/fixtures/social-footer.tsx",
+      "sha256": "dfd54509243d8d4d89c58dda0603514b79fc5b85127415f7a0403400a1f34861"
+    },
+    {
+      "path": "portal/e2e/footer-today.spec.ts",
+      "sha256": "c0ab40c25828cd102084aa197ff4117383e804794eeceda388cdfc09bbace9cf"
+    },
+    {
+      "path": "portal/e2e/social-footer-presentation.spec.ts",
+      "sha256": "85c6fad689338af0df758f50b9aa7f6edf66ec8ceee38b787b3df7605f8b586f"
+    },
+    {
+      "path": "portal/playwright.footer-today.config.ts",
+      "sha256": "b5697a68f97350c88a622b2af9b45ae0dc0ef2bd574ff00e6795dda8a495adda"
+    },
+    {
+      "path": "portal/vite.prepare-job.config.ts",
+      "sha256": "92d16ca6bf4e14bc7d5dc2eba56b54f45d1449d2a61e904447adbd5ec4eeba32"
+    },
+    {
+      "path": "portal/vendor/connorhoehnslalom-ui-components-2.440.0-consolidated-main.tgz",
+      "sha256": "ca4bb18704495a29d473cd463d36fbd3f35faaec372c7bdb21263b8b7f7bcbd2"
+    }
+  ],
+  "rawReportSha256": "547da9199497afc965af348eeef267328e9f8d474c20f3db4c5ee5feaf3b7041",
+  "screenshots": [
+    "portal/test-results/footer-today/footer-today-demo-is-visib-17cf2-details-and-safe-navigation-chromium/today-demo-details.png",
+    "portal/test-results/footer-today/footer-today-ticker-yields-9389b--height-or-horizontal-drift-chromium/today-footer-wide.png",
+    "portal/test-results/footer-today/footer-today-ticker-yields-9389b--height-or-horizontal-drift-chromium/today-footer-narrow-call.png"
+  ],
+  "cleanup": "Playwright-managed context and Vite fixture closed at test completion. No primary restart or adoption performed."
+}
