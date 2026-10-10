@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { Button, DocumentIcon, Inline, InlineAlert, LoadingState, SearchInput, Select, Stack, T } from '@connorhoehnslalom/ui-components/shared';
+import { FileCards, FileViewToggle, type FileView } from '../../components/files/FileCards';
 import { useSession } from '../../lib/auth';
 import { documentRecordHref, readWorkDocuments } from '../../lib/workDocuments';
 import { absoluteTime, durationLabel } from '../../lib/relativeTime';
@@ -20,7 +21,7 @@ export function InitiativeFiles(props: { projectId: string; projectName: string;
 }
 function Files({ projectId, projectName, itemIds, workspaceHref, onOpenRecording }: Parameters<typeof InitiativeFiles>[0]) {
   const navigate = useNavigate();
-  const [view, setView] = useState<'cards' | 'list'>('cards');
+  const [view, setView] = useState<FileView>('cards');
   const [kind, setKind] = useState('all');
   const [query, setQuery] = useState('');
   const [refresh, setRefresh] = useState(0);
@@ -74,7 +75,7 @@ function Files({ projectId, projectName, itemIds, workspaceHref, onOpenRecording
       <Inline gap="sm" wrap><SearchInput size="sm" value={query} onChange={setQuery} onClear={() => setQuery('')} placeholder="Search project files" aria-label="Search project files" className="w-56" />
         <Select size="sm" className="!w-36" aria-label="File type" value={kind} onChange={event => setKind(event.target.value)} options={[{ value: 'all', label: 'All files' }, { value: 'document', label: 'Documents' }, { value: 'presentation', label: 'Presentations' }, { value: 'recording', label: 'Recordings' }]} />
       </Inline>
-      <Inline gap="xs" wrap><Button size="sm" variant={view === 'cards' ? 'secondary' : 'ghost'} aria-pressed={view === 'cards'} onClick={() => setView('cards')}>Cards</Button><Button size="sm" variant={view === 'list' ? 'secondary' : 'ghost'} aria-pressed={view === 'list'} onClick={() => setView('list')}>List</Button>
+      <Inline gap="xs" wrap><FileViewToggle value={view} onChange={setView} />
         <Button size="sm" variant="ghost" disabled={read.pending} onClick={() => { setOlderBusy(false); setRefresh(n => n + 1); }}>Refresh</Button>
         <Button size="sm" variant="secondary" onClick={() => navigate(workspaceHref)}>Open workspace</Button></Inline>
     </Inline>
@@ -82,8 +83,9 @@ function Files({ projectId, projectName, itemIds, workspaceHref, onOpenRecording
     {read.pending ? <LoadingState label="Loading project files…" /> : <>
       <T size="xs" tone="secondary">{shown.length} {shown.length === 1 ? 'file' : 'files'}{query || kind !== 'all' ? ' matching this view' : ' in this initiative'}</T>
       {shown.length === 0 ? <Stack gap="xs" className="rounded-lg border border-dashed border-border p-6"><T size="sm" weight="semibold">{read.files.length ? 'No matching files' : 'No project files yet'}</T><T size="sm" tone="secondary" wrap>{read.files.length ? 'Try another search or file type.' : 'Linked work documents, saved project presentations, and recordings you participated in appear here.'}</T></Stack>
-        : <div className={view === 'cards' ? 'initiative-file-grid' : 'divide-y divide-border rounded-lg border border-border'} data-testid={`initiative-files-${view}`}>
-          {shown.map(row => <Button key={row.id} variant="ghost" className={view === 'cards' ? 'initiative-file-card' : '!h-auto !w-full !justify-start !rounded-none !px-3 !py-3 text-left'} onClick={() => open(row)} data-testid="initiative-file">
+        : view === 'cards' ? <FileCards items={shown.map(row => ({ ...row, kindLabel: row.kind }))} onOpen={id => { const row = shown.find(file => file.id === id); if (row) open(row); }} testId="initiative-files-cards" itemTestId="initiative-file" />
+        : <div className="divide-y divide-border rounded-lg border border-border" data-testid="initiative-files-list">
+          {shown.map(row => <Button key={row.id} variant="ghost" className="!h-auto !w-full !justify-start !rounded-none !px-3 !py-3 text-left" onClick={() => open(row)} data-testid="initiative-file">
             <Inline gap="sm" align="start" wrap={false} className="min-w-0 w-full"><DocumentIcon size={20} className="shrink-0 text-primary" /><Stack gap="xs" className="min-w-0 text-left">
               <T size="xs" tone="secondary">{row.kind === 'presentation' ? 'PRESENTATION' : row.kind === 'recording' ? 'RECORDING' : 'DOCUMENT'}</T>
               <T size="sm" weight="semibold" wrap className="line-clamp-2 break-words">{row.title}</T><T size="xs" tone="secondary" wrap className="font-normal">{row.detail}</T>

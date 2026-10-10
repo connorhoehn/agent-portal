@@ -37,7 +37,17 @@ test('native Assessment files reads, document breadcrumb and legacy deck routes 
   await expect(page.getByText(/and shared Workspace documents\./)).toBeVisible();
   for (const deck of teamDecks) await expect(page.getByTestId('document-result-list')).toContainText(deck.title);
   await page.screenshot({ path: test.info().outputPath('native-team-files.png') });
-  await page.getByTestId('document-result-list').getByText('Rubric Overview', { exact: true }).click();
+  await page.getByRole('group', { name: 'File view' }).getByRole('button', { name: 'Cards', exact: true }).click();
+  const cards = page.getByTestId('document-result-cards');
+  await expect(cards).toContainText('Rubric Overview');
+  const dimensions = await page.getByTestId('document-file-card').evaluateAll(nodes => nodes.map(node => ({ width: node.getBoundingClientRect().width, height: node.getBoundingClientRect().height })));
+  expect(dimensions.length).toBeGreaterThan(0); expect(dimensions.every(card => card.width <= 322 && card.height <= 150)).toBe(true);
+  await page.getByLabel('Search documents', { exact: true }).fill('no matching shared file');
+  await expect(page.getByText('Nothing matches “no matching shared file”', { exact: true })).toBeVisible();
+  await page.getByLabel('Search documents', { exact: true }).fill('Rubric');
+  await expect(page.getByTestId('document-file-card')).toHaveCount(1);
+  await page.screenshot({ path: test.info().outputPath('native-team-shared-file-cards.png') });
+  await cards.getByText('Rubric Overview', { exact: true }).click();
   await expect(page).toHaveURL(/\/assessment\/workspace\?doc=page%3A100002$/);
   await page.goto('/assessment/decks');
   await expect(page.getByRole('heading', { name: 'Review decks' })).toBeVisible();

@@ -30,6 +30,7 @@ import {
   type DocumentResultItem,
   type DropdownMenuSection,
 } from '@connorhoehnslalom/ui-components/shared';
+import { FileCards, FileViewToggle, type FileView } from '../../../components/files/FileCards';
 import { libraryRows, type LibraryFile } from './documentLibraryModel';
 import type { KnowledgeSection } from './types';
 
@@ -60,6 +61,7 @@ export interface DocumentLibraryProps {
 export function DocumentLibrary({ sections, files = [], title = 'All documents', description, notices, initialType, documentHref, onOpenFile, onSelect, onNewPage, onUpload, uploading, uploadError, onDismissUploadError, draftSectionTitle }: DocumentLibraryProps) {
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
+  const [view, setView] = useState<FileView>('list');
   const [sources, setSources] = useState<string[]>([]);
   const [types, setTypes] = useState<string[]>(initialType ? [initialType] : []);
   const [sort, setSort] = useState<Sort>('updated');
@@ -115,7 +117,7 @@ export function DocumentLibrary({ sections, files = [], title = 'All documents',
       {description}
       {notices}
       {uploadError && <Banner variant="error" onDismiss={onDismissUploadError} data-testid="document-upload-error">{uploadError}</Banner>}
-      <Inline gap="sm" align="center" data-testid="document-list-controls">
+      <Inline gap="sm" align="center" wrap data-testid="document-list-controls">
         <SearchInput size="md" value={query} onChange={setQuery} onClear={() => setQuery('')} placeholder="Search documents and files"
           aria-label="Search documents" className="min-w-0 flex-1" data-testid="document-search-input" />
         <FilterPopover trigger="icon" size="md" icon={<SlidersIcon />} label="Filter documents" activeCount={activeFilters}
@@ -137,6 +139,7 @@ export function DocumentLibrary({ sections, files = [], title = 'All documents',
             </Stack>
           </Stack>
         </FilterPopover>
+        <FileViewToggle value={view} onChange={setView} />
       </Inline>
       <Inline gap="xs" align="center" className="text-sm text-text-secondary" data-testid="document-list-count">
         <T aria-live="polite" data-testid="document-result-count">{`${visible.length} result${visible.length === 1 ? '' : 's'}`}</T>
@@ -147,13 +150,16 @@ export function DocumentLibrary({ sections, files = [], title = 'All documents',
       </Inline>
     </Stack>
     <Stack gap="none" className="min-h-0 flex-1 overflow-auto px-6 pb-3">
-      <DocumentResultList items={visible} currentId={currentId ?? visible[0]?.id ?? null} onCurrentChange={setCurrentId}
+      {view === 'cards' && visible.length > 0 ? <FileCards
+        items={visible.map(row => ({ id: row.id, title: row.title, kindLabel: row.type, detail: row.summary || row.folder }))}
+        onOpen={id => { const item = visible.find(row => row.id === id); if (item) openItem(item); }}
+        testId="document-result-cards" itemTestId="document-file-card" /> : <DocumentResultList items={visible} currentId={currentId ?? visible[0]?.id ?? null} onCurrentChange={setCurrentId}
         onOpen={openItem} draggable={false} rowMenu={rowMenu} aria-label="Documents" data-testid="document-result-list"
         emptyState={<EmptyState title={rows.length === 0 ? 'No documents yet' : needle ? `Nothing matches “${query.trim()}”` : 'No documents match these filters'}
           description={rows.length === 0 ? 'Pull a source, or create a page to get started.' : 'Try other words, or clear the filters.'}
           action={rows.length === 0
             ? (onNewPage ? <Button variant="primary" onClick={onNewPage}>New page</Button> : undefined)
-            : <Button variant="secondary" onClick={() => { setQuery(''); clearFilters(); }}>Clear search</Button>} />} />
+            : <Button variant="secondary" onClick={() => { setQuery(''); clearFilters(); }}>Clear search</Button>} />} />}
     </Stack>
   </Stack>;
 }
