@@ -16,6 +16,8 @@ export type SearchRecordType = typeof SEARCH_TYPES[number];
 export interface SearchRef { type: SearchRecordType; id: string }
 export interface SearchRecord extends SearchRef {
   title: string; description?: string; href: string; status?: string; subtitle?: string;
+  /** Existing authorized people portrait; no generated or inferred face. */
+  avatarUrl?: string;
   sourceRefs?: SearchRef[];
   /** ISO time the source last changed, only where the source records one. */
   updatedAt?: string;
@@ -161,7 +163,7 @@ export async function searchRecords(principal: PrincipalRef, opts: SearchOptions
   };
   const person = (id: string): SearchRef => ({ type: 'person', id });
   const initiative = (id: string): SearchRef => ({ type: 'initiative', id });
-  graph?.nodes.forEach(p => add({ type: 'person', id: p.id, title: p.name, description: p.skills.join(', '), subtitle: [p.title, p.department].filter(Boolean).join(' · '), href: `/iq/search?tab=connections&selection=${enc(`person:${p.id}`)}` }));
+  graph?.nodes.forEach(p => add({ type: 'person', id: p.id, title: p.name, description: p.skills.join(', '), subtitle: [p.title, p.department].filter(Boolean).join(' · '), ...(p.avatarUrl?.trim() ? { avatarUrl: p.avatarUrl } : {}), href: `/iq/search?tab=connections&selection=${enc(`person:${p.id}`)}` }));
   projects.forEach(p => {
     add({ type: 'initiative', id: p.id, title: p.name, description: summaries.get(p.id), status: p.status ?? undefined, subtitle: p.ownerName ? `Owner: ${p.ownerName}` : undefined, href: `/iq/projects/${enc(p.id)}`, updatedAt: isoOrUndefined(p.lastActivityAt ?? p.createdAt) });
     if (p.ownerId) edge(person(p.ownerId), initiative(p.id), 'owns');
@@ -283,7 +285,7 @@ export async function resolveSearchRecords(principal: PrincipalRef, refs: Search
     if (ref.type === 'person') {
       if (!allowed.people) return null;
       const p = await aurora.fetchPersonGraph(ref.id);
-      return p ? { ...ref, title: p.name, subtitle: [p.title, p.department].filter(Boolean).join(' · '), href: `/iq/search?tab=connections&selection=${enc(searchKey(ref))}` } : null;
+      return p ? { ...ref, title: p.name, subtitle: [p.title, p.department].filter(Boolean).join(' · '), ...(p.avatarUrl?.trim() ? { avatarUrl: p.avatarUrl } : {}), href: `/iq/search?tab=connections&selection=${enc(searchKey(ref))}` } : null;
     }
     if (ref.type === 'initiative') {
       const p = await getProject(ref.id);

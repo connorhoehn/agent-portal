@@ -6,6 +6,8 @@ export interface SearchRecord extends SearchRef {
   href: string;
   status?: string;
   subtitle?: string;
+  /** Authorized directory portrait; absence uses the shared avatar's initials. */
+  avatarUrl?: string;
   sourceRefs?: SearchRef[];
   /** Why the record matched ("Title match", "Matched through initiative membership"…). */
   matchReason?: string;

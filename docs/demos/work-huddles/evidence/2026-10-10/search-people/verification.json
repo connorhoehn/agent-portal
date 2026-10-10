@@ -1,0 +1,140 @@
+{
+  "scope": "Search people avatars and supported live presence; no profile or permission expansion",
+  "sourceState": {
+    "primaryPortal": "updated; actual source hosted by existing frontend",
+    "primaryMiddleware": "unchanged; no restart",
+    "candidateMiddleware": "additive avatar projection, not activated"
+  },
+  "behavior": [
+    "Both search and selected-context projections preserve existing authorized avatarUrl; absent portrait remains initials.",
+    "Frontend exact ID and name graph fallback works before the backend projection is activated.",
+    "Existing signed and directory-fenced shell presence subscription supplies observed Online/Away only; no new announcement or subscription.",
+    "Current active-tenant person-to-user mapping is required; names/person IDs are never treated as gateway user IDs.",
+    "Disconnected, unavailable, absent, unmapped and ambiguous presence is omitted rather than invented offline/last-online history.",
+    "Result rows omit transformed empty-profile prose; profile detail/answer evidence retains explicit empty state; ordinary inferred description remains hidden."
+  ],
+  "validation": {
+    "portalPure": {
+      "command": "node --test src/pages/search/__tests__/peopleSearchModel.test.ts src/pages/search/__tests__/publicSearchRecord.test.ts src/pages/search/__tests__/resultsModel.test.ts",
+      "passed": 11
+    },
+    "portalTypecheck": {
+      "command": "npm run typecheck",
+      "result": "PASS"
+    },
+    "candidateProvider": {
+      "command": "npm test -- --runInBand src/providers/__tests__/search.test.ts",
+      "passed": 27
+    },
+    "candidateMiddlewareTypecheck": {
+      "command": "npm run typecheck",
+      "result": "PASS"
+    },
+    "browser": {
+      "spec": "portal/e2e/search-people.spec.ts",
+      "fixture": "portal/e2e/fixtures/search-people.tsx",
+      "baseURL": "http://127.0.0.1:5283",
+      "result": "PASS",
+      "passed": 1,
+      "testSeconds": 23.0,
+      "attempt": 2,
+      "apiWrites": 0,
+      "pageErrors": 0,
+      "scope": "Actual shared SearchResults/RecordResultList/Avatar plus pure presentation with inert fixture presence; not a real person live-presence assertion",
+      "checks": [
+        "authorized portrait loads",
+        "online/away transitions",
+        "absence/disconnect omitted",
+        "exact name mismatch initials",
+        "broken URL initials then restored source photo",
+        "public skills retained and inferred/empty-placeholder prose omitted"
+      ],
+      "cleanup": "Owned Playwright context closed by completed runner"
+    },
+    "firstAttempt": {
+      "result": "test deadline exceeded at last image check",
+      "overallBudgetSeconds": 30,
+      "note": "Preserved private report; passing attempt changes only overall budget to90s, keeps5s assertion timeouts."
+    }
+  },
+  "limits": [
+    "No supported durable last-online history exists in this app source. Gateway heartbeat/lastSeen is not presented as logout history.",
+    "Presence uses existing authorized Social shell scope only; no claim of all-tenant or global offline status for absent users.",
+    "Current default photographic directory has Theo p-001 portrait, but no portrait for Ben p-035 or Isabel p-038. No image generated or borrowed.",
+    "Native backend projection remains candidate-only pending root-controlled state-preserving handoff; primary frontend authorized portrait fallback is active independently."
+  ],
+  "inventory": [
+    {
+      "path": "middleware/src/providers/search.ts",
+      "candidateSha256": "c79bb6542d5e4d11db60af8e6055962b3f8852f4d5fa757ac3f4fa15b0b8c5f0",
+      "primarySha256": "dcbce27c2e54d97abb4ba3c0c8301b183a8f7688a89f0ef70b6ade4996f5555e",
+      "note": null
+    },
+    {
+      "path": "middleware/src/providers/__tests__/search.test.ts",
+      "candidateSha256": "eccf882c602cf92b4657b2c1d9302833c92941b4a9b2b16524302b5b988ea612",
+      "primarySha256": "dfd5639ea0e45558341efd91ae70b0b5691111b22da7478577631b2792523844",
+      "note": null
+    },
+    {
+      "path": "portal/src/pages/search/searchTypes.ts",
+      "candidateSha256": "bb14289651535608d07099d05dd22ce1062bb5b64dc73fe3070162f5d4413308",
+      "primarySha256": "8483c0d7d5dcd1b101d0bb32653d05533cabc2ce74c52b2590f45ef3d21b5b36",
+      "note": null
+    },
+    {
+      "path": "portal/src/pages/search/peopleSearchModel.ts",
+      "candidateSha256": "84ea13bc7b9abdfc33601dc01c7b989e7d72eb8bd09e2657230f7ab36d8910f8",
+      "primarySha256": "84ea13bc7b9abdfc33601dc01c7b989e7d72eb8bd09e2657230f7ab36d8910f8",
+      "note": null
+    },
+    {
+      "path": "portal/src/pages/search/useSearchPeoplePresentation.ts",
+      "candidateSha256": "d1b2d74b667293d3ce67d191e5a001fa34ec2cb2987b6c2bcf35818747bd6561",
+      "primarySha256": "d1b2d74b667293d3ce67d191e5a001fa34ec2cb2987b6c2bcf35818747bd6561",
+      "note": null
+    },
+    {
+      "path": "portal/src/pages/search/publicSearchRecord.ts",
+      "candidateSha256": "cef31c94b768bed5e11177d6eee375158f0afd9dd957913779e07e648288c7b1",
+      "primarySha256": "cef31c94b768bed5e11177d6eee375158f0afd9dd957913779e07e648288c7b1",
+      "note": null
+    },
+    {
+      "path": "portal/src/pages/search/__tests__/peopleSearchModel.test.ts",
+      "candidateSha256": "d930442b6f6b23628aa9b3c8ba4858d0d94da2c3b39a46fbc35e47bedd9d1ddd",
+      "primarySha256": "d930442b6f6b23628aa9b3c8ba4858d0d94da2c3b39a46fbc35e47bedd9d1ddd",
+      "note": null
+    },
+    {
+      "path": "portal/src/pages/search/__tests__/publicSearchRecord.test.ts",
+      "candidateSha256": "d49d84d58c0796f61168b86e67e5157d84acb3aa146ec7a1f526b34722fc442c",
+      "primarySha256": "d49d84d58c0796f61168b86e67e5157d84acb3aa146ec7a1f526b34722fc442c",
+      "note": null
+    },
+    {
+      "path": "portal/src/pages/search/SearchPage.tsx",
+      "candidateSha256": "3fb4901f1860422e315b1c681a38e25d1acfdc5f93aa89dedd0ce4ef5b6a4002",
+      "primarySha256": "7e021a7e7eca6743e0da6c7cfa120acbe5367195286f3794a0d00447e9e17d36",
+      "note": "SearchPage includes separately owned toolbar/presentation edits; compare lane diffs rather than copy whole candidate file over primary."
+    },
+    {
+      "path": "portal/src/components/shell/EmbeddedSocial.tsx",
+      "candidateSha256": "b3f0df0e495bd0c8cb33706b6d16d0a99473e23383ba6e0bf54c7afab5c4125c",
+      "primarySha256": "b3f0df0e495bd0c8cb33706b6d16d0a99473e23383ba6e0bf54c7afab5c4125c",
+      "note": null
+    },
+    {
+      "path": "portal/e2e/search-people.spec.ts",
+      "candidateSha256": "636bd255b1f1764ec48a869ed83d0f11d9c60b8e3c1df8f088cb3e59f362e8b0",
+      "primarySha256": "636bd255b1f1764ec48a869ed83d0f11d9c60b8e3c1df8f088cb3e59f362e8b0",
+      "note": null
+    },
+    {
+      "path": "portal/e2e/fixtures/search-people.tsx",
+      "candidateSha256": "90ea3cb86f34e53ed71d8bd1aacb0ebc1c9007004db4460fdbc10d4d6a6c9d78",
+      "primarySha256": "90ea3cb86f34e53ed71d8bd1aacb0ebc1c9007004db4460fdbc10d4d6a6c9d78",
+      "note": null
+    }
+  ]
+}

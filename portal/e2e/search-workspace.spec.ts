@@ -123,7 +123,7 @@ test('Search views preserve query, draft, typed selection and graph layout', asy
 test('selection is sent as typed context and answer evidence links remain available across views', async ({ page }) => {
   const { submissions } = await mockWorkspace(page);
   await page.goto(`/iq/search?q=${encodeURIComponent(question)}&tab=connections&selection=person:vera,work:cutover`);
-  await page.getByRole('button', { name: 'Ask about selection →', exact: true }).click();
+  await page.getByRole('button', { name: /^Ask about selection/ }).click();
   await page.getByTestId('search-composer').getByRole('textbox', { name: 'Search question' }).fill(question);
   await page.getByTestId('search-composer').getByRole('button', { name: 'Send', exact: true }).click();
   // A send from Connections stays on Connections; the answer is one tab away.
@@ -286,14 +286,15 @@ test('Results group by type with counts, highlights and a URL-bound sort', async
   await expect(page).toHaveURL(/sort=recent/);
 });
 
-test('a scoped search names its initiative, offers the whole workspace and labels row actions', async ({ page }) => {
+test('a scoped search names its initiative, offers the whole workspace and keeps compact native row actions', async ({ page }) => {
   // The chips and sort collapse into the header menu below ~1536px; audit them at the walk width.
   await page.setViewportSize({ width: 1672, height: 941 });
   await mockWorkspace(page);
   await page.goto('/iq/search?q=cutover&scope=auth');
-  await expect(page.getByTestId('search-scope')).toContainText('In: Auth Migration');
+  await page.getByTestId('search-scope').focus();
+  await expect(page.getByRole('tooltip')).toContainText('Search scope: Auth Migration');
   await expect(page.getByTestId('record-result-list')).toContainText('5 results in Auth Migration');
-  await expect(page.getByRole('link', { name: /Open work item/ }).first()).toHaveAttribute('href', '/iq/work-items/cutover');
+  await expect(page.getByRole('link', { name: 'Tenant-by-tenant cutover', exact: true }).first()).toHaveAttribute('href', '/iq/work-items/cutover');
   // "Search entire workspace" sits in the results footer beside "N results in <scope>".
   await page.getByTestId('search-scope-all').click();
   expect(new URL(page.url()).searchParams.has('scope')).toBe(false);
@@ -344,7 +345,7 @@ test('asking about a selection keeps the query and the Connections graph', async
   const { submissions } = await mockWorkspace(page);
   await page.goto(`/iq/search?q=${encodeURIComponent(question)}&tab=connections&selection=person:vera,initiative:auth,work:cutover`);
   await expect(page.getByTestId('search-connections')).toBeVisible();
-  await page.getByRole('button', { name: 'Ask about selection →', exact: true }).click();
+  await page.getByRole('button', { name: /^Ask about selection/ }).click();
   // The conversation's thread opens in the shell's right pane (decision 9 amendment); the
   // ONE composer stays docked at the bottom of the content column (2026-10-07).
   const pane = page.getByTestId('page-conversation-pane');

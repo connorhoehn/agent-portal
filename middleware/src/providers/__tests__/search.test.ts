@@ -112,6 +112,24 @@ test('denied people never appear in results, related records, counts, or graph e
   expect(r.edges.some(x => x.source.startsWith('person:') || x.target.startsWith('person:'))).toBe(false);
   expect(aurora.fetchGraph).not.toHaveBeenCalled();
 });
+test('search and selection hydration preserve authorized portraits, with initials for absent faces', async () => {
+  const vera = { id: 'vera', name: 'Vera Green', title: 'Engineer', department: 'Platform', skills: ['identity'], avatarUrl: '/avatars/photos/vera.jpg', presence: 'office' };
+  mock(aurora.fetchGraph).mockResolvedValue({ peopleTotal: 2, nodes: [vera, { ...vera, id: 'nora', name: 'Nora Chang', avatarUrl: null }], edges: [] });
+  const r = await searchRecords(principal, { scope: 'auth', type: 'person' });
+  expect(r.results.find(row => row.id === 'vera')?.avatarUrl).toBe(vera.avatarUrl);
+  expect(r.results.find(row => row.id === 'nora')).not.toHaveProperty('avatarUrl');
+  expect(r.results.every(row => !('presence' in row))).toBe(true);
+  mock(aurora.fetchPersonGraph).mockResolvedValue(vera);
+  expect((await resolveSearchRecords(principal, [{ type: 'person', id: 'vera' }]))[0]?.avatarUrl).toBe(vera.avatarUrl);
+  mock(aurora.fetchPersonGraph).mockResolvedValue({ ...vera, avatarUrl: '' });
+  expect((await resolveSearchRecords(principal, [{ type: 'person', id: 'vera' }]))[0]).not.toHaveProperty('avatarUrl');
+});
+test('denied selection hydration never fetches or exposes a portrait', async () => {
+  mock(isAllowed).mockImplementation(async (_p, action) => action !== 'ViewOrgChart');
+  mock(aurora.fetchPersonGraph).mockResolvedValue({ id: 'vera', name: 'Vera Green', avatarUrl: '/secret.jpg' });
+  expect(await resolveSearchRecords(principal, [{ type: 'person', id: 'vera' }])).toEqual([]);
+  expect(aurora.fetchPersonGraph).not.toHaveBeenCalled();
+});
 test('tenant and Search denial stop all source reads', async () => {
   await expect(searchRecords({ ...principal, tenant: 'assessment' })).rejects.toMatchObject({ status: 403 });
   mock(isAllowed).mockResolvedValue(false);

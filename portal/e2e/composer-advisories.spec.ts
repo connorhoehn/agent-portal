@@ -30,6 +30,7 @@ test('composer notices are compact, hover/focus accessible, click-pinned and dis
   await page.screenshot({ path: test.info().outputPath('composer-notices.png') });
   await page.keyboard.press('Escape');
   await expect(panel).toHaveCount(0);
+  await expect(preview).toHaveCount(0);
   await expect(trigger).toBeFocused();
   await page.getByRole('button', { name: 'Resolve notices' }).click();
   await expect(trigger).toHaveCount(0);
