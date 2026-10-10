@@ -1,0 +1,73 @@
+{
+  "checkedAt": "2026-10-10T12:58:37.683395+00:00",
+  "repositories": [
+    {
+      "repository": "aws-agentcore",
+      "branch": "chore/work-huddle-cleanup-20261010",
+      "sourceCommit": "364aa4f002fb742180d28f272bfe555a36d79d57",
+      "remote": "git@github.com:connorhoehnslalom/aws-agentcore.git",
+      "verifiedRemoteCommit": "364aa4f002fb742180d28f272bfe555a36d79d57",
+      "worktreeClean": true
+    },
+    {
+      "repository": "ui-components",
+      "branch": "fix/work-huddle-hover-bounds",
+      "sourceCommit": "ffcd62652a1e7ad4fc2365425701265b8ba2810a",
+      "remote": "git@github.com:connorhoehnslalom/ui-components.git",
+      "verifiedRemoteCommit": "ffcd62652a1e7ad4fc2365425701265b8ba2810a",
+      "worktreeClean": true
+    },
+    {
+      "repository": "platform-api",
+      "branch": "fix/lobby-resource-admission",
+      "sourceCommit": "b63634061ab543bab688d86b7e6920490ae3ae8c",
+      "remote": "git@github.com:connorhoehnslalom/platform-api.git",
+      "verifiedRemoteCommit": "b63634061ab543bab688d86b7e6920490ae3ae8c",
+      "worktreeClean": true
+    },
+    {
+      "repository": "live-video-streaming",
+      "branch": "fix/work-huddle-recording-20261010",
+      "sourceCommit": "d63b863b6f8269ba93ad27e8b1b6c80b8240839e",
+      "remote": "git@github.com:connorhoehn/live-video-streaming.git",
+      "verifiedRemoteCommit": "d63b863b6f8269ba93ad27e8b1b6c80b8240839e",
+      "worktreeClean": true
+    },
+    {
+      "repository": "realtime-modules",
+      "branch": "feat/orgiq-0115",
+      "sourceCommit": "3a46a90c2f222da9c242bc08592f27537655cda3",
+      "remote": "git@github.com:connorhoehnslalom/realtime-modules.git",
+      "verifiedRemoteCommit": "3a46a90c2f222da9c242bc08592f27537655cda3",
+      "worktreeClean": true
+    },
+    {
+      "repository": "ui-components",
+      "branch": "release/2.440.0-density",
+      "sourceCommit": "be7718ae8098da49bc8dc0f79b7ede6b35f14386",
+      "remote": "git@github.com:connorhoehnslalom/ui-components.git",
+      "verifiedRemoteCommit": "be7718ae8098da49bc8dc0f79b7ede6b35f14386",
+      "worktreeClean": true
+    }
+  ],
+  "validation": {
+    "portalTypecheck": "passed",
+    "middlewareTypecheck": "passed",
+    "densityTests": 29,
+    "projectFilesAndInquiryBrowserChecks": 9,
+    "candidatePatchesApplyCheck": "passed in both native repositories",
+    "secretScan": "No private keys, AWS access-key IDs, GitHub tokens or JWTs detected in changed text or 4272 package members; candidate credential strings reviewed as development/test constants."
+  },
+  "preservedLocal": [
+    "Original deck and media",
+    "Session signing keys and runtime stores",
+    "Private call evidence and speaking-media captures",
+    "Local scratch/package staging"
+  ],
+  "remaining": [
+    "Native recording access and timestamp candidates committed as source patches, not activated.",
+    "Huddle chat still has the separate backend Social-grant issue documented in the rehearsal guide.",
+    "Changes are pushed on work branches, not merged into main. aws-agentcore origin/main has three newer commits; none were overwritten.",
+    "Realtime changes were pushed to the private connorhoehnslalom mirror, not the public connorhoehn remote."
+  ]
+}
