@@ -1,0 +1,217 @@
+{
+ "recordedAt": "2026-10-06",
+ "scope": "Huddle chat contracts moved from the removed POST /api/calls/:id/chat/messages to the gateway socket send on orgiq:huddle:<callId> (join, send with clientDeliveryId, persisted 'sent'); native contracts re-run; burst x1 + soak x1 unchanged; count/timing-only per-stage send profile; one reversible change (DM conversation index written once) A/B measured",
+ "driverFinding": "scripts/loadtest/realtime-calls.mjs never called the removed REST route: its chat leg is the gateway socket send on social:dm:<a>:<b> (join/send/message frames). The burst/soak chat p95 numbers measure real socket DM sends, not the dead route, so the driver was left unchanged (changing it to huddle chat would change the workload the plugin-scope table compares against).",
+ "contractChanges": {
+  "files": [
+   "middleware/test-support/bff-cluster-fixture.mjs (joinHuddle/sendHuddle/receivedHuddle)",
+   "middleware/test-support/bff-cluster-acceptance.mjs",
+   "middleware/test-support/bff-cluster-redis-failures.mjs",
+   "middleware/test-support/bff-cluster-dynamo-failures.mjs"
+  ],
+  "meaning": "Each former POST now joins the seat's socket to orgiq:huddle:<callId> and sends the portal's frame; success = the echoed message carrying the delivery id plus the library 'sent' for that id; any error frame on the channel fails the step. Peer delivery, durable history (GET /:callId/chat), retired-epoch non-delivery, crash/rejoin, Redis owner replacement and Dynamo outage assertions are unchanged. Added: a same-user unseated socket on the peer BFF is refused join/send, receives no huddle frames and stores nothing; replacement connections rejoin like the portal does."
+ },
+ "contracts": {
+  "nativeCluster": "12/12 (cluster-acceptance.log, crash case enabled)",
+  "redisFaults": "2/3 in two runs (redis-failures-1.log, redis-failures-2.log). Both huddle-chat cases pass. The failing case sends no chat: after the paused-Redis fence, realtime:orgiq-bff-cluster-acceptance:node:bff-b keeps being renewed by a live client (EVAL PEXPIRE every ~8 s, redis-stall-lease-renewal-monitor.txt) while both health endpoints stay 503, so 'old stable owner leases expire naturally' times out. Reproduced 2/2; passed in plugin-scope. Not diagnosed here.",
+  "dynamoFault": "1/1 (dynamo-failures.log). A first attempt failed at connect because the Redis stall failure leaves both native BFFs fenced (no restart in its failure path); it passed after the guarded helper restart.",
+  "nativeBffs": "restarted only through test-support/bff-cluster-processes.py (processes.log); final owned PIDs in /tmp/orgiq-bff-cluster-{a,b}.pid"
+ },
+ "images": {
+  "orgiq-middleware:cluster-plugin-scope-validation": "sha256:60accf659cfbbf3840d7f6205e896b69360f6da5c3a0e3f268a12cebe3c5ee8d (unchanged; plain burst/soak)",
+  "orgiq-middleware:cluster-real-send-validation": "sha256:c749a4aaef7948ec4fbadfaf1421c9d47e5e512e74b2a268d0dc69d8d5ef33c9 (current working tree incl. the DM index change; image-build.log)",
+  "orgiq-middleware:cluster-real-send-before-validation": "sha256:f9e9c019e510a2b87f6d6e1b50ddb682e02903bffbd634ed8a7e7edb6a5f1e25 (FROM the after image, only realtime-gateway.ts reverted and recompiled; before-image.Dockerfile, dm-index-change.diff)"
+ },
+ "results": {
+  "burst-real": {
+   "image": "plugin-scope (60accf65)",
+   "latency": [
+    "invite→incoming  p50 805.8  p95 1322.9  p99 1383.5  max 1403.4 ms (n=100)",
+    "accept→accepted  p50 101.6  p95 396.5  p99 401.9  max 419.8 ms (n=100)",
+    "chat delivery    p50 2309.5  p95 3272.1  p99 3881.5  max 3931.8 ms (n=1275 of 1276 sent)"
+   ],
+   "failed": [
+    "invite→incoming p95: 1322.9 (< 250 ms)",
+    "invite→incoming p99: 1383.5 (< 1000 ms)",
+    "accept→accepted p95: 396.5 (< 250 ms)",
+    "chat delivery p95: 3272.1 (< 300 ms, with paired-sender evidence)",
+    "event-loop proxy (/api/health p99): 164.6 (< 50 ms)",
+    "peer 1: health p99: 178.9 (< 50 ms)"
+   ]
+  },
+  "soak-real": {
+   "image": "plugin-scope (60accf65)",
+   "latency": [
+    "invite→incoming  p50 43.3  p95 86.5  p99 814.4  max 1010.8 ms (n=100)",
+    "accept→accepted  p50 37.5  p95 66.2  p99 77.2  max 87 ms (n=100)",
+    "chat delivery    p50 50.7  p95 6383.7  p99 8802.9  max 10668.9 ms (n=13966 of 13971 sent)"
+   ],
+   "failed": [
+    "chat delivery p95: 6383.7 (< 300 ms, with paired-sender evidence)",
+    "AUTHZ_CHANNEL_DENIED: 95 (0)",
+    "event-loop proxy (/api/health p99): 122.3 (< 50 ms)",
+    "peer 1: health p99: 126.2 (< 50 ms)",
+    "soak protocol errors: 6 (0)"
+   ]
+  },
+  "burst-real-metrics": {
+   "image": "plugin-scope (60accf65), stage metrics",
+   "latency": [
+    "invite→incoming  p50 2211.7  p95 3127.3  p99 3212.3  max 3234.7 ms (n=100)",
+    "accept→accepted  p50 674.6  p95 879.4  p99 895.8  max 905.7 ms (n=100)",
+    "chat delivery    p50 3793.9  p95 5822.8  p99 6063.5  max 6673.8 ms (n=1319 of 1321 sent)"
+   ],
+   "failed": [
+    "invite→incoming p95: 3127.3 (< 250 ms)",
+    "invite→incoming p99: 3212.3 (< 1000 ms)",
+    "accept→accepted p95: 879.4 (< 250 ms)",
+    "chat delivery p95: 5822.8 (< 300 ms, with paired-sender evidence)",
+    "event-loop proxy (/api/health p99): 283.3 (< 50 ms)",
+    "peer 1: health p99: 256.8 (< 50 ms)"
+   ]
+  },
+  "burst-ab-before-1": {
+   "image": "real-send-before (f9e9c019)",
+   "latency": [
+    "invite→incoming  p50 1123.7  p95 1719.8  p99 1793.4  max 1809 ms (n=100)",
+    "accept→accepted  p50 120  p95 407  p99 429.6  max 447.3 ms (n=100)",
+    "chat delivery    p50 2420.7  p95 3492.1  p99 4182.3  max 4354.2 ms (n=1286 of 1287 sent)"
+   ],
+   "failed": [
+    "invite→incoming p95: 1719.8 (< 250 ms)",
+    "invite→incoming p99: 1793.4 (< 1000 ms)",
+    "accept→accepted p95: 407 (< 250 ms)",
+    "chat delivery p95: 3492.1 (< 300 ms, with paired-sender evidence)",
+    "event-loop proxy (/api/health p99): 152.3 (< 50 ms)",
+    "peer 1: health p99: 97.1 (< 50 ms)"
+   ]
+  },
+  "burst-ab-after-1": {
+   "image": "real-send (c749a4aa)",
+   "latency": [
+    "invite→incoming  p50 1388.3  p95 2183.5  p99 2252.2  max 2272.1 ms (n=100)",
+    "accept→accepted  p50 204.2  p95 466.6  p99 507.3  max 509.9 ms (n=100)",
+    "chat delivery    p50 3634.4  p95 4302.7  p99 4519.6  max 4651 ms (n=1292 of 1292 sent)"
+   ],
+   "failed": [
+    "invite→incoming p95: 2183.5 (< 250 ms)",
+    "invite→incoming p99: 2252.2 (< 1000 ms)",
+    "accept→accepted p95: 466.6 (< 250 ms)",
+    "chat delivery p95: 4302.7 (< 300 ms, with paired-sender evidence)",
+    "event-loop proxy (/api/health p99): 200.8 (< 50 ms)",
+    "peer 1: health p99: 159.6 (< 50 ms)"
+   ]
+  },
+  "burst-ab-before-2": {
+   "image": "real-send-before (f9e9c019)",
+   "latency": [
+    "invite→incoming  p50 715  p95 1365.2  p99 1446.2  max 1465.7 ms (n=100)",
+    "accept→accepted  p50 76.2  p95 106.6  p99 165.2  max 190.8 ms (n=100)",
+    "chat delivery    p50 2253  p95 2920.3  p99 3407.3  max 3770.1 ms (n=1287 of 1289 sent)"
+   ],
+   "failed": [
+    "invite→incoming p95: 1365.2 (< 250 ms)",
+    "invite→incoming p99: 1446.2 (< 1000 ms)",
+    "chat delivery p95: 2920.3 (< 300 ms, with paired-sender evidence)",
+    "event-loop proxy (/api/health p99): 225.9 (< 50 ms)",
+    "peer 1: health p99: 69.7 (< 50 ms)"
+   ]
+  },
+  "burst-ab-after-2": {
+   "image": "real-send (c749a4aa)",
+   "latency": [
+    "invite→incoming  p50 366.4  p95 1056.1  p99 1134.6  max 1155.1 ms (n=100)",
+    "accept→accepted  p50 78.9  p95 97.6  p99 150.1  max 153.8 ms (n=100)",
+    "chat delivery    p50 2351  p95 2947.5  p99 3213.7  max 3396.6 ms (n=1256 of 1260 sent)"
+   ],
+   "failed": [
+    "invite→incoming p95: 1056.1 (< 250 ms)",
+    "invite→incoming p99: 1134.6 (< 1000 ms)",
+    "chat delivery p95: 2947.5 (< 300 ms, with paired-sender evidence)",
+    "peer 1: health p99: 139.1 (< 50 ms)"
+   ]
+  },
+  "burst-after-metrics": {
+   "image": "real-send (c749a4aa), stage metrics",
+   "latency": [
+    "invite→incoming  p50 705.7  p95 1406.4  p99 1477.2  max 1497.3 ms (n=100)",
+    "accept→accepted  p50 104.5  p95 195  p99 222.4  max 233.2 ms (n=100)",
+    "chat delivery    p50 2734  p95 3521.4  p99 3856.6  max 3999.5 ms (n=1286 of 1286 sent)"
+   ],
+   "failed": [
+    "invite→incoming p95: 1406.4 (< 250 ms)",
+    "invite→incoming p99: 1477.2 (< 1000 ms)",
+    "chat delivery p95: 3521.4 (< 300 ms, with paired-sender evidence)",
+    "event-loop proxy (/api/health p99): 146.5 (< 50 ms)",
+    "peer 1: health p99: 180.8 (< 50 ms)"
+   ]
+  }
+ },
+ "comparisonToPluginScope": {
+  "burst chat p95": {
+   "pluginScope": [
+    2948.2,
+    2731.5
+   ],
+   "thisStage": 3272.1
+  },
+  "burst invite p95": {
+   "pluginScope": [
+    978.3,
+    946
+   ],
+   "thisStage": 1322.9
+  },
+  "burst accept p95": {
+   "pluginScope": [
+    242.7,
+    131.2
+   ],
+   "thisStage": 396.5
+  },
+  "soak chat p95": {
+   "pluginScope": 5478.4,
+   "thisStage": 6383.7
+  },
+  "soakNewFailures": "AUTHZ_CHANNEL_DENIED 95 (publish on the sender's own social:dm pair) and 6 'call: Not authorized for call action: status' on the same unchanged image; plugin-scope soak had 0. Unexplained; Dynamo Local tables have grown across runs and failed authority reads fail closed, but that was not verified."
+ },
+ "stageProfile": {
+  "method": "test-support/native-rds-preload.mjs (bind-mounted, metrics file only): AsyncLocalStorage stage labels around ChatService.handleSendMessage/_checkMembership/_persistMessage/broadcastMessage, channelAccess.routerPermits, LocalRealtimeRouter.allows/fanOut/sendFiltered, RedisRealtimeRouter.checkChannel/publish/receive and each router plugin; Dynamo calls attributed to the innermost stage; http.request socket-assignment splits pool wait from DynamoDB Local service time. Counts/timings only. The instrumentation itself slows the run (instrumented burst chat p95 5,822.8 vs 3,272.1 plain), so stage numbers rank causes; they are not the plain-run latency.",
+  "summaries": [
+   "burst-real-metrics-stage-summary.json",
+   "burst-after-metrics-stage-summary.json"
+  ],
+  "ranked": [
+   "1. DynamoDB SDK socket-pool wait. 50 sockets per node, activePeak 50, queuedPeak 1,463/1,323. Per Dynamo call on the send path the wait is 168-595 ms against 36-52 ms DynamoDB Local service time (~90% of each call is queueing). Event loop p99 stays 45-51 ms, so the loop is not the bottleneck.",
+   "2. Pool demand per send: ~17 pool requests per stored message. Largest single category: chat-conversations UpdateItem 4.0 per DM send (2,696/675 node a), avg 718 ms, written twice for the same two rows (library store.chatOptions onChannelMessage AND the host's social:dm index).",
+   "3. Recipient authorization on fan-out: router.authorize.subscribe 5,502 checks (1,845 chat-members queries, avg 215 ms) and redisRouter.peerReceive 5,713 (954 queries, avg 260 ms) - the peer side of every delivery waits in the same pool.",
+   "4. Publish authorization repeated per send: routerPermits.publish ~4.6 per send (avg 181 ms) + checkChannel.publish; membership reads share via the scope but each check still awaits.",
+   "5. Persist PutItem avg 233 ms (wait 171 + service 47); broadcast avg 544 ms (local fan-out + peer publish 60 ms).",
+   "Unattributed: driver delivery p50 (3.8 s instrumented) exceeds send.total (1.46 s) + peerReceive (0.26 s); the remainder is before handleSendMessage starts (frame dispatch/queueing) and was not instrumented."
+  ]
+ },
+ "change": {
+  "what": "middleware/src/lib/realtime-gateway.ts createSocialChatBackend.chatOptions: for tenant DM channels (social:dm:) the host's name-derived conversation index replaces the library's channel-hook index instead of running beside it; every other channel still uses the library hook. Regression assertion in src/lib/__tests__/realtime-gateway-social-dynamo.test.ts (exactly one UpdateItem per member; fails 2 extra without the change). Gateway/call-chat/social-embedded suites: 160 passed, 6 skipped.",
+  "reversible": "dm-index-change.diff",
+  "measured": {
+   "conversationWritesPerSend": "4.0 -> 2.0",
+   "poolRequestsPerSend": "16.7/17.4 -> 15.2/15.2",
+   "poolQueuedPeak": "1,463/1,323 -> 662/643",
+   "sendTotalAvgMsInstrumented": "1,455/1,370 -> 1,011/910",
+   "plainBurstChatP95": {
+    "before": [
+     3492.1,
+     2920.3
+    ],
+    "after": [
+     4302.7,
+     2947.5
+    ]
+   },
+   "verdict": "Removes redundant writes and halves the pool queue, but end-to-end burst chat p95 does not improve beyond run-to-run noise (~±600 ms). Not a capacity fix; kept because it is correct and tested. Revert with the diff if unwanted."
+  }
+ },
+ "environment": "No cloud. Docker only via DOCKER_HOST=unix:///tmp/orgiq-capacity-docker.sock; forwarder untouched. Tilt middleware parent 83043 still serves :3001; its tsx watch child restarted itself (now 38907) after the realtime-gateway.ts edit. Compiled BFFs left on cluster-real-send-validation without metrics (containers-restore.log, prepare-restore.log). Drivers archived to retired-drivers/.",
+ "capacityAccepted": false,
+ "cloudAccepted": false
+}

@@ -97,13 +97,25 @@ function resolveImport(fromRel: string, spec: string, root: string): string | nu
 
 function collectCalls(node: ts.Node, sf: ts.SourceFile): Set<string> {
   const calls = new Set<string>();
+  // A named RegExp constant has the same local exec operation as an inline
+  // literal. It must not be mistaken for the Aurora exec transport.
+  const regexConstants = new Set<string>();
+  for (const statement of sf.statements) {
+    if (!ts.isVariableStatement(statement) || !(statement.declarationList.flags & ts.NodeFlags.Const)) continue;
+    for (const declaration of statement.declarationList.declarations) {
+      if (ts.isIdentifier(declaration.name) && declaration.initializer && ts.isRegularExpressionLiteral(declaration.initializer)) {
+        regexConstants.add(declaration.name.text);
+      }
+    }
+  }
   const visit = (n: ts.Node): void => {
     if (ts.isCallExpression(n) || ts.isNewExpression(n)) {
       const callee = n.expression;
       if (ts.isIdentifier(callee)) calls.add(callee.text);
       else if (ts.isPropertyAccessExpression(callee)) {
         // A RegExp literal's exec is not the Aurora transport with that name.
-        if (callee.name.text === 'exec' && ts.isRegularExpressionLiteral(callee.expression)) {
+        if (callee.name.text === 'exec' && (ts.isRegularExpressionLiteral(callee.expression)
+          || (ts.isIdentifier(callee.expression) && regexConstants.has(callee.expression.text)))) {
           ts.forEachChild(n, visit);
           return;
         }

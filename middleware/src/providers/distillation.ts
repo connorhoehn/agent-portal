@@ -39,7 +39,7 @@
 
 import { config } from '../config.js';
 import { NotFoundError, AppError, ValidationError } from '../lib/async-handler.js';
-import { clock, countBy, groupBy, sumBy, utcDayStartMs, DAY_MS } from '../mock/core/index.js';
+import { clock, countBy, groupBy, sumBy, utcDayStartMs, DAY_MS, fixtureRegistry } from '../mock/core/index.js';
 import { getAsset } from './prompt-library.js';
 import {
   observations as observationsFx, clusters as clustersFx, artifacts as artifactsFx,
@@ -797,6 +797,13 @@ let ingestLastTick = clock.now().getTime();
 export function simulateIngest(nowMs: number = clock.now().getTime()): Observation[] {
   const writers = writerRows();
   const rows = observationRows();
+  // The Distillation demo world: its director (mock/distillation-demo.ts) IS
+  // the write stream, note by note through recordObservation. Minting the
+  // writers' templates on top would fill L0 with copies of its script.
+  if (fixtureRegistry.scenario() === 'distillation-demo') {
+    ingestLastTick = nowMs;
+    return [];
+  }
   // Nobody writing, or a corpus an auditor has deliberately emptied: minting
   // here would refill the very surface they asked to see empty, which is the
   // shared-mutable-world problem the scenario control plane exists to end.
@@ -827,9 +834,27 @@ export function simulateIngest(nowMs: number = clock.now().getTime()): Observati
     recordWriterWrite(w, obs.created_at);
   }
   // An L0 write is a tier change: the realtime publisher re-reads /levels and
-  // pushes it on distill:levels (lib/distillation-realtime.ts).
+  // pushes it on orgiq:distill:levels (lib/distillation-realtime.ts).
   if (minted.length > 0) distillationEvents.emit('levels');
   return minted;
+}
+
+/**
+ * One observation written into L0 by a session — the path an agent's run note
+ * takes when it is written rather than simulated (the Distillation demo's
+ * director writes through here). Same effects as a simulated write: the row,
+ * the writer's last-write mirror when a writer row owns the session, and a
+ * `levels` signal so the realtime publisher pushes the new tier counts. An id
+ * already in L0 is refused rather than written twice.
+ */
+export function recordObservation(obs: Observation): Observation {
+  const rows = observationRows();
+  if (rows.some((o) => o.id === obs.id)) throw new AppError(409, `observation ${obs.id} already exists`);
+  rows.push(obs);
+  const writer = writerRows().find((w) => w.session_id === obs.session_id);
+  if (writer) recordWriterWrite(writer, obs.created_at);
+  distillationEvents.emit('levels');
+  return obs;
 }
 
 /**
@@ -912,7 +937,7 @@ export interface LevelView extends LevelState {
 
 const WRITERS_WINDOW_MS = 60 * 60 * 1000;
 
-/** /levels, enriched. The realtime `distill:levels` frame carries exactly this
+/** /levels, enriched. The realtime `orgiq:distill:levels` frame carries exactly this
  *  array, so the pushed state and the fetched state are one serializer. */
 export async function levelsView(): Promise<{ levels: LevelView[]; health: LevelHealth[] }> {
   const [ls, jobs, storedWriters] = await Promise.all([
@@ -1003,7 +1028,7 @@ export async function getCompaction(id: string): Promise<CompactionJob | null> {
   return (await listCompactions()).find((j) => j.id === id) ?? null;
 }
 
-/** One job as it stands this instant, as plain JSON — what a `distill:jobs`
+/** One job as it stands this instant, as plain JSON — what a `orgiq:distill:jobs`
  *  frame carries. Synchronous on purpose: the phases of a fast pass are
  *  announced back to back, and an async read would see the LAST phase for
  *  every frame instead of each phase in turn. */
@@ -1230,6 +1255,11 @@ function mintProcedureFacts(
  * (nobody has published it) — the absence of a row in the links fixture,
  * not a stored null.
  */
+/** A pattern's title without the "(+n more)" an L0 → L1 pass appends. */
+function headline(c: Cluster): string {
+  return c.title.replace(/ \(\+\d+ more\)$/, '');
+}
+
 function runL2Compaction(jobId: string, startedAt: string, batch?: ReadonlySet<string>): void {
   const pending = pendingClusters()
     .filter((c) => !batch || batch.has(c.id))
@@ -1260,7 +1290,11 @@ function runL2Compaction(jobId: string, startedAt: string, batch?: ReadonlySet<s
       const artifact: ArtifactRow = {
         id,
         type: procedural ? 'procedure' : ARTIFACT_TYPE_FOR_KIND[first.kind],
-        title: chunk.length === 1 ? first.title : `${first.title} (+${chunk.length - 1} more)`,
+        // A procedure is one thing with steps, so it takes its first pattern's
+        // headline; any other chunk says how many patterns it merged. Either
+        // way the pattern's own "(+n more)" is dropped — "X (+1 more) (+2
+        // more)" counted two different things in one title.
+        title: procedural || chunk.length === 1 ? headline(first) : `${headline(first)} (+${chunk.length - 1} more)`,
         summary: chunk.map((c) => c.summary).join(' '),
         // Plain-language "when this helps" is written by a person, never
         // generated from the chunk — null is the honest state for a draft
@@ -1299,7 +1333,7 @@ function runL2Compaction(jobId: string, startedAt: string, batch?: ReadonlySet<s
 // row and sends one message to `distill-compact-l1|l2` (lib/distillation-
 // queue.ts) — FIFO, grouped by repo, deduplicated by job id. A consumer loop
 // in this process claims the message, runs the pass in phases (each one a
-// `distill:jobs` frame), and acks it. The pieces that make that safe:
+// `orgiq:distill:jobs` frame), and acks it. The pieces that make that safe:
 //
 //   - Idempotency is the job id. A redelivered message whose job already
 //     finished is acked and noted in the job's log, never run twice. A
@@ -1361,10 +1395,12 @@ const sleep = (ms: number): Promise<void> => new Promise((resolve) => {
   t.unref?.();
 });
 
-/** The batch a pass claims: what is waiting in the level below, in its repo. */
-function claimBatch(level: CompactableLevel, repo: string | null): string[] {
+/** The batch a pass claims: what is waiting in the level below, in its repo
+ *  — and, for a scoped pass, among the rows it was asked to compact. */
+function claimBatch(level: CompactableLevel, repo: string | null, scope?: readonly string[]): string[] {
   const waiting: Array<{ id: string; repo: string }> = level === 'L1' ? pendingObservations() : pendingClusters();
-  return waiting.filter((r) => !repo || r.repo === repo).map((r) => r.id);
+  const only = scope ? new Set(scope) : null;
+  return waiting.filter((r) => (!repo || r.repo === repo) && (!only || only.has(r.id))).map((r) => r.id);
 }
 
 /** Test seam: fail the next N passes at the write phase, so DLQ behaviour can
@@ -1382,7 +1418,7 @@ async function runPass(row: CompactionJobRow, level: CompactableLevel, delivery:
   row.startedAt = clock.nowIso();
   row.finishedAt = null;
   row.attempts = delivery;
-  row.inputIds = claimBatch(level, row.repo ?? null);
+  row.inputIds = claimBatch(level, row.repo ?? null, row.scopeIds);
   setPhase(row, 'claim', 5, `Claimed from ${queue} (delivery ${delivery})`);
   if (step > 0) await sleep(step);
   setPhase(row, 'read', 25, `Reading ${plural(row.inputIds.length, `waiting ${input}`)}${row.repo ? ` in ${row.repo}` : ''}`);
@@ -1506,7 +1542,10 @@ export async function pumpCompactionQueue(level: CompactableLevel, waitSeconds =
  * scopes the pass (and its FIFO group) to one repository. The returned view
  * reads through to the row, so the caller watches it run.
  */
-export async function compactNow(level: CompactableLevel, by: string, repo: string | null = null): Promise<CompactionJob> {
+export async function compactNow(
+  level: CompactableLevel, by: string, repo: string | null = null,
+  opts: { scope?: readonly string[] } = {},
+): Promise<CompactionJob> {
   compactSeq += 1;
   // The mock id restarts at comp-91 with the process, which is harmless in
   // memory and a primary-key collision in distillation_compactions: a restart
@@ -1529,7 +1568,12 @@ export async function compactNow(level: CompactableLevel, by: string, repo: stri
     percent: 0,
     stepLabel: null,
     attempts: 0,
-    log: [{ at: now, level: 'info', message: `Queued on ${COMPACTION_QUEUES[level]} by ${by}${repo ? ` for ${repo}` : ''}.` }],
+    log: [{
+      at: now, level: 'info',
+      message: `Queued on ${COMPACTION_QUEUES[level]} by ${by}${repo ? ` for ${repo}` : ''}` +
+        (opts.scope ? ` — scoped to ${plural(opts.scope.length, level === 'L1' ? 'run note' : 'pattern')}.` : '.'),
+    }],
+    ...(opts.scope ? { scopeIds: [...opts.scope] } : {}),
   };
   jobRows().unshift(row);
   announce(row);
@@ -2020,7 +2064,7 @@ export async function listReview(q: ListReviewQuery = {}): Promise<ReviewSampleV
   return Promise.all(items.map(async (r) => ({ ...r, ...(await resolveReviewTarget(r)) })));
 }
 
-/** The counts `distill:review` pushes after any sample change — counted from
+/** The counts `orgiq:distill:review` pushes after any sample change — counted from
  *  the same store `/review` lists. */
 export function reviewCounts(): { pending: number; decided: number } {
   const byVerdict = countBy(reviewRows(), 'verdict');
@@ -2056,7 +2100,9 @@ export async function decideReview(
  * no-opping or re-stamping `updated_at` — same "don't let a second call
  * quietly clobber state" posture as `decideReview`.
  */
-export async function publishArtifact(id: string, _by: string): Promise<Artifact> {
+export async function publishArtifact(
+  id: string, _by: string, opts: { when_this_helps?: string | null } = {},
+): Promise<Artifact> {
   const row = artifactRows().find((a) => a.id === id);
   if (!row) throw new NotFoundError(`artifact ${id} not found`);
   if (row.status === 'published') {
@@ -2065,6 +2111,11 @@ export async function publishArtifact(id: string, _by: string): Promise<Artifact
   if (row.status === 'retired') {
     throw new AppError(409, `artifact ${id} is retired — publish only applies to a draft`);
   }
+  // Publishing is the moment a person releases a guide, so it is where the
+  // plain-language "when this helps" can be written — nothing in the machine
+  // writes plain language. Only fills an empty one; never overwrites prose.
+  const when = opts.when_this_helps?.trim();
+  if (when && !row.when_this_helps) row.when_this_helps = when;
   row.status = 'published';
   row.updated_at = clock.nowIso();
   distillationEvents.emit('artifacts');

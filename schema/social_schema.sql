@@ -31,6 +31,8 @@ CREATE TABLE IF NOT EXISTS social_channels (
 -- `/bindings`). One channel per context; a channel may serve several.
 CREATE TABLE IF NOT EXISTS social_bindings (
   tenant        TEXT        NOT NULL,
+  -- The kinds the BFF binds (routes/social.ts BINDING_CONTEXT_TENANT): 'initiative' (orgiq projects.id),
+  -- 'document' (assessment), 'team' (orgiq teams.id — the Communication plane's "My org teams").
   context_kind  TEXT        NOT NULL CHECK (context_kind ~ '^[a-z][a-z-]{0,31}$'),
   context_id    TEXT        NOT NULL,
   channel       TEXT        NOT NULL CHECK (channel ~ '^social:'),

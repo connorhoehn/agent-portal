@@ -1,0 +1,115 @@
+{
+  "phase": "cluster routing foundation",
+  "recordedAt": "2026-10-05T12:23:52.271486+00:00",
+  "rootHead": "86925d4d41b3957c747228d28eda5fba3c8f40f2",
+  "rootWorkCommitted": false,
+  "realtime": {
+    "version": "0.102.1",
+    "commit": "7af2e408ecc24e207344e2d5b07d1f5ebf354287",
+    "branch": "feat/redis-realtime-router",
+    "mainMerged": false
+  },
+  "uiComponents": {
+    "version": "2.409.0",
+    "commit": "f873b424899057a4344664dd9bc1a5b2abb940c0"
+  },
+  "gatewayImage": "sha256:0ccd02f9a96aaa4efcefcdca860ce5ab361309ab582e28ca88a815403002a230",
+  "cloudMutations": false,
+  "productionRouting": "LocalRealtimeRouter",
+  "singleGatewaySafeguardRetained": true,
+  "acceptance": {
+    "upstreamPassed": 2015,
+    "upstreamSkipped": 9,
+    "nativeTransport": 19,
+    "appBackendPassed": 345,
+    "appBackendSkipped": 2,
+    "nativeAppRuntime": 4,
+    "portalPassed": 1318,
+    "singleGatewayBrowserPassed": 0,
+    "baselineBrowserPassed": 9
+  },
+  "boundaries": [
+    "Two native WS instances share one fixture process; not two full BFF processes",
+    "Explicit fixture identity/resource authority; not provisioned directory acceptance",
+    "No cross-node Social membership invalidation or shared presence/CRDT ownership acceptance",
+    "No global ordering/end-to-end exactly-once delivery claim",
+    "No cloud/Aurora/IAM or capacity acceptance",
+    "No new physical-device/internet/TURN/media-restart acceptance"
+  ],
+  "stores": {
+    "redis": {
+      "container": "orgiq-cluster-validation-redis",
+      "id": "0f2c58e111b03b85ec73b2877c3cab6bd8506064fbef9c214d49ac2c90597299",
+      "port": 16481
+    },
+    "dynamo": {
+      "container": "orgiq-chat-dynamodb",
+      "id": "e8977ba070ae7c424836e57503ecc267c5de4fab82ea2308cd4e63cde6a35515",
+      "port": 18061
+    }
+  },
+  "rootSource": {
+    "CLAUDE.md": "4add1fa9accfdc7b9da3778af7cb27a60cb9899ecf20f1bebf7211272a890a38",
+    "docs/design/initiative-huddle-shell-plan.md": "7e9272e4a3244580c9cd63dc41a31612e89c79dd88b51f01a7eef44befe6756d",
+    "middleware/package.json": "775452ae3b7a197444bd1d8f83f6f801de90152bb932a562585f6665e40813d4",
+    "middleware/package-lock.json": "d517071320efb9d92773218c5db5edbdb23ba66a8592a70cc8f5aefb89563877",
+    "middleware/src/lib/call-access.ts": "01f24a481a442d30bf6c5ed4ed111f7f2075c49fd13e0ded9a8995515e43f2b6",
+    "middleware/src/lib/call-pages.ts": "635b64ce7122b52880e24ed3d9744c4c4a0a12ade4f221c1d6520738c4dc47b0",
+    "middleware/src/lib/call-chat.ts": "3a7031c7de45fde539bbc765ce58eca418df7e2cbd16b23e034b85a4830bfc2c",
+    "middleware/src/lib/__tests__/call-features-cluster.integration.test.ts": "2646bf6da530a9964a1f304dc90463af9647a89ed3cdc6cdd53d3c2b7bd283fc",
+    "middleware/src/lib/realtime-gateway.ts": "c7387ccd1422fbd5da31edd7f8f9bdf82c0c13d085330d2df95ade142d1349db",
+    "middleware/Dockerfile": "f8de1109772febc3dbb8a4f88e15562bfabbbe13f47e6a04826662f0435273db",
+    "infra/lib/middleware-service-stack.ts": "73700a0c06118e2e4a26835f1a87c6ba359a44a0a0e59aeeb9bffeaa4b271e95",
+    "portal/package.json": "6684a73068476d498e32ce4414062be555c0fee72378dff7d4527a80fd02fe84",
+    "portal/package-lock.json": "668da423a3caeca126a6f71fd29870688f44c69579570abd75039b4ad47186ee",
+    "portal/e2e/huddle-chat-real.spec.ts": "1efb2dd0faece55c42e99ee8f60eb8f2d6c9e4df72df6b9887c2911ab1321647",
+    "portal/e2e/huddle-page-sharing.spec.ts": "977d5c5dbbd10bcf915fcdd4537ec69ab17a83d1f5240e745fcb4947817f2879",
+    "portal/e2e/cdpTest.ts": "abd050bb063e4849944e70b82e16305c916783684dd990513026a43b4fb726a1",
+    "portal/e2e/realSession.ts": "22650c22dbe70073a80f52bcdeebb236fde1e63cde39ab9f47765de010422164"
+  },
+  "upstreamSource": {
+    "package.json": "fe6e190940c6468997a261eb9c041b14d704dfcbe8d12bd62409273967a7ec3f",
+    "package-lock.json": "1a560ff77757fac46b5a0e4a27209d3097637ad892f84a99fa239261d3cb6de3",
+    "src/server/RedisRealtimeRouter.ts": "0cbf0938ac6b2a3e314f19b2c49c059e0cb2ae6a112ec02b6b6b531a08606d69",
+    "src/server/router.ts": "721d47254a13eb964d4e5e73c9f284a85e8c39efff00391431357389258f1c0f",
+    "src/server/attach.ts": "b9387feb60b225149092108181e4afa3abd8a7434bd5ef16bc15abf36e5be245",
+    "src/server/index.ts": "c4e453109f75ede6ed0633285fa94b3c17135fa5750ac38158d34c70b059ba3c",
+    "src/server-ws/createWsHandler.ts": "b60d841fa2288386f21504d6db94be162750f8e049985781742087e2632b5696",
+    "src/server-ws/types.ts": "b2e328bf4e13d309d64e0aa711925763f393c6478dfa192cdb6ae475583fc650",
+    "dist/server/RedisRealtimeRouter.js": "3a54d79d6d1bce1b29af321c4041418cad02021818cdc32791af96e55dff7065",
+    "dist/server/RedisRealtimeRouter.d.ts": "239a7d81bc9a0425d0ff663149e7bfd4fd6bbc5a9ed06288f310be68d45e9378",
+    "test/server/redis-router.integration.test.ts": "a3157341fdf418591d8b45a676fc7d6f1fcff7690f8012bafef1cd758880ef8b",
+    "docs/recipes/redis-router.md": "1de8e3a5f3125b408ee4c08745a52fc93b131c8443e0dc1bc5ad746228e215d9"
+  },
+  "evidence": {
+    "cluster-app-native-cases.json": "f5ceb152808d823cf927b46639b80c9eb9304001972c871a9c36090ee1f876d8",
+    "cluster-app-tests.json": "6460519d152d2959547ee8cacae4e1fcfc30826b7d6ef01a262dabd7822980f4",
+    "cluster-app-tests.log": "0c5ad880d4a2d71363a42ead081b794f889ba8cc9032abb2a8715d320b86b024",
+    "cluster-aws-identity.log": "037489bd079a58d671d1ecae69cf47fc028d5756fd5864043c149114ae125b27",
+    "cluster-browser.json": "be1cc2d0cb990889c1723f407d17f966043d2b78af9f3af7de50777859798273",
+    "cluster-browser.log": "6f2db21c1e1aa865a7b0ec297989bee7d3106039e5f110520bbad71ba18562f4",
+    "cluster-foundation-acceptance.md": "10c035727e6fe71464d6f01eae29fe84e3ab3602c3946b18bc15b4cd4764d67a",
+    "cluster-gateway-artifact.log": "42f64d2f55cafe36822b92603b11ff10c14108aa309022bdbee625b63f6630ea",
+    "cluster-gateway-build.log": "19c69ef4ad404b88bb70f825a2bb6967f9f4ddd008c3cfd453d13e50346df20c",
+    "cluster-gateway-image-metadata.json": "4253673cab61488982db377eda96e720aaa30bff98d17285ad7679c22177e159",
+    "cluster-locked-libraries.json": "7c5959cbf63f5abdefaaa774309788faed8327c0ec3ba34119fe54d3ef66ce04",
+    "cluster-locked-libraries.log": "666c7665e006c441e65316597cb0118834e39e8c611095557b87a6c9814f093e",
+    "cluster-middleware-build.log": "890dd11b16e4a3386f08a4fa8529271130230f259e3188a13da295ba4ce5d33b",
+    "cluster-middleware-types.log": "a6aacf3de309c23e5aeb92922e8082e8eb964285a805f031247d7ef19849931b",
+    "cluster-package.json": "15fe80651ddd2950b088244efbd1651fb8ee6c25d6b4a290ee38fe34fc2cb78b",
+    "cluster-packed-runtime.log": "259ffbbfacb6e44832744d4ffc52ee7e85f6101dd8bafa3966df8b2d4f37d9d0",
+    "cluster-packed-types.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "cluster-portal-build.log": "6de0a516c1b71aa586ec0c5718b30bab9f8eebcd9d4fc0de3e25a6a0e0e7a21d",
+    "cluster-portal-tests.log": "0ae3fa3d5d823a1e1a95a40787a3d72c8e39c7840cbaf95bcd8d79d3ebc418b0",
+    "cluster-portal-types.log": "8a24334acd2b0e230f0ce6a6c975133be55373d12daa8543c05f6b9d201c7791",
+    "cluster-upstream-build.log": "a401e4e6400b1cc22ab54154e719d3863560cc831625f16364100f815a5ab7af",
+    "cluster-upstream-native-cases.json": "a31e432d6c9cb08264b22fa548f5cb9628ff7fd5e90006b916079304e3a0b820",
+    "cluster-upstream-tests.json": "27a21a900df4b92d1e12fc860f40d36ff5cc90cd12875233b63eb77d4f04ea0e",
+    "cluster-upstream-tests.log": "144e34c842afe3f89a5c96567ac65a44dd0b7649038e832bb306485133c78a1c"
+  },
+  "runtimeAudit": {
+    "baselineBffPid": 56895,
+    "baselineBffStarted": "2026-10-04T20:20:22 America/New_York",
+    "finding": "Browser run predates reader source edits; fresh-process browser gate required."
+  }
+}

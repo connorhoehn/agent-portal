@@ -30,7 +30,7 @@ export function messageAvailability(input: {
   if (!users || !selfUserId) return { ok: false, reason: 'Looking up who signs in as this person…' };
   const person = people[0]!;
   const user = users.find((u) => u.personId === person.personId);
-  if (!user) return { ok: false, reason: `${person.name} has no OrgIQ sign-in, so there is no one to message` };
+  if (!user) return { ok: false, reason: `${person.name} has no Work sign-in, so there is no one to message` };
   if (user.userId === selfUserId) return { ok: false, reason: 'You are the only person selected — pick someone else to message' };
   if (user.social === false) return { ok: false, reason: `${user.displayName || person.name} is not in Social, so a direct message would not reach them` };
   const displayName = user.displayName || person.name;

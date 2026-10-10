@@ -16,6 +16,8 @@
 // build-time `VITE_*` variables survive only as local overrides:
 // `realtimeEndpoints()` lets a non-blank override win over the token's value.
 
+import { reportApiFailure, responseFailure } from './apiFailure.ts';
+
 export const REALTIME_TOKEN_URL = '/api/session/realtime-token';
 /** Treat a token as stale this long before its `expiresAt`. */
 export const REFRESH_SKEW_MS = 60_000;
@@ -83,7 +85,11 @@ export function createRealtimeTokenSource(opts: {
 
   async function load(gen: number): Promise<RealtimeToken> {
     const res = await doFetch(url, { credentials: 'include', headers: { Accept: 'application/json' } });
-    if (!res.ok) throw new Error(`realtime token unavailable (HTTP ${res.status})`);
+    if (!res.ok) {
+      const failure = await responseFailure(res);
+      if (gen === generation) reportApiFailure(failure);
+      throw new Error(`realtime token unavailable (HTTP ${res.status})`);
+    }
     const body = await res.json() as Partial<RealtimeToken>;
     if (typeof body.token !== 'string' || !body.token || typeof body.expiresAt !== 'string') {
       throw new Error('realtime token response is malformed');

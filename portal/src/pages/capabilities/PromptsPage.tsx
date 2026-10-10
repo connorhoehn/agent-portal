@@ -5,8 +5,8 @@
 // mounted; every panel, control and derivation lives in ./prompts/.
 
 import { useSearchParams, useNavigate } from 'react-router';
-import { useEffect, useState } from 'react';
-import { EmptyState, ErrorState } from '@connorhoehnslalom/ui-components/shared';
+import { useCallback, useEffect, useState } from 'react';
+import { EmptyState, ErrorState, PageHeader, Stack } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { CreatePanel } from './prompts/CreatePanel';
 import { EditPanel } from './prompts/EditPanel';
@@ -34,6 +34,11 @@ function PromptsPage() {
   // Bumped after a publish or draft save so the version dropdown and detail
   // remount against the new server state rather than a cached response.
   const [versionKey, setVersionKey] = useState(0);
+  // Which trigger opened the panel that just closed. Edit and Test each
+  // REPLACE the view, so the button that opened them no longer exists while
+  // they are up; the view focuses it again once it has re-rendered.
+  const [returnFocusTo, setReturnFocusTo] = useState<'edit' | 'test' | null>(null);
+  const focusReturned = useCallback(() => setReturnFocusTo(null), []);
 
   useEffect(() => {
     if (!selection && prompts.length > 0) {
@@ -56,84 +61,98 @@ function PromptsPage() {
   }
 
   return (
-    <PromptsFrame
-      rail={(
-        <PromptSidebar
-          prompts={filtered}
-          loading={loading}
-          error={error}
-          search={search}
-          onSearch={setSearch}
-          selectedId={selection?.promptId ?? null}
-          onSelect={selectPrompt}
-          onRefresh={refresh}
-          onNew={() => { setSelection(null); setMode('create'); }}
-          canManage={canManage}
-        />
-      )}
-    >
-        {/* Exactly one of these renders: a failed fetch is not "empty", and an
-            empty library is not an error — showing both at once (DEFECTS.md
-            #8) told the reader two contradictory things at the same time. */}
-        {!selection && !loading && mode !== 'create' && (
-          error ? (
-            <ErrorState
-              title="Prompt studio unreachable"
-              description={friendlyLibraryError(error)}
-              actionLabel="Retry"
-              onAction={refresh}
+    <Stack gap="none" className="h-full min-h-0">
+      {/* The page's one h1. The studio is a full-height rail + pane, and the
+          pane's own header is the selected prompt's (an h2), so without this
+          the route had no top-level heading at all. */}
+      <PageHeader
+        title="Prompt Studio"
+        description="Author, test and publish the system prompts the agents read from the Bedrock Prompt Library."
+        className="flex-none pb-4"
+      />
+      <Stack gap="none" className="min-h-0 flex-1">
+        <PromptsFrame
+          rail={(
+            <PromptSidebar
+              prompts={filtered}
+              loading={loading}
+              error={error}
+              search={search}
+              onSearch={setSearch}
+              selectedId={selection?.promptId ?? null}
+              onSelect={selectPrompt}
+              onRefresh={refresh}
+              onNew={() => { setSelection(null); setMode('create'); }}
+              canManage={canManage}
             />
-          ) : (
-            <EmptyState
-              title="No prompts yet"
-              description="The Bedrock Prompt Library is empty for this tenant."
-              {...(canManage
-                ? { actionLabel: '+ New prompt', onAction: () => setMode('create') }
-                : {})}
-            />
-          )
-        )}
+          )}
+        >
+            {/* Exactly one of these renders: a failed fetch is not "empty", and an
+                empty library is not an error — showing both at once (DEFECTS.md
+                #8) told the reader two contradictory things at the same time. */}
+            {!selection && !loading && mode !== 'create' && (
+              error ? (
+                <ErrorState
+                  title="Prompt studio unreachable"
+                  description={friendlyLibraryError(error)}
+                  actionLabel="Retry"
+                  onAction={refresh}
+                />
+              ) : (
+                <EmptyState
+                  title="No prompts yet"
+                  description="The Bedrock Prompt Library is empty for this tenant."
+                  {...(canManage
+                    ? { actionLabel: '+ New prompt', onAction: () => setMode('create') }
+                    : {})}
+                />
+              )
+            )}
 
-        {selection && mode === 'view' && (
-          <ViewPanel
-            key={`${selection.promptId}-${versionKey}`}
-            selection={selection}
-            onVersionChange={version => backToView({ version })}
-            onEdit={() => setMode('edit')}
-            onTest={() => setMode('test')}
-            canManage={canManage}
-          />
-        )}
+            {selection && mode === 'view' && (
+              <ViewPanel
+                key={`${selection.promptId}-${versionKey}`}
+                selection={selection}
+                onVersionChange={version => backToView({ version })}
+                onEdit={() => setMode('edit')}
+                onTest={() => setMode('test')}
+                canManage={canManage}
+                returnFocusTo={returnFocusTo}
+                onFocusReturned={focusReturned}
+              />
+            )}
 
-        {selection && mode === 'test' && (
-          <TestPanel
-            key={`${selection.promptId}-${selection.version}-test`}
-            selection={selection}
-            onClose={() => setMode('view')}
-          />
-        )}
+            {selection && mode === 'test' && (
+              <TestPanel
+                key={`${selection.promptId}-${selection.version}-test`}
+                selection={selection}
+                onClose={() => { setReturnFocusTo('test'); setMode('view'); }}
+              />
+            )}
 
-        {selection && mode === 'edit' && (
-          <EditPanel
-            key={`${selection.promptId}-${selection.version}-edit`}
-            selection={selection}
-            onCancel={() => setMode('view')}
-            onPublished={(version, promptArn) => backToView({ version, promptArn }, true)}
-            onDraftSaved={() => backToView({ version: 'DRAFT' }, true)}
-          />
-        )}
+            {selection && mode === 'edit' && (
+              <EditPanel
+                key={`${selection.promptId}-${selection.version}-edit`}
+                selection={selection}
+                onCancel={() => { setReturnFocusTo('edit'); setMode('view'); }}
+                onPublished={(version, promptArn) => { setReturnFocusTo('edit'); backToView({ version, promptArn }, true); }}
+                onDraftSaved={() => { setReturnFocusTo('edit'); backToView({ version: 'DRAFT' }, true); }}
+              />
+            )}
 
-        {mode === 'create' && canManage && (
-          <CreatePanel
-            onCancel={() => { if (params.get('mode') === 'create') navigate('/iq/library'); else setMode('view'); }}
-            onCreated={(promptId, promptArn, promptName) => {
-              refresh();
-              setSelection({ promptId, promptName, promptArn, version: 'DRAFT' });
-              setMode('view');
-            }}
-          />
-        )}
-    </PromptsFrame>
+            {mode === 'create' && canManage && (
+              <CreatePanel
+                onCancel={() => { if (params.get('mode') === 'create') navigate('/iq/library'); else setMode('view'); }}
+                onCreated={(promptId, promptArn, promptName) => {
+                  refresh();
+                  setSelection({ promptId, promptName, promptArn, version: 'DRAFT' });
+                  setMode('view');
+                }}
+              />
+            )}
+        </PromptsFrame>
+      </Stack>
+    </Stack>
   );
 }
 

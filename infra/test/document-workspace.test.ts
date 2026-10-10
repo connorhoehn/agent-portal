@@ -85,6 +85,16 @@ test('document services remain disabled unless explicitly requested', () => {
   template.resourceCountIs('AWS::DynamoDB::Table', 0);
 });
 
+test('co-deployed Social and document proxies keep distinct private platform namespaces', () => {
+  const template = Template.fromStack(middlewareServiceStack({ ...context, deploySocial: true }, props));
+  const containers = Object.values<any>(template.findResources('AWS::ECS::TaskDefinition'))
+    .flatMap(task => task.Properties.ContainerDefinitions);
+  const env = Object.fromEntries(containers.find(c => c.Name === 'middleware').Environment.map((e: any) => [e.Name, e.Value]));
+  assert.equal(env.SOCIAL_PLATFORM_INTERNAL_URL, 'http://social-platform.orgiq-social.local:3001');
+  assert.equal(env.DOCUMENT_PLATFORM_INTERNAL_URL, 'http://workspace-platform.orgiq-documents.local:3001');
+  assert.notEqual(env.SOCIAL_PLATFORM_INTERNAL_URL, env.DOCUMENT_PLATFORM_INTERNAL_URL);
+});
+
 test('requires BFF service, HTTPS, normal identity and concrete configuration', () => {
   assert.throws(() => middlewareServiceStack({ deployDocumentWorkspace: true }, props), /deployMiddlewareService/);
   assert.throws(() => middlewareServiceStack(context, { ...props, certificateArn: undefined }), /HTTPS/);

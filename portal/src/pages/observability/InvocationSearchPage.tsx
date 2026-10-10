@@ -26,7 +26,7 @@ import {
   TableHead,
   TableRow,
   TableTd,
-  TableTh,
+  TableTh, T,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { CostChip } from '../../components/observability/CostChip';
@@ -34,7 +34,6 @@ import { PromptVersionChip } from '../../components/observability/PromptVersionC
 import { SmartEmptyState } from '../../components/observability/SmartEmptyState';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { readDegraded } from '../../lib/degraded';
-import { T } from './Text';
 import { RowEmpty } from './ReadState';
 
 interface InvocationSearchResult {
@@ -271,7 +270,7 @@ function InvocationSearchPage() {
       actions={
         <Link
           to="/admin/observability/invocations"
-          className="text-[12px] text-primary no-underline hover:underline"
+          className="text-xs text-primary no-underline hover:underline"
         >
           ← Recent activity
         </Link>
@@ -448,10 +447,10 @@ function InvocationSearchPage() {
         )}
         {applied && !error && rows.length > 0 && (
           <>
-            <T as="div" className="text-[11px] text-text-tertiary mb-2">
+            <T size="xs" as="div" className="text-text-tertiary mb-2">
               Showing {rows.length} of {totalCount}
             </T>
-            <Table>
+            <Table size="sm">
               <TableHead>
                 <TableRow>
                   <TableTh>Agent</TableTh>
@@ -473,16 +472,16 @@ function InvocationSearchPage() {
                     }
                     className="cursor-pointer"
                   >
-                    <TableTd className="text-[12px] font-medium whitespace-nowrap">
+                    <TableTd className="whitespace-nowrap">
                       {r.agentName || r.agentId}
                     </TableTd>
-                    <TableTd className="text-[11px] text-text-tertiary whitespace-nowrap">
+                    <TableTd className="text-text-tertiary whitespace-nowrap">
                       {new Date(r.ts).toLocaleString()}
                     </TableTd>
-                    <TableTd className="text-[12px] max-w-[280px] truncate" title={r.promptSnippet}>
+                    <TableTd className="max-w-[280px] truncate" title={r.promptSnippet}>
                       {snip(r.promptSnippet, 100)}
                     </TableTd>
-                    <TableTd className="text-[12px] max-w-[280px] truncate" title={r.responseSnippet}>
+                    <TableTd className="max-w-[280px] truncate" title={r.responseSnippet}>
                       {snip(r.responseSnippet, 100)}
                     </TableTd>
                     <TableTd>
@@ -496,7 +495,7 @@ function InvocationSearchPage() {
                     <TableTd className="whitespace-nowrap">
                       <PromptVersionChip promptVersion={r.promptVersion} />
                     </TableTd>
-                    <TableTd className="text-[12px] text-text-secondary whitespace-nowrap">{fmtDur(r.durationMs)}</TableTd>
+                    <TableTd className="text-text-secondary whitespace-nowrap">{fmtDur(r.durationMs)}</TableTd>
                   </TableRow>
                 ))}
               </TableBody>

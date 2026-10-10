@@ -3,14 +3,12 @@
 # check passes. --quick skips the slow suites (node tests, vite build).
 set -u
 cd "$(dirname "$0")/.."
-QUICK=0; SEAL=0
+source scripts/lib/judges.sh  # jg_*: static gates run once per tree state
+QUICK=0
 for a in "$@"; do case "$a" in
   --quick) QUICK=1;;
-  # Record the current digest for every log, using THIS script's own hash
-  # function — never a second implementation, which is how the first attempt
-  # at this baseline produced digests that disagreed with the checker's.
-  # Only after fresh observations are recorded, with the reason written down.
-  --seal) SEAL=1;;
+  # --seal is retired: one helper seals, after a walk (scripts/journeys/seal.sh).
+  --seal) echo "--seal is retired: walk the logs, then run scripts/journeys/seal.sh <dir> (docs/journeys.md)" >&2; exit 2;;
 esac; done
 FAILS=()
 ok()   { printf '  ✓ %s\n' "$1"; }
@@ -19,11 +17,11 @@ section() { printf '\n== %s ==\n' "$1"; }
 
 # ─────────────────────────────────────────────────────────────────────────────
 section "builds"
-if (cd portal && npx tsc --noEmit >/dev/null 2>&1); then ok "portal tsc"; else fail "portal: tsc errors"; fi
-if (cd middleware && npx tsc --noEmit >/dev/null 2>&1); then ok "middleware tsc"; else fail "middleware: tsc errors"; fi
+if jg_portal_tsc >/dev/null 2>&1; then ok "portal tsc"; else fail "portal: tsc errors"; fi
+if jg_mw_tsc >/dev/null 2>&1; then ok "middleware tsc"; else fail "middleware: tsc errors"; fi
 if [ "$QUICK" = 0 ]; then
   if (cd portal && node --test 'src/**/__tests__/*.test.ts' >/dev/null 2>&1); then ok "portal node tests"; else fail "portal: node tests failing"; fi
-  if (cd portal && npx vite build >/dev/null 2>&1); then ok "portal vite build"; else fail "portal: vite build failed"; fi
+  if jg_vite_build >/dev/null 2>&1; then ok "portal vite build"; else fail "portal: vite build failed"; fi
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -32,16 +30,15 @@ PAGES=portal/src/pages
 BUDGET_FILE=scripts/orgiq-raw-budget.txt
 BUDGET_START=1114
 BUDGET_DONE=60
-QUEUE=docs/ui-components-queue.md
-QUEUED_FILES=$(grep -oE "Composed locally in \`portal/src/pages/[A-Za-z0-9_/.-]+\.tsx\`" "$QUEUE" 2>/dev/null | grep -oE "portal/src/pages/[A-Za-z0-9_/.-]+\.tsx" | sort -u)
-PAGE_FILES=$(find "$PAGES" -name '*.tsx' | sort | grep -vxF -f <(printf '%s\n' $QUEUED_FILES))
-count_in() { local re="$1"; shift; local n=0; for f in "$@"; do c=$(grep -oE "$re" "$f" | wc -l | tr -d ' '); n=$((n+c)); done; echo "$n"; }
-# Raw elements are counted across line breaks (perl slurp) — a `<div` whose
-# `className=` sits on a later line is the same raw element as a one-liner.
-RAW_TAGS='div|p|span|h[1-6]|ul|ol|li|section|nav|article|table|tr|td|th|button|a|label|input|textarea|select|form|code|pre'
-raw_in_file() { perl -0777 -ne 'my $n=0; $n++ while /<('"$RAW_TAGS"')\s[^>]*?className=/g; print $n' "$1"; }
-count_raw() { local n=0; for f in "$@"; do c=$(raw_in_file "$f"); n=$((n+c)); done; echo "$n"; }
-n_raw=$(count_raw $PAGE_FILES)
+# The one raw-element counter (scripts/lib/discipline.sh, shared with
+# validate-component-discipline.sh): across line breaks AND brace-aware — the
+# perl slurp this used could not see past an arrow function in an onClick.
+source scripts/lib/discipline.sh
+QUEUED_FILES=$(dc_queued_files "$PAGES/")
+PAGE_FILES=$(dc_area_files "$PAGES" "$PAGES/")
+count_in() { dc_count_re "$@"; }
+raw_in_file() { dc_count_raw "$1"; }
+n_raw=$(dc_count_raw $PAGE_FILES)
 # Any JSX style prop counts — `style={{…}}` AND `style={hoistedConst}`; hoisting
 # an inline style into a named const is the same hand-rolled CSS.
 n_sty=$(count_in 'style=\{' $PAGE_FILES)
@@ -55,7 +52,7 @@ fi
 if [ "$budget" -le "$BUDGET_DONE" ]; then ok "budget has reached the done line ($BUDGET_DONE)"; else fail "budget $budget is above the done line $BUDGET_DONE — keep de-hand-rolling (worst directories below)"; fi
 printf '      worst directories:\n'
 for d in $(find "$PAGES" -mindepth 1 -maxdepth 1 -type d | sort) "$PAGES"; do
-  n=0; for f in $(find "$d" -maxdepth 1 -name '*.tsx' | grep -vxF -f <(printf '%s\n' $QUEUED_FILES)); do c=$(raw_in_file "$f"); n=$((n+c)); done
+  n=$(dc_count_raw $(find "$d" -maxdepth 1 -name '*.tsx' | grep -vxF -f <(printf '%s\n' $QUEUED_FILES)))
   [ "$n" -gt 0 ] && printf '      %5d  %s\n' "$n" "$d"
 done | sort -rn | head -8
 [ "$n_sty" = 0 ] && ok "no JSX style= props in pages" || fail "JSX style= props in pages (inline or hoisted): $n_sty"
@@ -74,39 +71,13 @@ JDIR=docs/orgiq-journeys
 MATRIX=$JDIR/MATRIX.txt
 [ -f "$MATRIX" ] || { fail "$MATRIX missing"; }
 jmissing=0; jbad=0; jtotal=0
-# ── Freshness is about CONTENT, not mtime ────────────────────────────────
-# A log is stale when the code it observed CHANGED. mtime is only a proxy for
-# that, and on 2026-09-07 it proved a bad one: a bulk operation stamped 134
-# portal source files with an identical mtime (14:35:02) while changing none
-# of them — the Vite dev server logged no HMR update for any of them — and
-# 54 logs "went stale" against edits that never happened.
-#
-# So the rule now reads a hash. `.pages-sha` records the digest of each
-# surface's own pages after its observations were explicitly sealed.
-# A later mtime bump with the same digest is not a change and does not stale
-# anything; a digest that moves does, whatever the mtimes say.
-SHA_CACHE="$JDIR/.pages-sha"
-pages_sha() { # digest of every .tsx the `pages:` line names, in path order
-  local out="" ; IFS=',' read -ra items <<< "$1"
-  for d in "${items[@]}"; do d=$(echo "$d" | tr -d ' '); [ -n "$d" ] || continue
-    if [ -f "$d" ]; then out="$out$(shasum -a 256 "$d" 2>/dev/null)"; continue; fi
-    [ -d "$d" ] || { echo "Missing audit source: $d" >&2; return 1; }
-    local depth=""; [ "${d%/}" = "portal/src/pages" ] && depth="-maxdepth 1"
-    local files; files=$(find "$d" $depth -name '*.tsx' 2>/dev/null | sort)
-    [ -n "$files" ] || { echo "No audit source files in $d" >&2; return 1; }
-    out="$out$(printf '%s\n' "$files" | xargs shasum -a 256 2>/dev/null)"
-  done
-  [ -n "$out" ] || { echo "No audit source files found" >&2; return 1; }
-  printf '%s' "$out" | shasum -a 256 | cut -d' ' -f1
-}
-sha_recorded() { grep -F "$1 " "$SHA_CACHE" 2>/dev/null | tail -1 | cut -d' ' -f2; }
-sha_record() { # keep one line per log
-  [ -f "$SHA_CACHE" ] || : > "$SHA_CACHE"
-  grep -vF "$1 " "$SHA_CACHE" > "$SHA_CACHE.tmp" 2>/dev/null || : > "$SHA_CACHE.tmp"
-  printf '%s %s\n' "$1" "$2" >> "$SHA_CACHE.tmp"
-  sort -o "$SHA_CACHE" "$SHA_CACHE.tmp" && rm -f "$SHA_CACHE.tmp"
-}
-
+# Freshness (docs/journeys.md): a log is stale when the rendered contract of
+# a route it walked changed since its walk was sealed — judged once below for
+# every matrix log, not as a field of each. (A source digest of the `pages:`
+# line used to decide it, so a refactor that kept every page's look restaled
+# the logs over it.) Only scripts/journeys/seal.sh <dir> records a seal.
+source scripts/lib/journeys.sh
+walked=""
 while IFS='|' read -r surface url listflag roles; do
   surface=$(echo "$surface" | tr -d ' '); [ -z "$surface" ] && continue; case "$surface" in \#*) continue;; esac
   listflag=$(echo "$listflag" | tr -d ' '); roles=$(echo "$roles" | tr -d ' ')
@@ -127,20 +98,15 @@ while IFS='|' read -r surface url listflag roles; do
     fi
     shot=$(grep -iE '^screenshot: *' "$f" | head -1 | sed -E 's/^screenshot: *//')
     { [ -n "$shot" ] && [ -f "$JDIR/$r/$shot" ]; } || bad="$bad screenshot"
-    pages=$(grep -iE '^pages: *' "$f" | head -1 | sed -E 's/^pages: *//')
-    if [ -z "$pages" ]; then bad="$bad pages-line"; else
-      cur_sha=$(pages_sha "$pages") || bad="$bad invalid-pages"
-      if [ "$(sha_recorded "$f")" != "$cur_sha" ]; then
-        bad="$bad stale(content-digest)"
-      fi
-      [ "$SEAL" = 1 ] && [ -n "$cur_sha" ] && sha_record "$f" "$cur_sha"
-    fi
+    walked="$walked $f"
     grep -qiE 'TODO|unverified|placeholder' "$f" && bad="$bad contains-TODO/unverified"
     [ -n "$bad" ] && { jbad=$((jbad+1)); printf '      %s/%s:%s\n' "$r" "$surface" "$bad"; }
   done
 done < "$MATRIX"
 [ "$jmissing" = 0 ] && ok "all $jtotal role×surface logs present" || fail "$jmissing of $jtotal journey logs missing"
-[ "$jbad" = 0 ] && ok "every present log passes all fields (incl. per-surface freshness)" || fail "$jbad journey logs fail a required field"
+[ "$jbad" = 0 ] && ok "every present log passes all fields" || fail "$jbad journey logs fail a required field"
+jr_freshness "$JDIR" $walked
+jr_report
 
 section "rail isolation per role"
 for r in member sme program-owner org-leader hr-admin; do

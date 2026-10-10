@@ -1,0 +1,479 @@
+Thu Oct  8 14:38:29 EDT 2026
+PASS src/lib/__tests__/oidc.test.ts
+PASS src/lib/__tests__/local-compute-fleet.test.ts
+PASS src/lib/__tests__/public-web-fetch.test.ts
+PASS src/providers/__tests__/document-drafts.test.ts
+PASS src/lib/__tests__/pipeline-definitions.test.ts
+PASS src/providers/__tests__/search.test.ts
+PASS src/lib/__tests__/envelope-read.test.ts
+PASS src/routes/__tests__/assessment.test.ts (5.267 s)
+PASS src/routes/__tests__/assessment-presence.test.ts (5.909 s)
+PASS src/routes/__tests__/pipeline-decks.test.ts (6.855 s)
+PASS src/lib/__tests__/realtime-gateway-attachments.test.ts (9.848 s)
+PASS src/mock/__tests__/observability-fixtures.test.ts
+PASS src/routes/__tests__/local-compute-routes.test.ts
+PASS src/mock/__tests__/demo-director.test.ts
+PASS src/lib/agent-loop/__tests__/agent-loop-restart.test.ts (5.615 s)
+PASS src/lib/__tests__/realtime-gateway-cursor.test.ts (6.155 s)
+PASS src/lib/__tests__/realtime-gateway-isolation.test.ts (6 s)
+PASS src/lib/__tests__/realtime-gateway-page-huddles.test.ts
+PASS src/lib/__tests__/realtime-gateway-initiative-huddles.test.ts
+PASS src/lib/__tests__/realtime-gateway-social.test.ts
+PASS src/routes/__tests__/work-item-comments-one-store.test.ts
+PASS src/routes/__tests__/session-bundle-routes.test.ts
+PASS src/routes/__tests__/agent-loop-tenant.test.ts (6.876 s)
+PASS src/lib/work-graph/__tests__/stream.test.ts
+PASS src/lib/__tests__/realtime-gateway.test.ts
+PASS src/lib/__tests__/devbox-fleet-rows.test.ts
+PASS src/lib/__tests__/dynamo-dispatch.test.ts
+PASS src/routes/__tests__/people-dm-index.test.ts
+PASS src/lib/__tests__/promotion-requires-run.test.ts
+PASS src/providers/__tests__/bots.test.ts
+PASS src/routes/__tests__/session-person.test.ts
+PASS src/providers/__tests__/lab-mock-clock.test.ts
+PASS src/mock/__tests__/bots-large.test.ts
+PASS src/routes/__tests__/call-chat.test.ts
+PASS src/providers/__tests__/rediscovery.test.ts
+PASS src/routes/__tests__/observability-authz-traces.test.ts
+PASS src/routes/__tests__/designs-routes.test.ts
+PASS src/providers/__tests__/environments-github-offline.test.ts
+PASS src/routes/__tests__/library-routes.test.ts
+PASS src/routes/__tests__/canary-routes.test.ts
+PASS src/lib/__tests__/session.test.ts
+PASS src/providers/__tests__/design-reviews.test.ts
+PASS src/mock/core/wire/__tests__/scan.test.ts
+PASS src/lib/__tests__/call-pages-store.test.ts
+PASS src/routes/__tests__/memory-routes.test.ts
+PASS src/routes/__tests__/demo-picker-switch.test.ts
+PASS src/lib/__tests__/realtime-gateway-notifications.test.ts
+PASS src/providers/__tests__/connected-sources.test.ts
+PASS src/lib/__tests__/devbox-fleet.test.ts
+PASS src/routes/__tests__/scores-routes.test.ts
+PASS src/routes/__tests__/environments-runs-degraded.test.ts
+PASS src/mock/__tests__/avatars.test.ts
+PASS src/routes/__tests__/sessions-title-backfill.test.ts
+PASS src/routes/__tests__/cost-routes.test.ts
+PASS src/lib/__tests__/mq-client.test.ts
+PASS src/routes/__tests__/sessions-events.test.ts
+PASS src/providers/__tests__/agent-projects.test.ts
+PASS src/lib/__tests__/realtime-gateway-page-cursors.test.ts
+PASS src/routes/__tests__/saved-searches.test.ts
+PASS src/providers/__tests__/identity-authoritative.test.ts
+PASS src/mock/__tests__/harness-writes.test.ts
+PASS src/lib/__tests__/browser-origin.test.ts
+PASS src/lib/__tests__/call-chat-gateway.test.ts
+PASS src/providers/__tests__/aurora-skill-leaderboard-total.test.ts
+PASS src/providers/__tests__/assessment-aurora.test.ts
+PASS src/providers/__tests__/prompt-library.test.ts
+PASS src/mock/core/parity/__tests__/sql-seed-literal.test.ts
+PASS src/providers/__tests__/document-legacy-write.test.ts
+PASS src/lib/__tests__/answer-sources.test.ts
+PASS src/lib/__tests__/help-search.test.ts
+PASS src/lib/__tests__/realtime-gateway-live-authority.test.ts
+PASS src/routes/__tests__/pipelines-work-graph.test.ts
+PASS src/lib/__tests__/call-chat-assessment-huddle.test.ts
+PASS src/lib/__tests__/realtime-gateway-tenants.test.ts
+PASS src/lib/__tests__/realtime-gateway-distillation.test.ts
+PASS src/lib/__tests__/realtime-gateway-social-dynamo.test.ts
+PASS src/lib/__tests__/redis-lite.test.ts
+PASS src/routes/__tests__/session-masquerade-stop.test.ts
+PASS src/routes/__tests__/work-graph.test.ts
+PASS src/routes/__tests__/conversation-summarize.test.ts
+PASS src/routes/__tests__/social-embedded.test.ts
+PASS src/lib/__tests__/tenant-channels.test.ts
+PASS src/routes/__tests__/social-work-graph.test.ts
+PASS src/lib/work-graph/__tests__/live.test.ts
+PASS src/routes/__tests__/assessment-work-graph.test.ts
+PASS src/routes/__tests__/social-summarize.test.ts
+PASS src/lib/__tests__/realtime-gateway-plugin-scope.test.ts
+PASS src/routes/__tests__/pipelines-definitions.test.ts (5.904 s)
+PASS src/lib/__tests__/live-principal-scope.test.ts
+PASS src/lib/__tests__/live-principal.test.ts
+PASS src/lib/__tests__/live-principal-publish-proof.test.ts
+PASS src/lib/work-graph/__tests__/social-live.test.ts
+PASS src/lib/__tests__/gateway-run-feed-adversarial.test.ts
+PASS src/lib/__tests__/realtime-gateway-send-requests.test.ts
+PASS src/lib/__tests__/gateway-run-feed.test.ts
+PASS src/routes/__tests__/cost-mock-branch.test.ts
+PASS src/routes/__tests__/social-channels.test.ts
+PASS src/routes/__tests__/tenant-chat-pins.test.ts
+PASS src/routes/__tests__/sprints.test.ts (5.085 s)
+PASS src/routes/__tests__/mock-control.test.ts (5.124 s)
+PASS src/routes/__tests__/agent-loop-social.test.ts (5.472 s)
+PASS src/lib/__tests__/distillation-realtime.test.ts
+PASS src/lib/__tests__/social-deck-channel.test.ts
+PASS src/lib/__tests__/dynamo-dispatch-optin.test.ts
+PASS src/lib/__tests__/initiative-deck-channel.test.ts (5.004 s)
+PASS src/routes/__tests__/bots-dispatch-journey.test.ts (5.229 s)
+PASS src/routes/__tests__/agent-loop-create-social.test.ts
+PASS src/routes/__tests__/chat-pins.test.ts
+PASS src/routes/__tests__/social-bindings.test.ts (5.231 s)
+PASS src/providers/__tests__/projects-repo-full-name.test.ts
+PASS src/routes/__tests__/social-deck.test.ts (5.2 s)
+PASS src/routes/__tests__/conversation-artifact-social.test.ts
+PASS src/__tests__/config-realtime-endpoints.test.ts
+PASS src/routes/__tests__/observability-mock-branch.test.ts
+PASS src/mock/__tests__/distillation-demo.test.ts (5.283 s)
+PASS src/lib/__tests__/deck-share-spec-cast.test.ts (5.136 s)
+PASS src/routes/__tests__/realtime-lobby-access.test.ts
+PASS src/routes/__tests__/page-calls.test.ts
+PASS src/routes/__tests__/communication-plane-authority.test.ts (5.852 s)
+PASS src/mock/__tests__/agent-jobs-fixture-writes.test.ts
+PASS src/routes/__tests__/runs-facade.test.ts
+PASS src/providers/__tests__/project-activity-mock.test.ts
+PASS src/routes/__tests__/pipelines.test.ts (6.549 s)
+PASS src/lib/gateway/__tests__/authority-facade.test.ts (5.752 s)
+PASS src/mock/core/wire/__tests__/sweep.test.ts (7.219 s)
+PASS src/mock/__tests__/trace-sink-union.test.ts (7.145 s)
+PASS src/providers/__tests__/work-items-brief-fields.test.ts (6.685 s)
+PASS src/routes/__tests__/assessment-routes.test.ts (6.406 s)
+PASS src/routes/__tests__/assessment-decks.test.ts (8.672 s)
+PASS src/routes/__tests__/assessment-drafts.test.ts (8.739 s)
+PASS src/mock/__tests__/fixture-references.test.ts (5.746 s)
+PASS src/lib/__tests__/direct-recipient.test.ts (5.296 s)
+PASS src/routes/__tests__/page-references.test.ts (8.276 s)
+PASS src/lib/__tests__/envelope-burn.test.ts (7.72 s)
+PASS src/providers/__tests__/distillation-queue.test.ts (5.232 s)
+PASS src/providers/__tests__/sprints.test.ts (6.892 s)
+PASS src/lib/__tests__/social-chat-dm-members.test.ts (6.067 s)
+PASS src/routes/__tests__/invocations-mock-detail.test.ts (7.496 s)
+PASS src/routes/__tests__/initiative-decks.test.ts (9.118 s)
+PASS src/routes/__tests__/dm-page-references.test.ts (7.66 s)
+PASS src/providers/__tests__/grants.test.ts
+PASS src/providers/__tests__/assessment-fixes.test.ts
+PASS src/mock/core/wire/__tests__/mock-branches.test.ts
+PASS src/providers/__tests__/assessment-decks-aurora.test.ts
+PASS src/providers/__tests__/assessment-run-completion-aurora.test.ts
+PASS src/routes/__tests__/bots-pause-resume-mock-mode.test.ts
+PASS src/routes/__tests__/assessment-events-gap.test.ts
+PASS src/routes/__tests__/environments.test.ts
+PASS src/providers/__tests__/bots-runs-bulk.test.ts
+PASS src/providers/__tests__/project-detail-spend-repo.test.ts
+PASS src/routes/__tests__/drift-routes.test.ts
+PASS src/routes/__tests__/ingest-routes.test.ts
+PASS src/lib/__tests__/work-suggestions.test.ts
+PASS src/routes/__tests__/prompt-versions-routes.test.ts
+PASS src/lib/work-graph/__tests__/projection.test.ts
+PASS src/providers/__tests__/kb-reconcile-mock-sync.test.ts
+PASS src/providers/__tests__/pipeline-decks-aurora.test.ts
+PASS src/lib/work-graph/__tests__/social-projection.test.ts
+PASS src/providers/__tests__/initiative-decks-aurora.test.ts
+PASS src/routes/__tests__/promotions-routes.test.ts
+PASS src/providers/__tests__/bots-mock-run-history.test.ts
+PASS src/routes/__tests__/agent-loop-create-tenant.test.ts
+PASS src/providers/__tests__/work-documents.test.ts
+PASS src/providers/__tests__/project-exists.test.ts
+PASS src/lib/__tests__/unsupported-upgrades.test.ts
+PASS src/routes/__tests__/topology.test.ts
+PASS src/lib/work-graph/__tests__/assessment-projection.test.ts
+PASS src/routes/__tests__/devbox.test.ts
+PASS src/routes/__tests__/me-groups.test.ts
+PASS src/routes/__tests__/session-realtime-token.test.ts
+PASS src/providers/__tests__/graph-proposals.test.ts
+PASS src/routes/__tests__/assessment-knowledge-comments.test.ts
+PASS src/mock/core/parity/__tests__/seed-parity.test.ts
+PASS src/lib/__tests__/health-probe.test.ts
+PASS src/routes/__tests__/prompt-history-routes.test.ts
+PASS src/providers/__tests__/aurora-graph-people-total.test.ts
+PASS src/lib/__tests__/cedar-policy-edges.test.ts
+PASS src/routes/__tests__/graph-decisions-route.test.ts
+PASS src/providers/__tests__/doc-linker.test.ts
+PASS src/lib/__tests__/capture-parse.test.ts
+PASS src/providers/__tests__/aurora-transaction.test.ts
+PASS src/routes/__tests__/knowledge-base-routes.test.ts
+PASS src/providers/__tests__/agent-jobs.test.ts
+PASS src/routes/__tests__/conversation-artifact-tenant.test.ts
+PASS src/lib/flow-runs/__tests__/flow-runs.test.ts
+PASS src/routes/__tests__/social-team-preferences.test.ts
+PASS src/lib/__tests__/frame-local-prompt.test.ts
+PASS src/providers/__tests__/session-bundle.test.ts
+PASS src/lib/__tests__/realtime-node-ownership.test.ts
+PASS src/lib/__tests__/search-context.test.ts
+PASS src/providers/__tests__/kb-reconcile-document-count.test.ts
+PASS src/providers/__tests__/aurora-leaderboard-total.test.ts
+PASS src/routes/__tests__/assessment-callback-exemption.test.ts
+PASS src/providers/__tests__/org-sweeps-batch.test.ts
+PASS src/providers/__tests__/document-canvas.test.ts
+PASS src/lib/__tests__/public-browser.test.ts
+PASS src/mock/core/__tests__/fixture.test.ts (925.579 s)
+PASS src/providers/__tests__/work-item-criteria-comments.test.ts (926.783 s)
+PASS src/mock/__tests__/devbox-tail-fixture.test.ts
+PASS src/lib/__tests__/mock-branches-fetch-scan.test.ts
+PASS src/lib/__tests__/realtime-token-provenance.test.ts
+PASS src/routes/__tests__/agents-search-context.test.ts
+PASS src/mock/__tests__/dev-pairings.test.ts
+PASS src/lib/__tests__/trusted-proxy-upgrade.test.ts
+PASS src/lib/__tests__/missed-page-huddle.test.ts
+PASS src/routes/__tests__/assessment-validation.test.ts
+PASS src/providers/__tests__/bots-safe-exec-degraded.test.ts
+PASS src/routes/__tests__/evaluations-routes.test.ts
+PASS src/providers/__tests__/agent-jobs-tool-call-list-aurora.test.ts
+PASS src/routes/__tests__/assessment-router-own-gate.test.ts
+PASS src/lib/__tests__/flow-run-channel-adversarial.test.ts
+PASS src/lib/__tests__/social-notify-tenant-mentions.test.ts
+PASS src/providers/__tests__/budgets-liveness.test.ts
+PASS src/routes/__tests__/agents-fleet.test.ts
+PASS src/mock/__tests__/canary-offline.test.ts
+PASS src/mock/__tests__/answer-check.test.ts
+PASS src/providers/__tests__/document-source.test.ts
+PASS src/mock/core/parity/__tests__/grants-mutation.test.ts
+PASS src/mock/core/parity/__tests__/value-parity.test.ts
+PASS src/lib/__tests__/turn-tool-calls.test.ts
+PASS src/lib/__tests__/judge-config.test.ts
+PASS src/lib/__tests__/authz-cache.test.ts
+PASS src/lib/__tests__/marketplace-estimate.test.ts
+PASS src/lib/flow-artifacts/__tests__/store.test.ts
+PASS src/routes/__tests__/assessment-run-complete.test.ts
+PASS src/mock/__tests__/assessment-fixtures.test.ts
+PASS src/mock/__tests__/blank-route-fixtures.test.ts
+PASS src/mock/__tests__/scores-seed-agreement.test.ts
+PASS src/mock/__tests__/library-provenance.test.ts
+PASS src/mock/__tests__/prompt-studio-offline.test.ts
+PASS src/routes/__tests__/identity-grants-scope.test.ts
+PASS src/providers/__tests__/document-source-upload.test.ts
+PASS src/routes/__tests__/assessment-knowledge-move.test.ts
+PASS src/providers/__tests__/design-reviews-fixture.test.ts
+PASS src/lib/__tests__/live-subscribers.test.ts
+PASS src/providers/__tests__/cloudwatch-cache.test.ts
+PASS src/routes/__tests__/assessment-exceptions.test.ts
+PASS src/routes/__tests__/assessment-tenant-gate.test.ts
+PASS src/routes/__tests__/connections.test.ts
+PASS src/providers/__tests__/upload-links-mock.test.ts
+PASS src/lib/__tests__/sse-init.test.ts
+PASS src/routes/__tests__/social-platform.test.ts
+PASS src/lib/__tests__/bot-estimate.test.ts
+PASS src/routes/__tests__/identity.test.ts
+PASS src/routes/__tests__/guardrails-detail-routes.test.ts
+PASS src/routes/__tests__/social-recording-flows.test.ts
+PASS src/routes/__tests__/capabilities-surface.test.ts
+PASS src/lib/__tests__/phantom-trace-guard.test.ts
+PASS src/lib/__tests__/run-cost.test.ts
+PASS src/routes/__tests__/assessment-commit-conflict.test.ts
+PASS src/routes/__tests__/lab.test.ts
+PASS src/routes/__tests__/work-items.test.ts
+PASS src/routes/__tests__/local-compute-worker-contract.test.ts
+PASS src/lib/__tests__/assessment-run-input.test.ts
+PASS src/__tests__/config-capability-check.test.ts
+PASS src/lib/__tests__/session-cookie-secure.test.ts
+PASS src/providers/__tests__/kb-reconcile-sync-state.test.ts
+PASS src/mock/__tests__/prompt-library-runs.test.ts
+PASS src/routes/__tests__/assessment-knowledge-rename.test.ts
+PASS src/providers/__tests__/document-mapping.test.ts
+PASS src/routes/__tests__/tool-calls-routes.test.ts
+PASS src/providers/__tests__/kb-reconcile-mock-clock.test.ts
+PASS src/routes/__tests__/oncall-routes.test.ts
+PASS src/providers/__tests__/assessment-admission.test.ts
+PASS src/routes/__tests__/bots-crud.test.ts
+PASS src/providers/__tests__/agent-jobs-tool-call-list-mock.test.ts
+PASS src/lib/__tests__/github-connector-mock.test.ts
+PASS src/lib/__tests__/devbox-visibility.test.ts
+PASS src/routes/__tests__/graph-routes.test.ts
+PASS src/providers/__tests__/document-workflows.test.ts
+PASS src/routes/__tests__/work-item-decision-links.test.ts
+PASS src/providers/__tests__/budgets-write-attribution.test.ts
+PASS src/lib/deck-shared/__tests__/authority.test.ts
+PASS src/lib/agent-loop/__tests__/agent-loop.test.ts
+PASS src/mock/core/__tests__/derive.test.ts
+PASS src/routes/__tests__/social.test.ts
+PASS src/routes/__tests__/assessment-canvas.test.ts
+PASS src/mock/__tests__/document-agent-edits.test.ts
+PASS src/lib/__tests__/sdlc-policy.test.ts
+PASS src/mock/core/parity/__tests__/shape-mutation.test.ts
+PASS src/lib/__tests__/prompt-contract.test.ts
+PASS src/routes/__tests__/projects-detail-rollups.test.ts
+PASS src/lib/__tests__/delivery-script.test.ts
+PASS src/routes/__tests__/work-item-criteria-comments.test.ts
+PASS src/lib/__tests__/devbox-shell.test.ts
+PASS src/routes/__tests__/work-documents.test.ts
+PASS src/mock/core/wire/__tests__/corpus.test.ts
+PASS src/routes/__tests__/assessment-outbound-gate.test.ts
+PASS src/providers/__tests__/assessment-recommendations.test.ts
+PASS src/lib/__tests__/rediscovery.test.ts
+PASS src/routes/__tests__/canary-library-mock.test.ts
+PASS src/providers/__tests__/assessment-source.test.ts
+PASS src/routes/__tests__/assessment-document-source.test.ts
+PASS src/mock/core/wire/__tests__/shape.test.ts
+PASS src/providers/__tests__/budgets.test.ts
+PASS src/providers/__tests__/org-sweeps-mock-seed.test.ts
+PASS src/mock/__tests__/devbox-fleet-fixture.test.ts
+PASS src/providers/__tests__/assessment-commit-atomicity.test.ts
+PASS src/lib/__tests__/assessment-broker.test.ts
+PASS src/providers/__tests__/agent-jobs-mock-clock.test.ts
+PASS src/mock/core/parity/__tests__/surface-invariants.test.ts
+PASS src/lib/__tests__/invocation-dedupe.test.ts
+PASS src/providers/__tests__/projects-summary-sponsor.test.ts
+PASS src/providers/__tests__/bot-run-attribution.test.ts
+PASS src/mock/__tests__/trace-sink-offline.test.ts
+PASS src/lib/__tests__/local-compute-node-logs.test.ts
+PASS src/routes/__tests__/prompt-evals-routes.test.ts
+PASS src/mock/__tests__/github-workflow-runs.test.ts
+PASS src/providers/__tests__/org-sweeps-mock-clock.test.ts
+PASS src/lib/__tests__/retention-sweep.test.ts
+PASS src/routes/__tests__/pr-watch-health-route.test.ts
+PASS src/routes/__tests__/invocations-replay-offline.test.ts
+PASS src/routes/__tests__/distillation-routes.test.ts
+PASS src/mock/core/wire/__tests__/write-policy.test.ts
+PASS src/routes/__tests__/session-epoch.test.ts
+PASS src/providers/__tests__/agent-projects-clone-offline.test.ts
+PASS src/routes/__tests__/kb-admin-delete.test.ts
+PASS src/lib/__tests__/invocations-mock.test.ts
+PASS src/routes/__tests__/bots-dispatch.test.ts
+PASS src/routes/__tests__/oncall-mock-branch.test.ts
+PASS src/providers/__tests__/assessment-exceptions.test.ts
+PASS src/providers/__tests__/document-comments.test.ts
+PASS src/routes/__tests__/projects-routes.test.ts
+PASS src/lib/__tests__/assessment-dispatcher.test.ts
+PASS src/routes/__tests__/grants.test.ts
+PASS src/providers/__tests__/assessment-scoring-run.test.ts
+PASS src/lib/__tests__/distillation-live-authority.test.ts
+PASS src/providers/__tests__/assessment-launch-live.test.ts
+PASS src/routes/__tests__/budgets.test.ts
+PASS src/providers/__tests__/asset-relationships.test.ts
+PASS src/routes/__tests__/distillation-redesign-routes.test.ts
+PASS src/mock/__tests__/work-items-large.test.ts
+PASS src/routes/__tests__/internal-document-grants.test.ts
+PASS src/lib/__tests__/notification-store.test.ts
+PASS src/routes/__tests__/ingest-kb-slug.test.ts
+PASS src/providers/__tests__/prompt-evals.test.ts
+PASS src/providers/__tests__/social-decks-aurora.test.ts
+PASS src/providers/__tests__/projects-initiatives-fixture.test.ts
+PASS src/providers/__tests__/agentcore-structured-input.test.ts
+PASS src/providers/__tests__/agentcore-chat-transport.test.ts
+PASS src/providers/__tests__/capability-reconcile-pagination.test.ts
+PASS src/providers/__tests__/assessment-run-completion.test.ts
+PASS src/lib/__tests__/upstream-envelope.test.ts
+PASS src/mock/__tests__/harness-run-offline.test.ts
+PASS src/routes/__tests__/sdlc-routes.test.ts
+PASS src/lib/__tests__/pipeline-runs.agent.test.ts
+PASS src/routes/__tests__/discussions.test.ts
+PASS src/routes/__tests__/distillation-gates.test.ts
+PASS src/routes/__tests__/work-sme-journey.test.ts
+PASS src/routes/__tests__/work-routes.test.ts
+PASS src/providers/__tests__/distillation.test.ts
+PASS src/routes/__tests__/people.test.ts
+PASS src/routes/__tests__/internal-devbox.test.ts
+PASS src/mock/core/wire/__tests__/routes.test.ts
+PASS src/routes/__tests__/work-findings-promote.test.ts
+PASS src/routes/__tests__/harness-trace-run-id.test.ts
+PASS src/mock/__tests__/chat-reset-all-tenants.test.ts
+PASS src/routes/__tests__/agents-invoke-capability.test.ts
+PASS src/routes/__tests__/work-jobs-tool-call-list.test.ts
+PASS src/lib/__tests__/service-auth-guard.test.ts
+PASS src/work-graph/__tests__/compute-emitter.test.ts
+PASS src/routes/__tests__/provider-degraded-routes.test.ts
+PASS src/providers/__tests__/distillation-domain.test.ts
+PASS src/routes/__tests__/agents-structured-input.test.ts
+PASS src/mock/__tests__/ingest-fixtures.test.ts
+PASS src/lib/deck-shared/__tests__/revise-with-agent.test.ts
+PASS src/routes/__tests__/quality-feedback-run.test.ts
+PASS src/mock/__tests__/oncall-fixtures.test.ts
+PASS src/routes/__tests__/agents-invocation-name.test.ts
+PASS src/lib/assessment-deck/__tests__/facts-narrative.test.ts
+PASS src/routes/__tests__/bots-initiative-runs.test.ts
+PASS src/routes/__tests__/bots-estimate-provenance.test.ts
+PASS src/lib/__tests__/call-chat-lifecycle.test.ts
+PASS src/mock/__tests__/devbox-loop.test.ts
+PASS src/providers/__tests__/distillation-store.test.ts
+PASS src/routes/__tests__/assessment-document-workflows.test.ts
+PASS src/mock/__tests__/domain-fixture-writes.test.ts
+PASS src/routes/__tests__/kb-admin-routes.test.ts
+PASS src/providers/__tests__/activity.test.ts
+PASS src/routes/__tests__/invocations-search-degraded.test.ts
+PASS src/routes/__tests__/bots-dispatch-mock-mode.test.ts
+PASS src/lib/__tests__/site-survey-origin.test.ts
+PASS src/mock/__tests__/scenario-coverage.test.ts
+PASS src/providers/__tests__/work-items.test.ts
+PASS src/lib/__tests__/bot-runner.test.ts
+PASS src/routes/__tests__/swallowed-failure-scan.test.ts
+PASS src/lib/__tests__/authz-matrix.test.ts
+PASS src/lib/__tests__/pr-watch-poller.test.ts
+PASS src/providers/__tests__/assessment-declared-fields.test.ts
+PASS src/lib/agent-loop/__tests__/agent-loop-approval.test.ts
+PASS src/providers/__tests__/promotions.test.ts
+PASS src/providers/__tests__/budgets-live-spend.test.ts
+PASS src/routes/__tests__/internal-work-graph-compute.test.ts
+PASS src/providers/__tests__/distillation-compaction.test.ts
+PASS src/lib/__tests__/cw-trace-offline.test.ts
+PASS src/lib/__tests__/social-membership-fence.test.ts
+PASS src/mock/__tests__/graph-people-large.test.ts
+PASS src/providers/__tests__/distillation-fixtures.test.ts
+PASS src/lib/__tests__/bot-scheduler.test.ts
+PASS src/providers/__tests__/assessment-status-transitions.test.ts
+PASS src/routes/__tests__/drop-routes.test.ts
+PASS src/mock/core/parity/__tests__/schema-shape.test.ts
+PASS src/lib/__tests__/pipeline-runs.projection.test.ts
+PASS src/lib/__tests__/harness-runner.test.ts
+PASS src/lib/__tests__/marketplace-dispatch.test.ts
+PASS src/routes/__tests__/kb-admin-mock.test.ts
+PASS src/providers/__tests__/sprint-grant-agreement.test.ts
+PASS src/routes/__tests__/session-capabilities.test.ts (5.114 s)
+PASS src/routes/__tests__/call-pages.test.ts (7.022 s)
+PASS src/providers/__tests__/assessment-envelope-discipline.test.ts (5.191 s)
+PASS src/lib/__tests__/migrate-work-comments.test.ts (6.954 s)
+PASS src/lib/__tests__/memory-queue.test.ts
+PASS src/mock/__tests__/sdlc-writes.test.ts (5.155 s)
+PASS src/routes/__tests__/auth-session.test.ts (5.288 s)
+PASS src/mock/core/__tests__/clock.test.ts (5.221 s)
+PASS src/providers/__tests__/agentcore-listing-degraded.test.ts (5.303 s)
+PASS src/providers/__tests__/assessment.test.ts (5.414 s)
+PASS src/providers/__tests__/assessment-run-atomicity.test.ts (5.457 s)
+PASS src/mock/__tests__/org-findings-large.test.ts (5.369 s)
+PASS src/routes/__tests__/harness-runner-service-auth.test.ts (5.331 s)
+PASS src/mock/core/parity/__tests__/org-graph-mutation.test.ts (5.303 s)
+PASS src/routes/__tests__/identity-program-lead-gate.test.ts (5.08 s)
+PASS src/routes/__tests__/approvals-poll-service-auth.test.ts (5.462 s)
+PASS src/lib/__tests__/social-notify.test.ts (6.803 s)
+PASS src/mock/__tests__/kb-surface-offline.test.ts (5.167 s)
+PASS src/routes/__tests__/harness-gated-routes.test.ts (907.344 s)
+PASS src/mock/core/coverage/__tests__/scan.test.ts (907.117 s)
+PASS src/providers/__tests__/assessment-submission-provenance.test.ts (906.917 s)
+PASS src/routes/__tests__/approvals-single-store.test.ts (906.302 s)
+PASS src/routes/__tests__/roster.test.ts
+PASS src/providers/__tests__/connections-capabilities-mock.test.ts
+PASS src/providers/__tests__/document-proposals.test.ts
+PASS src/routes/__tests__/calibration-routes.test.ts
+PASS src/routes/__tests__/agent-projects.test.ts
+PASS src/routes/__tests__/gatewayProxy.test.ts
+PASS src/routes/__tests__/canary-library-writes.test.ts
+PASS src/providers/__tests__/org-sweeps-remediation.test.ts
+PASS src/lib/__tests__/identity-hardening.test.ts
+PASS src/routes/__tests__/search.test.ts
+PASS src/routes/__tests__/auth-sso-flow.test.ts
+PASS src/mock/__tests__/agent-project-writes.test.ts
+PASS src/providers/__tests__/document-versions.test.ts
+PASS src/routes/__tests__/assessment-document-proposals.test.ts
+PASS src/providers/__tests__/document-comment-import.test.ts
+PASS src/providers/__tests__/budgets-derived-spend.test.ts
+PASS src/routes/__tests__/rediscovery-routes.test.ts
+PASS src/routes/__tests__/quality-routes.test.ts
+PASS src/routes/__tests__/identity-policy-admin.test.ts
+PASS src/providers/__tests__/projects-spend-window.test.ts
+PASS src/lib/__tests__/box-reservation.test.ts
+PASS src/routes/__tests__/test-fixtures-routes.test.ts
+PASS src/lib/__tests__/silent-fallback-degraded.test.ts
+PASS src/routes/__tests__/harness-mock.test.ts
+PASS src/routes/__tests__/agents-run-link.test.ts
+PASS src/lib/__tests__/service-auth-consolidation.test.ts
+PASS src/routes/__tests__/capabilities-mutation-gate.test.ts
+PASS src/lib/__tests__/authz-open-mode.test.ts
+PASS src/providers/__tests__/knowledge-base-mock.test.ts
+PASS src/lib/__tests__/rate-limit-proxy.test.ts
+PASS src/providers/__tests__/graph-decisions-mock.test.ts
+PASS src/routes/__tests__/traffic-routes.test.ts
+PASS src/mock/__tests__/local-compute-fixtures.test.ts
+PASS src/work-graph/__tests__/compute-registry.test.ts
+PASS src/lib/deck-shared/__tests__/narrative-modes.test.ts
+PASS src/work-graph/__tests__/compute-capability-sessions.test.ts
+PASS src/providers/__tests__/kb-reconcile-status-drift.test.ts
+PASS src/lib/__tests__/github-workflow-runs.test.ts
+PASS src/work-graph/__tests__/compute-capability-source.test.ts
+PASS src/lib/__tests__/demo-scoped-grants.test.ts
+PASS src/work-graph/__tests__/mapLocalCompute.test.ts
+PASS src/lib/__tests__/call-chat-state.test.ts
+PASS src/lib/__tests__/delivery-guard.test.ts
+PASS src/providers/__tests__/saved-searches.test.ts
+PASS src/work-graph/__tests__/mapCloudCompute.test.ts
+Test Suites: 7 skipped, 474 passed, 474 of 481 total
+Tests:       26 skipped, 6753 passed, 6779 total
+EXIT 0
+Thu Oct  8 15:16:29 EDT 2026

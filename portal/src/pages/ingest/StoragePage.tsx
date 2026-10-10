@@ -1,5 +1,6 @@
 import {
-  Card, CardHeader, KPIGrid, LoadingState, PageSection, StatCard, Stack, Table, TableBody,
+  T,
+  Card, CardHeader, LoadingState, PageSection, StatStrip, Stack, Table, TableBody,
   TableHead, TableRow, TableTd, TableTh,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
@@ -22,8 +23,31 @@ function StoragePage() {
           <UnavailableNotice
             error={failure}
             what="the storage breakdown"
-            source="Counted live from S3"
+            source="The breakdown is counted live from S3"
             onRetry={refresh}
+          />
+        )}
+        {/* Totals — one line above the breakdowns. "KB documents" is the count
+            the vector store holds (not the last run's newly-indexed count), and a
+            failed count shows a dash rather than a confident zero. */}
+        {!failure && storage && (
+          <StatStrip
+            aria-label="Storage totals"
+            variant="line"
+            size="sm"
+            items={[
+              { label: 'S3 bucket', value: storage.bucket ?? '—' },
+              { label: 'objects', value: storage.totalObjects.toLocaleString() },
+              { label: 'stored', value: formatBytes(storage.totalBytes) },
+              {
+                label: 'KB documents',
+                value: storage.kb.totalDocuments != null ? storage.kb.totalDocuments.toLocaleString() : '—',
+              },
+              {
+                label: 'last KB ingest',
+                value: storage.kb.lastIngestedAt ? new Date(storage.kb.lastIngestedAt).toLocaleString() : '—',
+              },
+            ]}
           />
         )}
         {/* By extension */}
@@ -34,32 +58,32 @@ function StoragePage() {
           ) : !storage || storage.byType.length === 0 ? (
             <EmptyState title="No S3 objects yet." />
           ) : (
-            <Table>
+            <Table size="sm">
               <TableHead>
                 <TableRow>
                   <TableTh>Extension</TableTh>
-                  <TableTh className="text-right">Count</TableTh>
-                  <TableTh className="text-right">Bytes</TableTh>
-                  <TableTh className="text-right">Share</TableTh>
+                  <TableTh numeric>Count</TableTh>
+                  <TableTh numeric>Bytes</TableTh>
+                  <TableTh numeric>Share</TableTh>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {storage.byType.map((row) => (
                   <TableRow key={row.extension}>
-                    <TableTd className="font-mono text-[12px]">
+                    <TableTd className="font-mono"><T as="span" size="xs">
                       {row.extension || '(none)'}
-                    </TableTd>
-                    <TableTd className="text-right text-[12px]">
+                    </T></TableTd>
+                    <TableTd numeric><T as="span" size="xs">
                       {row.count.toLocaleString()}
-                    </TableTd>
-                    <TableTd className="text-right text-[12px]">
+                    </T></TableTd>
+                    <TableTd numeric><T as="span" size="xs">
                       {formatBytes(row.bytes)}
-                    </TableTd>
-                    <TableTd className="text-right text-[11px] text-text-tertiary">
+                    </T></TableTd>
+                    <TableTd numeric><T as="span" size="xs" tone="tertiary">
                       {storage.totalBytes > 0
                         ? `${((row.bytes / storage.totalBytes) * 100).toFixed(1)}%`
                         : '—'}
-                    </TableTd>
+                    </T></TableTd>
                   </TableRow>
                 ))}
               </TableBody>
@@ -75,35 +99,33 @@ function StoragePage() {
           ) : !storage || storage.byPrefix.length === 0 ? (
             <EmptyState title="No S3 objects yet." />
           ) : (
-            <Table>
+            <Table size="sm">
               <TableHead>
                 <TableRow>
                   <TableTh>Prefix</TableTh>
-                  <TableTh className="text-right">Count</TableTh>
-                  <TableTh className="text-right">Bytes</TableTh>
-                  <TableTh className="text-right">Share</TableTh>
+                  <TableTh numeric>Count</TableTh>
+                  <TableTh numeric>Bytes</TableTh>
+                  <TableTh numeric>Share</TableTh>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {storage.byPrefix.map((row) => (
                   <TableRow key={row.prefix}>
                     <TableTd
-                      className="max-w-[480px] overflow-hidden text-ellipsis whitespace-nowrap font-mono text-[11px] text-text-secondary"
-                      title={row.prefix}
-                    >
+                      title={row.prefix} className="max-w-[480px] overflow-hidden text-ellipsis whitespace-nowrap font-mono"><T as="span" size="xs" tone="secondary">
                       {row.prefix}
-                    </TableTd>
-                    <TableTd className="text-right text-[12px]">
+                    </T></TableTd>
+                    <TableTd numeric><T as="span" size="xs">
                       {row.count.toLocaleString()}
-                    </TableTd>
-                    <TableTd className="text-right text-[12px]">
+                    </T></TableTd>
+                    <TableTd numeric><T as="span" size="xs">
                       {formatBytes(row.bytes)}
-                    </TableTd>
-                    <TableTd className="text-right text-[11px] text-text-tertiary">
+                    </T></TableTd>
+                    <TableTd numeric><T as="span" size="xs" tone="tertiary">
                       {storage.totalBytes > 0
                         ? `${((row.bytes / storage.totalBytes) * 100).toFixed(1)}%`
                         : '—'}
-                    </TableTd>
+                    </T></TableTd>
                   </TableRow>
                 ))}
               </TableBody>
@@ -111,40 +133,6 @@ function StoragePage() {
           )}
         </Card>
 
-        {/* Totals row — kept below the breakdown tables (table-density audit,
-            matches KnowledgeHomePage's "right now" strip): Total Objects and
-            Total Bytes sum what the two tables above already list per row,
-            but S3 Bucket names the bucket itself, which neither table shows. */}
-        <KPIGrid columns={3}>
-          <StatCard label="S3 Bucket" value={storage?.bucket ?? '—'} mono />
-          <StatCard label="Total Objects" value={storage ? storage.totalObjects.toLocaleString() : '—'} />
-          <StatCard label="Total Bytes" value={storage ? formatBytes(storage.totalBytes) : '—'} />
-        </KPIGrid>
-
-        {/* KB indexed docs — also carries something neither breakdown table
-            shows: what the knowledge base itself holds and when it last
-            ingested, as opposed to what is sitting in S3. */}
-        <Card padding="md">
-          <CardHeader title="Knowledge Base" />
-          {failure ? null : !storage ? (
-            <LoadingState label="Loading storage breakdown…" />
-          ) : (
-            <KPIGrid columns={2}>
-              {/* "Indexed" was the wrong noun as well as the wrong number: the
-                  value was the last run's newly-indexed count, which is 0 for a
-                  current index. It is now what the vector store holds, and a
-                  failed count shows a dash rather than a confident zero. */}
-              <StatCard
-                label="KB Documents"
-                value={storage.kb.totalDocuments != null ? storage.kb.totalDocuments.toLocaleString() : '—'}
-              />
-              <StatCard
-                label="Last KB Ingest"
-                value={storage.kb.lastIngestedAt ? new Date(storage.kb.lastIngestedAt).toLocaleString() : '—'}
-              />
-            </KPIGrid>
-          )}
-        </Card>
       </Stack>
     </PageSection>
   );

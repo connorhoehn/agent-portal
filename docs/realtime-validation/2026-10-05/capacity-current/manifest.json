@@ -1,0 +1,21 @@
+{
+  "capacityAccepted": false,
+  "inProgress": false,
+  "libraryCommit": "be54e682d50d750ede04bdae5f47302039826626",
+  "compiledImage": "sha256:86d3dd3c30818d7850274eae771e3d13df42df8c54287d9bb52e271030dfea8d",
+  "artifacts": {
+    "docs/realtime-validation/2026-10-05/capacity-current/orgiq-accept-race-capacity-steady.log": "d4c478d87ceccf643573b02525692c9e4fa5cc14385454b017e2ea30a15683d5",
+    "docs/realtime-validation/2026-10-05/capacity-current/orgiq-bff-container-internal-steady.json": "1cdd41c4e306ba5702e4824486373c11e3ab2cb21f0d9000b505e1e9e0411cce",
+    "docs/realtime-validation/2026-10-05/capacity-current/orgiq-accept-race-capacity-ring-storm.log": "01f6d40b1c6fc88abfdae31e4b71e9db4952cfe9d8d59a908bb71bbba618593d",
+    "docs/realtime-validation/2026-10-05/capacity-current/orgiq-bff-container-internal-ring-storm.json": "1c6bc9e92ba30d52d35781c3bbb6bee5bb8c337bfd9909536c893ddc58f82c55",
+    "docs/realtime-validation/2026-10-05/capacity-current/orgiq-current-capacity-a-cpu-stat.log": "10b43ccd2547d5cc99e8359c4334ec22d5cf2f9bf5502ed04dd8de9dc19887c4",
+    "docs/realtime-validation/2026-10-05/capacity-current/orgiq-current-capacity-b-cpu-stat.log": "4116557c1d89b697944ff37edf60d449d11e2a06d954d8955a880bc18344a93f",
+    "docs/realtime-validation/2026-10-05/capacity-current/orgiq-accept-race-capacity-churn.log": "225deb7984fde52d1430d4f57a8c91b00f7110a7d62d11c0cc2c5a029449e0d1",
+    "docs/realtime-validation/2026-10-05/capacity-current/orgiq-bff-container-internal-churn.json": "9f334d4228be711aa49086d27b9ffabf117b9201a0a674ffd7b2c0e81245cc95",
+    "docs/realtime-validation/2026-10-05/capacity-current/orgiq-accept-race-capacity-soak.log": "cf8aaf13ec40491a94df997ac280f6be73c0e523ae1585315e2e55534da08129",
+    "docs/realtime-validation/2026-10-05/capacity-current/orgiq-bff-container-internal-soak.json": "170023aa064c5791c2cfe62f0e4edfb938e3a633fc88c411f0bf63214fa12fd8",
+    "docs/realtime-validation/2026-10-05/capacity-current/orgiq-accept-race-capacity-burst.log": "484c9ee72f9b4c54f649de284884d4e12a7d6fcb247ce5e50e46c43040da2082",
+    "docs/realtime-validation/2026-10-05/capacity-current/orgiq-bff-container-internal-burst.json": "cb2f389d8f47cce3ae69e0ad063ce4f5e0818a28ea104538b3739a2b12645970",
+    "docs/realtime-validation/2026-10-05/capacity-current/orgiq-accept-race-capacity-matrix.log": "7bbf907e109d7d099f01d41977a5be417ecf7e2a5e3e24972812b0b7d27537ff"
+  }
+}

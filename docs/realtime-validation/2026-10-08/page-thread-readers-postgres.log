@@ -1,0 +1,20 @@
+  console.log
+    race split: [{"migrator":"racer-b","n":"30"}]
+
+      at Object.<anonymous> (src/lib/__tests__/migrate-work-comments-postgres.test.ts:158:13)
+
+PASS src/lib/__tests__/migrate-work-comments-postgres.test.ts (42.125 s)
+  work-comment migration with real PostgreSQL
+    ✓ reapplies the ledger migration and migrates every human comment once with directory-stamped senders (6494 ms)
+    ✓ two migrators racing over the same rows insert each comment exactly once (15053 ms)
+    ✓ a stale unwritten claim is taken over; a fresh one is not stolen (2987 ms)
+    ✓ dry run reads the exact pending SQL and claims nothing (2537 ms)
+    ✓ the provider read and write paths: thread for humans, the table only for audit rows, no human row written (2106 ms)
+    ✓ v_work_item_summary keeps comment_count (bigint, NULL = not known here) and replaces the table-counting definition in place (2365 ms)
+    ✓ the activity feed and the comment summary read the thread: migrated history and a later post, the table only for audit rows (5192 ms)
+
+Test Suites: 1 passed, 1 total
+Tests:       7 passed, 7 total
+Snapshots:   0 total
+Time:        42.625 s
+Ran all test suites matching /src\/lib\/__tests__\/migrate-work-comments-postgres.test.ts/i.

@@ -206,6 +206,27 @@ def cmd_load(args) -> int:
     return 0
 
 
+def cmd_avatars(args) -> int:
+    """Generate Nova Canvas portrait avatars (~$0.04/image; cached). Not part of `all`."""
+    import json
+    from . import avatars
+    if args.snapshot:
+        graph = json.loads(Path(args.snapshot).read_text())
+        people, teams = graph["people"], graph.get("teams", [])
+    else:
+        from . import aurora
+        people, teams = aurora.fetch_people(), aurora.fetch_teams()
+    people = avatars.with_departments(people, teams)
+    if args.only:
+        wanted = {x.strip() for x in args.only.split(",") if x.strip()}
+        people = [p for p in people if p["id"] in wanted]
+    if not people:
+        print("No people to generate avatars for.", file=sys.stderr)
+        return 1
+    avatars.run(people, skip_load=args.skip_load)
+    return 0
+
+
 def cmd_all(args) -> int:
     """Run the full pipeline: personas → docs → dedupe → embed → load."""
     from types import SimpleNamespace
@@ -245,6 +266,11 @@ SUBCOMMANDS = {
     "load":     (cmd_load,     lambda p: (
         p.add_argument("--snapshot", help="Read seed graph from this JSON"),
         p.add_argument("--skip-kb-sync", action="store_true"),
+    )),
+    "avatars":  (cmd_avatars,  lambda p: (
+        p.add_argument("--snapshot", help="Read seed graph from this JSON instead of Aurora"),
+        p.add_argument("--skip-load", action="store_true", help="Write PNGs only; no S3/Aurora/portal copy"),
+        p.add_argument("--only", help="Comma-separated person ids, e.g. p-001,p-002"),
     )),
     "all":      (cmd_all,      lambda p: (
         p.add_argument("--snapshot", help="Read seed graph from this JSON"),

@@ -87,6 +87,9 @@ echo "── Checking for orphaned S3 buckets ──"
 S3_BUCKETS=(
   "${PREFIX}-documents-${ACCOUNT}-${REGION}"
   "${PREFIX}-artifacts-${ACCOUNT}-${REGION}"
+  # OrgIQ-Portal (deployPortal=true). DESTROY with its own emptier, so an
+  # orphan only follows a failed stack delete — but a fixed name all the same.
+  "${PREFIX}-portal-${ACCOUNT}-${REGION}"
 )
 
 for bucket in "${S3_BUCKETS[@]}"; do
@@ -112,8 +115,8 @@ for bucket in "${S3_BUCKETS[@]}"; do
       # Foundation create that follows will fail on it. Say so, with the
       # command, rather than leaving a warning that reads as optional.
       echo "  ⚠️  Bucket s3://${bucket} is NOT empty — skipping deletion"
-      echo "      OrgIQ-Foundation will FAIL to create this bucket while the name is taken."
-      echo "      Contents are regenerable (schema/synth). To proceed:"
+      echo "      Its stack (OrgIQ-Foundation / OrgIQ-Portal) will FAIL to create this bucket while the name is taken."
+      echo "      Contents are regenerable (schema/synth; the portal bundle: scripts/portal-publish.mjs). To proceed:"
       echo "        aws s3 rb s3://${bucket} --force"
     fi
   fi
@@ -154,6 +157,87 @@ for table in "${DYNAMO_TABLES[@]}"; do
     echo "    Deleted"
   fi
 done
+echo "  Done"
+echo ""
+
+# ──────────────────────────────────────────────────────────────────
+# 2b. Orphaned OrgIQ-Social tables (deploySocial=true)
+#
+# OrgIQ-Social creates ~27 tables under `${PREFIX}-social-` (or
+# `${PREFIX}-social-<tableSuffix>-`) with RemovalPolicy.RETAIN AND deletion
+# protection, like realtime-examples' ApplicationTables. A teardown leaves
+# every one of them, and the next create fails on the first with "already
+# exists". So: listed by prefix (a suffix namespace included), ownership
+# asked of CloudFormation exactly as above, and an orphan that holds NOTHING
+# has its deletion protection turned off — `delete-table` is refused while it
+# is on — and is deleted. One that holds data (chat history, call log) is
+# never deleted here: the message names both ways forward.
+# ──────────────────────────────────────────────────────────────────
+echo "── Checking for orphaned OrgIQ-Social tables ──"
+
+# Emptiness by asking for one item, not ItemCount: describe-table's count is
+# refreshed about every six hours, so a table written to an hour ago reads 0.
+dynamo_has_items() {
+  local n
+  n=$(aws dynamodb scan --table-name "$1" --limit 1 --select COUNT --query 'Count' --output text 2>/dev/null || echo "error")
+  [[ "$n" != "0" ]]
+}
+
+SOCIAL_TABLES=$(aws dynamodb list-tables --region "$REGION" \
+  --query "TableNames[?starts_with(@, '${PREFIX}-social-')]" --output text 2>/dev/null | tr '\t' '\n' || true)
+SOCIAL_KEPT=()
+for table in $SOCIAL_TABLES; do
+  T_OWNER=$(aws cloudformation describe-stack-resources \
+    --physical-resource-id "$table" \
+    --query 'StackResources[0].StackName' --output text 2>/dev/null || echo "")
+  if [[ -n "$T_OWNER" && "$T_OWNER" != "None" ]]; then
+    continue  # a live OrgIQ-Social owns it
+  fi
+  if dynamo_has_items "$table"; then
+    SOCIAL_KEPT+=("$table")
+  else
+    echo "  Removing empty orphan table: ${table} (deletion protection off first)"
+    aws dynamodb update-table --table-name "$table" --no-deletion-protection-enabled > /dev/null
+    aws dynamodb delete-table --table-name "$table" > /dev/null
+  fi
+done
+if [[ ${#SOCIAL_KEPT[@]} -gt 0 ]]; then
+  echo "  ⚠️  ${#SOCIAL_KEPT[@]} orphaned social table(s) hold data — NOT deleted:"
+  for t in "${SOCIAL_KEPT[@]}"; do echo "      ${t}"; done
+  echo "      OrgIQ-Social will FAIL to create these names while they exist. Either deploy into a"
+  echo "      fresh namespace (--context tableSuffix=v2, passed to the middleware AND the social stack),"
+  echo "      or, once the data is not wanted, per table:"
+  echo "        aws dynamodb update-table --table-name <t> --no-deletion-protection-enabled"
+  echo "        aws dynamodb delete-table --table-name <t>"
+fi
+echo "  Done"
+echo ""
+
+# ──────────────────────────────────────────────────────────────────
+# 2c. Secrets scheduled for deletion
+#
+# A destroyed stack's secrets are SCHEDULED for deletion (a 7-30 day recovery
+# window), and the name stays taken for that window: a rebuild inside it fails
+# on the first fixed-name secret with "already scheduled for deletion". The
+# stacks' secrets all have fixed names — the middleware's callback and
+# realtime secrets, the CloudFront origin secret, the social and SFU secrets
+# (`${PREFIX}-social-*`) — and all are generated. Same rule as destroy.sh's
+# step 3 (which runs BEFORE its own cdk destroy, so the secrets that destroy
+# deletes are still pending afterwards): a secret already scheduled for
+# deletion is not recovered here, it is finished.
+# ──────────────────────────────────────────────────────────────────
+echo "── Clearing secrets scheduled for deletion ──"
+PENDING_SECRETS=$(aws secretsmanager list-secrets --include-planned-deletion \
+  --query "SecretList[?starts_with(Name, '${PREFIX}-') && DeletedDate != null].Name" \
+  --output text 2>/dev/null || true)
+if [[ -z "$PENDING_SECRETS" ]]; then
+  echo "  None"
+else
+  for secret in $PENDING_SECRETS; do
+    echo "  Force-deleting pending secret: ${secret}"
+    aws secretsmanager delete-secret --secret-id "$secret" --force-delete-without-recovery > /dev/null 2>&1 || true
+  done
+fi
 echo "  Done"
 echo ""
 

@@ -24,13 +24,12 @@ import {
   TableHead,
   TableRow,
   TableTd,
-  TableTh,
+  TableTh, T,
 } from '@connorhoehnslalom/ui-components/shared';
 import { SmartEmptyState } from '../../components/observability/SmartEmptyState';
 import { useCapabilities } from '../../lib/capabilities';
 import { toastError, toastPending, toastSuccess } from '../../lib/toastStore';
 import { writeJson } from '../../lib/writeJson';
-import { T } from './Text';
 import { streamStatusLabel } from '../../lib/streamStatus';
 
 interface Approval {
@@ -220,14 +219,14 @@ function ApprovalQueuePage() {
       title="Approvals"
       description="Actions an agent has paused on until a person decides. Approving lets the run continue; denying stops it and tells the agent why."
       actions={
-        <Inline gap="sm" align="center" className="text-[11px] text-text-secondary">
+        <Inline gap="sm" align="center" className="text-xs text-text-secondary">
           <StatusDot
             color={streaming ? 'var(--color-success)' : 'var(--color-text-tertiary)'}
             size="sm"
           />
-          <T>{streamStatusLabel(streaming, connectedOnce)}</T>
-          <T className="text-text-tertiary">·</T>
-          <T><strong>{sorted.length}</strong>&nbsp;pending</T>
+          <T size="sm">{streamStatusLabel(streaming, connectedOnce)}</T>
+          <T size="sm" className="text-text-tertiary">·</T>
+          <T size="sm"><T size="sm" weight="semibold">{sorted.length}</T>&nbsp;pending</T>
           <LiveRegion
             politeness="polite"
             message={`${sorted.length} approval${sorted.length === 1 ? '' : 's'} pending`}
@@ -252,7 +251,7 @@ function ApprovalQueuePage() {
             ]}
           />
         ) : (
-          <Table>
+          <Table size="sm">
             <TableHead>
               <TableRow>
                 <TableTh>Agent</TableTh>
@@ -269,17 +268,17 @@ function ApprovalQueuePage() {
                 return (
                   <Fragment key={a.approvalId}>
                     <TableRow>
-                      <TableTd className="text-[12px] font-medium whitespace-nowrap">{a.agentId}</TableTd>
+                      <TableTd className="whitespace-nowrap">{a.agentId}</TableTd>
                       {/* title=, because this is the approvals queue: adjudicating
                           "requested 2h ago" needs the real clock time, and there was
                           nowhere else on the row to read it. */}
-                      <TableTd className="text-[11px] text-text-tertiary whitespace-nowrap" title={absoluteTime(a.requestedAt)}>
+                      <TableTd className="text-text-tertiary whitespace-nowrap" title={absoluteTime(a.requestedAt)}>
                         {relativeTime(a.requestedAt)}
                       </TableTd>
-                      <TableTd className="text-[11px] text-text-tertiary font-mono" title={a.txId}>
+                      <TableTd className="text-text-tertiary font-mono" title={a.txId}>
                         {a.txId.length > 12 ? `${a.txId.slice(0, 12)}…` : a.txId}
                       </TableTd>
-                      <TableTd className="text-[12px] max-w-[320px] truncate" title={a.reason}>
+                      <TableTd className="max-w-[320px] truncate" title={a.reason}>
                         {a.reason}
                       </TableTd>
                       <TableTd>
@@ -293,7 +292,7 @@ function ApprovalQueuePage() {
                       </TableTd>
                       <TableTd>
                         {canApprove ? (
-                          <Inline gap="xs" align="center" wrap>
+                          <Inline gap="xs" align="center" wrap={false}>
                             <Input
                               size="sm"
                               value={notes[a.approvalId] ?? ''}
@@ -301,7 +300,7 @@ function ApprovalQueuePage() {
                                 setNotes((m) => ({ ...m, [a.approvalId]: e.target.value }))
                               }
                               placeholder="note (optional)"
-                              className="min-w-[140px]"
+                              className="w-[140px] shrink-0"
                             />
                             <Button
                               variant="primary"
@@ -326,7 +325,7 @@ function ApprovalQueuePage() {
                             )}
                           </Inline>
                         ) : (
-                          <T className="text-[11px] text-text-tertiary italic">
+                          <T size="xs" className="text-text-tertiary italic">
                             Viewing only — your role can&apos;t decide approvals
                           </T>
                         )}

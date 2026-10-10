@@ -10,13 +10,12 @@ import { MarkerType, type Node, type Edge } from '@xyflow/react';
 import { Link, useSearchParams } from 'react-router';
 import {
   Chip, DataTable, Drawer, EmptyState, Inline, InlineAlert, Input, SectionLabel,
-  SegmentedControl, Stack, StatStrip, StatusDot, VisuallyHidden, type DataTableColumn,
+  SegmentedControl, Stack, StatStrip, StatusDot, VisuallyHidden, type DataTableColumn, T,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../hooks/useFetch';
 import { UnavailableNotice } from '../components/UnavailableNotice';
 import { KeyValue } from '../components/KeyValue';
 import { AgentFlowFrame, NODE_HEIGHT, NODE_WIDTH, STATUS_COLORS, fmtCount, fmtMs } from './AgentFlowFrame';
-import { T } from './Text';
 import { canonicalKey, fleetRows, filterFleet, offDiagramCount, onlineLabel, STATUS_TONE, type FleetRow } from './agentFleetRows';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -600,7 +599,7 @@ function AgentDrawerBody({
             AgentFlowFrame.tsx has a single entry) — a fixed semantic tone
             reads the same as that cluster's indigo swatch without a computed
             `style` object per render. */}
-        <Chip size="xs" uppercase tone="accent">Org</Chip>
+        <Chip size="xs" uppercase tone="accent">Work</Chip>
       </Inline>
 
       <T className="block text-[11.5px] leading-[1.45] text-text-secondary">

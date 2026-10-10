@@ -1,4 +1,5 @@
 import { test, expect, type Browser, type Page } from '@playwright/test';
+import { openAs, signIn } from './realSession';
 
 // The S2 walk (docs/social-tenant-goal.md phase S2; docs/social-tenant-design.md
 // §4.2, §4.4, §4.5): rooms and recordings on the social tenant, one browser
@@ -34,28 +35,11 @@ test.describe.configure({ mode: 'serial' });
 type Person = { context: Awaited<ReturnType<Browser['newContext']>>; page: Page; errors: string[] };
 type Token = { token: string; platformApiUrl?: string };
 
-async function signIn(page: Page, userId: string) {
-  await page.goto('/');
-  let status = 0;
-  for (let attempt = 0; attempt < 2 && status !== 200; attempt += 1) {
-    if (attempt) await page.waitForTimeout(10_000); // a middleware edit restarts tsx watch
-    status = await page.evaluate(async (id) => (await fetch('/api/session/login', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
-      body: JSON.stringify({ userId: id }),
-    })).status, userId);
-  }
-  expect(status, `demo login as ${userId}`).toBe(200);
-}
-
 async function person(browser: Browser, baseURL: string | undefined, userId: string, path = '/'): Promise<Person> {
-  const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, baseURL, permissions: ['camera', 'microphone'] });
-  const page = await context.newPage();
-  const errors: string[] = [];
-  page.on('pageerror', (error) => errors.push(error.message));
-  await signIn(page, userId);
-  const me = await page.evaluate(async () => (await fetch('/api/session/me', { credentials: 'include' })).json());
-  expect(me.tenant, `${userId} stands in the social tenant`).toBe('social');
-  if (path !== '/') await page.goto(path);
+  const { context, page, errors } = await openAs(browser, userId, {
+    baseURL, viewport: { width: 1440, height: 900 }, contextOptions: { permissions: ['camera', 'microphone'] },
+    expectTenant: 'social', ...(path !== '/' ? { url: path } : {}),
+  });
   return { context, page, errors };
 }
 
@@ -216,7 +200,7 @@ test('the recordings list renders for the tenant', async ({ browser, baseURL }) 
   const theo = await browser.newContext({ baseURL });
   const page = await theo.newPage();
   await page.goto('/');
-  await page.evaluate(async () => fetch('/api/session/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ userId: 'u-nora' }) }));
+  await signIn(page, 'u-nora');
   const me = await page.evaluate(async () => (await fetch('/api/session/me', { credentials: 'include' })).json());
   expect(me.tenant).not.toBe('social');
   expect(await page.evaluate(async () => (await fetch('/api/social/recordings', { credentials: 'include' })).status)).toBe(403);

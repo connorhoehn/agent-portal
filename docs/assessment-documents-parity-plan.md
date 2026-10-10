@@ -240,8 +240,18 @@ Storage today:
 | Source mirror (Confluence pages, local docs) | Aurora `assessment_knowledge_{sections,nodes,docs,doc_versions}`; mock fixture `knowledgeDocsFixture` (`middleware/src/mock/assessment.ts:9428`) under `dev:mock` |
 | Source ID → canonical document UUID, migration state, owner | Aurora `assessment_document_mappings` (`schema/assessment_schema.sql:242`), `providers/document-mapping.ts` |
 | Rich content (Yjs binary) and named versions | the realtime gateway's snapshot store (DynamoDB in the examples stack) |
+| Completed drafter proposals and Apply/Discard decisions | Aurora `assessment_document_proposals`; registered `assessment.document-proposals` fixture under mock mode. Draft metadata is separate from canonical content; versioned claims prevent two tabs applying one proposal. Source-scoped read-by-id resolves retained notification targets, including terminal states and rows beyond the active-list cap, under current identity/source access and canonical write-policy controls. Notification links open and focus that proposal in the Editor tab; terminal/read-only targets show a content preview. Retry handles lookup failures; source navigation clears the target and old responses cannot replace a newer target or decision. The additive schema is not deployed. |
 | Lifecycle, review requests, section items | platform-api |
 | Comments and reactions | Aurora `assessment_knowledge_comments` / `_reactions` (BFF) |
+
+Ready proposal revisions use the same metadata row, through source-scoped
+`POST /doc/proposals/:proposalId/revision`. Version CAS preserves the original
+target and author while a same-actor/body retry recovers a lost response without
+another event. The installed `Revise…` form supplies feedback and the prior draft
+to the drafter; Stop/failure restores the original and failed saves retain a
+retryable candidate. No canonical content write occurs. The implementation is
+covered by provider, direct handler and model/client tests; the prepared browser
+cases await an environment that permits localhost binding.
 
 Accelerator UX that must survive (from the 2026-09-20 research and
 `assessment-tenant.md`): per-source sections with source badge and count;

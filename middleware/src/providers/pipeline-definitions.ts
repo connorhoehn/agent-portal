@@ -37,6 +37,7 @@ import type { ContextTenant, PipelineRunStatus } from '../lib/pipeline-runs.js';
 import { clock } from '../mock/core/index.js';
 import { pipelineConfigRows, pipelineDefinitionRows, pipelineRunRecords } from '../mock/pipeline-definitions.js';
 import { jobEvents, type JobChangeEvent } from './agent-jobs.js';
+import { publishPipelineRunMove } from '../lib/gateway-run-feed.js';
 import { notifyPipelineRun, PIPELINE_NOTIFY_STATUSES } from '../lib/social-notify.js';
 
 type Unavailable = Array<{ source: string; error: string }>;
@@ -257,7 +258,7 @@ async function writeRecord(rec: PipelineRunRecord): Promise<void> {
 }
 
 /** Move a record to its job's status — the one writer after creation. Terminal records stay put. */
-async function updateRecord(id: string, patch: { status: PipelineRunStatus; costUsd?: number | null; error?: string | null }): Promise<void> {
+async function updateRecord(id: string, patch: { status: PipelineRunStatus; costUsd?: number | null; error?: string | null; actorId?: string | null }): Promise<void> {
   const terminal = isTerminalRunStatus(patch.status);
   if (config.mock.aurora) {
     const row = pipelineRunRecords.rows().find((r) => r.id === id);
@@ -267,7 +268,8 @@ async function updateRecord(id: string, patch: { status: PipelineRunStatus; cost
     if (patch.costUsd !== undefined) row.costUsd = patch.costUsd;
     if (patch.error !== undefined) row.error = patch.error;
     if (terminal) row.finishedAt = clock.nowIso();
-    void announceRun({ id: row.id, definitionId: row.definitionId, triggeredBy: row.triggeredBy, status: row.status, error: row.error });
+    void announceRun({ id: row.id, definitionId: row.definitionId, triggeredBy: row.triggeredBy, status: row.status, error: row.error, actorId: patch.actorId });
+    void publishPipelineRunMove({ id: row.id, status: row.status, error: row.error, definitionId: row.definitionId });
     return;
   }
   const moved = await exec(
@@ -281,7 +283,8 @@ async function updateRecord(id: string, patch: { status: PipelineRunStatus; cost
   );
   const row = moved[0];
   if (row) {
-    void announceRun({ id: String(row['id']), definitionId: str(row['definition_id']), triggeredBy: str(row['triggered_by']), status: patch.status, error: str(row['error']) });
+    void announceRun({ id: String(row['id']), definitionId: str(row['definition_id']), triggeredBy: str(row['triggered_by']), status: patch.status, error: str(row['error']), actorId: patch.actorId });
+    void publishPipelineRunMove({ id: String(row['id']), status: patch.status, error: str(row['error']), definitionId: str(row['definition_id']) });
   }
 }
 
@@ -291,13 +294,13 @@ async function updateRecord(id: string, patch: { status: PipelineRunStatus; cost
  * `notifyPipelineRun`, which applies the tenant rule). Fire-and-forget: a
  * notification never slows or fails the job event that moved the record.
  */
-async function announceRun(rec: { id: string; definitionId: string | null; triggeredBy: string | null; status: PipelineRunStatus; error: string | null }): Promise<void> {
+async function announceRun(rec: { id: string; definitionId: string | null; triggeredBy: string | null; status: PipelineRunStatus; error: string | null; actorId?: string | null }): Promise<void> {
   try {
     if (!(PIPELINE_NOTIFY_STATUSES as readonly string[]).includes(rec.status)) return;
     const [def, cfg] = await Promise.all([rec.definitionId ? getDefinition(rec.definitionId) : Promise.resolve(null), getPipelinesConfig()]);
     await notifyPipelineRun({
       runId: rec.id, status: rec.status, definitionId: rec.definitionId, definitionTitle: def?.title ?? null,
-      triggeredBy: rec.triggeredBy, approverRoles: effectiveApproverRoles(def, cfg.defaultApproverRole).roles, error: rec.error,
+      triggeredBy: rec.triggeredBy, approverRoles: effectiveApproverRoles(def, cfg.defaultApproverRole).roles, error: rec.error, actorId: rec.actorId,
     });
   } catch (err) {
     console.warn(`[pipelines] could not announce run ${rec.id}: ${(err as Error).message}`);
@@ -351,6 +354,13 @@ export async function latestDryRunOf(definitionId: string): Promise<PipelineRunR
   return latestDryRun(await listRunRecords({ definitionId }), definitionId);
 }
 
+/**
+ * Who is cancelling a run, held while `cancelJob` emits. The job event that
+ * moves the record carries no actor, so without this the event path would
+ * announce the cancel to the person who pressed it.
+ */
+const cancellingActors = new Map<string, string>();
+
 let watching = false;
 /**
  * The existing completion path, heard: `completeJob` / `cancelJob` /
@@ -363,7 +373,7 @@ export function watchPipelineRuns(): void {
   jobEvents.on('change', (ev: JobChangeEvent) => {
     const runId = typeof ev.payload?.['pipelineRunId'] === 'string' ? String(ev.payload['pipelineRunId']) : null;
     if (!runId) return;
-    void updateRecord(runId, { status: runStatusForJob(ev.status) })
+    void updateRecord(runId, { status: runStatusForJob(ev.status), actorId: cancellingActors.get(runId) ?? null })
       .catch((err: unknown) => console.warn(`[pipelines] could not move run ${runId}:`, (err as Error).message));
   });
 }
@@ -561,16 +571,19 @@ export async function decideApproval(id: string, decision: 'approve' | 'reject',
  * cancelled where it runs — the tenant records runs, it does not own their
  * executors.
  */
-export async function cancelRun(runId: string): Promise<{ ok: true; status: string } | { ok: false; status: number; error: string }> {
+export async function cancelRun(runId: string, actorId?: string | null): Promise<{ ok: true; status: string } | { ok: false; status: number; error: string }> {
   const { loadProjection } = await import('./pipeline-runs.js');
   const run = (await loadProjection()).runs.find((r) => r.id === runId);
   if (!run) return { ok: false, status: 404, error: `No run ${runId}` };
   if (run.context.table === 'agent_jobs') {
     const { cancelJob } = await import('./agent-jobs.js');
-    if (!(await cancelJob(run.context.id))) {
+    if (actorId) cancellingActors.set(runId, actorId);
+    let cancelled: boolean;
+    try { cancelled = await cancelJob(run.context.id); } finally { if (actorId) setTimeout(() => cancellingActors.delete(runId), 5000).unref(); }
+    if (!cancelled) {
       return { ok: false, status: 409, error: `Only a queued or claimed job can be cancelled; this one is ${run.context.sourceStatus}.` };
     }
-    await updateRecord(runId, { status: 'cancelled' }).catch(() => undefined);
+    await updateRecord(runId, { status: 'cancelled', actorId }).catch(() => undefined);
     return { ok: true, status: 'cancelled' };
   }
   if (run.context.table === 'assessment_runs') {
@@ -583,3 +596,4 @@ export async function cancelRun(runId: string): Promise<{ ok: true; status: stri
 }
 
 export { candidateIdOf, effectiveApproverRoles };
+

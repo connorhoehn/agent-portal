@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-09-30T07:58:30.417Z",
-  "serverHandlerSha": "6f6620e68a333efe54904960e193af0014e67c204b330431196c5708841843ed",
+  "capturedAt": "2026-10-08T19:18:11.644Z",
+  "serverHandlerSha": "6b7ab6b22b74ecfc5eb1280bdc72518db74b8f0d123c3b9ae0ec551ff358072a",
   "baseUrl": "http://127.0.0.1:3012",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
@@ -64,6 +64,12 @@
         "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The only exceptions are deletes somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
       }
     },
+    "DELETE /api/calls/:callId/page": {
+      "refused": {
+        "rule": "destructive",
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The only exceptions are deletes somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
+      }
+    },
     "DELETE /api/capabilities/browser-sessions/:sessionId": {
       "refused": {
         "rule": "destructive",
@@ -83,6 +89,12 @@
       }
     },
     "DELETE /api/capabilities/guardrail/topics/:name": {
+      "refused": {
+        "rule": "destructive",
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The only exceptions are deletes somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
+      }
+    },
+    "DELETE /api/chat/pins": {
       "refused": {
         "rule": "destructive",
         "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The only exceptions are deletes somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
@@ -133,6 +145,12 @@
       },
       "values": {},
       "sent": []
+    },
+    "DELETE /api/graph/work-items/:id/documents/:documentId": {
+      "refused": {
+        "rule": "destructive",
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The only exceptions are deletes somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
+      }
     },
     "DELETE /api/identity/policies/:id": {
       "refused": {
@@ -198,6 +216,18 @@
         "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The only exceptions are deletes somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
       }
     },
+    "DELETE /api/social/plane/recordings/:recordingId": {
+      "refused": {
+        "rule": "destructive",
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The only exceptions are deletes somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
+      }
+    },
+    "DELETE /api/social/plane/teams/:teamId/members/:userId": {
+      "refused": {
+        "rule": "destructive",
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The only exceptions are deletes somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
+      }
+    },
     "DELETE /api/social/recordings/:recordingId": {
       "refused": {
         "rule": "destructive",
@@ -247,13 +277,13 @@
     "PATCH /api/assessment/knowledge/doc/workflows/comments/:commentId": {
       "refused": {
         "rule": "document-service",
-        "reason": "Delegates to durable document or source services outside the resettable Aurora fixture. Capture must not seed, publish, restore or transition real documents; dedicated isolated integration tests cover these writes."
+        "reason": "Delegates to durable document or source services outside the resettable Aurora fixture. Proposal writes also verify the canonical document policy through that service. Capture must not seed, publish, restore or transition real documents; dedicated isolated integration tests cover these writes."
       }
     },
     "PATCH /api/assessment/knowledge/doc/workflows/review-requests/:requestKey": {
       "refused": {
         "rule": "document-service",
-        "reason": "Delegates to durable document or source services outside the resettable Aurora fixture. Capture must not seed, publish, restore or transition real documents; dedicated isolated integration tests cover these writes."
+        "reason": "Delegates to durable document or source services outside the resettable Aurora fixture. Proposal writes also verify the canonical document policy through that service. Capture must not seed, publish, restore or transition real documents; dedicated isolated integration tests cover these writes."
       }
     },
     "PATCH /api/assessment/submissions/:team/:envelope/links": {
@@ -374,6 +404,7 @@
         "lastResult.subtype": "string",
         "lastResult.turns": "number",
         "ownerId": "string",
+        "projectId": "string",
         "sessionId": "string",
         "spendUsd": "number",
         "status": "string",
@@ -599,6 +630,18 @@
         "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
       }
     },
+    "PATCH /api/social/plane/teams/:teamId/me": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
+    },
+    "PATCH /api/social/teams/:teamId/me": {
+      "refused": {
+        "rule": "social-platform-not-verified",
+        "reason": "The Social platform backend is selected independently of MOCK_AURORA: a configured platform URL takes precedence and can persist a real membership preference. Capture does not verify that backend; isolated provider, handler and browser contracts cover this personal write."
+      }
+    },
     "PATCH /api/sprints/:sprintId/items": {
       "persona": "orgiq/admin",
       "status": 200,
@@ -658,6 +701,57 @@
       "status": 200,
       "shape": {
         "$": "object",
+        "demo": "object",
+        "demo.agents": "array",
+        "demo.agents[]": "object",
+        "demo.agents[].agent": "string",
+        "demo.agents[].boxId": "null",
+        "demo.agents[].label": "null",
+        "demo.agents[].name": "string",
+        "demo.agents[].runId": "null",
+        "demo.agents[].sessionId": "null",
+        "demo.agents[].status": "null",
+        "demo.agents[].workItemId": "string",
+        "demo.answeredBy": "null",
+        "demo.beatMs": "number",
+        "demo.errors": "array",
+        "demo.finishedAt": "null",
+        "demo.gate": "null",
+        "demo.milestones": "object",
+        "demo.milestones.answerCaptured": "boolean",
+        "demo.milestones.captured": "boolean",
+        "demo.milestones.gateRefused": "boolean",
+        "demo.milestones.questionAnswered": "boolean",
+        "demo.milestones.questionAsked": "boolean",
+        "demo.milestones.running3": "boolean",
+        "demo.phase": "string",
+        "demo.startedAt": "null",
+        "distillationDemo": "object",
+        "distillationDemo.applicationId": "null",
+        "distillationDemo.beatMs": "number",
+        "distillationDemo.errors": "array",
+        "distillationDemo.finishedAt": "null",
+        "distillationDemo.guideId": "null",
+        "distillationDemo.jobs": "object",
+        "distillationDemo.jobs.guide": "null",
+        "distillationDemo.jobs.patterns": "null",
+        "distillationDemo.jobs.retry": "null",
+        "distillationDemo.milestones": "object",
+        "distillationDemo.milestones.applied": "boolean",
+        "distillationDemo.milestones.guideMinted": "boolean",
+        "distillationDemo.milestones.notesWritten": "number",
+        "distillationDemo.milestones.patternsMinted": "boolean",
+        "distillationDemo.milestones.published": "boolean",
+        "distillationDemo.milestones.retried": "boolean",
+        "distillationDemo.milestones.reviewed": "boolean",
+        "distillationDemo.milestones.sampled": "boolean",
+        "distillationDemo.notes": "array",
+        "distillationDemo.notesTotal": "number",
+        "distillationDemo.openDecidedBy": "null",
+        "distillationDemo.patterns": "object",
+        "distillationDemo.phase": "string",
+        "distillationDemo.samples": "object",
+        "distillationDemo.startedAt": "null",
         "enabled": "boolean",
         "fixtures": "array",
         "fixtures[]": "object",
@@ -672,6 +766,12 @@
         "scenario": "string"
       },
       "values": {
+        "demo.phase": [
+          "idle"
+        ],
+        "distillationDemo.phase": [
+          "idle"
+        ],
         "fixtures[].scenario": [
           "default"
         ],
@@ -802,6 +902,42 @@
         "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: after the answer streams it calls `maybeGenerateTitle`, and lib/session-titles.ts sends a Bedrock ConverseCommand with no mock branch above it — unawaited, so the spend outlives the request."
       }
     },
+    "POST /api/assessment/decks/:id/preview": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
+    },
+    "POST /api/assessment/decks/:id/revise": {
+      "refused": {
+        "rule": "fires",
+        "reason": "Arms or fires something that outlives the capture — a cron registration, an agent job enqueued for the fleet dispatcher, a background sweep. The seeded bots are parked deliberately so the scheduler cannot fire against repos that do not exist yet. Here: launches a revise-review-deck run whose eight-second timer writes a deck revision."
+      }
+    },
+    "POST /api/assessment/decks/:id/revisions": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
+    },
+    "POST /api/assessment/drafts/:runId/accept": {
+      "refused": {
+        "rule": "assessment-private-draft",
+        "reason": "An evidence summary or follow-up draft is a durable flow run shared by every assessor who can read the team, and accepting one writes follow-up rows into the team the draft names. Generating fires an agent run that outlives the request, and the capture cannot own a draft to accept or discard; isolated route tests (assessment-drafts.test.ts) and the headless spec cover these writes."
+      }
+    },
+    "POST /api/assessment/drafts/:runId/discard": {
+      "refused": {
+        "rule": "assessment-private-draft",
+        "reason": "An evidence summary or follow-up draft is a durable flow run shared by every assessor who can read the team, and accepting one writes follow-up rows into the team the draft names. Generating fires an agent run that outlives the request, and the capture cannot own a draft to accept or discard; isolated route tests (assessment-drafts.test.ts) and the headless spec cover these writes."
+      }
+    },
+    "POST /api/assessment/drafts/:runId/revise": {
+      "refused": {
+        "rule": "assessment-private-draft",
+        "reason": "An evidence summary or follow-up draft is a durable flow run shared by every assessor who can read the team, and accepting one writes follow-up rows into the team the draft names. Generating fires an agent run that outlives the request, and the capture cannot own a draft to accept or discard; isolated route tests (assessment-drafts.test.ts) and the headless spec cover these writes."
+      }
+    },
     "POST /api/assessment/feedback": {
       "persona": "assessment/admin",
       "status": 201,
@@ -868,7 +1004,7 @@
     "POST /api/assessment/knowledge/canvas": {
       "refused": {
         "rule": "document-service",
-        "reason": "Delegates to durable document or source services outside the resettable Aurora fixture. Capture must not seed, publish, restore or transition real documents; dedicated isolated integration tests cover these writes."
+        "reason": "Delegates to durable document or source services outside the resettable Aurora fixture. Proposal writes also verify the canonical document policy through that service. Capture must not seed, publish, restore or transition real documents; dedicated isolated integration tests cover these writes."
       }
     },
     "POST /api/assessment/knowledge/doc/comment": {
@@ -911,6 +1047,24 @@
         "parentId",
         "position"
       ]
+    },
+    "POST /api/assessment/knowledge/doc/proposals": {
+      "refused": {
+        "rule": "document-service",
+        "reason": "Delegates to durable document or source services outside the resettable Aurora fixture. Proposal writes also verify the canonical document policy through that service. Capture must not seed, publish, restore or transition real documents; dedicated isolated integration tests cover these writes."
+      }
+    },
+    "POST /api/assessment/knowledge/doc/proposals/:proposalId/decision": {
+      "refused": {
+        "rule": "document-service",
+        "reason": "Delegates to durable document or source services outside the resettable Aurora fixture. Proposal writes also verify the canonical document policy through that service. Capture must not seed, publish, restore or transition real documents; dedicated isolated integration tests cover these writes."
+      }
+    },
+    "POST /api/assessment/knowledge/doc/proposals/:proposalId/revision": {
+      "refused": {
+        "rule": "document-service",
+        "reason": "Delegates to durable document or source services outside the resettable Aurora fixture. Proposal writes also verify the canonical document policy through that service. Capture must not seed, publish, restore or transition real documents; dedicated isolated integration tests cover these writes."
+      }
     },
     "POST /api/assessment/knowledge/doc/publish": {
       "persona": "assessment/admin",
@@ -969,49 +1123,49 @@
     "POST /api/assessment/knowledge/doc/workflows/comments": {
       "refused": {
         "rule": "document-service",
-        "reason": "Delegates to durable document or source services outside the resettable Aurora fixture. Capture must not seed, publish, restore or transition real documents; dedicated isolated integration tests cover these writes."
+        "reason": "Delegates to durable document or source services outside the resettable Aurora fixture. Proposal writes also verify the canonical document policy through that service. Capture must not seed, publish, restore or transition real documents; dedicated isolated integration tests cover these writes."
       }
     },
     "POST /api/assessment/knowledge/doc/workflows/ownership": {
       "refused": {
         "rule": "document-service",
-        "reason": "Delegates to durable document or source services outside the resettable Aurora fixture. Capture must not seed, publish, restore or transition real documents; dedicated isolated integration tests cover these writes."
+        "reason": "Delegates to durable document or source services outside the resettable Aurora fixture. Proposal writes also verify the canonical document policy through that service. Capture must not seed, publish, restore or transition real documents; dedicated isolated integration tests cover these writes."
       }
     },
     "POST /api/assessment/knowledge/doc/workflows/review-requests": {
       "refused": {
         "rule": "document-service",
-        "reason": "Delegates to durable document or source services outside the resettable Aurora fixture. Capture must not seed, publish, restore or transition real documents; dedicated isolated integration tests cover these writes."
+        "reason": "Delegates to durable document or source services outside the resettable Aurora fixture. Proposal writes also verify the canonical document policy through that service. Capture must not seed, publish, restore or transition real documents; dedicated isolated integration tests cover these writes."
       }
     },
     "POST /api/assessment/knowledge/doc/workflows/sections/:sectionId/items/:itemId/ack": {
       "refused": {
         "rule": "document-service",
-        "reason": "Delegates to durable document or source services outside the resettable Aurora fixture. Capture must not seed, publish, restore or transition real documents; dedicated isolated integration tests cover these writes."
+        "reason": "Delegates to durable document or source services outside the resettable Aurora fixture. Proposal writes also verify the canonical document policy through that service. Capture must not seed, publish, restore or transition real documents; dedicated isolated integration tests cover these writes."
       }
     },
     "POST /api/assessment/knowledge/doc/workflows/sections/:sectionId/items/:itemId/answer": {
       "refused": {
         "rule": "document-service",
-        "reason": "Delegates to durable document or source services outside the resettable Aurora fixture. Capture must not seed, publish, restore or transition real documents; dedicated isolated integration tests cover these writes."
+        "reason": "Delegates to durable document or source services outside the resettable Aurora fixture. Proposal writes also verify the canonical document policy through that service. Capture must not seed, publish, restore or transition real documents; dedicated isolated integration tests cover these writes."
       }
     },
     "POST /api/assessment/knowledge/doc/workflows/transitions": {
       "refused": {
         "rule": "document-service",
-        "reason": "Delegates to durable document or source services outside the resettable Aurora fixture. Capture must not seed, publish, restore or transition real documents; dedicated isolated integration tests cover these writes."
+        "reason": "Delegates to durable document or source services outside the resettable Aurora fixture. Proposal writes also verify the canonical document policy through that service. Capture must not seed, publish, restore or transition real documents; dedicated isolated integration tests cover these writes."
       }
     },
     "POST /api/assessment/knowledge/doc/workflows/versions": {
       "refused": {
         "rule": "document-service",
-        "reason": "Delegates to durable document or source services outside the resettable Aurora fixture. Capture must not seed, publish, restore or transition real documents; dedicated isolated integration tests cover these writes."
+        "reason": "Delegates to durable document or source services outside the resettable Aurora fixture. Proposal writes also verify the canonical document policy through that service. Capture must not seed, publish, restore or transition real documents; dedicated isolated integration tests cover these writes."
       }
     },
     "POST /api/assessment/knowledge/doc/workflows/versions/restore": {
       "refused": {
         "rule": "document-service",
-        "reason": "Delegates to durable document or source services outside the resettable Aurora fixture. Capture must not seed, publish, restore or transition real documents; dedicated isolated integration tests cover these writes."
+        "reason": "Delegates to durable document or source services outside the resettable Aurora fixture. Proposal writes also verify the canonical document policy through that service. Capture must not seed, publish, restore or transition real documents; dedicated isolated integration tests cover these writes."
       }
     },
     "POST /api/assessment/knowledge/presence": {
@@ -1031,25 +1185,25 @@
     "POST /api/assessment/knowledge/source/move": {
       "refused": {
         "rule": "document-service",
-        "reason": "Delegates to durable document or source services outside the resettable Aurora fixture. Capture must not seed, publish, restore or transition real documents; dedicated isolated integration tests cover these writes."
+        "reason": "Delegates to durable document or source services outside the resettable Aurora fixture. Proposal writes also verify the canonical document policy through that service. Capture must not seed, publish, restore or transition real documents; dedicated isolated integration tests cover these writes."
       }
     },
     "POST /api/assessment/knowledge/source/preview": {
       "refused": {
         "rule": "document-service",
-        "reason": "Delegates to durable document or source services outside the resettable Aurora fixture. Capture must not seed, publish, restore or transition real documents; dedicated isolated integration tests cover these writes."
+        "reason": "Delegates to durable document or source services outside the resettable Aurora fixture. Proposal writes also verify the canonical document policy through that service. Capture must not seed, publish, restore or transition real documents; dedicated isolated integration tests cover these writes."
       }
     },
     "POST /api/assessment/knowledge/source/publish": {
       "refused": {
         "rule": "document-service",
-        "reason": "Delegates to durable document or source services outside the resettable Aurora fixture. Capture must not seed, publish, restore or transition real documents; dedicated isolated integration tests cover these writes."
+        "reason": "Delegates to durable document or source services outside the resettable Aurora fixture. Proposal writes also verify the canonical document policy through that service. Capture must not seed, publish, restore or transition real documents; dedicated isolated integration tests cover these writes."
       }
     },
     "POST /api/assessment/knowledge/source/pull": {
       "refused": {
         "rule": "document-service",
-        "reason": "Delegates to durable document or source services outside the resettable Aurora fixture. Capture must not seed, publish, restore or transition real documents; dedicated isolated integration tests cover these writes."
+        "reason": "Delegates to durable document or source services outside the resettable Aurora fixture. Proposal writes also verify the canonical document policy through that service. Capture must not seed, publish, restore or transition real documents; dedicated isolated integration tests cover these writes."
       }
     },
     "POST /api/assessment/reports/publish": {
@@ -1182,6 +1336,18 @@
         "name"
       ]
     },
+    "POST /api/assessment/teams/:id/dimensions/:dim/drafts/evidence-summary": {
+      "refused": {
+        "rule": "assessment-private-draft",
+        "reason": "An evidence summary or follow-up draft is a durable flow run shared by every assessor who can read the team, and accepting one writes follow-up rows into the team the draft names. Generating fires an agent run that outlives the request, and the capture cannot own a draft to accept or discard; isolated route tests (assessment-drafts.test.ts) and the headless spec cover these writes."
+      }
+    },
+    "POST /api/assessment/teams/:id/dimensions/:dim/drafts/followups": {
+      "refused": {
+        "rule": "assessment-private-draft",
+        "reason": "An evidence summary or follow-up draft is a durable flow run shared by every assessor who can read the team, and accepting one writes follow-up rows into the team the draft names. Generating fires an agent run that outlives the request, and the capture cannot own a draft to accept or discard; isolated route tests (assessment-drafts.test.ts) and the headless spec cover these writes."
+      }
+    },
     "POST /api/assessment/teams/:id/evidence": {
       "persona": "assessment/admin",
       "status": 201,
@@ -1281,6 +1447,12 @@
         "relevant_dimension_ids",
         "scores"
       ]
+    },
+    "POST /api/assessment/teams/:teamId/decks": {
+      "refused": {
+        "rule": "fires",
+        "reason": "Arms or fires something that outlives the capture — a cron registration, an agent job enqueued for the fleet dispatcher, a background sweep. The seeded bots are parked deliberately so the scheduler cannot fire against repos that do not exist yet. Here: launches a draft-review-deck run whose eight-second timer writes a deck revision."
+      }
     },
     "POST /api/auth/logout": {
       "refused": {
@@ -1508,6 +1680,114 @@
         "name"
       ]
     },
+    "POST /api/chat/commands/agent/run": {
+      "refused": {
+        "rule": "agent-loop-run",
+        "reason": "An /agent run is a durable flow run readable only by the person who started it, from a conversation whose own authority (Social chatAccess with PostMessage, or a tenant family / huddle chat publish) still admits them. Starting one plans a goal (no step runs); Approve and Discard are once-only claims on that plan, an approval step pauses the loop and its approve/reject are once-only decisions by the requester (or, where the tenant's second-approver rule allows, another editor), and Approve then starts the existing summarize, deck, diagram and doc flows as that person's freshly reloaded session. The capture holds neither a run nor a conversation seat, and the loop outlives the request; isolated route tests (agent-loop-social.test.ts, agent-loop-tenant.test.ts, lib/agent-loop) and the headless spec cover these writes."
+      }
+    },
+    "POST /api/chat/commands/agent/runs/:id/approval/approve": {
+      "refused": {
+        "rule": "agent-loop-run",
+        "reason": "An /agent run is a durable flow run readable only by the person who started it, from a conversation whose own authority (Social chatAccess with PostMessage, or a tenant family / huddle chat publish) still admits them. Starting one plans a goal (no step runs); Approve and Discard are once-only claims on that plan, an approval step pauses the loop and its approve/reject are once-only decisions by the requester (or, where the tenant's second-approver rule allows, another editor), and Approve then starts the existing summarize, deck, diagram and doc flows as that person's freshly reloaded session. The capture holds neither a run nor a conversation seat, and the loop outlives the request; isolated route tests (agent-loop-social.test.ts, agent-loop-tenant.test.ts, lib/agent-loop) and the headless spec cover these writes."
+      }
+    },
+    "POST /api/chat/commands/agent/runs/:id/approval/reject": {
+      "refused": {
+        "rule": "agent-loop-run",
+        "reason": "An /agent run is a durable flow run readable only by the person who started it, from a conversation whose own authority (Social chatAccess with PostMessage, or a tenant family / huddle chat publish) still admits them. Starting one plans a goal (no step runs); Approve and Discard are once-only claims on that plan, an approval step pauses the loop and its approve/reject are once-only decisions by the requester (or, where the tenant's second-approver rule allows, another editor), and Approve then starts the existing summarize, deck, diagram and doc flows as that person's freshly reloaded session. The capture holds neither a run nor a conversation seat, and the loop outlives the request; isolated route tests (agent-loop-social.test.ts, agent-loop-tenant.test.ts, lib/agent-loop) and the headless spec cover these writes."
+      }
+    },
+    "POST /api/chat/commands/agent/runs/:id/approve": {
+      "refused": {
+        "rule": "agent-loop-run",
+        "reason": "An /agent run is a durable flow run readable only by the person who started it, from a conversation whose own authority (Social chatAccess with PostMessage, or a tenant family / huddle chat publish) still admits them. Starting one plans a goal (no step runs); Approve and Discard are once-only claims on that plan, an approval step pauses the loop and its approve/reject are once-only decisions by the requester (or, where the tenant's second-approver rule allows, another editor), and Approve then starts the existing summarize, deck, diagram and doc flows as that person's freshly reloaded session. The capture holds neither a run nor a conversation seat, and the loop outlives the request; isolated route tests (agent-loop-social.test.ts, agent-loop-tenant.test.ts, lib/agent-loop) and the headless spec cover these writes."
+      }
+    },
+    "POST /api/chat/commands/agent/runs/:id/discard": {
+      "refused": {
+        "rule": "agent-loop-run",
+        "reason": "An /agent run is a durable flow run readable only by the person who started it, from a conversation whose own authority (Social chatAccess with PostMessage, or a tenant family / huddle chat publish) still admits them. Starting one plans a goal (no step runs); Approve and Discard are once-only claims on that plan, an approval step pauses the loop and its approve/reject are once-only decisions by the requester (or, where the tenant's second-approver rule allows, another editor), and Approve then starts the existing summarize, deck, diagram and doc flows as that person's freshly reloaded session. The capture holds neither a run nor a conversation seat, and the loop outlives the request; isolated route tests (agent-loop-social.test.ts, agent-loop-tenant.test.ts, lib/agent-loop) and the headless spec cover these writes."
+      }
+    },
+    "POST /api/chat/commands/deck/run": {
+      "refused": {
+        "rule": "social-deck",
+        "reason": "A /deck run is private to the Social member who started it and is built from the conversation they may read; saving writes a deck only that member owns, editing is owner-only with a compare-and-set revision, and posting needs PostMessage plus current membership of the source conversation. The capture signs in without a Social grant and can own neither a run nor a deck; isolated route tests (social-deck.test.ts, social-deck-channel.test.ts) and the headless spec cover these writes."
+      }
+    },
+    "POST /api/chat/commands/deck/runs/:id/save": {
+      "refused": {
+        "rule": "social-deck",
+        "reason": "A /deck run is private to the Social member who started it and is built from the conversation they may read; saving writes a deck only that member owns, editing is owner-only with a compare-and-set revision, and posting needs PostMessage plus current membership of the source conversation. The capture signs in without a Social grant and can own neither a run nor a deck; isolated route tests (social-deck.test.ts, social-deck-channel.test.ts) and the headless spec cover these writes."
+      }
+    },
+    "POST /api/chat/commands/diagram/run": {
+      "refused": {
+        "rule": "conversation-artifact-run",
+        "reason": "A /diagram or /doc run is a durable flow run readable only by the person who started it, from a conversation whose own read authority (Social chatAccess, or a tenant family / huddle chat history) still admits them; posting a diagram and saving a page need that conversation's publish authority plus a finished run of their own, and Save is claimed once. Starting one fires an agent run that outlives the request, and the capture holds neither a run nor a conversation seat; isolated route tests (conversation-artifact-social.test.ts, conversation-artifact-tenant.test.ts) and the headless spec cover these writes."
+      }
+    },
+    "POST /api/chat/commands/diagram/runs/:id/post": {
+      "refused": {
+        "rule": "conversation-artifact-run",
+        "reason": "A /diagram or /doc run is a durable flow run readable only by the person who started it, from a conversation whose own read authority (Social chatAccess, or a tenant family / huddle chat history) still admits them; posting a diagram and saving a page need that conversation's publish authority plus a finished run of their own, and Save is claimed once. Starting one fires an agent run that outlives the request, and the capture holds neither a run nor a conversation seat; isolated route tests (conversation-artifact-social.test.ts, conversation-artifact-tenant.test.ts) and the headless spec cover these writes."
+      }
+    },
+    "POST /api/chat/commands/doc/run": {
+      "refused": {
+        "rule": "conversation-artifact-run",
+        "reason": "A /diagram or /doc run is a durable flow run readable only by the person who started it, from a conversation whose own read authority (Social chatAccess, or a tenant family / huddle chat history) still admits them; posting a diagram and saving a page need that conversation's publish authority plus a finished run of their own, and Save is claimed once. Starting one fires an agent run that outlives the request, and the capture holds neither a run nor a conversation seat; isolated route tests (conversation-artifact-social.test.ts, conversation-artifact-tenant.test.ts) and the headless spec cover these writes."
+      }
+    },
+    "POST /api/chat/commands/doc/runs/:id/save": {
+      "refused": {
+        "rule": "conversation-artifact-run",
+        "reason": "A /diagram or /doc run is a durable flow run readable only by the person who started it, from a conversation whose own read authority (Social chatAccess, or a tenant family / huddle chat history) still admits them; posting a diagram and saving a page need that conversation's publish authority plus a finished run of their own, and Save is claimed once. Starting one fires an agent run that outlives the request, and the capture holds neither a run nor a conversation seat; isolated route tests (conversation-artifact-social.test.ts, conversation-artifact-tenant.test.ts) and the headless spec cover these writes."
+      }
+    },
+    "POST /api/chat/commands/summarize/run": {
+      "refused": {
+        "rule": "social-private-run",
+        "reason": "A private /summarize run is readable only by the Social member who started it, from the conversation they may read, and posting needs that member's PostMessage grant plus a finished run of their own. The capture signs in without a Social grant and cannot own a run; isolated route tests (social-summarize.test.ts) and the headless spec cover these writes."
+      }
+    },
+    "POST /api/chat/commands/summarize/runs/:id/post": {
+      "refused": {
+        "rule": "social-private-run",
+        "reason": "A private /summarize run is readable only by the Social member who started it, from the conversation they may read, and posting needs that member's PostMessage grant plus a finished run of their own. The capture signs in without a Social grant and cannot own a run; isolated route tests (social-summarize.test.ts) and the headless spec cover these writes."
+      }
+    },
+    "POST /api/chat/decks/:id/post": {
+      "refused": {
+        "rule": "social-deck",
+        "reason": "A /deck run is private to the Social member who started it and is built from the conversation they may read; saving writes a deck only that member owns, editing is owner-only with a compare-and-set revision, and posting needs PostMessage plus current membership of the source conversation. The capture signs in without a Social grant and can own neither a run nor a deck; isolated route tests (social-deck.test.ts, social-deck-channel.test.ts) and the headless spec cover these writes."
+      }
+    },
+    "POST /api/chat/decks/:id/preview": {
+      "refused": {
+        "rule": "social-deck",
+        "reason": "A /deck run is private to the Social member who started it and is built from the conversation they may read; saving writes a deck only that member owns, editing is owner-only with a compare-and-set revision, and posting needs PostMessage plus current membership of the source conversation. The capture signs in without a Social grant and can own neither a run nor a deck; isolated route tests (social-deck.test.ts, social-deck-channel.test.ts) and the headless spec cover these writes."
+      }
+    },
+    "POST /api/chat/decks/:id/revise": {
+      "refused": {
+        "rule": "social-deck",
+        "reason": "A /deck run is private to the Social member who started it and is built from the conversation they may read; saving writes a deck only that member owns, editing is owner-only with a compare-and-set revision, and posting needs PostMessage plus current membership of the source conversation. The capture signs in without a Social grant and can own neither a run nor a deck; isolated route tests (social-deck.test.ts, social-deck-channel.test.ts) and the headless spec cover these writes."
+      }
+    },
+    "POST /api/chat/decks/:id/revisions": {
+      "refused": {
+        "rule": "social-deck",
+        "reason": "A /deck run is private to the Social member who started it and is built from the conversation they may read; saving writes a deck only that member owns, editing is owner-only with a compare-and-set revision, and posting needs PostMessage plus current membership of the source conversation. The capture signs in without a Social grant and can own neither a run nor a deck; isolated route tests (social-deck.test.ts, social-deck-channel.test.ts) and the headless spec cover these writes."
+      }
+    },
+    "POST /api/chat/pins": {
+      "refused": {
+        "rule": "chat-store-not-verified",
+        "reason": "The chat pin backend is selected independently of MOCK_AURORA. It may write DynamoDB even when the health response reports every mock provider. Capture does not verify that backend; isolated pin-store and browser tests cover this write."
+      }
+    },
     "POST /api/connections": {
       "persona": "orgiq/admin",
       "status": 201,
@@ -1526,6 +1806,72 @@
         "kind",
         "label"
       ]
+    },
+    "POST /api/conversations/agent/run": {
+      "refused": {
+        "rule": "agent-loop-run",
+        "reason": "An /agent run is a durable flow run readable only by the person who started it, from a conversation whose own authority (Social chatAccess with PostMessage, or a tenant family / huddle chat publish) still admits them. Starting one plans a goal (no step runs); Approve and Discard are once-only claims on that plan, an approval step pauses the loop and its approve/reject are once-only decisions by the requester (or, where the tenant's second-approver rule allows, another editor), and Approve then starts the existing summarize, deck, diagram and doc flows as that person's freshly reloaded session. The capture holds neither a run nor a conversation seat, and the loop outlives the request; isolated route tests (agent-loop-social.test.ts, agent-loop-tenant.test.ts, lib/agent-loop) and the headless spec cover these writes."
+      }
+    },
+    "POST /api/conversations/agent/runs/:id/approval/approve": {
+      "refused": {
+        "rule": "agent-loop-run",
+        "reason": "An /agent run is a durable flow run readable only by the person who started it, from a conversation whose own authority (Social chatAccess with PostMessage, or a tenant family / huddle chat publish) still admits them. Starting one plans a goal (no step runs); Approve and Discard are once-only claims on that plan, an approval step pauses the loop and its approve/reject are once-only decisions by the requester (or, where the tenant's second-approver rule allows, another editor), and Approve then starts the existing summarize, deck, diagram and doc flows as that person's freshly reloaded session. The capture holds neither a run nor a conversation seat, and the loop outlives the request; isolated route tests (agent-loop-social.test.ts, agent-loop-tenant.test.ts, lib/agent-loop) and the headless spec cover these writes."
+      }
+    },
+    "POST /api/conversations/agent/runs/:id/approval/reject": {
+      "refused": {
+        "rule": "agent-loop-run",
+        "reason": "An /agent run is a durable flow run readable only by the person who started it, from a conversation whose own authority (Social chatAccess with PostMessage, or a tenant family / huddle chat publish) still admits them. Starting one plans a goal (no step runs); Approve and Discard are once-only claims on that plan, an approval step pauses the loop and its approve/reject are once-only decisions by the requester (or, where the tenant's second-approver rule allows, another editor), and Approve then starts the existing summarize, deck, diagram and doc flows as that person's freshly reloaded session. The capture holds neither a run nor a conversation seat, and the loop outlives the request; isolated route tests (agent-loop-social.test.ts, agent-loop-tenant.test.ts, lib/agent-loop) and the headless spec cover these writes."
+      }
+    },
+    "POST /api/conversations/agent/runs/:id/approve": {
+      "refused": {
+        "rule": "agent-loop-run",
+        "reason": "An /agent run is a durable flow run readable only by the person who started it, from a conversation whose own authority (Social chatAccess with PostMessage, or a tenant family / huddle chat publish) still admits them. Starting one plans a goal (no step runs); Approve and Discard are once-only claims on that plan, an approval step pauses the loop and its approve/reject are once-only decisions by the requester (or, where the tenant's second-approver rule allows, another editor), and Approve then starts the existing summarize, deck, diagram and doc flows as that person's freshly reloaded session. The capture holds neither a run nor a conversation seat, and the loop outlives the request; isolated route tests (agent-loop-social.test.ts, agent-loop-tenant.test.ts, lib/agent-loop) and the headless spec cover these writes."
+      }
+    },
+    "POST /api/conversations/agent/runs/:id/discard": {
+      "refused": {
+        "rule": "agent-loop-run",
+        "reason": "An /agent run is a durable flow run readable only by the person who started it, from a conversation whose own authority (Social chatAccess with PostMessage, or a tenant family / huddle chat publish) still admits them. Starting one plans a goal (no step runs); Approve and Discard are once-only claims on that plan, an approval step pauses the loop and its approve/reject are once-only decisions by the requester (or, where the tenant's second-approver rule allows, another editor), and Approve then starts the existing summarize, deck, diagram and doc flows as that person's freshly reloaded session. The capture holds neither a run nor a conversation seat, and the loop outlives the request; isolated route tests (agent-loop-social.test.ts, agent-loop-tenant.test.ts, lib/agent-loop) and the headless spec cover these writes."
+      }
+    },
+    "POST /api/conversations/diagram/run": {
+      "refused": {
+        "rule": "conversation-artifact-run",
+        "reason": "A /diagram or /doc run is a durable flow run readable only by the person who started it, from a conversation whose own read authority (Social chatAccess, or a tenant family / huddle chat history) still admits them; posting a diagram and saving a page need that conversation's publish authority plus a finished run of their own, and Save is claimed once. Starting one fires an agent run that outlives the request, and the capture holds neither a run nor a conversation seat; isolated route tests (conversation-artifact-social.test.ts, conversation-artifact-tenant.test.ts) and the headless spec cover these writes."
+      }
+    },
+    "POST /api/conversations/diagram/runs/:id/post": {
+      "refused": {
+        "rule": "conversation-artifact-run",
+        "reason": "A /diagram or /doc run is a durable flow run readable only by the person who started it, from a conversation whose own read authority (Social chatAccess, or a tenant family / huddle chat history) still admits them; posting a diagram and saving a page need that conversation's publish authority plus a finished run of their own, and Save is claimed once. Starting one fires an agent run that outlives the request, and the capture holds neither a run nor a conversation seat; isolated route tests (conversation-artifact-social.test.ts, conversation-artifact-tenant.test.ts) and the headless spec cover these writes."
+      }
+    },
+    "POST /api/conversations/doc/run": {
+      "refused": {
+        "rule": "conversation-artifact-run",
+        "reason": "A /diagram or /doc run is a durable flow run readable only by the person who started it, from a conversation whose own read authority (Social chatAccess, or a tenant family / huddle chat history) still admits them; posting a diagram and saving a page need that conversation's publish authority plus a finished run of their own, and Save is claimed once. Starting one fires an agent run that outlives the request, and the capture holds neither a run nor a conversation seat; isolated route tests (conversation-artifact-social.test.ts, conversation-artifact-tenant.test.ts) and the headless spec cover these writes."
+      }
+    },
+    "POST /api/conversations/doc/runs/:id/save": {
+      "refused": {
+        "rule": "conversation-artifact-run",
+        "reason": "A /diagram or /doc run is a durable flow run readable only by the person who started it, from a conversation whose own read authority (Social chatAccess, or a tenant family / huddle chat history) still admits them; posting a diagram and saving a page need that conversation's publish authority plus a finished run of their own, and Save is claimed once. Starting one fires an agent run that outlives the request, and the capture holds neither a run nor a conversation seat; isolated route tests (conversation-artifact-social.test.ts, conversation-artifact-tenant.test.ts) and the headless spec cover these writes."
+      }
+    },
+    "POST /api/conversations/summarize/run": {
+      "refused": {
+        "rule": "conversation-private-run",
+        "reason": "A tenant-conversation or huddle /summarize run is a durable flow run readable only by the person who started it, while that conversation's own chat history authority (gateway family authority and chat membership rows, or an actual huddle seat) still admits them; posting needs the conversation's publish authority plus a finished run of their own. Starting one fires an agent run that outlives the request, and the capture holds neither a run nor a huddle seat; isolated route tests (conversation-summarize.test.ts) and the headless spec cover these writes."
+      }
+    },
+    "POST /api/conversations/summarize/runs/:id/post": {
+      "refused": {
+        "rule": "conversation-private-run",
+        "reason": "A tenant-conversation or huddle /summarize run is a durable flow run readable only by the person who started it, while that conversation's own chat history authority (gateway family authority and chat membership rows, or an actual huddle seat) still admits them; posting needs the conversation's publish authority plus a finished run of their own. Starting one fires an agent run that outlives the request, and the capture holds neither a run nor a huddle seat; isolated route tests (conversation-summarize.test.ts) and the headless spec cover these writes."
+      }
     },
     "POST /api/designs/:id/answer": {
       "persona": "orgiq/admin",
@@ -2002,6 +2348,30 @@
       "refused": {
         "rule": "spends",
         "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: writes an uploaded object to S3."
+      }
+    },
+    "POST /api/initiative-decks/:id/preview": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
+    },
+    "POST /api/initiative-decks/:id/revise": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
+    },
+    "POST /api/initiative-decks/:id/revisions": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
+    },
+    "POST /api/initiative-decks/projects/:projectId": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
       }
     },
     "POST /api/iq/prompts/experiments/:experimentId/complete": {
@@ -2566,6 +2936,24 @@
         "decision"
       ]
     },
+    "POST /api/pipelines/decks/:id/preview": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
+    },
+    "POST /api/pipelines/decks/:id/revise": {
+      "refused": {
+        "rule": "fires",
+        "reason": "Arms or fires something that outlives the capture — a cron registration, an agent job enqueued for the fleet dispatcher, a background sweep. The seeded bots are parked deliberately so the scheduler cannot fire against repos that do not exist yet. Here: starts a requester-private flow run whose executor appends a deck revision after the response, so a reset can land before it writes."
+      }
+    },
+    "POST /api/pipelines/decks/:id/revisions": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
+    },
     "POST /api/pipelines/definitions/:id/dry-run": {
       "refused": {
         "rule": "fires",
@@ -2581,6 +2969,12 @@
       },
       "values": {},
       "sent": []
+    },
+    "POST /api/pipelines/runs/:id/decks": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
     },
     "POST /api/promotions/:id/dismiss": {
       "persona": "orgiq/admin",
@@ -2631,6 +3025,12 @@
       },
       "values": {},
       "sent": []
+    },
+    "POST /api/realtime/lobby-access": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
     },
     "POST /api/rediscovery/check": {
       "persona": "orgiq/admin",
@@ -2859,6 +3259,60 @@
       }
     },
     "POST /api/social/dms/read": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
+    },
+    "POST /api/social/plane/channels": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
+    },
+    "POST /api/social/plane/channels/:slug/join": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
+    },
+    "POST /api/social/plane/channels/:slug/leave": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
+    },
+    "POST /api/social/plane/recordings/:recordingId/share": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
+    },
+    "POST /api/social/plane/rooms": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
+    },
+    "POST /api/social/plane/teams": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
+    },
+    "POST /api/social/plane/teams/:teamId/members": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
+    },
+    "POST /api/social/plane/work-sharing": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
+    },
+    "POST /api/social/plane/work-sharing/:id/transition": {
       "refused": {
         "rule": "unclassified",
         "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
@@ -3142,6 +3596,12 @@
         "allocatedUsd"
       ]
     },
+    "PUT /api/calls/:callId/page": {
+      "refused": {
+        "rule": "active-call-state",
+        "reason": "Page sharing requires an authenticated, connected participant in a live call with current cookie/socket provenance and grants. Call and page stores are selected independently of MOCK_AURORA and are not resettable fixtures. The capture cannot synthesize a joined call or restore revisions; dedicated HTTP, gateway and two-browser contracts cover this write. (Huddle messages travel over the gateway chat channel, not HTTP.)"
+      }
+    },
     "PUT /api/graph/work-items/:id/decisions/:decisionId": {
       "persona": "orgiq/admin",
       "status": 200,
@@ -3162,6 +3622,12 @@
         ]
       },
       "sent": []
+    },
+    "PUT /api/graph/work-items/:id/documents/:documentId": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
     },
     "PUT /api/identity/policies/:id": {
       "skipped": "no value found for :id under /api/identity/policies (orgiq/admin)"

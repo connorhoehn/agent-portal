@@ -49,7 +49,7 @@ test('library deep links retain asset inputs, versions and usage under Build', a
   await expect(page.getByTestId('catalog-explorer')).toBeVisible();
   await expect(page.getByText('Contract', { exact: true })).toBeVisible();
   await expect(page.getByText('Health & usage', { exact: true })).toBeVisible();
-  await expect(page.getByTestId('catalog-explorer').getByText('Build', { exact: true })).toBeVisible();
+  await expect(page.getByTestId('section-crumbs').getByText('Build', { exact: true })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Agent library', exact: true }).first()).toBeVisible();
   await expect(page).toHaveURL(/\/iq\/library\/lib-stakeholder-email$/);
 });

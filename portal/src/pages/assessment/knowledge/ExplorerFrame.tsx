@@ -1,7 +1,7 @@
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { ExplorerLayout, ContextColumn, type ContextColumnState } from '@connorhoehnslalom/ui-components';
-import { ChatIcon, Inline, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { ContextColumn, SplitPane, WorkspaceRail, type ContextColumnState } from '@connorhoehnslalom/ui-components';
+import { ChatIcon, Inline, Stack, useRailFold } from '@connorhoehnslalom/ui-components/shared';
 
 // Comments, Versions and Reviews are editor tabs (DocumentShell); the column
 // keeps what belongs beside the page rather than instead of it: the outline,
@@ -36,16 +36,33 @@ export interface ExplorerFrameProps {
 }
 
 export function ExplorerFrame({ rail, children, aside, paneHeader }: ExplorerFrameProps) {
-  const [collapsed, setCollapsed] = useState(() => {
-    try { return localStorage.getItem('assessment.documentRail.collapsed') === 'true'; }
-    catch { return false; }
+  // Remembered per depth band (the library rail model, `useRailFold`): a fold
+  // set on a shallow page never folds this rail three levels down.
+  const { folded: collapsed, toggle: toggleRail } = useRailFold({ storageKey: 'assessment.documentRail.collapsed' });
+  const frameRef = useRef<HTMLDivElement>(null);
+  const [frameWidth, setFrameWidth] = useState(1000);
+  const [railWidth, setRailWidth] = useState(() => {
+    try {
+      const stored = Number(localStorage.getItem('assessment.documentRail.width'));
+      return Number.isFinite(stored) && stored >= 220 && stored <= 480 ? stored : 280;
+    } catch { return 280; }
   });
-  function toggleRail() {
-    setCollapsed((value) => {
-      try { localStorage.setItem('assessment.documentRail.collapsed', String(!value)); } catch { /* Session-only preference. */ }
-      return !value;
-    });
-  }
+  useEffect(() => {
+    const element = frameRef.current;
+    if (!element) return;
+    const measure = () => setFrameWidth(Math.max(1, element.getBoundingClientRect().width));
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+  const visibleWidth = collapsed ? 36 : Math.min(railWidth, Math.max(180, frameWidth - 360));
+  const resizeRail = (ratio: number) => {
+    if (collapsed) return;
+    const next = Math.min(480, Math.max(220, Math.round(ratio * frameWidth)));
+    setRailWidth(next);
+    try { localStorage.setItem('assessment.documentRail.width', String(next)); } catch { /* Device preference only. */ }
+  };
   const [state, setState] = useState<ContextColumnState>('collapsed');
   const [active, setActive] = useState<PanelId>('outline');
   const [host, setHost] = useState<HTMLElement | null>(null);
@@ -54,21 +71,23 @@ export function ExplorerFrame({ rail, children, aside, paneHeader }: ExplorerFra
   const dock = <Stack ref={setHost} gap="sm" className="min-h-0 flex-1 p-4" />;
   return (
     <DocumentContext.Provider value={aside ? context : null}>
-      <Stack gap="none" className="h-full min-h-0 min-w-0 bg-surface" data-shell-flush data-testid="knowledge-workspace">
-        <ExplorerLayout
-          rail={rail({ foldRail: toggleRail })}
-          railLabel="document library"
-          // 220px — the Org rail's width (`xs`, ui-components 2.407.33).
-          railWidth="xs"
-          railCollapsed={collapsed}
-          // Open, the fold is one of the caption's actions; folded, the strip's unfold control.
-          {...(collapsed ? { onToggleRail: toggleRail } : {})}
-          panePadding="none"
-          {...(paneHeader ? { paneHeader } : {})}
+      <Stack ref={frameRef} gap="none" className="h-full min-h-0 min-w-0 bg-surface" data-shell-flush data-testid="knowledge-workspace" data-rail-collapsed={collapsed}>
+        <SplitPane
+          primary={<WorkspaceRail label="Document library" className="w-full border-r-0" collapsed={collapsed}
+            {...(collapsed ? { onToggle: toggleRail, toggleLabel: 'Show document library' } : {})}
+            data-testid="knowledge-explorer-rail">{rail({ foldRail: toggleRail })}</WorkspaceRail>}
+          ratio={visibleWidth / frameWidth}
+          onRatioChange={resizeRail}
+          minPrimaryPx={collapsed ? 36 : Math.min(220, frameWidth * 0.4)}
+          minSecondaryPx={Math.min(360, frameWidth * 0.6)}
+          dividerLabel="Resize document sidebar"
+          onDividerActivate={toggleRail}
+          className="flex-1"
           data-testid="knowledge-explorer"
-        >
+          secondary={<Stack gap="none" className="h-full min-h-0 min-w-0 flex-1" data-testid="knowledge-explorer-pane-column">
+          {paneHeader && <Stack gap="none" className="shrink-0 bg-surface" data-testid="knowledge-explorer-pane-header">{paneHeader}</Stack>}
           <Inline gap="none" align="stretch" wrap={false} className="min-h-0 min-w-0 flex-1 overflow-hidden">
-            <Stack gap="none" className="min-h-0 min-w-0 flex-1 overflow-y-auto">{children}</Stack>
+            <Stack gap="none" className="min-h-0 min-w-0 flex-1 overflow-y-auto" data-testid="knowledge-explorer-pane">{children}</Stack>
             {aside ? <ContextColumn state={state} onStateChange={setState}
             label="Document context" activeId={active} onActivate={(id) => open(id as PanelId)}
             panels={[
@@ -77,7 +96,8 @@ export function ExplorerFrame({ rail, children, aside, paneHeader }: ExplorerFra
               { id: 'activity', label: 'Activity', icon: '◷', content: aside },
             ]} /> : null}
           </Inline>
-        </ExplorerLayout>
+          </Stack>}
+        />
       </Stack>
     </DocumentContext.Provider>
   );

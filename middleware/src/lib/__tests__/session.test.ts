@@ -35,6 +35,23 @@ describe('mintSession', () => {
     expect(s).toMatchObject({ tenant: 'assessment', role: 'assessor' });
   });
 
+  it('lands in the home tenant, never in the Social overlay, when both are held', () => {
+    // Since 2026-10-07 the pipelines author u-ines also holds social:participant
+    // (the Communication plane embeds Social in her tenant). TENANTS lists
+    // social before pipelines, so the plain "first granted tenant" rule signed
+    // her in to Social; the home rule sends her to pipelines.
+    expect(mintSession(user, { social: ['participant'], pipelines: ['author'] }))
+      .toMatchObject({ tenant: 'pipelines', role: 'author' });
+    expect(mintSession(user, { social: ['participant'], assessment: ['assessor'] }))
+      .toMatchObject({ tenant: 'assessment', role: 'assessor' });
+    // The Social-only cast still lands in Social, and orgiq still wins when held.
+    expect(mintSession(user, { social: ['moderator'] })).toMatchObject({ tenant: 'social', role: 'moderator' });
+    expect(mintSession(user, { social: ['participant'], orgiq: ['sme'] })).toMatchObject({ tenant: 'orgiq', role: 'sme' });
+    // An explicit preference for Social is still honoured.
+    expect(mintSession(user, { social: ['participant'], pipelines: ['author'] }, { tenant: 'social' }))
+      .toMatchObject({ tenant: 'social', role: 'participant' });
+  });
+
   it('honors a preferred tenant/role only when actually granted', () => {
     const grants: Grants = { orgiq: ['member'], assessment: ['lead-assessor', 'assessor'] };
     expect(mintSession(user, grants, { tenant: 'assessment', role: 'assessor' }))
@@ -175,9 +192,11 @@ describe('session_epoch', () => {
       });
       const { req, res } = fakeReqRes(cookie);
       await sessionMiddleware()(req, res, () => {});
-      // Superseded → cookie cleared, dropped to the anonymous demo identity.
+      // Superseded → cookie cleared; a presented credential never becomes
+      // the permissive cookie-less demo identity.
       expect((res.clearCookie as jest.Mock)).toHaveBeenCalled();
-      expect(req.session?.sub).toBe('demo-user');
+      expect(req.session).toBeUndefined();
+      expect(req.sessionInvalid).toBe(true);
     });
 
     it('drops a session when its last grant has been revoked', async () => {
@@ -191,6 +210,7 @@ describe('session_epoch', () => {
       expect(res.clearCookie).toHaveBeenCalled();
       expect(req.session?.sub).not.toBe('u-e');
       expect(res.cookie).not.toHaveBeenCalled();
+      expect(req.sessionInvalid).toBe(true);
     });
 
     it('ACCEPTS a cookie whose epoch matches, re-minting at the current epoch', async () => {

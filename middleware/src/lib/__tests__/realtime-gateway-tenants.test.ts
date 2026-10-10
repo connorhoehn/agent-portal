@@ -16,6 +16,11 @@
 jest.mock('../../config.js', () => ({
   config: { region: 'us-east-1', aurora: {}, auth: { sessionSigningSecretArn: '' }, cognito: { portalOrigin: '' }, mock: { aurora: true } },
 }));
+jest.mock('../role-registry.js', () => ({ roleRegistry: () => [
+  { id: 'participant', tenant: 'social', capabilities: ['ViewSocial', 'PostMessage', 'StartCall'] },
+  { id: 'moderator', tenant: 'social', capabilities: ['ViewSocial', 'PostMessage', 'StartCall'] },
+  { id: 'community-admin', tenant: 'social', capabilities: ['ViewSocial', 'PostMessage', 'StartCall'] },
+] }));
 
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -100,7 +105,9 @@ const chatMessages = (o: Open, channel: string) => o.frames
 describe('the partition rule reads the token\'s tenants (E5)', () => {
   it('admits a social:ch: member standing in orgiq when the token lists social, and refuses without the grant', () => {
     expect(channelGuard({ userId: 'u-theo', org: 'orgiq', tenants: ['orgiq', 'social'] }, GENERAL)).toBe(true);
-    expect(channelGuard({ userId: 'u-theo', org: 'orgiq', tenants: ['orgiq', 'social'] }, `chat:${GENERAL}`)).toBe(true);
+    // baseChannel (0.107) unwraps `chat:` only around a DM lobby; the chat
+    // service uses the bare name, so a `chat:`-prefixed channel name fails closed.
+    expect(channelGuard({ userId: 'u-theo', org: 'orgiq', tenants: ['orgiq', 'social'] }, `chat:${GENERAL}`)).toBe(false);
     expect(channelGuard({ userId: 'u-theo', org: 'orgiq', tenants: ['orgiq'] }, GENERAL)).toBe(false);
     expect(channelGuard({ userId: 'u-theo', org: 'orgiq' }, GENERAL)).toBe(false);
     // The grant opens the partition, never membership: not a member of #design-reviews.
@@ -162,12 +169,13 @@ describe('over the socket', () => {
     } finally { for (const o of [theo, mira]) o.ws.close(); }
   });
 
-  it('the same user without the social grant gets AUTHZ_CHANNEL_DENIED and no history', async () => {
-    const theo = await connect(session('u-theo', 'Theo Chang', 'orgiq', { orgiq: ['member'] }));
+  it('a user with a forged social token grant and no current directory grant gets no history', async () => {
+    const theo = await connect(session('u-hr', 'Priya Desai', 'orgiq', { orgiq: ['hr-admin'], social: ['participant'] }));
     try {
       send(theo, { service: 'chat', action: 'join', channel: GENERAL });
       send(theo, { service: 'chat', action: 'history', channel: GENERAL, limit: 10 });
-      await until(() => denied(theo).length >= 2);
+      await until(() => theo.frames.filter(frame => frame.type === 'error').length >= 2);
+      expect(denied(theo).length).toBeGreaterThanOrEqual(1);
       expect(denied(theo)[0]).toMatchObject({ service: 'chat', channel: GENERAL });
       expect(theo.frames.some((f) => f.type === 'chat' && (f.action === 'history' || f.action === 'message'))).toBe(false);
     } finally { theo.ws.close(); }

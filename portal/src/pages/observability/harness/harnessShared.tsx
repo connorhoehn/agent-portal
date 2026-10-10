@@ -5,9 +5,8 @@
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 import {
-  Card, Chip, Inline, InlineAlert, PageSection,
+  Card, Chip, Inline, InlineAlert, PageSection, T,
 } from '@connorhoehnslalom/ui-components/shared';
-import { T } from '../Text';
 
 /**
  * `labeled` preserves RunDetailPage's "✓ pass"/"✗ fail" text — CompareRunsPage
@@ -50,7 +49,7 @@ export function ErrorBlock({
       actions={
         <Link
           to="/admin/observability/harness"
-          className="text-[12px] text-primary no-underline px-2 py-0.5 rounded hover:underline"
+          className="text-xs text-primary no-underline px-2 py-0.5 rounded hover:underline"
         >
           ← Back to harness
         </Link>
@@ -68,8 +67,8 @@ export function ErrorBlock({
 export function RunIdLine({ runId }: { runId?: string }) {
   if (!runId) return null;
   return (
-    <Inline gap="sm" align="center" className="text-[12px] text-text-secondary">
-      <T>run id:</T> <T className="font-mono text-[11.5px]">{runId}</T>
+    <Inline gap="sm" align="center" className="text-xs text-text-secondary">
+      <T>run id:</T> <T size="xs" className="font-mono">{runId}</T>
     </Inline>
   );
 }
@@ -78,10 +77,10 @@ export function RunIdLine({ runId }: { runId?: string }) {
 export function RunIdPairLine({ runIdA, runIdB }: { runIdA?: string; runIdB?: string }) {
   if (!runIdA && !runIdB) return null;
   return (
-    <Inline gap="sm" wrap className="text-[12px] text-text-secondary">
-      <T>runIdA:</T> <T className="font-mono text-[11.5px]">{runIdA ?? '—'}</T>
+    <Inline gap="sm" wrap className="text-xs text-text-secondary">
+      <T>runIdA:</T> <T size="xs" className="font-mono">{runIdA ?? '—'}</T>
       <T className="text-text-tertiary">·</T>
-      <T>runIdB:</T> <T className="font-mono text-[11.5px]">{runIdB ?? '—'}</T>
+      <T>runIdB:</T> <T size="xs" className="font-mono">{runIdB ?? '—'}</T>
     </Inline>
   );
 }

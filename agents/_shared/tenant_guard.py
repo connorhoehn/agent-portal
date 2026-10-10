@@ -42,3 +42,21 @@ def reject_wrong_tenant(payload: Any, *, expected_tenant: str, agent_id: str) ->
             ),
         }
     return None
+
+
+def reject_wrong_mode_tenant(
+    payload: Any, *, mode_tenants: dict[str, str], default_tenant: str, agent_id: str
+) -> dict | None:
+    """Per-mode tenant floor: a mode runs only for the tenant that owns it.
+
+    ``mode_tenants`` maps a mode to its one allowed tenant; a mode absent from
+    it (or a payload with no usable mode) falls to ``default_tenant``. Same
+    stance as :func:`reject_wrong_tenant` — a missing ``auth`` block is
+    refused, never defaulted.
+    """
+    mode = payload.get("mode") if isinstance(payload, dict) else None
+    expected = mode_tenants.get(mode, default_tenant) if isinstance(mode, str) else default_tenant
+    rejection = reject_wrong_tenant(payload, expected_tenant=expected, agent_id=agent_id)
+    if rejection is not None and isinstance(mode, str):
+        rejection["detail"] += f" for mode {mode!r}"
+    return rejection

@@ -3,7 +3,7 @@
 // and beneath it the work from the initiatives that is READY to be assigned —
 // short rows you click to get a confirmation modal, not a wall of cards.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import {
   Button,
@@ -12,8 +12,12 @@ import {
   DataTable,
   EmptyState,
   FilterChip,
+  IconButton,
   Inline,
+  Modal,
   PageSection,
+  PlayCircleIcon,
+  RedoIcon,
   Stack,
   TaskComposer,
   Toolbar,
@@ -22,12 +26,16 @@ import {
   type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
+import { useWorkEvents } from '../../hooks/useWorkEvents';
 import { useCapabilities } from '../../lib/capabilities';
 import { relativeTime } from '../../lib/relativeTime';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { toastError, toastPending, toastSuccess } from '../../lib/toastStore';
 import { sendJson, writeJson } from '../../lib/writeJson';
 import { AssignJobModal } from './AssignJobModal';
+import {
+  ACTIVE_RUNS_URL, dispatchedRunDestination, dispatchedRunLabel, dispatchedRunsNoun, type DispatchedRun,
+} from './dispatchedRuns';
 import {
   BotOrigin, GraphUpdatesLink, JobStatusPill, LIVE_STATUSES, ServesItem,
   SUGGESTION_LABEL, SUGGESTION_TONE, T, money, serves,
@@ -53,9 +61,25 @@ export default function QueuePage() {
   const [params, setParams] = useSearchParams();
   const filter = params.get('status') ?? 'all';
   const setFilter = (status: string) => { const next = new URLSearchParams(params); next.set('status', status); setParams(next); };
-  useEffect(() => {
-    if (params.get('compose') === '1' && canManage) document.getElementById('new-run')?.scrollIntoView({ block: 'start' });
-  }, [params, canManage]);
+  // "New run" opens the composer in a dialog over the table, keyed on
+  // `?compose=1` so the Inbox's button, this page's own button and a pasted
+  // link all land the same way. The composer used to sit under the full runs
+  // table and this page scrolled to it — but the scroll fired before the
+  // table above it had rendered, so after an in-app navigation it landed
+  // 1,650px short of the form with focus on <body>. A dialog has no position
+  // to miss, the library Modal puts focus in its first field (the title), and
+  // the table stays where the house rule wants it: above the fold.
+  const composing = canManage && params.get('compose') === '1';
+  // Closing hands focus to this page's own New run button. The Modal returns
+  // focus to whatever opened it, but arriving from the Inbox (or a pasted
+  // link) that element is gone or is <body>.
+  const newRunRef = useRef<HTMLButtonElement>(null);
+  const setComposing = (open: boolean) => {
+    const next = new URLSearchParams(params);
+    if (open) next.set('compose', '1'); else next.delete('compose');
+    setParams(next, { replace: !open });
+    if (!open) requestAnimationFrame(() => newRunRef.current?.focus());
+  };
   const [assigning, setAssigning] = useState<WorkSuggestion | null>(null);
   const [composerBusy, setComposerBusy] = useState(false);
 
@@ -68,6 +92,12 @@ export default function QueuePage() {
   // rows) — once a program crosses 100 jobs, a local count silently
   // under-reports every bucket while looking like a real total.
   const { data: summary } = useFetch<Summary>('/api/work/summary', 8_000);
+  // Dispatched runs are not queue jobs (see dispatchedRuns.ts): they are listed
+  // here, under their own heading, because this is where the header's
+  // "N running" sends people. Same URL and cadence as the badge, shared, so the
+  // two can never show different runs.
+  const { data: dispatchedData } = useFetch<{ runs: DispatchedRun[] }>(ACTIVE_RUNS_URL, 10_000, { share: true });
+  const dispatched = dispatchedData?.runs ?? [];
   const { data: suggestionsData, isLoading: suggestionsLoading, error: suggestionsError } =
     useFetch<{ suggestions: WorkSuggestion[] }>(canManage ? '/api/work/suggestions' : null, 60_000);
 
@@ -85,11 +115,7 @@ export default function QueuePage() {
 
   // Live queue events — a job changing state updates the table without
   // waiting for the next poll.
-  useEffect(() => {
-    const es = new EventSource('/api/work/events');
-    es.onmessage = () => refreshJobs();
-    return () => es.close();
-  }, [refreshJobs]);
+  useWorkEvents(refreshJobs);
 
   const jobs = useMemo(() => jobsData?.jobs ?? [], [jobsData]);
   const suggestions = suggestionsData?.suggestions ?? null;
@@ -132,7 +158,7 @@ export default function QueuePage() {
       const job = await sendJson<Job>('/api/work/jobs', 'POST', { title: title.trim(), prompt: prompt.trim() });
       toastSuccess(tid, 'Job queued', 'an idle worker picks it up within ~10s');
       refreshJobs();
-      navigate(`/iq/work/${job.id}`);
+      navigate(`/iq/work/${job.id}`, { replace: true });
     } catch (err) {
       toastError(tid, 'Could not queue job', (err as Error).message);
     } finally {
@@ -151,26 +177,23 @@ export default function QueuePage() {
     {
       key: 'title', header: 'Job', sortable: true,
       render: (j) => (
-        <Stack gap="none" className="min-w-0">
-          <Inline align="center" gap="sm" className="min-w-0">
-            {/* A real Link, not just the row's onClick: DataTable's row-click
-                is a bare <tr onClick> with no keyboard access, so this is the
-                one focusable, Enter-activatable control in the row. */}
-            <Link
-              to={`/iq/work/${j.id}`}
-              onClick={(e: React.MouseEvent) => e.stopPropagation()}
-              className="text-[12.5px] font-medium text-text-primary no-underline hover:text-primary truncate"
-              title={j.title}
-            >
-              {j.title}
-            </Link>
-            <BotOrigin job={j} />
-          </Inline>
-          {j.error && (
-            <T className="text-[11px] text-danger truncate" title={j.error}>{j.error}</T>
-          )}
-        </Stack>
+        // A real Link, not just the row's onClick: DataTable's row-click
+        // is a bare <tr onClick> with no keyboard access, so this is the
+        // one focusable, Enter-activatable control in the row. The failure
+        // text is the link's tooltip, the bot origin its own column.
+        <Link
+          to={`/iq/work/${j.id}`}
+          onClick={(e: React.MouseEvent) => e.stopPropagation()}
+          className="text-[12.5px] font-medium text-text-primary no-underline hover:text-primary truncate"
+          title={j.error ? `${j.title} — ${j.error}` : j.title}
+        >
+          {j.title}
+        </Link>
       ),
+    },
+    {
+      key: 'origin', header: 'Origin',
+      render: (j) => (j.botName ? <BotOrigin job={j} /> : <T className="text-[11px] text-text-tertiary">—</T>),
     },
     {
       key: 'status', header: 'Status', sortable: true,
@@ -191,23 +214,46 @@ export default function QueuePage() {
       ),
     },
     {
-      key: 'createdAt', header: 'Age', sortable: true, align: 'right',
+      key: 'createdAt', header: 'Age', sortable: true, numeric: true,
       compare: (a, b) => a.createdAt.localeCompare(b.createdAt),
-      render: (j) => <T className="text-[11px] text-text-tertiary whitespace-nowrap">{relativeTime(j.createdAt)}</T>,
+      render: (j) => relativeTime(j.createdAt),
     },
     {
-      key: 'action', header: '', align: 'right',
-      render: (j) => (j.status === 'failed' || j.status === 'cancelled') && canManage ? (
-        <Button
-          size="sm"
-          variant="secondary"
-          onClick={(e: React.MouseEvent) => { e.stopPropagation(); void requeue(j); }}
-        >
-          Requeue
-        </Button>
-      ) : (
-        <T className="text-[11px] text-text-tertiary whitespace-nowrap">
+      key: 'action', header: '', numeric: true,
+      render: (j) => (
+        <T size="xs" tone="tertiary" className="justify-end">
           {LIVE_STATUSES.has(j.status) ? 'watch →' : 'open →'}
+        </T>
+      ),
+    },
+  ];
+
+  const dispatchedColumns: DataTableColumn<DispatchedRun>[] = [
+    {
+      key: 'workItemTitle', header: 'Work item',
+      render: (r) => {
+        const dest = dispatchedRunDestination(r, canManage);
+        return (
+          <Link
+            to={dest.path}
+            onClick={(e: React.MouseEvent) => e.stopPropagation()}
+            className="text-[12.5px] font-medium text-text-primary no-underline hover:text-primary truncate"
+            title={dispatchedRunLabel(r)}
+          >
+            {dispatchedRunLabel(r)}
+          </Link>
+        );
+      },
+    },
+    {
+      key: 'startedAt', header: 'Started', numeric: true,
+      render: (r) => relativeTime(r.startedAt),
+    },
+    {
+      key: 'open', header: '', numeric: true,
+      render: (r) => (
+        <T size="xs" tone="tertiary" className="justify-end">
+          {dispatchedRunDestination(r, canManage).kind === 'computer' ? 'computer & logs →' : 'work item →'}
         </T>
       ),
     },
@@ -220,31 +266,15 @@ export default function QueuePage() {
     },
     {
       key: 'title', header: 'Work item', sortable: true,
+      // Row click opens the assign dialog; the Assign action in the row's
+      // actions is its keyboard-reachable twin.
       render: (s) => (
-        <Stack gap="none" className="min-w-0">
-          {/* A real Button, not just the row's onClick: DataTable's row-click
-              is a bare <tr onClick> with no keyboard access, so this is the
-              one focusable, Enter/Space-activatable control in the row.
-              `text-left` is load-bearing: Button's root is a native button
-              element (UA default `text-align: center`) rendered
-              `display: block`, and
-              the Stack stretches it to the column's full width — so without
-              it the title centred while its `reason` sub-line stayed at the
-              left edge and the two zig-zagged. `justify-start` alone cannot
-              fix that; it is a flex property and Button is not a flex
-              container. Same finding as `promotions/PromotionsPage.tsx`. */}
-          <Button
-            variant="ghost"
-            size="sm"
-            className="justify-start text-left px-0 py-0 border-0 h-fit min-w-0 truncate text-[12.5px] font-medium text-text-primary"
-            title={s.title}
-            onClick={(e) => { e.stopPropagation(); setAssigning(s); }}
-          >
-            {s.title}
-          </Button>
-          <T className="text-[11px] text-text-tertiary truncate" title={s.reason}>{s.reason}</T>
-        </Stack>
+        <T className="text-[12.5px] font-medium text-text-primary truncate" title={s.title}>{s.title}</T>
       ),
+    },
+    {
+      key: 'reason', header: 'Reason',
+      render: (s) => <T className="text-[11px] text-text-tertiary truncate" title={s.reason}>{s.reason}</T>,
     },
     {
       key: 'initiativeName', header: 'Initiative', sortable: true,
@@ -260,7 +290,7 @@ export default function QueuePage() {
       ),
     },
     {
-      key: 'storyPoints', header: 'Est.', align: 'right', sortable: true,
+      key: 'storyPoints', header: 'Est.', numeric: true, sortable: true,
       compare: (a, b) => (a.storyPoints ?? 0) - (b.storyPoints ?? 0),
       render: (s) => (
         <T className="text-[12px] text-text-secondary tabular-nums whitespace-nowrap">
@@ -269,21 +299,43 @@ export default function QueuePage() {
         </T>
       ),
     },
-    {
-      key: 'assign', header: '', align: 'right',
-      render: () => (
-        <T className="text-[11px] font-semibold text-primary whitespace-nowrap">Assign to agent →</T>
-      ),
-    },
   ];
 
   return (
-    <PageSection title="Runs" actions={<GraphUpdatesLink />}>
+    <PageSection
+      title="Runs"
+      actions={(
+        <Inline gap="sm" align="center">
+          <GraphUpdatesLink />
+          {canManage && <Button ref={newRunRef} size="sm" variant="primary" onClick={() => setComposing(true)}>New run</Button>}
+        </Inline>
+      )}
+    >
       <AssignJobModal
         suggestion={assigning}
         onClose={() => setAssigning(null)}
         onQueued={(job) => { setAssigning(null); refreshJobs(); navigate(`/iq/work/${job.id}`); }}
       />
+
+      {/* ── Dispatched runs: live, and not on the queue below ── */}
+      {dispatched.length > 0 && (
+        <Stack gap="xs" className="mb-4" data-testid="dispatched-runs">
+          <Inline align="baseline" gap="sm">
+            <T className="text-[13px] font-semibold text-text-primary">Running now outside the queue</T>
+            <T className="text-[11px] text-text-tertiary">
+              {dispatchedRunsNoun(dispatched.length)} from initiative work items — they run on a computer directly, so the job counts below leave them out
+            </T>
+          </Inline>
+          <DataTable<DispatchedRun>
+            data={dispatched}
+            columns={dispatchedColumns}
+            keyField={(r) => r.id}
+            size="sm"
+            onRowClick={(r) => navigate(dispatchedRunDestination(r, canManage).path)}
+            emptyMessage="Nothing dispatched is running"
+          />
+        </Stack>
+      )}
 
       {/* ── The queue itself ── */}
       <Toolbar wrap aria-label="Job filters">
@@ -318,7 +370,7 @@ export default function QueuePage() {
             // (org-leader DEFECTS #5). Point everyone else at the two doors
             // that actually put something on the queue for them instead.
             : canManage
-              ? 'No jobs yet — assign a work item below, or write one from scratch.'
+              ? 'No jobs yet — assign a work item below, or write one from scratch with New run.'
               : (
                 <>
                   No jobs yet —{' '}
@@ -337,7 +389,17 @@ export default function QueuePage() {
           data={filtered}
           columns={jobColumns}
           keyField={(j) => j.id}
+          size="sm"
           onRowClick={(j) => navigate(`/iq/work/${j.id}`)}
+          rowActions={(j) => ((j.status === 'failed' || j.status === 'cancelled') && canManage ? (
+            <IconButton
+              size="sm"
+              icon={<RedoIcon />}
+              aria-label={`Requeue ${j.title}`}
+              title="Requeue"
+              onClick={() => void requeue(j)}
+            />
+          ) : null)}
           pageSize={25}
           emptyMessage="No jobs"
           loading={jobsLoadingFirst}
@@ -356,7 +418,7 @@ export default function QueuePage() {
           {suggestionsError ? (
             <Card padding="md" className="w-full">
               <T className="text-[12px] text-text-tertiary">
-                Could not read your work items — the composer below still works.
+                Could not read your work items — New run still works.
               </T>
             </Card>
           ) : !suggestionsLoadingFirst && suggestions != null && suggestions.length === 0 ? (
@@ -370,7 +432,17 @@ export default function QueuePage() {
               data={suggestions ?? []}
               columns={suggestionColumns}
               keyField={(s) => s.id}
+              size="sm"
               onRowClick={(s) => setAssigning(s)}
+              rowActions={(s) => (
+                <IconButton
+                  size="sm"
+                  icon={<PlayCircleIcon />}
+                  aria-label={`Assign ${s.title} to an agent`}
+                  title="Assign to agent"
+                  onClick={() => setAssigning(s)}
+                />
+              )}
               pageSize={10}
               emptyMessage="Nothing to assign"
               className="w-full"
@@ -381,19 +453,26 @@ export default function QueuePage() {
       )}
 
       {/* ── Freeform — for work that is not on any board ── */}
-      {canManage && (
-        <div id="new-run"><TaskComposer
-          className="mt-6"
+      <Modal
+        open={composing}
+        onClose={() => { if (!composerBusy) setComposing(false); }}
+        ariaLabel="New run"
+        maxWidth={640}
+        cardClassName="p-0"
+        rawChildren
+      >
+        <TaskComposer
+          className="border-0"
           title="New run"
           description="An idle computer picks it up within ~10 seconds and works in a microVM with a persistent workspace and git."
           titlePlaceholder="Title — e.g. 'Document the Cedar policy migration'"
           promptPlaceholder="What should the worker do?"
-          hint="Runs on the first idle computer · ⌘⏎"
+          hint="Runs on the first idle computer · ⌘⏎ · Esc to close"
           submitLabel="Queue run"
           busy={composerBusy}
           onSubmit={({ title, prompt }) => void enqueueFreeform(title, prompt)}
-        /></div>
-      )}
+        />
+      </Modal>
     </PageSection>
   );
 }

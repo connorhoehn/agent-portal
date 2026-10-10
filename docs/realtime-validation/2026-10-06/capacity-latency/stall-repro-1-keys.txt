@@ -1,0 +1,46 @@
+1791303847.5 realtime:orgiq-bff-cluster-acceptance%3Adistillation:node:bff-b=a7a0132f/pttl26793 realtime:orgiq-bff-cluster-acceptance:node:bff-a=1775ad5f/pttl26484 realtime:orgiq-bff-cluster-acceptance%3Adistillation:node:bff-a=5798b772/pttl26368 realtime:orgiq-bff-cluster-acceptance:node:bff-b=60c5fe44/pttl26574 
+1791303848.91 
+1791303850.11 
+Error response from daemon: Container orgiq-bff-cluster-redis is paused, unpause the container before exec
+1791303851.25 
+Error response from daemon: Container orgiq-bff-cluster-redis is paused, unpause the container before exec
+1791303852.31 
+Error response from daemon: Container orgiq-bff-cluster-redis is paused, unpause the container before exec
+1791303853.36 
+Error response from daemon: Container orgiq-bff-cluster-redis is paused, unpause the container before exec
+1791303854.41 
+Error response from daemon: Container orgiq-bff-cluster-redis is paused, unpause the container before exec
+1791303855.46 
+Error response from daemon: Container orgiq-bff-cluster-redis is paused, unpause the container before exec
+1791303856.51 
+Error response from daemon: Container orgiq-bff-cluster-redis is paused, unpause the container before exec
+1791303857.55 
+Error response from daemon: Container orgiq-bff-cluster-redis is paused, unpause the container before exec
+1791303858.6 
+Error response from daemon: Container orgiq-bff-cluster-redis is paused, unpause the container before exec
+1791303859.65 
+Error response from daemon: Container orgiq-bff-cluster-redis is paused, unpause the container before exec
+1791303860.7 
+Error response from daemon: Container orgiq-bff-cluster-redis is paused, unpause the container before exec
+1791303861.74 
+1791303862.79 realtime:orgiq-bff-cluster-acceptance%3Adistillation:node:bff-b=83a82eca/pttl29496 realtime:orgiq-bff-cluster-acceptance:node:bff-a=53b0de7b/pttl29419 realtime:orgiq-bff-cluster-acceptance%3Adistillation:node:bff-a=460ceaf2/pttl29341 realtime:orgiq-bff-cluster-acceptance:node:bff-b=959455e9/pttl29207 
+1791303864.29 realtime:orgiq-bff-cluster-acceptance%3Adistillation:node:bff-b=83a82eca/pttl28012 realtime:orgiq-bff-cluster-acceptance:node:bff-a=53b0de7b/pttl27930 realtime:orgiq-bff-cluster-acceptance%3Adistillation:node:bff-a=460ceaf2/pttl27860 realtime:orgiq-bff-cluster-acceptance:node:bff-b=959455e9/pttl27771 
+1791303865.72 realtime:orgiq-bff-cluster-acceptance%3Adistillation:node:bff-b=83a82eca/pttl26590 realtime:orgiq-bff-cluster-acceptance:node:bff-a=53b0de7b/pttl26523 realtime:orgiq-bff-cluster-acceptance%3Adistillation:node:bff-a=460ceaf2/pttl26441 realtime:orgiq-bff-cluster-acceptance:node:bff-b=959455e9/pttl26349 
+1791303867.14 realtime:orgiq-bff-cluster-acceptance%3Adistillation:node:bff-b=83a82eca/pttl25178 realtime:orgiq-bff-cluster-acceptance:node:bff-a=53b0de7b/pttl25072 realtime:orgiq-bff-cluster-acceptance%3Adistillation:node:bff-a=460ceaf2/pttl24971 realtime:orgiq-bff-cluster-acceptance:node:bff-b=959455e9/pttl24878 
+1791303868.62 realtime:orgiq-bff-cluster-acceptance%3Adistillation:node:bff-b=83a82eca/pttl23681 realtime:orgiq-bff-cluster-acceptance:node:bff-a=53b0de7b/pttl23608 realtime:orgiq-bff-cluster-acceptance%3Adistillation:node:bff-a=460ceaf2/pttl23493 realtime:orgiq-bff-cluster-acceptance:node:bff-b=959455e9/pttl23407 
+1791303870.09 realtime:orgiq-bff-cluster-acceptance%3Adistillation:node:bff-b=83a82eca/pttl22206 realtime:orgiq-bff-cluster-acceptance:node:bff-a=53b0de7b/pttl22110 realtime:orgiq-bff-cluster-acceptance%3Adistillation:node:bff-a=460ceaf2/pttl22023 realtime:orgiq-bff-cluster-acceptance:node:bff-b=959455e9/pttl29977 
+1791303871.57 realtime:orgiq-bff-cluster-acceptance%3Adistillation:node:bff-b=83a82eca/pttl20694 realtime:orgiq-bff-cluster-acceptance:node:bff-a=53b0de7b/pttl28655 realtime:orgiq-bff-cluster-acceptance%3Adistillation:node:bff-a=460ceaf2/pttl20516 realtime:orgiq-bff-cluster-acceptance:node:bff-b=959455e9/pttl28482 
+1791303873.06 realtime:orgiq-bff-cluster-acceptance%3Adistillation:node:bff-b=83a82eca/pttl19226 realtime:orgiq-bff-cluster-acceptance:node:bff-a=53b0de7b/pttl27200 realtime:orgiq-bff-cluster-acceptance%3Adistillation:node:bff-a=460ceaf2/pttl19084 realtime:orgiq-bff-cluster-acceptance:node:bff-b=959455e9/pttl27051 
+1791303874.52 realtime:orgiq-bff-cluster-acceptance%3Adistillation:node:bff-b=83a82eca/pttl17698 realtime:orgiq-bff-cluster-acceptance:node:bff-a=53b0de7b/pttl25653 realtime:orgiq-bff-cluster-acceptance%3Adistillation:node:bff-a=460ceaf2/pttl17465 realtime:orgiq-bff-cluster-acceptance:node:bff-b=959455e9/pttl25399 
+1791303876.17 realtime:orgiq-bff-cluster-acceptance%3Adistillation:node:bff-b=83a82eca/pttl16114 realtime:orgiq-bff-cluster-acceptance:node:bff-a=53b0de7b/pttl24078 realtime:orgiq-bff-cluster-acceptance%3Adistillation:node:bff-a=460ceaf2/pttl15932 realtime:orgiq-bff-cluster-acceptance:node:bff-b=959455e9/pttl23897 
+1791303877.67 realtime:orgiq-bff-cluster-acceptance%3Adistillation:node:bff-b=83a82eca/pttl14608 realtime:orgiq-bff-cluster-acceptance:node:bff-a=53b0de7b/pttl22562 realtime:orgiq-bff-cluster-acceptance%3Adistillation:node:bff-a=460ceaf2/pttl14433 realtime:orgiq-bff-cluster-acceptance:node:bff-b=959455e9/pttl22392 
+1791303879.15 realtime:orgiq-bff-cluster-acceptance%3Adistillation:node:bff-b=83a82eca/pttl13155 realtime:orgiq-bff-cluster-acceptance:node:bff-a=53b0de7b/pttl21126 realtime:orgiq-bff-cluster-acceptance%3Adistillation:node:bff-a=460ceaf2/pttl13009 realtime:orgiq-bff-cluster-acceptance:node:bff-b=959455e9/pttl20972 
+1791303880.57 realtime:orgiq-bff-cluster-acceptance%3Adistillation:node:bff-b=83a82eca/pttl11745 realtime:orgiq-bff-cluster-acceptance:node:bff-a=53b0de7b/pttl29713 realtime:orgiq-bff-cluster-acceptance%3Adistillation:node:bff-a=460ceaf2/pttl11579 realtime:orgiq-bff-cluster-acceptance:node:bff-b=959455e9/pttl29551 
+1791303882.0 realtime:orgiq-bff-cluster-acceptance%3Adistillation:node:bff-b=83a82eca/pttl10278 realtime:orgiq-bff-cluster-acceptance:node:bff-a=53b0de7b/pttl28223 realtime:orgiq-bff-cluster-acceptance%3Adistillation:node:bff-a=460ceaf2/pttl10073 realtime:orgiq-bff-cluster-acceptance:node:bff-b=959455e9/pttl28037 
+1791303883.5 realtime:orgiq-bff-cluster-acceptance%3Adistillation:node:bff-b=83a82eca/pttl8802 realtime:orgiq-bff-cluster-acceptance:node:bff-a=53b0de7b/pttl26765 realtime:orgiq-bff-cluster-acceptance%3Adistillation:node:bff-a=460ceaf2/pttl8631 realtime:orgiq-bff-cluster-acceptance:node:bff-b=959455e9/pttl26607 
+1791303884.93 realtime:orgiq-bff-cluster-acceptance%3Adistillation:node:bff-b=83a82eca/pttl7355 realtime:orgiq-bff-cluster-acceptance:node:bff-a=53b0de7b/pttl25280 realtime:orgiq-bff-cluster-acceptance%3Adistillation:node:bff-a=460ceaf2/pttl7118 realtime:orgiq-bff-cluster-acceptance:node:bff-b=959455e9/pttl25066 
+1791303886.48 realtime:orgiq-bff-cluster-acceptance%3Adistillation:node:bff-b=83a82eca/pttl5832 realtime:orgiq-bff-cluster-acceptance:node:bff-a=53b0de7b/pttl23794 realtime:orgiq-bff-cluster-acceptance%3Adistillation:node:bff-a=460ceaf2/pttl5640 realtime:orgiq-bff-cluster-acceptance:node:bff-b=959455e9/pttl23594 
+1791303887.95 realtime:orgiq-bff-cluster-acceptance%3Adistillation:node:bff-b=83a82eca/pttl4363 realtime:orgiq-bff-cluster-acceptance:node:bff-a=53b0de7b/pttl22318 realtime:orgiq-bff-cluster-acceptance%3Adistillation:node:bff-a=460ceaf2/pttl4189 realtime:orgiq-bff-cluster-acceptance:node:bff-b=959455e9/pttl22138 
+1791303889.41 realtime:orgiq-bff-cluster-acceptance%3Adistillation:node:bff-b=83a82eca/pttl2881 realtime:orgiq-bff-cluster-acceptance:node:bff-a=53b0de7b/pttl20856 realtime:orgiq-bff-cluster-acceptance%3Adistillation:node:bff-a=460ceaf2/pttl2719 realtime:orgiq-bff-cluster-acceptance:node:bff-b=959455e9/pttl20686 
+1791303890.86 realtime:orgiq-bff-cluster-acceptance%3Adistillation:node:bff-b=83a82eca/pttl1443 realtime:orgiq-bff-cluster-acceptance:node:bff-a=53b0de7b/pttl29384 realtime:orgiq-bff-cluster-acceptance%3Adistillation:node:bff-a=460ceaf2/pttl1221 realtime:orgiq-bff-cluster-acceptance:node:bff-b=959455e9/pttl29170 
+1791303892.38 realtime:orgiq-bff-cluster-acceptance:node:bff-a=53b0de7b/pttl27805 realtime:orgiq-bff-cluster-acceptance:node:bff-b=959455e9/pttl27702 

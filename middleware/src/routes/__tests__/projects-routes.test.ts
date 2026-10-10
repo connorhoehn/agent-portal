@@ -15,6 +15,8 @@
 const gateCalls: string[] = [];
 let sessionValue: { sub: string; name?: string; role?: string } | null = { sub: 'u-1', name: 'RM' };
 
+// lib/mine.ts (the one "mine" viewer this route resolves through) reaches config through its providers.
+jest.mock('../../config.js', () => ({ config: { region: 'us-east-1', auth: { sessionSigningSecretArn: '', policyStoreId: undefined, cognito: null }, cognito: { portalOrigin: '' }, mock: { aurora: true, agentcore: true } } }));
 jest.mock('../../lib/authz.js', () => ({
   requireAction: (action: string) => {
     gateCalls.push(action);

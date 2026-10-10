@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import {
+  T,
   Inline,
   Spinner,
   Stack,
@@ -51,26 +52,16 @@ function RunningIcon() {
 
 function DoneIcon() {
   return (
-    <Inline
-      gap="none"
-      justify="center"
-      aria-hidden
-      className="w-[18px] h-[18px] rounded-full bg-success shrink-0 text-[11px] text-surface font-bold"
-    >
-      ✓
+    <Inline as="span" gap="none" justify="center" aria-hidden className="w-[18px] h-[18px] rounded-full bg-success shrink-0">
+      <T as="span" size="xs" weight="semibold" tone="inherit" className="text-surface">✓</T>
     </Inline>
   );
 }
 
 function ErrorIcon() {
   return (
-    <Inline
-      gap="none"
-      justify="center"
-      aria-hidden
-      className="w-[18px] h-[18px] rounded-full bg-danger shrink-0 text-[11px] text-surface font-bold"
-    >
-      ✗
+    <Inline as="span" gap="none" justify="center" aria-hidden className="w-[18px] h-[18px] rounded-full bg-danger shrink-0">
+      <T as="span" size="xs" weight="semibold" tone="inherit" className="text-surface">✗</T>
     </Inline>
   );
 }
@@ -213,21 +204,17 @@ export function ProvisioningProgress({
               <StepIcon status={status} />
 
               <Stack gap="none" className="flex flex-col gap-0.5">
-                <Inline
+                <T
                   as="span"
-                  gap="none"
-                  className={[
-                    'text-[13px]',
-                    status === 'running' ? 'font-semibold' : 'font-normal',
-                    status === 'done' ? 'text-success'
-                      : status === 'error' ? 'text-danger'
-                      : status === 'running' ? 'text-text-primary' : 'text-text-tertiary',
-                  ].join(' ')}
+                  size="sm"
+                  weight={status === 'running' ? 'semibold' : 'normal'}
+                  tone={status === 'running' ? 'primary' : status === 'done' || status === 'error' ? 'inherit' : 'tertiary'}
+                  className={status === 'done' ? 'text-success' : status === 'error' ? 'text-danger' : undefined}
                 >
                   {step.label}
-                </Inline>
+                </T>
                 {msg && (
-                  <Inline as="span" gap="none" className="text-[11px] text-text-tertiary">{msg}</Inline>
+                  <T as="span" size="xs" tone="tertiary">{msg}</T>
                 )}
               </Stack>
             </Inline>

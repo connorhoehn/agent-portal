@@ -1,0 +1,68 @@
+Started internal compiled load profile steady driver e91c2caf6626d72347c1a6b4f5b1d25257d274e7b628589c4b485c809996612f
+target ws://orgiq-bff-capacity-a:3001/ws · health http://orgiq-bff-capacity-a:3001/api/health · server pid unknown (pass --server-pid) · hold 60s
+
+=== steady · group 2 · 100 calls · 1000 sockets (200 in calls, 0 second tabs, 800 chat/presence) · run tag 66da
+  ramp: 1000/1000 connected in 20s
+  connect 1000/1000 (p95 5.6 ms) · established 100/100 · 109.7s
+  invite→incoming  p50 32  p95 40  p99 42.1  max 45.7 ms (n=100)
+  accept→accepted  p50 36.1  p95 48.7  p99 51.7  max 53.2 ms (n=100)
+  chat delivery    p50 29.9  p95 42.6  p99 419.5  max 1166 ms (n=2275 of 2275 sent)
+  cross: call 0 chat 0 presence 0 · unexpected ended 0 · answered-elsewhere 0 · denied 0 · other errors 0
+  slow /api/health samples (>=50 ms): 66.3ms@20.1s/ramp, 53.6ms@20.6s/ramp, 74.6ms@21.6s/ramp
+  server orgiq-bff-capacity-a: docker-working-set peak 190.9 MiB · CPU peak 102% mean 24.6% · /api/health p50 0.9 p99 53.6 max 74.6 ms (0 errors; 0 planned-outage errors) · client loop p99 11.5 ms
+  PASS  sockets connect: 1000/1000 (100%)
+  PASS  calls established: 100/100 (all)
+  PASS  invite→incoming p95: 40 (< 250 ms)
+  PASS  invite→incoming p99: 42.1 (< 1000 ms)
+  PASS  accept→accepted p95: 48.7 (< 250 ms)
+  PASS  chat delivery p95: 42.6 (< 300 ms, with paired-sender evidence)
+  PASS  background chat coverage: 800/800 (all paired senders reach their peer)
+  PASS  background chat admission: 800/800; 2860ms (all server join acknowledgements within 10 seconds)
+  PASS  cross-call/channel deliveries: 0 (0)
+  PASS  answered-elsewhere outside scenario 4: 0 (0)
+  PASS  ended before scripted hang-up: 0 (0)
+  PASS  unplanned socket disconnects: 0 (0)
+  PASS  AUTHZ_CHANNEL_DENIED: 0 (0)
+  FAIL  event-loop proxy (/api/health p99): 53.6 (< 50 ms)
+  PASS  health errors outside planned outage: 0 (0)
+  PASS  server memory peak: 190.9 (< 700 MiB)
+  PASS  container samples: 0 (no errors, at least one sample)
+  PASS  peer 1: health p99: 16.7 (< 50 ms)
+  PASS  peer 1: health errors: 0 (0)
+  PASS  peer 1: memory peak: 202.6 (< 700 MiB)
+  PASS  peer 1: container samples: 0 (no errors, at least one sample)
+
+=== steady · group 4 · 100 calls · 1000 sockets (400 in calls, 0 second tabs, 600 chat/presence) · run tag 5e8b
+  ramp: 1000/1000 connected in 20s
+  connect 1000/1000 (p95 5 ms) · established 100/100 · 109.6s
+  invite→incoming  p50 36.7  p95 50.6  p99 58.2  max 70.4 ms (n=300)
+  accept→accepted  p50 35.5  p95 48.2  p99 56.9  max 64.3 ms (n=300)
+  chat delivery    p50 31.6  p95 42.7  p99 51.4  max 80.9 ms (n=1711 of 1711 sent)
+  cross: call 0 chat 0 presence 0 · unexpected ended 0 · answered-elsewhere 0 · denied 0 · other errors 0
+  server orgiq-bff-capacity-a: docker-working-set peak 193.2 MiB · CPU peak 100.2% mean 24% · /api/health p50 0.8 p99 14.7 max 43.8 ms (0 errors; 0 planned-outage errors) · client loop p99 12.1 ms
+  PASS  sockets connect: 1000/1000 (100%)
+  PASS  calls established: 100/100 (all)
+  PASS  invite→incoming p95: 50.6 (< 250 ms)
+  PASS  invite→incoming p99: 58.2 (< 1000 ms)
+  PASS  accept→accepted p95: 48.2 (< 250 ms)
+  PASS  chat delivery p95: 42.7 (< 300 ms, with paired-sender evidence)
+  PASS  background chat coverage: 600/600 (all paired senders reach their peer)
+  PASS  background chat admission: 600/600; 2534.5ms (all server join acknowledgements within 10 seconds)
+  PASS  cross-call/channel deliveries: 0 (0)
+  PASS  answered-elsewhere outside scenario 4: 0 (0)
+  PASS  ended before scripted hang-up: 0 (0)
+  PASS  unplanned socket disconnects: 0 (0)
+  PASS  AUTHZ_CHANNEL_DENIED: 0 (0)
+  PASS  event-loop proxy (/api/health p99): 14.7 (< 50 ms)
+  PASS  health errors outside planned outage: 0 (0)
+  PASS  server memory peak: 193.2 (< 700 MiB)
+  PASS  container samples: 0 (no errors, at least one sample)
+  PASS  peer 1: health p99: 6.4 (< 50 ms)
+  PASS  peer 1: health errors: 0 (0)
+  PASS  peer 1: memory peak: 205.2 (< 700 MiB)
+  PASS  peer 1: container samples: 0 (no errors, at least one sample)
+
+1/2 runs passed every threshold
+  FAIL  steady × 2 — event-loop proxy (/api/health p99)
+  PASS  steady × 4
+Copied complete result to /tmp/orgiq-bff-container-internal-steady.json

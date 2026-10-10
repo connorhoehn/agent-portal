@@ -33,6 +33,7 @@
 import { createHash } from 'node:crypto';
 import { clock, defineFixture } from './core/index.js';
 import { diffFiles, diffStat } from './static-review.js';
+import { demoAuthProducts, type AnsweredPhase, type ProductStep } from './demo-auth-products.js';
 
 // ─── Work products ──────────────────────────────────────────────────────────
 //
@@ -126,6 +127,62 @@ export interface WorkProduct {
   diff: string;
   /** Dollars the runtime reports for the run — `result.total_cost_usd`. */
   costUsd: number;
+  /**
+   * The run's plan, emitted as the TodoWrite checklist a Claude Code run keeps
+   * (lab contract §1). When present the run is narrated from `steps` rather
+   * than `toolCalls`, re-emitting the plan as each step finishes an item.
+   */
+  plan?: string[];
+  steps?: ProductStep[];
+  /**
+   * A question the run ends on instead of finishing (lab contract §2): the
+   * last assistant text ends with '?' and the run stays open until somebody
+   * answers it on the same session. Nothing is staged until then — `answered`
+   * is the work the agent does once it has its answer.
+   */
+  question?: string;
+  answered?: AnsweredPhase;
+  /** `'demo'` paces each event by the demo's beat (mock/demo-pace.ts). */
+  pace?: 'demo';
+}
+
+function defaultProducts(): WorkProduct[] {
+  return [
+    {
+      id: 'throttle',
+      keyword: 'noise',
+      summary: 'Added a per-alert admission counter to the throttle so a flapping alert stops paging after the limit.',
+      toolCalls: [
+        { name: 'Read', target: 'src/alerts/throttle.ts' },
+        { name: 'Edit', target: 'src/alerts/throttle.ts' },
+      ],
+      diff: THROTTLE_DIFF,
+      costUsd: 0.11,
+    },
+    {
+      id: 'auth-cookie',
+      keyword: 'cookie',
+      summary: 'Set the Partitioned attribute on the session cookie when it is issued over a secure connection.',
+      toolCalls: [
+        { name: 'Grep', target: 'cookieOptions' },
+        { name: 'Edit', target: 'src/auth/session-cookie.ts' },
+      ],
+      diff: AUTH_COOKIE_DIFF,
+      costUsd: 0.07,
+    },
+    {
+      id: 'sampler',
+      keyword: null,
+      summary: 'Made trace sampling deterministic per trace id and pinned it with a test.',
+      toolCalls: [
+        { name: 'Read', target: 'src/collector/sampler.ts' },
+        { name: 'Edit', target: 'src/collector/sampler.ts' },
+        { name: 'Write', target: 'src/collector/sampler.test.ts' },
+      ],
+      diff: SAMPLER_DIFF,
+      costUsd: 0.09,
+    },
+  ];
 }
 
 /**
@@ -139,47 +196,32 @@ export interface WorkProduct {
  * `empty`   — an agent that changes nothing. Declared, because "the run
  *             finished and there was nothing to govern" is a real outcome the
  *             pipeline handles separately and should be reachable offline.
+ * `demo`    — the Computer Lab demo's Auth Migration agents
+ *             (mock/demo-auth-products.ts) ahead of the default three.
  */
 export const devboxWorkProducts = defineFixture<WorkProduct>({
   key: 'devbox-work-products',
   scenarios: {
-    default: () => [
-      {
-        id: 'throttle',
-        keyword: 'noise',
-        summary: 'Added a per-alert admission counter to the throttle so a flapping alert stops paging after the limit.',
-        toolCalls: [
-          { name: 'Read', target: 'src/alerts/throttle.ts' },
-          { name: 'Edit', target: 'src/alerts/throttle.ts' },
-        ],
-        diff: THROTTLE_DIFF,
-        costUsd: 0.11,
-      },
-      {
-        id: 'auth-cookie',
-        keyword: 'cookie',
-        summary: 'Set the Partitioned attribute on the session cookie when it is issued over a secure connection.',
-        toolCalls: [
-          { name: 'Grep', target: 'cookieOptions' },
-          { name: 'Edit', target: 'src/auth/session-cookie.ts' },
-        ],
-        diff: AUTH_COOKIE_DIFF,
-        costUsd: 0.07,
-      },
-      {
-        id: 'sampler',
-        keyword: null,
-        summary: 'Made trace sampling deterministic per trace id and pinned it with a test.',
-        toolCalls: [
-          { name: 'Read', target: 'src/collector/sampler.ts' },
-          { name: 'Edit', target: 'src/collector/sampler.ts' },
-          { name: 'Write', target: 'src/collector/sampler.test.ts' },
-        ],
-        diff: SAMPLER_DIFF,
-        costUsd: 0.09,
-      },
-    ],
+    default: () => defaultProducts(),
     empty: () => [],
+    // The Computer Lab demo's agents, FIRST so their keywords win over the
+    // defaults' (`cookie` would otherwise claim the logout bug), then the
+    // default three so any other prompt still lands where it always did.
+    demo: () => [
+      ...demoAuthProducts().map((p): WorkProduct => ({
+        ...p,
+        // The transcript's tool list, read off the narrated steps rather
+        // than restated beside them.
+        toolCalls: [...p.steps, ...(p.answered?.steps ?? [])]
+          .filter((st) => st.tool)
+          .map((st) => ({
+            name: st.tool!.name,
+            target: String(st.tool!.input['file_path'] ?? st.tool!.input['command'] ?? st.tool!.input['pattern'] ?? ''),
+          })),
+        pace: 'demo',
+      })),
+      ...defaultProducts(),
+    ],
   },
 });
 

@@ -5,10 +5,9 @@
 // can't do. Row click selects, same as a card — the detail below is shared.
 
 import { useMemo } from 'react';
-import { Button, Chip, DataTable, Inline } from '@connorhoehnslalom/ui-components/shared';
+import { ArrowRightIcon, Chip, DataTable, IconButton, T } from '@connorhoehnslalom/ui-components/shared';
 import type { DataTableColumn } from '@connorhoehnslalom/ui-components/shared';
 import { dateRange, isOverEnvelope, sprintHealth, STATUS_TONE, usd } from './sprintFormat';
-import { T } from './Text';
 import type { Sprint } from './types';
 
 /** Health sorts hottest-first: over-envelope, off-track, at-risk, on-track,
@@ -21,31 +20,26 @@ const healthRank = (s: Sprint) => {
   return h ? HEALTH_RANK[h.key]! : 4;
 };
 
-/** Right-aligned figures are only comparable down a column when the digits
- *  line up, which needs tabular numerals. */
-const NUM = 'tabular-nums whitespace-nowrap';
-
-/** Built per-render (not a module-level const) so the name cell's Button can
- *  close over `onSelect` — a real focusable control, not just the row's
- *  onClick: DataTable's row-click is a bare <tr onClick> with no keyboard
- *  access, so this is the one Enter/Space-activatable path into a sprint. */
-function columnsFor(onSelect: (id: string) => void): DataTableColumn<Sprint>[] {
+/** One thing per cell (docs/layout-cascade.md "Tables"): health and status are
+ *  columns of their own, the name is plain text, and the keyboard-reachable
+ *  way into a sprint is the row's Open action — DataTable's row-click is a
+ *  bare <tr onClick>. A table wider than the pane scrolls inside DataTable. */
+function columnsFor(): DataTableColumn<Sprint>[] {
   return [
   {
     key: 'name', header: 'Sprint', sortable: true,
     render: (s) => (
-      <Inline gap="xs" wrap={false}>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="justify-start text-left px-0 py-0 border-0 h-fit min-w-0 truncate font-semibold"
-          title={s.name}
-          onClick={(e) => { e.stopPropagation(); onSelect(s.id); }}
-        >
-          {s.name}
-        </Button>
-        <Chip tone={STATUS_TONE[s.status] ?? 'neutral'} size="sm">{s.status}</Chip>
-      </Inline>
+      <T weight="medium" className="block max-w-[230px] truncate" title={[s.name, s.orgProjectName, s.stewardName].filter(Boolean).join(' · ')}>
+        {s.name}
+      </T>
+    ),
+  },
+  {
+    key: 'initiative', header: 'Initiative · steward',
+    render: (s) => (
+      <T size="xs" tone="tertiary" className="block max-w-[170px] truncate">
+        {[s.orgProjectName, s.stewardName].filter(Boolean).join(' · ') || '—'}
+      </T>
     ),
   },
   {
@@ -54,40 +48,36 @@ function columnsFor(onSelect: (id: string) => void): DataTableColumn<Sprint>[] {
     render: (s) => {
       const h = sprintHealth(s);
       return h
-        ? <Chip tone={h.tone} size="sm" dot="static">{h.label}</Chip>
-        : <T className="text-text-tertiary">—</T>;
+        ? <Chip tone={h.tone} size="xs" dot="static">{h.label}</Chip>
+        : <T tone="tertiary">—</T>;
     },
   },
   {
-    key: 'orgProjectName', header: 'Initiative', sortable: true,
-    render: (s) => <T>{s.orgProjectName ?? '—'}</T>,
+    key: 'status', header: 'Status', sortable: true, width: '110px',
+    compare: (a, b) => a.status.localeCompare(b.status),
+    render: (s) => <Chip tone={STATUS_TONE[s.status] ?? 'neutral'} size="xs">{s.status}</Chip>,
   },
   {
-    key: 'stewardName', header: 'Steward', sortable: true,
-    render: (s) => <T>{s.stewardName ?? '—'}</T>,
-  },
-  {
-    key: 'startsOn', header: 'Window', sortable: true,
+    key: 'startsOn', header: 'Window', numeric: true, sortable: true,
     compare: (a, b) => String(a.startsOn ?? '').localeCompare(String(b.startsOn ?? '')),
-    render: (s) => <T className="whitespace-nowrap">{dateRange(s)}</T>,
+    render: (s) => <T tabular className="justify-end" title={`${s.pointsDone} / ${s.pointsTotal} pts`}>{dateRange(s)}</T>,
   },
   {
-    key: 'pointsDone', header: 'Points', align: 'right', sortable: true,
-    compare: (a, b) => (a.pointsDone / Math.max(a.pointsTotal, 1)) - (b.pointsDone / Math.max(b.pointsTotal, 1)),
-    render: (s) => <T className={NUM}>{s.pointsDone} / {s.pointsTotal}</T>,
+    key: 'points', header: 'Points', numeric: true,
+    render: (s) => `${s.pointsDone} / ${s.pointsTotal}`,
   },
   {
-    key: 'estimatedCostUsd', header: 'Planned', align: 'right', sortable: true,
-    render: (s) => <T className={NUM}>{usd(s.estimatedCostUsd)}</T>,
-  },
-  {
-    key: 'grantedUsd', header: 'Envelope', align: 'right', sortable: true,
-    render: (s) => <T className={NUM}>{s.grantCount > 0 ? usd(s.grantedUsd) : '—'}</T>,
-  },
-  {
-    key: 'initiativeSpendInWindowUsd', header: 'Spend in window', align: 'right', sortable: true,
+    key: 'grantedUsd', header: 'Envelope', numeric: true, sortable: true,
     render: (s) => (
-      <T className={isOverEnvelope(s) ? `${NUM} text-danger` : NUM}>
+      <T tabular className="justify-end" title={`${usd(s.estimatedCostUsd)} planned`}>
+        {s.grantCount > 0 ? usd(s.grantedUsd) : '—'}
+      </T>
+    ),
+  },
+  {
+    key: 'initiativeSpendInWindowUsd', header: 'Spend in window', numeric: true, sortable: true,
+    render: (s) => (
+      <T tabular className={isOverEnvelope(s) ? 'justify-end text-danger' : 'justify-end'}>
         {usd(s.initiativeSpendInWindowUsd)}
       </T>
     ),
@@ -95,20 +85,28 @@ function columnsFor(onSelect: (id: string) => void): DataTableColumn<Sprint>[] {
   ];
 }
 
-export function SprintTable({ sprints, onSelect }: {
-  sprints: Sprint[]; onSelect: (id: string) => void;
+export function SprintTable({ sprints, onSelect, emptyMessage = 'No sprints' }: {
+  sprints: Sprint[]; onSelect: (id: string) => void; emptyMessage?: string;
 }) {
-  const columns = useMemo(() => columnsFor(onSelect), [onSelect]);
+  const columns = useMemo(() => columnsFor(), []);
   return (
     <DataTable<Sprint>
       data={sprints}
       columns={columns}
       keyField={(s) => s.id}
       onRowClick={(s) => onSelect(s.id)}
-      searchable={sprints.length > 8}
-      searchPlaceholder="Filter sprints…"
+      rowActions={(s) => (
+        <IconButton
+          size="sm"
+          icon={<ArrowRightIcon />}
+          aria-label={`Open sprint ${s.name}`}
+          title="Open sprint"
+          onClick={() => onSelect(s.id)}
+        />
+      )}
+      size="sm"
       pageSize={25}
-      emptyMessage="No sprints"
+      emptyMessage={emptyMessage}
     />
   );
 }

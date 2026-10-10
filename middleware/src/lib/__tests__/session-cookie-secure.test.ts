@@ -27,9 +27,9 @@ import request from '../../test-support/http.js';
 import { setSessionCookie } from '../session.js';
 
 /** An app shaped like the real one: one proxy hop trusted, as index.ts sets. */
-function app(opts: { trustProxy?: boolean } = {}): express.Express {
+function app(opts: { trustProxy?: boolean; hops?: number } = {}): express.Express {
   const a = express();
-  if (opts.trustProxy !== false) a.set('trust proxy', 1);
+  if (opts.trustProxy !== false) a.set('trust proxy', opts.hops ?? 1);
   a.get('/set', (_req, res) => {
     setSessionCookie(res, 'signed.session.value');
     res.json({ ok: true });
@@ -104,5 +104,40 @@ describe('the session cookie Secure flag', () => {
       expect(cookie).toMatch(/HttpOnly/i);
       expect(cookie).toMatch(/SameSite=Lax/i);
     }
+  });
+
+  describe('behind CloudFront → ALB (TRUST_PROXY_HOPS=2)', () => {
+    // CloudFront reaches the ALB over plain HTTP (the ALB has no certificate in
+    // the no-domain deployment), and the ALB sets X-Forwarded-Proto to the
+    // scheme of THAT hop — so an https:// viewer arrived as `http` and the
+    // cookie lost Secure. The viewer's scheme is CloudFront-Forwarded-Proto.
+    beforeEach(() => {
+      process.env['NODE_ENV'] = 'production';
+      delete process.env['SESSION_COOKIE_SECURE'];
+      process.env['TRUST_PROXY_HOPS'] = '2';
+    });
+
+    it('IS Secure when CloudFront says the viewer used https, though the ALB says http', async () => {
+      const cookie = await setCookieHeader(app({ hops: 2 }), {
+        'X-Forwarded-Proto': 'http', 'CloudFront-Forwarded-Proto': 'https',
+      });
+      expect(cookie).toMatch(/;\s*Secure/i);
+    });
+
+    it('is not Secure when CloudFront says http', async () => {
+      const cookie = await setCookieHeader(app({ hops: 2 }), {
+        'X-Forwarded-Proto': 'http', 'CloudFront-Forwarded-Proto': 'http',
+      });
+      expect(cookie).not.toMatch(/;\s*Secure/i);
+    });
+
+    it('ignores CloudFront-Forwarded-Proto unless two hops are declared', async () => {
+      // A direct or ALB-only deployment must not take a client-typed header.
+      process.env['TRUST_PROXY_HOPS'] = '1';
+      const cookie = await setCookieHeader(app(), {
+        'X-Forwarded-Proto': 'http', 'CloudFront-Forwarded-Proto': 'https',
+      });
+      expect(cookie).not.toMatch(/;\s*Secure/i);
+    });
   });
 });

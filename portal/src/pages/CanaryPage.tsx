@@ -33,10 +33,9 @@ import {
   StatusPill,
   Switch,
   ThinkingDots,
-  Toolbar,
+  Toolbar, T, VisuallyHidden,
 } from '@connorhoehnslalom/ui-components/shared';
 import type { DataTableColumn } from '@connorhoehnslalom/ui-components/shared';
-import { T } from './Text';
 import { nodeTypes, edgeTypes } from '../components/canary/index.js';
 import { useCanaryStream } from '../components/canary/useCanaryStream.js';
 import { toastError } from '../lib/toastStore';
@@ -465,7 +464,7 @@ function CanaryFlowInner({
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
-function CanaryPage(): React.ReactElement {
+function CanaryWorkspace(): React.ReactElement {
   useCanaryStream();
   // Start/reset/halt/weight all require Cedar's ManageCanary — the same
   // action the /api/observability/canary mutations enforce.
@@ -679,6 +678,17 @@ function CanaryToolbar({
         onCancel={() => setConfirmNewExperiment(false)}
       />
     </Stack>
+  );
+}
+
+// The page title follows the trail (docs/layout-cascade.md rule 3); the
+// workspace's own toolbar names the phase, so the h1 is for assistive tech.
+function CanaryPage(): React.ReactElement {
+  return (
+    <>
+      <VisuallyHidden as="h1">Rollout</VisuallyHidden>
+      <CanaryWorkspace />
+    </>
   );
 }
 

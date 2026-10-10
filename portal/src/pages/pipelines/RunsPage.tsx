@@ -11,7 +11,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import {
-  Banner, Chip, DataTable, Inline, MetaLine, PageHeader, Select, Stack,
+  Banner, Button, Chip, DataTable, Inline, MetaLine, PageHeader, Select, Stack, T,
   type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
@@ -25,22 +25,19 @@ import {
 } from '../../lib/pipelineRuns';
 
 const COLUMNS: DataTableColumn<PipelineRun>[] = [
-  { key: 'title', header: 'Run', render: (r) => r.context.title, sortable: true, compare: (a, b) => a.context.title.localeCompare(b.context.title) },
+  { key: 'title', header: 'Run', render: (r) => <T size="sm" title={r.context.title} className="block max-w-[32rem] truncate">{r.context.title}</T>, sortable: true, compare: (a, b) => a.context.title.localeCompare(b.context.title) },
   {
-    key: 'status', header: 'Status', sortable: true,
+    key: 'status', header: 'Status', width: '128px', sortable: true,
     render: (r) => (
-      <Inline gap="xs" align="center">
-        <PipelineRunStatusChip status={r.status} />
-        {sourceStatusNote(r) && <MetaLine size="xs" tone="tertiary" items={[sourceStatusNote(r)]} />}
-      </Inline>
+      <PipelineRunStatusChip status={r.status} title={sourceStatusNote(r) ?? undefined} />
     ),
   },
   { key: 'kind', header: 'Kind', render: (r) => kindLabel(r.context.kind) },
   { key: 'tenant', header: 'Workspace', render: (r) => <Chip tone="neutral" size="xs">{r.context.tenant}</Chip> },
   { key: 'triggerType', header: 'Trigger', render: (r) => r.context.trigger ?? r.triggerType },
-  { key: 'costUsd', header: 'Cost', align: 'right', render: (r) => (r.costUsd != null ? usd(r.costUsd, { precision: 4 }) : '—') },
+  { key: 'costUsd', header: 'Cost', numeric: true, render: (r) => (r.costUsd != null ? usd(r.costUsd, { precision: 4 }) : '—') },
   {
-    key: 'startedAt', header: 'Started', sortable: true,
+    key: 'startedAt', header: 'Started', numeric: true, sortable: true,
     compare: (a, b) => (a.startedAt ?? '').localeCompare(b.startedAt ?? ''),
     render: (r) => (r.startedAt ? relativeTime(r.startedAt) : '—'),
   },
@@ -59,7 +56,11 @@ export default function RunsPage() {
 
   return (
     <Stack gap="md" data-testid="pipelines-runs">
-      <PageHeader title="Runs" description="Every run, what it acted for, and where it stands." />
+      <PageHeader
+        title="Runs"
+        description="Every run, what it acted for, and where it stands."
+        actions={<Button variant="secondary" size="sm" data-testid="pipelines-runs-activity" onClick={() => navigate('/pipelines/activity')}>Activity</Button>}
+      />
       <Inline gap="sm" wrap align="center">
         <Select aria-label="Status" size="sm" className="w-44" value={status} onChange={(e) => setStatus(e.target.value)} options={STATUS_FILTER_OPTIONS} />
         <Select aria-label="Kind" size="sm" className="w-44" value={kind} onChange={(e) => setKind(e.target.value)} options={KIND_FILTER_OPTIONS} />
@@ -76,6 +77,7 @@ export default function RunsPage() {
       ) : (
         <DataTable
           data-testid="pipelines-runs-table"
+          size="sm"
           data={runs}
           columns={COLUMNS}
           keyField={(r) => r.id}

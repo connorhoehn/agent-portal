@@ -33,19 +33,15 @@ import {
   Card,
   CardHeader,
   Chip,
+  DataTable,
+  type DataTableColumn,
   EmptyState,
   Inline,
   Stack,
-  Table,
-  TableHead,
-  TableBody,
-  TableRow,
-  TableTh,
-  TableTd,
+  T,
 } from '@connorhoehnslalom/ui-components/shared';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { usd } from './budgetsFormat';
-import { T } from './Text';
 import type { GrantRow } from './types';
 
 const CLOSED_PREVIEW = 4;
@@ -66,13 +62,52 @@ function GrantEnvelopeLink() {
   return (
     <Link
       to="/iq/sprints"
-      className="text-[11.5px] font-medium text-primary no-underline hover:underline shrink-0"
+      className="shrink-0 text-primary no-underline hover:underline"
       title="Granting envelopes is done from Sprints, not from this report"
     >
-      Grant envelope →
+      <T size="xs" weight="medium">Grant envelope →</T>
     </Link>
   );
 }
+
+// One line per envelope at the 44px list step. The sprint window used to be
+// a second line under the sprint name; it is its own column now.
+const GRANT_COLUMNS: DataTableColumn<GrantRow>[] = [
+  { key: 'sme', header: 'SME', render: (g) => <T>{g.granteeName ?? g.granteePersonId}</T> },
+  {
+    key: 'initiative',
+    header: 'Initiative',
+    render: (g) => (
+      <Link to={`/iq/projects/${encodeURIComponent(g.orgProjectId)}`} className="text-primary no-underline hover:underline">
+        {g.orgProjectName ?? g.orgProjectId}
+      </Link>
+    ),
+  },
+  {
+    key: 'sprint',
+    header: 'Sprint',
+    render: (g) => (
+      <Inline align="center" gap="sm" wrap={false}>
+        <T>{g.sprintName ?? '—'}</T>
+        {g.sprintStatus === 'active' && <Chip tone="success" size="xs">active</Chip>}
+      </Inline>
+    ),
+  },
+  {
+    key: 'window',
+    header: 'Window',
+    render: (g) => (g.startsOn && g.endsOn
+      ? <T tone="tertiary" tabular>{g.startsOn} → {g.endsOn}</T>
+      : <T tone="tertiary">—</T>),
+  },
+  { key: 'envelope', header: 'Envelope', numeric: true, render: (g) => <T tabular>{usd(g.allocatedUsd)}</T> },
+  {
+    key: 'spend',
+    header: 'Initiative spend in window',
+    numeric: true,
+    render: (g) => <T tone="secondary" tabular>{usd(g.initiativeSpendInWindowUsd)}</T>,
+  },
+];
 
 export function SprintsReport({ grants, error, hasData, canManage, refresh }: SprintsReportProps) {
   const navigate = useNavigate();
@@ -116,64 +151,22 @@ export function SprintsReport({ grants, error, hasData, canManage, refresh }: Sp
         subtitle="What each SME was given to see a sprint through. Spend shown is the initiative's within the sprint window, not the individual's."
         action={
           <Inline align="center" gap="md" wrap={false}>
-            <T className="text-[11px] text-text-tertiary tabular-nums">{countText}</T>
+            <T size="xs" tone="tertiary" tabular>{countText}</T>
             {canManage && <GrantEnvelopeLink />}
           </Inline>
         }
       />
-      <Table>
-        <TableHead>
-          <TableRow>
-            <TableTh>SME</TableTh>
-            <TableTh>Initiative</TableTh>
-            <TableTh>Sprint</TableTh>
-            <TableTh>Envelope</TableTh>
-            <TableTh>Initiative spend in window</TableTh>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {ordered.map((g) => (
-            <TableRow key={g.id}>
-              <TableTd>
-                <T className="text-[12.5px] text-text-primary">{g.granteeName ?? g.granteePersonId}</T>
-              </TableTd>
-              <TableTd>
-                <Link
-                  to={`/iq/projects/${encodeURIComponent(g.orgProjectId)}`}
-                  className="text-[12.5px] text-primary no-underline hover:underline"
-                >
-                  {g.orgProjectName ?? g.orgProjectId}
-                </Link>
-              </TableTd>
-              <TableTd>
-                <Stack gap="none">
-                  <Inline align="center" gap="sm">
-                    <T className="text-[12.5px] text-text-primary">{g.sprintName ?? '—'}</T>
-                    {g.sprintStatus === 'active' && <Chip tone="success">active</Chip>}
-                  </Inline>
-                  {g.startsOn && g.endsOn && (
-                    <T className="text-[11px] text-text-tertiary mt-0.5 tabular-nums">
-                      {g.startsOn} → {g.endsOn}
-                    </T>
-                  )}
-                </Stack>
-              </TableTd>
-              <TableTd><T className="tabular-nums">{usd(g.allocatedUsd)}</T></TableTd>
-              <TableTd>
-                <T className="tabular-nums text-text-secondary">{usd(g.initiativeSpendInWindowUsd)}</T>
-              </TableTd>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+      <DataTable
+        data-testid="budgets-sprints-table"
+        size="sm"
+        frameless
+        data={ordered}
+        columns={GRANT_COLUMNS}
+        keyField={(g) => g.id}
+      />
       {(hidden > 0 || showAll) && (
-        <Stack gap="none" className="px-3.5 py-2.5 border-t border-border">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="justify-start px-0 py-0 border-0 h-fit w-fit text-[11.5px] text-primary hover:underline"
-            onClick={() => setShowAll((v) => !v)}
-          >
+        <Stack gap="none" className="px-3 py-2 border-t border-border">
+          <Button variant="link" onClick={() => setShowAll((v) => !v)}>
             {showAll
               ? `Show fewer — collapse ${rest.length - CLOSED_PREVIEW} closed ${rest.length - CLOSED_PREVIEW === 1 ? 'sprint' : 'sprints'}`
               : `Show ${hidden} more closed ${hidden === 1 ? 'sprint' : 'sprints'}`}

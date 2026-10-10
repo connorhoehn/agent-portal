@@ -8,12 +8,11 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Card, Checkbox, Chip, CodeBlock, EmptyState, InlinePlaceholder, LoadingState, SectionLabel,
-  Select, SelectableCard, Stack, StatStrip, Inline, Tabs,
+  Select, SelectableCard, Stack, StatStrip, Inline, Tabs, T, VisuallyHidden,
 } from '@connorhoehnslalom/ui-components/shared';
 import { usePromptList, usePromptVersions } from '../../components/canary/usePromptLibrary.js';
 import { diffStats, lineDiff } from './diffFormat';
 import { DiffFrame } from './DiffFrame';
-import { T } from './Text';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -127,23 +126,24 @@ function ExperimentCard({ exp, role }: { exp: ExperimentRef; role: 'a' | 'b' }):
     <Card padding="sm" className="bg-surface-panel">
       <Inline gap="sm" align="center" wrap>
         <ActionBadge action={exp.finalAction || 'IN_PROGRESS'} />
-        <T className="text-[11px] text-text-secondary">
+        <T size="xs" className="text-text-secondary">
           v{exp.versionA} vs v{exp.versionB} · used as {role.toUpperCase()}
         </T>
-        <T className="ml-auto text-[11px] text-text-tertiary">{fmtDate(exp.startedAt)}</T>
+        <T size="xs" className="ml-auto text-text-tertiary">{fmtDate(exp.startedAt)}</T>
       </Inline>
       {/* The four numbers are a stat strip, not four hand-built tiles: same
           composite the dashboards use, so an experiment's scores read the
           way every other score on the app does. */}
       <StatStrip
-        frameless
+        variant="line"
+        size="sm"
         className="mt-2"
         aria-label={`Experiment v${exp.versionA} vs v${exp.versionB}`}
         items={[
-          { label: 'Score A', value: fmtScore(exp.scoreA) },
-          { label: 'Score B', value: fmtScore(exp.scoreB) },
+          { label: 'score A', value: fmtScore(exp.scoreA) },
+          { label: 'score B', value: fmtScore(exp.scoreB) },
           { label: 'Δ', value: fmtDelta(exp.scoreDelta), tone: deltaPositive ? 'accent' : 'danger' },
-          { label: 'Decisions', value: exp.decisionCount },
+          { label: 'decisions', value: exp.decisionCount },
         ]}
       />
     </Card>
@@ -158,7 +158,7 @@ function DiffView({ textA, textB, labelA, labelB }: { textA: string; textB: stri
   return (
     <Stack gap="sm" className="flex-1">
       <Inline gap="sm" align="center">
-        <T className="text-[11px] font-semibold text-text-secondary">{labelA} → {labelB}</T>
+        <T size="xs" weight="semibold" className="text-text-secondary">{labelA} → {labelB}</T>
         <Chip tone="success" size="xs" mono>+{stats.added}</Chip>
         <Chip tone="danger" size="xs" mono>−{stats.removed}</Chip>
       </Inline>
@@ -343,7 +343,8 @@ export default function PromptHistoryPage(): React.ReactElement {
   }
 
   return (
-    <Inline gap="none" className="-m-6 h-full min-h-0">
+    <Inline gap="none" className="h-full min-h-0">
+      <VisuallyHidden as="h1">Prompt versions</VisuallyHidden>
       {/* ── Left: prompt selector + version timeline ── */}
       <Stack gap="none" className="w-[260px] shrink-0 overflow-y-auto border-r border-border bg-surface">
         {/* Prompt picker */}
@@ -376,7 +377,7 @@ export default function PromptHistoryPage(): React.ReactElement {
           <>
             {/* Compare toggle */}
             <Inline gap="sm" align="center" justify="between" className="shrink-0 border-b border-border bg-surface-panel px-3 py-2">
-              <Inline as="label" gap="xs" align="center" className="cursor-pointer text-[11px] text-text-secondary">
+              <Inline as="label" gap="xs" align="center" className="text-xs cursor-pointer text-text-secondary">
                 <Checkbox
                   checked={compareMode}
                   onChange={checked => { setCompareMode(checked); setSelectedVersions([]); }}
@@ -384,14 +385,14 @@ export default function PromptHistoryPage(): React.ReactElement {
                 Compare two versions
               </Inline>
               {compareMode && selectedVersions.length === 2 && (
-                <T className="text-[10px] text-optimize">
+                <T size="xs" className="text-optimize">
                   {selectedVersions[0]} ↔ {selectedVersions[1]}
                 </T>
               )}
             </Inline>
 
             {versionsLoading && versions.length === 0 && <LoadingState label="Loading versions…" />}
-            {versionsError && <T className="block px-3.5 py-3 text-[12px] text-danger">{versionsError}</T>}
+            {versionsError && <T size="xs" className="block px-3.5 py-3 text-danger">{versionsError}</T>}
             {!versionsLoading && !versionsError && versions.length === 0 && (
               <InlinePlaceholder align="center" className="px-3.5 py-3">
                 No version history yet.
@@ -409,17 +410,17 @@ export default function PromptHistoryPage(): React.ReactElement {
                   className="block w-full rounded-none border-x-0 border-t-0 text-left"
                 >
                   <Inline gap="sm" align="center">
-                    <T className="font-mono text-[12px] font-bold text-text-primary">
+                    <T size="xs" weight="semibold" className="font-mono text-text-primary">
                       {v.version === 'DRAFT' ? 'DRAFT' : `v${v.version}`}
                     </T>
                     <StatusChip status={v.lifecycleStatus} />
                   </Inline>
                   {v.description && (
-                    <T className="mt-1 block truncate pl-0.5 text-[11px] leading-snug text-text-secondary">
+                    <T size="xs" className="mt-1 block truncate pl-0.5 leading-snug text-text-secondary">
                       {v.description}
                     </T>
                   )}
-                  <T className="mt-0.5 block pl-0.5 text-[10px] text-text-tertiary">
+                  <T size="xs" className="mt-0.5 block pl-0.5 text-text-tertiary">
                     {v.publishedAt ? fmtDate(v.publishedAt) : '—'}
                     {v.experiments.length > 0 && ` · ${v.experiments.length} exp`}
                   </T>
@@ -432,7 +433,7 @@ export default function PromptHistoryPage(): React.ReactElement {
         {tab === 'experiments' && (
           <>
             {expLoading && <LoadingState label="Loading experiments…" />}
-            {expError && <T className="block px-3.5 py-3 text-[12px] text-danger">{expError}</T>}
+            {expError && <T size="xs" className="block px-3.5 py-3 text-danger">{expError}</T>}
             {!expLoading && !expError && experiments.length === 0 && (
               <InlinePlaceholder align="center" className="px-3.5 py-3">
                 No experiments recorded yet.
@@ -442,17 +443,17 @@ export default function PromptHistoryPage(): React.ReactElement {
               <Stack key={exp.experimentId} gap="none" className="border-b border-border px-3.5 py-2.5">
                 <Inline gap="sm" align="center" wrap>
                   <ActionBadge action={exp.finalAction || 'IN_PROGRESS'} />
-                  <T className="font-mono text-[11px] text-text-secondary">
+                  <T size="xs" className="font-mono text-text-secondary">
                     v{exp.versionA}→v{exp.versionB}
                   </T>
                 </Inline>
                 {exp.descriptionB && (
-                  <T className="mt-0.5 block text-[11px] leading-snug text-text-secondary">{exp.descriptionB}</T>
+                  <T size="xs" className="mt-0.5 block leading-snug text-text-secondary">{exp.descriptionB}</T>
                 )}
-                <Inline gap="sm" className="mt-1 text-[11px] text-text-tertiary">
-                  <T className="text-[11px] text-text-tertiary">{fmtDate(exp.startedAt)}</T>
+                <Inline gap="sm" className="text-xs mt-1 text-text-tertiary">
+                  <T size="xs" className="text-text-tertiary">{fmtDate(exp.startedAt)}</T>
                   {exp.scoreDelta !== null && (
-                    <T className={`text-[11px] font-semibold ${(exp.scoreDelta ?? 0) >= 0 ? 'text-success' : 'text-danger'}`}>
+                    <T size="xs" weight="semibold" className={`  ${(exp.scoreDelta ?? 0) >= 0 ? 'text-success' : 'text-danger'}`}>
                       {fmtDelta(exp.scoreDelta)}
                     </T>
                   )}
@@ -484,21 +485,21 @@ export default function PromptHistoryPage(): React.ReactElement {
           <Stack gap="none" className="flex-1 overflow-y-auto">
             <Stack gap="none" className="shrink-0 border-b border-border px-6 pb-4 pt-5">
               <Inline gap="sm" align="center">
-                <T className="font-mono text-[16px] font-bold">
+                <T size="sm" weight="semibold" className="font-mono ">
                   {selectedVersion === 'DRAFT' ? 'DRAFT' : `v${selectedVersion}`}
                 </T>
                 <StatusChip status={versionDetail.lifecycleStatus} />
               </Inline>
               {versionDetail.description && (
-                <T className="mt-2 block text-[13px] leading-relaxed text-text-secondary">
+                <T size="sm" className="mt-2 block leading-relaxed text-text-secondary">
                   {versionDetail.description}
                 </T>
               )}
-              <Inline gap="md" wrap className="mt-2 text-[11px] text-text-tertiary">
-                {versionDetail.publishedAt && <T className="text-[11px] text-text-tertiary">Published {fmtDate(versionDetail.publishedAt)}</T>}
-                {versionDetail.deployedAt && <T className="text-[11px] text-text-tertiary">Deployed {fmtDate(versionDetail.deployedAt)}</T>}
-                {versionDetail.supersededAt && <T className="text-[11px] text-text-tertiary">Superseded {fmtDate(versionDetail.supersededAt)}</T>}
-                {versionDetail.authorEmail && <T className="text-[11px] text-text-tertiary">by {versionDetail.authorEmail}</T>}
+              <Inline gap="md" wrap className="text-xs mt-2 text-text-tertiary">
+                {versionDetail.publishedAt && <T size="xs" className="text-text-tertiary">Published {fmtDate(versionDetail.publishedAt)}</T>}
+                {versionDetail.deployedAt && <T size="xs" className="text-text-tertiary">Deployed {fmtDate(versionDetail.deployedAt)}</T>}
+                {versionDetail.supersededAt && <T size="xs" className="text-text-tertiary">Superseded {fmtDate(versionDetail.supersededAt)}</T>}
+                {versionDetail.authorEmail && <T size="xs" className="text-text-tertiary">by {versionDetail.authorEmail}</T>}
               </Inline>
             </Stack>
 
@@ -557,10 +558,10 @@ export default function PromptHistoryPage(): React.ReactElement {
         {inDiffMode && (
           <Stack gap="none" className="flex-1 overflow-y-auto">
             <Stack gap="none" className="shrink-0 border-b border-border px-6 pb-4 pt-5">
-              <T className="text-[14px] font-bold text-text-primary">
+              <T size="sm" weight="semibold" className="text-text-primary">
                 Comparing v{selectedVersions[0]} → v{selectedVersions[1]}
               </T>
-              <T className="mt-1 block text-[12px] text-text-secondary">
+              <T size="xs" className="mt-1 block text-text-secondary">
                 Lines added in green, removed in red.
               </T>
             </Stack>
@@ -593,8 +594,8 @@ function LifecycleMilestone({ label, date, active, tone }: { label: string; date
   return (
     <Stack gap="xs" align="center">
       <Inline as="span" gap="none" className={`h-3 w-3 rounded-full border-2 ${dotClass}`} />
-      <T className={`whitespace-nowrap text-[10px] font-semibold ${labelClass}`}>{label}</T>
-      {date && <T className="whitespace-nowrap text-[9px] text-text-tertiary">{fmtDate(date)}</T>}
+      <T size="xs" weight="semibold" className={`whitespace-nowrap   ${labelClass}`}>{label}</T>
+      {date && <T size="xs" className="whitespace-nowrap text-text-tertiary">{fmtDate(date)}</T>}
     </Stack>
   );
 }

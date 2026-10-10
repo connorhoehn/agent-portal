@@ -1,0 +1,378 @@
+{
+  "at": "2026-10-05T23:48:34.030Z",
+  "options": {
+    "url": "ws://orgiq-bff-capacity-a:3001/ws",
+    "peerUrls": [
+      "ws://orgiq-bff-capacity-b:3001/ws"
+    ],
+    "peerContainers": [
+      "orgiq-bff-capacity-b"
+    ],
+    "sockets": 1000,
+    "calls": 100,
+    "groupSizes": [
+      2
+    ],
+    "holdSeconds": 30,
+    "scenario": "double-accept",
+    "secret": "dev-fallback",
+    "json": "/results/double-accept.json",
+    "serverPid": null,
+    "healthUrl": "http://orgiq-bff-capacity-a:3001/api/health",
+    "rampPerSec": 50,
+    "chatEverySec": 30,
+    "chatStartup": "spread",
+    "stateEverySec": 20,
+    "spreadSeconds": 10,
+    "org": "social",
+    "origin": null,
+    "soakSeconds": 300,
+    "restartAfterSeconds": 150,
+    "recoveryTimeoutSeconds": 60,
+    "restartContainer": null,
+    "redisContainer": null,
+    "sampleContainer": "orgiq-bff-capacity-a",
+    "driverContainer": "orgiq-bff-capacity-driver-double-accept",
+    "tokenTtlSeconds": 600,
+    "identityManifest": "/results/identities.json"
+  },
+  "results": [
+    {
+      "scenario": "double-accept",
+      "identities": {
+        "mode": "directory-manifest",
+        "users": 1000,
+        "sha256": "239951005922487ce0a0a1dfb08529fc42fe3489a415416d6cfb932aecc11db8"
+      },
+      "groupSize": 2,
+      "calls": 100,
+      "sockets": 1000,
+      "holdSeconds": 30,
+      "soak": null,
+      "recoveries": [],
+      "unexpectedDisconnects": 0,
+      "runTag": "9cdd",
+      "durationS": 69.7,
+      "rampSeconds": 20,
+      "connect": {
+        "ok": 1000,
+        "fail": 0,
+        "failReasons": {},
+        "ms": {
+          "n": 1000,
+          "p50": 3.7,
+          "p95": 5.9,
+          "p99": 10.2,
+          "max": 82.2
+        }
+      },
+      "established": 100,
+      "failedCalls": [],
+      "latencyMs": {
+        "inviteToIncoming": {
+          "n": 100,
+          "p50": 41.8,
+          "p95": 61.2,
+          "p99": 78.9,
+          "max": 79.2
+        },
+        "acceptToAccepted": {
+          "n": 100,
+          "p50": 39.3,
+          "p95": 60.1,
+          "p99": 82.1,
+          "max": 100.6
+        },
+        "chatDelivery": {
+          "n": 1580,
+          "p50": 38.4,
+          "p95": 62.1,
+          "p99": 342.1,
+          "max": 648.4
+        }
+      },
+      "chat": {
+        "sent": 1580,
+        "delivered": 1580,
+        "expectedSenders": 790,
+        "sendingUsers": 790,
+        "deliveredUsers": 790
+      },
+      "chatAdmission": {
+        "expected": 790,
+        "joined": 790,
+        "waitMs": 2817.9
+      },
+      "crossDeliveries": {
+        "call": 0,
+        "chat": 0,
+        "presence": 0,
+        "samples": []
+      },
+      "unexpectedEnded": {
+        "count": 0,
+        "callsEnded": 0,
+        "samples": []
+      },
+      "answeredElsewhere": 10,
+      "denied": {
+        "count": 0,
+        "samples": []
+      },
+      "otherErrors": {
+        "count": 0,
+        "byMessage": {}
+      },
+      "notifications": {
+        "total": 0,
+        "missedCall": 0
+      },
+      "doubleAccept": {
+        "users": 10,
+        "exactlyOneWinner": 10,
+        "answeredElsewhere": 10,
+        "duplicateAcceptedAtCaller": 0
+      },
+      "glare": null,
+      "churn": null,
+      "frames": {
+        "in": 11694,
+        "out": 5990,
+        "byKind": {
+          "presence.set": 1790,
+          "notification:bulk-update.": 912,
+          "call.active-call": 210,
+          "chat.joined": 790,
+          "chat.history": 790,
+          "presence.subscribed": 790,
+          "chat.message": 3160,
+          "chat.sent": 1580,
+          "presence.update": 772,
+          "call.invite": 110,
+          "call.ended": 30,
+          "call.accepted": 110,
+          "call.participant-state": 430,
+          "call.user-status": 220
+        }
+      },
+      "server": {
+        "pid": null,
+        "container": "orgiq-bff-capacity-a",
+        "memorySource": "docker-working-set",
+        "sampleErrors": 0,
+        "rssMb": {
+          "peak": 228.9,
+          "last": 228.4
+        },
+        "cpuPct": {
+          "peak": 101.8,
+          "mean": 29.8,
+          "p95": 101.8
+        },
+        "healthMs": {
+          "n": 136,
+          "p50": 1,
+          "p95": 14.1,
+          "p99": 54.5,
+          "max": 58.1,
+          "errors": 0,
+          "plannedOutageErrors": 0
+        },
+        "slowHealth": [
+          {
+            "ms": 54.5,
+            "atS": 21.5,
+            "phase": "ramp"
+          },
+          {
+            "ms": 58.1,
+            "atS": 22,
+            "phase": "ramp"
+          },
+          {
+            "ms": 50.3,
+            "atS": 22.5,
+            "phase": "ramp"
+          }
+        ]
+      },
+      "peerServers": [
+        {
+          "url": "ws://orgiq-bff-capacity-b:3001/ws",
+          "pid": null,
+          "container": "orgiq-bff-capacity-b",
+          "memorySource": "docker-working-set",
+          "sampleErrors": 0,
+          "rssMb": {
+            "peak": 218,
+            "last": 217
+          },
+          "cpuPct": {
+            "peak": 101.1,
+            "mean": 30,
+            "p95": 101.1
+          },
+          "healthMs": {
+            "n": 136,
+            "p50": 0.8,
+            "p95": 8,
+            "p99": 38.7,
+            "max": 211.8,
+            "errors": 0,
+            "plannedOutageErrors": 0
+          },
+          "slowHealth": [
+            {
+              "ms": 211.8,
+              "atS": 20,
+              "phase": "ramp"
+            }
+          ]
+        }
+      ],
+      "targets": [
+        {
+          "url": "ws://orgiq-bff-capacity-a:3001/ws",
+          "socketsOpened": 500
+        },
+        {
+          "url": "ws://orgiq-bff-capacity-b:3001/ws",
+          "socketsOpened": 500
+        }
+      ],
+      "clientEventLoopMs": {
+        "p50": 10.2,
+        "p99": 11.8,
+        "max": 43.1
+      },
+      "verdict": [
+        {
+          "name": "sockets connect",
+          "ok": true,
+          "measured": "1000/1000",
+          "limit": "100%"
+        },
+        {
+          "name": "calls established",
+          "ok": true,
+          "measured": "100/100",
+          "limit": "all"
+        },
+        {
+          "name": "invite→incoming p95",
+          "ok": true,
+          "measured": 61.2,
+          "limit": "< 250 ms"
+        },
+        {
+          "name": "invite→incoming p99",
+          "ok": true,
+          "measured": 78.9,
+          "limit": "< 1000 ms"
+        },
+        {
+          "name": "accept→accepted p95",
+          "ok": true,
+          "measured": 60.1,
+          "limit": "< 250 ms"
+        },
+        {
+          "name": "chat delivery p95",
+          "ok": true,
+          "measured": 62.1,
+          "limit": "< 300 ms, with paired-sender evidence"
+        },
+        {
+          "name": "background chat coverage",
+          "ok": true,
+          "measured": "790/790",
+          "limit": "all paired senders reach their peer"
+        },
+        {
+          "name": "background chat admission",
+          "ok": true,
+          "measured": "790/790; 2817.9ms",
+          "limit": "all server join acknowledgements within 10 seconds"
+        },
+        {
+          "name": "cross-call/channel deliveries",
+          "ok": true,
+          "measured": 0,
+          "limit": "0"
+        },
+        {
+          "name": "double accept: exactly one winner",
+          "ok": true,
+          "measured": "10/10",
+          "limit": "all"
+        },
+        {
+          "name": "ended before scripted hang-up",
+          "ok": true,
+          "measured": 0,
+          "limit": "0"
+        },
+        {
+          "name": "unplanned socket disconnects",
+          "ok": true,
+          "measured": 0,
+          "limit": "0"
+        },
+        {
+          "name": "AUTHZ_CHANNEL_DENIED",
+          "ok": true,
+          "measured": 0,
+          "limit": "0"
+        },
+        {
+          "name": "event-loop proxy (/api/health p99)",
+          "ok": false,
+          "measured": 54.5,
+          "limit": "< 50 ms"
+        },
+        {
+          "name": "health errors outside planned outage",
+          "ok": true,
+          "measured": 0,
+          "limit": "0"
+        },
+        {
+          "name": "server memory peak",
+          "ok": true,
+          "measured": 228.9,
+          "limit": "< 700 MiB"
+        },
+        {
+          "name": "container samples",
+          "ok": true,
+          "measured": 0,
+          "limit": "no errors, at least one sample"
+        },
+        {
+          "name": "peer 1: health p99",
+          "ok": true,
+          "measured": 38.7,
+          "limit": "< 50 ms"
+        },
+        {
+          "name": "peer 1: health errors",
+          "ok": true,
+          "measured": 0,
+          "limit": "0"
+        },
+        {
+          "name": "peer 1: memory peak",
+          "ok": true,
+          "measured": 218,
+          "limit": "< 700 MiB"
+        },
+        {
+          "name": "peer 1: container samples",
+          "ok": true,
+          "measured": 0,
+          "limit": "no errors, at least one sample"
+        }
+      ]
+    }
+  ]
+}

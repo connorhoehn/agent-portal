@@ -11,6 +11,7 @@
 // render warned. A table row has one key by construction.
 
 import {
+  T,
   Card,
   CardHeader,
   Stack,
@@ -33,7 +34,7 @@ export function ConfigurationTab({ kb }: { kb: KbRegistryEntry }) {
             {configRows(kb).map(({ label, value }) => (
               <TableRow key={label}>
                 <TableTh scope="row" className="w-px whitespace-nowrap">{label}</TableTh>
-                <TableTd className="font-mono break-all text-[12px]">{value}</TableTd>
+                <TableTd className="break-all"><T as="span" size="xs" className="font-mono">{value}</T></TableTd>
               </TableRow>
             ))}
           </TableBody>

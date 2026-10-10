@@ -45,3 +45,52 @@ function titleCaseSweepId(id: string): string {
 export function sweepLabel(sweep: string): string {
   return SWEEP_TITLES[sweep] ?? titleCaseSweepId(sweep);
 }
+
+/**
+ * The initiative a finding's remedy would be charged to — the same evidence
+ * keys, in the same order, as the promote route's `initiativeIdForFinding`
+ * (middleware providers/org-sweeps.ts). That route runs the grant-scoped
+ * dispatch check against this id, so reading it the same way here is what
+ * lets the page warn before the click instead of after the 403.
+ */
+export function findingInitiativeId(finding: { evidence?: Record<string, unknown> | null }): string | null {
+  const ev = finding.evidence ?? {};
+  for (const key of ['initiativeId', 'initiative', 'candidateInitiative']) {
+    const v = ev[key];
+    if (typeof v === 'string' && v) return v;
+  }
+  const list = ev['initiatives'];
+  if (Array.isArray(list) && typeof list[0] === 'string' && list[0]) return list[0];
+  return null;
+}
+
+export interface ScopedSprintLike {
+  orgProjectId: string;
+  orgProjectName?: string | null;
+  status: string;
+  isGrantee: boolean;
+}
+
+/**
+ * Why "Put a worker on it" would be refused for an SME, or null when it would
+ * not be (or when the page cannot tell yet).
+ *
+ * Only an `sme` is grant-scoped (`decideGrantScopedDispatch` in middleware
+ * lib/bot-runner.ts lets every other role through), and a finding with no
+ * initiative in its evidence is unscoped, so both say nothing. `sprints` null
+ * means "not loaded" — a wrong warning is worse than none. Same rule, same
+ * `scope=mine` read, as the Run setup's "Sprint access required" cue
+ * (project-detail/projectFormat.ts `hasActiveGrantOnInitiative`).
+ */
+export function promoteGrantBlock(
+  finding: { evidence?: Record<string, unknown> | null },
+  isSme: boolean,
+  sprints: ScopedSprintLike[] | null,
+): { initiativeId: string; initiativeName: string | null } | null {
+  if (!isSme || !sprints) return null;
+  const initiativeId = findingInitiativeId(finding);
+  if (!initiativeId) return null;
+  if (sprints.some((s) => s.isGrantee && s.status === 'active' && s.orgProjectId === initiativeId)) return null;
+  const named = sprints.find((s) => s.orgProjectId === initiativeId && s.orgProjectName);
+  return { initiativeId, initiativeName: named?.orgProjectName ?? null };
+}

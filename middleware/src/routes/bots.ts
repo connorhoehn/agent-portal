@@ -33,7 +33,8 @@ import {
 import {
   getWorkItem, recordWorkItemEstimate, reviewWorkItemEstimate,
 } from '../providers/work-items.js';
-import { getBudget } from '../providers/budgets.js';
+import { getBudget, getMaintenance30d } from '../providers/budgets.js';
+import { listAgentProjects } from '../providers/agent-projects.js';
 import { registerBot, unregisterBot } from '../lib/bot-scheduler.js';
 import { validateCronExpr } from '../lib/ingest-scheduler.js';
 import { selectDispatchForecast, type ForecastSamples } from '../lib/marketplace-estimate.js';
@@ -239,12 +240,15 @@ botsRouter.post('/dispatch-work', dispatchGate, asyncHandler(async (req, res) =>
   // preflight: an ungranted SME must hear "you have no grant here", not "no
   // codebase delivers this initiative" (a refusal for a reason they cannot
   // act on and that used to fire first). org-leader/hr-admin/admin allocate
-  // and need no grant; resolveActiveGrant returns null (→ no enforcement) for
-  // non-SME platform identities and on any grants-read failure, so an authz
-  // check never fabricates a denial it can't support.
+  // and need no grant. An unavailable SME grant read answers 503 before any
+  // preflight or money gate; it cannot be treated as permission to dispatch.
   const verdict = await grantScopedDispatchVerdict(item.projectId, req.session);
   if (verdict.kind === 'deny') {
     res.status(403).json({ error: verdict.reason });
+    return;
+  }
+  if (verdict.kind === 'unavailable') {
+    res.status(503).json({ error: verdict.reason, gate: 'grant-authorization' });
     return;
   }
 
@@ -526,6 +530,42 @@ botsRouter.get('/marketplace-runs', marketReadGate, asyncHandler(async (req, res
   const orgProjectId = String(req.query['orgProjectId'] ?? '').trim();
   if (!orgProjectId) throw new ValidationError('orgProjectId is required');
   res.json({ runs: await listMarketplaceRuns(orgProjectId) });
+}));
+
+// GET /api/bots/initiative-runs?orgProjectId=p-…
+//
+// The runs on one initiative for any signed-in orgiq reader — the initiative
+// page's Agents tab. The roster (`GET /`) and run history (`/runs`) stay
+// gated because they carry bot CONFIGURATION (prompt, model, budgets, cron,
+// review policy); the runs themselves are what the work queue already shows
+// every session (`GET /api/work/jobs` is a session floor, CLAUDE.md "The auth
+// floor"), so this answers with the runs plus each bot's id and name only.
+// A member opening an initiative used to see "no runs" over nine real ones.
+//
+// Which bots count: those pointed at the initiative directly, or through a
+// codebase that delivers it — the same rule the portal's activity hook uses.
+botsRouter.get('/initiative-runs', requireSession('InitiativeRuns'), asyncHandler(async (req, res) => {
+  const orgProjectId = String(req.query['orgProjectId'] ?? '').trim();
+  if (!orgProjectId) throw new ValidationError('orgProjectId is required');
+  const [roster, codebases, marketplace] = await Promise.all([
+    listBotsResult(), listAgentProjects(), listMarketplaceRuns(orgProjectId),
+  ]);
+  const codebaseIds = new Set(codebases.filter((c) => c.orgProjectId === orgProjectId).map((c) => c.id));
+  const bots = roster.items
+    .filter((b) => b.orgProjectId === orgProjectId || (b.agentProjectId != null && codebaseIds.has(b.agentProjectId)))
+    .map((b) => ({ id: b.id, name: b.name }));
+  const history = bots.length > 0
+    ? await listBotRunsForBotsResult(bots.map((b) => b.id), 50)
+    : { items: [] };
+  const seen = new Set<string>();
+  const runs = [...marketplace, ...history.items].filter((r) => !seen.has(r.id) && (seen.add(r.id), true));
+  // The 30-day maintenance floor as `v_initiative_maintenance_30d` states it (cron-triggered
+  // COSTED runs attributed to the initiative) — the same value the Budgets ledger reads, decided
+  // here, never summed in a browser from a capped run list with unknown costs counted as zero
+  // (CLAUDE.md: unknown burn is unknown, not zero). Null when the view could not be read.
+  let maintenance30d: Awaited<ReturnType<typeof getMaintenance30d>> | null = null;
+  try { maintenance30d = await getMaintenance30d(orgProjectId); } catch { maintenance30d = null; }
+  res.json({ runs, bots, maintenance30d, ...(roster.degraded ? degradedFields(roster) : degradedFields(history)) });
 }));
 
 // GET /api/bots/runs?botIds=a,b,c

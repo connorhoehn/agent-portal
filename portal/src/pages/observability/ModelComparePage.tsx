@@ -16,7 +16,6 @@
 //   GET /api/observability/calibration/runs?limit=14      (recent MAE)
 
 import { useEffect, useMemo, useState } from 'react';
-import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 import {
   Card,
@@ -33,12 +32,11 @@ import {
   Inline,
   PageSection,
   Select,
-  StatStrip,
+  StatStrip, T,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { readDegraded } from '../../lib/degraded';
-import { T } from './Text';
 import { RowEmpty } from './ReadState';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -155,6 +153,8 @@ const costDeltaTone = (v: number | null): Tone => {
 };
 const durationDeltaTone = (v: number | null): Tone =>
   v == null ? 'neutral' : v > 100 ? 'danger' : v < -100 ? 'success' : 'neutral';
+const toneOf = (t: Tone): 'default' | 'accent' | 'danger' =>
+  t === 'danger' ? 'danger' : t === 'success' ? 'accent' : 'default';
 const judgeTone = (v: number | null): Tone =>
   v == null ? 'warning' : v >= 0.75 ? 'success' : v >= 0.55 ? 'warning' : 'danger';
 
@@ -247,81 +247,36 @@ function ModelComparePage() {
 
   const headlineItems = summary ? [
     {
-      label: 'Pass rate',
+      label: 'pass rate',
       value: fmtPct(summary.passRateB),
-      hint: (
-        <Inline gap="xs" align="center" wrap>
-          <Chip tone="neutral" size="xs">A {fmtPct(summary.passRateA)}</Chip>
-          <T className="text-text-tertiary">→</T>
-          <Chip tone="neutral" size="xs">B {fmtPct(summary.passRateB)}</Chip>
-          <Chip tone={passRateDeltaTone(summary.passRateDelta)} size="xs">
-            {summary.passRateDelta == null ? '—' : (summary.passRateDelta >= 0 ? '▲' : '▼')} {fmtSignedPct(summary.passRateDelta)}
-          </Chip>
-        </Inline>
-      ),
+      title: `A ${fmtPct(summary.passRateA)} → B ${fmtPct(summary.passRateB)} (${fmtSignedPct(summary.passRateDelta)})`,
+      tone: toneOf(passRateDeltaTone(summary.passRateDelta)),
     },
     {
-      label: 'Total cost',
+      label: 'total cost',
       value: fmtUsd(summary.costBUsd, 3),
-      hint: (
-        <Inline gap="xs" align="center" wrap>
-          <Chip tone="neutral" size="xs">A {fmtUsd(summary.costAUsd, 3)}</Chip>
-          <T className="text-text-tertiary">→</T>
-          <Chip tone="neutral" size="xs">B {fmtUsd(summary.costBUsd, 3)}</Chip>
-          <Chip tone={costDeltaTone(summary.costDeltaUsd)} size="xs">
-            {fmtSignedCost(summary.costDeltaUsd)}
-          </Chip>
-        </Inline>
-      ),
+      title: `A ${fmtUsd(summary.costAUsd, 3)} → B ${fmtUsd(summary.costBUsd, 3)} (${fmtSignedCost(summary.costDeltaUsd)})`,
+      tone: toneOf(costDeltaTone(summary.costDeltaUsd)),
     },
     {
-      label: 'Cost per good response',
+      label: 'cost per good response',
       value: fmtUsd(costPerGoodB, 4),
-      hint: (
-        <Inline gap="xs" align="center" wrap>
-          <Chip tone="neutral" size="xs">A {fmtUsd(costPerGoodA, 4)}</Chip>
-          <T className="text-text-tertiary">→</T>
-          <Chip tone="neutral" size="xs">B {fmtUsd(costPerGoodB, 4)}</Chip>
-          <Chip tone={costDeltaTone(costPerGoodDelta)} size="xs">
-            {fmtSignedCost(costPerGoodDelta)}
-          </Chip>
-        </Inline>
-      ),
+      title: `A ${fmtUsd(costPerGoodA, 4)} → B ${fmtUsd(costPerGoodB, 4)} (${fmtSignedCost(costPerGoodDelta)})`,
+      tone: toneOf(costDeltaTone(costPerGoodDelta)),
     },
     {
-      label: 'Avg latency',
+      label: 'avg latency',
       value: fmtSignedDuration(summary.avgDurationMsB == null ? null : Math.round(summary.avgDurationMsB)),
-      hint: (
-        <Inline gap="xs" align="center" wrap>
-          <Chip tone="neutral" size="xs">A {fmtSignedDuration(summary.avgDurationMsA == null ? null : Math.round(summary.avgDurationMsA))}</Chip>
-          <T className="text-text-tertiary">→</T>
-          <Chip tone="neutral" size="xs">B {fmtSignedDuration(summary.avgDurationMsB == null ? null : Math.round(summary.avgDurationMsB))}</Chip>
-          <Chip tone={durationDeltaTone(summary.durationDeltaMs)} size="xs">
-            {fmtSignedDuration(summary.durationDeltaMs)}
-          </Chip>
-        </Inline>
-      ),
+      title: `A ${fmtSignedDuration(summary.avgDurationMsA == null ? null : Math.round(summary.avgDurationMsA))} → B ${fmtSignedDuration(summary.avgDurationMsB == null ? null : Math.round(summary.avgDurationMsB))} (${fmtSignedDuration(summary.durationDeltaMs)})`,
+      tone: toneOf(durationDeltaTone(summary.durationDeltaMs)),
     },
     {
-      label: 'Judge MAE (calibration)',
+      label: 'judge MAE (calibration)',
       value: maeB ? fmt(maeB.mae) : '—',
-      hint: (maeA && maeB ? (
-        <Inline gap="xs" align="center" wrap>
-          <Chip tone="neutral" size="xs">A {fmt(maeA.mae)}</Chip>
-          <T className="text-text-tertiary">→</T>
-          <Chip tone="neutral" size="xs">B {fmt(maeB.mae)}</Chip>
-          {maeDelta != null && (
-            <Chip tone={maeDelta > 0.01 ? 'danger' : maeDelta < -0.01 ? 'success' : 'neutral'} size="xs">
-              {maeDelta >= 0 ? '+' : ''}{maeDelta.toFixed(3)}
-            </Chip>
-          )}
-        </Inline>
-      ) : (
-        <T className="text-[11px] text-text-tertiary">
-          Run a calibration to anchor this judge.{' '}
-          <Link to="/admin/observability/calibration" className="text-primary no-underline hover:underline">open →</Link>
-        </T>
-      )) as ReactNode,
+      title: maeA && maeB
+        ? `A ${fmt(maeA.mae)} → B ${fmt(maeB.mae)}${maeDelta != null ? ` (${maeDelta >= 0 ? '+' : ''}${maeDelta.toFixed(3)})` : ''}`
+        : 'Run a calibration to anchor this judge.',
+      tone: maeDelta != null && maeDelta > 0.01 ? 'danger' as const : 'default' as const,
     },
   ] : [];
 
@@ -360,28 +315,28 @@ function ModelComparePage() {
           />
         </Inline>
         {runA && runB && (
-          <Inline gap="sm" wrap align="center" className="text-[12px] text-text-secondary mt-2">
+          <Inline gap="sm" wrap align="center" className="mt-2">
             <Inline as="span" gap="xs" align="center" wrap title={`run A: ${runA.runId}`}>
-              <T>A:&nbsp;<strong>{runA.label}</strong></T>
-              <T className="font-mono text-[11.5px]">· judge {runA.judgeModelId}</T>
+              <T size="sm">A:&nbsp;<T size="sm" weight="semibold">{runA.label}</T></T>
+              <T size="xs" className="font-mono">· judge {runA.judgeModelId}</T>
               {agentModelA && (
                 <>
                   <T className="text-text-tertiary">·</T>
                   <Chip tone="neutral" size="xs">
-                    <T className="font-mono text-[11.5px]">agent {agentModelA}</T>
+                    <T size="xs" className="font-mono">agent {agentModelA}</T>
                   </Chip>
                 </>
               )}
             </Inline>
             <T className="text-text-tertiary">→</T>
             <Inline as="span" gap="xs" align="center" wrap title={`run B: ${runB.runId}`}>
-              <T>B:&nbsp;<strong>{runB.label}</strong></T>
-              <T className="font-mono text-[11.5px]">· judge {runB.judgeModelId}</T>
+              <T size="sm">B:&nbsp;<T size="sm" weight="semibold">{runB.label}</T></T>
+              <T size="xs" className="font-mono">· judge {runB.judgeModelId}</T>
               {agentModelB && (
                 <>
                   <T className="text-text-tertiary">·</T>
                   <Chip tone="neutral" size="xs">
-                    <T className="font-mono text-[11.5px]">agent {agentModelB}</T>
+                    <T size="xs" className="font-mono">agent {agentModelB}</T>
                   </Chip>
                 </>
               )}
@@ -415,7 +370,7 @@ function ModelComparePage() {
               title="Headline metrics"
               subtitle="green = B is better · red = B is worse · neutral = within band"
             />
-            <StatStrip frameless items={headlineItems} />
+            <StatStrip variant="line" size="sm" aria-label="Headline metrics" items={headlineItems} />
           </Card>
 
           {/* Regressions / Fixes */}
@@ -435,13 +390,13 @@ function ModelComparePage() {
           />
 
           <Card padding="md">
-            <Inline gap="xs" align="center" wrap className="text-[12px] text-text-secondary">
-              <T className="text-[11px] text-text-tertiary">
+            <Inline gap="xs" align="center" wrap>
+              <T size="xs" tone="tertiary">
                 Want a deeper view? Open the full Sprint 3 compare page:
               </T>
               <Link
                 to={`/admin/observability/harness/compare/${encodeURIComponent(runIdA)}/${encodeURIComponent(runIdB)}`}
-                className="text-[12px] text-primary no-underline hover:underline"
+                className="text-xs text-primary no-underline hover:underline"
               >
                 detailed compare →
               </Link>
@@ -513,15 +468,15 @@ function DeltaTable({
       {results.length === 0 ? (
         <RowEmpty text={emptyText} />
       ) : (
-        <Table>
+        <Table size="sm">
           <TableHead>
             <TableRow>
               <TableTh>Test</TableTh>
               <TableTh>Agent</TableTh>
               <TableTh>A → B</TableTh>
-              <TableTh>Δ score</TableTh>
-              <TableTh>Cost Δ</TableTh>
-              <TableTh>Dur Δ</TableTh>
+              <TableTh numeric>Δ score</TableTh>
+              <TableTh numeric>Cost Δ</TableTh>
+              <TableTh numeric>Dur Δ</TableTh>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -534,12 +489,14 @@ function DeltaTable({
                 : tone;
               return (
                 <TableRow key={r.testId}>
-                  <TableTd className="text-[11px] text-text-tertiary font-mono whitespace-nowrap">{r.testId}</TableTd>
-                  <TableTd className="text-[12px] font-medium whitespace-nowrap">{r.agentId || '—'}</TableTd>
+                  <TableTd className="font-mono max-w-[260px] truncate" title={r.testId}>{r.testId}</TableTd>
+                  <TableTd className="whitespace-nowrap">{r.agentId || '—'}</TableTd>
                   <TableTd className="whitespace-nowrap">
-                    <Chip tone={judgeTone(r.scoreA)} size="xs">{fmt(r.scoreA)}</Chip>
-                    <T className="text-text-tertiary mx-1">→</T>
-                    <Chip tone={judgeTone(r.scoreB)} size="xs">{fmt(r.scoreB)}</Chip>
+                    <Inline gap="xs" align="center" wrap={false}>
+                      <Chip tone={judgeTone(r.scoreA)} size="xs">{fmt(r.scoreA)}</Chip>
+                      <T tone="tertiary">→</T>
+                      <Chip tone={judgeTone(r.scoreB)} size="xs">{fmt(r.scoreB)}</Chip>
+                    </Inline>
                   </TableTd>
                   <TableTd>
                     <Chip tone={deltaTone} size="xs">
@@ -551,7 +508,7 @@ function DeltaTable({
                       {fmtSignedCost(r.costDeltaUsd)}
                     </Chip>
                   </TableTd>
-                  <TableTd className="text-[12px] text-text-secondary whitespace-nowrap">
+                  <TableTd numeric className="whitespace-nowrap">
                     {fmtSignedDuration(r.durationDeltaMs)}
                   </TableTd>
                 </TableRow>

@@ -22,7 +22,7 @@
 
 import { useMemo, useRef, useState, useEffect } from 'react';
 import {
-  Button, Chip, FormField, Inline, InlineAlert, Input, MetaLine, Modal,
+  Button, Chip, CloseIcon, FormField, IconButton, Inline, InlineAlert, Input, MetaLine, Modal,
   SectionLabel, Stack, Textarea,
 } from '@connorhoehnslalom/ui-components/shared';
 
@@ -168,7 +168,7 @@ export function SaveAsTestCaseModal({
         </Inline>
       }
     >
-      <Stack gap="sm" className="p-4 overflow-y-auto text-[12px]">
+      <Stack gap="sm" className="text-xs p-4 overflow-y-auto">
         <MetaLine
           size="xs"
           className="italic"
@@ -207,7 +207,7 @@ export function SaveAsTestCaseModal({
         <FormField label="Prompt">
           {({ labelId: _l, ...w }) => (
             <Textarea {...w} value={prompt} rows={6} disabled={submitting}
-              onChange={(e) => setPrompt(e.target.value)} className="w-full font-mono text-[11.5px]" />
+              onChange={(e) => setPrompt(e.target.value)} className="w-full font-mono" />
           )}
         </FormField>
 
@@ -216,7 +216,7 @@ export function SaveAsTestCaseModal({
             <Textarea {...w} value={referenceOutput} rows={5} disabled={submitting}
               onChange={(e) => setReferenceOutput(e.target.value)}
               placeholder="What does a known-good answer look like?"
-              className="w-full font-mono text-[11.5px]" />
+              className="text-xs w-full font-mono" />
           )}
         </FormField>
 
@@ -227,16 +227,14 @@ export function SaveAsTestCaseModal({
           {tags.map((t) => (
             <Chip key={t} tone="neutral" size="xs">
               {t}
-              <Button
+              <IconButton
                 variant="ghost"
                 size="sm"
-                className="ml-1 p-0 leading-none text-text-tertiary"
+                icon={<CloseIcon size={12} />}
                 onClick={() => removeTag(t)}
                 aria-label={`remove ${t}`}
                 disabled={submitting}
-              >
-                ×
-              </Button>
+              />
             </Chip>
           ))}
           <Input
@@ -284,7 +282,7 @@ export function SaveAsTestCaseModal({
           <FormField label="Notes" hint="auto" className="flex-1 min-w-0">
             {({ labelId: _l, ...w }) => (
               <Input {...w} type="text" value={notes} readOnly disabled size="sm"
-                className="w-full opacity-60 text-[10.5px]" />
+                className="w-full opacity-60" />
             )}
           </FormField>
         </Inline>

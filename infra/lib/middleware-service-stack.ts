@@ -10,8 +10,17 @@ import * as iam from 'aws-cdk-lib/aws-iam';
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 import * as ssm from 'aws-cdk-lib/aws-ssm';
 import * as logs from 'aws-cdk-lib/aws-logs';
+import * as cr from 'aws-cdk-lib/custom-resources';
+import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
+import * as sns from 'aws-cdk-lib/aws-sns';
+import * as subs from 'aws-cdk-lib/aws-sns-subscriptions';
+import { realtimeAlarm, realtimeAlarmsEnabled, realtimeAlarmTopicName } from './realtime-alarms';
+import { capabilityParameterNames } from './agentcore-capabilities-stack';
 import type { Construct } from 'constructs';
-import { socialRedisUrlParameterName, socialTablePrefix } from './social-stack';
+import { socialPlatformInternalUrl, socialRedisUrlParameterName, socialTablePrefix } from './social-stack';
+import {
+  CLOUDFRONT_RULE_PRIORITY, ORIGIN_VERIFY_HEADER, cloudFrontOriginSecretName, portalParameterNames,
+} from './portal-stack';
 
 export interface MiddlewareServiceStackProps extends cdk.StackProps {
   readonly prefix?: string;
@@ -70,6 +79,12 @@ export interface MiddlewareServiceStackProps extends cdk.StackProps {
   readonly memoryId?: string;
   readonly browserId?: string;
   readonly browserArn?: string;
+  /**
+   * Read CODE_INTERPRETER_ID / BROWSER_PROFILE_ID from OrgIQ-AgentCoreCapabilities'
+   * SSM parameters (capabilityParameterNames) and grant the code-interpreter
+   * session calls. bin/app.ts sets it; the single-stack test fixtures do not.
+   */
+  readonly capabilityParameters?: boolean;
   readonly knowledgeBaseId?: string;
   readonly gatewayId?: string;
   readonly gatewayUrl?: string;
@@ -528,6 +543,89 @@ export class MiddlewareServiceStack extends cdk.Stack {
       resources: ['*'],
     }));
 
+    // AgentCore Memory — the chat path's turn history. routes/agents.ts calls
+    // recordTurn/listEvents (providers/memory.ts: CreateEvent, ListEvents,
+    // ListSessions) on every invoke, and nothing granted them: MEMORY_ID was
+    // set while the role could not touch the memory it named, so a deployed
+    // chat answered but kept no history and every session list came back
+    // empty. Scoped to the one memory this stack is given.
+    if (props.memoryId) {
+      taskRole.addToPolicy(new iam.PolicyStatement({
+        sid: 'AgentCoreMemoryEvents',
+        actions: [
+          'bedrock-agentcore:CreateEvent',
+          'bedrock-agentcore:ListEvents',
+          'bedrock-agentcore:GetEvent',
+          'bedrock-agentcore:ListSessions',
+        ],
+        resources: [`arn:aws:bedrock-agentcore:${this.region}:${this.account}:memory/${props.memoryId}`],
+      }));
+    }
+
+    // Code Interpreter sessions — providers/agentcore.ts (Start/Invoke/Stop/
+    // ListCodeInterpreterSessions) behind the portal's code-interpreter
+    // surfaces. CODE_INTERPRETER_ID was never set on the task and nothing
+    // granted these, so the feature read "not configured" in every deployment.
+    // Scoped to the one code interpreter OrgIQ-AgentCoreCapabilities owns, by
+    // its NAME (`<prefix>_code_interpreter-<suffix>`) rather than an imported
+    // ARN, so this stack takes no new export (and freezes none).
+    if (props.capabilityParameters) {
+      taskRole.addToPolicy(new iam.PolicyStatement({
+        sid: 'CodeInterpreterSessions',
+        actions: [
+          'bedrock-agentcore:StartCodeInterpreterSession',
+          'bedrock-agentcore:InvokeCodeInterpreter',
+          'bedrock-agentcore:StopCodeInterpreterSession',
+          'bedrock-agentcore:GetCodeInterpreterSession',
+          'bedrock-agentcore:ListCodeInterpreterSessions',
+        ],
+        resources: [`arn:aws:bedrock-agentcore:${this.region}:${this.account}:code-interpreter-custom/${prefix.replace(/-/g, '_')}_code_interpreter-*`],
+      }));
+    }
+
+    // The capability reconcile page and the boot-time stale-id check
+    // (providers/capability-reconcile.ts) list what exists so a dead id is
+    // named. Read-only listings, which take no resource ARN.
+    taskRole.addToPolicy(new iam.PolicyStatement({
+      sid: 'CapabilityInventory',
+      actions: [
+        'bedrock-agentcore:ListBrowsers',
+        'bedrock-agentcore:ListBrowserProfiles',
+        'bedrock-agentcore:ListCodeInterpreters',
+        'bedrock-agentcore:ListMemories',
+      ],
+      resources: ['*'],
+    }));
+
+    // The prompt canary's control parameters — lib/weight-cache.ts
+    // (/orgiq/canary/weight_b, control, subject_{a,b}_arn) and
+    // lib/judge-config.ts (/orgiq/canary/judge_config, edited from
+    // /iq/evaluations). Read AND write: the evaluations page saves the judge
+    // config and the canary page sets the weight. That path only — no other
+    // parameter, and nothing under /orgiq/social or /orgiq/portal.
+    taskRole.addToPolicy(new iam.PolicyStatement({
+      sid: 'CanaryParameters',
+      actions: ['ssm:GetParameter', 'ssm:PutParameter'],
+      resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter/${prefix}/canary/*`],
+    }));
+
+    // The canary's score stream (lib/emf-emitter.ts writes EMF lines to
+    // /orgiq/canary/scores, which PromptCanary owns).
+    taskRole.addToPolicy(new iam.PolicyStatement({
+      sid: 'CanaryScoreLog',
+      actions: ['logs:CreateLogStream', 'logs:PutLogEvents'],
+      resources: [`arn:aws:logs:${this.region}:${this.account}:log-group:/${prefix}/canary/scores:*`],
+    }));
+
+    // Observability reads: CloudWatch GetMetricData (providers/agentcore.ts
+    // invocation metrics) and X-Ray traces (providers/cloudwatch.ts). Neither
+    // API takes a resource ARN; both are read-only.
+    taskRole.addToPolicy(new iam.PolicyStatement({
+      sid: 'ObservabilityReads',
+      actions: ['cloudwatch:GetMetricData', 'xray:GetTraceSummaries', 'xray:BatchGetTraces'],
+      resources: ['*'],
+    }));
+
     // Crawl/survey verify PUBLIC network mode before opening a browser session.
     // No update/create permissions: a request cannot turn this resource into a
     // VPC-connected browser. Session operations use this one configured ARN.
@@ -713,6 +811,26 @@ export class MiddlewareServiceStack extends cdk.Stack {
         : undefined),
     };
 
+    // ── CloudFront in front (opt-in, OrgIQ-Portal) ─────────────────────────
+    // `--context deployPortal=true` puts CloudFront between browsers and this
+    // ALB (lib/portal-stack.ts). Two hops now forward for the client
+    // (TRUST_PROXY_HOPS=2, lib/trusted-proxy.ts), and the ALB admits
+    // CloudFront and checks its secret header — see the listener lock below.
+    //
+    // `--context portalPublicUrls=true` (a LATER deploy, once OrgIQ-Portal has
+    // written its SSM parameters) points the middleware at its public HTTPS
+    // origin: PUBLIC_BASE_URL/PORTAL_ORIGIN (browser-origin allowlist),
+    // COGNITO_CALLBACK_URL/COGNITO_LOGOUT_URL (SSO turns on) and the token
+    // bridge's REALTIME_* URLs. Container secrets from SSM, by name: no export,
+    // no hand-copied CloudFront domain. Separate from deployPortal because a
+    // task started before the parameters exist fails ResourceInitializationError.
+    const viaCloudFront = ctxOn('deployPortal');
+    const portalUrls = ctxOn('portalPublicUrls');
+    const portalParams = portalParameterNames(prefix);
+    const portalSecret = (name: string, id: string) => ecs.Secret.fromSsmParameter(
+      ssm.StringParameter.fromStringParameterName(this, id, name),
+    );
+
     // ── Container environment variables ────────────────────────────────────
     // All values that are resolvable at synth time go here as plain strings.
     // Secrets (ARNs only known at runtime) are injected separately below.
@@ -752,7 +870,8 @@ export class MiddlewareServiceStack extends cdk.Stack {
       // in the ECS task if you want to scale a backing service to zero.
       MOCK_AURORA: 'false',
       MOCK_AGENTCORE: 'false',
-      TRUST_PROXY_HOPS: '1',
+      // One enforced hop (the ALB), or two with CloudFront in front of it.
+      TRUST_PROXY_HOPS: viaCloudFront ? '2' : '1',
       MOCK_GUARDRAILS: 'false',
       MOCK_CLOUDWATCH: 'false',
 
@@ -791,6 +910,11 @@ export class MiddlewareServiceStack extends cdk.Stack {
         SOCIAL_CHAT_STORE: 'dynamo',
         SOCIAL_CHAT_TABLE_PREFIX: socialTablePrefix(prefix, ctxStr('tableSuffix')),
       }),
+      // Social and Assessment documents use separate platform deployments and
+      // table namespaces. Never let Social's proxy fall back to the document
+      // platform when both stacks are installed. This REST endpoint is needed
+      // even when realtimeGateway is disabled and is independent of browser URLs.
+      ...(socialDeployed && { SOCIAL_PLATFORM_INTERNAL_URL: socialPlatformInternalUrl(prefix) }),
       // Browser-facing endpoints echoed by the token bridge. Deliberately not
       // PLATFORM_API_URL: that one is the SERVER-side work-graph URL
       // (work-graph/producer.ts), and in AWS the two are different hosts.
@@ -798,6 +922,34 @@ export class MiddlewareServiceStack extends cdk.Stack {
       ...(realtime.platformPublicUrl && { REALTIME_PLATFORM_PUBLIC_URL: realtime.platformPublicUrl }),
       ...(realtime.videoPublicUrl && { REALTIME_VIDEO_PUBLIC_URL: realtime.videoPublicUrl }),
     };
+    // The portal's public URLs, from OrgIQ-Portal's parameters. Explicit
+    // context (above) wins over the parameter for each REALTIME_* URL, and an
+    // env var is never ALSO a secret (ECS rejects the duplicate).
+    const portalSecrets: Record<string, ecs.Secret> = {};
+    if (portalUrls) {
+      const site = portalSecret(portalParams.url, 'PortalUrlParameter');
+      portalSecrets['PUBLIC_BASE_URL'] = site;
+      portalSecrets['PORTAL_ORIGIN'] = site;
+      portalSecrets['COGNITO_CALLBACK_URL'] = portalSecret(portalParams.cognitoCallbackUrl, 'PortalCognitoCallbackParameter');
+      portalSecrets['COGNITO_LOGOUT_URL'] = portalSecret(portalParams.cognitoLogoutUrl, 'PortalCognitoLogoutParameter');
+      if (realtime.enabled && !realtime.gatewayUrl) {
+        portalSecrets['REALTIME_GATEWAY_URL'] = portalSecret(portalParams.gatewayUrl, 'PortalGatewayUrlParameter');
+      }
+      // Only the distributions OrgIQ-Portal actually made (it reads the same flags).
+      if (socialDeployed && !ctxStr('realtimePlatformPublicUrl')) {
+        delete environment['REALTIME_PLATFORM_PUBLIC_URL'];
+        portalSecrets['REALTIME_PLATFORM_PUBLIC_URL'] = portalSecret(portalParams.platformApiUrl, 'PortalPlatformApiUrlParameter');
+      }
+      if (ctxOn('deploySocialMedia') && !ctxStr('realtimeVideoPublicUrl')) {
+        delete environment['REALTIME_VIDEO_PUBLIC_URL'];
+        portalSecrets['REALTIME_VIDEO_PUBLIC_URL'] = portalSecret(portalParams.videoUrl, 'PortalVideoUrlParameter');
+      }
+      if (!viaCloudFront) {
+        cdk.Annotations.of(this).addWarning('portalPublicUrls=true without deployPortal=true — the /'
+          + `${prefix}/portal/* parameters come from OrgIQ-Portal; without CloudFront in front, the ALB still `
+          + 'admits only albAllowCidr and TRUST_PROXY_HOPS stays 1.');
+      }
+    }
 
     // Cognito app-client secret injected as an ECS secret (pulled at task start
     // by the execution role, never rendered into the task-def env in plaintext).
@@ -819,7 +971,18 @@ export class MiddlewareServiceStack extends cdk.Stack {
       LAB_CALLBACK_SECRET: ecs.Secret.fromSecretsManager(labCallbackSecret),
       // The realtime token secret — no blackout window, see RealtimeJwtSecret.
       REALTIME_JWT_SECRET: ecs.Secret.fromSecretsManager(realtimeJwtSecret),
+      ...portalSecrets,
     };
+    if (props.capabilityParameters) {
+      // From OrgIQ-AgentCoreCapabilities' parameters, by name (see
+      // capabilityParameterNames): no import, and a rebuilt capability's new
+      // id reaches the next task start.
+      const caps = capabilityParameterNames(prefix);
+      containerSecrets['CODE_INTERPRETER_ID'] = ecs.Secret.fromSsmParameter(
+        ssm.StringParameter.fromStringParameterName(this, 'CodeInterpreterIdParameter', caps.codeInterpreterId));
+      containerSecrets['BROWSER_PROFILE_ID'] = ecs.Secret.fromSsmParameter(
+        ssm.StringParameter.fromStringParameterName(this, 'BrowserProfileIdParameter', caps.browserProfileId));
+    }
     if (realtime.redisFromSocial) {
       // Written by OrgIQ-Social. It must exist before a task starts, which the
       // deploy order guarantees (Social before `realtimeGateway=true`); a task
@@ -837,15 +1000,15 @@ export class MiddlewareServiceStack extends cdk.Stack {
       if (!realtime.socialChat) {
         warn('realtimeGateway=true without deploySocial=true — social chat uses the in-memory store (SOCIAL_CHAT_STORE unset).');
       }
-      if (!realtime.gatewayUrl && certArn) {
+      if (!realtime.gatewayUrl && certArn && !portalUrls) {
         warn('No realtimeGatewayUrl — with a certificate the socket URL must be the certificate\'s host '
           + '(wss://<middleware host>), which this stack does not know; REALTIME_GATEWAY_URL is unset.');
       }
-      if (!realtime.platformPublicUrl) {
+      if (!realtime.platformPublicUrl && !portalSecrets['REALTIME_PLATFORM_PUBLIC_URL']) {
         warn('No realtimePlatformPublicUrl or socialPlatformHost — REALTIME_PLATFORM_PUBLIC_URL is unset, so the '
           + 'token bridge tells browsers no platform-api (needs DNS/TLS, deploy plan §5).');
       }
-      if (!realtime.videoPublicUrl) {
+      if (!realtime.videoPublicUrl && !portalSecrets['REALTIME_VIDEO_PUBLIC_URL']) {
         warn('No realtimeVideoPublicUrl, videoPublicUrl or socialSfuHost — REALTIME_VIDEO_PUBLIC_URL is unset, so '
           + 'browsers are told no SFU (the SFU needs DNS/TLS and its custodian decision, deploy plan §3).');
       }
@@ -864,6 +1027,41 @@ export class MiddlewareServiceStack extends cdk.Stack {
       containerSecrets['COGNITO_CLIENT_SECRET'] = ecs.Secret.fromSecretsManager(cognitoSecretRef);
     }
 
+    // ── Task size and the one-task rule ────────────────────────────────────
+    // With `realtimeGateway=true` this task IS the realtime gateway, and its
+    // router is the library's single-process LocalRealtimeRouter: channel
+    // fan-out, "who do I ring" (getClientsByUserId), presence rosters and the
+    // social membership mirror are all in this process. Redis shares call
+    // state, NOT frames. A second task therefore splits every one of those:
+    // a ring from a socket on task A never reaches the callee on task B
+    // (docs/realtime-capacity-100-calls-2026-10-01.md §2 — a collision-class
+    // failure, not a capacity one). So with the gateway on:
+    //   - no autoscaling (it used to scale 1→4 on CPU 70%);
+    //   - stop-before-start deploys (min 0 / max 100), never two tasks at once;
+    //   - a short deregistration delay, because with stop-before-start the old
+    //     task drains for the WHOLE delay (300 s default) before the new one
+    //     starts — that delay is the signalling blackout per deploy;
+    //   - 1 vCPU / 2 GB by default: Node needs one whole core, and Fargate's
+    //     512 is half of one, shared with REST, agent SSE and the pollers.
+    //     ~1,000 sockets is tens of MB; the core is what runs out first.
+    // `middlewareCpu` / `middlewareMemoryMiB` override the size either way.
+    const realtimePinned = realtime.enabled;
+    const ctxNum = (k: string, fallback: number): number => {
+      const raw = this.node.tryGetContext(k);
+      if (raw === undefined || raw === null || raw === '') return fallback;
+      const n = Number(raw);
+      if (!Number.isInteger(n) || n <= 0) throw new Error(`${k} must be a positive integer, got ${String(raw)}`);
+      return n;
+    };
+    const taskCpu = ctxNum('middlewareCpu', realtimePinned ? 1024 : 512);
+    const taskMemory = ctxNum('middlewareMemoryMiB', realtimePinned ? 2048 : 1024);
+    const autoscaleRaw = this.node.tryGetContext('middlewareAutoscale');
+    const autoscale = autoscaleRaw === undefined ? !realtimePinned : (autoscaleRaw === true || autoscaleRaw === 'true');
+    if (realtimePinned && autoscale) {
+      throw new Error('middlewareAutoscale=true with realtimeGateway=true would run the single-process realtime router on '
+        + 'several tasks (rings and chat split between them). Run the gateway as one task, or move it to its own service first.');
+    }
+
     // ── Fargate service via L2 pattern ─────────────────────────────────────
     // ApplicationLoadBalancedFargateService handles the ALB, target group,
     // listener, security groups, and service wiring in one construct.
@@ -873,8 +1071,8 @@ export class MiddlewareServiceStack extends cdk.Stack {
       {
         cluster,
         serviceName: `${prefix}-middleware`,
-        cpu: 512,
-        memoryLimitMiB: 1024,
+        cpu: taskCpu,
+        memoryLimitMiB: taskMemory,
 
         // ARM64, to match the image.
         //
@@ -950,8 +1148,9 @@ export class MiddlewareServiceStack extends cdk.Stack {
         // Ensure 100% of tasks stay healthy during rolling updates when there
         // is only one task; CDK defaults to 50% which would briefly take the
         // service to zero running tasks on single-task services.
-        minHealthyPercent: 100,
-        maxHealthyPercent: 200,
+        // Gateway on: stop-before-start (see "the one-task rule" above).
+        minHealthyPercent: realtimePinned ? 0 : 100,
+        maxHealthyPercent: realtimePinned ? 100 : 200,
       },
     );
 
@@ -972,7 +1171,7 @@ export class MiddlewareServiceStack extends cdk.Stack {
     // so the socket URL can be derived (the portal appends /ws). ws://, not
     // wss://: usable only from an http:// page, i.e. the portal on each
     // participant's localhost — deploy plan §5's phase-2 arrangement.
-    if (realtime.enabled && !realtime.gatewayUrl && !certArn) {
+    if (realtime.enabled && !realtime.gatewayUrl && !certArn && !portalSecrets['REALTIME_GATEWAY_URL']) {
       fargateService.taskDefinition.defaultContainer!.addEnvironment(
         'REALTIME_GATEWAY_URL', `ws://${fargateService.loadBalancer.loadBalancerDnsName}`,
       );
@@ -1009,6 +1208,103 @@ export class MiddlewareServiceStack extends cdk.Stack {
       description: 'CIDRs permitted to reach the middleware load balancer',
     });
 
+    // ── CloudFront → ALB (deployPortal=true) ──────────────────────────────
+    // CloudFront's edges are not a CIDR anyone can list, and custodian revokes
+    // 0.0.0.0/0, so the ALB admits AWS's managed prefix list
+    // `com.amazonaws.global.cloudfront.origin-facing`. Whether custodian
+    // tolerates a prefix-list rule is UNVERIFIED (deploy plan §10): if it
+    // revokes this too, CloudFront answers 504 while every stack is healthy —
+    // read the SG's IpPermissions first.
+    //
+    // Its own security group because a prefix-list rule counts as the list's
+    // max entries (~55) against the per-SG rule quota (60 by default), and
+    // because every CloudFront distribution — not just ours — sits behind
+    // those addresses. Hence the lock: the listener's default action becomes a
+    // 403, and a request is forwarded only if it carries OrgIQ-Portal's secret
+    // header, or comes from an albAllowCidr address (rules below). The social
+    // stacks' host and header rules sit at lower priorities, unchanged.
+    if (viaCloudFront) {
+      const originSecret = new secretsmanager.Secret(this, 'CloudFrontOriginSecret', {
+        secretName: cloudFrontOriginSecretName(prefix),
+        description: `${ORIGIN_VERIFY_HEADER} — CloudFront (OrgIQ-Portal) sends it, the ALB listener rules require it`,
+        generateSecretString: { excludePunctuation: true, passwordLength: 40 },
+      });
+
+      const prefixListOverride = ctxStr('cloudFrontPrefixListId');
+      let prefixListId = prefixListOverride;
+      if (!prefixListId) {
+        // Resolved at deploy time: the id differs per region and a CDK context
+        // lookup would need credentials at synth.
+        const lookup = new cr.AwsCustomResource(this, 'CloudFrontPrefixListLookup', {
+          onUpdate: {
+            service: 'EC2',
+            action: 'describeManagedPrefixLists',
+            parameters: {
+              Filters: [{ Name: 'prefix-list-name', Values: ['com.amazonaws.global.cloudfront.origin-facing'] }],
+            },
+            physicalResourceId: cr.PhysicalResourceId.of('cloudfront-origin-facing-prefix-list'),
+            outputPaths: ['PrefixLists.0.PrefixListId'],
+          },
+          policy: cr.AwsCustomResourcePolicy.fromStatements([
+            new iam.PolicyStatement({ actions: ['ec2:DescribeManagedPrefixLists'], resources: ['*'] }),
+          ]),
+          installLatestAwsSdk: false,
+        });
+        prefixListId = lookup.getResponseField('PrefixLists.0.PrefixListId');
+      }
+      const cloudFrontSg = new ec2.SecurityGroup(this, 'CloudFrontOriginSecurityGroup', {
+        vpc,
+        description: 'CloudFront origin-facing prefix list -> middleware ALB (OrgIQ-Portal)',
+        allowAllOutbound: false,
+      });
+      cloudFrontSg.addIngressRule(
+        ec2.Peer.prefixList(prefixListId), ec2.Port.tcp(listenerPortNumber), 'CloudFront origin-facing edges',
+      );
+      // Onto the CfnLoadBalancer directly, NOT `loadBalancer.addSecurityGroup`:
+      // that joins the ALB's Connections, which replays every albAllowCidr rule
+      // onto this group too — eating the quota the prefix list needs. Traffic
+      // to the tasks needs nothing new: their group admits the ALB's first
+      // group, and the ALB's ENIs carry both.
+      const cfnLb = fargateService.loadBalancer.node.defaultChild as elbv2.CfnLoadBalancer;
+      cfnLb.addPropertyOverride('SecurityGroups', [
+        fargateService.loadBalancer.connections.securityGroups[0]!.securityGroupId,
+        cloudFrontSg.securityGroupId,
+      ]);
+
+      const forward = () => elbv2.ListenerAction.forward([fargateService.targetGroup]);
+      (fargateService.listener.node.defaultChild as elbv2.CfnListener).defaultActions = [{
+        type: 'fixed-response',
+        fixedResponseConfig: {
+          statusCode: '403', contentType: 'text/plain',
+          messageBody: 'Not through the OrgIQ portal distribution or an allowlisted address.',
+        },
+      }];
+      new elbv2.ApplicationListenerRule(this, 'CloudFrontOriginRule', {
+        listener: fargateService.listener,
+        priority: CLOUDFRONT_RULE_PRIORITY.middleware,
+        conditions: [elbv2.ListenerCondition.httpHeader(ORIGIN_VERIFY_HEADER, [originSecret.secretValue.unsafeUnwrap()])],
+        action: forward(),
+      });
+      // ALB rules take at most five condition values, so one rule per five CIDRs.
+      for (let i = 0; i < allowCidrs.length; i += 5) {
+        new elbv2.ApplicationListenerRule(this, `AllowlistedClientRule${i / 5}`, {
+          listener: fargateService.listener,
+          priority: CLOUDFRONT_RULE_PRIORITY.allowlistFirst + i / 5,
+          conditions: [elbv2.ListenerCondition.sourceIps(allowCidrs.slice(i, i + 5))],
+          action: forward(),
+        });
+      }
+
+      new cdk.CfnOutput(this, 'CloudFrontOriginSecretName', {
+        value: cloudFrontOriginSecretName(prefix),
+        description: 'Origin-verify header value; OrgIQ-Portal and OrgIQ-Social read it by this name',
+      });
+      new cdk.CfnOutput(this, 'CloudFrontPrefixListId', {
+        value: prefixListId,
+        description: 'Admitted on the ALB — check custodian left it: aws ec2 describe-security-groups',
+      });
+    }
+
     // ── HTTP → HTTPS redirect (only when certificate is present) ──────────
     if (certArn) {
       fargateService.loadBalancer.addRedirect({
@@ -1032,10 +1328,18 @@ export class MiddlewareServiceStack extends cdk.Stack {
     // from silently breaking every socket. The ALB keeps HTTP/1.1
     // connections to targets alive on its own; there is no setting for it.
     (fargateService.targetGroup.node.defaultChild as elbv2.CfnTargetGroup).protocolVersion = 'HTTP1';
-    // No sticky sessions, on purpose: cross-task fan-out goes over Redis
-    // pub/sub (realtime-examples' own ALB helper is "destickified" for the
-    // same reason), so a socket may land on any task.
+    // No sticky sessions. NOT because anything fans frames out across tasks —
+    // nothing does: this gateway's router is single-process, and Redis holds
+    // call state only (that "cross-task fan-out over Redis pub/sub" line
+    // described realtime-examples' gateway, not this one). Stickiness is moot
+    // because the gateway runs as ONE task (the one-task rule above); with the
+    // gateway off, REST is stateless and needs none.
     fargateService.targetGroup.setAttribute('stickiness.enabled', 'false');
+    if (realtimePinned) {
+      // Stop-before-start drains the old task for this long before the new
+      // one starts; every socket reconnects anyway, so drain briefly.
+      fargateService.targetGroup.setAttribute('deregistration_delay.timeout_seconds', '15');
+    }
 
     // ── Health check ──────────────────────────────────────────────────────
     fargateService.targetGroup.configureHealthCheck({
@@ -1048,21 +1352,86 @@ export class MiddlewareServiceStack extends cdk.Stack {
     });
 
     // ── Auto-scaling ──────────────────────────────────────────────────────
-    // Start at 1 replica; scale up under CPU/memory pressure.
-    const scaling = fargateService.service.autoScaleTaskCount({
-      minCapacity: 1,
-      maxCapacity: 4,
-    });
-    scaling.scaleOnCpuUtilization('CpuScaling', {
-      targetUtilizationPercent: 70,
-      scaleInCooldown: cdk.Duration.seconds(60),
-      scaleOutCooldown: cdk.Duration.seconds(30),
-    });
-    scaling.scaleOnMemoryUtilization('MemoryScaling', {
-      targetUtilizationPercent: 80,
-      scaleInCooldown: cdk.Duration.seconds(60),
-      scaleOutCooldown: cdk.Duration.seconds(30),
-    });
+    // Start at 1 replica; scale up under CPU/memory pressure — but never with
+    // the realtime gateway on (the one-task rule above).
+    if (autoscale) {
+      const scaling = fargateService.service.autoScaleTaskCount({
+        minCapacity: 1,
+        maxCapacity: 4,
+      });
+      scaling.scaleOnCpuUtilization('CpuScaling', {
+        targetUtilizationPercent: 70,
+        scaleInCooldown: cdk.Duration.seconds(60),
+        scaleOutCooldown: cdk.Duration.seconds(30),
+      });
+      scaling.scaleOnMemoryUtilization('MemoryScaling', {
+        targetUtilizationPercent: 80,
+        scaleInCooldown: cdk.Duration.seconds(60),
+        scaleOutCooldown: cdk.Duration.seconds(30),
+      });
+    }
+
+    // ── Load alarms (realtimeAlarms=true; lib/realtime-alarms.ts) ─────────
+    if (realtimeAlarmsEnabled(this)) {
+      const topic = new sns.Topic(this, 'RealtimeAlarmTopic', {
+        topicName: realtimeAlarmTopicName(prefix),
+        displayName: 'OrgIQ realtime load alarms',
+      });
+      const email = ctxStr('alertEmail');
+      if (email) topic.addSubscription(new subs.EmailSubscription(email));
+      const alarm = (spec: Parameters<typeof realtimeAlarm>[3]) => realtimeAlarm(this, prefix, topic, spec);
+      const lb = fargateService.loadBalancer;
+      const svc = fargateService.service;
+      const five = cdk.Duration.minutes(5);
+      const one = cdk.Duration.minutes(1);
+      alarm({ id: 'middleware-alb-5xx', threshold: 10, evaluationPeriods: 1,
+        metric: lb.metrics.httpCodeTarget(elbv2.HttpCodeTarget.TARGET_5XX_COUNT, { period: five, statistic: 'Sum' }),
+        description: 'Middleware returned >10 5xx in 5 minutes (through the ALB).' });
+      alarm({ id: 'middleware-alb-response-time', threshold: 2,
+        metric: lb.metrics.targetResponseTime({ period: one, statistic: 'p95' }),
+        description: 'Middleware p95 response time above 2 s for 3 minutes (SSE streams excluded only by their own length).' });
+      alarm({ id: 'middleware-alb-rejected', threshold: 0, evaluationPeriods: 1,
+        metric: lb.metrics.rejectedConnectionCount({ period: five, statistic: 'Sum' }),
+        description: 'The ALB rejected connections (it hit its connection limit).' });
+      alarm({ id: 'middleware-alb-connections', threshold: ctxNum('alarmMaxConnections', 3000),
+        metric: lb.metrics.activeConnectionCount({ period: one, statistic: 'Sum' }),
+        description: 'ALB active connections (sockets + HTTP) above the expected ceiling — near the one-task gateway\'s budget.' });
+      alarm({ id: 'middleware-cpu', threshold: 80,
+        metric: svc.metricCpuUtilization({ period: one }),
+        description: 'Middleware task CPU above 80% for 3 minutes — the gateway delays every frame when the loop is busy.' });
+      alarm({ id: 'middleware-memory', threshold: 85,
+        metric: svc.metricMemoryUtilization({ period: one }),
+        description: 'Middleware task memory above 85% for 3 minutes.' });
+
+      // The gateway's own load line (lib/realtime-gateway.ts gatewayStatsLine):
+      // one JSON line a minute → three metrics.
+      const ns = 'OrgIQ/RealtimeGateway';
+      const field = (name: string, metricName: string) => new logs.MetricFilter(this, `GatewayStats${metricName}`, {
+        logGroup,
+        filterPattern: logs.FilterPattern.stringValue('$.type', '=', 'realtime-gateway-stats'),
+        metricNamespace: ns,
+        metricName,
+        metricValue: `$.${name}`,
+      });
+      field('sockets', 'Sockets');
+      field('activeCalls', 'ActiveCalls');
+      const loop = field('eventLoopDelayP99Ms', 'EventLoopDelayP99Ms');
+      alarm({ id: 'gateway-event-loop', threshold: 100,
+        metric: loop.metric({ period: one, statistic: 'Maximum' }),
+        description: 'Gateway event-loop delay p99 above 100 ms for 3 minutes — ring and chat frames are queuing.' });
+      alarm({ id: 'gateway-silent', threshold: 1, comparison: cloudwatch.ComparisonOperator.LESS_THAN_THRESHOLD,
+        evaluationPeriods: 5, treatMissingData: cloudwatch.TreatMissingData.BREACHING,
+        metric: new cloudwatch.Metric({ namespace: ns, metricName: 'Sockets', period: one, statistic: 'SampleCount' }),
+        description: 'No gateway load line for 5 minutes — the gateway is down, restarting, or REALTIME_STATS_INTERVAL_MS=0.' });
+      new cdk.CfnOutput(this, 'RealtimeAlarmTopicArn', {
+        value: topic.topicArn,
+        description: 'SNS topic for the realtime load alarms (social stacks address it by name)',
+      });
+      if (!realtime.enabled) {
+        cdk.Annotations.of(this).addWarning('realtimeAlarms=true without realtimeGateway=true — the gateway-silent alarm will fire: '
+          + 'nothing writes the load line.');
+      }
+    }
 
     const deployDocuments = this.node.tryGetContext('deployDocumentWorkspace') === true
       || this.node.tryGetContext('deployDocumentWorkspace') === 'true';

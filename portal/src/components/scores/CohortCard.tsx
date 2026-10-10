@@ -1,6 +1,7 @@
-import { Card, Chip, EntityCell, Inline, MetaLine, SectionLabel, Stack, StatusDot } from '@connorhoehnslalom/ui-components/shared';
+import { AccentStripe, Card, Chip, EntityCell, Histogram, Inline, MetaLine, SectionLabel, Stack, StatusDot, dataAccentProps } from '@connorhoehnslalom/ui-components/shared';
 import { DEPT_COLORS } from './types';
-import { HistogramBar } from './HistogramBar';
+
+const BUCKET_LABELS = ['0–20', '20–40', '40–60', '60–80', '80–100'];
 
 export interface BrokerSummary {
   id: string;
@@ -40,15 +41,13 @@ export function CohortCard({ cohort }: CohortCardProps) {
 
   return (
     <Card padding="none" className="flex overflow-hidden">
-      {/* Left colour stripe. The colour is per-department data from the graph's
-          own palette, so it stays a style — Tailwind cannot build a class from
-          a runtime key. */}
-      <Inline gap="none" aria-hidden className="w-[5px] shrink-0" style={{ backgroundColor: deptColor }} />
+      {/* Left stripe: the department's colour (DEPT_COLORS, matching the radar) as a data accent. */}
+      <AccentStripe accent={deptColor} />
 
       <Stack gap="none" className="flex-1 py-4 px-[18px] min-w-0">
         <Inline align="start" justify="between" gap="md" className="mb-3">
           <Stack gap="none" className="min-w-0">
-            <EntityCell label={cohort.department} labelClassName="text-[15px]" className="min-w-0" />
+            <EntityCell label={cohort.department} labelClassName="" className="min-w-0" />
             <MetaLine
               size="sm"
               tone="secondary"
@@ -63,7 +62,7 @@ export function CohortCard({ cohort }: CohortCardProps) {
           </Chip>
         </Inline>
 
-        <HistogramBar buckets={cohort.compositeBuckets} color={deptColor} height={44} />
+        <Histogram buckets={cohort.compositeBuckets} labels={BUCKET_LABELS} accent={deptColor} height={44} aria-label={`${cohort.department} composite score distribution`} />
 
         <Inline justify="between" className="mt-[3px]">
           {[0, 20, 40, 60, 80, 100].map((t) => (
@@ -76,7 +75,7 @@ export function CohortCard({ cohort }: CohortCardProps) {
             <SectionLabel as="div" className="mb-1.5">Brokers</SectionLabel>
             {cohort.brokers.map((b) => (
               <Inline key={b.id} gap="xs" align="center">
-                <StatusDot size="sm" color={deptColor} />
+                <StatusDot size="sm" {...dataAccentProps(deptColor)} />
                 <MetaLine size="sm" items={[b.name]} />
                 <MetaLine size="xs" items={[`(touches ${b.departmentsTouched} teams)`]} />
               </Inline>

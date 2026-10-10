@@ -17,7 +17,7 @@
 //
 // Only under MOCK_AGENTCORE. Set MOCK_BOT_RUNS=0 to silence it.
 
-import { listBoxes, appendEvent, type FleetBox } from './devbox-fleet.js';
+import { listBoxes, appendEvent, isReserved, type FleetBox } from './devbox-fleet.js';
 
 /** A scripted run. Delays are relative to the previous step. */
 interface Step {
@@ -171,7 +171,8 @@ let jobIndex = 0;
  * perfectly. Rotating means whoever is looking sees a run before long.
  */
 function claimable(): FleetBox | null {
-  const idle = listBoxes().filter((b) => b.status === 'idle');
+  // A reserved box is someone's (an open governed run, the demo's agents).
+  const idle = listBoxes().filter((b) => b.status === 'idle' && !isReserved(b.id));
   if (idle.length === 0) return null;
   return idle[jobIndex % idle.length] ?? null;
 }

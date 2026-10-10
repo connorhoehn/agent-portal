@@ -1,0 +1,325 @@
+
+> @orgiq/middleware@0.3.0 test
+> node node_modules/.bin/jest --config jest.config.cjs --runInBand --runTestsByPath src/lib/__tests__/dynamo-dispatch.test.ts src/lib/__tests__/social-membership-fence.test.ts src/lib/__tests__/direct-recipient.test.ts src/lib/__tests__/live-principal.test.ts
+
+FAIL src/lib/__tests__/live-principal.test.ts
+  ● refreshes directory presentation and actual tenant grant keys without trusting captured token or cookie grants
+
+    listen EPERM: operation not permitted 127.0.0.1
+
+
+
+  ● denies missing identities, retired epochs and source roles rather than selecting another current role
+
+    listen EPERM: operation not permitted 127.0.0.1
+
+
+
+  ● validates the original social source role while embedding Social
+
+    listen EPERM: operation not permitted 127.0.0.1
+
+
+
+  ● validates the original assessment source role while embedding Social
+
+    listen EPERM: operation not permitted 127.0.0.1
+
+
+
+  ● validates the original pipelines source role while embedding Social
+
+    listen EPERM: operation not permitted 127.0.0.1
+
+
+
+  ● evaluates Social read and write actions against actual Social roles while retaining the source identity
+
+    listen EPERM: operation not permitted 127.0.0.1
+
+
+
+  ● checks real actor epoch and current admin authority independently from the effective user
+
+    listen EPERM: operation not permitted 127.0.0.1
+
+
+
+  ● rechecks grants and provenance after a delayed policy decision
+
+    listen EPERM: operation not permitted 127.0.0.1
+
+
+
+  ● rejects social:dm:alice:bob membership removal while the final identity read is pending
+
+    listen EPERM: operation not permitted 127.0.0.1
+
+
+
+  ● rejects social:team:example:general membership removal while the final identity read is pending
+
+    listen EPERM: operation not permitted 127.0.0.1
+
+
+
+  ● preserves resource guards, server-only distillation and the reserved huddle namespace
+
+    listen EPERM: operation not permitted 127.0.0.1
+
+
+
+  ● fails closed on authoritative directory or policy outages without reusing previous authority
+
+    listen EPERM: operation not permitted 127.0.0.1
+
+
+
+  ● a later action cannot reuse an older pending directory snapshot after remote revocation
+
+    listen EPERM: operation not permitted 127.0.0.1
+
+
+
+  ● retains local demo distillation while ignoring forged Social tenants and captured grants
+
+    listen EPERM: operation not permitted 127.0.0.1
+
+
+
+  ● preserves narrowed demo personas while retaining initial and admin demo grants
+
+    listen EPERM: operation not permitted 127.0.0.1
+
+
+
+  ● fresh call admission binds flat/nested invite callers and refuses stale provenance before signaling
+
+    listen EPERM: operation not permitted 127.0.0.1
+
+
+
+  ● resolves missing call lobbies from public state and applies current Social StartCall authority
+
+    listen EPERM: operation not permitted 127.0.0.1
+
+
+
+  ● refuses a forged explicit lobby that renames an existing Social call into OrgIQ
+
+    listen EPERM: operation not permitted 127.0.0.1
+
+
+
+  ● rejects malformed socket provenance 0
+
+    listen EPERM: operation not permitted 127.0.0.1
+
+
+
+  ● rejects malformed socket provenance 1
+
+    listen EPERM: operation not permitted 127.0.0.1
+
+
+
+  ● rejects malformed socket provenance 2
+
+    listen EPERM: operation not permitted 127.0.0.1
+
+
+
+  ● rejects malformed socket provenance 3
+
+    listen EPERM: operation not permitted 127.0.0.1
+
+
+
+  ● rejects malformed socket provenance 4
+
+    listen EPERM: operation not permitted 127.0.0.1
+
+
+
+  ● rejects malformed socket provenance 5
+
+    listen EPERM: operation not permitted 127.0.0.1
+
+
+
+  ● rejects malformed socket provenance 6
+
+    listen EPERM: operation not permitted 127.0.0.1
+
+
+
+FAIL src/lib/__tests__/direct-recipient.test.ts
+  ● keeps unrelated service delivery synchronous under its existing authority boundary
+
+    listen EPERM: operation not permitted 127.0.0.1
+
+
+
+  ● uses current ViewSocial for recipients without requiring call creation policy
+
+    listen EPERM: operation not permitted 127.0.0.1
+
+
+
+  ● refuses direct call data after grant revocation
+
+    listen EPERM: operation not permitted 127.0.0.1
+
+
+
+  ● refuses direct call data after epoch revocation
+
+    listen EPERM: operation not permitted 127.0.0.1
+
+
+
+  ● refuses direct call data after source-role revocation
+
+    listen EPERM: operation not permitted 127.0.0.1
+
+
+
+  ● refuses direct call data after actor revocation
+
+    listen EPERM: operation not permitted 127.0.0.1
+
+
+
+  ● refuses direct call data after outage revocation
+
+    listen EPERM: operation not permitted 127.0.0.1
+
+
+
+  ● refuses direct call data after policy revocation
+
+    listen EPERM: operation not permitted 127.0.0.1
+
+
+
+  ● refuses direct call data after membership revocation
+
+    listen EPERM: operation not permitted 127.0.0.1
+
+
+
+  ● filters each persisted item by current tenant rights without mutating the stored batch
+
+    listen EPERM: operation not permitted 127.0.0.1
+
+
+
+  ● a full unread window shares current resource checks only inside that one reply
+
+    listen EPERM: operation not permitted 127.0.0.1
+
+
+
+  ● hydrates a cold peer resource before applying the synchronous recipient guard
+
+    listen EPERM: operation not permitted 127.0.0.1
+
+
+
+  ● holds membership fences across the entire bulk policy/read operation
+
+    listen EPERM: operation not permitted 127.0.0.1
+
+
+
+  ● rechecks the source epoch after a delayed notification policy read
+
+    listen EPERM: operation not permitted 127.0.0.1
+
+
+
+  ● refuses cross-tenant links, conflicting channels, inaccessible lobbies and current approval denial
+
+    listen EPERM: operation not permitted 127.0.0.1
+
+
+
+  ● scopes missed calls by the call lobby and supports the existing OrgIQ initiative origin
+
+    listen EPERM: operation not permitted 127.0.0.1
+
+
+
+  ● allows a current forgotten receipt after state deletion but refuses unscoped call data
+
+    listen EPERM: operation not permitted 127.0.0.1
+
+
+
+FAIL src/lib/__tests__/social-membership-fence.test.ts
+  ● a delayed durable hydrate cannot revive membership after a newer successful local removal
+
+    listen EPERM: operation not permitted 127.0.0.1
+
+
+
+  ● failed durable membership writes do not invalidate an unchanged current proof
+
+    listen EPERM: operation not permitted 127.0.0.1
+
+
+
+  ● fresh channel reads observe a committed remote removal without an invalidation hint
+
+    listen EPERM: operation not permitted 127.0.0.1
+
+
+
+  ● a peer invalidation fences a delayed read without trusting a membership payload
+
+    listen EPERM: operation not permitted 127.0.0.1
+
+
+
+  ● a committed removal replaces an outstanding DM read for later callers without sharing mutable results
+
+    listen EPERM: operation not permitted 127.0.0.1
+
+
+
+  ● a failed outstanding membership read cannot poison the next current read
+
+    listen EPERM: operation not permitted 127.0.0.1
+
+
+
+  ● a new read after an unhinted remote removal cannot reuse a query that already captured older authority
+
+    listen EPERM: operation not permitted 127.0.0.1
+
+
+
+FAIL src/lib/__tests__/dynamo-dispatch.test.ts
+  ● limits dispatch, releases failed work, and refuses excess queued work before invoking it
+
+    listen EPERM: operation not permitted 127.0.0.1
+
+
+
+  ● runs sequential membership pages under one permit without deadlocking a full pool
+
+    listen EPERM: operation not permitted 127.0.0.1
+
+
+
+  ● combines only reads waiting for dispatch and starts a fresh snapshot for a later unhinted removal
+
+    listen EPERM: operation not permitted 127.0.0.1
+
+
+
+Test Suites: 4 failed, 4 total
+Tests:       52 failed, 52 total
+Snapshots:   0 total
+Time:        14.554 s
+Ran all test suites within paths "src/lib/__tests__/dynamo-dispatch.test.ts", "src/lib/__tests__/social-membership-fence.test.ts", "src/lib/__tests__/direct-recipient.test.ts", "src/lib/__tests__/live-principal.test.ts".

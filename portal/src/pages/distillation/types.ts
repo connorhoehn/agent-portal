@@ -392,12 +392,11 @@ export interface ApplicationsResponse {
 
 // ── Library provenance ───────────────────────────────────────────────────
 
-/** GET /library/:libraryItemId/provenance — 404 when the asset was not
- *  distilled, which the caller treats as "no section," not an error. */
-export interface ProvenanceResponse {
-  artifact: Artifact;
-  lineage: Lineage;
-}
+/** GET /library/:libraryItemId/provenance — both null when the asset was
+ *  never distilled, which the caller renders as "no section". */
+export type ProvenanceResponse =
+  | { artifact: Artifact; lineage: Lineage }
+  | { artifact: null; lineage: null };
 
 // ── Compaction flow (Compactions page — top-of-page tier ladder) ───────────
 // A small, non-interactive xyflow canvas: L0 → L1 → L2 → Library, fed by
@@ -525,6 +524,8 @@ export interface CompactionRun extends Omit<CompactionJob, 'status'> {
   percent?: number;
   stepLabel?: string;
   repo?: string;
+  /** Deliveries so far — 2 after one failed delivery was handed back. */
+  attempts?: number;
 }
 
 /** GET /review — the server-joined target of a sample. */

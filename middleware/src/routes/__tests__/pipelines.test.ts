@@ -86,8 +86,9 @@ describe('GET /api/pipelines/summary', () => {
     const rows = pipelinesSurfaces.rows();
     expect(res.body.surfaces).toEqual({ total: rows.length, live: rows.filter((r) => r.live).length, pending: rows.filter((r) => !r.live).length });
     // One seeded user per role, plus the cross-tenant operator.
-    expect(res.body.members.byRole).toEqual({ author: 1, operator: 1, 'pipeline-admin': 1, admin: 1 });
-    expect(res.body.members.total).toBe(4);
+    // Two authors since the 2026-10-07 seed: u-ines and u-tomas (the Communication plane's pipelines walker).
+    expect(res.body.members.byRole).toEqual({ author: 2, operator: 1, 'pipeline-admin': 1, admin: 1 });
+    expect(res.body.members.total).toBe(5); // five grant holders with u-tomas
   });
 
   it('the empty scenario reads zero surfaces', async () => {

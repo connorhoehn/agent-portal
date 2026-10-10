@@ -55,6 +55,7 @@ import { botsRouter } from '../bots.js';
 import { errorHandler } from '../../lib/async-handler.js';
 import { __setMockDispatchStepMs } from '../../lib/bot-runner.js';
 import { __resetMockRuns } from '../../providers/bots.js';
+import { getJob } from '../../providers/agent-jobs.js';
 
 // Run the simulated dispatch's state progression synchronously — the seam
 // exists so a test never sleeps through it (providers/distillation.ts's
@@ -113,5 +114,10 @@ describe('POST /api/bots/dispatch-work — Vera on Observability Platform (dev:m
       dispatchedBy: 'u-vera',
     });
     expect(res.body.run.jobId).toMatch(/^job-/);
+    const job = await getJob(res.body.run.jobId);
+    expect(job?.payload).toMatchObject({
+      workItemId: BODY.workItemId, workItemTitle: 'Error-budget dashboard per team',
+      initiativeId: 'p-observability', initiativeName: 'Observability Platform',
+    });
   });
 });

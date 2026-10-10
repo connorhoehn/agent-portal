@@ -17,9 +17,7 @@ export function useCanaryNavItems(): SubNavItem[] {
   const weightA = useCanaryStore((s) => s.weightA);
   const weightB = useCanaryStore((s) => s.weightB);
   const halted = useCanaryStore((s) => s.halted);
-  const controllerState = useCanaryStore((s) => s.controllerState);
   const decisionsCount = useCanaryStore((s) => s.recentDecisions.length);
-  const lastDecision = useCanaryStore((s) => s.recentDecisions[0]);
   const rps = useCanaryStore((s) => s.rps);
   const manualOpen = useCanaryStore((s) => s.manualSliderOpen);
 
@@ -31,7 +29,6 @@ export function useCanaryNavItems(): SubNavItem[] {
       {
         path: 'canary',
         label: 'New experiment',
-        hint: '3-step wizard: pick prompt → versions → traffic',
         accent: 'success',
         group: 'Setup',
       },
@@ -39,7 +36,6 @@ export function useCanaryNavItems(): SubNavItem[] {
         path: 'canary?focus=decisions',
         label: 'Past decisions',
         count: decisionsCount,
-        hint: lastDecision ? `Last: ${lastDecision.action}` : 'No decisions yet',
         group: 'History',
       },
     ];
@@ -50,19 +46,16 @@ export function useCanaryNavItems(): SubNavItem[] {
     {
       path: 'canary?focus=subject-a',
       label: 'Subject A',
-      hint: 'Terse explainer',
       group: 'Prompts',
     },
     {
       path: 'canary?focus=subject-b',
       label: 'Subject B',
-      hint: 'Structured explainer',
       group: 'Prompts',
     },
     {
       path: 'canary?focus=judge',
       label: 'Judge',
-      hint: 'Rubric scorer',
       group: 'Prompts',
     },
 
@@ -70,7 +63,6 @@ export function useCanaryNavItems(): SubNavItem[] {
     {
       path: 'canary?focus=status',
       label: halted ? 'Halted' : 'Active',
-      hint: `Controller: ${controllerState}`,
       accent: halted ? 'danger' : 'success',
       group: 'Run state',
     },
@@ -78,14 +70,12 @@ export function useCanaryNavItems(): SubNavItem[] {
       path: 'canary?focus=weight',
       label: 'Weight split',
       count: `${weightA}/${weightB}`,
-      hint: 'A% / B%',
       group: 'Run state',
     },
     {
       path: 'canary?focus=traffic',
       label: 'Traffic',
       count: `${rps.toFixed(1)}/min`,
-      hint: 'Rolling 30s estimate',
       group: 'Run state',
     },
 
@@ -93,7 +83,6 @@ export function useCanaryNavItems(): SubNavItem[] {
     {
       path: 'action-halt',
       label: halted ? 'Already halted' : 'Halt canary',
-      hint: halted ? 'Resume via manual weight' : 'Pin 100% to A',
       accent: 'danger',
       onClick: halted ? undefined : openHaltConfirm,
       group: 'Controls',
@@ -101,7 +90,6 @@ export function useCanaryNavItems(): SubNavItem[] {
     {
       path: 'action-manual',
       label: manualOpen ? 'Hide manual weight' : 'Manual weight…',
-      hint: 'Operator override (10 min)',
       onClick: toggleManualSlider,
       group: 'Controls',
     },
@@ -111,9 +99,6 @@ export function useCanaryNavItems(): SubNavItem[] {
       path: 'canary?focus=decisions',
       label: 'Decisions',
       count: decisionsCount,
-      hint: lastDecision
-        ? `Last: ${lastDecision.action}`
-        : 'No decisions yet',
       group: 'History',
     },
   ];

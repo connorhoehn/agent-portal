@@ -1,4 +1,5 @@
 import {
+  T,
   Chip,
   DataTable,
   Inline,
@@ -33,17 +34,18 @@ export function TargetsTable({
       key: 'label',
       header: 'Label',
       render: (t) => (
-        <>
-          <Inline gap="none" className="font-medium">{t.label}</Inline>
-          <Inline gap="none" className="text-[10px] font-mono text-text-tertiary">{t.id.slice(0, 12)}…</Inline>
-        </>
+        <Inline gap="sm" align="center" wrap={false}>
+          <T as="span" size="sm" weight="semibold">{t.label}</T>
+          <T as="span" size="xs" tone="tertiary" className="font-mono" title={t.id}>{t.id.slice(0, 12)}…</T>
+        </Inline>
       ),
     },
     {
       key: 'startUrl',
       header: 'URL',
-      className: 'text-[11px] font-mono text-text-secondary max-w-[280px] overflow-hidden truncate whitespace-nowrap',
-      render: (t) => <span title={t.startUrl}>{t.startUrl}</span>,
+      render: (t) => (
+        <T as="span" size="xs" tone="secondary" className="font-mono max-w-[280px] truncate whitespace-nowrap" title={t.startUrl}>{t.startUrl}</T>
+      ),
     },
     {
       key: 'mode',
@@ -53,14 +55,14 @@ export function TargetsTable({
     {
       key: 'cronExpr',
       header: 'Cron',
-      className: 'text-[11px] font-mono text-text-secondary',
-      render: (t) => t.cronExpr ?? <Inline as="span" gap="none" className="text-text-tertiary">on-demand</Inline>,
+      render: (t) => t.cronExpr
+        ? <T as="span" size="xs" tone="secondary" className="font-mono whitespace-nowrap">{t.cronExpr}</T>
+        : <T as="span" size="xs" tone="tertiary">on-demand</T>,
     },
     {
       key: 'lastRunAt',
       header: 'Last Run',
-      className: 'text-[11px] text-text-tertiary whitespace-nowrap',
-      render: (t) => absoluteTime(t.lastRunAt),
+      render: (t) => <T as="span" size="xs" tone="tertiary" className="whitespace-nowrap">{absoluteTime(t.lastRunAt)}</T>,
     },
     {
       key: 'lastStatus',
@@ -68,15 +70,14 @@ export function TargetsTable({
       render: (t) => (
         t.lastStatus
           ? <Chip tone={CRAWL_STATUS_TONE[t.lastStatus]} size="xs">{t.lastStatus}</Chip>
-          : <Inline as="span" gap="none" className="text-[11px] text-text-tertiary">—</Inline>
+          : <T as="span" size="xs" tone="tertiary">—</T>
       ),
     },
     {
       key: 'maxPages',
       header: 'Max Pages',
-      align: 'right',
-      className: 'text-[12px] font-semibold',
-      render: (t) => t.maxPages,
+      numeric: true,
+      render: (t) => <T as="span" size="sm" weight="semibold" tabular>{t.maxPages}</T>,
     },
     {
       key: 'enabled',
@@ -97,11 +98,12 @@ export function TargetsTable({
 
   return (
     <DataTable
+      size="sm"
       data={targets}
       columns={columns}
       keyField={(t) => t.id}
       rowActions={readOnly ? undefined : (t) => (
-        <Inline gap="none" className="flex gap-1.5 justify-end">
+        <Inline gap="xs" justify="end" wrap={false}>
           <Button variant="secondary" size="sm" onClick={() => onRun(t)} disabled={busyId === t.id}>
             {busyId === t.id ? 'Starting…' : 'Run now'}
           </Button>

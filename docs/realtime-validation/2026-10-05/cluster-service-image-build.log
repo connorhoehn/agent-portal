@@ -1,0 +1,102 @@
+#0 building with "colima" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 1.36kB done
+#1 DONE 0.0s
+
+#2 [context locked_libraries] load .dockerignore
+#2 transferring locked_libraries: 2B done
+#2 DONE 0.0s
+
+#3 [internal] load metadata for docker.io/library/node:22-slim
+#3 DONE 0.4s
+
+#4 [internal] load .dockerignore
+#4 transferring context: 75B done
+#4 DONE 0.0s
+
+#5 [deps 1/6] FROM docker.io/library/node:22-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c
+#5 resolve docker.io/library/node:22-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c done
+#5 DONE 0.0s
+
+#6 [internal] load build context
+#6 transferring context: 776.81kB 0.1s done
+#6 DONE 0.1s
+
+#7 [deps 2/6] WORKDIR /app
+#7 CACHED
+
+#8 [context locked_libraries] load from client
+#8 transferring locked_libraries: 31.93MB 0.1s done
+#8 DONE 0.1s
+
+#9 [deps 3/6] COPY package*.json ./
+#9 DONE 0.0s
+
+#10 [deps 4/6] COPY --from=locked_libraries / /vendor/
+#10 DONE 0.1s
+
+#11 [deps 5/6] RUN node /vendor/install-locked.mjs
+#11 DONE 0.1s
+
+#12 [deps 6/6] RUN --mount=type=cache,target=/root/.npm npm ci --ignore-scripts --legacy-peer-deps
+#12 1.831 npm warn deprecated inflight@1.0.6: This module is not supported, and leaks memory. Do not use it. Check out lru-cache if you want a good and tested way to coalesce async requests by a key value, which is much more comprehensive and powerful.
+#12 1.949 npm warn deprecated glob@7.2.3: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
+#12 2.530 npm warn deprecated node-domexception@1.0.0: Use your platform's native DOMException instead
+#12 3.067 npm warn deprecated glob@10.5.0: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
+#12 6.271 
+#12 6.271 added 857 packages, and audited 858 packages in 6s
+#12 6.271 
+#12 6.271 128 packages are looking for funding
+#12 6.271   run `npm fund` for details
+#12 6.302 
+#12 6.302 29 high severity vulnerabilities
+#12 6.302 
+#12 6.302 To address issues that do not require attention, run:
+#12 6.302   npm audit fix
+#12 6.302 
+#12 6.302 To address all issues (including breaking changes), run:
+#12 6.302   npm audit fix --force
+#12 6.302 
+#12 6.302 Run `npm audit` for details.
+#12 DONE 6.9s
+
+#13 [production 3/8] COPY --from=deps /app/node_modules ./node_modules
+#13 DONE 2.3s
+
+#14 [production 4/8] COPY package*.json ./
+#14 DONE 0.2s
+
+#15 [production 5/8] COPY src ./src
+#15 DONE 0.1s
+
+#16 [production 6/8] COPY seeds ./seeds
+#16 DONE 0.0s
+
+#17 [production 7/8] COPY tsconfig.json ./
+#17 DONE 0.0s
+
+#18 [production 8/8] RUN npm run build
+#18 0.271 
+#18 0.271 > @orgiq/middleware@0.3.0 build
+#18 0.271 > tsc
+#18 0.271 
+#18 12.31 npm notice
+#18 12.31 npm notice New major version of npm available! 10.9.9 -> 12.2.0
+#18 12.31 npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.0
+#18 12.31 npm notice To update run: npm install -g npm@12.2.0
+#18 12.31 npm notice
+#18 DONE 12.4s
+
+#19 exporting to image
+#19 exporting layers
+#19 exporting layers 9.7s done
+#19 exporting manifest sha256:14ac9ead48a94a2111fadf296943554880a125348dfe182c23537c692d76f7c1 done
+#19 exporting config sha256:f560752a458d945df7d9932e18bfb67a25c6e13c8416b1658acb02bc8dda5368 done
+#19 naming to docker.io/library/orgiq-middleware:cluster-service-validation done
+#19 unpacking to docker.io/library/orgiq-middleware:cluster-service-validation
+#19 unpacking to docker.io/library/orgiq-middleware:cluster-service-validation 3.1s done
+#19 DONE 12.8s
+
+#20 resolving provenance for metadata file
+#20 DONE 0.0s

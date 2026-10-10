@@ -123,6 +123,22 @@ gate against the API it reads, and here there is no nav item to compare.
 
 Affects `/admin/identity/*` and the assessment tenant's rail.
 
+## Decided: the day's graph pages are "Work graph", the ledgers keep "Activity" (2026-10-06)
+
+`/iq/activity`, `/pipelines/activity` and `/assessment/activity` are labelled "Work graph" (rail, palette, page title; the palette hint says "not the run ledger"); only assessment's System row `/assessment/runs` stays "Activity".
+
+## Decided: one deck write rule across tenants (2026-10-06)
+
+A deck is writable (build, save, revise, share) by exactly the actor who may run that tenant's agent on the deck's subject: assessment `RunAssessmentAgent` + team read, pipelines `RunPipeline` + run read, orgiq `DispatchAgentRun` + initiative read (budget-tier redaction stays a read rule), social `PostMessage` + current conversation membership (delete: owner only). One function, `deckWriteAuthority` (`middleware/src/lib/deck-shared/authority.ts`), asked fresh per request by every deck route; the portal's `can()` controls read the same action through `makeDeckApi({ tenant }).writeAction`. Full record in `docs/agentic-flows-migration.md` "Open decisions".
+
+## Decided: "Calls" becomes "Communication", the Social plane, in orgiq, assessment and pipelines (2026-10-07)
+
+The user: "Org calls should be renamed Communication and be the social app plane like the tenant features." Rail, palette and trail say **Communication** at `/iq/communication` (Org), `/assessment/communication` (Assess) and `/pipelines/communication` (Runs); `/<tenant>/calls` redirects to `…/communication/calls`. Social's own Meet › Calls (`/social/calls`) stays. The rows carry no `roles`, matching the page: every role of the tenant opens it, because its Calls destination still lists the tenant's page huddles (`GET /api/calls/tenant`, the tenant's own read action) exactly as the former Calls page did. Everything Social on the page reads and writes through `/api/social/plane` — the Social tenant router's own handlers, each gated on the caller's CURRENT Social grants (`lib/live-principal.ts`) for the same action the tenant router asks — so a control the plane offers is never wider than its API; `requireTenant('social')` still fronts `/api/social/*`. A tenant role without a Social grant gets the page's denied state ("Ask an admin for Social access") plus its call log, and no Social request. Record: `docs/social-tenant-design.md` §4.6 "Communication".
+
+## Decided: the Communication plane is shaped by the user's org context (2026-10-07)
+
+The user: "Communication should be a representation of the social tenant for enabled users — your team and initiative groups, the 'Active now' people, and the work they have shared." `/iq/communication`, `/assessment/communication` and `/pipelines/communication` keep their rail rows and gating (no `roles`; a session without a Social grant still gets the denied state and zero `/api/social` requests), but the workspace gains three things, all read through `/api/social/plane` (each re-gated on the actor's CURRENT Social grants) or a host-tenant route under its own gate, so no control is wider than its API: **Active now** (`GET /api/social/plane/active`), the user's groups (**My initiatives** / **My teams** / **My pipelines**, plus orgiq-only **My org teams** — all from the one `GET /api/me/groups?kind=` reader, `lib/mine.ts`), and **Shared work** (`?view=shared`, and a person's `…/people/:userId/shared-work`, filtered per viewer by sharing grants). "Mine" derives from `app_users.person_id` on the server, never the body. The footer's Social entry goes to `/<tenant>/communication` for an enabled user, `/social/channels` inside Social. Record: `docs/social-tenant-design.md` §4.6; judge: `scripts/validate-communication-plane.sh`.
+
 ## Deliberately clean
 
 `/admin/knowledge`, `/admin/budgets`, `/admin/bots` and `/admin/devbox` all

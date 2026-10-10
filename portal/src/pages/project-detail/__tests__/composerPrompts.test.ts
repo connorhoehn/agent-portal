@@ -7,7 +7,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  askHref, commandIn, composerCommands, composerSetup, itemPrefill, workflowMenu, workflowMenuRows, workflowPrompt,
+  askHref, commandIn, composerCommands, composerPageReference, composerSetup, itemPrefill, workflowMenu, workflowMenuRows, workflowPrompt,
   type ComposerSubject,
 } from '../composerPrompts.ts';
 import { briefFacts } from '../briefModel.ts';
@@ -32,6 +32,15 @@ test('the three variants open as in the mockups', () => {
   ]);
   const m = composerSetup(listSubject);
   assert.deepEqual([m.chip.label, m.draft, m.placeholder], ['Initiatives', '', "Ask about the team's initiatives or how to get involved…"]);
+});
+
+test('the page reference names the viewed page by breadcrumb and carries only its descriptor', () => {
+  const item = composerPageReference(itemSubject);
+  assert.deepEqual(item.crumbs, [OBS_PROJECT.name, b4.title]);
+  assert.equal(item.label, item.crumbs.join(' › '));
+  assert.deepEqual(item.page, { kind: 'work-item', id: 'wi-obs-e2-b4' });
+  assert.deepEqual(composerPageReference(initiativeSubject).page, { kind: 'initiative', id: OBS_PROJECT.id });
+  assert.deepEqual([composerPageReference(listSubject).page, composerPageReference(listSubject).label], [null, 'Initiatives']);
 });
 
 test('the item prefill follows what the brief is missing, and claims nothing unknown', () => {

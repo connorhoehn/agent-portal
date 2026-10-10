@@ -15,6 +15,15 @@
 jest.mock('../../config.js', () => ({
   config: { auth: { policyStoreId: undefined, cognito: null }, mock: { aurora: true } },
 }));
+// This suite's Vera persona is explicitly a moderator in its directory too.
+// Captured cookie grants alone are no longer authority for embedded actions.
+jest.mock('../../providers/identity.js', () => {
+  const actual = jest.requireActual('../../providers/identity.js');
+  return { ...actual, getUser: async (id: string, options: unknown) => {
+    const user = await actual.getUser(id, options);
+    return id === 'u-vera' && user ? { ...user, grants: { ...user.grants, social: ['moderator'] } } : user;
+  } };
+});
 jest.mock('../../lib/role-registry.js', () => ({
   roleRegistry: () => [
     { id: 'admin', tenant: null, label: 'Admin', summary: '', capabilities: ['*'] },
@@ -153,11 +162,12 @@ describe('POST /api/social/dms (grant-gated)', () => {
 
   it('refuses a session with no social grant, and a peer outside the social roster', async () => {
     expect((await request(hr()).post('/api/social/dms').send({ userId: 'u-vera' })).status).toBe(403);
-    expect((await request(theo()).post('/api/social/dms').send({ userId: 'u-eli' })).status).toBe(404);
+    // u-eli holds Social since the 2026-10-07 seed; u-hr (hr-admin, no Social grant) is the peer outside the roster.
+    expect((await request(theo()).post('/api/social/dms').send({ userId: 'u-hr' })).status).toBe(404);
   });
 
-  it('the rest of /api/social stays behind the tenant gate for an orgiq session', async () => {
+  it('channel administration stays tenant gated while embedded DM read remains source scoped', async () => {
     expect((await request(theo()).get('/api/social/channels')).status).toBe(403);
-    expect((await request(theo()).post('/api/social/dms/read').send({ channel: 'social:dm:u-theo:u-vera' })).status).toBe(403);
+    expect((await request(theo()).post('/api/social/dms/read').send({ channel: 'social:dm:u-theo:u-vera' })).status).toBe(200);
   });
 });

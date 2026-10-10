@@ -140,7 +140,7 @@ export function decidePublish(
   return { ok: true };
 }
 
-const LIVE_BOX_STATUSES: ReadonlySet<string> = new Set(['idle', 'running', 'waiting']);
+const LIVE_BOX_STATUSES: ReadonlySet<string> = new Set(['provisioning', 'idle', 'running', 'waiting']);
 
 /**
  * How many live sessions a publish would restart. `appliesTo` of `'fleet'`

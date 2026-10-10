@@ -167,8 +167,10 @@
 //     "drives a devbox microVM"; what they really do is return before their
 //     own work finishes, which is `fires`, not `spends`.
 //   * `POST /agent-projects/:id/clone-command` — "borrows the connection's real
-//     API key"; `borrowApiKey` throws under MOCK_AGENTCORE on purpose, and no
-//     seeded repository carries a connection to borrow for.
+//     API key"; `borrowApiKey` throws under MOCK_AGENTCORE on purpose, so
+//     `buildCloneCommand` never calls it offline — it builds the command with
+//     the token left out (every seeded repository is private and carries a
+//     connection).
 //   * `POST /sdlc/changes/:id/rereview` — "no mock branch" above a Converse
 //     that has had one, deliberately placed above the try, since the offline
 //     reviewer shipped.
@@ -437,9 +439,9 @@ const SPENDS: Family[] = [
   // unawaited, so it moved to `fires`. `POST /*/clone-command` read "borrows
   // the connection's real API key through AgentCore Identity"; `borrowApiKey`
   // THROWS under MOCK_AGENTCORE by design (providers/connected-sources.ts
-  // refuses to hand out a fake token), and every seeded project carries
-  // `connectionName: null` so the branch is not taken at all — it is on the
-  // allowlist now.
+  // refuses to hand out a fake token), so `buildCloneCommand` does not call it
+  // offline: it builds the credentialed command with the token left out — it
+  // is on the allowlist now.
   { pattern: 'POST /api/drop/*', what: 'reaches the RDS Data API unguarded, then S3' },
   { pattern: 'POST /api/gateway/channels/*', what: 'retired generic signing bridge; returns 410 without an upstream call' },
 
@@ -599,6 +601,9 @@ const FIRES: Family[] = [
   { pattern: 'POST /api/work/jobs/*/requeue', what: 'enqueues a fresh copy of the job' },
   { pattern: 'POST /api/work/findings/*/promote', what: 'enqueues an agent job the dispatcher will claim' },
   { pattern: 'POST /api/assessment/runs', what: 'starts progress timers that auto-complete the run eight seconds later' },
+  { pattern: 'POST /api/assessment/teams/*/decks', what: 'launches a draft-review-deck run whose eight-second timer writes a deck revision' },
+  { pattern: 'POST /api/assessment/decks/*/revise', what: 'launches a revise-review-deck run whose eight-second timer writes a deck revision' },
+  { pattern: 'POST /api/pipelines/decks/*/revise', what: 'starts a requester-private flow run whose executor appends a deck revision after the response, so a reset can land before it writes' },
   { pattern: 'POST /api/assessment/knowledge/pull', what: 'schedules a deferred pull that mutates the section 1.5s later' },
   { pattern: 'POST /api/distillation/compact', what: 'schedules a three-second completion timer' },
   { pattern: 'POST /api/ingest/schedules', what: 'writes ingest-schedules.json and registers a node-cron task' },
@@ -730,11 +735,57 @@ const family = (list: Family[]) => ({
  */
 export const REFUSAL_RULES: readonly RefusalRule[] = [
   {
+    id: 'active-call-state',
+    because: 'Page sharing requires an authenticated, connected participant in a live call with current cookie/socket provenance and grants. Call and page stores are selected independently of MOCK_AURORA and are not resettable fixtures. The capture cannot synthesize a joined call or restore revisions; dedicated HTTP, gateway and two-browser contracts cover this write. (Huddle messages travel over the gateway chat channel, not HTTP.)',
+    applies: route => route === 'PUT /api/calls/:callId/page',
+  },
+  {
+    id: 'social-platform-not-verified',
+    because: 'The Social platform backend is selected independently of MOCK_AURORA: a configured platform URL takes precedence and can persist a real membership preference. Capture does not verify that backend; isolated provider, handler and browser contracts cover this personal write.',
+    applies: route => route === 'PATCH /api/social/teams/:teamId/me',
+  },
+  {
+    id: 'social-private-run',
+    because: 'A private /summarize run is readable only by the Social member who started it, from the conversation they may read, and posting needs that member\'s PostMessage grant plus a finished run of their own. The capture signs in without a Social grant and cannot own a run; isolated route tests (social-summarize.test.ts) and the headless spec cover these writes.',
+    applies: route => /^POST \/api\/chat\/commands\/summarize\//.test(route),
+  },
+  {
+    id: 'conversation-private-run',
+    because: 'A tenant-conversation or huddle /summarize run is a durable flow run readable only by the person who started it, while that conversation\'s own chat history authority (gateway family authority and chat membership rows, or an actual huddle seat) still admits them; posting needs the conversation\'s publish authority plus a finished run of their own. Starting one fires an agent run that outlives the request, and the capture holds neither a run nor a huddle seat; isolated route tests (conversation-summarize.test.ts) and the headless spec cover these writes.',
+    applies: route => /^POST \/api\/conversations\/summarize\//.test(route),
+  },
+  {
+    id: 'conversation-artifact-run',
+    because: 'A /diagram or /doc run is a durable flow run readable only by the person who started it, from a conversation whose own read authority (Social chatAccess, or a tenant family / huddle chat history) still admits them; posting a diagram and saving a page need that conversation\'s publish authority plus a finished run of their own, and Save is claimed once. Starting one fires an agent run that outlives the request, and the capture holds neither a run nor a conversation seat; isolated route tests (conversation-artifact-social.test.ts, conversation-artifact-tenant.test.ts) and the headless spec cover these writes.',
+    applies: route => /^POST \/api\/(?:chat\/commands|conversations)\/(?:diagram|doc)\//.test(route),
+  },
+  {
+    id: 'agent-loop-run',
+    because: 'An /agent run is a durable flow run readable only by the person who started it, from a conversation whose own authority (Social chatAccess with PostMessage, or a tenant family / huddle chat publish) still admits them. Starting one plans a goal (no step runs); Approve and Discard are once-only claims on that plan, an approval step pauses the loop and its approve/reject are once-only decisions by the requester (or, where the tenant\'s second-approver rule allows, another editor), and Approve then starts the existing summarize, deck, diagram and doc flows as that person\'s freshly reloaded session. The capture holds neither a run nor a conversation seat, and the loop outlives the request; isolated route tests (agent-loop-social.test.ts, agent-loop-tenant.test.ts, lib/agent-loop) and the headless spec cover these writes.',
+    applies: route => /^POST \/api\/(?:chat\/commands|conversations)\/agent\//.test(route),
+  },
+  {
+    id: 'social-deck',
+    because: 'A /deck run is private to the Social member who started it and is built from the conversation they may read; saving writes a deck only that member owns, editing is owner-only with a compare-and-set revision, and posting needs PostMessage plus current membership of the source conversation. The capture signs in without a Social grant and can own neither a run nor a deck; isolated route tests (social-deck.test.ts, social-deck-channel.test.ts) and the headless spec cover these writes.',
+    applies: route => /^POST \/api\/chat\/(?:commands\/deck\/|decks\/)/.test(route),
+  },
+  {
+    id: 'assessment-private-draft',
+    because: 'An evidence summary or follow-up draft is a durable flow run shared by every assessor who can read the team, and accepting one writes follow-up rows into the team the draft names. Generating fires an agent run that outlives the request, and the capture cannot own a draft to accept or discard; isolated route tests (assessment-drafts.test.ts) and the headless spec cover these writes.',
+    applies: route => /^POST \/api\/assessment\/(?:teams\/[^/]+\/dimensions\/[^/]+\/drafts\/(?:evidence-summary|followups)|drafts\/[^/]+\/(?:accept|discard|revise))$/.test(route),
+  },
+  {
+    id: 'chat-store-not-verified',
+    because: 'The chat pin backend is selected independently of MOCK_AURORA. It may write DynamoDB even when the health response reports every mock provider. Capture does not verify that backend; isolated pin-store and browser tests cover this write.',
+    applies: route => route === 'POST /api/chat/pins',
+  },
+  {
     id: 'document-service',
-    because: 'Delegates to durable document or source services outside the resettable Aurora fixture. Capture must not seed, publish, restore or transition real documents; dedicated isolated integration tests cover these writes.',
+    because: 'Delegates to durable document or source services outside the resettable Aurora fixture. Proposal writes also verify the canonical document policy through that service. Capture must not seed, publish, restore or transition real documents; dedicated isolated integration tests cover these writes.',
     // A DELETE under these paths (a document comment) is refused all the same,
     // but as `destructive`: every DELETE carries that one label.
     applies: route => !route.startsWith('DELETE ') && (/^POST \/api\/assessment\/knowledge\/canvas$/.test(route)
+      || /^POST \/api\/assessment\/knowledge\/doc\/proposals(?:\/[^/]+\/(?:decision|revision))?$/.test(route)
       || /^[A-Z]+ \/api\/assessment\/knowledge\/(source|doc\/workflows)\//.test(route)),
   },
   {
@@ -2078,7 +2129,7 @@ export const WRITE_SPECS: readonly WriteSpec[] = [
   {
     route: 'POST /api/agent-projects/:id/clone-command',
     persona: 'orgiq/admin',
-    safe: 'It builds a string and returns it. `buildCloneCommand` reaches `borrowApiKey` only when the project carries a `connectionName`, and every seeded repository carries null — so the AgentCore Identity call its old reason named is not made. It could not succeed anyway: `borrowApiKey` THROWS under MOCK_AGENTCORE by design, rather than handing out a fake token. Deliberately NOT paired with `/cloned`: generating the command is not the clone, and the handler is explicit that it must not mark the project cloned.',
+    safe: 'It builds a string and returns it. Every seeded repository is private and carries a `connectionName`, but under MOCK_AGENTCORE `buildCloneCommand` does not call `borrowApiKey` (which THROWS there by design, rather than handing out a fake token): it builds the credentialed command with the token left out, so the AgentCore Identity call its old reason named is not made. Deliberately NOT paired with `/cloned`: generating the command is not the clone, and the handler is explicit that it must not mark the project cloned.',
     bodyFrom: 'routes/agent-projects.ts: `sessionId` must be a non-blank string; it is not resolved against the devbox and does not reach the response. `:id` is a repository off GET /api/agent-projects.',
     intercepts: ['aurora', 'agentcore'],
     build: async (ctx) => ({ sessionId: ctx.label() }),

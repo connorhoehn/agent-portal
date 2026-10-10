@@ -21,10 +21,9 @@ import {
   TableBody,
   TableRow,
   TableTh,
-  TableTd,
+  TableTd, T,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
-import { T } from './Text';
 import { relativeTime } from '../../lib/relativeTime';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import {
@@ -222,7 +221,7 @@ function InvocationsPage() {
         <Inline gap="sm" align="center">
           <Link
             to="/admin/observability/invocations/search"
-            className="mr-[10px] text-[12px] text-[var(--color-primary)] no-underline"
+            className="text-xs mr-[10px] text-[var(--color-primary)] no-underline"
           >
             Search & triage →
           </Link>
@@ -248,7 +247,7 @@ function InvocationsPage() {
               { value: 'error', label: 'Error' },
             ]}
           />
-          <T className="text-[11px] text-[var(--color-text-tertiary)]">{intervenedCount} intervened</T>
+          <T size="xs" className="text-[var(--color-text-tertiary)]">{intervenedCount} intervened</T>
         </Inline>
       }
     >
@@ -276,7 +275,7 @@ function InvocationsPage() {
             />
           )
         ) : (
-          <Table>
+          <Table size="sm">
             <TableHead>
               <TableRow>
                 {/* No "Prompt ver." or "Cost" column here, on purpose.
@@ -300,7 +299,7 @@ function InvocationsPage() {
             <TableBody>
               {filtered.map((inv) => (
                 <TableRow key={inv.id}>
-                  <TableTd className="whitespace-nowrap text-[11px] text-[var(--color-text-tertiary)]">
+                  <TableTd className="whitespace-nowrap text-[var(--color-text-tertiary)]">
                     <Link
                       to={`/admin/observability/invocations/${encodeURIComponent(inv.id)}`}
                       title={new Date(inv.startedAt).toLocaleString()}
@@ -309,14 +308,14 @@ function InvocationsPage() {
                       {relativeTime(inv.startedAt)}
                     </Link>
                   </TableTd>
-                  <TableTd className="whitespace-nowrap text-[12px] font-medium">
+                  <TableTd className="whitespace-nowrap">
                     {registryById.get(resolveAgentKey(inv.agentId, inv.agentName)) ?? inv.agentName}
                   </TableTd>
-                  <TableTd className="max-w-[280px] truncate text-[12px]" title={inv.promptSnippet}>
+                  <TableTd className="max-w-[280px] truncate" title={inv.promptSnippet}>
                     {inv.promptSnippet}
                   </TableTd>
                   <TableTd
-                    className="max-w-[320px] text-[12px] text-[var(--color-text-secondary)]"
+                    className="text-xs max-w-[320px] text-[var(--color-text-secondary)]"
                     title={inv.error ? `error: ${inv.error}` : inv.responseSnippet}
                   >
                     {inv.error ? (
@@ -325,7 +324,7 @@ function InvocationsPage() {
                       firstSentence(inv.responseSnippet)
                     )}
                   </TableTd>
-                  <TableTd className="text-[11px] text-[var(--color-text-tertiary)]">
+                  <TableTd className="text-[var(--color-text-tertiary)]">
                     {(inv.durationMs / 1000).toFixed(1)}s
                   </TableTd>
                   <TableTd>
@@ -356,14 +355,14 @@ function InvocationsPage() {
         <Inline align="center" justify="between" className="mb-3">
           <SectionLabel as="div">
             Bedrock Invocations{' '}
-            <T className="text-[11px] font-normal text-[var(--color-text-tertiary)]">
+            <T weight="normal" size="xs" className="text-[var(--color-text-tertiary)]">
               {/* Honest about the server-side cap (?limit=20) — this reads as
                   "the last hour" without it, when it's really the last 20
                   calls within that hour. */}
               from /orgiq/bedrock-invocations · last 20 · ~30s lag · full guardrail trace per entry
             </T>
           </SectionLabel>
-          <T className="text-[11px] text-[var(--color-text-tertiary)]">
+          <T size="xs" className="text-[var(--color-text-tertiary)]">
             {bedrock?.entries.filter((e) => e.intervened).length ?? 0} intervened in last hour
           </T>
         </Inline>
@@ -372,7 +371,7 @@ function InvocationsPage() {
             No Bedrock calls in the last hour. Invoke an agent and wait ~30s.
           </InlinePlaceholder>
         ) : (
-          <Table>
+          <Table size="sm">
             <TableHead>
               <TableRow>
                 <TableTh>When</TableTh>
@@ -387,19 +386,19 @@ function InvocationsPage() {
               {(bedrock?.entries ?? []).map((b) => (
                 <TableRow key={b.requestId}>
                   <TableTd
-                    className="whitespace-nowrap text-[11px] text-[var(--color-text-tertiary)]"
+                    className="text-xs whitespace-nowrap text-[var(--color-text-tertiary)]"
                     title={new Date(b.timestamp).toLocaleString()}
                   >
                     {relativeTime(b.timestamp)}
                   </TableTd>
-                  <TableTd className="whitespace-nowrap text-[12px] font-medium">{b.agent}</TableTd>
-                  <TableTd className="font-mono text-[11px] text-[var(--color-text-tertiary)]">
+                  <TableTd className="whitespace-nowrap">{b.agent}</TableTd>
+                  <TableTd className="font-mono text-[var(--color-text-tertiary)]">
                     {b.operation}
                   </TableTd>
-                  <TableTd className="max-w-[320px] truncate text-[12px]" title={b.promptSnippet}>
+                  <TableTd className="max-w-[320px] truncate" title={b.promptSnippet}>
                     {b.promptSnippet}
                   </TableTd>
-                  <TableTd className="text-[11px] text-[var(--color-text-tertiary)]">
+                  <TableTd className="text-[var(--color-text-tertiary)]">
                     {b.inputTokens}↓ / {b.outputTokens}↑
                   </TableTd>
                   <TableTd>
@@ -439,11 +438,11 @@ function CodeInterpreterTraces({ invocations }: { invocations: Invocation[] }) {
     <Card padding="md" className="mb-6">
       <Inline gap="sm" align="center" className="mb-3">
         <SectionLabel as="div">Code Interpreter Traces</SectionLabel>
-        <T className="text-[11px] text-[var(--color-text-tertiary)]">
+        <T size="xs" className="text-[var(--color-text-tertiary)]">
           invocations that triggered run_in_sandbox · live ring buffer
         </T>
         {traced.length > 0 && (
-          <T className="ml-auto text-[11px] font-semibold text-[var(--color-primary)]">
+          <T weight="semibold" size="xs" className="ml-auto text-[var(--color-primary)]">
             {traced.length} invocation{traced.length !== 1 ? 's' : ''} · {totalExecs} execution
             {totalExecs !== 1 ? 's' : ''}
           </T>
@@ -466,25 +465,25 @@ function CodeInterpreterTraces({ invocations }: { invocations: Invocation[] }) {
                 title={
                   <MetaLine
                     items={[
-                      <T
-                        className="whitespace-nowrap text-[11px] text-[var(--color-text-tertiary)]"
+                      <T size="xs"
+                        className="text-xs whitespace-nowrap text-[var(--color-text-tertiary)]"
                         title={new Date(inv.startedAt).toLocaleString()}
                       >
                         {relativeTime(inv.startedAt)}
                       </T>,
-                      <T className="whitespace-nowrap rounded-full bg-[var(--color-surface-hover)] px-[7px] py-[1px] text-[11px] font-semibold text-[var(--color-primary)]">
+                      <T weight="semibold" size="xs" className="whitespace-nowrap rounded-full bg-[var(--color-surface-hover)] px-[7px] py-[1px] text-[var(--color-primary)]">
                         {inv.agentName.replace('orgiq-', '')}
                       </T>,
-                      <T className="max-w-[360px] truncate text-[12px]">{inv.promptSnippet}</T>,
+                      <T size="xs" className="max-w-[360px] truncate">{inv.promptSnippet}</T>,
                     ]}
                   />
                 }
                 badge={
                   <Inline gap="sm" align="center">
-                    <T className="whitespace-nowrap rounded-full bg-[var(--color-primary)] px-2 py-[2px] text-[11px] font-semibold text-white">
+                    <T weight="semibold" size="xs" className="whitespace-nowrap rounded-full bg-[var(--color-primary)] px-2 py-[2px] text-white">
                       {execCount} sandbox run{execCount !== 1 ? 's' : ''}
                     </T>
-                    <T className="whitespace-nowrap text-[11px] text-[var(--color-text-tertiary)]">
+                    <T size="xs" className="whitespace-nowrap text-[var(--color-text-tertiary)]">
                       {(inv.durationMs / 1000).toFixed(1)}s total
                     </T>
                   </Inline>
@@ -500,14 +499,14 @@ function CodeInterpreterTraces({ invocations }: { invocations: Invocation[] }) {
                             <Chip tone={exec.error ? 'danger' : 'success'} size="xs">
                               run {idx + 1}
                             </Chip>,
-                            <T className="max-w-[420px] truncate font-mono text-[11px] text-[var(--color-text-secondary)]">
+                            <T size="xs" className="max-w-[420px] truncate font-mono text-[var(--color-text-secondary)]">
                               {exec.code
                                 .trim()
                                 .split('\n')
                                 .find((l) => l.trim() && !l.startsWith('#')) ??
                                 exec.code.trim().slice(0, 80)}
                             </T>,
-                            <T className="whitespace-nowrap text-[11px] text-[var(--color-text-tertiary)]">
+                            <T size="xs" className="whitespace-nowrap text-[var(--color-text-tertiary)]">
                               {exec.durationMs}ms · {exec.sessionId.slice(-8)}
                             </T>,
                           ]}

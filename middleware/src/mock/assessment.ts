@@ -3169,6 +3169,10 @@ const seedTeams = (): MockTeam[] => [
    {
     "initials": "SD",
     "name": "Sam Diallo"
+   },
+   {
+    "initials": "AN",
+    "name": "Asha Nair"
    }
   ]
  },

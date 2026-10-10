@@ -150,11 +150,11 @@ export const socialTeamMembersFixture = defineFixture<SocialTeamMemberRow>({
   key: 'social.team-members',
   scenarios: {
     default: () => [
-      { teamId: 'mock-team-community', userId: 'u-mira', role: 'owner', addedAt: clock.daysAgo(20), addedBy: 'u-mira' },
-      { teamId: 'mock-team-community', userId: 'u-lena', role: 'member', addedAt: clock.daysAgo(19), addedBy: 'u-mira' },
-      { teamId: 'mock-team-community', userId: 'u-sana', role: 'member', addedAt: clock.daysAgo(12), addedBy: 'u-mira' },
-      { teamId: 'mock-team-moderation', userId: 'u-lena', role: 'owner', addedAt: clock.daysAgo(10), addedBy: 'u-lena' },
-      { teamId: 'mock-team-moderation', userId: 'u-mira', role: 'member', addedAt: clock.daysAgo(10), addedBy: 'u-lena' },
+      { teamId: 'mock-team-community', userId: 'u-mira', role: 'owner', favorite: false, addedAt: clock.daysAgo(20), addedBy: 'u-mira' },
+      { teamId: 'mock-team-community', userId: 'u-lena', role: 'member', favorite: false, addedAt: clock.daysAgo(19), addedBy: 'u-mira' },
+      { teamId: 'mock-team-community', userId: 'u-sana', role: 'member', favorite: false, addedAt: clock.daysAgo(12), addedBy: 'u-mira' },
+      { teamId: 'mock-team-moderation', userId: 'u-lena', role: 'owner', favorite: false, addedAt: clock.daysAgo(10), addedBy: 'u-lena' },
+      { teamId: 'mock-team-moderation', userId: 'u-mira', role: 'member', favorite: false, addedAt: clock.daysAgo(10), addedBy: 'u-lena' },
     ],
     empty: () => [],
   },
@@ -183,6 +183,40 @@ export const socialRecordingsFixture = defineFixture<SocialRecordingRow>({
   },
 });
 
+/** platform-api's transcript document: speech segments (and injected `reaction` segments). */
+export interface SocialTranscriptSegment { startMs: number; endMs: number; speakerId: string; speakerLabel: string; text: string; kind?: 'reaction' }
+export interface SocialRecordingTranscriptRow { recordingId: string; transcriptStatus: 'ready' | 'pending' | 'failed'; segments: SocialTranscriptSegment[] }
+
+const seg = (startMs: number, speakerId: string, speakerLabel: string, text: string, kind?: 'reaction'): SocialTranscriptSegment =>
+  ({ startMs, endMs: startMs + 8_000, speakerId, speakerLabel, text, ...(kind ? { kind } : {}) });
+
+/** One transcript per seeded recording (`transcript.json`, served by `GET /api/recordings/:id/transcript`). */
+export const socialRecordingTranscriptsFixture = defineFixture<SocialRecordingTranscriptRow>({
+  key: 'social.recording-transcripts',
+  scenarios: {
+    default: () => [
+      { recordingId: 'mock-rec-town-hall-1', transcriptStatus: 'ready', segments: [
+        seg(0, 'u-mira', 'Mira Okafor', 'Welcome to the town hall. We will cover the spring community calendar first.'),
+        seg(9_000, 'u-lena', 'Lena Brandt', 'Moderation volume doubled after the launch, so we need two more volunteers.'),
+        seg(18_000, 'u-sana', 'Sana Iyer', 'I can take the Tuesday shift and write the onboarding guide.'),
+        seg(20_000, 'u-lena', 'Lena Brandt', 'reacted with a thumbs up', 'reaction'),
+        seg(27_000, 'u-mira', 'Mira Okafor', 'Decision: the event calendar goes live on Friday with Sana as the owner.'),
+      ] },
+      { recordingId: 'mock-rec-town-hall-2', transcriptStatus: 'ready', segments: [
+        seg(0, 'u-mira', 'Mira Okafor', 'Last week we agreed to trial a weekly office hour for new members.'),
+        seg(9_000, 'u-sana', 'Sana Iyer', 'Attendance was thirty people and most questions were about channel etiquette.'),
+      ] },
+      { recordingId: 'mock-rec-dm-lena-sana', transcriptStatus: 'ready', segments: [
+        seg(0, 'u-lena', 'Lena Brandt', 'Can you review the moderation checklist before the call with Mira?'),
+        seg(8_000, 'u-sana', 'Sana Iyer', 'Yes, I will send my edits tonight and flag anything unclear.'),
+        seg(16_000, 'u-lena', 'Lena Brandt', 'Great, the escalation section is the part I am least sure about.'),
+        seg(24_000, 'u-sana', 'Sana Iyer', 'Agreed, I will rewrite the escalation steps and share them tomorrow morning.'),
+      ] },
+    ],
+    empty: () => [],
+  },
+});
+
 function logRow(userId: string, direction: SocialCallLogRow['direction'], outcome: SocialCallLogRow['outcome'], call: { id: string; callerId: string; callerName: string; targets: string[]; lobbyName: string; hoursAgo: number; minutes?: number }): SocialCallLogRow {
   const startedAt = clock.hoursAgo(call.hoursAgo);
   const answered = outcome === 'answered';
@@ -199,6 +233,29 @@ const DM_CALL = { id: 'mock-call-dm-lena-sana', callerId: 'u-lena', callerName: 
 const MISSED = { id: 'mock-call-missed-mira-sana', callerId: 'u-mira', callerName: 'Mira Okafor', targets: ['u-sana'], lobbyName: 'social:dm:u-mira:u-sana', hoursAgo: 2 };
 const TOWN_HALL = { id: 'mock-call-town-hall-1', callerId: 'u-mira', callerName: 'Mira Okafor', targets: [], lobbyName: 'social:room:town-hall', hoursAgo: 26, minutes: 41 };
 
+/** A page huddle (`orgiq:initiative:<id>`, `assessment:team:<id>`): everyone who walked in reports a `joined` row naming the others. */
+function pageHuddle(lobbyName: string, people: Array<[string, string]>, hoursAgo: number, minutes: number, id: string): SocialCallLogRow[] {
+  return people.map(([userId, name]) => ({
+    ...logRow(userId, 'joined', 'answered', { id, callerId: userId, callerName: name, targets: people.map(([u]) => u).filter((u) => u !== userId), lobbyName, hoursAgo, minutes }),
+  }));
+}
+const INITIATIVE_HUDDLE = pageHuddle('orgiq:initiative:p-auth-migration', [['u-mia', 'Mia Singh'], ['u-nora', 'Nora DaSilva']], 7, 14, 'mock-call-initiative-1');
+const TEAM_HUDDLE = pageHuddle('assessment:team:TEAM-001', [['u-asha', 'Asha Nair'], ['u-jonas', 'Jonas Lindqvist']], 4, 22, 'mock-call-team-1');
+
+/** A huddle still going on: answered, no end yet — what the Communication plane's Active now reads as "in a huddle"
+ * (lib/work-graph/plane-active.ts) and the Calls panes list as live. Mira and Lena in #general's lobby, since the
+ * seed's quarter hour. Only #general's members see it there. */
+function liveHuddle(lobbyName: string, people: Array<[string, string]>, minutesAgo: number, id: string): SocialCallLogRow[] {
+  const startedAt = clock.hoursAgo(minutesAgo / 60);
+  const [callerId, callerName] = people[0]!;
+  return people.map(([userId]) => ({
+    userId, callId: id, direction: 'joined', callerId, callerName,
+    targetUserIds: people.map(([u]) => u).filter((u) => u !== userId), lobbyName, audioOnly: false, outcome: 'answered',
+    startedAt, answeredAt: startedAt, updatedAt: startedAt,
+  }));
+}
+const LIVE_HUDDLE = liveHuddle('social:ch:general', [['u-mira', 'Mira Okafor'], ['u-lena', 'Lena Brandt']], 14, 'mock-call-live-general');
+
 export const socialCallLogFixture = defineFixture<SocialCallLogRow>({
   key: 'social.call-log',
   scenarios: {
@@ -209,6 +266,9 @@ export const socialCallLogFixture = defineFixture<SocialCallLogRow>({
       logRow('u-sana', 'incoming', 'missed', MISSED),
       logRow('u-mira', 'joined', 'answered', TOWN_HALL),
       logRow('u-sana', 'joined', 'answered', { ...TOWN_HALL, callerId: 'u-sana', callerName: 'Sana Iqbal' }),
+      ...INITIATIVE_HUDDLE,
+      ...TEAM_HUDDLE,
+      ...LIVE_HUDDLE,
     ],
     empty: () => [],
   },

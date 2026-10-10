@@ -26,6 +26,7 @@ import { mockWorkItemRollup } from './work-items.js';
 import { mockRunsAttributedTo } from './bots.js';
 import { clock, countBy } from '../mock/core/index.js';
 import { initiatives, findInitiative, type MockInitiative } from '../mock/initiatives.js';
+import { mockAvatarUrl } from '../mock/avatars.js';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -127,6 +128,8 @@ export interface ProjectDetail {
     title: string | null;
     role: string | null;
     weight: number;
+    /** people.avatar_url — null renders initials. */
+    avatarUrl: string | null;
   }>;
 }
 
@@ -246,6 +249,19 @@ export function mockProjectExists(projectId: string): boolean {
 }
 
 /**
+ * Does this initiative exist NOW — GET /api/graph/projects/:id's 404 half, read
+ * fresh (no cache). The realtime gateway asks it on every decision on an
+ * `orgiq:initiative:<id>` call lobby (lib/page-resources.ts), so a forged or
+ * deleted initiative is refused the way its page 404s. A store error throws;
+ * the caller treats that as a refusal.
+ */
+export async function projectExists(id: string): Promise<boolean> {
+  if (!id) return false;
+  if (config.mock.aurora) return mockProjectExists(id);
+  return (await exec('SELECT 1 FROM projects WHERE id = :id LIMIT 1', [strParam('id', id)])).length > 0;
+}
+
+/**
  * What this initiative is CALLED, in mock mode — the one place a `p-*` id
  * resolves to a display name.
  *
@@ -307,6 +323,42 @@ function mockSummaryRow(p: MockInitiative): Omit<ProjectSummary, keyof typeof EM
 }
 
 // ─── Provider functions ──────────────────────────────────────────────────────
+
+/** One initiative the person belongs to, by the operating model's two relationships (docs/program-operating-model.md). */
+export interface InitiativeMembership { id: string; name: string; status: string | null; membership: 'owner' | 'contributor'; role: string | null }
+
+/**
+ * The initiatives `personId` owns (projects.owner_id) or contributes to
+ * (project_contributions) — the ONE membership rule behind every "mine" read of
+ * initiatives (lib/mine.ts; `listProjects({ mineOnly })` applies the same
+ * relationships to the full summary rows). The caller resolves the person from
+ * the session's directory link, never from a request.
+ */
+export async function listInitiativeMemberships(personId: string): Promise<InitiativeMembership[]> {
+  if (config.mock.aurora) {
+    return initiatives.rows()
+      .filter((p) => p.owner === personId || p.smes.includes(personId))
+      .map((p): InitiativeMembership => ({ id: p.id, name: p.name, status: p.status, membership: p.owner === personId ? 'owner' : 'contributor', role: p.owner === personId ? 'owner' : 'sme' }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+  const rows = await exec(
+    `SELECT p.id, p.name, p.status, (p.owner_id = :me) AS is_owner, pc.role
+       FROM projects p
+       LEFT JOIN project_contributions pc ON pc.project_id = p.id AND pc.person_id = :me
+      WHERE p.owner_id = :me OR pc.person_id IS NOT NULL
+      ORDER BY p.name`,
+    [strParam('me', personId)],
+  );
+  const seen = new Set<string>();
+  return rows.flatMap((r) => {
+    const id = String(r['id']);
+    if (seen.has(id)) return [];
+    seen.add(id);
+    const owner = r['is_owner'] === true;
+    return [{ id, name: String(r['name']), status: r['status'] == null ? null : String(r['status']),
+      membership: owner ? 'owner' as const : 'contributor' as const, role: owner ? 'owner' : r['role'] == null ? null : String(r['role']) }];
+  });
+}
 
 export async function listProjects(opts: {
   status?: string;
@@ -585,8 +637,8 @@ export async function getProject(id: string): Promise<ProjectDetail | null> {
       // The owner first, then SMEs — the order Aurora's `weight DESC` returns
       // for the operating model's two weights.
       contributors: [
-        { ...CAST[cast.owner]!, role: 'owner', weight: 1.0 },
-        ...cast.smes.map((pid) => ({ ...CAST[pid]!, role: 'sme', weight: 0.8 })),
+        { ...CAST[cast.owner]!, role: 'owner', weight: 1.0, avatarUrl: mockAvatarUrl(cast.owner) },
+        ...cast.smes.map((pid) => ({ ...CAST[pid]!, role: 'sme', weight: 0.8, avatarUrl: mockAvatarUrl(pid) })),
       ],
     };
   }
@@ -711,6 +763,20 @@ export async function getProject(id: string): Promise<ProjectDetail | null> {
     allocatedUsd = raw != null ? Number(raw) : null;
   } catch { /* initiative_budgets absent — pre-budgets schema */ }
 
+  // Avatars last, in their own guarded query: people.avatar_url is an additive
+  // column (schema/orgiq_schema.sql), so a cluster that predates it loses
+  // faces (initials), not the contributor list.
+  const avatarByPerson = new Map<string, string>();
+  try {
+    const avatarRows = await exec(
+      `SELECT pc.person_id, pe.avatar_url
+         FROM project_contributions pc JOIN people pe ON pe.id = pc.person_id
+        WHERE pc.project_id = :id AND pe.avatar_url IS NOT NULL`,
+      [strParam('id', id)],
+    );
+    for (const row of avatarRows) avatarByPerson.set(String(row['person_id']), String(row['avatar_url']));
+  } catch { /* column absent — pre-avatar schema */ }
+
   return {
     id: String(proj['id'] ?? ''),
     name: String(proj['name'] ?? ''),
@@ -732,6 +798,7 @@ export async function getProject(id: string): Promise<ProjectDetail | null> {
       title: r['title'] != null ? String(r['title']) : null,
       role: r['role'] != null ? String(r['role']) : null,
       weight: Number(r['weight'] ?? 0),
+      avatarUrl: avatarByPerson.get(String(r['person_id'] ?? '')) ?? null,
     })),
   };
 }

@@ -1,0 +1,92 @@
+
+Running 15 tests using 1 worker
+
+  ✓   1 [chromium] › e2e/embedded-social-real.spec.ts:77:1 › To-person uses the canonical DM, delivers live and replays without changing source or writing Discussion (4.7s)
+  ✓   2 [chromium] › e2e/embedded-social-real.spec.ts:109:1 › To-person page attachments resolve canonically for peers and survive reload independently of the shared huddle page (5.4s)
+  ✘   3 [chromium] › e2e/embedded-social-real.spec.ts:147:1 › a Social workspace reader opens an attached Org page through explicit workspace selection (2.0m)
+  -   4 [chromium] › e2e/embedded-social-real.spec.ts:167:1 › a held real persisted DM receipt cannot clear the draft after its composer destination changes
+  -   5 [chromium] › e2e/embedded-social-real.spec.ts:189:1 › Search Message during a huddle preserves the source URL, shared page, call and media instance
+  ✓   6 [chromium] › e2e/focused-work-real.spec.ts:16:3 › org-leader keeps selected Work, rail navigation and permissions at 1440×900 (2.3s)
+  ✓   7 [chromium] › e2e/focused-work-real.spec.ts:16:3 › hr-admin keeps selected Work, rail navigation and permissions at 1280×720 (2.1s)
+  ✓   8 [chromium] › e2e/focused-work-real.spec.ts:16:3 › program-owner keeps selected Work, rail navigation and permissions at 1024×768 (2.2s)
+  ✓   9 [chromium] › e2e/focused-work-real.spec.ts:16:3 › sme keeps selected Work, rail navigation and permissions at 1280×720 (2.2s)
+  ✓  10 [chromium] › e2e/focused-work-real.spec.ts:16:3 › member keeps selected Work, rail navigation and permissions at 1280×720 (2.1s)
+  ✓  11 [chromium] › e2e/focused-work-real.spec.ts:84:1 › changing initiative from focused Work drops the old item and keeps canonical navigation (1.8s)
+  ✓  12 [chromium] › e2e/focused-work-real.spec.ts:103:1 › narrow Work keeps the full title and composer usable with keyboard-accessible list navigation (1.8s)
+  ✘  13 [chromium] › e2e/work-documents-real.spec.ts:9:1 › an explicit document association saves, survives reload, opens the exact corpus record and removes without deleting it (64ms)
+  -  14 [chromium] › e2e/work-documents-real.spec.ts:40:1 › a work reader sees a saved canonical document and has no association mutation controls
+  -  15 [chromium] › e2e/work-documents-real.spec.ts:61:1 › a held association receipt cannot restore the old work context after navigation
+
+
+  1) [chromium] › e2e/embedded-social-real.spec.ts:147:1 › a Social workspace reader opens an attached Org page through explicit workspace selection 
+
+    [31mTest timeout of 120000ms exceeded.[39m
+
+    Error: locator.click: Target page, context or browser has been closed
+    Call log:
+    [2m  - waiting for getByRole('menuitem', { name: 'Chat', exact: true })[22m
+
+
+      64 |   const dock = page.getByTestId('initiative-composer');
+      65 |   await dock.getByRole('button', { name: 'Composer mode: Agent', exact: true }).click();
+    > 66 |   await page.getByRole('menuitem', { name: 'Chat', exact: true }).click();
+         |                                                                   ^
+      67 |   const target = dock.getByTestId('initiative-chat-target');
+      68 |   await expect(target.locator('option[value="person:u-vera"]')).toHaveCount(1);
+      69 |   await target.selectOption('person:u-vera');
+        at composer (/Users/connorhoehn/Projects/aws-agentcore/portal/e2e/embedded-social-real.spec.ts:66:67)
+        at /Users/connorhoehn/Projects/aws-agentcore/portal/e2e/embedded-social-real.spec.ts:151:18
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/embedded-social-real-a-Soc-40ab3-xplicit-workspace-selection-chromium/test-failed-2.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/embedded-social-real-a-Soc-40ab3-xplicit-workspace-selection-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/embedded-social-real-a-Soc-40ab3-xplicit-workspace-selection-chromium/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/embedded-social-real-a-Soc-40ab3-xplicit-workspace-selection-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/embedded-social-real-a-Soc-40ab3-xplicit-workspace-selection-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [chromium] › e2e/work-documents-real.spec.ts:9:1 › an explicit document association saves, survives reload, opens the exact corpus record and removes without deleting it 
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m200[39m
+    Received: [31m401[39m
+
+      12 |   try {
+      13 |     await loginAs(context, 'u-rachel', baseURL);
+    > 14 |     expect((await page.request.delete(`${API}/${DOC}`)).status()).toBe(200);
+         |                                                                   ^
+      15 |     await page.goto(DESTINATION); await expect(page.getByTestId('work-item-detail')).toBeVisible();
+      16 |     const section = page.getByTestId('work-document-links');
+      17 |     await expect(section.getByRole('button', { name: 'Add link', exact: true })).toBeVisible();
+        at /Users/connorhoehn/Projects/aws-agentcore/portal/e2e/work-documents-real.spec.ts:14:67
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/work-documents-real-an-exp-e8465-removes-without-deleting-it-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/work-documents-real-an-exp-e8465-removes-without-deleting-it-chromium/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/work-documents-real-an-exp-e8465-removes-without-deleting-it-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/work-documents-real-an-exp-e8465-removes-without-deleting-it-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2 failed
+    [chromium] › e2e/embedded-social-real.spec.ts:147:1 › a Social workspace reader opens an attached Org page through explicit workspace selection 
+    [chromium] › e2e/work-documents-real.spec.ts:9:1 › an explicit document association saves, survives reload, opens the exact corpus record and removes without deleting it 
+  4 did not run
+  9 passed (2.4m)

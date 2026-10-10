@@ -1,0 +1,16 @@
+{
+ "recordedAt": "2026-10-06",
+ "scope": "Measurement only. Unchanged readiness-gated burst and soak drivers/targets, same 0.109 image (sha256:bb15549ea9f32f1103c66879faa7599a89b8b3937f98a8980cf4e91b8cb73539, orgiq-middleware:cluster-0109-validation), DynamoDB Local/Redis/Postgres unchanged. Only the fixture BFF container budget varied (--cpus / --memory), matching middlewareCpu 1024/2048/4096 shapes. Local only, no cloud, no BFF/library code change. Launcher test-support/bff-cluster-containers.py and bff-cluster-capacity.mjs now read ORGIQ_BFF_CONTAINER_CPUS / ORGIQ_BFF_CONTAINER_MEMORY_MIB (default 1 / 1024, previous behaviour).",
+ "docker": "Colima VM, 6 CPUs / 11.65 GiB; two BFFs capped at 4 CPUs each oversubscribe the VM with DynamoDB Local and the load driver.",
+ "caveat": "Memory 4096 MiB (not 2048) was used for every run as requested. The 700 MiB server-memory-peak target is fixed; Node's heap limit scales with the container limit, so soak RSS (709-749 MiB) is not comparable to the 1 GiB runs (246 MiB). burst-2cpu was plain mode; others used metrics mode (store counters, ORGIQ_BFF_CONTAINER_STORE_METRICS=1), which adds overhead; burst-2cpu-metrics is the same-mode 2 CPU comparison.",
+ "runs": {
+  "burst-2cpu": {"mode":"plain","invite":[976.6,1549.9],"accept":[101.5,251.3],"chat":[2580.2,3590.2],"healthP99":[130.8,203.7],"memPeakMiB":[487.5,488.8],"cpuPeak":[119.0,107.3],"counts":null},
+  "burst-2cpu-metrics": {"mode":"metrics","invite":[49.3,101.4],"accept":[48.5,78.2],"chat":[1134.9,1721.6],"healthP99":[99.2,89.5],"memPeakMiB":[548.0,532.1],"memberQueries":12406,"publishAuthorizes":11940,"authzDenied":47,"dynamoSocketQueuedPeak":1398},
+  "burst-4cpu": {"mode":"metrics","invite":[52.9,77.5],"accept":[52.9,72.5],"chat":[997.9,1464.8],"healthP99":[81.5,136.8],"memPeakMiB":[545.7,405.1],"memberQueries":12682,"publishAuthorizes":12160,"dynamoSocketQueuedPeak":1221},
+  "soak-2cpu": {"mode":"metrics","invite":[38.2,53.8],"accept":[36.4,51.8],"chat":[12.6,623.2],"healthP99":[33.7,44.8],"memPeakMiB":[738.8,748.5],"memberQueries":80682,"publishAuthorizes":121661,"dynamoSocketQueuedPeak":1205},
+  "soak-4cpu": {"mode":"metrics","invite":[39.3,52.0],"accept":[36.3,47.0],"chat":[13.7,801.6],"healthP99":[45.6,49.7],"memPeakMiB":[709.2,713.6],"memberQueries":77430,"publishAuthorizes":121407,"dynamoSocketQueuedPeak":1203}
+ },
+ "note": "Arrays are [p50 or a, p95 or b] as named in the table in capacity-progress.md; see *-driver.log and *-result.json for raw values.",
+ "finding": "BFF CPU peaked 98-128% of a 200-400% cap: CPU was not saturated at 2 or 4 CPUs. The AWS SDK DynamoDB HTTP agent is capped at 50 sockets (dynamoHttp.socketLimit) with ~1,200-1,400 requests queued at peak on every run, regardless of CPU. chat-members Query p95 buckets sit at 512-1024 ms. That socket queue, not BFF CPU, now bounds chat p95.",
+ "verdict": "No size passed all targets. 2 CPU: burst fails invite/accept/chat/health, soak fails chat p95 and memory target (heap artifact). 4 CPU: burst fails chat p95 (1,465 ms) and both health p99; soak fails chat p95 (802 ms) and memory target. Not acceptance."
+}

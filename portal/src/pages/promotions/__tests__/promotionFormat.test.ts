@@ -49,8 +49,8 @@ test('filterPromotions: "all" keeps everything, any other value narrows by exact
 });
 
 test('nextStep: names the dry-run gate for a skill by its actual state', () => {
-  assert.match(nextStep(candidate({ proposedKind: 'skill', status: 'candidate', dryRunPassed: null })), /Approve, then run a dry run/);
-  assert.match(nextStep(candidate({ proposedKind: 'skill', status: 'approved', dryRunPassed: null })), /waiting on a passing dry run/);
+  assert.match(nextStep(candidate({ proposedKind: 'skill', status: 'candidate', dryRunPassed: null })), /Record approval — a skill also needs a completed dry-run/);
+  assert.match(nextStep(candidate({ proposedKind: 'skill', status: 'approved', dryRunPassed: null })), /waits for a completed dry-run/);
   assert.match(nextStep(candidate({ proposedKind: 'skill', status: 'approved', dryRunPassed: false })), /Dry run failed/);
   assert.match(nextStep(candidate({ proposedKind: 'skill', status: 'approved', dryRunPassed: true })), /Dry run passed/);
 });
@@ -78,44 +78,37 @@ test('isTerminalStatus: only promoted and dismissed are terminal', () => {
 });
 
 test('allowedActions: a terminal candidate hides every action (DEFECTS.md #1 — no stale-drawer retry)', () => {
-  assert.deepEqual(
-    allowedActions(candidate({ status: 'promoted', proposedKind: 'insight' })),
-    { canApprove: false, canApproveWithDryRun: false, canDismiss: false },
-  );
-  assert.deepEqual(
-    allowedActions(candidate({ status: 'dismissed', proposedKind: 'skill', dryRunPassed: true })),
-    { canApprove: false, canApproveWithDryRun: false, canDismiss: false },
-  );
+  assert.deepEqual(allowedActions(candidate({ status: 'promoted', proposedKind: 'insight' })), { primary: null, canDismiss: false });
+  assert.deepEqual(allowedActions(candidate({ status: 'dismissed', proposedKind: 'skill', dryRunPassed: true })), { primary: null, canDismiss: false });
 });
 
-test('allowedActions: a skill with no passing dry run only offers the dry-run-carrying action, never plain Approve', () => {
-  // This is the actual bug behind DEFECTS.md #1: the server's decidePromotion
-  // gate always 409s a plain Approve on an unready skill, even on the very
-  // first click — so the UI must never show that button for this shape.
-  for (const status of ['candidate', 'approved'] as const) {
-    for (const dryRunPassed of [null, false] as const) {
-      assert.deepEqual(
-        allowedActions({ status, proposedKind: 'skill', dryRunPassed }),
-        { canApprove: false, canApproveWithDryRun: true, canDismiss: true },
-      );
-    }
+test('allowedActions: an unapproved skill with no completed dry run offers "Record approval", never a dry-run claim', () => {
+  // sme DEFECTS #19: "Approve + record a passing dry run" recorded only the
+  // approval — a client cannot assert a run. The label now says what lands.
+  for (const dryRunPassed of [null, false] as const) {
+    const { primary, canDismiss } = allowedActions({ status: 'candidate', proposedKind: 'skill', dryRunPassed });
+    assert.equal(primary?.intent, 'approve');
+    assert.equal(primary?.label, 'Record approval');
+    assert.match(primary?.hint ?? '', /completed dry-run/);
+    assert.doesNotMatch(primary?.hint ?? '', /pipelines/);
+    assert.equal(canDismiss, true);
   }
 });
 
-test('allowedActions: a skill with a passing dry run gets the plain Approve/Promote action instead', () => {
-  assert.deepEqual(
-    allowedActions({ status: 'candidate', proposedKind: 'skill', dryRunPassed: true }),
-    { canApprove: true, canApproveWithDryRun: false, canDismiss: true },
-  );
+test('allowedActions: an approved skill still waiting on its run offers Promote, which re-asks the gate', () => {
+  for (const dryRunPassed of [null, false] as const) {
+    const { primary } = allowedActions({ status: 'approved', proposedKind: 'skill', dryRunPassed });
+    assert.equal(primary?.intent, 'promote');
+    assert.match(primary?.hint ?? '', /only if a completed dry-run/);
+  }
 });
 
-test('allowedActions: insight/runbook candidates always get the plain action, never the dry-run one', () => {
-  assert.deepEqual(
-    allowedActions({ status: 'candidate', proposedKind: 'insight', dryRunPassed: null }),
-    { canApprove: true, canApproveWithDryRun: false, canDismiss: true },
-  );
-  assert.deepEqual(
-    allowedActions({ status: 'approved', proposedKind: 'runbook', dryRunPassed: null }),
-    { canApprove: true, canApproveWithDryRun: false, canDismiss: true },
-  );
+test('allowedActions: a skill with a completed dry run, and every insight/runbook, get a plain Promote', () => {
+  for (const c of [
+    { status: 'candidate', proposedKind: 'skill', dryRunPassed: true },
+    { status: 'candidate', proposedKind: 'insight', dryRunPassed: null },
+    { status: 'approved', proposedKind: 'runbook', dryRunPassed: null },
+  ] as const) {
+    assert.deepEqual(allowedActions(c), { primary: { intent: 'promote', label: 'Promote' }, canDismiss: true });
+  }
 });

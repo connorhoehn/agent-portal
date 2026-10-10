@@ -207,7 +207,10 @@ export function decideDryRunGate(
   dryRun: DryRunRef | null,
 ): { ok: true } | { ok: false; reason: string } {
   const own = runbookDefinitionIdOf(candidate.id);
-  if (!dryRun) return { ok: false, reason: `a skill needs a completed dry-run of ${own} — start one from /pipelines/runbooks` };
+  // No route in the reason: it is read by both tenants (the orgiq promote
+  // 409 and the pipelines runbook view), and an orgiq reviewer pointed at a
+  // pipelines page they hold no grant in had no remedy at all (sme #19).
+  if (!dryRun) return { ok: false, reason: `a skill needs a completed dry-run of ${own}, and none is recorded yet` };
   if (dryRun.definitionId !== own) {
     return { ok: false, reason: `run ${dryRun.runId} is a dry-run of ${dryRun.definitionId}, not of ${own} — a skill stands on its own runbook's run` };
   }
@@ -321,7 +324,9 @@ export async function promoteCandidate(
   const gate = decidePromotion(c, { approvedBy: opts.approvedBy, dryRun });
   if (!gate.ok) {
     if (c.status === 'candidate') c.status = 'approved';
-    return { error: gate.reason };
+    // Say what DID land: the reviewer's approval stands, so the next step is
+    // the run, not another approval.
+    return { error: c.status === 'approved' ? `${gate.reason}; the approval is recorded, so promote again once that dry-run has completed` : gate.reason };
   }
   c.status = 'promoted';
   return { candidate: toCandidate(c, await runRefs()) };

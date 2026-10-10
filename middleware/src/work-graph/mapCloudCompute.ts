@@ -8,7 +8,7 @@
  * Nothing from this module is safe to send straight to a browser.
  */
 
-export type FleetBoxStatus = 'idle' | 'running' | 'waiting' | 'stopped' | 'error';
+export type FleetBoxStatus = 'provisioning' | 'idle' | 'running' | 'waiting' | 'stopped' | 'error';
 export type AgentJobStatus =
   | 'queued' | 'claimed' | 'running' | 'awaiting_review' | 'done' | 'failed' | 'cancelled';
 
@@ -129,6 +129,7 @@ function unsupported(reason: Extract<CloudComputeMapResult, { supported: false }
 
 function lifecycleForBox(status: FleetBoxStatus): CloudComputeLifecycle {
   switch (status) {
+    case 'provisioning': return 'created';
     case 'idle': return 'created';
     case 'running': return 'started';
     case 'waiting': return 'waiting';

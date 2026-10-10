@@ -37,7 +37,7 @@ import { agentProjectsRouter } from '../agent-projects.js';
 import { errorHandler } from '../../lib/async-handler.js';
 import {
   listAgentProjects, getAgentProject, linkAgentProject, unlinkAgentProject, listRuns,
-  listRecentRunsForProjects,
+  listRecentRunsForProjects, markCloned, finishRun,
 } from '../../providers/agent-projects.js';
 import { dispatchGovernedRun } from '../../lib/sdlc-pipeline.js';
 
@@ -48,6 +48,8 @@ const unlinkMock = unlinkAgentProject as unknown as jest.Mock;
 const listRunsMock = listRuns as unknown as jest.Mock;
 const recentRunsMock = listRecentRunsForProjects as unknown as jest.Mock;
 const dispatchMock = dispatchGovernedRun as unknown as jest.Mock;
+const markClonedMock = markCloned as unknown as jest.Mock;
+const finishRunMock = finishRun as unknown as jest.Mock;
 
 const PROJECT = { id: 'p-1', repoFullName: 'org/rag-search', orgProjectId: 'p-rag-search', sessionId: null };
 const RUN = { id: 'run-1', projectId: 'p-1', status: 'done', startedAt: '2026-08-20T00:00:00Z' };
@@ -74,6 +76,8 @@ beforeEach(() => {
   unlinkMock.mockReset(); unlinkMock.mockResolvedValue(true);
   listRunsMock.mockReset(); listRunsMock.mockResolvedValue([]);
   recentRunsMock.mockReset(); recentRunsMock.mockResolvedValue(new Map([['p-1', [RUN]]]));
+  markClonedMock.mockReset(); markClonedMock.mockResolvedValue(undefined);
+  finishRunMock.mockReset(); finishRunMock.mockResolvedValue(undefined);
   dispatchMock.mockReset(); dispatchMock.mockResolvedValue({ ok: true, runId: 'run-1', checkout: '/workspace' });
 });
 
@@ -160,5 +164,56 @@ describe('write routes stay on ManageDevbox', () => {
     const res = await request(buildApp(leader)).post('/api/agent-projects').send({ repoFullName: 'org/repo' });
     expect(res.status).toBe(201);
     expect(linkMock).toHaveBeenCalled();
+  });
+});
+
+describe('POST /api/agent-projects/:id/cloned', () => {
+  it('marks the project cloned into the confirmed session', async () => {
+    const res = await request(buildApp(leader)).post('/api/agent-projects/p-1/cloned').send({ sessionId: '  s-42  ' });
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ ok: true });
+    expect(getMock).toHaveBeenCalledWith('p-1');
+    expect(markClonedMock).toHaveBeenCalledWith('p-1', 's-42');
+  });
+
+  it('400s without a sessionId and never marks the project', async () => {
+    const res = await request(buildApp(leader)).post('/api/agent-projects/p-1/cloned').send({});
+    expect(res.status).toBe(400);
+    expect(markClonedMock).not.toHaveBeenCalled();
+  });
+
+  it('404s an unknown project', async () => {
+    getMock.mockResolvedValue(null);
+    const res = await request(buildApp(leader)).post('/api/agent-projects/nope/cloned').send({ sessionId: 's-1' });
+    expect(res.status).toBe(404);
+    expect(markClonedMock).not.toHaveBeenCalled();
+  });
+
+  it('refuses once ManageDevbox is denied', async () => {
+    manageAllow.value = false;
+    const res = await request(buildApp(leader)).post('/api/agent-projects/p-1/cloned').send({ sessionId: 's-1' });
+    expect(res.status).toBe(403);
+    expect(markClonedMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('POST /api/agent-projects/runs/:runId/finish', () => {
+  it('records a failed run with its error and nulls what was not sent', async () => {
+    const res = await request(buildApp(leader)).post('/api/agent-projects/runs/run-1/finish').send({ status: 'failed', error: 'git exited 128' });
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ ok: true });
+    expect(finishRunMock).toHaveBeenCalledWith('run-1', { status: 'failed', filesChanged: null, diffSummary: null, error: 'git exited 128' });
+  });
+
+  it('any status other than "failed" finishes as done', async () => {
+    await request(buildApp(leader)).post('/api/agent-projects/runs/run-2/finish').send({ status: 'running', filesChanged: 3, diffSummary: '+3 -1' });
+    expect(finishRunMock).toHaveBeenCalledWith('run-2', { status: 'done', filesChanged: 3, diffSummary: '+3 -1', error: null });
+  });
+
+  it('refuses once ManageDevbox is denied', async () => {
+    manageAllow.value = false;
+    const res = await request(buildApp(leader)).post('/api/agent-projects/runs/run-1/finish').send({ status: 'done' });
+    expect(res.status).toBe(403);
+    expect(finishRunMock).not.toHaveBeenCalled();
   });
 });

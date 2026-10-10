@@ -5,10 +5,64 @@ steps assume signed in as Theo Chang / member at 1552px, `middleware dev:mock`.
 
 ## Open
 
-#13 and #14 were both re-audited on 2026-09-07 and closed — see the Closed
-section. Nothing is open for this role right now.
+Found on the 2026-10-01 09:29 headless re-walk (Playwright, Chromium
+1680x940, own dev:mock stack, u-theo / member). #13 and #14 remain closed — see
+the Closed section.
+
+## Follow-up (2026-10-08 re-walk; filed with a reason, not blocking a surface verdict)
+
+Found on the 2026-10-08 headless re-walk of ask and explore for all five roles (both land on `/iq/search`). Both are tracked by a ledger the cascade and type-scale judges already own, so they are filed here, not left Open.
+
+- `/iq/search` (ask, explore) - the page title sits on the trail's row instead of under it: trail at x=488, h1 "Search" at x=525, both at top 80px, h1 14px/600 (the inline `ScopeHeader`, search-workspace decision 9). Rule: layout-cascade `title` ("the page title follows the trail"). Listed in `portal/e2e/layout-cascade-baseline.ts`; the cascade doc and decision 9 disagree and one of them needs to change.
+- `/iq/search` - the shell rail label is 16px and the SEARCH rail label 13px on a 32px pitch. Rule: the search protocol asks the two rails to share one type scale; type-scale ledger lists `scale rail 13/500`, `scale rail 13/600`, `siblings rail 12|11` for the route.
 
 ## Closed
+
+22. ~~Search › Connections (`/iq/explore` lands here): a mouse cannot click or hover a node on the all-types graph.~~ **Closed 2026-10-06 12:50** — re-observed with real mouse clicks (Playwright click() and hover; ui-components 2.418.0): the record graph node buttons compute pointer-events auto, elementFromPoint over a node returns the node, and a click took the graph from 53–55 to 15 nodes ("1 selected", zoom 54% to 97%); a second click made "2 selected".
+
+23. ~~People org graph: after two or three picks the drawing sits on the 40% zoom floor with unreadable captions and can run under the detail card.~~ **Closed 2026-10-06 12:50** — re-observed with real mouse clicks: people-graph picks re-fit at 102% / 90% / 90% (three picks) and 99% for a single pick, not the 40% floor; the selected person is on screen and legible, earlier far picks scroll out of view by design.
+
+18. **Several error notices print a sentence with no verb.** `UnavailableNotice`
+    (`portal/src/components/UnavailableNotice.tsx:66`) renders
+    `"<source>, so this is unknown rather than empty."`, so `source` must be a
+    clause ("Assets are read from the library catalog"). Four callers on this
+    role's surfaces pass a bare noun: `DesignsPage.tsx:108` (the rail's notice,
+    "Design reviews"; the pane's notice at `:117-120` is worded correctly), `PromotionsPage.tsx:311` and `:322` ("Promotion
+    candidates"), and `local-compute/ConfigurationPage.tsx` ("Session bundle
+    provider", "Agent library"). Seen live as "Internal server error. Design
+    reviews, so this is unknown rather than empty." on the design-reviews error
+    scenario, and the equivalent on the promotions bad id and both
+    configuration-preview notices.
+
+    *Re-checked 2026-10-06 13:05: the promotions list error now reads "Candidates are clustered from lab observations by the promotions service, so this is unknown rather than empty." and the library error "Assets are read from the library catalog, so this is unknown rather than empty." — both full clauses. The Designs rail notice and the session-bundle provider notice could not be reached (the design-reviews fixture did not change the page on its error scenario, and the bundle error scenario was not run), so this stays open for those two.*
+
+    *Closed 2026-10-06 12:45 (headless Chromium 1680x940, shared dev:mock, ui-components 2.418.0, u-theo): with the API answering 500, the Designs rail and pane read "Design reviews are read from Aurora, so this is unknown rather than empty."; Session settings and Library versions notices on Local compute > Session config read as full clauses; the promotions list reads "Candidates are clustered from lab observations by the promotions service, so this is unknown rather than empty." All four former bare-noun callers now pass a clause (responses forced to 500 with a browser route, the mock untouched).*
+
+
+21. **Initiative Overview: work-graph node names are cut with an ellipsis and have no hover title.**
+    Repro: u-theo, `/iq/projects/p-observability` (Overview), scroll to the
+    "Shared work graph". The clipped-text sweep reports 3 leaf labels clipped, e.g.
+    "Span-metrics connector feeding RED dashboards" has 130px of the 292px it
+    needs and renders "Span-metrics conn…"; "Metric cardinality budgets" 130 of
+    155. The node's `aria-label` carries the full text
+    ("Span-metrics connector feeding RED dashboards, idl…") but nothing has a
+    `title`, so a sighted reader cannot recover the cut name without opening
+    the node. First seen on the 2026-10-06 re-walk; the earlier logs of this
+    surface recorded the sweep as clean, so the graph is new since then.
+    Suspect the graph composite fed from `portal/src/pages/project-detail`
+    (the Overview graph panel) and the library's node renderer.
+
+    *Closed 2026-10-06 14:10 (ui-components 2.416.0, headless Chromium 1680x940, u-theo): the work-graph node header now carries a `title` holding the full name. The sweep still reports the strings clipped by their single-line ellipsis box (e.g. "Span-metrics connector feeding RED dashboards" 130 of 292px) but every one is titled with its whole text, the deliberate ellipsis-with-hover pattern the protocol accepts. Checked by reading the `title` attribute, not by a physical hover (headless).*
+
+15. ~~The Promotions "Find a candidate" box eats typed characters.~~ **Closed 2026-10-06 13:05** — re-observed as u-theo: typing "Fargate" into "Find a candidate" at one key per 250ms leaves exactly "Fargate" in the input and `q=Fargate` in the URL (the old run ended at "ae").
+
+16. ~~A bad id on a detail route reads as an outage, not as not-found.~~ **Closed 2026-10-06 13:05** — re-observed as u-theo: `/iq/designs/nope-not-real` reads "Design not found / No design review has the id "nope-not-real"." with "← All designs"; `/iq/promotions/zz-bogus` reads "Candidate not found / No promotion candidate has the id "zz-bogus"" with "← All asset promotions"; `/iq/library/nope-not-real` reads "Asset not found" with "← All assets". No Try again, no outage copy.
+
+17. ~~Session settings with no published bundle shows an outage instead of its empty state.~~ **Closed 2026-10-06 13:05** — re-observed with `session-bundles` on its empty scenario (restored to default afterwards): /iq/release → /iq/local-compute/configuration shows "No configuration preview / No session bundle has been published yet, so sessions run with the settings baked into their image." with no outage notice and no failed request.
+
+19. ~~Opening a never-distilled Library asset logs a console error.~~ **Closed 2026-10-06 13:05** — re-observed as u-theo: opening each of skill-pr-review-scoped, lib-stakeholder-email, lib-adr-summary, orgiq-supervisor-system-prompt and orgiq-search-system-prompt produced no 4xx response and 0 console lines.
+
+20. ~~Asset promotions has no h1.~~ **Closed 2026-10-06 13:05** — re-observed as u-theo: /iq/promotions (→ /iq/distillation/review?view=promotions) has an h1 "Asset promotions" with no candidate open, and with `&item=promo-aurora-cold-start` open the h1 is the candidate title "Retry the Data API through an Aurora cold start".
 
 13. ~~A failed turn that started from a starter card shows a Retry button that
     does nothing.~~ **Closed 2026-09-07 16:29** — every send path now goes

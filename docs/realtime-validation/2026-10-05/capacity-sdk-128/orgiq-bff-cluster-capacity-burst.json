@@ -1,0 +1,324 @@
+{
+  "at": "2026-10-05T15:52:14.674Z",
+  "options": {
+    "url": "ws://127.0.0.1:3063/ws",
+    "peerUrls": [
+      "ws://127.0.0.1:3064/ws"
+    ],
+    "sockets": 1000,
+    "calls": 100,
+    "groupSizes": [
+      2
+    ],
+    "holdSeconds": 10,
+    "scenario": "steady",
+    "secret": "dev-fallback",
+    "json": "/tmp/orgiq-bff-cluster-capacity-burst.json",
+    "serverPid": 61646,
+    "healthUrl": "http://127.0.0.1:3063/api/health",
+    "rampPerSec": 50,
+    "chatEverySec": 30,
+    "stateEverySec": 20,
+    "spreadSeconds": 2,
+    "org": "social",
+    "origin": null,
+    "soakSeconds": 300,
+    "restartAfterSeconds": 150,
+    "recoveryTimeoutSeconds": 60,
+    "restartContainer": null,
+    "redisContainer": null,
+    "sampleContainer": null,
+    "driverContainer": null,
+    "tokenTtlSeconds": 600,
+    "identityManifest": "/tmp/orgiq-bff-cluster-capacity-identities.json"
+  },
+  "results": [
+    {
+      "scenario": "steady",
+      "identities": {
+        "mode": "directory-manifest",
+        "users": 1000,
+        "sha256": "9dcf2f5b6c4198300686a06a5e579033106c407c52d1d36a93cf4d46c48bc0d8"
+      },
+      "groupSize": 2,
+      "calls": 100,
+      "sockets": 1000,
+      "holdSeconds": 10,
+      "soak": null,
+      "recoveries": [],
+      "unexpectedDisconnects": 0,
+      "runTag": "6b26",
+      "durationS": 39.4,
+      "rampSeconds": 20,
+      "connect": {
+        "ok": 1000,
+        "fail": 0,
+        "failReasons": {},
+        "ms": {
+          "n": 1000,
+          "p50": 2.3,
+          "p95": 3.6,
+          "p99": 5.4,
+          "max": 9.5
+        }
+      },
+      "established": 100,
+      "failedCalls": [],
+      "latencyMs": {
+        "inviteToIncoming": {
+          "n": 100,
+          "p50": 132,
+          "p95": 508.5,
+          "p99": 567.8,
+          "max": 571.6
+        },
+        "acceptToAccepted": {
+          "n": 100,
+          "p50": 45.4,
+          "p95": 250.5,
+          "p99": 312.9,
+          "max": 321.1
+        },
+        "chatDelivery": {
+          "n": 1251,
+          "p50": 2130.1,
+          "p95": 2686.6,
+          "p99": 2898.8,
+          "max": 3127.2
+        }
+      },
+      "chat": {
+        "sent": 1252,
+        "delivered": 1251,
+        "expectedSenders": 800,
+        "sendingUsers": 800,
+        "deliveredUsers": 800
+      },
+      "crossDeliveries": {
+        "call": 0,
+        "chat": 0,
+        "presence": 0,
+        "samples": []
+      },
+      "unexpectedEnded": {
+        "count": 0,
+        "callsEnded": 0,
+        "samples": []
+      },
+      "answeredElsewhere": 0,
+      "denied": {
+        "count": 0,
+        "samples": []
+      },
+      "otherErrors": {
+        "count": 0,
+        "byMessage": {}
+      },
+      "notifications": {
+        "total": 1251,
+        "missedCall": 0
+      },
+      "doubleAccept": null,
+      "glare": null,
+      "churn": null,
+      "frames": {
+        "in": 11640,
+        "out": 4652,
+        "byKind": {
+          "presence.set": 1800,
+          "notification:bulk-update.": 840,
+          "call.active-call": 200,
+          "chat.joined": 800,
+          "chat.history": 800,
+          "presence.subscribed": 800,
+          "presence.update": 795,
+          "chat.message": 2503,
+          "notification:new.": 1251,
+          "chat.sent": 1251,
+          "call.invite": 100,
+          "call.accepted": 100,
+          "call.participant-state": 200,
+          "call.user-status": 200
+        }
+      },
+      "server": {
+        "pid": 61646,
+        "container": null,
+        "memorySource": "process-rss",
+        "sampleErrors": 0,
+        "rssMb": {
+          "peak": 735.8,
+          "last": 735.8
+        },
+        "cpuPct": {
+          "peak": 139.1,
+          "mean": 29.1,
+          "p95": 127.8
+        },
+        "healthMs": {
+          "n": 75,
+          "p50": 0.6,
+          "p95": 17.9,
+          "p99": 27.3,
+          "max": 27.3,
+          "errors": 0,
+          "plannedOutageErrors": 0
+        },
+        "slowHealth": []
+      },
+      "peerServers": [
+        {
+          "url": "ws://127.0.0.1:3064/ws",
+          "pid": 61656,
+          "container": null,
+          "memorySource": "process-rss",
+          "sampleErrors": 0,
+          "rssMb": {
+            "peak": 660.2,
+            "last": 660.2
+          },
+          "cpuPct": {
+            "peak": 149,
+            "mean": 29.3,
+            "p95": 120
+          },
+          "healthMs": {
+            "n": 75,
+            "p50": 0.6,
+            "p95": 11,
+            "p99": 33.2,
+            "max": 33.2,
+            "errors": 0,
+            "plannedOutageErrors": 0
+          },
+          "slowHealth": []
+        }
+      ],
+      "targets": [
+        {
+          "url": "ws://127.0.0.1:3063/ws",
+          "socketsOpened": 500
+        },
+        {
+          "url": "ws://127.0.0.1:3064/ws",
+          "socketsOpened": 500
+        }
+      ],
+      "clientEventLoopMs": {
+        "p50": 10.4,
+        "p99": 12.3,
+        "max": 29.6
+      },
+      "verdict": [
+        {
+          "name": "sockets connect",
+          "ok": true,
+          "measured": "1000/1000",
+          "limit": "100%"
+        },
+        {
+          "name": "calls established",
+          "ok": true,
+          "measured": "100/100",
+          "limit": "all"
+        },
+        {
+          "name": "invite→incoming p95",
+          "ok": false,
+          "measured": 508.5,
+          "limit": "< 250 ms"
+        },
+        {
+          "name": "invite→incoming p99",
+          "ok": true,
+          "measured": 567.8,
+          "limit": "< 1000 ms"
+        },
+        {
+          "name": "accept→accepted p95",
+          "ok": false,
+          "measured": 250.5,
+          "limit": "< 250 ms"
+        },
+        {
+          "name": "chat delivery p95",
+          "ok": false,
+          "measured": 2686.6,
+          "limit": "< 300 ms, with paired-sender evidence"
+        },
+        {
+          "name": "background chat coverage",
+          "ok": true,
+          "measured": "800/800",
+          "limit": "all paired senders reach their peer"
+        },
+        {
+          "name": "cross-call/channel deliveries",
+          "ok": true,
+          "measured": 0,
+          "limit": "0"
+        },
+        {
+          "name": "answered-elsewhere outside scenario 4",
+          "ok": true,
+          "measured": 0,
+          "limit": "0"
+        },
+        {
+          "name": "ended before scripted hang-up",
+          "ok": true,
+          "measured": 0,
+          "limit": "0"
+        },
+        {
+          "name": "unplanned socket disconnects",
+          "ok": true,
+          "measured": 0,
+          "limit": "0"
+        },
+        {
+          "name": "AUTHZ_CHANNEL_DENIED",
+          "ok": true,
+          "measured": 0,
+          "limit": "0"
+        },
+        {
+          "name": "event-loop proxy (/api/health p99)",
+          "ok": true,
+          "measured": 27.3,
+          "limit": "< 50 ms"
+        },
+        {
+          "name": "health errors outside planned outage",
+          "ok": true,
+          "measured": 0,
+          "limit": "0"
+        },
+        {
+          "name": "server memory peak",
+          "ok": false,
+          "measured": 735.8,
+          "limit": "< 700 MiB"
+        },
+        {
+          "name": "peer 1: health p99",
+          "ok": true,
+          "measured": 33.2,
+          "limit": "< 50 ms"
+        },
+        {
+          "name": "peer 1: health errors",
+          "ok": true,
+          "measured": 0,
+          "limit": "0"
+        },
+        {
+          "name": "peer 1: memory peak",
+          "ok": true,
+          "measured": 660.2,
+          "limit": "< 700 MiB"
+        }
+      ]
+    }
+  ]
+}

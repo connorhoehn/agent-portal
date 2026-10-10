@@ -1,12 +1,12 @@
 // Bedrock ingestion job history.
 
 import {
+  T,
   Card,
   CardHeader,
   Chip,
   Inline,
   InlinePlaceholder,
-  MetaLine,
   Stack,
   Table,
   TableBody,
@@ -46,7 +46,7 @@ export function IngestionJobsTab({ kb }: { kb: KbRegistryEntry }) {
             {kb.bedrockKbId ? 'No ingestion jobs found.' : 'KB not yet provisioned — no ingestion jobs.'}
           </InlinePlaceholder>
         ) : (
-          <Table>
+          <Table size="sm">
             <TableHead>
               <TableRow>
                 <TableTh>Job</TableTh>
@@ -58,25 +58,22 @@ export function IngestionJobsTab({ kb }: { kb: KbRegistryEntry }) {
               {jobs.map((job) => (
                 <TableRow key={job.jobId}>
                   <TableTd>
-                    <Stack gap="xs" align="start">
-                      <MetaLine
-                        size="sm"
-                        items={[
-                          <Chip key="s" tone={jobTone(job.status)} size="xs">{job.status}</Chip>,
-                          <Inline key="id" as="span" gap="none" className="font-mono">{job.jobId.slice(0, 8)}…</Inline>,
-                        ]}
-                      />
+                    <Inline gap="sm" align="center" wrap={false} title={job.description || undefined}>
+                      <Chip tone={jobTone(job.status)} size="xs">{job.status}</Chip>
+                      <T as="span" size="xs" tone="secondary" className="font-mono">{job.jobId.slice(0, 8)}…</T>
                       {job.description && (
-                        <Inline as="span" gap="none" className="text-[11px] text-text-secondary">{job.description}</Inline>
+                        <T as="span" size="xs" tone="secondary" className="truncate max-w-[24rem]">{job.description}</T>
                       )}
-                    </Stack>
+                    </Inline>
                   </TableTd>
-                  <TableTd className="whitespace-nowrap tabular-nums text-[11px] text-text-secondary">
-                    {job.documentsIndexed} indexed
-                    {job.documentsFailed > 0 ? `, ${job.documentsFailed} failed` : ''}
+                  <TableTd className="whitespace-nowrap">
+                    <T as="span" size="xs" tone="secondary" tabular>
+                      {job.documentsIndexed} indexed
+                      {job.documentsFailed > 0 ? `, ${job.documentsFailed} failed` : ''}
+                    </T>
                   </TableTd>
-                  <TableTd className="whitespace-nowrap text-[11px] text-text-tertiary">
-                    {formatDate(job.startedAt)}
+                  <TableTd className="whitespace-nowrap">
+                    <T as="span" size="xs" tone="tertiary">{formatDate(job.startedAt)}</T>
                   </TableTd>
                 </TableRow>
               ))}

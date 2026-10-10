@@ -1,0 +1,9 @@
+
+== route ↔ test parity (every router) ==
+  ✓ 616 routes enumerated, 1 without a matching request(...) call
+  ✓ untested routes: 1 ≤ budget 1
+
+== worst routers (most untested routes first) ==
+      src/index.ts — 1 untested
+
+ALL CHECKS PASS — route coverage is at or under budget.

@@ -9,11 +9,17 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react';
 import {
   Banner,
+  Button,
   DropdownMenu,
+  FormField,
+  InlineAlert,
+  Modal,
   MoreIcon,
   PresenceAvatars,
+  Select,
   Stack,
   StackedRail,
+  T,
   type DropdownMenuSection,
   type StackedRailGroup,
   type StackedRailRow,
@@ -40,6 +46,7 @@ import {
   type RailDropPosition,
 } from './knowledgeFormat';
 import type { AssessmentSSEEvent, KnowledgeNode, KnowledgeSection } from './types';
+import { ShareDocumentDialog } from './ShareDocumentDialog';
 
 export type QuickView = 'recent' | 'shared';
 export const ACTIVITY_ID = (sectionKey: string) => `${sectionKey}::activity`;
@@ -129,6 +136,8 @@ export interface DocumentRailProps {
   /** Loading / error in place of the groups; the caption stays. */
   status?: ReactNode;
   sections: KnowledgeSection[];
+  /** Native files have their own destinations, outside the knowledge tree. */
+  fileGroup?: StackedRailGroup;
   /** The page open in the pane, or the section whose Activity is. */
   selectedId: string | null;
   activitySectionKey: string | null;
@@ -145,7 +154,7 @@ export interface DocumentRailProps {
   onCreate?: (destination: DraftDestination) => void;
   onRename?: (node: { id: string; title: string }) => void;
   /** Absent: nothing in this rail moves (a reader, the Prompts library). */
-  onReorder?: (id: string, targetParentId: string | null, position: number) => void;
+  onReorder?: (id: string, targetParentId: string | null, position: number) => Promise<void>;
   pulls: SectionPulls;
 }
 
@@ -154,6 +163,15 @@ const DROP_INDICATOR = '[&_[data-drop=before]]:shadow-[inset_0_2px_0_0_var(--col
 
 export function DocumentRail(props: DocumentRailProps) {
   const { sections, pulls } = props;
+  const [sharing, setSharing] = useState<{ id: string; title: string; source: string } | null>(null);
+  const [moving, setMoving] = useState<KnowledgeNode | null>(null);
+  const [moveParent, setMoveParent] = useState('');
+  const [moveBusy, setMoveBusy] = useState(false);
+  const [moveError, setMoveError] = useState<string | null>(null);
+  const [draggedTitle, setDraggedTitle] = useState<string | null>(null);
+  const expandTimer = useRef<number | undefined>(undefined);
+  const expandTarget = useRef<string | null>(null);
+  useEffect(() => () => window.clearTimeout(expandTimer.current), []);
   const { can, ready } = useCapabilities();
   const mayPull = ready && can('ManageKnowledge') && props.sourceConfigured;
 
@@ -226,27 +244,51 @@ export function DocumentRail(props: DocumentRailProps) {
     const over = (event: DragEvent<HTMLElement>) => {
       const rect = event.currentTarget.getBoundingClientRect();
       const position = headingOnly ? 'into' : railDropPosition(event.clientY - rect.top, rect.height);
-      if (!dropAt(id, position)) { if (drop?.id === id) setDrop(null); return; }
+      if (!dropAt(id, position)) {
+        setDrop(null); window.clearTimeout(expandTimer.current); expandTarget.current = null;
+        return;
+      }
       event.preventDefault();
       event.dataTransfer.dropEffect = 'move';
       if (drop?.id !== id || drop.position !== position) setDrop({ id, position });
+      const scroll = event.currentTarget.closest<HTMLElement>('[data-testid="knowledge-explorer-rail-scroll"]');
+      if (scroll) {
+        const bounds = scroll.getBoundingClientRect();
+        if (event.clientY < bounds.top + 32) scroll.scrollTop -= 12;
+        else if (event.clientY > bounds.bottom - 32) scroll.scrollTop += 12;
+      }
+      if (position === 'into' && !open.includes(id) && expandTarget.current !== id) {
+        window.clearTimeout(expandTimer.current);
+        expandTarget.current = id;
+        expandTimer.current = window.setTimeout(() => toggle(id, true), 550);
+      } else if (position !== 'into') {
+        window.clearTimeout(expandTimer.current); expandTarget.current = null;
+      }
     };
     return {
       ...(draggable ? {
         draggable: true,
-        onDragStart: (event: DragEvent<HTMLElement>) => { event.dataTransfer.setData('text/plain', id); event.dataTransfer.effectAllowed = 'move'; dragging.current = id; },
-        onDragEnd: () => { dragging.current = null; setDrop(null); },
+        onDragStart: (event: DragEvent<HTMLElement>) => { event.dataTransfer.setData('text/plain', id); event.dataTransfer.effectAllowed = 'move'; dragging.current = id; setDraggedTitle(sectionOf(id)?.nodes.find(node => node.id === id)?.title ?? null); },
+        onDragEnd: () => { dragging.current = null; setDrop(null); setDraggedTitle(null); window.clearTimeout(expandTimer.current); expandTarget.current = null; },
       } : {}),
       onDragOver: over,
       onDragEnter: over,
-      onDragLeave: () => { if (drop?.id === id) setDrop(null); },
+      onDragLeave: (event: DragEvent<HTMLElement>) => {
+        if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) return;
+        if (drop?.id === id) setDrop(null);
+        if (expandTarget.current === id) { window.clearTimeout(expandTimer.current); expandTarget.current = null; }
+      },
       onDrop: (event: DragEvent<HTMLElement>) => {
         event.preventDefault();
-        const target = drop?.id === id ? dropAt(id, drop.position) : null;
+        // Recompute from the actual drop; crossing a row's child span must
+        // not erase a valid destination or rely on an old hover render.
+        const rect = event.currentTarget.getBoundingClientRect();
+        const target = dropAt(id, headingOnly ? 'into' : railDropPosition(event.clientY - rect.top, rect.height));
         const dragged = dragging.current;
         dragging.current = null;
         setDrop(null);
-        if (target && dragged) props.onReorder!(dragged, target.parentId, target.position);
+        setDraggedTitle(null); window.clearTimeout(expandTimer.current); expandTarget.current = null;
+        if (target && dragged) void props.onReorder!(dragged, target.parentId, target.position).catch(() => { /* Explorer shows the server refusal. */ });
       },
       data: { 'data-drop': drop?.id === id ? drop.position : undefined, 'data-draggable': draggable || undefined },
     };
@@ -267,9 +309,13 @@ export function DocumentRail(props: DocumentRailProps) {
   const pageMenu = (node: KnowledgeNode, section: KnowledgeSection): DropdownMenuSection[] => {
     const childDraft = props.onCreate && (section.kind === 'synced' ? props.sourceConfigured : node.is_dir);
     return [
-      { items: [{ label: 'Open', onSelect: () => props.onOpenDocument(node.id) }] },
+      { items: [
+        { label: 'Open', onSelect: () => props.onOpenDocument(node.id) },
+        { label: 'Share…', onSelect: () => setSharing({ id: node.id, title: node.title, source: section.title }) },
+      ] },
       { items: [
         ...(section.kind === 'local' && props.onRename ? [{ label: 'Rename…', onSelect: () => props.onRename!({ id: node.id, title: node.title }) }] : []),
+        ...(canDragNode(dragNode(node.id)!) ? [{ label: 'Move to…', onSelect: () => { setMoving(node); setMoveParent(''); setMoveError(null); } }] : []),
         ...(childDraft ? [{ label: 'Add child draft…', onSelect: () => props.onCreate!(section.kind === 'synced'
           ? { sectionKey: 'workspace_drafts', sourceParentId: node.id, parentTitle: node.title }
           : { sectionKey: section.key, parentId: node.id, parentTitle: node.title }) }] : []),
@@ -356,8 +402,9 @@ export function DocumentRail(props: DocumentRailProps) {
             ...(section ? { menu: menuFor(node, section) } : {}) };
         }) };
 
-  const groups: StackedRailGroup[] = props.status ? [] : [
+  const groups: StackedRailGroup[] = props.status ? (props.fileGroup ? [props.fileGroup] : []) : [
     views,
+    ...(props.fileGroup ? [props.fileGroup] : []),
     ...(props.quickView ? [quickGroup(props.quickView)] : sections.map(sourceGroup)),
   ];
 
@@ -392,13 +439,45 @@ export function DocumentRail(props: DocumentRailProps) {
     return [];
   });
 
-  return <Stack gap="none" className="min-w-0 pb-3" onKeyDown={onKeyDown} onDoubleClick={onDoubleClick}>
+  const destinations = moving ? dragNodes.filter(target => {
+    const source = dragNode(moving.id);
+    return source && canDropNode(source, target, 'into') && railReorderTarget(dragNodes, moving.id, target.id, 'into');
+  }).map(target => {
+    const section = sectionOf(target.id)!;
+    return { value: target.id, label: target.id === sectionFolderId(section.key) ? section.title : nodePath(section.nodes, target.id).map(node => node.title).join(' / ') };
+  }) : [];
+  async function submitMove() {
+    const source = moving ? dragNode(moving.id) : undefined;
+    const target = dragNode(moveParent);
+    if (!source || !target || !canDragNode(source) || !canDropNode(source, target, 'into') || !props.onReorder || moveBusy) return;
+    const destination = railReorderTarget(dragNodes, source.id, target.id, 'into');
+    if (!destination) return;
+    setMoveBusy(true); setMoveError(null);
+    try { await props.onReorder(source.id, destination.parentId, destination.position); toggle(target.id, true); setMoving(null); }
+    catch (cause) { setMoveError(cause instanceof Error ? cause.message : 'The move could not be saved.'); }
+    finally { setMoveBusy(false); }
+  }
+
+  return <Stack gap="none" className="document-sidebar min-w-0 pb-3" onKeyDown={onKeyDown} onDoubleClick={onDoubleClick}>
+    {draggedTitle && <T role="status" className="px-3 py-2 text-text-secondary">Moving {draggedTitle}. Drop between rows to reorder, or on a page or folder to nest.</T>}
     <StackedRail title={props.title} count={props.count} actions={props.actions} aria-label="Documents" currentStyle="tint"
       selectedId={selected} groups={groups} className={DROP_INDICATOR} data-testid={RAIL} />
     {props.status}
     {failures.map(failure => <Stack key={failure.key} gap="none" className="px-2.5 pt-2">
       <Banner variant={failure.variant} onDismiss={() => pulls.dismiss(failure.key)} data-testid={`section-pull-notice-${failure.key}`}>{failure.text}</Banner>
     </Stack>)}
+    <ShareDocumentDialog document={sharing} onClose={() => setSharing(null)} />
+    <Modal open={!!moving} onClose={() => { if (!moveBusy) setMoving(null); }} title={`Move ${moving?.title ?? 'document'}`} maxWidth={460}
+      backdropTestId="move-document-dialog" footer={<>
+        <Button variant="ghost" disabled={moveBusy} onClick={() => setMoving(null)}>Cancel</Button>
+        <Button variant="primary" disabled={moveBusy || !destinations.some(item => item.value === moveParent)} onClick={() => void submitMove()}>{moveBusy ? 'Moving…' : 'Move here'}</Button>
+      </>}>
+      <Stack gap="md">
+        <FormField label="Destination">{wiring => <Select {...wiring} aria-label="Move destination" options={destinations} placeholder="Choose a parent" value={moveParent} onChange={event => setMoveParent(event.target.value)} />}</FormField>
+        <T className="text-text-secondary">The document and its children move together within their source.</T>
+        {moveError && <InlineAlert tone="error">{moveError}</InlineAlert>}
+      </Stack>
+    </Modal>
   </Stack>;
 }
 

@@ -7,7 +7,7 @@
 // always knows where they are in the chain.
 
 import { useNavigate } from 'react-router';
-import { Chip, Inline, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { Chip, Inline, Stack, T } from '@connorhoehnslalom/ui-components/shared';
 import { CostChip } from './CostChip';
 
 export interface TraceNode {
@@ -52,7 +52,7 @@ export function TraceTree({ parent, current, children, currentInvocationId }: Pr
   const kids = children ?? current.children ?? [];
 
   return (
-    <Stack gap="xs" className="font-mono text-[12px]">
+    <Stack gap="xs" className="text-xs font-mono">
       {parent && (
         <Row
           node={parent}
@@ -193,13 +193,13 @@ function Row({
             : 'Click to open'
       }
     >
-      <Inline as="span" gap="none" className="whitespace-pre text-text-tertiary text-[12px]">{connector}</Inline>
-      <Inline as="span" gap="none" aria-hidden className={`text-[11px] ${isGhost ? 'text-text-tertiary' : 'text-primary'}`}>
+      <T size="xs" tone="tertiary" className="whitespace-pre">{connector}</T>
+      <T size="xs" aria-hidden tone={isGhost ? 'tertiary' : 'inherit'} className={isGhost ? undefined : 'text-primary'}>
         {isGhost ? '◌' : '◉'}
-      </Inline>
-      <Inline as="span" gap="none" className={isGhost ? 'font-medium text-text-tertiary font-mono' : 'font-semibold text-text-primary'}>
+      </T>
+      <T size="sm" weight={isGhost ? 'normal' : 'semibold'} tone={isGhost ? 'tertiary' : 'primary'} className="font-mono">
         {isGhost ? `parent ${node.invocationId.slice(0, 8)}…` : name}
-      </Inline>
+      </T>
       {isGhost && (
         <Chip tone="warning" size="xs">
           not yet ingested
@@ -217,31 +217,31 @@ function Row({
       )}
       {!isGhost && (
         <>
-          <Inline as="span" gap="none" className="text-text-tertiary text-[11px]">·</Inline>
-          <Inline as="span" gap="none" className="text-[11px] text-text-tertiary font-sans">judge</Inline>
+          <T size="xs" tone="tertiary">·</T>
+          <T size="xs" tone="tertiary" className="font-sans">judge</T>
           <Chip tone={judgeTone(node.judgeScore)} size="xs">
             {fmt(node.judgeScore)}
           </Chip>
-          <Inline as="span" gap="none" className="text-text-tertiary text-[11px]">·</Inline>
-          <Inline as="span" gap="none" className="text-[11px] text-text-tertiary font-sans">dur {fmtDur(node.durationMs)}</Inline>
+          <T size="xs" tone="tertiary">·</T>
+          <T size="xs" tone="tertiary" className="font-sans">dur {fmtDur(node.durationMs)}</T>
           {node.totalCostUsd != null && (
             <>
-              <Inline as="span" gap="none" className="text-text-tertiary text-[11px]">·</Inline>
+              <T size="xs" tone="tertiary">·</T>
               <CostChip cost={node.totalCostUsd} />
             </>
           )}
         </>
       )}
       {isGhost && (
-        <Inline as="span" gap="none" className="text-[10.5px] text-text-tertiary italic font-sans">
+        <T size="xs" tone="tertiary" className="italic font-sans">
           referenced parent — poller has not caught its trace yet
-        </Inline>
+        </T>
       )}
       <Inline as="span" gap="none" className="flex-1" />
       {!isGhost && (
-        <Inline as="span" gap="none" aria-hidden className="text-[11px] text-primary font-sans">
+        <T size="xs" aria-hidden tone="inherit" className="text-primary font-sans">
           view →
-        </Inline>
+        </T>
       )}
     </Inline>
   );

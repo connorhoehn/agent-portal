@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-09-30T07:58:29.565Z",
-  "serverHandlerSha": "6f6620e68a333efe54904960e193af0014e67c204b330431196c5708841843ed",
+  "capturedAt": "2026-10-08T19:18:10.843Z",
+  "serverHandlerSha": "6b7ab6b22b74ecfc5eb1280bdc72518db74b8f0d123c3b9ae0ec551ff358072a",
   "baseUrl": "http://127.0.0.1:3012",
   "personas": [
     "orgiq/admin",
@@ -33,6 +33,57 @@
       "status": 200,
       "shape": {
         "$": "object",
+        "demo": "object",
+        "demo.agents": "array",
+        "demo.agents[]": "object",
+        "demo.agents[].agent": "string",
+        "demo.agents[].boxId": "null",
+        "demo.agents[].label": "null",
+        "demo.agents[].name": "string",
+        "demo.agents[].runId": "null",
+        "demo.agents[].sessionId": "null",
+        "demo.agents[].status": "null",
+        "demo.agents[].workItemId": "string",
+        "demo.answeredBy": "null",
+        "demo.beatMs": "number",
+        "demo.errors": "array",
+        "demo.finishedAt": "null",
+        "demo.gate": "null",
+        "demo.milestones": "object",
+        "demo.milestones.answerCaptured": "boolean",
+        "demo.milestones.captured": "boolean",
+        "demo.milestones.gateRefused": "boolean",
+        "demo.milestones.questionAnswered": "boolean",
+        "demo.milestones.questionAsked": "boolean",
+        "demo.milestones.running3": "boolean",
+        "demo.phase": "string",
+        "demo.startedAt": "null",
+        "distillationDemo": "object",
+        "distillationDemo.applicationId": "null",
+        "distillationDemo.beatMs": "number",
+        "distillationDemo.errors": "array",
+        "distillationDemo.finishedAt": "null",
+        "distillationDemo.guideId": "null",
+        "distillationDemo.jobs": "object",
+        "distillationDemo.jobs.guide": "null",
+        "distillationDemo.jobs.patterns": "null",
+        "distillationDemo.jobs.retry": "null",
+        "distillationDemo.milestones": "object",
+        "distillationDemo.milestones.applied": "boolean",
+        "distillationDemo.milestones.guideMinted": "boolean",
+        "distillationDemo.milestones.notesWritten": "number",
+        "distillationDemo.milestones.patternsMinted": "boolean",
+        "distillationDemo.milestones.published": "boolean",
+        "distillationDemo.milestones.retried": "boolean",
+        "distillationDemo.milestones.reviewed": "boolean",
+        "distillationDemo.milestones.sampled": "boolean",
+        "distillationDemo.notes": "array",
+        "distillationDemo.notesTotal": "number",
+        "distillationDemo.openDecidedBy": "null",
+        "distillationDemo.patterns": "object",
+        "distillationDemo.phase": "string",
+        "distillationDemo.samples": "object",
+        "distillationDemo.startedAt": "null",
         "enabled": "boolean",
         "fixtures": "array",
         "fixtures[]": "object",
@@ -45,6 +96,12 @@
         "scenario": "string"
       },
       "values": {
+        "demo.phase": [
+          "idle"
+        ],
+        "distillationDemo.phase": [
+          "idle"
+        ],
         "fixtures[].scenario": [
           "default"
         ],
@@ -354,7 +411,7 @@
         "projects[]": "object",
         "projects[].checkout": "string",
         "projects[].clonedAt": "null",
-        "projects[].connectionName": "null",
+        "projects[].connectionName": "string",
         "projects[].createdAt": "string",
         "projects[].defaultBranch": "string",
         "projects[].id": "string",
@@ -472,6 +529,23 @@
       },
       "values": {}
     },
+    "GET /api/assessment/decks": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "array"
+      },
+      "values": {}
+    },
+    "GET /api/assessment/decks/:id": {
+      "skipped": "no value found for :id under /api/assessment/decks (orgiq/admin); no value found for :id under /api/assessment/decks (assessment/admin); no value found for :id under /api/assessment/decks (anonymous)"
+    },
+    "GET /api/assessment/decks/:id/revisions/:rid/file": {
+      "skipped": "no value found for :id under /api/assessment/decks (orgiq/admin); no value found for :id under /api/assessment/decks (assessment/admin); no value found for :id under /api/assessment/decks (anonymous)"
+    },
+    "GET /api/assessment/decks/:id/revisions/:rid/spec": {
+      "skipped": "no value found for :id under /api/assessment/decks (orgiq/admin); no value found for :id under /api/assessment/decks (assessment/admin); no value found for :id under /api/assessment/decks (anonymous)"
+    },
     "GET /api/assessment/dimension-index": {
       "persona": "orgiq/admin",
       "status": 200,
@@ -492,6 +566,9 @@
         "teams[].id": "string"
       },
       "values": {}
+    },
+    "GET /api/assessment/drafts/:runId": {
+      "skipped": "no value found for :runId under /api/assessment/drafts (orgiq/admin); no value found for :runId under /api/assessment/drafts (assessment/admin); no value found for :runId under /api/assessment/drafts (anonymous)"
     },
     "GET /api/assessment/events": {
       "skipped": "server-sent event stream (orgiq/admin); server-sent event stream (assessment/admin); HTTP 403 (anonymous)"
@@ -588,6 +665,20 @@
         "comments[].parent_id": "null|string"
       },
       "values": {}
+    },
+    "GET /api/assessment/knowledge/doc/proposals": {
+      "persona": "assessment/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "canEdit": "boolean",
+        "documentId": "string",
+        "proposals": "array"
+      },
+      "values": {}
+    },
+    "GET /api/assessment/knowledge/doc/proposals/:proposalId": {
+      "skipped": "no value found for :proposalId under /api/assessment/knowledge/doc/proposals (orgiq/admin); no value found for :proposalId under /api/assessment/knowledge/doc/proposals (assessment/admin); no value found for :proposalId under /api/assessment/knowledge/doc/proposals (anonymous)"
     },
     "GET /api/assessment/knowledge/doc/reactions": {
       "persona": "orgiq/admin",
@@ -1211,6 +1302,9 @@
         ]
       }
     },
+    "GET /api/assessment/teams/:id/dimensions/:dim/drafts": {
+      "skipped": "no value found for :dim under /api/assessment/teams/TEAM-001/dimensions (orgiq/admin); no value found for :dim under /api/assessment/teams/TEAM-001/dimensions (assessment/admin); no value found for :id under /api/assessment/teams (anonymous)"
+    },
     "GET /api/assessment/teams/:id/evidence": {
       "persona": "orgiq/admin",
       "status": 200,
@@ -1409,6 +1503,12 @@
     "GET /api/assessment/teams/:id/stories/:file": {
       "skipped": "no value found for :file under /api/assessment/teams/TEAM-001/stories (orgiq/admin); no value found for :file under /api/assessment/teams/TEAM-001/stories (assessment/admin); no value found for :id under /api/assessment/teams (anonymous)"
     },
+    "GET /api/assessment/work-graph/teams/:id/graph": {
+      "skipped": "no value found for :id under /api/assessment/work-graph/teams (orgiq/admin); no value found for :id under /api/assessment/work-graph/teams (assessment/admin); no value found for :id under /api/assessment/work-graph/teams (anonymous)"
+    },
+    "GET /api/assessment/work-graph/workspace/graph": {
+      "skipped": "HTTP 400 (orgiq/admin); HTTP 400 (assessment/admin); HTTP 403 (anonymous)"
+    },
     "GET /api/assessment/workspace": {
       "persona": "orgiq/admin",
       "status": 200,
@@ -1593,6 +1693,9 @@
     "GET /api/bots/estimate": {
       "skipped": "HTTP 400 (orgiq/admin); HTTP 400 (assessment/admin); HTTP 403 (anonymous)"
     },
+    "GET /api/bots/initiative-runs": {
+      "skipped": "HTTP 400 (orgiq/admin); HTTP 400 (assessment/admin); HTTP 400 (anonymous)"
+    },
     "GET /api/bots/marketplace-runs": {
       "skipped": "HTTP 400 (orgiq/admin); HTTP 400 (assessment/admin); HTTP 403 (anonymous)"
     },
@@ -1662,6 +1765,44 @@
         "grants[].startsOn": "string"
       },
       "values": {}
+    },
+    "GET /api/calls": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "calls": "array",
+        "counts": "object",
+        "counts.missed": "number",
+        "counts.total": "number",
+        "lobby": "string",
+        "source": "string"
+      },
+      "values": {}
+    },
+    "GET /api/calls/:callId/chat": {
+      "skipped": "no value found for :callId under /api/calls (orgiq/admin); no value found for :callId under /api/calls (assessment/admin); no value found for :callId under /api/calls (anonymous)"
+    },
+    "GET /api/calls/:callId/page": {
+      "skipped": "no value found for :callId under /api/calls (orgiq/admin); no value found for :callId under /api/calls (assessment/admin); no value found for :callId under /api/calls (anonymous)"
+    },
+    "GET /api/calls/tenant": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "calls": "array",
+        "counts": "object",
+        "counts.missed": "number",
+        "counts.total": "number",
+        "source": "string",
+        "tenant": "string"
+      },
+      "values": {
+        "tenant": [
+          "orgiq"
+        ]
+      }
     },
     "GET /api/capabilities/browser-sessions": {
       "persona": "orgiq/admin",
@@ -1949,6 +2090,54 @@
         ]
       }
     },
+    "GET /api/chat/commands/agent/runs/:id": {
+      "skipped": "no value found for :id under /api/chat/commands/agent/runs (orgiq/admin); no value found for :id under /api/chat/commands/agent/runs (orgiq/admin); no value found for :id under /api/chat/commands/agent/runs (assessment/admin); no value found for :id under /api/chat/commands/agent/runs (assessment/admin); no value found for :id under /api/chat/commands/agent/runs (anonymous); no value found for :id under /api/chat/commands/agent/runs (anonymous)"
+    },
+    "GET /api/chat/commands/agent/waiting": {
+      "skipped": "HTTP 400 (orgiq/admin); HTTP 400 (orgiq/admin); HTTP 400 (assessment/admin); HTTP 400 (assessment/admin); HTTP 400 (anonymous); HTTP 400 (anonymous)"
+    },
+    "GET /api/chat/commands/deck/runs/:id": {
+      "skipped": "no value found for :id under /api/chat/commands/deck/runs (orgiq/admin); no value found for :id under /api/chat/commands/deck/runs (assessment/admin); no value found for :id under /api/chat/commands/deck/runs (anonymous)"
+    },
+    "GET /api/chat/commands/diagram/runs/:id": {
+      "skipped": "no value found for :id under /api/chat/commands/diagram/runs (orgiq/admin); no value found for :id under /api/chat/commands/diagram/runs (orgiq/admin); no value found for :id under /api/chat/commands/diagram/runs (assessment/admin); no value found for :id under /api/chat/commands/diagram/runs (assessment/admin); no value found for :id under /api/chat/commands/diagram/runs (anonymous); no value found for :id under /api/chat/commands/diagram/runs (anonymous)"
+    },
+    "GET /api/chat/commands/doc/runs/:id": {
+      "skipped": "no value found for :id under /api/chat/commands/doc/runs (orgiq/admin); no value found for :id under /api/chat/commands/doc/runs (orgiq/admin); no value found for :id under /api/chat/commands/doc/runs (assessment/admin); no value found for :id under /api/chat/commands/doc/runs (assessment/admin); no value found for :id under /api/chat/commands/doc/runs (anonymous); no value found for :id under /api/chat/commands/doc/runs (anonymous)"
+    },
+    "GET /api/chat/commands/summarize/runs/:id": {
+      "skipped": "no value found for :id under /api/chat/commands/summarize/runs (orgiq/admin); no value found for :id under /api/chat/commands/summarize/runs (assessment/admin); no value found for :id under /api/chat/commands/summarize/runs (anonymous)"
+    },
+    "GET /api/chat/decks": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "array"
+      },
+      "values": {}
+    },
+    "GET /api/chat/decks/:id": {
+      "skipped": "no value found for :id under /api/chat/decks (orgiq/admin); no value found for :id under /api/chat/decks (assessment/admin); no value found for :id under /api/chat/decks (anonymous)"
+    },
+    "GET /api/chat/decks/:id/revisions/:rid/file": {
+      "skipped": "no value found for :id under /api/chat/decks (orgiq/admin); no value found for :id under /api/chat/decks (assessment/admin); no value found for :id under /api/chat/decks (anonymous)"
+    },
+    "GET /api/chat/decks/:id/revisions/:rid/spec": {
+      "skipped": "no value found for :id under /api/chat/decks (orgiq/admin); no value found for :id under /api/chat/decks (assessment/admin); no value found for :id under /api/chat/decks (anonymous)"
+    },
+    "GET /api/chat/message": {
+      "skipped": "HTTP 404 (orgiq/admin); HTTP 404 (assessment/admin); HTTP 403 (anonymous)"
+    },
+    "GET /api/chat/pins": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "channel": "string",
+        "pins": "array"
+      },
+      "values": {}
+    },
     "GET /api/connections": {
       "persona": "orgiq/admin",
       "status": 200,
@@ -2000,6 +2189,21 @@
     },
     "GET /api/connections/:name/github/signal": {
       "skipped": "HTTP 400 (orgiq/admin); HTTP 400 (assessment/admin); no value found for :name under /api/connections (anonymous)"
+    },
+    "GET /api/conversations/agent/runs/:id": {
+      "skipped": "no value found for :id under /api/conversations/agent/runs (orgiq/admin); no value found for :id under /api/conversations/agent/runs (orgiq/admin); no value found for :id under /api/conversations/agent/runs (assessment/admin); no value found for :id under /api/conversations/agent/runs (assessment/admin); no value found for :id under /api/conversations/agent/runs (anonymous); no value found for :id under /api/conversations/agent/runs (anonymous)"
+    },
+    "GET /api/conversations/agent/waiting": {
+      "skipped": "HTTP 400 (orgiq/admin); HTTP 400 (orgiq/admin); HTTP 400 (assessment/admin); HTTP 400 (assessment/admin); HTTP 400 (anonymous); HTTP 400 (anonymous)"
+    },
+    "GET /api/conversations/diagram/runs/:id": {
+      "skipped": "no value found for :id under /api/conversations/diagram/runs (orgiq/admin); no value found for :id under /api/conversations/diagram/runs (orgiq/admin); no value found for :id under /api/conversations/diagram/runs (assessment/admin); no value found for :id under /api/conversations/diagram/runs (assessment/admin); no value found for :id under /api/conversations/diagram/runs (anonymous); no value found for :id under /api/conversations/diagram/runs (anonymous)"
+    },
+    "GET /api/conversations/doc/runs/:id": {
+      "skipped": "no value found for :id under /api/conversations/doc/runs (orgiq/admin); no value found for :id under /api/conversations/doc/runs (orgiq/admin); no value found for :id under /api/conversations/doc/runs (assessment/admin); no value found for :id under /api/conversations/doc/runs (assessment/admin); no value found for :id under /api/conversations/doc/runs (anonymous); no value found for :id under /api/conversations/doc/runs (anonymous)"
+    },
+    "GET /api/conversations/summarize/runs/:id": {
+      "skipped": "no value found for :id under /api/conversations/summarize/runs (orgiq/admin); no value found for :id under /api/conversations/summarize/runs (assessment/admin); no value found for :id under /api/conversations/summarize/runs (anonymous)"
     },
     "GET /api/designs": {
       "persona": "orgiq/admin",
@@ -2118,7 +2322,7 @@
         "boxes[].label": "string",
         "boxes[].lastActivityAt": "string",
         "boxes[].lastResult": "object",
-        "boxes[].lastResult.costUsd": "null|number",
+        "boxes[].lastResult.costUsd": "number",
         "boxes[].lastResult.durationMs": "number",
         "boxes[].lastResult.subtype": "string",
         "boxes[].lastResult.turns": "number",
@@ -2126,7 +2330,6 @@
         "boxes[].ownerId": "string",
         "boxes[].projectId": "string",
         "boxes[].sessionId": "string",
-        "boxes[].source": "string",
         "boxes[].spendUsd": "number",
         "boxes[].status": "string",
         "boxes[].stopsInMs": "number",
@@ -2134,7 +2337,6 @@
       },
       "values": {
         "boxes[].status": [
-          "error",
           "idle",
           "running",
           "waiting"
@@ -2161,6 +2363,21 @@
         "workspace": "string"
       },
       "values": {}
+    },
+    "GET /api/discussions/unread": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "sections": "object",
+        "tenant": "string",
+        "threads": "array"
+      },
+      "values": {
+        "tenant": [
+          "orgiq"
+        ]
+      }
     },
     "GET /api/distillation/artifacts": {
       "persona": "orgiq/admin",
@@ -2632,7 +2849,14 @@
       }
     },
     "GET /api/distillation/library/:libraryItemId/provenance": {
-      "skipped": "HTTP 404 (orgiq/admin); HTTP 404 (assessment/admin); HTTP 404 (anonymous)"
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "artifact": "null",
+        "lineage": "null"
+      },
+      "values": {}
     },
     "GET /api/distillation/procedures": {
       "persona": "orgiq/admin",
@@ -3132,6 +3356,9 @@
         ]
       }
     },
+    "GET /api/graph/documents/:documentId": {
+      "skipped": "no value found for :documentId under /api/graph/documents (orgiq/admin); no value found for :documentId under /api/graph/documents (assessment/admin); no value found for :documentId under /api/graph/documents (anonymous)"
+    },
     "GET /api/graph/entities": {
       "persona": "orgiq/admin",
       "status": 200,
@@ -3150,6 +3377,7 @@
         "edges[].type": "string",
         "nodes": "array",
         "nodes[]": "object",
+        "nodes[].avatarUrl": "string",
         "nodes[].department": "string",
         "nodes[].id": "string",
         "nodes[].influenceScore": "number",
@@ -3183,9 +3411,11 @@
       "status": 200,
       "shape": {
         "$": "object",
+        "avatarUrl": "string",
         "connections": "array",
         "connections[]": "object",
         "connections[].otherPerson": "object",
+        "connections[].otherPerson.avatarUrl": "string",
         "connections[].otherPerson.id": "string",
         "connections[].otherPerson.name": "string",
         "connections[].otherPerson.title": "string",
@@ -3265,6 +3495,7 @@
         "people": "array",
         "peopleTotal": "number",
         "people[]": "object",
+        "people[].avatarUrl": "string",
         "people[].department": "string",
         "people[].id": "string",
         "people[].influenceScore": "number",
@@ -3303,6 +3534,7 @@
         "allocatedUsd": "number",
         "contributors": "array",
         "contributors[]": "object",
+        "contributors[].avatarUrl": "string",
         "contributors[].name": "string",
         "contributors[].personId": "string",
         "contributors[].role": "string",
@@ -3517,6 +3749,7 @@
         "people": "array",
         "peopleTotal": "number",
         "people[]": "object",
+        "people[].avatarUrl": "string",
         "people[].department": "string",
         "people[].id": "string",
         "people[].influenceScore": "number",
@@ -3606,12 +3839,49 @@
       },
       "values": {}
     },
+    "GET /api/graph/work-items/:id/comments/summary": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "commentCount": "number",
+        "lastCommentAt": "null",
+        "workItemId": "string"
+      },
+      "values": {}
+    },
     "GET /api/graph/work-items/:id/criteria": {
       "persona": "orgiq/admin",
       "status": 200,
       "shape": {
         "$": "object",
         "criteria": "array"
+      },
+      "values": {}
+    },
+    "GET /api/graph/work-items/:id/documents": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "documents": "array",
+        "workItemId": "string"
+      },
+      "values": {}
+    },
+    "GET /api/graph/work-items/:id/documents/candidates": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "documents": "array",
+        "documents[]": "object",
+        "documents[].id": "string",
+        "documents[].ingestedAt": "string",
+        "documents[].source": "string",
+        "documents[].sourceUri": "string",
+        "documents[].title": "string",
+        "workItemId": "string"
       },
       "values": {}
     },
@@ -3630,6 +3900,8 @@
         "mocks.cloudwatch": "boolean",
         "mocks.guardrails": "boolean",
         "realtime": "object",
+        "realtime.distillation": "object",
+        "realtime.distillation.router": "string",
         "realtime.gateway": "string",
         "realtime.store": "string",
         "region": "string",
@@ -3668,7 +3940,287 @@
       }
     },
     "GET /api/identity/schema": {
-      "skipped": "HTTP 503 (orgiq/admin); HTTP 503 (assessment/admin); HTTP 403 (anonymous)"
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "raw": "string",
+        "schema": "object",
+        "schema.OrgIQ": "object",
+        "schema.OrgIQ.actions": "object",
+        "schema.OrgIQ.actions.ApproveException": "object",
+        "schema.OrgIQ.actions.ApproveException.appliesTo": "object",
+        "schema.OrgIQ.actions.ApproveException.appliesTo.principalTypes": "array",
+        "schema.OrgIQ.actions.ApproveException.appliesTo.principalTypes[]": "string",
+        "schema.OrgIQ.actions.ApproveException.appliesTo.resourceTypes": "array",
+        "schema.OrgIQ.actions.ApproveException.appliesTo.resourceTypes[]": "string",
+        "schema.OrgIQ.actions.ApproveStep": "object",
+        "schema.OrgIQ.actions.ApproveStep.appliesTo": "object",
+        "schema.OrgIQ.actions.ApproveStep.appliesTo.principalTypes": "array",
+        "schema.OrgIQ.actions.ApproveStep.appliesTo.principalTypes[]": "string",
+        "schema.OrgIQ.actions.ApproveStep.appliesTo.resourceTypes": "array",
+        "schema.OrgIQ.actions.ApproveStep.appliesTo.resourceTypes[]": "string",
+        "schema.OrgIQ.actions.ApproveTransaction": "object",
+        "schema.OrgIQ.actions.ApproveTransaction.appliesTo": "object",
+        "schema.OrgIQ.actions.ApproveTransaction.appliesTo.principalTypes": "array",
+        "schema.OrgIQ.actions.ApproveTransaction.appliesTo.principalTypes[]": "string",
+        "schema.OrgIQ.actions.ApproveTransaction.appliesTo.resourceTypes": "array",
+        "schema.OrgIQ.actions.ApproveTransaction.appliesTo.resourceTypes[]": "string",
+        "schema.OrgIQ.actions.AuthorDefinition": "object",
+        "schema.OrgIQ.actions.AuthorDefinition.appliesTo": "object",
+        "schema.OrgIQ.actions.AuthorDefinition.appliesTo.principalTypes": "array",
+        "schema.OrgIQ.actions.AuthorDefinition.appliesTo.principalTypes[]": "string",
+        "schema.OrgIQ.actions.AuthorDefinition.appliesTo.resourceTypes": "array",
+        "schema.OrgIQ.actions.AuthorDefinition.appliesTo.resourceTypes[]": "string",
+        "schema.OrgIQ.actions.CancelRun": "object",
+        "schema.OrgIQ.actions.CancelRun.appliesTo": "object",
+        "schema.OrgIQ.actions.CancelRun.appliesTo.principalTypes": "array",
+        "schema.OrgIQ.actions.CancelRun.appliesTo.principalTypes[]": "string",
+        "schema.OrgIQ.actions.CancelRun.appliesTo.resourceTypes": "array",
+        "schema.OrgIQ.actions.CancelRun.appliesTo.resourceTypes[]": "string",
+        "schema.OrgIQ.actions.ConnectLocalCompute": "object",
+        "schema.OrgIQ.actions.ConnectLocalCompute.appliesTo": "object",
+        "schema.OrgIQ.actions.ConnectLocalCompute.appliesTo.principalTypes": "array",
+        "schema.OrgIQ.actions.ConnectLocalCompute.appliesTo.principalTypes[]": "string",
+        "schema.OrgIQ.actions.ConnectLocalCompute.appliesTo.resourceTypes": "array",
+        "schema.OrgIQ.actions.ConnectLocalCompute.appliesTo.resourceTypes[]": "string",
+        "schema.OrgIQ.actions.DispatchAgentRun": "object",
+        "schema.OrgIQ.actions.DispatchAgentRun.appliesTo": "object",
+        "schema.OrgIQ.actions.DispatchAgentRun.appliesTo.principalTypes": "array",
+        "schema.OrgIQ.actions.DispatchAgentRun.appliesTo.principalTypes[]": "string",
+        "schema.OrgIQ.actions.DispatchAgentRun.appliesTo.resourceTypes": "array",
+        "schema.OrgIQ.actions.DispatchAgentRun.appliesTo.resourceTypes[]": "string",
+        "schema.OrgIQ.actions.EditGuardrail": "object",
+        "schema.OrgIQ.actions.EditGuardrail.appliesTo": "object",
+        "schema.OrgIQ.actions.EditGuardrail.appliesTo.principalTypes": "array",
+        "schema.OrgIQ.actions.EditGuardrail.appliesTo.principalTypes[]": "string",
+        "schema.OrgIQ.actions.EditGuardrail.appliesTo.resourceTypes": "array",
+        "schema.OrgIQ.actions.EditGuardrail.appliesTo.resourceTypes[]": "string",
+        "schema.OrgIQ.actions.EditPolicy": "object",
+        "schema.OrgIQ.actions.EditPolicy.appliesTo": "object",
+        "schema.OrgIQ.actions.EditPolicy.appliesTo.principalTypes": "array",
+        "schema.OrgIQ.actions.EditPolicy.appliesTo.principalTypes[]": "string",
+        "schema.OrgIQ.actions.EditPolicy.appliesTo.resourceTypes": "array",
+        "schema.OrgIQ.actions.EditPolicy.appliesTo.resourceTypes[]": "string",
+        "schema.OrgIQ.actions.EditSchema": "object",
+        "schema.OrgIQ.actions.EditSchema.appliesTo": "object",
+        "schema.OrgIQ.actions.EditSchema.appliesTo.principalTypes": "array",
+        "schema.OrgIQ.actions.EditSchema.appliesTo.principalTypes[]": "string",
+        "schema.OrgIQ.actions.EditSchema.appliesTo.resourceTypes": "array",
+        "schema.OrgIQ.actions.EditSchema.appliesTo.resourceTypes[]": "string",
+        "schema.OrgIQ.actions.EnterEnvironment": "object",
+        "schema.OrgIQ.actions.EnterEnvironment.appliesTo": "object",
+        "schema.OrgIQ.actions.EnterEnvironment.appliesTo.principalTypes": "array",
+        "schema.OrgIQ.actions.EnterEnvironment.appliesTo.principalTypes[]": "string",
+        "schema.OrgIQ.actions.EnterEnvironment.appliesTo.resourceTypes": "array",
+        "schema.OrgIQ.actions.EnterEnvironment.appliesTo.resourceTypes[]": "string",
+        "schema.OrgIQ.actions.LabelFeedback": "object",
+        "schema.OrgIQ.actions.LabelFeedback.appliesTo": "object",
+        "schema.OrgIQ.actions.LabelFeedback.appliesTo.principalTypes": "array",
+        "schema.OrgIQ.actions.LabelFeedback.appliesTo.principalTypes[]": "string",
+        "schema.OrgIQ.actions.LabelFeedback.appliesTo.resourceTypes": "array",
+        "schema.OrgIQ.actions.LabelFeedback.appliesTo.resourceTypes[]": "string",
+        "schema.OrgIQ.actions.ManageAssessmentConfig": "object",
+        "schema.OrgIQ.actions.ManageAssessmentConfig.appliesTo": "object",
+        "schema.OrgIQ.actions.ManageAssessmentConfig.appliesTo.principalTypes": "array",
+        "schema.OrgIQ.actions.ManageAssessmentConfig.appliesTo.principalTypes[]": "string",
+        "schema.OrgIQ.actions.ManageAssessmentConfig.appliesTo.resourceTypes": "array",
+        "schema.OrgIQ.actions.ManageAssessmentConfig.appliesTo.resourceTypes[]": "string",
+        "schema.OrgIQ.actions.ManageBots": "object",
+        "schema.OrgIQ.actions.ManageBots.appliesTo": "object",
+        "schema.OrgIQ.actions.ManageBots.appliesTo.principalTypes": "array",
+        "schema.OrgIQ.actions.ManageBots.appliesTo.principalTypes[]": "string",
+        "schema.OrgIQ.actions.ManageBots.appliesTo.resourceTypes": "array",
+        "schema.OrgIQ.actions.ManageBots.appliesTo.resourceTypes[]": "string",
+        "schema.OrgIQ.actions.ManageBudgets": "object",
+        "schema.OrgIQ.actions.ManageBudgets.appliesTo": "object",
+        "schema.OrgIQ.actions.ManageBudgets.appliesTo.principalTypes": "array",
+        "schema.OrgIQ.actions.ManageBudgets.appliesTo.principalTypes[]": "string",
+        "schema.OrgIQ.actions.ManageBudgets.appliesTo.resourceTypes": "array",
+        "schema.OrgIQ.actions.ManageBudgets.appliesTo.resourceTypes[]": "string",
+        "schema.OrgIQ.actions.ManageCanary": "object",
+        "schema.OrgIQ.actions.ManageCanary.appliesTo": "object",
+        "schema.OrgIQ.actions.ManageCanary.appliesTo.principalTypes": "array",
+        "schema.OrgIQ.actions.ManageCanary.appliesTo.principalTypes[]": "string",
+        "schema.OrgIQ.actions.ManageCanary.appliesTo.resourceTypes": "array",
+        "schema.OrgIQ.actions.ManageCanary.appliesTo.resourceTypes[]": "string",
+        "schema.OrgIQ.actions.ManageChannels": "object",
+        "schema.OrgIQ.actions.ManageChannels.appliesTo": "object",
+        "schema.OrgIQ.actions.ManageChannels.appliesTo.principalTypes": "array",
+        "schema.OrgIQ.actions.ManageChannels.appliesTo.principalTypes[]": "string",
+        "schema.OrgIQ.actions.ManageChannels.appliesTo.resourceTypes": "array",
+        "schema.OrgIQ.actions.ManageChannels.appliesTo.resourceTypes[]": "string",
+        "schema.OrgIQ.actions.ManageDevbox": "object",
+        "schema.OrgIQ.actions.ManageDevbox.appliesTo": "object",
+        "schema.OrgIQ.actions.ManageDevbox.appliesTo.principalTypes": "array",
+        "schema.OrgIQ.actions.ManageDevbox.appliesTo.principalTypes[]": "string",
+        "schema.OrgIQ.actions.ManageDevbox.appliesTo.resourceTypes": "array",
+        "schema.OrgIQ.actions.ManageDevbox.appliesTo.resourceTypes[]": "string",
+        "schema.OrgIQ.actions.ManageEnvironments": "object",
+        "schema.OrgIQ.actions.ManageEnvironments.appliesTo": "object",
+        "schema.OrgIQ.actions.ManageEnvironments.appliesTo.principalTypes": "array",
+        "schema.OrgIQ.actions.ManageEnvironments.appliesTo.principalTypes[]": "string",
+        "schema.OrgIQ.actions.ManageEnvironments.appliesTo.resourceTypes": "array",
+        "schema.OrgIQ.actions.ManageEnvironments.appliesTo.resourceTypes[]": "string",
+        "schema.OrgIQ.actions.ManageIngest": "object",
+        "schema.OrgIQ.actions.ManageIngest.appliesTo": "object",
+        "schema.OrgIQ.actions.ManageIngest.appliesTo.principalTypes": "array",
+        "schema.OrgIQ.actions.ManageIngest.appliesTo.principalTypes[]": "string",
+        "schema.OrgIQ.actions.ManageIngest.appliesTo.resourceTypes": "array",
+        "schema.OrgIQ.actions.ManageIngest.appliesTo.resourceTypes[]": "string",
+        "schema.OrgIQ.actions.ManageKB": "object",
+        "schema.OrgIQ.actions.ManageKB.appliesTo": "object",
+        "schema.OrgIQ.actions.ManageKB.appliesTo.principalTypes": "array",
+        "schema.OrgIQ.actions.ManageKB.appliesTo.principalTypes[]": "string",
+        "schema.OrgIQ.actions.ManageKB.appliesTo.resourceTypes": "array",
+        "schema.OrgIQ.actions.ManageKB.appliesTo.resourceTypes[]": "string",
+        "schema.OrgIQ.actions.ManageKnowledge": "object",
+        "schema.OrgIQ.actions.ManageKnowledge.appliesTo": "object",
+        "schema.OrgIQ.actions.ManageKnowledge.appliesTo.principalTypes": "array",
+        "schema.OrgIQ.actions.ManageKnowledge.appliesTo.principalTypes[]": "string",
+        "schema.OrgIQ.actions.ManageKnowledge.appliesTo.resourceTypes": "array",
+        "schema.OrgIQ.actions.ManageKnowledge.appliesTo.resourceTypes[]": "string",
+        "schema.OrgIQ.actions.ManagePipelineConfig": "object",
+        "schema.OrgIQ.actions.ManagePipelineConfig.appliesTo": "object",
+        "schema.OrgIQ.actions.ManagePipelineConfig.appliesTo.principalTypes": "array",
+        "schema.OrgIQ.actions.ManagePipelineConfig.appliesTo.principalTypes[]": "string",
+        "schema.OrgIQ.actions.ManagePipelineConfig.appliesTo.resourceTypes": "array",
+        "schema.OrgIQ.actions.ManagePipelineConfig.appliesTo.resourceTypes[]": "string",
+        "schema.OrgIQ.actions.ManageRecordings": "object",
+        "schema.OrgIQ.actions.ManageRecordings.appliesTo": "object",
+        "schema.OrgIQ.actions.ManageRecordings.appliesTo.principalTypes": "array",
+        "schema.OrgIQ.actions.ManageRecordings.appliesTo.principalTypes[]": "string",
+        "schema.OrgIQ.actions.ManageRecordings.appliesTo.resourceTypes": "array",
+        "schema.OrgIQ.actions.ManageRecordings.appliesTo.resourceTypes[]": "string",
+        "schema.OrgIQ.actions.ManageSocialConfig": "object",
+        "schema.OrgIQ.actions.ManageSocialConfig.appliesTo": "object",
+        "schema.OrgIQ.actions.ManageSocialConfig.appliesTo.principalTypes": "array",
+        "schema.OrgIQ.actions.ManageSocialConfig.appliesTo.principalTypes[]": "string",
+        "schema.OrgIQ.actions.ManageSocialConfig.appliesTo.resourceTypes": "array",
+        "schema.OrgIQ.actions.ManageSocialConfig.appliesTo.resourceTypes[]": "string",
+        "schema.OrgIQ.actions.ManageSprints": "object",
+        "schema.OrgIQ.actions.ManageSprints.appliesTo": "object",
+        "schema.OrgIQ.actions.ManageSprints.appliesTo.principalTypes": "array",
+        "schema.OrgIQ.actions.ManageSprints.appliesTo.principalTypes[]": "string",
+        "schema.OrgIQ.actions.ManageSprints.appliesTo.resourceTypes": "array",
+        "schema.OrgIQ.actions.ManageSprints.appliesTo.resourceTypes[]": "string",
+        "schema.OrgIQ.actions.ManageSubmissions": "object",
+        "schema.OrgIQ.actions.ManageSubmissions.appliesTo": "object",
+        "schema.OrgIQ.actions.ManageSubmissions.appliesTo.principalTypes": "array",
+        "schema.OrgIQ.actions.ManageSubmissions.appliesTo.principalTypes[]": "string",
+        "schema.OrgIQ.actions.ManageSubmissions.appliesTo.resourceTypes": "array",
+        "schema.OrgIQ.actions.ManageSubmissions.appliesTo.resourceTypes[]": "string",
+        "schema.OrgIQ.actions.ManageTeams": "object",
+        "schema.OrgIQ.actions.ManageTeams.appliesTo": "object",
+        "schema.OrgIQ.actions.ManageTeams.appliesTo.principalTypes": "array",
+        "schema.OrgIQ.actions.ManageTeams.appliesTo.principalTypes[]": "string",
+        "schema.OrgIQ.actions.ManageTeams.appliesTo.resourceTypes": "array",
+        "schema.OrgIQ.actions.ManageTeams.appliesTo.resourceTypes[]": "string",
+        "schema.OrgIQ.actions.ManageUsers": "object",
+        "schema.OrgIQ.actions.ManageUsers.appliesTo": "object",
+        "schema.OrgIQ.actions.ManageUsers.appliesTo.principalTypes": "array",
+        "schema.OrgIQ.actions.ManageUsers.appliesTo.principalTypes[]": "string",
+        "schema.OrgIQ.actions.ManageUsers.appliesTo.resourceTypes": "array",
+        "schema.OrgIQ.actions.ManageUsers.appliesTo.resourceTypes[]": "string",
+        "schema.OrgIQ.actions.PostMessage": "object",
+        "schema.OrgIQ.actions.PostMessage.appliesTo": "object",
+        "schema.OrgIQ.actions.PostMessage.appliesTo.principalTypes": "array",
+        "schema.OrgIQ.actions.PostMessage.appliesTo.principalTypes[]": "string",
+        "schema.OrgIQ.actions.PostMessage.appliesTo.resourceTypes": "array",
+        "schema.OrgIQ.actions.PostMessage.appliesTo.resourceTypes[]": "string",
+        "schema.OrgIQ.actions.PublishReport": "object",
+        "schema.OrgIQ.actions.PublishReport.appliesTo": "object",
+        "schema.OrgIQ.actions.PublishReport.appliesTo.principalTypes": "array",
+        "schema.OrgIQ.actions.PublishReport.appliesTo.principalTypes[]": "string",
+        "schema.OrgIQ.actions.PublishReport.appliesTo.resourceTypes": "array",
+        "schema.OrgIQ.actions.PublishReport.appliesTo.resourceTypes[]": "string",
+        "schema.OrgIQ.actions.RunAssessmentAgent": "object",
+        "schema.OrgIQ.actions.RunAssessmentAgent.appliesTo": "object",
+        "schema.OrgIQ.actions.RunAssessmentAgent.appliesTo.principalTypes": "array",
+        "schema.OrgIQ.actions.RunAssessmentAgent.appliesTo.principalTypes[]": "string",
+        "schema.OrgIQ.actions.RunAssessmentAgent.appliesTo.resourceTypes": "array",
+        "schema.OrgIQ.actions.RunAssessmentAgent.appliesTo.resourceTypes[]": "string",
+        "schema.OrgIQ.actions.RunPipeline": "object",
+        "schema.OrgIQ.actions.RunPipeline.appliesTo": "object",
+        "schema.OrgIQ.actions.RunPipeline.appliesTo.principalTypes": "array",
+        "schema.OrgIQ.actions.RunPipeline.appliesTo.principalTypes[]": "string",
+        "schema.OrgIQ.actions.RunPipeline.appliesTo.resourceTypes": "array",
+        "schema.OrgIQ.actions.RunPipeline.appliesTo.resourceTypes[]": "string",
+        "schema.OrgIQ.actions.ScoreAssessment": "object",
+        "schema.OrgIQ.actions.ScoreAssessment.appliesTo": "object",
+        "schema.OrgIQ.actions.ScoreAssessment.appliesTo.principalTypes": "array",
+        "schema.OrgIQ.actions.ScoreAssessment.appliesTo.principalTypes[]": "string",
+        "schema.OrgIQ.actions.ScoreAssessment.appliesTo.resourceTypes": "array",
+        "schema.OrgIQ.actions.ScoreAssessment.appliesTo.resourceTypes[]": "string",
+        "schema.OrgIQ.actions.Search": "object",
+        "schema.OrgIQ.actions.Search.appliesTo": "object",
+        "schema.OrgIQ.actions.Search.appliesTo.principalTypes": "array",
+        "schema.OrgIQ.actions.Search.appliesTo.principalTypes[]": "string",
+        "schema.OrgIQ.actions.Search.appliesTo.resourceTypes": "array",
+        "schema.OrgIQ.actions.Search.appliesTo.resourceTypes[]": "string",
+        "schema.OrgIQ.actions.StartCall": "object",
+        "schema.OrgIQ.actions.StartCall.appliesTo": "object",
+        "schema.OrgIQ.actions.StartCall.appliesTo.principalTypes": "array",
+        "schema.OrgIQ.actions.StartCall.appliesTo.principalTypes[]": "string",
+        "schema.OrgIQ.actions.StartCall.appliesTo.resourceTypes": "array",
+        "schema.OrgIQ.actions.StartCall.appliesTo.resourceTypes[]": "string",
+        "schema.OrgIQ.actions.ViewAssessment": "object",
+        "schema.OrgIQ.actions.ViewAssessment.appliesTo": "object",
+        "schema.OrgIQ.actions.ViewAssessment.appliesTo.principalTypes": "array",
+        "schema.OrgIQ.actions.ViewAssessment.appliesTo.principalTypes[]": "string",
+        "schema.OrgIQ.actions.ViewAssessment.appliesTo.resourceTypes": "array",
+        "schema.OrgIQ.actions.ViewAssessment.appliesTo.resourceTypes[]": "string",
+        "schema.OrgIQ.actions.ViewIdentityAdmin": "object",
+        "schema.OrgIQ.actions.ViewIdentityAdmin.appliesTo": "object",
+        "schema.OrgIQ.actions.ViewIdentityAdmin.appliesTo.principalTypes": "array",
+        "schema.OrgIQ.actions.ViewIdentityAdmin.appliesTo.principalTypes[]": "string",
+        "schema.OrgIQ.actions.ViewIdentityAdmin.appliesTo.resourceTypes": "array",
+        "schema.OrgIQ.actions.ViewIdentityAdmin.appliesTo.resourceTypes[]": "string",
+        "schema.OrgIQ.actions.ViewLeaderboard": "object",
+        "schema.OrgIQ.actions.ViewLeaderboard.appliesTo": "object",
+        "schema.OrgIQ.actions.ViewLeaderboard.appliesTo.principalTypes": "array",
+        "schema.OrgIQ.actions.ViewLeaderboard.appliesTo.principalTypes[]": "string",
+        "schema.OrgIQ.actions.ViewLeaderboard.appliesTo.resourceTypes": "array",
+        "schema.OrgIQ.actions.ViewLeaderboard.appliesTo.resourceTypes[]": "string",
+        "schema.OrgIQ.actions.ViewObservability": "object",
+        "schema.OrgIQ.actions.ViewObservability.appliesTo": "object",
+        "schema.OrgIQ.actions.ViewObservability.appliesTo.principalTypes": "array",
+        "schema.OrgIQ.actions.ViewObservability.appliesTo.principalTypes[]": "string",
+        "schema.OrgIQ.actions.ViewObservability.appliesTo.resourceTypes": "array",
+        "schema.OrgIQ.actions.ViewObservability.appliesTo.resourceTypes[]": "string",
+        "schema.OrgIQ.actions.ViewOrgChart": "object",
+        "schema.OrgIQ.actions.ViewOrgChart.appliesTo": "object",
+        "schema.OrgIQ.actions.ViewOrgChart.appliesTo.principalTypes": "array",
+        "schema.OrgIQ.actions.ViewOrgChart.appliesTo.principalTypes[]": "string",
+        "schema.OrgIQ.actions.ViewOrgChart.appliesTo.resourceTypes": "array",
+        "schema.OrgIQ.actions.ViewOrgChart.appliesTo.resourceTypes[]": "string",
+        "schema.OrgIQ.actions.ViewPerformance": "object",
+        "schema.OrgIQ.actions.ViewPerformance.appliesTo": "object",
+        "schema.OrgIQ.actions.ViewPerformance.appliesTo.principalTypes": "array",
+        "schema.OrgIQ.actions.ViewPerformance.appliesTo.principalTypes[]": "string",
+        "schema.OrgIQ.actions.ViewPerformance.appliesTo.resourceTypes": "array",
+        "schema.OrgIQ.actions.ViewPerformance.appliesTo.resourceTypes[]": "string",
+        "schema.OrgIQ.actions.ViewPipelines": "object",
+        "schema.OrgIQ.actions.ViewPipelines.appliesTo": "object",
+        "schema.OrgIQ.actions.ViewPipelines.appliesTo.principalTypes": "array",
+        "schema.OrgIQ.actions.ViewPipelines.appliesTo.principalTypes[]": "string",
+        "schema.OrgIQ.actions.ViewPipelines.appliesTo.resourceTypes": "array",
+        "schema.OrgIQ.actions.ViewPipelines.appliesTo.resourceTypes[]": "string",
+        "schema.OrgIQ.actions.ViewSalary": "object",
+        "schema.OrgIQ.actions.ViewSalary.appliesTo": "object",
+        "schema.OrgIQ.actions.ViewSalary.appliesTo.principalTypes": "array",
+        "schema.OrgIQ.actions.ViewSalary.appliesTo.principalTypes[]": "string",
+        "schema.OrgIQ.actions.ViewSalary.appliesTo.resourceTypes": "array",
+        "schema.OrgIQ.actions.ViewSalary.appliesTo.resourceTypes[]": "string",
+        "schema.OrgIQ.actions.ViewSocial": "object",
+        "schema.OrgIQ.actions.ViewSocial.appliesTo": "object",
+        "schema.OrgIQ.actions.ViewSocial.appliesTo.principalTypes": "array",
+        "schema.OrgIQ.actions.ViewSocial.appliesTo.principalTypes[]": "string",
+        "schema.OrgIQ.actions.ViewSocial.appliesTo.resourceTypes": "array",
+        "schema.OrgIQ.actions.ViewSocial.appliesTo.resourceTypes[]": "string",
+        "schema.OrgIQ.entityTypes": "object"
+      },
+      "values": {}
     },
     "GET /api/identity/tenants": {
       "persona": "orgiq/admin",
@@ -4099,6 +4651,23 @@
         "surveys": "array"
       },
       "values": {}
+    },
+    "GET /api/initiative-decks": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "array"
+      },
+      "values": {}
+    },
+    "GET /api/initiative-decks/:id": {
+      "skipped": "no value found for :id under /api/initiative-decks (orgiq/admin); no value found for :id under /api/initiative-decks (assessment/admin); no value found for :id under /api/initiative-decks (anonymous)"
+    },
+    "GET /api/initiative-decks/:id/revisions/:rid/file": {
+      "skipped": "no value found for :id under /api/initiative-decks (orgiq/admin); no value found for :id under /api/initiative-decks (assessment/admin); no value found for :id under /api/initiative-decks (anonymous)"
+    },
+    "GET /api/initiative-decks/:id/revisions/:rid/spec": {
+      "skipped": "no value found for :id under /api/initiative-decks (orgiq/admin); no value found for :id under /api/initiative-decks (assessment/admin); no value found for :id under /api/initiative-decks (anonymous)"
     },
     "GET /api/iq/prompts/experiments": {
       "persona": "orgiq/admin",
@@ -4627,6 +5196,9 @@
     },
     "GET /api/local-compute/stream": {
       "skipped": "server-sent event stream (orgiq/admin); server-sent event stream (assessment/admin); server-sent event stream (anonymous)"
+    },
+    "GET /api/me/groups": {
+      "skipped": "HTTP 400 (orgiq/admin); HTTP 400 (assessment/admin); HTTP 400 (anonymous)"
     },
     "GET /api/observability/approvals": {
       "persona": "orgiq/admin",
@@ -5206,7 +5778,7 @@
         "points[].bucketStart": "string",
         "points[].count": "number",
         "points[].driftP95": "number",
-        "points[].judgeP50": "null|number",
+        "points[].judgeP50": "number",
         "windowHours": "number"
       },
       "values": {}
@@ -6055,6 +6627,47 @@
       },
       "values": {}
     },
+    "GET /api/page-references/resolve": {
+      "skipped": "HTTP 400 (orgiq/admin); HTTP 400 (assessment/admin); HTTP 400 (anonymous)"
+    },
+    "GET /api/people/conversations": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "conversations": "array",
+        "tenant": "string"
+      },
+      "values": {
+        "tenant": [
+          "orgiq"
+        ]
+      }
+    },
+    "GET /api/people/shared": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "dmPrefix": "string",
+        "lobby": "string",
+        "me": "object",
+        "me.avatarUrl": "string",
+        "me.displayName": "string",
+        "me.userId": "string",
+        "people": "array",
+        "people[]": "object",
+        "people[].avatarUrl": "string",
+        "people[].displayName": "string",
+        "people[].userId": "string",
+        "tenant": "string"
+      },
+      "values": {
+        "tenant": [
+          "orgiq"
+        ]
+      }
+    },
     "GET /api/pipelines/approvals": {
       "persona": "orgiq/admin",
       "status": 200,
@@ -6150,6 +6763,26 @@
         "updatedBy": "null"
       },
       "values": {}
+    },
+    "GET /api/pipelines/decks": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "array"
+      },
+      "values": {}
+    },
+    "GET /api/pipelines/decks/:id": {
+      "skipped": "no value found for :id under /api/pipelines/decks (orgiq/admin); no value found for :id under /api/pipelines/decks (assessment/admin); no value found for :id under /api/pipelines/decks (anonymous)"
+    },
+    "GET /api/pipelines/decks/:id/revisions/:rid/file": {
+      "skipped": "no value found for :id under /api/pipelines/decks (orgiq/admin); no value found for :id under /api/pipelines/decks (assessment/admin); no value found for :id under /api/pipelines/decks (anonymous)"
+    },
+    "GET /api/pipelines/decks/:id/revisions/:rid/spec": {
+      "skipped": "no value found for :id under /api/pipelines/decks (orgiq/admin); no value found for :id under /api/pipelines/decks (assessment/admin); no value found for :id under /api/pipelines/decks (anonymous)"
+    },
+    "GET /api/pipelines/decks/:id/runs/:runId": {
+      "skipped": "no value found for :id under /api/pipelines/decks (orgiq/admin); no value found for :id under /api/pipelines/decks (assessment/admin); no value found for :id under /api/pipelines/decks (anonymous)"
     },
     "GET /api/pipelines/definitions": {
       "persona": "orgiq/admin",
@@ -6593,6 +7226,135 @@
       "values": {
         "tenant": [
           "pipelines"
+        ]
+      }
+    },
+    "GET /api/pipelines/work-graph/runs/:id/graph": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "cursor": "string",
+        "edges": "array",
+        "edges[]": "object",
+        "edges[].capabilities": "array",
+        "edges[].disclosure": "string",
+        "edges[].endedAt": "string",
+        "edges[].fromId": "string",
+        "edges[].id": "string",
+        "edges[].relation": "string",
+        "edges[].startedAt": "string",
+        "edges[].status": "string",
+        "edges[].toId": "string",
+        "edges[].updatedAt": "string",
+        "nodes": "array",
+        "nodes[]": "object",
+        "nodes[].capabilities": "array",
+        "nodes[].capabilities[]": "string",
+        "nodes[].disclosure": "string",
+        "nodes[].endedAt": "string",
+        "nodes[].id": "string",
+        "nodes[].kind": "string",
+        "nodes[].startedAt": "string",
+        "nodes[].status": "string",
+        "nodes[].title": "string",
+        "nodes[].updatedAt": "string",
+        "partial": "boolean",
+        "revision": "number",
+        "schemaVersion": "number",
+        "scope": "object",
+        "scope.day": "string",
+        "scope.personId": "string",
+        "scope.policyRevision": "string",
+        "scope.timezone": "string",
+        "sources": "array",
+        "sources[]": "object",
+        "sources[].checkedAt": "string",
+        "sources[].health": "string",
+        "sources[].source": "string",
+        "watermark": "number"
+      },
+      "values": {
+        "edges[].status": [
+          "completed"
+        ],
+        "nodes[].kind": [
+          "project",
+          "run",
+          "task"
+        ],
+        "nodes[].status": [
+          "completed",
+          "idle"
+        ]
+      }
+    },
+    "GET /api/pipelines/work-graph/workspace/graph": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "cursor": "string",
+        "edges": "array",
+        "edges[]": "object",
+        "edges[].capabilities": "array",
+        "edges[].disclosure": "string",
+        "edges[].endedAt": "string",
+        "edges[].fromId": "string",
+        "edges[].id": "string",
+        "edges[].relation": "string",
+        "edges[].startedAt": "string",
+        "edges[].status": "string",
+        "edges[].toId": "string",
+        "edges[].updatedAt": "string",
+        "nodes": "array",
+        "nodes[]": "object",
+        "nodes[].capabilities": "array",
+        "nodes[].capabilities[]": "string",
+        "nodes[].disclosure": "string",
+        "nodes[].endedAt": "string",
+        "nodes[].id": "string",
+        "nodes[].kind": "string",
+        "nodes[].startedAt": "string",
+        "nodes[].status": "string",
+        "nodes[].title": "string",
+        "nodes[].updatedAt": "string",
+        "partial": "boolean",
+        "revision": "number",
+        "schemaVersion": "number",
+        "scope": "object",
+        "scope.day": "string",
+        "scope.personId": "string",
+        "scope.policyRevision": "string",
+        "scope.timezone": "string",
+        "sources": "array",
+        "sources[]": "object",
+        "sources[].checkedAt": "string",
+        "sources[].health": "string",
+        "sources[].source": "string",
+        "watermark": "number"
+      },
+      "values": {
+        "edges[].status": [
+          "completed",
+          "error",
+          "idle",
+          "running",
+          "waiting"
+        ],
+        "nodes[].kind": [
+          "change",
+          "project",
+          "run",
+          "task"
+        ],
+        "nodes[].status": [
+          "completed",
+          "error",
+          "idle",
+          "running",
+          "stopped",
+          "waiting"
         ]
       }
     },
@@ -7220,7 +7982,8 @@
         "results[].title": "string",
         "results[].type": "string",
         "results[].updatedAt": "string",
-        "total": "number"
+        "total": "number",
+        "totalIsLowerBound": "boolean"
       },
       "values": {
         "related[].sourceRefs[].type": [
@@ -7536,6 +8299,7 @@
       "shape": {
         "$": "array",
         "$[]": "object",
+        "$[].avatarUrl": "string",
         "$[].displayName": "string",
         "$[].email": "string",
         "$[].id": "string",
@@ -7681,6 +8445,9 @@
         ]
       }
     },
+    "GET /api/social/conversations/:id/shared-work": {
+      "skipped": "no value found for :id under /api/social/conversations (orgiq/admin); no value found for :id under /api/social/conversations (assessment/admin); no value found for :id under /api/social/conversations (anonymous)"
+    },
     "GET /api/social/dms": {
       "persona": "orgiq/admin",
       "status": 200,
@@ -7690,6 +8457,53 @@
       },
       "values": {}
     },
+    "GET /api/social/dms/page-reference": {
+      "skipped": "HTTP 400 (orgiq/admin); HTTP 400 (assessment/admin); HTTP 400 (anonymous)"
+    },
+    "GET /api/social/embedded": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "authorityKey": "string",
+        "canSend": "boolean",
+        "conversations": "array",
+        "conversationsHasMore": "boolean",
+        "me": "object",
+        "me.avatarUrl": "string",
+        "me.displayName": "string",
+        "me.userId": "string",
+        "people": "array",
+        "peopleHasMore": "boolean",
+        "peopleTotal": "number",
+        "people[]": "object",
+        "people[].avatarUrl": "string",
+        "people[].displayName": "string",
+        "people[].roles": "array",
+        "people[].roles[]": "string",
+        "people[].userId": "string",
+        "source": "object",
+        "source.actor": "null",
+        "source.epoch": "number",
+        "source.role": "string",
+        "source.tenant": "string",
+        "source.userId": "string"
+      },
+      "values": {
+        "people[].roles[]": [
+          "admin",
+          "community-admin",
+          "moderator",
+          "participant"
+        ],
+        "source.role": [
+          "admin"
+        ],
+        "source.tenant": [
+          "orgiq"
+        ]
+      }
+    },
     "GET /api/social/people": {
       "persona": "orgiq/admin",
       "status": 200,
@@ -7697,6 +8511,7 @@
         "$": "object",
         "people": "array",
         "people[]": "object",
+        "people[].avatarUrl": "string",
         "people[].displayName": "string",
         "people[].roles": "array",
         "people[].roles[]": "string",
@@ -7708,6 +8523,264 @@
           "community-admin",
           "moderator",
           "participant"
+        ]
+      }
+    },
+    "GET /api/social/plane/active": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "counts": "object",
+        "counts.inCall": "number",
+        "counts.people": "number",
+        "counts.sharing": "number",
+        "counts.withActivity": "number",
+        "limits": "array",
+        "limits[]": "string",
+        "observedAt": "string",
+        "people": "array",
+        "people[]": "object",
+        "people[].activity": "null|string",
+        "people[].displayName": "string",
+        "people[].inCall": "null",
+        "people[].status": "string",
+        "people[].userId": "string",
+        "people[].workSharing": "null"
+      },
+      "values": {
+        "people[].status": [
+          "online"
+        ]
+      }
+    },
+    "GET /api/social/plane/calls": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "calls": "array",
+        "counts": "object",
+        "counts.missed": "number",
+        "counts.total": "number",
+        "source": "string"
+      },
+      "values": {}
+    },
+    "GET /api/social/plane/capabilities": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "actions": "object",
+        "actions.ManageChannels": "boolean",
+        "actions.ManageRecordings": "boolean",
+        "actions.ManageTeams": "boolean",
+        "actions.PostMessage": "boolean",
+        "actions.StartCall": "boolean",
+        "actions.ViewSocial": "boolean",
+        "tenant": "string"
+      },
+      "values": {
+        "tenant": [
+          "orgiq"
+        ]
+      }
+    },
+    "GET /api/social/plane/channels": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "channels": "array",
+        "channels[]": "object",
+        "channels[].channel": "string",
+        "channels[].createdAt": "string",
+        "channels[].createdBy": "string",
+        "channels[].description": "string",
+        "channels[].joined": "boolean",
+        "channels[].lastMessageAt": "string",
+        "channels[].lastMessagePreview": "string",
+        "channels[].memberCount": "number",
+        "channels[].name": "string",
+        "channels[].privacy": "string",
+        "channels[].role": "null",
+        "channels[].slug": "string"
+      },
+      "values": {}
+    },
+    "GET /api/social/plane/conversations/:id/shared-work": {
+      "skipped": "no value found for :id under /api/social/plane/conversations (orgiq/admin); no value found for :id under /api/social/plane/conversations (assessment/admin); no value found for :id under /api/social/plane/conversations (anonymous)"
+    },
+    "GET /api/social/plane/dms": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "conversations": "array"
+      },
+      "values": {}
+    },
+    "GET /api/social/plane/people": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "people": "array",
+        "people[]": "object",
+        "people[].avatarUrl": "string",
+        "people[].displayName": "string",
+        "people[].roles": "array",
+        "people[].roles[]": "string",
+        "people[].userId": "string"
+      },
+      "values": {
+        "people[].roles[]": [
+          "admin",
+          "community-admin",
+          "moderator",
+          "participant"
+        ]
+      }
+    },
+    "GET /api/social/plane/people/:userId/shared-work": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "items": "array",
+        "sharing": "object",
+        "sharing.fresh": "boolean",
+        "sharing.grants": "array",
+        "sharing.provenance": "object",
+        "sharing.referencedIn": "array",
+        "sharing.state": "null",
+        "sharing.viewer": "string",
+        "snapshot": "object",
+        "snapshot.cursor": "string",
+        "snapshot.edges": "array",
+        "snapshot.nodes": "array",
+        "snapshot.partial": "boolean",
+        "snapshot.revision": "number",
+        "snapshot.schemaVersion": "number",
+        "snapshot.scope": "object",
+        "snapshot.scope.day": "string",
+        "snapshot.scope.personId": "string",
+        "snapshot.scope.policyRevision": "string",
+        "snapshot.scope.timezone": "string",
+        "snapshot.sources": "array",
+        "snapshot.watermark": "number"
+      },
+      "values": {}
+    },
+    "GET /api/social/plane/recordings": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "counts": "object",
+        "counts.ready": "number",
+        "counts.total": "number",
+        "recordings": "array",
+        "source": "string"
+      },
+      "values": {}
+    },
+    "GET /api/social/plane/recordings/:recordingId/playback": {
+      "skipped": "no value found for :recordingId under /api/social/plane/recordings (orgiq/admin); no value found for :recordingId under /api/social/plane/recordings (assessment/admin); no value found for :recordingId under /api/social/plane/recordings (anonymous)"
+    },
+    "GET /api/social/plane/recordings/:recordingId/transcript": {
+      "skipped": "no value found for :recordingId under /api/social/plane/recordings (orgiq/admin); no value found for :recordingId under /api/social/plane/recordings (assessment/admin); no value found for :recordingId under /api/social/plane/recordings (anonymous)"
+    },
+    "GET /api/social/plane/rooms": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "counts": "object",
+        "counts.open": "number",
+        "counts.private": "number",
+        "counts.total": "number",
+        "rooms": "array",
+        "rooms[]": "object",
+        "rooms[].createdAt": "string",
+        "rooms[].createdBy": "string",
+        "rooms[].description": "string",
+        "rooms[].lastActiveAt": "string",
+        "rooms[].lobbyName": "string",
+        "rooms[].name": "string",
+        "rooms[].orgId": "string",
+        "rooms[].roomId": "string",
+        "rooms[].settings": "object",
+        "rooms[].settings.audioOnly": "boolean",
+        "rooms[].settings.recordingEnabled": "boolean",
+        "rooms[].settings.softCap": "number",
+        "rooms[].slug": "string",
+        "rooms[].state": "string",
+        "rooms[].visibility": "string",
+        "source": "string"
+      },
+      "values": {
+        "rooms[].state": [
+          "active"
+        ]
+      }
+    },
+    "GET /api/social/plane/teams": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "counts": "object",
+        "counts.channels": "number",
+        "counts.total": "number",
+        "source": "string",
+        "teams": "array"
+      },
+      "values": {}
+    },
+    "GET /api/social/plane/teams/:teamId": {
+      "skipped": "no value found for :teamId under /api/social/plane/teams (orgiq/admin); no value found for :teamId under /api/social/plane/teams (assessment/admin); no value found for :teamId under /api/social/plane/teams (anonymous)"
+    },
+    "GET /api/social/plane/work-graph/conversations/:id/graph": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "cursor": "string",
+        "edges": "array",
+        "nodes": "array",
+        "nodes[]": "object",
+        "nodes[].capabilities": "array",
+        "nodes[].capabilities[]": "string",
+        "nodes[].disclosure": "string",
+        "nodes[].id": "string",
+        "nodes[].kind": "string",
+        "nodes[].startedAt": "string",
+        "nodes[].status": "string",
+        "nodes[].title": "string",
+        "nodes[].updatedAt": "string",
+        "partial": "boolean",
+        "revision": "number",
+        "schemaVersion": "number",
+        "scope": "object",
+        "scope.day": "string",
+        "scope.personId": "string",
+        "scope.policyRevision": "string",
+        "scope.timezone": "string",
+        "sources": "array",
+        "sources[]": "object",
+        "sources[].checkedAt": "string",
+        "sources[].health": "string",
+        "sources[].source": "string",
+        "watermark": "number"
+      },
+      "values": {
+        "nodes[].kind": [
+          "project"
+        ],
+        "nodes[].status": [
+          "idle"
         ]
       }
     },
@@ -7725,6 +8798,9 @@
       "values": {}
     },
     "GET /api/social/recordings/:recordingId/playback": {
+      "skipped": "no value found for :recordingId under /api/social/recordings (orgiq/admin); no value found for :recordingId under /api/social/recordings (assessment/admin); no value found for :recordingId under /api/social/recordings (anonymous)"
+    },
+    "GET /api/social/recordings/:recordingId/transcript": {
       "skipped": "no value found for :recordingId under /api/social/recordings (orgiq/admin); no value found for :recordingId under /api/social/recordings (assessment/admin); no value found for :recordingId under /api/social/recordings (anonymous)"
     },
     "GET /api/social/rooms": {
@@ -7760,6 +8836,16 @@
           "active"
         ]
       }
+    },
+    "GET /api/social/share-destinations": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "channels": "array",
+        "conversations": "array"
+      },
+      "values": {}
     },
     "GET /api/social/summary": {
       "persona": "orgiq/admin",
@@ -7800,6 +8886,34 @@
     },
     "GET /api/social/teams/:teamId": {
       "skipped": "no value found for :teamId under /api/social/teams (orgiq/admin); no value found for :teamId under /api/social/teams (assessment/admin); no value found for :teamId under /api/social/teams (anonymous)"
+    },
+    "GET /api/social/work-graph/conversations/:id/graph": {
+      "skipped": "HTTP 404 (orgiq/admin); HTTP 404 (assessment/admin); no value found for :id under /api/social/work-graph/conversations (anonymous)"
+    },
+    "GET /api/social/work-graph/workspace/graph": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "cursor": "string",
+        "edges": "array",
+        "nodes": "array",
+        "partial": "boolean",
+        "revision": "number",
+        "schemaVersion": "number",
+        "scope": "object",
+        "scope.day": "string",
+        "scope.personId": "string",
+        "scope.policyRevision": "string",
+        "scope.timezone": "string",
+        "sources": "array",
+        "sources[]": "object",
+        "sources[].checkedAt": "string",
+        "sources[].health": "string",
+        "sources[].source": "string",
+        "watermark": "number"
+      },
+      "values": {}
     },
     "GET /api/sprints": {
       "persona": "orgiq/admin",
@@ -7873,6 +8987,166 @@
         "windowHours": "number"
       },
       "values": {}
+    },
+    "GET /api/work-graph/initiatives/:id/graph": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "cursor": "string",
+        "edges": "array",
+        "edges[]": "object",
+        "edges[].capabilities": "array",
+        "edges[].disclosure": "string",
+        "edges[].endedAt": "string",
+        "edges[].fromId": "string",
+        "edges[].id": "string",
+        "edges[].relation": "string",
+        "edges[].startedAt": "string",
+        "edges[].status": "string",
+        "edges[].toId": "string",
+        "edges[].updatedAt": "string",
+        "nodes": "array",
+        "nodes[]": "object",
+        "nodes[].capabilities": "array",
+        "nodes[].capabilities[]": "string",
+        "nodes[].disclosure": "string",
+        "nodes[].endedAt": "string",
+        "nodes[].id": "string",
+        "nodes[].kind": "string",
+        "nodes[].startedAt": "string",
+        "nodes[].status": "string",
+        "nodes[].title": "string",
+        "nodes[].updatedAt": "string",
+        "partial": "boolean",
+        "revision": "number",
+        "schemaVersion": "number",
+        "scope": "object",
+        "scope.day": "string",
+        "scope.personId": "string",
+        "scope.policyRevision": "string",
+        "scope.timezone": "string",
+        "sources": "array",
+        "sources[]": "object",
+        "sources[].checkedAt": "string",
+        "sources[].health": "string",
+        "sources[].source": "string",
+        "watermark": "number"
+      },
+      "values": {
+        "edges[].status": [
+          "completed",
+          "idle",
+          "running",
+          "waiting"
+        ],
+        "nodes[].kind": [
+          "agent",
+          "project",
+          "run",
+          "task"
+        ],
+        "nodes[].status": [
+          "completed",
+          "idle",
+          "running",
+          "stopped",
+          "waiting"
+        ]
+      }
+    },
+    "GET /api/work-graph/people/:id/graph": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "cursor": "string",
+        "edges": "array",
+        "nodes": "array",
+        "partial": "boolean",
+        "revision": "number",
+        "schemaVersion": "number",
+        "scope": "object",
+        "scope.day": "string",
+        "scope.personId": "string",
+        "scope.policyRevision": "string",
+        "scope.timezone": "string",
+        "sources": "array",
+        "sources[]": "object",
+        "sources[].checkedAt": "string",
+        "sources[].health": "string",
+        "sources[].source": "string",
+        "watermark": "number"
+      },
+      "values": {}
+    },
+    "GET /api/work-graph/workspace/graph": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "cursor": "string",
+        "edges": "array",
+        "edges[]": "object",
+        "edges[].capabilities": "array",
+        "edges[].disclosure": "string",
+        "edges[].endedAt": "string",
+        "edges[].fromId": "string",
+        "edges[].id": "string",
+        "edges[].relation": "string",
+        "edges[].startedAt": "string",
+        "edges[].status": "string",
+        "edges[].toId": "string",
+        "edges[].updatedAt": "string",
+        "nodes": "array",
+        "nodes[]": "object",
+        "nodes[].capabilities": "array",
+        "nodes[].capabilities[]": "string",
+        "nodes[].disclosure": "string",
+        "nodes[].endedAt": "string",
+        "nodes[].id": "string",
+        "nodes[].kind": "string",
+        "nodes[].startedAt": "string",
+        "nodes[].status": "string",
+        "nodes[].title": "string",
+        "nodes[].updatedAt": "string",
+        "partial": "boolean",
+        "revision": "number",
+        "schemaVersion": "number",
+        "scope": "object",
+        "scope.day": "string",
+        "scope.personId": "string",
+        "scope.policyRevision": "string",
+        "scope.timezone": "string",
+        "sources": "array",
+        "sources[]": "object",
+        "sources[].checkedAt": "string",
+        "sources[].health": "string",
+        "sources[].source": "string",
+        "watermark": "number"
+      },
+      "values": {
+        "edges[].status": [
+          "completed",
+          "idle",
+          "running",
+          "waiting"
+        ],
+        "nodes[].kind": [
+          "agent",
+          "change",
+          "project",
+          "run",
+          "task"
+        ],
+        "nodes[].status": [
+          "completed",
+          "idle",
+          "running",
+          "stopped",
+          "waiting"
+        ]
+      }
     },
     "GET /api/work/ask-suggestions": {
       "persona": "orgiq/admin",
@@ -8143,6 +9417,8 @@
         "mocks.cloudwatch": "boolean",
         "mocks.guardrails": "boolean",
         "realtime": "object",
+        "realtime.distillation": "object",
+        "realtime.distillation.router": "string",
         "realtime.gateway": "string",
         "realtime.store": "string",
         "region": "string",
@@ -8307,12 +9583,14 @@
         "ms_forms_export",
         "observation",
         "problem",
+        "project",
         "prompt",
         "protected_paths",
         "question",
         "require_review",
         "retrieval",
         "retrieve",
+        "run",
         "runbook",
         "skill",
         "synced",
@@ -8358,7 +9636,8 @@
       "open": false,
       "values": [
         "done",
-        "failed"
+        "failed",
+        "idle"
       ]
     },
     "role": {
@@ -8477,6 +9756,7 @@
         "not_applicable",
         "offline",
         "ok",
+        "online",
         "open",
         "pending",
         "planning",
@@ -8493,6 +9773,7 @@
         "staged",
         "stale",
         "stalled",
+        "stopped",
         "succeeded",
         "superseded",
         "unproven",

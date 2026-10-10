@@ -58,22 +58,36 @@ export interface RealtimeTokenClaims {
   org: string;
   tenants: string[];
   role: string;
+  /** Session generation, checked by stateful BFF collaboration endpoints. */
+  epoch?: number;
   tokenKind: typeof REALTIME_TOKEN_KIND;
   /** The Cognito subject, when the user has signed in via SSO. */
   external_sub?: string;
   /** The real identity while masquerading, like the session cookie's `act`. */
-  act?: { sub: string };
+  act?: { sub: string; epoch?: number };
+  /** The directory's avatar (app_users / linked people.avatar_url). The
+   * gateway stamps it on presence and chat sender identity, so peers render a
+   * face instead of initials. Cosmetic: no authority reads it. */
+  avatarUrl?: string;
+}
+
+/** An avatar URL safe to put in a claim: a same-origin path or an https URL, bounded. */
+export function claimableAvatarUrl(raw: unknown): string | undefined {
+  if (typeof raw !== 'string' || raw.length === 0 || raw.length > 512) return undefined;
+  if (raw.startsWith('/') && !raw.startsWith('//')) return raw;
+  return /^https:\/\/[^\s]+$/.test(raw) ? raw : undefined;
 }
 
 /** Claims for the session's EFFECTIVE identity (the masqueraded user while
  * masquerading), with the real one in `act`. */
 export function realtimeClaims(
   session: Session,
-  directory: { externalSub?: string | null; email?: string | null } = {},
+  directory: { externalSub?: string | null; email?: string | null; avatarUrl?: string | null } = {},
 ): RealtimeTokenClaims {
   const displayName = session.name ?? session.sub;
   const space = displayName.indexOf(' ');
   const { externalSub, email } = directory;
+  const avatarUrl = claimableAvatarUrl(directory.avatarUrl);
   return {
     sub: session.sub,
     displayName,
@@ -83,9 +97,11 @@ export function realtimeClaims(
     org: session.tenant,
     tenants: Object.keys(session.grants),
     role: session.role,
+    epoch: session.epoch ?? 0,
     tokenKind: REALTIME_TOKEN_KIND,
     ...(externalSub ? { external_sub: externalSub } : {}),
-    ...(session.act ? { act: { sub: session.act.sub } } : {}),
+    ...(session.act ? { act: { sub: session.act.sub, epoch: session.act.epoch ?? 0 } } : {}),
+    ...(avatarUrl ? { avatarUrl } : {}),
   };
 }
 
@@ -140,5 +156,9 @@ export async function verifyRealtimeToken(token: string, secret: string): Promis
   if (payload['tokenKind'] !== REALTIME_TOKEN_KIND) throw new Error('not an orgiq realtime token');
   if (typeof payload.sub !== 'string' || !payload.sub) throw new Error('token has no subject');
   if (typeof payload['org'] !== 'string' || !payload['org']) throw new Error('token has no org');
+  if (payload['epoch'] !== undefined && (!Number.isSafeInteger(payload['epoch']) || Number(payload['epoch']) < 0)) throw new Error('invalid session epoch');
+  const actor = payload['act'] as { sub?: unknown; epoch?: unknown } | undefined;
+  if (actor && (typeof actor.sub !== 'string' || !actor.sub
+    || (actor.epoch !== undefined && (!Number.isSafeInteger(actor.epoch) || Number(actor.epoch) < 0)))) throw new Error('invalid actor provenance');
   return payload as unknown as RealtimeTokenClaims;
 }

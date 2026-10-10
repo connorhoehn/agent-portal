@@ -1,0 +1,59 @@
+[native-rds-acceptance] provider SQL transport connected to dedicated loopback PostgreSQL
+[devbox-reaper] active — idle 20m, ceiling 60m
+[scheduler] loaded 0 schedule(s)
+[crawl-targets] loaded 0 target(s)
+[cw-ingest] offline or mocked trace pipeline — skipping start
+[canary-decisions] starting poller, interval 5s
+[pr-watch] starting PR poller, interval 120s
+[retention] RETENTION_SWEEP_DISABLED=1 — skipping start
+[canary-local-ctrl] started — min_samples=1, cooldown=15s
+[dispatcher] starting job dispatcher, interval 10s
+[mock-bot] simulating bot runs on idle computers every 15s
+[seed] POLICY_STORE_ID unset — skipping policy seed
+[devbox-fleet] could not load persisted boxes: relation "devbox_boxes" does not exist
+[devbox-fleet] persistence active — 0 box(es) restored, activity flushed every 15s
+@aws-sdk/credential-provider-node - defaultProvider::fromEnv WARNING:
+    Multiple credential sources detected: 
+    Both AWS_PROFILE and the pair AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY static credentials are set.
+    This SDK will proceed with the AWS_PROFILE value.
+    
+    However, a future version may change this behavior to prefer the ENV static credentials.
+    Please ensure that your environment only sets either the AWS_PROFILE or the
+    AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY pair.
+
+[bots] boot sweep failed: relation "agent_project_runs" does not exist
+[canary-decisions] cold-start failed: relation "observability.canary_decisions" does not exist
+[dispatcher] restart recovery failed: relation "agent_jobs" does not exist
+[realtime-gateway] serving /ws (chat, presence, calls, notifications, work-graph); call state + inbox: redis (redis://127.0.0.1:16483); chat store: dynamo
+[flow-runs] dispatch failed: error: relation "flow_runs" does not exist
+    at /Users/connorhoehn/Projects/aws-agentcore/middleware/node_modules/pg-pool/index.js:45:11
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async RDSDataClient.send (file:///Users/connorhoehn/Projects/aws-agentcore/middleware/test-support/native-rds-preload.mjs:229:14)
+    at async exec (/Users/connorhoehn/Projects/aws-agentcore/middleware/src/providers/aurora.ts:120:16)
+    at async Object.expireLeases (/Users/connorhoehn/Projects/aws-agentcore/middleware/src/lib/flow-runs/store.ts:299:22)
+    at async dispatchFlowRuns (/Users/connorhoehn/Projects/aws-agentcore/middleware/src/lib/flow-runs/dispatcher.ts:61:22) {
+  length: 107,
+  severity: 'ERROR',
+  code: '42P01',
+  detail: undefined,
+  hint: undefined,
+  position: '8',
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: undefined,
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: 'parse_relation.c',
+  line: '1449',
+  routine: 'parserOpenTable'
+}
+[bots] scheduled 0 cron bot(s) of 0
+[dispatcher] tick failed: relation "agent_jobs" does not exist
+[realtime-gateway] Redis peer routing ready { nodeId: 'bff-a' }
+orgiq-middleware listening on :3063 (mock=agentcore,guardrails,cloudwatch)
+[compute-registry] DynamoDB table agentcore-compute-registry at http://localhost:18000 unavailable — registry stays in memory: 
+[compute-registry] memory store — 0 box(es) restored, registrations expire after 900s unless refreshed
+[realtime] levels: Distillation compaction history unavailable: relation "distillation_compactions" does not exist

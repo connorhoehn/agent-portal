@@ -16,7 +16,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams, useNavigate, useSearchParams } from 'react-router';
 import {
   Button, Chip, ConfirmDialog, EmptyState, ErrorState, Inline, LoadingState, PageSection,
-  Stack, PageHeader, StatStrip, Tabs, Disclosure, ChatComposer,
+  Stack, PageHeader, StatStrip, Tabs, Disclosure,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch';
@@ -29,6 +29,8 @@ import { BOTS_ROLES, DEVBOX_ROLES } from './automateNav';
 import { useSession } from '../../lib/auth';
 import { KeyValue } from '../../components/KeyValue';
 import { isNotFoundFetchError } from './jobFetchStatus';
+import { JobConversation } from './JobConversation';
+import { callScopeKey } from '../../components/shell/callShellModel';
 
 interface ActivityEntry {
   t: 'text' | 'tool' | 'error';
@@ -105,6 +107,14 @@ const WATCHDOG_EVERY_MS = 10_000;
 
 export default function JobDetailPage() {
   const { jobId = '' } = useParams();
+  const { session } = useSession();
+  // useFetch retains data while a new URL loads. A new actor or route owns a
+  // fresh reader and tail, so the previous run cannot appear during that wait.
+  return <JobDetailContent key={JSON.stringify([callScopeKey(session), jobId])} />;
+}
+
+function JobDetailContent() {
+  const { jobId = '' } = useParams();
   const navigate = useNavigate();
   const { session } = useSession();
   const [params, setParams] = useSearchParams();
@@ -129,28 +139,36 @@ export default function JobDetailPage() {
 
   const [live, setLive] = useState<ActivityEntry[]>([]);
   const [tailState, setTailState] = useState<'idle' | 'open' | 'retrying' | 'unavailable'>('idle');
-  const [question, setQuestion] = useState('');
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
   const isLive = !!job && LIVE_STATUSES.has(job.status);
   const stored = job?.result?.transcript ?? [];
+  const tailScope = JSON.stringify([callScopeKey(session), jobId, job?.id ?? null, job?.boxId ?? null, isLive]);
+  const latestTailScope = useRef(tailScope); latestTailScope.current = tailScope;
 
   // Live tail of the worker's own event log, scoped to this job. The box log
   // is shared by every run that box has done, so we gate on the job_started /
   // job_finished markers the dispatcher writes with our jobId — otherwise a
   // previous run's output would appear as if it were ours.
   useEffect(() => {
-    if (!job?.boxId || !isLive) return;
-    let es: EventSource;
+    setLive([]); setTailState('idle');
+    if (!session || !job?.boxId || job.id !== jobId || !isLive) return;
+    let es: EventSource | null = null;
     let inOurJob = false;
     let lastSeen = Date.now();
     let disposed = false;
+    const current = (stream?: EventSource) => !disposed && latestTailScope.current === tailScope && (!stream || es === stream);
+    const close = () => { const previous = es; es = null; previous?.close(); };
 
     const open = () => {
-      if (disposed) return;
-      es = new EventSource(`/api/devbox/boxes/${job.boxId}/tail`);
+      if (!current()) return;
+      // Retire the old connection before replacing it; late callbacks keep
+      // their own stream identity and cannot become the replacement's output.
+      close();
+      const stream = new EventSource(`/api/devbox/boxes/${encodeURIComponent(job.boxId!)}/tail`);
+      es = stream;
       inOurJob = false;
       lastSeen = Date.now();
       setTailState('open');
@@ -158,12 +176,14 @@ export default function JobDetailPage() {
       // The server heartbeats every 25s (middleware lib/sse.ts) so that a quiet
       // stream can be told apart from a dead one. Without this listener the
       // watchdog below would tear down a perfectly healthy idle tail.
-      es.addEventListener('heartbeat', () => { lastSeen = Date.now(); setTailState('open'); });
+      stream.addEventListener('heartbeat', () => { if (!current(stream)) return; lastSeen = Date.now(); setTailState('open'); });
 
-      es.onmessage = (msg) => {
+      stream.onmessage = (msg) => {
+        if (!current(stream)) return;
         lastSeen = Date.now();
         let ev: Record<string, unknown>;
-        try { ev = JSON.parse(msg.data) as Record<string, unknown>; } catch { return; }
+        try { const parsed: unknown = JSON.parse(msg.data); if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return;
+          ev = parsed as Record<string, unknown>; } catch { return; }
 
         const type = String(ev['type'] ?? '');
         if (type === 'job_started') {
@@ -185,8 +205,9 @@ export default function JobDetailPage() {
       // died with a middleware restart), whereas a transient blip goes back to
       // CONNECTING and retries on its own. Saying "retrying" for a log that is
       // never coming back is the kind of lie that costs someone ten minutes.
-      es.onerror = () => {
-        setTailState(es.readyState === EventSource.CLOSED ? 'unavailable' : 'retrying');
+      stream.onerror = () => {
+        if (!current(stream)) return;
+        setTailState(stream.readyState === EventSource.CLOSED ? 'unavailable' : 'retrying');
       };
     };
 
@@ -198,17 +219,17 @@ export default function JobDetailPage() {
     // box's buffer, and `inOurJob` is re-derived from the replayed
     // job_started marker rather than carried across.
     const watchdog = window.setInterval(() => {
-      if (Date.now() - lastSeen > STALL_AFTER_MS) open();
+      if (current() && Date.now() - lastSeen > STALL_AFTER_MS) open();
     }, WATCHDOG_EVERY_MS);
 
     open();
     return () => {
       disposed = true;
       window.clearInterval(watchdog);
-      es?.close();
+      close();
       setTailState('idle');
     };
-  }, [job?.boxId, job?.id, isLive, refresh]);
+  }, [tailScope, job?.boxId, job?.id, jobId, isLive, refresh]);
 
   // Follow the tail as it grows, but only while live — nobody wants a stored
   // transcript yanking itself to the bottom on every poll.
@@ -296,24 +317,29 @@ export default function JobDetailPage() {
   const activityUnavailable = !isLive && activity.length === 0 && job.status !== 'queued';
   const canOpenAutomation = BOTS_ROLES.includes(session?.role ?? '');
   const canOpenWorker = DEVBOX_ROLES.includes(session?.role ?? '');
-  const toolResults = tools.length > 0 ? <PageSection size="md" title="Recorded tool results">
+  const toolResults = tools.length > 0 ? <PageSection size="sm" title="Recorded tool results">
     <Stack gap="none" className="border-t border-border">
       {tools.map((tool, i) => <Inline key={`${i}-${tool.name}`} gap="md" className="border-b border-border py-2 text-[13px]">
-        <span className={tool.done ? 'text-success' : 'text-text-tertiary'} aria-label={tool.done ? 'Completed' : 'Not completed'}>{tool.done ? '✓' : '○'}</span>
-        <code className="text-[12px]">{tool.name}</code>
+        <T className={tool.done ? 'text-success' : 'text-text-tertiary'} aria-label={tool.done ? 'Completed' : 'Not completed'}>{tool.done ? '✓' : '○'}</T>
+        <T className="font-mono text-[12px]">{tool.name}</T>
       </Inline>)}
     </Stack>
   </PageSection> : null;
-  const unavailable = activityUnavailable ? <PageSection size="md" title="Activity unavailable">
+  const unavailable = activityUnavailable ? <PageSection size="sm" title="Activity unavailable">
     <T className="text-[13px] text-text-tertiary">This run predates activity recording, or its worker log has expired.</T>
   </PageSection> : null;
 
   return (
-    <Stack gap="lg" data-testid="run-detail">
-      <PageHeader title={job.title} size="lg" badge={<JobStatusPill status={job.status} />}
-        back={{ label: '← Back to runs', to: '/iq/work/queue', onClick: (e) => { if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return; e.preventDefault(); navigate('/iq/work/queue'); } }}
+    <Stack gap="none" className="h-full min-h-0" data-testid="run-detail">
+      <Stack gap="lg" className="min-h-0 flex-1 overflow-auto pb-4" data-testid="run-detail-scroll">
+      {/* The 20px heading every Org page has, 16px under the trail — and no
+          back link: the trail's "Runs" crumb already is the way back, and a
+          back row above the title pushed it 30px under the trail. */}
+      <PageHeader title={job.title} badge={<JobStatusPill status={job.status} />}
         description={`${job.botName ? `${job.botTrigger === 'cron' ? 'Scheduled' : 'Dispatched'} by ${job.botName}` : `Queued by ${job.createdBy ?? 'unknown'}`} · Attempt ${job.attempts} of ${job.maxAttempts}`}
         actions={<Inline gap="sm">
+          {job.boxId && canOpenWorker && <Button size="sm" variant="secondary" onClick={() => navigate(`/admin/devbox?box=${encodeURIComponent(job.boxId!)}`)}>Open computer ↗</Button>}
+          {typeof job.payload.initiativeId === 'string' && <Button size="sm" variant="secondary" onClick={() => navigate(`/iq/projects/${encodeURIComponent(String(job.payload.initiativeId))}${typeof job.payload.workItemId === 'string' ? `?${new URLSearchParams({ tab: 'work', item: job.payload.workItemId })}` : ''}`)}>{typeof job.payload.workItemId === 'string' ? 'Open work item' : 'Open initiative'} ↗</Button>}
           {job.botId && canOpenAutomation && <Button size="sm" variant="secondary" onClick={() => navigate(`/admin/bots/${encodeURIComponent(job.botId!)}`)}>Open automation ↗</Button>}
           {canManage && (job.status === 'queued' || job.status === 'claimed') && <Button size="sm" variant="secondary" onClick={() => setConfirmCancel(true)}>Cancel</Button>}
           {canManage && job.status === 'awaiting_review' && <>
@@ -321,7 +347,7 @@ export default function JobDetailPage() {
             <Button size="sm" variant="secondary" onClick={() => void review('reject')}>Reject</Button>
           </>}
         </Inline>} />
-      <StatStrip frameless aria-label="Run metrics" items={[
+      <StatStrip variant="line" size="sm" aria-label="Run metrics" items={[
         { label: 'Duration', value: durationLabel(job.result?.durationMs) },
         { label: 'Cost', value: job.result?.costUsd == null ? '—' : usd(job.result.costUsd, { precision: 2 }) },
         { label: 'Turns', value: job.result?.turns ?? '—' },
@@ -332,16 +358,16 @@ export default function JobDetailPage() {
         { id: 'outputs', label: 'Outputs' }, { id: 'changes', label: 'Changes', badge: proposalCount || undefined },
       ]} />
       {tab === 'summary' && <Stack gap="lg">
-        <PageSection size="md" title="Outcome">
+        <PageSection size="sm" title="Outcome">
           <T wrap className={`text-[14px] ${job.error ? 'text-danger' : 'text-text-primary'}`}>
             {job.error ?? job.result?.summary ?? (job.status === 'queued' ? 'Waiting for a worker.' : isLive ? 'This run is in progress.' : 'No outcome recorded.')}
           </T>
           {activityUnavailable && job.result && <T className="mt-1 text-[12px] text-text-tertiary">The recorded result is shown below. Detailed activity is unavailable for this run.</T>}
         </PageSection>
-        <PageSection size="md" title="Task"><T wrap className="text-[14px] text-text-secondary whitespace-pre-wrap">{prompt || 'No prompt recorded.'}</T></PageSection>
+        <PageSection size="sm" title="Task"><T wrap className="text-[14px] text-text-secondary whitespace-pre-wrap">{prompt || 'No prompt recorded.'}</T></PageSection>
         {toolResults}
         {unavailable}
-        <PageSection size="md" title="Timing">
+        <PageSection size="sm" title="Timing">
           <Stack gap="xs" className="max-w-lg">
             {([['Queued', job.createdAt], ['Claimed', job.claimedAt], ['Started', job.startedAt], ['Finished', job.finishedAt]] as const).filter(([, at]) => at).map(([label, at]) => <KeyValue key={label} layout="row" labelWidth="w-28" label={label} value={absoluteTime(at)} />)}
           </Stack>
@@ -368,15 +394,15 @@ export default function JobDetailPage() {
         </Stack>
       </Stack>}
       {tab === 'outputs' && <Stack gap="lg">
-        {job.result?.summary && <PageSection size="md" title="Recorded result"><T wrap className="text-[14px] whitespace-pre-wrap">{job.result.summary}</T></PageSection>}
+        {job.result?.summary && <PageSection size="sm" title="Recorded result"><T wrap className="text-[14px] whitespace-pre-wrap">{job.result.summary}</T></PageSection>}
         {toolResults}
         {!job.result?.summary && !tools.length && <EmptyState size="sm" title="No outputs recorded" />}
       </Stack>}
       {tab === 'changes' && <Stack gap="sm">
         {proposalsError || proposalsDegraded ? <ErrorState title="Run changes unavailable" body={proposalsError || proposalsDegraded || 'Run changes are unavailable.'} actionLabel="Retry" onAction={refreshProposals} /> : proposalsLoading && !proposalsData ? <LoadingState /> : changes.length ? changes.map((change) => <Link key={change.id} to={`/iq/work/changes?job=${encodeURIComponent(job.id)}`} className="border-b border-border py-3 text-[13px] text-primary hover:underline">{change.kind} · {change.status}{change.rationale ? ` — ${change.rationale}` : ''}</Link>) : <EmptyState size="sm" title="No graph changes recorded" />}
       </Stack>}
-      <ChatComposer value={question} onChange={setQuestion} placeholder="Ask about this run…" aria-label="Ask about this run" submitAriaLabel="Ask about this run"
-        onSubmit={() => { if (question.trim()) navigate(`/iq/invoke?${new URLSearchParams({ prompt: `${question.trim()}\n\nRun: ${job.title} (${job.id})\nStatus: ${job.status}\nTask: ${prompt}\nRecorded outcome: ${job.result?.summary ?? job.error ?? 'Not recorded'}` })}`); }} />
+      </Stack>
+      <JobConversation key={`${callScopeKey(session)}:${job.id}`} job={job} />
       <ConfirmDialog open={confirmCancel} tone="destructive" title="Cancel this run?"
         body={`This run is currently ${job.status}. Cancelling stops it and cannot be undone.`}
         confirmLabel={cancelling ? 'Cancelling…' : 'Cancel run'} confirmDisabled={cancelling}

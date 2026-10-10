@@ -1,0 +1,23 @@
+✔ the background cadence and synchronized startup burst are explicit separate workloads (0.963542ms)
+✔ restart is explicit, local, bounded and cannot be selected by the ordinary all profile (0.322667ms)
+✔ container names cannot carry Docker options, selectors or shell code (0.108709ms)
+✔ peer targets require distinct authenticated gateway endpoints and refuse ambiguous container operations (0.72375ms)
+✔ restart health refuses another service, disabled gateways and memory stores (0.083083ms)
+✔ restart target validates exact container identity and the loopback port before any mutation (1.207208ms)
+✔ Docker driver allows an exact gateway alias only in its own runtime and shared network (0.3505ms)
+✔ Docker DNS exception refuses host execution, foreign aliases, isolated networks and wrong ports (0.349167ms)
+✔ Docker restart refuses an unrelated Redis before health or restart operations (0.170166ms)
+✔ reauthentication tokens use a fresh bounded expiry, issuer, audience and tenant (2.061458ms)
+✔ directory manifests refuse missing authority, duplicate subjects and insufficient users (0.342625ms)
+✔ directory-backed token renewal preserves actual source role, epoch and tenant claims (0.335958ms)
+✔ recovery requires the original call ID and complete roster on each new socket (0.458792ms)
+✔ chat and presence recovery need fresh recipient sockets and current publisher IDs (0.163125ms)
+✔ all recovery evidence is required, and a driver/Redis error cannot count as recovery (0.077958ms)
+ℹ tests 15
+ℹ suites 0
+ℹ pass 15
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 107.691208

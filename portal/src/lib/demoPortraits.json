@@ -1,0 +1,137 @@
+{
+  "personas": [
+    {
+      "subjectId": "u-operator",
+      "userId": "u-operator",
+      "name": "Platform Operator",
+      "portraitUrl": "/avatars/photos/u-operator.jpg",
+      "biography": "Keeps the shared platform available and helps teams diagnose access and runtime issues."
+    },
+    {
+      "subjectId": "p-005",
+      "userId": "u-release",
+      "name": "Sienna Garcia",
+      "portraitUrl": "/avatars/photos/p-005.jpg",
+      "biography": "Coordinates platform releases, manages delivery budgets, and makes dependencies visible before a release slips."
+    },
+    {
+      "subjectId": "p-002",
+      "userId": "u-vera",
+      "name": "Vera Green",
+      "portraitUrl": "/avatars/photos/p-002.jpg",
+      "biography": "Connects the technical details of an initiative to its delivery risks and the decisions the team needs to make."
+    },
+    {
+      "subjectId": "u-asha",
+      "userId": "u-asha",
+      "name": "Asha Nair",
+      "portraitUrl": "/avatars/photos/u-asha.jpg",
+      "biography": "Reviews engineering evidence with teams and helps turn an unclear claim into an actionable follow-up."
+    },
+    {
+      "subjectId": "u-jonas",
+      "userId": "u-jonas",
+      "name": "Jonas Lindqvist",
+      "portraitUrl": "/avatars/photos/u-jonas.jpg",
+      "biography": "Reviews assessment exceptions and calibrates findings so different teams are judged consistently."
+    },
+    {
+      "subjectId": "u-farah",
+      "userId": "u-farah",
+      "name": "Farah Osei",
+      "portraitUrl": "/avatars/photos/u-farah.jpg",
+      "biography": "Runs the assessment program and keeps its follow-up work connected to team priorities."
+    },
+    {
+      "subjectId": "p-030",
+      "userId": "u-mia",
+      "name": "Mia Singh",
+      "portraitUrl": "/avatars/photos/p-030.jpg",
+      "biography": "Coordinates initiative delivery, sprint planning, and budget allocation across the program."
+    },
+    {
+      "subjectId": "p-004",
+      "userId": "u-nora",
+      "name": "Nora DaSilva",
+      "portraitUrl": "/avatars/photos/p-004.jpg",
+      "biography": "Owns the Observability Platform initiative and translates operational problems into clear engineering work."
+    },
+    {
+      "subjectId": "p-012",
+      "userId": "u-rachel",
+      "name": "Rachel Kowalski",
+      "portraitUrl": "/avatars/photos/p-012.jpg",
+      "biography": "Keeps identity, governance, and program controls understandable to the teams using them."
+    },
+    {
+      "subjectId": "p-001",
+      "userId": "u-theo",
+      "name": "Theo Chang",
+      "portraitUrl": "/avatars/photos/p-001.jpg",
+      "biography": "Helps the platform team find existing knowledge and understand the connections between people and work."
+    },
+    {
+      "subjectId": "u-mira",
+      "userId": "u-mira",
+      "name": "Mira Okafor",
+      "portraitUrl": "/avatars/photos/u-mira.jpg",
+      "biography": "Helps people find the right conversation, share useful work, and build an active professional community."
+    },
+    {
+      "subjectId": "u-lena",
+      "userId": "u-lena",
+      "name": "Lena Brandt",
+      "portraitUrl": "/avatars/photos/u-lena.jpg",
+      "biography": "Keeps channels and team spaces useful, organized, and welcoming."
+    },
+    {
+      "subjectId": "u-sana",
+      "userId": "u-sana",
+      "name": "Sana Iqbal",
+      "portraitUrl": "/avatars/photos/u-sana.jpg",
+      "biography": "Shares product feedback and cross-team context through conversations, calls, and documents."
+    },
+    {
+      "subjectId": "u-ines",
+      "userId": "u-ines",
+      "name": "Ines Moreau",
+      "portraitUrl": "/avatars/photos/u-ines.jpg",
+      "biography": "Authors pipeline definitions and tests their behavior before asking an operator to run them."
+    },
+    {
+      "subjectId": "u-kofi",
+      "userId": "u-kofi",
+      "name": "Kofi Mensah",
+      "portraitUrl": "/avatars/photos/u-kofi.jpg",
+      "biography": "Runs approved workflows and responds when a step stalls, fails, or needs a decision."
+    },
+    {
+      "subjectId": "u-dara",
+      "userId": "u-dara",
+      "name": "Dara Whitfield",
+      "portraitUrl": "/avatars/photos/u-dara.jpg",
+      "biography": "Maintains pipeline configuration and makes operational decisions visible to authors and operators."
+    },
+    {
+      "subjectId": "u-tomas",
+      "userId": "u-tomas",
+      "name": "Tomás Ferreira",
+      "portraitUrl": "/avatars/photos/u-tomas.jpg",
+      "biography": "Builds workflows and uses the Communication plane to coordinate their rollout with colleagues."
+    },
+    {
+      "subjectId": "p-008",
+      "userId": "u-layla",
+      "name": "Layla Hassan",
+      "portraitUrl": "/avatars/photos/p-008.jpg",
+      "biography": "Builds reliable telemetry pipelines and helps teams identify which alerts deserve action."
+    },
+    {
+      "subjectId": "p-011",
+      "userId": "u-eli",
+      "name": "Eli Garcia",
+      "portraitUrl": "/avatars/photos/p-011.jpg",
+      "biography": "Turns noisy alerting into useful signals and validates reliability changes against real failure cases."
+    }
+  ]
+}

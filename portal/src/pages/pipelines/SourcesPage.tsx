@@ -9,7 +9,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import {
-  Banner, Chip, DataTable, Inline, MetaLine, PageHeader, SearchInput, Stack, type DataTableColumn,
+  Banner, Chip, DataTable, Inline, PageHeader, SearchInput, Stack, StatStrip, T, type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { relativeTime } from '../../lib/relativeTime';
@@ -22,15 +22,14 @@ import {
 const str = (v: unknown): string => (typeof v === 'string' && v ? v : '—');
 
 const RUNS: DataTableColumn<PipelineDefinition>[] = [
-  { key: 'runCount', header: 'Runs', align: 'right', sortable: true, compare: (a, b) => a.runCount - b.runCount, render: (d) => d.runCount },
+  { key: 'runCount', header: 'Runs', numeric: true, sortable: true, compare: (a, b) => a.runCount - b.runCount, render: (d) => d.runCount },
   {
-    key: 'lastRun', header: 'Last run',
-    render: (d) => (d.lastRun ? (
-      <Inline gap="xs" align="center">
-        <PipelineRunStatusChip status={d.lastRun.status} />
-        <MetaLine size="xs" tone="tertiary" items={[d.lastRun.startedAt ? relativeTime(d.lastRun.startedAt) : null]} />
-      </Inline>
-    ) : 'never'),
+    key: 'lastRunStatus', header: 'Last run', width: '112px',
+    render: (d) => (d.lastRun ? <PipelineRunStatusChip status={d.lastRun.status} /> : 'never'),
+  },
+  {
+    key: 'lastRun', header: 'Last run at', numeric: true,
+    render: (d) => (d.lastRun?.startedAt ? relativeTime(d.lastRun.startedAt) : '—'),
   },
 ];
 
@@ -42,11 +41,11 @@ const PAGES: Record<SourcePageId, { title: string; description: string; noun: st
     empty: 'No agents in the fleet registry.',
     columns: [
       { key: 'title', header: 'Agent', sortable: true, compare: (a, b) => a.title.localeCompare(b.title), render: (d) => d.title },
-      { key: 'id', header: 'Runtime', render: (d) => <MetaLine size="xs" tone="secondary" items={[d.source.id]} /> },
+      { key: 'id', header: 'Runtime', render: (d) => <T size="xs" tone="tertiary">{d.source.id}</T> },
       { key: 'workspace', header: 'Workspace', render: (d) => <Chip tone="neutral" size="xs">{d.contextTenant}</Chip> },
       { key: 'model', header: 'Model', render: (d) => str(d.meta['model']) },
-      { key: 'tools', header: 'Tools', align: 'right', render: (d) => (Array.isArray(d.meta['tools']) ? (d.meta['tools'] as unknown[]).length : 0) },
-      { key: 'status', header: 'Status', render: (d) => <Chip tone={d.meta['status'] === 'healthy' ? 'success' : d.meta['status'] === 'degraded' ? 'warning' : 'neutral'} size="xs">{str(d.meta['status'])}</Chip> },
+      { key: 'tools', header: 'Tools', numeric: true, render: (d) => (Array.isArray(d.meta['tools']) ? (d.meta['tools'] as unknown[]).length : 0) },
+      { key: 'status', header: 'Status', width: '112px', render: (d) => <Chip tone={d.meta['status'] === 'healthy' ? 'success' : d.meta['status'] === 'degraded' ? 'warning' : 'neutral'} size="xs">{str(d.meta['status'])}</Chip> },
       ...RUNS,
     ],
   },
@@ -58,13 +57,9 @@ const PAGES: Record<SourcePageId, { title: string; description: string; noun: st
     columns: [
       {
         key: 'title', header: 'Bot', sortable: true, compare: (a, b) => a.title.localeCompare(b.title),
-        render: (d) => (
-          <Inline gap="xs" align="center">
-            {d.title}
-            {!d.enabled && <Chip tone="neutral" size="xs">paused</Chip>}
-          </Inline>
-        ),
+        render: (d) => d.title,
       },
+      { key: 'state', header: 'State', width: '96px', render: (d) => (d.enabled ? <Chip tone="success" size="xs">active</Chip> : <Chip tone="neutral" size="xs">paused</Chip>) },
       { key: 'trigger', header: 'Trigger', render: (d) => (d.meta['cronExpr'] ? `${triggerSummary(d.triggers)} · ${String(d.meta['cronExpr'])}` : triggerSummary(d.triggers)) },
       { key: 'initiative', header: 'Initiative', render: (d) => str(d.meta['initiativeName'] ?? d.meta['initiativeId'] ?? d.meta['repo']) },
       { key: 'model', header: 'Model', render: (d) => str(d.meta['model']) },
@@ -79,7 +74,7 @@ const PAGES: Record<SourcePageId, { title: string; description: string; noun: st
     columns: [
       { key: 'title', header: 'Command', sortable: true, compare: (a, b) => a.title.localeCompare(b.title), render: (d) => d.title },
       { key: 'summary', header: 'What it does', render: (d) => d.description ?? '—' },
-      { key: 'owner', header: 'Runs as', render: (d) => <MetaLine size="xs" tone="secondary" items={[d.owner ?? '—']} /> },
+      { key: 'owner', header: 'Runs as', render: (d) => <T size="xs" tone="tertiary">{d.owner ?? '—'}</T> },
       ...RUNS,
     ],
   },
@@ -98,14 +93,19 @@ export default function SourcesPage({ source }: { source: SourcePageId }) {
   return (
     <Stack gap="md" data-testid={`pipelines-source-${source}`}>
       <PageHeader title={page.title} description={page.description} badge={<Chip tone="neutral" size="xs">Read-only</Chip>} />
-      <Inline gap="sm" wrap align="center">
-        <SearchInput size="sm" className="w-64" aria-label={`Search ${page.noun}`} placeholder={`Search ${page.noun}`} value={query} onChange={setQuery} onClear={() => setQuery('')} />
+      <Inline gap="md" align="center" wrap={false}>
         {data && (
-          <MetaLine size="xs" tone="tertiary" items={[
-            rows.length === all.length ? `${all.length} ${page.noun}` : `${rows.length} of ${all.length} ${page.noun}`,
-            `${all.reduce((n, d) => n + d.runCount, 0)} recorded runs`,
-          ]} />
+          <StatStrip
+            aria-label={`${page.title} summary`}
+            variant="line"
+            size="sm"
+            items={[
+              { label: rows.length === all.length ? page.noun : `of ${all.length} ${page.noun}`, value: rows.length },
+              { label: 'recorded runs', value: all.reduce((n, d) => n + d.runCount, 0) },
+            ]}
+          />
         )}
+        <SearchInput size="sm" className="ml-auto w-64 shrink-0" aria-label={`Search ${page.noun}`} placeholder={`Search ${page.noun}`} value={query} onChange={setQuery} onClear={() => setQuery('')} />
       </Inline>
       {data && data.unavailable.length > 0 && (
         <Banner variant="warning">
@@ -117,6 +117,7 @@ export default function SourcesPage({ source }: { source: SourcePageId }) {
       ) : (
         <DataTable
           data-testid={`pipelines-source-${source}-table`}
+          size="sm"
           data={rows}
           columns={page.columns}
           keyField={(d) => d.id}

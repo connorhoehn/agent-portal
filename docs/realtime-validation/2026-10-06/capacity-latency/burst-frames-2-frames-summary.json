@@ -1,0 +1,776 @@
+{
+ "a": {
+  "resetAt": "2026-10-06T16:38:56.528Z",
+  "eventLoopMs": {
+   "p50": 10.346495,
+   "p95": 12.951551,
+   "p99": 50.331647,
+   "max": 222.953471
+  },
+  "hists": {
+   "authorize.publish.social:dm.allow": {
+    "n": 6171,
+    "p50": 127.0,
+    "p95": 429.5,
+    "p99": 723.1,
+    "max": 1066.0,
+    "avg": 149.5,
+    "sumS": 922.7
+   },
+   "authorize.subscribe.social:dm.allow": {
+    "n": 4753,
+    "p50": 127.0,
+    "p95": 663.0,
+    "p99": 788.6,
+    "max": 859.4,
+    "avg": 196.0,
+    "sumS": 931.6
+   },
+   "authorize.subscribe.social:dm.deny": {
+    "n": 800,
+    "p50": 7.7,
+    "p95": 11.3,
+    "p99": 11.3,
+    "max": 11.5,
+    "avg": 6.5,
+    "sumS": 5.2
+   },
+   "deliver.createdToRecipientWrite.local": {
+    "n": 653,
+    "p50": 938.0,
+    "p95": 1327.0,
+    "p99": 1327.0,
+    "max": 1283,
+    "avg": 716.6,
+    "sumS": 468.0
+   },
+   "deliver.createdToRecipientWrite.peer": {
+    "n": 650,
+    "p50": 1877.0,
+    "p95": 2434.5,
+    "p99": 2434.5,
+    "max": 2326,
+    "avg": 1384.7,
+    "sumS": 900.1
+   },
+   "handler.call.ended": {
+    "n": 100,
+    "p50": 151.2,
+    "p95": 165.0,
+    "p99": 180.0,
+    "max": 173.3,
+    "avg": 131.4,
+    "sumS": 13.1
+   },
+   "handler.call.invite": {
+    "n": 100,
+    "p50": 2654.9,
+    "p95": 3443.3,
+    "p99": 3443.3,
+    "max": 3378.3,
+    "avg": 2441.7,
+    "sumS": 244.2
+   },
+   "handler.call.participant-state": {
+    "n": 100,
+    "p50": 278.2,
+    "p95": 303.4,
+    "p99": 303.4,
+    "max": 295.3,
+    "avg": 256.7,
+    "sumS": 25.7
+   },
+   "handler.call.status": {
+    "n": 100,
+    "p50": 1578.2,
+    "p95": 2895.3,
+    "p99": 2895.3,
+    "max": 2851.7,
+    "avg": 1514.8,
+    "sumS": 151.5
+   },
+   "handler.call.user-status": {
+    "n": 100,
+    "p50": 116.4,
+    "p95": 233.8,
+    "p99": 255.0,
+    "max": 249.2,
+    "avg": 120.1,
+    "sumS": 12.0
+   },
+   "handler.chat.join": {
+    "n": 400,
+    "p50": 1578.2,
+    "p95": 1721.2,
+    "p99": 1877.0,
+    "max": 1805.4,
+    "avg": 1527.2,
+    "sumS": 610.9
+   },
+   "handler.chat.send": {
+    "n": 653,
+    "p50": 2047.0,
+    "p95": 2895.3,
+    "p99": 2895.3,
+    "max": 2802.7,
+    "avg": 1569.6,
+    "sumS": 1024.9
+   },
+   "handler.presence.set": {
+    "n": 400,
+    "p50": 938.0,
+    "p95": 1721.2,
+    "p99": 2232.4,
+    "max": 2174.5,
+    "avg": 985.9,
+    "sumS": 394.4
+   },
+   "handler.presence.subscribe": {
+    "n": 400,
+    "p50": 1115.7,
+    "p95": 1447.2,
+    "p99": 1447.2,
+    "max": 1419.6,
+    "avg": 1072.9,
+    "sumS": 429.1
+   },
+   "peer.createdToReceive": {
+    "n": 1303,
+    "p50": 1023.0,
+    "p95": 1578.2,
+    "p99": 1721.2,
+    "max": 1618,
+    "avg": 820.5,
+    "sumS": 1069.2
+   },
+   "peer.publish": {
+    "n": 3851,
+    "p50": 31.0,
+    "p95": 165.0,
+    "p99": 233.8,
+    "max": 270.8,
+    "avg": 48.7,
+    "sumS": 187.7
+   },
+   "peer.receive": {
+    "n": 5701,
+    "p50": 7.0,
+    "p95": 938.0,
+    "p99": 1115.7,
+    "max": 1162.8,
+    "avg": 194.2,
+    "sumS": 1107.1
+   },
+   "queue.call.ended": {
+    "n": 100,
+    "p50": 116.4,
+    "p95": 233.8,
+    "p99": 255.0,
+    "max": 249.3,
+    "avg": 120.2,
+    "sumS": 12.0
+   },
+   "queue.call.invite": {
+    "n": 100,
+    "p50": 0.1,
+    "p95": 0.1,
+    "p99": 0.1,
+    "max": 0.3,
+    "avg": 0.0,
+    "sumS": 0.0
+   },
+   "queue.call.participant-state": {
+    "n": 100,
+    "p50": 0.1,
+    "p95": 0.1,
+    "p99": 0.2,
+    "max": 26.5,
+    "avg": 0.3,
+    "sumS": 0.0
+   },
+   "queue.call.status": {
+    "n": 100,
+    "p50": 0.1,
+    "p95": 0.1,
+    "p99": 0.2,
+    "max": 0.3,
+    "avg": 0.0,
+    "sumS": 0.0
+   },
+   "queue.call.user-status": {
+    "n": 100,
+    "p50": 0.1,
+    "p95": 0.1,
+    "p99": 0.1,
+    "max": 0.1,
+    "avg": 0.0,
+    "sumS": 0.0
+   },
+   "queue.chat.join": {
+    "n": 400,
+    "p50": 0.1,
+    "p95": 0.1,
+    "p99": 0.1,
+    "max": 0.2,
+    "avg": 0.0,
+    "sumS": 0.0
+   },
+   "queue.chat.send": {
+    "n": 653,
+    "p50": 2434.5,
+    "p95": 3755.0,
+    "p99": 4870.0,
+    "max": 5320.4,
+    "avg": 1892.5,
+    "sumS": 1235.8
+   },
+   "queue.presence.set": {
+    "n": 400,
+    "p50": 2654.9,
+    "p95": 3157.4,
+    "p99": 3157.4,
+    "max": 2927.0,
+    "avg": 2600.7,
+    "sumS": 1040.3
+   },
+   "queue.presence.subscribe": {
+    "n": 400,
+    "p50": 1578.2,
+    "p95": 1721.2,
+    "p99": 1877.0,
+    "max": 1805.4,
+    "avg": 1527.2,
+    "sumS": 610.9
+   },
+   "send.blockedBy.chat.join": {
+    "n": 410,
+    "p50": 607.9,
+    "p95": 788.6,
+    "p99": 860.1,
+    "max": 852.8,
+    "avg": 571.1,
+    "sumS": 234.1
+   },
+   "send.blockedBy.chat.send": {
+    "n": 71,
+    "p50": 2232.4,
+    "p95": 2895.3,
+    "p99": 2895.3,
+    "max": 2802.7,
+    "avg": 1828.7,
+    "sumS": 129.8
+   },
+   "send.blockedBy.presence.set": {
+    "n": 438,
+    "p50": 938.0,
+    "p95": 1721.2,
+    "p99": 2232.4,
+    "max": 2174.5,
+    "avg": 976.9,
+    "sumS": 427.9
+   },
+   "send.blockedBy.presence.subscribe": {
+    "n": 420,
+    "p50": 1115.7,
+    "p95": 1447.2,
+    "p99": 1447.2,
+    "max": 1419.6,
+    "avg": 1055.8,
+    "sumS": 443.4
+   },
+   "send.broadcast": {
+    "n": 653,
+    "p50": 663.0,
+    "p95": 1023.0,
+    "p99": 1023.0,
+    "max": 968.1,
+    "avg": 460.6,
+    "sumS": 300.8
+   },
+   "send.broadcast.localFanOut": {
+    "n": 653,
+    "p50": 196.4,
+    "p95": 511.0,
+    "p99": 511.0,
+    "max": 491.2,
+    "avg": 206.2,
+    "sumS": 134.6
+   },
+   "send.broadcast.redisCheckPublish": {
+    "n": 3918,
+    "p50": 106.6,
+    "p95": 468.5,
+    "p99": 663.0,
+    "max": 869.9,
+    "avg": 131.7,
+    "sumS": 515.9
+   },
+   "send.createdToPeerPublish": {
+    "n": 653,
+    "p50": 1115.7,
+    "p95": 1447.2,
+    "p99": 1447.2,
+    "max": 1526,
+    "avg": 821.1,
+    "sumS": 536.2
+   },
+   "send.gate.membership": {
+    "n": 653,
+    "p50": 0.2,
+    "p95": 3.4,
+    "p99": 6.3,
+    "max": 6.1,
+    "avg": 0.5,
+    "sumS": 0.3
+   },
+   "send.gate.routerPermits.publish": {
+    "n": 2612,
+    "p50": 116.4,
+    "p95": 511.0,
+    "p99": 723.1,
+    "max": 870.1,
+    "avg": 149.3,
+    "sumS": 390.0
+   },
+   "send.handlerStartToCreated": {
+    "n": 653,
+    "p50": 361.0,
+    "p95": 663.0,
+    "p99": 723.1,
+    "max": 870.6,
+    "avg": 291.0,
+    "sumS": 190.0
+   },
+   "send.persist": {
+    "n": 653,
+    "p50": 214.3,
+    "p95": 468.5,
+    "p99": 607.9,
+    "max": 580.6,
+    "avg": 215.6,
+    "sumS": 140.8
+   },
+   "send.queueWait": {
+    "n": 653,
+    "p50": 2434.5,
+    "p95": 3755.0,
+    "p99": 4870.0,
+    "max": 5320.4,
+    "avg": 1892.5,
+    "sumS": 1235.8
+   },
+   "socket.bufferedBytesAtSend": {
+    "n": 5776,
+    "p50": 0.1,
+    "p95": 0.1,
+    "p99": 0.1,
+    "max": 0,
+    "avg": 0.0,
+    "sumS": 0.0
+   }
+  },
+  "counters": {
+   "recv.call.ended": 100,
+   "recv.call.invite": 100,
+   "recv.call.participant-state": 100,
+   "recv.call.status": 100,
+   "recv.call.user-status": 100,
+   "recv.chat.join": 400,
+   "recv.chat.send": 653,
+   "recv.presence.set": 400,
+   "recv.presence.subscribe": 400,
+   "sqlError.relation \"agent_jobs\" does not exist": 5,
+   "sqlError.relation \"agent_project_runs\" does not exist": 1,
+   "sqlError.relation \"bots\" does not exist": 1,
+   "sqlError.relation \"flow_runs\" does not exist": 10,
+   "sqlError.relation \"observability.canary_decisions\" does not exist": 10
+  }
+ },
+ "b": {
+  "resetAt": "2026-10-06T16:38:56.546Z",
+  "eventLoopMs": {
+   "p50": 10.362879,
+   "p95": 13.467647,
+   "p99": 41.254911,
+   "max": 206.045183
+  },
+  "hists": {
+   "authorize.publish.social:dm.allow": {
+    "n": 6150,
+    "p50": 89.5,
+    "p95": 361.0,
+    "p99": 557.3,
+    "max": 710.4,
+    "avg": 121.3,
+    "sumS": 745.7
+   },
+   "authorize.subscribe.social:dm.allow": {
+    "n": 4756,
+    "p50": 82.0,
+    "p95": 663.0,
+    "p99": 663.0,
+    "max": 1515.1,
+    "avg": 171.9,
+    "sumS": 817.7
+   },
+   "authorize.subscribe.social:dm.deny": {
+    "n": 135,
+    "p50": 1.0,
+    "p95": 2.1,
+    "p99": 2.4,
+    "max": 2.5,
+    "avg": 1.1,
+    "sumS": 0.1
+   },
+   "deliver.createdToRecipientWrite.local": {
+    "n": 650,
+    "p50": 788.6,
+    "p95": 1216.7,
+    "p99": 1216.7,
+    "max": 1140,
+    "avg": 623.7,
+    "sumS": 405.4
+   },
+   "deliver.createdToRecipientWrite.peer": {
+    "n": 653,
+    "p50": 1877.0,
+    "p95": 2434.5,
+    "p99": 2434.5,
+    "max": 2354,
+    "avg": 1316.4,
+    "sumS": 859.6
+   },
+   "handler.call.accepted": {
+    "n": 100,
+    "p50": 511.0,
+    "p95": 607.9,
+    "p99": 663.0,
+    "max": 624.0,
+    "avg": 481.3,
+    "sumS": 48.1
+   },
+   "handler.call.ended": {
+    "n": 100,
+    "p50": 138.6,
+    "p95": 180.0,
+    "p99": 196.4,
+    "max": 184.1,
+    "avg": 132.9,
+    "sumS": 13.3
+   },
+   "handler.call.participant-state": {
+    "n": 100,
+    "p50": 233.8,
+    "p95": 255.0,
+    "p99": 278.2,
+    "max": 275.2,
+    "avg": 199.1,
+    "sumS": 19.9
+   },
+   "handler.call.status": {
+    "n": 100,
+    "p50": 1578.2,
+    "p95": 3157.4,
+    "p99": 3157.4,
+    "max": 3102.0,
+    "avg": 1557.3,
+    "sumS": 155.7
+   },
+   "handler.call.user-status": {
+    "n": 100,
+    "p50": 165.0,
+    "p95": 196.4,
+    "p99": 196.4,
+    "max": 198.9,
+    "avg": 150.3,
+    "sumS": 15.0
+   },
+   "handler.chat.join": {
+    "n": 400,
+    "p50": 1721.2,
+    "p95": 1877.0,
+    "p99": 2047.0,
+    "max": 1904.3,
+    "avg": 1606.8,
+    "sumS": 642.7
+   },
+   "handler.chat.send": {
+    "n": 650,
+    "p50": 1721.2,
+    "p95": 2434.5,
+    "p99": 2434.5,
+    "max": 2305.8,
+    "avg": 1342.2,
+    "sumS": 872.4
+   },
+   "handler.presence.set": {
+    "n": 400,
+    "p50": 860.1,
+    "p95": 1115.7,
+    "p99": 1115.7,
+    "max": 1223.1,
+    "avg": 846.2,
+    "sumS": 338.5
+   },
+   "handler.presence.subscribe": {
+    "n": 400,
+    "p50": 1023.0,
+    "p95": 1578.2,
+    "p99": 1578.2,
+    "max": 4189.2,
+    "avg": 1118.7,
+    "sumS": 447.5
+   },
+   "peer.createdToReceive": {
+    "n": 1303,
+    "p50": 1023.0,
+    "p95": 1578.2,
+    "p99": 1578.2,
+    "max": 1570,
+    "avg": 800.5,
+    "sumS": 1043.1
+   },
+   "peer.publish": {
+    "n": 3754,
+    "p50": 12.5,
+    "p95": 138.6,
+    "p99": 196.4,
+    "max": 196.4,
+    "avg": 34.0,
+    "sumS": 127.5
+   },
+   "peer.receive": {
+    "n": 5701,
+    "p50": 3.0,
+    "p95": 860.1,
+    "p99": 1023.0,
+    "max": 1056.1,
+    "avg": 168.4,
+    "sumS": 960.3
+   },
+   "queue.call.accepted": {
+    "n": 100,
+    "p50": 0.1,
+    "p95": 0.1,
+    "p99": 0.2,
+    "max": 1.2,
+    "avg": 0.0,
+    "sumS": 0.0
+   },
+   "queue.call.ended": {
+    "n": 100,
+    "p50": 165.0,
+    "p95": 196.4,
+    "p99": 214.3,
+    "max": 199.5,
+    "avg": 151.3,
+    "sumS": 15.1
+   },
+   "queue.call.participant-state": {
+    "n": 100,
+    "p50": 468.5,
+    "p95": 607.9,
+    "p99": 607.9,
+    "max": 569.1,
+    "avg": 432.4,
+    "sumS": 43.2
+   },
+   "queue.call.status": {
+    "n": 100,
+    "p50": 0.1,
+    "p95": 0.1,
+    "p99": 0.3,
+    "max": 1.7,
+    "avg": 0.0,
+    "sumS": 0.0
+   },
+   "queue.call.user-status": {
+    "n": 100,
+    "p50": 0.1,
+    "p95": 0.1,
+    "p99": 0.1,
+    "max": 0.1,
+    "avg": 0.0,
+    "sumS": 0.0
+   },
+   "queue.chat.join": {
+    "n": 400,
+    "p50": 0.1,
+    "p95": 0.1,
+    "p99": 0.2,
+    "max": 1.2,
+    "avg": 0.0,
+    "sumS": 0.0
+   },
+   "queue.chat.send": {
+    "n": 650,
+    "p50": 2434.5,
+    "p95": 3157.4,
+    "p99": 4465.7,
+    "max": 5737.8,
+    "avg": 1781.5,
+    "sumS": 1158.0
+   },
+   "queue.presence.set": {
+    "n": 400,
+    "p50": 2895.3,
+    "p95": 3157.4,
+    "p99": 3157.4,
+    "max": 5777.2,
+    "avg": 2726.2,
+    "sumS": 1090.5
+   },
+   "queue.presence.subscribe": {
+    "n": 400,
+    "p50": 1721.2,
+    "p95": 1877.0,
+    "p99": 2047.0,
+    "max": 1904.3,
+    "avg": 1606.8,
+    "sumS": 642.7
+   },
+   "send.blockedBy.chat.join": {
+    "n": 408,
+    "p50": 663.0,
+    "p95": 938.0,
+    "p99": 938.0,
+    "max": 950.0,
+    "avg": 628.1,
+    "sumS": 256.3
+   },
+   "send.blockedBy.chat.send": {
+    "n": 56,
+    "p50": 1721.2,
+    "p95": 2434.5,
+    "p99": 2434.5,
+    "max": 2304.2,
+    "avg": 1462.2,
+    "sumS": 81.9
+   },
+   "send.blockedBy.presence.set": {
+    "n": 429,
+    "p50": 860.1,
+    "p95": 1115.7,
+    "p99": 1115.7,
+    "max": 1223.1,
+    "avg": 834.4,
+    "sumS": 358.0
+   },
+   "send.blockedBy.presence.subscribe": {
+    "n": 417,
+    "p50": 1023.0,
+    "p95": 1578.2,
+    "p99": 1578.2,
+    "max": 4189.2,
+    "avg": 1105.2,
+    "sumS": 460.9
+   },
+   "send.broadcast": {
+    "n": 650,
+    "p50": 429.5,
+    "p95": 607.9,
+    "p99": 607.9,
+    "max": 620.2,
+    "avg": 333.0,
+    "sumS": 216.5
+   },
+   "send.broadcast.localFanOut": {
+    "n": 650,
+    "p50": 151.2,
+    "p95": 361.0,
+    "p99": 361.0,
+    "max": 366.1,
+    "avg": 143.9,
+    "sumS": 93.5
+   },
+   "send.broadcast.redisCheckPublish": {
+    "n": 3900,
+    "p50": 82.0,
+    "p95": 429.5,
+    "p99": 557.3,
+    "max": 710.4,
+    "avg": 108.2,
+    "sumS": 422.1
+   },
+   "send.createdToPeerPublish": {
+    "n": 650,
+    "p50": 860.1,
+    "p95": 1327.0,
+    "p99": 1327.0,
+    "max": 1268,
+    "avg": 694.5,
+    "sumS": 451.4
+   },
+   "send.gate.membership": {
+    "n": 650,
+    "p50": 0.2,
+    "p95": 3.0,
+    "p99": 3.0,
+    "max": 2.9,
+    "avg": 0.4,
+    "sumS": 0.3
+   },
+   "send.gate.routerPermits.publish": {
+    "n": 2600,
+    "p50": 89.5,
+    "p95": 468.5,
+    "p99": 607.9,
+    "max": 710.4,
+    "avg": 127.0,
+    "sumS": 330.3
+   },
+   "send.handlerStartToCreated": {
+    "n": 650,
+    "p50": 255.0,
+    "p95": 557.3,
+    "p99": 723.1,
+    "max": 710.5,
+    "avg": 263.4,
+    "sumS": 171.2
+   },
+   "send.persist": {
+    "n": 650,
+    "p50": 233.8,
+    "p95": 511.0,
+    "p99": 557.3,
+    "max": 559.9,
+    "avg": 232.3,
+    "sumS": 151.0
+   },
+   "send.queueWait": {
+    "n": 650,
+    "p50": 2434.5,
+    "p95": 3157.4,
+    "p99": 4465.7,
+    "max": 5737.8,
+    "avg": 1781.5,
+    "sumS": 1158.0
+   },
+   "socket.bufferedBytesAtSend": {
+    "n": 5854,
+    "p50": 0.1,
+    "p95": 0.1,
+    "p99": 0.1,
+    "max": 0,
+    "avg": 0.0,
+    "sumS": 0.0
+   }
+  },
+  "counters": {
+   "recv.call.accepted": 100,
+   "recv.call.ended": 100,
+   "recv.call.participant-state": 100,
+   "recv.call.status": 100,
+   "recv.call.user-status": 100,
+   "recv.chat.join": 400,
+   "recv.chat.send": 650,
+   "recv.presence.set": 400,
+   "recv.presence.subscribe": 400,
+   "sqlError.relation \"agent_jobs\" does not exist": 5,
+   "sqlError.relation \"agent_project_runs\" does not exist": 1,
+   "sqlError.relation \"bots\" does not exist": 1,
+   "sqlError.relation \"flow_runs\" does not exist": 10,
+   "sqlError.relation \"observability.canary_decisions\" does not exist": 10
+  }
+ }
+}

@@ -16,7 +16,7 @@ import { MiddlewareServiceStack } from '../lib/middleware-service-stack';
 import { SOCIAL_IMAGE_REPOS, SocialImagesStack, type SocialImageKey } from '../lib/social-images-stack';
 import { SocialMediaStack } from '../lib/social-media-stack';
 import {
-  MIDDLEWARE_CHAT_TABLES, SOCIAL_TABLES, SocialStack, socialRedisUrlParameterName, socialTablePrefix,
+  MIDDLEWARE_CHAT_TABLES, SOCIAL_TABLES, SocialStack, socialPlatformInternalUrl, socialRedisUrlParameterName, socialTablePrefix,
 } from '../lib/social-stack';
 import { ARNS, PREFIX, middlewareServiceStack, newApp } from './helpers/stacks';
 import { exportedNames, importedExportNames, synthApp } from './helpers/app-assembly';
@@ -114,7 +114,7 @@ describe('OrgIQ-MiddlewareService — realtime amendments', () => {
     });
   });
 
-  test('target group speaks HTTP/1.1 (the upgrade mechanism) and is not sticky (Redis fans out)', () => {
+  test('target group speaks HTTP/1.1 (the upgrade mechanism) and is not sticky', () => {
     t.hasResourceProperties('AWS::ElasticLoadBalancingV2::TargetGroup', {
       ProtocolVersion: 'HTTP1',
       TargetGroupAttributes: Match.arrayWith([{ Key: 'stickiness.enabled', Value: 'false' }]),
@@ -144,6 +144,15 @@ describe('OrgIQ-MiddlewareService — realtime amendments', () => {
       secrets: Object.fromEntries((c.Secrets as any[]).map((e) => [e.Name, e.ValueFrom])) as Record<string, any>,
     };
   };
+
+  test('Social REST targets its private platform even without the gateway or a public host', () => {
+    assert.equal(envOf(middlewareServiceStack()).env.SOCIAL_PLATFORM_INTERNAL_URL, undefined);
+    const { env } = envOf(middlewareServiceStack({ deploySocial: 'true' }));
+    assert.equal(env.SOCIAL_PLATFORM_INTERNAL_URL, 'http://social-platform.orgiq-social.local:3001');
+    assert.equal(env.REALTIME_GATEWAY, undefined);
+    assert.equal(env.REALTIME_PLATFORM_PUBLIC_URL, undefined);
+    assert.equal(socialPlatformInternalUrl('other'), 'http://social-platform.other-social.local:3001');
+  });
 
   test('realtimeGateway=true alone: gateway on, memory state (no REDIS_URL, no SOCIAL_CHAT_*), warned', () => {
     const stack = middlewareServiceStack({ realtimeGateway: 'true' });
@@ -182,6 +191,7 @@ describe('OrgIQ-MiddlewareService — realtime amendments', () => {
     // Names middleware/src/lib/social-chat.ts reads.
     assert.equal(env.SOCIAL_CHAT_STORE, 'dynamo');
     assert.equal(env.SOCIAL_CHAT_TABLE_PREFIX, 'orgiq-social-');
+    assert.equal(env.SOCIAL_PLATFORM_INTERNAL_URL, 'http://social-platform.orgiq-social.local:3001');
     // The execution role (which resolves container secrets) can read it.
     const policies = JSON.stringify(Template.fromStack(stack).findResources('AWS::IAM::Policy'));
     assert.match(policies, /ssm:GetParameters/);
@@ -387,7 +397,10 @@ describe('OrgIQ-Social — platform-api, Redis, tables', () => {
     assert.equal(env.VIDEO_SECRETS_REQUIRED, 'true');
     assert.match(JSON.stringify(env.REDIS_URL), /PrimaryEndPoint\.Address/, 'REDIS_URL must be the ElastiCache endpoint');
     assert.match(JSON.stringify(env.REDIS_ENDPOINT), /PrimaryEndPoint\.Address/);
-    assert.ok(JSON.stringify(env.VIDEO_API_URL).includes('PrivateIp'), 'VIDEO_API_URL must be the SFU private IP');
+    // The SFU private IP, read by NAME from OrgIQ-SocialMedia's parameter (an
+    // import would pin the replaced host's export on every image roll).
+    assert.ok(JSON.stringify(env.VIDEO_API_URL).includes('Parameter'), 'VIDEO_API_URL must be the SFU private IP (SSM)');
+    assert.ok(!JSON.stringify(env.VIDEO_API_URL).includes('Fn::ImportValue'), 'VIDEO_API_URL must not import the instance');
   });
 
   test('secrets: REALTIME_JWT_SECRET is read from the same named secret; video secrets are secrets, not env', () => {
@@ -487,7 +500,7 @@ describe('OrgIQ-Social — platform-api, Redis, tables', () => {
     assert.match(value, /PrimaryEndPoint\.Address/);
   });
 
-  test('the middleware task role gets exactly the four chat tables — attached by role name, six store calls, no Scan/CreateTable', () => {
+  test('the middleware task role gets the chat and pin tables — attached by role name, six store calls, no Scan/CreateTable', () => {
     const policies = Object.values<any>(t.findResources('AWS::IAM::Policy', {
       Properties: { PolicyName: 'orgiq-middleware-social-chat' },
     }));
@@ -500,6 +513,7 @@ describe('OrgIQ-Social — platform-api, Redis, tables', () => {
       'dynamodb:PutItem', 'dynamodb:Query', 'dynamodb:UpdateItem',
     ]);
     const resources = JSON.stringify(stmt.Resource);
+    assert.ok(resources.includes(':table/orgiq-social-chat-pins"'), 'pinning requires durable pin-table access');
     for (const table of MIDDLEWARE_CHAT_TABLES) {
       assert.ok(resources.includes(`:table/orgiq-social-${table}"`), `missing ${table}`);
       assert.ok(resources.includes(`:table/orgiq-social-${table}/index/*`), `missing ${table} indexes`);

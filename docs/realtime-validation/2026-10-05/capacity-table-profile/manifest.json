@@ -1,0 +1,15 @@
+{
+  "capacityAccepted": false,
+  "scope": "table-category diagnostics only; same compiled 0.106 application; launch race produced 27 ECONNREFUSED upgrades, latency also failed",
+  "compiledImage": "sha256:9493e0964c2bc1a72f89315c4d84cf96e1fce91cc32b15d54a7b22ec0dc96ac2",
+  "libraryCommit": "c5c967ee18fb2fa6dabe126e2dcdd023a4a64dac",
+  "artifacts": {
+    "docs/realtime-validation/2026-10-05/capacity-table-profile/runtime.json": "50c5e2cb0611dfcebb68c534a743bd592690d4ecbfe497b17aeb2bebe5116dd7",
+    "docs/realtime-validation/2026-10-05/capacity-table-profile/orgiq-table-profile-capacity-burst.log": "00ca7d8863f90914eb9a162d6046f2b3eedb2c2903da4becc7e2134e2f421820",
+    "docs/realtime-validation/2026-10-05/capacity-table-profile/orgiq-table-profile-a-metrics.json": "bbeadae29e4ce371009b125b19bfb21f3c08fd47e273dac899c30e633dfe4951",
+    "docs/realtime-validation/2026-10-05/capacity-table-profile/orgiq-bff-container-internal-burst.json": "a51613c7d15f0353a7a47da04fdc44cdb03bc164b0ec6e14e3898b228b550084",
+    "docs/realtime-validation/2026-10-05/capacity-table-profile/orgiq-table-profile-b-metrics.json": "92a6cc9679aab082ea2979697e63d1e33466cf679cff8a53e8a0ef2ed5ba4309",
+    "docs/realtime-validation/2026-10-05/capacity-table-profile/profiling-source.tar.gz": "95d53cb64dd6a3ace85b65b1c2725511086e5d5e02f48351f01803ef8ba1f6b9",
+    "docs/realtime-validation/2026-10-05/capacity-table-profile/orgiq-table-profile-container-launch.log": "88806933e3bbc501236f052c64aaa4f07bc169e5f116ab5db9e6e299f8ec918e"
+  }
+}

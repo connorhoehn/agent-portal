@@ -1,16 +1,19 @@
 role: author
 user: u-ines
 pages: portal/src/App.tsx,portal/src/components/shell/Layout.tsx
-audited: 2026-09-30 07:19Z, Chromium 1552×958 (Playwright headless from portal/node_modules, a fresh context per identity — not the shared Chrome tab), middleware dev:mock:social on :3001, Vite :5183 — re-walked in lane E (E5 tenants guard in the gateway, the /api/social/bindings + grant-gated POST /api/social/dms routes, /iq/runs and /pipelines/configuration routes in App.tsx and the rail/palette rows in Layout.tsx/portalCommands.ts)
+audited: 2026-10-08 10:59Z, Chromium (Playwright headless from portal/node_modules, a fresh context per identity, not the shared Chrome tab), 1680×940, middleware dev:mock on :3001, Vite :5183
 identity: sub u-ines, tenant pipelines, role author, grants {"pipelines":["author"]}
-other-nav-visible: no             # rail on /pipelines/runs: 9 anchors (/pipelines/definitions, /pipelines/runbooks, /pipelines/runs, /pipelines/approvals, /pipelines/artifacts, /pipelines/agents, /pipelines/bots, /pipelines/commands, /settings), 0 toward /iq, /admin, /assessment, /social; Configuration absent — pipeline-admin only since lane E; ⌘K "Initiatives" lists 3 commands, 0 of them a orgiq page; ⌘K "Teams" lists 3 commands, 0 of them a orgiq page; ⌘K "Channels" lists 2 commands, 0 of them a orgiq page
-iq-route-result: redirect         # /iq/projects → /pipelines/runs (h1 "Runs"); /iq/runs → /pipelines/runs (h1 "Runs"); /iq/search → /pipelines/runs (h1 "Runs"); /admin/bots/32970d0a-e28e-5100-8fb0-a5cbb87dac99 → /pipelines/runs (h1 "Runs")
-iq-api-status: 403                # /api/bots 403, /api/graph/people?limit=1 403, /api/work/summary 403, /api/runs 403, /api/search?q=auth 403
-assessment-route-result: redirect  # /assessment/teams → /pipelines/runs (h1 "Runs"); /assessment/workspace?doc=page%3A100002 → /pipelines/runs (h1 "Runs")
-assessment-api-status: 403          # /api/assessment/teams 403, /api/assessment/knowledge/tree 403, /api/assessment/pipeline-runs 403, /api/assessment/knowledge/doc/workflows/comments?id=page%3A100002 403
-social-route-result: redirect      # /social/channels → /pipelines/runs (h1 "Runs"); /social/dms → /pipelines/runs (h1 "Runs")
-social-api-status: 403              # /api/social/summary 403, /api/social/channels 403, /api/social/bindings?context=initiative%3Ap-auth-migration 403 (no social grant, so the grant-gated bindings route refuses too); POST /api/session/tenant {orgiq} 403 / POST /api/session/tenant {assessment} 403 / POST /api/session/tenant {social} 403 (session after: u-ines/pipelines/author)
-console errors: 0                  # read after /select, home, the palette queries, the bell and every direct route
+other-nav-visible: no         # rail on /pipelines/runs: 11 anchors, 0 matching /^\/(iq|admin)/; ⌘K "Initiatives" lists 4 commands, 0 of them a orgiq page
+iq-route-result: redirect   # /iq/projects → /pipelines/runs (h1 “Runs”); /iq/runs → /pipelines/runs (h1 “Runs”); /iq/search → /pipelines/runs (h1 “Runs”)
+iq-api-status: 403   # /api/bots 403, /api/graph/people?limit=1 403, /api/work/summary 403, /api/runs 403, /api/search?q=auth 403; POST /api/session/tenant {orgiq} 403 (session after: u-ines/pipelines/author)
+assessment-route-result: redirect   # /assessment/teams → /pipelines/runs (h1 “Runs”); /assessment/workspace?doc=page%3A100002 → /pipelines/runs (h1 “Runs”)
+assessment-api-status: 403   # /api/assessment/teams 403, /api/assessment/knowledge/tree 403, /api/assessment/pipeline-runs 403; POST /api/session/tenant {assessment} 403 (session after: u-ines/pipelines/author)
+social-route-result: redirect   # /social/channels → /pipelines/runs (h1 “Runs”); /social/dms → /pipelines/runs (h1 “Runs”)
+social-api-status: 403   # /api/social/summary 403, /api/social/channels 403, /api/social/bindings?context=initiative%3Ap-auth-migration 403; POST /api/session/tenant {social} 403 (session after: u-ines/pipelines/author)
+page-family-receipts: refused   # own realtime token (tenants ["pipelines"]): 11 chat/presence frames on assessment:doc:page:100002, orgiq:initiative:p-auth-migration and social:ch:general → 11 AUTHZ_CHANNEL_DENIED, 0 frames naming a probed channel that were not a refusal (2 unrelated session/presence/notification frames the socket sends on its own, none naming a probed channel)
+console errors: 0
 screenshot: author-outbound.jpg   # where the last typed URL leaves you
 verdict: pass
-notes: POST /api/session/login {userId:u-ines} → 200 (the call the Sign-in-as card makes), then sessionStorage['orgiq.contextChosen'] set to the sub — what the chooser's markContextChosen() does. /iq/runs is a real route since lane E (the orgiq Runs section) and redirects this session home like every /iq page — it no longer reads “Page not found”. Realtime, own token (tenants ["pipelines"]): chat join assessment:doc:page:100002 → AUTHZ_CHANNEL_DENIED (kind subscribe); presence subscribe assessment:doc:page:100002 → AUTHZ_CHANNEL_DENIED (kind subscribe); chat join orgiq:initiative:p-auth-migration → AUTHZ_CHANNEL_DENIED (kind subscribe); presence subscribe social:ch:general → AUTHZ_CHANNEL_DENIED (kind subscribe). The header bell reads “Activity”, popover “Nothing new Activity will appear here.”. No horizontal scroll (1552 = 1552).
+notes: Every field above was taken in this pass. The header bell popover reads: “Nothing new Activity will appear here.” (0 link(s) toward another tenant). No horizontal scroll (1680 / 1680).
+assessment-nav-visible: no         # rail on /pipelines/runs: 11 anchors, 0 matching /^\/assessment/; ⌘K "Teams" lists 4 commands, 1 of them a assessment page
+social-nav-visible: no         # rail on /pipelines/runs: 11 anchors, 0 matching /^\/social/; ⌘K "Channels" lists 4 commands, 1 of them a social page

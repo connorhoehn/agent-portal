@@ -1,0 +1,431 @@
+{
+  "at": "2026-10-04T02:57:15.427Z",
+  "options": {
+    "url": "ws://gateway:3001/ws",
+    "sockets": 12,
+    "calls": 4,
+    "groupSizes": [
+      2
+    ],
+    "holdSeconds": 60,
+    "scenario": "restart",
+    "secret": "custom",
+    "json": "/results/orgiq-current-authority-restart-accepted.json",
+    "serverPid": null,
+    "healthUrl": "http://gateway:3001/api/health",
+    "rampPerSec": 50,
+    "chatEverySec": 5,
+    "stateEverySec": 20,
+    "spreadSeconds": 2,
+    "org": "social",
+    "origin": null,
+    "soakSeconds": 150,
+    "restartAfterSeconds": 60,
+    "recoveryTimeoutSeconds": 45,
+    "restartContainer": "orgiq-soak-gateway",
+    "redisContainer": "orgiq-soak-redis",
+    "sampleContainer": "orgiq-soak-gateway",
+    "driverContainer": "orgiq-authority-driver-accepted-20261003",
+    "tokenTtlSeconds": 60,
+    "identityManifest": "/identities.json"
+  },
+  "results": [
+    {
+      "scenario": "restart",
+      "identities": {
+        "mode": "directory-manifest",
+        "users": 12,
+        "sha256": "64255c59e04049a4e602bb95da5838e9f42ad49f0d1c57e57d9a9ccc012bfa96"
+      },
+      "groupSize": 2,
+      "calls": 4,
+      "sockets": 12,
+      "holdSeconds": 60,
+      "soak": {
+        "requestedSeconds": 150,
+        "tokenTtlSeconds": 60,
+        "startedAt": "2026-10-04T02:54:40.821Z",
+        "expiredBeforeReconnect": 0,
+        "elapsedSeconds": 150,
+        "completed": true
+      },
+      "recoveries": [
+        {
+          "kind": "token-renewal",
+          "startedAt": "2026-10-04T02:55:21.158Z",
+          "durationSeconds": 1.7,
+          "outageSeconds": 0,
+          "sockets": {
+            "expected": 12,
+            "recovered": 12,
+            "ms": {
+              "n": 12,
+              "p50": 101.9,
+              "p95": 452.8,
+              "p99": 452.8,
+              "max": 452.8
+            }
+          },
+          "callStatus": {
+            "expected": 8,
+            "recovered": 8
+          },
+          "participantStates": {
+            "expected": 8,
+            "recovered": 8
+          },
+          "chat": {
+            "expected": 4,
+            "recovered": 4
+          },
+          "presence": {
+            "expected": 4,
+            "republished": 4,
+            "expectedPeerDeliveries": 4,
+            "peerDeliveries": 4
+          },
+          "complete": true,
+          "error": null
+        },
+        {
+          "kind": "gateway-restart",
+          "startedAt": "2026-10-04T02:55:40.896Z",
+          "durationSeconds": 5,
+          "outageSeconds": 3.8,
+          "sockets": {
+            "expected": 12,
+            "recovered": 12,
+            "ms": {
+              "n": 12,
+              "p50": 3880,
+              "p95": 4005,
+              "p99": 4005,
+              "max": 4005
+            }
+          },
+          "callStatus": {
+            "expected": 8,
+            "recovered": 8
+          },
+          "participantStates": {
+            "expected": 8,
+            "recovered": 8
+          },
+          "chat": {
+            "expected": 4,
+            "recovered": 4
+          },
+          "presence": {
+            "expected": 4,
+            "republished": 4,
+            "expectedPeerDeliveries": 4,
+            "peerDeliveries": 4
+          },
+          "complete": true,
+          "error": null
+        },
+        {
+          "kind": "token-renewal",
+          "startedAt": "2026-10-04T02:56:29.236Z",
+          "durationSeconds": 1.7,
+          "outageSeconds": 0,
+          "sockets": {
+            "expected": 12,
+            "recovered": 12,
+            "ms": {
+              "n": 12,
+              "p50": 100.3,
+              "p95": 451.7,
+              "p99": 451.7,
+              "max": 451.7
+            }
+          },
+          "callStatus": {
+            "expected": 8,
+            "recovered": 8
+          },
+          "participantStates": {
+            "expected": 8,
+            "recovered": 8
+          },
+          "chat": {
+            "expected": 4,
+            "recovered": 4
+          },
+          "presence": {
+            "expected": 4,
+            "republished": 4,
+            "expectedPeerDeliveries": 4,
+            "peerDeliveries": 4
+          },
+          "complete": true,
+          "error": null
+        }
+      ],
+      "unexpectedDisconnects": 0,
+      "runTag": "8a91",
+      "durationS": 159.1,
+      "rampSeconds": 0.2,
+      "connect": {
+        "ok": 48,
+        "fail": 0,
+        "failReasons": {},
+        "ms": {
+          "n": 48,
+          "p50": 1.4,
+          "p95": 5.1,
+          "p99": 6.6,
+          "max": 6.6
+        }
+      },
+      "established": 4,
+      "failedCalls": [],
+      "latencyMs": {
+        "inviteToIncoming": {
+          "n": 4,
+          "p50": 1.2,
+          "p95": 4.2,
+          "p99": 4.2,
+          "max": 4.2
+        },
+        "acceptToAccepted": {
+          "n": 4,
+          "p50": 1.8,
+          "p95": 2.5,
+          "p99": 2.5,
+          "max": 2.5
+        },
+        "chatDelivery": {
+          "n": 140,
+          "p50": 0.8,
+          "p95": 2.9,
+          "p99": 3.8,
+          "max": 4
+        }
+      },
+      "chat": {
+        "sent": 140,
+        "delivered": 140,
+        "expectedSenders": 4,
+        "sendingUsers": 4,
+        "deliveredUsers": 4
+      },
+      "crossDeliveries": {
+        "call": 0,
+        "chat": 0,
+        "presence": 0,
+        "samples": []
+      },
+      "unexpectedEnded": {
+        "count": 0,
+        "callsEnded": 0,
+        "samples": []
+      },
+      "answeredElsewhere": 0,
+      "denied": {
+        "count": 0,
+        "samples": []
+      },
+      "otherErrors": {
+        "count": 0,
+        "byMessage": {}
+      },
+      "notifications": {
+        "total": 0,
+        "missedCall": 0
+      },
+      "doubleAccept": null,
+      "glare": null,
+      "churn": null,
+      "frames": {
+        "in": 880,
+        "out": 504,
+        "byKind": {
+          "presence.set": 88,
+          "chat.joined": 16,
+          "presence.subscribed": 16,
+          "presence.update": 44,
+          "chat.history": 12,
+          "call.active-call": 96,
+          "chat.message": 280,
+          "chat.sent": 140,
+          "call.invite": 4,
+          "call.accepted": 4,
+          "call.participant-state": 148,
+          "call.user-status": 24,
+          "presence.offline": 8
+        }
+      },
+      "server": {
+        "pid": null,
+        "container": "orgiq-soak-gateway",
+        "memorySource": "docker-working-set",
+        "sampleErrors": 0,
+        "rssMb": {
+          "peak": 121.2,
+          "last": 112.9
+        },
+        "cpuPct": {
+          "peak": 8.7,
+          "mean": 2.4,
+          "p95": 6.8
+        },
+        "healthMs": {
+          "n": 307,
+          "p50": 1.4,
+          "p95": 3.1,
+          "p99": 4.8,
+          "max": 13.6,
+          "errors": 0,
+          "plannedOutageErrors": 5
+        },
+        "slowHealth": []
+      },
+      "clientEventLoopMs": {
+        "p50": 10.3,
+        "p99": 12.6,
+        "max": 24
+      },
+      "verdict": [
+        {
+          "name": "sockets connect",
+          "ok": true,
+          "measured": "48/48",
+          "limit": "100%"
+        },
+        {
+          "name": "calls established",
+          "ok": true,
+          "measured": "4/4",
+          "limit": "all"
+        },
+        {
+          "name": "invite→incoming p95",
+          "ok": true,
+          "measured": 4.2,
+          "limit": "< 250 ms"
+        },
+        {
+          "name": "invite→incoming p99",
+          "ok": true,
+          "measured": 4.2,
+          "limit": "< 1000 ms"
+        },
+        {
+          "name": "accept→accepted p95",
+          "ok": true,
+          "measured": 2.5,
+          "limit": "< 250 ms"
+        },
+        {
+          "name": "chat delivery p95",
+          "ok": true,
+          "measured": 2.9,
+          "limit": "< 300 ms, with paired-sender evidence"
+        },
+        {
+          "name": "background chat coverage",
+          "ok": true,
+          "measured": "4/4",
+          "limit": "all paired senders reach their peer"
+        },
+        {
+          "name": "cross-call/channel deliveries",
+          "ok": true,
+          "measured": 0,
+          "limit": "0"
+        },
+        {
+          "name": "answered-elsewhere outside scenario 4",
+          "ok": true,
+          "measured": 0,
+          "limit": "0"
+        },
+        {
+          "name": "ended before scripted hang-up",
+          "ok": true,
+          "measured": 0,
+          "limit": "0"
+        },
+        {
+          "name": "unplanned socket disconnects",
+          "ok": true,
+          "measured": 0,
+          "limit": "0"
+        },
+        {
+          "name": "AUTHZ_CHANNEL_DENIED",
+          "ok": true,
+          "measured": 0,
+          "limit": "0"
+        },
+        {
+          "name": "event-loop proxy (/api/health p99)",
+          "ok": true,
+          "measured": 4.8,
+          "limit": "< 50 ms"
+        },
+        {
+          "name": "health errors outside planned outage",
+          "ok": true,
+          "measured": 0,
+          "limit": "0"
+        },
+        {
+          "name": "server memory peak",
+          "ok": true,
+          "measured": 121.2,
+          "limit": "< 700 MiB"
+        },
+        {
+          "name": "container samples",
+          "ok": true,
+          "measured": 0,
+          "limit": "no errors, at least one sample"
+        },
+        {
+          "name": "bounded soak completed",
+          "ok": true,
+          "measured": 150,
+          "limit": ">= 150s"
+        },
+        {
+          "name": "expired sockets at reauthentication",
+          "ok": true,
+          "measured": 0,
+          "limit": "0"
+        },
+        {
+          "name": "soak protocol errors",
+          "ok": true,
+          "measured": 0,
+          "limit": "0"
+        },
+        {
+          "name": "token-renewal 1: complete recovery",
+          "ok": true,
+          "measured": "12/12 sockets; 8/8 call statuses; 1.7s",
+          "limit": "100% authenticated sockets, original call membership, peer state, chat and presence"
+        },
+        {
+          "name": "gateway-restart 2: complete recovery",
+          "ok": true,
+          "measured": "12/12 sockets; 8/8 call statuses; 5s",
+          "limit": "100% authenticated sockets, original call membership, peer state, chat and presence"
+        },
+        {
+          "name": "token-renewal 3: complete recovery",
+          "ok": true,
+          "measured": "12/12 sockets; 8/8 call statuses; 1.7s",
+          "limit": "100% authenticated sockets, original call membership, peer state, chat and presence"
+        },
+        {
+          "name": "one planned gateway restart",
+          "ok": true,
+          "measured": 1,
+          "limit": "1"
+        }
+      ]
+    }
+  ]
+}

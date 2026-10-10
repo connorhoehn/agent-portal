@@ -1,11 +1,14 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { readDegraded } from '../lib/degraded';
 import { nextPollDelay, isDocumentHidden } from './pollSchedule';
+import { reportApiFailure, responseFailure, type ApiFailure } from '../lib/apiFailure';
 
 interface UseFetchReturn<T> {
   data: T | null;
   isLoading: boolean;
   error: string | null;
+  /** A typed transport/authority failure; pages never have to parse `error`. */
+  failure: ApiFailure | null;
   /**
    * The wire's "we could not look" marker, already unwrapped: the first line
    * of the server-side error when the body carries `degraded: true`, else
@@ -46,20 +49,8 @@ export interface UseFetchOptions {
  * read the agent fleet" instead of "that agent does not exist". Throwing the
  * bare status line discarded the only sentence worth reading.
  */
-async function failureText(res: Response): Promise<string> {
-  const status = `${res.status} ${res.statusText}`.trim();
-  try {
-    const body: unknown = await res.clone().json();
-    if (body && typeof body === 'object' && !Array.isArray(body)) {
-      const rec = body as Record<string, unknown>;
-      const said = [rec['error'], rec['reason'], rec['message']]
-        .find((v) => typeof v === 'string' && v.trim().length > 0) as string | undefined;
-      if (said) return `${status} — ${said.trim()}`;
-    }
-  } catch {
-    // Not JSON, or already consumed. The status line is all we have.
-  }
-  return status;
+class FetchFailure extends Error {
+  constructor(readonly failure: ApiFailure) { super(failure.message); }
 }
 
 // Opt-in in-flight dedupe (UseFetchOptions.share). Keyed by url — a second
@@ -87,13 +78,14 @@ export function useFetch<T>(
   const [data, setData] = useState<T | null>(null);
   const [isLoading, setIsLoading] = useState(url !== null);
   const [error, setError] = useState<string | null>(null);
+  const [failure, setFailure] = useState<ApiFailure | null>(null);
   const [degraded, setDegraded] = useState<string | null>(null);
   const hasDataRef = useRef(false);
   const refreshRef = useRef<() => void>(() => {});
   const share = !!options?.share;
 
   useEffect(() => {
-    if (!url) { setIsLoading(false); setData(null); setDegraded(null); hasDataRef.current = false; return; }
+    if (!url) { setIsLoading(false); setData(null); setError(null); setFailure(null); setDegraded(null); hasDataRef.current = false; return; }
 
     let cancelled = false;
     let failures = 0;
@@ -126,7 +118,11 @@ export function useFetch<T>(
         const res = share
           ? await sharedFetch(url)
           : await fetch(url, { credentials: 'include', signal: controller.signal });
-        if (!res.ok) throw new Error(await failureText(res));
+        if (!res.ok) {
+          const failed = await responseFailure(res);
+          if (!cancelled) reportApiFailure(failed);
+          throw new FetchFailure(failed);
+        }
         // Clone before parsing: a shared response is read by every
         // subscriber, and cloning is free (a no-op copy) when there is only
         // one.
@@ -134,6 +130,7 @@ export function useFetch<T>(
         if (!cancelled) {
           setData(json);
           setError(null);
+          setFailure(null);
           // A 200 can still be an admission that the read failed. Unwrap it
           // here, once, so no page has to remember to look.
           setDegraded(readDegraded(json));
@@ -146,6 +143,12 @@ export function useFetch<T>(
         if (err instanceof DOMException && err.name === 'AbortError') return;
         if (!cancelled) {
           setError(err instanceof Error ? err.message : 'Fetch failed');
+          const failed: ApiFailure = err instanceof FetchFailure ? err.failure
+            : { kind: 'network', status: null, code: null, message: err instanceof Error ? err.message : 'Fetch failed' };
+          setFailure(failed);
+          if (failed.kind === 'session-invalid' || failed.kind === 'forbidden') {
+            setData(null); hasDataRef.current = false;
+          }
           // The transport failure is the story now; a marker from the previous
           // poll would only add a second, staler sentence.
           setDegraded(null);
@@ -195,5 +198,5 @@ export function useFetch<T>(
     refreshRef.current();
   }, []);
 
-  return { data, isLoading, error, degraded, refresh };
+  return { data, isLoading, error, failure, degraded, refresh };
 }

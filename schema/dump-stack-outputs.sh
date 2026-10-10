@@ -95,6 +95,29 @@ def social_block() -> str:
         f"# REDIS_URL={redis}   # inside the VPC: unreachable from a laptop\n"
     )
 
+def portal_block() -> str:
+    """OrgIQ-Portal (deployPortal=true): the deployed portal's HTTPS origin,
+    written COMMENTED OUT. This file configures a LAPTOP middleware, whose
+    portal is localhost — pointing PUBLIC_BASE_URL or COGNITO_CALLBACK_URL at
+    CloudFront would send a local SSO login to the deployed BFF. The deployed
+    task reads these from SSM itself (portalPublicUrls=true). Kept here for
+    the operator scripts that take a middleware URL (infra/scripts/harness.py
+    MIDDLEWARE_URL / PORTAL_URL) and for --context portalPublicUrl.
+    """
+    url = pick("PortalUrl")
+    if not url:
+        return "# OrgIQ-Portal not deployed (--context deployPortal=true).\n"
+    lines = [
+        "# OrgIQ-Portal — the DEPLOYED portal + middleware (/api, /ws); commented out on",
+        "# purpose, see portal_block() in schema/dump-stack-outputs.sh.",
+        f"# PORTAL_URL={url}",
+        f"# MIDDLEWARE_URL={url}",
+    ]
+    for key, label in (("PlatformApiPublicUrl", "REALTIME_PLATFORM_PUBLIC_URL"), ("SfuPublicUrl", "REALTIME_VIDEO_PUBLIC_URL")):
+        if pick(key):
+            lines.append(f"# {label}={pick(key)}")
+    return "\n".join(lines) + "\n"
+
 client_secret = cognito_client_secret()
 # Cognito rejects non-localhost HTTP callbacks, so the local BFF URL is the
 # only one that works until the deployed middleware has an HTTPS origin.
@@ -183,6 +206,7 @@ COGNITO_CALLBACK_URL={callback_url}
 PORTAL_ORIGIN={portal_origin}
 
 {social_block()}
+{portal_block()}
 # Runtime image ECR URIs
 SUPERVISOR_ECR_URI={ecr}/orgiq-supervisor
 SEARCH_ECR_URI={ecr}/orgiq-search

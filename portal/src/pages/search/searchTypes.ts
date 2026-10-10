@@ -19,6 +19,8 @@ export interface SearchResponse {
   results: SearchRecord[];
   counts: Record<SearchRecordType | 'all', number>;
   total: number;
+  /** The server read a bounded window of some source, or a source failed: `total` and `counts` are floors. */
+  totalIsLowerBound?: boolean;
   partial?: string[];
   related?: SearchRecord[];
   edges?: SearchEdge[];

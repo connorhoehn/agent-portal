@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
+  T,
   Button,
   Card,
   Chip,
@@ -79,7 +80,7 @@ export function PageDetailModal({
         <Inline align="start" justify="between" gap="md" className="mb-3">
           <Stack gap="none" className="min-w-0 flex-1">
             <Inline gap="sm" align="center" className="mb-1 min-w-0">
-              <EntityCell label={page.title || page.url} labelClassName="text-sm" className="min-w-0" />
+              <EntityCell label={page.title || page.url} className="min-w-0" />
               <Chip tone={PAGE_STATUS_TONE[page.status]} size="xs">{page.status}</Chip>
             </Inline>
             <MetaLine
@@ -213,23 +214,19 @@ function LinksTab({ links }: { links: CrawlPage['discoveredLinks'] }) {
       <TableBody>
         {links.map((l, i) => (
           <TableRow key={i}>
-            <TableTd className="text-[12px]">{l.label || <em className="text-text-tertiary">(unlabeled)</em>}</TableTd>
+            <TableTd><T as="span" size="xs">{l.label || <em className="text-text-tertiary">(unlabeled)</em>}</T></TableTd>
             <TableTd
-              className="text-[11px] font-mono text-text-secondary max-w-[360px] overflow-hidden truncate whitespace-nowrap"
-              title={l.targetUrl ?? ''}
-            >
+              title={l.targetUrl ?? ''} className="font-mono max-w-[360px] overflow-hidden truncate whitespace-nowrap"><T as="span" size="xs" tone="secondary">
               {l.targetUrl ?? '—'}
-            </TableTd>
+            </T></TableTd>
             <TableTd>
               {l.isSpaLink
                 ? <Chip tone="warning" size="xs">SPA</Chip>
                 : <Chip tone="neutral" size="xs">href</Chip>}
             </TableTd>
-            <TableTd
-              className="text-right text-[11px] font-mono text-text-tertiary"
-            >
+            <TableTd className="text-right font-mono"><T as="span" size="xs" tone="tertiary">
               {l.clickX != null && l.clickY != null ? `(${l.clickX}, ${l.clickY})` : '—'}
-            </TableTd>
+            </T></TableTd>
           </TableRow>
         ))}
       </TableBody>
@@ -246,7 +243,7 @@ function S3KeysList({ page }: { page: CrawlPage }) {
   return (
     <Stack gap="none" className="flex flex-col gap-0.5">
       {entries.map(e => (
-        <Inline gap="none" key={e.label} className="flex items-center gap-2 text-[10px]">
+        <T as="span" key={e.label} size="xs" className="flex items-center gap-2">
           <SectionLabel className="w-20 shrink-0">
             {e.label}
           </SectionLabel>
@@ -263,7 +260,7 @@ function S3KeysList({ page }: { page: CrawlPage }) {
           ) : (
             <Inline as="span" gap="none" className="text-text-tertiary">—</Inline>
           )}
-        </Inline>
+        </T>
       ))}
     </Stack>
   );
@@ -291,7 +288,7 @@ function CopyButton({ text }: { text: string }) {
     }
   }
   return (
-    <Button variant="secondary" size="sm" onClick={copy} className="px-1.5 py-px text-[10px]">
+    <Button variant="secondary" size="sm" onClick={copy}>
       {copied ? 'copied' : 'copy'}
     </Button>
   );

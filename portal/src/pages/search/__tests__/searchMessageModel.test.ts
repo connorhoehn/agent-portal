@@ -29,7 +29,7 @@ test('each reason the button is off is said in the person\'s name', () => {
   assert.match(off([]), /Select a person/);
   assert.match(off([vera, eli]), /one-to-one/);
   assert.match(off([vera], null as unknown as typeof users), /Looking up/);
-  assert.match(off([maya]), /Maya Patel has no OrgIQ sign-in/);
+  assert.match(off([maya]), /Maya Patel has no Work sign-in/);
   assert.match(off([eli]), /Eli Garcia is not in Social/);
   assert.match(off([{ personId: 'p-001', name: 'Theo Chang' }]), /only person selected/);
 });

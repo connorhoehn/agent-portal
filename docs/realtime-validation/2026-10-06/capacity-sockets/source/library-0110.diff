@@ -1,0 +1,631 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 53697cf..a926126 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -2,6 +2,32 @@
+ 
+ ## [Unreleased]
+ 
++## 0.110.0 — 2026-10-06
++
++Two opt-in changes that cut DynamoDB/authority round trips per chat send;
++defaults are unchanged.
++
++- **Peer operation scopes (opt-in).** `new RedisRealtimeRouter({ peerOperationLingerMs })`
++  (0-2000, default 0). A cross-node chat send reached each peer as two frames,
++  the notify plugin's readable-subscription probe (`subscription-check`) and
++  the fan-out (`channel`), and the peer opened a separate authority scope for
++  each, so a host that shares one membership read per scope read the same
++  rows twice for one recipient. Opted in, the origin stamps both frames with
++  its operation's scope id (`op`, one number) and the peer runs every frame
++  of one (origin instance, op) under one scope, closed at most
++  `peerOperationLingerMs` after its last frame (or immediately on fence or
++  shutdown). Every check still calls `authorize`; recipient checks are never
++  memoized by the router; a host's shared proof must stay revocable for the
++  scope's life (point 2). Off: no `op` on the wire, per-frame scopes as
++  before. Contract P6 in `src/server-ws/authorityScope.ts`.
++- **Transactional conversations-index writes (opt-in).**
++  `new DynamoChatStore({ messageIndexWrites: 'transaction' })` /
++  `new DynamoConversationsStore({ messageIndexWrites })`: `recordMessage`
++  sends the same per-member UpdateItems as one `TransactWriteItems` request
++  per 100 members (duplicates collapse) instead of one request per member. A
++  failed transaction (a concurrent write to the same row, a throttle) is
++  logged and retried as per-member writes. Default `'each'`: unchanged.
++
+ ## 0.109.0 — 2026-10-06
+ 
+ - **Publish proofs (opt-in).** `attachRealtime({ publishProofMaxAgeMs })`,
+diff --git a/package.json b/package.json
+index 607e915..4052943 100644
+--- a/package.json
++++ b/package.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "@connorhoehn/realtime-modules",
+-  "version": "0.109.0",
++  "version": "0.110.0",
+   "publishConfig": {
+     "registry": "https://npm.pkg.github.com"
+   },
+diff --git a/src/server-ws/authorityScope.ts b/src/server-ws/authorityScope.ts
+index b5062f8..db48915 100644
+--- a/src/server-ws/authorityScope.ts
++++ b/src/server-ws/authorityScope.ts
+@@ -193,6 +193,26 @@ export function scopeFor(existing: AuthorityScope | null | undefined, operation:
+ //       denied whatever the marker says. An absent, stale, future or
+ //       malformed marker, or a peer with the option off, re-checks the
+ //       publisher exactly as before.
++//
++//   P6. Peer operation scopes (0.110, OPT-IN: `RedisRealtimeRouter`'s
++//       `peerOperationLingerMs` > 0). A cross-node chat send reached each
++//       peer as TWO frames — the notify plugin's readable-subscription probe
++//       (`subscription-check`) and the fan-out (`channel`) — and the peer
++//       opened a fresh scope for each, so the host read the same membership
++//       rows twice for one recipient a few ms apart. Opted in, the origin
++//       stamps both with its operation's scope id (`op`, one number), and
++//       the peer runs every frame of one (origin instance, op) under ONE
++//       scope. That scope is still bound to the operation: it opens with the
++//       first frame, stays open while any frame runs, and closes at most
++//       `peerOperationLingerMs` (<= 2000) after the last one finishes — or
++//       at once when the router fences or shuts down. It is a scope like any
++//       other: every check still calls `authorize` (directory, actor, policy
++//       per check), recipient `subscribe` checks are never shared (P1), the
++//       router's per-recipient fences still run, and a host's shared proof
++//       must stay revocable (point 2) for the scope's whole life, so a
++//       membership write or peer hint during the linger denies or rereads.
++//       A frame without `op`, an over-bound table or the option off gets a
++//       per-frame scope (fan-out) or none (probe), exactly as before.
+ // ---------------------------------------------------------------------------
+ 
+ /** Clock tolerance a peer allows for a publish proof stamped in its future. */
+diff --git a/src/server/RedisRealtimeRouter.ts b/src/server/RedisRealtimeRouter.ts
+index 2c72852..b091379 100644
+--- a/src/server/RedisRealtimeRouter.ts
++++ b/src/server/RedisRealtimeRouter.ts
+@@ -48,13 +48,26 @@ export interface RedisRealtimeRouterOptions {
+      * younger than ITS max age. Recipient checks always run on every node.
+      */
+     publishProofMaxAgeMs?: number;
++    /**
++     * 0.110, opt-in (authorityScope.ts P6). > 0: frames one origin operation
++     * sends to a peer (its `subscription-check` probes and its `channel`
++     * fan-out) carry a content-free operation number, and the peer runs
++     * them under ONE authority scope per (origin instance, operation),
++     * kept open at most this many ms after its last frame finishes. Every
++     * check still asks `authorize`; only host-shared proofs (one membership
++     * read per channel) are reused. 0 (default): one scope per frame, as
++     * before, and no operation number on the wire. Max 2000.
++     */
++    peerOperationLingerMs?: number;
+ }
+ type Source = { nodeId: string; instance: string };
+ type Registration = Source & { generation: string; ctx: WsAuthContext };
+ type Wire = { v: 1; id: string; source: Source; kind: 'direct' | 'receipt' | 'channel' | 'broadcast' | 'call-event' | 'peer-event' | 'subscription-check';
+     clientId?: string; generation?: string; delivered?: boolean; channel?: string;
+     eventTopic?: string;
+-    excludeClientId?: string | null; publisher?: { clientId: string; generation: string; proofAt?: number }; message?: unknown };
++    excludeClientId?: string | null; publisher?: { clientId: string; generation: string; proofAt?: number }; message?: unknown;
++    /** P6: the origin operation this frame belongs to (its scope id). */
++    op?: number };
+ const NOOP_LOGGER: RouterLogger = { debug() {}, info() {}, warn() {}, error() {} };
+ const RELEASE = "if redis.call('GET',KEYS[1]) == ARGV[1] then return redis.call('DEL',KEYS[1]) end return 0";
+ const REGISTER = `if redis.call('GET',KEYS[1]) ~= ARGV[1] then return 0 end
+@@ -100,6 +113,8 @@ export class RedisRealtimeRouter implements RealtimeRouter {
+     private readonly pending = new Map<string, { target: Source; resolve: (delivered: boolean) => void }>();
+     private readonly seen = new Map<string, { until: number; pending: boolean; result: Promise<boolean> }>();
+     private activeDeliveries = 0;
++    private readonly peerLingerMs: number;
++    private readonly peerOps = new Map<string, { scope: AuthorityScope; refs: number; timer: ReturnType<typeof setTimeout> | null }>();
+     private readonly cleanup = new Set<Promise<unknown>>();
+     private readonly callHandlers = new Set<(payload: string) => void>();
+     private readonly peerHandlers = new Map<string, Set<(payload: string) => void | Promise<void>>>();
+@@ -149,6 +164,8 @@ export class RedisRealtimeRouter implements RealtimeRouter {
+         this.maxBytes = opts.maxFrameBytes ?? 1024 * 1024;
+         this.maxPending = opts.maxPendingRequests ?? 1024;
+         this.maxSeen = opts.maxSeenFrames ?? 10_000;
++        this.peerLingerMs = opts.peerOperationLingerMs ?? 0;
++        if (!Number.isSafeInteger(this.peerLingerMs) || this.peerLingerMs < 0 || this.peerLingerMs > 2000) throw new Error('Invalid peer operation linger');
+         if (![this.leaseMs, this.timeoutMs, this.maxBytes, this.maxPending, this.maxSeen].every(n => Number.isSafeInteger(n) && n > 0)
+             || this.leaseMs < 300 || this.timeoutMs >= this.leaseMs) throw new Error('Invalid cluster bounds');
+         this.log = opts.logger ?? NOOP_LOGGER;
+@@ -168,6 +185,7 @@ export class RedisRealtimeRouter implements RealtimeRouter {
+         this.fenced = true; this.deadline = 0;
+         if (this.timer) clearInterval(this.timer);
+         for (const pending of this.pending.values()) pending.resolve(false);
++        this.closePeerOps();
+         this.log.warn(`[realtime-cluster] ${reason}; routing permanently fenced`, error);
+     }
+     private source(): Source { return { nodeId: this.nodeId, instance: this.instance }; }
+@@ -330,7 +348,7 @@ export class RedisRealtimeRouter implements RealtimeRouter {
+         if (!target || (previous && previous.generation !== target.generation) || this.pending.size >= this.maxPending) return false;
+         return this.request(target, { kind: 'direct', clientId, generation: target.generation, message });
+     }
+-    private request(target: Registration, fields: Pick<Wire, 'kind' | 'clientId' | 'generation' | 'message' | 'channel'>): Promise<boolean> {
++    private request(target: Registration, fields: Pick<Wire, 'kind' | 'clientId' | 'generation' | 'message' | 'channel' | 'op'>): Promise<boolean> {
+         const id = randomUUID();
+         return new Promise<boolean>(resolve => {
+             const timer = setTimeout(() => finish(false), this.timeoutMs);
+@@ -375,7 +393,8 @@ export class RedisRealtimeRouter implements RealtimeRouter {
+         }
+         const target = await this.registration(clientId, false);
+         if (!target || target.instance === this.instance || this.pending.size >= this.maxPending) return false;
+-        return this.request(target, { kind: 'subscription-check', clientId, generation: target.generation, channel });
++        const op = this.operationOf(opts.scope);
++        return this.request(target, { kind: 'subscription-check', clientId, generation: target.generation, channel, ...(op !== undefined ? { op } : {}) });
+     }
+     async sendToChannel(channel: string, message: unknown, excludeClientId?: string | null,
+         opts?: { skipCoalesce?: boolean; publisherClientId?: string | null; scope?: AuthorityScope }): Promise<void> {
+@@ -398,9 +417,10 @@ export class RedisRealtimeRouter implements RealtimeRouter {
+         if (publisherId && !registration) return;
+         // P5: a content-free proof time, only for a live allowed proof.
+         const proofAt = publisherId ? this.local.publishProofAt(scope, publisherId, channel) : null;
++        const op = this.operationOf(scope);
+         await this.publish(`${this.prefix}channels`, { v: 1, id: randomUUID(), source: this.source(), kind: 'channel',
+             channel, message, excludeClientId, ...(publisherId ? { publisher: { clientId: publisherId, generation: registration!.generation,
+-                ...(proofAt !== null ? { proofAt } : {}) } } : {}) });
++                ...(proofAt !== null ? { proofAt } : {}) } } : {}), ...(op !== undefined ? { op } : {}) });
+     }
+     async broadcastToAll(message: unknown, excludeClientId?: string): Promise<void> {
+         await this.local.broadcastToAll(message, excludeClientId);
+@@ -455,16 +475,20 @@ export class RedisRealtimeRouter implements RealtimeRouter {
+             if (typeof frame.clientId !== 'string' || typeof frame.generation !== 'string') return false;
+             const local = this.registrations.get(frame.clientId);
+             if (!local || local.registration.generation !== frame.generation || this.current(frame.clientId) !== local.context) return false;
+-            return frame.kind === 'subscription-check'
+-                ? typeof frame.channel === 'string' && !!frame.channel && Buffer.byteLength(frame.channel) <= this.maxBytes
+-                    && await this.local.isClientSubscribed(frame.clientId, frame.channel)
+-                : this.local.sendToClient(frame.clientId, frame.message);
++            if (frame.kind !== 'subscription-check') return this.local.sendToClient(frame.clientId, frame.message);
++            if (typeof frame.channel !== 'string' || !frame.channel || Buffer.byteLength(frame.channel) > this.maxBytes) return false;
++            const shared = this.acquirePeerOperation(frame);
++            if (!shared) return this.local.isClientSubscribed(frame.clientId, frame.channel);
++            try { return await this.local.isClientSubscribed(frame.clientId, frame.channel, { scope: shared.scope }); }
++            finally { shared.release(); }
+         }
+         if (frame.kind === 'channel') {
+             if (typeof frame.channel !== 'string' || !frame.channel) return false;
+             // One authority scope per peer fan-out: the publisher's re-check
+-            // and this node's recipient checks share it.
+-            const scope = createAuthorityScope('fanout');
++            // and this node's recipient checks share it (P6: and, opted in,
++            // the same origin operation's subscription probes).
++            const shared = this.acquirePeerOperation(frame);
++            const scope = shared?.scope ?? createAuthorityScope('fanout');
+             try {
+                 if (frame.publisher) {
+                     if (typeof frame.publisher.clientId !== 'string' || typeof frame.publisher.generation !== 'string') return false;
+@@ -478,11 +502,50 @@ export class RedisRealtimeRouter implements RealtimeRouter {
+                 }
+                 await this.local.sendToLocalChannel(frame.channel, frame.message, frame.excludeClientId, scope);
+             } finally {
+-                scope.close();
++                if (shared) shared.release(); else scope.close();
+             }
+         } else await this.local.broadcastToAll(frame.message, frame.excludeClientId ?? undefined);
+         return true;
+     }
++    /** P6, origin side: the operation number a peer frame carries, opted in. */
++    private operationOf(scope: AuthorityScope | null | undefined): number | undefined {
++        return this.peerLingerMs > 0 && scope?.active ? scope.id : undefined;
++    }
++    /**
++     * P6, peer side: one scope per (origin instance, operation) while any of
++     * its frames runs, closed `peerLingerMs` after the last one finishes.
++     * Null when off, unnumbered or over the bound (callers then use their
++     * own per-frame scope, as before 0.110).
++     */
++    private acquirePeerOperation(frame: Wire): { scope: AuthorityScope; release: () => void } | null {
++        if (!(this.peerLingerMs > 0) || typeof frame.op !== 'number' || !Number.isSafeInteger(frame.op) || frame.op < 1) return null;
++        const key = `${frame.source.instance}:${frame.op}`;
++        let entry = this.peerOps.get(key);
++        if (!entry || !entry.scope.active) {
++            if (this.peerOps.size >= this.maxPending) return null;
++            entry = { scope: createAuthorityScope(`peer:${frame.kind}`), refs: 0, timer: null };
++            this.peerOps.set(key, entry);
++        }
++        const held = entry;
++        if (held.timer) { clearTimeout(held.timer); held.timer = null; }
++        held.refs++;
++        let released = false;
++        return { scope: held.scope, release: () => {
++            if (released) return;
++            released = true;
++            if (--held.refs > 0) return;
++            held.timer = setTimeout(() => {
++                if (held.refs > 0) return;
++                if (this.peerOps.get(key) === held) this.peerOps.delete(key);
++                held.scope.close();
++            }, this.peerLingerMs);
++            held.timer.unref?.();
++        } };
++    }
++    private closePeerOps(): void {
++        for (const entry of this.peerOps.values()) { if (entry.timer) clearTimeout(entry.timer); entry.scope.close(); }
++        this.peerOps.clear();
++    }
+     removeClient(clientId: string): void {
+         this.local.removeClient(clientId);
+         const entry = this.registrations.get(clientId);
+@@ -497,6 +560,7 @@ export class RedisRealtimeRouter implements RealtimeRouter {
+     async shutdown(): Promise<void> {
+         if (this.stopped) return;
+         this.stopped = true;
++        this.closePeerOps();
+         this.deadline = 0;
+         if (this.timer) clearInterval(this.timer);
+         for (const pending of this.pending.values()) pending.resolve(false);
+diff --git a/src/server/stores/dynamo/DynamoChatStore.ts b/src/server/stores/dynamo/DynamoChatStore.ts
+index 5575d32..67039f4 100644
+--- a/src/server/stores/dynamo/DynamoChatStore.ts
++++ b/src/server/stores/dynamo/DynamoChatStore.ts
+@@ -60,6 +60,8 @@ export interface DynamoChatStoreOpts extends DynamoStoreClockOpts {
+     channelIndexName?: string;
+     /** Index-write and lookup failures are reported here (they never throw). */
+     logger?: DynamoStoreLogger;
++    /** 0.110: see {@link DynamoConversationsStoreOpts.messageIndexWrites}. Default `'each'`. */
++    messageIndexWrites?: 'each' | 'transaction';
+ }
+ 
+ type HookInfo = { channel: string; members: string[]; message: ChatMessage };
+@@ -114,6 +116,7 @@ export class DynamoChatStore implements ChatStore {
+             tableName: this.tables.conversations,
+             channelIndexName: opts.channelIndexName,
+             logger: opts.logger,
++            ...(opts.messageIndexWrites ? { messageIndexWrites: opts.messageIndexWrites } : {}),
+             ...clock,
+         });
+         this.members = new DynamoChatMembershipStore({ client, tableName: this.tables.members });
+diff --git a/src/server/stores/dynamo/DynamoConversationsStore.ts b/src/server/stores/dynamo/DynamoConversationsStore.ts
+index 3e0ab0c..21d6955 100644
+--- a/src/server/stores/dynamo/DynamoConversationsStore.ts
++++ b/src/server/stores/dynamo/DynamoConversationsStore.ts
+@@ -25,7 +25,7 @@
+ // Index writes are best-effort: failures are logged and swallowed, because
+ // the message itself is already stored and the row heals on the next one.
+ 
+-import { BatchGetItemCommand, QueryCommand, UpdateItemCommand } from '@aws-sdk/client-dynamodb';
++import { BatchGetItemCommand, QueryCommand, TransactWriteItemsCommand, UpdateItemCommand } from '@aws-sdk/client-dynamodb';
+ import type { ChatMessage } from '../../../chat/types';
+ import { dmChannelMembers, isDmChatChannel } from '../../../chat/dmChannels';
+ import {
+@@ -75,6 +75,15 @@ export interface DynamoConversationsStoreOpts extends DynamoStoreClockOpts {
+     /** GSI keyed by `channel`. Default `channel-index`. */
+     channelIndexName?: string;
+     logger?: DynamoStoreLogger;
++    /**
++     * 0.110. How `recordMessage` writes one message's rows: `'each'`
++     * (default) — one UpdateItem per member, as before; `'transaction'` —
++     * the same UpdateItems in one TransactWriteItems request per 100
++     * members (one round trip instead of one per member). A transaction that
++     * fails (a concurrent write to the same row, a throttle) is retried as
++     * per-member writes, so the rows still heal the way they did.
++     */
++    messageIndexWrites?: 'each' | 'transaction';
+ }
+ 
+ /**
+@@ -104,6 +113,7 @@ export class DynamoConversationsStore {
+     private readonly logger?: DynamoStoreLogger;
+     private readonly now: () => number;
+     private readonly ttlSeconds: number;
++    private readonly messageIndexWrites: 'each' | 'transaction';
+ 
+     constructor(opts: DynamoConversationsStoreOpts) {
+         this.client = requireClient('DynamoConversationsStore', opts?.client);
+@@ -112,6 +122,9 @@ export class DynamoConversationsStore {
+         this.logger = opts.logger;
+         this.now = opts.now ?? Date.now;
+         this.ttlSeconds = opts.ttlSeconds ?? CHAT_TTL_SECONDS;
++        const writes = opts.messageIndexWrites ?? 'each';
++        if (writes !== 'each' && writes !== 'transaction') throw new Error("DynamoConversationsStore: messageIndexWrites must be 'each' or 'transaction'");
++        this.messageIndexWrites = writes;
+     }
+ 
+     /**
+@@ -125,25 +138,26 @@ export class DynamoConversationsStore {
+         const preview = (message.message ?? '').slice(0, CONVERSATION_PREVIEW_MAX);
+         const ttl = ttlFrom(this.now, this.ttlSeconds);
+         const peersJson = JSON.stringify(members);
+-        await Promise.all(members.map(async (userId) => {
++        // UpdateItem, not Put: the row also carries this person's own
++        // pinned / mutedUntil / unreadFrom / section.
++        const update = (userId: string) => ({
++            TableName: this.tableName,
++            Key: { userId: { S: userId }, channel: { S: channel } },
++            UpdateExpression:
++                'SET peers = :peers, lastMessageAt = :at, lastMessagePreview = :preview, #ttl = :ttl'
++                + (senderUserId ? ', lastMessageUserId = :sender' : ''),
++            ExpressionAttributeNames: { '#ttl': 'ttl' },
++            ExpressionAttributeValues: {
++                ':peers': { S: peersJson },
++                ':at': { S: message.timestamp },
++                ':preview': { S: preview },
++                ':ttl': { N: ttl },
++                ...(senderUserId ? { ':sender': { S: senderUserId } } : {}),
++            },
++        });
++        const each = (userIds: string[]) => Promise.all(userIds.map(async (userId) => {
+             try {
+-                // UpdateItem, not Put: the row also carries this person's own
+-                // pinned / mutedUntil / unreadFrom / section.
+-                await this.client.send(new UpdateItemCommand({
+-                    TableName: this.tableName,
+-                    Key: { userId: { S: userId }, channel: { S: channel } },
+-                    UpdateExpression:
+-                        'SET peers = :peers, lastMessageAt = :at, lastMessagePreview = :preview, #ttl = :ttl'
+-                        + (senderUserId ? ', lastMessageUserId = :sender' : ''),
+-                    ExpressionAttributeNames: { '#ttl': 'ttl' },
+-                    ExpressionAttributeValues: {
+-                        ':peers': { S: peersJson },
+-                        ':at': { S: message.timestamp },
+-                        ':preview': { S: preview },
+-                        ':ttl': { N: ttl },
+-                        ...(senderUserId ? { ':sender': { S: senderUserId } } : {}),
+-                    },
+-                }));
++                await this.client.send(new UpdateItemCommand(update(userId)));
+             } catch (err) {
+                 this.logger?.warn?.('conversations index write failed', {
+                     channel,
+@@ -152,6 +166,27 @@ export class DynamoConversationsStore {
+                 });
+             }
+         }));
++        const unique = Array.from(new Set(members));
++        if (this.messageIndexWrites !== 'transaction' || unique.length < 2) {
++            await each(members);
++            return;
++        }
++        const chunks: string[][] = [];
++        for (let i = 0; i < unique.length; i += 100) chunks.push(unique.slice(i, i + 100));
++        await Promise.all(chunks.map(async (chunk) => {
++            if (chunk.length < 2) { await each(chunk); return; }
++            try {
++                await this.client.send(new TransactWriteItemsCommand({
++                    TransactItems: chunk.map((userId) => ({ Update: update(userId) })),
++                }));
++            } catch (err) {
++                this.logger?.warn?.('conversations index transaction failed; writing rows one by one', {
++                    channel,
++                    error: (err as Error)?.message,
++                });
++                await each(chunk);
++            }
++        }));
+     }
+ 
+     /**
+diff --git a/test/server/redis-router.integration.test.ts b/test/server/redis-router.integration.test.ts
+index 0dc6e1e..972f683 100644
+--- a/test/server/redis-router.integration.test.ts
++++ b/test/server/redis-router.integration.test.ts
+@@ -6,6 +6,7 @@ import { randomUUID } from 'crypto';
+ import { createClient, type RedisClientType } from 'redis';
+ import WebSocket from 'ws';
+ import { attachRealtime, defineFeature, calls, chat, notifications, presence, splitServiceChannel, RedisRealtimeRouter, type RealtimeClusterRedis, type RealtimeHandle } from '../../src/server';
++import { createAuthorityScope, type AuthorityScope } from '../../src/server-ws/authorityScope';
+ import { RedisPresenceStore } from '../../src/presence';
+ import { RedisCallStateStore, type CallStateRedis } from '../../src/call';
+ import type { NotificationService } from '../../src/notification';
+@@ -36,12 +37,12 @@ type NativeNode = { router: RedisRealtimeRouter; handle: RealtimeHandle; server:
+     let authorities: Map<string, Authority>;
+     let members: Set<string>;
+     let held: { id: string; entered: VoidDeferred; release: VoidDeferred; calls: number } | null;
+-    let asks: Array<{ node: string; kind: string; userId: string; channel: string }>;
++    let asks: Array<{ node: string; kind: string; userId: string; channel: string; scope?: AuthorityScope }>;
+ 
+     async function boot(nodeId: string, ns = namespace, options: { fixedClientId?: string; dropReceipts?: boolean;
+         registerGate?: VoidDeferred; disconnectGate?: VoidDeferred; disconnected?: VoidDeferred;
+         rejoinGraceMs?: number; renewGate?: VoidDeferred; renewing?: VoidDeferred; ended?: string[];
+-        publishProofMaxAgeMs?: number; withChat?: boolean } = {}): Promise<NativeNode> {
++        publishProofMaxAgeMs?: number; peerOperationLingerMs?: number; withChat?: boolean } = {}): Promise<NativeNode> {
+         if (!redisUrl) throw new Error('REAL_ROUTER_REDIS_URL is required for real Redis acceptance');
+         const command = createClient({ url: redisUrl, disableOfflineQueue: true, socket: { reconnectStrategy: false } });
+         command.on('error', () => undefined);
+@@ -74,14 +75,15 @@ type NativeNode = { router: RedisRealtimeRouter; handle: RealtimeHandle; server:
+                 return async () => { await subscriber.unsubscribe(topic); };
+             },
+         };
+-        const authorize = async ({ ctx, channel, kind }: { ctx: any; channel: string; kind: string }) => {
+-            asks.push({ node: nodeId, kind, userId: String(ctx?.userId), channel });
++        const authorize = async ({ ctx, channel, kind, scope }: { ctx: any; channel: string; kind: string; scope?: AuthorityScope }) => {
++            asks.push({ node: nodeId, kind, userId: String(ctx?.userId), channel, ...(scope ? { scope } : {}) });
+             const current = authorities.get(ctx?.userId);
+             return !!current && current.epoch === ctx.epoch && current.org === ctx.org
+                 && splitServiceChannel(channel).channel.startsWith(`${ctx.org}:`) && members.has(ctx.userId);
+         };
+         const router = new RedisRealtimeRouter({ redis: port, namespace: ns, nodeId, leaseMs: 900, requestTimeoutMs: 200,
+             ...(options.publishProofMaxAgeMs !== undefined ? { publishProofMaxAgeMs: options.publishProofMaxAgeMs } : {}),
++            ...(options.peerOperationLingerMs !== undefined ? { peerOperationLingerMs: options.peerOperationLingerMs } : {}),
+             authorize, filterClientMessage: async ({ ctx, message }) => {
+                 const frame = message as any;
+                 if (held && frame.id === held.id && ctx?.userId === 'bob') {
+@@ -336,6 +338,90 @@ type NativeNode = { router: RedisRealtimeRouter; handle: RealtimeHandle; server:
+         expect(carol.frames.some(f => f.message?.message === 'stale')).toBe(true);
+     });
+ 
++    // 0.110 peer operation scopes (authorityScope.ts P6) across two real nodes.
++    async function probeThenFanOut(linger: number | undefined, between?: () => void) {
++        const opts = linger !== undefined ? { peerOperationLingerMs: linger } : {};
++        const a = await boot('a', namespace, opts), b = await boot('b', namespace, opts);
++        const alice = await connect(a, 'alice'), bob = await connect(b, 'bob');
++        const channel = 'orgiq:room';
++        expect(await a.router.subscribeToChannel(alice.id, channel)).toBe(true);
++        expect(await b.router.subscribeToChannel(bob.id, channel)).toBe(true);
++        asks.length = 0;
++        // One origin operation, as a chat send runs it: the notify plugin's
++        // readable-subscription probe, then the fan-out.
++        const scope = createAuthorityScope('chat.send');
++        const probed = await a.router.isClientSubscribed(bob.id, channel, { scope });
++        between?.();
++        await a.router.sendToChannel(channel, { type: 'test', id: 'p6' }, null, { publisherClientId: alice.id, scope });
++        scope.close();
++        await delay(60);
++        const peer = asks.filter(x => x.node === 'b' && x.kind === 'subscribe' && x.userId === 'bob');
++        return { a, b, bob, probed, peer, delivered: bob.frames.some(f => f.id === 'p6') };
++    }
++
++    it('P6 off: the probe and the fan-out reach the peer under separate scopes and carry no op number', async () => {
++        const { a, probed, peer, delivered } = await probeThenFanOut(undefined);
++        expect(probed).toBe(true); expect(delivered).toBe(true);
++        expect(peer).toHaveLength(2);
++        expect(peer[0].scope).toBeUndefined(); // the probe ran unscoped, as before
++        expect(peer[1].scope).toBeDefined();
++        for (const e of a.published.filter(x => x.frame.kind === 'subscription-check' || x.frame.kind === 'channel')) expect('op' in e.frame).toBe(false);
++    });
++
++    it('P6 on: one origin operation shares ONE peer scope across its probe and its fan-out, and still asks for every check', async () => {
++        const { a, probed, peer, delivered } = await probeThenFanOut(500);
++        expect(probed).toBe(true); expect(delivered).toBe(true);
++        expect(peer).toHaveLength(2); // never memoized by the router: both recipient checks asked
++        expect(peer[0].scope).toBeDefined();
++        expect(peer[1].scope).toBe(peer[0].scope);
++        const frames = a.published.filter(x => x.frame.kind === 'subscription-check' || (x.frame.kind === 'channel' && x.frame.message?.id === 'p6'));
++        expect(frames).toHaveLength(2);
++        expect(new Set(frames.map(x => x.frame.op)).size).toBe(1);
++        expect(typeof frames[0].frame.op).toBe('number');
++    });
++
++    it('P6 on: a recipient revoked between the probe and the fan-out is refused on the peer', async () => {
++        const { probed, peer, delivered } = await probeThenFanOut(500, () => { members.delete('bob'); });
++        expect(probed).toBe(true);
++        expect(peer).toHaveLength(2);
++        expect(delivered).toBe(false);
++    });
++
++    it('P6 on: the shared peer scope closes after its linger and on shutdown', async () => {
++        const { b, peer } = await probeThenFanOut(100);
++        const shared = peer[0].scope!;
++        expect(shared.active).toBe(true); // within the linger
++        await delay(200);
++        expect(shared.active).toBe(false);
++        expect((b.router as any).peerOps.size).toBe(0);
++        namespace = `acceptance-${randomUUID()}`; // a second pair, separate node owners
++        const again = await probeThenFanOut(1500);
++        expect(again.peer[0].scope!.active).toBe(true);
++        await again.b.router.shutdown();
++        expect(again.peer[0].scope!.active).toBe(false);
++    });
++
++    it('P6 ignores a forged or malformed op and rejects an out-of-range linger', async () => {
++        expect(() => new RedisRealtimeRouter({ redis: {} as any, namespace, nodeId: 'x', peerOperationLingerMs: 2001 })).toThrow('Invalid peer operation linger');
++        expect(() => new RedisRealtimeRouter({ redis: {} as any, namespace, nodeId: 'x', peerOperationLingerMs: -1 })).toThrow('Invalid peer operation linger');
++        const a = await boot('a', namespace, { peerOperationLingerMs: 500 }), b = await boot('b', namespace, { peerOperationLingerMs: 500 });
++        const bob = await connect(b, 'bob'); await b.router.subscribeToChannel(bob.id, 'orgiq:room');
++        asks.length = 0;
++        const original = a.port.publish;
++        a.port.publish = async (topic, payload) => {
++            const frame = JSON.parse(payload);
++            if (frame.kind === 'subscription-check') frame.op = 'not-a-number';
++            return original(topic, JSON.stringify(frame));
++        };
++        const scope = createAuthorityScope('probe');
++        try { expect(await a.router.isClientSubscribed(bob.id, 'orgiq:room', { scope })).toBe(true); }
++        finally { scope.close(); a.port.publish = original; }
++        const peer = asks.filter(x => x.node === 'b' && x.kind === 'subscribe');
++        expect(peer).toHaveLength(1);
++        expect(peer[0].scope).toBeUndefined();
++        expect((b.router as any).peerOps.size).toBe(0);
++    });
++
+     it('drops a held delivery after disconnect and suppresses in-flight duplicate frames', async () => {
+         const a = await boot('a'), b = await boot('b'), bob = await connect(b, 'bob');
+         held = { id: 'held', entered: deferred(), release: deferred(), calls: 0 };
+diff --git a/test/stores/dynamo/DynamoChatStore.local.test.ts b/test/stores/dynamo/DynamoChatStore.local.test.ts
+index ae77cc0..cdfdf56 100644
+--- a/test/stores/dynamo/DynamoChatStore.local.test.ts
++++ b/test/stores/dynamo/DynamoChatStore.local.test.ts
+@@ -131,6 +131,23 @@ const S = (AttributeName: string) => ({ AttributeName, AttributeType: 'S' as con
+                 expect(await s.listMessages(ch, 10)).toHaveLength(3);
+             });
+ 
++            it("messageIndexWrites 'transaction' leaves the same rows as per-member writes and keeps per-person state (0.110)", async () => {
++                const each = new DynamoChatStore({ client, tables });
++                const tx = new DynamoChatStore({ client, tables, messageIndexWrites: 'transaction' });
++                const a = `tx-each-${tag}`, b = `tx-txn-${tag}`;
++                await tx.conversations.setPinned('dev-eve', b, true);
++                const message = (channel: string) => ({ id: 'm', clientId: 'c', userId: 'dev-zed', channel, message: 'hi', timestamp: '2026-10-06T12:00:00.000Z' });
++                await each.conversations.recordMessage({ channel: a, members: ['dev-eve', 'dev-zed'], message: message(a) });
++                await tx.conversations.recordMessage({ channel: b, members: ['dev-eve', 'dev-zed'], message: message(b) });
++                for (const user of ['dev-eve', 'dev-zed']) {
++                    const rows = await tx.conversations.listForUser(user, 50);
++                    const strip = (r: any) => r && { peers: r.peers, lastMessageAt: r.lastMessageAt, lastMessagePreview: r.lastMessagePreview, lastMessageUserId: r.lastMessageUserId };
++                    expect(strip(rows.find((r) => r.channel === b))).toEqual(strip(rows.find((r) => r.channel === a)));
++                }
++                expect((await tx.conversations.listForUser('dev-eve', 50)).find((r) => r.channel === b)?.pinned).toBe(true);
++                expect((await tx.conversations.listUsersForChannel(b)).sort()).toEqual(['dev-eve', 'dev-zed']);
++            });
++
+             it('keeps per-person conversation state across messages; section/mute/unread round-trip; the GSI answers the audience', async () => {
+                 const s = store();
+                 const c = `room:design-${tag}`;
+diff --git a/test/stores/dynamo/DynamoChatStore.test.ts b/test/stores/dynamo/DynamoChatStore.test.ts
+index c603e05..338ce68 100644
+--- a/test/stores/dynamo/DynamoChatStore.test.ts
++++ b/test/stores/dynamo/DynamoChatStore.test.ts
+@@ -212,6 +212,44 @@ describe('conversations index', () => {
+         await expect(store.conversations.recordMessage({ channel: 'g', members: ['a', 'b'], message: msg() })).resolves.toBeUndefined();
+     });
+ 
++    it("messageIndexWrites 'transaction' writes the SAME member updates in one TransactWriteItems request (0.110)", async () => {
++        const each = makeStore();
++        const tx = makeStore({ messageIndexWrites: 'transaction' });
++        const info = { channel: 'room:design', members: ['dev-eve', 'dev-carol', 'dev-eve'], message: msg({ channel: 'room:design', userId: 'dev-carol' }) };
++        await each.store.conversations.recordMessage(info);
++        await tx.store.conversations.recordMessage(info);
++        expect(tx.ddb.sent.map((s) => s.name)).toEqual(['TransactWriteItemsCommand']);
++        // Duplicates collapse (a transaction may not name one item twice);
++        // each Update is exactly the per-member UpdateItem input.
++        const updates = tx.ddb.sent[0].input.TransactItems.map((i: any) => i.Update);
++        expect(updates).toEqual(each.ddb.sent.slice(0, 2).map((s) => s.input));
++        expect(tx.ddb.rows('chat-conversations')).toEqual(each.ddb.rows('chat-conversations'));
++    });
++
++    it("messageIndexWrites 'transaction' falls back to per-member writes when the transaction fails, and one member stays an UpdateItem", async () => {
++        const warn = jest.fn();
++        const { ddb, store } = makeStore({ messageIndexWrites: 'transaction', logger: { warn } });
++        ddb.failNext('TransactWriteItemsCommand', Object.assign(new Error('conflict'), { name: 'TransactionCanceledException' }));
++        await store.conversations.recordMessage({ channel: 'g', members: ['a', 'b'], message: msg({ channel: 'g' }) });
++        expect(ddb.sent.map((s) => s.name)).toEqual(['TransactWriteItemsCommand', 'UpdateItemCommand', 'UpdateItemCommand']);
++        expect(ddb.row('chat-conversations', 'a', 'g')).toBeDefined();
++        expect(ddb.row('chat-conversations', 'b', 'g')).toBeDefined();
++        expect(warn).toHaveBeenCalledWith('conversations index transaction failed; writing rows one by one', expect.objectContaining({ channel: 'g' }));
++        ddb.clear();
++        await store.conversations.recordMessage({ channel: 'solo', members: ['a'], message: msg({ channel: 'solo' }) });
++        expect(ddb.sent.map((s) => s.name)).toEqual(['UpdateItemCommand']);
++    });
++
++    it("messageIndexWrites splits more than 100 members into transactions of at most 100 and rejects unknown modes", async () => {
++        const { ddb, store } = makeStore({ messageIndexWrites: 'transaction' });
++        const members = Array.from({ length: 201 }, (_, i) => `u${i}`);
++        await store.conversations.recordMessage({ channel: 'big', members, message: msg({ channel: 'big' }) });
++        expect(ddb.sent.map((s) => s.name).sort()).toEqual(['TransactWriteItemsCommand', 'TransactWriteItemsCommand', 'UpdateItemCommand']);
++        expect(ddb.sent.filter((s) => s.name === 'TransactWriteItemsCommand').map((s) => s.input.TransactItems.length)).toEqual([100, 100]);
++        expect(ddb.rows('chat-conversations')).toHaveLength(201);
++        expect(() => new DynamoConversationsStore({ client: ddb, tableName: 't', messageIndexWrites: 'batch' } as any)).toThrow(/messageIndexWrites/);
++    });
++
+     it('recordJoin seeds peers/joinedAt only if absent and refreshes ttl', async () => {
+         const { ddb, store } = makeStore();
+         await store.conversations.recordJoin('room:design', 'dev-eve');
+diff --git a/test/stores/dynamo/ddbDouble.ts b/test/stores/dynamo/ddbDouble.ts
+index 8ff5901..f0641dc 100644
+--- a/test/stores/dynamo/ddbDouble.ts
++++ b/test/stores/dynamo/ddbDouble.ts
+@@ -83,6 +83,16 @@ export function makeDdbDouble(opts: { keys?: Record<string, [string, string]> }
+                 }
+                 return { Responses: out };
+             }
++            case 'TransactWriteItemsCommand': {
++                // All-or-nothing over Update items (the only kind the stores send).
++                for (const { Update: u } of input.TransactItems) {
++                    const id = k(u.TableName, u.Key);
++                    const item = { ...(table(u.TableName).get(id) ?? u.Key) };
++                    applyUpdate(item, u.UpdateExpression, u.ExpressionAttributeNames, u.ExpressionAttributeValues);
++                    table(u.TableName).set(id, item);
++                }
++                return {};
++            }
+             default: return {};
+         }
+     };

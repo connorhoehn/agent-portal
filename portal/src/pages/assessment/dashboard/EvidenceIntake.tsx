@@ -17,6 +17,7 @@ import {
   Input,
   MetaLine,
   Stack,
+  T,
   Textarea,
   type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
@@ -257,11 +258,12 @@ const LEDGER_COLUMNS: DataTableColumn<LedgerItem>[] = [
   {
     key: 'name',
     header: 'Item',
-    render: (item) => <strong className="font-semibold text-text-primary">{item.name}</strong>,
+    render: (item) => <T size="sm" weight="medium">{item.name}</T>,
   },
   {
     key: 'captured_at',
     header: 'When',
+    numeric: true,
     render: (item) => fmtDate(item.captured_at),
   },
   {
@@ -334,6 +336,7 @@ export function EvidenceIntake({ teamId }: EvidenceIntakeProps) {
             data={items}
             columns={LEDGER_COLUMNS}
             keyField={(item) => item.provenance_id}
+            size="sm"
             loading={isLoading}
             emptyMessage="No evidence ingested yet. Add evidence above to start this team’s lineage ledger."
             frameless

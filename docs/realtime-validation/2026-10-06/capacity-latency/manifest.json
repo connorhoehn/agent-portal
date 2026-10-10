@@ -1,0 +1,172 @@
+{
+ "recordedAt": "2026-10-06",
+ "scope": "Three open items from capacity-real-send: (1) per-stage breakdown of chat delivery from socket frame receipt, one targeted reversible change, re-measured; (2) the stalled-Redis lease that kept renewing; (3) the soak's publish denials and call-status errors. Local only, no cloud.",
+ "method": {
+  "frameDiagnostics": "test-support/native-rds-preload.mjs ORGIQ_NATIVE_METRICS_MODE=frames (bind-mounted; bff-cluster-containers.py ORGIQ_BFF_CONTAINER_METRICS_MODE=frames). Hooks: ws 'message' receipt per connection, createWsHandler services' handleAction (queue wait = handler start - receipt; blockedBy = overlap with earlier handlers on the same connection), chat send gates/persist/broadcast, Redis router publish/receive, recipient socket write, outgoing error frames by fixed labels, host membership writes/peer hints/fences, SQL and Dynamo error classes. log2/8 histograms (~9% resolution; percentiles report the bucket upper bound). SIGUSR2 resets after fixture preparation. Counts/timings only; no channels, subjects, ids or bodies written. Wall-clock spans across containers use the one VM kernel clock.",
+  "overhead": "frames-mode burst chat p95 3,343/5,521 vs plain 2,498-4,336 on the same image; used to rank, plain runs used for latency claims.",
+  "runner": "run_profile.sh <profile> <label> [frames]; summarise_frames.py"
+ },
+ "item1_breakdown": {
+  "burst": "burst-frames-1 (driver p50 2,702): send.queueWait p50 663-723 / p95 1,116-1,327 ms (blocked by the same socket's presence.set in 410/620 sends, overlap p50 ~750 ms); handler start->message created p50 139-255 / p95 469-608 (publish authorize p50 ~100, p95 430); created->peer recipient write p50 1,721 / p95 1,877-2,232 (created->peer publish p50 0.86-1.1 s = persist ~0.21 + publish check ~0.1 + local fan-out ~0.15-0.2 + second check; Redis transit ~0.1-0.16; peer receive->write ~0.86 incl. publisher+recipient authorize); event-loop delay p50 10.2 (resolution floor) / p99 40 / max 167-214 ms; frame parse+dispatch for an unblocked frame <=0.1 ms p50 (max 3 ms); socket send backlog 0 KB at every write. Server sum of p50s ~2.61 s vs driver 2.70 s; ~0.09 s outside the server. burst-frames-2 (driver p50 4.70 s): queue p50 2.43 s (send enqueued behind join/subscribe/set).",
+  "soak": "soak-frames-1/before-3: send.queueWait p50 0.1 / p95 2.9-3.2 s / p99 4.1-4.9 s, blocked by presence.set (~45% of sends, overlap p50 938 ms) and earlier chat.send; presence.set handler p50 860 ms (permitted 394, broadcast 663-789, shared store put 24 ms); chat.send handler p50 37 / p95 2,047. soak-frames-2 diverged (driver p95 12.2 s; presence.set queue p95 16-19 s as the driver's 1-s recovery retries stack per socket).",
+  "rootMechanism": "Every slow stage is authorization I/O under a saturated fixture: BFF containers reach their 1-CPU cap during waves, DynamoDB Local 86% of a core, ~1.3 ms CPU per SDK call; authorize allow p50 ~100 ms / p95 360-720 ms. Earlier SDK pool experiment (128) did not help; this stage did not repeat it."
+ },
+ "item1_change": {
+  "what": "realtime-modules createWsHandler: presence frames serialise on their own per-connection lane (independentServices, default ['presence']; [] restores one lane). Order within each lane unchanged; chat/call share one lane; close drains all lanes.",
+  "branch": "connorhoehn/realtime-modules perf/presence-frame-lane @ b365d49c5e183fb357391bd7ae1385c6493b8599 (from feat/orgiq-0108 6e2a9392). Not released, not merged, consumers still pin 0.108.0.",
+  "libraryGate": "createWsHandler suite 27/27 (5 new); full jest 2,026 passed, 14 skipped; 2 suites (redis-router.integration, calls-socket-close) fail to compile identically on unmodified 0.108.0 with the borrowed node_modules (library-jest.log). Build + verify-exports pass.",
+  "measuredImage": "orgiq-middleware:cluster-latency-lane-validation sha256:ab0525591b9f32f68e9d1da1d6ba1dd60c472f7af4ff14c27687ce2ade725cca = cluster-real-send-validation + the four rebuilt dist modules only (lane-image/Dockerfile; base files verified identical to the 0.108.0 commit)",
+  "burst": {
+   "before": [
+    4336.0,
+    2498.2
+   ],
+   "lane": [
+    3302.1,
+    2896.7
+   ],
+   "verdict": "no difference beyond run-to-run noise"
+  },
+  "soak": {
+   "beforeAllThisStage": [
+    4223.9,
+    12172.0,
+    13928.9,
+    3992.0,
+    3261.4,
+    3094.6
+   ],
+   "lane": [
+    2984.8,
+    3094.4,
+    2438.4
+   ],
+   "queueWaitP95": {
+    "before": "2.9-3.2 s",
+    "lane": "1.3-1.4 s"
+   },
+   "chatHandlerP95": {
+    "before": "2.0 s",
+    "lane": "2.4-2.7 s"
+   },
+   "verdict": "Lane soaks are below every baseline soak and none diverged (baseline diverged in 2 of 6), but the non-divergent baselines (3.1-4.2 s) overlap closely. Queue wait halves; work moves into handler time because the CPU is saturated. Capacity still fails (300 ms target)."
+  }
+ },
+ "item2_redisStall": {
+  "finding": "Not a fenced owner and not the fixture client. Each BFF has two leased routers: /ws (namespace) and cookie /realtime (namespace:distillation). During the 12-s pause both routers' renewals were in flight; the cookie router's 2-s command deadline fired ~60 ms before the paused EVAL replies were delivered, so it fenced (health 503), while the /ws router's reply landed inside its deadline and it legitimately kept its lease, renewing every 10 s from the same connection with its own token (stall-repro-1-monitor.txt/keys.txt). The fixture's key pattern matches both namespaces. Fenced routers never renewed. Race-dependent: 1 of 4 reproductions hit it.",
+  "defect": "BFF: one process reported 503 forever while half its ownership stayed alive and kept serving its /ws sockets.",
+  "fix": "middleware/src/lib/realtime-node-ownership.ts linkNodeOwnership: the first leased router to fence retires its sibling (shutdown releases the lease). Wired in index.ts; handles expose ownership. Regression: src/lib/__tests__/realtime-node-ownership.test.ts (4). stall-fixed-2 shows the RELEASE EVALs for both /ws leases 50 ms after the late renewals; stall-fixed-3/4 fenced naturally; 3/3 pass."
+ },
+ "item3_classification": {
+  "earlier": "capacity-real-send soak: 95 AUTHZ_CHANNEL_DENIED (publish on the sender's own social:dm pair; samples show both members of a pair) + 6 call status refusals; soak-ab-before-1 here: 13 call status refusals, 0 denials.",
+  "reproduction": "0 denials and 0 protocol errors in 5 further baseline soaks (3 instrumented, 2 plain with host refusal logs) and 3 lane soaks. Both occurrences were divergent runs (driver chat p95 6.4 s and 13.9 s); one other divergent run (12.2 s) had none.",
+  "ruledOut": "membership writes, peer invalidation hints and fenced proofs: 0 in every instrumented run (the DM index never writes members); DM name guard admits both pair members; policy is static; frames on closed sockets are never delivered; peer-side publisher checks are silent.",
+  "classification": "By elimination both families are the host authorize returning false from its catch (fail-closed on a transient exception) under overload: live-principal catches any SQL, DynamoDB SDK (2 s connect / 5 s request deadlines) or store error and denies. That is correct fail-closed behaviour; the user-visible refusal is a capacity defect, not an authority defect. The exact exception was not captured (those runs' container logs were replaced).",
+  "alsoSeen": "~800 silent 'refused subscribe ... user ?' per node per soak: fan-out to sockets the driver dropped during token renewal (null context) - correct, not counted by the driver.",
+  "nowCaptured": "run_profile.sh saves host refusal lines (*-refusals.log); frames mode counts error frames, SQL/Dynamo errors and membership fences."
+ },
+ "gates": {
+  "typecheck": "pass (typecheck.log)",
+  "gatewayJest": "26 suites, 290 passed, 11 skipped (jest-gateway.log; includes realtime-node-ownership)",
+  "nativeContracts": "12/12 with crash case (cluster-acceptance.log). A back-to-back attempt failed at login on every case and is retained (failed-attempts/); it passed after the guarded helper restart; not diagnosed.",
+  "redisFaults": "3/3 (redis-failures.log)",
+  "dynamoFault": "1/1 (dynamo-failures.log)"
+ },
+ "runs": {
+  "burst-ab-before-1": {
+   "chatP50": 3650.3,
+   "chatP95": 4336.0,
+   "denied": 0,
+   "otherErrors": {}
+  },
+  "burst-ab-before-2": {
+   "chatP50": 1866.7,
+   "chatP95": 2498.2,
+   "denied": 0,
+   "otherErrors": {}
+  },
+  "burst-ab-lane-1": {
+   "chatP50": 2518.7,
+   "chatP95": 3302.1,
+   "denied": 0,
+   "otherErrors": {}
+  },
+  "burst-ab-lane-2": {
+   "chatP50": 2509.9,
+   "chatP95": 2896.7,
+   "denied": 0,
+   "otherErrors": {}
+  },
+  "burst-frames-1": {
+   "chatP50": 2702.4,
+   "chatP95": 3343.3,
+   "denied": 0,
+   "otherErrors": {}
+  },
+  "burst-frames-2": {
+   "chatP50": 4700.9,
+   "chatP95": 5521.1,
+   "denied": 0,
+   "otherErrors": {}
+  },
+  "soak-ab-before-1": {
+   "chatP50": 1213.2,
+   "chatP95": 13928.9,
+   "denied": 0,
+   "otherErrors": {
+    "call:Not authorized for call action: status": 13
+   }
+  },
+  "soak-ab-lane-1": {
+   "chatP50": 37.0,
+   "chatP95": 2984.8,
+   "denied": 0,
+   "otherErrors": {}
+  },
+  "soak-ab-lane-2": {
+   "chatP50": 23.8,
+   "chatP95": 2438.4,
+   "denied": 0,
+   "otherErrors": {}
+  },
+  "soak-frames-1": {
+   "chatP50": 32.8,
+   "chatP95": 4223.9,
+   "denied": 0,
+   "otherErrors": {}
+  },
+  "soak-frames-2": {
+   "chatP50": 1067.1,
+   "chatP95": 12172.0,
+   "denied": 0,
+   "otherErrors": {}
+  },
+  "soak-frames-before-3": {
+   "chatP50": 31.8,
+   "chatP95": 3992.0,
+   "denied": 0,
+   "otherErrors": {}
+  },
+  "soak-frames-lane-1": {
+   "chatP50": 25.4,
+   "chatP95": 3094.4,
+   "denied": 0,
+   "otherErrors": {}
+  },
+  "soak-plain-before-4": {
+   "chatP50": 26.3,
+   "chatP95": 3261.4,
+   "denied": 0,
+   "otherErrors": {}
+  },
+  "soak-plain-before-5": {
+   "chatP50": 26.0,
+   "chatP95": 3094.6,
+   "denied": 0,
+   "otherErrors": {}
+  }
+ },
+ "environment": "Docker only via the task socket; forwarder untouched; native BFFs restarted only through bff-cluster-processes.py (processes.log); Tilt :3001 untouched apart from its own tsx-watch reloads after middleware edits. Compiled BFFs left on cluster-real-send-validation, plain. No cloud.",
+ "capacityAccepted": false,
+ "cloudAccepted": false
+}

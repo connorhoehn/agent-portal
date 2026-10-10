@@ -2,7 +2,7 @@ import { useState } from 'react';
 import {
   Button, Card, CardHeader, Chip, ConfirmDialog, FormField, FormRow, Input, LoadingState,
   PageSection, Select, Stack, Switch, Table, TableBody, TableHead, TableRow, TableTd,
-  TableTh,
+  TableTh, T,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch';
@@ -10,7 +10,6 @@ import { EmptyState } from '../../components/ingest/ui';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { toastError, toastPending, toastSuccess } from '../../lib/toastStore';
 import { writeJson } from '../../lib/writeJson';
-import { T } from './Text';
 import { JOB_STATUS_TONE } from './ingestFormat';
 
 interface DataSource {
@@ -125,7 +124,7 @@ function SchedulesPanel({ sources }: { sources: DataSource[] }) {
         ) : schedules.length === 0 && !showForm ? (
           <EmptyState title="No schedules configured" body={'Ingestion runs only on manual "Sync now" trigger.'} />
         ) : schedules.length > 0 ? (
-          <Table>
+          <Table size="sm">
             <TableHead>
               <TableRow>
                 <TableTh>Label</TableTh><TableTh>Cron</TableTh><TableTh>Data Source</TableTh>
@@ -136,16 +135,16 @@ function SchedulesPanel({ sources }: { sources: DataSource[] }) {
             <TableBody>
               {schedules.map(s => (
                 <TableRow key={s.id}>
-                  <TableTd className="font-medium">{s.label}</TableTd>
-                  <TableTd className="font-mono text-[11px] text-text-secondary">{s.cronExpr}</TableTd>
-                  <TableTd className="text-[12px]">{s.dataSourceName}</TableTd>
-                  <TableTd className="whitespace-nowrap text-[11px] text-text-tertiary">
+                  <TableTd><T as="span" size="sm" weight="semibold">{s.label}</T></TableTd>
+                  <TableTd className="font-mono"><T as="span" size="xs" tone="secondary">{s.cronExpr}</T></TableTd>
+                  <TableTd><T as="span" size="xs">{s.dataSourceName}</T></TableTd>
+                  <TableTd className="whitespace-nowrap"><T as="span" size="xs" tone="tertiary">
                     {s.lastRunAt ? new Date(s.lastRunAt).toLocaleString() : '—'}
-                  </TableTd>
+                  </T></TableTd>
                   <TableTd>
                     {s.lastStatus
                       ? <Chip tone={JOB_STATUS_TONE[s.lastStatus] ?? 'neutral'} size="xs">{s.lastStatus}</Chip>
-                      : <T className="text-[11px] text-text-tertiary">—</T>}
+                      : <T size="xs" tone="tertiary">—</T>}
                   </TableTd>
                   <TableTd>
                     {canManage ? (
@@ -265,7 +264,7 @@ function ScheduleForm({ sources, onCreated }: { sources: DataSource[]; onCreated
           </FormField>
         )}
 
-        {error && <T className="text-[12px] text-danger">{error}</T>}
+        {error && <T size="xs" tone="inherit" className="text-danger">{error}</T>}
 
         <Button variant="primary" onClick={submit} disabled={saving}>
           {saving ? 'Saving…' : 'Create Schedule'}

@@ -80,7 +80,7 @@ export function TrendLine({ history, degraded }: TrendLineProps) {
       </Stack>
 
       <Stack gap="none" align="start">
-        <EntityCell label={deltaLabel} labelClassName={`text-sm ${deltaClass}`} />
+        <EntityCell label={deltaLabel} labelClassName={` ${deltaClass}`} />
         <MetaLine size="xs" items={['vs 7d ago']} />
       </Stack>
     </Inline>

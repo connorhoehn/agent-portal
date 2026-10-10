@@ -46,6 +46,7 @@ test('needs attention: the blocked bug, with its short reason, Eli Garcia and "2
   assert.equal(m.attention.length, 1);
   assert.deepEqual(m.attention[0], {
     id: 'wi-obs-e2-b4',
+    key: null,
     title: 'Stop duplicate alerts during a dependency outage',
     reason: 'Waiting on the dependency map.',
     assigneeName: 'Eli Garcia',

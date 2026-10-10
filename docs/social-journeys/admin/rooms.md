@@ -1,16 +1,19 @@
 surface: rooms
 role: admin
 user: u-operator
-url: /social/rooms?room=town-hall
+url: /social/rooms
 pages: portal/src/pages/social/RoomsPage.tsx,portal/src/pages/social/SocialChatWorkspace.tsx,portal/src/pages/social/SocialRoomsSection.tsx,portal/src/pages/social/RoomPane.tsx,portal/src/pages/social/useSocialCall.ts
-audited: 2026-09-30 12:42Z → 12:44Z, Chromium 1672×941 (Playwright headless, one fresh context per user — not the shared Chrome tab), middleware dev:mock:social on :3001 with the `social` compose profile up (platform-api, DynamoDB Local, host SFU), Vite :5183
+audited: 2026-10-07 03:08Z → 03:11Z, Chromium 1680×940, Playwright headless, a separate signed-in context per user (second context u-sana); Tilt stack: Vite :5183 over middleware :3001 (mock providers) with the real SFU :3902 and platform-api :23001
 session: /api/session/me sub u-operator, tenant social, role admin
 screenshot: rooms.jpg
-verdict: pass
+verdict: pass — real SFU media (fake devices) observed
 console errors: 0
-layout: pass — chat rail (library ConversationRail) 300px at x=200, flush against the 200px shell rail (content col left 200, 0px from content start), top 70 = content top 70, 871px tall = the full content height (no page header, shell crumbs off); pane 1172px at x=500; no horizontal scroll (scrollWidth 1672 = innerWidth 1672); the call dock is drawn above the page by the shell (SocialLayout)
-keyboard: pass — 18 distinct Tab stops from the rail's Find box through main (first: Find a chat, social-chat-rail-shelf-activity, social-chat-rail-shelf-mentions, social-chat-rail-shelf-calls, social-chat-rail-shelf-recordings, rail-section-header-toggle…) against 23 visible controls in main — the rail's conversation rows and the tree sit behind roving tabindexes (ArrowDown walks them), so fewer stops than controls is the design; the ROOMS section's + (new-room-button) opened "New room Name Slug preview appears here 0/48 Description (optional) Audio only Skip video " and Escape closed it (True)
-empty-state: pass — /social/rooms?room=no-such-room renders "This room is not available It does not exist, or it is private and you are not one of its members."
-realtime: pass — second arrival 0.38s: from Sana Iqbal's Join in their own context to this dock reading "2 people"; this user's Join → live took 0.06s; when u-sana left, this dock read "1 person" after <0.01s. In the call the dock read "Town hall 2 people Share People 2 Leave You Sana Iqbal". Both joined social:room:town-hall
-role-gating: can open rooms (ManageChannels): the ROOMS section's + (new-room-button) opened "New room Name Slug preview appears here 0/48 Description (optional) Audio only Skip video " and Escape closed it (True); GET /api/social/rooms lists moderators-desk (private), town-hall (org); joins and leaves calls
-notes: The rooms are the ROOMS section of the chat rail (the library's hook-bound rooms list): "▸ ROOMS + # Moderators desk # Town hall"; the room opens in the pane: "Who can join Everyone in this workspace Opened by Platform Operator Call Audio and video Recording Off Lobby social:room:town-hall".
+layout: pass — content column x=200px, width 1480px, top 70px, bottom 893px; rail 300px at x=200 (0px from content start), y=70, height 823; pane x=500, width 1180; scrollWidth 1680 / viewport 1680; body scrollHeight 940 / viewport height 940; footer row y=894–940px (1680px wide)
+keyboard: pass — physical Tab sweep reached 28 distinct controls in main against 38 visible enabled interactive elements (roving-focus rows and disabled controls are skipped by Tab); first stops: social-new-dm, social-rail-search, social-chat-rail-shelf-activ, social-chat-rail-shelf-menti, social-chat-rail-shelf-calls, social-chat-rail-shelf-recor, rail-section-header-toggle, social-team-tree-heading-tog, social-team-tree-create-team
+empty-state: pass — the surface's own GET /api/social/rooms answered with an empty list (stubbed in the browser, since rooms are platform-api's): Pick a room Choose a room under Rooms on the left to see who can join it, then join its call. A room stays open between calls, so a group can gather i; rail: ▸ ROOMS + No rooms yet Create one to start an ongoing hangout. Create room; unknown room id rendered the workspace with no pane
+realtime: pass — real room call on the local SFU/platform-api with fake devices: dock up in 0.00s, the peer's join showed "2 joined" in 0.01s, the peer's leave showed "1 joined" in 0.00s
+role-gating: New room control present (creates "journey-admin-muxj3o57", listed 1×); POST /api/social/rooms with an empty body → 400 (validation, not 403)
+room-detail: Journey admin muxj3o57 Open to the workspace Join call Who can join Everyone in this workspace Opened by Platform Operator Call Audio and video Recording Off Lobby social:room:journey-admin-muxj3o57
+call-tiles: 2 tiles in the dock: You SI Sana Iqbal
+media: join enabled: true; after Leave the footer returned to its idle Huddle/Message row (checked separately after the walk: the call dock was absent 4s after Leave; the walk probe itself matched the idle row, so its "false" is a probe quirk, not a defect)
+environment: Tilt stack, DEV_OFFLINE with registered mock providers for chat/directory; rooms, calls and recordings come from the real platform-api and SFU. Mock state was reset per fixture after the walk; walk-created rooms/teams were left for the reviewer.

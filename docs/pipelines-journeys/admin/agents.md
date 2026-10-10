@@ -1,14 +1,16 @@
 surface: agents
 role: admin
-user: u-operator (Platform Operator)
+user: u-operator
 url: /pipelines/agents
-pages: portal/src/pages/pipelines/SourcesPage.tsx,portal/src/lib/pipelineDefinitions.ts
-audited: 2026-09-30 05:09Z, Chromium 148.0.7778.96 1456×958 (Playwright headless, one context per identity — not the shared Chrome tab), middleware dev:mock:social on :3001, Vite :5183; GET /api/session/me: sub u-operator, tenant pipelines, role admin, grants {"orgiq":["admin"],"assessment":["admin"],"social":["admin"],"pipelines":["admin"]}
+pages: portal/src/pages/pipelines/AgentsPage.tsx
+audited: 2026-10-08 10:49Z → 2026-10-08 10:49Z, Chromium (Playwright headless from portal/node_modules, a fresh context per identity, not the shared Chrome tab), 1680×940, Tilt stack: middleware dev:mock on :3001, Vite :5183
+session: /api/session/me sub u-operator, tenant pipelines, role admin, grants {"orgiq":["admin"],"assessment":["admin"],"social":["admin"],"pipelines":["admin"]}
 screenshot: agents.jpg
 verdict: pass
 console errors: 0
-layout: pass — content col left 224px w 1208px; no horizontal scroll (scrollWidth 1456 = innerWidth 1456); h1 "Agents"; first table row top 286px; one row (search · count · recorded runs) above the table
-keyboard: pass — 10 really-visible focusables in main, Tab visited 10; Enter on the first focused row opened its definition (/pipelines/definitions?open=agent%3Aorgiq-advisor, drawer open); Escape closed the drawer; Back returned to the list
-empty-state: pass — search "zzzz-no-such-thing" leaves the table reading "No agents match "zzzz-no-such-thing"."
-role-gating: pass — admin holds every action (the cross-tenant wildcard); forbidden nothing. Read-only for every role: the page carries a "Read-only" badge, the only buttons in main are the table's Prev/Next, and the definition a row opens offers only what the role may do (Dry-run is for runbooks, which this list does not hold).
-notes: P2 re-walk — this surface was an empty state on P0 and now lists the agents from the definition registry (GET /api/pipelines/definitions?kind=…). First rows: Advisor orgiq-advisor orgiq nova-pro-v1 3 healthy 0 never / Assessment Drafter orgiq-assessment-drafter assessment nova-pro-v1 2 healthy 0 never / Assessment Scorer orgiq-assessment-scorer assessment nova-pro-v1 2 healthy 0 never. Nine agents from the fleet registry; only the supervisor has runs (its invocations carry the AG-UI run id; the sub-agents it calls fold into its runs as children), so the others read 0 / never — true, not missing.
+layout: pass — content col left 224px w 1432px, top 70px, bottom 893px; no horizontal scroll (scrollWidth 1680 / innerWidth 1680); h1 “Agents”; 1 <main>
+type: title 20/600; sizes in main (size/weight×text nodes): 14/400×58, 10/600×21, 12/600×9, 12/400×9, 14/600×2, 14/500×1, 20/600×1
+keyboard: pass — 11 really-visible focusables in main (10 Tab stops, the rest roving tabindex=-1 members), Tab visited 10; Enter on the first row (focus on TR) opened /pipelines/definitions?open=agent%3Aorgiq-advisor; browser Back returned to /pipelines/agents
+empty-state: pass — a read-only list with no filter; /pipelines/agents/does-not-exist renders “Sources › Agents Page not found Nothing lives at /pipelines/agents/does-not-exis”
+role-gating: pass — admin holds every action. Controls in main: []; Approve/Reject absent from the DOM, Cancel run absent, New definition absent, Configuration rail row present; invalid-body write probes (403 = refused by Cedar, anything else = past the gate, nothing written): PUT /configuration {} → 400; PUT /definitions/no-such-definition/approvers {} → 400; POST /approvals/no-such-step/decide {} → 400; POST /runs/no-such-run/cancel {} → 404
+notes: Every field above was observed in this pass, not carried forward.  Main text on arrival: Sources › Agents Agents Read-only The agent fleet — every deployed agent is a definition, and each invocation that carried a run id is one of its runs. 9 agents • 105 recorded runs AGENT RUNTIME WORKSPACE MODEL TOOLS STATUS RUNS LAST RUN LA

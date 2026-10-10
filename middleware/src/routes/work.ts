@@ -391,6 +391,7 @@ workRouter.post('/findings/:id/promote', requireAction('DispatchAgentRun'), asyn
   if (initiativeId) {
     const verdict = await grantScopedDispatchVerdict(initiativeId, resolveSession(req) ?? undefined);
     if (verdict.kind === 'deny') { res.status(403).json({ error: verdict.reason }); return; }
+    if (verdict.kind === 'unavailable') { res.status(503).json({ error: verdict.reason, gate: 'grant-authorization' }); return; }
   }
 
   const remedy = remediationFor(finding);

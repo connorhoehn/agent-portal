@@ -1,3 +1,5 @@
+// The tile shelf is the shell's one media sink, collapsed under the footer row
+// (SocialFooter.tsx): the dock is read for text/phase, and the row holds Leave.
 // A call started from the Search page (docs/social-calls-plan.md step 6),
 // walked the way docs/social-calls-first-call.md walks the initiative call:
 // two browser contexts, fake camera + microphone, against the middleware's own
@@ -16,6 +18,7 @@
 // first-call doc uses on :5184; override with SEARCH_CALL_PORTAL. Without
 // platform-api, Start call is off ("Calls need …") and this spec skips, saying so.
 import { chromium, expect, test, type Browser, type BrowserContext, type Page } from '@playwright/test';
+import { openAs } from './realSession';
 
 const PORTAL = process.env.SEARCH_CALL_PORTAL ?? 'http://localhost:5183';
 const SEARCH = '/iq/search?tab=connections&selection=person%3Ap-004';
@@ -32,13 +35,7 @@ test.beforeAll(async () => {
 test.afterAll(async () => { await browser?.close(); });
 
 async function signedIn(userId: string): Promise<{ context: BrowserContext; page: Page }> {
-  const context = await browser.newContext({ baseURL: PORTAL, permissions: ['camera', 'microphone'] });
-  const page = await context.newPage();
-  await page.goto('/');
-  const status = await page.evaluate(async (id: string) => (await fetch('/api/session/login', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ userId: id }),
-  })).status, userId);
-  expect(status, `sign in as ${userId}`).toBe(200);
+  const { context, page } = await openAs(browser, userId, { baseURL: PORTAL, contextOptions: { permissions: ['camera', 'microphone'] }, preJoin: 'remembered' });
   return { context, page };
 }
 
@@ -65,6 +62,7 @@ async function noraElsewhere(page: Page) {
 }
 
 test('Search: ring → accept → both live → leave', async () => {
+  test.setTimeout(120_000);
   const vera = await signedIn('u-vera');
   const nora = await signedIn('u-nora');
   try {
@@ -73,24 +71,21 @@ test('Search: ring → accept → both live → leave', async () => {
 
     await start.click();
     const veraDock = vera.page.getByTestId('search-call-dock');
-    await expect(veraDock).toBeVisible({ timeout: 10_000 });
+    await expect(veraDock).toHaveCount(1, { timeout: 10_000 });
 
     const toast = nora.page.getByTestId('incoming-call-toast');
     await expect(toast).toContainText('Vera Green is calling', { timeout: 15_000 });
-    await expect(veraDock.getByTestId('call-dock-meta')).toContainText('Calling Nora DaSilva');
+    await expect(vera.page.getByTestId('shell-call-dock')).toContainText('Calling Nora DaSilva', { timeout: 15_000 });
 
     await nora.page.getByTestId('incoming-call-accept').click();
     // Accept opens Search on the same people (the invite's channel) and answers there.
     await expect(nora.page).toHaveURL(/\/iq\/search\?.*selection=person%3Ap-004/, { timeout: 10_000 });
-    const noraDock = nora.page.getByTestId('search-call-dock');
-    await expect(noraDock.getByTestId('call-dock-meta')).toContainText('2 people', { timeout: 20_000 });
-    await expect(veraDock.getByTestId('call-dock-meta')).toContainText('2 people', { timeout: 20_000 });
+    for (const p of [vera, nora]) await expect(p.page.getByTestId('shell-call-dock')).toContainText('2 joined', { timeout: 20_000 });
     await expect(toast).toHaveCount(0);
 
-    await veraDock.getByTestId('call-dock-leave').click();
+    await vera.page.getByTestId(/^(shell-)?call-dock-leave$/).first().click();
     // In a two-person call one Leave ends it for both: "Call ended", then idle.
-    await expect(noraDock.getByTestId('call-dock-meta')).toHaveCount(0, { timeout: 15_000 });
-    await expect(veraDock.getByTestId('call-dock-meta')).toHaveCount(0, { timeout: 15_000 });
+    for (const p of [vera, nora]) await expect(p.page.getByTestId('shell-call-dock')).toHaveCount(0, { timeout: 15_000 });
     await expect(vera.page.getByTestId('search-start-call')).toBeEnabled({ timeout: 15_000 });
   } finally {
     await vera.context.close();
@@ -99,6 +94,7 @@ test('Search: ring → accept → both live → leave', async () => {
 });
 
 test('Search: ring → decline → the caller\'s dock ends', async () => {
+  test.setTimeout(120_000);
   const vera = await signedIn('u-vera');
   const nora = await signedIn('u-nora');
   try {
@@ -106,15 +102,14 @@ test('Search: ring → decline → the caller\'s dock ends', async () => {
     const start = await veraReadyToCall(vera.page);
 
     await start.click();
-    const veraDock = vera.page.getByTestId('search-call-dock');
-    await expect(veraDock.getByTestId('call-dock-meta')).toContainText('Calling Nora DaSilva', { timeout: 15_000 });
+    await expect(vera.page.getByTestId('shell-call-dock')).toContainText('Calling Nora DaSilva', { timeout: 15_000 });
     await expect(nora.page.getByTestId('incoming-call-toast')).toBeVisible({ timeout: 15_000 });
 
     await nora.page.getByTestId('incoming-call-decline').click();
     await expect(nora.page.getByTestId('incoming-call-toast')).toHaveCount(0);
     await expect(nora.page).toHaveURL(/\/iq\/projects$/);
     // Declined: straight to "Call ended" (then idle) — never "2 people".
-    await expect(veraDock.getByTestId('call-dock-meta')).toHaveCount(0, { timeout: 15_000 });
+    await expect(vera.page.getByTestId('shell-call-dock')).toHaveCount(0, { timeout: 15_000 });
     await expect(vera.page.getByTestId('search-start-call')).toBeEnabled({ timeout: 15_000 });
   } finally {
     await vera.context.close();

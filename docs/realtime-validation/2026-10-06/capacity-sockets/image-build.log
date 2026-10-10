@@ -1,0 +1,27 @@
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 777B done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/orgiq-middleware:cluster-0109-validation
+#2 DONE 0.0s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 2B done
+#3 DONE 0.0s
+
+#4 [1/2] FROM docker.io/library/orgiq-middleware:cluster-0109-validation@sha256:bb15549ea9f32f1103c66879faa7599a89b8b3937f98a8980cf4e91b8cb73539
+#4 resolve docker.io/library/orgiq-middleware:cluster-0109-validation@sha256:bb15549ea9f32f1103c66879faa7599a89b8b3937f98a8980cf4e91b8cb73539 done
+#4 CACHED
+
+#5 [2/2] RUN sed -i -e "s/maxSockets > 256)$/maxSockets > 1024)/"            -e "s/must be an integer from 1 to 256/must be an integer from 1 to 1024/"            -e "s/httpAgent: { maxSockets }, httpsAgent: { maxSockets }/httpAgent: { keepAlive: true, maxSockets }, httpsAgent: { keepAlive: true, maxSockets }/" /app/dist/lib/realtime-gateway.js  && grep -q "maxSockets > 1024)" /app/dist/lib/realtime-gateway.js && grep -q "keepAlive: true, maxSockets" /app/dist/lib/realtime-gateway.js
+#5 DONE 0.1s
+
+#6 exporting to image
+#6 exporting layers 0.0s done
+#6 exporting manifest sha256:830115567800094a03b865eb657136d37a5115b16a48575eae04918c5aaf6d7a done
+#6 exporting config sha256:e7e473042a9ab691ccb8dc660dca42c89d0ffa08eda5242d4c56b4d279f56a0a done
+#6 naming to docker.io/library/orgiq-middleware:cluster-sockets-validation done
+#6 unpacking to docker.io/library/orgiq-middleware:cluster-sockets-validation done
+#6 DONE 0.0s

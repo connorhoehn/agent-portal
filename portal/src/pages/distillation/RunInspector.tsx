@@ -10,7 +10,7 @@ import {
 } from '@connorhoehnslalom/ui-components/shared';
 import { relativeTime } from '../../lib/relativeTime';
 import {
-  inputRefs, logLines, outputLevel, producedRefs, runFacts, runStatus, runTechnicalText, transformationLabel,
+  inputRefs, logLines, outputLevel, producedRefs, runFacts, jobStatus, isRetrying, retryReason, runTechnicalText, transformationLabel,
   whatChanged,
 } from './activityModel';
 import { knowledgeHref, knowledgeItemHref, viewForLevel } from './distillationRoutes';
@@ -72,7 +72,7 @@ export function RunInspector({ job, onClose, onOpen }: {
   /** Open a Knowledge record or view (pushes history, so Back returns here). */
   onOpen: (href: string) => void;
 }) {
-  const status = runStatus(job.status);
+  const status = jobStatus(job);
   const produced = producedRefs(job);
   const titles = useItemTitles(produced.map((r) => r.id));
   const outView = viewForLevel(outputLevel(job.level));
@@ -83,7 +83,7 @@ export function RunInspector({ job, onClose, onOpen }: {
     <Stack gap="md" className="h-full overflow-y-auto border-l border-border bg-surface p-4" data-testid="run-inspector">
       <DetailHeader
         title={transformationLabel(job.level)}
-        badge={<StatusPill tone={status.tone} label={status.label} size="sm" />}
+        badge={<StatusPill tone={status.tone} label={status.label} {...(status.meta ? { meta: status.meta } : {})} size="sm" />}
         meta={<T className="text-[12px] text-text-tertiary">Started {relativeTime(job.startedAt)}{job.repo ? ` · ${job.repo}` : ''}</T>}
         aside={<IconButton aria-label="Close run" size="sm" variant="ghost" icon={<CloseIcon size={16} />} onClick={onClose} />}
         // The aside is only the close button; its default width squeezed the
@@ -91,6 +91,7 @@ export function RunInspector({ job, onClose, onOpen }: {
         asideWidth={32}
       />
       {job.status === 'failed' && <InlineAlert tone="error">{job.error ?? 'Failed without an error message.'}</InlineAlert>}
+      {isRetrying(job) && <InlineAlert tone="warning" data-testid="run-retrying">{retryReason(job)}</InlineAlert>}
       <KeyValue layout="row" labelWidth="w-24" items={runFacts(job)} aria-label="Run facts" />
       {/* heading variant, like the Produced list beside it — the mockup draws
           "What changed" and "Produced" as the same heading. */}

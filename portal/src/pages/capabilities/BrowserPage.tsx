@@ -60,7 +60,7 @@ function BrowserPage() {
       {blocking.map((c) => (
         <InlineAlert key={c.key} tone="error" className="mb-3">
           {`${c.label}: ${c.detail} Everything on this page launches a real browser session with that id, so it will fail until ${c.envVar} is corrected — see `}
-          <Link to="/admin/capabilities" className="font-medium text-primary no-underline hover:underline">Capabilities</Link>
+          <Link to="/admin/capabilities" className="text-primary no-underline hover:underline">Capabilities</Link>
           {'.'}
         </InlineAlert>
       ))}

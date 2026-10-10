@@ -15,15 +15,26 @@
 jest.mock('../../config.js', () => ({
   config: { region: 'us-east-1', auth: { sessionSigningSecretArn: '' }, cognito: { portalOrigin: '' }, mock: { aurora: true } },
 }));
+// Jest's CJS transform cannot evaluate role-registry's import.meta URL. Keep
+// the same Social seed capabilities while exercising the attached runtime.
+jest.mock('../role-registry.js', () => ({ roleRegistry: () => [
+  { id: 'participant', tenant: 'social', capabilities: ['ViewSocial', 'PostMessage'] },
+  { id: 'moderator', tenant: 'social', capabilities: ['ViewSocial', 'PostMessage'] },
+  { id: 'community-admin', tenant: 'social', capabilities: ['ViewSocial', 'PostMessage'] },
+] }));
 
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import WebSocket from 'ws';
 import { SignJWT } from 'jose';
-import { attachRealtimeGateway, channelGuard, lobbyGuard, realtimeGatewayEnabled, realtimeGatewayStatus, REALTIME_GATEWAY_PATH } from '../realtime-gateway.js';
+import {
+  activeCallCount, attachRealtimeGateway, channelGuard, gatewayStatsLine, GATEWAY_STATS_TYPE, lobbyGuard, realtimeGatewayEnabled,
+  realtimeGatewayStatus, REALTIME_GATEWAY_PATH, statsIntervalMs,
+} from '../realtime-gateway.js';
 import { rejectUnsupportedUpgrades } from '../unsupported-upgrades.js';
 import { signRealtimeToken, realtimeClaims, REALTIME_TOKEN_ISSUER, REALTIME_TOKEN_KIND } from '../realtime-token.js';
 import type { Session } from '../session.js';
+import { getUser } from '../../providers/identity.js';
 
 const SECRET = 'test-realtime-secret';
 type Frame = Record<string, unknown> & { type?: string };
@@ -55,13 +66,15 @@ function session(sub: string, name: string, tenant = 'orgiq'): Session {
 }
 
 async function tokenFor(sub: string, name: string, tenant = 'orgiq'): Promise<string> {
-  return (await signRealtimeToken(realtimeClaims(session(sub, name, tenant)), SECRET)).token;
+  const user = await getUser(sub, { authoritative: true });
+  const current = { ...session(sub, name, tenant), role: user?.grants[tenant]?.[0] ?? 'member', epoch: user?.epoch ?? 0 } as Session;
+  return (await signRealtimeToken(realtimeClaims(current), SECRET)).token;
 }
 
 type Open = { ws: WebSocket; frames: Frame[] };
-function connect(opts: { path?: string; protocols?: string[]; origin?: string } = {}): Promise<Open | { refused: number }> {
+function connect(opts: { path?: string; protocols?: string[]; origin?: string; headers?: Record<string, string> } = {}): Promise<Open | { refused: number }> {
   return new Promise((resolve) => {
-    const headers: Record<string, string> = {};
+    const headers: Record<string, string> = { ...(opts.headers ?? {}) };
     if (opts.origin) headers['origin'] = opts.origin;
     const ws = new WebSocket(`ws://127.0.0.1:${port}${opts.path ?? REALTIME_GATEWAY_PATH}`, opts.protocols ?? [], { headers });
     const frames: Frame[] = [];
@@ -89,6 +102,25 @@ async function until(pred: () => boolean, ms = 2_000): Promise<void> {
 const settle = (ms = 150) => new Promise((r) => setTimeout(r, ms));
 
 describe('handshake', () => {
+  it('closes an oversized signalling frame with 1009 before dispatch', async () => {
+    const sender = await connectAs('u-vera', 'Vera Green');
+    const peer = await connectAs('u-nora', 'Nora DaSilva');
+    try {
+      const closed = new Promise<number>((resolve) => sender.ws.once('close', resolve));
+      sender.ws.send(JSON.stringify({
+        type: 'call', action: 'invite',
+        data: {
+          callId: 'oversized-invite', lobbyName: 'orgiq:dm:u-nora:u-vera',
+          callerId: 'u-vera', targetUserIds: ['u-nora'], padding: 'x'.repeat(256 * 1024),
+        },
+      }));
+      expect(await closed).toBe(1009);
+      await settle();
+      expect(peer.frames.some((f) => f.type === 'call')).toBe(false);
+      expect(peer.ws.readyState).toBe(WebSocket.OPEN);
+    } finally { sender.ws.close(); peer.ws.close(); }
+  });
+
   it('accepts a valid realtime token, echoes the marker subprotocol and sends the session frame', async () => {
     const r = await connect({ protocols: ['bearer-token-v1', await tokenFor('u-vera', 'Vera Green')], origin: 'http://localhost:5184' });
     if ('refused' in r) throw new Error(`refused ${r.refused}`);
@@ -123,6 +155,29 @@ describe('handshake', () => {
       .toEqual({ refused: 401 });
   });
 
+  describe('behind CloudFront → ALB (TRUST_PROXY_HOPS=2)', () => {
+    // The portal and /ws share the CloudFront origin, but the socket the
+    // middleware sees is plain TCP from the ALB, so the same-origin test used
+    // to compare https://<cf> against http://<cf> and refuse the portal's own
+    // socket (unless PUBLIC_BASE_URL happened to list it).
+    const prior = process.env['TRUST_PROXY_HOPS'];
+    afterEach(() => { if (prior === undefined) delete process.env['TRUST_PROXY_HOPS']; else process.env['TRUST_PROXY_HOPS'] = prior; });
+    const viaCloudFront = { host: 'd111.cloudfront.net', 'x-forwarded-proto': 'http', 'cloudfront-forwarded-proto': 'https' };
+
+    it('admits the https:// portal page as same-origin', async () => {
+      process.env['TRUST_PROXY_HOPS'] = '2';
+      const r = await connect({ protocols: ['bearer-token-v1', await tokenFor('u-vera', 'Vera Green')], origin: 'https://d111.cloudfront.net', headers: viaCloudFront });
+      if ('refused' in r) throw new Error(`refused ${r.refused}`);
+      r.ws.close();
+    });
+
+    it('does not take the CloudFront header from a caller when no proxy is declared', async () => {
+      delete process.env['TRUST_PROXY_HOPS'];
+      expect(await connect({ protocols: ['bearer-token-v1', await tokenFor('u-vera', 'Vera Green')], origin: 'https://d111.cloudfront.net', headers: viaCloudFront }))
+        .toEqual({ refused: 401 });
+    });
+  });
+
   it('leaves every other upgrade path to rejectUnsupportedUpgrades (404)', async () => {
     const token = await tokenFor('u-vera', 'Vera Green');
     expect(await connect({ path: '/socket', protocols: ['bearer-token-v1', token] })).toEqual({ refused: 404 });
@@ -145,12 +200,32 @@ describe('channelGuard (pure) — chat and presence channels are tenant-scoped l
     ['presence:orgiq:invoke', true],
     ['presence:assessment:knowledge:confluence-eng', false],
     ['reactions:orgiq:session:abc', true],
-    ['cursor:orgiq:doc:1', true],
+    // Default deny (2026-10-05): a family lib/tenant-channels.ts does not list.
+    ['cursor:orgiq:doc:1', false],
+    ['orgiq:anything', false],
+    ['presence:orgiq:lobby', true],
+    ['orgiq:lobby', false],
+    ['chat:orgiq:lobby', false],
+    ['orgiq:initiative:p-soc2', true],
     ['chat:orgiq:dm:u-theo:u-vera', true],
     ['chat:orgiq:dm:u-vera:u-nora', false],
+    // Huddle chat: shape only (chat or reactions on the exact name); the
+    // call-seat authority is live-principal's authorizeHuddleChannel.
+    ['orgiq:huddle', false],
+    ['orgiq:huddle:call-id', true],
+    ['reactions:orgiq:huddle:call-id', true],
+    ['presence:orgiq:huddle:call-id', false],
+    ['cursor:orgiq:huddle:call-id', false],
+    ['chat:orgiq:huddle:call-id', false],
     ['presence:', false],
     ['presence:orgiq', false],
   ])('%s → %s', (channel, ok) => expect(channelGuard(theo, channel)).toBe(ok));
+  it('admits only the huddle chat shape, never as a call lobby or for a token without orgiq', () => {
+    expect(channelGuard(theo, 'orgiq:huddle:call-id', 'publish')).toBe(true);
+    expect(channelGuard({ ...theo, org: 'social', tenants: ['social'] }, 'orgiq:huddle:call-id')).toBe(false);
+    expect(channelGuard({ ...theo, userId: '' }, 'orgiq:huddle:call-id')).toBe(false);
+    expect(lobbyGuard(theo, 'orgiq:huddle:call-id')).toBe(false);
+  });
   it('refuses a socket with no auth context', () => {
     expect(channelGuard(null, 'orgiq:invoke')).toBe(false);
   });
@@ -163,6 +238,9 @@ describe('lobbyGuard (pure)', () => {
     ['orgiq:initiative:p-auth-migration', true],
     ['assessment:dm:u-nora:u-vera', false],
     ['orgiq:dm:u-nora:u-theo', false],
+    ['orgiq:invoke', false],
+    ['orgiq:work:wi-1', false],
+    ['orgiq:room:x', false],
     ['orgiq:', false],
     ['orgiqx:dm:u-vera', false],
     ['dm:u-nora:u-vera', false],
@@ -197,6 +275,15 @@ describe('calls over the socket', () => {
     expect(errors(vera)).toEqual([]);
   });
 
+  it.each(['flat', 'nested'])('refuses a %s invite that assigns caller ownership to another authenticated user', async shape => {
+    const callId = `call-spoof-${shape}`;
+    const payload = { callId, lobbyName: 'orgiq:dm:u-nora:u-vera', callerId: 'u-nora', targetUserIds: ['u-nora'] };
+    vera.ws.send(JSON.stringify({ service: 'call', action: 'invite', ...(shape === 'flat' ? payload : { data: payload }) }));
+    await until(() => errors(vera).length > 0); await settle();
+    expect(errors(vera)[0]).toMatchObject({ type: 'error', service: 'call', message: expect.stringContaining('Not authorized') });
+    expect(callFrames(nora, callId)).toEqual([]);
+  });
+
   it('refuses an assessment: lobby for an orgiq caller — error to the sender, nothing to the target', async () => {
     vera.ws.send(invite('assessment:dm:u-nora:u-vera', 'call-cross'));
     await until(() => errors(vera).length > 0);
@@ -228,9 +315,9 @@ describe('calls over the socket', () => {
   });
 
   it('refuses an orgiq lobby for an assessment caller', async () => {
-    const ada = await connectAs('u-ada', 'Ada Assessor', 'assessment');
+    const ada = await connectAs('u-asha', 'Asha Nair', 'assessment');
     try {
-      ada.ws.send(JSON.stringify({ service: 'call', action: 'invite', callId: 'call-rev', lobbyName: 'orgiq:dm:u-ada:u-nora', callerId: 'u-ada', targetUserIds: ['u-nora'] }));
+      ada.ws.send(JSON.stringify({ service: 'call', action: 'invite', callId: 'call-rev', lobbyName: 'orgiq:dm:u-asha:u-nora', callerId: 'u-asha', targetUserIds: ['u-nora'] }));
       await until(() => errors(ada).length > 0);
       await settle();
       expect(callFrames(nora, 'call-rev')).toEqual([]);
@@ -245,5 +332,48 @@ describe('REALTIME_GATEWAY', () => {
     expect(realtimeGatewayEnabled({ NODE_ENV: 'production' })).toBe(false);
     expect(realtimeGatewayEnabled({ NODE_ENV: 'production', REALTIME_GATEWAY: 'on' })).toBe(true);
     expect(realtimeGatewayEnabled({ NODE_ENV: 'development', REALTIME_GATEWAY: 'off' })).toBe(false);
+  });
+});
+
+describe('the load line (capacity review #9)', () => {
+  it('is one JSON object with the fields the infra metric filters read', () => {
+    const line = JSON.parse(gatewayStatsLine({
+      sockets: 1000, activeCalls: 100, eventLoopP99Ns: 12_345_678, eventLoopMaxNs: 98_000_000, rssBytes: 300 * 1048576, store: 'redis',
+    }, new Date('2026-10-01T00:00:00Z')));
+    expect(line).toEqual({
+      type: GATEWAY_STATS_TYPE, sockets: 1000, activeCalls: 100, eventLoopDelayP99Ms: 12.35, eventLoopDelayMaxMs: 98,
+      rssMb: 300, store: 'redis', ts: '2026-10-01T00:00:00.000Z',
+    });
+    // The infra filter and this line must agree on the names.
+    expect(GATEWAY_STATS_TYPE).toBe('realtime-gateway-stats');
+  });
+
+  it('counts the call service\'s active calls, whatever it is registered as', () => {
+    expect(activeCallCount({ call: { activeCalls: new Map([['a', 1], ['b', 2]]) } })).toBe(2);
+    expect(activeCallCount({ calls: { activeCalls: new Map([['a', 1]]) } })).toBe(1);
+    expect(activeCallCount({})).toBe(0);
+  });
+
+  it('defaults to once a minute; REALTIME_STATS_INTERVAL_MS=0 turns it off', () => {
+    expect(statsIntervalMs({})).toBe(60_000);
+    expect(statsIntervalMs({ REALTIME_STATS_INTERVAL_MS: '0' })).toBe(0);
+    expect(statsIntervalMs({ REALTIME_STATS_INTERVAL_MS: 'nope' })).toBe(60_000);
+  });
+
+  it('is emitted by a live gateway with real counts', async () => {
+    const lines: string[] = [];
+    const spy = jest.spyOn(console, 'log').mockImplementation((...a: unknown[]) => { lines.push(String(a[0])); });
+    const s2 = http.createServer();
+    const h = attachRealtimeGateway(s2, { redisUrl: null, pingIntervalMs: 0, statsIntervalMs: 40 });
+    try {
+      await new Promise((r) => setTimeout(r, 150));
+      const stats = lines.filter((l) => l.includes(GATEWAY_STATS_TYPE)).map((l) => JSON.parse(l) as Record<string, unknown>);
+      expect(stats.length).toBeGreaterThan(0);
+      expect(stats[0]).toMatchObject({ type: GATEWAY_STATS_TYPE, sockets: 0, activeCalls: 0, store: 'memory' });
+      expect(typeof stats[0]!['eventLoopDelayP99Ms']).toBe('number');
+    } finally {
+      await h.dispose();
+      spy.mockRestore();
+    }
   });
 });

@@ -1,0 +1,114 @@
+{
+  "checkedAt": "2026-10-10T03:07:52.879Z",
+  "status": "eight-speaking-clips-delivered-exact-native-transcripts-verified",
+  "contentSha256": "d0fc41cba9147d8b46b5cb29c5184548dbc1d3abca3b783a39b020132ac004d8",
+  "expectedSpeakingClipCount": 8,
+  "deliveredSpeakingClipCount": 8,
+  "candidateProviders": [
+    {
+      "name": "HeyGen",
+      "installed": false
+    },
+    {
+      "name": "Runway",
+      "installed": false
+    },
+    {
+      "name": "OpenArt",
+      "installed": false
+    },
+    {
+      "name": "Higgsfield",
+      "installed": false
+    }
+  ],
+  "providerEvidence": "Plugin Management search returned installed:false for all four on this check. No callable video-generation provider or confirmed live generation job handle was available in this session.",
+  "portableHandoff": {
+    "path": "speaking-media-handoff.zip",
+    "bytes": 168839,
+    "sha256": "61c67a568e0082e1caf10108c4d144df3170cf67148f0948f7b49e92218b8f08",
+    "expectedSpeechFiles": 8,
+    "originalPortraitFiles": 2
+  },
+  "technicalRegression": {
+    "command": "node --test scripts/demos/prepare-huddle-media.test.mjs scripts/demos/huddle-media-contract.test.mjs",
+    "passed": 7,
+    "failed": 0,
+    "scope": [
+      "Original portrait and exact-line export integrity",
+      "Duplicate/traversal rejection",
+      "Review-byte matching and changed-content invalidation",
+      "Silent-audio rejection",
+      "Tone accepted only as technical unverified media",
+      "Both per-actor WAVs exactly 1.75 seconds and both cameras exactly 21 frames at 12 fps",
+      "Each actor audible only during its own scheduled test turn"
+    ],
+    "notProofOf": [
+      "Realistic speaking footage",
+      "Exact spoken words or lip sync",
+      "Synchronized live two-person speaking playback"
+    ]
+  },
+  "nextAction": "Finalize original deck recovery and combined source/runtime evidence. Exact native speech gates and strict Work screen/camera recording acceptance already pass.",
+  "speechTracksGenerated": 8,
+  "speechWordsVerifiedByIndependentAsr": 8,
+  "portraitPilot": "All eight full-portrait animations rendered and encoded successfully.",
+  "providerEvidenceCheckedAt": "2026-10-09T18:35:32.450333+00:00",
+  "localGeneration": {
+    "speech": "Pinned Kokoro MLX model, two distinct voices",
+    "animation": "Pinned OpenTalker/SadTalker 256 model, full portrait render on Apple MPS",
+    "qualityLimit": "ASR confirms the words, sampled frames confirm identity and motion. Human listening and continuous lip-sync review are not claimed."
+  },
+  "encodedSpeechWordsVerifiedByIndependentAsr": 8,
+  "deliveredMedia": {
+    "manifest": "speaking-media-manifest.json",
+    "archive": "speaking-media.zip",
+    "totalVideoBytes": 4015090,
+    "automatedReview": "speaking-media/automated-review.json",
+    "temporalOffsetSeconds": -0.04,
+    "humanPerceptualReview": "not claimed",
+    "archiveBytes": 4457949,
+    "archiveSha256": "d067e4d8b7aafa0221cc0d512f71ba11e60d48bef0365f692073727ce7cc1846",
+    "generationCommands": "speaking-media/generation-commands.json"
+  },
+  "liveCaptureIssue": "The authorized CDP endpoint with owned isolated contexts supports prepared MP4 captureStream and decoded WAV WebAudio. Both retained native scenes verified actual received speech/media. Physical-device and OS-picker coverage remain separate.",
+  "liveRehearsalFindings": {
+    "nativeSpeech": "The real voiced deck candidate has all four exact normalized lines in its native TranscriptDoc. Speaker label remains the native mixed Call label; per-person diarization is not claimed.",
+    "pptxExport": "Shared authenticated fetch/blob export passes three lifecycle browser regressions and actual deck-call continuity. Final seven-slide native export includes edited title and dependency-map note; no beforeunload/pagehide or native Leave occurred during Download.",
+    "participantAccess": "Native attendance preservation is active locally at 2026-10-09T20:20:36.060Z after an idle check. Both real actors receive authorized native document and playback access after Leave for both new recordings.",
+    "sceneCompletion": "Both original scenes pass every exact normalized native transcript line and media/UI/both-participant playback. Initiative retranscription was requested by its participant through the existing native pipeline; recorded media and attendance are unchanged. The historical initial recognition mismatch remains in dated evidence.",
+    "screenRecordingIdentity": "Actual native LVS source and realtime SDK pass strict real Work acceptance: two trusted participants, two AV camera tracks and one video-only screen track; stopping share preserves remote camera PCs/receiver tracks and advancing RTP reports. Original recordings unchanged.",
+    "deckScene": {
+      "status": "verified-native",
+      "recordingId": "2026-10-09T20-35-19-431Z-e153e35d",
+      "proof": "evidence/2026-10-09/final-speaking-deck/completion-proof.json",
+      "captureSkewMs": 252,
+      "bothParticipantExactTranscriptAndPlayback": true,
+      "everyReceivedTurnAndDownloadContinuity": true,
+      "sameRecordingAfterInitialNotRequested404": true
+    },
+    "initiativeScene": {
+      "status": "verified-native-exact-transcript",
+      "recordingId": "2026-10-09T20-42-14-121Z-457a1e8b",
+      "proof": "evidence/2026-10-09/final-speaking-initiative/evidence-index.json",
+      "everyReceivedTurnAndUiAction": true,
+      "bothParticipantsNativeDocAndPlayback": true,
+      "actualRecordedSpeechIndependentAsrExact": true,
+      "exactNativeTranscriptGatePassed": true,
+      "nativeTranscriptDifference": null,
+      "storedTranscriptChanged": true,
+      "transcriptWrittenBy": "Existing native pipeline after participant-requested retranscription",
+      "latestProof": "evidence/2026-10-10/native-source-speech-summary/verification.json"
+    },
+    "screenAndNavigation": {
+      "status": "verified-native",
+      "proof": "evidence/2026-10-09/native-share-navigation/evidence-index.json",
+      "nativeApisMocked": false,
+      "displaySource": "explicit-owned-canvas-captureStream",
+      "osPickerVerified": false,
+      "originalHuddleIdentityPreserved": true,
+      "cameraTrackIdsPreservedAfterStop": true,
+      "latestProof": "evidence/2026-10-10/native-work-screen-acceptance/verification.json"
+    }
+  }
+}

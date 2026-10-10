@@ -25,8 +25,24 @@ const RAIL_PATHS = [
 test('every rail path resolves to a section and a page', () => {
   for (const path of RAIL_PATHS) {
     const crumbs = resolveBreadcrumbs(path);
-    assert.ok(crumbs.length >= 2, `${path} → ${JSON.stringify(crumbs)}`);
+    assert.ok(crumbs.length >= (path === '/assessment/workspace' ? 1 : 2), `${path} → ${JSON.stringify(crumbs)}`);
   }
+});
+
+test('Assessment Workspace and legacy presentation links use the files location without Informatics', () => {
+  assert.deepEqual(resolveBreadcrumbs('/assessment/workspace'), [{ label: 'Workspace' }]);
+  assert.deepEqual(resolveBreadcrumbs('/assessment/decks/deck-existing').map(crumb => crumb.label), ['Workspace', 'Presentations', 'Presentation deck-exi…']);
+  const deck = resolveBreadcrumbs('/assessment/decks/deck-existing');
+  assert.equal(deck[0]?.path, '/assessment/workspace?view=library');
+  assert.equal(deck[1]?.path, '/assessment/workspace?view=presentations');
+  assert.equal(deck[2]?.id, 'deck-existing');
+});
+
+test('a Work presentation trail names its files location and resolved entity without Plan', () => {
+  assert.deepEqual(resolveBreadcrumbs('/iq/decks/deck-existing'), [
+    { label: 'Initiatives', path: '/iq/projects' },
+    { label: 'Deck deck-exi…', id: 'deck-existing' },
+  ]);
 });
 
 test('configuration lives beneath Local compute, including its legacy address', () => {
@@ -53,4 +69,14 @@ test('entity crumbs carry the id so a mounted page can supply the title', () => 
     const last = resolveBreadcrumbs(path).at(-1);
     assert.equal(last?.id, id, `${path} → ${JSON.stringify(last)}`);
   }
+});
+
+test('the four work-graph routes read "Work graph", never the raw slug', () => {
+  const cases: Array<[string, string[]]> = [
+    ['/iq/activity', ['Operate', 'Work graph']],
+    ['/pipelines/activity', ['Runs', 'Work graph']],
+    ['/assessment/activity', ['Analyze', 'Work graph']],
+    ['/social/work-graph', ['Library', 'Work graph']],
+  ];
+  for (const [path, labels] of cases) assert.deepEqual(resolveBreadcrumbs(path).map((c) => c.label), labels, path);
 });

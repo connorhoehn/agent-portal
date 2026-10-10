@@ -1,0 +1,45 @@
+import { test, expect } from './cdpTest';
+import { signIn } from './realSession';
+import { writeFile } from 'node:fs/promises';
+
+test.use({ baseURL: 'http://localhost:5183', viewport: { width: 1100, height: 800 }, actionTimeout: 5000, navigationTimeout: 10000 });
+test('native chat hooks distinguish waiting, confirmed empty, denied read and disconnected transport without losing an unsent draft', async ({ page }) => {
+  const errors: string[] = [], writes: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.goto('/'); await signIn(page, 'u-nora', { expectTenant: 'orgiq' });
+  page.on('request', request => { if (request.method() !== 'GET' && new URL(request.url()).pathname.startsWith('/api/')) writes.push(request.url()); });
+  await page.route('**/__conversation-read-state', route => route.fulfill({ contentType: 'text/html', body: '<html><head><script type="module">import RefreshRuntime from "/@react-refresh"; RefreshRuntime.injectIntoGlobalHook(window); window.$RefreshReg$ = () => {}; window.$RefreshSig$ = () => type => type; window.__vite_plugin_react_preamble_installed__ = true;</script></head><body><div id="root"></div><script type="module" src="/e2e/fixtures/conversation-read-state.tsx"></script></body></html>' }));
+  await page.goto('/__conversation-read-state');
+  const thread = page.getByTestId('fixture-thread');
+  const editor = thread.getByRole('textbox', { name: 'Message', exact: true });
+  await expect(thread).toContainText('Loading discussion');
+  await expect(page.getByTestId('confirmed-empty')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Confirm native join', exact: true }).click();
+  await expect(thread).toContainText('Loading discussion');
+  await page.getByRole('button', { name: 'Return empty history', exact: true }).click();
+  await expect(page.getByTestId('confirmed-empty')).toBeVisible();
+  await editor.click(); await editor.fill('An unsent local draft');
+  await page.getByRole('button', { name: 'Disconnect fixture transport', exact: true }).click();
+  await expect(thread).toContainText('Discussion is offline');
+  await expect(thread).not.toContainText('No messages yet');
+  await expect(editor).toContainText('An unsent local draft');
+  await thread.getByRole('button', { name: 'Reconnect', exact: true }).click();
+  await expect(thread).toContainText('Loading discussion');
+  await page.getByRole('button', { name: 'Confirm native join', exact: true }).click();
+  await page.getByRole('button', { name: 'Return empty history', exact: true }).click();
+  await expect(page.getByTestId('confirmed-empty')).toBeVisible();
+  await expect(editor).toContainText('An unsent local draft');
+  await page.getByRole('button', { name: 'Deny read', exact: true }).click();
+  await expect(thread).toContainText('Discussion access unavailable');
+  await expect(editor).toHaveCount(0);
+  await page.getByRole('button', { name: 'Return late history', exact: true }).click();
+  await expect(thread).toContainText('Discussion access unavailable');
+  await expect(thread).not.toContainText('Late history must stay hidden');
+  const outbound = await page.evaluate(() => (window as typeof window & { __conversationReadProof: { outbound: Record<string, unknown>[] } }).__conversationReadProof.outbound);
+  expect(outbound.filter(frame => frame.service === 'chat' && frame.action === 'history')).toHaveLength(2);
+  expect(outbound.some(frame => frame.service === 'chat' && frame.action === 'send')).toBe(false);
+  expect(writes).toEqual([]); expect(errors).toEqual([]);
+  await page.screenshot({ path: test.info().outputPath('denied-read-hides-late-history.png') });
+  await writeFile(test.info().outputPath('conversation-read-state-proof.json'), JSON.stringify({ checkedAt: new Date().toISOString(), outbound, writes, errors,
+    scope: 'Real owned Nora login; production native useChat and ChannelThread under a controlled protocol transport. No actual chat, grant, epoch, call, recording or server-record mutations.' }, null, 2));
+});

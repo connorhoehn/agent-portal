@@ -199,8 +199,9 @@ export function ComputeHost({ children }: { children: ReactNode }) {
   const client = useMemo(() => withLocalMachines(createComputeClient(clientOptions)), [clientOptions]);
 
   // The library's own kinds, with the DEFAULT one taught to tell a laptop from
-  // a microVM — see localMachines.tsx for why this cannot be a second kind.
-  const paneKinds = labPaneKinds;
+  // a microVM — see localMachines.tsx for why this cannot be a second kind —
+  // and not to attach a shell the session's capabilities already refuse.
+  const paneKinds = useMemo(() => labPaneKinds(canManage), [canManage]);
 
   return (
     <ComputeProvider

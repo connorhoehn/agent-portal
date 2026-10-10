@@ -1,153 +1,276 @@
-// The mission-control rail.
+// The initiative's Agents tab.
 //
-// This was five independent panels stacked down a 300px column — agents,
-// computers, environments, lab memory and outcomes — each with its own header
-// and its own border, all on screen at once beside the work column. That stack
-// is the "competing panels" half of the clutter. The panels themselves are
-// unchanged; they are now two tabs, so one concern is on screen at a time and
-// the rest are one click away.
+// Until 2026-10-07 this was five stacked bordered boxes — Delivered by,
+// Activity, an Agents | Compute strip, Agents and Outcomes — and Outcomes
+// read only "cron · done · $0.74 · 3h ago". It is now one table-first
+// surface: a small section heading whose meta line carries the delivering
+// repo and the spend counted from the listed rows; ONE row of segmented
+// controls (Runs | Bots | Compute, and the 30/90/180-day window); then a
+// single table of the agent runs on this initiative — work item, agent,
+// outcome, spend, when, logs. The table's own empty row is the empty state.
+//
+// The runs come from `GET /api/bots/initiative-runs`, a session floor: the
+// runs on an initiative are work-queue facts every reader may see, while the
+// bot roster (configuration) stays behind its own gate and only the Bots view
+// reads it.
 
-import { useState } from 'react';
-import { useFetch } from '../../hooks/useFetch';
-import { Link } from 'react-router';
+import { useMemo, useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router';
 import {
-  Card,
+  ActionRowList,
+  type ActionRowColumn,
+} from '@connorhoehnslalom/ui-components';
+import {
+  Button,
   Chip,
+  DataTable,
   Inline,
-  SectionLabel,
+  InlineAlert,
+  Link as ExternalLink,
+  MetaLine,
+  PageSection,
+  SegmentedControl,
   Stack,
-  TabPanel,
-  Tabs,
+  StatusPill,
+  T,
+  type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
-import {
-  AgentsRailCard,
-  OutcomesRailCard,
-  type useInitiativeAgentActivity,
-} from '../../components/marketplace/InitiativeAgentRail';
+import { useFetch } from '../../hooks/useFetch';
+import { useCapabilities } from '../../lib/capabilities';
+import { relativeTime } from '../../lib/relativeTime';
+import { usd } from '../../lib/format';
+import { botStatusChip, runStateChip } from '../../lib/statusTone';
+import type { useInitiativeAgentActivity } from '../../components/marketplace/InitiativeAgentRail';
 import { ComputersRailCard } from '../../components/marketplace/InitiativeComputeRail';
 import { EnvironmentsRailCard } from '../../components/marketplace/InitiativeEnvironmentsRail';
 import { LabMemoryRailCard } from '../../components/marketplace/InitiativeLabMemoryRail';
-import { T } from './Text';
-import { ActivityPanel } from './ActivityPanel';
-import type { BotRun } from '../bots/BotsPage';
+import { TEMPLATE_TONE, triggerSummary, type BotRun } from '../bots/BotsPage';
+import { RANGE_DAYS, runTableRows, type RunTableRow } from './agentRunsModel';
+import { flattenWorkItems } from './projectFormat';
 import type { Codebase, WorkItemTree } from './types';
 
 type AgentActivity = ReturnType<typeof useInitiativeAgentActivity>;
 
-const RAIL_TABS = [
-  { id: 'agents', label: 'Agents' },
-  { id: 'compute', label: 'Compute' },
+const VIEW_OPTIONS = [
+  { value: 'runs', label: 'Runs' },
+  { value: 'bots', label: 'Bots' },
+  { value: 'compute', label: 'Compute' },
+];
+const RANGE_OPTIONS = RANGE_DAYS.map((d) => ({ value: String(d), label: `${d}d` }));
+
+const BOT_COLUMNS: ActionRowColumn[] = [
+  { id: 'status', width: 'sm', label: 'Status' },
+  { id: 'spend', width: 'md', label: 'Spent today', align: 'end' },
 ];
 
-/** The code that delivers this initiative — the other half of the repo ↔
- *  initiative join. Each chip lands on the codebase's console. */
-function DeliveredBy({ codebases }: { codebases: Codebase[] }) {
-  if (codebases.length === 0) return null;
-  return (
-    <Card padding="sm">
-      {/* Same header as every other rail card (Designs, Agents, Outcomes,
-          Activity): a small uppercase label, not a card title. */}
-      <SectionLabel className="text-[10px] font-semibold tracking-wide">Delivered by</SectionLabel>
-      <Inline gap="sm" className="mt-2">
-        {codebases.map((cb) => (
-          <Link
-            key={cb.id}
-            to={`/admin/projects?project=${cb.id}`}
-            title="Open this codebase — runs, changes, workspace"
-            className="no-underline"
-          >
-            <Chip tone="info" size="xs" mono>{cb.repoFullName}</Chip>
-          </Link>
-        ))}
-      </Inline>
-    </Card>
-  );
+type Tone = 'success' | 'warning' | 'danger' | 'info' | 'neutral';
+function pillTone(tone: string): Tone {
+  return tone === 'success' || tone === 'warning' || tone === 'danger' || tone === 'info' ? tone : 'neutral';
 }
 
-/** The initiative's design reviews — the ADR threads that steer this work.
- *  Without this card the two surfaces never met: designs knew their
- *  initiative, the initiative had no idea it was being designed. */
-function DesignsRailCard({ initiativeId }: { initiativeId: string | undefined }) {
-  const { data } = useFetch<{ reviews: Array<{
-    id: string; title: string; status: string; openQuestions: number;
-  }> }>(initiativeId ? `/api/designs?initiative=${encodeURIComponent(initiativeId)}` : null, 60_000);
-  const reviews = data?.reviews ?? [];
-  if (reviews.length === 0) return null;
-  return (
-    <Card padding="sm">
-      <Inline justify="between" align="baseline" wrap={false}>
-        <SectionLabel className="text-[10px] font-semibold tracking-wide">Designs</SectionLabel>
-        <Link to="/iq/designs" className="text-[11px] text-primary no-underline hover:underline">all →</Link>
-      </Inline>
-      <Stack gap="xs" className="mt-2">
-        {reviews.map((r) => (
-          <Link key={r.id} to={`/iq/designs/${r.id}`} className="no-underline min-w-0">
-            <Inline gap="xs" wrap={false}>
-              <Chip
-                tone={r.status === 'approved' ? 'success' : r.status === 'awaiting_input' ? 'warning' : 'info'}
-                size="xs"
-              >
-                {r.status === 'awaiting_input' ? 'needs input' : r.status}
-              </Chip>
-              <T className="truncate text-[12px] text-text-secondary hover:text-primary">{r.title}</T>
-            </Inline>
-          </Link>
-        ))}
-      </Stack>
-    </Card>
-  );
+interface InitiativeRunsResponse {
+  runs: BotRun[];
+  bots: Array<{ id: string; name: string }>;
+  degraded?: boolean;
+  error?: string;
 }
 
 export function InitiativeRail({
   initiativeId,
   activity,
   codebases,
-  runs,
   workTree,
+  onOpenLog,
 }: {
   initiativeId: string | undefined;
+  /** Opens the run's log in the right pane; the link keeps its page href for a new tab. */
+  onOpenLog?: (jobId: string) => void;
+  /** The bot roster for the Bots view (gated; `botsError` says when not readable). */
   activity: AgentActivity;
   codebases: Codebase[];
-  /** Marketplace runs + the work tree — the day-by-day activity card derives
-   *  its lines from the same objects the work pane shows. */
-  runs: BotRun[];
+  /** Kept for the page's call site; the runs are read from initiative-runs. */
+  runs?: BotRun[];
   workTree: WorkItemTree[];
 }) {
-  const [tab, setTab] = useState('agents');
+  const [view, setView] = useState('runs');
+  const [days, setDays] = useState<number>(30);
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  // /admin/bots is an hr-admin route (ManageDevbox): for anyone else a bot
+  // row opens nothing rather than a page that redirects them home.
+  const { can, ready } = useCapabilities();
+  const canManageBots = ready && can('ManageDevbox');
+
+  const { data, error, isLoading } = useFetch<InitiativeRunsResponse>(
+    initiativeId ? `/api/bots/initiative-runs?orgProjectId=${encodeURIComponent(initiativeId)}` : null,
+    15_000,
+  );
+  const runsError = error ?? (data?.degraded ? data.error ?? 'degraded' : null);
+  const workTitles = useMemo(
+    () => new Map(flattenWorkItems(workTree).map((w) => [w.id, w.title] as const)),
+    [workTree],
+  );
+  const table = useMemo(
+    () => runTableRows(data?.runs ?? [], data?.bots ?? [], days, workTitles),
+    [data, days, workTitles],
+  );
+
+  const itemHref = (id: string) => {
+    const params = new URLSearchParams(searchParams);
+    params.set('tab', 'work');
+    params.set('item', id);
+    return `?${params}`;
+  };
+
+  // Five columns fit the ~580px column beside the Discussion pane: the work
+  // item carries its agent as a second line, the outcome its status and words
+  // on one line.
+  const columns: DataTableColumn<RunTableRow>[] = [
+    {
+      key: 'workItem', header: 'Work item', sortable: true,
+      compare: (a, b) => a.workItemLabel.localeCompare(b.workItemLabel),
+      // A run with no work item is a bot's standing mission: its bot leads.
+      render: (r) => (
+        <Stack gap="none" className="whitespace-nowrap">
+          {r.workItemId
+            ? <Link to={itemHref(r.workItemId)} className="text-primary no-underline hover:underline" data-testid="agents-run-item">
+                <T size="sm" weight="medium" tone="inherit">{r.workItemLabel}</T>
+              </Link>
+            : <T size="sm" weight="medium">{r.agent}</T>}
+          <T size="xs" tone="secondary" data-testid="agents-run-agent">
+            {r.workItemId ? r.agent : `${r.workItemLabel} · ${r.run.trigger.replace(/_/g, ' ')}`}
+          </T>
+        </Stack>
+      ),
+    },
+    {
+      key: 'outcome', header: 'Outcome',
+      render: (r) => (
+        <Inline gap="xs" wrap>
+          <StatusPill variant="text" tone={pillTone(runStateChip(r.run.status).tone)} label={r.run.status} className="shrink-0" />
+          {r.outcome && <T size="xs" tone="secondary">{r.outcome}</T>}
+          {r.run.outcome?.prUrl && <ExternalLink href={r.run.outcome.prUrl} external>PR</ExternalLink>}
+        </Inline>
+      ),
+    },
+    {
+      key: 'spend', header: 'Spend', align: 'right', sortable: true, width: '72px',
+      compare: (a, b) => (a.run.costUsd ?? 0) - (b.run.costUsd ?? 0),
+      render: (r) => <T size="sm" className="whitespace-nowrap tabular-nums">{usd(r.run.costUsd)}</T>,
+    },
+    {
+      key: 'when', header: 'When', align: 'right', sortable: true, width: '96px',
+      compare: (a, b) => a.startedMs - b.startedMs,
+      render: (r) => <T size="sm" tone="secondary" className="whitespace-nowrap" title={new Date(r.startedMs).toLocaleString()}>{relativeTime(r.run.startedAt)}</T>,
+    },
+    {
+      key: 'logs', header: 'Logs', align: 'right', width: '56px',
+      // The run's transcript and tool calls, from the work queue every
+      // signed-in reader may read: in the right pane, its page on demand.
+      render: (r) => r.run.jobId
+        ? <Link to={`/iq/work/${encodeURIComponent(r.run.jobId)}`} className="text-primary no-underline hover:underline" data-testid="agents-run-logs"
+            // Detail goes far right (the user, 2026-10-07): a plain click opens
+            // the log in the pane; a modified click still opens the page.
+            onClick={(event) => {
+              if (!onOpenLog || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+              event.preventDefault();
+              onOpenLog(r.run.jobId!);
+            }}>
+            <T size="sm" tone="inherit">Logs</T>
+          </Link>
+        : <T size="sm" tone="secondary">—</T>,
+    },
+  ];
+
+  const { bots, botsError, botsLoading } = activity;
+  const rosterDenied = !!botsError && /403|401|forbidden/i.test(botsError);
+
+  const meta = [
+    ...codebases.map((cb) => (
+      <Link key={cb.id} to={`/admin/projects?project=${cb.id}`} title="Open this codebase — runs, changes, workspace"
+        className="text-primary no-underline hover:underline" data-testid="agents-repo-link">
+        <T size="sm" tone="inherit">{cb.repoFullName}</T>
+      </Link>
+    )),
+    view === 'runs'
+      ? `${runsError ? 'at least ' : ''}${usd(table.spendUsd)} agent spend over ${table.rows.length} run${table.rows.length === 1 ? '' : 's'} in the last ${days} days`
+      : null,
+  ];
 
   return (
-    <Stack gap="sm">
-      <DeliveredBy codebases={codebases} />
-      {/* Activity lives in the rail, not a tab: it is the context you read
-          beside the work, and the rail stays on screen while the table
-          scrolls. */}
-      <ActivityPanel compact runs={runs} workTree={workTree} />
-      <DesignsRailCard initiativeId={initiativeId} />
+    <PageSection
+      size="sm"
+      title="Agents"
+      actions={view === 'bots' && canManageBots
+        ? <Button variant="link" onClick={() => navigate('/admin/bots')}>New bot</Button>
+        : undefined}
+      data-testid="initiative-agents"
+    >
+      <Stack gap="sm">
+        {meta.some(Boolean) && <MetaLine size="sm" tone="secondary" items={meta} data-testid="initiative-agents-meta" />}
+        <Inline gap="sm" wrap data-testid="initiative-agents-controls">
+          <SegmentedControl size="sm" aria-label="Runs, bots or compute" options={VIEW_OPTIONS}
+            value={view} onChange={setView} data-testid="initiative-agents-view" />
+          {view === 'runs' && (
+            <SegmentedControl size="sm" aria-label="Time window" options={RANGE_OPTIONS}
+              value={String(days)} onChange={(v) => setDays(Number(v))} data-testid="initiative-agents-range" />
+          )}
+        </Inline>
 
-      <Tabs
-        idPrefix="initiative-rail"
-        aria-label="Initiative rail"
-        variant="segmented"
-        size="sm"
-        items={RAIL_TABS}
-        value={tab}
-        onValueChange={setTab}
-      />
+        {view === 'runs' && (
+          <>
+            {runsError && (
+              <InlineAlert tone="warning">
+                A run history could not be read ({runsError}) — the runs and spend are a floor, not a total.
+              </InlineAlert>
+            )}
+            <DataTable
+              data={table.rows}
+              columns={columns}
+              keyField={(r) => r.run.id}
+              loading={isLoading && !data}
+              emptyMessage={`No agent runs in the last ${days} days — authorize one from an open story or bug.`}
+              data-testid="initiative-agents-runs"
+            />
+          </>
+        )}
 
-      <TabPanel id="agents" when={tab} idPrefix="initiative-rail">
-        <Stack gap="sm">
-          <AgentsRailCard activity={activity} />
-          <OutcomesRailCard activity={activity} />
-        </Stack>
-      </TabPanel>
+        {view === 'bots' && (
+          <ActionRowList
+            aria-label="Bots pointed at this initiative"
+            size="sm"
+            columns={rosterDenied ? [] : BOT_COLUMNS}
+            items={rosterDenied
+              // The roster's configuration is not this role's to read; the
+              // bots' names are, from the runs they made.
+              ? (data?.bots ?? []).map((b) => ({ id: b.id, title: b.name, description: 'Configuration is visible to bot managers.' }))
+              : bots.map((bot) => {
+                  const chip = botStatusChip(bot);
+                  return {
+                    id: bot.id,
+                    title: bot.name,
+                    leading: <Chip tone={TEMPLATE_TONE[bot.template]} size="xs">{bot.template}</Chip>,
+                    description: triggerSummary(bot),
+                    cells: {
+                      status: <StatusPill variant="text" tone={pillTone(chip.tone)} label={chip.label} />,
+                      spend: <T size="sm">{usd(bot.todaySpendUsd)}</T>,
+                    },
+                  };
+                })}
+            onOpen={(item) => { if (canManageBots) navigate(`/admin/bots/${item.id}`); }}
+            emptyLabel={botsLoading && !botsError ? 'Loading bots…' : 'No bots target this initiative — point a standing mission here from the Bots page.'}
+            data-testid="initiative-agents-bots"
+          />
+        )}
 
-      <TabPanel id="compute" when={tab} idPrefix="initiative-rail">
-        <Stack gap="sm">
-          <ComputersRailCard initiativeId={initiativeId} />
-          <EnvironmentsRailCard initiativeId={initiativeId} />
-          <LabMemoryRailCard initiativeId={initiativeId} />
-        </Stack>
-      </TabPanel>
-    </Stack>
+        {view === 'compute' && (
+          <Stack gap="sm">
+            <ComputersRailCard initiativeId={initiativeId} />
+            <EnvironmentsRailCard initiativeId={initiativeId} />
+            <LabMemoryRailCard initiativeId={initiativeId} />
+          </Stack>
+        )}
+      </Stack>
+    </PageSection>
   );
 }

@@ -1,6 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { Stack, Textarea } from '@connorhoehnslalom/ui-components/shared';
-import { T } from '../Text';
+import { Stack, Textarea, T } from '@connorhoehnslalom/ui-components/shared';
 
 /**
  * Editable template with a line-number gutter.

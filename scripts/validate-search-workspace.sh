@@ -3,6 +3,7 @@
 # check passes. Flags: --quick skips the slow suites (jest, vite build).
 set -u
 cd "$(dirname "$0")/.."
+source scripts/lib/judges.sh  # jg_*: static gates run once per tree state
 QUICK=0
 for a in "$@"; do case "$a" in --quick) QUICK=1;; esac; done
 
@@ -16,29 +17,28 @@ PAGE=$PAGES/SearchPage.tsx
 
 # ─────────────────────────────────────────────────────────────────────────────
 section "middleware"
-if (cd middleware && npx tsc --noEmit >/dev/null 2>&1); then ok "tsc clean"; else fail "middleware: tsc errors"; fi
+if jg_mw_tsc >/dev/null 2>&1; then ok "tsc clean"; else fail "middleware: tsc errors"; fi
 if [ "$QUICK" = 0 ]; then
   if (cd middleware && npx jest src/routes/__tests__/search src/routes/__tests__/saved-searches src/providers/__tests__/search src/providers/__tests__/saved-searches src/lib/__tests__/search-context src/routes/__tests__/agents-search-context >/dev/null 2>&1); then ok "jest (search suites) green"; else fail "middleware: search jest failures"; fi
 fi
 
 section "portal"
-if (cd portal && npx tsc --noEmit >/dev/null 2>&1); then ok "tsc clean"; else fail "portal: tsc errors"; fi
+if jg_portal_tsc >/dev/null 2>&1; then ok "tsc clean"; else fail "portal: tsc errors"; fi
 if (cd portal && node --test 'src/pages/search/__tests__/*.test.ts' >/dev/null 2>&1); then ok "node tests green"; else fail "portal: search node tests failing"; fi
 if [ "$QUICK" = 0 ]; then
-  if (cd portal && npx vite build >/dev/null 2>&1); then ok "vite build"; else fail "portal: vite build failed"; fi
+  if jg_vite_build >/dev/null 2>&1; then ok "vite build"; else fail "portal: vite build failed"; fi
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
 section "component discipline ($PAGES)"
-RAW_RE='<(div|p|span|h[1-6]|ul|ol|li|section|nav|article|table|tr|td|th|button|a|label|input|textarea|select|form|code|pre)( [^>]*)?className='
-count_in() { local re="$1"; shift; local n=0; for f in "$@"; do c=$(grep -oE "$re" "$f" | wc -l | tr -d ' '); n=$((n+c)); done; echo "$n"; }
+source scripts/lib/discipline.sh  # the one raw-element counter (brace-aware), shared with validate-component-discipline.sh
 PAGE_FILES=$(find "$PAGES" -name '*.tsx' | sort)
-n_raw=$(count_in "$RAW_RE" $PAGE_FILES)
-n_btn=$(count_in '<button[ >]' $PAGE_FILES)
-n_sty=$(count_in 'style=\{\{' $PAGE_FILES)
+n_raw=$(dc_count_raw $PAGE_FILES)
+n_btn=$(dc_count_re '<button[ >]' $PAGE_FILES)
+n_sty=$(dc_count_re 'style=\{\{' $PAGE_FILES)
 if [ "$n_raw" = 0 ]; then ok "raw styled elements: 0"; else
   fail "raw styled elements in search pages: $n_raw (must be 0 — RecordResultList / CitedRecordList / Stack / Inline / Chip…)"
-  for f in $PAGE_FILES; do c=$(grep -oE "$RAW_RE" "$f" | wc -l | tr -d ' '); [ "$c" -gt 0 ] && printf '      %4d  %s\n' "$c" "${f#$PAGES/}"; done | sort -rn
+  for f in $PAGE_FILES; do c=$(dc_count_raw "$f"); [ "$c" -gt 0 ] && printf '      %4d  %s\n' "$c" "${f#$PAGES/}"; done | sort -rn
 fi
 [ "$n_btn" = 0 ] && ok "no raw <button>" || fail "raw <button> in search pages: $n_btn (use Button/IconButton)"
 [ "$n_sty" = 0 ] && ok "no inline style={{}}" || fail "inline style={{}} in search pages: $n_sty"
@@ -55,8 +55,10 @@ for c in ExplorerLayout RailSection RailNavList RecordResultList CitedRecordList
 done
 grep -q "SubNavLayout" "$PAGE" 2>/dev/null && fail "SearchPage.tsx still uses SubNavLayout (the Search rail is ExplorerLayout + RailNavList)" || ok "no SubNavLayout"
 grep -q "RichChatComposer" "$PAGES/SearchComposer.tsx" 2>/dev/null && ok "composer is RichChatComposer" || fail "SearchComposer.tsx is not on RichChatComposer"
-grep -q "AgentComposerDock" "$PAGES/SearchComposer.tsx" 2>/dev/null && ok "SearchComposer hosts AgentComposerDock" || fail "SearchComposer.tsx does not host AgentComposerDock (the initiative composer shell, decision 6)"
-grep -q "AgentComposerDock" portal/src/pages/projects/InitiativeComposer.tsx 2>/dev/null && ok "InitiativeComposer hosts AgentComposerDock" || fail "InitiativeComposer.tsx does not host AgentComposerDock (one composer shell for both pages)"
+# 2.439: the one composer is the library ConversationComposer (ContextComposer underneath; AgentComposerDock before 2.407).
+grep -qE "<(ConversationComposer|AgentComposerDock)\b" "$PAGES/SearchComposer.tsx" 2>/dev/null && ok "SearchComposer hosts the library composer (ConversationComposer)" || fail "SearchComposer.tsx does not host the library composer (the initiative composer shell, decision 6)"
+# AgentComposerDock is deprecated since ui-components 2.407.0 in favour of ContextComposer (same shell); accept either.
+grep -qE "<(ConversationComposer|AgentComposerDock|ContextComposer)\b" portal/src/pages/projects/InitiativeComposer.tsx 2>/dev/null && ok "InitiativeComposer hosts the library composer shell (ConversationComposer)" || fail "InitiativeComposer.tsx does not host the library composer shell (one composer shell for both pages)"
 grep -qE "hideModeMenu|fixedMode" "$PAGES/SearchComposer.tsx" 2>/dev/null && fail "SearchComposer hides the Agent ⌄ mode menu (hideModeMenu/fixedMode)" || ok "Agent ⌄ mode menu visible on Search"
 { [ -f "$PAGES/searchWorkflows.ts" ] && [ -f "$PAGES/__tests__/searchWorkflows.test.ts" ] && grep -q "searchWorkflows" "$PAGES/SearchComposer.tsx"; } 2>/dev/null && ok "Workflow ⌄ rows are pure searchWorkflows (tested)" || fail "searchWorkflows.ts + test missing or unused by SearchComposer"
 { [ -f "$PAGES/connectionsModel.ts" ] && [ -f "$PAGES/__tests__/connectionsModel.test.ts" ] && grep -q "connectionsView" "$PAGE"; } 2>/dev/null && ok "Connections view chosen by connectionsView() (tested)" || fail "connectionsModel.connectionsView or its test is missing, or SearchPage does not use it (decision 8)"
@@ -83,6 +85,12 @@ grep -qE "path: '/iq/search'" portal/src/components/shell/portalCommands.ts && o
 grep -qE "path: '/iq/search'" portal/src/components/shell/Layout.tsx && ok "shell rail targets /iq/search" || fail "Layout.tsx rail does not target /iq/search"
 grep -q "ScopeHeader" "$PAGE" 2>/dev/null && ok "crumbs on ScopeHeader" || fail "SearchPage.tsx has no ScopeHeader"
 grep -q 'variant="inline"' "$PAGE" 2>/dev/null && ok "one header row: ScopeHeader variant=inline (decision 9)" || fail "SearchPage.tsx does not use ScopeHeader variant=\"inline\" — crumbs, title, tabs and controls belong on one row (decision 9)"
+# Decision 9 amendment (2026-10-07): a long trail takes its own row — the
+# library Breadcrumbs, never collapsed (no maxItems) — over the inline header.
+if grep -q 'data-testid="search-trail"' "$PAGE" 2>/dev/null; then
+  grep -E '<Breadcrumbs[^>]*data-testid="search-trail"' "$PAGE" | grep -q 'maxItems' && fail "the search trail collapses crumbs (maxItems) — it must read whole (decision 9 amendment)" || ok "two-row form: the trail row never collapses"
+else fail "SearchPage.tsx has no search-trail row for long trails (decision 9 amendment)"; fi
+grep -q '<SidePane' "$PAGE" 2>/dev/null && grep -q 'onClose={closePane}' "$PAGE" && grep -q 'readPaneState' "$PAGE" && ok "Ask about selection opens the shell's right pane (library SidePane, page-owned, the pane URL contract)" || fail "SearchPage.tsx does not host Ask about selection in the library SidePane (page-owned, readPaneState) (decision 9 amendment)"
 grep -qE "\bSearchInput\b" "$PAGE" 2>/dev/null && fail "SearchPage.tsx still draws a hero SearchInput — the composer issues queries (decision 9)" || ok "no hero search field; the composer issues queries"
 grep -q "RecordGraphCard" "$PAGE" 2>/dev/null && ok "Answer view carries RecordGraphCard" || fail "SearchPage.tsx does not use RecordGraphCard in the Answer view (decision 9)"
 for tab in results answer connections; do grep -q "'$tab'" "$PAGE" 2>/dev/null || fail "SearchPage.tsx has no '$tab' tab"; done
@@ -137,13 +145,14 @@ for r in "${ROLES[@]}"; do for s in "${SURFACES[@]}"; do
 done; done
 [ "$jmissing" = 0 ] && ok "all 10 role×surface logs present" || fail "$jmissing of 10 journey logs missing (roles: ${ROLES[*]}; surfaces: ${SURFACES[*]})"
 [ "$jbad" = 0 ] && ok "every present log passes all fields" || fail "$jbad journey logs fail a required field"
+# Freshness (docs/journeys.md): a log is stale when the rendered contract of
+# a route it walked changed since its walk was sealed (until 2026-10-08 this
+# compared every log's mtime against the newest search page: any edit to any
+# search file staled all ten).
 if [ -d "$JDIR" ]; then
-  newest=$(ls -t $(find "$PAGES" -name '*.tsx') 2>/dev/null | head -1)
-  stale=0; stale_names=""
-  for f in $(find "$JDIR" -name '*.md' ! -name 'PROTOCOL.md' ! -name 'DEFECTS.md' 2>/dev/null); do
-    [ -n "$newest" ] && [ "$newest" -nt "$f" ] && { stale=$((stale+1)); stale_names="$stale_names ${f#$JDIR/}"; }
-  done
-  [ "$stale" = 0 ] && ok "journey logs are newer than every search page" || fail "$stale journey logs predate a search page edit — re-walk them:$stale_names"
+  source scripts/lib/journeys.sh
+  jr_freshness "$JDIR" $(find "$JDIR" -name '*.md' ! -name 'PROTOCOL.md' ! -name 'DEFECTS.md' 2>/dev/null | sort)
+  jr_report
 fi
 
 section "docs"

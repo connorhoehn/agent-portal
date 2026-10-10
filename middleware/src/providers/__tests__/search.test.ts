@@ -55,6 +55,22 @@ test('type filters and pagination share permission-filtered counts', async () =>
   expect(r.results[0]?.type).toBe('person');
   expect(r.counts.all).toBeGreaterThan(r.total);
 });
+test('the total is exact only when every source window was read whole', async () => {
+  const exact = await searchRecords(principal, { q: 'Auth Migration' });
+  expect(exact.totalIsLowerBound).toBe(false);
+  expect(exact.total).toBe(exact.counts.all);
+  // A full 200-row initiative window means initiatives beyond it were never scored.
+  mock(listProjects).mockResolvedValue(Array.from({ length: 200 }, (_, i) => ({ id: `p${i}`, name: i === 0 ? 'Auth Migration' : `Initiative ${i}` })));
+  const capped = await searchRecords(principal, { q: 'Auth Migration' });
+  expect(capped.totalIsLowerBound).toBe(true);
+  expect(capped.partial).toContain('Initiatives source window is limited');
+  // A failed source read contributes nothing, so the count is a floor there too.
+  mock(listProjects).mockResolvedValue([]);
+  mock(listDecisions).mockRejectedValue(new Error('down'));
+  const failed = await searchRecords(principal, { q: 'cutover' });
+  expect(failed.totalIsLowerBound).toBe(true);
+  expect(failed.partial).toContain('Decisions unavailable');
+});
 test('denied people never appear in results, related records, counts, or graph edges', async () => {
   mock(isAllowed).mockImplementation(async (_p, action) => action !== 'ViewOrgChart');
   const r = await searchRecords(principal, { q: 'Auth Migration' });

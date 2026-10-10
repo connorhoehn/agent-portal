@@ -19,13 +19,13 @@ import {
   markInReview, markDelivering, markDelivered, markFailed, hasNewerChangeForProject,
   setCommitSha,
 } from '../providers/sdlc.js';
-import { updateWorkItem } from '../providers/work-items.js';
+import { getWorkItem, updateWorkItem } from '../providers/work-items.js';
 import { startRun, checkoutPath, type AgentProject } from '../providers/agent-projects.js';
 import { deliverChange } from './change-delivery.js';
 import { deliveryBlockReason } from './delivery-guard.js';
 import { isGitFailure, parsePorcelainFiles } from './capture-parse.js';
 import { resolveDevboxArn, devboxDataClient } from './devbox-arn.js';
-import { registerBox, getBoxBySession, appendEvent } from './devbox-fleet.js';
+import { registerBox, getBoxBySession, appendEvent, reserveBox, releaseBox } from './devbox-fleet.js';
 import type { BedrockAgentCoreClient } from '@aws-sdk/client-bedrock-agentcore';
 
 export interface CaptureInput {
@@ -88,6 +88,10 @@ export async function dispatchGovernedRun(input: {
     ts: new Date().toISOString(),
   });
 
+  // The box is this run's until the run returns — including while it waits on
+  // its operator — so no queued job is handed a checkout mid-run.
+  const holder = `run:${run.id}`;
+  reserveBox(box.id, holder);
   void executeProjectRun({
     runId: run.id,
     sessionId: input.sessionId,
@@ -105,7 +109,7 @@ export async function dispatchGovernedRun(input: {
         ...(input.workItemId ? { workItemId: input.workItemId } : {}),
       }).catch((err) => console.warn('[sdlc] capture failed:', (err as Error).message));
     },
-  });
+  }).finally(() => releaseBox(box.id, holder));
 
   return { ok: true, runId: run.id, checkout };
 }
@@ -154,8 +158,9 @@ async function captureDiff(input: CaptureInput): Promise<{ diff: string; files: 
  */
 async function commitCapture(input: CaptureInput, title: string): Promise<string | null> {
   const git = `git -c safe.directory='*' -c user.name='OrgIQ Agent' -c user.email='agent@orgiq.local' -C ${input.checkout}`;
-  const b64 = Buffer.from(`orgiq: ${title.slice(0, 200)}`, 'utf8').toString('base64');
   try {
+    const key = input.workItemId ? (await getWorkItem(input.workItemId))?.key : null;
+    const b64 = Buffer.from(workItemCommitMessage(title, key), 'utf8').toString('base64');
     const out = await runDevboxShell(input.client, input.runtimeArn, input.sessionId,
       `${git} add -A && ${git} commit -q -m "$(echo ${b64} | base64 -d)" && ${git} rev-parse HEAD`);
     const sha = out.trim().split('\n').map((l) => l.trim()).filter(Boolean).pop() ?? '';
@@ -164,6 +169,11 @@ async function commitCapture(input: CaptureInput, title: string): Promise<string
     console.warn(`[sdlc] commit-per-capture failed, using working-tree delivery: ${(err as Error).message}`);
     return null;
   }
+}
+
+/** Keep the permanent work reference in git even when the human title changes. */
+export function workItemCommitMessage(title: string, key?: string | null): string {
+  return `${key ?? 'work'}: ${title.replace(/[\r\n]+/g, ' ').slice(0, 200)}`;
 }
 
 /**
@@ -246,7 +256,25 @@ export async function captureAndGate(input: CaptureInput): Promise<string | null
     console.warn(`[sdlc] change ${change.id} review/gate errored:`, (err as Error).message);
     await markFailed(change.id, `pipeline error: ${(err as Error).message}`);
   }
+  // Tell the computer's own tail that its change went for review (lab wire
+  // contract §4), so whoever is watching the run sees where its work landed
+  // instead of a run that simply ended. Only facts already recorded above.
+  announceDelivery(input.sessionId, {
+    title: change.title, captureId: change.id,
+    ...(input.workItemId ? { workItemId: input.workItemId } : {}),
+    ...(sha ? { commitSha: sha } : {}),
+  });
   return change.id;
+}
+
+/** A `delivery` frame into the tail of the box working this session, if any. */
+function announceDelivery(sessionId: string | null, frame: {
+  title: string; captureId: string; workItemId?: string; commitSha?: string;
+  branch?: string; prUrl?: string; prNumber?: number;
+}): void {
+  const box = sessionId ? getBoxBySession(sessionId) : null;
+  if (!box) return;
+  appendEvent(box.id, { type: 'delivery', ...frame, ts: new Date().toISOString() });
 }
 
 /**
@@ -307,6 +335,14 @@ export async function deliverApprovedChange(input: {
 
   if (result.ok && result.prUrl) {
     await markDelivered(input.changeId, result.branch ?? '', result.prUrl);
+    const prNumber = Number(/\/pull\/(\d+)/.exec(result.prUrl)?.[1]);
+    announceDelivery(sessionId, {
+      title: change.title, captureId: change.id, prUrl: result.prUrl,
+      ...(change.workItemId ? { workItemId: change.workItemId } : {}),
+      ...(change.commitSha ? { commitSha: change.commitSha } : {}),
+      ...(result.branch ? { branch: result.branch } : {}),
+      ...(Number.isFinite(prNumber) ? { prNumber } : {}),
+    });
     // Close the loop on the board: without the PR written back onto the work
     // item, the story sits in in_review with no link, the PR chip never
     // renders, and the merge-detection poller — which flips stories to done

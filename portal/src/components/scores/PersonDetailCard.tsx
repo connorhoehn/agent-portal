@@ -40,7 +40,7 @@ interface Props {
   onSelectConnection: (id: string) => void;
 }
 
-const SECTION_HEADER = 'text-[11px] font-semibold text-text-tertiary uppercase tracking-wider mt-4 mb-1.5';
+const SECTION_HEADER = 'text-xs font-semibold text-text-tertiary uppercase tracking-wider mt-4 mb-1.5';
 
 export function PersonDetailCard({ detail, compositeScore, influenceScore, deptColors, onClose, onSelectConnection }: Props) {
   const { data: radar } = useFetch<RadarResponse>(
@@ -98,7 +98,7 @@ export function PersonDetailCard({ detail, compositeScore, influenceScore, deptC
     <Card padding="md" className="mt-4">
       <Inline align="start" justify="between" className="mb-2">
         <Stack gap="none">
-          <EntityCell label={detail.name} labelClassName="text-base" />
+          <EntityCell label={detail.name} labelClassName="" />
           <MetaLine size="sm" tone="secondary" items={[detail.title]} />
           {/* Department colour is data, not design: it comes from the graph's
               own per-department palette, so it stays a style rather than

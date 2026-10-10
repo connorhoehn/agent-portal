@@ -1,0 +1,13 @@
+{
+  "gatewayImage": "sha256:46eafb4672e87121ecb76f10bbef89c4ed26935c80dac92eaf10c9955299db9e",
+  "compiledChecks": {
+    "realtimeVersion": "0.101.0",
+    "directRecipientFilter": true,
+    "normalizedHrefGuard": true,
+    "channelGenerationFence": true,
+    "callLobbyEnvelope": true
+  },
+  "inspection": "ephemeral container; --network none; node entrypoint; no server started",
+  "runningGatewayImage": "sha256:b91932ad4a0ef45ba477cc2e506ef142b3db3ea028340e86dbf1b60ebec44f87",
+  "runningGatewayReplaced": false
+}

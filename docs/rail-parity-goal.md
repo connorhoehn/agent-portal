@@ -75,6 +75,12 @@ documents rails move onto the Org rail's family.
 
 ## Definition of done
 
+The October 9 request adds an adjustable document-sidebar width to the earlier
+220px parity target: start at 280px, remember the owner's resize, and retain the
+library's row scale, full-height frame and independent rail scrolling. The
+new sidebar browser checks own width/pointer/keyboard persistence and sibling
+indentation; the earlier fixed-width measurement is historical for this rail.
+
 - Measured headless at 1672×941: the second rail on `/assessment/workspace`
   and on `/iq/library` agree on rail width (±8px), left and top (±2px — the
   flush frame), caption size (11px caps), row font (13px/500), row pitch,
@@ -123,6 +129,23 @@ documents rails move onto the Org rail's family.
   `StackedRail` shape.
 
 ## Adoption record
+
+- October 9 owner follow-up: the assessment document sidebar now composes the
+  pinned library's `SplitPane` and `WorkspaceRail`, with a remembered 280px
+  default width (220–480px), pointer/keyboard resize and the existing fold
+  preference. Folding retains the mounted document pane. Sibling leaves and
+  parent pages reserve the same disclosure column; selected rows retain their
+  ellipsis control. Menus include Share (an existing-access link), Move to,
+  and the permitted rename/create actions. Dragging shows before/after/into
+  feedback, scrolls near the rail edges and opens collapsed parents on hover.
+  Drops and Move to use the existing authorized source/local move endpoints;
+  refusals retain the dialog and report the server's reason. No document
+  sharing grants, source publishing, or shared-tree mutations were performed
+  during validation. `portal/e2e/document-sidebar.spec.ts` uses an isolated
+  browser move fixture. All four checks and the production build pass, including
+  pointer/keyboard resize, reload persistence, mounted-pane retention, equal
+  sibling text edges, hovered/selected menus, reader restrictions, nested drops,
+  successful move refresh and retained server refusals. Layout image: `design/documents-parity/sidebar-resize-hierarchy.png`.
 
 - ui-components release: `2.407.30` StackedRail (`d0f975fc`); `2.407.32` gutter model (caret in the row-text column, one caption x, 18px per level, `d7702462`); `2.407.33` rows at `SubNavLayout`'s 36px geometry, `ExplorerLayout.railWidth="xs"` = 220px, row `trailing` slot (`a1291afc`); `2.407.36` group actions reveal on hover with a `title` so the 220px rail keeps its labels whole (`ec342193`) — pinned here
 - aws-agentcore `DocumentRail.tsx`: bdf571d9 (2026-09-29)

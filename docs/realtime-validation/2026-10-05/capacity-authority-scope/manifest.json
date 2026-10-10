@@ -1,0 +1,675 @@
+{
+ "recordedAt": "2026-10-05",
+ "scope": "Adopt realtime-modules 0.107.0 authority items in the middleware host: library baseChannel replaces the local service-prefix strip, and AuthorityScope shares one Social membership read per channel per library operation; native gates and the unchanged capacity matrix",
+ "library": {
+  "version": "0.107.0",
+  "commit": "826d81e54997755177002b02dd81010331691aaf",
+  "consumerKey": "@connorhoehnslalom/realtime-modules"
+ },
+ "lockNote": "The coordinator reinstalled middleware dependencies (restoring peer packages dropped by an earlier --legacy-peer-deps install) before any image build, native BFF restart or test in this stage; every result below ran on the restored lock. No npm install was run by this stage.",
+ "source": {
+  "changed": [
+   "middleware/src/lib/realtime-gateway.ts: baseChannel import (line 75); channelGuard uses baseChannel (245); stripServicePrefix kept only as a deprecated alias of baseChannel (263-276); authorizeChannel forwards scope (280-283); DmRouter.isClientSubscribed opts (306); liveSubscribersForUsers(router, channel, users, scope?) (325-339); producers and upload guards use baseChannel",
+   "middleware/src/lib/social-chat.ts: ScopedMembershipRead; MirroredMembershipStore.listMembers(channel, { scope }) and scopedMembers(channel, scope) (210-251)",
+   "middleware/src/lib/live-principal.ts: currentSocialMembershipProof(channel, user, scope?) (138-153); LiveChannelAuthorization.scope (179-182); authorizeLiveGatewayChannel passes args.scope (194)",
+   "middleware/src/lib/direct-recipient.ts: unchanged (call/notification filters receive no scope in 0.107)",
+   "tests: new live-principal-scope.test.ts (17 adversarial); live-subscribers.test.ts +1; tenant-channels.test.ts typing: publish now false; realtime-gateway-social/-tenants chat:social:ch:general now false",
+   "middleware/test-support/bff-cluster-containers.py: allowlist adds orgiq-middleware:cluster-authority-scope-validation"
+  ],
+  "before": "source-before/ (pre-change copies of the four lib files and three tests)",
+  "after": "source-after/",
+  "prefixDecision": "The local regex also stripped chat:/typing:/activity:/pins:. No library service (chat subscribes and fans out on the bare name; typing is a chat action; activity:broadcast is the library firehose), no portal hook and no host producer names a channel with those prefixes (dist + source grep). baseChannel leaves them on, so their partition is never a tenant and admitName refuses: fail closed. Only chat: around a DM lobby is unwrapped (chat:social:dm:a:b admitted for members). Two guard tests that asserted chat:social:ch:general and one that asserted typing: publish were updated to false.",
+  "notMoved": "The DM/channel unread producers stay router plugins. Router plugin onMessage receives no scope in 0.107, so their isClientSubscribed probes stay fresh; liveSubscribersForUsers accepts and forwards a scope for callers that have one (chat message hooks). Remote probes are answered by the peer under its own check either way."
+ },
+ "fenceArgument": [
+  "Lifetime: the shared entry lives in the library scope memo only; share is consulted only while scope.active, and the observer is disposed on scope close. A closed scope is never used (fresh read, as before 0.107). No positive answer outlives the operation.",
+  "Order: directory -> policy -> membership (shared) -> directory per check, as before; no proof starts before the directory (the reverted fanout-proof failure mode).",
+  "Revocation: the shared read registers its change observer synchronously before its durable read starts and keeps it until close; each check additionally holds its own observer from its start. A committed local write or peer social:membership hint flips the shared flag, which is sticky, so every remaining check of that operation on that channel denies. listMembers callers get a fresh read instead (rows are data; the chat service failing open on a thrown read is avoided).",
+  "Directory, actor and policy: never shared; asked per check (epoch bump, actor retirement, grant/policy revocation deny mid-operation).",
+  "Failure: a rejected shared read is dropped by the scope; that check denies, the next retries."
+ ],
+ "image": {
+  "tag": "orgiq-middleware:cluster-authority-scope-validation",
+  "id": "sha256:c229bf59804cbdabcba562f4a8758a370b9c8c8680530dcf94dc4ff279f26918",
+  "arch": "arm64",
+  "node": "v22.23.3",
+  "localOnly": true,
+  "build": "node scripts/docker/prepare-libraries.mjs; docker buildx build --platform linux/arm64 --provenance=false --sbom=false --progress=plain --target production --build-context locked_libraries=$PWD/.docker-libraries -t orgiq-middleware:cluster-authority-scope-validation --load middleware",
+  "distVerifiedOffline": "817 dist/*.js sha256 identical to local middleware/dist (docker run --network none); realtime-modules 0.107.0 in image; scopedMembers and baseChannel present"
+ },
+ "contracts": {
+  "authority": "8 suites, 130 tests (live-principal, live-principal-scope 17 new, live-subscribers, tenant-channels, direct-recipient, social-membership-fence, dynamo-dispatch, dynamo-dispatch-optin); new scope tests: 7 fail against the pre-change live-principal.ts",
+  "appGate": "29 suites: 308 passed, 1 skipped (store restart opt-in), with CALL_FEATURE_CLUSTER/CALL_CHAT_TEST/SOCIAL_CHAT_DDB_IT/CALL_PAGE_TEST against orgiq-chat-redis :16479 and orgiq-chat-dynamodb :18061. Combined run with realtime-gateway-attachments, gateway-run-feed*, tenant-channels, people*, live-principal-scope, dynamo-dispatch*: 38 suites, 418 passed, 1 skipped, 0 failed (app-tests.json/log)",
+  "typecheckBuild": "pass",
+  "nativeCluster": "12/12 (cluster-acceptance.log)",
+  "redisFaults": "3/3 on a fresh BFF restart (redis-failures.log). The first run, started directly after the 12 contracts without a restart, failed the stalled-command case: the bff-b /ws lease key kept renewing (PTTL rose 21.3 s -> 29.2 s) while both healths were 503, so \"old stable owner leases expire naturally\" timed out at 31 s. Retained as redis-failures-run1.log; not reproduced; cause not established.",
+  "dynamoFault": "1/1 (dynamo-failures.log)",
+  "libraryNativeRedis": "/tmp/orgiq-realtime-cluster-candidate @826d81e (feat/orgiq-parity), REAL_ROUTER_REDIS=1 REAL_ROUTER_REDIS_URL=redis://127.0.0.1:16481: test/server/redis-router.integration.test.ts 31/31 pass; CALL_TEST_REDIS_URL same: test/call/call-state-recovery-redis.test.ts 5/5 pass. Fixture orgiq-cluster-validation-redis (label orgiq.validation=realtime-cluster) had no other clients (CLIENT LIST = the probe only); reached through a temporary owned SSH forward, removed after."
+ },
+ "results": {
+  "burst-scope": {
+   "driverExit": 1,
+   "verdict": "FAIL",
+   "failedThresholds": [
+    "invite\u2192incoming p95: 1267.6 (< 250 ms)",
+    "invite\u2192incoming p99: 1349.4 (< 1000 ms)",
+    "chat delivery p95: 2887.1 (< 300 ms, with paired-sender evidence)",
+    "event-loop proxy (/api/health p99): 116.8 (< 50 ms)",
+    "peer 1: health p99: 104.8 (< 50 ms)"
+   ],
+   "latencyLines": [
+    "invite\u2192incoming  p50 635.9  p95 1267.6  p99 1349.4  max 1369.6 ms (n=100)",
+    "accept\u2192accepted  p50 75.2  p95 157.1  p99 202.1  max 218.6 ms (n=100)",
+    "chat delivery    p50 2173.8  p95 2887.1  p99 3637.9  max 3669.5 ms (n=1268 of 1268 sent)"
+   ],
+   "memoryPeaks": [
+    "PASS  server memory peak: 220.6 (< 700 MiB)",
+    "PASS  peer 1: memory peak: 218.5 (< 700 MiB)"
+   ],
+   "dockerStats": {
+    "capacity-a": {
+     "samples": 15,
+     "peak": 100.29,
+     "mean": 22.7
+    },
+    "capacity-b": {
+     "samples": 15,
+     "peak": 102.49,
+     "mean": 23.1
+    },
+    "cluster-dynamodb": {
+     "samples": 15,
+     "peak": 114.75,
+     "mean": 15.8
+    },
+    "cluster-redis": {
+     "samples": 15,
+     "peak": 17.88,
+     "mean": 2.7
+    },
+    "cluster-postgres": {
+     "samples": 15,
+     "peak": 10.35,
+     "mean": 5.5
+    }
+   }
+  },
+  "burst-scope-2": {
+   "driverExit": 1,
+   "verdict": "FAIL",
+   "failedThresholds": [
+    "invite\u2192incoming p95: 629.4 (< 250 ms)",
+    "chat delivery p95: 2139.5 (< 300 ms, with paired-sender evidence)",
+    "event-loop proxy (/api/health p99): 110.7 (< 50 ms)",
+    "peer 1: health p99: 84.1 (< 50 ms)"
+   ],
+   "latencyLines": [
+    "invite\u2192incoming  p50 59.9  p95 629.4  p99 679.7  max 698.9 ms (n=100)",
+    "accept\u2192accepted  p50 43.9  p95 65.3  p99 83.3  max 85 ms (n=100)",
+    "chat delivery    p50 1535.9  p95 2139.5  p99 2574  max 2831.3 ms (n=1262 of 1262 sent)"
+   ],
+   "memoryPeaks": [
+    "PASS  server memory peak: 230 (< 700 MiB)",
+    "PASS  peer 1: memory peak: 225.8 (< 700 MiB)"
+   ],
+   "dockerStats": {
+    "capacity-a": {
+     "samples": 15,
+     "peak": 97.92,
+     "mean": 23.2
+    },
+    "capacity-b": {
+     "samples": 15,
+     "peak": 90.4,
+     "mean": 22.6
+    },
+    "cluster-dynamodb": {
+     "samples": 15,
+     "peak": 57.42,
+     "mean": 13.9
+    },
+    "cluster-redis": {
+     "samples": 15,
+     "peak": 24.57,
+     "mean": 3.5
+    },
+    "cluster-postgres": {
+     "samples": 15,
+     "peak": 19.24,
+     "mean": 8.3
+    }
+   }
+  },
+  "burst-scope-metrics": {
+   "driverExit": 1,
+   "verdict": "FAIL",
+   "failedThresholds": [
+    "invite\u2192incoming p95: 1290.5 (< 250 ms)",
+    "invite\u2192incoming p99: 1371.8 (< 1000 ms)",
+    "accept\u2192accepted p95: 318.8 (< 250 ms)",
+    "chat delivery p95: 3403.9 (< 300 ms, with paired-sender evidence)",
+    "event-loop proxy (/api/health p99): 148.6 (< 50 ms)",
+    "peer 1: health p99: 170.8 (< 50 ms)"
+   ],
+   "latencyLines": [
+    "invite\u2192incoming  p50 888.4  p95 1290.5  p99 1371.8  max 1392.2 ms (n=100)",
+    "accept\u2192accepted  p50 71  p95 318.8  p99 348.9  max 363.8 ms (n=100)",
+    "chat delivery    p50 2347.9  p95 3403.9  p99 3849.4  max 4067.6 ms (n=1278 of 1279 sent)"
+   ],
+   "memoryPeaks": [
+    "PASS  server memory peak: 222.8 (< 700 MiB)",
+    "PASS  peer 1: memory peak: 230.2 (< 700 MiB)"
+   ],
+   "dockerStats": {
+    "capacity-a": {
+     "samples": 16,
+     "peak": 102.6,
+     "mean": 23.0
+    },
+    "capacity-b": {
+     "samples": 16,
+     "peak": 101.76,
+     "mean": 22.6
+    },
+    "cluster-dynamodb": {
+     "samples": 16,
+     "peak": 109.72,
+     "mean": 15.9
+    },
+    "cluster-redis": {
+     "samples": 16,
+     "peak": 4.96,
+     "mean": 1.8
+    },
+    "cluster-postgres": {
+     "samples": 16,
+     "peak": 13.27,
+     "mean": 5.6
+    }
+   }
+  },
+  "soak-scope": {
+   "driverExit": 1,
+   "verdict": "FAIL",
+   "failedThresholds": [
+    "invite\u2192incoming p95: 345.1 (< 250 ms)",
+    "accept\u2192accepted p95: 317.7 (< 250 ms)",
+    "chat delivery p95: 5083.9 (< 300 ms, with paired-sender evidence)",
+    "event-loop proxy (/api/health p99): 92.3 (< 50 ms)",
+    "peer 1: health p99: 82.7 (< 50 ms)"
+   ],
+   "latencyLines": [
+    "invite\u2192incoming  p50 38.5  p95 345.1  p99 456.9  max 490.1 ms (n=100)",
+    "accept\u2192accepted  p50 37  p95 317.7  p99 622.7  max 626 ms (n=100)",
+    "chat delivery    p50 38.9  p95 5083.9  p99 7812  max 8588.9 ms (n=13571 of 13575 sent)"
+   ],
+   "memoryPeaks": [
+    "PASS  server memory peak: 257.6 (< 700 MiB)",
+    "PASS  peer 1: memory peak: 249.5 (< 700 MiB)"
+   ],
+   "dockerStats": {
+    "capacity-a": {
+     "samples": 117,
+     "peak": 102.96,
+     "mean": 32.5
+    },
+    "capacity-b": {
+     "samples": 117,
+     "peak": 105.59,
+     "mean": 33.7
+    },
+    "cluster-dynamodb": {
+     "samples": 117,
+     "peak": 115.26,
+     "mean": 25.1
+    },
+    "cluster-redis": {
+     "samples": 117,
+     "peak": 17.73,
+     "mean": 3.0
+    },
+    "cluster-postgres": {
+     "samples": 117,
+     "peak": 34.23,
+     "mean": 13.8
+    }
+   }
+  },
+  "steady-scope": {
+   "driverExit": 0,
+   "verdict": "PASS",
+   "failedThresholds": [],
+   "latencyLines": [
+    "invite\u2192incoming  p50 37  p95 50.1  p99 58.1  max 71.3 ms (n=100)",
+    "accept\u2192accepted  p50 35.4  p95 43.4  p99 48.3  max 62.5 ms (n=100)",
+    "chat delivery    p50 23.5  p95 32.9  p99 51.3  max 970.4 ms (n=2277 of 2278 sent)",
+    "invite\u2192incoming  p50 37  p95 50.2  p99 62.3  max 72.4 ms (n=300)",
+    "accept\u2192accepted  p50 30.2  p95 38.8  p99 49.6  max 63 ms (n=300)",
+    "chat delivery    p50 23.5  p95 31.9  p99 48  max 107.1 ms (n=1709 of 1709 sent)"
+   ],
+   "memoryPeaks": [
+    "PASS  server memory peak: 231 (< 700 MiB)",
+    "PASS  peer 1: memory peak: 248.7 (< 700 MiB)",
+    "PASS  server memory peak: 231.1 (< 700 MiB)",
+    "PASS  peer 1: memory peak: 249.8 (< 700 MiB)"
+   ],
+   "dockerStats": {
+    "capacity-a": {
+     "samples": 75,
+     "peak": 87.43,
+     "mean": 19.3
+    },
+    "capacity-b": {
+     "samples": 75,
+     "peak": 46.01,
+     "mean": 17.2
+    },
+    "cluster-dynamodb": {
+     "samples": 75,
+     "peak": 42.22,
+     "mean": 11.3
+    },
+    "cluster-redis": {
+     "samples": 75,
+     "peak": 15.16,
+     "mean": 2.5
+    },
+    "cluster-postgres": {
+     "samples": 75,
+     "peak": 14.47,
+     "mean": 7.7
+    }
+   }
+  },
+  "ring-storm-scope": {
+   "driverExit": 1,
+   "verdict": "FAIL",
+   "failedThresholds": [
+    "peer 1: health p99: 58 (< 50 ms)",
+    "invite\u2192incoming p95: 417.9 (< 250 ms)",
+    "accept\u2192accepted p95: 338.7 (< 250 ms)"
+   ],
+   "latencyLines": [
+    "invite\u2192incoming  p50 50.5  p95 91.7  p99 102.3  max 105.1 ms (n=100)",
+    "accept\u2192accepted  p50 51.6  p95 86.6  p99 93.8  max 97 ms (n=100)",
+    "chat delivery    p50 24.3  p95 34.8  p99 52.6  max 134.7 ms (n=1775 of 1776 sent)",
+    "invite\u2192incoming  p50 103.2  p95 417.9  p99 430.5  max 431.6 ms (n=300)",
+    "accept\u2192accepted  p50 151.3  p95 338.7  p99 369.1  max 375.1 ms (n=300)",
+    "chat delivery    p50 24.6  p95 45.4  p99 151.4  max 261 ms (n=1343 of 1344 sent)"
+   ],
+   "memoryPeaks": [
+    "PASS  server memory peak: 236.1 (< 700 MiB)",
+    "PASS  peer 1: memory peak: 249.8 (< 700 MiB)",
+    "PASS  server memory peak: 238.4 (< 700 MiB)",
+    "PASS  peer 1: memory peak: 250 (< 700 MiB)"
+   ],
+   "dockerStats": {
+    "capacity-a": {
+     "samples": 63,
+     "peak": 100.93,
+     "mean": 19.6
+    },
+    "capacity-b": {
+     "samples": 63,
+     "peak": 91.47,
+     "mean": 17.3
+    },
+    "cluster-dynamodb": {
+     "samples": 63,
+     "peak": 60.11,
+     "mean": 11.8
+    },
+    "cluster-redis": {
+     "samples": 63,
+     "peak": 16.5,
+     "mean": 2.4
+    },
+    "cluster-postgres": {
+     "samples": 63,
+     "peak": 26.22,
+     "mean": 7.2
+    }
+   }
+  },
+  "double-accept-scope": {
+   "driverExit": 1,
+   "verdict": "FAIL",
+   "failedThresholds": [
+    "event-loop proxy (/api/health p99): 66.6 (< 50 ms)"
+   ],
+   "latencyLines": [
+    "invite\u2192incoming  p50 59.7  p95 97.7  p99 118.3  max 120.6 ms (n=100)",
+    "accept\u2192accepted  p50 54.7  p95 91.1  p99 116.8  max 119.4 ms (n=100)",
+    "chat delivery    p50 38.6  p95 247  p99 1301.6  max 1534.9 ms (n=1580 of 1580 sent)"
+   ],
+   "memoryPeaks": [
+    "PASS  server memory peak: 238.2 (< 700 MiB)",
+    "PASS  peer 1: memory peak: 250 (< 700 MiB)"
+   ],
+   "dockerStats": {
+    "capacity-a": {
+     "samples": 24,
+     "peak": 101.52,
+     "mean": 24.0
+    },
+    "capacity-b": {
+     "samples": 24,
+     "peak": 100.01,
+     "mean": 24.6
+    },
+    "cluster-dynamodb": {
+     "samples": 24,
+     "peak": 67.08,
+     "mean": 16.2
+    },
+    "cluster-redis": {
+     "samples": 24,
+     "peak": 16.36,
+     "mean": 3.9
+    },
+    "cluster-postgres": {
+     "samples": 24,
+     "peak": 24.94,
+     "mean": 10.8
+    }
+   }
+  },
+  "churn-scope": {
+   "driverExit": 0,
+   "verdict": "PASS",
+   "failedThresholds": [],
+   "latencyLines": [
+    "invite\u2192incoming  p50 50.5  p95 90.5  p99 106.4  max 147.3 ms (n=100)",
+    "accept\u2192accepted  p50 46.7  p95 77.1  p99 87.3  max 141.9 ms (n=100)",
+    "chat delivery    p50 33.1  p95 60  p99 104.4  max 160.3 ms (n=2275 of 2276 sent)",
+    "invite\u2192incoming  p50 39  p95 51  p99 70.3  max 77.1 ms (n=300)",
+    "accept\u2192accepted  p50 30.9  p95 41.5  p99 49.8  max 57 ms (n=300)",
+    "chat delivery    p50 26.4  p95 36.7  p99 127.8  max 420.4 ms (n=1709 of 1709 sent)"
+   ],
+   "memoryPeaks": [
+    "PASS  server memory peak: 237.2 (< 700 MiB)",
+    "PASS  peer 1: memory peak: 249.7 (< 700 MiB)",
+    "PASS  server memory peak: 235.4 (< 700 MiB)",
+    "PASS  peer 1: memory peak: 250.3 (< 700 MiB)"
+   ],
+   "dockerStats": {
+    "capacity-a": {
+     "samples": 75,
+     "peak": 102.79,
+     "mean": 22.2
+    },
+    "capacity-b": {
+     "samples": 75,
+     "peak": 96.49,
+     "mean": 20.8
+    },
+    "cluster-dynamodb": {
+     "samples": 75,
+     "peak": 74.37,
+     "mean": 14.3
+    },
+    "cluster-redis": {
+     "samples": 75,
+     "peak": 17.63,
+     "mean": 2.7
+    },
+    "cluster-postgres": {
+     "samples": 75,
+     "peak": 14.85,
+     "mean": 9.2
+    }
+   }
+  }
+ },
+ "comparisonToCapacityBaselineProfile": {
+  "burst-scope": {
+   "thisStage": {
+    "verdict": "FAIL",
+    "failed": [
+     "invite\u2192incoming p95: 1267.6 (< 250 ms)",
+     "invite\u2192incoming p99: 1349.4 (< 1000 ms)",
+     "chat delivery p95: 2887.1 (< 300 ms, with paired-sender evidence)",
+     "event-loop proxy (/api/health p99): 116.8 (< 50 ms)",
+     "peer 1: health p99: 104.8 (< 50 ms)"
+    ]
+   },
+   "capacityBaselineProfile": {
+    "run": "burst-baseline",
+    "verdict": "FAIL",
+    "failed": [
+     "invite\u2192incoming p95: 2397.7 (< 250 ms)",
+     "invite\u2192incoming p99: 2455.9 (< 1000 ms)",
+     "accept\u2192accepted p95: 1391.4 (< 250 ms)",
+     "chat delivery p95: 5324.2 (< 300 ms, with paired-sender evidence)",
+     "event-loop proxy (/api/health p99): 124.3 (< 50 ms)",
+     "peer 1: health p99: 161.8 (< 50 ms)"
+    ]
+   }
+  },
+  "burst-scope-2": {
+   "thisStage": {
+    "verdict": "FAIL",
+    "failed": [
+     "invite\u2192incoming p95: 629.4 (< 250 ms)",
+     "chat delivery p95: 2139.5 (< 300 ms, with paired-sender evidence)",
+     "event-loop proxy (/api/health p99): 110.7 (< 50 ms)",
+     "peer 1: health p99: 84.1 (< 50 ms)"
+    ]
+   },
+   "capacityBaselineProfile": {
+    "run": "burst-baseline-2",
+    "verdict": "FAIL",
+    "failed": [
+     "invite\u2192incoming p95: 2328 (< 250 ms)",
+     "invite\u2192incoming p99: 2403.6 (< 1000 ms)",
+     "accept\u2192accepted p95: 658.3 (< 250 ms)",
+     "chat delivery p95: 4738.3 (< 300 ms, with paired-sender evidence)",
+     "event-loop proxy (/api/health p99): 102.5 (< 50 ms)",
+     "peer 1: health p99: 162 (< 50 ms)"
+    ]
+   }
+  },
+  "soak-scope": {
+   "thisStage": {
+    "verdict": "FAIL",
+    "failed": [
+     "invite\u2192incoming p95: 345.1 (< 250 ms)",
+     "accept\u2192accepted p95: 317.7 (< 250 ms)",
+     "chat delivery p95: 5083.9 (< 300 ms, with paired-sender evidence)",
+     "event-loop proxy (/api/health p99): 92.3 (< 50 ms)",
+     "peer 1: health p99: 82.7 (< 50 ms)"
+    ]
+   },
+   "capacityBaselineProfile": {
+    "run": "soak-baseline",
+    "verdict": "FAIL",
+    "failed": [
+     "chat delivery p95: 10263.3 (< 300 ms, with paired-sender evidence)",
+     "event-loop proxy (/api/health p99): 106.1 (< 50 ms)",
+     "peer 1: health p99: 108.5 (< 50 ms)"
+    ]
+   }
+  },
+  "steady-scope": {
+   "thisStage": {
+    "verdict": "PASS",
+    "failed": []
+   },
+   "capacityBaselineProfile": {
+    "run": "steady-baseline",
+    "verdict": "PASS",
+    "failed": []
+   }
+  },
+  "ring-storm-scope": {
+   "thisStage": {
+    "verdict": "FAIL",
+    "failed": [
+     "peer 1: health p99: 58 (< 50 ms)",
+     "invite\u2192incoming p95: 417.9 (< 250 ms)",
+     "accept\u2192accepted p95: 338.7 (< 250 ms)"
+    ]
+   },
+   "capacityBaselineProfile": {
+    "run": "ring-storm-baseline",
+    "verdict": "FAIL",
+    "failed": [
+     "invite\u2192incoming p95: 305.4 (< 250 ms)",
+     "peer 1: health p99: 59.2 (< 50 ms)"
+    ]
+   }
+  },
+  "double-accept-scope": {
+   "thisStage": {
+    "verdict": "FAIL",
+    "failed": [
+     "event-loop proxy (/api/health p99): 66.6 (< 50 ms)"
+    ]
+   },
+   "capacityBaselineProfile": {
+    "run": "double-accept-baseline",
+    "verdict": "FAIL",
+    "failed": [
+     "event-loop proxy (/api/health p99): 54.5 (< 50 ms)"
+    ]
+   }
+  },
+  "churn-scope": {
+   "thisStage": {
+    "verdict": "PASS",
+    "failed": []
+   },
+   "capacityBaselineProfile": {
+    "run": "churn-baseline",
+    "verdict": "PASS",
+    "failed": []
+   }
+  }
+ },
+ "memberQueries": {
+  "thisStage": {
+   "a": 6370,
+   "b": 6425
+  },
+  "baselineImage(capacity-fanout-proof/burst-baseline-metrics)": {
+   "a": 16387,
+   "b": 16605
+  },
+  "messagesPutPerNode": {
+   "a": 631,
+   "b": 648
+  },
+  "reduction": "6,370/6,425 vs 16,387/16,605 chat-members queries per node per burst (-61%); ~10 per stored message vs ~25"
+ },
+ "conclusions": [
+  "Member queries per burst fell about 61% per node. Burst improved on every latency in two plain runs (invite p95 1267.6/629.4 vs 2397.7/2328; accept p95 157.1/65.3 vs 1391.4/658.3, now under target; chat p95 2887.1/2139.5 vs 5324.2/4738.3) but still fails invite, chat and both health targets. The store-metrics burst was slower (invite 1290.5, accept 318.8, chat 3403.9).",
+  "Steady and churn pass. Double-accept still fails health p99 only (66.6 vs 54.5 before). Ring-storm group four fails invite/accept p95 (417.9/338.7 vs 305.4/243.7 before) and group two peer health (58 vs 59.2). Soak chat p95 improves to 5083.9 (from 10263.3) but invite/accept p95 now fail (345.1/317.7 vs 133.2/85) along with health.",
+  "Both BFFs still hit the 1-CPU cap during burst and soak. Capacity not accepted."
+ ],
+ "capacityAccepted": false,
+ "cloudAccepted": false,
+ "drivers": "all stopped drivers archived to retired-drivers/ (logs + id/exit/finish) by retire_drivers.py, then removed; compiled BFFs restored without metrics (containers-restore.log, prepare-restore.log)",
+ "artifacts": {
+  "app-tests.json": "d5d341cb9eaa28a38368ffc5751531a4b63a35d1aa372ad8ef51ddd869d97193",
+  "app-tests.log": "92d4809b72bef3b2abea6b017aee17bd8503e936d836ae6df7d3dd1cdb3dc493",
+  "build-image-source.log": "890dd11b16e4a3386f08a4fa8529271130230f259e3188a13da295ba4ce5d33b",
+  "build.log": "890dd11b16e4a3386f08a4fa8529271130230f259e3188a13da295ba4ce5d33b",
+  "burst-scope-2-docker-stats.csv": "054bc2f8923782a890becb34327e69cd8959906366866ee755cc1627cd328c78",
+  "burst-scope-2-driver.log": "11f7abaf75559cf12149fd83efa490304fb0f30902056336435ae6a92e8aea52",
+  "burst-scope-2-result.json": "553109b304df50e36ebcdf6384beab987b7ceee05e47ef7173525dd33c73bbe1",
+  "burst-scope-docker-stats.csv": "588375bdee49841bebc19fd8b3e31f8062148e7ebfdca0f1e36364e00816b3df",
+  "burst-scope-driver.log": "dde8d71a0dc51ac4203a5739446b595d9f15171a18fbc49c1019bb716e27fbb4",
+  "burst-scope-metrics-a-metrics-after.json": "aea773facc2739d2764841974a0bc9bd5c3b6083d909c8b5c992b6459897c4e2",
+  "burst-scope-metrics-a-metrics-before.json": "a2a83048995986958d476a6042f814e4bb7509f9ede99c4bdcc12db3a5bcd647",
+  "burst-scope-metrics-b-metrics-after.json": "fda5a03695b5398d99fc82e202c6e1067876e9cc0700b7aeb0316a40102a6ac7",
+  "burst-scope-metrics-b-metrics-before.json": "9124f1aec71d2ef402187c400b41562137da38abbb8108ee942317d6ce19f014",
+  "burst-scope-metrics-docker-stats.csv": "736e33f3a01c1b0c1bf6c4d07b34e9f8f77b1fa0d8d2bc6218d29c8bddef613f",
+  "burst-scope-metrics-driver.log": "3c4dc5570336225c33811edca9ea1190cf0a94987a40d5e13d236dcef2c994b2",
+  "burst-scope-metrics-result.json": "ee5ec0f40974694f22c9c7d061c2c5825a55d59edbc0c44ca3cd959cf063670e",
+  "burst-scope-result.json": "f5b2fbe6167ed28f94f2bbef192256a9eef2e228de564e1c30c6fa92b6bfb7bf",
+  "churn-scope-docker-stats.csv": "c6ea2423d67defe4f760b9eaea6c1e56c83ec9d8bd3b236cdddbbe33113eb7b9",
+  "churn-scope-driver.log": "496407b419173661b9df17a6cf38bf64a437042d01d44df2aeba3731c0de9d53",
+  "churn-scope-result.json": "5c29928569694ae9561ccde91d4cbbf10e6ee3d28b110ba270dbf4abbb665772",
+  "cluster-acceptance.log": "6311f2e07c3c9f25687ed0b768dfe9a332b9e8552e1e420cad919494f4dd62a4",
+  "containers-burst-metrics.log": "3fc6cf484981a52ed8e0a9a82a082b8d2af5136016718ccbf496f5d24720d2d4",
+  "containers-restore.log": "44e411a20b90e24f35afbf4bcfbba3dce6d05e53067d53eb1f378adb4195f6de",
+  "containers.log": "886113b882aaee6d0f59e0fc358dff129be96f1d716c1f8ec3c0fc9549e669e6",
+  "double-accept-scope-docker-stats.csv": "4bb14828aa88043828bf1c0e052cc66f709056ba5809adc3b099b7a2e7386d50",
+  "double-accept-scope-driver.log": "2878b3df5fd1750ba4b686cade85d3dde9c828f602b82654270931d6b116611f",
+  "double-accept-scope-result.json": "7394343aeadf0c9d182f0366b5b87217c84902f4b3cf303c1bff4fe683efcb99",
+  "dynamo-failures.log": "6b2d725a5a8a6ef2be880554170a9b548738ce5460ca7d986c02eb790b46c052",
+  "image-artifact.err": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "image-build.log": "e0e24704f39558c40fb7874499e88ceba342ee717a3a0daee62d8f644bb2655a",
+  "image-dist-list.txt": "d1465a78bc622df8c00d46f987090999fc92319b563f529524e34a83df8be7f9",
+  "library-call-recovery-redis.log": "c9d57563c31a54af3af6540b6f6ec1145c5089e7a36ef05530bcfef7b3506c7c",
+  "library-native-redis.head": "1b7b6310dec74b7fb3f5867327c955d710b331571e3f6dab1cae2a8812187330",
+  "library-native-redis.log": "2f4ca3046ca6a36c516904fb02690a3fa1bdfc56ba451ad523091447a806a86f",
+  "local-dist-list.txt": "ff9227efa5fa8dee60f93a4829634bcbb780d52f4944087f9bcdb2b30bc53539",
+  "prepare-attempt1-missing-image-env.log": "0ee297e4c467f48354deea881505a5186cbc8ce05fc615bddc86673de14665db",
+  "prepare-burst-metrics.log": "0f8bf45a2970f0659431a484d050fd68228a38c194b9647531240971827fa902",
+  "prepare-libraries.log": "f05631c1619494b0d997fbde0555a0bb85d7268051d0eb7e3251af6b4005e77f",
+  "prepare-restore.log": "0f8bf45a2970f0659431a484d050fd68228a38c194b9647531240971827fa902",
+  "prepare.log": "0f8bf45a2970f0659431a484d050fd68228a38c194b9647531240971827fa902",
+  "processes-2.log": "d357ca5d92c80b20f8482e5ed38716d4d3707c4202bdc4f1ad00972e89cb5205",
+  "processes.log": "5de62443b927d9b3566762c56583bddbd764a9096c0cc9b53bcc40e66ac73225",
+  "redis-failures-run1.log": "6b9f656d39bf10aa0eb8eb3ebed8d154da314498bddd669ed38589f73dc3fe6b",
+  "redis-failures.log": "3fc3b70d140993b5a2b4a041cee89b11ff6f0c00ea2eef92839ba0718cad2844",
+  "retire_drivers.py": "0f0be6deb91cb3feef75e1e2de8856614905be463a21af5d5e9f83804846deb9",
+  "retired-drivers/orgiq-bff-capacity-driver-burst-1791246273.log": "b2f296991ef848df781900c325d7710225f1e904260a2a45ba4c3a0208fca23e",
+  "retired-drivers/orgiq-bff-capacity-driver-burst-1791246273.txt": "c5360e887565e1b0d2c35d111f1e2ade8e17f4113bc3d35daf9eb6cdeb246b87",
+  "retired-drivers/orgiq-bff-capacity-driver-burst-1791252541.log": "f43e501ffc7835ec94f749d1b85f4d7204e65ada1b70beceb5148e6fabc7581f",
+  "retired-drivers/orgiq-bff-capacity-driver-burst-1791252541.txt": "5fa8fd48d3ba5b5eb04092c5a47b8ab7d614cd0ccb978cce1433a9e3258e995e",
+  "retired-drivers/orgiq-bff-capacity-driver-burst-1791252589.log": "747bbea5365b4d4c2e74f40eca3b3150870c0f1ecde30ef39518081bc592131d",
+  "retired-drivers/orgiq-bff-capacity-driver-burst-1791252589.txt": "cb8cf64352bc8da50a5bb906c00b215e88d37be00ca22337d9c820e942f03d76",
+  "retired-drivers/orgiq-bff-capacity-driver-burst-1791253732.log": "4d6256c90f98a10537c5a10e6ee620d69dabed8361f54076d7bf6b6524227f11",
+  "retired-drivers/orgiq-bff-capacity-driver-burst-1791253732.txt": "6c4341fd49ee78ad9dbe70219d280064a7b1f23997e0d17e68fef715b18a8914",
+  "retired-drivers/orgiq-bff-capacity-driver-churn-1791244042.log": "02fa802f150cc9cc4e042446326343412a9c71d707f9a2385abb9babfd09e17e",
+  "retired-drivers/orgiq-bff-capacity-driver-churn-1791244042.txt": "db8e61d3eadb1be65b64a459b9735ce1444d1854d2c251e6fe9e00706d0bd96c",
+  "retired-drivers/orgiq-bff-capacity-driver-churn-1791253661.log": "104d3f29b71e01e01636543b26f10bbbbfee15a2f5da0e9e2815b3756cdf7b96",
+  "retired-drivers/orgiq-bff-capacity-driver-churn-1791253661.txt": "e533b071131acf818ee590b3086e492f743150ee92e3fa2ce1a820ba21543ebf",
+  "retired-drivers/orgiq-bff-capacity-driver-double-accept-1791244117.log": "6afde903e1bffaf8f00238bb585ee3541aad64be1ba46edbe39af0a5f12d4fbe",
+  "retired-drivers/orgiq-bff-capacity-driver-double-accept-1791244117.txt": "ad4290c4708d5f6fc361d89e45678abf9e97f76bf1448dce3498fa31ffbc9e19",
+  "retired-drivers/orgiq-bff-capacity-driver-double-accept-1791253436.log": "f10ee11c82d9e946641f854fdb987f1a1af468e984f43b849543214f4130719c",
+  "retired-drivers/orgiq-bff-capacity-driver-double-accept-1791253436.txt": "6dfbc59c3e427fad79fcaa6bb557607d71d904ddcdba488188edd2dbf07f8f8c",
+  "retired-drivers/orgiq-bff-capacity-driver-ring-storm-1791243810.log": "3dc2f144fd10cd71f007470a5c18ec438099ebc365c3a0fc65c576f2ebb5156e",
+  "retired-drivers/orgiq-bff-capacity-driver-ring-storm-1791243810.txt": "bfa1783eb1a07dfae0c1c5f25858f59ccf9b0c9cb290461b735bb4510dc5a96d",
+  "retired-drivers/orgiq-bff-capacity-driver-ring-storm-1791253361.log": "a6083696860ca272edbb3b66cffd92ac89520eddb8a8a9b0b34aa14ce4463b1a",
+  "retired-drivers/orgiq-bff-capacity-driver-ring-storm-1791253361.txt": "2f9aa3d630b24927583e44fea436449621bd50d3191b7b0c968dffd79d517aac",
+  "retired-drivers/orgiq-bff-capacity-driver-soak-1791246131.log": "a4af99d3b57a7863a7c64016edbb6b8988e73922766a2cf3225fd5239768f0f5",
+  "retired-drivers/orgiq-bff-capacity-driver-soak-1791246131.txt": "ce87fc049a11685c21173f615f8b02ee19a55343fcb009a70e77c7f33de80515",
+  "retired-drivers/orgiq-bff-capacity-driver-soak-1791252944.log": "08d913a778d9571cce7c551845523bb590df231f582684ae95bb72e42ae747d9",
+  "retired-drivers/orgiq-bff-capacity-driver-soak-1791252944.txt": "9a1c2cbb5ea98b4cf65e5e2c7474641ef580cc7fe563eed6636397039961436a",
+  "retired-drivers/orgiq-bff-capacity-driver-steady-1791243620.log": "d29511f91ce3b2326269a8c4962fd697cd2ffbd40376169c11d909f1f2936c1a",
+  "retired-drivers/orgiq-bff-capacity-driver-steady-1791243620.txt": "efdb7ededac6f6defa745a57492a6964f926b59b72c99581bfc57dbcb20137e2",
+  "retired-drivers/orgiq-bff-capacity-driver-steady-1791253173.log": "88b2c7e2f3296d34bcd8ab2d1053ce35eff31362ed70e9b75412a0cded91caa8",
+  "retired-drivers/orgiq-bff-capacity-driver-steady-1791253173.txt": "7d4a18f9d85c5cb46244656738f7bce45c4b385ec29c4261bcf19f7f894d99ca",
+  "ring-storm-scope-docker-stats.csv": "a75418dac6e1672324ecc52691df960e0e0b69b71f598a7bdd0798ff6ca70c8b",
+  "ring-storm-scope-driver.log": "d455044cac869dc6f3291a1990440baebb42b2f7650389f27310b59a3ea54285",
+  "ring-storm-scope-result.json": "b48f0332ec0bd38249dd12d21a84ec2311971b5bcccce365d03d504768d4f01b",
+  "run_profile.sh": "c3b935fb756c5878116aea45e29d0a965aa4f5dfa648527731f806b6b32a5ab9",
+  "soak-scope-docker-stats.csv": "41a38dc0952e76abac16b14f54a5c52775751e559dc2537304cdfca0f1137454",
+  "soak-scope-driver.log": "7fa350b2c51bcddd06d6574911a78dbf0fa47f55723806847240c8bf32f3b337",
+  "soak-scope-result.json": "34691054a8ab1bf4bb33976843b7fb626b4b3d9a52f122fb7165f50c64057a7e",
+  "source-after/bff-cluster-containers.py": "80e90db09d105bd470dc2939434c507937347af06ab0aba72b28531dcf409e6c",
+  "source-after/direct-recipient.ts": "7931d45ad623c6e084610ce72af93ed043830f85ac04fc5ca8e204929128fd8c",
+  "source-after/live-principal-scope.test.ts": "fa6a83d28d2494c7461321b04be82ed380b60edef39ccf799f9acdf03a656f6c",
+  "source-after/live-principal.ts": "4911e0ec5c2c560bda055d111f73e4e14f0f20cce412c3983783c8237222914e",
+  "source-after/live-subscribers.test.ts": "6076741e4ddc5dc0846fcc99ee3f30d5071235800886fe575285260d10578e4c",
+  "source-after/realtime-gateway-social.test.ts": "46af3049888bde6f9062aacd8cec9b61d8d17929041b7de6ec6cdd77e5dfbdac",
+  "source-after/realtime-gateway-tenants.test.ts": "dfa8f20de6138d62ca928c3f453e863cff8b15f36b95bf79f4797dcca8b023ed",
+  "source-after/realtime-gateway.ts": "5d6f5f32bffc3944df2ab114c4cd2ed14dc68bfc4d93bd5ecc33a9f46032d019",
+  "source-after/social-chat.ts": "2d7353a06484ddfffd1e36f56a2849edcb85dc0862c07cb73bc6b29efc164a34",
+  "source-after/tenant-channels.test.ts": "89b4da45b4875408ec948bb27e19357711fe007d7be9b823f5652fd50feb7ad5",
+  "source-before/direct-recipient.ts": "7931d45ad623c6e084610ce72af93ed043830f85ac04fc5ca8e204929128fd8c",
+  "source-before/live-principal.test.ts": "f53f1af2a7be4416332b7a8b0c75ef20051c98240f7e882c68688db1ac81ea49",
+  "source-before/live-principal.ts": "31f53ce5042597f925cece66193a68de568f2efcfd96e8b8b099545458ce1c7e",
+  "source-before/live-subscribers.test.ts": "28ecde3270b7a0c89156a76a9927e612a3e43a888f718f3fb391e2f32d0fd782",
+  "source-before/realtime-gateway.ts": "b8bc123d29eb247b5c6d57eb159614e49ad5e2b99243af87753888b0bb3fc631",
+  "source-before/social-chat.ts": "34a895822cae7ad73a8fe299417a5a98117ca2e28e0f9e79ba1d9b1dd6de0c84",
+  "source-before/tenant-channels.test.ts": "61f71ee1de497f37c251b3b2fb89de344d802047212c3a8c1c6efec1c246fcc6",
+  "steady-scope-docker-stats.csv": "897db0fde98dc4c96ab37eca006bf07727ddac09c67e07b3b1db7d36cc1e4fac",
+  "steady-scope-driver.log": "d655c51ce2bcc6bcb677e7a6222a7fe24c1a939cf3179e522f05b6663abd7b6a",
+  "steady-scope-result.json": "d1d41c5c0dc97eb77e0f23416ff049e9de77025dc2a0a8209ee82cc0b2d33d5c",
+  "typecheck.log": "a6aacf3de309c23e5aeb92922e8082e8eb964285a805f031247d7ef19849931b"
+ }
+}

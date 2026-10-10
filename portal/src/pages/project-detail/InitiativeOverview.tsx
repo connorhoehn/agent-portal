@@ -45,8 +45,8 @@ const COLUMNS: ActionRowColumn[] = [
 
 function cells(assigneeName: string | null, points: string | null): Record<string, ReactNode> {
   return {
-    person: assigneeName ? <ActionRowPerson name={assigneeName} /> : <T className="text-text-secondary">Unassigned</T>,
-    points: points ?? <T className="text-text-secondary">Unsized</T>,
+    person: assigneeName ? <ActionRowPerson name={assigneeName} size={24} /> : <T tone="secondary">Unassigned</T>,
+    points: points ?? <T tone="secondary">Unsized</T>,
   };
 }
 
@@ -54,8 +54,11 @@ export function InitiativeOverview({
   model,
   onOpen,
   onRetry,
+  recent,
 }: {
   model: OverviewModel;
+  /** The Recent activity list (a compact `RecentWorkActivity`); the canvas lives on the Activity tab. */
+  recent?: ReactNode;
   /** Client-side navigation to a Work-tab deep link. */
   onOpen: (href: string) => void;
   onRetry?: () => void;
@@ -66,8 +69,17 @@ export function InitiativeOverview({
   };
 
   return (
-    <Stack gap="xl" className="px-6 pb-6 pt-5" data-testid="initiative-overview">
-      <StatStrip variant="line" items={model.stats.map(statItem)} aria-label="Initiative progress" data-testid="overview-stats" />
+    <Stack gap="xl" className="px-6 pb-6 pt-4" data-testid="initiative-overview">
+      {/* Every role here sits on the app's body step (ui-components 2.429.0
+          `size="sm"`: 14px headings/titles/stats, 12px descriptions) so the
+          Overview reads like the tabs above it and the Distillation,
+          Initiatives and scorecard surfaces — e2e/initiative-overview-type. */}
+      <Inline gap="md" align="center" wrap>
+        <StatStrip variant="line" size="sm" items={model.stats.map(statItem)} aria-label="Initiative progress" data-testid="overview-stats" className="flex-1" />
+        {model.state === 'ready' && model.attention.length === 0 && (
+          <T size="sm" tone="secondary" role="status" data-testid="overview-attention-clear">{ATTENTION_NONE}</T>
+        )}
+      </Inline>
 
       {model.state === 'loading' && <LoadingState label="Loading work…" />}
       {model.state === 'error' && (
@@ -82,8 +94,8 @@ export function InitiativeOverview({
       )}
       {model.state === 'ready' && (
         <>
-          <PageSection
-            size="md"
+          {model.attention.length > 0 && <PageSection
+            size="sm"
             title="Needs attention"
             // The count is the rows below it, never a stored total. It reads
             // as the mockup's pale-indigo pill (ui-components 2.396.0).
@@ -91,9 +103,10 @@ export function InitiativeOverview({
             countTone="primary"
             data-testid="overview-attention-section"
           >
-            {model.attention.length > 0 ? (
+            {
               <ActionRowList
                 aria-label="Needs attention"
+                size="sm"
                 tone="warning"
                 accent="bar"
                 action="Open"
@@ -101,32 +114,37 @@ export function InitiativeOverview({
                 items={model.attention.map((a) => ({
                   id: a.id,
                   title: a.title,
-                  // The mockup's tag: pale red fill, soft red border, 14px red
-                  // text — `outline="soft"` + `lg` since ui-components 2.396.0.
-                  leading: <Chip tone="danger" size="lg" outline="soft">Blocked</Chip>,
-                  ...(a.reason ? { description: a.reason } : {}),
+                  // The mockup's tag: pale red fill, soft red border, red text
+                  // (`outline="soft"` since ui-components 2.396.0) at the 12px
+                  // tag step of the compact rows.
+                  leading: <Inline gap="xs" align="center" wrap={false}>
+                    {a.key && <Chip tone="neutral" size="sm" mono>{a.key}</Chip>}
+                    <Chip tone="danger" size="md" outline="soft">Blocked</Chip>
+                  </Inline>,
+                  // The row truncates its description to one line, and a
+                  // blocked reason is a sentence ("Cannot be written until the
+                  // cu…" at 1440px): whole on hover.
+                  ...(a.reason ? { description: <T title={a.reason}>{a.reason}</T> } : {}),
                   cells: cells(a.assigneeName, a.points),
                 }))}
                 onOpen={hrefOf(model.attention)}
                 data-testid="overview-attention"
               />
-            ) : (
-              <T className="text-text-secondary">{ATTENTION_NONE}</T>
-            )}
-          </PageSection>
+            }
+          </PageSection>}
 
           <PageSection
-            size="md"
+            size="sm"
             title="Up next"
             // The mockup puts 32px between the attention row and this heading
             // where the other sections sit 24px apart (the library story's
             // `mt-8` against `mt-6`); the stack's `xl` gap carries 24 of it.
-            className="mt-2"
+            className={model.attention.length > 0 ? 'mt-2' : undefined}
             actions={model.viewAll ? (
-              <Button variant="link" onClick={() => onOpen(model.viewAll!.href)} data-testid="overview-view-all">
+              <Button variant="link" size="sm" onClick={() => onOpen(model.viewAll!.href)} data-testid="overview-view-all">
                 <Inline gap="sm" align="center">
                   {model.viewAll.label}
-                  <ArrowRightIcon size={20} />
+                  <ArrowRightIcon size={16} />
                 </Inline>
               </Button>
             ) : undefined}
@@ -134,14 +152,17 @@ export function InitiativeOverview({
           >
             <ActionRowList
               aria-label="Up next"
+              className="work-overview-striped-rows"
+              size="sm"
               columns={COLUMNS}
-              items={model.upNext.map((r) => ({ id: r.id, title: r.title, cells: cells(r.assigneeName, r.points) }))}
+              items={model.upNext.map((r) => ({ id: r.id, title: r.title, leading: r.key ? <Chip tone="neutral" size="sm" mono>{r.key}</Chip> : undefined, cells: cells(r.assigneeName, r.points) }))}
               onOpen={hrefOf(model.upNext)}
               emptyLabel="Nothing is up next."
             />
           </PageSection>
         </>
       )}
+      {recent}
     </Stack>
   );
 }

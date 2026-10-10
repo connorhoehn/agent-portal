@@ -1,0 +1,102 @@
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 1.36kB done
+#1 DONE 0.0s
+
+#2 [context locked_libraries] load .dockerignore
+#2 transferring locked_libraries: 2B done
+#2 DONE 0.0s
+
+#3 [internal] load metadata for docker.io/library/node:22-slim
+#3 DONE 0.3s
+
+#4 [internal] load .dockerignore
+#4 transferring context: 75B done
+#4 DONE 0.0s
+
+#5 [deps 1/6] FROM docker.io/library/node:22-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392
+#5 resolve docker.io/library/node:22-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392 done
+#5 DONE 0.0s
+
+#6 [internal] load build context
+#6 transferring context: 1.43MB 0.1s done
+#6 DONE 0.1s
+
+#7 [deps 2/6] WORKDIR /app
+#7 CACHED
+
+#8 [deps 3/6] COPY package*.json ./
+#8 DONE 0.1s
+
+#9 [context locked_libraries] load from client
+#9 transferring locked_libraries: 32.02MB 0.2s done
+#9 DONE 0.2s
+
+#10 [deps 4/6] COPY --from=locked_libraries / /vendor/
+#10 DONE 0.1s
+
+#11 [deps 5/6] RUN node /vendor/install-locked.mjs
+#11 DONE 0.2s
+
+#12 [deps 6/6] RUN --mount=type=cache,target=/root/.npm npm ci --ignore-scripts --legacy-peer-deps
+#12 1.928 npm warn deprecated inflight@1.0.6: This module is not supported, and leaks memory. Do not use it. Check out lru-cache if you want a good and tested way to coalesce async requests by a key value, which is much more comprehensive and powerful.
+#12 2.077 npm warn deprecated glob@7.2.3: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
+#12 2.772 npm warn deprecated node-domexception@1.0.0: Use your platform's native DOMException instead
+#12 3.345 npm warn deprecated glob@10.5.0: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
+#12 7.158 
+#12 7.158 added 874 packages, and audited 875 packages in 7s
+#12 7.158 
+#12 7.158 128 packages are looking for funding
+#12 7.158   run `npm fund` for details
+#12 7.193 
+#12 7.193 49 vulnerabilities (17 moderate, 31 high, 1 critical)
+#12 7.193 
+#12 7.193 To address issues that do not require attention, run:
+#12 7.193   npm audit fix
+#12 7.193 
+#12 7.193 To address all issues possible (including breaking changes), run:
+#12 7.193   npm audit fix --force
+#12 7.193 
+#12 7.193 Some issues need review, and may require choosing
+#12 7.193 a different dependency.
+#12 7.193 
+#12 7.193 Run `npm audit` for details.
+#12 DONE 7.5s
+
+#13 [production 3/8] COPY --from=deps /app/node_modules ./node_modules
+#13 DONE 2.3s
+
+#14 [production 4/8] COPY package*.json ./
+#14 DONE 0.2s
+
+#15 [production 5/8] COPY src ./src
+#15 DONE 0.1s
+
+#16 [production 6/8] COPY seeds ./seeds
+#16 DONE 0.0s
+
+#17 [production 7/8] COPY tsconfig.json ./
+#17 DONE 0.0s
+
+#18 [production 8/8] RUN npm run build
+#18 0.314 
+#18 0.314 > @orgiq/middleware@0.3.0 build
+#18 0.314 > tsc
+#18 0.314 
+#18 14.71 npm notice
+#18 14.71 npm notice New major version of npm available! 10.9.9 -> 12.2.0
+#18 14.71 npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.0
+#18 14.71 npm notice To update run: npm install -g npm@12.2.0
+#18 14.71 npm notice
+#18 DONE 14.9s
+
+#19 exporting to image
+#19 exporting layers
+#19 exporting layers 13.1s done
+#19 exporting manifest sha256:7344ceceb89c8f5631f031d9de730f54f866c663fa9f9f691c901b2cd17fbb0c done
+#19 exporting config sha256:2be1af0f586f073f63404f8d5876949cd6bd0d3c0b2c5b456c210fb625dd93da done
+#19 naming to docker.io/library/orgiq-middleware:cluster-0110-validation done
+#19 unpacking to docker.io/library/orgiq-middleware:cluster-0110-validation
+#19 unpacking to docker.io/library/orgiq-middleware:cluster-0110-validation 3.2s done
+#19 DONE 16.3s

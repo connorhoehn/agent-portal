@@ -51,10 +51,17 @@ export function PromptSidebar({
           <InlinePlaceholder>No prompts found.</InlinePlaceholder>
         )}
         {prompts.length > 0 && (
-          // Library rows: title + one-line description, the selected prompt
-          // reads as the checked one of several. These were two-line labels
-          // inside a `Button` with `!h-auto`, a local height override.
-          <ChoiceList data-testid="prompt-rail-list">
+          // Library rows: title + description, the selected prompt reads as
+          // the checked one of several. ChoiceRow truncates both lines to one
+          // and carries no title, so in this 240px rail every name and every
+          // description was cut with no way to read the rest (the description
+          // appears nowhere else on the page). The rows wrap instead — names
+          // break at their hyphens. A wrap/title option on ChoiceRow is queued
+          // in docs/ui-components-queue.md; this override goes when it ships.
+          <ChoiceList
+            data-testid="prompt-rail-list"
+            className="[&_[role=radio]_span]:whitespace-normal [&_[role=radio]_span]:[overflow-wrap:anywhere]"
+          >
             {prompts.map(prompt => (
               <ChoiceRow
                 key={prompt.id}

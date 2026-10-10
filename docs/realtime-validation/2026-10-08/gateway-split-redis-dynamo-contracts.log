@@ -1,0 +1,172 @@
+PASS src/lib/__tests__/call-chat-redis.integration.test.ts
+PASS src/lib/__tests__/call-pages-redis.integration.test.ts
+FAIL src/lib/__tests__/call-chat-durable.integration.test.ts
+  ● durable huddle membership over real Redis and DynamoDB Local › replays the newest stored messages after a cold resume with each member's original boundary
+
+    ResourceNotFoundException: Cannot do operations on a non-existent table
+
+      114 |     try {
+      115 |       expect(await redis.command('PING')).toBe('PONG');
+    > 116 |       expect((await client.send(new DescribeTableCommand({ TableName: table }))).Table?.TableStatus).toBe('ACTIVE');
+          |               ^
+      117 |     } finally { client.destroy(); await redis.quit(); }
+      118 |   }, 15000);
+      119 |
+
+      at AwsJson1_0Protocol.handleError (node_modules/@aws-sdk/core/dist-cjs/submodules/protocols/index.js:1385:27)
+      at AwsJson1_0Protocol.deserializeResponse (node_modules/@smithy/core/dist-cjs/submodules/protocols/index.js:529:13)
+      at node_modules/@smithy/core/dist-cjs/submodules/schema/index.js:23:24
+      at node_modules/@smithy/core/dist-cjs/index.js:118:20
+      at node_modules/@smithy/core/dist-cjs/submodules/retry/index.js:171:50
+      at node_modules/@aws-sdk/middleware-logger/dist-cjs/index.js:5:26
+      at Object.<anonymous> (src/lib/__tests__/call-chat-durable.integration.test.ts:116:15)
+
+  ● durable huddle membership over real Redis and DynamoDB Local › a late joiner reads only later messages; leaving refuses reads and an explicit rejoin advances the boundary
+
+    ResourceNotFoundException: Cannot do operations on a non-existent table
+
+      114 |     try {
+      115 |       expect(await redis.command('PING')).toBe('PONG');
+    > 116 |       expect((await client.send(new DescribeTableCommand({ TableName: table }))).Table?.TableStatus).toBe('ACTIVE');
+          |               ^
+      117 |     } finally { client.destroy(); await redis.quit(); }
+      118 |   }, 15000);
+      119 |
+
+      at AwsJson1_0Protocol.handleError (node_modules/@aws-sdk/core/dist-cjs/submodules/protocols/index.js:1385:27)
+      at AwsJson1_0Protocol.deserializeResponse (node_modules/@smithy/core/dist-cjs/submodules/protocols/index.js:529:13)
+      at node_modules/@smithy/core/dist-cjs/submodules/schema/index.js:23:24
+      at node_modules/@smithy/core/dist-cjs/index.js:118:20
+      at node_modules/@smithy/core/dist-cjs/submodules/retry/index.js:171:50
+      at node_modules/@aws-sdk/middleware-logger/dist-cjs/index.js:5:26
+      at Object.<anonymous> (src/lib/__tests__/call-chat-durable.integration.test.ts:116:15)
+
+  ● durable huddle membership over real Redis and DynamoDB Local › rejects revoked or mismatched actors and keeps terminal history inaccessible to fresh runtimes
+
+    ResourceNotFoundException: Cannot do operations on a non-existent table
+
+      114 |     try {
+      115 |       expect(await redis.command('PING')).toBe('PONG');
+    > 116 |       expect((await client.send(new DescribeTableCommand({ TableName: table }))).Table?.TableStatus).toBe('ACTIVE');
+          |               ^
+      117 |     } finally { client.destroy(); await redis.quit(); }
+      118 |   }, 15000);
+      119 |
+
+      at AwsJson1_0Protocol.handleError (node_modules/@aws-sdk/core/dist-cjs/submodules/protocols/index.js:1385:27)
+      at AwsJson1_0Protocol.deserializeResponse (node_modules/@smithy/core/dist-cjs/submodules/protocols/index.js:529:13)
+      at node_modules/@smithy/core/dist-cjs/submodules/schema/index.js:23:24
+      at node_modules/@smithy/core/dist-cjs/index.js:118:20
+      at node_modules/@smithy/core/dist-cjs/submodules/retry/index.js:171:50
+      at node_modules/@aws-sdk/middleware-logger/dist-cjs/index.js:5:26
+      at Object.<anonymous> (src/lib/__tests__/call-chat-durable.integration.test.ts:116:15)
+
+  ● durable huddle membership over real Redis and DynamoDB Local › a reused call id after state expiry never exposes the retained transcript
+
+    ResourceNotFoundException: Cannot do operations on a non-existent table
+
+      114 |     try {
+      115 |       expect(await redis.command('PING')).toBe('PONG');
+    > 116 |       expect((await client.send(new DescribeTableCommand({ TableName: table }))).Table?.TableStatus).toBe('ACTIVE');
+          |               ^
+      117 |     } finally { client.destroy(); await redis.quit(); }
+      118 |   }, 15000);
+      119 |
+
+      at AwsJson1_0Protocol.handleError (node_modules/@aws-sdk/core/dist-cjs/submodules/protocols/index.js:1385:27)
+      at AwsJson1_0Protocol.deserializeResponse (node_modules/@smithy/core/dist-cjs/submodules/protocols/index.js:529:13)
+      at node_modules/@smithy/core/dist-cjs/submodules/schema/index.js:23:24
+      at node_modules/@smithy/core/dist-cjs/index.js:118:20
+      at node_modules/@smithy/core/dist-cjs/submodules/retry/index.js:171:50
+      at node_modules/@aws-sdk/middleware-logger/dist-cjs/index.js:5:26
+      at Object.<anonymous> (src/lib/__tests__/call-chat-durable.integration.test.ts:116:15)
+
+FAIL src/lib/__tests__/call-features-cluster.integration.test.ts
+  ● call pages and huddle chat across native gateway nodes › reads remote seats and delivers a canonical pinned page to the other gateway
+
+    ResourceNotFoundException: Cannot do operations on a non-existent table
+
+      160 |     nodes = []; clients = []; storageChannels = new Set(); held = null;
+      161 |     const a = await boot('a'), b = await boot('b');
+    > 162 |     expect((await a.db.send(new DescribeTableCommand({ TableName: table }))).Table?.TableStatus).toBe('ACTIVE');
+          |             ^
+      163 |     const alice = await connect(a, 'alice'), bob = await connect(b, 'bob');
+      164 |     await a.observed.registerParticipant(callId, alice.id, sessions.alice.sub, lobby, [sessions.bob.sub]);
+      165 |     await b.observed.registerParticipant(callId, bob.id, sessions.alice.sub, lobby, [sessions.alice.sub]);
+
+      at AwsJson1_0Protocol.handleError (node_modules/@aws-sdk/core/dist-cjs/submodules/protocols/index.js:1385:27)
+      at AwsJson1_0Protocol.deserializeResponse (node_modules/@smithy/core/dist-cjs/submodules/protocols/index.js:529:13)
+      at node_modules/@smithy/core/dist-cjs/submodules/schema/index.js:23:24
+      at node_modules/@smithy/core/dist-cjs/index.js:118:20
+      at node_modules/@smithy/core/dist-cjs/submodules/retry/index.js:171:50
+      at node_modules/@aws-sdk/middleware-logger/dist-cjs/index.js:5:26
+      at Object.<anonymous> (src/lib/__tests__/call-features-cluster.integration.test.ts:162:13)
+
+  ● call pages and huddle chat across native gateway nodes › delivers huddle chat across gateways and answers a retried delivery id with the original message
+
+    ResourceNotFoundException: Cannot do operations on a non-existent table
+
+      160 |     nodes = []; clients = []; storageChannels = new Set(); held = null;
+      161 |     const a = await boot('a'), b = await boot('b');
+    > 162 |     expect((await a.db.send(new DescribeTableCommand({ TableName: table }))).Table?.TableStatus).toBe('ACTIVE');
+          |             ^
+      163 |     const alice = await connect(a, 'alice'), bob = await connect(b, 'bob');
+      164 |     await a.observed.registerParticipant(callId, alice.id, sessions.alice.sub, lobby, [sessions.bob.sub]);
+      165 |     await b.observed.registerParticipant(callId, bob.id, sessions.alice.sub, lobby, [sessions.alice.sub]);
+
+      at AwsJson1_0Protocol.handleError (node_modules/@aws-sdk/core/dist-cjs/submodules/protocols/index.js:1385:27)
+      at AwsJson1_0Protocol.deserializeResponse (node_modules/@smithy/core/dist-cjs/submodules/protocols/index.js:529:13)
+      at node_modules/@smithy/core/dist-cjs/submodules/schema/index.js:23:24
+      at node_modules/@smithy/core/dist-cjs/index.js:118:20
+      at node_modules/@smithy/core/dist-cjs/submodules/retry/index.js:171:50
+      at node_modules/@aws-sdk/middleware-logger/dist-cjs/index.js:5:26
+      at Object.<anonymous> (src/lib/__tests__/call-features-cluster.integration.test.ts:162:13)
+
+  ● call pages and huddle chat across native gateway nodes › fences a remote recipient revoked during an awaited socket delivery and denies stale REST readers
+
+    ResourceNotFoundException: Cannot do operations on a non-existent table
+
+      160 |     nodes = []; clients = []; storageChannels = new Set(); held = null;
+      161 |     const a = await boot('a'), b = await boot('b');
+    > 162 |     expect((await a.db.send(new DescribeTableCommand({ TableName: table }))).Table?.TableStatus).toBe('ACTIVE');
+          |             ^
+      163 |     const alice = await connect(a, 'alice'), bob = await connect(b, 'bob');
+      164 |     await a.observed.registerParticipant(callId, alice.id, sessions.alice.sub, lobby, [sessions.bob.sub]);
+      165 |     await b.observed.registerParticipant(callId, bob.id, sessions.alice.sub, lobby, [sessions.alice.sub]);
+
+      at AwsJson1_0Protocol.handleError (node_modules/@aws-sdk/core/dist-cjs/submodules/protocols/index.js:1385:27)
+      at AwsJson1_0Protocol.deserializeResponse (node_modules/@smithy/core/dist-cjs/submodules/protocols/index.js:529:13)
+      at node_modules/@smithy/core/dist-cjs/submodules/schema/index.js:23:24
+      at node_modules/@smithy/core/dist-cjs/index.js:118:20
+      at node_modules/@smithy/core/dist-cjs/submodules/retry/index.js:171:50
+      at node_modules/@aws-sdk/middleware-logger/dist-cjs/index.js:5:26
+      at Object.<anonymous> (src/lib/__tests__/call-features-cluster.integration.test.ts:162:13)
+
+  ● call pages and huddle chat across native gateway nodes › keeps shared pages and history floors intact while the connection directory is unavailable
+
+    ResourceNotFoundException: Cannot do operations on a non-existent table
+
+      160 |     nodes = []; clients = []; storageChannels = new Set(); held = null;
+      161 |     const a = await boot('a'), b = await boot('b');
+    > 162 |     expect((await a.db.send(new DescribeTableCommand({ TableName: table }))).Table?.TableStatus).toBe('ACTIVE');
+          |             ^
+      163 |     const alice = await connect(a, 'alice'), bob = await connect(b, 'bob');
+      164 |     await a.observed.registerParticipant(callId, alice.id, sessions.alice.sub, lobby, [sessions.bob.sub]);
+      165 |     await b.observed.registerParticipant(callId, bob.id, sessions.alice.sub, lobby, [sessions.alice.sub]);
+
+      at AwsJson1_0Protocol.handleError (node_modules/@aws-sdk/core/dist-cjs/submodules/protocols/index.js:1385:27)
+      at AwsJson1_0Protocol.deserializeResponse (node_modules/@smithy/core/dist-cjs/submodules/protocols/index.js:529:13)
+      at node_modules/@smithy/core/dist-cjs/submodules/schema/index.js:23:24
+      at node_modules/@smithy/core/dist-cjs/index.js:118:20
+      at node_modules/@smithy/core/dist-cjs/submodules/retry/index.js:171:50
+      at node_modules/@aws-sdk/middleware-logger/dist-cjs/index.js:5:26
+      at Object.<anonymous> (src/lib/__tests__/call-features-cluster.integration.test.ts:162:13)
+
+PASS src/lib/__tests__/redis-lite.test.ts
+PASS src/lib/__tests__/realtime-gateway-social-dynamo.test.ts
+
+Test Suites: 2 failed, 4 passed, 6 total
+Tests:       8 failed, 15 passed, 23 total
+Snapshots:   0 total
+Time:        7.654 s
+Ran all test suites matching /call-chat-redis.integration|call-chat-durable.integration|call-features-cluster.integration|call-pages-redis.integration|realtime-gateway-social-dynamo|redis-lite/i.

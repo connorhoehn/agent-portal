@@ -7,7 +7,7 @@
 
 import { useNavigate } from 'react-router';
 import {
-  Banner, Button, Chip, ConfirmDialog, DataTable, Inline, MetaLine, PageHeader, Stack, type DataTableColumn,
+  Banner, Chip, ConfirmDialog, DataTable, IconButton, MetaLine, PageHeader, PlayCircleIcon, Stack, StatStrip, type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';
@@ -24,15 +24,14 @@ interface RunbooksResponse { runbooks: RunbookRow[]; total: number; unavailable:
 const BASE_COLUMNS: DataTableColumn<RunbookRow>[] = [
   { key: 'title', header: 'Runbook', sortable: true, compare: (a, b) => a.title.localeCompare(b.title), render: (r) => r.title },
   { key: 'rung', header: 'Rung', render: (r) => rungLabel(r.runbook) },
-  { key: 'steps', header: 'Steps', align: 'right', render: (r) => r.steps.length },
+  { key: 'steps', header: 'Steps', numeric: true, render: (r) => r.steps.length },
   {
-    key: 'lastDryRun', header: 'Last dry-run',
-    render: (r) => (r.runbook.lastDryRun ? (
-      <Inline gap="xs" align="center">
-        <PipelineRunStatusChip status={r.runbook.lastDryRun.status} />
-        <MetaLine size="xs" tone="tertiary" items={[relativeTime(r.runbook.lastDryRun.startedAt)]} />
-      </Inline>
-    ) : 'never'),
+    key: 'lastDryRunStatus', header: 'Last dry-run', width: '128px',
+    render: (r) => (r.runbook.lastDryRun ? <PipelineRunStatusChip status={r.runbook.lastDryRun.status} /> : 'never'),
+  },
+  {
+    key: 'lastDryRun', header: 'Dry-run at', numeric: true,
+    render: (r) => (r.runbook.lastDryRun ? relativeTime(r.runbook.lastDryRun.startedAt) : '—'),
   },
   {
     key: 'promotion', header: 'Promotion to skill',
@@ -58,12 +57,17 @@ export default function RunbooksPage() {
         description="Runbooks on their way to becoming skills. A runbook becomes a skill only after a completed dry-run of its own definition."
       />
       {data && (
-        <MetaLine size="xs" tone="tertiary" items={[
-          `${rows.length} runbooks`,
-          `${rows.filter((r) => r.runbook.promotionToSkill.ok).length} with a completed dry-run`,
-          canRun ? null : 'dry-runs are started by authors and operators',
-        ]} />
+        <StatStrip
+          aria-label="Runbook summary"
+          variant="line"
+          size="sm"
+          items={[
+            { label: rows.length === 1 ? 'runbook' : 'runbooks', value: rows.length },
+            { label: 'with a completed dry-run', value: rows.filter((r) => r.runbook.promotionToSkill.ok).length },
+          ]}
+        />
       )}
+      {data && !canRun && <MetaLine size="xs" tone="tertiary" items={['dry-runs are started by authors and operators']} />}
       {data && data.unavailable.length > 0 && (
         <Banner variant="warning">
           {`Not every source could be read — ${data.unavailable.map((u) => `${u.source}: ${u.error}`).join('; ')}.`}
@@ -74,6 +78,7 @@ export default function RunbooksPage() {
       ) : (
         <DataTable
           data-testid="pipelines-runbooks-table"
+          size="sm"
           data={rows}
           columns={BASE_COLUMNS}
           keyField={(r) => r.id}
@@ -81,15 +86,15 @@ export default function RunbooksPage() {
           pageSize={25}
           onRowClick={(r) => navigate(definitionHref(r.id))}
           rowActions={canRun ? (r) => (canDryRun(r) ? (
-            <Button
+            <IconButton
               size="sm"
-              variant="secondary"
+              icon={<PlayCircleIcon />}
+              aria-label={`Dry-run ${r.title}`}
+              title={dryRun.busy === r.id ? 'Starting…' : 'Dry-run'}
               disabled={dryRun.busy === r.id || r.runbook.lastDryRun?.status === 'pending' || r.runbook.lastDryRun?.status === 'running'}
               onClick={(e) => { e.stopPropagation(); dryRun.start(r.id, r.title); }}
               data-testid="pipelines-runbook-dry-run"
-            >
-              {dryRun.busy === r.id ? 'Starting…' : 'Dry-run'}
-            </Button>
+            />
           ) : null) : undefined}
           emptyMessage="No runbooks — nothing on the promotion ladder has reached the runbook rung."
         />

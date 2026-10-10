@@ -12,7 +12,7 @@
 #         scripts/validate-pipelines-tenant.sh --phase=P0     # judge one lane: P0 | P1 | P2 | E
 #         scripts/validate-pipelines-tenant.sh --quick        # skip the slow suites (jest, vite build, venv, neighbour validators)
 #         scripts/validate-pipelines-tenant.sh --no-time      # skip the optional time gate (PIPELINES_UNTIL=HH)
-#         scripts/validate-pipelines-tenant.sh --seal         # record journey-log source digests (after a real walk only)
+#         scripts/validate-pipelines-tenant.sh --seal         # retired: scripts/journeys/seal.sh <dir> seals, after a walk
 #
 # Phases are cumulative: --phase=P2 judges P0, P1 and P2. The default is E,
 # i.e. the whole definition of done. A phase beyond the one asked for is
@@ -23,13 +23,14 @@
 set -u
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
+source scripts/lib/judges.sh  # jg_*: static gates run once per tree state
 
-QUICK=0; NO_TIME=0; SEAL=0; PHASE=E
+QUICK=0; NO_TIME=0; PHASE=E
 for a in "$@"; do
   case "$a" in
     --quick) QUICK=1 ;;
     --no-time) NO_TIME=1 ;;
-    --seal) SEAL=1 ;;
+    --seal) echo "--seal is retired: walk the logs, then run scripts/journeys/seal.sh <dir> (docs/journeys.md)" >&2; exit 2 ;;
     --phase=*) PHASE="${a#--phase=}" ;;
     -h|--help) sed -n '2,22p' "$0"; exit 0 ;;
     *) echo "unknown flag: $a (see --help)"; exit 2 ;;
@@ -106,7 +107,7 @@ run_jest() { # run_jest <label> <test paths...> — targeted, never the whole su
 
 neighbour() { # neighbour <script> <args...> — another judge must stay green; its own output stays in $TMP
   local s="$1"; shift
-  if bash "scripts/$s" "$@" >"$TMP/$s.log" 2>&1; then ok "$s${*:+ $*} exits 0"
+  if jg_judge "$s" "$@" >"$TMP/$s.log" 2>&1; then ok "$s${*:+ $*} exits 0"
   else fail "$s${*:+ $*} is red"; grep -E 'CHECK\(S\) FAILING' "$TMP/$s.log" | head -1 | sed 's/^/      /'; grep -E '^  - ' "$TMP/$s.log" | head -4 | sed 's/^/      /'; fi
 }
 
@@ -299,43 +300,15 @@ t_miss=""; for tid in pipeline-run pipeline-steps pipeline-artifacts pipeline-ev
   grep -rqE "(data-testid|testId)=\"$tid\"" "$PAGES" 2>/dev/null || t_miss="$t_miss $tid"
 done
 [ -z "$t_miss" ] && ok "run detail renders Run → Steps → Artifacts → Events (test ids)" || fail "run detail under $PAGES lacks data-testid:$t_miss"
-# Component discipline — the assessment judge's line regex AND the brace-aware
-# counter from validate-component-discipline.sh (the line regex cannot see
-# past an arrow function, CLAUDE.md "Facts that bite").
-RAW_RE='<(div|p|span|h[1-6]|ul|ol|li|section|nav|article|table|tr|td|th|button|a|label|input|textarea|select|form|code|pre)( [^>]*)?className='
-QUEUED_FILES=$(grep -oE "Composed locally in \`$PAGES/[A-Za-z0-9_/.-]+\.tsx\`" docs/ui-components-queue.md 2>/dev/null | grep -oE "$PAGES/[A-Za-z0-9_/.-]+\.tsx" | sort -u)
-PAGE_FILES=$(find "$PAGES" -name '*.tsx' 2>/dev/null | sort | grep -vxF -f <(printf '%s\n' $QUEUED_FILES) )
-count_brace() { # brace-aware raw-element count, same walker as validate-component-discipline.sh
-  python3 - "$@" <<'PY'
-import re, sys
-EL = r'div|p|span|h[1-6]|ul|ol|li|section|nav|article|table|tr|td|th|button|a|label|input|textarea|select|form|code|pre'
-rx = re.compile(rf'<({EL})(?=[\s/>])')
-def end(s, i):
-    d = 0; q = None; j = i
-    while j < len(s):
-        c = s[j]
-        if q:
-            if c == q and s[j-1] != '\\': q = None
-        elif c in '"\'`': q = c
-        elif c == '{': d += 1
-        elif c == '}': d -= 1
-        elif c == '>' and d == 0: return j
-        j += 1
-    return -1
-t = 0
-for p in sys.argv[1:]:
-    s = open(p, encoding='utf-8', errors='ignore').read()
-    for m in rx.finditer(s):
-        e = end(s, m.start())
-        if e > 0 and re.search(r'\s(className|style)=', s[m.start():e]): t += 1
-print(t, end='')
-PY
-}
-count_in() { local re="$1"; shift; local n=0 c; for f in "$@"; do c=$(grep -oE "$re" "$f" | wc -l | tr -d ' '); n=$((n+c)); done; echo "$n"; }
+# Component discipline — the one brace-aware counter (scripts/lib/discipline.sh,
+# shared with validate-component-discipline.sh; the line regex this used beside
+# it cannot see past an arrow function, CLAUDE.md "Facts that bite").
+source scripts/lib/discipline.sh
+PAGE_FILES=$(dc_area_files "$PAGES" "$PAGES/")
 if [ -n "$PAGE_FILES" ]; then
-  n_raw=$(count_in "$RAW_RE" $PAGE_FILES); n_btn=$(count_in '<button[ >]' $PAGE_FILES); n_sty=$(count_in 'style=\{\{' $PAGE_FILES)
-  n_brace=$(count_brace $PAGE_FILES)
-  [ "$n_raw" = 0 ] && [ "$n_brace" = 0 ] && ok "raw styled elements: 0 (line regex) / 0 (brace-aware)" || fail "raw styled elements under $PAGES: $n_raw (line regex) / $n_brace (brace-aware) — must be 0; compose from ui-components or queue the gap"
+  n_btn=$(dc_count_re '<button[ >]' $PAGE_FILES); n_sty=$(dc_count_re 'style=\{\{' $PAGE_FILES)
+  n_brace=$(dc_count_raw $PAGE_FILES)
+  [ "$n_brace" = 0 ] && ok "raw styled elements: 0 (brace-aware)" || fail "raw styled elements under $PAGES: $n_brace (brace-aware) — must be 0; compose from ui-components or queue the gap"
   [ "$n_btn" = 0 ] && ok "no raw <button>" || fail "raw <button> under $PAGES: $n_btn"
   [ "$n_sty" = 0 ] && ok "no inline style={{}}" || fail "inline style={{}} under $PAGES: $n_sty"
   leaks=$(grep -rnE "['\"\`]/(iq|admin|assessment|social)(/|['\"\`])" "$PAGES" --include='*.tsx' | wc -l | tr -d ' ')
@@ -367,13 +340,13 @@ if [ ! -f "$f" ]; then fail "slice journey log $f missing"; else
 fi
 
 section "P0 · type + test gates"
-if (cd middleware && npx tsc --noEmit >/dev/null 2>&1); then ok "middleware tsc clean"; else fail "middleware: tsc errors"; fi
-if (cd portal && npx tsc --noEmit >/dev/null 2>&1); then ok "portal tsc clean"; else fail "portal: tsc errors"; fi
+if jg_mw_tsc >/dev/null 2>&1; then ok "middleware tsc clean"; else fail "middleware: tsc errors"; fi
+if jg_portal_tsc >/dev/null 2>&1; then ok "portal tsc clean"; else fail "portal: tsc errors"; fi
 if ls "$PAGES"/__tests__/*.test.ts >/dev/null 2>&1; then
   if (cd portal && node --test "src/pages/$T/__tests__/"*.test.ts 2>&1 | grep -qE '^ℹ fail 0$'); then ok "portal $T node tests green"; else fail "portal: $T node tests failing"; fi
 else fail "no node tests under $PAGES/__tests__ (the run-status formatting and crosswalk labels owe one)"; fi
 if [ "$QUICK" = 0 ] && [ "$n_pages" -ge 3 ]; then
-  if (cd portal && npx vite build 2>&1 | grep -q '✓ built'); then ok "vite build"; else fail "portal: vite build fails"; fi
+  if jg_vite_build 2>&1 | grep -q '✓ built'; then ok "vite build"; else fail "portal: vite build fails"; fi
 fi
 
 section "P0 · journey logs ($JDIR)"
@@ -451,41 +424,12 @@ compute=$(grep -oE '<[A-Za-z]*(Devbox|Compute|Machine)[A-Za-z]*' "$LAYOUT" | tr 
 ungated=""; for c in $compute; do grep -qE "session\?\.tenant === 'orgiq' && <$c\b" "$LAYOUT" || ungated="$ungated $c"; done
 [ -z "$ungated" ] && ok "Computer-Lab chrome stays orgiq-only in the shell" || fail "Computer-Lab chrome would mount in the $T shell:$ungated"
 
-section "P0 · freshness (content digest of each log's pages:)"
-SHA_CACHE="$JDIR/.pages-sha"
-pages_sha() {
-  local out="" ; IFS=',' read -ra items <<< "$1"
-  for d in "${items[@]}"; do d=$(echo "$d" | tr -d ' '); [ -n "$d" ] || continue
-    if [ -f "$d" ]; then out="$out$(shasum -a 256 "$d" 2>/dev/null)"; continue; fi
-    [ -d "$d" ] || { echo "Missing audit source: $d" >&2; return 1; }
-    local files; files=$(find "$d" -name '*.tsx' 2>/dev/null | sort)
-    [ -n "$files" ] || return 1
-    out="$out$(printf '%s\n' "$files" | xargs shasum -a 256 2>/dev/null)"
-  done
-  [ -n "$out" ] || return 1
-  printf '%s' "$out" | shasum -a 256 | cut -d' ' -f1
-}
-sha_recorded() { grep -F "$1 " "$SHA_CACHE" 2>/dev/null | tail -1 | cut -d' ' -f2; }
-sha_record() {
-  [ -f "$SHA_CACHE" ] || : > "$SHA_CACHE"
-  grep -vF "$1 " "$SHA_CACHE" > "$SHA_CACHE.tmp" 2>/dev/null || : > "$SHA_CACHE.tmp"
-  printf '%s %s\n' "$1" "$2" >> "$SHA_CACHE.tmp"
-  sort -o "$SHA_CACHE" "$SHA_CACHE.tmp" && rm -f "$SHA_CACHE.tmp"
-}
-n_logs=0; stale=0; stale_names=""
+section "P0 · freshness (each log's walked routes: rendered contract vs its sealed walk, docs/journeys.md)"
+source scripts/lib/journeys.sh
 if [ -d "$JDIR" ]; then
-  while IFS= read -r f; do
-    n_logs=$((n_logs+1))
-    pages=$(grep -iE '^pages: *' "$f" | head -1 | sed -E 's/^pages: *//')
-    [ -n "$pages" ] || { stale=$((stale+1)); stale_names="$stale_names ${f#$JDIR/}(no-pages-line)"; continue; }
-    cur=$(pages_sha "$pages") || { stale=$((stale+1)); stale_names="$stale_names ${f#$JDIR/}(invalid-pages)"; continue; }
-    [ "$(sha_recorded "$f")" = "$cur" ] || { stale=$((stale+1)); stale_names="$stale_names ${f#$JDIR/}(content-digest)"; }
-    [ "$SEAL" = 1 ] && sha_record "$f" "$cur"
-  done < <(find "$JDIR" -name '*.md' ! -name 'PROTOCOL.md' ! -name 'DEFECTS.md' ! -path '*/fixtures/*' 2>/dev/null | sort)
+  jr_freshness "$JDIR" $(find "$JDIR" -name '*.md' ! -name 'PROTOCOL.md' ! -name 'DEFECTS.md' ! -path '*/fixtures/*' 2>/dev/null | sort)
 fi
-if [ "$n_logs" = 0 ]; then fail "no journey or isolation logs to judge for freshness"
-elif [ "$stale" = 0 ]; then ok "$n_logs logs match their recorded source digests"
-else fail "$stale of $n_logs logs have missing or different source digests — re-walk them:$stale_names"; fi
+if [ "${JR_TOTAL:-0}" = 0 ]; then fail "no journey or isolation logs to judge for freshness"; else jr_report; fi
 
 section "P0 · neighbour judges still green"
 if [ "$QUICK" = 1 ]; then ok "skipped (--quick)"; else

@@ -262,9 +262,11 @@ function NoteContent({ item, onOpen }: { item: Observation & { level: 'L0' }; on
 }
 
 export function KnowledgeRecord({
-  item, sourceCount, onOpenSources, onOpen, tab, runId, onTabChange, onViewRun,
+  item, sourceCount, onOpenSources, onOpen, tab, runId, onTabChange, onViewRun, version = null,
 }: {
   item: Item;
+  /** The store's digest — moves when a run, a publish or a note lands. */
+  version?: string | null;
   /** From the sources read; null while unknown (never shown as 0). */
   sourceCount: number | null;
   onOpenSources: () => void;
@@ -281,7 +283,7 @@ export function KnowledgeRecord({
   const { can, ready } = useCapabilities();
   const canRecord = ready && can('ManageBots');
   const isProcedure = item.level === 'L2' && item.type === 'procedure';
-  const procedure = useProcedure(isProcedure ? item.id : null);
+  const procedure = useProcedure(isProcedure ? item.id : null, version);
   const crumbs = recordCrumbs(item);
   const status = recordStatus(item);
   const history = useMemo(() => recordHistory(item), [item]);
@@ -370,7 +372,7 @@ export function KnowledgeRecord({
     >
       {/* A guide's sections space themselves (DetailSection rules); the
           other tiers stack loose blocks and need the gap. */}
-      <Stack gap={item.level === 'L2' && activeTab === 'content' ? 'none' : 'md'} className="w-full px-6 py-4">
+      <Stack gap={item.level === 'L2' && activeTab === 'content' ? 'none' : 'md'} className="w-full px-5 py-4">
         {activeTab === 'content' && (
           <>
             {item.level === 'L2' && item.type === 'procedure' && <ProcedureContent item={item} data={procedure} actions={actions} />}

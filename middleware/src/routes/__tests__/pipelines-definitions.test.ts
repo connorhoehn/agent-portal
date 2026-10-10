@@ -70,7 +70,7 @@ describe('GET /api/pipelines/definitions', () => {
 
   it('filters by kind', async () => {
     const res = await request(ines()).get('/api/pipelines/definitions?kind=assessment-command');
-    expect(res.body.definitions).toHaveLength(9);
+    expect(res.body.definitions).toHaveLength(11);
   });
 
   it('an outside tenant is refused at the mount', async () => {
@@ -285,6 +285,45 @@ describe('POST /api/pipelines/runs/:id/cancel — CancelRun', () => {
   it('404s an unknown run', async () => {
     const res = await request(kofi()).post('/api/pipelines/runs/job%3Anope/cancel').send({});
     expect(res.status).toBe(404);
+  });
+});
+
+describe('cancel notifications never reach the canceller', () => {
+  const tick = () => new Promise((r) => setTimeout(r, 25));
+  let got: Array<{ userId: string; title: string }>;
+  beforeEach(() => {
+    got = [];
+    setNotificationSink({ notifyUser: async (userId, input) => { got.push({ userId, title: input.title }); return {}; } });
+  });
+  afterEach(() => setNotificationSink(null));
+
+  it('the cancel route (job-event path) tells the trigger, not the canceller', async () => {
+    const started = await request(ines()).post(`/api/pipelines/definitions/${enc(RUNBOOK)}/dry-run`).send({});
+    const runId = started.body.run.id as string;
+    got.length = 0;
+    expect((await request(kofi()).post(`/api/pipelines/runs/${enc(runId)}/cancel`).send({})).status).toBe(200);
+    await tick();
+    const who = got.filter((n) => /cancelled/.test(n.title)).map((n) => n.userId);
+    expect(who).toContain('u-ines');
+    expect(who).not.toContain('u-kofi');
+  });
+
+  it('the canceller is excluded when they triggered the run themselves', async () => {
+    const started = await request(kofi()).post(`/api/pipelines/definitions/${enc(RUNBOOK)}/dry-run`).send({});
+    const runId = started.body.run.id as string;
+    got.length = 0;
+    await request(kofi()).post(`/api/pipelines/runs/${enc(runId)}/cancel`).send({});
+    await tick();
+    expect(got.filter((n) => /cancelled/.test(n.title)).map((n) => n.userId)).not.toContain('u-kofi');
+  });
+
+  it('a cancel with no known actor (a bare job event) still notifies the trigger', async () => {
+    const started = await request(ines()).post(`/api/pipelines/definitions/${enc(RUNBOOK)}/dry-run`).send({});
+    got.length = 0;
+    const { cancelJob } = await import('../../providers/agent-jobs.js');
+    await cancelJob(started.body.jobId as string);
+    await tick();
+    expect(got.filter((n) => /cancelled/.test(n.title)).map((n) => n.userId)).toContain('u-ines');
   });
 });
 

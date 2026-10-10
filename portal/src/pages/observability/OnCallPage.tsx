@@ -27,8 +27,8 @@ import {
   MetaLine,
   PageSection,
   Stack,
-  StatCard,
-  StatusDot,
+  StatStrip,
+  StatusDot, T,
 } from '@connorhoehnslalom/ui-components/shared';
 import {
   ComposedChart,
@@ -45,7 +45,6 @@ import {
 import { useFetch } from '../../hooks/useFetch';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { firstDegraded } from '../../lib/degraded';
-import { T } from './Text';
 import { RowEmpty } from './ReadState';
 import { parsePgTimestampAsUtc } from '../../lib/pgTimestamp.ts';
 import { severityTone } from '../../lib/statusTone';
@@ -240,7 +239,7 @@ function OnCallPage() {
 
       {/* Status strip */}
       <Card padding="md">
-        <Inline gap="sm" align="center" wrap className="text-[12px] text-text-secondary">
+        <Inline gap="sm" align="center" wrap className="text-xs text-text-secondary">
           <SeverityDot
             severity={
               timelineBlind ? 'unknown'
@@ -249,20 +248,20 @@ function OnCallPage() {
                 : 'ok'
             }
           />
-          <T>
+          <T size="sm">
             {timelineBlind
               ? 'alarm state unknown'
               : activeAlarms.length === 0
               ? 'no active alarms'
               : `${activeAlarms.length} active alarm${activeAlarms.length === 1 ? '' : 's'}`}
           </T>
-          <T className="text-text-tertiary">·</T>
-          <T>
-            <strong>{hitlBlind ? '—' : hitl?.pendingCount ?? 0}</strong>&nbsp;pending approval
+          <T size="sm" className="text-text-tertiary">·</T>
+          <T size="sm">
+            <T size="sm" weight="semibold">{hitlBlind ? '—' : hitl?.pendingCount ?? 0}</T>&nbsp;pending approval
             {!hitlBlind && hitl?.pendingCount === 1 ? '' : 's'}
           </T>
-          <T className="text-text-tertiary">·</T>
-          <T>
+          <T size="sm" className="text-text-tertiary">·</T>
+          <T size="sm">
             last incident {timelineBlind || eventsBlind ? 'unknown' : lastIncident ? timeAgo(lastIncident) : '—'}
           </T>
         </Inline>
@@ -274,14 +273,14 @@ function OnCallPage() {
         {timelineBlind ? (
           <Inline gap="sm" align="center" className="py-1.5 px-1">
             <SeverityDot severity="unknown" />
-            <T className="text-[12px] text-text-secondary">
+            <T size="xs" className="text-text-secondary">
               Alarm state could not be read · this is not an all-clear
             </T>
           </Inline>
         ) : activeAlarms.length === 0 ? (
           <Inline gap="sm" align="center" className="py-1.5 px-1">
             <SeverityDot severity="ok" />
-            <T className="text-[12px] text-text-secondary">
+            <T size="xs" className="text-text-secondary">
               All clear · all signals within thresholds
             </T>
           </Inline>
@@ -301,7 +300,7 @@ function OnCallPage() {
           subtitle={`errors = real failures (guardrail / schema-invalid) · judge P05 = answer-quality floor · drift · cost · deploys · bucket ${win.bucket}m · ${win.label}`}
           action={
             deployLines.length > 0 ? (
-              <T className="text-[11px] text-text-tertiary">
+              <T size="xs" className="text-text-tertiary">
                 <T className="text-warning">↑</T> deploy markers
               </T>
             ) : undefined
@@ -491,10 +490,10 @@ function AlarmChip({ alarm }: { alarm: AlarmState }) {
     <InlineAlert tone={alertTone}>
       <Stack gap="none">
         <Inline gap="sm" align="center" wrap>
-          <T className="text-[12px] font-semibold font-mono">{alarm.name}</T>
+          <T weight="semibold" size="xs" className="font-mono">{alarm.name}</T>
           <Chip tone={tone} size="xs">{alarm.severity}</Chip>
         </Inline>
-        <T className="text-[11px] text-text-secondary">{alarm.reason}</T>
+        <T size="xs" className="text-text-secondary">{alarm.reason}</T>
       </Stack>
     </InlineAlert>
   );
@@ -525,7 +524,12 @@ function HitlSlaBody({
   return (
     <Stack gap="md">
       <Inline align="baseline" gap="md" wrap>
-        <StatCard label="Pending" value={hitl.pendingCount} />
+        <StatStrip
+          aria-label="Pending approvals"
+          variant="line"
+          size="sm"
+          items={[{ label: 'pending', value: hitl.pendingCount }]}
+        />
         {oldestMin != null && oldestMin >= 5 && (
           <Chip tone="warning" size="sm">
             oldest {oldestMin}m
@@ -604,13 +608,13 @@ function EventRow({ event, onClick }: { event: RecentEvent; onClick: () => void 
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); }
       } : undefined}
     >
-      <T className={`text-[13px] w-3.5 text-center shrink-0 ${glyphClass}`}>{EVENT_GLYPH[event.kind]}</T>
+      <T size="sm" className={` w-3.5 text-center shrink-0 ${glyphClass}`}>{EVENT_GLYPH[event.kind]}</T>
       <StatusDot color={dotColor} size="xs" />
       <Stack gap="none" className="min-w-0 flex-1">
-        <T as="div" className="text-[12px] font-medium truncate">{event.title}</T>
-        {event.detail && <T as="div" className="text-[11px] text-text-tertiary truncate">{event.detail}</T>}
+        <T weight="medium" size="xs" as="div" className="truncate">{event.title}</T>
+        {event.detail && <T size="xs" as="div" className="text-text-tertiary truncate">{event.detail}</T>}
       </Stack>
-      <T className="text-[11px] text-text-tertiary font-mono whitespace-nowrap shrink-0">
+      <T size="xs" className="text-text-tertiary font-mono whitespace-nowrap shrink-0">
         {relativeTime(event.ts)}
       </T>
       {tone === 'danger' && <Chip tone="danger" size="xs">crit</Chip>}

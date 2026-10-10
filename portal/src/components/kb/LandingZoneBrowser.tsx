@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import {
+  T,
   Button, Chip, CodeBlock, DataTable, Inline, InlineAlert, MetaLine, Spinner, Stack,
 } from '@connorhoehnslalom/ui-components/shared';
 import type { DataTableColumn } from '@connorhoehnslalom/ui-components/shared';
@@ -123,9 +124,9 @@ export function LandingZoneBrowser({ kbId, s3Prefix }: LandingZoneBrowserProps) 
       header: 'Key',
       render: (f) => (
         <Inline gap="xs" wrap={false}>
-          <Inline as="span" gap="none" title={f.key} className="font-mono text-[12px]">
+          <T as="span" title={f.key} size="xs" className="font-mono">
             {truncateKey(f.key)}
-          </Inline>
+          </T>
           {f.extension && (
             <Chip tone="neutral" size="xs" uppercase>
               {f.extension.replace(/^\./, '')}

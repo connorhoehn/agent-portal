@@ -16,12 +16,10 @@
 // "two components disagreeing about whether a computer exists is the class of
 // bug the old localStorage mirror produced."
 //
-// ⚠️ `Computer` STILL CARRIES NO `kind`. That is the gap queued in
-// docs/ui-components-queue.md, and it is why the id is prefixed rather than
-// flagged: `local:` is the only channel available for saying "this is somebody's
-// laptop, not an AgentCore box", and the pane kind below reads it back. When
-// `Computer.kind?: 'microvm' | 'local'` ships, the prefix goes and the pane
-// kind switches on the field instead.
+// A machine carries `kind: 'local'` (ui-components 2.411): the lab draws it
+// with a laptop glyph and the pane registry keeps a terminal off it. The
+// `local:` id prefix stays because `nodeIdOf` reads the node id back out of it
+// for the machine's log pane.
 
 import type { ComputeClient, Computer } from '@connorhoehnslalom/ui-components/compute';
 
@@ -63,6 +61,8 @@ export function machineToComputer(n: NodeWire): Computer {
     : 'stopped';
   return {
     id: `${LOCAL_ID_PREFIX}${n.id}`,
+    // What the lab reads to draw a laptop and to keep a terminal off it.
+    kind: 'local',
     label: n.label,
     sessionId: `local-machine-no-agentcore-session-${n.id}`,
     createdAt: n.registeredAt ?? new Date().toISOString(),

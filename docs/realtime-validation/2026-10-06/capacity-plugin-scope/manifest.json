@@ -1,0 +1,346 @@
+{
+ "recordedAt": "2026-10-06",
+ "scope": "Adopt realtime-modules 0.108.0: router plugins receive the operation AuthorityScope (notify plugins thread it into membership reads and readable-subscription probes), and the workGraph() stream replaces the portal fake transport; native gates and burst x3 (one with store metrics) + soak x1 on a local image",
+ "library": {
+  "version": "0.108.0",
+  "commit": "6e2a9392a6c9c7853e6c2bd0a0e0fd8bbcbbc02f",
+  "consumerKey": "@connorhoehnslalom/realtime-modules"
+ },
+ "source": {
+  "snapshot": "source/ (changed host files at image time)",
+  "note": "The image also contains other in-flight working-tree changes, including an untracked middleware/src/routes/call-chat.ts (modified 09:46, before this stage) that no longer serves POST /api/calls/:id/chat/messages."
+ },
+ "image": {
+  "tag": "orgiq-middleware:cluster-plugin-scope-validation",
+  "id": "sha256:60accf659cfbbf3840d7f6205e896b69360f6da5c3a0e3f268a12cebe3c5ee8d",
+  "arch": "arm64",
+  "node": "v22.23.3",
+  "localOnly": true,
+  "build": "node scripts/docker/prepare-libraries.mjs; docker buildx build --platform linux/arm64 --provenance=false --sbom=false --progress=plain --target production --build-context locked_libraries=$PWD/.docker-libraries -t orgiq-middleware:cluster-plugin-scope-validation --load middleware",
+  "distVerifiedOffline": "905 dist/*.js sha256 identical to local middleware/dist (docker run --network none); realtime-modules 0.108.0 in image (PLUGIN_SCOPE_RETAIN_MAX_MS, work-graph/streamService.js present); liveScope(args) and workGraph({ present in dist/lib/realtime-gateway.js"
+ },
+ "contracts": {
+  "unit": "middleware full suite 435 suites, 6197 passed, 17 skipped; new realtime-gateway-plugin-scope (8) and work-graph/stream (16) suites",
+  "nativeCluster": "9/12 (cluster-acceptance.log). The 3 failures (huddle messages/pages, retired epoch, abrupt node loss) get an Express 404 HTML for POST /api/calls/:id/chat/messages, a route the concurrently edited untracked routes/call-chat.ts no longer serves; not caused by this stage (no file of this stage touches call chat). Contracts not edited.",
+  "redisFaults": "2/3 (redis-failures.log); the failing case uses the same removed POST route",
+  "dynamoFault": "0/1 (dynamo-failures.log); same removed POST route (line 22 of the contract)"
+ },
+ "results": {
+  "burst-plugin": {
+   "driverExit": 1,
+   "verdict": "FAIL",
+   "failedThresholds": [
+    "invite\u2192incoming p95: 978.3 (< 250 ms)",
+    "invite\u2192incoming p99: 1058.7 (< 1000 ms)",
+    "chat delivery p95: 2948.2 (< 300 ms, with paired-sender evidence)",
+    "event-loop proxy (/api/health p99): 206.5 (< 50 ms)",
+    "peer 1: health p99: 189.6 (< 50 ms)"
+   ],
+   "latencyLines": [
+    "invite\u2192incoming  p50 554.6  p95 978.3  p99 1058.7  max 1079.3 ms (n=100)",
+    "accept\u2192accepted  p50 78.9  p95 242.7  p99 296.1  max 296.2 ms (n=100)",
+    "chat delivery    p50 2209.9  p95 2948.2  p99 3662.1  max 3690.7 ms (n=1265 of 1265 sent)"
+   ],
+   "memoryPeaks": [
+    "PASS  server memory peak: 229.3 (< 700 MiB)",
+    "PASS  peer 1: memory peak: 226.4 (< 700 MiB)"
+   ],
+   "dockerStats": {
+    "capacity-a": {
+     "samples": 16,
+     "peak": 100.88,
+     "mean": 23.2
+    },
+    "capacity-b": {
+     "samples": 16,
+     "peak": 102.41,
+     "mean": 21.8
+    },
+    "cluster-dynamodb": {
+     "samples": 16,
+     "peak": 112.65,
+     "mean": 15.4
+    },
+    "cluster-redis": {
+     "samples": 16,
+     "peak": 7.46,
+     "mean": 2.0
+    },
+    "cluster-postgres": {
+     "samples": 16,
+     "peak": 11.93,
+     "mean": 5.7
+    }
+   }
+  },
+  "burst-plugin-2": {
+   "driverExit": 1,
+   "verdict": "FAIL",
+   "failedThresholds": [
+    "invite\u2192incoming p95: 946 (< 250 ms)",
+    "invite\u2192incoming p99: 1026.8 (< 1000 ms)",
+    "chat delivery p95: 2731.5 (< 300 ms, with paired-sender evidence)",
+    "event-loop proxy (/api/health p99): 150.6 (< 50 ms)",
+    "peer 1: health p99: 152 (< 50 ms)"
+   ],
+   "latencyLines": [
+    "invite\u2192incoming  p50 221  p95 946  p99 1026.8  max 1046.9 ms (n=100)",
+    "accept\u2192accepted  p50 71.5  p95 131.2  p99 149  max 156.9 ms (n=100)",
+    "chat delivery    p50 1769.5  p95 2731.5  p99 2993.6  max 3231.3 ms (n=1267 of 1267 sent)"
+   ],
+   "memoryPeaks": [
+    "PASS  server memory peak: 247.9 (< 700 MiB)",
+    "PASS  peer 1: memory peak: 238 (< 700 MiB)"
+   ],
+   "dockerStats": {
+    "capacity-a": {
+     "samples": 15,
+     "peak": 101.68,
+     "mean": 22.6
+    },
+    "capacity-b": {
+     "samples": 15,
+     "peak": 82.58,
+     "mean": 20.6
+    },
+    "cluster-dynamodb": {
+     "samples": 15,
+     "peak": 95.33,
+     "mean": 14.8
+    },
+    "cluster-redis": {
+     "samples": 15,
+     "peak": 5.34,
+     "mean": 1.8
+    },
+    "cluster-postgres": {
+     "samples": 15,
+     "peak": 14.86,
+     "mean": 6.7
+    }
+   }
+  },
+  "burst-plugin-metrics": {
+   "driverExit": 1,
+   "verdict": "FAIL",
+   "failedThresholds": [
+    "invite\u2192incoming p95: 1335.5 (< 250 ms)",
+    "invite\u2192incoming p99: 1415.3 (< 1000 ms)",
+    "accept\u2192accepted p95: 503 (< 250 ms)",
+    "chat delivery p95: 3213.9 (< 300 ms, with paired-sender evidence)",
+    "event-loop proxy (/api/health p99): 176 (< 50 ms)",
+    "peer 1: health p99: 136.9 (< 50 ms)"
+   ],
+   "latencyLines": [
+    "invite\u2192incoming  p50 1035.8  p95 1335.5  p99 1415.3  max 1435.2 ms (n=100)",
+    "accept\u2192accepted  p50 87.8  p95 503  p99 552.2  max 553.6 ms (n=100)",
+    "chat delivery    p50 2493.2  p95 3213.9  p99 4137  max 4373.2 ms (n=1274 of 1274 sent)"
+   ],
+   "memoryPeaks": [
+    "PASS  server memory peak: 231.8 (< 700 MiB)",
+    "PASS  peer 1: memory peak: 228.1 (< 700 MiB)"
+   ],
+   "dockerStats": {
+    "capacity-a": {
+     "samples": 16,
+     "peak": 98.51,
+     "mean": 26.4
+    },
+    "capacity-b": {
+     "samples": 16,
+     "peak": 100.78,
+     "mean": 25.2
+    },
+    "cluster-dynamodb": {
+     "samples": 16,
+     "peak": 109.65,
+     "mean": 16.0
+    },
+    "cluster-redis": {
+     "samples": 16,
+     "peak": 5.33,
+     "mean": 1.8
+    },
+    "cluster-postgres": {
+     "samples": 16,
+     "peak": 14.76,
+     "mean": 6.3
+    }
+   }
+  },
+  "soak-plugin": {
+   "driverExit": 1,
+   "verdict": "FAIL",
+   "failedThresholds": [
+    "chat delivery p95: 5478.4 (< 300 ms, with paired-sender evidence)",
+    "event-loop proxy (/api/health p99): 90.1 (< 50 ms)",
+    "peer 1: health p99: 132 (< 50 ms)"
+   ],
+   "latencyLines": [
+    "invite\u2192incoming  p50 39.7  p95 94.7  p99 125.4  max 155.6 ms (n=100)",
+    "accept\u2192accepted  p50 37.7  p95 67.2  p99 95.8  max 134.7 ms (n=100)",
+    "chat delivery    p50 52.3  p95 5478.4  p99 8000.7  max 9279.5 ms (n=13811 of 13819 sent)"
+   ],
+   "memoryPeaks": [
+    "PASS  server memory peak: 265.1 (< 700 MiB)",
+    "PASS  peer 1: memory peak: 258.9 (< 700 MiB)"
+   ],
+   "dockerStats": {
+    "capacity-a": {
+     "samples": 117,
+     "peak": 100.75,
+     "mean": 33.7
+    },
+    "capacity-b": {
+     "samples": 117,
+     "peak": 102.47,
+     "mean": 34.4
+    },
+    "cluster-dynamodb": {
+     "samples": 117,
+     "peak": 95.73,
+     "mean": 24.1
+    },
+    "cluster-redis": {
+     "samples": 117,
+     "peak": 19.55,
+     "mean": 2.8
+    },
+    "cluster-postgres": {
+     "samples": 117,
+     "peak": 34.83,
+     "mean": 13.9
+    }
+   }
+  }
+ },
+ "comparisonToCapacityAuthorityScope": {
+  "burst-plugin": {
+   "thisStage": [
+    "invite\u2192incoming p95: 978.3 (< 250 ms)",
+    "invite\u2192incoming p99: 1058.7 (< 1000 ms)",
+    "chat delivery p95: 2948.2 (< 300 ms, with paired-sender evidence)",
+    "event-loop proxy (/api/health p99): 206.5 (< 50 ms)",
+    "peer 1: health p99: 189.6 (< 50 ms)"
+   ],
+   "authorityScope": [
+    "invite\u2192incoming p95: 1267.6 (< 250 ms)",
+    "invite\u2192incoming p99: 1349.4 (< 1000 ms)",
+    "chat delivery p95: 2887.1 (< 300 ms, with paired-sender evidence)",
+    "event-loop proxy (/api/health p99): 116.8 (< 50 ms)",
+    "peer 1: health p99: 104.8 (< 50 ms)"
+   ]
+  },
+  "burst-plugin-2": {
+   "thisStage": [
+    "invite\u2192incoming p95: 946 (< 250 ms)",
+    "invite\u2192incoming p99: 1026.8 (< 1000 ms)",
+    "chat delivery p95: 2731.5 (< 300 ms, with paired-sender evidence)",
+    "event-loop proxy (/api/health p99): 150.6 (< 50 ms)",
+    "peer 1: health p99: 152 (< 50 ms)"
+   ],
+   "authorityScope": [
+    "invite\u2192incoming p95: 629.4 (< 250 ms)",
+    "chat delivery p95: 2139.5 (< 300 ms, with paired-sender evidence)",
+    "event-loop proxy (/api/health p99): 110.7 (< 50 ms)",
+    "peer 1: health p99: 84.1 (< 50 ms)"
+   ]
+  },
+  "burst-plugin-metrics": {
+   "thisStage": [
+    "invite\u2192incoming p95: 1335.5 (< 250 ms)",
+    "invite\u2192incoming p99: 1415.3 (< 1000 ms)",
+    "accept\u2192accepted p95: 503 (< 250 ms)",
+    "chat delivery p95: 3213.9 (< 300 ms, with paired-sender evidence)",
+    "event-loop proxy (/api/health p99): 176 (< 50 ms)",
+    "peer 1: health p99: 136.9 (< 50 ms)"
+   ],
+   "authorityScope": [
+    "invite\u2192incoming p95: 1290.5 (< 250 ms)",
+    "invite\u2192incoming p99: 1371.8 (< 1000 ms)",
+    "accept\u2192accepted p95: 318.8 (< 250 ms)",
+    "chat delivery p95: 3403.9 (< 300 ms, with paired-sender evidence)",
+    "event-loop proxy (/api/health p99): 148.6 (< 50 ms)",
+    "peer 1: health p99: 170.8 (< 50 ms)"
+   ]
+  },
+  "soak-plugin": {
+   "thisStage": [
+    "chat delivery p95: 5478.4 (< 300 ms, with paired-sender evidence)",
+    "event-loop proxy (/api/health p99): 90.1 (< 50 ms)",
+    "peer 1: health p99: 132 (< 50 ms)"
+   ],
+   "authorityScope": [
+    "invite\u2192incoming p95: 345.1 (< 250 ms)",
+    "accept\u2192accepted p95: 317.7 (< 250 ms)",
+    "chat delivery p95: 5083.9 (< 300 ms, with paired-sender evidence)",
+    "event-loop proxy (/api/health p99): 92.3 (< 50 ms)",
+    "peer 1: health p99: 82.7 (< 50 ms)"
+   ]
+  }
+ },
+ "memberQueries": {
+  "thisStageCumulativeFromContainerStart": {
+   "a": 6434,
+   "b": 6495
+  },
+  "note": "The before snapshot was not captured (copied before the 5 s metrics flush); counts include prepare-only traffic, which was 29 per node in the previous stage, so the burst is about 6,405/6,466",
+  "authorityScope": {
+   "a": 6370,
+   "b": 6425
+  },
+  "messagesPutPerNode": {
+   "a": 639,
+   "b": 635
+  },
+  "conclusion": "Unchanged (~+0.5%): the burst chats on two-person DMs, so the notify plugins add almost no membership reads either way; sharing the send scope in the plugins removes nothing measurable here."
+ },
+ "conclusions": [
+  "Member queries per burst unchanged vs capacity-authority-scope (about 10 per stored message).",
+  "Burst still fails invite p95/p99, chat p95 and both health targets; accept p95 passes in both plain runs (242.7/131.2). The store-metrics burst also fails accept (503).",
+  "Soak: invite/accept p95 now pass (94.7/67.2 vs 345.1/317.7); chat p95 5,478.4 (vs 5,083.9) and both health targets still fail.",
+  "Capacity not accepted."
+ ],
+ "capacityAccepted": false,
+ "cloudAccepted": false,
+ "drivers": "all stopped drivers archived to retired-drivers/ by retire_drivers.py and removed; compiled BFFs restored without metrics (containers-restore.log, prepare-restore.log)",
+ "artifacts": [
+  "build.log",
+  "burst-plugin-2-docker-stats.csv",
+  "burst-plugin-2-driver.log",
+  "burst-plugin-2-result.json",
+  "burst-plugin-docker-stats.csv",
+  "burst-plugin-driver.log",
+  "burst-plugin-metrics-a-metrics-after.json",
+  "burst-plugin-metrics-b-metrics-after.json",
+  "burst-plugin-metrics-docker-stats.csv",
+  "burst-plugin-metrics-driver.log",
+  "burst-plugin-metrics-result.json",
+  "burst-plugin-result.json",
+  "cluster-acceptance.log",
+  "containers-burst-metrics.log",
+  "containers-restore.log",
+  "containers.log",
+  "dynamo-failures.log",
+  "image-artifact.log",
+  "image-build.log",
+  "image-dist-list.txt",
+  "local-dist-list.txt",
+  "prepare-attempt1-missing-image-env.log",
+  "prepare-burst-metrics.log",
+  "prepare-libraries.log",
+  "prepare-restore.log",
+  "prepare.log",
+  "processes-2.log",
+  "processes-3.log",
+  "processes.log",
+  "redis-failures.log",
+  "retire_drivers.py",
+  "retired-drivers",
+  "run_profile.sh",
+  "soak-plugin-docker-stats.csv",
+  "soak-plugin-driver.log",
+  "soak-plugin-result.json",
+  "source"
+ ]
+}

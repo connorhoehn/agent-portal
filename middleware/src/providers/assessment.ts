@@ -23,7 +23,7 @@ import { legacyThreadMoved } from './document-comment-import.js';
 import { NotFoundError } from '../lib/async-handler.js';
 import * as A from './assessment-aurora.js';
 import { sourceConfigured, readSourceTree, readSourcePage } from './document-source.js';
-import { assessmentRunInput } from '../lib/assessment-run-input.js';
+import { assessmentRunInput, DECK_COMMANDS } from '../lib/assessment-run-input.js';
 
 // ─── Wire types (mirrors the source's ui/src/components/assessment/types.ts) ─
 
@@ -243,7 +243,7 @@ function hex(n = 12): string {
 }
 
 function stampNow(): string {
-  return new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z');
+  return clock.nowIso().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z');
 }
 
 // Prototype pollution: there used to be MOCK_* object literals here keyed by
@@ -471,7 +471,7 @@ function emptyScore(dimensionId: string): M.MockDimensionScore {
   return {
     dimension_id: dimensionId, current_level: null, is_na: false, confidence: 'low',
     self_claimed_level: null, evidence_class: null, cap_applied: false,
-    evidence: [], follow_up_questions: [], history: [], updated_at: new Date().toISOString(),
+    evidence: [], follow_up_questions: [], history: [], updated_at: clock.nowIso(),
   };
 }
 
@@ -583,6 +583,17 @@ function assembleTeamDetail(
   return { team: teamDetail, workflow_steps, dimensions };
 }
 
+/**
+ * Does team `id` exist right now? The resource half of GET /teams/:id (which
+ * 404s an unknown team) without assembling the detail — the realtime gateway
+ * asks it for `assessment:team:<id>` on every decision (lib/page-resources.ts).
+ */
+export async function teamExists(id: string): Promise<boolean> {
+  if (!isValidTeamId(id)) return false;
+  if (config.mock.aurora) return M.teams().some((t) => t.id === id);
+  return (await A.fetchTeam(id)) !== null;
+}
+
 export async function getTeamDetail(id: string): Promise<TeamDetailResponse | null> {
   if (config.mock.aurora) {
     const team = M.teams().find((t) => t.id === id);
@@ -598,6 +609,46 @@ export async function getTeamDetail(id: string): Promise<TeamDetailResponse | nu
     A.fetchDimensionScores(id), A.fetchConfiguration(), A.fetchProvenanceRaw(id),
   ]);
   return assembleTeamDetail(team, dims, cfg.target_level, prov.historical);
+}
+
+/**
+ * Everything a review deck states, read once through the same assembly the
+ * scorecard and the improvement plan use (docs/assessment-deck-goal.md
+ * decision 3): the team row (rubric version, approved exceptions), the raw
+ * dimension scores (evidence class), the assembled detail (certification per
+ * dimension) and the plan (recommendation kinds). Nothing here is recomputed
+ * by the deck — lib/assessment-deck/facts.ts only arranges these values.
+ */
+export interface TeamDeckSource {
+  team: M.MockTeam;
+  dims: Record<string, M.MockDimensionScore>;
+  targetLevel: number;
+  detail: TeamDetailResponse;
+  plan: TeamPlan;
+}
+
+export async function getTeamDeckSource(id: string): Promise<TeamDeckSource | null> {
+  if (config.mock.aurora) {
+    const team = M.teams().find((t) => t.id === id);
+    if (!team) return null;
+    const dims = M.scoresFor(id) ?? {};
+    const targetLevel = M.configuration().target_level;
+    return {
+      team, dims, targetLevel,
+      detail: assembleTeamDetail(team, dims, targetLevel, M.provenanceFor(id)),
+      plan: computeTeamPlan(id, dims, targetLevel, M.storiesFor(id)),
+    };
+  }
+  const team = await A.fetchTeam(id);
+  if (!team) return null;
+  const [dims, cfg, prov, stories] = await Promise.all([
+    A.fetchDimensionScores(id), A.fetchConfiguration(), A.fetchProvenanceRaw(id), A.fetchStories(id),
+  ]);
+  return {
+    team, dims, targetLevel: cfg.target_level,
+    detail: assembleTeamDetail(team, dims, cfg.target_level, prov.historical),
+    plan: computeTeamPlan(id, dims, cfg.target_level, stories),
+  };
 }
 
 function dimensionIndexEntry(
@@ -655,7 +706,7 @@ export async function patchTeam(
   // one came to read "New" beside "17/17 assessed". The route still rejects a
   // status that is not one of the three, so the contract is unchanged; the
   // value just no longer overrides the scores.
-  team.updated_at = new Date().toISOString();
+  team.updated_at = clock.nowIso();
   return { ...team, status: M.teamStatus(team.id) };
 }
 
@@ -669,7 +720,7 @@ export async function resetAssessment(id: string): Promise<boolean> {
   if (!config.mock.aurora) return A.resetTeamAssessment(id);
   const dims = M.scoresFor(id);
   if (!dims) return false;
-  const now = new Date().toISOString();
+  const now = clock.nowIso();
   for (const dimId of M.DIMENSION_IDS) {
     const prev = dims[dimId];
     dims[dimId] = {
@@ -788,7 +839,7 @@ function computeTeamPlan(
   const ordered = [...buckets.close_claim, ...buckets.advance, ...buckets.answer];
   ordered.forEach((r, i) => { r.rank = i + 1; });
 
-  return { team_id: teamId, generated_at: new Date().toISOString(), target_level: target, counts, recommendations: ordered };
+  return { team_id: teamId, generated_at: clock.nowIso(), target_level: target, counts, recommendations: ordered };
 }
 
 async function buildTeamPlan(teamId: string): Promise<TeamPlan | null> {
@@ -823,7 +874,7 @@ export async function listPortfolioRecommendations(cohort?: Cohort): Promise<{
       const plan = computeTeamPlan(team.id, allDims.get(team.id) ?? {}, cfg.target_level, allStories.get(team.id) ?? []);
       return { id: team.id, name: team.name, cohort: team.cohort, counts: plan.counts, top: plan.recommendations[0] ?? null };
     });
-    return { generated_at: new Date().toISOString(), teams: rows, skipped: [] };
+    return { generated_at: clock.nowIso(), teams: rows, skipped: [] };
   }
   const teams = M.teams().filter((t) => !cohort || t.cohort === cohort);
   const rows = [];
@@ -832,7 +883,7 @@ export async function listPortfolioRecommendations(cohort?: Cohort): Promise<{
     if (!plan) continue;
     rows.push({ id: team.id, name: team.name, cohort: team.cohort, counts: plan.counts, top: plan.recommendations[0] ?? null });
   }
-  return { generated_at: new Date().toISOString(), teams: rows, skipped: [] };
+  return { generated_at: clock.nowIso(), teams: rows, skipped: [] };
 }
 
 // ─── Stories ────────────────────────────────────────────────────────────────
@@ -881,7 +932,7 @@ export async function uploadEvidence(
 ): Promise<M.EvidenceLogItem | null> {
   const item: M.EvidenceLogItem = {
     evidence_id: `EV-${hex()}`, dimension_id: payload.dimension_id ?? null, source_type: payload.source_type,
-    excerpt: payload.excerpt, supports_level: null, captured_at: new Date().toISOString(),
+    excerpt: payload.excerpt, supports_level: null, captured_at: clock.nowIso(),
     source_ref: `PROV-${hex()}`, scored: false, status: 'PENDING',
   };
   if (!config.mock.aurora) {
@@ -963,7 +1014,7 @@ export async function patchException(
   }
   exception.status = patch.status;
   exception.approved_by = patch.approved_by;
-  exception.approved_at = new Date().toISOString();
+  exception.approved_at = clock.nowIso();
   if (patch.status === 'approved') {
     const dims = M.scoresFor(teamId);
     if (dims?.[dimensionId]) {
@@ -1101,7 +1152,7 @@ export async function intakeText(
 ): Promise<M.EvidenceLogItem | null> {
   const item: M.EvidenceLogItem = {
     evidence_id: `EV-${hex()}`, dimension_id: payload.dimension_id ?? null, source_type: payload.source_type ?? 'document',
-    excerpt: payload.text.slice(0, 500), supports_level: null, captured_at: payload.captured_at ?? new Date().toISOString(),
+    excerpt: payload.text.slice(0, 500), supports_level: null, captured_at: payload.captured_at ?? clock.nowIso(),
     source_ref: `PROV-${hex()}`, scored: false, status: 'PENDING',
     title: payload.title, captured_by: payload.captured_by,
   };
@@ -1118,7 +1169,7 @@ export async function intakeText(
 export async function intakeImage(teamId: string, payload: { dimension_id?: string | null; filename: string }): Promise<M.EvidenceLogItem | null> {
   const item: M.EvidenceLogItem = {
     evidence_id: `EV-${hex()}`, dimension_id: payload.dimension_id ?? null, source_type: 'artifact',
-    excerpt: `Pasted screenshot: ${payload.filename}`, supports_level: null, captured_at: new Date().toISOString(),
+    excerpt: `Pasted screenshot: ${payload.filename}`, supports_level: null, captured_at: clock.nowIso(),
     source_ref: `PROV-${hex()}`, scored: false, status: 'PENDING',
   };
   if (!config.mock.aurora) {
@@ -1399,7 +1450,7 @@ export async function applyScores(
   const relevant = new Set(payload.relevant_dimension_ids ?? []);
   const applied: AppliedScore[] = [];
   const rejected: RejectedScore[] = [];
-  const now = new Date().toISOString();
+  const now = clock.nowIso();
 
   for (const entry of payload.scores ?? []) {
     const current = dims[entry.dimension_id] ?? emptyScore(entry.dimension_id);
@@ -1424,6 +1475,50 @@ export async function applyScores(
   // (M.deriveTeamStatus), so there is no longer a copy that can fall behind.
   team.updated_at = now;
   return { applied, rejected };
+}
+
+/**
+ * Adds reviewed follow-up questions to one dimension: the same row shape,
+ * OPEN status, `team` audience and normalized-text de-duplication that
+ * `computeScoreEntry` applies to an agent's questions, WITHOUT touching the
+ * dimension's level, history or evidence. Used when an assessor accepts a
+ * follow-up draft (lib/assessment-drafts.ts); the text is the stored draft's,
+ * never the request's. Returns null when the team or dimension is unknown.
+ */
+export async function addFollowUps(
+  teamId: string, dimensionId: string, texts: readonly string[],
+): Promise<{ created: M.FollowUpQuestion[]; skipped: string[] } | null> {
+  if (!M.DIMENSION_IDS.includes(dimensionId)) return null;
+  const build = (current: M.FollowUpQuestion[]): { created: M.FollowUpQuestion[]; skipped: string[] } => {
+    const open = new Set(current.filter((q) => q.status === 'OPEN').map((q) => normalizeQuestion(q.text)));
+    const created: M.FollowUpQuestion[] = []; const skipped: string[] = [];
+    for (const text of texts) {
+      const key = normalizeQuestion(text);
+      if (!key || open.has(key)) { skipped.push(text); continue; }
+      open.add(key);
+      created.push({ question_id: `Q-${hex()}`, dimension_id: dimensionId, text, target_audience: 'team', status: 'OPEN' });
+    }
+    return { created, skipped };
+  };
+  if (!config.mock.aurora) {
+    if (!await A.fetchTeam(teamId)) return null;
+    return A.withTeamTransaction(teamId, async () => {
+      const current = (await A.fetchDimensionScores(teamId))[dimensionId]?.follow_up_questions ?? [];
+      const out = build(current);
+      for (const fu of out.created) await A.insertFollowUpRow(teamId, fu);
+      return out;
+    });
+  }
+  const dims = M.scoresFor(teamId);
+  const team = M.teams().find((t) => t.id === teamId);
+  if (!dims || !team) return null;
+  const score = dims[dimensionId] ?? emptyScore(dimensionId);
+  const out = build(score.follow_up_questions);
+  if (out.created.length > 0) {
+    dims[dimensionId] = { ...score, follow_up_questions: [...score.follow_up_questions, ...out.created], updated_at: clock.nowIso() };
+    team.updated_at = clock.nowIso();
+  }
+  return out;
 }
 
 // ─── Feedback (HITL tasks) ──────────────────────────────────────────────────
@@ -1531,7 +1626,7 @@ export async function createFeedback(payload: {
   const task: M.FeedbackTask = {
     task_id: `fb-${hex()}`, team_id: payload.team_id ?? null, kind: payload.kind,
     status: 'OPEN', dimension_id: payload.dimension_id ?? null, question: payload.question,
-    created_at: new Date().toISOString(), resolved_at: null, response: null,
+    created_at: clock.nowIso(), resolved_at: null, response: null,
   };
   if (!config.mock.aurora) { await A.insertFeedbackTask(task); return task; }
   M.feedback().push(task);
@@ -1548,7 +1643,7 @@ export async function resolveFeedback(taskId: string, response: string): Promise
       return {
         task_id: taskId, team_id: q.team_id, kind: 'follow_up', status: 'RESOLVED',
         dimension_id: q.dimension_id, question: q.text, created_at: q.created_at,
-        resolved_at: new Date().toISOString(), response,
+        resolved_at: clock.nowIso(), response,
       };
     }
     return A.resolveFeedbackTaskRow(taskId, response);
@@ -1561,14 +1656,14 @@ export async function resolveFeedback(taskId: string, response: string): Promise
     return {
       task_id: taskId, team_id: hit.team.id, kind: 'follow_up', status: 'RESOLVED',
       dimension_id: hit.dimId, question: hit.q.text, created_at: createdAt,
-      resolved_at: new Date().toISOString(), response,
+      resolved_at: clock.nowIso(), response,
     };
   }
   const task = M.feedback().find((t) => t.task_id === taskId);
   if (!task) return null;
   task.status = 'RESOLVED';
   task.response = response;
-  task.resolved_at = new Date().toISOString();
+  task.resolved_at = clock.nowIso();
   return task;
 }
 
@@ -1582,7 +1677,7 @@ export async function dismissFeedback(taskId: string): Promise<M.FeedbackTask | 
       return {
         task_id: taskId, team_id: q.team_id, kind: 'follow_up', status: 'DISMISSED',
         dimension_id: q.dimension_id, question: q.text, created_at: q.created_at,
-        resolved_at: new Date().toISOString(), response: null,
+        resolved_at: clock.nowIso(), response: null,
       };
     }
     return A.dismissFeedbackTaskRow(taskId);
@@ -1595,13 +1690,13 @@ export async function dismissFeedback(taskId: string): Promise<M.FeedbackTask | 
     return {
       task_id: taskId, team_id: hit.team.id, kind: 'follow_up', status: 'DISMISSED',
       dimension_id: hit.dimId, question: hit.q.text, created_at: createdAt,
-      resolved_at: new Date().toISOString(), response: null,
+      resolved_at: clock.nowIso(), response: null,
     };
   }
   const task = M.feedback().find((t) => t.task_id === taskId);
   if (!task) return null;
   task.status = 'DISMISSED';
-  task.resolved_at = new Date().toISOString();
+  task.resolved_at = clock.nowIso();
   return task;
 }
 
@@ -1814,7 +1909,7 @@ export async function getRun(runId: string): Promise<M.MockRun | null> {
 export async function createRunRecord(payload: {
   command: string; team_id?: string | null; status?: M.RunStatus; summary?: string; args?: Record<string, unknown>;
 }): Promise<M.MockRun> {
-  const now = new Date().toISOString();
+  const now = clock.nowIso();
   const rec: M.MockRun = {
     id: `run-${stampNow()}-${payload.command}-${hex(12)}`, command: payload.command,
     team_id: payload.team_id ?? null, args: payload.args ?? {}, status: payload.status ?? 'completed',
@@ -1834,6 +1929,11 @@ const MOCK_RUN_DURATION_MS = 8_000;
 // (classify-transcript, develop-jira-story, ...) just reports done.
 const SCORE_APPLYING_COMMANDS = new Set(['score-dimensions', 'process-self-assessment']);
 
+// Review-deck commands write a deck revision on completion through
+// providers/assessment-decks.ts. That module imports this one, so it is
+// reached by dynamic import at completion time rather than a static cycle.
+export { DECK_COMMANDS };
+
 export type LaunchRunResult =
   | { ok: true; run_id: string; started_at: string }
   | { ok: false; status: 400 | 409 | 429 | 503; reason: string };
@@ -1852,7 +1952,12 @@ export async function launchRun(
   // (same attribution rule as bot_runs.dispatched_by). Persisted on Aurora;
   // the in-memory fixture has no column for it.
   launchedBy: string | null = null,
+  // Drafter input for a review-deck command (see assessmentRunInput).
+  deckInput?: Record<string, unknown>,
 ): Promise<LaunchRunResult> {
+  if (DECK_COMMANDS.has(command) && !deckInput) {
+    return { ok: false, status: 400, reason: `${command} is launched from the review-deck routes (POST /teams/:teamId/decks, POST /decks/:id/revise)` };
+  }
   if (!args || typeof args !== 'object' || Array.isArray(args)) return { ok: false, status: 400, reason: 'args must be an object' };
   // Pin the exact submission once, before dispatch. Callback time must not
   // select a different envelope that arrived while the agent was working.
@@ -1874,11 +1979,11 @@ export async function launchRun(
     try {
       dispatch = assessmentRunInput(command, args, teamId,
         teamId ? await A.fetchEvidenceLog(teamId) : [], selected,
-        M.rubricDimensions(team?.rubric_version ?? M.DEFAULT_RUBRIC_VERSION));
+        M.rubricDimensions(team?.rubric_version ?? M.DEFAULT_RUBRIC_VERSION), deckInput);
     } catch (error) {
       return { ok: false, status: 400, reason: error instanceof Error ? error.message : 'Invalid run input' };
     }
-    const startedAt = new Date().toISOString();
+    const startedAt = clock.nowIso();
     const id = `run-${stampNow()}-${command}-${hex(12)}`;
     const rec: M.MockRun = {
       id, command, team_id: teamId, args, status: 'running', source: 'agent',
@@ -1900,7 +2005,7 @@ export async function launchRun(
     return { ok: false, status: 429, reason: `maximum of ${RUN_CONCURRENCY_CAP} concurrent runs already in progress` };
   }
 
-  const startedAt = new Date().toISOString();
+  const startedAt = clock.nowIso();
   const id = `run-${stampNow()}-${command}-${hex(12)}`;
   const rec: M.MockRun = {
     id, command, team_id: teamId, args, status: 'running', source: 'agent',
@@ -1918,7 +2023,7 @@ export async function launchRun(
     if (!r || r.status !== 'running') { clearInterval(progressTimer); return; }
     ticksSent += 1;
     const percent = Math.min(90, Math.round((ticksSent / (PROGRESS_TICKS + 1)) * 100));
-    assessmentBroker.publish({ type: 'run.progress', run_id: id, command, team_id: teamId, percent, ts: new Date().toISOString() });
+    assessmentBroker.publish({ type: 'run.progress', run_id: id, command, team_id: teamId, percent, ts: clock.nowIso() });
     if (ticksSent >= PROGRESS_TICKS) clearInterval(progressTimer);
   }, MOCK_RUN_DURATION_MS / (PROGRESS_TICKS + 1));
   progressTimer.unref?.();
@@ -1927,7 +2032,19 @@ export async function launchRun(
     void (async () => {
       const r = M.runs().find((x) => x.id === id);
       if (!r || r.status !== 'running') return;
-      const finishedAt = new Date().toISOString();
+      if (DECK_COMMANDS.has(command)) {
+        // The offline drafter: a deterministic narrative obeying the same
+        // contract, through the same completion seam a real result takes.
+        const decks = await import('./assessment-decks.js');
+        let deckResult: unknown;
+        try { deckResult = await decks.mockDeckRunResult(r); } catch (error) {
+          await completeRun(id, { status: 'failed', error: error instanceof Error ? error.message : 'offline drafter failed' });
+          return;
+        }
+        await completeRun(id, { status: 'completed', deck_result: deckResult });
+        return;
+      }
+      const finishedAt = clock.nowIso();
       r.status = 'completed';
       r.finished_at = finishedAt;
       r.summary = `Mock run completed for ${command}${teamId ? ` on ${teamId}` : ''}.`;
@@ -1985,6 +2102,8 @@ export const AGENT_COMMANDS: AgentCommandInfo[] = [
   { name: 'draft-confluence-page', summary: 'Draft a Markdown page in the run ledger; publishing is separate.', allowed_tools: DRAFTER_TOOLS },
   { name: 'suggest-confluence-content', summary: 'Suggest content edits from supplied source material.', allowed_tools: DRAFTER_TOOLS },
   { name: 'draw-diagram', summary: 'Draft a safe draw.io XML diagram in the run ledger.', allowed_tools: DRAFTER_TOOLS },
+  { name: 'draft-review-deck', summary: 'Write the narrative of a team review deck; every number comes from the scorecard.', allowed_tools: DRAFTER_TOOLS },
+  { name: 'revise-review-deck', summary: 'Revise a review deck as instructed; facts are re-applied after the edit.', allowed_tools: DRAFTER_TOOLS },
 ];
 
 export async function listCommands(): Promise<AgentCommandInfo[]> {
@@ -2004,7 +2123,7 @@ export async function stopRun(runId: string): Promise<StopRunResult> {
     const run = await A.fetchRun(runId);
     if (!run) return { ok: false, status: 404, reason: 'run not found' };
     if (run.status !== 'running') return { ok: false, status: 409, reason: `run is already ${run.status}` };
-    const finishedAt = new Date().toISOString();
+    const finishedAt = clock.nowIso();
     const reason = 'stopped by operator';
     const summary = `Stopped by operator before ${run.command} finished.`;
     await A.updateRunStatus(runId, { status: 'failed', finished_at: finishedAt, summary, error: reason });
@@ -2018,7 +2137,7 @@ export async function stopRun(runId: string): Promise<StopRunResult> {
   if (!run) return { ok: false, status: 404, reason: 'run not found' };
   if (run.status !== 'running') return { ok: false, status: 409, reason: `run is already ${run.status}` };
   run.status = 'failed';
-  run.finished_at = new Date().toISOString();
+  run.finished_at = clock.nowIso();
   run.error = 'stopped by operator';
   run.summary = `Stopped by operator before ${run.command} finished.`;
   assessmentBroker.publish({
@@ -2051,6 +2170,8 @@ export async function completeRun(
   patch: {
     status: 'completed' | 'failed'; summary?: string; error?: string;
     files_written?: string[]; scoring_log?: M.ScoringLogEntry[];
+    /** A review-deck command's drafter output (parsed JSON). */
+    deck_result?: unknown;
   },
 ): Promise<CompleteRunResult> {
   if (!config.mock.aurora) {
@@ -2062,7 +2183,7 @@ export async function completeRun(
       return { ok: false, status: 400, reason: 'A scoring run requires a non-empty scoring_log to complete' };
     }
 
-    const finishedAt = new Date().toISOString();
+    const finishedAt = clock.nowIso();
     let summary = patch.summary ?? (patch.status === 'completed'
       ? `Completed ${run.command}${run.team_id ? ` on ${run.team_id}` : ''}.`
       : `Failed ${run.command}${run.team_id ? ` on ${run.team_id}` : ''}.`);
@@ -2090,6 +2211,13 @@ export async function completeRun(
         + `${noEvidence} low-confidence with no evidence; ${followUpsOpened} follow-up${followUpsOpened === 1 ? '' : 's'} opened.`;
       filesWritten = patch.files_written ?? [`workspace/teams/${run.team_id}/reports/scoring_log_${log.stamp}.json`];
       ({ status, summary, error: errorText } = reconcileRunOutcome({ status, summary, error: errorText }, applied));
+    }
+
+    if (patch.status === 'completed' && DECK_COMMANDS.has(run.command)) {
+      const decks = await import('./assessment-decks.js');
+      const outcome = await decks.applyDeckRunResult(run, patch.deck_result);
+      if (outcome.ok) summary = patch.summary ?? outcome.summary;
+      else { status = 'failed'; errorText = outcome.reason; }
     }
 
     await A.updateRunStatus(runId, { status, finished_at: finishedAt, summary, error: errorText, files_written: filesWritten });
@@ -2124,7 +2252,7 @@ export async function completeRun(
       return { ok: false, status: 400, reason: 'Scoring output must match the selected submission dimensions' };
     }
   }
-  const finishedAt = new Date().toISOString();
+  const finishedAt = clock.nowIso();
   run.status = patch.status;
   run.finished_at = finishedAt;
   run.error = patch.status === 'failed' ? (patch.error ?? 'agent reported failure') : null;
@@ -2156,6 +2284,13 @@ export async function completeRun(
     run.status = reconciled.status;
     run.summary = reconciled.summary;
     run.error = reconciled.error;
+  }
+
+  if (patch.status === 'completed' && DECK_COMMANDS.has(run.command)) {
+    const decks = await import('./assessment-decks.js');
+    const outcome = await decks.applyDeckRunResult(run, patch.deck_result);
+    if (outcome.ok) run.summary = patch.summary ?? outcome.summary;
+    else { run.status = 'failed'; run.error = outcome.reason; }
   }
 
   assessmentBroker.publish(run.status === 'completed'
@@ -2206,7 +2341,7 @@ function computeRollup(teams: M.MockTeam[], dimsByTeam: Map<string, Record<strin
   return {
     target_level: target, teams_total: filtered.length, dimensions_assessed: assessed,
     dimensions_applicable: applicable, at_or_above_target: atOrAbove, claims_open: claimsOpen,
-    by_cohort: byCohort, generated_at: new Date().toISOString(),
+    by_cohort: byCohort, generated_at: clock.nowIso(),
   };
 }
 
@@ -2231,7 +2366,7 @@ export async function updateConfiguration(patch: { target_level?: number; motion
   const cfg = M.configuration();
   if (patch.target_level !== undefined) cfg.target_level = patch.target_level;
   if (patch.motions !== undefined) cfg.motions = patch.motions;
-  cfg.updated_at = new Date().toISOString();
+  cfg.updated_at = clock.nowIso();
   return cfg;
 }
 
@@ -2588,7 +2723,7 @@ const STAGED_PARSES = new Map<string, StagedParse>();
 const STAGE_TTL_MS = 30 * 60 * 1000;
 
 function pruneStagedParses(): void {
-  const cutoff = Date.now() - STAGE_TTL_MS;
+  const cutoff = clock.now().getTime() - STAGE_TTL_MS;
   for (const [token, staged] of STAGED_PARSES) {
     if (staged.created_at < cutoff) STAGED_PARSES.delete(token);
   }
@@ -2688,7 +2823,7 @@ export async function parseSubmission(
     const stagingToken = randomUUID();
     // See STAGED_PARSES declaration: this stays module-level memory even on
     // the Aurora path — a 30-minute wizard scratch, not durable state.
-    STAGED_PARSES.set(stagingToken, { source_file: sourceFile, rows: staged, created_at: Date.now() });
+    STAGED_PARSES.set(stagingToken, { source_file: sourceFile, rows: staged, created_at: clock.now().getTime() });
     return { staging_token: stagingToken, source_file: sourceFile, mapping_warnings: warnings, rows };
   }
 
@@ -2705,7 +2840,7 @@ export async function parseSubmission(
   const { rows, staged, warnings } = parseFormsRecords(payload.records ?? [], sourceFile, M.teams(), mockHasCommittedEnvelopeForForm);
   pruneStagedParses();
   const stagingToken = randomUUID();
-  STAGED_PARSES.set(stagingToken, { source_file: sourceFile, rows: staged, created_at: Date.now() });
+  STAGED_PARSES.set(stagingToken, { source_file: sourceFile, rows: staged, created_at: clock.now().getTime() });
   return { staging_token: stagingToken, source_file: sourceFile, mapping_warnings: warnings, rows };
 }
 
@@ -2727,7 +2862,7 @@ function parseFormsTimestamp(value: string): Date | null {
 }
 
 function envelopeStamp(completionTime: string): string {
-  const parsed = parseFormsTimestamp(completionTime) ?? new Date();
+  const parsed = parseFormsTimestamp(completionTime) ?? clock.now();
   return parsed.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
 }
 
@@ -2774,7 +2909,7 @@ export async function commitSubmissions(
 
     const committed: string[] = [];
     const results: CommitResultRow[] = [];
-    const nowIso = new Date().toISOString();
+    const nowIso = clock.nowIso();
 
     for (const selection of payload.selections) {
       const row = staged.rows.find((r) => r.row_index === selection.row_index);
@@ -2819,7 +2954,7 @@ export async function commitSubmissions(
       // MS-Forms wire string (see the interface comment) — these parsed
       // ISO values are only for the DB's typed columns.
       const parsedSubmitted = parseFormsTimestamp(row.submitted_at);
-      const submittedAtIso = (parsedSubmitted ?? new Date()).toISOString();
+      const submittedAtIso = (parsedSubmitted ?? clock.now()).toISOString();
       const assessmentDateIso = parsedSubmitted ? submittedAtIso.slice(0, 10) : null;
       // Atomic: supersede the prior envelope (if any) and insert the
       // replacement in one transaction, with a conflict-safe insert
@@ -2861,7 +2996,7 @@ export async function commitSubmissions(
 
   const committed: string[] = [];
   const results: CommitResultRow[] = [];
-  const nowIso = new Date().toISOString();
+  const nowIso = clock.nowIso();
 
   for (const selection of payload.selections) {
     const row = staged.rows.find((r) => r.row_index === selection.row_index);
@@ -3004,7 +3139,7 @@ function syncedPageDoc(id: string): M.KnowledgeDoc | null {
   return {
     id, title: node.title, classification: 'synced',
     markdown: `# ${node.title}\n\n${body}\n`,
-    editable: false, path: `confluence/${node.page_id}`, updated_at: node.updated_at ?? new Date().toISOString(),
+    editable: false, path: `confluence/${node.page_id}`, updated_at: node.updated_at ?? clock.nowIso(),
   };
 }
 
@@ -3033,7 +3168,7 @@ export async function putKnowledgeDoc(
       stamp, label: opts.label ?? null, size: doc.markdown.length, savedAt: doc.updated_at,
       markdown: doc.markdown, savedBy: opts.actor ?? null,
     });
-    const now = new Date().toISOString();
+    const now = clock.nowIso();
     await A.updateKnowledgeDocMarkdown(id, markdown, now);
     assessmentBroker.publish({ type: 'knowledge.doc.saved', id, stamp, by: opts.actor ?? 'unknown', ts: now });
     return { ok: true, updated_at: now };
@@ -3044,7 +3179,7 @@ export async function putKnowledgeDoc(
   const versions = M.ensureVersionsFor(id);
   versions.push({ stamp, label: opts.label ?? null, saved_at: doc.updated_at, markdown: doc.markdown });
   doc.markdown = markdown;
-  doc.updated_at = new Date().toISOString();
+  doc.updated_at = clock.nowIso();
   assessmentBroker.publish({ type: 'knowledge.doc.saved', id, stamp, by: opts.actor ?? 'unknown', ts: doc.updated_at });
   return { ok: true, updated_at: doc.updated_at };
 }
@@ -3079,7 +3214,7 @@ export async function restoreKnowledgeDocVersion(
       stamp: restoreStamp, label: 'pre-restore snapshot', size: doc.markdown.length,
       savedAt: doc.updated_at, markdown: doc.markdown, savedBy: actor,
     });
-    const now = new Date().toISOString();
+    const now = clock.nowIso();
     await A.updateKnowledgeDocMarkdown(id, version.markdown, now);
     assessmentBroker.publish({ type: 'knowledge.doc.saved', id, stamp: restoreStamp, by: actor, ts: now });
     return { ok: true, updated_at: now };
@@ -3091,7 +3226,7 @@ export async function restoreKnowledgeDocVersion(
   const versions = M.ensureVersionsFor(id);
   versions.push({ stamp: restoreStamp, label: 'pre-restore snapshot', saved_at: doc.updated_at, markdown: doc.markdown });
   doc.markdown = version.markdown;
-  doc.updated_at = new Date().toISOString();
+  doc.updated_at = clock.nowIso();
   assessmentBroker.publish({ type: 'knowledge.doc.saved', id, stamp: restoreStamp, by: actor, ts: doc.updated_at });
   return { ok: true, updated_at: doc.updated_at };
 }
@@ -3124,7 +3259,7 @@ export async function pullKnowledgeSection(sectionKey: string): Promise<PullSect
   if (!section) return { ok: false, status: 404, reason: `no synced section "${sectionKey}"` };
 
   const timer = setTimeout(() => {
-    const now = new Date().toISOString();
+    const now = clock.nowIso();
     const pageNodes = section.nodes.filter((n) => !n.is_dir);
     for (const n of pageNodes) n.updated_at = now;
     assessmentBroker.publish({
@@ -3189,7 +3324,7 @@ export async function moveKnowledgeNode(
     const at = await A.moveKnowledgeNodeRow(id, targetParentId, position);
     assessmentBroker.publish({
       type: 'knowledge.moved', id, parent_id: targetParentId, position: at, by: actor,
-      ts: new Date().toISOString(),
+      ts: clock.nowIso(),
     });
     return { ok: true, id, parent_id: targetParentId, position: at, section: verdict.section };
   }
@@ -3218,7 +3353,7 @@ export async function moveKnowledgeNode(
 
   assessmentBroker.publish({
     type: 'knowledge.moved', id, parent_id: targetParentId, position: clamped, by: actor,
-    ts: new Date().toISOString(),
+    ts: clock.nowIso(),
   });
   return { ok: true, id, parent_id: targetParentId, position: clamped, section: section.key };
 }
@@ -3288,7 +3423,7 @@ export async function renameKnowledgeNode(
   }
 
   assessmentBroker.publish({
-    type: 'knowledge.renamed', id, title, by: actor, ts: new Date().toISOString(),
+    type: 'knowledge.renamed', id, title, by: actor, ts: clock.nowIso(),
   });
   return { ok: true, id, title, section: section.key };
 }
@@ -3343,7 +3478,7 @@ export async function publishKnowledgeDoc(id: string, actor = 'unknown'): Promis
   const version = (publishedVersions.get(pageId) ?? 0) + 1;
   publishedVersions.set(pageId, version);
 
-  const now = new Date().toISOString();
+  const now = clock.nowIso();
   const existing = target.nodes.find((n) => n.id === `page:${pageId}`);
   if (existing) {
     existing.updated_at = now;
@@ -3411,7 +3546,7 @@ export async function editKnowledgeComment(
   if (found.author !== actor) return { ok: false, status: 403, reason: 'only the author can edit a comment' };
   if (found.deleted_at) return { ok: false, status: 400, reason: 'that comment was deleted' };
 
-  const now = new Date().toISOString();
+  const now = clock.nowIso();
   if (!config.mock.aurora) await A.updateKnowledgeComment(commentId, body, now);
   else { found.body = body; found.edited_at = now; }
 
@@ -3430,7 +3565,7 @@ export async function deleteKnowledgeComment(
   if (found.author !== actor) return { ok: false, status: 403, reason: 'only the author can delete a comment' };
   if (found.deleted_at) return { ok: true, id: commentId, body: found.body, deleted_at: found.deleted_at };
 
-  const now = new Date().toISOString();
+  const now = clock.nowIso();
   if (!config.mock.aurora) await A.softDeleteKnowledgeComment(commentId, now);
   else found.deleted_at = now;
 
@@ -3489,7 +3624,7 @@ export async function toggleKnowledgeReaction(
   const valid = targetId === docId || comments.some((c) => c.id === targetId) || extraTargets.includes(targetId);
   if (!valid) return { ok: false, status: 404, reason: `"${targetId}" is not this document or one of its comments` };
 
-  const now = new Date().toISOString();
+  const now = clock.nowIso();
   let reacted: boolean;
   if (!config.mock.aurora) {
     reacted = await A.toggleKnowledgeReaction(targetId, trimmed, actor, now);
@@ -3521,7 +3656,7 @@ export async function createKnowledgeComment(
   if (!(await getKnowledgeDoc(id))) return null;
   if (await legacyThreadMoved(id)) return { ok: false, status: 409, reason: COMMENTS_MOVED };
   const commentId = `comment-${stampNow()}-${hex(6)}`;
-  const now = new Date().toISOString();
+  const now = clock.nowIso();
   if (!config.mock.aurora) {
     if (!(await A.insertKnowledgeComment(commentId, id, body, actor, now, parentId))) {
       return { ok: false, reason: 'Invalid reply parent' };

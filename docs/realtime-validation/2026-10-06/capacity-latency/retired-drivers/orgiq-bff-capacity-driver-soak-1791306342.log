@@ -1,0 +1,45 @@
+target ws://orgiq-bff-capacity-a:3001/ws · health http://orgiq-bff-capacity-a:3001/api/health · server pid unknown (pass --server-pid) · hold 60s
+
+=== soak · group 2 · 100 calls · 1000 sockets (200 in calls, 0 second tabs, 800 chat/presence) · run tag 7844
+  ramp: 1000/1000 connected in 20s
+  token-renewal: sockets 1000/1000, call status 200/200, participant routes 200/200, chat 800/800, presence 800/800, 25.9s
+  token-renewal: sockets 1000/1000, call status 200/200, participant routes 200/200, chat 800/800, presence 800/800, 24.6s
+  token-renewal: sockets 1000/1000, call status 200/200, participant routes 200/200, chat 800/800, presence 800/800, 22.6s
+  connect 4000/4000 (p95 77.6 ms) · established 100/100 · 349.6s
+  invite→incoming  p50 38.1  p95 50.7  p99 79.5  max 84.5 ms (n=100)
+  accept→accepted  p50 36.1  p95 46.6  p99 66.5  max 66.7 ms (n=100)
+  chat delivery    p50 37  p95 2984.8  p99 3487.2  max 5745.7 ms (n=12407 of 12412 sent)
+  cross: call 0 chat 0 presence 0 · unexpected ended 0 · answered-elsewhere 0 · denied 0 · other errors 0
+  soak 300/300s · token TTL 120s · 3 authenticated recovery cycles · expired sockets 0
+  slow /api/health samples (>=50 ms): 124.4ms@20s/ramp, 57.7ms@23s/ramp, 53.3ms@112.1s/token-renewal, 52ms@112.6s/token-renewal, 180.9ms@113.1s/token-renewal, 268.4ms@113.6s/token-renewal, 69.8ms@114.1s/token-renewal, 58.3ms@115.1s/soak, 51.2ms@115.6s/soak, 125.2ms@116.1s/soak, 59.3ms@116.6s/soak, 52.1ms@117.1s/soak, 128.2ms@147.9s/soak, 80.8ms@202s/token-renewal, 100.6ms@202.5s/token-renewal, 190ms@203s/token-renewal, 64.1ms@203.5s/token-renewal, 90.6ms@206s/soak, 67.1ms@206.5s/soak, 135.4ms@273.1s/token-renewal, 92.5ms@290.1s/token-renewal, 96.4ms@291.1s/token-renewal, 120.1ms@291.6s/token-renewal, 69.2ms@294.6s/soak
+  server orgiq-bff-capacity-a: docker-working-set peak 261.3 MiB · CPU peak 103.1% mean 33.4% · /api/health p50 1.3 p99 124.4 max 268.4 ms (0 errors; 0 planned-outage errors) · client loop p99 14.2 ms
+  PASS  sockets connect: 4000/4000 (100%)
+  PASS  calls established: 100/100 (all)
+  PASS  invite→incoming p95: 50.7 (< 250 ms)
+  PASS  invite→incoming p99: 79.5 (< 1000 ms)
+  PASS  accept→accepted p95: 46.6 (< 250 ms)
+  FAIL  chat delivery p95: 2984.8 (< 300 ms, with paired-sender evidence)
+  PASS  background chat coverage: 800/800 (all paired senders reach their peer)
+  PASS  background chat admission: 800/800; 2449.8ms (all server join acknowledgements within 10 seconds)
+  PASS  cross-call/channel deliveries: 0 (0)
+  PASS  answered-elsewhere outside scenario 4: 0 (0)
+  PASS  ended before scripted hang-up: 0 (0)
+  PASS  unplanned socket disconnects: 0 (0)
+  PASS  AUTHZ_CHANNEL_DENIED: 0 (0)
+  FAIL  event-loop proxy (/api/health p99): 124.4 (< 50 ms)
+  PASS  health errors outside planned outage: 0 (0)
+  PASS  server memory peak: 261.3 (< 700 MiB)
+  PASS  container samples: 0 (no errors, at least one sample)
+  FAIL  peer 1: health p99: 148.5 (< 50 ms)
+  PASS  peer 1: health errors: 0 (0)
+  PASS  peer 1: memory peak: 249.2 (< 700 MiB)
+  PASS  peer 1: container samples: 0 (no errors, at least one sample)
+  PASS  bounded soak completed: 300 (>= 300s)
+  PASS  expired sockets at reauthentication: 0 (0)
+  PASS  soak protocol errors: 0 (0)
+  PASS  token-renewal 1: complete recovery: 1000/1000 sockets; 200/200 call statuses; 25.9s (100% authenticated sockets, original call membership, peer state, chat and presence)
+  PASS  token-renewal 2: complete recovery: 1000/1000 sockets; 200/200 call statuses; 24.6s (100% authenticated sockets, original call membership, peer state, chat and presence)
+  PASS  token-renewal 3: complete recovery: 1000/1000 sockets; 200/200 call statuses; 22.6s (100% authenticated sockets, original call membership, peer state, chat and presence)
+
+0/1 runs passed every threshold
+  FAIL  soak × 2 — chat delivery p95; event-loop proxy (/api/health p99); peer 1: health p99

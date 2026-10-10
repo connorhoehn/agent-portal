@@ -16,6 +16,7 @@
 
 import { exec } from '../providers/aurora.js';
 import { config } from '../config.js';
+import { createHealthProbe } from './health-probe.js';
 
 const TTL_MS = 15_000;
 
@@ -24,8 +25,6 @@ export interface DatastoreStatus {
   /** Short reason when not ok, safe to show in a UI. */
   error?: string;
 }
-
-let cached: { status: DatastoreStatus; checkedAt: number } | null = null;
 
 /** Trim a driver error down to something a status line can carry. */
 function summarize(err: unknown): string {
@@ -46,22 +45,20 @@ function summarize(err: unknown): string {
   return first.slice(0, 140);
 }
 
+const probe = createHealthProbe(TTL_MS, async () => {
+  await exec('SELECT 1');
+  return { ok: true };
+}, summarize);
+
 export async function checkDatastore(): Promise<DatastoreStatus> {
-  if (config.mock.aurora) return { ok: true };
+  return config.mock.aurora ? { ok: true } : probe.check();
+}
 
-  const now = Date.now();
-  if (cached && now - cached.checkedAt < TTL_MS) return cached.status;
-
-  try {
-    await exec('SELECT 1');
-    cached = { status: { ok: true }, checkedAt: now };
-  } catch (err) {
-    cached = { status: { ok: false, error: summarize(err) }, checkedAt: now };
-  }
-  return cached.status;
+export function readDatastoreStatus() {
+  return config.mock.aurora ? { ok: true } : probe.snapshot();
 }
 
 /** Test hook — drop the cached verdict. */
 export function _resetDatastoreProbe(): void {
-  cached = null;
+  probe.reset();
 }

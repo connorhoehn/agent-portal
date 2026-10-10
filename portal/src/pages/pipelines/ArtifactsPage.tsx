@@ -24,10 +24,10 @@ const COLUMNS: DataTableColumn<PipelineArtifact>[] = [
   { key: 'kind', header: 'Kind', render: (a) => <Chip tone="neutral" size="xs">{artifactKindLabel(a.kind)}</Chip> },
   { key: 'title', header: 'Artifact', render: (a) => a.title, sortable: true, compare: (x, y) => x.title.localeCompare(y.title) },
   { key: 'runId', header: 'Run', render: (a) => (a.runId ? <MetaLine size="xs" tone="secondary" items={[a.runId]} /> : 'no run') },
-  { key: 'runStatus', header: 'Run status', render: (a) => (a.runStatus ? <PipelineRunStatusChip status={a.runStatus} /> : '—') },
+  { key: 'runStatus', header: 'Run status', width: '128px', render: (a) => (a.runStatus ? <PipelineRunStatusChip status={a.runStatus} /> : '—') },
   { key: 'contextTenant', header: 'Workspace', render: (a) => a.contextTenant ?? '—' },
   {
-    key: 'createdAt', header: 'Created', sortable: true,
+    key: 'createdAt', header: 'Created', numeric: true, sortable: true,
     compare: (x, y) => (x.createdAt ?? '').localeCompare(y.createdAt ?? ''),
     render: (a) => (a.createdAt ? relativeTime(a.createdAt) : '—'),
   },
@@ -64,6 +64,7 @@ export default function ArtifactsPage() {
       ) : (
         <DataTable
           data-testid="pipelines-artifacts-table"
+          size="sm"
           data={rows}
           columns={COLUMNS}
           keyField={(a) => a.id}

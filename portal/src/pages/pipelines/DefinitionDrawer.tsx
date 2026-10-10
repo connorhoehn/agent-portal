@@ -7,7 +7,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import {
-  Button, ConfirmDialog, DataTable, DetailSection, Drawer, EmptyState, InlineAlert, KeyValue, LoadingState,
+  Button, ConfirmDialog, DataTable, DetailSection, Drawer, EmptyState, Inline, InlineAlert, KeyValue, LoadingState,
   MetaLine, Select, Stack, type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
@@ -24,6 +24,8 @@ import {
   type DefinitionStep, type DryRunRecord, type PipelineDefinition, type RunbookState,
 } from '../../lib/pipelineDefinitions';
 import { useDryRun } from './useDryRun';
+import { PipelineDiscussion, PipelinePresence } from './PipelineRealtime';
+import { defChannel } from './pipelinesRealtime';
 
 interface DefinitionDetail {
   definition: PipelineDefinition;
@@ -35,23 +37,23 @@ interface DefinitionDetail {
 }
 
 const STEP_COLUMNS: DataTableColumn<DefinitionStep & { n: number }>[] = [
-  { key: 'n', header: '#', width: '3rem', render: (s) => s.n },
+  { key: 'n', header: '#', width: '3rem', numeric: true, render: (s) => s.n },
   { key: 'label', header: 'Step', render: (s) => s.label },
   { key: 'detail', header: 'Detail', render: (s) => s.detail ?? '—' },
 ];
 
 const RUN_COLUMNS: DataTableColumn<PipelineRun>[] = [
-  { key: 'status', header: 'Status', render: (r) => <PipelineRunStatusChip status={r.status} /> },
+  { key: 'status', header: 'Status', width: '112px', render: (r) => <PipelineRunStatusChip status={r.status} /> },
   { key: 'title', header: 'Run', render: (r) => r.context.title },
-  { key: 'startedAt', header: 'Started', render: (r) => (r.startedAt ? relativeTime(r.startedAt) : '—') },
+  { key: 'startedAt', header: 'Started', numeric: true, render: (r) => (r.startedAt ? relativeTime(r.startedAt) : '—') },
 ];
 
 const DRY_RUN_COLUMNS: DataTableColumn<DryRunRecord>[] = [
-  { key: 'status', header: 'Status', render: (r) => <PipelineRunStatusChip status={r.status} /> },
+  { key: 'status', header: 'Status', width: '112px', render: (r) => <PipelineRunStatusChip status={r.status} /> },
   { key: 'id', header: 'Run', render: (r) => <MetaLine size="xs" tone="secondary" items={[r.id]} /> },
   { key: 'by', header: 'Started by', render: (r) => r.triggeredBy ?? '—' },
-  { key: 'cost', header: 'Cost', align: 'right', render: (r) => (r.costUsd != null ? usd(r.costUsd, { precision: 4 }) : r.estimateUsd != null ? `est. ${usd(r.estimateUsd, { precision: 4 })}` : '—') },
-  { key: 'startedAt', header: 'Started', render: (r) => relativeTime(r.startedAt) },
+  { key: 'cost', header: 'Cost', numeric: true, render: (r) => (r.costUsd != null ? usd(r.costUsd, { precision: 4 }) : r.estimateUsd != null ? `est. ${usd(r.estimateUsd, { precision: 4 })}` : '—') },
+  { key: 'startedAt', header: 'Started', numeric: true, render: (r) => relativeTime(r.startedAt) },
 ];
 
 export function DefinitionDrawer({ id, onClose, onChanged }: { id: string | null; onClose: () => void; onChanged: () => void }) {
@@ -92,10 +94,15 @@ export function DefinitionDrawer({ id, onClose, onChanged }: { id: string | null
       subtitle={def ? `${kindLabel(def.kind)} · ${def.id}` : id ?? undefined}
       width={640}
       data-testid="pipelines-definition-drawer"
-      actions={def && canRun && canDryRun(def) ? (
-        <Button size="sm" variant="primary" disabled={dryRun.busy === def.id} onClick={() => dryRun.start(def.id, def.title)} data-testid="pipelines-dry-run">
-          {dryRun.busy === def.id ? 'Starting…' : 'Dry-run'}
-        </Button>
+      actions={def ? (
+        <Inline gap="sm" align="center">
+          <PipelinePresence channel={defChannel(def.id)} />
+          {canRun && canDryRun(def) && (
+            <Button size="sm" variant="primary" disabled={dryRun.busy === def.id} onClick={() => dryRun.start(def.id, def.title)} data-testid="pipelines-dry-run">
+              {dryRun.busy === def.id ? 'Starting…' : 'Dry-run'}
+            </Button>
+          )}
+        </Inline>
       ) : undefined}
     >
       {notFound ? (
@@ -115,7 +122,7 @@ export function DefinitionDrawer({ id, onClose, onChanged }: { id: string | null
           <KeyValue
             layout="row"
             items={[
-              { label: 'Workspace', value: def.contextTenant === 'assessment' ? 'Assessment' : 'Org' },
+              { label: 'Workspace', value: def.contextTenant === 'assessment' ? 'Assessment' : 'Work' },
               { label: 'Owner', value: def.owner ?? 'Not recorded', muted: !def.owner, mono: Boolean(def.owner) },
               { label: 'Version', value: `v${def.version}${def.recorded ? ' (recorded)' : ' (derived)'}` },
               { label: 'Source', value: `${def.source.table} · ${def.source.id}`, mono: true },
@@ -151,6 +158,7 @@ export function DefinitionDrawer({ id, onClose, onChanged }: { id: string | null
           <DetailSection title="Steps" hint={`${def.steps.length}`}>
             <DataTable
               frameless
+              size="sm"
               data={def.steps.map((s, i) => ({ ...s, n: i + 1 }))}
               columns={STEP_COLUMNS}
               keyField={(s) => s.id}
@@ -161,6 +169,7 @@ export function DefinitionDrawer({ id, onClose, onChanged }: { id: string | null
             <DetailSection title="Dry-runs" hint={`${data.dryRuns.length}`} data-testid="pipelines-dry-runs">
               <DataTable
                 frameless
+                size="sm"
                 data={data.dryRuns}
                 columns={DRY_RUN_COLUMNS}
                 keyField={(r) => r.id}
@@ -172,12 +181,16 @@ export function DefinitionDrawer({ id, onClose, onChanged }: { id: string | null
           <DetailSection title="Recent runs" hint={`${data?.runs.length ?? 0}`}>
             <DataTable
               frameless
+              size="sm"
               data={data?.runs ?? []}
               columns={RUN_COLUMNS}
               keyField={(r) => r.id}
               onRowClick={(r) => navigate(runHref('/pipelines/runs', r.id))}
               emptyMessage="No run of this definition is recorded."
             />
+          </DetailSection>
+          <DetailSection title="Discussion" data-testid="pipelines-definition-discussion">
+            <PipelineDiscussion channel={defChannel(def.id)} />
           </DetailSection>
         </Stack>
       )}

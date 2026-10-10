@@ -1,0 +1,62 @@
+Native SQL directory provisioned: 1000 current users; local two-owner profile: steady
+target ws://127.0.0.1:3063/ws · health http://127.0.0.1:3063/api/health · server pid 63147 · hold 60s
+
+=== steady · group 2 · 100 calls · 1000 sockets (200 in calls, 0 second tabs, 800 chat/presence) · run tag 0a5b
+  ramp: 1000/1000 connected in 20s
+  connect 1000/1000 (p95 4 ms) · established 100/100 · 107.2s
+  invite→incoming  p50 26.3  p95 32.8  p99 37.8  max 48.7 ms (n=100)
+  accept→accepted  p50 29.8  p95 37.5  p99 42.9  max 43.5 ms (n=100)
+  chat delivery    p50 24.9  p95 33.9  p99 347.5  max 1175.4 ms (n=2278 of 2278 sent)
+  cross: call 0 chat 0 presence 0 · unexpected ended 0 · answered-elsewhere 0 · denied 0 · other errors 0
+  slow /api/health samples (>=50 ms): 102.2ms@12.5s/ramp, 116.7ms@72.5s/hold
+  server 63147: process-rss peak 779.9 MiB · CPU peak 136% mean 17.4% · /api/health p50 0.5 p99 23.7 max 116.7 ms (0 errors; 0 planned-outage errors) · client loop p99 12.3 ms
+  PASS  sockets connect: 1000/1000 (100%)
+  PASS  calls established: 100/100 (all)
+  PASS  invite→incoming p95: 32.8 (< 250 ms)
+  PASS  invite→incoming p99: 37.8 (< 1000 ms)
+  PASS  accept→accepted p95: 37.5 (< 250 ms)
+  PASS  chat delivery p95: 33.9 (< 300 ms, with paired-sender evidence)
+  PASS  background chat coverage: 800/800 (all paired senders reach their peer)
+  PASS  cross-call/channel deliveries: 0 (0)
+  PASS  answered-elsewhere outside scenario 4: 0 (0)
+  PASS  ended before scripted hang-up: 0 (0)
+  PASS  unplanned socket disconnects: 0 (0)
+  PASS  AUTHZ_CHANNEL_DENIED: 0 (0)
+  PASS  event-loop proxy (/api/health p99): 23.7 (< 50 ms)
+  PASS  health errors outside planned outage: 0 (0)
+  FAIL  server memory peak: 779.9 (< 700 MiB)
+  PASS  peer 1: health p99: 22.8 (< 50 ms)
+  PASS  peer 1: health errors: 0 (0)
+  FAIL  peer 1: memory peak: 802.4 (< 700 MiB)
+
+=== steady · group 4 · 100 calls · 1000 sockets (400 in calls, 0 second tabs, 600 chat/presence) · run tag ea95
+  ramp: 1000/1000 connected in 20s
+  connect 1000/1000 (p95 3.6 ms) · established 100/100 · 107.3s
+  invite→incoming  p50 28.9  p95 34.8  p99 37.1  max 39.3 ms (n=300)
+  accept→accepted  p50 28  p95 35  p99 39.1  max 41.8 ms (n=300)
+  chat delivery    p50 25.1  p95 33.2  p99 41.8  max 718.8 ms (n=1711 of 1711 sent)
+  cross: call 0 chat 0 presence 0 · unexpected ended 0 · answered-elsewhere 0 · denied 0 · other errors 0
+  slow /api/health samples (>=50 ms): 88.5ms@22.5s/calls-starting, 113.8ms@82.5s/hold
+  server 63147: process-rss peak 795.5 MiB · CPU peak 104% mean 15.8% · /api/health p50 0.5 p99 9.6 max 113.8 ms (0 errors; 0 planned-outage errors) · client loop p99 12.3 ms
+  PASS  sockets connect: 1000/1000 (100%)
+  PASS  calls established: 100/100 (all)
+  PASS  invite→incoming p95: 34.8 (< 250 ms)
+  PASS  invite→incoming p99: 37.1 (< 1000 ms)
+  PASS  accept→accepted p95: 35 (< 250 ms)
+  PASS  chat delivery p95: 33.2 (< 300 ms, with paired-sender evidence)
+  PASS  background chat coverage: 600/600 (all paired senders reach their peer)
+  PASS  cross-call/channel deliveries: 0 (0)
+  PASS  answered-elsewhere outside scenario 4: 0 (0)
+  PASS  ended before scripted hang-up: 0 (0)
+  PASS  unplanned socket disconnects: 0 (0)
+  PASS  AUTHZ_CHANNEL_DENIED: 0 (0)
+  PASS  event-loop proxy (/api/health p99): 9.6 (< 50 ms)
+  PASS  health errors outside planned outage: 0 (0)
+  FAIL  server memory peak: 795.5 (< 700 MiB)
+  PASS  peer 1: health p99: 11.9 (< 50 ms)
+  PASS  peer 1: health errors: 0 (0)
+  FAIL  peer 1: memory peak: 806 (< 700 MiB)
+
+0/2 runs passed every threshold
+  FAIL  steady × 2 — server memory peak; peer 1: memory peak
+  FAIL  steady × 4 — server memory peak; peer 1: memory peak

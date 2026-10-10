@@ -13,12 +13,11 @@ import {
   TableTh,
   TableTd,
   Chip,
-  PageSection,
+  PageSection, T,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { showingLabel } from '../../lib/format';
-import { T } from './Text';
 
 // Hand-rolled `Table` (not `DataTable`), so there's no built-in pagination
 // lever — this page renders every session `/api/sessions` returns in one
@@ -85,7 +84,7 @@ function SessionsPage() {
           <Button variant="secondary" size="sm" onClick={() => refresh()}>
             Refresh
           </Button>
-          <T className="text-[11px] text-text-tertiary">{showingLabel(visible.length, filtered.length, 'sessions')}</T>
+          <T size="xs" className="text-text-tertiary">{showingLabel(visible.length, filtered.length, 'sessions')}</T>
         </Inline>
       }
     >
@@ -102,7 +101,7 @@ function SessionsPage() {
               onRetry={refresh}
             />
           ) : (
-            <InlinePlaceholder align="center" className="p-6 text-[12px]">
+            <InlinePlaceholder align="center" className="text-xs p-6">
               {/* "Start a conversation" is only useful advice when a
                   conversation could actually be recorded. Offline it cannot:
                   AgentCore Memory is unconfigured under dev:mock, so
@@ -118,7 +117,7 @@ function SessionsPage() {
             </InlinePlaceholder>
           )
         ) : (
-          <Table>
+          <Table size="sm">
             <TableHead>
               <TableRow>
                 <TableTh>Title</TableTh>
@@ -135,7 +134,7 @@ function SessionsPage() {
               {visible.map((s) => (
                 <TableRow key={s.sessionId}>
                   <TableTd
-                    className="text-[12px] font-medium max-w-[280px] overflow-hidden text-ellipsis whitespace-nowrap"
+                    className="text-xs max-w-[280px] overflow-hidden text-ellipsis whitespace-nowrap"
                     title={s.title}
                   >
                     {s.title ?? <T className="text-[var(--color-text-tertiary)]">untitled</T>}
@@ -146,21 +145,21 @@ function SessionsPage() {
                         {s.agentName.replace('orgiq-', '')}
                       </Chip>
                     ) : (
-                      <T className="text-[11px] text-[var(--color-text-tertiary)]">—</T>
+                      <T size="xs" className="text-[var(--color-text-tertiary)]">—</T>
                     )}
                   </TableTd>
-                  <TableTd className="text-[11px] text-[var(--color-text-tertiary)] font-mono">
+                  <TableTd className="text-[var(--color-text-tertiary)] font-mono">
                     {s.actorId ?? '—'}
                   </TableTd>
-                  <TableTd className="text-[11px] text-[var(--color-text-tertiary)] whitespace-nowrap">
+                  <TableTd className="text-[var(--color-text-tertiary)] whitespace-nowrap">
                     {new Date(s.createdAt).toLocaleString()}
                   </TableTd>
-                  <TableTd className="text-[11px] text-[var(--color-text-tertiary)] whitespace-nowrap">
+                  <TableTd className="text-[var(--color-text-tertiary)] whitespace-nowrap">
                     {s.lastMessageAt ? new Date(s.lastMessageAt).toLocaleString() : '—'}
                   </TableTd>
-                  <TableTd className="text-[12px]">{s.messageCount ?? '—'}</TableTd>
+                  <TableTd>{s.messageCount ?? '—'}</TableTd>
                   <TableTd
-                    className="text-[10px] font-mono text-[var(--color-text-tertiary)]"
+                    className="text-xs font-mono text-[var(--color-text-tertiary)]"
                     title={s.sessionId}
                   >
                     {s.sessionId.slice(0, 12)}…
@@ -168,7 +167,7 @@ function SessionsPage() {
                   <TableTd>
                     <Link
                       to={`/iq/invoke?session=${encodeURIComponent(s.sessionId)}`}
-                      className="text-[11px] px-2 py-0.5 bg-transparent border border-[var(--color-border)] text-[var(--color-text-secondary)] rounded-[var(--radius-sm)] cursor-pointer no-underline"
+                      className="text-xs px-2 py-0.5 bg-transparent border border-[var(--color-border)] text-[var(--color-text-secondary)] rounded-[var(--radius-sm)] cursor-pointer no-underline"
                     >
                       Open
                     </Link>

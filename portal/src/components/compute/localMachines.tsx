@@ -4,8 +4,9 @@
 // `node --test`, which strips types but cannot transform JSX. Everything that
 // renders lives here; everything that decides lives there.
 
-import { DEFAULT_PANE_KINDS } from '@connorhoehnslalom/ui-components/compute';
+import { DEFAULT_PANE_KINDS, TAIL_PANE_KIND } from '@connorhoehnslalom/ui-components/compute';
 import type { PaneKind } from '@connorhoehnslalom/ui-components/compute';
+import { InlineAlert, Stack } from '@connorhoehnslalom/ui-components/shared';
 import { NodeLog } from '../../pages/local-compute/NodeLog';
 import { isLocalMachineId, nodeIdOf } from './localMachines';
 
@@ -36,16 +37,43 @@ import { isLocalMachineId, nodeIdOf } from './localMachines';
  */
 const [defaultKind, ...otherKinds] = DEFAULT_PANE_KINDS;
 
-export const labPaneKinds: PaneKind[] = defaultKind
-  ? [
+/**
+ * The pane a microVM gets when this session may not open a shell on it.
+ *
+ * The fleet has a READ tier (org-leader, program-owner — `FLEET_READ_ROLES`)
+ * without `ManageDevbox`, and the lab's default pane is a terminal that
+ * attaches on mount: for those roles every page load POSTed `shell-url`, got a
+ * 403, logged it as a console error and painted `error · Forbidden` with a
+ * "reattach" that could never succeed. The capability already said no, so the
+ * pane does not ask. It says why instead, and shows the computer's tail —
+ * read-only, no shell slot, and served to anyone who can see the box — so the
+ * pane still answers "what is it doing".
+ */
+function shellUnavailable(ctx: Parameters<PaneKind['render']>[0]) {
+  return (
+    <Stack gap="none" className="h-full min-h-0">
+      <InlineAlert tone="info" palette="code" className="m-2 flex-none" data-testid="shell-unavailable">
+        No shell for your role — opening one needs computer access (ManageDevbox), which SMEs and HR admins hold.
+        Showing this computer&apos;s activity instead.
+      </InlineAlert>
+      <Stack gap="none" className="min-h-0 flex-1">{TAIL_PANE_KIND.render(ctx)}</Stack>
+    </Stack>
+  );
+}
+
+/** The lab's pane kinds for a session that may (`canOpenShell`) or may not
+ *  attach a shell. Memoize the result: the lab reads the registry by identity. */
+export function labPaneKinds(canOpenShell: boolean): PaneKind[] {
+  if (!defaultKind) return [...DEFAULT_PANE_KINDS];
+  return [
     {
       ...defaultKind,
       render: (ctx) => (
         isLocalMachineId(ctx.computer.id)
           ? <NodeLog nodeId={nodeIdOf(ctx.computer.id)} />
-          : defaultKind.render(ctx)
+          : canOpenShell ? defaultKind.render(ctx) : shellUnavailable(ctx)
       ),
     },
     ...otherKinds,
-  ]
-  : [...DEFAULT_PANE_KINDS];
+  ];
+}

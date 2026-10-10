@@ -164,13 +164,30 @@ function requireAgentTenant(req: import('express').Request, res: import('express
 // data-plane ManageIngest capability. Read agents (supervisor/search/advisor)
 // keep their existing Search + tenant gating, authorized by requireAgentTenant.
 //
+// The devbox runtime is gated the same way on ManageDevbox: it runs Claude
+// Code in a microVM — compute that bills and a shell that can push to repos —
+// which is why /api/devbox/* already requires ManageDevbox. The portal's agent
+// picker hides it from roles without the capability, but a hidden control is
+// not a gate: until 2026-10-01 any signed-in role could POST here directly.
+//
 // The id is matched on the normalized form because the runtime cache registers
-// several spellings (graph-builder / orgiq-graph-builder / orgiq_graph_builder),
-// mirroring how agentTenant() normalizes.
+// several spellings (graph-builder / orgiq-graph-builder / orgiq_graph_builder,
+// devbox / orgiq-devbox / orgiq_devbox), mirroring how agentTenant() normalizes.
 const WRITE_AGENT_RE = /(graph[-_]builder|ingestion|scoring)/;
+const DEVBOX_AGENT_RE = /(^|[-_])devbox($|[-_])/;
 
-function isWriteAgent(agentId: string): boolean {
-  return WRITE_AGENT_RE.test(agentId.toLowerCase());
+interface AgentCapabilityGate { action: string; message: string }
+
+/** The capability a DIRECT invoke of `agentId` needs beyond Search, or null. */
+export function agentCapabilityGate(agentId: string): AgentCapabilityGate | null {
+  const id = agentId.toLowerCase();
+  if (WRITE_AGENT_RE.test(id)) {
+    return { action: 'ManageIngest', message: 'this agent performs data writes; you need the ManageIngest capability to invoke it directly' };
+  }
+  if (DEVBOX_AGENT_RE.test(id)) {
+    return { action: 'ManageDevbox', message: 'this agent runs a devbox (Claude Code in a microVM); you need the ManageDevbox capability to invoke it directly' };
+  }
+  return null;
 }
 
 // Runs AFTER requireAgentTenant and BEFORE the SSE stream opens, so a blocked
@@ -181,26 +198,22 @@ async function requireAgentCapability(
   next: import('express').NextFunction,
 ): Promise<void> {
   const agentId = String(req.params['agentId'] ?? '');
-  if (!isWriteAgent(agentId)) { next(); return; }
+  const gate = agentCapabilityGate(agentId);
+  if (!gate) { next(); return; }
   const session = resolveSession(req);
   if (!session) {
     // requireAction('Search') runs first and 401s an anonymous caller, so this
-    // is belt-and-suspenders for a write agent reached without a session.
+    // is belt-and-suspenders for a gated agent reached without a session.
     res.status(401).json({ error: 'Unauthenticated' });
     return;
   }
   try {
-    if (await isAllowed(session, 'ManageIngest')) { next(); return; }
-    res.status(403).json({
-      error: 'Forbidden',
-      action: 'ManageIngest',
-      agentId,
-      message: 'this agent performs data writes; you need the ManageIngest capability to invoke it directly',
-    });
+    if (await isAllowed(session, gate.action)) { next(); return; }
+    res.status(403).json({ error: 'Forbidden', action: gate.action, agentId, message: gate.message });
   } catch {
     // Authorization infrastructure failure (AVP unreachable/throttled) — 503,
     // matching requireAction's distinction between a DENY and an outage.
-    res.status(503).json({ error: 'authorization unavailable', action: 'ManageIngest' });
+    res.status(503).json({ error: 'authorization unavailable', action: gate.action });
   }
 }
 

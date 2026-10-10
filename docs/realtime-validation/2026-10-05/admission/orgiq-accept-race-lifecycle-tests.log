@@ -1,0 +1,20 @@
+
+> @orgiq/middleware@0.3.0 test
+> node node_modules/.bin/jest --config jest.config.cjs --runInBand --runTestsByPath src/lib/__tests__/call-chat-gateway.test.ts src/lib/__tests__/call-chat-lifecycle.test.ts src/lib/__tests__/call-pages-store.test.ts
+
+PASS src/lib/__tests__/call-chat-gateway.test.ts
+  ● Console
+
+    console.log
+      [realtime-gateway] serving /ws (chat, presence, calls, notifications); call state + inbox: memory; chat store: memory
+
+      at attachRealtimeGateway (src/lib/realtime-gateway.ts:820:11)
+
+PASS src/lib/__tests__/call-chat-lifecycle.test.ts
+PASS src/lib/__tests__/call-pages-store.test.ts
+
+Test Suites: 3 passed, 3 total
+Tests:       10 passed, 10 total
+Snapshots:   0 total
+Time:        11.031 s, estimated 13 s
+Ran all test suites within paths "src/lib/__tests__/call-chat-gateway.test.ts", "src/lib/__tests__/call-chat-lifecycle.test.ts", "src/lib/__tests__/call-pages-store.test.ts".

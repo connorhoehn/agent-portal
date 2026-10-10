@@ -1,0 +1,12 @@
+
+> @orgiq/middleware@0.3.0 test
+> node node_modules/.bin/jest --config jest.config.cjs --runInBand src/routes/__tests__/work-documents.test.ts src/providers/__tests__/work-documents.test.ts
+
+PASS src/routes/__tests__/work-documents.test.ts
+PASS src/providers/__tests__/work-documents.test.ts
+
+Test Suites: 2 passed, 2 total
+Tests:       8 passed, 8 total
+Snapshots:   0 total
+Time:        5.142 s
+Ran all test suites matching /src\/routes\/__tests__\/work-documents.test.ts|src\/providers\/__tests__\/work-documents.test.ts/i.

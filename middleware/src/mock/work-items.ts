@@ -37,6 +37,8 @@
 // climbing past a seed it no longer collides with.
 
 import { defineFixture } from './core/index.js';
+import { createHash } from 'node:crypto';
+import { SEEDED_WORK_KEYS, WORK_KEY_PREFIXES } from '../lib/work-item-keys.js';
 // Type-only, so it is erased at compile: providers/work-items.ts imports the
 // fixture below at run time, and a value import back the other way would be a
 // genuine cycle rather than a shared shape.
@@ -336,6 +338,7 @@ const MOCK_PROGRAM_FIELDS: Record<string, { sprintId?: string; estimatedCostUsd?
  */
 function normalizeSeed(seed: MockSeed, idOverride?: { id: string; parentId: string | null }): WorkItem {
   return {
+    key: SEEDED_WORK_KEYS[seed.id] ?? null,
     sprintId: null,
     estimatedCostUsd: null,
     summary: null,
@@ -376,15 +379,40 @@ function suffixId(id: string, round: number): string {
 
 function largeWorkItems(): WorkItem[] {
   const out: WorkItem[] = [];
+  const numbers = new Map<string, number>();
   for (let round = 0; round < LARGE_ROUNDS; round += 1) {
     for (const seed of MOCK_WORK_ITEM_SEEDS) {
-      out.push(normalizeSeed(seed, {
+      const item = normalizeSeed(seed, {
         id: suffixId(seed.id, round),
         parentId: seed.parentId ? suffixId(seed.parentId, round) : null,
-      }));
+      });
+      if (round > 0) {
+        const prefix = WORK_KEY_PREFIXES[item.projectId]!;
+        const high = numbers.get(item.projectId) ?? reservedWorkKeyNumber(prefix);
+        item.key = `${prefix}-${high + 1}`;
+        numbers.set(item.projectId, high + 1);
+      }
+      out.push(item);
     }
   }
   return out;
+}
+
+/**
+ * The Computer Lab demo's board (mock/demo-director.ts): the seed, with Auth
+ * Migration's sprint at its first morning — the two items the seed has
+ * already started (the refresh-loop bug in progress, cookie hardening in
+ * review with PR 49) are still open and unclaimed, so the four agents' worth
+ * of work the demo needs is four of the seed's own items rather than four
+ * invented ones. Nothing else on the board moves.
+ */
+const DEMO_UNSTARTED = new Set(['wi-auth-e1-b4', 'wi-auth-e1-s3']);
+function demoWorkItems(): WorkItem[] {
+  return MOCK_WORK_ITEM_SEEDS.map((seed) => {
+    const item = normalizeSeed(seed);
+    if (!DEMO_UNSTARTED.has(item.id)) return item;
+    return { ...item, status: 'open', prUrl: null, prStatus: null, completedAt: null };
+  });
 }
 
 /**
@@ -399,6 +427,7 @@ function largeWorkItems(): WorkItem[] {
  *             state a fully seeded board can never show.
  * `large`   — the seed replayed across `LARGE_ROUNDS` rounds (see above), for
  *             both the board-wide and the per-initiative caps.
+ * `demo`    — Auth Migration's sprint before any of it started (demoWorkItems).
  *
  * The rows are built in the factory, not at module scope, so `projectName` is
  * resolved after providers/projects.ts has finished evaluating (see the import
@@ -410,6 +439,7 @@ export const workItems = defineFixture<WorkItem>({
     default: () => MOCK_WORK_ITEM_SEEDS.map((seed) => normalizeSeed(seed)),
     empty: () => [],
     large: largeWorkItems,
+    demo: demoWorkItems,
     // An initiative with no work and an initiative whose work could not be
     // read look identical without this — and the second is the one where the
     // progress and spend figures above the table are computed from nothing.
@@ -437,4 +467,18 @@ export function nextMockWorkItemId(): string {
     if (m) max = Math.max(max, Number(m[1]));
   }
   return `wi-mock-${max + 1}`;
+}
+
+function reservedWorkKeyNumber(prefix: string): number {
+  return Math.max(0, ...Object.values(SEEDED_WORK_KEYS)
+    .filter(key => key.startsWith(`${prefix}-`)).map(key => Number(key.slice(prefix.length + 1))));
+}
+
+/** Mirrors the database namespace rule; resets restore the same seeded keys. */
+export function nextMockWorkItemKey(projectId: string): string {
+  const name = projectId.replace(/^p-/, '').replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-+|-+$/g, '').toUpperCase() || 'WORK';
+  const prefix = WORK_KEY_PREFIXES[projectId] ?? `ORG-${name}-${createHash('md5').update(projectId).digest('hex').slice(0, 6).toUpperCase()}`;
+  const live = workItems.rows().filter(item => item.projectId === projectId && item.key?.startsWith(`${prefix}-`));
+  const high = Math.max(reservedWorkKeyNumber(prefix), ...live.map(item => Number(item.key!.slice(prefix.length + 1))));
+  return `${prefix}-${high + 1}`;
 }

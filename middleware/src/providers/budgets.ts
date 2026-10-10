@@ -521,6 +521,25 @@ export async function getBudget(orgProjectId: string): Promise<BudgetRow | null>
   return rows[0] ? rowToBudget(rows[0]) : null;
 }
 
+/** The recurring cron floor over the trailing 30 days — the mock analogue of
+ *  v_initiative_maintenance_30d (schema/program_schema.sql): cron-triggered
+ *  costed runs attributed to the initiative, started within 30 days of now. */
+export interface Maintenance30d { cronRuns: number; costUsd: number }
+
+export async function getMaintenance30d(orgProjectId: string): Promise<Maintenance30d> {
+  if (config.mock.aurora) {
+    const from = clock.now().getTime() - 30 * 86_400_000;
+    const runs = costed(mockRunsAttributedTo(orgProjectId))
+      .filter((r) => r.trigger === 'cron' && Date.parse(r.startedAt) > from);
+    return { cronRuns: runs.length, costUsd: sumBy(runs, 'costUsd', { digits: COST_SCALE }) };
+  }
+  const rows = await safeExec(
+    `SELECT cron_runs_30d, maintenance_cost_30d_usd::float8 AS cost FROM v_initiative_maintenance_30d WHERE org_project_id = :pid`,
+    [s('pid', orgProjectId)],
+  );
+  return { cronRuns: toNum(rows[0]?.['cron_runs_30d']), costUsd: toNum(rows[0]?.['cost']) };
+}
+
 /** Does the initiative exist? Mock mode answers true and lets the write path
  *  return its 503 — a 404 would misreport "no Aurora" as "no such project". */
 export async function initiativeExists(orgProjectId: string): Promise<boolean> {

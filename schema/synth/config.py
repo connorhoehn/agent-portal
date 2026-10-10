@@ -15,6 +15,7 @@ CACHE_DIR.mkdir(exist_ok=True)
 NOVA_PRO = "amazon.nova-pro-v1:0"
 NOVA_LITE = "amazon.nova-lite-v1:0"
 TITAN_V2 = "amazon.titan-embed-text-v2:0"
+NOVA_CANVAS = "amazon.nova-canvas-v1:0"   # image generation (avatars)
 EMBEDDING_DIM = 1024
 
 

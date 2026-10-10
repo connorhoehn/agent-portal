@@ -21,6 +21,7 @@ import { DevboxStack } from '../lib/devbox-stack';
 import { SocialImagesStack } from '../lib/social-images-stack';
 import { SocialMediaStack } from '../lib/social-media-stack';
 import { SocialStack } from '../lib/social-stack';
+import { PortalStack } from '../lib/portal-stack';
 
 const app = new cdk.App();
 
@@ -96,10 +97,21 @@ const authorization = new AuthorizationStack(app, 'OrgIQ-Authorization', {
 //     --context authCallbackUrls=https://mw.example.com/api/auth/callback \
 //     --context authLogoutUrls=https://portal.example.com/
 // -------------------------------------------------------------------
-const authCallbackUrls = (app.node.tryGetContext('authCallbackUrls') as string | undefined)
+//
+// `--context portalPublicUrl=https://<id>.cloudfront.net` (OrgIQ-Portal's
+// `PortalUrl` output) registers that origin's callback and sign-out URL too —
+// the no-domain HTTPS path (docs/social-calls-deploy-plan.md §10). A context
+// value, not an import: this stack deploys long before OrgIQ-Portal exists.
+const portalPublicUrl = (app.node.tryGetContext('portalPublicUrl') as string | undefined)?.trim().replace(/\/+$/, '');
+if (portalPublicUrl !== undefined && !/^https:\/\/[^/\s]+$/.test(portalPublicUrl)) {
+  throw new Error(`portalPublicUrl must be an https:// origin (Cognito refuses http callbacks), got ${portalPublicUrl}`);
+}
+const splitList = (key: string) => (app.node.tryGetContext(key) as string | undefined)
   ?.split(',').map(s => s.trim()).filter(Boolean);
-const authLogoutUrls = (app.node.tryGetContext('authLogoutUrls') as string | undefined)
-  ?.split(',').map(s => s.trim()).filter(Boolean);
+const withPortal = (list: string[] | undefined, extra: string) =>
+  (portalPublicUrl ? [...(list ?? []), `${portalPublicUrl}${extra}`] : list);
+const authCallbackUrls = withPortal(splitList('authCallbackUrls'), '/api/auth/callback');
+const authLogoutUrls = withPortal(splitList('authLogoutUrls'), '/');
 const authentication = new AuthenticationStack(app, 'OrgIQ-Authentication', {
   env,
   prefix,
@@ -233,6 +245,11 @@ const agentCoreRuntime = new AgentCoreRuntimeStack(app, 'OrgIQ-AgentCoreRuntime'
   approvalsRequestSecret: app.node.tryGetContext('approvalsRequestSecret') as string | undefined,
   harnessTraceSecret: app.node.tryGetContext('harnessTraceSecret') as string | undefined,
   assessmentRunCompleteSecret: app.node.tryGetContext('assessmentRunCompleteSecret') as string | undefined,
+  // MIDDLEWARE_URL for those callbacks. A deployed runtime cannot reach the
+  // ALB (PUBLIC network mode, AWS addresses outside albAllowCidr) but can
+  // reach CloudFront, which the ALB admits — so the portal URL is the
+  // default; `middlewareCallbackUrl` names anything else.
+  middlewareUrl: (app.node.tryGetContext('middlewareCallbackUrl') as string | undefined) ?? portalPublicUrl,
   description: 'OrgIQ AgentCore Runtime: 8 agent runtimes with lifecycle and endpoint config',
 });
 agentCoreRuntime.addDependency(agents);
@@ -423,6 +440,9 @@ const middlewareService = new MiddlewareServiceStack(app, 'OrgIQ-MiddlewareServi
   // AgentCore identifiers (from AgentCoreMemoryStack + KnowledgeBaseStack)
   browserId: agentCoreCapabilities.browserId,
   browserArn: agentCoreCapabilities.browserArn,
+  // CODE_INTERPRETER_ID / BROWSER_PROFILE_ID by SSM name from the
+  // capabilities stack (no import, no freeze) + the code-interpreter grant.
+  capabilityParameters: true,
   memoryId: cdk.Fn.importValue(`${prefix}-memory-id`),
   // `--context kbId=<id>` overrides the CFN import. The KnowledgeBase stack's
   // exports are imported by four other stacks, so a knowledge base deleted
@@ -445,6 +465,9 @@ middlewareService.addDependency(authorization);
 middlewareService.addDependency(agentCoreMemory);
 middlewareService.addDependency(knowledgeBase);
 middlewareService.addDependency(guardrails);
+// The capability-id SSM parameters are read by name, which creates no CDK
+// dependency (the PromptCanary race): they must exist before this deploys.
+middlewareService.addDependency(agentCoreCapabilities);
 
 // -------------------------------------------------------------------
 // Stacks 16-18: Social calls (docs/social-calls-deploy-plan.md). All opt-in —
@@ -520,6 +543,35 @@ if (deploySocial) {
   social.addDependency(authentication);
   if (socialImages) social.addDependency(socialImages);
   if (socialMedia) social.addDependency(socialMedia);
+}
+
+// -------------------------------------------------------------------
+// Stack 19: Portal (opt-in) — the portal bundle on S3 behind CloudFront, and
+// HTTPS without a domain: CloudFront's *.cloudfront.net certificate fronts
+// the middleware (/api, /ws), and, with the social flags, platform-api and
+// the SFU's signalling on their own distributions (lib/portal-stack.ts).
+//
+//   deployPortal=true        OrgIQ-Portal, plus the ALB side on the middleware
+//                            and social stacks (prefix list, origin secret,
+//                            header rules) — pass it to every one of them
+//   portalPublicUrls=true    a LATER middleware deploy: read the public URLs
+//                            back from OrgIQ-Portal's SSM parameters
+//   portalPublicUrl=https://…  Cognito callback/sign-out + the runtimes'
+//                            MIDDLEWARE_URL (copied from the PortalUrl output)
+//
+// It imports only `<prefix>-middleware-alb-dns`, an export the middleware
+// has always had, and the origin secret BY NAME — no new export to freeze.
+// -------------------------------------------------------------------
+if (ctxFlag('deployPortal')) {
+  const portal = new PortalStack(app, 'OrgIQ-Portal', {
+    env,
+    prefix,
+    loadBalancerDnsName: cdk.Fn.importValue(`${prefix}-middleware-alb-dns`),
+    platformApi: deploySocial,
+    sfu: deploySocialMedia,
+    description: 'OrgIQ Portal: S3 + CloudFront for the portal, HTTPS in front of the middleware, platform-api and SFU signalling',
+  });
+  portal.addDependency(middlewareService);
 }
 
 app.synth();

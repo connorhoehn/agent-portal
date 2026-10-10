@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
-  PageSection, Card, Stack, Inline, Divider, SectionLabel, Button, Switch, RadioGroup,
+  PageSection, Card, Stack, Inline, Divider, SectionLabel, Button, Switch, RadioGroup, T,
 } from '@connorhoehnslalom/ui-components/shared';
-import { T } from './Text';
 import { RangeSliderFrame } from './RangeSliderFrame';
 import { SettingRow } from '../components/settings';
 import { loadPreferences, savePreferences, DEFAULTS } from '../lib/preferences';

@@ -1,50 +1,38 @@
 // Stable hierarchy: Initiative views → initiative/sprint list → content.
-// Project tabs retain their parents; Work adds its own list inside the pane.
+// Project tabs retain their parents; focused Work uses the existing list rail.
 // The section parent closes descendants; URL-backed breadcrumbs reopen them.
 
-import { useCallback, useState, type ReactNode } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router';
+import { useEffect, useState, type ReactNode } from 'react';
+import { useLocation, useNavigate, useSearchParams } from 'react-router';
 import {
   ExplorerLayout,
-  ScopeHeader,
+  ListRailLayout,
   ViewportFillRegion,
-  type WorkspaceRailBack,
+  useSidePaneHost,
+  type ListRail,
 } from '@connorhoehnslalom/ui-components';
-import { Breadcrumbs, EmptyState, RailNavList, Stack, SubNavLayout, activeNavItemClassName, inactiveNavItemClassName } from '@connorhoehnslalom/ui-components/shared';
+import { Breadcrumbs, Modal, RailNavList, Stack, useRailFold, type BreadcrumbItem } from '@connorhoehnslalom/ui-components/shared';
 import { initiativeBreadcrumbs, initiativeListHref, type InitiativeCrumb } from './initiativeNavigation';
+import { useDialogueRailFold } from '../../components/shell/useDialogueRailFold';
 
-/**
- * Slots for the initiative/sprint list, shared by list and detail routes.
- */
-export interface ExplorerRailSlots {
+export interface InitiativesExplorerProps {
+  /** The list rail (the library rail model's `ListRail`): the initiative/sprint list, or on a work item the work list. */
+  rail: ListRail;
   scope?: 'all' | 'mine';
   lens?: 'initiatives' | 'sprints';
-  /** "All initiatives", "My initiatives", or "Sprints". */
-  railTitle: string;
-  /** The count chip after the title. Omit when it is unknown or capped. */
-  railCount?: number;
-  /** Optional parent link above the title. */
-  railBack?: WorkspaceRailBack | null;
-  /** Controls in the title row, such as the sort/filter menu. */
-  railActions?: ReactNode;
-  /** Search under the list title. Views belong to the parent navigation. */
-  railHeader?: ReactNode;
-  /** The scrolling body. */
-  rail: ReactNode;
-  /** The fixed footer: "14 initiatives", "Personal view". */
-  railFooter?: ReactNode;
   /** Offer the « fold. */
   collapsible?: boolean;
-  /** What the rail holds, for the fold controls' names. */
-  railLabel?: string;
-}
-
-export interface InitiativesExplorerProps extends ExplorerRailSlots {
   /** Keep views and initiative rows together, as in the initiative detail mockup. */
   combinedNavigation?: boolean;
+  /** A selected item replaces initiative browsing with its existing work list. */
+  focusedWork?: boolean;
   breadcrumbs?: InitiativeCrumb[];
-  /** The band over the pane: `ScopeHeader` (title, pill, tabs). */
-  paneHeader?: ReactNode;
+  /**
+   * The band over the pane (title, pill, tabs). A function receives the
+   * clickable trail and draws it itself — the library `PageHeader`'s
+   * `breadcrumbs`, so a collapsed header can fold its title into the trail.
+   */
+  paneHeader?: ReactNode | ((trail: BreadcrumbItem[]) => ReactNode);
   /** The pane body. It scrolls; the header and composer do not. */
   children: ReactNode;
   /** Docked under the pane — normally `<InitiativeComposer>`. */
@@ -52,20 +40,18 @@ export interface InitiativesExplorerProps extends ExplorerRailSlots {
   'data-testid'?: string;
 }
 
+// The « fold, remembered per depth band (the library rail model, `useRailFold`):
+// `initiatives.rail-collapsed.shallow` on lists and records, `.deep` on a work
+// item — a fold set on a list never leaves a deep page without its work list.
 const RAIL_FOLD_KEY = 'initiatives.rail-collapsed';
 
-function readFolded(): boolean {
-  try { return localStorage.getItem(RAIL_FOLD_KEY) === '1'; } catch { return false; }
-}
-
 export function InitiativesExplorer({
-  railTitle, railCount, railBack, railActions, railHeader, rail, railFooter,
-  collapsible = false, railLabel = 'initiatives',
-  paneHeader, children, composer, scope = 'all', lens = 'initiatives', breadcrumbs, combinedNavigation = false, 'data-testid': testId,
+  rail, collapsible = false,
+  paneHeader, children, composer, scope = 'all', lens = 'initiatives', breadcrumbs, combinedNavigation = false, focusedWork = false, 'data-testid': testId,
 }: InitiativesExplorerProps) {
   const navigate = useNavigate();
   const [search] = useSearchParams();
-  const atSection = search.get('nav') === 'section';
+  const { pathname } = useLocation();
   const views = [
     { path: initiativeListHref(search, 'all'), label: 'All initiatives', active: lens === 'initiatives' && scope === 'all' },
     { path: initiativeListHref(search, 'mine'), label: 'My initiatives', active: lens === 'initiatives' && scope === 'mine' },
@@ -79,14 +65,37 @@ export function InitiativesExplorer({
       navigate(crumb.href!);
     } } : {}),
   }));
-  const [folded, setFolded] = useState(readFolded);
-  const toggle = useCallback(() => {
-    setFolded((was) => {
-      const next = !was;
-      try { localStorage.setItem(RAIL_FOLD_KEY, next ? '1' : '0'); } catch { /* private mode */ }
-      return next;
-    });
+  const railFold = useRailFold({ storageKey: RAIL_FOLD_KEY });
+  const dialogue = useSidePaneHost();
+  const { folded, toggle } = useDialogueRailFold(dialogue.shown, railFold, pathname);
+  const [narrow, setNarrow] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches);
+  const [mobileWorkOpen, setMobileWorkOpen] = useState(false);
+  // The work list is the section rail: it stays open on a deep page. When
+  // space is short the shell folds the PRIMARY rail first
+  // (the shell's rail rule, Layout.tsx); this list folds only on a
+  // phone-width window (the `narrow` modal) or by the reader's own «.
+  const selectedItem = search.get('item');
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 767px)');
+    const update = () => setNarrow(media.matches);
+    update(); media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
   }, []);
+  useEffect(() => { setMobileWorkOpen(false); }, [selectedItem, focusedWork, narrow]);
+
+  const viewsNav = (
+    <RailNavList aria-label="Initiative views" currentStyle="tint" items={views.map((view) => ({
+      id: view.path, href: view.path, label: view.label, current: view.active,
+      onNavigate: (event) => {
+        if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+        event.preventDefault(); navigate(view.path);
+      },
+    }))} />
+  );
+  // The trail is the content column's first row at the 24px gutter: the
+  // padding is on its row, so the trail's own box starts at the gutter.
+  const crumbs = <Stack gap="none" className="px-6 pb-1 pt-3"><Breadcrumbs items={trail} separator="›" data-testid="initiative-breadcrumbs" /></Stack>;
+  const band = typeof paneHeader === 'function' ? paneHeader(trail) : <>{crumbs}{paneHeader}</>;
 
   return (
     <ViewportFillRegion bottomGap={0} data-testid={testId ?? 'initiatives-explorer'}>
@@ -94,63 +103,43 @@ export function InitiativesExplorer({
         {combinedNavigation ? (
           <ExplorerLayout
             className="min-h-0 min-w-0 flex-1"
-            railWidth="ms"
+            railWidth={focusedWork ? 'md' : 'ms'}
             railHeading="caption"
             railCountStyle="plain"
-            railTitle="Initiatives"
-            railCount={railCount}
-            railActions={railActions}
-            railLabel="initiatives"
-            railHeader={<Stack gap="md">
-              <RailNavList aria-label="Initiative views" currentStyle="tint" items={views.map((view) => ({
-                id: view.path, href: view.path, label: view.label, current: view.active,
-                onNavigate: (event) => {
-                  if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
-                  event.preventDefault(); navigate(view.path);
-                },
-              }))} />
-              {railHeader}
-            </Stack>}
-            rail={rail}
-            railFooter={railFooter}
+            railTitle={focusedWork ? rail.title : 'Initiatives'}
+            railCount={rail.count}
+            railActions={rail.actions}
+            railLabel={focusedWork ? rail.label : 'initiatives'}
+            railCollapsed={folded || (focusedWork && narrow)}
+            onToggleRail={collapsible ? focusedWork && narrow ? () => setMobileWorkOpen(true) : toggle : undefined}
+            railHeader={focusedWork ? rail.header : <Stack gap="md">{viewsNav}{rail.header}</Stack>}
+            rail={rail.body}
+            railFooter={rail.footer}
             panePadding="none"
-            paneHeader={<><Breadcrumbs items={trail} separator="›" className="px-6 pt-3 pb-1" data-testid="initiative-breadcrumbs" />{paneHeader}</>}
+            paneHeader={band}
             paneFooter={composer}
           >{children}</ExplorerLayout>
         ) : (
-        <SubNavLayout title="Initiatives" items={views} railLabel="Initiative views" contentAs="section" contentLabel="Initiatives workspace"
-          renderNavItem={(item, body) => {
-            const active = !atSection && views.find((view) => view.path === item.path)?.active;
-            return <Link to={item.path} aria-current={active ? 'page' : undefined} className={active ? activeNavItemClassName : inactiveNavItemClassName}>{body}</Link>;
-          }}>
-        {atSection ? <Stack gap="none" className="h-full min-h-0">
-          <ScopeHeader breadcrumbs={[{ label: 'Plan' }, { label: 'Initiatives' }]} title="Initiatives" />
-          <EmptyState size="sm" title="Browse initiatives" description="Choose All initiatives, My initiatives, or Sprints to open its list." />
-        </Stack> : (
-        <ExplorerLayout
-          className="min-h-0 flex-1"
-          railWidth="ms"
-          railHeading="caption"
-          railCountStyle="chip"
-          railTitle={railTitle}
-          {...(railCount != null ? { railCount } : {})}
-          railBack={railBack ?? null}
-          railActions={railActions}
-          railHeader={railHeader}
-          railFooter={railFooter}
-          railLabel={railLabel}
-          {...(collapsible ? { railCollapsed: folded, onToggleRail: toggle } : {})}
-          rail={rail}
-          panePadding="none"
-          asidePlacement="beside"
-          paneHeader={<><Breadcrumbs items={trail} separator="›" className="px-6 pt-2 pb-1" data-testid="initiative-breadcrumbs" />{paneHeader}</>}
-          paneFooter={composer}
+        // The list routes (All / My / Sprints) take the same single section
+        // rail as an initiative: the views over the list, never a views rail
+        // beside a list rail (docs/layout-cascade.md — at most two rails).
+        <ListRailLayout
+          list={{ ...rail, header: <Stack gap="md">{viewsNav}{rail.header}</Stack> }}
+          {...(collapsible ? { fold: { folded, onToggle: toggle } } : {})}
+          header={band}
+          footer={composer}
         >
           {children}
-        </ExplorerLayout>
+        </ListRailLayout>
         )}
-        </SubNavLayout>
-        )}
+        {focusedWork && narrow && <Modal open={mobileWorkOpen} onClose={() => setMobileWorkOpen(false)}
+          title="Work items" maxWidth={480}>
+          <Stack gap="md" className="h-[70dvh] min-h-0" data-testid="mobile-work-navigation">
+            {rail.header}
+            <Stack gap="none" className="min-h-0 flex-1 overflow-y-auto">{rail.body}</Stack>
+            {rail.footer}
+          </Stack>
+        </Modal>}
       </Stack>
     </ViewportFillRegion>
   );

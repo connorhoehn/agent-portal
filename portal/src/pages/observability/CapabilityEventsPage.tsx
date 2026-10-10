@@ -73,7 +73,7 @@ function CapabilityEventsPage() {
     >
       <Card padding="md">
         {filtered.length === 0 ? (
-          <InlinePlaceholder align="center" className="p-6 text-[12px]">
+          <InlinePlaceholder align="center" className="text-xs p-6">
             {events.length === 0 ? (
               <>
                 No browser or code-interpreter activity in this process. The feed is
@@ -87,7 +87,7 @@ function CapabilityEventsPage() {
             ) : 'No events match the current filter.'}
           </InlinePlaceholder>
         ) : (
-          <Table>
+          <Table size="sm">
             <TableHead>
               <TableRow>
                 <TableTh>Session</TableTh>
@@ -103,10 +103,10 @@ function CapabilityEventsPage() {
                 const detailText = formatCapDetail(ev);
                 return (
                   <TableRow key={ev.id}>
-                    <TableTd className="text-[10px] font-mono text-[var(--color-text-tertiary)]">
+                    <TableTd className="font-mono text-[var(--color-text-tertiary)]">
                       {ev.sessionId ? ev.sessionId.slice(0, 12) + '…' : '—'}
                     </TableTd>
-                    <TableTd className="text-[11px] text-[var(--color-text-tertiary)] whitespace-nowrap" title={new Date(ev.startedAt).toLocaleString()}>
+                    <TableTd className="text-[var(--color-text-tertiary)] whitespace-nowrap" title={new Date(ev.startedAt).toLocaleString()}>
                       {relativeTime(ev.startedAt)}
                     </TableTd>
                     <TableTd>
@@ -115,12 +115,12 @@ function CapabilityEventsPage() {
                       </Chip>
                     </TableTd>
                     <TableTd
-                      className="text-[12px] max-w-[380px] overflow-hidden text-ellipsis whitespace-nowrap"
+                      className="text-xs max-w-[380px] overflow-hidden text-ellipsis whitespace-nowrap"
                       title={detailText}
                     >
                       {detailText}
                     </TableTd>
-                    <TableTd className="text-[11px] text-[var(--color-text-tertiary)]">
+                    <TableTd className="text-[var(--color-text-tertiary)]">
                       {(ev.durationMs / 1000).toFixed(2)}s
                     </TableTd>
                     <TableTd>

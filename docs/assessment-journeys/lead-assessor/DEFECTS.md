@@ -1,5 +1,15 @@
 # Defects found — lead-assessor journey audit (u-jonas)
 
+## Closed — 2026-10-07 08:08 — the dimension composer is below the fold on arrival (ui-components 2.427.0 MasterDetail paneFooter)
+
+Re-measured as u-jonas (lead-assessor) on /assessment/teams/TEAM-001 at 1680x940 after MasterDetail took the remaining height: on arrival, host column at scroll 0 and window scrollY 0, the composer input is at y=754-794 and its block at y=705-868, above the shell footer bar (top y=893) and inside the 940px viewport. Scrolling the dimension list (0 to 495) leaves the input at y=754; selecting another row leaves it at y=754. Zero console errors. The earlier record (input y=961-1001, block y=911-1075) is superseded. Detail: team-scorecard.md.
+
+Previous entry, kept as history:
+
+### Was open — 2026-10-07 07:58 — the dimension composer is below the fold on arrival (ui-components 2.427.0 MasterDetail paneFooter)
+
+Found as u-jonas (lead-assessor) on /assessment/teams/TEAM-001 at 1680x940: the composer's input is at y=961-1001 and its block at y=911-1075, past the 940px viewport and under the shell footer (starts y=893). The master-detail is 576px tall starting at y=500 inside a host column that ends at y=869 (scrollHeight 939, clientHeight 732); the host scrolls, and at scrollTop 207 the input reads y=754-794. The list itself behaves: the rail scrolls inside the pane (0 to 289) and the composer does not move while it does. The previous record had the composer top at y=707 on arrival. Likely cause: the pane is sized to a fixed height that does not account for the header, stat strip and tab rows above it. Not fixed here (audit rule). Detail: team-scorecard.md.
+
 Status reflects the Part 3 re-audit (2026-09-05, this session). All three
 items open at the end of the prior pass are now Closed, verified by
 re-testing the two re-audited surfaces (team-scorecard, workspace).
@@ -388,7 +398,7 @@ not by reading the fix. Numbering follows the Open entries they replace.
    re-render re-reads the real age; the 15-second presence heartbeat supplies
    the re-renders. Two tabs as u-jonas on
    `/assessment/rules?doc=rule:scoring-guardrails.md`, tab B saving at
-   `2026-09-07T08:41:43.616Z` and tab A left untouched and read repeatedly:
+   `2026-09-07T08:08:43.616Z` and tab A left untouched and read repeatedly:
 
    | elapsed since the save | banner text |
    |---|---|
@@ -844,3 +854,96 @@ Observed while walking, not new: #12 (account menu names roles by slug) reads fi
 5. **The prompt library is renamable by every ManageKnowledge role.** — **Closed 2026-09-29 09:20.** Fixed both sides: `KnowledgeExplorer.tsx` passes `onRename` only when `mode !== 'prompts'`, and `renameKnowledgeNode` (`middleware/src/providers/assessment.ts`) returns 409 for any `prompt:` id before looking the node up. Re-verified as u-jonas (lead-assessor), u-farah (program-lead) and u-operator (admin): all 9 prompt rows' ⋯ menus on `/assessment/prompts` hold **Open** only (Rename… on 0 of 9, for each role), the head ⋯ holds Read, Version history, Show outline, Print, Download as…; and `POST /api/assessment/knowledge/doc/rename {id:"prompt:draw-diagram.md", title:"Draw Diagram"}` answers `409 {"error":"prompts are read-only; edit them in the fleet asset library"}` for all three (u-asha, lacking ManageKnowledge, gets 403); the tree still reads “Draw Diagram”. Nothing was renamed this pass. Logs: lead-assessor/program-lead/admin `prompts.md` back to `verdict: pass`. The original report follows.
 
     Regression from today's rebuild. On `/assessment/prompts` each prompt row's ⋯ now offers **Rename…** to lead-assessor, program-lead and admin (the assessor sees Open only). It works end to end: as u-jonas, “Draw Diagram” → “Draw Diagram (audit rename)” returned `200 {"ok":true,"id":"prompt:draw-diagram.md",…,"section":"prompts"}` from `POST /api/assessment/knowledge/doc/rename` and the rail showed the new title (screenshot `lead-assessor/prompts-rename-defect.jpg`); renamed back, also 200. The committed `KnowledgeExplorer.tsx` rendered the row rename only inside `mayCreate` (`mode !== 'prompts'`); the working tree passes `onRename` to `DocumentRail` whenever `canDo('ManageKnowledge')` (`portal/src/pages/assessment/knowledge/KnowledgeExplorer.tsx:266`) with no prompts exclusion, and `DocumentRail`'s row menu offers Rename… for any `local` section — prompts is `kind: 'local'`. Owner: portal (`KnowledgeExplorer.tsx` — gate `onRename` on `mode !== 'prompts'`). Defence in depth, pre-existing: `renameKnowledgeNode` (`middleware/src/providers/assessment.ts:3245`) refuses synced sections but not the prompts section, so the server accepts it too. Logs: lead-assessor/program-lead/admin `prompts.md` carry `verdict: fail`.
+
+## Open — 2026-10-06 re-walk (headless, Tilt mock stack)
+
+1. **Section titles render as `<h1>`, so three pages carry several top-level headings.** Measured in the accessibility
+   sweep as u-jonas: `/assessment/reports` has four h1 (Portfolio, Certification heatmap, Where to start, By cohort),
+   `/assessment/runs` three (Activity, Run a command, Pipeline runs), `/assessment/configuration` three (Configuration,
+   Certification target, Cohort motions); the other surfaces have exactly one. Every h1 sits inside the one `<main>`; no
+   control lacks an accessible name (0 of 541 across the eleven surfaces). The page title is the first h1 in each case;
+   the sections under it are the `PageSection` titles. Fix belongs in the library's `PageSection` (level prop) or the
+   pages; not changed in this audit.
+2. **Environment limit, not a page defect — the document backend is down on this stack.** `/api/assessment/knowledge/canvas`
+   and `.../doc/workflows/comments` answer 503 ("Document collaboration is unavailable. Your existing document is
+   preserved."): the Tilt middleware's `SOCIAL_PLATFORM_INTERNAL_URL` points at the platform-api forward on :23002, and the
+   Colima docker daemon behind it refuses connections. The four explorer logs (workspace, enterprise, rules, prompts)
+   therefore record the two 503 console lines per load and could not observe editing, comments, presence or the
+   document call. Re-walk them once the social document stack is up (`node scripts/social-documents.mjs up`).
+
+
+
+## Open — 2026-10-06 17:00Z re-walk (two sessions, Chromium 1680×940, document backend up)
+
+3. **The four explorer rails no longer expose tree semantics.** Measured on workspace, enterprise, rules and prompts as u-jonas: `[role=tree]` 0, `[role=treeitem]` 0, no `aria-level`, no `aria-expanded`; the StackedRail renders buttons and list items. Every control still has a name, so nothing is unnamed, but a screen-reader user no longer hears level or expanded state for the Engineering Space hierarchy and the rail is a run of tab stops instead of one roving tree entry. Page/library work, not changed in this audit; the earlier "tree has no aria-label" note is moot.
+4. **Dismiss after Accept errors (re-confirmed from code, evidence drafts).** After a follow-up draft is accepted the card's button reads "Dismiss" but calls the discard route, which answers 409 "This draft was already accepted"; the card stays and shows the error. `EvidenceDraftsPanel.tsx` (`discard`, label `decided ? 'Dismiss' : 'Discard'`), `routes/assessment-drafts.ts` discard handler. Not run live because accepting adds rows to a shared team.
+5. **Accept can create rows and then answer 409 "already decided" when another assessor discards at the same moment.** The rows are written before the once-only decision claim; see the 17:00Z entry in REVIEW-2026-09-05.md. Low severity, idempotent by text.
+6. **Resolved environment limit.** Item 2 of the earlier 2026-10-06 re-walk (document backend down, canvas and comments 503) no longer holds: platform-api and the social gateway are up and the explorer logs now observe the real canvas, presence, proposals and chat (stretch/realtime.md).
+
+
+## Closed or reclassified — re-verified 2026-10-06 (Chromium 1680×940, one context per role, ui-components 2.420.0, no restarts)
+
+3. **Reclassified — the explorer rails are not trees, and that is the design.** Measured on all four explorer pages: `[role=tree]` and `[role=treeitem]` are 0 because the rail is the library's `StackedRail` inside `nav[aria-label=Explorer]`, not a tree widget. It does carry `aria-expanded` on group headers (prompts: 1 true, 10 false) and a roving tab stop (one row `tabindex=0`, twelve `-1`); ArrowDown from "Classify Transcript" moved focus to "Score Dimensions". Every control has a name. The earlier entry compared a nav to a tree and called it a regression; it is neither. One narrow gap remains and is a library question, not a defect here: rows expose no `aria-level`, so nesting depth is not announced.
+4. **Closed — Dismiss after Accept no longer errors.** Live, as u-jonas on TEAM-007 dimension 3: drafted follow-ups, accepted (POST `/drafts/:id/accept`), the card then read "Dismiss", and clicking it sent no request (only the followups and accept POSTs were recorded), removed the card and logged 0 console errors. `EvidenceDraftsPanel.tsx` hides an accepted card locally. Side effect: Accept added 3 follow-up questions to TEAM-007 dimension 3 in the mock; they were left in place because `POST /api/__mock/reset` would wipe other sessions' state.
+5. **Closed — Accept and Discard are decided by one claim and the loser creates nothing.** `assessment-drafts.ts` claims the decision before `addFollowUps` and releases it if the write fails. Raced on a fresh draft (u-jonas Accept with baseRevision 1, u-asha Discard, simultaneous): Discard 200, Accept 409 "This draft was already discarded", draft ended `discarded`, no questions created; a second Discard answered 409 "already discarded". In the browser, a Discard by u-farah removed u-jonas's card within the poll interval, so the loser's Accept button was gone rather than failing.
+- **Closed — named search inputs (the older #4 and #6).** Dashboard `/assessment/teams` input has `aria-label="Search teams"`; Feedback `/assessment/feedback` input has `aria-label="Search questions"`.
+
+## 2026-10-06 footer re-walk
+
+- Minor: the workspace Explorer section heading "Engineering Space (Confluence)" is cut with an ellipsis (141px into 213px) and has no title, so the full name is unreachable. Repro: /assessment/workspace?doc=page%3A100002 at 1680px; likely the library StackedRail section header (portal/src/pages/assessment/knowledge/DocumentRail.tsx). Not a regression of the footer work.
+
+## 2026-10-06 dimension composer re-walk
+
+- CLOSED 2026-10-06 19:00 (final re-walk: Pinned view reads "Nothing pinned yet", GET /api/chat/pins 200, 0 console errors; a pin and unpin by u-jonas both returned 200). Was: on /assessment/teams/TEAM-001 the Discussion tab's Pinned view reads "Pinned messages are unavailable: gateway request failed: 400" and logs one 400 console error as every assessment role. Repro: open the Discussion tab (any role), then the Pinned sub-tab area renders the message. Matches the known queued gap that Pinned needs /api/chat/pins for assessment channels.
+- CLOSED 2026-10-06 19:00 (composer docked at y=707-869 of 940, visible on arrival). Was: the dimension composer's top edge is at y=1593 in a 940px viewport, so on arrival the Chat | Agent block is not visible and has to be found by scrolling the page.
+
+## 2026-10-06 20:16 activity graph re-walk
+
+- Minor, open: the assessment rail now has two near-identical entries, 'Activity graph' (/assessment/activity, the work graph) and 'Activity' (/assessment/runs, the agent run ledger); the command palette query 'Activity' returns both ('Activity graph' and 'Activity — Agent run ledger'). A person scanning the rail cannot tell which is which without hovering. Repro: sign in as this role, open /assessment/teams, read the rail. Not fixed here (no code changes in a re-walk).
+- Observation, not a defect: /assessment/activity shows 6 nodes at 1680x940 while GET /api/assessment/work-graph/workspace/graph returns 27; the canvas windows to the viewer's visible region, and the team Activity tab shows its 3 (TEAM-001) or 20 (TEAM-006 after a run) nodes.
+
+## 2026-10-06 23:04 local re-walk (single input, huddle grid, ui-components 2.423.0, realtime-modules 0.113.0)
+
+- Closed 2026-10-06 23:28 local: on a document page, typing in the page composer (Chat mode) now publishes a typing indicator. Observed with u-farah and u-jonas on /assessment/workspace?doc=page%3A100002, both with the context column's Chat tab open: while u-jonas typed in the page composer, u-farah's pane read "Jonas Lindqvist is typing…"; the message he sent arrived in her pane and survived a fresh load. The same indicator appeared for u-farah on TEAM-001's Discussion tab while u-jonas typed in the dimension composer in Chat mode. 0 console errors in both sessions. Originally filed at 23:04 (cause: typing was only wired to the pane's own composer); fixed by `pageComposerTypingHandler` in `DocumentConversation.tsx` and `DimensionComposer.tsx`.
+- Closed: the two near-identical rail entries ('Activity graph' vs 'Activity'). The rail now reads Work graph (/assessment/activity) under Analyze and Activity (/assessment/runs) under System.
+- Still open, unchanged: the workspace Explorer section heading "Engineering Space (Confluence)" is cut with an ellipsis and has no title (1 clipped-text hit on /assessment/workspace, 0 on enterprise/rules/prompts for the assessor, 1 on the lead roles' enterprise page, the heading "Enterprise Context").
+- Observation, not a defect: the Certification tab's evidence-coverage strip (Attested / Documented / Observed) now sits inside a collapsed "Assessment progress & evidence coverage" disclosure; it reads "Attested 1 · Documented 13 · Observed 1 · N/A 2" once opened. PROTOCOL.md still says the tab "opens with" the strip, so that sentence is slightly out of date.
+- Residue left by this walk, for whoever resets the mock: one chat message ("walk check 2026-10-06 typing", u-jonas) in the Rubric Overview thread, and a scratch draft "Journey walk scratch 2026-10-06 c" with one typed line. Seeded Rubric Overview still carries the repeated "opens.NeNext step: …" lines from earlier edit tests.
+
+- Residue from the 23:28 re-walk: one more copy of the same chat message ("walk check 2026-10-06 typing", u-jonas) in the Rubric Overview thread, plus one more typed line in the scratch draft.
+
+## 2026-10-07 00:25 re-walk (live cursors, message edit/delete)
+
+- Minor, open: the deleted-message row shows its sender as the raw client id ("c_muxlj2", avatar "C_") instead of the person's display name, on the author's own screen and on the peer's, so a deleted line loses who wrote it. Repro: as u-jonas open /assessment/workspace?doc=page%3A100002, open Chat in the context column, send a line from the Chat-mode composer, hover it, Delete, confirm. The same row appears in the orgiq initiative discussion, the pipelines run discussion and the social channel, DM and team panes (observed in each). Not fixed here (no code changes in a re-walk); it looks like the library's tombstone renderer, not a page.
+- Validator red, open: `validate-assessment-tenant.sh --quick` fails "imports integrations/realtime-modules (breaks vite build without @tiptap/react)" because `portal/src/pages/assessment/knowledge/CanvasDocumentPane.tsx` imports `WrappedCursorOverlay` from `@connorhoehnslalom/ui-components/integrations/realtime-modules`. Whether the production build actually breaks was not re-tested in this pass; the check is a source grep.
+- Residue from this audit, cleaned: four proposed-edit cards (drafter sends made while the composer was still in Agent mode) were discarded and one chat message deleted; two deleted-message rows remain in the Rubric Overview thread.
+- Transient, not reproduced: the assessor's first Enterprise load showed the tab "Comments16" (the Rubric Overview count); three alternating loads did not repeat it.
+
+## 2026-10-07 01:11 re-walk (cursor import, deleted-row sender, Forward)
+
+- Closed, deleted-row sender: the deleted-message row now names the person. With u-jonas (lead-assessor) posting in the Rubric Overview document Chat pane and u-farah (program-lead) watching, Delete (confirmed with "Delete this message? It will be removed for everyone in this conversation.") left "JL Jonas Lindqvist 01:10 This message was deleted." on both screens with the text gone; the raw client id ("c_...", avatar "C_") from the 00:25 entry no longer appears. Same row observed in the Social channel, DM and team panes (social-journeys logs).
+- Closed, validator red on the cursor overlay import: `portal/src/pages/assessment/knowledge/CanvasDocumentPane.tsx` now imports `WrappedCursorOverlay` from `@connorhoehnslalom/ui-components/integrations/realtime`; `validate-assessment-tenant.sh --quick` reports "no integrations/realtime-modules imports" as passing, and the canvas still shows the labelled remote pointer (u-farah's reached u-jonas in 314 ms, labelled "Farah Osei"; 0 self pointers; gone 171 ms after she left; reverse 317 ms). Whether a production `vite build` is clean was not run in this pass; the dev server served the page with 0 console errors.
+- Observation, not a defect: Forward in an assessment conversation opens the picker but offers "Nowhere to send this — You can post in no other conversation right now", because an assessment-tenant session has no Social post authority; the picker names the origin as "a private conversation". Nothing could be forwarded from here (the delivered Social forward is recorded in social-journeys).
+- Residue from this audit: three chat messages and their deleted rows ("FWD assess ...", "ED assessment ...") in the Rubric Overview thread; the shared mock was not reset.
+
+## Open — 2026-10-08 — type-scale and layout-cascade findings on the re-walked routes
+
+Recorded from the 2026-10-08 re-walk as lead-assessor (live type census per route is in each log's notes) and the measured sweep contract (docs/journeys/contracts/type-scale.json, 09:34Z). The cascade sweep reports no violations for any of these routes. Not fixed here; no product code was edited.
+
+- /assessment/teams · title 20/600 · scale content 10/400; scale content 11/400 · rule: type scale (14/600 headings, 14/400 body, 12/400 meta, 20/600 page title; docs/journeys.md type-scale contract)
+- /assessment/enterprise · title 20/700 · scale content 10/400; scale content 13/400; scale content 13/500; scale content 16/400; scale content 16/600; scale rail 11/600; scale rail 13/500; siblings content 40|22 · rule: type scale (14/600 headings, 14/400 body, 12/400 meta, 20/600 page title; docs/journeys.md type-scale contract)
+- /assessment/feedback · title 20/600 · no sweep offenders · rule: type scale (14/600 headings, 14/400 body, 12/400 meta, 20/600 page title; docs/journeys.md type-scale contract)
+- /assessment/prompts · title 20/700 · scale content 10/400; scale content 11/400; scale content 13/400; scale content 13/500; scale content 13/600; scale content 16/400; scale content 16/600; scale rail 11/600; scale rail 13/500; siblings content 40|22|22|22 · rule: type scale (14/600 headings, 14/400 body, 12/400 meta, 20/600 page title; docs/journeys.md type-scale contract)
+- /assessment/reports · title 20/600 · actions content size=md; scale content 11/400; title-scale content 20/600 · rule: type scale (14/600 headings, 14/400 body, 12/400 meta, 20/600 page title; docs/journeys.md type-scale contract)
+- /assessment/rules · title 20/700 · scale content 10/400; scale content 13/400; scale content 13/500; scale content 16/400; scale content 16/600; scale rail 11/600; scale rail 13/500 · rule: type scale (14/600 headings, 14/400 body, 12/400 meta, 20/600 page title; docs/journeys.md type-scale contract)
+- /assessment/runs · title 20/600 · scale content 11/400; scale content 16/400; title-scale content 20/600 · rule: type scale (14/600 headings, 14/400 body, 12/400 meta, 20/600 page title; docs/journeys.md type-scale contract)
+- /assessment/submissions · title 20/600 · no sweep offenders · rule: type scale (14/600 headings, 14/400 body, 12/400 meta, 20/600 page title; docs/journeys.md type-scale contract)
+- /assessment/submissions?view=add · title 20/600 · no sweep offenders · rule: type scale (14/600 headings, 14/400 body, 12/400 meta, 20/600 page title; docs/journeys.md type-scale contract)
+- /assessment/teams/TEAM-001 · title 20/600 · actions content 16/600; scale content 10/400; scale content 10/600; scale content 11/400; scale content 11/700; scale content 16/400; scale content 16/600; scale content 18/700; siblings content 12|16 · rule: type scale (14/600 headings, 14/400 body, 12/400 meta, 20/600 page title; docs/journeys.md type-scale contract)
+- /assessment/workspace · title 20/700 · scale content 10/400; scale content 11/400; scale content 13/400; scale content 13/500; scale content 13/600; scale content 16/400; scale content 16/600; scale rail 11/600; scale rail 13/500; siblings content 40|22|22 · rule: type scale (14/600 headings, 14/400 body, 12/400 meta, 20/600 page title; docs/journeys.md type-scale contract)
+
+Scorecard dimension rail, measured live as lead-assessor: sibling group headings in one rail carry different sizes — Dimensions17 12/600; Claims to verify6 16/400; Verified9 16/400; Not applicable2 16/400; Testing & QE – Automated Tes 18/700. The sweep's `siblings content 12|16` offender is exactly this (the "Dimensions" heading is 12/600 while "Claims to verify / Verified / Not applicable" are 16/400). Rule: sibling headings share one size (layout cascade / type scale).
+
+Explorer pages (workspace, enterprise, rules, prompts): the page title is 20/700 where every other page is 20/600, and the content region draws 10/11/13/16/22/40px text outside the scale (sweep offenders above). The Explorer rail has no search control (menu offers only "Refresh library"); PROTOCOL.md still describes a searchable tree rail — open question, not a regression I can date.
+
+The earlier "composer below the fold" defect stays closed: the dimension composer input measured y=779-819 against the footer at y=893 on arrival.

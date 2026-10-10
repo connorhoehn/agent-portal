@@ -131,13 +131,10 @@ describe('addWorkItemComment — mock mode', () => {
     expect(settle!.id).toMatch(/^wic-[0-9a-f-]{36}$/);
   });
 
-  it('records a human comment with its author', async () => {
-    await addWorkItemComment('wi-auth-e2-b3', 'Picking this up.', { authorId: 'p-004' });
-    const feed = await getProjectActivity('p-auth-migration', { limit: 100 });
-    expect(feed.find((e) => e.subject === 'Logout leaves the legacy shim cookie alive'
-      && e.kind === 'comment')).toMatchObject({
-      action: 'commented on', actorId: 'p-004', actorName: 'Nora DaSilva',
-    });
+  it('refuses a human comment: the table is audit history, the thread orgiq:work:<id> is the store', async () => {
+    const before = (await getProjectActivity('p-auth-migration', { limit: 100 })).length;
+    await expect(addWorkItemComment('wi-auth-e2-b3', 'Picking this up.', { authorId: 'p-004' })).rejects.toThrow(/audit-only/);
+    expect((await getProjectActivity('p-auth-migration', { limit: 100 })).length).toBe(before);
   });
 });
 
@@ -151,5 +148,46 @@ describe('mockReprojectedIso', () => {
   it('leaves a stamp this process wrote alone — reprojecting it would land in the future', () => {
     const now = new Date().toISOString();
     expect(mockReprojectedIso(now)).toBe(now);
+  });
+});
+
+// The two readers that used to count work_item_comments (the feed above and
+// v_work_item_summary.comment_count) read the thread orgiq:work:<id> now — the
+// mock thread is the migration of the fixture (mock/social-channels.ts), so the
+// counts still derive from rows, and a post made after the migration counts.
+describe('the feed and the comment count read the thread', () => {
+  it('a new thread post raises the count and leads the feed; the table gains nothing', async () => {
+    const { createWorkItemComment, workThreadSummary } = await import('../work-items.js');
+    const seeded = workItemComments.rows().filter((c) => c.workItemId === 'wi-auth-e1-b4' && !c.isSystem).length;
+    const before = await workThreadSummary('wi-auth-e1-b4', null);
+    expect(before.commentCount).toBe(seeded);
+    const tableBefore = workItemComments.rows().length;
+
+    const posted = await createWorkItemComment('wi-auth-e1-b4',
+      { userId: 'u-nora', displayName: 'Nora DaSilva', personId: 'p-004' }, 'Terminal 401 on revocation, retry only on 403-expired.');
+
+    const after = await workThreadSummary('wi-auth-e1-b4', null);
+    expect(after.commentCount).toBe(seeded + 1);
+    expect(after.lastCommentAt).toBe(posted.createdAt);
+    expect(workItemComments.rows().length).toBe(tableBefore);
+
+    const feed = await getProjectActivity('p-auth-migration', { limit: 100 });
+    expect(feed.find((e) => e.id === posted.id)).toMatchObject({
+      kind: 'comment', action: 'commented on', actorId: 'p-004', actorName: 'Nora DaSilva', workItemId: 'wi-auth-e1-b4',
+    });
+  });
+
+  it("a reader's history floor applies to both readers", async () => {
+    const { workThreadSummary } = await import('../work-items.js');
+    const { socialChat } = await import('../../lib/social-chat.js');
+    const chat = socialChat(); await chat.ready;
+    const thread = await chat.chatStore.listMessages('orgiq:work:wi-obs-e1-b5', 100);
+    expect(thread.length).toBe(2);
+    // A member whose history starts at the first comment sees only the second.
+    await chat.membershipStore.putMember({ channel: 'orgiq:work:wi-obs-e1-b5', userId: 'u-late', role: 'member', addedBy: 'test',
+      addedAt: thread[0]!.timestamp, historyFrom: thread[0]!.timestamp, removedAt: null });
+    expect((await workThreadSummary('wi-obs-e1-b5', 'u-late')).commentCount).toBe(1);
+    const feed = await getProjectActivity('p-observability', { limit: 100, viewerUserId: 'u-late' });
+    expect(feed.filter((e) => e.workItemId === 'wi-obs-e1-b5' && e.kind === 'comment')).toHaveLength(1);
   });
 });

@@ -1,0 +1,90 @@
+PASS src/lib/__tests__/call-chat-durable.integration.test.ts (12.607 s)
+PASS src/lib/__tests__/realtime-gateway-isolation.test.ts (5.117 s)
+  ● Console
+
+    console.log
+      [realtime-gateway] serving /ws (chat, presence, calls, notifications); call state + inbox: memory; chat store: memory
+
+      at attachRealtimeGateway (src/lib/realtime-gateway.ts:882:11)
+
+PASS src/lib/__tests__/realtime-gateway-attachments.test.ts
+  ● Console
+
+    console.log
+      [realtime-gateway] serving /ws (chat, presence, calls, notifications); call state + inbox: memory; chat store: memory
+
+      at attachRealtimeGateway (src/lib/realtime-gateway.ts:882:11)
+
+    console.warn
+      [realtime-gateway] refused publish on channel 'social:ch:deck-reviews' for user '?' (org '?')
+
+      284 |   if (!ok) {
+      285 |     const who = ctx as Record<string, unknown> | null;
+    > 286 |     console.warn(`[realtime-gateway] refused ${kind} on channel '${channel}' for user '${String(who?.['userId'] ?? '?')}' (org '${String(who?.['org'] ?? '?')}')`);
+          |             ^
+      287 |   }
+      288 |   return ok;
+      289 | };
+
+      at LocalRealtimeRouter.authorizeChannel [as authorize] (src/lib/realtime-gateway.ts:286:13)
+      at LocalRealtimeRouter.sendToChannelScoped (node_modules/@connorhoehnslalom/realtime-modules/src/server/router.ts:365:28)
+      at LocalRealtimeRouter.sendToChannel (node_modules/@connorhoehnslalom/realtime-modules/src/server/router.ts:349:13)
+
+PASS src/lib/__tests__/realtime-gateway.test.ts
+  ● Console
+
+    console.log
+      [realtime-gateway] serving /ws (chat, presence, calls, notifications); call state + inbox: memory; chat store: memory
+
+      at attachRealtimeGateway (src/lib/realtime-gateway.ts:882:11)
+
+PASS src/lib/__tests__/realtime-gateway-social-dynamo.test.ts
+PASS src/lib/__tests__/realtime-gateway-social.test.ts
+PASS src/lib/__tests__/realtime-gateway-notifications.test.ts
+PASS src/lib/__tests__/realtime-gateway-live-authority.test.ts
+PASS src/lib/__tests__/realtime-gateway-tenants.test.ts
+PASS src/lib/__tests__/realtime-gateway-distillation.test.ts
+PASS src/lib/__tests__/call-features-cluster.integration.test.ts
+PASS src/routes/__tests__/dm-page-references.test.ts
+PASS src/lib/__tests__/distillation-realtime.test.ts
+PASS src/lib/__tests__/call-chat-gateway.test.ts
+  ● Console
+
+    console.log
+      [realtime-gateway] serving /ws (chat, presence, calls, notifications); call state + inbox: memory; chat store: memory
+
+      at attachRealtimeGateway (src/lib/realtime-gateway.ts:882:11)
+
+PASS src/lib/__tests__/distillation-live-authority.test.ts
+PASS src/routes/__tests__/social-bindings.test.ts
+{"type":"authz","decision":"DENY","action":"TenantScope","sub":"u-theo","role":"member","tenant":"orgiq","path":"/channels","reason":"route requires tenant=social","ts":"2026-10-06T01:58:51.819Z"}
+PASS src/routes/__tests__/people.test.ts
+{"type":"authz","decision":"DENY","action":"SharedPeople","sub":"anonymous","role":"-","path":"/shared","reason":"no session","ts":"2026-10-06T01:58:54.609Z"}
+PASS src/routes/__tests__/social-embedded.test.ts
+PASS src/lib/__tests__/gateway-run-feed.test.ts
+PASS src/routes/__tests__/people-dm-index.test.ts
+PASS src/lib/__tests__/gateway-run-feed-adversarial.test.ts
+PASS src/lib/__tests__/live-principal-scope.test.ts
+PASS src/routes/__tests__/call-chat.test.ts
+PASS src/lib/__tests__/tenant-channels.test.ts
+PASS src/lib/__tests__/dynamo-dispatch-optin.test.ts
+PASS src/lib/__tests__/dynamo-dispatch.test.ts
+PASS src/lib/__tests__/call-chat-lifecycle.test.ts
+PASS src/lib/__tests__/live-subscribers.test.ts
+PASS src/lib/__tests__/live-principal.test.ts
+PASS src/routes/__tests__/call-pages.test.ts
+PASS src/lib/__tests__/social-membership-fence.test.ts
+PASS src/lib/__tests__/call-pages-store.test.ts
+PASS src/lib/__tests__/call-pages-redis.integration.test.ts
+PASS src/lib/__tests__/direct-recipient.test.ts
+PASS src/lib/__tests__/health-probe.test.ts
+PASS src/lib/__tests__/call-chat-redis.integration.test.ts
+PASS src/lib/__tests__/call-chat-state.test.ts
+PASS src/providers/__tests__/identity-authoritative.test.ts
+
+Test Suites: 38 passed, 38 total
+Tests:       1 skipped, 418 passed, 419 total
+Snapshots:   0 total
+Time:        138.851 s, estimated 139 s
+Ran all test suites within paths "src/lib/__tests__/call-chat-durable.integration.test.ts", "src/lib/__tests__/call-chat-gateway.test.ts", "src/lib/__tests__/call-chat-lifecycle.test.ts", "src/lib/__tests__/call-chat-redis.integration.test.ts", "src/lib/__tests__/call-chat-state.test.ts", "src/lib/__tests__/call-features-cluster.integration.test.ts", "src/lib/__tests__/call-pages-redis.integration.test.ts", "src/lib/__tests__/call-pages-store.test.ts", "src/lib/__tests__/direct-recipient.test.ts", "src/lib/__tests__/distillation-live-authority.test.ts", "src/lib/__tests__/distillation-realtime.test.ts", "src/lib/__tests__/health-probe.test.ts", "src/lib/__tests__/live-principal.test.ts", "src/lib/__tests__/live-subscribers.test.ts", "src/lib/__tests__/realtime-gateway-distillation.test.ts", "src/lib/__tests__/realtime-gateway-isolation.test.ts", "src/lib/__tests__/realtime-gateway-live-authority.test.ts", "src/lib/__tests__/realtime-gateway-notifications.test.ts", "src/lib/__tests__/realtime-gateway-social-dynamo.test.ts", "src/lib/__tests__/realtime-gateway-social.test.ts", "src/lib/__tests__/realtime-gateway-tenants.test.ts", "src/lib/__tests__/realtime-gateway.test.ts", "src/lib/__tests__/social-membership-fence.test.ts", "src/providers/__tests__/identity-authoritative.test.ts", "src/routes/__tests__/call-chat.test.ts", "src/routes/__tests__/call-pages.test.ts", "src/routes/__tests__/dm-page-references.test.ts", "src/routes/__tests__/social-bindings.test.ts", "src/routes/__tests__/social-embedded.test.ts", "src/lib/__tests__/dynamo-dispatch-optin.test.ts", "src/lib/__tests__/dynamo-dispatch.test.ts", "src/lib/__tests__/gateway-run-feed-adversarial.test.ts", "src/lib/__tests__/gateway-run-feed.test.ts", "src/lib/__tests__/live-principal-scope.test.ts", "src/lib/__tests__/realtime-gateway-attachments.test.ts", "src/lib/__tests__/tenant-channels.test.ts", "src/routes/__tests__/people-dm-index.test.ts", "src/routes/__tests__/people.test.ts".
+Test results written to: ../docs/realtime-validation/2026-10-05/capacity-authority-scope/app-tests.json

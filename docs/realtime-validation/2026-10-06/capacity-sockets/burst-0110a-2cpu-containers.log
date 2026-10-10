@@ -1,0 +1,3 @@
+sockets=default cpus=2 mem=4096 image=orgiq-middleware:cluster-0110-validation sha256:7344ceceb89c8f5631f031d9de730f54f866c663fa9f9f691c901b2cd17fbb0c mode=metrics
+Started owned compiled BFF a container 81f781a9aa055de7429c90fca0534427a18fa6ecd911c1284d5befdde970cec6 port 3065 image sha256:7344ceceb89c8f5631f031d9de730f54f866c663fa9f9f691c901b2cd17fbb0c budget 2 CPU / 4096 MiB dynamoMaxSockets default indexWrites default peerLingerMs default
+Started owned compiled BFF b container 8b48568b2032809527aec2b77b336235d42e00ee850db67822e8545eea570f32 port 3066 image sha256:7344ceceb89c8f5631f031d9de730f54f866c663fa9f9f691c901b2cd17fbb0c budget 2 CPU / 4096 MiB dynamoMaxSockets default indexWrites default peerLingerMs default

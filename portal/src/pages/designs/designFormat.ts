@@ -109,3 +109,7 @@ export function nextStep(
       return 'Agents are iterating — nothing needs you yet.';
   }
 }
+
+/** Where design reviews are read from, as the clause UnavailableNotice joins
+ *  to "…, so this is unknown rather than empty." — not a bare noun. */
+export const DESIGNS_SOURCE = 'Design reviews are read from Aurora';

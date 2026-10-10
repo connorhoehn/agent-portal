@@ -40,7 +40,7 @@ export interface UserInfo {
 // ── Fallback seed mirror (matches schema/identity_schema.sql) ────────────────
 
 const FALLBACK_TENANTS: TenantInfo[] = [
-  { id: 'orgiq', displayName: 'OrgIQ', status: 'ACTIVE' },
+  { id: 'orgiq', displayName: 'Work', status: 'ACTIVE' },
   { id: 'assessment', displayName: 'Assessment', status: 'ACTIVE' },
   { id: 'social', displayName: 'Social', status: 'ACTIVE' },
   { id: 'pipelines', displayName: 'Pipelines', status: 'ACTIVE' },
@@ -73,11 +73,11 @@ const FALLBACK_USERS: UserInfo[] = [
   { id: 'u-nora', displayName: 'Nora DaSilva', email: 'nora.dasilva@orgiq.example', personId: 'p-004',
     grants: { orgiq: ['sme'], social: ['participant'] }, epoch: 0 },
   { id: 'u-eli', displayName: 'Eli Garcia', email: 'eli.garcia@orgiq.example', personId: 'p-011',
-    grants: { orgiq: ['sme'] }, epoch: 0 },
+    grants: { orgiq: ['sme'], social: ['participant'] }, epoch: 0 },
   { id: 'u-layla', displayName: 'Layla Hassan', email: 'layla.hassan@orgiq.example', personId: 'p-008',
-    grants: { orgiq: ['sme'] }, epoch: 0 },
+    grants: { orgiq: ['sme'], social: ['participant'] }, epoch: 0 },
   { id: 'u-caleb', displayName: 'Caleb Turner', email: 'caleb.turner@orgiq.example', personId: 'p-013',
-    grants: { orgiq: ['sme'] }, epoch: 0 },
+    grants: { orgiq: ['sme'], social: ['participant'] }, epoch: 0 },
   // Assessment tenant cast — see docs/assessment-tenant.md Roles (Cedar).
   { id: 'u-asha', displayName: 'Asha Nair', email: 'asha.nair@assessment.example', personId: null,
     grants: { assessment: ['assessor'], social: ['participant'] }, epoch: 0 },
@@ -102,6 +102,11 @@ const FALLBACK_USERS: UserInfo[] = [
     grants: { pipelines: ['operator'] }, epoch: 0 },
   { id: 'u-dara', displayName: 'Dara Whitfield', email: 'dara.whitfield@orgiq.example', personId: null,
     grants: { pipelines: ['pipeline-admin'] }, epoch: 0 },
+  // The Communication-plane walker for pipelines (docs/communication-plane-goal.md):
+  // a pipelines author who ALSO holds Social. Deliberately NOT part of the pure
+  // three-person cast above, whose outbound isolation walks need no Social grant.
+  { id: 'u-tomas', displayName: 'Tomás Ferreira', email: 'tomas.ferreira@orgiq.example', personId: null,
+    grants: { pipelines: ['author'], social: ['participant'] }, epoch: 0 },
 ];
 
 // ── RDS Data API helpers (local to this module) ──────────────────────────────
@@ -153,6 +158,12 @@ function groupGrants(rows: unknown[][]): Map<string, Grants> {
   return byUser;
 }
 
+/** The seeded login linked to an org-graph person (the fallback mirror of `app_users.person_id`), if any. */
+export function seedUserForPerson(personId: string): { id: string; displayName: string } | null {
+  const user = FALLBACK_USERS.find((u) => u.personId === personId);
+  return user ? { id: user.id, displayName: user.displayName } : null;
+}
+
 export async function listTenants(): Promise<TenantInfo[]> {
   if (!auroraConfigured()) return FALLBACK_TENANTS;
   try {
@@ -166,12 +177,16 @@ export async function listTenants(): Promise<TenantInfo[]> {
   }
 }
 
-export async function listUsers(): Promise<UserInfo[]> {
-  if (!auroraConfigured()) return FALLBACK_USERS;
+export async function listUsers(options: { authoritative?: boolean } = {}): Promise<UserInfo[]> {
+  if (options.authoritative && config.mock?.aurora) return FALLBACK_USERS;
+  if (!auroraConfigured()) {
+    if (options.authoritative) throw new Error('identity store unavailable');
+    return FALLBACK_USERS;
+  }
   try {
     const users = await exec(
       `SELECT id, display_name, email, person_id, session_epoch FROM app_users ORDER BY display_name`);
-    if (users.length === 0) return FALLBACK_USERS;
+    if (users.length === 0) return options.authoritative ? [] : FALLBACK_USERS;
     const grants = groupGrants(await exec(
       // tenant_id, role tie-break granted_at so the ordering is total and
       // deterministic — seed rows share a granted_at timestamp, so ordering by
@@ -185,7 +200,8 @@ export async function listUsers(): Promise<UserInfo[]> {
       grants: grants.get(id as string) ?? {},
       epoch: (epoch as number | null) ?? 0,
     }));
-  } catch {
+  } catch (error) {
+    if (options.authoritative) throw error;
     return FALLBACK_USERS;
   }
 }
@@ -199,27 +215,62 @@ export async function getUser(userId: string, options: { authoritative?: boolean
     return FALLBACK_USERS.find(u => u.id === userId) ?? null;
   }
   try {
-    const rows = await exec(
-      `SELECT id, display_name, email, person_id, session_epoch, external_sub FROM app_users WHERE id = :id`,
-      [str('id', userId)]);
-    if (rows.length === 0) return options.authoritative ? null : FALLBACK_USERS.find(u => u.id === userId) ?? null;
-    const [id, displayName, email, personId, epoch, externalSub] = rows[0]!;
-    const grantRows = await exec(
-      `SELECT user_id, tenant_id, role FROM user_tenant_roles WHERE user_id = :id ORDER BY granted_at, tenant_id, role`,
-      [str('id', userId)]);
-    return {
-      id: id as string,
-      displayName: displayName as string,
-      email: (email as string | null) ?? null,
-      personId: (personId as string | null) ?? null,
-      grants: groupGrants(grantRows).get(id as string) ?? {},
-      epoch: (epoch as number | null) ?? 0,
-      externalSub: (externalSub as string | null | undefined) ?? null,
-    };
+    const user = options.authoritative ? await queuedAuthoritativeUser(userId) : (await readCurrentUsers([userId])).get(userId) ?? null;
+    return user ?? (options.authoritative ? null : FALLBACK_USERS.find(u => u.id === userId) ?? null);
   } catch (error) {
     if (options.authoritative) throw error;
     return FALLBACK_USERS.find(u => u.id === userId) ?? null;
   }
+}
+
+// One SQL snapshot keeps each user's epoch and grants together. Adjacent
+// outstanding authority reads share a bounded query, not a settled positive
+// cache: every later action/delivery still starts a new directory read.
+const AUTHORITY_BATCH_SIZE = 128;
+const MAX_QUEUED_AUTHORITY_SUBJECTS = 2048;
+type AuthorityWaiter = { resolve: (user: UserInfo | null) => void; reject: (error: unknown) => void };
+const authorityQueue = new Map<string, AuthorityWaiter[]>();
+let authorityScheduled = false;
+async function readCurrentUsers(userIds: string[]): Promise<Map<string, UserInfo>> {
+  const params = userIds.map((id, index) => str(`id${index}`, id));
+  const rows = await exec(
+    `SELECT u.id, u.display_name, u.email, u.person_id, u.session_epoch, u.external_sub,
+            r.tenant_id, r.role
+     FROM app_users u LEFT JOIN user_tenant_roles r ON r.user_id = u.id
+     WHERE u.id IN (${params.map(param => `:${param.name}`).join(', ')})
+     ORDER BY u.id, r.granted_at, r.tenant_id, r.role`, params);
+  const users = new Map<string, UserInfo>();
+  for (const [id, name, email, personId, epoch, externalSub, tenant, role] of rows) {
+    if (typeof id !== 'string' || !userIds.includes(id)) throw new Error('Unexpected directory subject');
+    let user = users.get(id);
+    if (!user) {
+      user = { id, displayName: name as string, email: (email as string | null) ?? null,
+        personId: (personId as string | null) ?? null, epoch: (epoch as number | null) ?? 0,
+        externalSub: (externalSub as string | null) ?? null, grants: {} };
+      users.set(id, user);
+    }
+    if (typeof tenant === 'string' && typeof role === 'string') (user.grants[tenant] ??= []).push(role);
+  }
+  return users;
+}
+function queuedAuthoritativeUser(userId: string): Promise<UserInfo | null> {
+  if (!authorityQueue.has(userId) && authorityQueue.size >= MAX_QUEUED_AUTHORITY_SUBJECTS) return Promise.reject(new Error('Directory authority queue is full'));
+  return new Promise((resolve, reject) => {
+    const waiters = authorityQueue.get(userId) ?? [];
+    waiters.push({ resolve, reject }); authorityQueue.set(userId, waiters);
+    if (authorityScheduled) return;
+    authorityScheduled = true;
+    setImmediate(() => {
+      authorityScheduled = false;
+      const queued = [...authorityQueue]; authorityQueue.clear();
+      for (let offset = 0; offset < queued.length; offset += AUTHORITY_BATCH_SIZE) {
+        const batch = queued.slice(offset, offset + AUTHORITY_BATCH_SIZE);
+        void readCurrentUsers(batch.map(([id]) => id)).then(users => {
+          for (const [id, readers] of batch) for (const reader of readers) reader.resolve(users.has(id) ? structuredClone(users.get(id)!) : null);
+        }, error => { for (const [, readers] of batch) for (const reader of readers) reader.reject(error); });
+      }
+    });
+  });
 }
 
 // ── IdP identity resolution (Cognito / OIDC) ─────────────────────────────────
@@ -299,13 +350,30 @@ export async function linkExternalSub(userId: string, sub: string): Promise<void
 export async function bumpSessionEpoch(userId: string): Promise<number> {
   if (!auroraConfigured()) {
     const u = FALLBACK_USERS.find(x => x.id === userId);
-    if (u) return (u.epoch = (u.epoch ?? 0) + 1);
-    return 1;
+    const next = u ? (u.epoch = (u.epoch ?? 0) + 1) : 1;
+    directoryChanged(userId);
+    return next;
   }
   const rows = await exec(
     `UPDATE app_users SET session_epoch = session_epoch + 1 WHERE id = :id RETURNING session_epoch`,
     [str('id', userId)]);
+  directoryChanged(userId);
   return (rows[0]?.[0] as number | undefined) ?? 1;
+}
+
+// ── Committed directory changes (grants, epoch) ─────────────────────────────
+// A content-free signal for live readers that hold access open (the work-graph
+// stream, lib/work-graph/stream.ts): they re-ask their own authority. Never a
+// grant record; listeners must not trust anything but the user id.
+const directoryListeners = new Set<(userId: string) => void>();
+export function onDirectoryChange(listener: (userId: string) => void): () => void {
+  directoryListeners.add(listener);
+  return () => { directoryListeners.delete(listener); };
+}
+function directoryChanged(userId: string): void {
+  for (const listener of directoryListeners) {
+    try { listener(userId); } catch { /* a listener never fails the write */ }
+  }
 }
 
 // ── Provisioning (admin UI) ──────────────────────────────────────────────────
@@ -346,6 +414,7 @@ export async function setGrants(userId: string, grants: Grants): Promise<void> {
         [str('id', userId), str('tenant', tenant), str('role', role)]);
     }
   }
+  directoryChanged(userId);
 }
 
 /**
@@ -360,3 +429,4 @@ export function displayNameForSubject(subject: string | null | undefined): strin
   if (!subject) return null;
   return FALLBACK_USERS.find((u) => u.id === subject)?.displayName ?? null;
 }
+

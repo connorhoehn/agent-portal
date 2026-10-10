@@ -1,13 +1,12 @@
-// The in-document call (plan gap 8): the Call button in the document head and
-// the call docked in the page margin (`VideoDockSlot` in CanvasDocumentView's
-// `gutterLead`, where realtime-examples' page editor docks its call).
+// The in-document Call/Leave button (plan gap 8), bound to the authenticated
+// shell's persistent call and single media playback dock.
 //
 // Not a second call stack. It is the initiative page's: the one
-// `useConversationCall` the tenant shell hosts (projects/InitiativeCallHost,
-// mounted around the assessment routes by AssessmentLayout), the realtime
+// `useConversationCall` the tenant shell hosts (the library's call block host,
+// mounted in the authenticated Layout), the realtime
 // token as its credential, the shared call model (lib/conversationCallModel:
 // `callAvailability`, `lobbyPrefix`) for why the button is off, and the
-// library dock the initiative and Search pages draw (lib/conversationCall
+// library dock the authenticated shell draws (lib/conversationCall
 // `ConversationCallDock`, ui-components `createConversationCallDock`). What
 // differs is only who and where:
 //
@@ -17,20 +16,19 @@
 //   - the people RUNG are the others on the page right now (canvas awareness,
 //     the byline), not an owner/SME roster — a document has none;
 //   - the invite's channel carries the document's URL, so Accept on any
-//     assessment page opens it (AssessmentLayout's DocumentCallNavigator).
+//     authenticated page opens it (the call host's Accept, ShellCallHost).
 
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { VideoDockSlot } from '@connorhoehnslalom/ui-components/doc-editor';
-import { useInitiativeCallHost } from '../../projects/InitiativeCallHost';
-import { ConversationCallDock } from '../../../lib/conversationCall';
+import { useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallHost, useCallLobby } from '../../../lib/conversationCall';
 import { callAvailability, lobbyPrefix } from '../../../lib/conversationCallModel';
+import { pageHuddleStart } from '@connorhoehnslalom/ui-components/integrations/realtime';
 import { documentCallChannel, documentCallLobby, type AwarenessPerson } from './documentCommentsModel';
 import { conversationChannelForDoc } from './knowledgeFormat';
 
 export interface DocumentCallView {
   /** For the shared DocumentHeader: its Call control. Empty when no call host is mounted. */
   headerProps: { onToggleVideoCall?: () => void; isCallActive?: boolean; callVariant?: 'idle' | 'available' | 'active'; callLabel?: string };
-  /** For CanvasDocumentView `gutterLead`; null while this document has no call. */
+  /** Compatibility gutter slot; playback stays in the persistent shell. */
   dock: ReactNode;
   /** Why the Call control is off, or null. */
   unavailableReason: string | null;
@@ -42,15 +40,26 @@ export interface DocumentCallView {
 export function useDocumentCall({ docId, href, title, people, onOpenPeople }: {
   docId: string; href: string; title: string; people: readonly AwarenessPerson[]; onOpenPeople: () => void;
 }): DocumentCallView {
-  const host = useInitiativeCallHost();
+  const host = useCallHost();
   const tenant = host?.tenant ?? null;
   const lobbyName = tenant ? documentCallLobby(lobbyPrefix(tenant), conversationChannelForDoc(docId)) : null;
   const channel = documentCallChannel(href);
-  const bind = host?.bind;
-  useEffect(() => {
-    if (bind && lobbyName) bind({ lobbyName, title, channel });
-  }, [bind, lobbyName, title, channel]);
   const targets = useMemo(() => people.map(p => ({ userId: p.id, displayName: p.name })), [people]);
+  // The footer's idle Huddle runs this same start (never a second call path).
+  const startRef = useRef<() => void>(() => {});
+  const early = host ? callAvailability({
+    gatewayConfigured: host.gatewayConfigured, connectionState: host.connectionState, platformApiUrl: host.platformApiUrl,
+    signedIn: !!host.self, usersLoaded: true, targets, nobodyReason: 'Nobody else has this document open to call',
+  }) : null;
+  // The footer's Huddle needs no one else on the page (realtime-parity gap 3):
+  // with nobody to ring it opens the document's huddle (or walks into the one
+  // that is on), like a room. Only the connection can block it.
+  const reachable = host ? callAvailability({
+    gatewayConfigured: host.gatewayConfigured, connectionState: host.connectionState, platformApiUrl: host.platformApiUrl,
+    signedIn: !!host.self, usersLoaded: true, targets: [{ userId: 'document', displayName: title }],
+  }) : null;
+  const blocked = reachable && !reachable.ok ? reachable.reason : undefined;
+  useCallLobby(lobbyName ? { lobbyName, title, channel, ...(blocked ? { startBlockedReason: blocked } : {}) } : null, () => startRef.current());
   const [notice, setNotice] = useState<string | null>(null);
   const clearNotice = () => setNotice(null);
 
@@ -58,10 +67,12 @@ export function useDocumentCall({ docId, href, title, people, onOpenPeople }: {
   const { call } = host;
   const here = host.lobby?.lobbyName === lobbyName;
   const inCall = call.phase !== 'idle' && call.phase !== 'ringing' && call.phase !== 'ended' && call.phase !== 'failed';
-  const availability = callAvailability({
-    gatewayConfigured: host.gatewayConfigured, connectionState: host.connectionState, platformApiUrl: host.platformApiUrl,
-    signedIn: !!host.self, usersLoaded: true, targets, nobodyReason: 'Nobody else has this document open to call',
-  });
+  const availability = early!; // non-null: `host` is
+  startRef.current = () => {
+    if (blocked || !here) return;
+    if (availability.ok && !(call.phase === 'idle' && call.call)) { void call.start(targets); return; }
+    pageHuddleStart(call);
+  };
   const reason = availability.ok ? null : availability.reason;
   const active = here && inCall;
   const busyElsewhere = inCall && !here;
@@ -78,10 +89,7 @@ export function useDocumentCall({ docId, href, title, people, onOpenPeople }: {
       void call.start(targets);
     },
   };
-  const dock = here && call.phase !== 'idle'
-    ? <VideoDockSlot docked canAccept label="Document call" data-testid="document-call-slot">
-      <ConversationCallDock call={call} title={title} onOpenPeople={onOpenPeople} selfName={host.self?.displayName ?? ''} compact data-testid="document-call-dock" />
-    </VideoDockSlot>
-    : null;
-  return { headerProps, dock, unavailableReason: reason, notice, clearNotice };
+  // Playback and device controls stay in the persistent shell after this
+  // document unmounts. The existing gutter slot remains compatible and empty.
+  return { headerProps, dock: null, unavailableReason: reason, notice, clearNotice };
 }

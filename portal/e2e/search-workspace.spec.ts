@@ -155,7 +155,10 @@ test('saved search restores query, scope and selection then can be removed', asy
   await expect(rail.getByRole('button', { name: 'Auth migration owners', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'New search', exact: true }).click();
   await rail.getByRole('button', { name: 'Auth migration owners', exact: true }).click();
-  await expect(page.getByRole('heading', { name: question, exact: true })).toBeVisible();
+  // A scoped trail with one selected record takes its own row and ends at the
+  // record (decision 9 amendment); the query is the crumb before it.
+  await expect(page.getByTestId('search-trail')).toContainText(question);
+  await expect(page.getByRole('heading', { name: 'Vera Green', exact: true })).toBeVisible();
   expect(new URL(page.url()).searchParams.get('scope')).toBe('auth');
   await expect(page.getByRole('button', { name: 'Person: Vera Green', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await page.getByRole('button', { name: 'Search actions', exact: true }).click();
@@ -342,11 +345,15 @@ test('asking about a selection keeps the query and the Connections graph', async
   await page.goto(`/iq/search?q=${encodeURIComponent(question)}&tab=connections&selection=person:vera,initiative:auth,work:cutover`);
   await expect(page.getByTestId('search-connections')).toBeVisible();
   await page.getByRole('button', { name: 'Ask about selection →', exact: true }).click();
-  const composer = page.getByTestId('search-composer');
+  // The conversation's thread opens in the shell's right pane (decision 9 amendment); the
+  // ONE composer stays docked at the bottom of the content column (2026-10-07).
+  const pane = page.getByTestId('page-conversation-pane');
+  const composer = page.getByTestId('search-explorer').getByTestId('search-composer');
   await expect(composer.getByRole('textbox', { name: 'Search question' })).toHaveText('What connects these 3 records, and what needs attention?');
+  await expect(pane.getByTestId('search-composer')).toHaveCount(0);
   await composer.getByRole('button', { name: 'Send', exact: true }).click();
   await expect.poll(() => submissions.length).toBe(1);
-  await expect(page.getByTestId('search-assistant-strip')).toContainText('Start with Vera Green');
+  await expect(pane.getByTestId('search-pane-transcript')).toContainText('Start with Vera Green');
   const url = new URL(page.url());
   expect(url.searchParams.get('q')).toBe(question);
   expect(url.searchParams.get('tab')).toBe('connections');
@@ -355,7 +362,7 @@ test('asking about a selection keeps the query and the Connections graph', async
   await expect(page.getByRole('button', { name: 'Person: Vera Green', exact: true })).toHaveAttribute('aria-pressed', 'true');
 });
 
-test('the expanded assistant strip renders Markdown; the collapsed line is plain text', async ({ page }) => {
+test('the assistant strip is plain text; Open conversation shows the Markdown reply in the right pane', async ({ page }) => {
   await mockWorkspace(page);
   await page.route('**/api/sessions/*/events', route => route.fulfill({ json: { events: [
     { eventId: 'q-md', role: 'USER', text: question },
@@ -366,8 +373,9 @@ test('the expanded assistant strip renders Markdown; the collapsed line is plain
   await expect(strip).toContainText('Key Decisions: ask Vera Green first. Source:');
   await expect(strip).not.toContainText('**');
   await expect(strip).not.toContainText('s3://');
-  await strip.getByRole('button', { name: 'Expand conversation', exact: true }).click();
-  const conversation = page.getByTestId('search-assistant-conversation');
+  await strip.getByRole('button', { name: 'Open conversation', exact: true }).click();
+  const conversation = page.getByTestId('page-conversation-pane').getByTestId('search-pane-transcript');
+  await expect(page.getByTestId('search-assistant-strip')).toHaveCount(0);
   await expect(conversation.locator('strong', { hasText: 'Vera Green' })).toBeVisible();
   await expect(conversation).not.toContainText('**');
 });
@@ -472,7 +480,14 @@ test('the Connections canvas takes the height the header freed', async ({ page }
   const canvas = (await graph.locator('.react-flow').boundingBox())!;
   const whole = (await graph.boundingBox())!;
   console.log(`[measure] record graph ${Math.round(whole.height)}px, canvas ${Math.round(canvas.height)}px`);
-  expect(canvas.height).toBeGreaterThanOrEqual(520);
+  // Floor 500 (was 520, set 2026-09-29 at ui-components e95120a8). Measured
+  // 2026-10-07 at the 74c6ec52 pin, 1672×941, on this route (no scope, two
+  // selected → the one-row header; no trail row is drawn): main 824 = header
+  // 48 + record graph 559 + composer footer 217 (the library dock 197 + the
+  // unchanged mx-6 mb-3 mt-2); the graph's own toolbar 49 leaves the canvas
+  // 510. None of those rows changed with the four-pane work — the 10px went
+  // to the library dock and toolbar at the newer pin.
+  expect(canvas.height).toBeGreaterThanOrEqual(500);
   await page.goto('/iq/search?type=person&tab=connections');
   const org = (await page.getByTestId('search-people-canvas-canvas').boundingBox())!;
   console.log(`[measure] people canvas ${Math.round(org.height)}px`);

@@ -21,7 +21,9 @@
 // and its ordinary empty state is saying "there is genuinely nothing here",
 // and that distinction is the entire point of the marker.
 
-import { Card, Button } from '@connorhoehnslalom/ui-components/shared';
+import { Card, Button, ErrorState, PageSection } from '@connorhoehnslalom/ui-components/shared';
+
+export { isNotFoundError } from './notFound';
 
 interface Props {
   /**
@@ -31,7 +33,11 @@ interface Props {
   error: string;
   /** What could not be loaded, as a noun phrase: "the cost history". */
   what: string;
-  /** Where the data comes from, so the reader knows where to look. */
+  /**
+   * Where the data comes from, so the reader knows where to look — a CLAUSE,
+   * because it is joined as "<source>, so this is unknown rather than
+   * empty.": "Cost history lives in Aurora", not "Cost history".
+   */
   source?: string;
   onRetry?: () => void;
   className?: string;
@@ -72,6 +78,30 @@ export function UnavailableNotice({
         </div>
       )}
     </Card>
+  );
+}
+
+/**
+ * The not-found answer for a record addressed by id: what was not found and
+ * the way back to its list — the shape initiative detail settled on (an h1
+ * naming the kind of record, then "Initiative not found" + "← Back to
+ * Initiatives"). `heading` is that h1, so the page keeps exactly one.
+ */
+export function RecordNotFound({ heading, title, body, backLabel, onBack }: {
+  heading: string;
+  title: string;
+  body: string;
+  backLabel: string;
+  onBack: () => void;
+}) {
+  return (
+    <PageSection title={heading} data-testid="record-not-found">
+      <ErrorState
+        title={title}
+        body={body}
+        action={<Button variant="secondary" size="sm" onClick={onBack}>← {backLabel}</Button>}
+      />
+    </PageSection>
   );
 }
 

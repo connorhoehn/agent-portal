@@ -15,9 +15,10 @@
 
 import { RedisNotificationStore } from '@connorhoehnslalom/realtime-modules/notification';
 import { config } from '../config.js';
-import { notificationRedisClient, type NotificationRedisLike, type RedisLite } from './redis-lite.js';
+import { notificationRedisClient, type NotificationRedisLike, type GatewayRedisStore } from './redis-lite.js';
 import { holdsGrant, shapeNotification } from './social-notify.js';
 import { notificationsFixture } from '../mock/notifications.js';
+import { mockRestartMirror } from '../mock/restart-state.js';
 
 type Entry = { score: number; value: string };
 
@@ -89,6 +90,11 @@ export class MemoryNotificationRedis implements NotificationRedisLike {
     return had ? 1 : 0;
   }
 
+  restore(snapshot: NonNullable<ReturnType<typeof mockRestartMirror<'notifications'>>>): void {
+    for (const [key, entries] of snapshot.zsets) this.zsets.set(key, entries);
+    for (const [key, entries] of snapshot.hashes) this.hashes.set(key, new Map(entries));
+  }
+
   clear(): void {
     this.zsets.clear();
     this.hashes.clear();
@@ -102,13 +108,15 @@ const logger = {
   error: (msg: string, meta?: Record<string, unknown>) => console.error('[notifications]', msg, meta ?? ''),
 };
 
-let active: { store: RedisNotificationStore; memory: MemoryNotificationRedis | null } | null = null;
+let active: { store: RedisNotificationStore; memory: MemoryNotificationRedis | null; restoredRestart?: boolean } | null = null;
 
 /** Build the inbox the gateway's `notifications({ store })` feature persists into. */
-export function createGatewayNotificationStore(redis: RedisLite | null): { store: RedisNotificationStore; memory: MemoryNotificationRedis | null } {
+export function createGatewayNotificationStore(redis: GatewayRedisStore | null): { store: RedisNotificationStore; memory: MemoryNotificationRedis | null } {
   const memory = redis ? null : new MemoryNotificationRedis();
   const store = new RedisNotificationStore({ redisClient: redis ? notificationRedisClient(redis) : memory, logger });
-  active = { store, memory };
+  const snapshot = config.mock.aurora ? mockRestartMirror('notifications') : undefined;
+  if (memory && snapshot) memory.restore(snapshot);
+  active = { store, memory, restoredRestart: !!(memory && snapshot) };
   return active;
 }
 
@@ -125,12 +133,14 @@ export function releaseGatewayNotificationStore(): void {
 export async function seedMockNotifications(): Promise<number> {
   const target = active;
   if (!config.mock?.aurora || !target?.memory) return 0;
+  if (target.restoredRestart) { target.restoredRestart = false; return 0; }
   target.memory.clear();
   let written = 0;
   for (const row of notificationsFixture.rows()) {
     if (!(await holdsGrant(row.userId, row.tenant))) continue;
     const shaped = shapeNotification({
       id: row.id, type: row.type, title: row.title, body: row.body, timestamp: row.timestamp,
+      ...(row.channel ? { channel: row.channel } : {}),
       payload: { ...row.extra, tenant: row.tenant },
       action: { label: row.actionLabel, href: row.href },
     });

@@ -7,6 +7,7 @@
    later-loaded build, so the layout silently collapsed (stat grids rendering
    as a stack). Scanning the dist keeps every library class real here. */
 @source "../node_modules/@connorhoehnslalom/ui-components/dist";
+@source "../patches";
 
 @theme {
   /* ── Brand ──────────────────────────────────────────────────────────
@@ -669,3 +670,319 @@ tbody tr:focus-within .row-reveal,
 }
 .search-composer textarea { min-height: 48px; }
 .search-composer > div { border-top: 0; }
+
+/* Overview lists keep the library's row actions, focus ring and semantic tones.
+   Alternating neutral surfaces make long titles easier to track to their cells.
+   The owning library's striped/compact-chrome gaps are logged in the UI queue. */
+.work-overview-striped-rows > ul > li:nth-child(even):not([data-tone]) {
+  background: var(--color-surface-panel);
+}
+.work-overview-striped-rows > ul > li:nth-child(odd):not([data-tone]) {
+  background: var(--color-surface);
+}
+
+/* Shared discussion frame: title grows, bringing minimize beside close rather
+   than leaving one action beside the subtitle and the other at the far edge. */
+[data-testid="page-conversation-pane"] > header {
+  padding-block: 6px;
+}
+[data-testid="page-conversation-pane"] > header > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+[data-testid="page-conversation-pane"] > header > :first-child > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+[data-testid="page-conversation-pane"] > header button {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text-secondary);
+  background: var(--color-surface);
+}
+[data-testid="page-conversation-pane"] > header button:hover {
+  color: var(--color-text-primary);
+  background: var(--color-surface-hover);
+}
+[data-testid="initiative-pane-header-row"] {
+  min-height: 44px;
+  padding-block: 6px;
+  column-gap: 12px;
+}
+
+/* Shared by every ConversationComposer, using the active tenant's brand and
+   theme. Existing central call docks paint it once around the whole shelf. */
+:is(.initiative-composer-dock, .conversation-composer-backdrop) {
+  position: relative;
+  isolation: isolate;
+  width: 100%;
+  background: linear-gradient(to bottom, transparent, color-mix(in srgb, var(--color-primary) 8%, var(--color-surface-panel)) 45%, var(--color-surface-panel));
+  overflow: clip;
+}
+.initiative-composer-dock { padding: 30px 20px 20px; }
+.conversation-composer-backdrop:not(:where(.initiative-composer-dock *)) {
+  /* Compact chat presets have zero inset; leave a visible edge for the sky. */
+  padding-block: 14px;
+  padding-inline: max(12px, var(--dock-inset, 0px));
+}
+:is(.initiative-composer-dock, .conversation-composer-backdrop)::before {
+  content: '';
+  position: absolute;
+  inset: -20px;
+  z-index: 0;
+  background-image:
+    radial-gradient(circle at 18% 24%, color-mix(in srgb, var(--color-primary) 65%, transparent) 1.5px, transparent 3px),
+    radial-gradient(circle at 72% 65%, color-mix(in srgb, var(--color-primary) 45%, transparent) 1.2px, transparent 2.5px),
+    radial-gradient(circle at 38% 80%, color-mix(in srgb, var(--color-primary) 40%, transparent) 1px, transparent 2px),
+    radial-gradient(circle, color-mix(in srgb, var(--color-text-tertiary) 18%, transparent) .65px, transparent 1px);
+  background-size: 97px 73px, 151px 109px, 181px 137px, 13px 13px;
+  mask-image: linear-gradient(#0004, #000 20%);
+  pointer-events: none;
+  animation: composer-star-drift 4s ease-in-out infinite alternate;
+}
+:is(.initiative-composer-dock, .conversation-composer-backdrop)::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    radial-gradient(ellipse 1.5px 6px at 12% 75%, color-mix(in srgb, var(--color-primary) 70%, transparent) 15%, transparent 100%),
+    radial-gradient(ellipse 6px 1.5px at 12% 75%, color-mix(in srgb, var(--color-primary) 70%, transparent) 15%, transparent 100%),
+    radial-gradient(ellipse 1.5px 5px at 83% 40%, color-mix(in srgb, var(--color-primary) 55%, transparent) 15%, transparent 100%),
+    radial-gradient(ellipse 5px 1.5px at 83% 40%, color-mix(in srgb, var(--color-primary) 55%, transparent) 15%, transparent 100%);
+  background-size: 211px 97px, 211px 97px, 277px 131px, 277px 131px;
+  animation: composer-star-twinkle 1.8s ease-in-out infinite alternate;
+}
+:is(.initiative-composer-dock, .conversation-composer-backdrop) > * { position: relative; z-index: 1; }
+.initiative-composer-dock .conversation-composer-backdrop { background: transparent; overflow: visible; }
+.initiative-composer-dock .conversation-composer-backdrop::before,
+.initiative-composer-dock .conversation-composer-backdrop::after { content: none; }
+
+/* A conversation preview is a distinct modal, not another composer layered
+   over the work. The backdrop is dimmed/blurred by the shared Modal. */
+.messages-overview-sky {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  background: linear-gradient(120deg, color-mix(in srgb, var(--color-primary) 9%, var(--color-surface-panel)), var(--color-surface-panel));
+}
+.messages-overview-sky::before {
+  content: '';
+  position: absolute;
+  inset: -20px;
+  z-index: -1;
+  pointer-events: none;
+  opacity: .4;
+  background-image: radial-gradient(circle, var(--color-primary) 1px, transparent 2px);
+  background-size: 49px 37px;
+  animation: messages-preview-drift 9s linear infinite alternate;
+}
+@keyframes messages-preview-drift { to { transform: translate(16px, -12px); opacity: .2; } }
+@media (prefers-reduced-motion: reduce) { .messages-overview-sky::before { animation: none; } }
+@keyframes composer-star-drift {
+  from { transform: translate3d(-8px, 5px, 0); opacity: .55; }
+  to { transform: translate3d(8px, -5px, 0); opacity: .9; }
+}
+@keyframes composer-star-twinkle {
+  from { opacity: .2; transform: translate3d(0, 2px, 0); }
+  to { opacity: .8; transform: translate3d(0, -2px, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  :is(.initiative-composer-dock, .conversation-composer-backdrop)::before,
+  :is(.initiative-composer-dock, .conversation-composer-backdrop)::after { animation: none; }
+}
+.initiative-composer-dock :is([data-testid="initiative-composer"], [data-testid="search-composer"], [data-testid="deck-huddle-composer"], [data-testid="deck-composer-dock"]) {
+  background: transparent;
+  padding-top: 0;
+  --dock-inset: 0px;
+}
+.initiative-composer-dock [data-testid$="-dock-slot"],
+.initiative-composer-dock [data-testid="shell-call-media"] section[data-phase] {
+  background: transparent;
+  border-top: 0;
+}
+.initiative-composer-dock :is([data-testid="initiative-composer"], [data-testid="search-composer"], [data-testid="deck-huddle-composer"], [data-testid="deck-composer-dock"]) > :last-child {
+  box-shadow: 0 8px 28px -12px color-mix(in srgb, var(--color-text-primary) 24%, transparent);
+}
+
+/* Work keys are small edge overlays; the title retains the row's full width. */
+.initiative-file-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 15rem), 20rem));
+  gap: 12px;
+}
+.initiative-file-card {
+  width: 100%;
+  height: 148px !important;
+  padding: 16px !important;
+  justify-content: flex-start !important;
+  align-items: flex-start !important;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-surface);
+  overflow: hidden;
+}
+[data-testid="initiative-work-rail"] [data-testid*="-row-"]:has([data-testid^="initiative-work-rail-tag-"]),
+[data-testid="initiative-work-rail"] [data-testid*="-item-"]:has([data-testid^="initiative-work-rail-tag-"]) {
+  position: relative;
+}
+[data-testid="initiative-work-rail"] span:has(> [data-testid^="initiative-work-rail-tag-"]) {
+  position: absolute;
+  right: 6px;
+  top: 9px;
+  padding-left: 24px;
+  pointer-events: none;
+  background: linear-gradient(to right, transparent, var(--color-surface-panel) 28%);
+}
+[data-testid="initiative-work-rail"] [data-current="true"] span:has(> [data-testid^="initiative-work-rail-tag-"]) {
+  background: linear-gradient(to right, transparent, color-mix(in srgb, var(--color-primary) 10%, var(--color-surface-panel)) 28%);
+}
+[data-testid="initiative-work-rail"] [data-testid^="initiative-work-rail-tag-"] {
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 16px;
+  padding: 1px 4px;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-secondary);
+}
+.work-item-metadata { row-gap: 8px; }
+.deck-document-actions { gap: 6px; }
+.deck-document-actions > button,
+.deck-document-actions [aria-haspopup="menu"] {
+  min-height: 28px;
+  padding-inline: 10px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+[data-testid="work-item-header-stats"] {
+  border-top: 1px solid color-mix(in srgb, var(--color-border) 75%, transparent);
+  padding-top: 8px;
+  margin-top: 4px;
+}
+[data-testid="work-item-header-crumbs"],
+[data-testid="work-item-header-crumbs"] :is(a, button, span) {
+  font-size: 13px;
+  font-weight: 500;
+  font-style: italic;
+  color: var(--color-text-secondary);
+}
+[data-testid="work-item-header"] [role="tablist"] {
+  margin-top: 8px;
+  gap: 12px;
+}
+[data-testid="work-item-header"] [role="tab"] {
+  min-height: 36px;
+  padding: 6px 10px;
+  font-size: 13px;
+  line-height: 20px;
+}
+[data-testid="work-item-header"] [role="tab"]:first-child {
+  padding-left: 0;
+}
+
+/* The social footer owns the call controls. The central dock is a compact
+   participant grid, whose cards never grow with an empty content column. */
+[data-testid="shell-call-media"][data-placement="composer"] [data-testid$="-header"] {
+  display: none;
+}
+[data-testid="shell-call-media"][data-placement="composer"] [data-testid="call-dock-tile-row"] {
+  display: flex;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  gap: 8px;
+  align-items: center;
+}
+[data-testid="shell-call-media"][data-placement="composer"] [data-dock-item="true"] {
+  flex: 0 0 170px;
+  width: 170px !important;
+  height: 96px !important;
+  aspect-ratio: 16 / 9;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #293341, #151c28);
+}
+[data-testid="shell-call-media"][data-placement="composer"] [data-testid="call-dock-connecting"] > div {
+  width: 170px;
+  height: 96px;
+}
+/* The media strip and editor form one chat card. Footer controls stay in the
+   social row, so navigating cannot introduce a second standalone call panel. */
+.conversation-call-composer [data-testid$="-dock-slot"] {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-bottom: 0;
+  border-radius: 12px 12px 0 0;
+  padding: 10px 12px;
+}
+.conversation-call-composer [data-testid$="-dock-slot"] section[data-phase] {
+  padding: 0;
+  gap: 0;
+}
+.conversation-call-composer [data-testid$="-dock-slot"] + *,
+.conversation-call-composer [data-testid$="-dock-slot"] + * .uic-composer {
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+[data-testid="shell-call-media"][data-placement="composer"] [data-dock-item="true"]:has([data-call-stream="screen"]) {
+  flex-basis: 240px;
+  width: 240px !important;
+}
+[data-call-stream="screen"] video { object-fit: contain !important; }
+[data-dock-item="true"]:has([data-call-stream="screen"]) > .absolute.inset-x-0 > svg:last-child { display: none; }
+[data-testid="brief-table"] [data-testid*="key-value"] { min-width: 0; }
+.shell-header { min-height: 60px; padding-block: 10px; }
+.shell-header h2 { font-size: 20px; line-height: 26px; }
+
+/* The initiative conversation reads from the top, like a discussion log, with
+   a compact gutter. Its input stays in the central dock. */
+[data-testid="scope-discussion-panel"] [data-testid="chat-panel-messages"] > div,
+[data-testid="huddle-thread"] [data-testid="chat-panel-messages"] > div {
+  margin-top: 0;
+  padding: 8px 12px;
+}
+[data-testid="scope-discussion-panel"] [data-testid="chat-day-separator"],
+[data-testid="huddle-thread"] [data-testid="chat-day-separator"] { padding-block: 4px; }
+
+.work-prejoin { position: relative; }
+.work-prejoin::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 4px;
+  background-image: var(--background-image-brand-gradient);
+}
+.work-prejoin-context {
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-panel);
+  border: 1px solid var(--color-border);
+}
+.work-prejoin [data-testid="settings-preview"] { border: 1px solid var(--color-border); }
+.work-prejoin [data-testid="prejoin-remember"] + * { font-size: 12px; }
+.work-prejoin [data-testid="prejoin-join"] { min-width: 110px; }
+
+/* Document hierarchy: leaves reserve the same disclosure column as parents,
+   so siblings share a text edge instead of jumping left on leaf rows. */
+.document-sidebar [data-rail-key^="r:"]:not([data-rail-key^="r:view:"]) [data-rail-gutter]:not(:has([data-rail-step="caret"]))::after {
+  content: "";
+  width: 18px;
+  flex-shrink: 0;
+}
+.document-sidebar [data-rail-key^="r:"]:not([data-rail-key^="r:view:"]):not(:has([data-rail-gutter]))::before {
+  content: "";
+  width: 18px;
+  margin-right: -10px;
+  flex-shrink: 0;
+}
+.document-sidebar [data-rail-key][data-draggable="true"] { cursor: grab; }
+.document-sidebar [data-rail-key][data-draggable="true"]:active { cursor: grabbing; }
+.document-sidebar [data-rail-key][data-drop="into"] { background: var(--color-surface-hover); }
+/* Keep actions available for the open document and while a menu is active. */
+.document-sidebar [data-rail-key][data-current="true"] + [data-testid$="-menu"] { display: flex; }
+@media (hover: none) {
+  .document-sidebar [data-testid$="-menu"] { display: flex; }
+}
+[data-testid="knowledge-workspace"][data-rail-collapsed="true"] [data-testid="knowledge-explorer-divider"] { display: none; }

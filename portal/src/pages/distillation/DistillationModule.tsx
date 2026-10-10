@@ -6,25 +6,30 @@
 // views inside it with live counts — Guides & findings / Patterns / Run notes,
 // Pending / Reviewed, Runs (warning accent while a tier is behind) / Tier
 // graph. The IA doc's horizontal tabs were dropped for it: one navigation,
-// not two. On Review and Activity the ScopeHeader above the content names the
-// destination and keeps the repository selector (`?repo=`, carried by every
-// rail link) and "Open Library ↗". Knowledge has no title band: its record's
-// own headline is the page title, so the module hands the crumbs, the selector
-// and the link down (`scope` in the outlet context) and Knowledge hangs them
-// at the top of its content pane (`ScopeHeader variant="crumbs"`), the guide
-// record mockup (docs/distillation-guide-record-spec.md). Flush over a
+// not two. Every destination's content column is the same cascade
+// (docs/layout-cascade.md): the module hands the crumbs, the repository
+// facet (`?repo=`, carried by every rail link) and "Agent library ↗" down
+// (`scope` in the outlet context). A destination with a list (Knowledge's
+// explorer, the review queue, the promotion candidates, the runs) draws
+// `ListRailLayout` (the library list rail): the list is a flush list rail stacked beside this
+// section rail — the Initiatives rail's structure — with the repository in
+// its filter popover beside its search, and the content column (the trail
+// as a `ScopeHeader variant="crumbs"` band, the title, the record) after it.
+// The content header carries no repository button. Flush over a
 // ViewportFillRegion.
-import { useMemo, type ReactNode } from 'react';
+import { useMemo } from 'react';
 import { Link, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router';
-import { ScopeHeader, ViewportFillRegion, type BreadcrumbItem } from '@connorhoehnslalom/ui-components';
+import { ViewportFillRegion, type BreadcrumbItem, type WorkListFilterFacet } from '@connorhoehnslalom/ui-components';
 import {
-  EmptyState, Select, Stack, SubNavLayout, activeNavItemClassName, inactiveNavItemClassName, type SubNavItem,
+  Stack, SubNavLayout, activeNavItemClassName, inactiveNavItemClassName, type SubNavItem,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useShellBreadcrumbItems } from '../../components/shell/Breadcrumbs';
+import { SectionContent } from '../../components/shell/SectionContent';
+import { DistillationOverview } from './DistillationOverview';
 import { useDistillationChannel } from '../../hooks/useDistillationChannel';
 import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';
-import { activeNavId, destinationTitle, moduleNav } from './moduleNavModel';
+import { activeNavId, moduleNav } from './moduleNavModel';
 import { queueCounts } from './reviewQueueModel';
 import { activityDot, tierCount } from './tierFlowModel';
 import type { PromotionCandidate } from '../promotions/types';
@@ -35,11 +40,12 @@ export interface DistillationOutletContext {
   refreshReview: () => void;
   refreshPromotions: () => void;
   refreshLevels: () => void;
-  /** The module's crumbs, repository selector and Library link, for a tab
-   *  that draws them itself (Knowledge, at the top of its content pane). */
+  /** The module's crumbs, the repository facet for a list rail's filter
+   *  popover, and the Library link (only where it leads somewhere: Knowledge,
+   *  where guides become assets, and Asset promotions). */
   scope: {
     breadcrumbs: BreadcrumbItem[];
-    controls: ReactNode;
+    repoFacet: WorkListFilterFacet;
     link: { label: string; href: string };
   };
 }
@@ -69,6 +75,7 @@ export default function DistillationModule() {
     () => (levels.data ? activityDot(levels.data.levels ?? [], levels.data.health) : null),
     [levels.data],
   );
+  const digest = (lv: 'L0' | 'L1' | 'L2') => levels.data?.levels?.find((l) => l.level === lv)?.digest ?? null;
   const tier = (lv: 'L0' | 'L1' | 'L2') => {
     const row = levels.data?.levels?.find((l) => l.level === lv);
     return row ? tierCount(row) : null;
@@ -98,31 +105,24 @@ export default function DistillationModule() {
   }
   // A deep link can name a repository before either source lists it.
   if (repo && !repoLabels.has(repo)) repoLabels.set(repo, repo);
-  const repoOptions = [
-    { value: '', label: 'All repositories' },
-    ...[...repoLabels].map(([value, label]) => ({ value, label })),
-  ];
+  const repoOptions = [...repoLabels].map(([value, label]) => ({ value, label }));
 
-  const repoSelect = (
-    <Select
-      aria-label="Repository"
-      size="sm"
-      value={repo ?? ''}
-      options={repoOptions}
-      onChange={(e) => {
-        const next = new URLSearchParams(params);
-        if (e.target.value) next.set('repo', e.target.value); else next.delete('repo');
-        // A new scope drops the selection made inside the old one.
-        next.delete('item'); next.delete('sample'); next.delete('run');
-        setParams(next, { replace: true });
-      }}
-      data-testid="distillation-repo"
-    />
-  );
-  // Knowledge draws its own crumb line (see the header comment).
-  const onKnowledge = location.pathname.startsWith('/iq/distillation/knowledge');
-  const onPromotions = location.pathname.startsWith('/iq/distillation/review') && params.get('view') === 'promotions';
-  const atModule = onKnowledge && params.get('nav') === 'distillation';
+  // The repository scope lives in each list rail's filter popover, beside its
+  // search (never as a button in the content header). Same `?repo=` param;
+  // a new scope drops the selection made inside the old one.
+  const repoFacet: WorkListFilterFacet = {
+    id: 'repo', label: 'Repository',
+    options: repoOptions,
+    selected: repo ? [repo] : [],
+    onChange: (sel) => {
+      const value = sel.length > 0 ? sel[sel.length - 1] : null;
+      const next = new URLSearchParams(params);
+      if (value) next.set('repo', value); else next.delete('repo');
+      next.delete('item'); next.delete('sample'); next.delete('run');
+      setParams(next, { replace: true });
+    },
+  };
+  const atModule = location.pathname.startsWith('/iq/distillation/knowledge') && params.get('nav') === 'distillation';
   const moduleHref = `/iq/distillation/knowledge?${new URLSearchParams({ nav: 'distillation', ...(repo ? { repo } : {}) })}`;
   const breadcrumbs = crumbs.map((crumb) => crumb.label === 'Distillation' ? {
     label: crumb.label,
@@ -161,30 +161,41 @@ export default function DistillationModule() {
             );
           }}
         >
-          <Stack gap="none" className="h-full min-h-0">
-            {((!onKnowledge && !onPromotions) || atModule) && (
-              <ScopeHeader
-                breadcrumbs={atModule ? [{ label: 'Build' }, { label: 'Distillation' }] : breadcrumbs}
-                title={atModule ? 'Distillation' : destinationTitle(location.pathname)}
-                link={LIBRARY_LINK}
-                controls={repoSelect}
-                data-testid="distillation-header"
+          {/* The content column (docs/layout-cascade.md): a destination with
+              a list draws ListRailLayout (the list rail flush beside this
+              rail, then trail → title → record); the module's own landing is
+              SectionContent over an overview of the three tiers, never a
+              placeholder. */}
+          {atModule ? (
+            <SectionContent
+              breadcrumbs={[{ label: 'Build' }, { label: 'Distillation' }]}
+              link={LIBRARY_LINK}
+              title="Distillation"
+              description="What the fleet has learned from its runs: notes compact into patterns, patterns into reusable guides."
+              data-testid="distillation-landing"
+            >
+              <DistillationOverview
+                repo={repo}
+                counts={{ guides: tier('L2'), patterns: tier('L1'), notes: tier('L0') }}
+                versions={{ guides: digest('L2'), patterns: digest('L1'), notes: digest('L0') }}
+                pending={pending}
+                canPlay={canReview}
+                onDemoChanged={() => { levels.refresh(); review.refresh(); }}
               />
-            )}
-            <Stack gap="none" className="min-h-0 flex-1">
-              {/* Tabs refresh the header's live counts after their own writes (a
-                  verdict changes Review's pending count) without waiting for the
-                  channel or the poll. */}
-              {atModule ? <EmptyState size="sm" title="Explore distillation" description="Choose Guides & findings, Patterns or Run notes to open Knowledge, or browse Review and Activity." /> : <Outlet
-                context={{
-                  refreshReview: review.refresh,
-                  refreshPromotions: promotions.refresh,
-                  refreshLevels: levels.refresh,
-                  scope: { breadcrumbs, controls: repoSelect, link: LIBRARY_LINK },
-                } satisfies DistillationOutletContext}
-              />}
-            </Stack>
-          </Stack>
+            </SectionContent>
+          ) : (
+            // Tabs refresh the rail's live counts after their own writes (a
+            // verdict changes Review's pending count) without waiting for the
+            // channel or the poll.
+            <Outlet
+              context={{
+                refreshReview: review.refresh,
+                refreshPromotions: promotions.refresh,
+                refreshLevels: levels.refresh,
+                scope: { breadcrumbs, repoFacet, link: LIBRARY_LINK },
+              } satisfies DistillationOutletContext}
+            />
+          )}
         </SubNavLayout>
       </Stack>
     </ViewportFillRegion>

@@ -270,8 +270,18 @@ export async function buildCloneCommand(project: AgentProject): Promise<{ comman
     return { command, redacted };
   }
 
-  const token = await borrowApiKey(project.connectionName);
-  const authed = `https://x-access-token:${token}@github.com/${project.repoFullName}.git`;
+  // Offline there is no vault (`borrowApiKey` throws under MOCK_AGENTCORE, on
+  // purpose) and no github.com: the command only ever reaches the fake microVM
+  // in mock/devbox-shell.ts, which answers any `git clone`. So the mock builds
+  // the same credentialed shape with the token left out, rather than refusing
+  // — every seeded repository is private and carries a connection, and a
+  // refusal here would 503 every offline dispatch at ensureWorkspace. Same
+  // placement as lib/change-delivery.ts's mock branch: below everything that
+  // reads the project, above the first thing that reaches outside.
+  const token = config.mock.agentcore ? null : await borrowApiKey(project.connectionName);
+  const authed = token
+    ? `https://x-access-token:${token}@github.com/${project.repoFullName}.git`
+    : url;
   const command = [
     `rm -rf ${target}`,
     `git clone --depth 50 ${authed} ${target}`,

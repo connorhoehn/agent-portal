@@ -1,0 +1,71 @@
+Started internal compiled load profile churn driver 00e74116a342a0cb266d3e80d109519f14af744cb5f376297320a6e6dfeb235a
+target ws://orgiq-bff-capacity-a:3001/ws · health http://orgiq-bff-capacity-a:3001/api/health · server pid unknown (pass --server-pid) · hold 60s
+
+=== churn · group 2 · 100 calls · 1000 sockets (200 in calls, 0 second tabs, 800 chat/presence) · run tag 0fc3
+  ramp: 1000/1000 connected in 20s
+  churn: dropping 20 in-call sockets (1 per call), reconnecting after 2 s
+  connect 1020/1020 (p95 9.8 ms) · established 100/100 · 108s
+  invite→incoming  p50 33.5  p95 47.7  p99 237.5  max 385.8 ms (n=100)
+  accept→accepted  p50 31  p95 40.1  p99 43.5  max 48.5 ms (n=100)
+  chat delivery    p50 31.3  p95 51.8  p99 1526.4  max 2467.8 ms (n=2275 of 2276 sent)
+  cross: call 0 chat 0 presence 0 · unexpected ended 0 · answered-elsewhere 0 · denied 0 · other errors 0
+  churn: 20/200 dropped, 20 back; peers told 'left' 20 (rejoinGraceMs 30000); calls ended by server 0 at — s after the drop ({}); status replies listing the reconnected user 0/20
+  server orgiq-bff-capacity-a: docker-working-set peak 220.9 MiB · CPU peak 101.4% mean 30.6% · /api/health p50 0.9 p99 17.9 max 34.8 ms (0 errors; 0 planned-outage errors) · client loop p99 11.6 ms
+  PASS  sockets connect: 1020/1020 (100%)
+  PASS  calls established: 100/100 (all)
+  PASS  invite→incoming p95: 47.7 (< 250 ms)
+  PASS  invite→incoming p99: 237.5 (< 1000 ms)
+  PASS  accept→accepted p95: 40.1 (< 250 ms)
+  PASS  chat delivery p95: 51.8 (< 300 ms, with paired-sender evidence)
+  PASS  background chat coverage: 800/800 (all paired senders reach their peer)
+  PASS  background chat admission: 800/800; 1074.8ms (all server join acknowledgements within 10 seconds)
+  PASS  cross-call/channel deliveries: 0 (0)
+  PASS  answered-elsewhere outside scenario 4: 0 (0)
+  PASS  ended before scripted hang-up: 0 (0)
+  PASS  unplanned socket disconnects: 0 (0)
+  PASS  AUTHZ_CHANNEL_DENIED: 0 (0)
+  PASS  event-loop proxy (/api/health p99): 17.9 (< 50 ms)
+  PASS  health errors outside planned outage: 0 (0)
+  PASS  server memory peak: 220.9 (< 700 MiB)
+  PASS  container samples: 0 (no errors, at least one sample)
+  PASS  peer 1: health p99: 30.4 (< 50 ms)
+  PASS  peer 1: health errors: 0 (0)
+  PASS  peer 1: memory peak: 227.2 (< 700 MiB)
+  PASS  peer 1: container samples: 0 (no errors, at least one sample)
+
+=== churn · group 4 · 100 calls · 1000 sockets (400 in calls, 0 second tabs, 600 chat/presence) · run tag 2b50
+  ramp: 1000/1000 connected in 20s
+  churn: dropping 40 in-call sockets (1 per call), reconnecting after 2 s
+  connect 1040/1040 (p95 11 ms) · established 100/100 · 109.4s
+  invite→incoming  p50 37.5  p95 53.6  p99 76.2  max 114.7 ms (n=300)
+  accept→accepted  p50 30.8  p95 46.6  p99 89.7  max 99.1 ms (n=300)
+  chat delivery    p50 32.6  p95 46.3  p99 88  max 361.7 ms (n=1711 of 1711 sent)
+  cross: call 0 chat 0 presence 0 · unexpected ended 0 · answered-elsewhere 0 · denied 0 · other errors 0
+  churn: 40/400 dropped, 40 back; peers told 'left' 120 (rejoinGraceMs —); calls ended by server 0 at — s after the drop ({}); status replies listing the reconnected user 0/40
+  server orgiq-bff-capacity-a: docker-working-set peak 220.4 MiB · CPU peak 93.2% mean 30.2% · /api/health p50 0.9 p99 27.4 max 43.7 ms (0 errors; 0 planned-outage errors) · client loop p99 11.9 ms
+  PASS  sockets connect: 1040/1040 (100%)
+  PASS  calls established: 100/100 (all)
+  PASS  invite→incoming p95: 53.6 (< 250 ms)
+  PASS  invite→incoming p99: 76.2 (< 1000 ms)
+  PASS  accept→accepted p95: 46.6 (< 250 ms)
+  PASS  chat delivery p95: 46.3 (< 300 ms, with paired-sender evidence)
+  PASS  background chat coverage: 600/600 (all paired senders reach their peer)
+  PASS  background chat admission: 600/600; 2333.4ms (all server join acknowledgements within 10 seconds)
+  PASS  cross-call/channel deliveries: 0 (0)
+  PASS  answered-elsewhere outside scenario 4: 0 (0)
+  PASS  ended before scripted hang-up: 0 (0)
+  PASS  unplanned socket disconnects: 0 (0)
+  PASS  AUTHZ_CHANNEL_DENIED: 0 (0)
+  PASS  event-loop proxy (/api/health p99): 27.4 (< 50 ms)
+  PASS  health errors outside planned outage: 0 (0)
+  PASS  server memory peak: 220.4 (< 700 MiB)
+  PASS  container samples: 0 (no errors, at least one sample)
+  PASS  peer 1: health p99: 20 (< 50 ms)
+  PASS  peer 1: health errors: 0 (0)
+  PASS  peer 1: memory peak: 228.7 (< 700 MiB)
+  PASS  peer 1: container samples: 0 (no errors, at least one sample)
+
+2/2 runs passed every threshold
+  PASS  churn × 2
+  PASS  churn × 4
+Copied complete result to /tmp/orgiq-bff-container-internal-churn.json

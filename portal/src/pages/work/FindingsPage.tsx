@@ -17,9 +17,11 @@ import {
   DataTable,
   EmptyState,
   FilterChip,
+  IconButton,
   Inline,
   LoadingState,
   PageSection,
+  RedoIcon,
   Stack,
   Toolbar,
   ToolbarGroup,
@@ -27,12 +29,16 @@ import {
   type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
+import { useWorkEvents } from '../../hooks/useWorkEvents';
 import { useCapabilities } from '../../lib/capabilities';
+import { useSession } from '../../lib/auth';
 import { relativeTime } from '../../lib/relativeTime';
 import { toastError, toastPending, toastSuccess } from '../../lib/toastStore';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { writeJson } from '../../lib/writeJson';
-import { filterFindings, sweepLabel, type FindingStatus } from './findingsFilter';
+import {
+  filterFindings, promoteGrantBlock, sweepLabel, type FindingStatus, type ScopedSprintLike,
+} from './findingsFilter';
 import {
   BotOrigin, SeverityChip, T,
   type Finding, type Job,
@@ -61,6 +67,18 @@ export default function FindingsPage() {
   // devbox-fleet operation. DEFECTS #4 never asked for this one to move.
   const canRequeue = ready && can('ManageDevbox');
 
+  // Promote runs the same grant-scoped check as dispatch-work: an SME with no
+  // active sprint grant on the finding's initiative is refused with a 403.
+  // That refusal used to arrive only after the click, while the Run setup on
+  // the initiative warned "Sprint access required" before it — so read the
+  // same `scope=mine` sprints it reads and say so in the row up front. Only
+  // fetched for an sme, the one grant-scoped role. The server stays the gate.
+  const { session } = useSession();
+  const isSme = session?.role === 'sme';
+  const { data: mySprints } = useFetch<{ sprints: ScopedSprintLike[] }>(
+    isSme && canManageFindings ? '/api/sprints?scope=mine' : null,
+  );
+
   const [findingStatus, setFindingStatus] = useState<FindingStatus>('open');
 
   const {
@@ -75,11 +93,7 @@ export default function FindingsPage() {
   const jobsLoadingFirst = jobsLoading && !jobsData;
   const findingsLoadingFirst = findingsLoading && !findingsData;
 
-  useEffect(() => {
-    const es = new EventSource('/api/work/events');
-    es.onmessage = () => { refreshJobs(); refreshFindings(); };
-    return () => es.close();
-  }, [refreshJobs, refreshFindings]);
+  useWorkEvents(() => { refreshJobs(); refreshFindings(); });
 
   // The server already scopes GET /api/work/findings?status= to the
   // selected bucket, but re-applying the filter client-side means the rows
@@ -234,43 +248,31 @@ export default function FindingsPage() {
   const dlqColumns: DataTableColumn<Job>[] = [
     {
       key: 'title', header: 'Job', sortable: true,
+      // A real Link, not just the row's onClick (the row click is a bare
+      // <tr onClick>); the failure text is its tooltip, the bot its own column.
       render: (j) => (
-        <Stack gap="none" className="min-w-0">
-          <Inline align="center" gap="sm" className="min-w-0">
-            {/* A real Link, not just the row's onClick: DataTable's row-click
-                is a bare <tr onClick> with no keyboard access, so this is the
-                one focusable, Enter-activatable control in the row. */}
-            <Link
-              to={`/iq/work/${j.id}`}
-              onClick={(e: React.MouseEvent) => e.stopPropagation()}
-              className="text-[12.5px] font-medium text-text-primary no-underline hover:text-primary truncate"
-              title={j.title}
-            >
-              {j.title}
-            </Link>
-            <BotOrigin job={j} />
-          </Inline>
-          {j.error && <T className="text-[11px] text-danger truncate" title={j.error}>{j.error}</T>}
-        </Stack>
+        <Link
+          to={`/iq/work/${j.id}`}
+          onClick={(e: React.MouseEvent) => e.stopPropagation()}
+          className="text-[12.5px] font-medium text-text-primary no-underline hover:text-primary truncate"
+          title={j.error ? `${j.title} — ${j.error}` : j.title}
+        >
+          {j.title}
+        </Link>
       ),
     },
     {
-      key: 'attempts', header: 'Attempts', align: 'right',
-      render: (j) => <T className="text-[11px] text-text-tertiary tabular-nums">{j.attempts}/{j.maxAttempts}</T>,
+      key: 'origin', header: 'Origin',
+      render: (j) => (j.botName ? <BotOrigin job={j} /> : <T className="text-[11px] text-text-tertiary">—</T>),
     },
     {
-      key: 'createdAt', header: 'Age', align: 'right', sortable: true,
+      key: 'attempts', header: 'Attempts', numeric: true,
+      render: (j) => `${j.attempts}/${j.maxAttempts}`,
+    },
+    {
+      key: 'createdAt', header: 'Age', numeric: true, sortable: true,
       compare: (a, b) => a.createdAt.localeCompare(b.createdAt),
-      render: (j) => <T className="text-[11px] text-text-tertiary whitespace-nowrap">{relativeTime(j.createdAt)}</T>,
-    },
-    {
-      key: 'action', header: '', align: 'right',
-      render: (j) => canRequeue ? (
-        <Button size="sm" variant="secondary"
-          onClick={(e: React.MouseEvent) => { e.stopPropagation(); void requeue(j); }}>
-          Requeue
-        </Button>
-      ) : null,
+      render: (j) => relativeTime(j.createdAt),
     },
   ];
 
@@ -287,23 +289,27 @@ export default function FindingsPage() {
         <T className="text-[13px] font-semibold text-text-primary">Dead-letter queue</T>
         <T className="text-[11px] text-text-tertiary">jobs that failed or were cancelled — requeue puts a clone back on the queue</T>
       </Inline>
-      {!jobsLoadingFirst && deadLettered.length === 0 ? (
-        <Card padding="md" className="mb-6">
-          <T className="text-[12px] text-text-tertiary">Nothing dead-lettered. Failed jobs land here with their error and a requeue button.</T>
-        </Card>
-      ) : (
-        <Stack gap="none" align="start" className="mb-6">
-          <DataTable<Job>
-            data={deadLettered}
-            columns={dlqColumns}
-            keyField={(j) => j.id}
-            onRowClick={(j) => navigate(`/iq/work/${j.id}`)}
-            pageSize={10}
-            emptyMessage="Nothing dead-lettered"
-            loading={jobsLoadingFirst}
-          />
-        </Stack>
-      )}
+      <Stack gap="none" className="mb-6">
+        <DataTable<Job>
+          data={deadLettered}
+          columns={dlqColumns}
+          keyField={(j) => j.id}
+          size="sm"
+          onRowClick={(j) => navigate(`/iq/work/${j.id}`)}
+          rowActions={canRequeue ? (j) => (
+            <IconButton
+              size="sm"
+              icon={<RedoIcon />}
+              aria-label={`Requeue ${j.title}`}
+              title="Requeue"
+              onClick={() => void requeue(j)}
+            />
+          ) : undefined}
+          pageSize={10}
+          emptyMessage="Nothing dead-lettered. Failed jobs land here with their error and a requeue action."
+          loading={jobsLoadingFirst}
+        />
+      </Stack>
 
       {/* ── Sweep findings, grouped. The group header is the unit of
              attention; the rows are the drill-in. ── */}
@@ -432,9 +438,10 @@ export default function FindingsPage() {
                           Find the links
                         </Button>
                       )}
-                      <Button size="sm" variant="secondary" onClick={() => void promote(f)}>
-                        Put a worker on it
-                      </Button>
+                      <PromoteAction
+                        block={promoteGrantBlock(f, isSme, mySprints?.sprints ?? null)}
+                        onPromote={() => void promote(f)}
+                      />
                       <Button
                         size="sm"
                         variant="danger"
@@ -453,5 +460,33 @@ export default function FindingsPage() {
       </Card>
       )}
     </PageSection>
+  );
+}
+
+/** "Put a worker on it", or — when the grant check would refuse it — the same
+ *  button disabled beside the reason, the way the Run setup says "Sprint
+ *  access required" before Authorize rather than after. */
+function PromoteAction({ block, onPromote }: {
+  block: ReturnType<typeof promoteGrantBlock>;
+  onPromote: () => void;
+}) {
+  if (!block) {
+    return <Button size="sm" variant="secondary" onClick={onPromote}>Put a worker on it</Button>;
+  }
+  const where = block.initiativeName ?? "this finding's initiative";
+  return (
+    <>
+      <T className="text-[11px] text-warning whitespace-nowrap">Sprint access required</T>
+      <Link to="/iq/sprints" className="text-[11px] text-primary no-underline hover:underline whitespace-nowrap">Open sprints</Link>
+      <Button
+        size="sm"
+        variant="secondary"
+        disabled
+        title={`You hold no active sprint grant on ${where}, so a worker would be refused — ask the release manager for a grant`}
+        aria-label={`Put a worker on it — unavailable: no active sprint grant on ${where}`}
+      >
+        Put a worker on it
+      </Button>
+    </>
   );
 }

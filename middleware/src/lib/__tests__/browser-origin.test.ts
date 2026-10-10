@@ -55,3 +55,43 @@ it('allows loopback development ports but still rejects arbitrary websites', asy
   expect((await request(app()).post('/').set('Origin', 'http://localhost:5183')).status).toBe(200);
   expect((await request(app()).post('/').set('Origin', 'https://evil.example.com')).status).toBe(403);
 });
+
+describe('behind CloudFront → ALB (TRUST_PROXY_HOPS=2)', () => {
+  // The portal and the API share the CloudFront origin, but the ALB reports
+  // `http` for CloudFront's hop — so without CloudFront-Forwarded-Proto the
+  // portal's own https:// page read as a foreign origin and every write 403'd.
+  const priorHops = process.env['TRUST_PROXY_HOPS'];
+  afterEach(() => {
+    if (priorHops === undefined) delete process.env['TRUST_PROXY_HOPS']; else process.env['TRUST_PROXY_HOPS'] = priorHops;
+  });
+  function cfApp() {
+    const a = express();
+    a.set('trust proxy', 2);
+    a.use(browserOrigin);
+    a.post('/', (_req, res) => res.json({ reached: true }));
+    return a;
+  }
+
+  it('treats the https:// CloudFront page as same-origin', async () => {
+    process.env['TRUST_PROXY_HOPS'] = '2';
+    const res = await request(cfApp()).post('/').set('Host', 'd111.cloudfront.net')
+      .set('X-Forwarded-Proto', 'http').set('CloudFront-Forwarded-Proto', 'https')
+      .set('Origin', 'https://d111.cloudfront.net');
+    expect(res.status).toBe(200);
+  });
+
+  it('still refuses another site sent through the same distribution', async () => {
+    process.env['TRUST_PROXY_HOPS'] = '2';
+    const res = await request(cfApp()).post('/').set('Host', 'd111.cloudfront.net')
+      .set('CloudFront-Forwarded-Proto', 'https').set('Origin', 'https://evil.example.com');
+    expect(res.status).toBe(403);
+  });
+
+  it('does not take CloudFront-Forwarded-Proto from a caller when one hop is declared', async () => {
+    process.env['TRUST_PROXY_HOPS'] = '1';
+    const res = await request(cfApp()).post('/').set('Host', 'api.example.com')
+      .set('X-Forwarded-Proto', 'http').set('CloudFront-Forwarded-Proto', 'https')
+      .set('Origin', 'https://api.example.com');
+    expect(res.status).toBe(403);
+  });
+});

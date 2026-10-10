@@ -73,7 +73,7 @@ const CHANGES = ['program-owner', 'hr-admin'];
 // rail and the palette share this so ⌘K lists pages in the order the rail
 // shows them — a group a tenant doesn't list sorts last, never vanishes.
 export const GROUP_ORDER_BY_TENANT: Record<string, string[]> = {
-  orgiq: ['Plan', 'Design', 'Build', 'Release', 'Operate', 'Org', 'System'],
+  orgiq: ['Plan', 'Design', 'Build', 'Release', 'Operate', 'Engage', 'System'],
   assessment: ['Assess', 'Analyze', 'Informatics', 'System'],
   // docs/social-tenant-design.md §4.1 — talk, meet, the people you do it
   // with, what was recorded, then the tenant's own configuration.
@@ -120,6 +120,10 @@ const PAGES: PageEntry[] = [
   // is not confused with Observability's "Runs" (agent invocations).
   { label: 'Workspace runs',     hint: 'Bot, agent and queue runs, with steps', path: '/iq/runs',                                  tenant: 'orgiq',  group: 'Operate', roles: BOTS,
     keywords: ['run', 'runs', 'pipeline', 'bot', 'job', 'ledger', 'steps'] },
+  // The day's work graph (/api/work-graph, requireTenant('orgiq') only — no
+  // capability gate), so every orgiq role sees it, like Initiatives.
+  { label: 'Work graph',         hint: 'The day as a graph, not the run ledger', path: '/iq/activity',                                tenant: 'orgiq',  group: 'Operate',
+    keywords: ['work graph', 'activity', 'graph', 'today', 'day', 'runs', 'work'] },
   { label: 'Local compute configuration', hint: 'Session settings and bundled skill versions', path: '/iq/local-compute/configuration', tenant: 'orgiq', group: 'Build',
     keywords: ['release', 'session', 'config', 'skill bundle', 'hooks'] },
   { label: 'Budgets',            hint: 'Agent spend vs allocation',           path: '/admin/budgets',                              tenant: 'admin',  group: 'Plan',    roles: BUDGETS,
@@ -141,13 +145,15 @@ const PAGES: PageEntry[] = [
   { label: 'Distillation activity',    hint: 'Tier flow, compaction runs, tier graph', path: '/iq/distillation/activity',       tenant: 'orgiq',  group: 'Build',
     keywords: ['distillation', 'activity', 'compaction', 'job', 'run', 'tier', 'health', 'ingest', 'overview'] },
   // ── Org — organizational intelligence ──
-  { label: 'Search', hint: 'Find records, ask questions, explore connections', path: '/iq/search', tenant: 'orgiq', group: 'Org',
+  { label: 'Search', hint: 'Find records, ask questions, explore connections', path: '/iq/search', tenant: 'orgiq', group: 'Engage',
     keywords: ['ask', 'search', 'chat', 'agent', 'help', 'explore', 'graph', 'connections'] },
-  { label: 'Scores',             hint: 'Per-person influence leaderboard',    path: '/iq/scores',                                  tenant: 'orgiq',  group: 'Org', roles: PLATFORM,
+  { label: 'Communication',      hint: 'Social channels and direct messages here, and the huddles you joined on initiative pages', path: '/iq/communication', tenant: 'orgiq', group: 'Engage',
+    keywords: ['communication', 'social', 'chat', 'message', 'dm', 'channel', 'mention', 'call', 'calls', 'huddle', 'missed', 'meeting', 'history'] },
+  { label: 'Scores',             hint: 'Per-person influence leaderboard',    path: '/iq/scores',                                  tenant: 'orgiq',  group: 'Engage', roles: PLATFORM,
     keywords: ['score', 'leaderboard', 'influence'] },
-  { label: 'Score cohorts',      hint: 'Scores grouped by team',              path: '/iq/scores/cohorts',                          tenant: 'orgiq',  group: 'Org', roles: PLATFORM,
+  { label: 'Score cohorts',      hint: 'Scores grouped by team',              path: '/iq/scores/cohorts',                          tenant: 'orgiq',  group: 'Engage', roles: PLATFORM,
     keywords: ['score', 'cohort', 'team'] },
-  { label: 'Score compare',      hint: 'Radar overlay of people',             path: '/iq/scores/compare',                          tenant: 'orgiq',  group: 'Org', roles: PLATFORM,
+  { label: 'Score compare',      hint: 'Radar overlay of people',             path: '/iq/scores/compare',                          tenant: 'orgiq',  group: 'Engage', roles: PLATFORM,
     keywords: ['score', 'compare', 'radar'] },
   // ── Operate — prompts, health, platform ──
   { label: 'What is deployed',   hint: 'Live prompts + what to do next',      path: '/iq/prompt-ops',                              tenant: 'orgiq',  group: 'Design',  roles: PLATFORM,
@@ -230,16 +236,20 @@ const PAGES: PageEntry[] = [
   // palette listed nothing but Settings.
   { label: 'Dashboard',          hint: 'Cohorts, teams, scorecards',          path: '/assessment/teams',                           tenant: 'assessment', group: 'Assess',
     keywords: ['dashboard', 'cohort', 'team', 'scorecard'] },
+  { label: 'Communication',      hint: 'Social channels and direct messages here, and huddles on teams and documents', path: '/assessment/communication', tenant: 'assessment', group: 'Assess',
+    keywords: ['communication', 'social', 'chat', 'message', 'dm', 'channel', 'mention', 'call', 'calls', 'huddle', 'missed', 'meeting', 'history'] },
   { label: 'Submissions',        hint: 'Forms intake wizard',                 path: '/assessment/submissions',                     tenant: 'assessment', group: 'Assess',
     keywords: ['submission', 'form', 'intake'] },
   { label: 'Reports',            hint: 'Program rollup, where to start',      path: '/assessment/reports',                         tenant: 'assessment', group: 'Analyze',
     keywords: ['report', 'rollup', 'certification', 'maturity', 'level'] },
   { label: 'Feedback',           hint: 'Open follow-ups across teams',        path: '/assessment/feedback',                        tenant: 'assessment', group: 'Analyze',
     keywords: ['feedback', 'follow-up'] },
+  { label: 'Work graph',         hint: 'Teams, evidence and drafts for the day, not the run ledger', path: '/assessment/activity',                     tenant: 'assessment', group: 'Analyze',
+    keywords: ['activity', 'graph', 'teams', 'evidence', 'drafts', 'decks'] },
   { label: 'Enterprise',         hint: 'Governance context',                  path: '/assessment/enterprise',                      tenant: 'assessment', group: 'Informatics',
     keywords: ['enterprise', 'governance'] },
-  { label: 'Workspace',          hint: 'Document explorer',                   path: '/assessment/workspace',                       tenant: 'assessment', group: 'Informatics',
-    keywords: ['workspace', 'document', 'explorer'] },
+  { label: 'Workspace',          hint: 'Documents, files and presentations',  path: '/assessment/workspace?view=library',          tenant: 'assessment', group: 'Informatics',
+    keywords: ['workspace', 'document', 'file', 'explorer', 'deck', 'presentation', 'powerpoint', 'pptx', 'slides', 'review'] },
   { label: 'Prompts',            hint: 'Agent slash commands',                path: '/assessment/prompts',                         tenant: 'assessment', group: 'Informatics',
     keywords: ['prompt', 'slash command'] },
   { label: 'Rules',              hint: 'Scoring stance + archetypes',         path: '/assessment/rules',                           tenant: 'assessment', group: 'Informatics',
@@ -269,6 +279,8 @@ const PAGES: PageEntry[] = [
     keywords: ['profile', 'status', 'avatar', 'me'] },
   { label: 'Recordings',         hint: 'Call recordings and their shares',    path: '/social/recordings',                          tenant: 'social', group: 'Library',
     keywords: ['recording', 'video', 'playback', 'share'] },
+  { label: 'Work graph',         hint: 'Your conversations, calls, recordings and decks for the day', path: '/social/work-graph', tenant: 'social', group: 'Library',
+    keywords: ['activity', 'graph', 'conversations', 'calls', 'recordings', 'decks', 'today'] },
   { label: 'Configuration',      hint: 'Retention, rooms and integrations',   path: '/social/configuration',                       tenant: 'social', group: 'System',
     keywords: ['configuration', 'retention', 'policy', 'integration'] },
   { label: 'Social settings',    hint: 'Your notification and call preferences', path: '/social/settings',                        tenant: 'social', group: 'System',
@@ -282,6 +294,10 @@ const PAGES: PageEntry[] = [
     keywords: ['runbook', 'skill', 'dry-run', 'promotion'] },
   { label: 'Runs',               hint: 'Every run, its steps and status',     path: '/pipelines/runs',                             tenant: 'pipelines', group: 'Runs',
     keywords: ['run', 'job', 'execution', 'status', 'ledger'] },
+  { label: 'Work graph',         hint: 'Runs, steps and approvals for the day, not the run ledger', path: '/pipelines/activity',                       tenant: 'pipelines', group: 'Runs',
+    keywords: ['activity', 'graph', 'runs', 'approvals'] },
+  { label: 'Communication',      hint: 'Social channels and direct messages here, and huddles on runs', path: '/pipelines/communication', tenant: 'pipelines', group: 'Runs',
+    keywords: ['communication', 'social', 'chat', 'message', 'dm', 'channel', 'mention', 'call', 'calls', 'huddle', 'missed', 'meeting', 'history'] },
   { label: 'Approvals',          hint: 'Steps waiting on a person',           path: '/pipelines/approvals',                        tenant: 'pipelines', group: 'Runs',
     keywords: ['approval', 'approve', 'review', 'waiting'] },
   { label: 'Artifacts',          hint: 'What runs produced',                  path: '/pipelines/artifacts',                        tenant: 'pipelines', group: 'Runs',

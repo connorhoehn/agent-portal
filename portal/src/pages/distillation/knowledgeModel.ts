@@ -457,3 +457,30 @@ export function guidePrompt(
   lines.push(EXPLAIN_ONLY);
   return `${q}\n\n${lines.join('\n')}`;
 }
+
+// ── Live arrivals ────────────────────────────────────────────────────────
+
+/**
+ * The ids a live refresh brought in: in `next`, not in `before`. `before`
+ * null is the first load of a scope, where nothing is "new" — every row
+ * would be, which says nothing.
+ */
+export function freshIds(before: ReadonlyArray<{ id: string }> | null, next: ReadonlyArray<{ id: string }>): Set<string> {
+  if (before === null) return new Set();
+  const seen = new Set(before.map((r) => r.id));
+  return new Set(next.filter((r) => !seen.has(r.id)).map((r) => r.id));
+}
+
+/** What the screen reader hears when rows arrive: "2 new run notes", or
+ *  nothing when nothing arrived. */
+export function freshAnnouncement(count: number, view: KnowledgeView): string {
+  if (count <= 0) return '';
+  return `${count} new ${count === 1 ? VIEW_SINGULAR[view] : VIEW_NOUN[view]}`;
+}
+
+/** "3h ago", "just now" — compactAge as a phrase; '' when unknown. */
+export function agoPhrase(iso: string | null | undefined, nowMs: number): string {
+  const age = compactAge(iso, nowMs);
+  if (!age) return '';
+  return age === 'now' ? 'just now' : `${age} ago`;
+}

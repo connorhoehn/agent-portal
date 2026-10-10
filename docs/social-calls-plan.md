@@ -295,6 +295,115 @@ wire contract and where state lives with two replicas).
    tenant-aware lobbies and the platform-api/SFU verifiers shipped
    2026-09-29 — step 3.)
 
+## Lobby admission at platform-api (2026-10-06)
+
+**The gap.** platform-api's `lobbyAccess` admitted any OrgIQ-token lobby
+inside the caller's tenant. It applied only a prefix rule plus DM ids, so it
+admitted `orgiq:initiative:<any id>`, `assessment:team:<any id>`, a private
+`social:ch:<slug>`, or a name that is not a lobby family at all. A caller
+with a valid tenant token could therefore get media tokens for a page's
+huddle by posting to platform-api directly, skipping the BFF gateway's
+`lobbyGuard` and live-principal checks.
+
+**The mechanism.** platform-api now asks the BFF for every lobby decision
+(platform-api `src/lib/lobbyAuthority.ts`, `docs/lobby-authority.md`). When
+`LOBBY_AUTHORITY_REQUIRED=true`:
+
+- An OrgIQ-token lobby that passes platform-api's prefix rule also needs a
+  yes from `POST /api/realtime/lobby-access` (`middleware/src/routes/realtime-lobby-access.ts`).
+- platform-api calls that route with the caller's own bearer and `{lobbyName}`.
+- The BFF verifies the token exactly as `/ws` does
+  (`gatewayAuthFromClaims`). It then answers with `authorizeLiveGatewayCall(…, 'join', {lobbyName})`,
+  the same fresh admission a join frame gets: the directory epoch, grants and
+  actor, `lobbyGuard`, the family read gate, Social StartCall and membership,
+  and the page resource.
+- platform-api admits only on 200 `{allowed:true}`. Anything else refuses,
+  including 403, 401, a 404 from a BFF that lacks the route, 5xx and timeouts.
+- `orgiq:`, `assessment:`, `social:` and `pipelines:` lobbies are refused to
+  any non-OrgIQ caller, such as a Cognito or SKIP_AUTH dev bearer.
+
+**Why a callback rather than lobby grants in the token.** The preferred
+design was `lobbies: [{name, exp}]` in the realtime token. It cannot be
+carried cleanly, for three reasons:
+
+- The portal's realtime token is one cached, page-wide credential shared with
+  the gateway socket. A changed token reconnects that socket (`OptionalGatewayProvider`).
+- The call library asks for the token through `platformApi.getIdToken()`,
+  which takes no lobby argument. A lobby-scoped token would need new library
+  plumbing and edits to the call host (`pages/projects/InitiativeCallHost.tsx`).
+- A grant outlives a revocation by up to its TTL. The callback is fresh on
+  every request and needs no client change.
+
+The cost is one BFF round trip per platform-api lobby decision, cached per
+request. These decisions happen only on session create, join and reads.
+
+**Rollout: two steps, each half deployable on its own.**
+
+1. Deploy the middleware carrying the route. It is inert until something
+   calls it.
+2. Then turn platform-api on. Locally, the `social` compose profile sets
+   `LOBBY_AUTHORITY_REQUIRED=true` and
+   `LOBBY_AUTHORITY_URL=http://host.docker.internal:3001/api/realtime/lobby-access`
+   (override with `SOCIAL_LOBBY_AUTHORITY_*`). In the cloud, use
+   `--context lobbyAuthorityUrl=<url platform-api's tasks can reach>/api/realtime/lobby-access`
+   on `OrgIQ-Social`, which sets both variables.
+
+The reverse order refuses every OrgIQ call until the middleware lands. That
+blackout is bounded by step 1. To roll back, drop the context or the flag;
+platform-api's default is off, which keeps the old prefix rule. Do not set
+the flag on a platform-api whose BFF URL is unreachable from its tasks. As
+with the machine callbacks, the deployed middleware ALB is not open to the
+VPC by default.
+
+**Verified (2026-10-06, local).**
+
+- platform-api branch `fix/lobby-resource-admission` at
+  `c226048c6d8b8c105f579f478d4ff19a1a5bdaca` (not merged, no tag). Its 16 new
+  tests pass, and so do the existing lobby and video suites. The full suite
+  has 6,011 passing; the one failure, `eventBusCompact`, also passes on its
+  own both with and without this change.
+- BFF route: 12 jest tests, plus the 232 gateway, live-principal and token
+  tests.
+- The owned BFF fixtures on :3063 and :3064 were restarted on this code. The
+  12 native contracts, 3 Redis faults and 1 DynamoDB fault all pass.
+- One real end-to-end run used `middleware/test-support/bff-platform-lobby-authority.mjs`
+  against a dedicated platform-api on :23011 and the isolated SFU on :3902:
+  - Two sessions ran a page huddle across both BFFs, and both were admitted
+    to the same SFU session.
+  - With valid tenant tokens, `orgiq:forged-huddle`, `orgiq:work:<id>`,
+    `orgiq:huddle:<callId>`, a non-member `social:ch:` and a retired-epoch
+    token were each refused with 404.
+  - Control run with the flag off: the same forged names were admitted (201).
+
+**OrgIQ lobby families (closed 2026-10-06).** The BFF used to admit
+`orgiq:initiative:<any id>` to any orgiq session: the family asked only the
+REST read's tenant gate, never the initiative, so platform-api inherited that
+yes. The family now carries `lobbyResource: 'orgiq-initiative'`
+(`middleware/src/lib/tenant-channels.ts`), the same standard as
+`assessment:team:<id>` and `pipelines:run:<id>`. Every call decision,
+including ringing and delivery, asks two things against the reloaded session:
+
+- the read tier `GET /api/graph/projects/:id` uses (active tenant orgiq, or
+  admin; every orgiq role holds it, so there is no narrower tier);
+- the initiative existing now, through `projectExists` in
+  `providers/projects.ts` (the `projects` row, or the mock fixture). This has
+  no cache, and a store error counts as a refusal.
+
+The rest of the `orgiq:` lobby shapes are unchanged:
+
+- `orgiq:work:<id>` is not a call lobby at all.
+- `orgiq:dm:<ids>` admits only the named ids.
+- Every other `orgiq:` name is refused.
+
+Seats, the `orgiq:huddle:<callId>` call-chat namespace and the initiative's
+chat channel are unchanged. Deleting the initiative, a grant or epoch
+revocation, or a forged rename of a stored call each fences delivery.
+
+Verification: `realtime-gateway-initiative-huddles.test.ts` runs 10 contracts
+through a real router. The native BFFs answer
+`/api/realtime/lobby-access` with 200 for the seeded `cluster-project` and
+403 for an unknown or forged id.
+
 ## Deploying it (see `docs/social-calls-deploy-plan.md`, 2026-09-28)
 
 Four pieces in order — the realtime JWT secret minted by

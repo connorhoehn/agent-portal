@@ -1,5 +1,6 @@
 import { NavLink, Outlet } from 'react-router';
-import { SubNavLayout, activeNavItemClassName, inactiveNavItemClassName, type SubNavItem } from '@connorhoehnslalom/ui-components/shared';
+import { activeNavItemClassName, inactiveNavItemClassName, type SubNavItem } from '@connorhoehnslalom/ui-components/shared';
+import { BuildSectionLayout } from '../../components/shell/BuildSectionLayout';
 import { useFetch } from '../../hooks/useFetch';
 import { useSession } from '../../lib/auth';
 import type { CrawlSession, CrawlTarget } from '../../components/ingest/types';
@@ -39,11 +40,10 @@ function IngestLayout() {
   );
 
   return (
-    <SubNavLayout
+    <BuildSectionLayout
       title="Knowledge"
       storageKey="knowledge"
       items={items}
-      contentAs="section"
       contentLabel="Ingest"
       renderNavItem={(item, children) => (
         <NavLink
@@ -55,7 +55,7 @@ function IngestLayout() {
       )}
     >
       <Outlet />
-    </SubNavLayout>
+    </BuildSectionLayout>
   );
 }
 

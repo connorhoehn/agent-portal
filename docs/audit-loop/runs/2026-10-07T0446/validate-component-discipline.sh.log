@@ -1,0 +1,26 @@
+
+== component discipline (per-area ratchets) ==
+  ✓ portal/src (all): raw 0/0, button 0/0, style 4/7 — LOWER THE BUDGETS to 0:0:4
+  ✓ components/runs: raw 0, button 0, style 0 (all at budget)
+  ✓ components/codebases: raw 0, button 0, style 0 (all at budget)
+  ✓ components/scores: raw 0, button 0, style 4 (all at budget)
+  ✓ components/marketplace: raw 0, button 0, style 0 (all at budget)
+  ✓ components/ingest: raw 0, button 0, style 0 (all at budget)
+  ✓ components/canary: raw 0/0, button 0/0, style 0/1 — LOWER THE BUDGETS to 0:0:0
+  ✓ components/shell: raw 0, button 0, style 0 (all at budget)
+  ✓ components/knowledge: raw 0, button 0, style 0 (all at budget)
+  ✓ components/sdlc: raw 0, button 0, style 0 (all at budget)
+  ✓ components/kb: raw 0/0, button 0/0, style 0/2 — LOWER THE BUDGETS to 0:0:0
+  ✓ components/observability: raw 0, button 0, style 0 (all at budget)
+  ✓ pages: raw 0, button 0, style 0 (all at budget)
+
+== queued composites stay small ==
+  ✓ 14 queued composites, each ≤ 8 raw elements
+
+== realtime-modules alias bridge ==
+  ✓ vite alias + tsconfig paths map @connorhoehn/realtime-modules
+
+== raw typography on bare text nodes (ratchet) ==
+  ✓ raw typography utilities on bare text: 8 (budget 8)
+
+ALL CHECKS PASS — every gated area is at or under its raw/button/style budget.

@@ -39,9 +39,9 @@ export function usePipelineRun(base: string, runId: string | null) {
   };
 }
 
-export function PipelineRunStatusChip({ status }: { status: string }) {
+export function PipelineRunStatusChip({ status, title }: { status: string; title?: string }) {
   const c = runStatusChip(status);
-  return <Chip tone={c.tone} size="xs" dot={status === 'running' ? 'pulse' : undefined}>{c.label}</Chip>;
+  return <Chip tone={c.tone} size="xs" dot={status === 'running' ? 'pulse' : undefined} {...(title ? { title } : {})}>{c.label}</Chip>;
 }
 
 /** The run's header and its context — tenant, kind, the source rows it folds. */
@@ -90,10 +90,10 @@ export function PipelineRunSummary({ run }: { run: PipelineRun }) {
 const STEP_COLUMNS: DataTableColumn<PipelineStep>[] = [
   { key: 'label', header: 'Step', render: (s) => s.label },
   {
-    key: 'status', header: 'Status',
+    key: 'status', header: 'Status', width: '112px',
     render: (s) => { const c = stepStatusChip(s.status); return <Chip tone={c.tone} size="xs">{c.label}</Chip>; },
   },
-  { key: 'startedAt', header: 'Started', render: (s) => (s.startedAt ? relativeTime(s.startedAt) : '—') },
+  { key: 'startedAt', header: 'Started', numeric: true, render: (s) => (s.startedAt ? relativeTime(s.startedAt) : '—') },
   {
     key: 'attempts', header: 'Attempts',
     // An agent run's attempts are its tool calls (TOOL_CALL_START…RESULT) —
@@ -102,7 +102,7 @@ const STEP_COLUMNS: DataTableColumn<PipelineStep>[] = [
       const items = attemptItems(s);
       if (items.length === 0) return '—';
       return (
-        <Inline gap="xs" wrap>
+        <Inline gap="xs" wrap={false}>
           {items.map((a) => { const c = stepStatusChip(a.status); return <Chip key={a.key} tone={c.tone} size="xs" title={c.label}>{a.label}</Chip>; })}
         </Inline>
       );
@@ -116,7 +116,7 @@ export function PipelineRunSteps({ steps }: { steps: PipelineStep[] }) {
   return (
     <Stack gap="sm">
       <WorkflowStepper size="sm" steps={stepperSteps(steps)} data-testid="pipeline-stepper" />
-      <DataTable data={steps} columns={STEP_COLUMNS} keyField={(s) => s.stepId} />
+      <DataTable size="sm" data={steps} columns={STEP_COLUMNS} keyField={(s) => s.stepId} />
     </Stack>
   );
 }
@@ -131,6 +131,7 @@ const ARTIFACT_COLUMNS: DataTableColumn<PipelineArtifact>[] = [
 export function PipelineRunArtifacts({ artifacts }: { artifacts: PipelineArtifact[] }) {
   return (
     <DataTable
+      size="sm"
       data={artifacts}
       columns={ARTIFACT_COLUMNS}
       keyField={(a) => a.id}

@@ -1,10 +1,13 @@
 import { Fragment, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
-import { ScopeHeader } from '@connorhoehnslalom/ui-components';
+import { UNDER_CRUMBS_BAND } from '../components/shell/headerRhythm';
 import {
   Button,
   EmptyState,
+  Inline,
   LoadingState,
+  PageHeader,
+  SectionLabel,
   Stack,
   StatStrip,
 } from '@connorhoehnslalom/ui-components/shared';
@@ -95,13 +98,10 @@ function ProjectsPage() {
   const refreshAll = () => { list.list.refresh(); person.refresh(); personDetail.refresh(); };
 
   const header = (title: string, description: string) => (
-    <ScopeHeader
-      // v2's type scale (V1): the 22px title and the 15px summary.
-      titleSize="md"
-      descriptionSize="sm"
+    <PageHeader
       title={title}
       description={description}
-      className="border-b border-border"
+      className={`border-b border-border px-6 pb-3 ${UNDER_CRUMBS_BAND}`}
       data-testid="initiatives-pane-header"
     />
   );
@@ -162,44 +162,43 @@ function ProjectsPage() {
       const velocityPct = totals.pointsTotal > 0 ? Math.round((totals.pointsDone / totals.pointsTotal) * 100) : null;
       body = (
         <Stack gap="md">
+          {/* One line of prose stats, as the initiative detail page draws
+              them: the KPI-card strip gave each cluster ~140px of the 708px
+              pane at 1440px and cut "$431.00 allocated" to 51px. The line
+              wraps between clusters, never inside one. */}
           <StatStrip
+            variant="line"
+            size="sm"
             aria-label="Program rollup"
             items={[
               {
-                label: 'Agents active',
+                // How many initiatives those runs are spread across — the
+                // same number the value counts, not the in-flight status count.
+                label: `agent${totals.agentsActive === 1 ? '' : 's'} active${totals.agentsActiveInitiatives > 0
+                  ? ` on ${totals.agentsActiveInitiatives} initiative${totals.agentsActiveInitiatives === 1 ? '' : 's'}`
+                  : ''}`,
                 value: totals.agentsActive,
                 ...(totals.agentsActive > 0 ? { tone: 'accent' as const } : {}),
-                // How many initiatives those runs are spread across — the
-                // same number the tile shows, not the in-flight status count.
-                hint: totals.agentsActiveInitiatives > 0
-                  ? `on ${totals.agentsActiveInitiatives} initiative${totals.agentsActiveInitiatives === 1 ? '' : 's'}`
-                  : 'none running',
               },
               {
-                label: 'Active initiatives',
+                label: `active initiative${totals.inFlight === 1 ? '' : 's'}${totals.planning > 0 ? ` · ${totals.planning} planning` : ` of ${rows.length}`}`,
                 value: totals.inFlight,
-                hint: totals.planning > 0 ? `${totals.planning} planning` : `${rows.length} total`,
               },
               {
-                label: 'Open work',
+                label: totals.criticalCount > 0
+                  ? `open items · ${totals.criticalCount} critical`
+                  : `open items · ${totals.openStories} stories, ${totals.openBugs} bugs`,
                 value: totals.openStories + totals.openBugs,
                 ...(totals.criticalCount > 0 ? { tone: 'danger' as const } : {}),
-                hint: totals.criticalCount > 0
-                  ? `${totals.criticalCount} critical`
-                  : `${totals.openStories} stories · ${totals.openBugs} bugs`,
               },
               {
-                label: 'Delivered',
+                label: totals.pointsTotal > 0 ? `delivered · ${totals.pointsDone}/${totals.pointsTotal} pts` : 'delivered · nothing estimated',
                 value: velocityPct != null ? `${velocityPct}%` : '—',
-                hint: totals.pointsTotal > 0 ? `${totals.pointsDone}/${totals.pointsTotal} pts` : 'nothing estimated',
               },
               {
-                label: `Spend · ${SPEND_MONTH.split(' ')[0]}`,
+                label: `spent in ${SPEND_MONTH.split(' ')[0]}${totals.allocatedUsd > 0 ? ` of ${usd(totals.allocatedUsd)} allocated` : ' · no allocations'}`,
                 value: usd(totals.spendUsd),
                 ...(totals.allocatedUsd > 0 && totals.spendUsd > totals.allocatedUsd ? { tone: 'danger' as const } : {}),
-                // "of $431.00 allocated" needed 108px in the 104px cell and was cut with
-                // no title; the "of" carried nothing the label does not already say.
-                hint: totals.allocatedUsd > 0 ? `${usd(totals.allocatedUsd)} allocated` : 'no allocations',
               },
             ]}
           />
@@ -211,7 +210,10 @@ function ProjectsPage() {
 
   return (
     <InitiativesExplorer
-      {...list.slots}
+      rail={list.rail}
+      scope={list.scope}
+      lens={list.lens}
+      collapsible
       breadcrumbs={initiativeBreadcrumbs({
         search: searchParams, scope, sprints: lens === 'sprints',
         sprint: lens === 'sprints' ? sprints.data?.sprints.find((s) => s.id === sprints.openId)?.name : undefined,
@@ -244,14 +246,14 @@ function MineEmpty({
         title={copy.heading}
         description={<Lines lines={copy.lines} />}
         action={(
-          <div className="flex flex-wrap items-center gap-2">
+          <Inline gap="sm">
             <Button size="sm" onClick={onEveryone}>{copy.primary.label}</Button>
             <Button size="sm" variant="secondary" onClick={onProfile}>{copy.secondary.label}</Button>
-          </div>
+          </Inline>
         )}
       />
       <Stack gap="sm" className="mt-5 border-t border-border pt-5 text-[13px] leading-5 text-text-secondary">
-        <h2 className="text-[14px] font-semibold text-text-primary">{copy.details.title}</h2>
+        <SectionLabel as="h2" case="sentence" className="text-[14px] font-semibold">{copy.details.title}</SectionLabel>
         <div><Lines lines={copy.details.lines} /></div>
         <Button size="sm" variant="ghost" className="self-start" onClick={onRefresh}>{copy.details.action.label}</Button>
       </Stack>

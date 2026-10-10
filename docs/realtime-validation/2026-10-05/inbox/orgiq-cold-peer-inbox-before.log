@@ -1,0 +1,66 @@
+
+> @orgiq/middleware@0.3.0 test
+> node node_modules/.bin/jest --config jest.config.cjs --runInBand --runTestsByPath src/lib/__tests__/direct-recipient.test.ts
+
+FAIL src/lib/__tests__/direct-recipient.test.ts
+  ✓ keeps unrelated service delivery synchronous under its existing authority boundary (2 ms)
+  ✓ uses current ViewSocial for recipients without requiring call creation policy (1 ms)
+  ✓ refuses direct call data after grant revocation (1 ms)
+  ✓ refuses direct call data after epoch revocation
+  ✓ refuses direct call data after source-role revocation
+  ✓ refuses direct call data after actor revocation
+  ✓ refuses direct call data after outage revocation
+  ✓ refuses direct call data after policy revocation (1 ms)
+  ✓ refuses direct call data after membership revocation
+  ✓ filters each persisted item by current tenant rights without mutating the stored batch
+  ✓ a full unread window shares current resource checks only inside that one reply (5 ms)
+  ✕ hydrates a cold peer resource before applying the synchronous recipient guard (2 ms)
+  ✓ holds membership fences across the entire bulk policy/read operation (1 ms)
+  ✓ rechecks the source epoch after a delayed notification policy read
+  ✓ refuses cross-tenant links, conflicting channels, inaccessible lobbies and current approval denial
+  ✓ scopes missed calls by the call lobby and supports the existing OrgIQ initiative origin
+  ✓ allows a current forgotten receipt after state deletion but refuses unscoped call data (1 ms)
+
+  ● hydrates a cold peer resource before applying the synchronous recipient guard
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 14
+    + Received  +  1
+
+      Object {
+        "payload": Object {
+    -     "notifications": Array [
+    -       Object {
+    -         "action": Object {
+    -           "href": "/social/teams",
+    -         },
+    -         "id": "cold-peer",
+    -         "payload": Object {
+    -           "channel": "social:ch:remote-private",
+    -           "tenant": "social",
+    -         },
+    -         "title": "Private cold-peer",
+    -         "type": "message",
+    -       },
+    -     ],
+    +     "notifications": Array [],
+        },
+        "type": "notification:bulk-update",
+      }
+
+      87 |   const message = bulk(item('cold-peer', 'social', channel));
+      88 |   expect(membershipStore.isActiveMember(channel, 'bob')).toBe(false);
+    > 89 |   expect(await coldFilter({ clientId: 'b', ctx, message })).toEqual(message);
+         |                                                             ^
+      90 |   expect(read).toHaveBeenCalledTimes(1);
+      91 | });
+      92 | it('holds membership fences across the entire bulk policy/read operation', async () => {
+
+      at Object.<anonymous> (src/lib/__tests__/direct-recipient.test.ts:89:61)
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 16 passed, 17 total
+Snapshots:   0 total
+Time:        3.516 s
+Ran all test suites within paths "src/lib/__tests__/direct-recipient.test.ts".

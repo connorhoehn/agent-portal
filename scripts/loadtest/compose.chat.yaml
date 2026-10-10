@@ -1,0 +1,60 @@
+name: orgiq-chat-test
+
+# Separate from the accepted signalling soak. No app/gateway rebuilds, owner
+# ports, AWS credentials or sibling service builds. Stores survive test-runtime
+# replacement; DynamoDB Local is disk-backed in its own named volume.
+services:
+  chat-dynamodb:
+    image: amazon/dynamodb-local:3.3.1@sha256:ff89bd48ff32cd8d9be5fee8873b65b8854dc408f1afe881be6eb00247bc0dab
+    container_name: orgiq-chat-dynamodb
+    command: ["-jar", "DynamoDBLocal.jar", "-sharedDb", "-dbPath", "/data"]
+    # The dedicated data volume is created root-owned by Docker. This local
+    # emulator has no host bind mounts.
+    user: "0:0"
+    ports: ["127.0.0.1:18061:8000"]
+    volumes: ["chat-dynamodb-data:/data"]
+    mem_limit: 512m
+    security_opt: [no-new-privileges:true]
+
+  chat-redis:
+    image: redis:7-alpine
+    container_name: orgiq-chat-redis
+    command: [redis-server, --appendonly, "yes", --maxmemory, 128mb, --maxmemory-policy, noeviction]
+    ports: ["127.0.0.1:16479:6379"]
+    volumes: ["chat-redis-data:/data"]
+    mem_limit: 256m
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 2s
+      timeout: 1s
+      retries: 30
+    security_opt: [no-new-privileges:true]
+
+  chat-init:
+    image: orgiq-soak-gateway:local
+    pull_policy: never
+    container_name: orgiq-chat-init
+    command: [node, /seed/init-chat-dynamodb.mjs]
+    environment:
+      NODE_PATH: /app/node_modules
+      CHAT_DDB_ENDPOINT: http://chat-dynamodb:8000
+      CHAT_TABLE_PREFIX: orgiq-chat-
+      CHAT_SCHEMA_SETUP_PATH: /seed/public/scripts/init-dynamodb.cjs
+      CHAT_SCHEMA_MANIFEST_PATH: /seed/public/infra/dynamodb-schemas.json
+      AWS_EC2_METADATA_DISABLED: "true"
+    volumes:
+      - ./init-chat-dynamodb.mjs:/seed/init-chat-dynamodb.mjs:ro
+      - ../../infra/node_modules/realtime-examples/scripts/init-dynamodb.cjs:/seed/public/scripts/init-dynamodb.cjs:ro
+      - ../../infra/node_modules/realtime-examples/infra/dynamodb-schemas.json:/seed/public/infra/dynamodb-schemas.json:ro
+    depends_on:
+      chat-dynamodb:
+        condition: service_started
+      chat-redis:
+        condition: service_healthy
+    restart: "no"
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+
+volumes:
+  chat-dynamodb-data:
+  chat-redis-data:

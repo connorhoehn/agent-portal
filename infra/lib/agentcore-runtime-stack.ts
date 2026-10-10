@@ -69,6 +69,20 @@ export interface AgentCoreRuntimeStackProps extends cdk.StackProps {
   readonly approvalsRequestSecret?: string;
   readonly harnessTraceSecret?: string;
   readonly assessmentRunCompleteSecret?: string;
+  /**
+   * The middleware as a deployed runtime reaches it (`MIDDLEWARE_URL`,
+   * agents/_shared/callbacks.py, approval_tool.py, instrumentation.py).
+   * Unset, the agents fall back to `http://middleware:3001` — the compose
+   * service name, which resolves nowhere in AWS — so the approval request,
+   * its poll and the assessment run-complete callback cannot arrive (traces
+   * still do, via stdout → CloudWatch → the middleware's poller). Runtimes run
+   * in PUBLIC network mode from AWS addresses no `albAllowCidr` lists, so the
+   * reachable value is the CloudFront portal URL (OrgIQ-Portal), which the ALB
+   * admits by its origin-verify header: `--context portalPublicUrl=https://…`
+   * (or `middlewareCallbackUrl` to name something else). See
+   * docs/social-calls-deploy-plan.md §10.
+   */
+  readonly middlewareUrl?: string;
 }
 
 const AGENT_NAMES = [
@@ -135,6 +149,9 @@ export class AgentCoreRuntimeStack extends cdk.Stack {
 
     const prefix = props.prefix ?? 'orgiq';
     const modelId = props.modelId ?? 'amazon.nova-pro-v1:0';
+    if (props.middlewareUrl !== undefined && !/^https?:\/\/[^/\s]+\/?$/.test(props.middlewareUrl)) {
+      throw new Error(`middlewareUrl must be an origin (https://host), got ${props.middlewareUrl}`);
+    }
 
     // Phase 1 (default): create ECR repos + execution roles
     // Phase 2 (after images pushed): add CfnRuntime + CfnRuntimeEndpoint
@@ -481,6 +498,8 @@ export class AgentCoreRuntimeStack extends cdk.Stack {
           ...(props.approvalsRequestSecret && { APPROVALS_REQUEST_SECRET: props.approvalsRequestSecret }),
           ...(props.harnessTraceSecret && { HARNESS_TRACE_SECRET: props.harnessTraceSecret }),
           ...(props.assessmentRunCompleteSecret && { ASSESSMENT_RUN_COMPLETE_SECRET: props.assessmentRunCompleteSecret }),
+          // Where those callbacks go — see `middlewareUrl` on the props.
+          ...(props.middlewareUrl && { MIDDLEWARE_URL: props.middlewareUrl }),
         },
       });
 

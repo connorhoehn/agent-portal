@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import {
+  T,
   Button,
   Card,
   CardHeader,
@@ -329,9 +330,9 @@ function PolicyEditor({
           options={[{ value: 'builder', label: 'Builder' }, { value: 'raw', label: 'Raw Cedar' }]}
         />
         {!draft.parsed && draft.mode === 'raw' && (
-          <Inline as="span" className="text-[11px] text-text-tertiary">
+          <T as="span" size="xs" tone="tertiary">
             (advanced syntax — builder unavailable)
-          </Inline>
+          </T>
         )}
       </Inline>
 
@@ -404,9 +405,9 @@ function BuilderForm({
 
         <FormField label="Resource" layout="inline">
           {() => (
-            <Inline as="span" gap="xs" className="text-[12px] text-text-tertiary">
+            <T as="span" size="xs" tone="tertiary">
               Application <code>(fixed)</code>
-            </Inline>
+            </T>
           )}
         </FormField>
       </Stack>
@@ -434,9 +435,9 @@ function PolicySummary({ parsed, statement }: { parsed: ParsedPolicy | null; sta
           labelWidth="w-auto"
           label="Effect"
           value={(
-            <Inline as="span" className={effectTone(parsed.effect) === 'success' ? 'font-medium text-success' : 'font-medium text-danger'}>
+            <T as="span" size="sm" weight="semibold" className={effectTone(parsed.effect) === 'success' ? 'text-success' : 'text-danger'}>
               {parsed.effect}
-            </Inline>
+            </T>
           )}
         />
         <KeyValue layout="row" labelWidth="w-auto" label="Role" value={parsed.role ?? 'any role'} />

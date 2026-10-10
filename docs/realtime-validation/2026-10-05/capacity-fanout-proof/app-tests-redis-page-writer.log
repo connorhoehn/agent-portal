@@ -1,0 +1,8 @@
+PASS src/lib/__tests__/call-pages-redis.integration.test.ts
+  ✓ real Redis atomically selects one writer across two instances and retains clear revisions/TTL (14 ms)
+
+Test Suites: 1 passed, 1 total
+Tests:       1 passed, 1 total
+Snapshots:   0 total
+Time:        2.76 s, estimated 3 s
+Ran all test suites within paths "src/lib/__tests__/call-pages-redis.integration.test.ts".

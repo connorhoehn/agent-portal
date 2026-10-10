@@ -1,0 +1,7 @@
+{
+  "realtimeVersion": "0.101.0",
+  "directRecipientFilter": true,
+  "normalizedHrefGuard": true,
+  "channelGenerationFence": true,
+  "callLobbyEnvelope": true
+}

@@ -1,0 +1,220 @@
+{
+  "status": 200,
+  "specStatus": 200,
+  "readOnly": true,
+  "actor": "u-vera",
+  "deckId": "idk-42e8a3f0-0595-40d7-9afd-65f79cfaf843",
+  "data": {
+    "id": "idk-42e8a3f0-0595-40d7-9afd-65f79cfaf843",
+    "projectId": "p-observability",
+    "title": "Observability review",
+    "includesBudget": false,
+    "revisions": [
+      {
+        "id": "irev-1f41698f-42ff-4052-8f21-0eb16834db1d",
+        "label": "Edited",
+        "createdAt": "2026-10-09T17:24:32.009Z",
+        "producedBy": "person:u-nora"
+      },
+      {
+        "id": "irev-d4e47b1e-3ad4-4516-afc3-15a27ed96f3c",
+        "label": "Edited",
+        "createdAt": "2026-10-09T17:23:35.411Z",
+        "producedBy": "person:u-nora"
+      },
+      {
+        "id": "irev-a2cafc83-2662-4a9d-9ba7-93ab061d0b58",
+        "label": "Edited",
+        "createdAt": "2026-10-09T17:20:26.201Z",
+        "producedBy": "person:u-nora"
+      },
+      {
+        "id": "irev-2f97c0c5-8894-4f52-8709-cd8ea01e2275",
+        "label": "Edited",
+        "createdAt": "2026-10-09T13:56:00.395Z",
+        "producedBy": "person:u-vera"
+      },
+      {
+        "id": "irev-b32b4af7-a7e7-4b54-b532-2e293a3e4fcb",
+        "label": "Edited",
+        "createdAt": "2026-10-09T13:46:53.822Z",
+        "producedBy": "person:u-vera"
+      },
+      {
+        "id": "irev-00937fec-1b6d-4b72-bb81-123252b8fd36",
+        "label": "Edited",
+        "createdAt": "2026-10-09T13:45:16.519Z",
+        "producedBy": "person:u-nora"
+      },
+      {
+        "id": "irev-caab70b8-4b63-4dfc-a194-e763b60c919f",
+        "label": "Generated with narrative",
+        "createdAt": "2026-10-09T13:36:10.607Z",
+        "producedBy": "generated"
+      }
+    ],
+    "activeRevisionId": "irev-1f41698f-42ff-4052-8f21-0eb16834db1d",
+    "lockedSlideIds": [],
+    "createdAt": "2026-10-09T13:36:10.607Z",
+    "updatedAt": "2026-10-09T17:24:32.009Z"
+  },
+  "spec": {
+    "title": "Observability review",
+    "subtitle": "In Progress · as of 2026-10-09",
+    "theme": "plain",
+    "slides": [
+      {
+        "id": "title",
+        "layout": "title",
+        "title": "Observability Platform",
+        "eyebrow": "Initiative status",
+        "bullets": [
+          "Status: In Progress",
+          "Owner: Nora DaSilva",
+          "Sponsor: Vera Green",
+          "Repository: connorhoehnslalom/orgiq-observability",
+          "As of: 2026-10-09"
+        ],
+        "notes": "Status deck for Observability Platform, prepared from the initiative's work items, sprints and decisions.",
+        "sources": [
+          {
+            "documentId": "initiative:p-observability",
+            "title": "Initiative Observability Platform"
+          }
+        ]
+      },
+      {
+        "id": "summary",
+        "layout": "bullets",
+        "title": "Observability: validation next",
+        "bullets": [
+          "Work items: 14 total · 11 open · 3 done",
+          "Story points: 18 of 52 done",
+          "Estimated cost of open work: $40.07",
+          "Sprints: 3",
+          "Open decisions: 0",
+          "Centralize telemetry, reduce alert noise, and control retention costs. Focus: actionable alerts, team error budgets, and OpenTelemetry.",
+          "Evidence on file: “Centralize telemetry, reduce alert noise, and control retention costs. Focus: actionable alerts, team error budgets, and OpenTelemetry.”"
+        ],
+        "notes": "Confirm the affected service dependency map, then replay the outage. Reviewed together in the huddle. The validation checklist is ready for review.",
+        "sources": [
+          {
+            "documentId": "initiative:p-observability",
+            "title": "Initiative Observability Platform"
+          },
+          {
+            "documentId": "initiative:p-observability:work-items",
+            "title": "Observability Platform — work items"
+          }
+        ]
+      },
+      {
+        "id": "work-status",
+        "layout": "chart",
+        "title": "Work by status",
+        "bullets": [
+          "Count of work items in each status (14 items)"
+        ],
+        "chart": {
+          "kind": "bar",
+          "labels": [
+            "Open",
+            "In progress",
+            "In review",
+            "Done",
+            "Cancelled"
+          ],
+          "series": [
+            {
+              "name": "Work items",
+              "values": [
+                6,
+                4,
+                1,
+                3,
+                0
+              ]
+            }
+          ]
+        },
+        "notes": "Validate the dependency map before replaying the alert outage.",
+        "sources": [
+          {
+            "documentId": "initiative:p-observability:work-items",
+            "title": "Observability Platform — work items"
+          }
+        ]
+      },
+      {
+        "id": "work-type",
+        "layout": "bullets",
+        "title": "Work by type",
+        "bullets": [
+          "Epics: 3 · 3 open · 0 points · $0.00 estimated",
+          "Stories: 9 · 6 open · 47 points · $56.07 estimated",
+          "Bugs: 2 · 2 open · 5 points · $5.74 estimated"
+        ],
+        "sources": [
+          {
+            "documentId": "initiative:p-observability:work-items",
+            "title": "Observability Platform — work items"
+          }
+        ]
+      },
+      {
+        "id": "sprints",
+        "layout": "bullets",
+        "title": "Sprints",
+        "bullets": [
+          "Sprint 98 — Span metrics + decom — Active · 2026-09-25 to 2026-10-09 · 0/5 items · 0/21 points · $24.95 estimated",
+          "Sprint 97 — Burn-rate alerts — Done · 2026-09-11 to 2026-09-25 · 1/2 items · 5/10 points · $11.54 estimated",
+          "Sprint 96 — Ingest hardening — Done · 2026-08-28 to 2026-09-11 · 2/2 items · 13/13 points · $16.52 estimated"
+        ],
+        "sources": [
+          {
+            "documentId": "initiative:p-observability",
+            "title": "Initiative Observability Platform"
+          },
+          {
+            "documentId": "sprint:spr-obs-s3",
+            "title": "Sprint Sprint 98 — Span metrics + decom"
+          },
+          {
+            "documentId": "sprint:spr-obs-s2",
+            "title": "Sprint Sprint 97 — Burn-rate alerts"
+          },
+          {
+            "documentId": "sprint:spr-obs-s1",
+            "title": "Sprint Sprint 96 — Ingest hardening"
+          }
+        ]
+      },
+      {
+        "id": "decisions",
+        "layout": "bullets",
+        "title": "Decisions",
+        "bullets": [
+          "Adopt OpenTelemetry — Resolved",
+          "Self-hosted OTel collectors over vendor agents — Resolved",
+          "Decisions above are as recorded on the initiative.",
+          "Evidence on file: “Replace ad-hoc tracing with OTLP + AWS X-Ray for unified observability.”"
+        ],
+        "notes": "Drafted offline from the supplied evidence excerpts.",
+        "sources": [
+          {
+            "documentId": "initiative:p-observability",
+            "title": "Initiative Observability Platform"
+          },
+          {
+            "documentId": "decision:d-otel",
+            "title": "Decision Adopt OpenTelemetry"
+          },
+          {
+            "documentId": "decision:d-otel-vendor",
+            "title": "Decision Self-hosted OTel collectors over vendor agents"
+          }
+        ]
+      }
+    ]
+  }
+}

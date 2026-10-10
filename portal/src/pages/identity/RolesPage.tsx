@@ -1,10 +1,12 @@
 import { useMemo } from 'react';
 import {
+  T,
   Card,
   CardHeader,
   Chip,
   DetailSection,
   Inline,
+  InlineAlert,
   LoadingState,
   PageSection,
   Stack,
@@ -40,7 +42,7 @@ function RolesPage() {
   // The matrix rows come from the SAME live schema the Schema tab edits — a
   // hardcoded action list here silently drifted from it the first time anyone
   // added an action.
-  const { data: schemaData } = useFetch<SchemaResponse>('/api/identity/schema');
+  const { data: schemaData, error: schemaError } = useFetch<SchemaResponse>('/api/identity/schema', undefined, { share: true });
 
   const actions = useMemo(
     () => matrixActions(Object.keys(schemaData?.schema?.OrgIQ?.actions ?? {}), data ?? []),
@@ -74,7 +76,12 @@ function RolesPage() {
       description="Cedar policies enforced by Verified Permissions on every middleware request."
     >
       <DetailSection title="Permission matrix" first>
-        <Table>
+        {schemaError && (
+          <InlineAlert tone="error" data-testid="roles-schema-error">
+            The action list could not be read from the policy schema ({schemaError}), so the matrix shows only the actions the roles themselves grant.
+          </InlineAlert>
+        )}
+        <Table size="sm">
           <TableHead>
             <TableRow>
               <TableTh>Action</TableTh>
@@ -84,7 +91,7 @@ function RolesPage() {
           <TableBody>
             {actions.map(action => (
               <TableRow key={action}>
-                <TableTd className="font-mono text-[12px]">{action}</TableTd>
+                <TableTd className="font-mono">{action}</TableTd>
                 {data.map(r => (
                   <TableTd key={r.id} className="text-center">
                     <Chip size="xs" tone={r.capabilities.includes(action) ? 'success' : 'neutral'}>
@@ -107,7 +114,7 @@ function RolesPage() {
           <Card key={role.id} className="w-[280px]">
             <CardHeader title={role.label} subtitle={role.id} />
             <Stack gap="sm" className="mt-2">
-              <Stack as="p" gap="none" className="m-0 text-[12px] text-text-secondary">{role.summary}</Stack>
+              <T as="p" size="xs" tone="secondary" className="m-0">{role.summary}</T>
               <Inline gap="xs" wrap>
                 {role.capabilities.map(c => (
                   <Chip key={c} size="xs">{c}</Chip>

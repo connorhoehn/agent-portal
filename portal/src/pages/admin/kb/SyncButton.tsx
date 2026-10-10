@@ -1,6 +1,6 @@
 // "Sync Now" — kicks a Bedrock ingestion job for the KB's data source.
 
-import { Button, Inline, InlineAlert, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { Button, InlineAlert, Stack, T } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../../lib/capabilities';
 import { useKbAction } from './useKbAction';
 
@@ -22,7 +22,7 @@ export function SyncButton({
 
   if (!ready || !can('ManageKB')) return null;
   // No data source means nothing to ingest FROM — the verb would 400.
-  if (!dataSourceId) return <Inline as="span" gap="none" className="text-[11px] text-text-tertiary">—</Inline>;
+  if (!dataSourceId) return <T as="span" size="xs" tone="tertiary">—</T>;
 
   return (
     <Stack gap="xs">

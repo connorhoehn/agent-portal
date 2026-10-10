@@ -16,11 +16,10 @@ import {
   Chip,
   DetailHeader,
   InlineAlert,
-  KPIGrid,
   MetaLine,
   ProgressBar,
   Stack,
-  StatCard,
+  StatStrip,
   TabPanel,
   Tabs,
 } from '@connorhoehnslalom/ui-components/shared';
@@ -36,36 +35,31 @@ function SprintMoney({ s }: { s: Sprint }) {
       {/* mdColumns: this panel is rendered inside an 880px Drawer (SprintsLens),
           narrower than a full-width page at the same viewport — four tiles at
           the md band would cram. */}
-      <KPIGrid columns={4} mdColumns={2}>
-        <StatCard
-          label="Points"
-          value={`${s.pointsDone} / ${s.pointsTotal}`}
-          hint={`${s.doneItemCount} of ${s.itemCount} items done`}
-        />
-        <StatCard
-          label="Planned cost"
-          value={usd(s.estimatedCostUsd)}
-          hint="Sum of the sprint's work-item dollar estimates"
-        />
-        <StatCard
-          label="Envelope granted"
-          value={s.grantCount > 0 ? usd(s.grantedUsd) : '—'}
-          hint={s.grantCount > 0
-            ? `${s.grantCount} grant${s.grantCount === 1 ? '' : 's'} to ${s.stewardName ?? 'the steward'}`
-            : 'No budget grant scoped to this sprint'}
-        />
-        <StatCard
-          label="Initiative spend in window"
-          value={usd(s.initiativeSpendInWindowUsd)}
-          danger={overEnvelope}
-          // The label is load-bearing, not decoration. bot_runs record the
-          // initiative and the bot that paid, never the person whose envelope
-          // authorized it — so this is what the initiative spent between these
-          // dates, and calling it the steward's burn would be a number the data
-          // cannot support.
-          hint={`All agent spend attributed to this initiative ${dateRange(s)} — not a personal burn figure`}
-        />
-      </KPIGrid>
+      <StatStrip
+        aria-label="Sprint money"
+        variant="line"
+        size="sm"
+        items={[
+          { label: 'points', value: `${s.pointsDone} / ${s.pointsTotal}`, title: `${s.doneItemCount} of ${s.itemCount} items done` },
+          { label: 'planned', value: usd(s.estimatedCostUsd), title: "Sum of the sprint's work-item dollar estimates" },
+          {
+            label: 'envelope granted',
+            value: s.grantCount > 0 ? usd(s.grantedUsd) : '—',
+            title: s.grantCount > 0
+              ? `${s.grantCount} grant${s.grantCount === 1 ? '' : 's'} to ${s.stewardName ?? 'the steward'}`
+              : 'No budget grant scoped to this sprint',
+          },
+          {
+            label: 'initiative spend in window',
+            value: usd(s.initiativeSpendInWindowUsd),
+            // Load-bearing label: bot_runs record the initiative and the bot that
+            // paid, never the person whose envelope authorized it, so this is not
+            // a personal burn figure.
+            title: `All agent spend attributed to this initiative ${dateRange(s)} — not a personal burn figure`,
+            ...(overEnvelope ? { tone: 'danger' as const } : {}),
+          },
+        ]}
+      />
       {overEnvelope ? (
         <InlineAlert tone="warning">
           The initiative spent more inside this window than the sprint's envelope holds. That

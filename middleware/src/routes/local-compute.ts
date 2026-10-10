@@ -1201,6 +1201,7 @@ localComputeRouter.post(
       if (!item) { res.status(404).json({ error: 'no such work item' }); return; }
       const verdict = await grantScopedDispatchVerdict(item.projectId, req.session);
       if (verdict.kind === 'deny') { res.status(403).json({ error: verdict.reason }); return; }
+      if (verdict.kind === 'unavailable') { res.status(503).json({ error: verdict.reason, gate: 'grant-authorization' }); return; }
       // The codebase that delivers the initiative, if one is registered —
       // the worker clones it with its own credentials. No codebase is not a
       // refusal here: the machine can still be asked, it just has nothing to

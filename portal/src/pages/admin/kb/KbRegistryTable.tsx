@@ -3,12 +3,11 @@
 
 import {
   Chip,
-  EntityCell,
   Inline,
   InlinePlaceholder,
   LoadingState,
   MetaLine,
-  Stack,
+  T,
   Table,
   TableBody,
   TableHead,
@@ -47,57 +46,54 @@ export function KbRegistryTable({
   onRefresh: () => void;
 }) {
   return (
-    <Table>
+    <Table size="sm">
       <TableHead>
         <TableRow>
-          {COLUMNS.map((c, i) => <TableTh key={c || `actions-${i}`}>{c}</TableTh>)}
+          {COLUMNS.map((c, i) => <TableTh key={c || `actions-${i}`} numeric={c === 'Documents'}>{c}</TableTh>)}
         </TableRow>
       </TableHead>
       <TableBody>
         {kbs.map((kb) => (
           <TableRow key={kb.id} clickable onClick={() => onOpen(kb)}>
             <TableTd>
-              <EntityCell label={kb.name} id={kb.slug} />
+              <Inline gap="sm" align="center" wrap={false}>
+                <T as="span" size="sm" weight="semibold" className="truncate">{kb.name}</T>
+                <T as="span" size="xs" tone="tertiary" className="font-mono truncate">{kb.slug}</T>
+              </Inline>
             </TableTd>
 
-            <TableTd className="text-[12px] text-text-secondary">{kb.purpose}</TableTd>
+            <TableTd><T as="span" size="xs" tone="secondary">{kb.purpose}</T></TableTd>
 
             <TableTd>
-              <Stack gap="xs" align="start">
+              <Inline gap="sm" align="center" wrap={false}>
                 <StatusChip status={kb.status} />
                 {/* The failure reason is the whole point of a FAILED row, but a
                     250-char Bedrock message would set the column width for
                     every other row — clipped here, in full on the detail page. */}
                 {kb.errorMessage && (
-                  <Inline
-                    as="span"
-                    gap="none"
-                    wrap
-                    className="max-w-[200px] break-words text-[10px] text-danger"
-                    title={kb.errorMessage}
-                  >
+                  <T as="span" size="xs" className="max-w-[200px] truncate text-danger" title={kb.errorMessage}>
                     {truncate(kb.errorMessage, 60)}
-                  </Inline>
+                  </T>
                 )}
-              </Stack>
+              </Inline>
             </TableTd>
 
-            <TableTd className="text-[12px] text-text-secondary tabular-nums whitespace-nowrap">
-              {docCountLabel(kb.docCount)}
+            <TableTd numeric className="whitespace-nowrap">
+              <T as="span" size="xs" tone="secondary" tabular>{docCountLabel(kb.docCount)}</T>
             </TableTd>
 
             <TableTd className="whitespace-nowrap">
-              <Stack gap="xs" align="start">
+              <Inline gap="sm" align="center" wrap={false}>
                 <MetaLine size="xs" items={[formatDate(kb.lastSyncAt)]} />
                 {kb.lastSyncStatus && (
                   <Chip tone={syncTone(kb.lastSyncStatus)} size="xs">{kb.lastSyncStatus}</Chip>
                 )}
-              </Stack>
+              </Inline>
             </TableTd>
 
             {/* Row actions must not also open the row. */}
             <TableTd onClick={(e) => e.stopPropagation()}>
-              <Inline gap="xs" align="start">
+              <Inline gap="xs" align="center" wrap={false}>
                 {kb.status === 'ACTIVE' ? (
                   <SyncButton kbId={kb.id} dataSourceId={kb.dataSourceId} onDone={onRefresh} />
                 ) : canProvision(kb) ? (
@@ -105,9 +101,9 @@ export function KbRegistryTable({
                   // page, so starting it here means going there.
                   <ProvisionButton kbId={kb.id} retry={kb.status === 'FAILED'} onDone={() => onOpen(kb)} />
                 ) : (
-                  <Inline as="span" gap="none" className="text-[11px] text-text-tertiary">
+                  <T as="span" size="xs" tone="tertiary">
                     {kb.status === 'CREATING' ? 'Provisioning…' : '—'}
-                  </Inline>
+                  </T>
                 )}
                 {/* Delete is the escape hatch for rows that never came up. */}
                 {canProvision(kb) && (

@@ -181,6 +181,15 @@ export const PARAM_SOURCES: Record<string, string> = {
   'personId@/api/scores': '/api/scores/leaderboard#personId',
   'agentId@/api/agent-detail': '/api/agents#id',
   'id@/api/graph/decisions': '/api/graph/decisions',
+  'id@/api/work-graph/initiatives': '/api/graph/projects#id',
+  'id@/api/work-graph/people': '/api/scores/leaderboard#personId',
+  'id@/api/pipelines/work-graph/runs': '/api/pipelines/runs#id',
+  // A conversation is named by its chat channel; a person who is in none of them is answered the uniform 404.
+  'id@/api/social/work-graph/conversations': '/api/social/channels#channels[].channel',
+  // The plane's mount of the same graph, and a person's shared work (routes/social-plane.ts): the plane's own lists name them.
+  // An open room is a conversation every Social grant holder may read; the capture persona is in no seeded channel.
+  'id@/api/social/plane/work-graph/conversations': '/api/social/plane/rooms#rooms[].lobbyName',
+  'userId@/api/social/plane/people': '/api/social/plane/people#people[].userId',
   'id@/api/ingest/crawl': '/api/ingest/crawls',
   'jobId@/api/ingest/job': '/api/ingest/jobs',
   'id@/api/ingest/survey': '/api/ingest/surveys',

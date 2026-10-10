@@ -48,7 +48,7 @@ import {
   TableHead,
   TableRow,
   TableTd,
-  TableTh,
+  TableTh, T,
 } from '@connorhoehnslalom/ui-components/shared';
 
 import { useFetch } from '../../hooks/useFetch';
@@ -56,7 +56,6 @@ import { useUrlState } from '../../lib/useUrlState';
 import { SmartEmptyState } from '../../components/observability/SmartEmptyState';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { firstDegraded } from '../../lib/degraded';
-import { T } from './Text';
 import {
   TOOL_WINDOWS,
   errorTone,
@@ -235,7 +234,7 @@ function ToolCallsPage() {
           >
             Failing only
           </FilterChip>
-          <T className="text-[11px] text-text-tertiary">
+          <T size="xs" tone="tertiary">
             {tableBlind
               ? 'tool count unavailable'
               : `${fmtInt(visibleRows.length)} of ${fmtInt(rows.length)} tools`}
@@ -263,25 +262,25 @@ function ToolCallsPage() {
             ]}
           />
         ) : (
-          <Table>
+          <Table size="sm">
             <TableHead>
               <TableRow>
                 <TableTh>Tool</TableTh>
-                <TableTh>Calls</TableTh>
+                <TableTh numeric>Calls</TableTh>
                 <TableTh>Volume</TableTh>
-                <TableTh>P50</TableTh>
-                <TableTh>P99</TableTh>
+                <TableTh numeric>P50</TableTh>
+                <TableTh numeric>P99</TableTh>
                 <TableTh>Error rate</TableTh>
-                <TableTh>Cost</TableTh>
+                <TableTh numeric>Cost</TableTh>
               </TableRow>
             </TableHead>
             <TableBody>
               {visibleRows.map((r) => (
                 <TableRow key={r.toolName}>
-                  <TableTd className="text-[12px] font-medium font-mono whitespace-nowrap">
+                  <TableTd className="font-mono whitespace-nowrap">
                     {r.toolName}
                   </TableTd>
-                  <TableTd className="text-[12px] text-text-secondary tabular-nums">
+                  <TableTd numeric>
                     {fmtInt(r.count)}
                   </TableTd>
                   <TableTd>
@@ -296,10 +295,10 @@ function ToolCallsPage() {
                         color="var(--color-brand)"
                       />
                     ) : (
-                      <T className="text-[11px] text-text-tertiary">—</T>
+                      <T size="xs" tone="tertiary">—</T>
                     )}
                   </TableTd>
-                  <TableTd className="text-[12px] text-text-secondary tabular-nums">
+                  <TableTd numeric>
                     {fmtMs(r.p50DurationMs)}
                   </TableTd>
                   <TableTd>
@@ -311,11 +310,11 @@ function ToolCallsPage() {
                     {r.errorRate > 0 ? (
                       <Chip tone={errorTone(r.errorRate)} size="xs">{fmtPct(r.errorRate)}</Chip>
                     ) : (
-                      <T className="text-[12px] text-text-tertiary tabular-nums">0%</T>
+                      <T tone="tertiary" tabular>0%</T>
                     )}
                   </TableTd>
                   <TableTd
-                    className="text-[12px] text-text-secondary tabular-nums"
+                    numeric
                     title={r.withCost === 0
                       ? 'No priced rows — this tool spends no model tokens'
                       : `${fmtInt(r.withCost)} of ${fmtInt(r.count)} calls carried a cost estimate`}
@@ -386,7 +385,7 @@ function ToolCallsPage() {
             onRetry={refreshErrors}
           />
         ) : (
-          <Table>
+          <Table size="sm">
             <TableHead>
               <TableRow>
                 <TableTh>Agent</TableTh>
@@ -399,13 +398,13 @@ function ToolCallsPage() {
             <TableBody>
               {visibleErrors.map((e) => (
                 <TableRow key={e.toolCallId}>
-                  <TableTd className="text-[12px] font-mono whitespace-nowrap">{e.agentId || '—'}</TableTd>
-                  <TableTd className="text-[11px] text-text-tertiary whitespace-nowrap">
+                  <TableTd className="font-mono whitespace-nowrap">{e.agentId || '—'}</TableTd>
+                  <TableTd className="whitespace-nowrap">
                     {fmtTs(e.ts)}
                   </TableTd>
-                  <TableTd className="text-[12px] font-mono whitespace-nowrap">{e.toolName}</TableTd>
+                  <TableTd className="font-mono whitespace-nowrap">{e.toolName}</TableTd>
                   <TableTd
-                    className="text-[12px] text-text-secondary max-w-[360px] truncate"
+                    className="max-w-[360px] truncate"
                     title={e.errorMessage ?? 'errored with no message'}
                   >
                     {e.errorMessage ?? 'errored with no message'}
@@ -413,7 +412,7 @@ function ToolCallsPage() {
                   <TableTd className="whitespace-nowrap">
                     <Link
                       to={`/admin/observability/invocations/${encodeURIComponent(e.invocationId)}`}
-                      className="text-primary text-[12px] font-mono no-underline px-1 py-0.5"
+                      className="text-xs text-primary font-mono no-underline px-1 py-0.5"
                     >
                       {e.invocationId}
                     </Link>

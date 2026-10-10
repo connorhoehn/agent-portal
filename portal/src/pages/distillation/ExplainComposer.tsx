@@ -1,13 +1,12 @@
 // The docked Agent composer under a Knowledge record or a Review claim (spec
 // §1): its context chip is the record, and it only EXPLAINS. Sending prepares
-// a question for the Ask page (`/iq/invoke?prompt=`), which runs the read-only
-// org agent — it never submits a review, publishes, or starts a compaction.
+// a question for Search's Answer view (`/iq/search?tab=answer&prompt=`), which
+// runs the read-only org agent — it never submits a review, publishes, or starts a compaction.
 // Mutating workflows stay on their own buttons and capability gates.
 //
-// Light (backdropTone "none") in a FloatingComposerDock, the way
-// realtime-examples docks its Pipelines composer: the dock pins inside
-// EditorShell's footer at the column's full width, which also keeps the
-// composer out of a content-sized container. The context chip is a menu
+// The library ConversationComposer with no conversation (Agent only, no
+// particle console), pinned inside EditorShell's footer at the column's full
+// width. The context chip is a menu
 // ("This guide ▾": what the prompt attaches, "No context" included) rather
 // than a removable ×, so the reader can put the context back. The host owns
 // the choice and builds the prompt, and gets the composer's handle so a
@@ -15,11 +14,10 @@
 // project").
 import { forwardRef, useMemo, useState, type ForwardedRef, type Ref } from 'react';
 import { useNavigate } from 'react-router';
-import { FloatingComposerDock } from '@connorhoehnslalom/ui-components/doc-editor';
-import {
-  RichChatComposer, type ComposerMode, type RichChatComposerHandle,
-} from '@connorhoehnslalom/ui-components/social/rich-composer';
+import type { RichChatComposerHandle } from '@connorhoehnslalom/ui-components/social/rich-composer';
+import { ConversationComposer } from '../../lib/conversationComposer';
 import { explainPrompt } from './knowledgeModel';
+import { searchMigration } from '../search/searchModel';
 
 export interface ExplainContextOption<C extends string> {
   value: C;
@@ -42,7 +40,6 @@ function ExplainComposerInner<C extends string>(
   ref: ForwardedRef<RichChatComposerHandle>,
 ) {
   const navigate = useNavigate();
-  const [mode, setMode] = useState<ComposerMode>('agent');
   const chosen = contextOptions.find((o) => o.value === context) ?? contextOptions[0];
   const references = useMemo(() => [{
     id: subject.id,
@@ -59,42 +56,37 @@ function ExplainComposerInner<C extends string>(
   }], [subject.id, chosen.label, contextOptions, context, onContextChange]);
 
   return (
-    <FloatingComposerDock
+    <ConversationComposer
+      key={subject.id}
+      channel={null}
+      context={{ kind: 'document', id: subject.id, title: chosen.label }}
+      // It only explains (the read-only org agent); nothing here writes.
+      capabilities={{ maySend: false, agent: { allowed: true } }}
+      offModes={{ chat: 'Distillation has no discussion thread — ask the agent instead', terminal: 'A record has no terminal' }}
+      defaultMode="agent"
       label="Ask about this record"
       data-testid="distillation-composer"
-      className="bg-surface pt-3"
-      composer={(
-        <RichChatComposer
-          key={subject.id}
-          ref={ref}
-          mode={mode}
-          onModeChange={setMode}
-          modeControl="menu"
-          backdropTone="none"
-          disabledModes={['chat', 'terminal']}
-          modeUnavailableReasons={{
-            chat: 'Distillation has no discussion thread — ask the agent instead',
-            terminal: 'A record has no terminal',
-          }}
-          layout="auto"
-          toolbar="compact"
-          density="compact"
-          modeShortcuts
-          modeTriggers
-          submitLabel={{ agent: 'Ask' }}
-          modePlaceholders={{ agent: placeholder }}
-          allowAttachments={false}
-          references={references}
-          onSend={(msg) => {
-            const typed = msg.text.replace(/^\/agent\s+/, '');
-            if (!typed.trim()) return false;
-            const prompt = buildPrompt(typed, context);
-            if (!prompt) return false;
-            navigate(`/iq/invoke?${new URLSearchParams({ prompt }).toString()}`);
-            return true;
-          }}
-        />
-      )}
+      // EditorShell's 20px head inset: the composer lines up with the record's
+      // title and body (one left edge for the whole record pane).
+      className="bg-surface pt-3 [--dock-inset:1.25rem]"
+      composerRef={ref}
+      console={false}
+      // Always the card (as before 2.439): the context menu chip stays on the mode row, never the idle row's 11px chip.
+      expanded
+      contextChip={false}
+      submitLabel={{ agent: 'Ask' }}
+      modePlaceholders={{ agent: placeholder }}
+      references={references}
+      persistDraft={false}
+      onAgent={typed => {
+        if (!typed.trim()) return false;
+        const prompt = buildPrompt(typed, context);
+        if (!prompt) return false;
+        // Straight to the Answer view: a hop through the legacy /iq/invoke
+        // redirect is one more lazy route the navigation has to wait for.
+        navigate(searchMigration('/iq/invoke', `?${new URLSearchParams({ prompt })}`));
+        return true;
+      }}
     />
   );
 }

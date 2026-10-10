@@ -20,6 +20,9 @@ export const DOCUMENT_EDIT_AGENT_ID = 'orgiq-assessment-drafter';
 export const DOCUMENT_EDIT_MODE = 'suggest-confluence-content';
 /** The drafter reads the whole page; past this the page is cut, and says so. */
 export const DOCUMENT_TEXT_LIMIT = 24_000;
+export const DOCUMENT_REVISION_FEEDBACK_LIMIT = 2_000;
+/** Matches the invoke route's JSON.stringify(payload).length limit. */
+export const DOCUMENT_EDIT_INPUT_LIMIT = 64 * 1024;
 
 export interface DocumentSelection {
   /** Editor positions, `from < to`. */
@@ -48,7 +51,20 @@ export interface DocumentEditRequest {
     text: string;
     truncated: boolean;
     selection: DocumentSelection | null;
+    /** The original insertion caret, when revising an existing proposal. */
+    cursor?: number;
   };
+  revision?: {
+    id: string;
+    version: number;
+    instruction: string;
+    content: { text: string };
+  };
+}
+
+export interface DocumentRevisionRequest extends DocumentEditRequest {
+  document: DocumentEditRequest['document'] & { cursor: number };
+  revision: NonNullable<DocumentEditRequest['revision']>;
 }
 
 /** `/api/agents/:id/invoke` for the drafter. */
@@ -77,6 +93,77 @@ export function buildDocumentEditRequest(instruction: string, context: DocumentE
       selection,
     },
   };
+}
+
+/** Revise a pending draft without moving its target to the editor's current selection. */
+export function buildDocumentRevisionRequest(
+  feedback: string,
+  context: DocumentEditContext,
+  proposal: DocumentAgentProposal & { version: number },
+): DocumentRevisionRequest | null {
+  const ask = feedback.trim();
+  if (!ask) return null;
+  if (ask.length > DOCUMENT_REVISION_FEEDBACK_LIMIT) {
+    throw new Error('Revision feedback must be 2,000 characters or fewer.');
+  }
+  const selection = proposal.kind === 'replace' && proposal.anchor !== 'cursor'
+    ? { from: proposal.anchor.from, to: proposal.anchor.to, text: proposal.originalText }
+    : null;
+  const pageText = textPrefix(context.text, DOCUMENT_TEXT_LIMIT);
+  if (!pageText.trim()) {
+    throw new Error('This revision needs document text as source context. Add document text before revising.');
+  }
+  const request: DocumentRevisionRequest = {
+    mode: DOCUMENT_EDIT_MODE,
+    instruction: selection
+      ? `${ask}\n\nRevise the pending replacement in revision.content.text for the original document.selection. Return only the unapplied replacement as content.`
+      : `${ask}\n\nRevise the pending insertion in revision.content.text at the original document.cursor. Return only the unapplied insertion as content.`,
+    document: {
+      id: context.docId,
+      title: context.title,
+      text: pageText,
+      truncated: pageText.length < context.text.length,
+      selection,
+      cursor: proposal.cursor,
+    },
+    revision: {
+      id: proposal.id,
+      version: proposal.version,
+      instruction: proposal.instruction,
+      content: { text: proposal.content.text },
+    },
+  };
+  if (JSON.stringify(request).length <= DOCUMENT_EDIT_INPUT_LIMIT) return request;
+
+  // Only canonical page context is expendable. Silently dropping the prior
+  // draft or original target would turn a revision into a different request.
+  request.document.truncated = true;
+  request.document.text = '';
+  if (JSON.stringify(request).length > DOCUMENT_EDIT_INPUT_LIMIT) {
+    throw new Error('This draft and its original target are too large to revise. Shorten the draft or request a smaller edit.');
+  }
+  let lower = 0;
+  let upper = pageText.length;
+  while (lower < upper) {
+    const length = Math.ceil((lower + upper) / 2);
+    request.document.text = textPrefix(pageText, length);
+    if (JSON.stringify(request).length <= DOCUMENT_EDIT_INPUT_LIMIT) lower = length;
+    else upper = length - 1;
+  }
+  request.document.text = textPrefix(pageText, lower);
+  if (!request.document.text.trim()) {
+    throw new Error('This draft leaves no document text as source context. Shorten the draft or request a smaller edit.');
+  }
+  return request;
+}
+
+/** Do not leave half of a Unicode surrogate pair at the context boundary. */
+function textPrefix(text: string, limit: number): string {
+  let end = Math.min(text.length, limit);
+  if (end > 0 && end < text.length
+    && text.charCodeAt(end - 1) >= 0xd800 && text.charCodeAt(end - 1) <= 0xdbff
+    && text.charCodeAt(end) >= 0xdc00 && text.charCodeAt(end) <= 0xdfff) end--;
+  return text.slice(0, end);
 }
 
 /** The payload as JSON (a log line, a test fixture). */
@@ -131,6 +218,22 @@ export interface DocumentAgentProposal {
   instruction: string;
 }
 
+/**
+ * The list a refresh leaves on screen: local rows that must survive it
+ * (streaming, unsaved, and a just-applied row still inside its "Applied"
+ * window — the server list is only ready/applying, so without this a refresh
+ * triggered by the apply itself wipes the chip within milliseconds), then the
+ * server's rows, the linked target first.
+ */
+export function mergeRefreshedProposals<T extends { id: string; status: string }>(
+  current: readonly T[], remote: readonly T[], opts: { requestedId: string | null | undefined; unsaved: (id: string) => boolean },
+): T[] {
+  const local = current.filter(p => p.status === 'streaming' || p.status === 'applied' || opts.unsaved(p.id));
+  const localIds = new Set(local.map(p => p.id));
+  const rest = remote.filter(p => !localIds.has(p.id));
+  return [...rest.filter(p => p.id === opts.requestedId), ...local, ...rest.filter(p => p.id !== opts.requestedId)];
+}
+
 /** The proposal a send opens, before any reply (status `streaming`). */
 export function pendingProposal(id: string, instruction: string, context: DocumentEditContext): DocumentAgentProposal {
   const selection = context.selection && context.selection.to > context.selection.from ? context.selection : null;
@@ -183,9 +286,10 @@ export type InsertNode =
 /**
  * The proposal's markdown as editor content: one paragraph per block, `#`–`###`
  * as headings, soft line breaks joined. A single paragraph inserts as its text
- * (so it flows into the paragraph at the caret); several insert as blocks.
+ * (so it flows into the paragraph at the caret, after a space when `charBefore`
+ * is non-whitespace text); several insert as blocks.
  */
-export function insertContentFor(markdown: string): string | InsertNode[] {
+export function insertContentFor(markdown: string, charBefore = ''): string | InsertNode[] {
   const blocks = markdown.replace(/\r\n/g, '\n').split(/\n{2,}/).map(b => b.trim()).filter(Boolean);
   if (blocks.length === 0) return '';
   const nodes: InsertNode[] = blocks.map((block) => {
@@ -196,6 +300,10 @@ export function insertContentFor(markdown: string): string | InsertNode[] {
     const text = block.split('\n').map(l => l.trim()).join(' ');
     return { type: 'paragraph', content: [{ type: 'text', text }] };
   });
-  if (nodes.length === 1 && nodes[0]!.type === 'paragraph') return nodes[0]!.content![0]!.text;
+  if (nodes.length === 1 && nodes[0]!.type === 'paragraph') {
+    // Flowing into the caret's paragraph: keep a word boundary after text.
+    const text = nodes[0]!.content![0]!.text;
+    return charBefore !== '' && !/\s/.test(charBefore) ? ` ${text}` : text;
+  }
   return nodes;
 }

@@ -24,11 +24,12 @@ import {
   TableTh,
   TableTd,
   Chip,
+  CodeBlock,
   Inline,
   PageSection,
   Select,
   Stack,
-  useToast,
+  useToast, T,
 } from '@connorhoehnslalom/ui-components/shared';
 import {
   LineChart,
@@ -47,7 +48,6 @@ import { SaveAsTestCaseModal } from '../../components/observability/SaveAsTestCa
 import { SmartEmptyState } from '../../components/observability/SmartEmptyState';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { firstDegraded, readDegraded } from '../../lib/degraded';
-import { T } from './Text';
 import { RowEmpty } from './ReadState';
 import { parsePgTimestampAsUtc } from '../../lib/pgTimestamp';
 import { WindowPicker, useWindowUrlState } from './WindowPicker';
@@ -255,22 +255,22 @@ function DriftPage() {
             ]}
           />
         ) : (
-          <Table>
+          <Table size="sm">
             <TableHead>
               <TableRow>
                 <TableTh>Agent</TableTh>
-                <TableTh>Count</TableTh>
+                <TableTh numeric>Count</TableTh>
                 <TableTh>Schema OK %</TableTh>
-                <TableTh>Judge P50</TableTh>
-                <TableTh>Judge P05</TableTh>
-                <TableTh>Drift P95</TableTh>
+                <TableTh numeric>Judge P50</TableTh>
+                <TableTh numeric>Judge P05</TableTh>
+                <TableTh numeric>Drift P95</TableTh>
               </TableRow>
             </TableHead>
             <TableBody>
               {rows.map((r) => (
                 <TableRow key={r.agentId}>
-                  <TableTd className="text-[12px] font-medium whitespace-nowrap">{r.agentId}</TableTd>
-                  <TableTd className="text-[12px] text-[var(--color-text-secondary)]">{r.count}</TableTd>
+                  <TableTd className="whitespace-nowrap">{r.agentId}</TableTd>
+                  <TableTd numeric>{r.count}</TableTd>
                   <TableTd>
                     <Chip tone={schemaTone(r.schemaConformance)} size="xs">
                       {(r.schemaConformance * 100).toFixed(1)}%
@@ -296,9 +296,9 @@ function DriftPage() {
 
       <Card padding="md">
         <Inline as="div" align="center" justify="between" wrap gap="md" className="mb-3">
-          <Inline as="h2" gap="xs" wrap className="text-[14px] font-semibold m-0">
-            Drift Over Time{' '}
-            <T className="text-[11px] text-[var(--color-text-tertiary)] font-normal">
+          <Inline as="h2" gap="xs" wrap align="baseline" className="m-0">
+            <T size="sm" weight="semibold">Drift Over Time</T>
+            <T size="xs" tone="tertiary">
               P95 cosine distance to centroid · bucket {win.bucket}m · window {win.label}
             </T>
           </Inline>
@@ -341,9 +341,9 @@ function DriftPage() {
 
       <Card padding="md">
         <Inline as="div" align="center" justify="between" wrap gap="md" className="mb-3">
-          <Inline as="h2" gap="xs" wrap className="text-[14px] font-semibold m-0">
-            By Template{' '}
-            <T className="text-[11px] text-[var(--color-text-tertiary)] font-normal">
+          <Inline as="h2" gap="xs" wrap align="baseline" className="m-0">
+            <T size="sm" weight="semibold">By Template</T>
+            <T size="xs" tone="tertiary">
               which prompt is drifting · {templates.length} group{templates.length === 1 ? '' : 's'} · sorted by drift
             </T>
           </Inline>
@@ -351,16 +351,16 @@ function DriftPage() {
         {templates.length === 0 ? (
           <RowEmpty text="No template groups have enough samples to compare yet." degraded={driftDegraded} />
         ) : (
-          <Table>
+          <Table size="sm">
             <TableHead>
               <TableRow>
                 <TableTh>Agent</TableTh>
                 <TableTh>Template</TableTh>
-                <TableTh>Count</TableTh>
-                <TableTh>Judge P50</TableTh>
-                <TableTh>Judge P05</TableTh>
+                <TableTh numeric>Count</TableTh>
+                <TableTh numeric>Judge P50</TableTh>
+                <TableTh numeric>Judge P05</TableTh>
                 <TableTh>Schema OK %</TableTh>
-                <TableTh>Drift P95</TableTh>
+                <TableTh numeric>Drift P95</TableTh>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -376,11 +376,11 @@ function DriftPage() {
                     }}
                     className={focused ? 'bg-[var(--color-surface-hover)]' : ''}
                   >
-                    <TableTd className="text-[12px] font-medium whitespace-nowrap">{t.agentId}</TableTd>
-                    <TableTd className="text-[11px] text-[var(--color-text-tertiary)] font-[ui-monospace,monospace] whitespace-nowrap">
+                    <TableTd className="whitespace-nowrap">{t.agentId}</TableTd>
+                    <TableTd className="font-mono whitespace-nowrap">
                       {t.templateId}
                     </TableTd>
-                    <TableTd className="text-[12px] text-[var(--color-text-secondary)]">{t.count}</TableTd>
+                    <TableTd numeric>{t.count}</TableTd>
                     <TableTd>
                       <Chip tone={judgeP50Tone(t.judgeP50)} size="xs">{fmt(t.judgeP50)}</Chip>
                     </TableTd>
@@ -405,9 +405,9 @@ function DriftPage() {
 
       <Card padding="md">
         <Inline as="div" align="center" justify="between" wrap gap="md" className="mb-3">
-          <Inline as="h2" gap="xs" wrap className="text-[14px] font-semibold m-0">
-            Outliers{' '}
-            <T className="text-[11px] text-[var(--color-text-tertiary)] font-normal">
+          <Inline as="h2" gap="xs" wrap align="baseline" className="m-0">
+            <T size="sm" weight="semibold">Outliers</T>
+            <T size="xs" tone="tertiary">
               highest drift first · click a row to inspect + see nearest known-good neighbor
             </T>
           </Inline>
@@ -429,7 +429,7 @@ function DriftPage() {
         ) : outlierRows.length === 0 ? (
           <RowEmpty text="No outliers for this agent in the current window." degraded={driftDegraded} />
         ) : (
-          <Table>
+          <Table size="sm">
             <TableHead>
               <TableRow>
                 <TableTh>Template</TableTh>
@@ -448,21 +448,21 @@ function DriftPage() {
                 return (
                   <Fragment key={o.invocationId}>
                     <TableRow>
-                      <TableTd className="text-[11px] text-[var(--color-text-tertiary)] font-[ui-monospace,monospace] whitespace-nowrap">
+                      <TableTd className="font-mono whitespace-nowrap">
                         {o.templateId ?? '(none)'}
                       </TableTd>
-                      <TableTd className="text-[11px] text-[var(--color-text-tertiary)] whitespace-nowrap">
+                      <TableTd className="whitespace-nowrap">
                         {relativeTime(o.ts)}
                       </TableTd>
                       <TableTd
-                        className="text-[12px] max-w-[320px] overflow-hidden text-ellipsis whitespace-nowrap cursor-pointer"
+                        className="text-xs max-w-[320px] overflow-hidden text-ellipsis whitespace-nowrap cursor-pointer"
                         title={o.promptSnippet}
                         onClick={() => setExpanded(isOpen ? null : o.invocationId)}
                       >
                         {o.promptSnippet}
                       </TableTd>
                       <TableTd
-                        className="text-[12px] max-w-[320px] overflow-hidden text-ellipsis whitespace-nowrap cursor-pointer"
+                        className="text-xs max-w-[320px] overflow-hidden text-ellipsis whitespace-nowrap cursor-pointer"
                         title={o.responseSnippet}
                         onClick={() => setExpanded(isOpen ? null : o.invocationId)}
                       >
@@ -554,63 +554,39 @@ function OutlierDetail({
     <div>
       <Inline as="div" align="start" gap="md">
         <Stack gap="none" className="flex-1">
-          <T as="div" className="text-[10px] font-bold text-[var(--color-text-tertiary)] mb-1 tracking-[0.5px]">
+          <T as="div" size="xs" weight="semibold" tone="tertiary" className="mb-1">
             OUTLIER
           </T>
-          <Inline as="div" align="center" wrap gap="xs" className="text-[11px] text-[var(--color-text-secondary)] mb-1.5">
-            <span>distance {fmt(outlier.distance)}</span>
-            <T className="text-[var(--color-text-tertiary)]">·</T>
-            <span>judge {fmt(outlier.judgeScore)}</span>
-            <T className="text-[var(--color-text-tertiary)]">·</T>
+          <Inline as="div" align="center" wrap gap="xs" className="mb-1.5">
+            <T size="xs" tone="secondary">distance {fmt(outlier.distance)}</T>
+            <T tone="tertiary">·</T>
+            <T size="xs" tone="secondary">judge {fmt(outlier.judgeScore)}</T>
+            <T tone="tertiary">·</T>
             <CostChip cost={outlier.totalCostUsd} />
             <PromptVersionChip promptVersion={outlier.promptVersion} />
           </Inline>
-          <Stack
-            as="pre"
-            gap="none"
-            className="font-['Fira_Code','Cascadia_Code',monospace] text-[11.5px] leading-[1.55] whitespace-pre-wrap [word-break:break-word] m-0 py-2.5 px-3 rounded-[var(--radius-sm)] bg-[var(--color-surface)] border border-[var(--color-border)] max-h-[300px] overflow-y-auto"
-          >
-            {outlier.responseSnippet}
-          </Stack>
+          <CodeBlock code={outlier.responseSnippet} language="text" />
           {outlier.judgeRationale && (
-            <T as="div" className="text-[10.5px] text-[var(--color-text-tertiary)] mt-1.5 italic">
+            <T as="div" size="xs" tone="tertiary" className="mt-1.5 italic">
               judge: {outlier.judgeRationale}
             </T>
           )}
         </Stack>
         <Stack gap="none" className="flex-1">
-          <T as="div" className="text-[10px] font-bold text-[var(--color-text-tertiary)] mb-1 tracking-[0.5px]">
+          <T as="div" size="xs" weight="semibold" tone="tertiary" className="mb-1">
             NEAREST KNOWN-GOOD{' '}
             {nearest && (
-              <T className="font-normal text-[var(--color-text-tertiary)]">
+              <T size="xs" tone="tertiary">
                 · distance {fmt(nearest.distance)} · judge {fmt(nearest.judgeScore)}
               </T>
             )}
           </T>
           {neighbors == null ? (
-            <Stack
-              as="pre"
-              gap="none"
-              className="font-['Fira_Code','Cascadia_Code',monospace] text-[11.5px] leading-[1.55] whitespace-pre-wrap [word-break:break-word] m-0 py-2.5 px-3 rounded-[var(--radius-sm)] bg-[var(--color-surface)] border border-[var(--color-border)] max-h-[300px] overflow-y-auto"
-            >
-              loading…
-            </Stack>
+            <CodeBlock code="loading…" language="text" />
           ) : nearest ? (
-            <Stack
-              as="pre"
-              gap="none"
-              className="font-['Fira_Code','Cascadia_Code',monospace] text-[11.5px] leading-[1.55] whitespace-pre-wrap [word-break:break-word] m-0 py-2.5 px-3 rounded-[var(--radius-sm)] bg-[var(--color-surface)] border border-[var(--color-border)] max-h-[300px] overflow-y-auto"
-            >
-              {nearest.responseSnippet}
-            </Stack>
+            <CodeBlock code={nearest.responseSnippet} language="text" />
           ) : (
-            <Stack
-              as="pre"
-              gap="none"
-              className="font-['Fira_Code','Cascadia_Code',monospace] text-[11.5px] leading-[1.55] whitespace-pre-wrap [word-break:break-word] m-0 py-2.5 px-3 rounded-[var(--radius-sm)] bg-[var(--color-surface)] border border-[var(--color-border)] max-h-[300px] overflow-y-auto text-[var(--color-text-tertiary)]"
-            >
-              no trusted neighbor in last 7d
-            </Stack>
+            <CodeBlock code="no trusted neighbor in last 7d" language="text" />
           )}
         </Stack>
       </Inline>

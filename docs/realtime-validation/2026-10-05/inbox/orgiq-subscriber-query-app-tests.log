@@ -1,0 +1,202 @@
+
+> @orgiq/middleware@0.3.0 test
+> node node_modules/.bin/jest --config jest.config.cjs --runInBand --json --outputFile=/tmp/orgiq-subscriber-query-app-tests.json --runTestsByPath src/lib/__tests__/call-chat-durable.integration.test.ts src/lib/__tests__/realtime-gateway.test.ts src/lib/__tests__/realtime-gateway-isolation.test.ts src/lib/__tests__/call-features-cluster.integration.test.ts src/lib/__tests__/realtime-gateway-notifications.test.ts src/lib/__tests__/realtime-gateway-social.test.ts src/lib/__tests__/realtime-gateway-live-authority.test.ts src/lib/__tests__/realtime-gateway-distillation.test.ts src/lib/__tests__/realtime-gateway-tenants.test.ts src/lib/__tests__/realtime-gateway-social-dynamo.test.ts src/routes/__tests__/dm-page-references.test.ts src/lib/__tests__/live-principal.test.ts src/routes/__tests__/call-chat.test.ts src/routes/__tests__/call-pages.test.ts src/lib/__tests__/call-pages-redis.integration.test.ts src/lib/__tests__/call-chat-state.test.ts src/lib/__tests__/call-chat-redis.integration.test.ts src/lib/__tests__/call-chat-gateway.test.ts src/lib/__tests__/distillation-realtime.test.ts src/lib/__tests__/distillation-live-authority.test.ts src/routes/__tests__/social-embedded.test.ts src/routes/__tests__/social-bindings.test.ts src/lib/__tests__/call-chat-lifecycle.test.ts src/lib/__tests__/social-membership-fence.test.ts src/lib/__tests__/call-pages-store.test.ts src/lib/__tests__/direct-recipient.test.ts src/lib/__tests__/health-probe.test.ts src/providers/__tests__/identity-authoritative.test.ts src/lib/__tests__/live-subscribers.test.ts
+
+PASS src/lib/__tests__/call-chat-durable.integration.test.ts (12.628 s)
+PASS src/lib/__tests__/realtime-gateway.test.ts
+  ● Console
+
+    console.log
+      [realtime-gateway] serving /ws (chat, presence, calls, notifications); call state + inbox: memory; chat store: dynamo
+
+      at attachRealtimeGateway (src/lib/realtime-gateway.ts:835:11)
+
+PASS src/lib/__tests__/realtime-gateway-isolation.test.ts (5.017 s)
+  ● Console
+
+    console.log
+      [realtime-gateway] serving /ws (chat, presence, calls, notifications); call state + inbox: memory; chat store: dynamo
+
+      at attachRealtimeGateway (src/lib/realtime-gateway.ts:835:11)
+
+PASS src/lib/__tests__/call-features-cluster.integration.test.ts
+FAIL src/lib/__tests__/realtime-gateway-social.test.ts
+  ● channelGuard on social:ch: names › admits a member, refuses a non-member, and refuses another tenant before membership is asked
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+      110 | describe('channelGuard on social:ch: names', () => {
+      111 |   it('admits a member, refuses a non-member, and refuses another tenant before membership is asked', () => {
+    > 112 |     expect(channelGuard({ userId: 'u-sana', org: 'social' }, GENERAL)).toBe(true);
+          |                                                                        ^
+      113 |     expect(channelGuard({ userId: 'u-sana', org: 'social' }, `chat:${GENERAL}`)).toBe(true);
+      114 |     expect(channelGuard({ userId: 'u-sana', org: 'social' }, DESIGN)).toBe(false);
+      115 |     expect(channelGuard({ userId: 'u-sana', org: 'social' }, `presence:${DESIGN}`)).toBe(false);
+
+      at Object.<anonymous> (src/lib/__tests__/realtime-gateway-social.test.ts:112:72)
+
+  ● channels over the socket › a member posts in social:ch:general and another member reads it live; it lands in the store
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+      146 |     expect(chatMessages(sana, GENERAL).find((m) => m.message === 'hello from the test')).toMatchObject({ userId: 'u-mira' });
+      147 |     expect(denied(mira)).toEqual([]);
+    > 148 |     expect(socialChannelMessagesFixture.rows().some((m) => m.channel === GENERAL && m.message === 'hello from the test')).toBe(true);
+          |                                                                                                                           ^
+      149 |   });
+      150 |
+      151 |   it('the owner and added member join and exchange messages in a new team General channel longer than 50 characters', async () => {
+
+      at Object.<anonymous> (src/lib/__tests__/realtime-gateway-social.test.ts:148:123)
+
+PASS src/lib/__tests__/realtime-gateway-notifications.test.ts
+PASS src/lib/__tests__/realtime-gateway-live-authority.test.ts
+PASS src/lib/__tests__/realtime-gateway-distillation.test.ts
+FAIL src/lib/__tests__/realtime-gateway-tenants.test.ts
+  ● the partition rule reads the token's tenants (E5) › admits a social:ch: member standing in orgiq when the token lists social, and refuses without the grant
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+      105 | describe('the partition rule reads the token\'s tenants (E5)', () => {
+      106 |   it('admits a social:ch: member standing in orgiq when the token lists social, and refuses without the grant', () => {
+    > 107 |     expect(channelGuard({ userId: 'u-theo', org: 'orgiq', tenants: ['orgiq', 'social'] }, GENERAL)).toBe(true);
+          |                                                                                                     ^
+      108 |     expect(channelGuard({ userId: 'u-theo', org: 'orgiq', tenants: ['orgiq', 'social'] }, `chat:${GENERAL}`)).toBe(true);
+      109 |     expect(channelGuard({ userId: 'u-theo', org: 'orgiq', tenants: ['orgiq'] }, GENERAL)).toBe(false);
+      110 |     expect(channelGuard({ userId: 'u-theo', org: 'orgiq' }, GENERAL)).toBe(false);
+
+      at Object.<anonymous> (src/lib/__tests__/realtime-gateway-tenants.test.ts:107:101)
+
+  ● the partition rule reads the token's tenants (E5) › a channel's CALL lobby asks the same membership as its chat (2026-09-30)
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+      116 |     // #general member: the lobby opens; #design-reviews non-member: refused,
+      117 |     // even though the social grant admits the partition.
+    > 118 |     expect(lobbyGuard({ userId: 'u-theo', org: 'orgiq', tenants: ['orgiq', 'social'] }, GENERAL)).toBe(true);
+          |                                                                                                   ^
+      119 |     expect(lobbyGuard({ userId: 'u-sana', org: 'social', tenants: ['social'] }, 'social:ch:design-reviews')).toBe(false);
+      120 |     expect(lobbyGuard({ userId: 'u-sana', org: 'orgiq', tenants: ['orgiq'] }, GENERAL)).toBe(false);
+      121 |   });
+
+      at Object.<anonymous> (src/lib/__tests__/realtime-gateway-tenants.test.ts:118:99)
+
+PASS src/routes/__tests__/dm-page-references.test.ts
+PASS src/lib/__tests__/realtime-gateway-social-dynamo.test.ts
+PASS src/routes/__tests__/call-chat.test.ts
+PASS src/routes/__tests__/call-pages.test.ts
+PASS src/lib/__tests__/live-principal.test.ts
+PASS src/lib/__tests__/call-pages-redis.integration.test.ts
+PASS src/lib/__tests__/live-subscribers.test.ts
+PASS src/lib/__tests__/call-chat-state.test.ts
+PASS src/lib/__tests__/call-chat-redis.integration.test.ts
+PASS src/lib/__tests__/call-chat-gateway.test.ts
+  ● Console
+
+    console.log
+      [realtime-gateway] serving /ws (chat, presence, calls, notifications); call state + inbox: memory; chat store: memory
+
+      at attachRealtimeGateway (src/lib/realtime-gateway.ts:835:11)
+
+PASS src/lib/__tests__/distillation-live-authority.test.ts
+PASS src/lib/__tests__/distillation-realtime.test.ts
+PASS src/routes/__tests__/social-embedded.test.ts
+PASS src/routes/__tests__/social-bindings.test.ts
+{"type":"authz","decision":"DENY","action":"TenantScope","sub":"u-theo","role":"member","tenant":"orgiq","path":"/channels","reason":"route requires tenant=social","ts":"2026-10-05T18:41:57.896Z"}
+PASS src/lib/__tests__/call-chat-lifecycle.test.ts
+PASS src/lib/__tests__/social-membership-fence.test.ts
+PASS src/lib/__tests__/call-pages-store.test.ts
+PASS src/lib/__tests__/direct-recipient.test.ts
+PASS src/lib/__tests__/health-probe.test.ts
+PASS src/providers/__tests__/identity-authoritative.test.ts
+
+Summary of all failing tests
+FAIL src/lib/__tests__/realtime-gateway-social.test.ts
+  ● channelGuard on social:ch: names › admits a member, refuses a non-member, and refuses another tenant before membership is asked
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+      110 | describe('channelGuard on social:ch: names', () => {
+      111 |   it('admits a member, refuses a non-member, and refuses another tenant before membership is asked', () => {
+    > 112 |     expect(channelGuard({ userId: 'u-sana', org: 'social' }, GENERAL)).toBe(true);
+          |                                                                        ^
+      113 |     expect(channelGuard({ userId: 'u-sana', org: 'social' }, `chat:${GENERAL}`)).toBe(true);
+      114 |     expect(channelGuard({ userId: 'u-sana', org: 'social' }, DESIGN)).toBe(false);
+      115 |     expect(channelGuard({ userId: 'u-sana', org: 'social' }, `presence:${DESIGN}`)).toBe(false);
+
+      at Object.<anonymous> (src/lib/__tests__/realtime-gateway-social.test.ts:112:72)
+
+  ● channels over the socket › a member posts in social:ch:general and another member reads it live; it lands in the store
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+      146 |     expect(chatMessages(sana, GENERAL).find((m) => m.message === 'hello from the test')).toMatchObject({ userId: 'u-mira' });
+      147 |     expect(denied(mira)).toEqual([]);
+    > 148 |     expect(socialChannelMessagesFixture.rows().some((m) => m.channel === GENERAL && m.message === 'hello from the test')).toBe(true);
+          |                                                                                                                           ^
+      149 |   });
+      150 |
+      151 |   it('the owner and added member join and exchange messages in a new team General channel longer than 50 characters', async () => {
+
+      at Object.<anonymous> (src/lib/__tests__/realtime-gateway-social.test.ts:148:123)
+
+FAIL src/lib/__tests__/realtime-gateway-tenants.test.ts
+  ● the partition rule reads the token's tenants (E5) › admits a social:ch: member standing in orgiq when the token lists social, and refuses without the grant
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+      105 | describe('the partition rule reads the token\'s tenants (E5)', () => {
+      106 |   it('admits a social:ch: member standing in orgiq when the token lists social, and refuses without the grant', () => {
+    > 107 |     expect(channelGuard({ userId: 'u-theo', org: 'orgiq', tenants: ['orgiq', 'social'] }, GENERAL)).toBe(true);
+          |                                                                                                     ^
+      108 |     expect(channelGuard({ userId: 'u-theo', org: 'orgiq', tenants: ['orgiq', 'social'] }, `chat:${GENERAL}`)).toBe(true);
+      109 |     expect(channelGuard({ userId: 'u-theo', org: 'orgiq', tenants: ['orgiq'] }, GENERAL)).toBe(false);
+      110 |     expect(channelGuard({ userId: 'u-theo', org: 'orgiq' }, GENERAL)).toBe(false);
+
+      at Object.<anonymous> (src/lib/__tests__/realtime-gateway-tenants.test.ts:107:101)
+
+  ● the partition rule reads the token's tenants (E5) › a channel's CALL lobby asks the same membership as its chat (2026-09-30)
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+      116 |     // #general member: the lobby opens; #design-reviews non-member: refused,
+      117 |     // even though the social grant admits the partition.
+    > 118 |     expect(lobbyGuard({ userId: 'u-theo', org: 'orgiq', tenants: ['orgiq', 'social'] }, GENERAL)).toBe(true);
+          |                                                                                                   ^
+      119 |     expect(lobbyGuard({ userId: 'u-sana', org: 'social', tenants: ['social'] }, 'social:ch:design-reviews')).toBe(false);
+      120 |     expect(lobbyGuard({ userId: 'u-sana', org: 'orgiq', tenants: ['orgiq'] }, GENERAL)).toBe(false);
+      121 |   });
+
+      at Object.<anonymous> (src/lib/__tests__/realtime-gateway-tenants.test.ts:118:99)
+
+
+Test Suites: 2 failed, 27 passed, 29 total
+Tests:       4 failed, 1 skipped, 287 passed, 292 total
+Snapshots:   0 total
+Time:        108.133 s, estimated 110 s
+Ran all test suites within paths "src/lib/__tests__/call-chat-durable.integration.test.ts", "src/lib/__tests__/realtime-gateway.test.ts", "src/lib/__tests__/realtime-gateway-isolation.test.ts", "src/lib/__tests__/call-features-cluster.integration.test.ts", "src/lib/__tests__/realtime-gateway-notifications.test.ts", "src/lib/__tests__/realtime-gateway-social.test.ts", "src/lib/__tests__/realtime-gateway-live-authority.test.ts", "src/lib/__tests__/realtime-gateway-distillation.test.ts", "src/lib/__tests__/realtime-gateway-tenants.test.ts", "src/lib/__tests__/realtime-gateway-social-dynamo.test.ts", "src/routes/__tests__/dm-page-references.test.ts", "src/lib/__tests__/live-principal.test.ts", "src/routes/__tests__/call-chat.test.ts", "src/routes/__tests__/call-pages.test.ts", "src/lib/__tests__/call-pages-redis.integration.test.ts", "src/lib/__tests__/call-chat-state.test.ts", "src/lib/__tests__/call-chat-redis.integration.test.ts", "src/lib/__tests__/call-chat-gateway.test.ts", "src/lib/__tests__/distillation-realtime.test.ts", "src/lib/__tests__/distillation-live-authority.test.ts", "src/routes/__tests__/social-embedded.test.ts", "src/routes/__tests__/social-bindings.test.ts", "src/lib/__tests__/call-chat-lifecycle.test.ts", "src/lib/__tests__/social-membership-fence.test.ts", "src/lib/__tests__/call-pages-store.test.ts", "src/lib/__tests__/direct-recipient.test.ts", "src/lib/__tests__/health-probe.test.ts", "src/providers/__tests__/identity-authoritative.test.ts", "src/lib/__tests__/live-subscribers.test.ts".
+Test results written to: ../../../../../tmp/orgiq-subscriber-query-app-tests.json

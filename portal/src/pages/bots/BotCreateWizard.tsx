@@ -357,7 +357,7 @@ export function BotCreateWizard({ open, onClose }: BotCreateWizardProps) {
                       return (
                         <SelectableCard key={t.id} selected={active} onSelect={() => applyStarter(t)} padding="sm" className="text-left">
                           <Stack gap="xs">
-                            <Inline as="span" gap="none" className={active ? 'text-[12px] font-semibold text-primary' : 'text-[12px] font-semibold text-text-primary'}>
+                            <Inline as="span" gap="none" className={active ? 'text-primary' : 'text-text-primary'}>
                               {t.label}
                             </Inline>
                             <MetaLine size="xs" tone="tertiary" items={[t.blurb]} />
@@ -404,7 +404,7 @@ export function BotCreateWizard({ open, onClose }: BotCreateWizardProps) {
                           }}
                         >
                           <Stack gap="xs">
-                            <Inline as="span" gap="none" className={active ? 'text-[12px] font-semibold text-primary' : 'text-[12px] font-semibold text-text-primary'}>
+                            <Inline as="span" gap="none" className={active ? 'text-primary' : 'text-text-primary'}>
                               {t.label}
                             </Inline>
                             <MetaLine size="xs" tone="tertiary" items={[t.blurb]} />
@@ -644,7 +644,7 @@ export function BotCreateWizard({ open, onClose }: BotCreateWizardProps) {
             <>
               <Card padding="md">
                 <SectionLabel as="div" className="mb-2">{step1.name.trim() || 'Unnamed bot'}</SectionLabel>
-                <Table>
+                <Table size="sm">
                   <TableBody>
                     <TableRow><TableTd className="text-text-tertiary">Template</TableTd><TableTd>{step1.template ?? '—'}</TableTd></TableRow>
                     <TableRow>
@@ -663,7 +663,7 @@ export function BotCreateWizard({ open, onClose }: BotCreateWizardProps) {
                     </TableRow>
                   </TableBody>
                 </Table>
-                <Stack gap="none" className="mt-2.5 text-[12px] text-text-secondary leading-snug border-t border-border pt-2 whitespace-pre-wrap">
+                <Stack gap="none" className="text-xs mt-2.5 text-text-secondary leading-snug border-t border-border pt-2 whitespace-pre-wrap">
                   {step1.prompt.trim()}
                 </Stack>
               </Card>

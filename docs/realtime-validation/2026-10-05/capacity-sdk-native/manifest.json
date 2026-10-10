@@ -1,0 +1,118 @@
+{
+ "recordedAt": "2026-10-05",
+ "scope": "SDK dispatch/deadline queue prototype: first native, application and compiled-capacity evaluation",
+ "rootHead": "86925d4d41b3957c747228d28eda5fba3c8f40f2",
+ "libraryVersion": "0.106.0",
+ "libraryCommit": "c5c967ee18fb2fa6dabe126e2dcdd023a4a64dac",
+ "compiledImage": {
+  "tag": "orgiq-middleware:cluster-sdk-dispatch-validation",
+  "id": "sha256:be341009708999317756142d34fb492b7ecae2a3e9694de18b57af002e39a7aa",
+  "arch": "arm64",
+  "node": "v22.23.3",
+  "localOnly": true
+ },
+ "results": {
+  "authoritySuites": "62/62 under the normal jest config, three consecutive runs, after widening one flaky 10 ms test budget (first run: 61/62, wait-budget expiry)",
+  "nativeClusterContracts": "12/12",
+  "redisFaults": "3/3",
+  "dynamoFault": "1/1",
+  "applicationGate": "291 passed, 2 skipped (store restart opt-in; Redis page writer run separately: 1/1) \u2014 equals the sealed 292+1",
+  "firstAppAttempt": "pointed at the bff-cluster DynamoDB (no orgiq-chat- tables): 9 failures, retained as app-tests-wrong-store.*",
+  "burst": [
+   {
+    "run": 1,
+    "inviteP95": 3124.3,
+    "inviteP99": 3187.9,
+    "acceptP95": 1455.7,
+    "chatP95": 5967.9,
+    "healthP99": [
+     103.6,
+     197.0
+    ],
+    "memMiB": [
+     203.0,
+     211.8
+    ]
+   },
+   {
+    "run": 2,
+    "inviteP95": 2616.3,
+    "inviteP99": 2696.9,
+    "acceptP95": 1202.3,
+    "chatP95": 5054.4,
+    "healthP99": [
+     52.9,
+     126.9
+    ],
+    "memMiB": [
+     209.1,
+     null
+    ]
+   }
+  ],
+  "burstBaseline": "capacity-table-ready: invite p95/p99 1733.9/1811.0, accept p95 767.0, chat p95 4163.1, health p99 151.3/104.5",
+  "burstCorrectness": "both runs: 1000/1000 sockets, 100/100 calls, 800/800 paired senders, zero cross/denied/ended/disconnect errors"
+ },
+ "capacityAccepted": false,
+ "cloudAccepted": false,
+ "conclusion": "The queue prototype passes every authority, fault and application contract but regresses the unchanged burst on every latency target in two runs; it is not a capacity improvement. Remaining matrix profiles were not run on this image.",
+ "launcherChanges": [
+  "bff-cluster-containers.py: declared the new image tag in its allowlist",
+  "bff-cluster-capacity.mjs: image identity check reads ORGIQ_BFF_CONTAINER_IMAGE (default unchanged)"
+ ],
+ "retiredDrivers": "seven stopped driver containers archived to retired-drivers/ then removed; burst result matched capacity-table-ready byte-for-byte",
+ "fixtureState": "native BFFs 3063/3064 and compiled BFFs 3065/3066 now run the dispatch source/image",
+ "artifacts": {
+  "docs/realtime-validation/2026-10-05/capacity-sdk-native/app-tests-call-pages-redis.log": "07ca410d9bec901d40c24417b1943c8ba6f5fc2db8945695e11c6c867cd9bbad",
+  "docs/realtime-validation/2026-10-05/capacity-sdk-native/app-tests-wrong-store.json": "2ebfd0bd5faa54c6e692324e95158306ca1d333f8a1ead402cbfc389f11e5fee",
+  "docs/realtime-validation/2026-10-05/capacity-sdk-native/app-tests-wrong-store.log": "156d6e7f0d544228ea69433113f4bec941f27c18f376568c3856344be8fecdb3",
+  "docs/realtime-validation/2026-10-05/capacity-sdk-native/app-tests.json": "b1630472fd136e163601f994efd58b08268d3119c1dccc76f65f52af566179ba",
+  "docs/realtime-validation/2026-10-05/capacity-sdk-native/app-tests.log": "59dec981f35789390ddd21f9b584a686450d7c1d276be63b85a6477b39a7fb0a",
+  "docs/realtime-validation/2026-10-05/capacity-sdk-native/authority-jest-1.log": "b5f476563e3900c2e1a83ca5963dd7481f142424fb7c434bf9db4dd187fdbdb2",
+  "docs/realtime-validation/2026-10-05/capacity-sdk-native/authority-jest-2.log": "6b434f672f30b17c102287c7d598d29c88aa46206ff53873575b9fc8c527487f",
+  "docs/realtime-validation/2026-10-05/capacity-sdk-native/authority-jest-3.log": "4d4cfbb0cd38b8c25df3183acee753dbce23cf363abbd8e891ee81388f3b1b52",
+  "docs/realtime-validation/2026-10-05/capacity-sdk-native/authority-jest.log": "e7f1375258493231d7155bf1c83d0a5ce5584170fa9f55c15346f463000bb5d1",
+  "docs/realtime-validation/2026-10-05/capacity-sdk-native/build.log": "890dd11b16e4a3386f08a4fa8529271130230f259e3188a13da295ba4ce5d33b",
+  "docs/realtime-validation/2026-10-05/capacity-sdk-native/burst-run1-container.txt": "02f058f6ed88d924ee540eb61c2734eb66d787de7a1c8b42c30ebe34341bc83b",
+  "docs/realtime-validation/2026-10-05/capacity-sdk-native/burst-run1-driver.log": "a541f00ce8ed5d5ab0dd3d80b12e5b1387d8505aecdeb1161f6d723aefb9eaf2",
+  "docs/realtime-validation/2026-10-05/capacity-sdk-native/burst-run1-result.json": "09c82b145ae991ec8b4f66f0ade02417b5fdfa329b9589563a81b86e3126a829",
+  "docs/realtime-validation/2026-10-05/capacity-sdk-native/burst-run1.log": "8235ef370db00d65bb322ecd1e6f3636a1ea8b422ed19147d599ff2599fb0e27",
+  "docs/realtime-validation/2026-10-05/capacity-sdk-native/burst-run2-container.txt": "3937e7a1f362a875a0634513703cb7c4bb867e8e94b5015283e48d928d75ffdb",
+  "docs/realtime-validation/2026-10-05/capacity-sdk-native/burst-run2-driver.log": "7bb853d33249e1280e18ce97a6b1a6ddceff1eb90ccd93f1316d51e468cc1bd4",
+  "docs/realtime-validation/2026-10-05/capacity-sdk-native/burst-run2-result.json": "eae54756d8a1972c4f70e4a64d579b06d80be51423e14f80b0c8cdda4fcf307e",
+  "docs/realtime-validation/2026-10-05/capacity-sdk-native/burst-run2.log": "b66359efa77a44c34cc21cbc8fa2aacad6b31fab2a7217e78c9286bd617c4cc2",
+  "docs/realtime-validation/2026-10-05/capacity-sdk-native/cluster-acceptance.log": "a2ae0860d1054e14cd218ac57cb2a76f3cc02342fa32466815e269de877c956a",
+  "docs/realtime-validation/2026-10-05/capacity-sdk-native/containers.log": "877f8c9d4b3e31021f0c5c2b19f2b16f57ec328a2b47e1cf91684956c0287550",
+  "docs/realtime-validation/2026-10-05/capacity-sdk-native/dynamo-failures.log": "76bedfe38903140255af957fa2f585f28e3db08c8e41da68a22854d6847f7c55",
+  "docs/realtime-validation/2026-10-05/capacity-sdk-native/image-artifact.log": "c0b72d369e7b4ee4837d3e85f88495a7906acaa3f4e1ca9c8421aeba452b188b",
+  "docs/realtime-validation/2026-10-05/capacity-sdk-native/image-build.log": "65ac3ab0b60e96a278669b4d27f09a3719c4bec08247edca06b151f9a04f0afb",
+  "docs/realtime-validation/2026-10-05/capacity-sdk-native/prepare-before-containers.log": "485833169aeae37cabba695dba9f1b1c74c261ffdb41204f0335bdb440d8f417",
+  "docs/realtime-validation/2026-10-05/capacity-sdk-native/prepare-libraries.log": "27fa5f016fd3dde1720a8794d58ea7441e5445ff67791803283709b3cedbe19e",
+  "docs/realtime-validation/2026-10-05/capacity-sdk-native/prepare-tag-mismatch.log": "c4d27adcf2211cdc3929a897a4cc5c5f4d7597ae481ac63e22871eef6985672b",
+  "docs/realtime-validation/2026-10-05/capacity-sdk-native/prepare.log": "0f8bf45a2970f0659431a484d050fd68228a38c194b9647531240971827fa902",
+  "docs/realtime-validation/2026-10-05/capacity-sdk-native/redis-failures.log": "47c5ccbfe8df5167ba6d921fc2a9849abd48d796dfe4484da3a2416a70d2bc1c",
+  "docs/realtime-validation/2026-10-05/capacity-sdk-native/retired-drivers/burst-container.json": "60c06a9100830bca65c39ac27f2e372d4722e5eb361eb22a5553e455596c058f",
+  "docs/realtime-validation/2026-10-05/capacity-sdk-native/retired-drivers/burst-result.json": "88a293aca1b76b46745953c008fe3703e341490114803114d6b9b66331a396a1",
+  "docs/realtime-validation/2026-10-05/capacity-sdk-native/retired-drivers/burst.log": "a9675845e8c2ceea7cd8ac0294e5c556ce6a8d5319bf555098643937fcd8e0b3",
+  "docs/realtime-validation/2026-10-05/capacity-sdk-native/retired-drivers/churn-container.json": "17da9aa36010e35b64c38aef2164626e786566d91a30f3e89b53694372d211e1",
+  "docs/realtime-validation/2026-10-05/capacity-sdk-native/retired-drivers/churn-result.json": "9f334d4228be711aa49086d27b9ffabf117b9201a0a674ffd7b2c0e81245cc95",
+  "docs/realtime-validation/2026-10-05/capacity-sdk-native/retired-drivers/churn.log": "835d7ae13cabcf3567199c2c4f7e38c19fdef1d159095b1373aef02ad2772fdf",
+  "docs/realtime-validation/2026-10-05/capacity-sdk-native/retired-drivers/double-accept-container.json": "0b1d18140c376fd0c2ceed82f9a2617d15c2455cc68407236f8ffe90e1ec5488",
+  "docs/realtime-validation/2026-10-05/capacity-sdk-native/retired-drivers/double-accept-result.json": "f7785c265208aa561ca8fd293d85d0a7c6bf285d5b6a3da80f0873471408daf3",
+  "docs/realtime-validation/2026-10-05/capacity-sdk-native/retired-drivers/double-accept.log": "0285c88bda590d4d6ceae371b76bf56c5755512904f42a2ab130005bdf148529",
+  "docs/realtime-validation/2026-10-05/capacity-sdk-native/retired-drivers/pilot-container.json": "e8a3b337a94406bf3b266c6bbc9f715deffcb7bc516325dbbb2db83e8e1e7ee2",
+  "docs/realtime-validation/2026-10-05/capacity-sdk-native/retired-drivers/pilot-result.json": "ef6f283e7060463d7c1e25f4cf64c96ae9c56d9a430ff589fbec06bb813da896",
+  "docs/realtime-validation/2026-10-05/capacity-sdk-native/retired-drivers/pilot.log": "631b50f4ba3533fea73e7140f5b5cc4e1b3696b895f46b27edfbc76fcb640c4b",
+  "docs/realtime-validation/2026-10-05/capacity-sdk-native/retired-drivers/ring-storm-container.json": "b8274bc4fd3c40b78da577064ddccd68e1ddc60d161082abf9111ec770eeeb81",
+  "docs/realtime-validation/2026-10-05/capacity-sdk-native/retired-drivers/ring-storm-result.json": "1c6bc9e92ba30d52d35781c3bbb6bee5bb8c337bfd9909536c893ddc58f82c55",
+  "docs/realtime-validation/2026-10-05/capacity-sdk-native/retired-drivers/ring-storm.log": "7db74f076290c601a6ba5cc3830b387ca0f93910368fd5cd00902b78e2f52084",
+  "docs/realtime-validation/2026-10-05/capacity-sdk-native/retired-drivers/soak-container.json": "20d09afa94b30c22bd9399bcffc602ef2c1014e987ff120a03da20a8129366aa",
+  "docs/realtime-validation/2026-10-05/capacity-sdk-native/retired-drivers/soak-result.json": "170023aa064c5791c2cfe62f0e4edfb938e3a633fc88c411f0bf63214fa12fd8",
+  "docs/realtime-validation/2026-10-05/capacity-sdk-native/retired-drivers/soak.log": "9678656745d45dddb579d4db70da6c9e04c9c9100b24d58bf5f9623568bdfb9d",
+  "docs/realtime-validation/2026-10-05/capacity-sdk-native/retired-drivers/steady-container.json": "8522e292a445c0baafebb8f14c916eed169c9c76fab5b0e02c85c65f873619a5",
+  "docs/realtime-validation/2026-10-05/capacity-sdk-native/retired-drivers/steady-result.json": "1cdd41c4e306ba5702e4824486373c11e3ab2cb21f0d9000b505e1e9e0411cce",
+  "docs/realtime-validation/2026-10-05/capacity-sdk-native/retired-drivers/steady.log": "62cf487a72cafdc966a1e62dd9d8787253f48d153ee6552b9e40b0b7a074d83f",
+  "docs/realtime-validation/2026-10-05/capacity-sdk-native/source-snapshot.tar.gz": "95188f1d7b37667e7672c0185c8739b3b54f7117e1a65770b9f996f61c800b9c",
+  "docs/realtime-validation/2026-10-05/capacity-sdk-native/typecheck.log": "a6aacf3de309c23e5aeb92922e8082e8eb964285a805f031247d7ef19849931b"
+ }
+}

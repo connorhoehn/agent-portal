@@ -1,5 +1,10 @@
 import json
-from document_commands import DOCUMENT_MODES, DOCUMENT_PROMPT, validate_document_output
+from document_commands import (
+    DECK_MODES, DECK_PROMPT, DOCUMENT_MODES, DOCUMENT_PROMPT, validate_deck_output, validate_document_output,
+)
+from evidence_commands import EVIDENCE_MODES, EVIDENCE_PROMPT, validate_evidence_output
+from agent_plan import AGENT_PLAN_MODES, AGENT_PLAN_PROMPT, validate_agent_plan
+from deck_narrative import DECK_NARRATIVE_MODES, DECK_REVISE_MODES, DECK_NARRATIVE_PROMPT, DECK_NARRATIVE_TENANTS, validate_deck_narrative_output
 import logging
 import os
 import sys
@@ -21,7 +26,7 @@ from _shared.agui_stream import (  # noqa: E402
     run_error_event,
     wants_stream,
 )
-from _shared.tenant_guard import reject_wrong_tenant  # noqa: E402
+from _shared.tenant_guard import reject_wrong_mode_tenant  # noqa: E402
 from _shared.instrumentation import (  # noqa: E402
     TraceContext,
     install_bedrock_usage_capture,
@@ -56,6 +61,12 @@ MODEL_ID = os.environ.get("MODEL_ID", "amazon.nova-pro-v1:0")
 # agents/_shared/tenant_guard.py for why this is stricter than the news-*
 # agents, which rely on the middleware route gate alone).
 EXPECTED_TENANT = "assessment"
+
+# Per-mode tenant guard: every mode is assessment-only unless listed here. The
+# deck-narrative and deck-revise modes belong to exactly one other tenant each,
+# so an assessment session cannot run them and orgiq/pipelines/social sessions
+# cannot run any assessment mode.
+MODE_TENANTS = dict(DECK_NARRATIVE_TENANTS)
 
 
 @tool
@@ -227,7 +238,7 @@ OUTPUT (context mode) — return exactly one JSON object and nothing else:
 {"facts": [ <validated facts> ]}
 """
 
-SYSTEM_PROMPT += DOCUMENT_PROMPT
+SYSTEM_PROMPT += DOCUMENT_PROMPT + DECK_PROMPT + EVIDENCE_PROMPT + AGENT_PLAN_PROMPT
 
 _model = BedrockModel(**_model_kwargs())
 # System prompt is resolved from Bedrock Prompt Management at run time
@@ -248,8 +259,39 @@ _agent = LiveAgent(
 def _validate_payload(payload: dict) -> str | None:
     """None if payload is well-formed for its mode; else an error string."""
     mode = payload.get("mode")
-    if mode not in ("story", "context") and mode not in DOCUMENT_MODES:
-        return "mode must be story, context, or a supported document command"
+    if mode not in ("story", "context") and mode not in DOCUMENT_MODES and mode not in DECK_MODES and mode not in EVIDENCE_MODES and mode not in AGENT_PLAN_MODES and mode not in DECK_NARRATIVE_MODES:
+        return "mode must be story, context, or a supported document or deck command"
+    if mode in EVIDENCE_MODES:
+        dim = payload.get("dimension")
+        if not isinstance(dim, dict) or not isinstance(dim.get("id"), str) or not isinstance(dim.get("evidence"), list):
+            return f"{mode} requires dimension: {{id, facts, criteria, evidence}}"
+        return None
+    if mode in DECK_REVISE_MODES:
+        if not isinstance(payload.get("spec"), dict) or not isinstance(payload.get("instruction"), str):
+            return f"{mode} requires spec and instruction"
+        return None
+    if mode in DECK_NARRATIVE_MODES:
+        slides = payload.get("slides")
+        if not isinstance(slides, list) or not slides or any(
+            not isinstance(s, dict) or not isinstance(s.get("slideId"), str) for s in slides
+        ):
+            return f"{mode} requires slides: [{{slideId, kind, facts, evidence}}]"
+        return None
+    if mode in AGENT_PLAN_MODES:
+        if not isinstance(payload.get("goal"), str) or not isinstance(payload.get("allowed_kinds"), list):
+            return f"{mode} requires goal and allowed_kinds"
+        return None
+    if mode == "draft-review-deck":
+        slides = payload.get("slides")
+        if not isinstance(slides, list) or not slides or any(
+            not isinstance(s, dict) or not isinstance(s.get("slideId"), str) for s in slides
+        ):
+            return "draft-review-deck requires slides: [{slideId, kind, facts, evidence}]"
+        return None
+    if mode == "revise-review-deck":
+        if not isinstance(payload.get("spec"), dict) or not isinstance(payload.get("instruction"), str):
+            return "revise-review-deck requires spec and instruction"
+        return None
     if mode == "story":
         rec = payload.get("recommendation")
         if not isinstance(rec, dict) or not rec.get("dimension_id") or not rec.get("kind"):
@@ -297,8 +339,9 @@ async def _handle_sync(payload: dict) -> dict:
     if not isinstance(payload, dict):
         payload = {}
 
-    rejection = reject_wrong_tenant(
-        payload, expected_tenant=EXPECTED_TENANT, agent_id="orgiq-assessment-drafter"
+    rejection = reject_wrong_mode_tenant(
+        payload, mode_tenants=MODE_TENANTS, default_tenant=EXPECTED_TENANT,
+        agent_id="orgiq-assessment-drafter",
     )
     if rejection is not None:
         log.warning("assessment-drafter: %s", rejection["detail"])
@@ -315,7 +358,7 @@ async def _handle_sync(payload: dict) -> dict:
     token = _current_ctx.set(ctx)
     shared_token = set_active_ctx(ctx)
 
-    input_text = (DOCUMENT_PROMPT + "\n" if mode in DOCUMENT_MODES else "") + json.dumps(payload, ensure_ascii=False, default=str)
+    input_text = (DOCUMENT_PROMPT + "\n" if mode in DOCUMENT_MODES else DECK_PROMPT + "\n" if mode in DECK_MODES else EVIDENCE_PROMPT + "\n" if mode in EVIDENCE_MODES else AGENT_PLAN_PROMPT + "\n" if mode in AGENT_PLAN_MODES else DECK_NARRATIVE_PROMPT + "\n" if mode in DECK_NARRATIVE_MODES else "") + json.dumps(payload, ensure_ascii=False, default=str)
 
     log.info(
         "AssessmentDrafter handling (invocation=%s, parent=%s, team=%s, mode=%s)",
@@ -342,6 +385,14 @@ async def _handle_sync(payload: dict) -> dict:
                 violations,
             )
             response_text = scrubbed
+    elif mode in EVIDENCE_MODES:
+        response_text = validate_evidence_output(mode, response_text, payload)
+    elif mode in DECK_NARRATIVE_MODES:
+        response_text = validate_deck_narrative_output(mode, response_text, payload)
+    elif mode in AGENT_PLAN_MODES:
+        response_text = validate_agent_plan(mode, response_text, payload)
+    elif mode in DECK_MODES:
+        response_text = validate_deck_output(mode, response_text, payload)
     elif mode in DOCUMENT_MODES:
         try:
             response_text = validate_document_output(mode, response_text, payload["document"]["text"])

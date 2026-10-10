@@ -19,7 +19,7 @@ import { EventEmitter } from 'node:events';
 import {
   claimNextJob, markRunning, completeJob, reapStaleJobs, listJobs, type AgentJob,
 } from '../providers/agent-jobs.js';
-import { listBoxes, appendEvent, getBox, registerBox } from './devbox-fleet.js';
+import { listBoxes, appendEvent, getBox, registerBox, isReserved } from './devbox-fleet.js';
 import { isLocalBoxId } from './local-compute-fleet.js';
 import { runDevboxTask } from '../routes/devbox.js';
 
@@ -165,7 +165,7 @@ async function tick(): Promise<void> {
     // a session id that only ever existed on somebody's laptop. A paired machine
     // gets work by CLAIMING it (routes/local-compute.ts), never by being pushed.
     const idle = listBoxes().filter(
-      (b) => (b.status === 'idle' || b.status === 'waiting') && !busy.has(b.id) && !isLocalBoxId(b.id),
+      (b) => (b.status === 'idle' || b.status === 'waiting') && !busy.has(b.id) && !isReserved(b.id) && !isLocalBoxId(b.id),
     );
     for (const box of idle) {
       const job = await claimNextJob(box.id, box.sessionId);

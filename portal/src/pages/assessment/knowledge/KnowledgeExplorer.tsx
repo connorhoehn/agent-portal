@@ -3,9 +3,10 @@
 // content; the BFF retains source-bound comments, reactions and sync actions.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useSearchParams } from 'react-router';
+import { Link, useNavigate, useSearchParams } from 'react-router';
 import {
   ActivityFeed,
+  Banner,
   Button,
   ChevronIcon,
   DropdownMenu,
@@ -26,6 +27,8 @@ import { sendJson } from '../../../lib/writeJson';
 import { DocPane, FolderPane } from './DocPane';
 import { ActivityBar } from './ActivityBar';
 import { DocumentLibrary } from './DocumentLibrary';
+import { compactDocumentPath, presentationFiles } from './documentLibraryModel';
+import { deckPaths, type DeckSummary } from '../decks/decksApi';
 import { DocumentNavigationProvider, useDocumentNavigation } from './DocumentNavigation';
 import { DocumentRail, useSectionPulls, type QuickView } from './DocumentRail';
 import { ScopeHeader } from '@connorhoehnslalom/ui-components';
@@ -83,12 +86,15 @@ export function KnowledgeExplorer(props: KnowledgeExplorerProps) {
 }
 function KnowledgeExplorerContent({ mode }: KnowledgeExplorerProps) {
   const navigation = useDocumentNavigation();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [view, setView] = useState<MainView>({ kind: 'node' });
   const [quickView, setQuickView] = useState<QuickView | null>(null);
   const sse = useAssessmentEvents();
 
   const treeFetch = useFetch<KnowledgeTreeResponse>('/api/assessment/knowledge/tree');
+  const decksFetch = useFetch<DeckSummary[]>(mode === 'workspace' ? deckPaths.list() : null);
+  const files = useMemo(() => presentationFiles(decksFetch.data ?? []), [decksFetch.data]);
   const { can: canDo } = useCapabilities();
   const pulls = useSectionPulls(sse.events, treeFetch.refresh);
 
@@ -134,6 +140,7 @@ function KnowledgeExplorerContent({ mode }: KnowledgeExplorerProps) {
       // paint so the row stops looking like it is still going somewhere.
       setMoveStatus((m) => { const next = { ...m }; delete next[id]; return next; });
       setMoveError(err instanceof Error ? err.message : 'the move could not be saved');
+      throw err;
     }
   }
   // Activity does: GET /runs is a real, contracted endpoint. Only fetched in
@@ -145,7 +152,8 @@ function KnowledgeExplorerContent({ mode }: KnowledgeExplorerProps) {
   const nodes = useMemo(() => flatNodes(sections), [sections]);
   const activityCount = useCallback((section: KnowledgeSection) => activityForSection(section, activityRuns).length
     + pulledEventsForSection(sse.events, section.key).length, [activityRuns, sse.events]);
-  const libraryOpen = searchParams.get('view') === 'library';
+  const presentationsOpen = mode === 'workspace' && searchParams.get('view') === 'presentations';
+  const libraryOpen = searchParams.get('view') === 'library' || presentationsOpen;
   const selectedId = searchParams.get('doc');
   const selectedNode = findNode(nodes, selectedId);
   const draftSection = mode === 'workspace' ? sections.find(section => section.key === 'workspace_drafts') ?? { key: 'workspace_drafts', title: 'Workspace drafts' } : sections.find(section => section.kind === 'local');
@@ -176,6 +184,7 @@ function KnowledgeExplorerContent({ mode }: KnowledgeExplorerProps) {
     const next = new URLSearchParams(searchParams);
     next.set('doc', id);
     next.delete('view');
+    if (id !== selectedId) next.delete('proposal');
     setSearchParams(next);
   });
 
@@ -183,6 +192,11 @@ function KnowledgeExplorerContent({ mode }: KnowledgeExplorerProps) {
     const next = new URLSearchParams(searchParams); next.set('view', 'library');
     setSearchParams(next); setView({ kind: 'node' });
   });
+  const openPresentations = () => navigation?.navigate(() => {
+    const next = new URLSearchParams(searchParams); next.set('view', 'presentations');
+    setSearchParams(next); setView({ kind: 'node' });
+  });
+  const openPresentation = (href: string) => navigation?.navigate(() => { void navigate(href); });
 
   const openActivity = (sectionKey: string) => navigation?.navigate(() => {
     const next = new URLSearchParams(searchParams);
@@ -219,12 +233,14 @@ function KnowledgeExplorerContent({ mode }: KnowledgeExplorerProps) {
   }
 
   const modeLabel = MODE_LABEL[mode];
-  const ancestors = view.kind === 'node' ? nodePath(nodes, selectedId) : [];
+  const ancestors = view.kind === 'node' ? compactDocumentPath(nodePath(nodes, selectedId)) : [];
   const crumbs: { label: string; onClick?: () => void }[] = [
     ...(view.kind === 'activity' ? [{ label: 'Activity' }] : ancestors.map((n, index) => ({ label: n.title, ...(index < ancestors.length - 1 ? { onClick: () => handleSelectNode(n.id) } : {}) }))),
   ];
   const shellTrail = useShellBreadcrumbItems();
-  const documentTotal = sections.reduce((sum, section) => sum + sectionDocumentCount(section), 0);
+  const documentTotal = sections.reduce((sum, section) => sum + sectionDocumentCount(section), 0) + files.length;
+  const explorerTrail = [{ label: modeLabel, onClick: openLibrary },
+    ...(libraryOpen ? (presentationsOpen ? [{ label: 'Presentations' }] : []) : crumbs)];
   const mayMove = canDo('ManageKnowledge') && mode !== 'prompts';
 
   // The caption's 28px actions: New page, the list's ⋯, and the fold.
@@ -236,7 +252,7 @@ function KnowledgeExplorerContent({ mode }: KnowledgeExplorerProps) {
       sections={[{ items: [
         ...(mayCreate ? [{ label: 'New page', onSelect: () => createDraft({ sectionKey: draftSectionKey! }), 'data-testid': 'new-page-btn' }] : []),
         { label: 'All documents', trailing: String(documentTotal), onSelect: openLibrary },
-        { label: 'Refresh library', onSelect: () => void treeFetch.refresh() },
+        { label: 'Refresh library', onSelect: () => { void treeFetch.refresh(); if (mode === 'workspace') decksFetch.refresh(); } },
       ] }]} />
     <IconButton aria-label="Hide document library" title="Hide document library" variant="ghost" size="sm" className="h-7 w-7 text-text-secondary"
       icon={<ChevronIcon dir="left" size={14} />} onClick={foldRail} data-testid="knowledge-explorer-rail-fold" />
@@ -257,6 +273,12 @@ function KnowledgeExplorerContent({ mode }: KnowledgeExplorerProps) {
           : treeFetch.error ? <ErrorState title="Couldn't load the document library" body={treeFetch.error} />
           : undefined}
         sections={sections}
+        fileGroup={mode === 'workspace' ? {
+          id: 'presentations', title: 'Presentations', collapsible: false, testId: 'document-rail-presentations',
+          actions: <Button variant="link" size="sm" onClick={openPresentations}>View all</Button>,
+          emptyLabel: decksFetch.isLoading ? 'Loading presentations…' : decksFetch.error ? 'Presentations are unavailable.' : 'No presentations yet.',
+          rows: files.map(file => ({ id: file.id, label: file.title, onSelect: () => openPresentation(file.href) })),
+        } : undefined}
         selectedId={view.kind === 'node' ? selectedId : null}
         activitySectionKey={view.kind === 'activity' ? view.sectionKey : null}
         libraryOpen={libraryOpen}
@@ -319,24 +341,29 @@ function KnowledgeExplorerContent({ mode }: KnowledgeExplorerProps) {
   return (
     <ExplorerFrame
       rail={rail}
-      // The trail over the pane, the Org explorers' way: the shell groups
-      // (Informatics › Workspace), then Documents (the library), then this
-      // explorer's own crumbs. The shell's breadcrumb row is off for this page.
+      // The meaningful location only; the rail already shows the full tree.
       paneHeader={<ScopeHeader variant="crumbs" data-testid="knowledge-trail"
-        breadcrumbs={[...shellTrail, { label: 'Documents', onClick: openLibrary }, ...(libraryOpen ? [] : crumbs)]} />}
+        breadcrumbs={mode === 'workspace' ? explorerTrail : [...shellTrail, ...(libraryOpen ? [] : crumbs)]} />}
       aside={!libraryOpen && view.kind === 'node' && isPage && selectedNode
         ? <ActivityBar node={selectedNode} sectionKey={selectedSectionKey} sseEvents={sse.events} />
         : undefined}
     >
-      {/* Document pages use their own visible heading; other views still name the workspace. */}
-      {(view.kind !== 'node' || !isPage) && !libraryOpen && <VisuallyHidden as="h1">{modeLabel}</VisuallyHidden>}
+      {/* The page title is the view's name, first after the trail in every
+          state (docs/layout-cascade.md rule 3); an open document's own
+          headline stays in the pane, so the title does not jump as the reader
+          moves through the library. */}
+      {!libraryOpen && <VisuallyHidden as="h1">{modeLabel}</VisuallyHidden>}
       <NewDraftDialog destination={creating} onClose={() => setCreating(null)} onCreated={id => { treeFetch.refresh(); handleSelectNode(id); }} />
 
-      {libraryOpen && (treeFetch.isLoading ? <LoadingState label="Loading document library…" />
-        : treeFetch.error ? <ErrorState title="Couldn't load the document library" body={treeFetch.error} />
-        : <DocumentLibrary sections={sections} onSelect={handleSelectNode}
+      {libraryOpen && <DocumentLibrary key={presentationsOpen ? 'presentations' : 'library'} sections={sections} files={files} onSelect={handleSelectNode} onOpenFile={openPresentation}
+            title={presentationsOpen ? 'Presentations' : 'All documents & files'} initialType={presentationsOpen ? 'Presentation' : undefined}
+            notices={<>
+              {(treeFetch.isLoading || decksFetch.isLoading) && <LoadingState label="Loading documents and files…" />}
+              {treeFetch.error && <Banner variant="error">Documents are unavailable: {treeFetch.error} <Button variant="link" size="sm" onClick={treeFetch.refresh}>Retry documents</Button></Banner>}
+              {decksFetch.error && <Banner variant="error">Presentations are unavailable: {decksFetch.error} <Button variant="link" size="sm" onClick={decksFetch.refresh}>Retry presentations</Button></Banner>}
+            </>}
             {...(mayCreate ? { onNewPage: () => createDraft({ sectionKey: draftSectionKey! }), onUpload: uploadFiles, draftSectionTitle: draftSection?.title } : {})}
-            uploading={uploading} uploadError={uploadError} onDismissUploadError={() => setUploadError(null)} />)}
+            uploading={uploading} uploadError={uploadError} onDismissUploadError={() => setUploadError(null)} />}
 
       {!libraryOpen && view.kind === 'activity' && activityPane}
 
@@ -353,7 +380,7 @@ function KnowledgeExplorerContent({ mode }: KnowledgeExplorerProps) {
           <EmptyState title={selectedNode.title} body="This file isn't viewable here." description={selectedNode.id} />
         ) : (
           <DocPane node={selectedNode} mode={mode} onBack={openLibrary} sourceConfigured={sourceConfigured} sseEvents={sse.events} sseConnected={sse.connected} sseGapped={sse.gapped} onTreeChanged={treeFetch.refresh}
-            path={[{ label: 'Documents', onClick: openLibrary }, ...crumbs.slice(0, -1)]} sectionKey={selectedSectionKey} />
+            path={[{ label: modeLabel, onClick: openLibrary }, ...crumbs.slice(0, -1)]} sectionKey={selectedSectionKey} />
         )
       )}
     </ExplorerFrame>

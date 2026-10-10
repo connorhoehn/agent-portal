@@ -6,17 +6,17 @@
 // one is specifically "you were published FROM this distillation artifact,"
 // which only some assets have.
 //
-// GET /api/distillation/library/:libraryItemId/provenance 404s for an asset
-// that was never distilled — that's the common case, not an error, so no
-// section renders at all rather than an EmptyState nobody asked for.
-import { Chip, DetailSection, Inline, Stack } from '@connorhoehnslalom/ui-components/shared';
+// GET /api/distillation/library/:libraryItemId/provenance answers an asset
+// that was never distilled with `{ artifact: null }` — the common case, not
+// an error (it used to be a 404, which the browser logged on every open), so
+// no section renders at all rather than an EmptyState nobody asked for.
+import { Chip, DetailSection, Inline, Stack, T } from '@connorhoehnslalom/ui-components/shared';
 import { Link } from 'react-router';
 import { useFetch } from '../../hooks/useFetch';
 import {
   ARTIFACT_STATUS_LABEL, ARTIFACT_STATUS_TONE, ARTIFACT_TYPE_LABEL, ARTIFACT_TYPE_TONE,
 } from '../distillation/distillationFormat';
 import { knowledgeHref } from '../distillation/distillationRoutes';
-import { T } from '../distillation/Text';
 import type { ProvenanceResponse } from '../distillation/types';
 
 export function DistillationProvenance({ libraryItemId }: { libraryItemId: string }) {
@@ -25,11 +25,11 @@ export function DistillationProvenance({ libraryItemId }: { libraryItemId: strin
     0,
   );
 
-  // A 404 ("never distilled") and any other transient error both render
+  // "Never distilled" (`artifact: null`) and any transient error both render
   // nothing — this is a supplementary section, not load-bearing content, and
   // guarding on shape (does `artifact` exist) rather than presence keeps a
   // missing/renamed field from crashing the drawer.
-  if (error || !data?.artifact) return null;
+  if (error || !data?.artifact || !data.lineage) return null;
   const { artifact: a } = data;
 
   return (

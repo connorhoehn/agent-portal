@@ -34,7 +34,7 @@ import {
   TableHead,
   TableRow,
   TableTd,
-  TableTh,
+  TableTh, T,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch';
@@ -44,7 +44,6 @@ import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { firstDegraded, readDegraded } from '../../lib/degraded';
 import { toastError } from '../../lib/toastStore';
 import { writeJson } from '../../lib/writeJson';
-import { T } from './Text';
 import { relativeTime } from '../../lib/relativeTime';
 
 interface QualityScore {
@@ -209,6 +208,52 @@ function QualityPage() {
     setNoteText('');
   }
 
+  const renderFeedback = (invocationId: string) => {
+    const currentLabel = feedback[invocationId];
+    return noteFor === invocationId ? (
+                          <Inline as="div" align="center" gap="xs">
+                            <Input
+                              autoFocus
+                              value={noteText}
+                              onChange={(e) => setNoteText(e.target.value)}
+                              placeholder="note…"
+                              className="min-w-[160px]"
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') commitNote();
+                                if (e.key === 'Escape') cancelNote();
+                              }}
+                            />
+                            <Button variant="secondary" size="sm" onClick={commitNote}>
+                              save
+                            </Button>
+                            <Button variant="secondary" size="sm" onClick={cancelNote}>
+                              cancel
+                            </Button>
+                          </Inline>
+                        ) : !canLabel ? null : (
+                          <Inline as="div" gap="xs">
+                            <FeedbackBtn
+                              label="good"
+                              symbol="✓"
+                              active={currentLabel === 'good'}
+                              onClick={() => submitFeedback(invocationId, 'good')}
+                            />
+                            <FeedbackBtn
+                              label="bad"
+                              symbol="✗"
+                              active={currentLabel === 'bad'}
+                              onClick={() => submitFeedback(invocationId, 'bad')}
+                            />
+                            <FeedbackBtn
+                              label="fixed"
+                              symbol="✎"
+                              active={currentLabel === 'fixed'}
+                              onClick={() => startNote(invocationId)}
+                            />
+                          </Inline>
+                        );
+  };
+
   return (
     <PageSection
       title="Quality"
@@ -333,9 +378,10 @@ function QualityPage() {
 
       <Card padding="md">
         <Inline as="div" align="center" justify="between" wrap gap="md" className="mb-3">
-          <Inline as="h2" gap="xs" wrap className="text-[14px] font-semibold m-0">
-            Recent Invocations{' '}
-            <T className="text-[11px] text-[var(--color-text-tertiary)] font-normal">
+          <Inline as="h2" gap="xs" wrap align="baseline" className="m-0">
+            <T size="sm" weight="semibold">
+            Recent Invocations</T>
+            <T size="xs" tone="tertiary">
               click a feedback button to label · ✎ adds a note
             </T>
           </Inline>
@@ -344,7 +390,7 @@ function QualityPage() {
         {tableRows.length === 0 ? (
           <EmptyState text="No invocations to review yet." degraded={qualityDegraded} />
         ) : (
-          <Table>
+          <Table size="sm">
             <TableHead>
               <TableRow>
                 <TableTh>When</TableTh>
@@ -356,12 +402,10 @@ function QualityPage() {
             </TableHead>
             <TableBody>
               {tableRows.map((r) => {
-                const currentLabel = feedback[r.invocationId];
-                const isNoting = noteFor === r.invocationId;
                 return (
                   <TableRow key={r.invocationId}>
                     <TableTd
-                      className="text-[11px] text-[var(--color-text-tertiary)] whitespace-nowrap"
+                      className="whitespace-nowrap"
                       title={new Date(r.ts).toLocaleString()}
                     >
                       {relativeTime(r.ts)}
@@ -372,7 +416,7 @@ function QualityPage() {
                       </Chip>
                     </TableTd>
                     <TableTd
-                      className={`text-[12px] max-w-[480px] overflow-hidden text-ellipsis whitespace-nowrap text-[var(--color-text-secondary)] ${r.invocationId ? 'cursor-pointer' : ''}`}
+                      className={`max-w-[480px] overflow-hidden text-ellipsis whitespace-nowrap ${r.invocationId ? 'cursor-pointer' : ''}`}
                       title={
                         r.invocationId
                           ? `${r.judgeRationale} — click to open invocation`
@@ -389,50 +433,7 @@ function QualityPage() {
                     <TableTd className="whitespace-nowrap">
                       <CostChip cost={r.totalCostUsd} />
                     </TableTd>
-                    <TableTd>
-                      {isNoting ? (
-                        <Inline as="div" align="center" gap="xs">
-                          <Input
-                            autoFocus
-                            value={noteText}
-                            onChange={(e) => setNoteText(e.target.value)}
-                            placeholder="note…"
-                            className="min-w-[160px]"
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') commitNote();
-                              if (e.key === 'Escape') cancelNote();
-                            }}
-                          />
-                          <Button variant="secondary" size="sm" onClick={commitNote}>
-                            save
-                          </Button>
-                          <Button variant="secondary" size="sm" onClick={cancelNote}>
-                            cancel
-                          </Button>
-                        </Inline>
-                      ) : !canLabel ? null : (
-                        <Inline as="div" gap="xs">
-                          <FeedbackBtn
-                            label="good"
-                            symbol="✓"
-                            active={currentLabel === 'good'}
-                            onClick={() => submitFeedback(r.invocationId, 'good')}
-                          />
-                          <FeedbackBtn
-                            label="bad"
-                            symbol="✗"
-                            active={currentLabel === 'bad'}
-                            onClick={() => submitFeedback(r.invocationId, 'bad')}
-                          />
-                          <FeedbackBtn
-                            label="fixed"
-                            symbol="✎"
-                            active={currentLabel === 'fixed'}
-                            onClick={() => startNote(r.invocationId)}
-                          />
-                        </Inline>
-                      )}
-                    </TableTd>
+                    <TableTd>{renderFeedback(r.invocationId)}</TableTd>
                   </TableRow>
                 );
               })}
@@ -471,15 +472,13 @@ function FeedbackBtn({
 function EmptyState({ text, degraded }: { text: string; degraded?: string | null }) {
   if (degraded) {
     return (
-      <Inline as="div" justify="center" className="p-6 text-[12px] text-danger">
-        Unknown — this read failed ({degraded}).
+      <Inline as="div" justify="center" className="p-6 text-danger"><T size="xs" tone="inherit">
+        Unknown — this read failed ({degraded}).</T>
       </Inline>
     );
   }
   return (
-    <Inline as="div" justify="center" className="p-6 text-[12px] text-[var(--color-text-tertiary)]">
-      {text}
-    </Inline>
+    <Inline as="div" justify="center" className="p-6"><T size="xs" tone="tertiary">{text}</T></Inline>
   );
 }
 

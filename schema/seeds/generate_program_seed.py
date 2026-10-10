@@ -17,14 +17,26 @@ proj-* project family that no Aurora seed ever created.
 from __future__ import annotations
 
 import math
+import json
 import random
 import uuid
 from pathlib import Path
 
 OUT = Path(__file__).resolve().parent.parent / 'seed_program.sql'
+WORK_KEYS = json.loads((Path(__file__).resolve().parent / 'work_item_keys.json').read_text())['items']
 RNG = random.Random(20260821)
 
 GH = 'https://github.com/connorhoehnslalom'
+
+# The credential every initiative repo is linked through. All fourteen
+# orgiq-* repos are PRIVATE (flipped 2026-09-29; CLAUDE.md requires it), and
+# agent_projects.connection_name null means "public, no credential" — so a
+# seed that left it null told the Codebases page every repo was public and
+# sent clones and pushes out with no credential to a repo that refuses them.
+# The name is providerNameFor('github', 'connorhoehnslalom') in
+# middleware/src/providers/connected-sources.ts, the same provider the mock
+# fixture (middleware/src/mock/connected-sources.ts) lists.
+GH_CONNECTION = 'orgiq-github-connorhoehnslalom'
 
 # ─── Curated cast ────────────────────────────────────────────────────────────
 # owner: the one person who runs the initiative ("Run by").
@@ -647,14 +659,19 @@ def main() -> None:
                 f"VALUES ('{sme}', '{pid}', 'sme', 0.8) ON CONFLICT DO NOTHING"
             )
 
-        # Repo link the initiative's code will live in (user provisions the repo).
+        # Repo link the initiative's code will live in (user provisions the repo,
+        # private, reached through GH_CONNECTION).
         # DO UPDATE, not DO NOTHING — see the note on the bots insert below:
         # seed.sql deletes projects on every run and this FK is ON DELETE SET
-        # NULL, so a re-run silently detaches the repo from its initiative.
+        # NULL, so a re-run silently detaches the repo from its initiative. The
+        # connection is re-asserted on conflict too, so a cluster seeded before
+        # the repos went private stops reading them as public.
         emit(
-            "INSERT INTO agent_projects (id, repo_full_name, default_branch, org_project_id, added_by) "
-            f"VALUES ('{stable_uuid('repo', pid)}', 'connorhoehnslalom/{ini['repo']}', 'main', '{pid}', 'seed') "
-            f"ON CONFLICT (repo_full_name) DO UPDATE SET org_project_id = '{pid}'"
+            "INSERT INTO agent_projects (id, repo_full_name, default_branch, org_project_id, connection_name, added_by) "
+            f"VALUES ('{stable_uuid('repo', pid)}', 'connorhoehnslalom/{ini['repo']}', 'main', '{pid}', "
+            f"'{GH_CONNECTION}', 'seed') "
+            f"ON CONFLICT (repo_full_name) DO UPDATE SET org_project_id = '{pid}', "
+            f"connection_name = '{GH_CONNECTION}'"
         )
 
         # Sprints + grants
@@ -700,8 +717,8 @@ def main() -> None:
             desc_sql = f"'{q(edesc)}'" if edesc else 'NULL'
             done_at = days(8) if estatus == 'done' else 'NULL'
             emit(
-                "INSERT INTO work_items (id, project_id, parent_id, type, title, description, status, priority, assignee_id, labels, created_at, updated_at, completed_at) "
-                f"VALUES ('{eid}', '{pid}', NULL, 'epic', '{q(etitle)}', {desc_sql}, '{estatus}', '{epri}', "
+                "INSERT INTO work_items (id, work_item_key, project_id, parent_id, type, title, description, status, priority, assignee_id, labels, created_at, updated_at, completed_at) "
+                f"VALUES ('{eid}', '{WORK_KEYS[eid]['key']}', '{pid}', NULL, 'epic', '{q(etitle)}', {desc_sql}, '{estatus}', '{epri}', "
                 f"'{ini['owner']}', NULL, {days(item_age)}, {days(RNG.randint(1, 6))}, {done_at}) "
                 "ON CONFLICT (id) DO NOTHING"
             )
@@ -725,8 +742,8 @@ def main() -> None:
                     completed = 'NULL'
                     pr_sql = 'NULL, NULL'
                 emit(
-                    "INSERT INTO work_items (id, project_id, parent_id, type, title, status, priority, assignee_id, labels, story_points, estimated_cost_usd, sprint_id, pr_url, pr_status, created_at, updated_at, completed_at) "
-                    f"VALUES ('{cid}', '{pid}', '{eid}', '{ctype}', '{q(ctitle)}', '{cstatus}', '{cpri}', "
+                    "INSERT INTO work_items (id, work_item_key, project_id, parent_id, type, title, status, priority, assignee_id, labels, story_points, estimated_cost_usd, sprint_id, pr_url, pr_status, created_at, updated_at, completed_at) "
+                    f"VALUES ('{cid}', '{WORK_KEYS[cid]['key']}', '{pid}', '{eid}', '{ctype}', '{q(ctitle)}', '{cstatus}', '{cpri}', "
                     f"'{assignee}', {labels_sql}, {pts}, {est}, {sprint_sql}, {pr_sql}, "
                     f"{days(created)}, {days(RNG.randint(0, 5))}, {completed}) "
                     "ON CONFLICT (id) DO NOTHING"
@@ -785,11 +802,14 @@ def main() -> None:
             paused = (f"'{q(bot['paused'])}'" if bot.get('paused')
                       else "'awaiting repo provisioning — un-pause once the repository exists'")
             enabled = 'FALSE'
+            # obs-nightly-maintenance is created by u-tomas (pipelines author who
+            # also holds Social): the Communication plane's "My pipelines" walker.
+            creator = 'u-tomas' if bot['name'] == 'obs-nightly-maintenance' else 'u-rachel'
             emit(
                 "INSERT INTO bots (id, name, template, prompt_template, org_project_id, model, trigger, cron_expr, enabled, budget_per_run_usd, budget_per_day_usd, max_runs_per_day, requires_review, created_by, created_at, last_run_at, paused_reason) "
                 f"VALUES ('{bid}', '{q(bot['name'])}', '{bot['template']}', '{q(bot['mission'])}', "
                 f"'{pid}', 'us.amazon.nova-lite-v1:0', 'cron', '{bot['cron']}', {enabled}, "
-                f"{bot['per_run']}, {bot['per_day']}, 4, TRUE, 'u-rachel', {days(45)}, {days(1)}, {paused}) "
+                f"{bot['per_run']}, {bot['per_day']}, 4, TRUE, '{creator}', {days(45)}, {days(1)}, {paused}) "
                 # DO UPDATE is load-bearing, not defensive. seed.sql opens with
                 # DELETE FROM projects, and bots.org_project_id is ON DELETE SET
                 # NULL — so the second time this seed runs, every bot loses its

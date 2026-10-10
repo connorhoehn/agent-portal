@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Button, Card, Chip, DataTable, DetailHeader, InlinePlaceholder, Stack, type BreadcrumbItem } from '@connorhoehnslalom/ui-components/shared';
+import { Button, Card, Chip, DataTable, DetailHeader, InlinePlaceholder, Stack, T, type BreadcrumbItem } from '@connorhoehnslalom/ui-components/shared';
 import { useSession } from '../../../lib/auth';
 import { relativeTime } from '../../../lib/relativeTime';
 import { CLASSIFICATION_LABEL } from './knowledgeFormat';
@@ -24,12 +24,13 @@ export function FolderPane({ node, children, onSelectChild }: { node: KnowledgeN
           <DataTable<KnowledgeNode>
             data={children}
             keyField={(child) => child.id}
+            size="sm"
+            onRowClick={(child) => onSelectChild(child.id)}
             pageSize={20}
             columns={[
-              { key: 'title', header: 'Name', sortable: true, render: (child) =>
-                <Button variant="ghost" size="sm" className="border-0 px-0 text-left" onClick={() => onSelectChild(child.id)}>{child.title}</Button> },
+              { key: 'title', header: 'Name', sortable: true, render: (child) => <T size="sm" weight="medium">{child.title}</T> },
               { key: 'classification', header: 'Type', render: (child) => child.is_dir ? 'Folder' : (child.classification ? CLASSIFICATION_LABEL[child.classification] ?? child.classification : 'Document') },
-              { key: 'updated_at', header: 'Updated', render: (child) => child.updated_at ? relativeTime(child.updated_at) : '—' },
+              { key: 'updated_at', header: 'Updated', numeric: true, render: (child) => child.updated_at ? relativeTime(child.updated_at) : '—' },
             ]}
           />
         )}

@@ -9,14 +9,13 @@
 
 import { useState } from 'react';
 import {
-  Button, Card, Chip, DetailSection, Inline, InlinePlaceholder, LoadingState, ProgressBar, Stack,
+  Button, Card, Chip, DetailSection, Inline, InlinePlaceholder, LoadingState, ProgressBar, Stack, T,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { useCapabilities } from '../../lib/capabilities';
 import { toastError, toastPending, toastSuccess } from '../../lib/toastStore';
 import { writeJson } from '../../lib/writeJson';
-import { T } from './Text';
 import {
   assertionSummary, caseResultFor, formatPassRate, latestRun, progressColor,
   type EvalCase, type EvalRun,

@@ -133,7 +133,7 @@ beforeEach(() => {
   deleteCriterionMock.mockResolvedValue(true);
   listCommentsMock.mockResolvedValue({ comments: [COMMENT], total: 1 });
   createCommentMock.mockResolvedValue(COMMENT);
-  getUserMock.mockResolvedValue({ id: 'u-nora', personId: 'p-004' });
+  getUserMock.mockResolvedValue({ id: 'u-nora', displayName: 'Nora DaSilva', personId: 'p-004' });
 });
 
 // ── GET criteria ───────────────────────────────────────────────────────────────
@@ -368,7 +368,7 @@ describe('POST /api/graph/work-items/:id/comments', () => {
     expect(res.status).toBe(201);
     expect(res.body).toEqual(COMMENT);
     expect(getUserMock).toHaveBeenCalledWith('u-nora');
-    expect(createCommentMock).toHaveBeenCalledWith('wi-obs-e1-s4', 'p-004', 'Looks right to me.');
+    expect(createCommentMock).toHaveBeenCalledWith('wi-obs-e1-s4', { userId: 'u-nora', displayName: 'Nora DaSilva', personId: 'p-004' }, 'Looks right to me.');
   });
 
   it('409s when the session has no linked person', async () => {

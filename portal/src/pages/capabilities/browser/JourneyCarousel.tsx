@@ -1,8 +1,7 @@
-import { Card, IconButton, Inline, InlinePlaceholder, MetaLine, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { Card, IconButton, Inline, InlinePlaceholder, MetaLine, Stack, T } from '@connorhoehnslalom/ui-components/shared';
 import { ImageThumbnail } from '@connorhoehnslalom/ui-components';
 import { SelectableCard } from '@connorhoehnslalom/ui-components/shared';
 import type { JourneyStep } from './types';
-import { T } from '../Text';
 
 /** One recorded step, big, with a thumbnail strip to jump between them. */
 export function JourneyCarousel({
@@ -28,8 +27,8 @@ export function JourneyCarousel({
           disabled={idx === 0}
         />
         <Stack gap="none" align="center" className="flex-1 min-w-0">
-          <T className="text-[12px] font-semibold text-text-primary">{step.pageTitle || step.url}</T>
-          <T className="truncate font-mono text-[10px] text-text-tertiary">{step.url}</T>
+          <T size="xs" weight="semibold" className="text-text-primary">{step.pageTitle || step.url}</T>
+          <T size="xs" className="truncate font-mono text-text-tertiary">{step.url}</T>
           <MetaLine items={[`Step ${idx + 1} of ${steps.length}`, new Date(step.startedAt).toLocaleTimeString()]} />
         </Stack>
         <IconButton
@@ -52,8 +51,8 @@ export function JourneyCarousel({
       {step.question && (
         <Card padding="sm" className="bg-surface-hover">
           <Stack gap="xs">
-            <T className="text-[11px] font-semibold text-text-tertiary" wrap>Q: {step.question}</T>
-            <T className="text-[12px] text-text-primary" wrap>{step.answer}</T>
+            <T size="xs" weight="semibold" className="text-text-tertiary" wrap>Q: {step.question}</T>
+            <T size="xs" className="text-text-primary" wrap>{step.answer}</T>
           </Stack>
         </Card>
       )}
@@ -71,7 +70,7 @@ export function JourneyCarousel({
           >
             {s.imageDataUrl
               ? <ImageThumbnail src={s.imageDataUrl} alt="" size="sm" />
-              : <T className="text-[9px] text-text-tertiary">{i + 1}</T>}
+              : <T size="xs" className="text-text-tertiary">{i + 1}</T>}
           </SelectableCard>
         ))}
       </Inline>

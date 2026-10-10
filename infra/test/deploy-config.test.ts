@@ -112,3 +112,50 @@ describe('deploy.sh: a half-built fleet must not exit 0', () => {
     assert.match(code(deploySh), /KB_RETRIED/);
   });
 });
+
+describe('teardown and rebuild know the opt-in stacks (deploy plan §8/§10)', () => {
+  test('cdk destroy synthesizes the opt-in stacks, or it cannot see them to delete', () => {
+    // Without the flags OrgIQ-Portal / OrgIQ-Social* are not in the app, so
+    // `cdk destroy --all` skips them and then fails on the middleware, whose
+    // exports they still import.
+    const script = code(destroySh);
+    for (const flag of ['deploySocial=true', 'deploySocialMedia=true', 'deploySocialImages=true', 'deployPortal=true']) {
+      assert.match(script, new RegExp(`--context ${flag}`), `destroy does not pass ${flag}`);
+    }
+    assert.match(script, /destroy --all --force "\$\{DESTROY_CONTEXT\[@\]\}"/);
+  });
+
+  test('the billing sweep reports ElastiCache, the SFU host and EIP, CloudFront, social tables and retained repos', () => {
+    const script = code(destroySh);
+    assert.match(script, /describe-replication-groups/);
+    assert.match(script, /describe-addresses/);
+    assert.match(script, /list-distributions/);
+    assert.match(script, /-social-'\)\]/);
+    for (const repo of ['middleware', 'social-gateway', 'platform-api', 'lvs-sfu']) {
+      assert.match(script, new RegExp(`"\\$\\{PREFIX\\}-${repo}"`), `${repo} not in RETAINED_REPOS`);
+    }
+  });
+
+  test('a social table is never deleted with deletion protection still on', () => {
+    // delete-table is refused while protection is on; both scripts must turn
+    // it off first, in that order.
+    for (const script of [code(deploySh), code(destroySh)]) {
+      const off = script.indexOf('--no-deletion-protection-enabled');
+      const del = script.indexOf('delete-table', off);
+      assert.ok(off > -1 && del > off, 'update-table --no-deletion-protection-enabled must precede delete-table');
+    }
+  });
+
+  test('destroy.sh deletes retained data only when asked (PURGE_RETAINED)', () => {
+    const script = code(destroySh);
+    const gate = script.indexOf('PURGE_RETAINED');
+    assert.ok(gate > -1 && gate < script.indexOf('--no-deletion-protection-enabled'));
+  });
+
+  test('deploy.sh deletes only EMPTY orphaned social tables, and knows the portal bucket and pending secrets', () => {
+    const script = code(deploySh);
+    assert.match(script, /scan --table-name "\$1" --limit 1 --select COUNT/);
+    assert.match(script, /"\$\{PREFIX\}-portal-\$\{ACCOUNT\}-\$\{REGION\}"/);
+    assert.match(script, /--force-delete-without-recovery/);
+  });
+});

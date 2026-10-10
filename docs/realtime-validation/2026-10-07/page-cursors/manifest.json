@@ -1,0 +1,29 @@
+{
+  "date": "2026-10-07",
+  "change": "Read cursors + unread for the page discussion families without a member list",
+  "library": {
+    "version": "0.115.0",
+    "sha": "7fa168e4fa294d982b5a610556831e453e06f8e4",
+    "branch": "feat/orgiq-0115 (cut from 0.114.0 8b1cca5b564ebb94bbef5136c3d38f5dc4561452; pushed to origin; not merged, no tag)",
+    "gate": "npm run build (verify:exports 32 subpaths), typecheck, check:contract, jest --maxWorkers=1: 185 suites passed / 3 skipped, 2085 tests passed / 56 skipped; npm pack --dry-run",
+    "installed": "middleware and portal package.json pin the full SHA; node_modules report 0.115.0"
+  },
+  "middleware": {
+    "typecheck": "pass",
+    "newContracts": "src/lib/__tests__/realtime-gateway-page-cursors.test.ts 9/9 (reader cursor + receipts on assessment:team, orgiq:initiative, pipelines:run; outsider and policy refusal; grant/epoch revocation mid-session; cross-tenant and gone resource; unread item/count/clear; revoked reader gets none); src/routes/__tests__/discussions.test.ts 4/4",
+    "gatewayChatSuites": "39 suites (2 skipped), 515 passed / 6 skipped",
+    "nativeBffContracts": "12/12 (cluster-acceptance.log), crash acceptance included",
+    "redisFaults": "3/3 (redis-failures.log); a first attempt without DOCKER_HOST failed at docker inspect before any fault (redis-failures-no-docker-host.log)",
+    "dynamoFault": "1/1 (dynamo-failures.log)",
+    "nativeBffs": "restarted once through test-support/bff-cluster-processes.py; left running on the 0.115 source",
+    "mockFloorQuick": "ALL CHECKS PASS after recapturing routes/wire/writes against a throwaway :3012 server (stopped)",
+    "routeCoverage": "737 routes, 0 untested"
+  },
+  "portal": {
+    "typecheck": "pass",
+    "tests": "1526/1526",
+    "componentDiscipline": "ALL CHECKS PASS",
+    "e2e": "e2e/unread-divider.spec.ts 4/4 on http://127.0.0.1:5183 (social #general, assessment team Discussion, initiative Discussion, pipelines run thread; server unread count 2 then 0)"
+  },
+  "environment": "Tilt :3001 reloaded itself through tsx watch after middleware edits (no manual restart); portal Vite not restarted; no cloud"
+}

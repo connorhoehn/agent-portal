@@ -1,4 +1,5 @@
 import { test, expect, type Browser, type Page } from '@playwright/test';
+import { signIn } from './realSession';
 
 // The S1 walk (docs/social-tenant-goal.md phase S1; docs/social-tenant-design.md
 // §4.2–§4.5): channels and DMs on the social tenant, two browser contexts, one
@@ -24,17 +25,9 @@ import { test, expect, type Browser, type Page } from '@playwright/test';
 test.use({ viewport: { width: 1440, height: 900 }, ...(process.env.PARITY_BASE_URL ? { baseURL: process.env.PARITY_BASE_URL } : {}) });
 test.describe.configure({ mode: 'serial' });
 
-async function signIn(page: Page, userId: string) {
+async function signedIn(page: Page, userId: string) {
   await page.goto('/');
-  let status = 0;
-  for (let attempt = 0; attempt < 2 && status !== 200; attempt += 1) {
-    if (attempt) await page.waitForTimeout(10_000); // a middleware edit restarts tsx watch
-    status = await page.evaluate(async (id) => (await fetch('/api/session/login', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
-      body: JSON.stringify({ userId: id }),
-    })).status, userId);
-  }
-  expect(status, `demo login as ${userId}`).toBe(200);
+  await signIn(page, userId);
 }
 
 type Person = { context: Awaited<ReturnType<Browser['newContext']>>; page: Page; errors: string[] };
@@ -44,7 +37,7 @@ async function person(browser: Browser, baseURL: string | undefined, userId: str
   const page = await context.newPage();
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
-  await signIn(page, userId);
+  await signedIn(page, userId);
   const me = await page.evaluate(async () => (await fetch('/api/session/me', { credentials: 'include' })).json());
   expect(me.tenant, `${userId} stands in the social tenant`).toBe('social');
   await page.goto(path);
@@ -149,7 +142,7 @@ test('a forged cross-tenant subscribe is refused with AUTHZ_CHANNEL_DENIED', asy
   test.setTimeout(60_000);
   const context = await browser.newContext({ baseURL });
   const page = await context.newPage();
-  await signIn(page, 'u-hr');
+  await signedIn(page, 'u-hr');
   const me = await page.evaluate(async () => (await fetch('/api/session/me', { credentials: 'include' })).json());
   // u-hr stands in orgiq and holds no grant in social at all.
   expect(me.tenant).toBe('orgiq');

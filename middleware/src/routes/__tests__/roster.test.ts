@@ -130,9 +130,12 @@ describe('GET /api/roster/users (person → user, for the initiative call)', () 
 
   it('says who holds a social grant only to a caller who holds one (Search → Message, lane E)', async () => {
     const res = await request(appAs('orgiq', { orgiq: ['org-leader'], social: ['participant'] })).get('/api/roster/users?personIds=p-004,p-011');
+    // The 2026-10-07 seed gives every person-linked user a Social grant (u-eli included, so
+    // Search → Message reaches the whole program cast); the `false` branch is no longer
+    // reachable from the seed, and the negative claim below is "no field without a grant".
     expect(res.body.users).toEqual([
       { personId: 'p-004', userId: 'u-nora', displayName: 'Nora DaSilva', social: true },
-      { personId: 'p-011', userId: 'u-eli', displayName: 'Eli Garcia', social: false },
+      { personId: 'p-011', userId: 'u-eli', displayName: 'Eli Garcia', social: true },
     ]);
     const without = await request(appAs('orgiq', { orgiq: ['org-leader'] })).get('/api/roster/users?personIds=p-004');
     expect(without.body.users[0]).not.toHaveProperty('social');

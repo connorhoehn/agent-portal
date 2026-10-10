@@ -1,0 +1,44 @@
+## static inline styles (style={{) outside tests
+portal/src/components/kb/KBHealthBadge.tsx:85:      style={{ borderColor: c.border, background: c.bg, color: c.text }}
+portal/src/components/kb/KBHealthBadge.tsx:87:      <Inline as="span" gap="none" className="text-[10px] leading-none" style={{ color: c.dot }}>
+portal/src/components/canary/nodes/ScorePanelNode.tsx:44:        style={{ color }}
+portal/src/components/canary/setup/VersionPickerStep.tsx:63:      style={{ borderLeftColor: selected ? sideColor : 'transparent' }}
+portal/src/components/canary/setup/VersionPickerStep.tsx:70:        style={{ accentColor: sideColor }}
+portal/src/components/canary/edges/WeightedEdge.tsx:55:        style={{
+portal/src/components/canary/edges/WeightedEdge.tsx:69:          style={{
+portal/src/components/ingest/SiteSurveyPanel.tsx:369:        style={{ paddingLeft: depth * 14 }}
+portal/src/components/ingest/Thumbnail.tsx:42:        style={{ width, height }}
+portal/src/components/ingest/Thumbnail.tsx:57:      style={{ width, minHeight: height }}
+portal/src/components/scores/Leaderboard.tsx:86:          items={[<Inline as="span" gap="none" key="d" style={{ color: deptColors[s.department] ?? 'var(--color-text-secondary)' }}>{s.department}</Inline>]}
+portal/src/components/scores/HistogramBar.tsx:25:      style={{ height }}
+portal/src/components/scores/HistogramBar.tsx:37:              style={{ height: barH, backgroundColor: color, opacity: 0.15 + 0.85 * pct }}
+portal/src/components/scores/CohortCard.tsx:46:      <Inline gap="none" aria-hidden className="w-[5px] shrink-0" style={{ backgroundColor: deptColor }} />
+portal/src/components/scores/CompareDeltaTable.tsx:37:                <Inline as="span" gap="none" style={{ color: colorFor(i) }}>{e.name}</Inline>
+portal/src/components/scores/CompareDeltaTable.tsx:66:                      {isMax ? <Inline as="span" gap="none" style={{ color: colorFor(i) }}>{Math.round(val)}</Inline> : Math.round(val)}
+portal/src/components/scores/PersonDetailCard.tsx:109:            items={[<Inline as="span" gap="none" key="d" style={{ color: deptColors[detail.department] ?? 'var(--color-text-tertiary)' }}>{detail.department}</Inline>]}
+portal/src/components/observability/ToolWaterfall.tsx:161:                style={{ left: `${leftPct}%`, width: `${widthPct}%` }}
+portal/src/components/observability/ToolWaterfall.tsx:174:                  style={{ left: `calc(${leftPct + widthPct}% + 6px)` }}
+## useNotifications( call sites
+portal/src/components/shell/SharedNotifications.tsx:4:// `useNotifications()` keeps its list in component-local state, so each caller
+portal/src/components/shell/SharedNotifications.tsx:20:  const inbox = useNotifications();
+portal/src/components/shell/ActivityBell.tsx:3:// The library's bell over realtime-modules' `useNotifications()` — the
+## raw WebSocket / EventSource
+portal/src/components/kb/ProvisioningProgress.tsx:109:    const es = new EventSource(`/api/admin/kb-registry/${registryId}/status`);
+portal/src/components/canary/useCanaryStream.ts:84:    const es = new EventSource('/api/observability/canary/events');
+portal/src/components/ingest/useCrawlStream.ts:27:    const es = new EventSource(`/api/ingest/crawl/${encodeURIComponent(crawlId)}/stream`);
+portal/src/components/runs/RunTimeline.tsx:237:      es = new EventSource(src ?? `/api/devbox/boxes/${encodeURIComponent(boxId)}/tail`);
+portal/src/hooks/useWorkEvents.ts:16:    source = new EventSource(URL);
+portal/src/pages/ingest/DataSourcesPage.tsx:42:    const es = new EventSource(
+portal/src/pages/assessment/knowledge/useAssessmentEvents.ts:61:      es = new EventSource('/api/assessment/events', { withCredentials: true });
+portal/src/pages/observability/AuthzLogPage.tsx:56:    const es = new EventSource('/api/observability/authz/stream', { withCredentials: true });
+portal/src/pages/observability/ApprovalQueuePage.tsx:122:    const es = new EventSource('/api/observability/approvals/stream', {
+portal/src/pages/local-compute/useLocalComputeStream.ts:43:      es = new EventSource('/api/local-compute/events', { withCredentials: true });
+portal/src/pages/work/JobDetailPage.tsx:153:      es = new EventSource(`/api/devbox/boxes/${job.boxId}/tail`);
+## local copies of library DM/channel helpers
+portal/src/pages/social/socialChat.ts:65:export const DM_PREFIX = 'social:dm:';
+portal/src/pages/social/socialChat.ts:73:export function dmMembers(lobby: string): string[] {
+middleware/src/lib/social-chat.ts:55:export const SOCIAL_DM_PREFIX = 'social:dm:';
+middleware/src/lib/social-chat.ts:80:export function dmChannelFor(userIds: readonly string[]): string {
+middleware/src/lib/social-chat.ts:88:export function dmMembers(channel: string): string[] | null {
+middleware/src/lib/social-notify.ts:360:export function parseDmLobby(name: string): { tenant: string; members: string[] } | null {
+middleware/src/lib/realtime-gateway.ts:250:export function stripServicePrefix(channel: string): string {

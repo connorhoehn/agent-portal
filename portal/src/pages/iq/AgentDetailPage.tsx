@@ -16,12 +16,11 @@ import { Link, useParams } from 'react-router';
 import {
   Button, Card, CardHeader, CatalogGrid, Chip, CodeBlock, CollapsibleSection,
   DataTable, Inline, InlinePlaceholder, LogStream, PageSection, Stack, StatStrip,
-  Switch,
+  Switch, T,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { useCrumbLabel } from '../../lib/crumbLabels';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
-import { T } from './Text';
 import { KeyValue } from '../../components/KeyValue';
 import { STATUS_CHIP_TONE, countTelemetryLines, ms, toLogLevel, visibleLogLines, when } from './agentDetailFormat';
 
@@ -86,7 +85,7 @@ export default function AgentDetailPage() {
         <UnavailableNotice
           error={error}
           what="this agent"
-          source="Composed from the runtime list, Prompt Management, invocation traces and CloudWatch"
+          source="This page is composed from the runtime list, Prompt Management, invocation traces and CloudWatch"
           onRetry={refresh}
           className="mb-4"
         />

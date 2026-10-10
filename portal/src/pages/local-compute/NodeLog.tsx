@@ -79,7 +79,7 @@ export function NodeLog({ nodeId }: { nodeId: string }) {
       <UnavailableNotice
         error={failure}
         what="this machine's operational log"
-        source="Shipped by the worker between jobs — see tools/local-compute-worker.mjs"
+        source="The log is shipped by the worker between jobs (tools/local-compute-worker.mjs)"
       />
     );
   }

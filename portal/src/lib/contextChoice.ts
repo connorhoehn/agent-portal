@@ -14,7 +14,7 @@ export function hasChosenContext(sub: string): boolean {
 }
 
 /** Forget the chooser decision. Sign-out and sign-in call this so the next
- * session re-drives through /select instead of inheriting the old pick. */
+ * session re-drives through /workspaces instead of inheriting the old pick. */
 export function clearContextChosen(): void {
   try { sessionStorage.removeItem(KEY); } catch { /* private mode — ignore */ }
 }

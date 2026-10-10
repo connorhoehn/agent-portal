@@ -31,6 +31,8 @@ import express, { type Request, type Response, type NextFunction } from 'express
 import request from '../../test-support/http.js';
 import { workRouter } from '../work.js';
 import { errorHandler } from '../../lib/async-handler.js';
+import * as budgets from '../../providers/budgets.js';
+import { listJobs } from '../../providers/agent-jobs.js';
 
 function buildApp(session: Record<string, unknown> | null) {
   const app = express();
@@ -64,6 +66,16 @@ function promote(session: Record<string, unknown> | null, id: string) {
 }
 
 describe('POST /api/work/findings/:id/promote — grant-scoped dispatch', () => {
+  it('503s and creates no job when an SME grant lookup is unavailable', async () => {
+    const before = await listJobs({ limit: 1_000 });
+    const unavailable = jest.spyOn(budgets, 'listGrants').mockRejectedValueOnce(new Error('grant database unavailable'));
+    try {
+      const res = await promote(nora, FINDING_OBS_NO_GRANT);
+      expect(res.status).toBe(503);
+      expect(res.body.gate).toBe('grant-authorization');
+      expect(await listJobs({ limit: 1_000 })).toEqual(before);
+    } finally { unavailable.mockRestore(); }
+  });
   it('403s an sme with no active grant on the finding\'s initiative', async () => {
     const res = await promote(nora, FINDING_OBS_NO_GRANT);
     expect(res.status).toBe(403);

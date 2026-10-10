@@ -208,3 +208,81 @@ export async function getDecision(id: string): Promise<DecisionDetail | null> {
     })),
   };
 }
+
+// ─── Work-graph read (lib/work-graph/sources.ts) ─────────────────────────────
+//
+// The activity graph draws a decision only on an honest instant of its own:
+// `decided_at` (a DATE — the whole calendar day) or `escalated_at` (a
+// timestamp). An open decision with neither has no moment to draw, and
+// `created_at` is not it (the seeds leave it to its NOW() default), so such a
+// row is not returned here. Same table, same rows as listDecisions /
+// getDecision / getProjectDecisions — one concept, one more projection.
+
+export interface DecisionActivityRow {
+  id: string;
+  topic: string;
+  summary: string | null;
+  status: string;
+  projectId: string | null;
+  workItemId: string | null;
+  requiredRole: string | null;
+  /** 'YYYY-MM-DD' (a DATE), or null. */
+  decidedAt: string | null;
+  /** ISO timestamp, or null. */
+  escalatedAt: string | null;
+  participants: Array<{ personId: string; name: string; role: string | null }>;
+}
+
+export const DECISION_ACTIVITY_LIMIT = 200;
+
+export async function listDecisionActivity(opts: { projectId?: string } = {}): Promise<DecisionActivityRow[]> {
+  if (config.mock.aurora) {
+    const byId = new Map(mockPeople.map((p) => [p.id, p]));
+    return decisionRows.rows()
+      .filter((d) => (d.decidedAt || d.escalatedAt) && (!opts.projectId || d.projectId === opts.projectId))
+      .map((d) => ({
+        id: d.id, topic: d.topic, summary: d.summary, status: d.status, projectId: d.projectId, workItemId: d.workItemId,
+        requiredRole: d.requiredRole, decidedAt: d.decidedAt, escalatedAt: d.escalatedAt,
+        participants: decisionParticipantRows.rows().filter((p) => p.decisionId === d.id)
+          .flatMap((p) => { const person = byId.get(p.personId); return person ? [{ personId: p.personId, name: person.name, role: p.role }] : []; }),
+      }))
+      .sort((a, b) => (b.escalatedAt ?? b.decidedAt ?? '').localeCompare(a.escalatedAt ?? a.decidedAt ?? ''))
+      .slice(0, DECISION_ACTIVITY_LIMIT);
+  }
+  const params = [intParam('lim', DECISION_ACTIVITY_LIMIT)];
+  let projectClause = '';
+  if (opts.projectId) { projectClause = 'AND d.project_id = :pid'; params.push(strParam('pid', opts.projectId)); }
+  const heads = await exec(
+    `SELECT d.id, d.topic, d.summary, d.status, d.project_id, d.work_item_id, d.required_role,
+            d.decided_at::text AS decided_at, d.escalated_at
+       FROM decisions d
+      WHERE (d.decided_at IS NOT NULL OR d.escalated_at IS NOT NULL) ${projectClause}
+      ORDER BY COALESCE(d.escalated_at, d.decided_at) DESC
+      LIMIT :lim`,
+    params,
+  );
+  if (heads.length === 0) return [];
+  const names = heads.map((_, i) => `:d${i}`).join(', ');
+  const people = await exec(
+    `SELECT dp.decision_id, dp.person_id, p.name, dp.role
+       FROM decision_participants dp JOIN people p ON p.id = dp.person_id
+      WHERE dp.decision_id IN (${names})
+      ORDER BY dp.weight DESC NULLS LAST, p.name`,
+    heads.map((h, i) => strParam(`d${i}`, String(h['id']))),
+  );
+  const mine = new Map<string, DecisionActivityRow['participants']>();
+  for (const r of people) {
+    const list = mine.get(String(r['decision_id'])) ?? [];
+    list.push({ personId: String(r['person_id']), name: String(r['name'] ?? ''), role: r['role'] != null ? String(r['role']) : null });
+    mine.set(String(r['decision_id']), list);
+  }
+  return heads.map((r) => ({
+    id: String(r['id']), topic: String(r['topic'] ?? ''), summary: r['summary'] != null ? String(r['summary']) : null,
+    status: String(r['status'] ?? 'open'), projectId: r['project_id'] != null ? String(r['project_id']) : null,
+    workItemId: r['work_item_id'] != null ? String(r['work_item_id']) : null,
+    requiredRole: r['required_role'] != null ? String(r['required_role']) : null,
+    decidedAt: r['decided_at'] != null ? String(r['decided_at']).slice(0, 10) : null,
+    escalatedAt: r['escalated_at'] != null ? String(r['escalated_at']) : null,
+    participants: mine.get(String(r['id'])) ?? [],
+  }));
+}

@@ -29,6 +29,17 @@ FILES = [
     # column. Every statement in it is CREATE/ALTER ... IF NOT EXISTS, so
     # running it first costs nothing on an up-to-date cluster.
     'schema/orgiq_work_items_schema.sql',
+    'schema/work_item_documents_schema.sql',
+    'schema/work_item_comment_migration_schema.sql',
+    'schema/assessment_team_members_schema.sql',
+    # Additive review-deck tables (docs/assessment-deck-goal.md); IF NOT
+    # EXISTS throughout, and they need assessment_schema.sql's teams table,
+    # which load_schema.py applies first.
+    'schema/assessment_deck_schema.sql',
+    'schema/pipeline_deck_schema.sql',
+    'schema/initiative_deck_schema.sql',
+    'schema/flow_runs_schema.sql',
+    'schema/social_deck_schema.sql',
     'schema/seed.sql',
     # Sprints, budget grants, work-item cost estimates — the program tables the
     # curated seed writes into. load_schema.py also applies this; listing it

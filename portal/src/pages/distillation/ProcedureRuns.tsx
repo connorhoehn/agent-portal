@@ -10,7 +10,7 @@
 // by procedureRunsModel.ts. Run markers live ONLY here: the Content tab shows
 // the approach as neutral numbered steps and names a failed latest run in one
 // callout (docs/distillation-guide-record-spec.md).
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ProcedureSteps, WorkActivityList, type WorkActivityEvent } from '@connorhoehnslalom/ui-components';
 import {
   Banner, Button, DetailSection, FormField, InlineAlert, Inline, SegmentedControl, Select, Stack, Textarea,
@@ -30,13 +30,24 @@ export interface ProcedureData {
   refreshRuns: () => void;
 }
 
-export function useProcedure(artifactId: string | null): ProcedureData {
+/** `version` is the store's digest: when it moves, a run may have been
+ *  recorded, so the runs (and the lineage that names them) are read again. */
+export function useProcedure(artifactId: string | null, version: string | null = null): ProcedureData {
   const lineage = useFetch<Lineage>(
     artifactId ? `/api/distillation/items/${encodeURIComponent(artifactId)}/lineage?depth=2` : null, 0,
   );
   const runs = useFetch<ProcedureRunsResponse>(
     artifactId ? `/api/distillation/procedures/${encodeURIComponent(artifactId)}/runs` : null, 0,
   );
+  const firstVersion = useRef(version);
+  const refreshRuns = runs.refresh;
+  const refreshLineage = lineage.refresh;
+  useEffect(() => {
+    if (!artifactId || version === firstVersion.current) return;
+    firstVersion.current = version;
+    refreshRuns();
+    refreshLineage();
+  }, [artifactId, version, refreshRuns, refreshLineage]);
   const steps = useMemo<ProcedureStepDef[]>(
     // The plain wording when the fact has one (the same text the Content
     // tab's approach shows), else the fact's statement.

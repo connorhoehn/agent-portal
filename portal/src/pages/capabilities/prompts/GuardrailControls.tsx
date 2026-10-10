@@ -1,8 +1,7 @@
-import { Chip, Inline, InlineAlert, Select } from '@connorhoehnslalom/ui-components/shared';
+import { Chip, Inline, InlineAlert, Select, T } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../../hooks/useFetch.js';
 import { blockingInterventions } from './promptFormat';
 import type { GuardrailIntervention, GuardrailSnapshot } from './types';
-import { T } from '../Text';
 
 /** The tenant's configured guardrail, or none. A single-guardrail tenant is the
  *  only shape the API exposes today, so this is a two-option select. */
@@ -39,7 +38,7 @@ export function GuardrailBanner({ interventions }: { interventions: GuardrailInt
   return (
     <InlineAlert tone="warning">
       <Inline gap="sm">
-        <T className="font-bold">Guardrail triggered</T>
+        <T weight="semibold">Guardrail triggered</T>
         {blocked.map((b, i) => (
           <Chip key={i} tone="warning" size="xs" solid>{b.type ?? b.action}</Chip>
         ))}

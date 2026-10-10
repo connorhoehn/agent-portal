@@ -3,6 +3,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
+  T,
   Button,
   Card,
   Chip,
@@ -138,9 +139,9 @@ function PolicyTestPage() {
           </FormField>
           <FormField label="Resource" layout="inline">
             {() => (
-              <Inline as="span" gap="xs" className="text-[12px] text-text-tertiary">
+              <T as="span" size="xs" tone="tertiary">
                 Application <code>(fixed)</code>
-              </Inline>
+              </T>
             )}
           </FormField>
           <Inline justify="end">
@@ -160,13 +161,13 @@ function PolicyTestPage() {
                 <Inline gap="md" align="start">
                   <DecisionChip value={r.decision} hasError={!!r.error} />
                   <Stack gap="xs" className="min-w-0 flex-1">
-                    <Inline as="span" gap="xs" className="text-[13px] font-medium">
+                    <T as="span" size="sm" weight="semibold" className="inline-flex items-center gap-1">
                       <code>{r.request.tenant}/{r.request.role}</code>
-                      <Inline as="span" className="text-text-tertiary">→</Inline>
+                      <T as="span" size="sm" tone="tertiary">→</T>
                       <code>{r.request.action}</code>
-                    </Inline>
+                    </T>
                     {r.error && (
-                      <Inline as="span" className="text-[11px] text-danger">{r.error}</Inline>
+                      <T as="span" size="xs" className="text-danger">{r.error}</T>
                     )}
                     {r.determiningPolicies && r.determiningPolicies.length > 0 && (
                       <Inline gap="xs" wrap>
@@ -183,7 +184,7 @@ function PolicyTestPage() {
                     {r.errors && r.errors.length > 0 && (
                       <Stack gap="none">
                         {r.errors.map((e, j) => (
-                          <Inline key={j} as="span" className="text-[11px] text-danger">{e.errorDescription}</Inline>
+                          <T key={j} as="span" size="xs" className="text-danger">{e.errorDescription}</T>
                         ))}
                       </Stack>
                     )}

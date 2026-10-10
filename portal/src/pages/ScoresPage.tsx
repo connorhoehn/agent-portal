@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
-import { Button, CollapsibleSection, EmptyState, ErrorState, LoadingState, PageSection } from '@connorhoehnslalom/ui-components/shared';
+import { Button, CollapsibleSection, EmptyState, ErrorState, LoadingState, PageSection, T } from '@connorhoehnslalom/ui-components/shared';
 import { ScoreAnalysisPanel } from '../components/scores/ScoreAnalysisPanel';
 import { useFetch } from '../hooks/useFetch';
 import { useCapabilities } from '../lib/capabilities';
@@ -11,7 +11,6 @@ import { FilterBar } from '../components/scores/FilterBar';
 import { Leaderboard } from '../components/scores/Leaderboard';
 import { PersonDetailCard } from '../components/scores/PersonDetailCard';
 import { LeaderboardAccessNeeded, isLeaderboardForbiddenError } from '../components/scores/LeaderboardAccessNeeded';
-import { T } from './Text';
 import { showingLabel } from '../lib/format';
 
 function ScoresPage() {
@@ -243,7 +242,7 @@ function ScoresPage() {
         mostRecentScoredAt={data.mostRecentScoredAt ?? null}
       />
 
-      <T as="p" className="mb-3 block text-[12px] text-text-secondary">
+      <T size="xs" as="p" className="mb-3 block text-text-secondary">
         Ranked by composite score (blended influence + expertise) across {departments.length} departments — search a skill to re-rank, or filter by department.
       </T>
 

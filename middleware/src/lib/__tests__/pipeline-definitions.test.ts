@@ -17,6 +17,13 @@ import { promotionCandidates } from '../../mock/promotions.js';
 import { agentFleet } from '../../mock/agent-statuses.js';
 import { pipelineDefinitionRows } from '../../mock/pipeline-definitions.js';
 
+// The real launchable set: the nine seeded commands plus the two deck commands.
+const EXPECTED_COMMANDS = [
+  'classify-transcript', 'develop-jira-story', 'draft-confluence-page', 'draft-review-deck',
+  'draw-diagram', 'extract-enterprise-context', 'process-self-assessment', 'revise-review-deck',
+  'score-dimensions', 'suggest-confluence-content', 'validate-outputs',
+].sort();
+
 function fixtureSources(): DefinitionSources {
   return {
     bots: MOCK_BOTS,
@@ -34,7 +41,7 @@ describe('deriveDefinitions — every source row yields exactly one definition',
 
   it('the fixtures are not empty (a vacuous pass proves nothing)', () => {
     expect(src.bots.length).toBeGreaterThan(0);
-    expect(src.commands.length).toBe(9);
+    expect(src.commands.map((c) => c.name).sort()).toEqual(EXPECTED_COMMANDS);
     expect(src.runbooks.filter(isRunbookCandidate).length).toBeGreaterThan(0);
     expect(src.agents.length).toBeGreaterThan(0);
   });
@@ -48,9 +55,9 @@ describe('deriveDefinitions — every source row yields exactly one definition',
     expect(defs.filter((d) => d.kind === 'bot')).toHaveLength(src.bots.length);
   });
 
-  it('each of the nine assessment commands is exactly one assessment-command definition', () => {
+  it('each assessment command is exactly one assessment-command definition', () => {
     for (const c of src.commands) expect(ids.filter((i) => i === definitionIdFor.command(c.name))).toHaveLength(1);
-    expect(defs.filter((d) => d.kind === 'assessment-command')).toHaveLength(9);
+    expect(defs.filter((d) => d.kind === 'assessment-command')).toHaveLength(EXPECTED_COMMANDS.length);
     expect(defs.filter((d) => d.kind === 'assessment-command').every((d) => d.contextTenant === 'assessment')).toBe(true);
   });
 

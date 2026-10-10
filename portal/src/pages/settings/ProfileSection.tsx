@@ -12,9 +12,8 @@
 import { useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import {
-  Card, Divider, SectionLabel, Button, Inline, InlineAlert,
+  Card, Divider, SectionLabel, Button, Inline, InlineAlert, T,
 } from '@connorhoehnslalom/ui-components/shared';
-import { T } from '../Text';
 import { SettingRow } from '../../components/settings';
 import { useFetch } from '../../hooks/useFetch';
 import { useSession } from '../../lib/auth';

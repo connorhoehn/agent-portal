@@ -16,7 +16,7 @@
 import { useMemo } from 'react';
 import { Link } from 'react-router';
 import {
-  Card, CardHeader, Chip, PageSection, Stack, StatStrip, Table, TableBody, TableHead, TableRow, TableTh, TableTd,
+  Card, CardHeader, Chip, PageSection, Stack, StatStrip, Table, TableBody, TableHead, TableRow, TableTh, TableTd, T,
 } from '@connorhoehnslalom/ui-components/shared';
 import {
   AreaChart,
@@ -33,7 +33,6 @@ import { SmartEmptyState } from '../../components/observability/SmartEmptyState'
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { firstDegraded, readDegraded } from '../../lib/degraded';
 import { TrafficHeatmapFrame } from './TrafficHeatmapFrame';
-import { T } from './Text';
 import { RowEmpty } from './ReadState';
 import { normalizePgTimestamp, parsePgTimestamp } from '../../lib/pgTimestamp';
 import { WindowPicker, useWindowUrlState } from './WindowPicker';
@@ -312,34 +311,34 @@ function TrafficPage() {
         />
       )}
 
-      <Card padding="md">
-        <StatStrip
-          frameless
-          items={[
-            {
-              label: 'Total invocations',
-              value: totalsBlind ? '—' : fmtInt(totals.inv),
-              hint: totalsBlind
-                ? 'could not be read — not a count of zero'
-                : `across ${perAgent.length} agent${perAgent.length === 1 ? '' : 's'} in ${win.label}`,
-            },
-            {
-              label: 'Average RPS',
-              value: totalsBlind ? '—' : fmtRps(totals.avgRps),
-              hint: totalsBlind
-                ? 'rate unknown for this window'
-                : `smoothed over the full ${win.label} window`,
-            },
-            {
-              label: 'Spend',
-              value: totalsBlind ? '—' : fmtUsd(totals.cost),
-              hint: totalsBlind
-                ? 'spend could not be read — this is not $0'
-                : 'Bedrock + judge for this window',
-            },
-          ]}
-        />
-      </Card>
+      <StatStrip
+        variant="line"
+        size="sm"
+        aria-label="Traffic totals"
+        items={[
+          {
+            label: 'invocations',
+            value: totalsBlind ? '—' : fmtInt(totals.inv),
+            title: totalsBlind
+              ? 'could not be read — not a count of zero'
+              : `across ${perAgent.length} agent${perAgent.length === 1 ? '' : 's'} in ${win.label}`,
+          },
+          {
+            label: 'RPS average',
+            value: totalsBlind ? '—' : fmtRps(totals.avgRps),
+            title: totalsBlind
+              ? 'rate unknown for this window'
+              : `smoothed over the full ${win.label} window`,
+          },
+          {
+            label: 'spend',
+            value: totalsBlind ? '—' : fmtUsd(totals.cost),
+            title: totalsBlind
+              ? 'spend could not be read — this is not $0'
+              : 'Bedrock + judge for this window',
+          },
+        ]}
+      />
 
       {/* RPS-over-time stacked-area chart. */}
       <Card padding="md">
@@ -436,13 +435,13 @@ function TrafficPage() {
             degraded={trafficDegraded}
           />
         ) : (
-          <Table>
+          <Table size="sm">
             <TableHead>
               <TableRow>
                 <TableTh>User</TableTh>
-                <TableTh>Invocations</TableTh>
-                <TableTh>Unique agents</TableTh>
-                <TableTh>Total cost</TableTh>
+                <TableTh numeric>Invocations</TableTh>
+                <TableTh numeric>Unique agents</TableTh>
+                <TableTh numeric>Total cost</TableTh>
                 <TableTh>Last seen</TableTh>
                 <TableTh></TableTh>
               </TableRow>
@@ -450,11 +449,11 @@ function TrafficPage() {
             <TableBody>
               {topUsers.map((u) => (
                 <TableRow key={u.userId}>
-                  <TableTd className="text-[12px] font-medium font-mono whitespace-nowrap">{u.userId}</TableTd>
-                  <TableTd className="text-[12px] text-text-secondary tabular-nums">{fmtInt(u.invocations)}</TableTd>
-                  <TableTd className="text-[12px] text-text-secondary tabular-nums">{fmtInt(u.uniqueAgents)}</TableTd>
-                  <TableTd className="text-[12px] text-text-secondary tabular-nums">{fmtUsd(u.totalCostUsd, 4)}</TableTd>
-                  <TableTd className="text-[11px] text-text-tertiary whitespace-nowrap">
+                  <TableTd className="font-mono whitespace-nowrap">{u.userId}</TableTd>
+                  <TableTd numeric>{fmtInt(u.invocations)}</TableTd>
+                  <TableTd numeric>{fmtInt(u.uniqueAgents)}</TableTd>
+                  <TableTd numeric>{fmtUsd(u.totalCostUsd, 4)}</TableTd>
+                  <TableTd className="whitespace-nowrap">
                     {u.lastSeenAt
                       ? (parsePgTimestamp(u.lastSeenAt)?.toLocaleString() ?? u.lastSeenAt)
                       : '—'}
@@ -462,7 +461,7 @@ function TrafficPage() {
                   <TableTd className="text-right whitespace-nowrap">
                     <Link
                       to={`/admin/observability/invocations/search?userId=${encodeURIComponent(u.userId)}`}
-                      className="text-primary text-[14px] no-underline px-2 py-0.5"
+                      className="text-primary no-underline px-2 py-0.5"
                     >
                       →
                     </Link>
@@ -492,14 +491,14 @@ function TrafficPage() {
         {perAgent.length === 0 ? (
           <RowEmpty text="No agents observed in this window." degraded={trafficDegraded} />
         ) : (
-          <Table>
+          <Table size="sm">
             <TableHead>
               <TableRow>
                 <TableTh>Agent</TableTh>
-                <TableTh>Invocations</TableTh>
-                <TableTh>RPS</TableTh>
-                <TableTh>P50 latency</TableTh>
-                <TableTh>P99 latency</TableTh>
+                <TableTh numeric>Invocations</TableTh>
+                <TableTh numeric>RPS</TableTh>
+                <TableTh numeric>P50 latency</TableTh>
+                <TableTh numeric>P99 latency</TableTh>
                 <TableTh>
                   <T title="Guardrail interventions or schema-invalid outputs — real request failures.">
                     Error rate
@@ -510,19 +509,19 @@ function TrafficPage() {
                     Low-quality rate
                   </T>
                 </TableTh>
-                <TableTh>Cost</TableTh>
+                <TableTh numeric>Cost</TableTh>
               </TableRow>
             </TableHead>
             <TableBody>
               {perAgent.map((a) => (
                 <TableRow key={a.agentId}>
-                  <TableTd className="text-[12px] font-medium font-mono whitespace-nowrap">{a.agentId}</TableTd>
-                  <TableTd className="text-[12px] text-text-secondary tabular-nums">{fmtInt(a.invocations)}</TableTd>
+                  <TableTd className="font-mono whitespace-nowrap">{a.agentId}</TableTd>
+                  <TableTd numeric>{fmtInt(a.invocations)}</TableTd>
                   <TableTd>
                     <Chip tone={rpsTone(a.rps)} size="xs">{fmtRps(a.rps)}</Chip>
                   </TableTd>
-                  <TableTd className="text-[12px] text-text-secondary tabular-nums">{fmtMs(a.p50DurationMs)}</TableTd>
-                  <TableTd className="text-[12px] text-text-secondary tabular-nums">{fmtMs(a.p99DurationMs)}</TableTd>
+                  <TableTd numeric>{fmtMs(a.p50DurationMs)}</TableTd>
+                  <TableTd numeric>{fmtMs(a.p99DurationMs)}</TableTd>
                   <TableTd>
                     <Chip tone={errorTone(a.errorRate)} size="xs">
                       {fmtPct(a.errorRate)}
@@ -530,7 +529,7 @@ function TrafficPage() {
                   </TableTd>
                   <TableTd>
                     {a.lowQualityRate == null || !Number.isFinite(a.lowQualityRate) ? (
-                      <T className="text-[12px] text-text-secondary tabular-nums">—</T>
+                      <T tone="secondary" tabular>—</T>
                     ) : (
                       <Chip tone={lowQualityTone(a.lowQualityRate)} size="xs">
                         {fmtPct(a.lowQualityRate)}

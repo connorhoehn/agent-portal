@@ -1,0 +1,7 @@
+0.110.0
+1
+1
+514:    if (!Number.isSafeInteger(maxSockets) || maxSockets < 1 || maxSockets > 1024)
+540:    const store = new DynamoChatStore({ client, tablePrefix: cfg.tablePrefix, logger, messageIndexWrites: socialChatIndexWrites() });
+614:                channelAudience: (channel) => tenantDmMembers(channel) ?? library.channelAudience(channel),
+773:                    peerOperationLingerMs: peerOperationLingerMs() });

@@ -7,39 +7,32 @@
 // their node in the graph, with an Outlook-style people card that answers
 // "who is this" on hover without spending a navigation to find out.
 //
-// The card's own open/close/pin state is a local, non-modal disclosure
-// (see PersonCardFrame.tsx and personCardState.ts), not the library's
-// PersonHoverCard: that component opens its panel on focus and its
-// InlinePopover always moves focus into the panel and traps Tab there the
-// moment it opens, which made a table of person chips unusable past row 1 by
-// keyboard (docs/orgiq-journeys/sme/DEFECTS.md #2). Here, focus alone never
-// opens the card, Enter/Space toggles a pin, Escape closes it without moving
-// focus (it was never taken from the trigger), and Tab always continues to
-// the next control regardless of whether the card is open or pinned.
+// The card is the library `HoverCard` (2.437.0), not `PersonHoverCard`:
+// that component opens its panel on focus and its InlinePopover moves focus
+// into the panel and traps Tab there, which made a table of person chips
+// unusable past row 1 by keyboard (docs/orgiq-journeys/sme/DEFECTS.md #2).
+// Here (`openOnFocus={false}`) focus alone never opens the card, Space (and
+// Enter on a plain name) toggles a pin, Escape closes it without moving
+// focus, and Tab always continues to the next control.
 //
-// The card's detail is fetched ONLY once a hover/pin has actually opened it
-// at least once. A table of twenty rows must not fire twenty person requests
-// on mount to fill in cards nobody looked at.
+// Everyday cards use the existing self-disclosed demo profiles. Only a ready
+// Work HR session requests inferred graph details, after a hover/pin opens.
+// A table must not request person details for cards nobody looked at.
 
-import { useCallback, useEffect, useId, useReducer, useRef, useState, type KeyboardEvent, type RefObject } from 'react';
+import { useState, type KeyboardEvent } from 'react';
 import { Link } from 'react-router';
-import { Avatar, Chip, Inline, LoadingState, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { Avatar, Chip, HoverCard, Inline, LoadingState, Stack, T } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { useSession } from '../../lib/auth';
-import { PersonCardFrame } from './PersonCardFrame';
-import { initialPersonCardState, isPersonCardVisible, personCardReducer } from './personCardState.ts';
-import { T } from './Text';
+import { PublicPersonSummary } from '../../components/people/PublicPersonSummary';
 import type { PersonDetail } from './types';
-
-const HOVER_OPEN_DELAY = 450;
-const HOVER_CLOSE_DELAY = 250;
 
 /** Where a person's name goes when you click it. */
 export function personPath(personId: string): string {
   return `/iq/explore?focus=${encodeURIComponent(personId)}`;
 }
 
-function HoverDetail({ personId }: { personId: string }) {
+function InferredHoverDetail({ personId }: { personId: string }) {
   const { data, error } = useFetch<PersonDetail>(`/api/graph/people/${encodeURIComponent(personId)}`);
   if (error) return <T className="text-[11px] text-text-tertiary">Couldn’t load details.</T>;
   if (!data) return <LoadingState label="Loading…" spinnerSize="sm" />;
@@ -59,10 +52,10 @@ function HoverDetail({ personId }: { personId: string }) {
 }
 
 /** The identity block the card shows immediately, before any fetch. */
-function PersonIdentity({ name, title, department }: { name: string; title?: string | null; department?: string | null }) {
+function PersonIdentity({ name, title, department, avatarUrl }: { name: string; title?: string | null; department?: string | null; avatarUrl?: string | null }) {
   return (
     <Inline gap="xs" align="center">
-      <Avatar name={name} size={32} />
+      <Avatar name={name} size={32} src={avatarUrl ?? undefined} />
       <Stack gap="none">
         <T className="truncate text-sm font-semibold text-text-primary">{name}</T>
         {title && <T className="truncate text-xs text-text-secondary">{title}</T>}
@@ -72,58 +65,6 @@ function PersonIdentity({ name, title, department }: { name: string; title?: str
   );
 }
 
-/**
- * Shared hover/pin timing + state for both branches below. Neither branch
- * moves focus anywhere: the trigger keeps focus for its whole lifecycle, so
- * "Escape returns focus to the trigger" is true by construction.
- */
-function usePersonCard(anchorRef: RefObject<HTMLElement | null>) {
-  const [state, dispatch] = useReducer(personCardReducer, initialPersonCardState);
-  const [everOpened, setEverOpened] = useState(false);
-  const openTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const clearTimers = useCallback(() => {
-    if (openTimer.current) { clearTimeout(openTimer.current); openTimer.current = null; }
-    if (closeTimer.current) { clearTimeout(closeTimer.current); closeTimer.current = null; }
-  }, []);
-  useEffect(() => clearTimers, [clearTimers]);
-
-  const scheduleOpen = useCallback(() => {
-    clearTimers();
-    openTimer.current = setTimeout(() => {
-      dispatch({ type: 'hover-open' });
-      setEverOpened(true);
-    }, HOVER_OPEN_DELAY);
-  }, [clearTimers]);
-
-  const scheduleClose = useCallback(() => {
-    clearTimers();
-    closeTimer.current = setTimeout(() => dispatch({ type: 'hover-close' }), HOVER_CLOSE_DELAY);
-  }, [clearTimers]);
-
-  const togglePin = useCallback(() => {
-    clearTimers();
-    setEverOpened(true);
-    dispatch({ type: 'toggle-pin' });
-  }, [clearTimers]);
-
-  const visible = isPersonCardVisible(state);
-
-  // Escape closes whatever is showing. Attached to the trigger itself, so
-  // it only fires while the trigger (or its child) has focus — it never
-  // reaches for focus, since the trigger already has it.
-  const onEscape = useCallback((e: KeyboardEvent) => {
-    if (e.key !== 'Escape' || !visible) return;
-    e.stopPropagation();
-    clearTimers();
-    dispatch({ type: 'dismiss' });
-    anchorRef.current?.focus();
-  }, [visible, clearTimers, anchorRef]);
-
-  return { visible, everOpened, scheduleOpen, scheduleClose, togglePin, clearTimers, onEscape };
-}
-
 export function PersonRef({
   personId,
   name,
@@ -131,6 +72,7 @@ export function PersonRef({
   department,
   avatarSize = 18,
   showAvatar = true,
+  avatarUrl,
   className,
 }: {
   personId: string | null;
@@ -140,86 +82,83 @@ export function PersonRef({
   department?: string | null;
   avatarSize?: number;
   showAvatar?: boolean;
+  /** The person's portrait (people.avatar_url); absent/null renders initials. */
+  avatarUrl?: string | null;
   className?: string;
 }) {
-  const anchorRef = useRef<HTMLElement | null>(null);
-  const cardId = useId();
-  const { visible, everOpened, scheduleOpen, scheduleClose, togglePin, clearTimers, onEscape } = usePersonCard(anchorRef);
+  // Pin/hover state belongs to this actor and person. An old detail request
+  // must not survive a tenant, role, sign-in, or displayed-person change.
+  const [openedScope, setOpenedScope] = useState<string | null>(null);
   // The graph node a name links to is an orgiq route. In any other tenant the
   // person is a name with a card, not a door into another product — the
   // tenants share a BFF, not journeys.
-  const { session } = useSession();
-  const linkable = session?.tenant === 'orgiq';
+  const { session, sessionStatus } = useSession();
+  const ready = sessionStatus === 'ready';
+  const linkable = ready && session?.tenant === 'orgiq';
+  const inferred = linkable && session?.role === 'hr-admin';
+  const scope = JSON.stringify([sessionStatus, session?.sub, session?.tenant, session?.role,
+    session?.masquerading?.actor, session?.masquerading?.asUser, personId]);
+  const everOpened = openedScope === scope;
 
   if (!name) return <T className="text-text-tertiary">—</T>;
 
   // A name with no id is a name, not a broken link: render it plainly rather
   // than a control that goes nowhere.
-  if (!personId || !linkable) {
-    const plain = (
-      <Inline gap="xs" align="center" wrap={false} className={className}>
-        {showAvatar && <Avatar name={name} size={avatarSize} title={name} />}
-        <T className="truncate">{name}</T>
-      </Inline>
-    );
-    if (!personId) return plain;
+  const plain = (
+    <Inline gap="xs" align="center" wrap={false} className={className}>
+      {showAvatar && <Avatar name={name} size={avatarSize} title={name} src={avatarUrl ?? undefined} />}
+      <T className="truncate">{name}</T>
+    </Inline>
+  );
+  if (!personId) return plain;
+  // Space has no native action on either trigger, so it pins without scrolling the page.
+  const keepSpace = (e: KeyboardEvent) => {
+    if (e.key === ' ') { e.preventDefault(); e.stopPropagation(); }
+    // The containing table may also use Enter to open a row. This person's
+    // link/button owns that key; its native link action still runs.
+    if (e.key === 'Enter') e.stopPropagation();
+  };
+  if (!linkable) {
     return (
-      <>
-        <span
-          ref={anchorRef as RefObject<HTMLSpanElement>}
-          tabIndex={0}
-          role="button"
-          aria-haspopup="dialog"
-          aria-expanded={visible}
-          aria-describedby={visible ? cardId : undefined}
-          onMouseEnter={scheduleOpen}
-          onMouseLeave={scheduleClose}
-          onKeyDown={(e) => {
-            // No native action to preserve here (there's no destination),
-            // so both keys pin — unlike the linkable branch below.
-            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); togglePin(); }
-            onEscape(e);
-          }}
-        >
-          {plain}
-        </span>
-        {/* No `details` here: HoverDetail reads the orgiq graph, which
-            another tenant's session is (correctly) refused. The card
-            carries what the row already knows — name, title, department —
-            and nothing fetched. */}
-        <PersonCardFrame anchorRef={anchorRef} open={visible} id={cardId} ariaLabel={`About ${name}`} onMouseEnter={clearTimers} onMouseLeave={scheduleClose}>
-          <PersonIdentity name={name} title={title} department={department} />
-        </PersonCardFrame>
-      </>
+      // Other tenants and unavailable identities never request or inherit
+      // inferred details. Ready readers may see the same public demo profile.
+      <HoverCard key={scope} label={`About ${name}`} openOnFocus={false} data-testid="person-card"
+        content={<Stack gap="sm"><PersonIdentity name={name} title={title} department={department} avatarUrl={avatarUrl} />
+          {ready && <PublicPersonSummary personId={personId} projectLinks={false} />}</Stack>}>
+        {(trigger) => (
+          <span {...trigger} tabIndex={0} role="button" aria-label={name} aria-haspopup="dialog"
+            onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); keepSpace(e); trigger.onKeyDown(e); }}>
+            {plain}
+          </span>
+        )}
+      </HoverCard>
     );
   }
 
   return (
-    <>
-      <Link
-        ref={anchorRef as RefObject<HTMLAnchorElement>}
-        to={personPath(personId)}
-        onMouseEnter={scheduleOpen}
-        onMouseLeave={scheduleClose}
-        onKeyDown={(e) => {
-          // Enter keeps its native action (navigate to the graph node) —
-          // overloading it into a pin toggle would swallow the link's own
-          // purpose. Space has no native action on a link, so it pins.
-          if (e.key === ' ') { e.preventDefault(); togglePin(); }
-          onEscape(e);
-        }}
-        aria-describedby={visible ? cardId : undefined}
-        className={`inline-flex items-center gap-1.5 no-underline hover:underline ${className ?? 'text-text-secondary'}`}
-      >
-        {showAvatar && <Avatar name={name} size={avatarSize} title={name} />}
-        <T className="truncate">{name}</T>
-      </Link>
-      <PersonCardFrame anchorRef={anchorRef} open={visible} id={cardId} ariaLabel={`About ${name}`} onMouseEnter={clearTimers} onMouseLeave={scheduleClose}>
+    // Enter keeps the link's native action (navigate to the graph node); the
+    // pin it also toggles is moot once the page changes.
+    <HoverCard key={scope} label={`About ${name}`} openOnFocus={false} onOpenChange={(open) => { if (open) setOpenedScope(scope); }} data-testid="person-card"
+      content={(
         <Stack gap="xs">
-          <PersonIdentity name={name} title={title} department={department} />
-          {everOpened && <HoverDetail personId={personId} />}
+          <PersonIdentity name={name} title={title} department={department} avatarUrl={avatarUrl} />
+          {everOpened && (inferred
+            ? <InferredHoverDetail key={scope} personId={personId} />
+            : <PublicPersonSummary personId={personId} />)}
         </Stack>
-      </PersonCardFrame>
-    </>
+      )}>
+      {({ 'aria-expanded': _expanded, 'aria-controls': _controls, ...trigger }) => (
+        <Link
+          {...trigger}
+          to={personPath(personId)}
+          aria-label={name}
+          onKeyDown={(e) => { keepSpace(e); trigger.onKeyDown(e); }}
+          className={`inline-flex items-center gap-1.5 no-underline hover:underline ${className ?? 'text-text-secondary'}`}
+        >
+          {showAvatar && <Avatar name={name} size={avatarSize} title={name} src={avatarUrl ?? undefined} />}
+          <T className="truncate">{name}</T>
+        </Link>
+      )}
+    </HoverCard>
   );
 }

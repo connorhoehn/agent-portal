@@ -1,10 +1,11 @@
 // lib/distillation-realtime.ts — realtime-modules attached on /realtime, over
 // a real http.Server and a raw `ws` client carrying a real signed session
 // cookie. Pinned:
-//   - a subscribed client receives distill:jobs frames as a compaction runs,
-//     each phase in order, ending `succeeded` — plus distill:levels after it;
-//   - distill:review arrives after a sample is decided, with counted totals;
-//   - a channel outside distill:* is refused (no ack — the catalog's rule);
+//   - a subscribed client receives orgiq:distill:jobs frames as a compaction runs,
+//     each phase in order, ending `succeeded` — plus orgiq:distill:levels after it;
+//   - orgiq:distill:review arrives after a sample is decided, with counted totals;
+//   - a channel outside orgiq:distill:* is refused (no ack — the catalog's
+//     rule), and so is the pre-2026-10-01 bare `distill:*` spelling;
 //   - an assessment-tenant cookie, a cross-site Origin, and (outside demo
 //     mode) no cookie are all refused at the upgrade;
 //   - every other upgrade path is still answered 404.
@@ -93,34 +94,34 @@ async function subscribed(cookie: string, channels: string[]): Promise<{ ws: Web
 }
 
 describe('distill channels', () => {
-  it('a subscribed client receives distill:jobs frames as a compaction runs, then distill:levels', async () => {
+  it('a subscribed client receives orgiq:distill:jobs frames as a compaction runs, then orgiq:distill:levels', async () => {
     const { ws, frames } = await subscribed(await cookieFor({}), [DISTILL_CHANNELS.jobs, DISTILL_CHANNELS.levels]);
     try {
       const job = await compactNow('L1', 'Test Operator');
       await until(() => frames.some((f) => f.type === 'job' && (f['job'] as { status: string }).status === 'succeeded'));
       const jobFrames = frames.filter((f) => f.type === 'job').map((f) => f['job'] as { id: string; status: string; phase: string; percent: number });
       expect(jobFrames.every((j) => j.id === job.id)).toBe(true);
-      expect(frames.filter((f) => f.type === 'job').every((f) => f.channel === 'distill:jobs')).toBe(true);
+      expect(frames.filter((f) => f.type === 'job').every((f) => f.channel === DISTILL_CHANNELS.jobs)).toBe(true);
       expect(jobFrames.map((j) => j.phase)).toEqual(['queued', 'claim', 'read', 'merge', 'write', 'done']);
       expect(jobFrames.map((j) => j.status)).toEqual(['queued', 'running', 'running', 'running', 'running', 'succeeded']);
       const percents = jobFrames.map((j) => j.percent);
       expect(percents).toEqual(percents.slice().sort((a, b) => a - b));
       await until(() => frames.some((f) => f.type === 'levels'));
       const levels = frames.find((f) => f.type === 'levels')!;
-      expect(levels.channel).toBe('distill:levels');
+      expect(levels.channel).toBe(DISTILL_CHANNELS.levels);
       expect((levels['levels'] as Array<{ level: string; digest: string }>).map((l) => l.level)).toEqual(['L0', 'L1', 'L2']);
     } finally {
       ws.close();
     }
   });
 
-  it('distill:review carries counted pending/decided after a verdict', async () => {
+  it('orgiq:distill:review carries counted pending/decided after a verdict', async () => {
     const { ws, frames } = await subscribed(await cookieFor({ role: 'org-leader' }), [DISTILL_CHANNELS.review]);
     try {
       await decideReview('rev-003', { verdict: 'agree', note: null }, 'Test');
       await until(() => frames.some((f) => f.type === 'review'));
       const review = frames.find((f) => f.type === 'review')!;
-      expect(review.channel).toBe('distill:review');
+      expect(review.channel).toBe(DISTILL_CHANNELS.review);
       expect(typeof review['pending']).toBe('number');
       expect(typeof review['decided']).toBe('number');
     } finally {
@@ -128,18 +129,21 @@ describe('distill channels', () => {
     }
   });
 
-  it('refuses a subscription outside distill:* (no subscribed ack; since realtime-modules 0.98.6 a refusal frame)', async () => {
+  it('refuses a subscription outside orgiq:distill:* (no subscribed ack; since realtime-modules 0.98.6 a refusal frame)', async () => {
     const conn = await connect({ cookie: await cookieFor({}) });
     if ('refused' in conn) throw new Error('refused');
     conn.ws.send(JSON.stringify({ service: 'subscribe', action: 'subscribe', channel: 'chat:general' }));
+    conn.ws.send(JSON.stringify({ service: 'subscribe', action: 'subscribe', channel: 'distill:jobs' }));
     conn.ws.send(JSON.stringify({ service: 'subscribe', action: 'subscribe', channel: DISTILL_CHANNELS.jobs }));
     await until(() => conn.frames.some((f) => f.channel === DISTILL_CHANNELS.jobs));
     // 0.98.6 answers a refused subscribe with an error frame that names the
     // channel (`AUTHZ_CHANNEL_DENIED`); what must never arrive is a
     // subscribed ack or data for it.
-    const foreign = conn.frames.filter((f) => f.channel === 'chat:general');
-    expect(foreign.every((f) => f['type'] === 'error')).toBe(true);
-    expect(foreign.some((f) => f['type'] !== 'error')).toBe(false);
+    for (const name of ['chat:general', 'distill:jobs']) {
+      const foreign = conn.frames.filter((f) => f.channel === name);
+      expect(foreign.every((f) => f['type'] === 'error')).toBe(true);
+      expect(foreign.some((f) => f['type'] !== 'error')).toBe(false);
+    }
     conn.ws.close();
   });
 });

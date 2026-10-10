@@ -1,3 +1,4 @@
+import { mockRestartMirror } from '../mock/restart-state.js';
 // Durable mirror of the devbox fleet registry (schema/devbox_fleet_schema.sql).
 //
 // The registry itself is two in-memory Maps in lib/devbox-fleet.ts and stays
@@ -20,10 +21,12 @@ import { type SqlParameter } from '@aws-sdk/client-rds-data';
 import { exec } from './aurora.js';
 import { config } from '../config.js';
 import {
-  setFleetStore, hydrateBoxes, _resetFleet, type FleetBox, type FleetStore,
+  setFleetStore, hydrateBoxes, restoreMockFleetRestart, seedEventLog, _resetFleet, type FleetBox, type FleetStore,
 } from '../lib/devbox-fleet.js';
 import { rowToBox } from '../lib/devbox-fleet-rows.js';
 import { devboxBoxes } from '../mock/devbox-fleet.js';
+import { devboxTails, startMockTailTicker, stopMockTailTicker } from '../mock/devbox-tail.js';
+import { resetMockDevboxTransport } from '../mock/devbox-shell.js';
 
 /**
  * How long a box's moved activity clock may sit unwritten.
@@ -82,7 +85,7 @@ export async function loadFleet(): Promise<FleetBox[]> {
   // `POST /api/__mock/scenario {"scenario":"empty","fixture":"devbox-boxes"}`
   // still asks for a genuinely empty fleet by name — the one case where that
   // instruction is the honest screen.
-  if (config.mock.aurora) return devboxBoxes.rows().map((b) => ({ ...b }));
+  if (config.mock.aurora) return (mockRestartMirror('fleet')?.map(s => s.box) as FleetBox[] | undefined) ?? devboxBoxes.rows().map((b) => ({ ...b }));
   if (!usable()) return [];
   try {
     const rows = await exec(
@@ -244,8 +247,27 @@ export function createFleetStore(): FleetStore | null {
  * an empty fleet and the boxes it should have been watching are invisible for
  * one interval. Returns how many boxes were restored.
  */
+/**
+ * Offline only: give each seeded box the history its tail replays
+ * (mock/devbox-tail.ts). Runs after every mock hydration — boot and the
+ * control plane's reset — so a reset brings the logs back with the boxes.
+ */
+function seedMockTails(): void {
+  if (!config.mock.aurora) return;
+  try {
+    for (const { boxId, events } of devboxTails.rows()) seedEventLog(boxId, events);
+  } catch {
+    // A pinned `error` scenario throws by design; boxes without history are
+    // the honest result, and the control plane must not 500 over it.
+  }
+  // Running boxes keep working from here (mock/devbox-tail.ts's ticker).
+  startMockTailTicker();
+}
+
 export async function initFleetPersistence(): Promise<number> {
   const restored = hydrateBoxes(await loadFleet());
+  seedMockTails();
+  restoreMockFleetRestart();
   const s = createFleetStore();
   setFleetStore(s);
   if (s) {
@@ -280,6 +302,11 @@ export function _stopFleetPersistence(): void {
  */
 export function rehydrateMockFleet(): number {
   if (!config.mock.aurora) return 0;
+  // Nothing from the old world may keep writing into the new one: the ticker
+  // stops, and every run the fake microVM is still streaming (or holding open
+  // on a question) is released and silenced before the boxes are rebuilt.
+  stopMockTailTicker();
+  resetMockDevboxTransport();
   _resetFleet();
   // `rows()` THROWS when the fixture is pinned to `error` — that is what an
   // error scenario is. This runs from the scenario plane's own POST handler,
@@ -292,7 +319,9 @@ export function rehydrateMockFleet(): number {
   // nothing — it only stops one fixture's error scenario from taking the
   // control plane down with it.
   try {
-    return hydrateBoxes(devboxBoxes.rows().map((b) => ({ ...b })));
+    const loaded = hydrateBoxes(devboxBoxes.rows().map((b) => ({ ...b })));
+    seedMockTails();
+    return loaded;
   } catch {
     return 0;
   }

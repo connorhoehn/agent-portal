@@ -1,0 +1,132 @@
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 1.36kB done
+#1 DONE 0.0s
+
+#2 [context locked_libraries] load .dockerignore
+#2 transferring locked_libraries: 2B done
+#2 DONE 0.0s
+
+#3 [internal] load metadata for docker.io/library/node:22-slim
+#3 DONE 0.8s
+
+#4 [internal] load .dockerignore
+#4 transferring context: 75B done
+#4 DONE 0.0s
+
+#5 [deps 1/6] FROM docker.io/library/node:22-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392
+#5 resolve docker.io/library/node:22-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392 done
+#5 DONE 0.2s
+
+#6 [internal] load build context
+#6 transferring context: 3.43MB 0.1s done
+#6 DONE 0.2s
+
+#7 [context locked_libraries] load from client
+#7 transferring locked_libraries: 31.99MB 0.2s done
+#7 DONE 0.2s
+
+#5 [deps 1/6] FROM docker.io/library/node:22-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392
+#5 sha256:a8e3f40b26e8ab8419b3b90a177118d69162cdcd4799bd0c6bae541309993590 447B / 447B 0.1s done
+#5 sha256:aa7268e3e147e6faaf14f99734d2c8565bb9080ec0f292ae2aae65879bfd2727 0B / 1.71MB 0.2s
+#5 sha256:aa7268e3e147e6faaf14f99734d2c8565bb9080ec0f292ae2aae65879bfd2727 1.71MB / 1.71MB 0.2s done
+#5 sha256:a7d3259c055657a65a0815a6a5d07333f0b859c90cb197f4c7853941f77e78f2 2.10MB / 49.96MB 0.3s
+#5 sha256:8d752b15e16356e3c5fddfe9c08b5cd27a091835fe465cdef26dd30d3d856171 3.31kB / 3.31kB 0.2s done
+#5 sha256:c75f989a229d12b2d2613a5997de9ff3546f664c22da9248720033a2410220f6 0B / 28.14MB 0.2s
+#5 sha256:a7d3259c055657a65a0815a6a5d07333f0b859c90cb197f4c7853941f77e78f2 12.58MB / 49.96MB 0.5s
+#5 sha256:c75f989a229d12b2d2613a5997de9ff3546f664c22da9248720033a2410220f6 8.39MB / 28.14MB 0.3s
+#5 sha256:a7d3259c055657a65a0815a6a5d07333f0b859c90cb197f4c7853941f77e78f2 24.12MB / 49.96MB 0.6s
+#5 sha256:c75f989a229d12b2d2613a5997de9ff3546f664c22da9248720033a2410220f6 17.83MB / 28.14MB 0.5s
+#5 sha256:a7d3259c055657a65a0815a6a5d07333f0b859c90cb197f4c7853941f77e78f2 38.80MB / 49.96MB 0.8s
+#5 sha256:c75f989a229d12b2d2613a5997de9ff3546f664c22da9248720033a2410220f6 28.14MB / 28.14MB 0.6s done
+#5 extracting sha256:c75f989a229d12b2d2613a5997de9ff3546f664c22da9248720033a2410220f6
+#5 sha256:a7d3259c055657a65a0815a6a5d07333f0b859c90cb197f4c7853941f77e78f2 49.96MB / 49.96MB 0.9s
+#5 sha256:a7d3259c055657a65a0815a6a5d07333f0b859c90cb197f4c7853941f77e78f2 49.96MB / 49.96MB 0.9s done
+#5 extracting sha256:c75f989a229d12b2d2613a5997de9ff3546f664c22da9248720033a2410220f6 0.4s done
+#5 DONE 1.3s
+
+#5 [deps 1/6] FROM docker.io/library/node:22-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392
+#5 extracting sha256:8d752b15e16356e3c5fddfe9c08b5cd27a091835fe465cdef26dd30d3d856171 done
+#5 extracting sha256:a7d3259c055657a65a0815a6a5d07333f0b859c90cb197f4c7853941f77e78f2
+#5 extracting sha256:a7d3259c055657a65a0815a6a5d07333f0b859c90cb197f4c7853941f77e78f2 0.6s done
+#5 DONE 1.9s
+
+#5 [deps 1/6] FROM docker.io/library/node:22-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392
+#5 extracting sha256:aa7268e3e147e6faaf14f99734d2c8565bb9080ec0f292ae2aae65879bfd2727 0.0s done
+#5 extracting sha256:a8e3f40b26e8ab8419b3b90a177118d69162cdcd4799bd0c6bae541309993590 done
+#5 DONE 1.9s
+
+#8 [deps 2/6] WORKDIR /app
+#8 DONE 0.3s
+
+#9 [deps 3/6] COPY package*.json ./
+#9 DONE 0.0s
+
+#10 [deps 4/6] COPY --from=locked_libraries / /vendor/
+#10 DONE 0.2s
+
+#11 [deps 5/6] RUN node /vendor/install-locked.mjs
+#11 DONE 0.3s
+
+#12 [deps 6/6] RUN --mount=type=cache,target=/root/.npm npm ci --ignore-scripts --legacy-peer-deps
+#12 2.045 npm warn deprecated inflight@1.0.6: This module is not supported, and leaks memory. Do not use it. Check out lru-cache if you want a good and tested way to coalesce async requests by a key value, which is much more comprehensive and powerful.
+#12 2.169 npm warn deprecated glob@7.2.3: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
+#12 2.884 npm warn deprecated node-domexception@1.0.0: Use your platform's native DOMException instead
+#12 3.496 npm warn deprecated glob@10.5.0: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
+#12 7.413 
+#12 7.413 added 874 packages, and audited 875 packages in 7s
+#12 7.413 
+#12 7.413 128 packages are looking for funding
+#12 7.413   run `npm fund` for details
+#12 7.451 
+#12 7.451 49 vulnerabilities (17 moderate, 31 high, 1 critical)
+#12 7.451 
+#12 7.451 To address issues that do not require attention, run:
+#12 7.451   npm audit fix
+#12 7.451 
+#12 7.451 To address all issues possible (including breaking changes), run:
+#12 7.451   npm audit fix --force
+#12 7.451 
+#12 7.451 Some issues need review, and may require choosing
+#12 7.451 a different dependency.
+#12 7.451 
+#12 7.451 Run `npm audit` for details.
+#12 DONE 7.9s
+
+#13 [production 3/8] COPY --from=deps /app/node_modules ./node_modules
+#13 DONE 2.6s
+
+#14 [production 4/8] COPY package*.json ./
+#14 DONE 0.2s
+
+#15 [production 5/8] COPY src ./src
+#15 DONE 0.1s
+
+#16 [production 6/8] COPY seeds ./seeds
+#16 DONE 0.0s
+
+#17 [production 7/8] COPY tsconfig.json ./
+#17 DONE 0.0s
+
+#18 [production 8/8] RUN npm run build
+#18 0.231 
+#18 0.231 > @orgiq/middleware@0.3.0 build
+#18 0.231 > tsc
+#18 0.231 
+#18 15.15 npm notice
+#18 15.15 npm notice New major version of npm available! 10.9.9 -> 12.2.0
+#18 15.15 npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.0
+#18 15.15 npm notice To update run: npm install -g npm@12.2.0
+#18 15.15 npm notice
+#18 DONE 15.2s
+
+#19 exporting to image
+#19 exporting layers
+#19 exporting layers 10.3s done
+#19 exporting manifest sha256:60accf659cfbbf3840d7f6205e896b69360f6da5c3a0e3f268a12cebe3c5ee8d 0.0s done
+#19 exporting config sha256:728789ab67aeccba8b2e444f0e85850a1145cc5c8ef95c39d56aed7e7219d4ac done
+#19 naming to docker.io/library/orgiq-middleware:cluster-plugin-scope-validation done
+#19 unpacking to docker.io/library/orgiq-middleware:cluster-plugin-scope-validation
+#19 unpacking to docker.io/library/orgiq-middleware:cluster-plugin-scope-validation 3.3s done
+#19 DONE 13.6s

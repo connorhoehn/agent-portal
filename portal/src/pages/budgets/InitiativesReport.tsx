@@ -12,6 +12,8 @@ import {
   CatalogGrid,
   Chip,
   ConfirmDialog,
+  DataTable,
+  type DataTableColumn,
   EmptyState,
   IconButton,
   InlinePlaceholder,
@@ -20,18 +22,13 @@ import {
   ProgressBar,
   Select,
   Stack,
-  Table,
-  TableHead,
-  TableBody,
-  TableRow,
-  TableTh,
-  TableTd,
+  T,
+  TrashIcon,
 } from '@connorhoehnslalom/ui-components/shared';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { toastError, toastSuccess } from '../../lib/toastStore';
 import { writeJson } from '../../lib/writeJson';
 import { usd, modelLabelFor, ago, rowBudgetStats } from './budgetsFormat';
-import { T } from './Text';
 import type { BudgetRow, BudgetSummary, InitiativeOption } from './types';
 import { absoluteTime } from '../../lib/relativeTime';
 
@@ -67,7 +64,7 @@ function BreakdownCard({ title, rows, emptyLabel }: {
         ) : (
           rows.map((r) => (
             <Inline key={r.label} align="center" gap="sm" wrap={false} className="min-w-0">
-              <T className="text-[11px] text-text-secondary w-24 shrink-0 truncate" title={r.label}>{r.label}</T>
+              <T size="xs" tone="secondary" className="w-24 shrink-0 truncate" title={r.label}>{r.label}</T>
               <ProgressBar
                 value={Math.max((r.spentUsd / max) * 100, 2)}
                 size="sm"
@@ -75,8 +72,8 @@ function BreakdownCard({ title, rows, emptyLabel }: {
                 className="flex-1 min-w-0"
                 aria-label={`${r.label} share of period spend`}
               />
-              <T className="text-[11px] text-text-primary font-medium whitespace-nowrap tabular-nums">{usd(r.spentUsd)}</T>
-              <T className="text-[10px] text-text-tertiary whitespace-nowrap w-14 text-right">
+              <T size="xs" weight="medium" tabular>{usd(r.spentUsd)}</T>
+              <T size="xs" tone="tertiary" className="w-14 justify-end">
                 {r.runCount} {r.runCount === 1 ? 'run' : 'runs'}
               </T>
             </Inline>
@@ -162,15 +159,15 @@ function AllocationCell({ row, canManage, onSaved }: {
         }}
         onBlur={() => { if (!busy) void save(); }}
         aria-label={`Monthly budget for ${row.orgProjectName ?? row.orgProjectId}`}
-        className="w-24"
+        className="ml-auto w-24"
       />
     );
   }
 
   if (row.allocatedUsd == null) {
     return (
-      <Inline align="center" gap="sm" wrap={false}>
-        <T className="text-[11px] text-warning">— unallocated</T>
+      <Inline align="center" justify="end" gap="sm" wrap={false}>
+        <T size="xs" className="text-warning">unallocated</T>
         {canManage && (
           <Button
             variant="secondary"
@@ -185,17 +182,16 @@ function AllocationCell({ row, canManage, onSaved }: {
     );
   }
 
-  if (!canManage) return <T className="tabular-nums">{usd(row.allocatedUsd)}</T>;
+  if (!canManage) return <T tabular>{usd(row.allocatedUsd)}</T>;
   return (
     <Button
-      variant="ghost"
-      size="sm"
+      variant="link"
       onClick={beginEdit}
       title="Click to edit the monthly allocation"
+      aria-label={`Edit monthly budget for ${row.orgProjectName ?? row.orgProjectId}: ${usd(row.allocatedUsd)}`}
       data-allocation-trigger={row.orgProjectId}
-      className="px-1.5 py-0.5 -mx-1.5 h-fit w-fit border-0 text-[12px] text-text-primary tabular-nums hover:bg-surface-hover"
     >
-      {usd(row.allocatedUsd)}
+      <T tabular>{usd(row.allocatedUsd)}</T>
     </Button>
   );
 }
@@ -220,7 +216,7 @@ function FirstBudgetForm({ initiatives, onSaved }: { initiatives: InitiativeOpti
 
   return (
     <Card padding="md" className="mt-4 max-w-xl mx-auto">
-      <T className="text-[12px] font-semibold text-text-primary mb-2">Set the first budget</T>
+      <T as="p" size="sm" weight="semibold" className="mb-2">Set the first budget</T>
       <Inline align="center" gap="sm" wrap>
         <Select
           value={projectId}
@@ -314,6 +310,108 @@ export function InitiativesReport({
     );
   }
 
+  // One line per row at the library's 44px list step: numbers right-aligned
+  // in tabular figures, the burn meter INLINE beside the remaining figure,
+  // and the maintenance share of spend a pill with its explanation in the
+  // tooltip rather than a second line under the value.
+  const columns: DataTableColumn<BudgetRow>[] = [
+    {
+      key: 'initiative',
+      header: 'Initiative',
+      render: (row) => (
+        <Inline align="center" gap="sm" wrap={false} className="min-w-0">
+          <Link
+            to={`/iq/projects/${row.orgProjectId}`}
+            className="truncate text-text-primary no-underline hover:text-primary hover:underline"
+          >
+            {row.orgProjectName ?? row.orgProjectId}
+          </Link>
+          {rowBudgetStats(row).blindSpot && (
+            <Chip tone="warning" size="xs" title="Spending with no allocation — set a budget so this spend has a ceiling">
+              blind spot
+            </Chip>
+          )}
+        </Inline>
+      ),
+    },
+    {
+      key: 'allocated',
+      header: 'Allocated',
+      numeric: true,
+      render: (row) => <AllocationCell row={row} canManage={canManage} onSaved={refresh} />,
+    },
+    {
+      key: 'spent',
+      header: 'Spent',
+      numeric: true,
+      render: (row) => (
+        <Inline align="center" justify="end" gap="sm" wrap={false}>
+          {/* The floor is a subset of the figure beside it, never extra spend:
+              a full floor says so in words instead of restating the number. */}
+          {row.maintenanceUsd > 0 && (
+            <Chip
+              tone="neutral"
+              size="xs"
+              title="Cron-triggered bot runs — the recurring floor of keeping this initiative's repos alive. Part of the spend figure, not additional to it."
+            >
+              {row.maintenanceUsd >= row.spentThisPeriodUsd ? 'all maintenance' : `${usd(row.maintenanceUsd)} maintenance`}
+            </Chip>
+          )}
+          <T tabular>{usd(row.spentThisPeriodUsd)}</T>
+        </Inline>
+      ),
+    },
+    {
+      key: 'remaining',
+      header: 'Remaining',
+      numeric: true,
+      render: (row) => {
+        const { remaining, burn } = rowBudgetStats(row);
+        if (remaining == null || burn == null) return <T tone="tertiary">—</T>;
+        return (
+          <Inline align="center" justify="end" gap="sm" wrap={false}>
+            <T tabular weight={remaining < 0 ? 'semibold' : undefined} className={remaining < 0 ? 'text-danger' : undefined}>
+              {usd(remaining)}
+            </T>
+            <ProgressBar
+              value={Math.min(row.spentThisPeriodUsd, row.allocatedUsd!)}
+              max={row.allocatedUsd!}
+              size="sm"
+              showRatio={false}
+              className="w-16 shrink-0"
+              color={burn > 1 ? 'var(--color-danger)' : burn > 0.8 ? 'var(--color-warning)' : undefined}
+              aria-label={`Burn: ${Math.round(burn * 100)}% of allocation`}
+            />
+          </Inline>
+        );
+      },
+    },
+    {
+      key: 'runs',
+      header: 'Runs',
+      numeric: true,
+      render: (row) => <T tabular>{row.runCountThisPeriod}</T>,
+    },
+    {
+      key: 'lastActivity',
+      header: 'Last activity',
+      // A readable local time, not the raw wire string; the tooltip carries
+      // the precise moment.
+      render: (row) => (
+        <T tone="tertiary" title={absoluteTime(row.lastAgentActivityAt)}>{ago(row.lastAgentActivityAt)}</T>
+      ),
+    },
+    {
+      key: 'updatedBy',
+      header: 'Updated by',
+      render: (row) => (
+        <T tone="tertiary" title={row.updatedByName ? row.updatedBy ?? undefined : undefined}>
+          {row.updatedByName ?? row.updatedBy ?? '—'}
+        </T>
+      ),
+    },
+  ];
+
   return (
     <>
       {/* ── Allocation table ──
@@ -322,118 +420,23 @@ export function InitiativesReport({
           them, not a prerequisite to reading the ledger (DEFECTS.md #2: this
           page used to stack a description, a stat strip AND two breakdown
           cards above the table — three summary blocks before any row). */}
-      <Card padding="none" className="overflow-x-auto">
-        <Table>
-          <TableHead>
-            <TableRow>
-              <TableTh>Initiative</TableTh>
-              <TableTh>Allocated</TableTh>
-              <TableTh>Spent</TableTh>
-              <TableTh>Remaining</TableTh>
-              <TableTh>Runs</TableTh>
-              <TableTh>Last activity</TableTh>
-              <TableTh>Updated by</TableTh>
-              {canManage && <TableTh aria-label="Actions" />}
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {budgets.map((row) => {
-              const { blindSpot, remaining, burn } = rowBudgetStats(row);
-              return (
-                <TableRow key={row.orgProjectId}>
-                  <TableTd>
-                    <Inline align="center" gap="sm" wrap={false} className="min-w-0">
-                      <Link
-                        to={`/iq/projects/${row.orgProjectId}`}
-                        className="text-[12px] font-medium text-text-primary no-underline truncate hover:text-primary hover:underline"
-                      >
-                        {row.orgProjectName ?? row.orgProjectId}
-                      </Link>
-                      {blindSpot && (
-                        <Chip tone="warning" size="xs" title="Spending with no allocation — set a budget so this spend has a ceiling">
-                          blind spot
-                        </Chip>
-                      )}
-                    </Inline>
-                  </TableTd>
-                  <TableTd>
-                    <AllocationCell row={row} canManage={canManage} onSaved={refresh} />
-                  </TableTd>
-                  <TableTd>
-                    <T className="tabular-nums">{usd(row.spentThisPeriodUsd)}</T>
-                    {/* The floor is a subset. Repeating an identical figure
-                        under the total ("$3.75" / "$3.75 maintenance")
-                        reads as a second charge, so a full floor says so in
-                        words instead of restating the number. */}
-                    {row.maintenanceUsd > 0 && (
-                      <T
-                        className="text-[11px] text-text-tertiary tabular-nums mt-0.5"
-                        title="Cron-triggered bot runs — the recurring floor of keeping this initiative's repos alive. Part of the figure above, not additional to it."
-                      >
-                        {row.maintenanceUsd >= row.spentThisPeriodUsd
-                          ? 'all maintenance'
-                          : `${usd(row.maintenanceUsd)} maintenance`}
-                      </T>
-                    )}
-                  </TableTd>
-                  <TableTd>
-                    {remaining == null || burn == null ? (
-                      <T className="text-text-tertiary">—</T>
-                    ) : (
-                      <Stack gap="xs" className="min-w-28">
-                        <T className={`tabular-nums text-[12px] ${remaining < 0 ? 'text-danger font-semibold' : ''}`}>
-                          {usd(remaining)}
-                        </T>
-                        <ProgressBar
-                          value={Math.min(row.spentThisPeriodUsd, row.allocatedUsd!)}
-                          max={row.allocatedUsd!}
-                          size="sm"
-                          showRatio={false}
-                          color={burn > 1 ? 'var(--color-danger)' : burn > 0.8 ? 'var(--color-warning)' : undefined}
-                          aria-label={`Burn: ${Math.round(burn * 100)}% of allocation`}
-                        />
-                      </Stack>
-                    )}
-                  </TableTd>
-                  <TableTd>
-                    <T className="tabular-nums">{row.runCountThisPeriod}</T>
-                  </TableTd>
-                  <TableTd>
-                    {/* A readable local time, not the raw wire string. The tooltip
-                        exists so someone can read the PRECISE moment, which is
-                        exactly what a Postgres/ISO stamp makes harder — the same
-                        defect the bots run table was fixed for. */}
-                    <T className="text-text-tertiary whitespace-nowrap" title={absoluteTime(row.lastAgentActivityAt)}>
-                      {ago(row.lastAgentActivityAt)}
-                    </T>
-                  </TableTd>
-                  <TableTd>
-                    <T className="text-text-tertiary" title={row.updatedByName ? row.updatedBy ?? undefined : undefined}>
-                      {row.updatedByName ?? row.updatedBy ?? '—'}
-                    </T>
-                  </TableTd>
-                  {canManage && (
-                    <TableTd>
-                      {row.allocatedUsd != null && (
-                        <IconButton
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setConfirmDelete(row)}
-                          title="Remove this allocation"
-                          aria-label={`Remove allocation for ${row.orgProjectName ?? row.orgProjectId}`}
-                          className="text-text-tertiary hover:text-danger"
-                        >
-                          ✕
-                        </IconButton>
-                      )}
-                    </TableTd>
-                  )}
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
-      </Card>
+      <DataTable
+        data-testid="budgets-initiatives-table"
+        size="sm"
+        data={budgets}
+        columns={columns}
+        keyField={(row) => row.orgProjectId}
+        {...(canManage ? { rowActions: (row: BudgetRow) => row.allocatedUsd != null ? (
+          <IconButton
+            variant="ghost"
+            size="sm"
+            icon={<TrashIcon size={14} />}
+            onClick={() => setConfirmDelete(row)}
+            title="Remove this allocation"
+            aria-label={`Remove allocation for ${row.orgProjectName ?? row.orgProjectId}`}
+          />
+        ) : null } : {})}
+      />
 
       {/* ── Breakdown ──
           Two cuts of one set of runs, so they sum to the same total. By-model
@@ -443,7 +446,7 @@ export function InitiativesReport({
           as 'unknown' rather than dropping the spend. */}
       <CatalogGrid columns={2} dense className="mt-4">
         <BreakdownCard
-          title="SPEND BY MODEL"
+          title="Spend by model"
           emptyLabel={(summary?.totalSpentThisPeriodUsd ?? 0) > 0
             ? 'no model recorded for this period’s runs'
             : 'no spend this period'}
@@ -454,7 +457,7 @@ export function InitiativesReport({
           }))}
         />
         <BreakdownCard
-          title="SPEND BY TRIGGER"
+          title="Spend by trigger"
           rows={(summary?.byTrigger ?? []).map((t) => ({
             label: t.trigger, spentUsd: t.spentUsd, runCount: t.runCount,
           }))}

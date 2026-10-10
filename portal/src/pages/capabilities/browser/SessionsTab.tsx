@@ -15,7 +15,7 @@ import {
   TableHead,
   TableRow,
   TableTd,
-  TableTh,
+  TableTh, T,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../../lib/capabilities';
 import { useFetch } from '../../../hooks/useFetch';
@@ -25,7 +25,6 @@ import { toastError } from '../../../lib/toastStore';
 import { SESSIONS_URL, closeSession, launchSession } from './browserApi';
 import { closedSessions, isBlankUrl, openSessions, sessionTone } from './browserFormat';
 import type { BrowserSession } from './types';
-import { T } from '../Text';
 
 const MAX_PAST_ROWS = 20;
 
@@ -81,13 +80,13 @@ export function SessionsTab() {
           ) : open.length === 0 ? (
             <InlinePlaceholder align="center" size="sm">No open browser sessions.</InlinePlaceholder>
           ) : (
-            <Table>
+            <Table size="sm">
               <TableHead>
                 <TableRow>
                   <TableTh>Label</TableTh>
                   <TableTh>Status</TableTh>
                   <TableTh>Current URL</TableTh>
-                  <TableTh className="text-right">Requests</TableTh>
+                  <TableTh numeric>Requests</TableTh>
                   <TableTh>Last active</TableTh>
                   <TableTh><T className="sr-only">Actions</T></TableTh>
                 </TableRow>
@@ -95,22 +94,22 @@ export function SessionsTab() {
               <TableBody>
                 {open.map(session => (
                   <TableRow key={session.sessionId}>
-                    <TableTd className="font-medium">{session.agentName}</TableTd>
+                    <TableTd >{session.agentName}</TableTd>
                     <TableTd>
                       <Chip tone={sessionTone(session.status)} size="xs">{session.status}</Chip>
                     </TableTd>
                     {/* title=, like the other sessions table in this file does
                         at the `s.currentUrl` cell below. A truncated URL with no
                         hover is a link whose destination cannot be read at all. */}
-                    <TableTd className="max-w-[260px] truncate text-[11px]" title={session.currentUrl}>
+                    <TableTd className="max-w-[260px] truncate" title={session.currentUrl}>
                       {isBlankUrl(session.currentUrl) ? (
                         <T className="text-text-tertiary">—</T>
                       ) : (
                         <ExternalLink external href={session.currentUrl}>{session.currentUrl}</ExternalLink>
                       )}
                     </TableTd>
-                    <TableTd className="text-right tabular-nums whitespace-nowrap">{session.requestCount}</TableTd>
-                    <TableTd className="whitespace-nowrap text-[11px] text-text-tertiary">
+                    <TableTd numeric>{session.requestCount}</TableTd>
+                    <TableTd className="whitespace-nowrap text-text-tertiary">
                       {relativeTimeSeconds(session.lastActivityAt)}
                     </TableTd>
                     <TableTd>
@@ -148,27 +147,27 @@ export function SessionsTab() {
               browse-the-web prompt.
             </InlinePlaceholder>
           ) : (
-            <Table>
+            <Table size="sm">
               <TableHead>
                 <TableRow>
                   <TableTh>Agent</TableTh>
                   <TableTh>Started</TableTh>
                   <TableTh>Last URL</TableTh>
-                  <TableTh className="text-right">Requests</TableTh>
+                  <TableTh numeric>Requests</TableTh>
                   <TableTh>Status</TableTh>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {closed.slice(0, MAX_PAST_ROWS).map(s => (
                   <TableRow key={s.sessionId}>
-                    <TableTd className="text-[12px]">{s.agentName}</TableTd>
-                    <TableTd className="whitespace-nowrap text-[11px] text-text-tertiary">
+                    <TableTd >{s.agentName}</TableTd>
+                    <TableTd className="whitespace-nowrap text-text-tertiary">
                       {new Date(s.startedAt).toLocaleString()}
                     </TableTd>
-                    <TableTd className="max-w-[320px] truncate text-[11px]" title={s.currentUrl}>
+                    <TableTd className="max-w-[320px] truncate" title={s.currentUrl}>
                       {isBlankUrl(s.currentUrl) ? <T className="text-text-tertiary">—</T> : s.currentUrl}
                     </TableTd>
-                    <TableTd className="text-right tabular-nums whitespace-nowrap text-[11px] text-text-tertiary">
+                    <TableTd numeric className="text-text-tertiary">
                       {s.requestCount}
                     </TableTd>
                     <TableTd><Chip tone="neutral" size="xs">{s.status}</Chip></TableTd>

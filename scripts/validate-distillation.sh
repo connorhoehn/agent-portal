@@ -3,6 +3,7 @@
 # check passes. Flags: --quick skips the slow suites (jest, vite build).
 set -u
 cd "$(dirname "$0")/.."
+source scripts/lib/judges.sh  # jg_*: static gates run once per tree state
 QUICK=0
 for a in "$@"; do case "$a" in --quick) QUICK=1;; esac; done
 
@@ -13,33 +14,31 @@ section() { printf '\n== %s ==\n' "$1"; }
 
 # ─────────────────────────────────────────────────────────────────────────────
 section "middleware"
-if (cd middleware && npx tsc --noEmit >/dev/null 2>&1); then ok "tsc clean"; else fail "middleware: tsc errors"; fi
+if jg_mw_tsc >/dev/null 2>&1; then ok "tsc clean"; else fail "middleware: tsc errors"; fi
 if [ "$QUICK" = 0 ]; then
   if (cd middleware && npx jest src/routes/__tests__/distillation src/providers/__tests__/distillation >/dev/null 2>&1); then ok "jest (distillation suites) green"; else fail "middleware: distillation jest failures"; fi
 fi
 
 section "portal"
-if (cd portal && npx tsc --noEmit >/dev/null 2>&1); then ok "tsc clean"; else fail "portal: tsc errors"; fi
+if jg_portal_tsc >/dev/null 2>&1; then ok "tsc clean"; else fail "portal: tsc errors"; fi
 if (cd portal && node --test 'src/pages/distillation/__tests__/*.test.ts' >/dev/null 2>&1); then ok "node tests green"; else fail "portal: distillation node tests failing"; fi
 if [ "$QUICK" = 0 ]; then
-  if (cd portal && npx vite build >/dev/null 2>&1); then ok "vite build"; else fail "portal: vite build failed"; fi
+  if jg_vite_build >/dev/null 2>&1; then ok "vite build"; else fail "portal: vite build failed"; fi
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
 section "component discipline (portal/src/pages/distillation)"
 PAGES="portal/src/pages/distillation"
-RAW_RE='<(div|p|span|h[1-6]|ul|ol|li|section|nav|article|table|tr|td|th|button|a|label|input|textarea|select|form|code|pre)( [^>]*)?className='
-QUEUE=docs/ui-components-queue.md
-QUEUED_FILES=$(grep -oE "Composed locally in \`portal/src/pages/distillation/[A-Za-z0-9_/.-]+\.tsx\`" "$QUEUE" 2>/dev/null | grep -oE "portal/src/pages/distillation/[A-Za-z0-9_/.-]+\.tsx" | sort -u)
-PAGE_FILES=$(find "$PAGES" -name '*.tsx' | sort | grep -vxF -f <(printf '%s\n' $QUEUED_FILES))
-count_in() { local re="$1"; shift; local n=0; for f in "$@"; do c=$(grep -oE "$re" "$f" | wc -l | tr -d ' '); n=$((n+c)); done; echo "$n"; }
-n_raw=$(count_in "$RAW_RE" $PAGE_FILES)
-n_sty=$(count_in 'style=\{\{' $PAGE_FILES)
-q_over=""; for f in $QUEUED_FILES; do [ -f "$f" ] || continue; c=$(grep -oE "$RAW_RE" "$f" | wc -l | tr -d ' '); [ "$c" -le 12 ] || q_over="$q_over ${f#$PAGES/}($c)"; done
+source scripts/lib/discipline.sh  # the one raw-element counter (brace-aware), shared with validate-component-discipline.sh
+QUEUED_FILES=$(dc_queued_files "$PAGES/")
+PAGE_FILES=$(dc_area_files "$PAGES" "$PAGES/")
+n_raw=$(dc_count_raw $PAGE_FILES)
+n_sty=$(dc_count_re 'style=\{\{' $PAGE_FILES)
+q_over=""; for f in $QUEUED_FILES; do [ -f "$f" ] || continue; c=$(dc_count_raw "$f"); [ "$c" -le 12 ] || q_over="$q_over ${f#$PAGES/}($c)"; done
 [ -z "$q_over" ] && ok "queued composites ≤ 12 raw elements each" || fail "queued composite over cap:$q_over"
 if [ "$n_raw" = 0 ]; then ok "raw styled elements: 0"; else
   fail "raw styled elements in pages: $n_raw (must be 0 — use Stack/Inline/Card/DetailSection/PageSection/DataTable/Chip…)"
-  for f in $PAGE_FILES; do c=$(grep -oE "$RAW_RE" "$f" | wc -l | tr -d ' '); [ "$c" -gt 0 ] && printf '      %4d  %s\n' "$c" "${f#$PAGES/}"; done | sort -rn | head -8
+  for f in $PAGE_FILES; do c=$(dc_count_raw "$f"); [ "$c" -gt 0 ] && printf '      %4d  %s\n' "$c" "${f#$PAGES/}"; done | sort -rn | head -8
 fi
 [ "$n_sty" = 0 ] && ok "no inline style={{}}" || fail "inline style={{}} in pages: $n_sty"
 
@@ -57,8 +56,12 @@ grep -qE "tabs=\{" "$MODULE" && fail "DistillationModule.tsx still passes horizo
 [ -f "$PAGES/DistillationLayout.tsx" ] && fail "DistillationLayout.tsx still present (retired)" || ok "DistillationLayout retired"
 # The live signals moved from header tabs to the sub-nav: pending count and
 # tier counts as rail counts, tier health as the Runs entry's accent.
-{ grep -q "health: dot" "$MODULE" && grep -q "pending" "$MODULE" && grep -q "controls=" "$MODULE" && grep -q "/iq/library" "$MODULE"; } \
-  && ok "sub-nav carries live counts + health accent; header keeps the repo selector and Open Library" || fail "DistillationModule lacks live rail counts/health accent, the repo selector or the Library link"
+{ grep -q "health: dot" "$MODULE" && grep -q "pending" "$MODULE" && grep -q "repoFacet" "$MODULE" && grep -q "/iq/library" "$MODULE"; } \
+  && ok "sub-nav carries live counts + health accent; the repository is a list-rail filter facet; Open Library kept" || fail "DistillationModule lacks live rail counts/health accent, the repository facet or the Library link"
+# No repository button in the content header (spec §1, 2026-10-07): the
+# repository is a facet in each list rail's filter popover.
+{ grep -q "distillation-repo" "$MODULE" || grep -qE "scope\.controls|controls=\{" "$MODULE" $PAGES/*Tab.tsx portal/src/pages/promotions/PromotionsPage.tsx; } \
+  && fail "a repository control still sits in a distillation content header" || ok "no repository button in the content header (rail filter instead)"
 grep -qE "path=\"distillation\"" portal/src/App.tsx && ok "/iq/distillation is a route tree" || fail "App.tsx: /iq/distillation is not a nested route tree"
 for s in knowledge review activity; do
   grep -qE "path=\"$s\"" portal/src/App.tsx || fail "App.tsx: no route for /iq/distillation/$s"
@@ -80,8 +83,10 @@ grep -q "controls={false}" $PAGES/*.tsx && fail "a canvas hides its CanvasZoomCo
 grep -q "CanvasPaneLayout" "$PAGES/ActivityTab.tsx" 2>/dev/null && ok "Activity: canvas + run inspector in CanvasPaneLayout" || fail "ActivityTab does not use CanvasPaneLayout"
 { grep -q "SourceList" "$PAGES/SourcesPanel.tsx" && grep -q "SegmentedControl" "$PAGES/SourcesPanel.tsx"; } 2>/dev/null \
   && ok "Sources inspector: List | Graph" || fail "SourcesPanel lacks SourceList + List/Graph switch"
-{ grep -q "ExplorerLayout" "$PAGES/KnowledgeTab.tsx" && grep -q "ExplorerLayout" "$PAGES/ReviewTab.tsx" && grep -q "ContextColumn" "$PAGES/KnowledgeTab.tsx"; } 2>/dev/null \
-  && ok "Knowledge + Review: explorer · record · ContextColumn" || fail "Knowledge/Review are not ExplorerLayout + ContextColumn"
+# The explorer is the library ListRailLayout (the shared list rail,
+# docs/layout-cascade.md rule 5).
+{ grep -q "<ListRailLayout" "$PAGES/KnowledgeTab.tsx" && grep -q "<ListRailLayout" "$PAGES/ReviewTab.tsx" && grep -q "ContextColumn" "$PAGES/KnowledgeTab.tsx"; } 2>/dev/null \
+  && ok "Knowledge + Review: list rail (ListRailLayout) · record · ContextColumn" || fail "Knowledge/Review are not ListRailLayout + ContextColumn"
 grep -q "Load more" "$PAGES/KnowledgeTab.tsx" 2>/dev/null && ok "explorer keeps cursor Load more" || fail "Knowledge explorer lost cursor Load more"
 # The guide record (docs/distillation-guide-record-spec.md): the rail picks
 # the view, so the explorer has no second view selector; Content leads with a
@@ -165,34 +170,16 @@ for r in "${ROLES[@]}"; do for s in "${SURFACES[@]}"; do
 done; done
 [ "$jmissing" = 0 ] && ok "all 6 role×surface logs present" || fail "$jmissing of 6 journey logs missing (roles: ${ROLES[*]}; surfaces: ${SURFACES[*]})"
 [ "$jbad" = 0 ] && ok "every present log passes all fields" || fail "$jbad journey logs fail a required field"
-# Freshness, per surface: a log must be newer than the newest .tsx among the
-# files/dirs its own `pages:` line names — the same rule the orgiq audit uses.
-# A log with no `pages:` line falls back to the global "newest page edit",
-# so the check can never be dodged by omitting the line.
+# Freshness (docs/journeys.md): a log is stale when the rendered contract of
+# the route it walked changed since its walk was sealed. Only the current
+# surfaces are judged; logs for surfaces the 2026-09-24 redesign retired
+# (overview, tiers, artifacts, lineage, compactions) are history and are not
+# re-audited. (This judge compared mtimes until 2026-10-08: a fresh clone or
+# a bulk touch passed or staled every log at once.)
 if [ -d "$JDIR" ]; then
-  newest_global=$(ls -t $(find "$PAGES" -name '*.tsx') 2>/dev/null | head -1)
-  newest_in() { # newest .tsx among comma-separated files/dirs
-    local newest=""; IFS=',' read -ra items <<< "$1"
-    for d in "${items[@]}"; do d=$(echo "$d" | tr -d ' '); [ -n "$d" ] || continue
-      if [ -f "$d" ]; then { [ -z "$newest" ] || [ "$d" -nt "$newest" ]; } && newest="$d"; continue; fi
-      [ -d "$d" ] || continue
-      f=$(ls -t $(find "$d" -name '*.tsx' 2>/dev/null) 2>/dev/null | head -1)
-      [ -n "$f" ] && { [ -z "$newest" ] || [ "$f" -nt "$newest" ]; } && newest="$f"
-    done; echo "$newest"
-  }
-  stale=0; stale_names=""
-  # Only the current surfaces are judged; logs for surfaces the 2026-09-24
-  # redesign retired (overview, tiers, artifacts, lineage, compactions) are
-  # history and are not re-audited.
-  for f in $(for r in "${ROLES[@]}"; do for s in "${SURFACES[@]}"; do [ -f "$JDIR/$r/$s.md" ] && echo "$JDIR/$r/$s.md"; done; done); do
-    pages=$(grep -iE '^pages: *' "$f" | head -1 | sed -E 's/^pages: *//')
-    ref=$([ -n "$pages" ] && newest_in "$pages" || echo "$newest_global")
-    # A `pages:` line naming only files that no longer exist (a retired
-    # surface) proves nothing — judge it against the newest page instead.
-    [ -z "$ref" ] && ref="$newest_global"
-    [ -n "$ref" ] && [ "$ref" -nt "$f" ] && { stale=$((stale+1)); stale_names="$stale_names ${f#$JDIR/}(${ref##*/})"; }
-  done
-  [ "$stale" = 0 ] && ok "journey logs are newer than the pages their surface renders from" || fail "$stale journey logs predate a page they render from — re-audit them:$stale_names"
+  source scripts/lib/journeys.sh
+  jr_freshness "$JDIR" $(for r in "${ROLES[@]}"; do for s in "${SURFACES[@]}"; do [ -f "$JDIR/$r/$s.md" ] && echo "$JDIR/$r/$s.md"; done; done)
+  jr_report
 fi
 
 section "docs"

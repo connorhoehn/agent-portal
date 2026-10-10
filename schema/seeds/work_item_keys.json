@@ -1,0 +1,345 @@
+{
+  "version": 1,
+  "namespaces": {
+    "p-observability": "ORG-OBS",
+    "p-auth-migration": "ORG-AUTH",
+    "p-llm-platform": "ORG-LLM",
+    "p-cost-opt": "ORG-COST",
+    "p-realtime-analytics": "ORG-RTA",
+    "p-data-lake": "ORG-LAKE",
+    "p-feature-store": "ORG-FS",
+    "p-mobile-redesign": "ORG-MOB",
+    "p-design-v3": "ORG-DS",
+    "p-rag-search": "ORG-RAG",
+    "p-soc2": "ORG-SOC2",
+    "p-design-system-api": "ORG-DSAPI",
+    "p-inference-platform": "ORG-INF",
+    "p-zero-trust": "ORG-ZT"
+  },
+  "items": {
+    "wi-obs-e1": {
+      "projectId": "p-observability",
+      "key": "ORG-OBS-1"
+    },
+    "wi-obs-e1-s1": {
+      "projectId": "p-observability",
+      "key": "ORG-OBS-2"
+    },
+    "wi-obs-e1-s2": {
+      "projectId": "p-observability",
+      "key": "ORG-OBS-3"
+    },
+    "wi-obs-e1-s3": {
+      "projectId": "p-observability",
+      "key": "ORG-OBS-4"
+    },
+    "wi-obs-e1-s4": {
+      "projectId": "p-observability",
+      "key": "ORG-OBS-5"
+    },
+    "wi-obs-e1-b5": {
+      "projectId": "p-observability",
+      "key": "ORG-OBS-6"
+    },
+    "wi-obs-e2": {
+      "projectId": "p-observability",
+      "key": "ORG-OBS-7"
+    },
+    "wi-obs-e2-s1": {
+      "projectId": "p-observability",
+      "key": "ORG-OBS-8"
+    },
+    "wi-obs-e2-s2": {
+      "projectId": "p-observability",
+      "key": "ORG-OBS-9"
+    },
+    "wi-obs-e2-s3": {
+      "projectId": "p-observability",
+      "key": "ORG-OBS-10"
+    },
+    "wi-obs-e2-b4": {
+      "projectId": "p-observability",
+      "key": "ORG-OBS-11"
+    },
+    "wi-obs-e3": {
+      "projectId": "p-observability",
+      "key": "ORG-OBS-12"
+    },
+    "wi-obs-e3-s1": {
+      "projectId": "p-observability",
+      "key": "ORG-OBS-13"
+    },
+    "wi-obs-e3-s2": {
+      "projectId": "p-observability",
+      "key": "ORG-OBS-14"
+    },
+    "wi-auth-e1": {
+      "projectId": "p-auth-migration",
+      "key": "ORG-AUTH-1"
+    },
+    "wi-auth-e1-s1": {
+      "projectId": "p-auth-migration",
+      "key": "ORG-AUTH-2"
+    },
+    "wi-auth-e1-s2": {
+      "projectId": "p-auth-migration",
+      "key": "ORG-AUTH-3"
+    },
+    "wi-auth-e1-s3": {
+      "projectId": "p-auth-migration",
+      "key": "ORG-AUTH-4"
+    },
+    "wi-auth-e1-b4": {
+      "projectId": "p-auth-migration",
+      "key": "ORG-AUTH-5"
+    },
+    "wi-auth-e2": {
+      "projectId": "p-auth-migration",
+      "key": "ORG-AUTH-6"
+    },
+    "wi-auth-e2-s1": {
+      "projectId": "p-auth-migration",
+      "key": "ORG-AUTH-7"
+    },
+    "wi-auth-e2-s2": {
+      "projectId": "p-auth-migration",
+      "key": "ORG-AUTH-8"
+    },
+    "wi-auth-e2-b3": {
+      "projectId": "p-auth-migration",
+      "key": "ORG-AUTH-9"
+    },
+    "wi-llm-e1": {
+      "projectId": "p-llm-platform",
+      "key": "ORG-LLM-1"
+    },
+    "wi-llm-e1-s1": {
+      "projectId": "p-llm-platform",
+      "key": "ORG-LLM-2"
+    },
+    "wi-llm-e1-s2": {
+      "projectId": "p-llm-platform",
+      "key": "ORG-LLM-3"
+    },
+    "wi-llm-e1-b3": {
+      "projectId": "p-llm-platform",
+      "key": "ORG-LLM-4"
+    },
+    "wi-llm-e2": {
+      "projectId": "p-llm-platform",
+      "key": "ORG-LLM-5"
+    },
+    "wi-llm-e2-s1": {
+      "projectId": "p-llm-platform",
+      "key": "ORG-LLM-6"
+    },
+    "wi-llm-e2-s2": {
+      "projectId": "p-llm-platform",
+      "key": "ORG-LLM-7"
+    },
+    "wi-llm-e3": {
+      "projectId": "p-llm-platform",
+      "key": "ORG-LLM-8"
+    },
+    "wi-llm-e3-s1": {
+      "projectId": "p-llm-platform",
+      "key": "ORG-LLM-9"
+    },
+    "wi-llm-e3-s2": {
+      "projectId": "p-llm-platform",
+      "key": "ORG-LLM-10"
+    },
+    "wi-cost-e1": {
+      "projectId": "p-cost-opt",
+      "key": "ORG-COST-1"
+    },
+    "wi-cost-e1-s1": {
+      "projectId": "p-cost-opt",
+      "key": "ORG-COST-2"
+    },
+    "wi-cost-e1-s2": {
+      "projectId": "p-cost-opt",
+      "key": "ORG-COST-3"
+    },
+    "wi-cost-e1-b3": {
+      "projectId": "p-cost-opt",
+      "key": "ORG-COST-4"
+    },
+    "wi-cost-e2": {
+      "projectId": "p-cost-opt",
+      "key": "ORG-COST-5"
+    },
+    "wi-cost-e2-s1": {
+      "projectId": "p-cost-opt",
+      "key": "ORG-COST-6"
+    },
+    "wi-cost-e2-s2": {
+      "projectId": "p-cost-opt",
+      "key": "ORG-COST-7"
+    },
+    "wi-rta-e1": {
+      "projectId": "p-realtime-analytics",
+      "key": "ORG-RTA-1"
+    },
+    "wi-rta-e1-s1": {
+      "projectId": "p-realtime-analytics",
+      "key": "ORG-RTA-2"
+    },
+    "wi-rta-e1-s2": {
+      "projectId": "p-realtime-analytics",
+      "key": "ORG-RTA-3"
+    },
+    "wi-rta-e1-b3": {
+      "projectId": "p-realtime-analytics",
+      "key": "ORG-RTA-4"
+    },
+    "wi-rta-e1-s4": {
+      "projectId": "p-realtime-analytics",
+      "key": "ORG-RTA-5"
+    },
+    "wi-lake-e1": {
+      "projectId": "p-data-lake",
+      "key": "ORG-LAKE-1"
+    },
+    "wi-lake-e1-s1": {
+      "projectId": "p-data-lake",
+      "key": "ORG-LAKE-2"
+    },
+    "wi-lake-e1-s2": {
+      "projectId": "p-data-lake",
+      "key": "ORG-LAKE-3"
+    },
+    "wi-lake-e1-s3": {
+      "projectId": "p-data-lake",
+      "key": "ORG-LAKE-4"
+    },
+    "wi-fs-e1": {
+      "projectId": "p-feature-store",
+      "key": "ORG-FS-1"
+    },
+    "wi-fs-e1-s1": {
+      "projectId": "p-feature-store",
+      "key": "ORG-FS-2"
+    },
+    "wi-fs-e1-s2": {
+      "projectId": "p-feature-store",
+      "key": "ORG-FS-3"
+    },
+    "wi-fs-e1-b3": {
+      "projectId": "p-feature-store",
+      "key": "ORG-FS-4"
+    },
+    "wi-mob-e1": {
+      "projectId": "p-mobile-redesign",
+      "key": "ORG-MOB-1"
+    },
+    "wi-mob-e1-s1": {
+      "projectId": "p-mobile-redesign",
+      "key": "ORG-MOB-2"
+    },
+    "wi-mob-e1-s2": {
+      "projectId": "p-mobile-redesign",
+      "key": "ORG-MOB-3"
+    },
+    "wi-mob-e1-b3": {
+      "projectId": "p-mobile-redesign",
+      "key": "ORG-MOB-4"
+    },
+    "wi-ds-e1": {
+      "projectId": "p-design-v3",
+      "key": "ORG-DS-1"
+    },
+    "wi-ds-e1-s1": {
+      "projectId": "p-design-v3",
+      "key": "ORG-DS-2"
+    },
+    "wi-ds-e1-s2": {
+      "projectId": "p-design-v3",
+      "key": "ORG-DS-3"
+    },
+    "wi-ds-e1-b3": {
+      "projectId": "p-design-v3",
+      "key": "ORG-DS-4"
+    },
+    "wi-rag-e1": {
+      "projectId": "p-rag-search",
+      "key": "ORG-RAG-1"
+    },
+    "wi-rag-e1-s1": {
+      "projectId": "p-rag-search",
+      "key": "ORG-RAG-2"
+    },
+    "wi-rag-e1-s2": {
+      "projectId": "p-rag-search",
+      "key": "ORG-RAG-3"
+    },
+    "wi-rag-e1-s3": {
+      "projectId": "p-rag-search",
+      "key": "ORG-RAG-4"
+    },
+    "wi-soc2-e1": {
+      "projectId": "p-soc2",
+      "key": "ORG-SOC2-1"
+    },
+    "wi-soc2-e1-s1": {
+      "projectId": "p-soc2",
+      "key": "ORG-SOC2-2"
+    },
+    "wi-soc2-e1-s2": {
+      "projectId": "p-soc2",
+      "key": "ORG-SOC2-3"
+    },
+    "wi-soc2-e1-b3": {
+      "projectId": "p-soc2",
+      "key": "ORG-SOC2-4"
+    },
+    "wi-dsapi-e1": {
+      "projectId": "p-design-system-api",
+      "key": "ORG-DSAPI-1"
+    },
+    "wi-dsapi-e1-s1": {
+      "projectId": "p-design-system-api",
+      "key": "ORG-DSAPI-2"
+    },
+    "wi-dsapi-e1-s2": {
+      "projectId": "p-design-system-api",
+      "key": "ORG-DSAPI-3"
+    },
+    "wi-dsapi-e1-b3": {
+      "projectId": "p-design-system-api",
+      "key": "ORG-DSAPI-4"
+    },
+    "wi-inf-e1": {
+      "projectId": "p-inference-platform",
+      "key": "ORG-INF-1"
+    },
+    "wi-inf-e1-s1": {
+      "projectId": "p-inference-platform",
+      "key": "ORG-INF-2"
+    },
+    "wi-inf-e1-s2": {
+      "projectId": "p-inference-platform",
+      "key": "ORG-INF-3"
+    },
+    "wi-inf-e1-b3": {
+      "projectId": "p-inference-platform",
+      "key": "ORG-INF-4"
+    },
+    "wi-zt-e1": {
+      "projectId": "p-zero-trust",
+      "key": "ORG-ZT-1"
+    },
+    "wi-zt-e1-s1": {
+      "projectId": "p-zero-trust",
+      "key": "ORG-ZT-2"
+    },
+    "wi-zt-e1-s2": {
+      "projectId": "p-zero-trust",
+      "key": "ORG-ZT-3"
+    },
+    "wi-zt-e1-s3": {
+      "projectId": "p-zero-trust",
+      "key": "ORG-ZT-4"
+    }
+  }
+}

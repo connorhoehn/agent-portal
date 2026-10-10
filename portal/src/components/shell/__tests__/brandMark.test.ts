@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { brandInitials, brandMarkUri, gradientStops } from '../brandMark.ts';
 
 test('initials are the first two letters of the label', () => {
-  assert.equal(brandInitials('Org'), 'Or');
+  assert.equal(brandInitials('Work'), 'Wo');
   assert.equal(brandInitials('Assessment'), 'As');
   assert.equal(brandInitials('X'), 'X');
   assert.equal(brandInitials(''), '?');
@@ -16,8 +16,8 @@ test('gradient stops are the first and last colours of the gradient', () => {
 });
 
 test('the mark is an SVG data URI carrying both stops and the initials', () => {
-  const uri = brandMarkUri('Org', '#6366f1', '#ec4899');
+  const uri = brandMarkUri('Work', '#6366f1', '#ec4899');
   assert.ok(uri.startsWith('data:image/svg+xml;utf8,'));
   const svg = decodeURIComponent(uri.slice('data:image/svg+xml;utf8,'.length));
-  assert.ok(svg.includes('stop-color="#6366f1"') && svg.includes('stop-color="#ec4899"') && svg.includes('>Or<'));
+  assert.ok(svg.includes('stop-color="#6366f1"') && svg.includes('stop-color="#ec4899"') && svg.includes('>Wo<'));
 });

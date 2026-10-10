@@ -20,12 +20,13 @@ import { useCallback, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import {
   Banner, Button, Chip, DataTable, Inline, InlineAlert, MetaLine, PageSection,
-  SearchInput, SegmentedControl, StatStrip, Toolbar,
+  SearchInput, SegmentedControl, StatStrip, T, Toolbar,
   type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
+import { KBHealthBadge } from '../../components/kb/KBHealthBadge.js';
 import {
   toastPending, toastSuccess, toastError, toastInfo, dismissToast,
 } from '../../lib/toastStore';
@@ -48,7 +49,7 @@ const STATUS_OPTIONS = [
 /** An ACTIONS cell with no control still needs to say something — an empty
  *  cell on a row that says "broken" reads as a dead end (DEFECTS.md #17). */
 function actionHint(text: string) {
-  return <Inline as="span" gap="none" className="text-[11px] text-text-tertiary">{text}</Inline>;
+  return <T as="span" size="xs" tone="tertiary">{text}</T>;
 }
 
 export default function KnowledgeHomePage() {
@@ -147,17 +148,15 @@ export default function KnowledgeHomePage() {
             <Link
               to={`/admin/knowledge/registry/${e.id}`}
               onClick={(ev) => ev.stopPropagation()}
-              className="text-[13px] font-semibold text-text-primary no-underline hover:text-primary hover:underline truncate"
+              className="text-text-primary no-underline hover:text-primary hover:underline truncate"
             >
-              {e.name}
+              <T as="span" size="sm" weight="semibold">{e.name}</T>
             </Link>
           ) : (
-            <Inline as="span" gap="none" className="text-[13px] font-semibold text-text-primary truncate">
-              {e.name}
-            </Inline>
+            <T as="span" size="sm" weight="semibold" className="truncate">{e.name}</T>
           )}
           {e.slug && (
-            <Inline as="span" gap="none" className="text-[11px] text-text-tertiary truncate">· {e.slug}</Inline>
+            <T as="span" size="xs" tone="tertiary" className="truncate">· {e.slug}</T>
           )}
         </Inline>
       ),
@@ -172,7 +171,7 @@ export default function KnowledgeHomePage() {
       key: 'detail',
       header: 'Detail',
       render: (e) => (
-        <Inline as="span" gap="none" className="text-[12px] text-text-secondary">{e.detail}</Inline>
+        <T as="span" size="xs" tone="secondary" className="truncate">{e.detail}</T>
       ),
     },
     {
@@ -205,6 +204,7 @@ export default function KnowledgeHomePage() {
     <PageSection
       title="Knowledge"
       description="Where the agents' knowledge comes from — sources, ingestion, and the knowledge bases they retrieve from."
+      actions={<KBHealthBadge />}
     >
       {recError && (
         <UnavailableNotice
@@ -247,6 +247,7 @@ export default function KnowledgeHomePage() {
       </Toolbar>
 
       <DataTable<Reconciled>
+        size="sm"
         data={filtered}
         columns={columns}
         keyField={(e) => e.id ?? e.slug ?? e.liveKbId ?? e.name}
@@ -344,23 +345,25 @@ export default function KnowledgeHomePage() {
       {/* ── Right now ────────────────────────────────────────────────────── */}
       <StatStrip
         aria-label="Knowledge, right now"
+        variant="line"
+        size="sm"
         className="mb-5"
         items={[
           {
-            label: 'Knowledge bases',
+            label: 'knowledge bases',
             value: recError ? '—' : live.length,
-            hint: recError ? 'unknown' : `${live.filter((e) => e.liveStatus === 'ACTIVE').length} active in AWS — counted from the account`,
+            title: recError ? 'unknown' : `${live.filter((e) => e.liveStatus === 'ACTIVE').length} active in AWS — counted from the account`,
           },
           {
-            label: 'Documents indexed',
+            label: 'documents indexed',
             value: recError ? '—' : docs.toLocaleString(),
-            hint: <>in the graph — what <Link to="/iq/work" className="text-primary no-underline hover:underline">sweeps</Link> read and agents cite</>,
+            title: 'in the graph — what the stale-document sweep reads and agents cite',
           },
           {
-            label: 'Needs attention',
+            label: 'need attention',
             value: recError ? '—' : problems.length,
             tone: problems.length ? 'danger' : 'default',
-            hint: `${problems.length === 1 ? 'disagreement' : 'disagreements'} between the registry and the account`,
+            title: `${problems.length === 1 ? 'disagreement' : 'disagreements'} between the registry and the account`,
           },
         ]}
       />
@@ -457,62 +460,46 @@ export default function KnowledgeHomePage() {
       {/* ── The pipeline, in the order it happens ────────────────────────── */}
       <StatStrip
         aria-label="The pipeline"
+        variant="line"
+        size="sm"
         className="mb-3"
         items={[
           {
-            label: 'Sources',
+            label: 'sources',
             value: targets ? String(targets.targets?.length ?? 0) : '—',
-            hint: (
-              <>
-                {(targets?.targets ?? []).filter((t) => t.enabled !== false).length > 0
-                  ? `${(targets?.targets ?? []).filter((t) => t.enabled !== false).length} enabled`
-                  : 'nothing configured to pull content in'}
-                {canIngest && <> · <Link to="/admin/ingest/crawl" className="text-primary no-underline hover:underline">manage →</Link></>}
-              </>
-            ),
+            title: (targets?.targets ?? []).filter((t) => t.enabled !== false).length > 0
+              ? `${(targets?.targets ?? []).filter((t) => t.enabled !== false).length} enabled`
+              : 'nothing configured to pull content in',
+            ...(canIngest && { href: '/admin/ingest/crawl' }),
           },
           {
-            label: 'Ingestion',
+            label: 'ingestion jobs',
             value: jobsDegraded ? '—' : jobs ? String(jobs.jobs?.length ?? 0) : '—',
-            hint: (
-              <>
-                {jobsDegraded
-                  ? 'job history unreadable — not the same as none run'
-                  : jobs?.jobs?.[0]?.status ? `last ${jobs.jobs[0].status.toLowerCase()} ${when(jobs.jobs[0].startedAt)}` : 'no ingestion has run'}
-                {canIngest && <> · <Link to="/admin/ingest/sources" className="text-primary no-underline hover:underline">history →</Link></>}
-              </>
-            ),
+            title: jobsDegraded
+              ? 'job history unreadable — not the same as none run'
+              : jobs?.jobs?.[0]?.status ? `last ${jobs.jobs[0].status.toLowerCase()} ${when(jobs.jobs[0].startedAt)}` : 'no ingestion has run',
+            ...(canIngest && { href: '/admin/ingest/sources' }),
           },
           {
-            label: 'Storage',
+            label: 'stored objects',
             value: storageDegraded ? '—' : storage?.totalObjects != null ? storage.totalObjects.toLocaleString() : '—',
-            hint: (
-              <>
-                {storageDegraded
-                  ? 'S3 listing unreadable — not the same as empty'
-                  : storage?.totalBytes ? bytes(storage.totalBytes) : 'nothing stored yet'}
-                {canIngest && <> · <Link to="/admin/ingest/storage" className="text-primary no-underline hover:underline">browse →</Link></>}
-              </>
-            ),
+            title: storageDegraded
+              ? 'S3 listing unreadable — not the same as empty'
+              : storage?.totalBytes ? bytes(storage.totalBytes) : 'nothing stored yet',
+            ...(canIngest && { href: '/admin/ingest/storage' }),
           },
           {
-            label: 'Knowledge base',
+            label: 'live knowledge bases',
             value: recError ? '—' : String(live.length),
-            hint: (
-              <>
-                {/* Three states, not two. A null count and a counted zero used
-                    to collapse into "no data source attached" — the flat
-                    falsehood the reconcile fix was about — and `when(null)`
-                    renders an unreadable history as the equally confident
-                    "never". */}
-                {!dataSourcesKnown
-                  ? 'data sources unreadable'
-                  : dataSources === 0
-                    ? 'no data source attached'
-                    : `${dataSources} data source${dataSources === 1 ? '' : 's'} · last sync ${syncUnknown ? 'unreadable' : when(lastSync)}`}
-                {' '}· <Link to="/admin/knowledge/registry" className="text-primary no-underline hover:underline">registry →</Link>
-              </>
-            ),
+            // Three states, not two. A null count and a counted zero used to
+            // collapse into "no data source attached"; an unreadable history
+            // is "unreadable", never "never".
+            title: !dataSourcesKnown
+              ? 'data sources unreadable'
+              : dataSources === 0
+                ? 'no data source attached'
+                : `${dataSources} data source${dataSources === 1 ? '' : 's'} · last sync ${syncUnknown ? 'unreadable' : when(lastSync)}`,
+            href: '/admin/knowledge/registry',
           },
         ]}
       />

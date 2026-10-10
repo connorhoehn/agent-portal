@@ -9,9 +9,50 @@ under that role and are listed here because they reproduce for this role.
 ## Open
 
 #21 and #22 were both re-audited on 2026-09-07 and closed — see the Closed
-section. Nothing is open for this role right now.
+section. #23–#27 were found on the 2026-10-01 09:27 headless re-walk
+(Chromium 1680x940, Playwright, dev:mock on :3043/:5243, signed in as u-mia).
 
 ## Closed
+
+29. ~~Computer Lab's computer list says "Nothing matches." when nothing is
+    shared, with no filter typed.~~ Repro: u-mia (program-owner),
+    `/admin/devbox`: the notice reads "You can see the fleet but not drive
+    it", the status strip is 0 / 0 / 0, the pane says "No computers in the lab /
+    Nothing in the fleet is shared with you yet." — and the list rail under the
+    empty "Find computer or agent…" box says "Nothing matches." as if a search
+    had failed. Suspect `portal/src/pages/admin/DevboxPage.tsx` (the list's
+    empty copy does not distinguish an empty fleet from an empty filter).
+
+    *Closed 2026-10-06 15:05 (ui-components 2.419.0, headless Chromium 1680x940, u-mia, devbox-boxes/agent-fleet/compute-nodes on the empty scenario, then reset): the list rail now reads "No computers in the lab / Nothing in the fleet is shared with you yet."; no "Nothing matches." node exists with no filter typed.*
+
+30. ~~Search › Connections (`/iq/explore` lands here): a mouse cannot click or hover a node on the all-types graph.~~ **Closed 2026-10-06 12:50** — re-observed with real mouse clicks (Playwright click() and hover; ui-components 2.418.0): the record graph node buttons compute pointer-events auto, elementFromPoint over a node returns the node, and a click took the graph from 53–55 to 15 nodes ("1 selected", zoom 54% to 97%); a second click made "2 selected".
+
+31. ~~People org graph: after two or three picks the drawing sits on the 40% zoom floor with unreadable captions and can run under the detail card.~~ **Closed 2026-10-06 12:50** — re-observed with real mouse clicks: people-graph picks re-fit at 103% / 90% / 90% (three picks) and 93% for a single pick, not the 40% floor; the selected person is on screen and legible, earlier far picks scroll out of view by design.
+
+24. ~~Search › Connections graph node labels are clamped and the hover title does not carry the label.~~ **Closed 2026-10-06 12:50** — re-observed: every clamped record-graph caption sits in a button whose title leads with the record name and carries the full caption, nodes now receive hover, and a selected long-titled node prints its whole caption on three lines. Titles read from the attribute, not a native tooltip.
+
+28. **Initiative Overview: work-graph node names are cut with an ellipsis and have no hover title.**
+    Repro: u-mia, `/iq/projects/p-observability` (Overview), scroll to the
+    "Shared work graph". The clipped-text sweep reports 6 leaf labels clipped, e.g.
+    "Span-metrics connector feeding RED dashboards" has 130px of the 292px it
+    needs and renders "Span-metrics conn…"; "Metric cardinality budgets" 130 of
+    155. The node's `aria-label` carries the full text
+    ("Span-metrics connector feeding RED dashboards, idl…") but nothing has a
+    `title`, so a sighted reader cannot recover the cut name without opening
+    the node. First seen on the 2026-10-06 re-walk; the earlier logs of this
+    surface recorded the sweep as clean, so the graph is new since then.
+    Suspect the graph composite fed from `portal/src/pages/project-detail`
+    (the Overview graph panel) and the library's node renderer.
+
+    *Closed 2026-10-06 14:10 (ui-components 2.416.0, headless Chromium 1680x940, u-mia): the work-graph node header now carries a `title` holding the full name. The sweep still reports the strings clipped by their single-line ellipsis box (e.g. "Span-metrics connector feeding RED dashboards" 130 of 292px) but every one is titled with its whole text, the deliberate ellipsis-with-hover pattern the protocol accepts. Checked by reading the `title` attribute, not by a physical hover (headless).*
+
+23. ~~Initiatives: both tables are wider than their pane at 1680px, so the right-hand columns are cut with no visible scrollbar.~~ **Closed 2026-10-06 13:05** — re-observed as u-mia at 1680px: the table box is 948px and the table is 948px on All initiatives, on Sprints (13 rows) and on the landing view, so Updated, Envelope and Spend in window are fully visible.
+
+25. ~~Agent library: opening 5 of 12 assets logs a console error, and the asset page has no h1.~~ **Closed 2026-10-06 13:05** — re-observed as u-mia: opening skill-pr-review-scoped, lib-stakeholder-email, lib-adr-summary, orgiq-supervisor-system-prompt and orgiq-search-system-prompt gave no 4xx and no console line, and each asset page has an h1 with the asset name.
+
+26. ~~Asset promotions has no h1.~~ **Closed 2026-10-06 13:05** — re-observed as u-mia: /iq/promotions (→ review?view=promotions) has an h1 "Asset promotions"; with `&item=promo-aurora-cold-start` open the h1 is the candidate title.
+
+27. ~~A known "not found" / "nothing there" reads as an outage.~~ **Closed 2026-10-06 13:05** — re-observed as u-mia: `/iq/designs/nope-not-real`, `/iq/library/nope-not-real` and `/iq/promotions/zz-bogus` read "Design not found", "Asset not found" and "Candidate not found" with a back link; with `session-bundles` on its empty scenario the configuration page shows "No configuration preview / No session bundle has been published yet…" (scenario restored); the promotions list error now reads "Candidates are clustered from lab observations by the promotions service, so this is unknown rather than empty." The remaining bare-noun notices (Designs rail, bundle provider error) are tracked in member #18.
 
 21. ~~A failed turn that started from a starter card shows a Retry button that
     does nothing.~~ **Closed 2026-09-07 16:38** — every send path now goes

@@ -1,0 +1,8 @@
+middleware/src/index.ts:9:import { linkNodeOwnership, type LeasedOwner } from './lib/realtime-node-ownership.js';
+middleware/src/index.ts:548:// (lib/realtime-node-ownership.ts), so /health's 503 never leaves half a lease alive.
+middleware/src/index.ts:549:const stopOwnershipLink = linkNodeOwnership([gatewayHandle?.ownership, 'ownership' in distillationHandle ? distillationHandle.ownership : undefined]
+middleware/src/index.ts:550:  .filter((owner): owner is LeasedOwner => !!owner));
+middleware/src/lib/distillation-realtime.ts:53:import type { LeasedOwner } from './realtime-node-ownership.js';
+middleware/src/lib/distillation-realtime.ts:140:      if (opts.router && !opts.router.isReady()) throw new Error('Distillation ownership is unavailable');
+middleware/src/lib/distillation-realtime.ts:186: * Its separate namespace keeps /ws feature/service ownership independent. */
+middleware/src/lib/distillation-realtime.ts:210:    return Object.assign(handle, { ownership: router as LeasedOwner, detach: async () => { try { await detach(); } finally { await redis.quit(); } } });

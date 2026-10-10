@@ -1,8 +1,9 @@
 import { gatewayEndpoints } from '../lib/gatewayEndpoint.ts';
 import { realtimeTokenSource, type RealtimeToken, type RealtimeTokenSource } from '../lib/realtimeToken.ts';
-import { Fragment, createElement, useCallback, useEffect, useState, type ReactNode } from 'react';
+import { Fragment, createElement, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { GatewayContext, type GatewayContextValue } from '@connorhoehnslalom/realtime-modules/client';
 import { GatewaySocketProvider, useGateway } from '@connorhoehnslalom/realtime-modules/client/ws';
+import { portalGatewayRest } from '../lib/gatewayRest.ts';
 
 const noop = (): void => {};
 const unavailable = (): never => {
@@ -37,7 +38,10 @@ export function gatewayWebSocketUrl(configuredUrl?: string): string | null {
 function TokenRenewer({ onDown }: { onDown: () => void }) {
   const { connectionState } = useGateway();
   useEffect(() => {
-    if (connectionState === 'reconnecting' || connectionState === 'disconnected') onDown();
+    // Explicit public reconnect starts at `connecting`. An authority change
+    // may have prefetched a new cached bearer before asking it to reconnect.
+    // Consuming an unchanged token is a no-op in the owner's state setter.
+    if (['connecting', 'reconnecting', 'disconnected'].includes(connectionState)) onDown();
   }, [connectionState, onDown]);
   return null;
 }
@@ -55,6 +59,7 @@ type TokenState = { ready: false } | { ready: true; token?: string };
 export function AuthenticatedGatewaySocket({ url, children, tokens = realtimeTokenSource }: {
   url: string; children: ReactNode; tokens?: RealtimeTokenSource;
 }) {
+  const rest = useMemo(() => portalGatewayRest(url, tokens), [url, tokens]);
   const [auth, setAuth] = useState<TokenState>(() => {
     const cached = tokens.peek();
     return cached ? { ready: true, token: cached.token } : { ready: false };
@@ -77,7 +82,7 @@ export function AuthenticatedGatewaySocket({ url, children, tokens = realtimeTok
   }, [tokens]);
   if (!auth.ready) return null;
   return createElement(GatewaySocketProvider, {
-    url, token: auth.token,
+    url, token: auth.token, httpBase: '', rest,
     children: createElement(Fragment, null, createElement(TokenRenewer, { onDown: renew }), children),
   });
 }

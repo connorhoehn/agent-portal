@@ -2,6 +2,7 @@ import { config } from '../config.js';
 import { agentcore } from '../providers/index.js';
 import * as A from '../providers/assessment-aurora.js';
 import { completeRun } from '../providers/assessment.js';
+import { DECK_COMMANDS } from './assessment-run-input.js';
 import { assessmentBroker } from './assessment-broker.js';
 import type * as M from '../mock/assessment.js';
 
@@ -73,8 +74,11 @@ export async function executeClaim(claimed: NonNullable<Awaited<ReturnType<typeo
     }
     if (!result.text.trim()) throw new Error('Agent returned an empty result');
     const scoringLog = SCORE_COMMANDS.has(run.command) ? scoreResult(result.text, dispatch.payload['relevant_dimension_ids']) : undefined;
+    // A review-deck run's output is the drafter's JSON; the deck provider
+    // merges it (and writes the revision) inside completeRun.
+    const deckResult: unknown = DECK_COMMANDS.has(run.command) ? JSON.parse(result.text) : undefined;
     const completed = await completeRun(run.id, { status: 'completed',
-      ...(scoringLog ? { scoring_log: scoringLog } : { summary: result.text }) });
+      ...(scoringLog ? { scoring_log: scoringLog } : deckResult !== undefined ? { deck_result: deckResult } : { summary: result.text }) });
     if (!completed.ok && completed.status !== 409) throw new Error(completed.reason);
   } catch (error) {
     const reason = error instanceof Error ? error.message : 'Agent dispatch failed';

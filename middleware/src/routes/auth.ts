@@ -127,7 +127,7 @@ authRouter.get('/callback', loginLimit, asyncHandler(async (req, res) => {
       decision: 'DENY', action: 'Login', sub: claims.email ?? claims.sub, role: '-',
       path: '/api/auth/callback', reason: 'no OrgIQ account for federated identity',
     });
-    res.status(403).send('Your identity is authenticated but not provisioned in OrgIQ. Ask an administrator to add you.');
+    res.status(403).send('Your identity is authenticated but not provisioned in Work. Ask an administrator to add you.');
     return;
   }
 

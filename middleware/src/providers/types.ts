@@ -18,7 +18,8 @@ export interface Person {
   department: string;
   skills: string[];
   influenceScore: number;
-  imageUrl?: string;
+  /** people.avatar_url — a portrait URL, or null/absent for initials. */
+  avatarUrl?: string | null;
   /** Today's presence status — stable within a calendar day, changes nightly. */
   presence?: PresenceStatus;
 }
@@ -53,7 +54,7 @@ export interface GraphSnapshot {
 export interface PersonDetail extends Person {
   scoredAt: string | null;
   connections: Array<Relationship & {
-    otherPerson: { id: string; name: string; title: string } | null;
+    otherPerson: { id: string; name: string; title: string; avatarUrl?: string | null } | null;
   }>;
 }
 

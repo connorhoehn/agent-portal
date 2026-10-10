@@ -52,6 +52,7 @@
 // Aurora table yet outside schema/distillation_schema.sql.
 
 import { clock, defineFixture } from './core/index.js';
+import { demoIngestWriters } from './distillation-demo-script.js';
 
 // ─── Types (the domain model — docs/distillation-goal.md) ──────────────────
 
@@ -282,6 +283,12 @@ export interface CompactionJobRow {
   /** The batch the consumer claimed: observation ids (L1) or cluster ids (L2).
    *  Ids, not a count — the count is `inputIds.length`. */
   inputIds?: string[];
+  /** A pass asked to compact only these rows (observation ids for L1, cluster
+   *  ids for L2) — "this session's notes", "the patterns review agreed with".
+   *  The claim is still what is WAITING among them, so a row another pass
+   *  took in the meantime is not claimed twice. Internal: not on the wire;
+   *  `input_ids` is what the pass actually claimed. */
+  scopeIds?: string[];
   log?: CompactionLogEntry[];
   phase?: CompactionPhase;
   percent?: number | null;
@@ -1959,7 +1966,8 @@ export const facts = defineFixture<Fact>({
 
 /** Which artifacts were published into the Library. Emptying this fixture is
  *  the "nothing has been published yet" world — every artifact still resolves,
- *  none of them link out, and /library/:id/provenance 404s. */
+ *  none of them link out, and /library/:id/provenance answers
+ *  `{ artifact: null, lineage: null }` for every asset. */
 export const libraryLinks = defineFixture<LibraryLink>({
   key: 'distillation-library-links',
   scenarios: {
@@ -2005,6 +2013,9 @@ export const ingestWriters = defineFixture<IngestWriter>({
     default: seedIngestWriters,
     empty: () => [],
     large: () => [...seedIngestWriters(), ...largeIngestWriters()],
+    // The Distillation demo's sessions (mock/distillation-demo-script.ts). In
+    // this world the director is the write stream and simulated ingest is off.
+    'distillation-demo': demoIngestWriters,
     error: unreadable('L0 write-stream rollup'),
   },
 });

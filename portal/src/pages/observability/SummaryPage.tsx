@@ -2,12 +2,12 @@ import type React from 'react';
 import { Link } from 'react-router';
 import {
   Card, Inline, KPIGrid, LineChart, LoadingState, NotificationCenter, PageSection, SectionLabel, Stack, StatCard,
-  StatStrip,
+  StatStrip, T,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { formatTokenCount } from '../../lib/format';
-import { T } from './Text';
+import { healthFailed, healthPending, type DependencyHealth } from '../../lib/healthStatus';
 
 interface ObsSummary {
   totalInvocations24h: number;
@@ -44,8 +44,8 @@ interface Alarm {
 
 interface Health {
   mocks: Record<string, boolean>;
-  awsCredentials?: { ok: boolean; error?: string };
-  datastore?: { ok: boolean; error?: string };
+  awsCredentials?: DependencyHealth;
+  datastore?: DependencyHealth;
 }
 
 /** What the operator should do next, derived from live signals only. */
@@ -91,20 +91,26 @@ function deriveNextSteps(
     }];
   }
 
-  if (health?.datastore?.ok === false && health?.awsCredentials?.ok !== false) {
+  if (healthPending(health?.awsCredentials) || healthPending(health?.datastore)) {
+    return [{ label: 'Checking service availability',
+      detail: 'Waiting for the latest credentials and database checks before reporting service health.',
+      to: '/admin/observability/summary', urgent: false }];
+  }
+
+  if (healthFailed(health?.datastore) && !healthFailed(health?.awsCredentials)) {
     // Only when credentials are fine — an expired session explains a dead
     // database, and reporting both would send someone down two paths at once.
     steps.push({
       label: 'Aurora is unreachable',
       detail:
-        `${health.datastore.error ?? 'The cluster did not answer'}. Trace, quality and ` +
+        `${health?.datastore?.error ?? 'The cluster did not answer'}. Trace, quality and ` +
         `evaluation history all live there, so those panels are unknown rather than empty.`,
       to: '/admin/observability/summary',
       urgent: true,
     });
   }
 
-  if (health?.awsCredentials?.ok === false) {
+  if (healthFailed(health?.awsCredentials)) {
     steps.push({
       label: 'Refresh AWS credentials, then restart the middleware',
       detail:
@@ -221,6 +227,7 @@ function SummaryPage() {
   // page derives "Nothing needs you" from a runtime list it never got.
   const blind = health?.awsCredentials?.ok === false
     || health?.datastore?.ok === false
+    || healthPending(health?.awsCredentials) || healthPending(health?.datastore)
     || fleetFailure != null;
   const dash = (v: React.ReactNode): React.ReactNode => (blind ? '—' : v);
 
@@ -246,8 +253,8 @@ function SummaryPage() {
           value={runtimes.length || '—'}
           hint={(
             <Stack gap="none">
-              <T>{blind ? 'unknown' : `${healthy} healthy${runtimes.length > healthy ? ` · ${runtimes.length - healthy} not` : ''}`}</T>
-              <T className="text-xs text-text-tertiary" wrap>
+              <T size="sm">{blind ? 'unknown' : `${healthy} healthy${runtimes.length > healthy ? ` · ${runtimes.length - healthy} not` : ''}`}</T>
+              <T size="xs" className="text-text-tertiary" wrap>
                 {blind
                   ? 'Cannot list runtimes while the backend is unreachable.'
                   : 'Live from AgentCore Runtime, not a static list.'}
@@ -262,8 +269,8 @@ function SummaryPage() {
           danger={!blind && firing.length > 0}
           hint={(
             <Stack gap="none">
-              <T>firing</T>
-              <T className="text-xs text-text-tertiary" wrap>
+              <T size="sm">firing</T>
+              <T size="xs" className="text-text-tertiary" wrap>
                 {blind
                   ? 'Cannot evaluate alarms while the backend is unreachable.'
                   : alarms[0]?.reason ?? 'No alarm evaluation yet.'}
@@ -279,8 +286,8 @@ function SummaryPage() {
           danger={!blind && (summary?.totalErrors24h ?? 0) > 0}
           hint={(
             <Stack gap="none">
-              <T>{blind ? 'no data' : `of ${summary?.totalInvocations24h ?? 0} runs`}</T>
-              <T className="text-xs text-text-tertiary">System failures, not answer quality.</T>
+              <T size="sm">{blind ? 'no data' : `of ${summary?.totalInvocations24h ?? 0} runs`}</T>
+              <T size="xs" className="text-text-tertiary">System failures, not answer quality.</T>
               <Link to="/admin/observability/invocations?status=error" className="text-xs text-primary hover:underline">
                 Open Runs →
               </Link>
@@ -335,10 +342,10 @@ function SummaryPage() {
                 }`}
               />
               <Stack gap="none">
-                <T as="div" className="text-sm font-medium text-[var(--color-text-primary)]">
+                <T weight="medium" size="sm" as="div" className="text-[var(--color-text-primary)]">
                   {s.label}
                 </T>
-                <T as="div" className="text-xs text-[var(--color-text-secondary)]" wrap>{s.detail}</T>
+                <T size="xs" as="div" className="text-[var(--color-text-secondary)]" wrap>{s.detail}</T>
               </Stack>
             </Link>
           ))}
@@ -398,30 +405,30 @@ function SummaryPage() {
       <Card padding="md">
         <Inline align="center" justify="between" className="mb-3">
           <Inline align="baseline" gap="xs">
-            <T as="div" className="text-sm font-semibold">Guardrail Activity (6h)</T>
-            <T className="text-xs font-normal text-[var(--color-text-tertiary)]">
+            <T weight="semibold" size="sm" as="div">Guardrail Activity (6h)</T>
+            <T weight="normal" size="xs" className="text-[var(--color-text-tertiary)]">
               from AWS/Bedrock metrics
             </T>
           </Inline>
-          <Inline gap="lg" className="text-xs">
-            <T>
+          <Inline gap="lg">
+            <T size="sm">
               <T className="text-[var(--color-text-tertiary)]">Invocations: </T>
-              <T className="font-semibold">{blind ? '—' : guardrail?.totalInvocations ?? 0}</T>
+              <T size="sm" weight="semibold">{blind ? '—' : guardrail?.totalInvocations ?? 0}</T>
             </T>
-            <T>
+            <T size="sm">
               <T className="text-[var(--color-text-tertiary)]">Interventions: </T>
-              <T className={`font-semibold ${!blind && (guardrail?.totalInterventions ?? 0) > 0 ? 'text-red-600' : ''}`}>
+              <T weight="semibold" className={` ${!blind && (guardrail?.totalInterventions ?? 0) > 0 ? 'text-red-600' : ''}`}>
                 {blind ? '—' : guardrail?.totalInterventions ?? 0}
               </T>
             </T>
-            <T>
+            <T size="sm">
               <T className="text-[var(--color-text-tertiary)]">Rate: </T>
-              <T className="font-semibold">{blind ? '—' : `${guardrail?.interventionRate ?? '0.0'}%`}</T>
+              <T size="sm" weight="semibold">{blind ? '—' : `${guardrail?.interventionRate ?? '0.0'}%`}</T>
             </T>
           </Inline>
         </Inline>
         {(guardrail?.series.length ?? 0) === 0 ? (
-          <T as="div" className="p-4 text-center text-xs text-[var(--color-text-tertiary)]">
+          <T size="xs" as="div" className="p-4 text-center text-[var(--color-text-tertiary)]">
             No guardrail activity in the last 6h.
           </T>
         ) : (

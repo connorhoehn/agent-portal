@@ -659,6 +659,10 @@ Run `aws-azure-login --mode gui` first. Then
 
 ### What remains undeployable
 
+(2026-10-01: §10 closes the DNS/TLS, Cognito-callback and teardown-sweep
+items below in code — CloudFront supplies HTTPS without a domain. The SFU
+item stands.)
+
 - **The SFU** (`OrgIQ-SocialMedia`). Media needs ingress from wherever the
   participants are, and custodian revokes `0.0.0.0/0`. Whether it also
   revokes UDP or high-TCP rules is unmeasured (the §3 phase-0 probe is an
@@ -678,3 +682,401 @@ Run `aws-azure-login --mode gui` first. Then
   failed stack delete would leave one behind. The `orgiq-social-*` tables
   (RETAIN plus deletion protection) are still missing from `deploy.sh` and
   `destroy.sh`, as §8 says.
+
+## 10. What is now in CDK/code (2026-10-01)
+
+The owner's instruction: build all of it now, deploy and test later. So this
+section is code and offline tests only. The AWS credentials had expired and
+nothing was deployed. `cd infra && npm test` synthesizes the whole app in
+process (281 tests). The default app (no context) was synthesized before and
+after this change. 16 of the 17 templates are byte-identical. The one
+difference is deliberate: `OrgIQ-MiddlewareService` gains the AgentCore
+Memory grant (below), a bug fix the chat path needs whatever flags are set.
+
+The headline change: **HTTPS no longer needs a domain.** §5 and §9 made a
+hosted zone and an ACM certificate the prerequisite for `wss://`, the
+Cognito callback and `getUserMedia`. CloudFront's default `*.cloudfront.net`
+name and certificate now supply that. The `certificateArn` + host-rule path
+still works; this is an alternative, not a replacement.
+
+### Resources
+
+| stack | resource | notes |
+|---|---|---|
+| `OrgIQ-Portal` (new, `infra/lib/portal-stack.ts`) | S3 bucket `orgiq-portal-<account>-<region>` | Private (`BLOCK_ALL`, bucket-owner-enforced), SSE-S3. DESTROY, emptied on delete by an identity-based Lambda, the same pattern as `OrgIQ-Foundation` and for the same reason: no `autoDeleteObjects`, because the custodian strips the bucket policy the stock provider relies on. |
+| `OrgIQ-Portal` | Portal distribution | Default behaviour: the bucket through Origin Access Control, `CachingOptimized`, and a CloudFront Function (viewer request) that rewrites extensionless paths to `/index.html`. `/api/*`, `/ws`, `/ws/*` and `/health` go to the ALB with `CachingDisabled`, `AllViewerAndCloudFrontHeaders-2022-06`, all methods, `https-only`, a 60 s read timeout and no compression. There are no distribution-wide error pages. Those would also turn the middleware's own 403/404 into `index.html` with a 200. |
+| `OrgIQ-Portal` | platform-api distribution, SFU distribution | Only with `deploySocial` / `deploySocialMedia`. Each has a single ALB origin and sends a route header. They are separate distributions because platform-api's `/api` collides with the middleware's, and LVS answers WHIP/WHEP with absolute `Location: /api/channels/…` paths, which a path prefix would break. Media still goes straight to the Elastic IP. |
+| `OrgIQ-Portal` | SSM `/orgiq/portal/{url,gateway-url,cognito-callback-url,cognito-logout-url,platform-api-url,video-url}` | The middleware reads these by name. |
+| `OrgIQ-Portal` | outputs `PortalUrl`, `PortalBucketName`, `PortalDistributionId`, `PortalDistributionArn`, `PlatformApiPublicUrl`, `SfuPublicUrl` | `scripts/portal-publish.mjs` and `schema/dump-stack-outputs.sh` read them. The stack imports one export, `orgiq-middleware-alb-dns`, which has always existed, and creates none. |
+| `OrgIQ-MiddlewareService` (with `deployPortal`) | secret `orgiq-cloudfront-origin-secret` | Every CloudFront origin sends it as `x-orgiq-origin-verify`. Portal and Social read it as a dynamic reference by name, so it creates no export. |
+| `OrgIQ-MiddlewareService` | security group with the managed prefix list `com.amazonaws.global.cloudfront.origin-facing` on the listener port | Its own group: a prefix-list rule counts as the list's max entries (about 55) against the 60-rule quota. It is attached through the `CfnLoadBalancer`, so the `albAllowCidr` rules are not replayed onto it. The id is looked up at deploy time by an `AwsCustomResource` (`ec2:DescribeManagedPrefixLists`); `cloudFrontPrefixListId` overrides it. |
+| `OrgIQ-MiddlewareService` | listener lock | The default action becomes a fixed 403. Priority 90 forwards requests that carry the secret header; 91 and up forward `albAllowCidr` sources, five CIDRs per rule. Without the lock, the prefix list would let anyone's distribution past the allowlist. |
+| `OrgIQ-MiddlewareService` | `TRUST_PROXY_HOPS=2` | CloudFront appends the viewer's address and the ALB appends CloudFront's. |
+| `OrgIQ-MiddlewareService` (with `portalPublicUrls`) | container secrets from the SSM parameters | `PUBLIC_BASE_URL` and `PORTAL_ORIGIN` feed the origin allowlist. `COGNITO_CALLBACK_URL` and `COGNITO_LOGOUT_URL` turn SSO on. `REALTIME_GATEWAY_URL` (with `realtimeGateway`), `REALTIME_PLATFORM_PUBLIC_URL` (with `deploySocial`) and `REALTIME_VIDEO_PUBLIC_URL` (with `deploySocialMedia`) go to the token bridge. Explicit `realtime*Url` context wins, and no name is set as both env and secret. |
+| `OrgIQ-MiddlewareService` (always) | IAM `AgentCoreMemoryEvents` | `CreateEvent`, `ListEvents`, `GetEvent` and `ListSessions` on the one memory it is given. `routes/agents.ts` records every turn through `providers/memory.ts`, and nothing had granted these, so a deployed chat would have answered but kept no history. |
+| `OrgIQ-Social` (with `deployPortal`) | listener rules 31 (platform-api) and 41 (SFU) | Each matches the secret header plus `x-orgiq-origin-route`. The target groups now exist when either a host or `deployPortal` is set. Host rules 30 and 40 are unchanged. |
+| `OrgIQ-AgentCoreRuntime` | env `MIDDLEWARE_URL` on every runtime | Set from `middlewareCallbackUrl`, else `portalPublicUrl`; absent otherwise. |
+| `OrgIQ-Authentication` | callback `<portalPublicUrl>/api/auth/callback` and sign-out URL `<portalPublicUrl>/` | Added to the localhost ones; `http://` is refused at synth. |
+
+Middleware code (`middleware/src`):
+- `lib/trusted-proxy.ts` accepts `TRUST_PROXY_HOPS=2`, and `viewerScheme(req)`
+  reads `CloudFront-Forwarded-Proto` only at two hops. Without it, CloudFront
+  reaches the ALB over HTTP and the ALB writes `X-Forwarded-Proto: http`, so
+  the session cookie lost `Secure` and the portal's own `https://` origin read
+  as cross-origin.
+- `lib/session.ts` (cookie `Secure`) and `lib/browser-origin.ts` use it.
+- `config.ts` no longer echoes the server-side `PLATFORM_API_URL` to browsers
+  in production. `gatewayUrl`, `platformApiUrl` (`REALTIME_PLATFORM_PUBLIC_URL`)
+  and `videoUrl` (`REALTIME_VIDEO_PUBLIC_URL`) were already in the token
+  response.
+
+Portal: `hooks/useGatewayInfo.ts` reads the gateway from the token response
+(`useRealtimeEndpoints`) like the badge and the call host already did.
+`VITE_*` is a local override only. Nothing else in `portal/src` bakes an
+endpoint. `App.tsx` passes `VITE_GATEWAY_URL` only as the provider's
+override, and the rest are feature booleans.
+
+Scripts:
+- `scripts/docker/middleware-image-build.mjs` builds HEAD's `middleware/`
+  with `git archive` (`--working-tree` to include uncommitted changes). It
+  runs `prepare-libraries.mjs` (exact locked library commits), then a
+  `buildx` ARM64 push of the `production` stage to `orgiq-middleware`
+  `:latest` and `:<commit12>`, and prints the ECS rollout command.
+- `scripts/portal-publish.mjs` reads the stack outputs. It builds with the
+  three `VITE_*` overrides blanked, because `portal/.env.local` is read by a
+  production build too, and refuses a bundle that names a localhost endpoint.
+  It syncs (`assets/` immutable, the rest `no-cache`), invalidates `/*`,
+  checks that the OAC bucket-policy statement still exists
+  (`--repair-bucket-policy` re-applies it), and smoke-tests `/` and `/health`.
+- Both take `--dry-run`. Tests: `node --test scripts/docker/tests/*.test.mjs`.
+- `infra/scripts/deploy.sh` knows the portal bucket. It deletes empty
+  orphaned `orgiq-social-*` tables (deletion protection off first) and lists
+  the ones holding data with both ways forward. It finishes secrets that are
+  scheduled for deletion.
+- `infra/scripts/destroy.sh` runs `cdk destroy` with the opt-in stacks'
+  flags. A bare `--all` never saw them, so it failed on the middleware's
+  in-use exports. It finishes the secrets it just scheduled. It sweeps
+  ElastiCache, the SFU instance and Elastic IP, CloudFront distributions,
+  social tables, the four RETAIN repos and stack-made secrets.
+  `PURGE_RETAINED=true` deletes the retained tables and repos.
+
+### Context flags
+
+| flag | stacks | effect |
+|---|---|---|
+| `deployPortal=true` | app, middleware, Social | Adds `OrgIQ-Portal` and the ALB side: origin secret, prefix-list group, listener lock, `TRUST_PROXY_HOPS=2`, and Social's header rules. Pass it on **every** later middleware and Social deploy. Without it the lock and the rules are removed, and CloudFront gets 403s. No export freezes either way. |
+| `portalPublicUrls=true` | middleware | Reads the public URLs from Portal's parameters. Use it only on a deploy **after** Portal has written them: the parameters are resolved at deploy time, so a missing one fails the deploy. |
+| `portalPublicUrl=https://<id>.cloudfront.net` | Authentication, AgentCoreRuntime | Adds the Cognito callback and sign-out URL, and sets the runtimes' `MIDDLEWARE_URL`. Copied from the `PortalUrl` output. |
+| `middlewareCallbackUrl` | AgentCoreRuntime | Overrides `MIDDLEWARE_URL`. |
+| `cloudFrontPrefixListId` | middleware | Skips the deploy-time lookup (`pl-3b927c52` in us-east-1, as remembered, not fetched). |
+| `portalAlbOriginHost` | Portal | Required with `certificateArn`. The ALB then answers HTTPS only, so CloudFront needs a host the certificate covers. |
+| `socialPortalOrigin` | SocialMedia | (existing) Sets `LVS_CORS_ORIGINS`. Pass `$PORTAL_URL`, or LVS stays wildcard. |
+
+### Runbook A: no domain (CloudFront)
+
+Every step needs the user's credentials. Run `aws-azure-login --mode gui` first.
+
+```bash
+aws sts get-caller-identity --query Account --output text      # must print 647757222309
+cd infra
+
+# 0. Probe (operator, AWS write): a throwaway SG with a rule from
+#    com.amazonaws.global.cloudfront.origin-facing; read IpPermissions after
+#    60 s. If custodian revokes it, stop: nothing below can reach the ALB.
+
+# 1. The fleet, then the agent images (no secret context yet; CLAUDE.md order).
+./scripts/deploy.sh
+../agents/base/build.sh && ../agents/build-all.sh
+./scripts/deploy.sh OrgIQ-AgentCoreRuntime --context deployRuntimes=true
+
+# 2. Middleware image (ARM64, locked libraries), then phase 2 with the
+#    CloudFront side, and the portal stack in the same call.
+node ../scripts/docker/middleware-image-build.mjs --dry-run
+node ../scripts/docker/middleware-image-build.mjs
+MW=(--context deployMiddlewareService=true --context deployPortal=true
+    --context albAllowCidr=$MY_IP/32)
+./scripts/deploy.sh OrgIQ-MiddlewareService OrgIQ-Portal -e "${MW[@]}"
+aws ecs describe-services --cluster orgiq-middleware --services orgiq-middleware \
+  --query 'services[0].[desiredCount,runningCount]'                 # 1 1
+PL=$(aws cloudformation describe-stacks --stack-name OrgIQ-MiddlewareService \
+  --query "Stacks[0].Outputs[?OutputKey=='CloudFrontPrefixListId'].OutputValue" --output text)
+aws ec2 describe-security-groups --filters Name=ip-permission.prefix-list-id,Values=$PL \
+  --query 'SecurityGroups[].GroupId'                                # non-empty, again after 60 s
+PORTAL_URL=$(aws cloudformation describe-stacks --stack-name OrgIQ-Portal \
+  --query "Stacks[0].Outputs[?OutputKey=='PortalUrl'].OutputValue" --output text)
+
+# 3. Publish the portal.
+node ../scripts/portal-publish.mjs --dry-run
+node ../scripts/portal-publish.mjs
+curl -s "$PORTAL_URL/health"                                        # the middleware, through CloudFront
+
+# 4. Cognito learns the HTTPS callback; then the middleware learns its URLs
+#    (SSO on, Secure cookie, origin allowlist).
+./scripts/deploy.sh OrgIQ-Authentication -e --context portalPublicUrl=$PORTAL_URL
+./scripts/deploy.sh OrgIQ-MiddlewareService -e "${MW[@]}" --context portalPublicUrls=true
+
+# 5. Close the callback guards, and give the fleet a reachable MIDDLEWARE_URL.
+for s in approvals-request harness-trace assessment-run-complete; do
+  aws secretsmanager get-secret-value --secret-id orgiq-$s-secret --query SecretString --output text; done
+./scripts/deploy.sh OrgIQ-AgentCoreRuntime --context deployRuntimes=true --context portalPublicUrl=$PORTAL_URL \
+  --context approvalsRequestSecret=… --context harnessTraceSecret=… --context assessmentRunCompleteSecret=…
+
+# 6. Social. Portal FIRST with the social flags, so its platform/SFU
+#    distributions and parameters exist before the middleware reads them.
+SOCIAL=(--context deploySocial=true --context deploySocialMedia=true
+        --context sfuImageDigest=$SFU_DIGEST --context sfuAllowCidr=$IP_A/32,$IP_B/32
+        --context socialPortalOrigin=$PORTAL_URL)
+./scripts/deploy.sh OrgIQ-SocialImages -e --context deploySocialImages=true
+node ../scripts/docker/social-images-build.mjs                      # §4; prints the digests
+./scripts/deploy.sh OrgIQ-Portal -e "${MW[@]}" "${SOCIAL[@]}"
+MW+=(--context portalPublicUrls=true)
+./scripts/deploy.sh OrgIQ-MiddlewareService OrgIQ-SocialMedia OrgIQ-Social -e "${MW[@]}" "${SOCIAL[@]}"
+SOCIAL+=(--context deploySocialService=true --context platformApiImageDigest=$PLATFORM_DIGEST)
+./scripts/deploy.sh OrgIQ-Social -e "${MW[@]}" "${SOCIAL[@]}"
+MW+=(--context realtimeGateway=true)
+./scripts/deploy.sh OrgIQ-MiddlewareService -e "${MW[@]}" "${SOCIAL[@]}"
+```
+
+From step 6 on, every middleware deploy carries `MW` and `SOCIAL`, as in
+§8. A participant's IP needs `sfuAllowCidr` for media and nothing else. The
+portal, the API and the SFU signalling now arrive through CloudFront, so
+`albAllowCidr` is only the operator's direct door.
+
+Check after step 6: the token response
+(`curl -b <cookie> $PORTAL_URL/api/session/realtime-token`) carries
+`gatewayUrl` = `wss://<portal id>.cloudfront.net` and the two other
+distributions' URLs.
+
+### Runbook B: with a domain
+
+Use §8's "Phase 1 deploy order" (certificate, host rules 30/40, explicit
+`realtime*Url` context), with two additions:
+- To host the portal anyway, add `--context deployPortal=true --context
+  portalAlbOriginHost=mw.$DOMAIN` (a name on the certificate that resolves to
+  the ALB). The portal is then at its `cloudfront.net` URL. A custom alias on
+  the distribution is **not built**: it would need a us-east-1 certificate on
+  the distribution and an alias record.
+- Pass `portalPublicUrl` to Authentication and AgentCoreRuntime as in A
+  steps 4 and 5. Use the HTTPS middleware host there if the portal is not
+  hosted.
+
+### What is still unverifiable until deployed
+
+1. **Custodian vs a prefix-list rule.** Nothing shows whether
+   `custodian-restrict-security-group-admin-ingress` revokes it. If it does,
+   CloudFront answers 504 and every stack reads healthy. Step 2 checks.
+2. **Custodian vs the OAC bucket policy.** CloudFront can read a private
+   bucket only through a bucket resource policy; there is no identity-based
+   form. The custodian has stripped a bucket policy here before. If it strips
+   this one, the portal answers 403 AccessDenied. `portal-publish.mjs` checks
+   it on every run, and `--repair-bucket-policy` puts it back. If it keeps
+   vanishing, the fallback is the middleware serving `portal/dist` itself,
+   which is not built (§10 "Deferred").
+3. **Dynamic references in two new places.** The origin secret is
+   `{{resolve:secretsmanager:orgiq-cloudfront-origin-secret:SecretString:::}}`
+   in CloudFront `OriginCustomHeaders` and in ALB `HttpHeaderConfig` values. I
+   believe CloudFormation resolves secretsmanager references in any resource
+   property, but I did not check it for these two.
+4. **The `Authorization` header to platform-api and the SFU.** These rely on
+   `AllViewerAndCloudFrontHeaders` plus `CachingDisabled` forwarding it on
+   GET. I believe all-viewer origin request policies do, but this is not
+   verified. If they don't, platform-api GETs answer 401 through CloudFront
+   only.
+5. **The scheme headers.** The fix assumes CloudFront sends
+   `CloudFront-Forwarded-Proto` under that policy. If the ALB passes
+   `https` through instead, nothing breaks.
+6. **WebSocket and SSE through CloudFront.** Upgrades are supported on any
+   behaviour, and `Sec-WebSocket-Protocol` is a viewer header, so it is
+   forwarded. SSE is cut after 60 s without a byte. The agent stream's
+   heartbeat is 25 s (realtime-modules `createAgentStream`), so the risk is
+   time-to-first-byte on a slow start, not the gaps.
+7. **AgentCore runtimes reaching CloudFront.** PUBLIC network mode should
+   have internet egress. (An earlier draft of this item said the approval
+   tool's poll of `GET /approvals/:id` was session-gated. That was stale: the
+   route takes `serviceAuthOr(APPROVALS_SERVICE_AUTH, …)` and
+   `approval_tool.py` sends `x-approvals-auth` on the poll whenever
+   `APPROVALS_REQUEST_SECRET` is set; both are tested.)
+8. **The middleware image build.** `middleware-image-build.mjs` has run only
+   as `--dry-run`. `prepare-libraries.mjs` needs the sibling checkouts to
+   hold the pinned commits, and the `production` stage has never been pushed
+   from here.
+9. Unchanged from §9: SFU media ingress (custodian vs UDP and high TCP),
+   TURN, recordings. platform-api's `GATEWAY_WS_URL` also has no middleware
+   address to point at, because the middleware has no Cloud Map name. That
+   is pre-existing and left alone.
+
+### Deferred to the owner
+
+- **The listener lock under `deployPortal`.** The ALB's default action
+  becomes a 403. That is the conservative choice: the prefix list admits
+  every CloudFront customer. The alternative, no lock, lets any distribution
+  reach the middleware past `albAllowCidr`.
+- **`TRUST_PROXY_HOPS=2`.** An allowlisted client that bypasses CloudFront
+  can choose its own rate-limit bucket. It is allowlisted anyway.
+- **Data deletion.** `deploy.sh` deletes only *empty* orphaned social tables.
+  `destroy.sh` deletes retained data only with `PURGE_RETAINED=true`.
+- **Grants the task role still lacks** (not on the chat path; not added
+  because each widens the role):
+  - Code Interpreter sessions (`Start`/`Invoke`/`Stop`/`ListCodeInterpreterSessions`).
+  - `ssm:GetParameter`/`PutParameter` on `/orgiq/canary/*` (judge config,
+    canary weights).
+  - `xray:GetTraceSummaries`/`BatchGetTraces`, `cloudwatch:GetMetricData`,
+    and `logs:CreateLogStream`/`PutLogEvents` (canary scores).
+  - Bedrock prompt writes (`CreatePrompt`, `UpdatePrompt`,
+    `CreatePromptVersion`, `OptimizePrompt`) and guardrail
+    `Get`/`List`/`Update`.
+  - The control-plane list calls (`ListBrowsers`, `ListBrowserProfiles`,
+    `ListCodeInterpreters`, `ListMemories`, credential providers).
+  - Env vars `.env.aws` sets but the task does not: `CODE_INTERPRETER_ID`,
+    `BROWSER_PROFILE_ID`, `WORKLOAD_IDENTITY_ARN`, `POLICY_ENGINE_ID`,
+    `GATEWAY_ID`/`GATEWAY_URL`, the evaluator ids, `CANARY_*`.
+- **A custom domain on the distributions**, and **the middleware serving the
+  portal** as a no-bucket fallback. Neither is built.
+
+## 11. Capacity: 100 simultaneous calls (2026-10-01)
+
+[The capacity review](realtime-capacity-100-calls-2026-10-01.md) found that
+the stack as coded could not reliably carry a handful of calls. The in-repo
+items of its "Ranked changes" are now CDK and code. Nothing was deployed.
+`cd infra && npm test` covers them (309 tests; `test/realtime-capacity.test.ts`).
+What changed, and what it means for a deploy:
+
+- **The SFU has a Redis by default (#1).** Without one, LVS gave every joiner
+  of a call a fresh session, so each person sat alone in their own call with
+  no error. Each SFU host now runs a loopback Redis, chosen over the
+  ElastiCache because nothing is shared through it (reasons in
+  `social-media-stack.ts`). `sfuRedisUrl` overrides it.
+- **Arming that Redis also arms LVS's stream quota.** That is a default of 50
+  publishers in the 'default' account, i.e. 25 two-person calls for the whole
+  SFU. So `MAX_CONCURRENT_STREAMS=1000` is now the default (`sfuMaxStreams`).
+  The review's "set it to 0 (unlimited)" is wrong: LVS reads `parseInt(v) || 50`,
+  so 0 means 50.
+- **These two default changes alter the SocialMedia template.** The instance
+  is replaced, because its user data changed.
+- **SFU image rolls no longer wedge.** OrgIQ-Social used to import the SFU
+  host's private IP and instance id through CDK hash exports. Every image roll
+  replaces the instance and renames those exports, which would have failed with
+  "Cannot delete export … in use". Social now reads
+  `/orgiq/social/sfu-{private-ip,instance-id}` by name instead.
+- **The gateway is one task (#2).** With `realtimeGateway=true` there is no
+  autoscaling, stop-before-start deploys (0/100), 1 vCPU / 2 GB and a 15 s
+  deregistration delay. `middlewareAutoscale=true` with the gateway is refused
+  at synth.
+  - **Every middleware deploy is a signalling blackout** of roughly a task
+    start plus 15 s.
+  - **Until upstream realtime-modules re-registers reconnected sockets (#4),
+    that blackout ends every 1:1 call 30 s later.** Deploy outside call hours.
+- **The gateway does not need its own service yet (#7).** One 1 vCPU task
+  carries about 1,000 sockets and about 100 frames/s with room to spare.
+  #7 removes REST's ceiling, not the gateway's, so it stays headroom.
+- **ElastiCache resilience.** `socialRedisReplicas` and `socialRedisNodeType`
+  add a replica, failover, Multi-AZ and a daily snapshot. `redis-lite` now has
+  a 2 s per-command deadline and a 5 s connect deadline
+  (`REDIS_COMMAND_TIMEOUT_MS`, `REDIS_CONNECT_TIMEOUT_MS`). A stalled Redis
+  used to hang every call frame forever.
+- **Load alarms (#9), `realtimeAlarms=true`.** These go to the SNS topic
+  `orgiq-realtime-alarms`; `alertEmail` subscribes.
+  - Middleware: ALB 5xx, p95 response time, rejected connections, active
+    connections (`alarmMaxConnections`, default 3000), task CPU and memory.
+  - Gateway: event-loop p99 above 100 ms, and "no load line for 5 minutes".
+    These come from a new once-a-minute `realtime-gateway-stats` log line
+    (sockets, active calls, event-loop delay) and metric filters.
+  - Social: Redis memory, evictions and CPU; platform-api CPU and memory;
+    DynamoDB throttles on the hot tables.
+  - SFU: CPU, NetworkOut (`alarmSfuNetworkOutMbps`), CPU credits (burstable
+    types only) and status checks.
+  - The SFU (and the TURN host) **always** get EC2 auto-recover on a failed
+    system status check. That keeps the same instance id, IP and EIP.
+- **platform-api** is sized by `platformApiCpu` and `platformApiMemoryMiB`.
+  Its three TTLs (`document-video-sessions`, `pipeline-runs`, `social-outbox`)
+  are now set by CDK; they used to fail silently at boot.
+
+### Media reachability: the custodian exception or TURN
+
+- **Exception:** the account owner exempts the SFU group, and
+  `sfuAllowCidr=0.0.0.0/0` (synth warns).
+- **TURN:** `deployTurn=true` adds coturn on its own `t4g.small` with an
+  Elastic IP.
+  - It listens on 3478 UDP/TCP and on 443/TCP, relays on 49152-49651 from the
+    SFU's EIP only, and denies private peers.
+  - The SFU gets `LVS_TURN_URL` and `LVS_TURN_STATIC_SECRET`; browsers get
+    credentials from `<videoUrl>/api/ice-servers`.
+  - `turnAllowCidr` gates who may use it. **This is the same custodian
+    question, moved to one port (443) on one group.**
+- **What 443 can and cannot pass:**
+  - Without a certificate, 443 carries **plain** TURN over TCP. That passes
+    port-filtering firewalls but not TLS-inspecting proxies.
+  - TURN over TLS (`turns:`) needs a DNS name pointing at the TURN EIP and a
+    certificate for it, supplied as `turnTlsDomain` + `turnTlsCertSecretName`
+    (a Secrets Manager JSON `{"cert","key"}`).
+  - Neither CloudFront (HTTP only) nor ACM (non-exportable keys) can supply
+    that in the no-domain path.
+- **Not available:** the client ignores `iceTransportPolicy`
+  (realtime-modules `fetchIceServers` returns `iceServers` only), so
+  "force relay" is not available from here.
+
+### The 100-call profile
+
+Pass these **in addition to** runbook A or B. They go on every deploy of the
+stacks named, because context is not sticky.
+
+```bash
+# case (a): 100 one-to-one calls (200 participants, ~400 SFU transports, ~130 Mbps egress)
+PROFILE_A=(--context realtimeGateway=true                      # middleware: 1 task, 1 vCPU / 2 GB
+  --context sfuInstanceType=c7g.2xlarge --context sfuWorkers=8
+  --context sfuAdmissionCapacity=200 --context alarmSfuNetworkOutMbps=300
+  --context socialRedisNodeType=cache.t4g.small --context socialRedisReplicas=1
+  --context platformApiCpu=1024 --context platformApiMemoryMiB=2048
+  --context realtimeAlarms=true --context alertEmail=$OPS_EMAIL)
+
+# case (b): 100 four-way calls (400 participants, ~1,600 transports, ~780 Mbps egress)
+PROFILE_B=(--context realtimeGateway=true
+  --context sfuInstanceType=c7g.4xlarge --context sfuWorkers=16
+  --context sfuMaxTransports=4000 --context sfuAdmissionCapacity=400
+  --context alarmSfuNetworkOutMbps=1000
+  --context socialRedisNodeType=cache.t4g.small --context socialRedisReplicas=1
+  --context platformApiCpu=1024 --context platformApiMemoryMiB=2048
+  --context realtimeAlarms=true --context alertEmail=$OPS_EMAIL)
+
+# plus media reachability, one of:
+REACH=(--context sfuAllowCidr=0.0.0.0/0)                                   # after a custodian exception
+REACH=(--context deployTurn=true --context turnAllowCidr=0.0.0.0/0)        # TURN (its own custodian question)
+```
+
+`MAX_CONCURRENT_STREAMS` is already 1000 by default and covers both cases.
+(a) needs about 400 transports, inside LVS's default 1000; (b) needs 1,600,
+hence `sfuMaxTransports=4000`. `test/realtime-capacity.test.ts` synthesizes
+case (b) and checks each value.
+
+**Upstream fixes integrated 2026-10-01:**
+
+- **LVS (#5): rooms spread across live workers** at
+  `1c26334bd7508fc5fc6afbb1319e6d2fd7a0aa45`, now pinned in `socialSources`.
+  A room stays on its assigned worker and WebRtcServer until its transports
+  close. Single-node deployments select `spread` automatically; clustered
+  mesh deployments retain `primary`. Worker death evicts only its rooms.
+  The caps now accept 0 / unlimited as uncapped; CDK keeps explicit bounds.
+- **realtime-modules (#4): calls survive socket reconnection** in v0.99.4,
+  `94bf705e9a4be312d1b54aac83b374b227a2ca4e`, installed in middleware and
+  portal. The authenticated former participant reclaims its live seat; the
+  peer stays in the call during the grace period. Retries have jitter.
+- **Payload cap (#10):** `/ws` limits frames to 256 KiB via `maxPayload`.
+  A larger frame closes the sender with 1009 before dispatch. Canvas traffic
+  uses the separate `/realtime` socket with the library's 16 MiB default.
+- **Still upstream:** simulcast (#11), conditional call-log writes (part of
+  #13), and per-socket frame rate limits. `dmLobbyName` separator validation
+  and forwarding `calls({ crossNodePubSub })` are included in v0.99.4.
+
+Both sibling changes are pushed; this repo's integration remains uncommitted.
+The sizing profiles still require an AWS media load test. Nothing was deployed.
+
+**Candidate sizing (2026-10-06, measurement only, not acceptance).** Local fixture
+BFFs at 2 and 4 CPUs (4,096 MiB), same 0.109 image and drivers, were measured
+against the 100-call / 1,000-connection profile
+(`realtime-validation/2026-10-06/capacity-sizing/manifest.json`). No size passed
+every target. At 4 CPUs the soak passes invite, accept and both health p99s
+(45.6/49.7 ms), but chat p95 is 802 ms (target 300) and burst chat p95 is 1,465 ms
+with health p99 82/137 ms. The 2 CPU shape is worse on the burst. BFF CPU peaked
+at about 100-130%, so more CPU is not the lever; the DynamoDB SDK socket limit (50,
+about 1,200 queued) is. `middlewareCpu=2048 / middlewareMemoryMiB=4096` is therefore
+not a passing size. The single-gateway safeguard stays; no cloud run was made.

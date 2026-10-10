@@ -17,10 +17,9 @@ import {
   Drawer,
   EmptyState,
   InlineAlert,
-  Stack,
+  Stack, T,
 } from '@connorhoehnslalom/ui-components/shared';
 import type { DataTableColumn } from '@connorhoehnslalom/ui-components/shared';
-import { T } from './Text';
 import {
   envelopeScopeLabel, envelopeWindowLabel, hasKnownBurn, remainingLabel, spentLabel, usd,
 } from '../../lib/envelopeFormat';
@@ -40,21 +39,21 @@ const COLUMNS: DataTableColumn<EnvelopeRow>[] = [
     render: (e) => <T className="whitespace-nowrap text-text-secondary">{envelopeWindowLabel(e)}</T>,
   },
   {
-    key: 'allocatedUsd', header: 'Granted', align: 'right', sortable: true,
+    key: 'allocatedUsd', header: 'Granted', numeric: true, sortable: true,
     render: (e) => <T className={NUM}>{usd(e.allocatedUsd)}</T>,
   },
   {
-    key: 'spentUsd', header: 'Spent by you', align: 'right', sortable: true,
+    key: 'spentUsd', header: 'Spent by you', numeric: true, sortable: true,
     render: (e) => (
       <T className={hasKnownBurn(e) ? NUM : `${NUM} text-text-tertiary`}>{spentLabel(e)}</T>
     ),
   },
   {
-    key: 'remainingUsd', header: 'Left', align: 'right', sortable: true,
+    key: 'remainingUsd', header: 'Left', numeric: true, sortable: true,
     render: (e) => {
       if (!hasKnownBurn(e)) return <T className={`${NUM} text-text-tertiary`}>{remainingLabel(e)}</T>;
       return (
-        <T className={e.remainingUsd! <= 0 ? `${NUM} text-danger` : `${NUM} font-semibold`}>
+        <T weight="semibold" className={e.remainingUsd! <= 0 ? `${NUM} text-danger` : `${NUM} `}>
           {remainingLabel(e)}
         </T>
       );
@@ -123,6 +122,7 @@ export function EnvelopeDrawer({ open, onClose, data }: {
             data={rows}
             columns={COLUMNS}
             keyField={(e) => e.grantId}
+            size="sm"
             pageSize={25}
             emptyMessage="No active sprint envelope"
           />

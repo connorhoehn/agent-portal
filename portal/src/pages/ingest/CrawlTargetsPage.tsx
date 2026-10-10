@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import {
   Button, Card, CardHeader, Chip, ConfirmDialog, EmptyState, Inline, InlineAlert, LoadingState,
-  PageSection, Stack,
+  PageSection, Stack, T,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { sendJson, writeJson } from '../../lib/writeJson';
@@ -16,7 +16,6 @@ import { RunDetailDrawer } from '../../components/ingest/RunDetailDrawer';
 import { NewTargetModal } from '../../components/ingest/NewTargetModal';
 import type { TargetDraft } from '../../components/ingest/NewTargetModal';
 import { StatusDot } from '../../components/ingest/ui';
-import { T } from './Text';
 
 function CrawlTargetsPage() {
   // Target CRUD, runs and cancels all ride /api/ingest (ManageIngest).

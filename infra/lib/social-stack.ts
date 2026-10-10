@@ -1,4 +1,5 @@
 import * as cdk from 'aws-cdk-lib';
+import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import * as ecs from 'aws-cdk-lib/aws-ecs';
 import * as ecr from 'aws-cdk-lib/aws-ecr';
@@ -13,7 +14,11 @@ import * as ssm from 'aws-cdk-lib/aws-ssm';
 import * as discovery from 'aws-cdk-lib/aws-servicediscovery';
 import type { Construct } from 'constructs';
 import { socialRepoName } from './social-images-stack';
-import { SFU_PORTS, sfuSecretNames } from './social-media-stack';
+import { SFU_PORTS, sfuParameterNames, sfuSecretNames } from './social-media-stack';
+import {
+  CLOUDFRONT_RULE_PRIORITY, ORIGIN_ROUTE_HEADER, ORIGIN_ROUTES, ORIGIN_VERIFY_HEADER, originVerifyValue,
+} from './portal-stack';
+import { realtimeAlarm, realtimeAlarmsEnabled, realtimeAlarmTopic } from './realtime-alarms';
 
 // ── Tables ──────────────────────────────────────────────────────────────────
 //
@@ -46,7 +51,7 @@ const N = (name: string): Key => ({ name, type: 'N' });
 
 export const SOCIAL_TABLES: readonly TableSpec[] = [
   // video sessions + calls
-  { name: 'document-video-sessions', hash: S('documentId'), range: S('sessionId') },
+  { name: 'document-video-sessions', hash: S('documentId'), range: S('sessionId'), ttl: 'ttl' },
   {
     name: 'call-session-bindings', hash: S('callId'), range: S('sessionId'),
     gsi: [{ name: 'sessionId-index', hash: S('sessionId') }, { name: 'lobbyName-index', hash: S('lobbyName') }],
@@ -86,14 +91,18 @@ export const SOCIAL_TABLES: readonly TableSpec[] = [
   { name: 'video-recording-share-links', hash: S('shareToken'), ttl: 'ttl' },
   // touched at boot (dynamo-setup.ts checks TTL on each)
   {
-    name: 'social-outbox', hash: S('outboxId'),
+    // TTL on social-outbox, document-video-sessions and pipeline-runs: the
+    // attribute platform-api's dynamo-setup.ts enables at boot — which it
+    // cannot here (no UpdateTimeToLive on its role), so ended sessions never
+    // expired (capacity review §4). CDK owns the setting instead.
+    name: 'social-outbox', hash: S('outboxId'), ttl: 'ttl',
     gsi: [
       { name: 'status-index', hash: S('status'), range: S('createdAt') },
       { name: 'pending-index', hash: S('pendingShard'), range: S('outboxId') },
     ],
   },
   {
-    name: 'pipeline-runs', hash: S('pipelineId'), range: S('runId'),
+    name: 'pipeline-runs', hash: S('pipelineId'), range: S('runId'), ttl: 'ttl',
     gsi: [{ name: 'status-startedAt-index', hash: S('status'), range: S('startedAt') }, { name: 'runId-index', hash: S('runId') }],
   },
   {
@@ -112,6 +121,8 @@ export const SOCIAL_TABLES: readonly TableSpec[] = [
   { name: 'chat-conversations', hash: S('userId'), range: S('channel'), gsi: [{ name: 'channel-index', hash: S('channel') }] },
   { name: 'chat-reactions', hash: S('channelId'), range: S('reactionKey') },
   { name: 'chat-pins', hash: S('channelId'), range: S('messageId') },
+  // Work-sharing grants (middleware/src/lib/work-graph/sharing.ts): PK `<org>#<owner>`, SK grantId, TTL past expiry.
+  { name: 'work-sharing', hash: S('ownerKey'), range: S('grantId'), ttl: 'ttl' },
   { name: 'crdt-snapshots', hash: S('documentId'), range: N('timestamp') },
   // platform-api run-time tables — in no schema manifest
   { name: 'call-log', hash: S('userId'), range: S('callId') },
@@ -133,12 +144,12 @@ export function socialTablePrefix(prefix: string, suffix?: string): string {
 }
 
 /**
- * The four tables the middleware's own gateway persists social chat in —
+ * The tables the middleware's own gateway persists social chat and pins in —
  * realtime-modules' `DEFAULT_DYNAMO_CHAT_TABLES` (`DynamoChatStore`, read by
  * middleware/src/lib/social-chat.ts under `SOCIAL_CHAT_STORE=dynamo`). The
  * middleware task role is granted exactly these, not the whole namespace.
  */
-export const MIDDLEWARE_CHAT_TABLES = ['chat-messages', 'chat-conversations', 'chat-members', 'chat-reads'] as const;
+export const MIDDLEWARE_CHAT_TABLES = ['chat-messages', 'chat-conversations', 'chat-members', 'chat-reads', 'chat-pins', 'work-sharing'] as const;
 
 /**
  * SSM parameter OrgIQ-Social writes the Redis URL to, and the middleware task
@@ -146,6 +157,11 @@ export const MIDDLEWARE_CHAT_TABLES = ['chat-messages', 'chat-conversations', 'c
  */
 export function socialRedisUrlParameterName(prefix: string): string {
   return `/${prefix}/social/redis-url`;
+}
+
+/** Private Cloud Map endpoint shared by the Social service and its BFF. */
+export function socialPlatformInternalUrl(prefix: string): string {
+  return `http://social-platform.${prefix}-social.local:3001`;
 }
 
 const attr = (k: Key): dynamodb.Attribute => ({
@@ -171,7 +187,9 @@ export interface SocialStackProps extends cdk.StackProps {
   readonly cognitoClientId?: string;
   /** From OrgIQ-SocialMedia, when it is part of the app. */
   readonly sfu?: {
+    /** Unused since 2026-10-01 — read from SSM by name (sfuParameterNames); kept so callers need not change. */
     readonly privateIp: string;
+    /** Unused since 2026-10-01 — read from SSM by name (sfuParameterNames). */
     readonly instanceId: string;
     readonly securityGroupId: string;
   };
@@ -194,6 +212,9 @@ export interface SocialStackProps extends cdk.StackProps {
  *   socialGatewayWsUrl          GATEWAY_WS_URL for platform-api (the middleware's socket)
  *   tableSuffix                 namespace suffix so a redeploy after teardown can dodge
  *                               the RETAINed tables ("already exists")
+ *   deployPortal=true           the no-domain path: OrgIQ-Portal's platform-api and SFU
+ *                               distributions reach these targets through header rules
+ *                               (priorities 31 and 41) instead of host rules
  *
  * Two phases, the middleware pattern: phase 1 lands the tables, Redis, the
  * secrets and a platform-api service at desiredCount 0; after the image is
@@ -264,21 +285,35 @@ export class SocialStack extends cdk.Stack {
       description: 'orgiq social Redis: the middleware VPC private subnets',
       subnetIds: props.vpc.selectSubnets({ subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS }).subnetIds,
     });
+    // Default: one cache.t4g.micro node, the dev phase of the deploy plan. A
+    // node restart or AZ event loses every ringing call and every unread
+    // notification, so the 100-call profile (deploy plan §11) asks for
+    // `socialRedisReplicas=1`: a replica in another AZ, automatic failover
+    // (the primary endpoint flips; redis-lite reconnects on the next command
+    // and its 2 s command deadline bounds the stall) and a daily snapshot.
+    // `socialRedisNodeType` sizes the node.
+    const redisNodeType = ctx('socialRedisNodeType') ?? 'cache.t4g.micro';
+    if (!/^cache\.[a-z0-9]+\.[a-z0-9]+$/.test(redisNodeType)) throw new Error(`socialRedisNodeType must look like cache.t4g.small, got ${redisNodeType}`);
+    const replicasRaw = ctx('socialRedisReplicas');
+    const redisReplicas = replicasRaw === undefined ? 0 : Number(replicasRaw);
+    if (!Number.isInteger(redisReplicas) || redisReplicas < 0 || redisReplicas > 5) {
+      throw new Error(`socialRedisReplicas must be 0-5, got ${String(replicasRaw)}`);
+    }
+    const resilient = redisReplicas > 0;
     const redis = new elasticache.CfnReplicationGroup(this, 'SocialRedis', {
       replicationGroupId: `${prefix}-social-redis`,
       replicationGroupDescription: 'orgiq social: realtime call state + notification inbox',
       engine: 'redis',
       engineVersion: '7.1',
-      cacheNodeType: 'cache.t4g.micro',
-      // One node, no replica, no failover: the dev phase of the deploy plan.
-      numCacheClusters: 1,
-      automaticFailoverEnabled: false,
-      multiAzEnabled: false,
+      cacheNodeType: redisNodeType,
+      numCacheClusters: 1 + redisReplicas,
+      automaticFailoverEnabled: resilient,
+      multiAzEnabled: resilient,
       port: 6379,
       // Neither client speaks TLS (see the class comment); at rest is free.
       transitEncryptionEnabled: false,
       atRestEncryptionEnabled: true,
-      snapshotRetentionLimit: 0,
+      snapshotRetentionLimit: resilient ? 1 : 0,
       cacheSubnetGroupName: redisSubnets.cacheSubnetGroupName!,
       securityGroupIds: [redisSg.securityGroupId],
     });
@@ -399,10 +434,20 @@ export class SocialStack extends cdk.Stack {
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
 
+    // 0.5 vCPU / 1 GB by default; the 100-call profile gives it a whole core
+    // (`platformApiCpu=1024 platformApiMemoryMiB=2048`, capacity review #12).
+    // Still one task: ownership fencing across replicas is not established.
+    const intCtx = (k: string, fallback: number): number => {
+      const raw = ctx(k);
+      if (raw === undefined || raw === '') return fallback;
+      const n = Number(raw);
+      if (!Number.isInteger(n) || n <= 0) throw new Error(`${k} must be a positive integer, got ${raw}`);
+      return n;
+    };
     const taskDefinition = new ecs.FargateTaskDefinition(this, 'PlatformApiTaskDef', {
       family: `${prefix}-social-platform-api`,
-      cpu: 512,
-      memoryLimitMiB: 1024,
+      cpu: intCtx('platformApiCpu', 512),
+      memoryLimitMiB: intCtx('platformApiMemoryMiB', 1024),
       // ARM64: the image is built on Apple Silicon (the middleware's
       // `exec format error` gotcha).
       runtimePlatform: {
@@ -415,10 +460,22 @@ export class SocialStack extends cdk.Stack {
 
     const platformHost = ctx('socialPlatformHost');
     const sfuHost = ctx('socialSfuHost');
-    const videoApiUrl = props.sfu ? `http://${props.sfu.privateIp}:${SFU_PORTS.api}` : ctx('videoApiUrl');
+    // The SFU host's private IP and instance id by NAME (OrgIQ-SocialMedia's
+    // SSM parameters, resolved at deploy time), not via props.sfu's imports:
+    // the host is replaced on every image roll, and an import would pin the
+    // old instance's export (see sfuParameterNames).
+    const sfuParams = sfuParameterNames(prefix);
+    const sfuPrivateIp = props.sfu ? ssm.StringParameter.valueForStringParameter(this, sfuParams.privateIp) : undefined;
+    const sfuInstanceId = props.sfu ? ssm.StringParameter.valueForStringParameter(this, sfuParams.instanceId) : undefined;
+    const videoApiUrl = sfuPrivateIp ? `http://${sfuPrivateIp}:${SFU_PORTS.api}` : ctx('videoApiUrl');
     const videoPublicUrl = ctx('videoPublicUrl') ?? (sfuHost ? `https://${sfuHost}` : undefined);
     const gatewayWsUrl = ctx('socialGatewayWsUrl');
-    const platformInternal = `http://social-platform.${prefix}-social.local:3001`;
+    const platformInternal = socialPlatformInternalUrl(prefix);
+    // Per-resource lobby admission (platform-api docs/lobby-authority.md):
+    // opt-in, and only AFTER the middleware carrying POST
+    // /api/realtime/lobby-access is deployed — the reverse order refuses
+    // every OrgIQ call lobby (docs/social-calls-plan.md, "Lobby admission").
+    const lobbyAuthorityUrl = ctx('lobbyAuthorityUrl');
 
     const environment: Record<string, string> = {
       NODE_ENV: 'production',
@@ -439,6 +496,7 @@ export class SocialStack extends cdk.Stack {
       ...(videoApiUrl && { VIDEO_API_URL: videoApiUrl }),
       ...(videoPublicUrl && { VIDEO_PUBLIC_URL: videoPublicUrl }),
       ...(gatewayWsUrl && { GATEWAY_WS_URL: gatewayWsUrl }),
+      ...(lobbyAuthorityUrl && { LOBBY_AUTHORITY_URL: lobbyAuthorityUrl, LOBBY_AUTHORITY_REQUIRED: 'true' }),
     };
     if (!videoApiUrl) {
       cdk.Annotations.of(this).addWarning(
@@ -518,7 +576,24 @@ export class SocialStack extends cdk.Stack {
     // collides with the middleware. Priorities 10 and 20 belong to the
     // document workspace. One listener, one certificate (SAN or wildcard),
     // one albAllowCidr allowlist.
-    if (platformHost) {
+    //
+    // Without a domain (`deployPortal=true`) the same target groups are also
+    // reached through OrgIQ-Portal's CloudFront distributions: each sends the
+    // origin-verify secret plus a route header naming its target, and a rule
+    // here matches both (lib/portal-stack.ts for why headers, not hosts).
+    const viaCloudFront = flag('deployPortal');
+    const cloudFrontRule = (id: string, priority: number, route: string, tg: elbv2.IApplicationTargetGroup) => {
+      new elbv2.ApplicationListenerRule(this, id, {
+        listener,
+        priority,
+        conditions: [
+          elbv2.ListenerCondition.httpHeader(ORIGIN_VERIFY_HEADER, [originVerifyValue(prefix)]),
+          elbv2.ListenerCondition.httpHeader(ORIGIN_ROUTE_HEADER, [route]),
+        ],
+        targetGroups: [tg],
+      });
+    };
+    if (platformHost || viaCloudFront) {
       const tg = new elbv2.ApplicationTargetGroup(this, 'PlatformApiTargetGroup', {
         vpc: props.vpc,
         port: 3001,
@@ -528,17 +603,23 @@ export class SocialStack extends cdk.Stack {
         deregistrationDelay: cdk.Duration.seconds(30),
         healthCheck: { path: '/health', healthyHttpCodes: '200', interval: cdk.Duration.seconds(30) },
       });
-      new elbv2.ApplicationListenerRule(this, 'PlatformApiHostRule', {
-        listener,
-        priority: 30,
-        conditions: [elbv2.ListenerCondition.hostHeaders([platformHost])],
-        targetGroups: [tg],
-      });
+      if (platformHost) {
+        new elbv2.ApplicationListenerRule(this, 'PlatformApiHostRule', {
+          listener,
+          priority: 30,
+          conditions: [elbv2.ListenerCondition.hostHeaders([platformHost])],
+          targetGroups: [tg],
+        });
+      }
+      if (viaCloudFront) {
+        cloudFrontRule('PlatformApiCloudFrontRule', CLOUDFRONT_RULE_PRIORITY.platformApi, ORIGIN_ROUTES.platformApi, tg);
+      }
       this.platformService.attachToApplicationTargetGroup(tg);
     } else {
       cdk.Annotations.of(this).addWarning(
-        'No socialPlatformHost — platform-api has no listener rule, so browsers cannot reach it. '
-        + 'Deploy with --context socialPlatformHost=platform.<domain> once DNS/TLS exist.',
+        'No socialPlatformHost and no deployPortal — platform-api has no listener rule, so browsers cannot reach it. '
+        + 'Deploy with --context socialPlatformHost=platform.<domain> once DNS/TLS exist, or with '
+        + '--context deployPortal=true for the CloudFront path.',
       );
     }
 
@@ -549,7 +630,7 @@ export class SocialStack extends cdk.Stack {
       // The SFU's recording webhook back to platform-api.
       platformSg.addIngressRule(ec2.Peer.securityGroupId(props.sfu.securityGroupId), ec2.Port.tcp(3001), 'SFU webhook');
 
-      if (sfuHost) {
+      if (sfuHost || viaCloudFront) {
         // Browsers reach the SFU's HTTP API over HTTPS through the shared ALB
         // (an https:// portal cannot call http:// — mixed content).
         const sfuTg = new elbv2.ApplicationTargetGroup(this, 'SfuTargetGroup', {
@@ -558,19 +639,64 @@ export class SocialStack extends cdk.Stack {
           protocol: elbv2.ApplicationProtocol.HTTP,
           protocolVersion: elbv2.ApplicationProtocolVersion.HTTP1,
           targetType: elbv2.TargetType.INSTANCE,
-          targets: [new elbv2Targets.InstanceIdTarget(props.sfu.instanceId, SFU_PORTS.api)],
+          targets: [new elbv2Targets.InstanceIdTarget(sfuInstanceId!, SFU_PORTS.api)],
           deregistrationDelay: cdk.Duration.seconds(30),
           healthCheck: { path: '/api/health', healthyHttpCodes: '200', interval: cdk.Duration.seconds(30) },
         });
-        new elbv2.ApplicationListenerRule(this, 'SfuHostRule', {
-          listener,
-          priority: 40,
-          conditions: [elbv2.ListenerCondition.hostHeaders([sfuHost])],
-          targetGroups: [sfuTg],
-        });
+        if (sfuHost) {
+          new elbv2.ApplicationListenerRule(this, 'SfuHostRule', {
+            listener,
+            priority: 40,
+            conditions: [elbv2.ListenerCondition.hostHeaders([sfuHost])],
+            targetGroups: [sfuTg],
+          });
+        }
+        if (viaCloudFront) {
+          cloudFrontRule('SfuCloudFrontRule', CLOUDFRONT_RULE_PRIORITY.sfu, ORIGIN_ROUTES.sfu, sfuTg);
+        }
         sfuSg.addIngressRule(ec2.Peer.securityGroupId(props.loadBalancerSecurityGroupId), ec2.Port.tcp(SFU_PORTS.api), 'ALB → SFU API');
         albSg.addEgressRule(ec2.Peer.securityGroupId(props.sfu.securityGroupId), ec2.Port.tcp(SFU_PORTS.api), 'ALB → SFU API');
       }
+    }
+
+    // ── Load alarms (realtimeAlarms=true; lib/realtime-alarms.ts) ─────────
+    if (realtimeAlarmsEnabled(this)) {
+      const topic = realtimeAlarmTopic(this, prefix);
+      const alarm = (spec: Parameters<typeof realtimeAlarm>[3]) => realtimeAlarm(this, prefix, topic, spec);
+      const one = cdk.Duration.minutes(1);
+      const cacheMetric = (metricName: string, statistic: string) => new cloudwatch.Metric({
+        namespace: 'AWS/ElastiCache', metricName, statistic, period: one,
+        // The primary is node 001 of the replication group.
+        dimensionsMap: { CacheClusterId: `${prefix}-social-redis-001` },
+      });
+      alarm({ id: 'social-redis-memory', threshold: 80, metric: cacheMetric('DatabaseMemoryUsagePercentage', 'Maximum'),
+        description: 'Social Redis memory above 80% — call state and inboxes are next to be refused.' });
+      alarm({ id: 'social-redis-evictions', threshold: 0, evaluationPeriods: 1, metric: cacheMetric('Evictions', 'Sum'),
+        description: 'Social Redis evicted keys — ringing calls or unread notifications were dropped.' });
+      alarm({ id: 'social-redis-cpu', threshold: 80, metric: cacheMetric('EngineCPUUtilization', 'Maximum'),
+        description: 'Social Redis engine CPU above 80% for 3 minutes.' });
+      alarm({ id: 'social-platform-api-cpu', threshold: 80, metric: this.platformService.metricCpuUtilization({ period: one }),
+        description: 'platform-api CPU above 80% for 3 minutes (one task by design).' });
+      alarm({ id: 'social-platform-api-memory', threshold: 85, metric: this.platformService.metricMemoryUtilization({ period: one }),
+        description: 'platform-api memory above 85% for 3 minutes.' });
+      // DynamoDB throttles on the hot tables, as one math alarm (a math
+      // expression takes at most 10 metrics: 5 tables × read/write).
+      const hot = ['chat-messages', 'chat-members', 'chat-conversations', 'document-video-sessions', 'call-log'];
+      const usingMetrics: Record<string, cloudwatch.IMetric> = {};
+      hot.forEach((t, i) => {
+        for (const [k, name] of [['r', 'ReadThrottleEvents'], ['w', 'WriteThrottleEvents']] as const) {
+          usingMetrics[`${k}${i}`] = new cloudwatch.Metric({
+            namespace: 'AWS/DynamoDB', metricName: name, statistic: 'Sum', period: one,
+            dimensionsMap: { TableName: `${this.tablePrefix}${t}` },
+          });
+        }
+      });
+      alarm({ id: 'social-dynamodb-throttles', threshold: 0, evaluationPeriods: 1,
+        metric: new cloudwatch.MathExpression({
+          expression: Object.keys(usingMetrics).map((k) => `FILL(${k}, 0)`).join(' + '),
+          usingMetrics, period: one, label: 'throttle events (hot social tables)',
+        }),
+        description: `DynamoDB throttled the hot social tables (${hot.join(', ')}).` });
     }
 
     // ── Outputs ────────────────────────────────────────────────────────────

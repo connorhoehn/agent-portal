@@ -1,0 +1,148 @@
+{
+ "measured": {
+  "sourceDigest": "95f885bbdd1322e19464db981b137478d9f6d4c0e9f92aae2fbc3bd85dc9efbf",
+  "at": "2026-10-08T12:17:03.056Z"
+ },
+ "routes": {
+  "/assessment/workspace": {
+   "value": {
+    "verdict": "MATCH",
+    "problems": []
+   },
+   "changedAt": "2026-10-08T09:08:08.563Z"
+  },
+  "/iq/communication/calls": {
+   "value": {
+    "verdict": "MATCH",
+    "problems": []
+   },
+   "changedAt": "2026-10-08T09:08:08.563Z"
+  },
+  "/iq/communication/rooms": {
+   "value": {
+    "verdict": "MATCH",
+    "problems": []
+   },
+   "changedAt": "2026-10-08T09:08:08.563Z"
+  },
+  "/iq/communication/teams": {
+   "value": {
+    "verdict": "MATCH",
+    "problems": []
+   },
+   "changedAt": "2026-10-08T09:08:08.563Z"
+  },
+  "/iq/designs/:id": {
+   "value": {
+    "verdict": "MATCH",
+    "problems": []
+   },
+   "changedAt": "2026-10-08T09:22:10.011Z"
+  },
+  "/iq/distillation/activity?view=runs": {
+   "value": {
+    "verdict": "MATCH",
+    "problems": []
+   },
+   "changedAt": "2026-10-08T09:08:08.563Z"
+  },
+  "/iq/distillation/knowledge?item=art-001": {
+   "value": {
+    "verdict": "MATCH",
+    "problems": []
+   },
+   "changedAt": "2026-10-08T09:08:08.563Z"
+  },
+  "/iq/distillation/knowledge?view=guides": {
+   "value": {
+    "verdict": "MATCH",
+    "problems": []
+   },
+   "changedAt": "2026-10-08T09:08:08.563Z"
+  },
+  "/iq/distillation/knowledge?view=notes": {
+   "value": {
+    "verdict": "MATCH",
+    "problems": []
+   },
+   "changedAt": "2026-10-08T09:08:08.563Z"
+  },
+  "/iq/distillation/knowledge?view=patterns": {
+   "value": {
+    "verdict": "MATCH",
+    "problems": []
+   },
+   "changedAt": "2026-10-08T09:08:08.563Z"
+  },
+  "/iq/distillation/review?sample=rev-027&panel=sources&sourceView=graph": {
+   "value": {
+    "verdict": "MATCH",
+    "problems": []
+   },
+   "changedAt": "2026-10-08T09:08:08.563Z"
+  },
+  "/iq/distillation/review?tab=decided": {
+   "value": {
+    "verdict": "MATCH",
+    "problems": []
+   },
+   "changedAt": "2026-10-08T09:08:08.563Z"
+  },
+  "/iq/distillation/review?view=promotions": {
+   "value": {
+    "verdict": "MATCH",
+    "problems": []
+   },
+   "changedAt": "2026-10-08T09:08:08.563Z"
+  },
+  "/iq/library/:assetId": {
+   "value": {
+    "verdict": "MATCH",
+    "problems": []
+   },
+   "changedAt": "2026-10-08T09:22:10.011Z"
+  },
+  "/social/calls": {
+   "value": {
+    "verdict": "MATCH",
+    "problems": []
+   },
+   "changedAt": "2026-10-08T09:08:08.563Z"
+  },
+  "/social/channels": {
+   "value": {
+    "verdict": "MATCH",
+    "problems": []
+   },
+   "changedAt": "2026-10-08T09:08:08.563Z"
+  },
+  "/social/dms": {
+   "value": {
+    "verdict": "MATCH",
+    "problems": []
+   },
+   "changedAt": "2026-10-08T09:08:08.563Z"
+  },
+  "/social/recordings": {
+   "value": {
+    "verdict": "MATCH",
+    "problems": []
+   },
+   "changedAt": "2026-10-08T09:08:08.563Z"
+  },
+  "/social/rooms": {
+   "value": {
+    "verdict": "MATCH",
+    "problems": []
+   },
+   "changedAt": "2026-10-08T09:08:08.563Z"
+  },
+  "/social/teams": {
+   "value": {
+    "verdict": "MATCH",
+    "problems": []
+   },
+   "changedAt": "2026-10-08T09:08:08.563Z"
+  }
+ }
+}

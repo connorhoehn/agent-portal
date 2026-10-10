@@ -26,6 +26,7 @@ import {
   openConsult, getConsult, listConsults, answerConsult,
 } from '../providers/lab.js';
 import { requireServiceAuth, LAB_CALLBACK_SERVICE_AUTH } from '../lib/service-auth.js';
+import { notifyPipelinesWorkGraphChanged } from '../lib/work-graph/live.js';
 
 export const labRouter = Router();
 
@@ -125,6 +126,8 @@ labRouter.post('/consults', callbackLimit, requireLabAuth, asyncHandler(async (r
     ...(str(body['repo']) !== undefined ? { repo: str(body['repo'])! } : {}),
     ...(str(body['initiativeId']) !== undefined ? { initiativeId: str(body['initiativeId'])! } : {}),
   });
+  // A pending consult is an approval waiting on a person (pipelines activity graph, content-free hint).
+  void notifyPipelinesWorkGraphChanged(null, 'approval');
   res.status(201).json({ consult });
 }));
 
@@ -163,5 +166,6 @@ labRouter.post('/consults/:id/answer', requireAction('DispatchAgentRun'), asyncH
   const who = req.session?.sub ?? 'unknown';
   const consult = await answerConsult(String(req.params['id']), answer, who);
   if (!consult) { res.status(409).json({ error: 'consult is not pending (answered, expired, or unknown)' }); return; }
+  void notifyPipelinesWorkGraphChanged(null, 'approval');
   res.json({ consult });
 }));

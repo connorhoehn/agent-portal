@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router';
-import { SubNavLayout, type SubNavItem, activeNavItemClassName, inactiveNavItemClassName } from '@connorhoehnslalom/ui-components/shared';
+import { type SubNavItem, activeNavItemClassName, inactiveNavItemClassName } from '@connorhoehnslalom/ui-components/shared';
+import { BuildSectionLayout } from '../../components/shell/BuildSectionLayout';
 import { useFetch } from '../../hooks/useFetch';
 import { ObservabilityHelpButton } from './ObservabilityHelp';
 
@@ -58,17 +59,17 @@ function ObservabilityLayout() {
     // "Overview", not "Health". The section itself is Health, and naming its
     // first page the same thing printed the word three times down one rail —
     // once as the parent nav item, once as the group heading, once as the row.
-    { group: 'Health', path: 'summary',     label: 'Overview', hint: 'Errors, alarms, quality, drift' },
-    { group: 'Health', path: 'oncall',      label: 'On-Call',  hint: 'Live alarms + incident timeline' },
-    { group: 'Runs',   path: 'invocations', label: 'Runs',     hint: 'Every agent call, newest first',
+    { group: 'Health', path: 'summary',     label: 'Overview' },
+    { group: 'Health', path: 'oncall',      label: 'On-Call' },
+    { group: 'Runs',   path: 'invocations', label: 'Runs',
       ...(invocationCount ? { count: invocationCount } : {}) },
-    { group: 'Cost',   path: 'cost',        label: 'Cost',     hint: 'Spend, traffic, per-agent burn' },
+    { group: 'Cost',   path: 'cost',        label: 'Cost' },
   ];
 
   // Drill-ins, grouped under the question they answer.
   const drillIns: SubNavItem[] = [
-    { group: 'Health', path: 'quality',         label: 'Quality',         hint: 'Judge scores + feedback' },
-    { group: 'Health', path: 'drift',           label: 'Drift',           hint: 'Schema + judge + embedding' },
+    { group: 'Health', path: 'quality',         label: 'Quality' },
+    { group: 'Health', path: 'drift',           label: 'Drift' },
 
     // Safety is its own question, not a kind of health. A queue of decisions
     // waiting on a person, a log of who was refused, and what the guardrails
@@ -76,21 +77,21 @@ function ObservabilityLayout() {
     // be perfectly healthy and still be handing someone data they should not
     // have. Filing them under Health produced "Operate › Health › Approval
     // Queue", which reads as a claim that an approval is a health metric.
-    { group: 'Safety', path: 'guardrail-rules', label: 'Guardrails',     hint: 'What was blocked, and who tripped it' },
-    { group: 'Safety', path: 'approvals',       label: 'Approvals',      hint: 'Decisions waiting on a person' },
-    { group: 'Safety', path: 'authz',           label: 'Access log',     hint: 'Who was allowed, who was refused' },
+    { group: 'Safety', path: 'guardrail-rules', label: 'Guardrails' },
+    { group: 'Safety', path: 'approvals',       label: 'Approvals' },
+    { group: 'Safety', path: 'authz',           label: 'Access log' },
 
-    { group: 'Runs', path: 'invocations/search', label: 'Search',            hint: 'Filter by prompt / agent / score' },
-    { group: 'Runs', path: 'tools',              label: 'Tool Calls',        hint: 'Per-tool latency + failures' },
-    { group: 'Runs', path: 'sessions',           label: 'Sessions',          hint: 'Chat thread replay' },
-    { group: 'Runs', path: 'capability-events',  label: 'Capability Events', hint: 'Browser + code interpreter' },
-    { group: 'Runs', path: 'memory',             label: 'Memory',            hint: 'Memory ops + cold sessions' },
-    { group: 'Runs', path: 'harness',            label: 'Harness',           hint: 'Replay test set + view runs' },
-    { group: 'Runs', path: 'calibration',        label: 'Calibration',       hint: 'Judge vs human MAE' },
-    { group: 'Runs', path: 'model-compare',      label: 'Model Compare',     hint: 'Side-by-side run delta' },
+    { group: 'Runs', path: 'invocations/search', label: 'Search' },
+    { group: 'Runs', path: 'tools',              label: 'Tool Calls' },
+    { group: 'Runs', path: 'sessions',           label: 'Sessions' },
+    { group: 'Runs', path: 'capability-events',  label: 'Capability Events' },
+    { group: 'Runs', path: 'memory',             label: 'Memory' },
+    { group: 'Runs', path: 'harness',            label: 'Harness' },
+    { group: 'Runs', path: 'calibration',        label: 'Calibration' },
+    { group: 'Runs', path: 'model-compare',      label: 'Model Compare' },
 
-    { group: 'Cost', path: 'traffic', label: 'Traffic',       hint: 'RPS + heatmap + top users' },
-    { group: 'Cost', path: 'agents',  label: 'Agent Metrics', hint: 'Per-agent CloudWatch stats' },
+    { group: 'Cost', path: 'traffic', label: 'Traffic' },
+    { group: 'Cost', path: 'agents',  label: 'Agent Metrics' },
   ];
 
   // Interleave so each drill-in sits under its own question rather than in a
@@ -121,7 +122,7 @@ function ObservabilityLayout() {
   }
 
   return (
-    <SubNavLayout
+    <BuildSectionLayout
       // "Health", not "Operate": the shell's Operate group also holds
       // Architecture, Knowledge and Capabilities, none of which are here, and
       // the breadcrumb for every page in this rail already reads Operate › Health.
@@ -129,7 +130,6 @@ function ObservabilityLayout() {
       items={items}
       titleAction={<ObservabilityHelpButton />}
       storageKey="obs"
-      contentAs="section"
       contentLabel="Health"
       renderNavItem={(item, children) => (
         <NavLink
@@ -141,7 +141,7 @@ function ObservabilityLayout() {
       )}
     >
       <Outlet />
-    </SubNavLayout>
+    </BuildSectionLayout>
   );
 }
 

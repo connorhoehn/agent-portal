@@ -2,11 +2,14 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { clearContextChosen, markContextChosen } from './contextChoice';
 import { tenantHome } from './tenantHome';
 import { clearTenantScopedCaches } from './tenantCaches';
-import { Button, Inline, LoadingState, MetaLine, SectionLabel, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { SESSION_INVALID_EVENT } from './apiFailure';
+import { realtimeTokenSource } from './realtimeToken';
+import { Button, Card, Inline, LoadingState, LockIcon, MetaLine, SectionLabel, Stack, T } from '@connorhoehnslalom/ui-components/shared';
 
 export type Role = 'member' | 'sme' | 'program-owner' | 'org-leader' | 'hr-admin';
 export type SessionRole = Role | 'admin';
 export type Tenant = 'orgiq' | 'assessment' | 'social' | 'pipelines';
+export type SessionStatus = 'loading' | 'ready' | 'invalid' | 'signed-out' | 'unavailable';
 
 /** tenant id → roles held there (from user_tenant_roles via the session cookie). */
 export type Grants = Record<string, string[]>;
@@ -30,12 +33,16 @@ export interface DirectoryUser {
   id: string;
   displayName: string;
   email: string | null;
+  /** Portrait URL (`app_users`/linked `people.avatar_url`); null renders initials. */
+  avatarUrl?: string | null;
   tenants: Array<{ tenant: string; roles: string[] }>;
 }
 
 interface SessionContextValue {
   session: Session | null;
   isLoading: boolean;
+  /** Authoritative session state, including a retired signed-cookie epoch. */
+  sessionStatus: SessionStatus;
   /** True when Cognito SSO is configured — the portal offers a real sign-in. */
   ssoEnabled: boolean;
   /** True when the middleware rejected the anonymous request (401 with
@@ -43,7 +50,7 @@ interface SessionContextValue {
   ssoRequired: boolean;
   setRole: (role: string) => Promise<void>;
   /** Switch account (tenant) AND role in one step. This is the ONLY tenant
-   * switch the portal exposes, and it belongs to the /select chooser — there
+   * switch the portal exposes, and it belongs to the /workspaces chooser — there
    * is deliberately no inline setTenant: switching workspaces goes back
    * through the chooser so the boundary stays authoritative. */
   enterContext: (tenant: Tenant, role: string, to?: string) => Promise<void>;
@@ -106,28 +113,65 @@ const SSO_REDIRECT_KEY = 'orgiq.ssoAutoRedirected';
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [sessionStatus, setSessionStatus] = useState<SessionStatus>('loading');
   // The current identity, readable from the stable ([]-dep) callbacks below
   // without making every one of them churn on each session refresh.
   const subRef = useRef<string>('');
   const [ssoRequired, setSsoRequired] = useState(false);
+  const refreshGeneration = useRef(0);
+  const identityChanges = useRef(0);
+  const invalidSub = useRef<string | null>(null);
+  const invalidRevalidation = useRef<Promise<void> | null>(null);
+
+  // A /me request begun before an identity write cannot restore its former
+  // actor after the cookie changes. Pause new reads until the write settles.
+  const withIdentityChange = useCallback(async (change: () => Promise<void>) => {
+    refreshGeneration.current += 1;
+    identityChanges.current += 1;
+    try { await change(); }
+    finally {
+      refreshGeneration.current += 1;
+      identityChanges.current -= 1;
+    }
+  }, []);
 
   const refresh = useCallback(async () => {
+    if (identityChanges.current) return;
+    const generation = ++refreshGeneration.current;
+    const current = () => generation === refreshGeneration.current;
     try {
-      const res = await fetch('/api/session/me', { credentials: 'include' });
+      const res = await fetch('/api/session/me', { credentials: 'include', cache: 'no-store' });
       if (res.status === 401) {
         // The middleware refused the anonymous request: a real IdP is
         // configured and the demo fallback is off. Surface the unauthenticated
         // state (session stays null → every gated surface hides) and let the
         // auto-redirect effect below route through Cognito.
-        let sso = false;
-        try { sso = !!((await res.json()) as { ssoRequired?: boolean }).ssoRequired; } catch { /* body optional */ }
+        let sso = false, retired = false;
+        try {
+          const body = (await res.json()) as { ssoRequired?: boolean; code?: string };
+          sso = !!body.ssoRequired; retired = body.code === 'SESSION_INVALID';
+        } catch { /* body optional */ }
+        if (!current()) return;
+        if (retired) invalidSub.current ??= subRef.current || '__retired-session__';
         setSsoRequired(sso);
         setSession(null);
+        subRef.current = '';
+        setSessionStatus(retired || invalidSub.current ? 'invalid' : 'signed-out');
         return;
       }
       if (!res.ok) throw new Error(`${res.status}`);
       const raw = (await res.json()) as Partial<Session>;
+      if (!current()) return;
+      // Dev middleware may clear an aged retired cookie and offer its demo
+      // fallback. That is not the invalid account signing in again. Keep the
+      // explicit gate until a current real identity arrives through login.
+      if (invalidSub.current && raw.sub === 'demo-user' && invalidSub.current !== 'demo-user') {
+        setSession(null); setSessionStatus('invalid'); return;
+      }
+      invalidSub.current = null;
+      invalidRevalidation.current = null;
       setSsoRequired(false);
+      setSessionStatus('ready');
       // A real session arrived — allow a future sign-out to auto-redirect again.
       try { sessionStorage.removeItem(SSO_REDIRECT_KEY); } catch { /* private mode */ }
       // Take grants and switch lists only from the server — never inherit them
@@ -145,27 +189,46 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         masquerading: raw.masquerading ?? null,
       });
     } catch {
+      if (!current()) return;
       // Session lookup failed (middleware down, etc.). Fail closed: an identity
       // with no grants, so the UI hides gated surfaces instead of going blank
       // OR silently showing admin.
       setSession(UNAVAILABLE_SESSION);
+      subRef.current = '';
+      setSessionStatus('unavailable');
     } finally {
-      setIsLoading(false);
+      if (current()) setIsLoading(false);
     }
   }, []);
 
   const [ssoEnabled, setSsoEnabled] = useState(false);
 
   useEffect(() => {
+    const onInvalidSession = () => {
+      // A response to a request begun before an explicit identity write may
+      // not retire the replacement account. Those writes hard-navigate.
+      if (identityChanges.current || invalidRevalidation.current) return;
+      refreshGeneration.current += 1;
+      invalidSub.current ??= subRef.current || '__retired-session__';
+      subRef.current = '';
+      setSession(null); setSessionStatus('invalid'); setIsLoading(false);
+      realtimeTokenSource.clear();
+      const pending = refresh();
+      invalidRevalidation.current = pending;
+      void pending.finally(() => { if (invalidRevalidation.current === pending) invalidRevalidation.current = null; });
+    };
+    window.addEventListener(SESSION_INVALID_EVENT, onInvalidSession);
     void refresh();
     // Ask the BFF whether enterprise SSO is configured.
     fetch('/api/auth/config', { credentials: 'include' })
       .then(r => (r.ok ? r.json() : null))
       .then((j: { ssoEnabled?: boolean } | null) => setSsoEnabled(!!j?.ssoEnabled))
       .catch(() => setSsoEnabled(false));
+    return () => { refreshGeneration.current += 1; window.removeEventListener(SESSION_INVALID_EVENT, onInvalidSession); };
   }, [refresh]);
 
   const signInWithSso = useCallback(() => {
+    refreshGeneration.current += 1;
     const returnTo = window.location.pathname + window.location.search;
     window.location.href = `/api/auth/login?returnTo=${encodeURIComponent(returnTo)}`;
   }, []);
@@ -182,13 +245,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     signInWithSso();
   }, [isLoading, ssoRequired, ssoEnabled, signInWithSso]);
 
-  const logout = useCallback(async () => {
+  const logout = useCallback(() => withIdentityChange(async () => {
     let ssoLogoutUrl: string | undefined;
     try {
       const res = await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
       if (res.ok) ssoLogoutUrl = ((await res.json()) as { ssoLogoutUrl?: string }).ssoLogoutUrl;
     } catch { /* cookie may already be gone — still hard-redirect below */ }
-    // Forget the chooser decision so the next login re-drives through /select.
+    // Forget the chooser decision so the next login re-drives through /workspaces.
     clearContextChosen();
     // Scrub tenant/user-scoped caches so a different identity signing in on this
     // (possibly shared) browser inherits none of the previous session's data.
@@ -196,7 +259,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     // Hard redirect: through the Cognito hosted logout when SSO is on (clears
     // the IdP session too), else to the root so the app remounts signed-out.
     window.location.href = ssoLogoutUrl ?? '/';
-  }, []);
+  }), [withIdentityChange]);
 
   // Identity changes go through the BFF (which re-mints the signed cookie) and
   // then HARD-REDIRECT, so the entire app remounts from the new session —
@@ -205,17 +268,17 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   // POST (e.g. 403 on an ungranted role) throws before the redirect, so the
   // caller's error handling still shows the message.
 
-  const setRole = useCallback(async (role: string) => {
+  const setRole = useCallback((role: string) => withIdentityChange(async () => {
     await post('/api/session/role', { role });
     // Reload the current page under the new role.
     window.location.assign(window.location.pathname + window.location.search);
-  }, []);
+  }), [withIdentityChange]);
 
   // Set the account (tenant) and role together, then enter that workspace. The
   // role must be held in the target tenant — the chooser only offers held ones.
-  // (There is intentionally no standalone setTenant: the /select chooser is
+  // (There is intentionally no standalone setTenant: the /workspaces chooser is
   // the only tenant boundary, so inline switching can't bypass it.)
-  const enterContext = useCallback(async (tenant: Tenant, role: string, to?: string) => {
+  const enterContext = useCallback((tenant: Tenant, role: string, to?: string) => withIdentityChange(async () => {
     await post('/api/session/tenant', { tenant });
     await post('/api/session/role', { role });
     // Crossing the tenant boundary: drop the previous workspace's cached data
@@ -235,9 +298,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     // unless the caller names a page INSIDE that tenant (an embedded
     // "Open in Social" link, design §4.6); anything else falls back home.
     window.location.assign(to && to.startsWith(`${tenantHome(tenant).split('/').slice(0, 2).join('/')}/`) ? to : tenantHome(tenant));
-  }, []);
+  }), [withIdentityChange]);
 
-  const login = useCallback(async (userId: string) => {
+  const login = useCallback((userId: string) => withIdentityChange(async () => {
     await post('/api/session/login', { userId });
     // A different identity must make its own chooser decision.
     clearContextChosen();
@@ -245,27 +308,27 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     // must not inherit the previous one's tenant/user-scoped caches.
     clearTenantScopedCaches();
     window.location.assign('/');
-  }, []);
+  }), [withIdentityChange]);
 
-  const masquerade = useCallback(async (userId: string) => {
+  const masquerade = useCallback((userId: string) => withIdentityChange(async () => {
     await post('/api/session/masquerade', { userId });
     // Root re-drives to the masqueraded identity's workspace (chooser is skipped
     // while masquerading).
     window.location.assign('/');
-  }, []);
+  }), [withIdentityChange]);
 
-  const stopMasquerade = useCallback(async () => {
+  const stopMasquerade = useCallback(() => withIdentityChange(async () => {
     await post('/api/session/masquerade/stop', {});
     window.location.assign('/');
-  }, []);
+  }), [withIdentityChange]);
 
   // Revoke this user's OTHER sessions. Deliberately does NOT navigate: the
   // server re-issues the current cookie, so this tab stays signed in. The POST
   // throws the server's error (e.g. 409 while masquerading) for the caller to
   // surface.
   const revokeOtherSessions = useCallback(async () => {
-    await post('/api/session/revoke-others', {});
-  }, []);
+    await withIdentityChange(() => post('/api/session/revoke-others', {}));
+  }, [withIdentityChange]);
 
   const listUsers = useCallback(async (): Promise<DirectoryUser[]> => {
     const res = await fetch('/api/session/users', { credentials: 'include' });
@@ -274,20 +337,47 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const ctxValue = useMemo(
-    () => ({ session, isLoading, ssoEnabled, ssoRequired, setRole, enterContext, login, masquerade, stopMasquerade, signInWithSso, logout, revokeOtherSessions, listUsers, refresh }),
-    [session, isLoading, ssoEnabled, ssoRequired, setRole, enterContext, login, masquerade, stopMasquerade, signInWithSso, logout, revokeOtherSessions, listUsers, refresh],
+    () => ({ session, isLoading, sessionStatus, ssoEnabled, ssoRequired, setRole, enterContext, login, masquerade, stopMasquerade, signInWithSso, logout, revokeOtherSessions, listUsers, refresh }),
+    [session, isLoading, sessionStatus, ssoEnabled, ssoRequired, setRole, enterContext, login, masquerade, stopMasquerade, signInWithSso, logout, revokeOtherSessions, listUsers, refresh],
   );
 
   // Unauthenticated + a real IdP required: replace the app with a sign-in
   // gate. This renders only after the one-shot auto-redirect above has been
   // spent (the user came back from Cognito still without a session).
   const showSsoGate = !isLoading && ssoRequired && session === null;
+  // Replace the private route tree before a RequireTenant fallback can
+  // redirect a retired account to Home. The chooser remains the dev login
+  // door; arriving there is an explicit action, never an automatic demotion.
+  const showRecoveryGate = !isLoading && sessionStatus === 'invalid' && window.location.pathname !== '/workspaces';
 
   return (
     <SessionContext.Provider value={ctxValue}>
-      {showSsoGate ? <SsoGate ssoEnabled={ssoEnabled} onSignIn={signInWithSso} /> : children}
+      {showSsoGate ? <SsoGate ssoEnabled={ssoEnabled} onSignIn={signInWithSso} /> : showRecoveryGate
+        ? <SessionRecoveryGate onRetry={refresh} onSignIn={ssoEnabled ? signInWithSso : () => window.location.assign('/workspaces')} />
+        : children}
     </SessionContext.Provider>
   );
+}
+
+function SessionRecoveryGate({ onRetry, onSignIn }: { onRetry: () => Promise<void>; onSignIn: () => void }) {
+  const [busy, setBusy] = useState(false);
+  return <Inline justify="center" className="min-h-screen items-center bg-bg p-6" data-testid="session-recovery-gate">
+    <Card padding="lg" className="w-full max-w-[440px]" role="status" aria-live="polite">
+      <Stack gap="md">
+        <Inline gap="sm" align="center"><LockIcon size={18} /><T size="sm" weight="semibold">Workspace access</T></Inline>
+        <Stack gap="xs">
+          <h1><T as="span" size="lg" weight="semibold">Sign in again</T></h1>
+          <T size="sm" tone="secondary" wrap>Your session is no longer current. Sign in to return to your workspace.</T>
+        </Stack>
+        <Inline gap="sm">
+          <Button size="sm" variant="primary" disabled={busy} onClick={onSignIn}>Sign in</Button>
+          <Button size="sm" variant="secondary" disabled={busy} onClick={() => {
+            setBusy(true); void onRetry().finally(() => setBusy(false));
+          }}>{busy ? 'Checking…' : 'Try again'}</Button>
+        </Inline>
+      </Stack>
+    </Card>
+  </Inline>;
 }
 
 function SsoGate({ ssoEnabled, onSignIn }: { ssoEnabled: boolean; onSignIn: () => void }) {
@@ -299,7 +389,7 @@ function SsoGate({ ssoEnabled, onSignIn }: { ssoEnabled: boolean; onSignIn: () =
       className="min-h-screen items-center p-6 bg-bg"
     >
       <Stack gap="none" className="max-w-[420px] text-center">
-        <SectionLabel className="text-[13px] tracking-[0.14em] text-primary mb-4">Org</SectionLabel>
+        <SectionLabel className="text-[13px] tracking-[0.14em] text-primary mb-4">Work</SectionLabel>
         <SectionLabel as="h1" className="text-[22px] font-bold text-text-primary normal-case tracking-normal mb-2">
           Sign in required
         </SectionLabel>

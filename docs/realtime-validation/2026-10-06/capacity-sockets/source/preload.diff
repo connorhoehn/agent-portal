@@ -1,0 +1,52 @@
+305a306,343
+> // Origin attribution (ORGIQ_NATIVE_ORIGIN_METRICS=1, full mode only): which
+> // socket action or peer frame kind a Dynamo request started under, and the
+> // channel FAMILY (two fixed segments, e.g. social:dm) it names. Counts only.
+> const originMetrics = metricsPath && process.env.ORGIQ_NATIVE_ORIGIN_METRICS === '1';
+> const originOf = new AsyncLocalStorage();
+> metrics.originDynamo = {}; metrics.actions = {};
+> function dynamoFamily(input) {
+>   const values = Object.values(input?.ExpressionAttributeValues ?? {}).concat(Object.values(input?.Key ?? {}), Object.values(input?.Item ?? {}));
+>   for (const v of values) if (typeof v?.S === 'string' && v.S.includes(':')) return family(v.S);
+>   return 'none';
+> }
+> function instrumentOrigins() {
+>   const require = createRequire(import.meta.url);
+>   const root = join(dirname(require.resolve('@connorhoehnslalom/realtime-modules/server')), '..');
+>   const handlerModule = require(join(root, 'server-ws/createWsHandler.js'));
+>   const create = handlerModule.createWsHandler;
+>   handlerModule.createWsHandler = function(opts) {
+>     for (const [name, svc] of Object.entries(opts.services ?? {})) {
+>       if (!svc || typeof svc.handleAction !== 'function') continue;
+>       const original = svc.handleAction;
+>       svc.handleAction = function(clientId, action, data) {
+>         const key = (name + '.' + action).replace(/[^a-z.-]/gi, '').slice(0, 40);
+>         metrics.actions[key] = (metrics.actions[key] ?? 0) + 1;
+>         return originOf.run({ o: 'ws:' + key }, () => original.call(this, clientId, action, data));
+>       };
+>     }
+>     return create.call(this, opts);
+>   };
+>   const { RedisRealtimeRouter } = require(join(root, 'server/RedisRealtimeRouter.js'));
+>   const receive = RedisRealtimeRouter.prototype.receive;
+>   RedisRealtimeRouter.prototype.receive = function(payload) {
+>     const kind = typeof payload === 'string' ? (/"kind":"([a-z-]{1,24})"/.exec(payload)?.[1] ?? 'other') : 'other';
+>     const action = kind === 'channel' ? (/"action":"([a-z-]{1,24})"/.exec(payload)?.[1] ?? '-') : '-';
+>     const key = 'peer:' + kind + '.' + action;
+>     metrics.actions[key] = (metrics.actions[key] ?? 0) + 1;
+>     return originOf.run({ o: key }, () => receive.call(this, payload));
+>   };
+> }
+324,325c362,364
+<     try { const result = await originalSend.call(this, command, ...args); finish(false); finishTable(false); finishStage(false); return result; }
+<     catch (error) { finish(true); finishTable(true); finishStage(true); throw error; }
+---
+>     const finishOrigin = table && originMetrics ? beginMetric((originOf.getStore()?.o ?? 'none') + '|' + (stageOf.getStore()?.stage ?? 'none') + '|' + dynamoFamily(command.input) + '>' + table + ':' + command.constructor.name, metrics.originDynamo) : () => {};
+>     try { const result = await originalSend.call(this, command, ...args); finish(false); finishTable(false); finishStage(false); finishOrigin(false); return result; }
+>     catch (error) { finish(true); finishTable(true); finishStage(true); finishOrigin(true); throw error; }
+333,334c372,373
+<   } else instrumentSendStages();
+<   process.on('SIGUSR2', () => { for (const k of Object.keys(hists)) delete hists[k]; for (const k of Object.keys(counters)) delete counters[k]; loop?.reset(); metrics.resetAt = new Date().toISOString(); });
+---
+>   } else { instrumentSendStages(); if (originMetrics) instrumentOrigins(); }
+>   process.on('SIGUSR2', () => { for (const k of Object.keys(hists)) delete hists[k]; for (const k of Object.keys(counters)) delete counters[k]; loop?.reset(); if (originMetrics) { metrics.originDynamo = {}; metrics.actions = {}; } metrics.resetAt = new Date().toISOString(); });

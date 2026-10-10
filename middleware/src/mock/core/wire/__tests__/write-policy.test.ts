@@ -35,6 +35,36 @@ const writeRoutes = enumerateRoutes().routes.filter((r) => r.method !== 'GET').m
 const FULLY_MOCKED: Intercepted = new Set<MockProvider>(['aurora', 'agentcore', 'guardrails', 'cloudwatch']);
 
 describe('write policy — the decision', () => {
+  it('does not treat Aurora interception as a resettable joined call', () => {
+    const decision = classifyWrite('PUT /api/calls/:callId/page', FULLY_MOCKED);
+    expect(decision.kind).toBe('refused');
+    if (decision.kind === 'refused') expect(decision.rule).toBe('active-call-state');
+  });
+
+  it('does not treat Aurora interception as proof that personal team preferences are resettable', () => {
+    const decision = classifyWrite('PATCH /api/social/teams/:teamId/me', FULLY_MOCKED);
+    expect(decision.kind).toBe('refused');
+    if (decision.kind === 'refused') expect(decision.rule).toBe('social-platform-not-verified');
+  });
+
+  it('does not treat Aurora interception as proof that chat pin writes are resettable', () => {
+    const decision = classifyWrite('POST /api/chat/pins', FULLY_MOCKED);
+    expect(decision.kind).toBe('refused');
+    if (decision.kind === 'refused') expect(decision.rule).toBe('chat-store-not-verified');
+  });
+
+  it('refuses proposal mutations that consult the canonical document service even with Aurora mocked', () => {
+    for (const route of [
+      'POST /api/assessment/knowledge/doc/proposals',
+      'POST /api/assessment/knowledge/doc/proposals/:proposalId/decision',
+      'POST /api/assessment/knowledge/doc/proposals/:proposalId/revision',
+    ]) {
+      const decision = classifyWrite(route, FULLY_MOCKED);
+      expect(decision.kind).toBe('refused');
+      if (decision.kind === 'refused') expect(decision.rule).toBe('document-service');
+    }
+  });
+
   it('classifies every write route on the live surface, with no gap', () => {
     const unclassifiable = writeRoutes.filter((r) => {
       const v = classifyWrite(r);

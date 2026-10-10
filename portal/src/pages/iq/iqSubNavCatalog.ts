@@ -33,10 +33,10 @@ export interface IqSubNavSpec {
 // Invoke reads ?session= (deep-links from Memory/Sessions) but none of the
 // old focus/prompt params — its own session sidebar covers navigation.
 const SCORES_ITEMS: SubNavItem[] = [
-  { path: '/iq/scores',          label: 'Overview',  hint: 'Ranked influence + expertise', group: 'Scores' },
-  { path: '/iq/scores/cohorts',  label: 'Cohorts',   hint: 'Distribution by team',         group: 'Scores' },
-  { path: '/iq/scores/compare',  label: 'Compare',   hint: 'Two-person side-by-side',      group: 'Scores' },
-  { path: '/iq/explore',         label: 'Explore',     hint: 'The org as a network',       group: 'Other views' },
+  { path: '/iq/scores',          label: 'Overview', group: 'Scores' },
+  { path: '/iq/scores/cohorts',  label: 'Cohorts', group: 'Scores' },
+  { path: '/iq/scores/compare',  label: 'Compare', group: 'Scores' },
+  { path: '/iq/explore',         label: 'Explore', group: 'Other views' },
 ];
 
 // Explore's rail is only the entity lens now. Ask and Initiatives are
@@ -76,7 +76,7 @@ export function useIqSubNav(pathname: string): IqSubNavSpec | null {
   const promptItems = promptMgmtItemsFor(seesScores);
   const exploreItems = seesScores
     ? [
-        { path: '/iq/scores', label: 'Scores', hint: 'Ranked influence + expertise', group: 'Other views' },
+        { path: '/iq/scores', label: 'Scores', group: 'Other views' },
         ...EXPLORE_ITEMS,
       ]
     : EXPLORE_ITEMS;
@@ -110,13 +110,11 @@ export function useIqSubNav(pathname: string): IqSubNavSpec | null {
     const isLive = experimentState === 'running' || experimentState === 'terminal';
     return {
       title: 'Prompt Management',
-      items: promptItems,
+      // The live experiment's controls join the one section rail under their
+      // own headings — a second rail beside it was a third navigation column
+      // at the content top (docs/layout-cascade.md rule 1).
+      items: isLive ? [...promptItems, ...canaryItems] : promptItems,
       storageKey: 'iq-canary-subnav',
-      ...(isLive ? {
-        secondaryTitle: 'Live Experiment',
-        secondaryItems: canaryItems,
-        secondaryStorageKey: 'iq-canary-secondary',
-      } : {}),
     };
   }
   // /iq/agents has no rail. The only thing it ever held was the Window

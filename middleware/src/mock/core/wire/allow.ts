@@ -55,6 +55,16 @@ export const ALLOWED: { file: string; entries: AllowEntry[] } = {
         'Deliberately not a role. The test is "an unknown role is denied, not ' +
         'defaulted" — a role the server DOES send would not test anything.',
     },
+    {
+      file: 'portal/src/components/communication/__tests__/planeRailModel.test.ts',
+      field: 'status',
+      value: 'away',
+      reason:
+        'Not a wire value. `away` is the library ActivePerson status the shell ' +
+        'derives from a presence entry\'s idle flag (EmbeddedSocialProvider) before ' +
+        'the plane/active enrichment is merged in; the test feeds that client-side ' +
+        'tile shape, and `GET /api/social/plane/active` only ever sends online/busy/offline.',
+    },
   ],
 };
 

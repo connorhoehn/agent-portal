@@ -59,6 +59,8 @@ jest.mock('../../lib/bot-runner.js', () => ({
 }));
 jest.mock('../../providers/work-items.js', () => ({ getWorkItem: jest.fn() }));
 jest.mock('../../providers/budgets.js', () => ({ getBudget: jest.fn() }));
+// GET /initiative-runs reads the codebases; stubbed like the other providers.
+jest.mock('../../providers/agent-projects.js', () => ({ listAgentProjects: jest.fn(async () => []) }));
 jest.mock('../../lib/bot-scheduler.js', () => ({ registerBot: jest.fn(), unregisterBot: jest.fn() }));
 jest.mock('../../lib/ingest-scheduler.js', () => ({ validateCronExpr: jest.fn() }));
 jest.mock('../../lib/marketplace-estimate.js', () => ({ selectDispatchForecast: jest.fn() }));

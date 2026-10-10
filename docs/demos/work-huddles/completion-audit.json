@@ -1,0 +1,293 @@
+{
+  "objective": "Audit and improve the Work/Assessment conversation, native huddle/recording, shared presentation and contextual computer-job journeys while preserving existing local state.",
+  "overallStatus": "incomplete",
+  "requirements": [
+    {
+      "requirement": "Final visual checks",
+      "status": "verified",
+      "evidence": [
+        "evidence/2026-10-09/access-gate-compact.png",
+        "evidence/2026-10-09/messages-overview-signed.png",
+        "evidence/2026-10-09/initiatives-shared-particles.png",
+        "evidence/2026-10-09/assessment-shared-particles.png",
+        "evidence/2026-10-09/social-shared-particles.png",
+        "evidence/2026-10-09/social-message-portraits-final.png",
+        "evidence/2026-10-09/recording-playback-layout-wide.png",
+        "evidence/2026-10-09/recording-playback-layout-narrow.png",
+        "evidence/2026-10-09/native-share-navigation/cost-call-in-auth-composer.png",
+        "evidence/2026-10-09/final-speaking-deck/deck-u-vera-shared-recording-playback.png",
+        "evidence/2026-10-09/resumed-goal/verification.json",
+        "evidence/2026-10-09/resumed-goal/bounds-verification.json",
+        "evidence/2026-10-09/resumed-goal/production-build-bounds-receipt.json"
+      ],
+      "latestPeopleCardScope": "Ready ordinary PersonRef cards use existing self-disclosed demo profiles; only ready Work HR cards request inferred detail. Native short-viewport Layla/Eli bounds, pinned-resize/async-growth, actor/tenant response fencing and keyboard behavior pass. No native public-profile API or server data redaction is claimed by the UI fixture."
+    },
+    {
+      "requirement": "Two-person PPT rehearsal",
+      "status": "verified",
+      "evidence": [
+        "evidence/2026-10-09/ppt-follow.png",
+        "evidence/2026-10-09/ppt-race-conflict.png",
+        "evidence/2026-10-09/observability-review-v7.pptx",
+        "evidence/2026-10-09/presentation-export-current-state.json",
+        "evidence/2026-10-09/real-media-summary.json",
+        "evidence/2026-10-09/ppt-v7-preserved-summary.png",
+        "evidence/2026-10-09/final-speaking-deck/completion-proof.json",
+        "evidence/2026-10-09/deck-speaking-export-content-proof.json",
+        "evidence/2026-10-09/original-v7-head-final.json"
+      ],
+      "scope": "Historical dirty-draft/conflict checks plus fresh two-person native speaking deck rehearsal: four real received speech turns, Follow, saved revision propagation, export without leaving, exact native transcript and shared playback for both actors. No simultaneous keystroke merging or physical-device/perceptual-review claim."
+    },
+    {
+      "requirement": "Speaking videos and timed scene playback",
+      "status": "verified_native_speech_and_media",
+      "expectedClips": [
+        "initiative-01-vera.mp4",
+        "initiative-02-nora.mp4",
+        "initiative-03-vera.mp4",
+        "initiative-04-nora.mp4",
+        "deck-01-vera.mp4",
+        "deck-02-nora.mp4",
+        "deck-03-vera.mp4",
+        "deck-04-nora.mp4"
+      ],
+      "generatedSpeakingClips": 8,
+      "blocker": null,
+      "evidence": [
+        "speaking-media-handoff.zip",
+        "media-readiness.json",
+        "speaking-media-manifest.json",
+        "speaking-media/automated-review.json",
+        "evidence/2026-10-09/final-speaking-deck/completion-proof.json",
+        "evidence/2026-10-09/final-speaking-initiative/evidence-index.json",
+        "evidence/2026-10-09/final-speaking-initiative/initiative-actual-native-independent-asr.json",
+        "evidence/2026-10-09/goal-revalidation/current-native-revalidation.json",
+        "evidence/2026-10-09/goal-revalidation/speaking-artifacts.json",
+        "evidence/2026-10-09/speaking-archive-manifest-update.json",
+        "evidence/2026-10-10/native-speech/evidence-index.json",
+        "evidence/2026-10-10/native-speech/activation.json",
+        "evidence/2026-10-10/native-speech/nora-content-validation.json",
+        "evidence/2026-10-10/native-speech/vera-content-validation.json",
+        "evidence/2026-10-10/native-source-speech-summary/verification.json"
+      ],
+      "prepared": "Eight speaking exports and both timed native media/UI scenes verified. Original initiative recording was retranscribed by the existing native pipeline using the existing transcription worker; all four exact normalized lines match both participant API bodies and stored TranscriptDoc. Original media, attendance, script and strict gate unchanged. Human perceptual approval, per-person diarization and model summary success are not claimed.",
+      "generatedSpeechTracks": 8,
+      "portraitPilotCompleted": true,
+      "remainingChecks": [],
+      "completedScenes": [
+        "deck",
+        "initiative"
+      ],
+      "mediaAndUiVerifiedScenes": [
+        "deck",
+        "initiative"
+      ]
+    },
+    {
+      "requirement": "DB work-key migration",
+      "status": "verified_local",
+      "evidence": [
+        "../../../schema/work_item_key_schema.sql",
+        "../../../schema/tests/work_item_keys.sql",
+        "evidence/2026-10-09/database-current-state.json",
+        "evidence/2026-10-09/goal-revalidation/database-migration.json"
+      ],
+      "scope": "Existing local orgiq PostgreSQL, immutable key allocator, seed namespaces reserved, existing row allocated, trigger enabled. Aurora untouched; local mock chats remain process-memory data."
+    },
+    {
+      "requirement": "Recording-store activation",
+      "status": "verified_local",
+      "evidence": [
+        "evidence/2026-10-09/recording-evidence.json",
+        "evidence/2026-10-09/work-recording-playback-compact.png",
+        "evidence/2026-10-09/work-recordings-activity.png",
+        "evidence/2026-10-09/recording-runtime-proof.json",
+        "evidence/2026-10-09/recording-after-queue-restart.png",
+        "evidence/2026-10-09/shared-recording-player-heart-replay.png",
+        "evidence/2026-10-09/shared-recording-list-work.png"
+      ],
+      "scope": "Native platform API/LVS recording runtime with existing local DynamoDB. Native signed queue restored; persisted test message survived restart and consumers recovered. Saved recording and heart played after restart.",
+      "frontend": "Existing shared RecordingList, RecordingPlayer and PlaybackReactionsLayer; SDK LVSRecording metadata; Work-only context/auth adapter over native platform API routes."
+    },
+    {
+      "requirement": "Huddle tiles inside chat and separate screen share",
+      "status": "verified_native",
+      "scope": "Latest strict actual native two-person Observability call kept one 96px media strip inside the composer while routing to Auth Migration. Screen remains a separate decoded tile; Stop Share preserves both exact remote camera PCs, receiver tracks and advancing RTP reports through the health sweep. Native recording has two trusted participants and three tracks, saved reaction, both participants playback and nonparticipant denial. Prepared capture; physical devices and OS picker not claimed.",
+      "evidence": [
+        "evidence/2026-10-09/camera-and-screen-composer.png",
+        "evidence/2026-10-09/native-screen-recording-source-audit.json",
+        "evidence/2026-10-09/native-screen-identity-test-proof.json",
+        "evidence/2026-10-09/native-share-navigation/evidence-index.json",
+        "evidence/2026-10-09/native-screen-identity-runtime-revalidation.json",
+        "evidence/2026-10-10/native-work-screen-acceptance/verification.json"
+      ]
+    },
+    {
+      "requirement": "Discussion authority and Engage navigation",
+      "status": "verified_local",
+      "evidence": [
+        "evidence/2026-10-09/discussion-authority-audit.json",
+        "evidence/2026-10-09/work-member-authority-filter-menu.png",
+        "evidence/2026-10-09/search-shared-particle-background.png",
+        "evidence/2026-10-09/search-shared-particle-proof.json"
+      ],
+      "scope": "Member and SME REST/gateway/Cedar posting decisions agree. Read/filter copy and filtered-empty action are clear; member posting destination does not silently become a DM. Engage group/palette/trails and matching Search backdrop are rendered and navigation tests pass."
+    },
+    {
+      "requirement": "Shared presentation workspace and persistent Chat/Agent",
+      "status": "verified_local",
+      "scope": "Shared Work/Assessment/Pipelines/Social reader/editor layer; Work host explicitly enables read-only questions under signed orgiq/Search; other hosts preserve existing revise and huddle Chat flows. Actual signed Work Member questions and original HEAD preservation; isolated editable delayed/error preview and draft regression. No cloud-model credentials or native Follow claim from fixtures. Reader manual/participant navigation and Stop controls preserve deliberate selection; programmatic Follow continues; pending/error previews never display stale images. These controls are verified in owned rendering fixtures. A Search-capable Work Member with cloned unsupported-host documents verifies each configured Edit handler and zero Work supervisor requests; no native cross-tenant edit authority is claimed.",
+      "evidence": [
+        "evidence/2026-10-09/presentation-workspace/verification-summary.json",
+        "evidence/2026-10-09/presentation-workspace/editor-present-verification.json",
+        "evidence/2026-10-09/presentation-workspace/final-checks.json",
+        "evidence/2026-10-09/presentation-workspace/member-wide.png",
+        "evidence/2026-10-09/presentation-workspace/member-narrow-slides.png",
+        "evidence/2026-10-09/presentation-workspace/member-present.png",
+        "evidence/2026-10-09/presentation-workspace/particle-overflow-diagnostic.json",
+        "evidence/2026-10-09/presentation-workspace/current-preview-verification.json",
+        "evidence/2026-10-09/deck-question-routing-audit.json",
+        "evidence/2026-10-09/presentation-workspace/reader-navigation-verification.json",
+        "evidence/2026-10-09/deck-question-host-regression.json"
+      ]
+    },
+    {
+      "requirement": "Assessment navigation, dimension rail and central mentions",
+      "status": "verified_local",
+      "evidence": [
+        "evidence/2026-10-09/assessment-files/verification.json",
+        "evidence/2026-10-09/assessment-dimension-rail/verification.json",
+        "evidence/2026-10-09/assessment-communication-sweep/current-composer-mentions-proof.json"
+      ],
+      "scope": "Actual home Assessment reads, complete dimension labels/filter/keyboard behavior, compact workspace breadcrumb and central mention insertion. Saved presentation metadata uses explicit fixtures because native store is empty; documents lacking a team association are labelled shared. No live message, notification or document was authored."
+    },
+    {
+      "requirement": "Communication session, discussion and footer sweep",
+      "status": "verified_local",
+      "evidence": [
+        "evidence/2026-10-09/session-authority-recovery/verification.json",
+        "evidence/2026-10-09/communication-workspace/verification.json",
+        "evidence/2026-10-09/communication-rail/verification.json",
+        "evidence/2026-10-09/assessment-communication-sweep/verification.json",
+        "evidence/2026-10-09/assessment-communication-sweep/source-build-receipt.json",
+        "evidence/2026-10-10/communication-continuation/verification.json"
+      ],
+      "scope": "Actual native invalid-signature cookie recovery on the exact Work route; no stale identity/composer; native picker reachable. Valid owner/SME footer focus and navigation, bottom composer/draft retention, scoped list retry fixtures, native-hook history/denial/disconnect fixtures. BFF stale/expired/deleted/revoked-source-role cases use native test fixtures without changing real epochs or grants. Fresh continuation repeats valid owner wide/narrow composer/draft/focus and actual owned Eli invalid-cookie single-gate/picker recovery, with zero failed valid reads, authored messages or page errors."
+    }
+  ],
+  "remainingUpstreamLimits": [
+    "Work page authority is absent from native room-only recording:listByLobby authorization; current participant-index adapter remains intentional.",
+    "Work gateway omits persistCallBinding; native page-huddle join also bypasses invite/accepted persistence. Latest-lobby selection is ambiguous.",
+    "Composed video, peer legs and transcript.json stream without participant authorization and use public caching. Existing live playbackAuth permits absent/public channels and binds only channel ARN.",
+    "Off choices apply after connecting; native join requests audio and normally video.",
+    "Worker produces real timestamps, but CLI emits text and platform reconstructs evenly spaced segments with mixed Call attribution.",
+    "Successful model summarization remains unverified because credentials were unavailable; no claim of per-person diarization."
+  ],
+  "checkedAt": "2026-10-10T04:34:12.700237+00:00",
+  "verificationScope": "Native source recording identity, screen/camera continuity and exact speech are active and verified in real Work actors. Original deck ID and authentic v7 head are recovered and pass both participant reads and exports. Terminal missing-credential summaries settle failed. Inquiry delivery/invitation races pass inert native-mounted fixtures; job preparation and contextual questions pass owned browser checks without dispatch.",
+  "latestRevalidation": {
+    "nativeParticipantReads": "Both original participants retain authorized metadata, transcript and playback access to both final recordings.",
+    "nativeContent": "Deck exact gate previously passed. Original initiative recording now passes all4lines in strict native store and both original participant API bodies via normal participant-requested pipeline regeneration.",
+    "nativeSummary": "Current actual native transcribe run preserves exact4lines and ready transcript; terminal missing-model-credentials summary now settles failed, not pending. Same-run conditional repository update prevents stale failure from clobbering a new attempt.",
+    "nativeScreenCandidate": "Strict live actual Work test passes with two trusted participants, three separate recording tracks, preserved camera peer connections/receiver tracks/advancing RTP reports across Stop Share and health sweep, decoded audio, native party reaction, participant playback and outsider denial. Native APIs are unchanged and unmocked.",
+    "mediaPackage": "Eight clip bytes unchanged. Current manifest/readiness and all archive entries pass consistency; only stale command-manifest note was repacked.",
+    "database": "Current read-only query confirms original key, reservations, constraints and assignment function.",
+    "liveOriginalDeck": "Recovered original ID and exact archived v7 full spec/head; both home identities pass native API, all7 authentic metadata rows, six unavailable old bodies, wide/narrow composer, unchanged content, and PPTX7slides+Sources. Member scoped question completes without leaving deck. No historical slide bodies invented."
+  },
+  "latestUiSweep": {
+    "checkedAt": "2026-10-10T04:43:13.387932+00:00",
+    "status": "verified_local",
+    "evidence": "evidence/2026-10-09/assessment-communication-sweep/verification.json",
+    "nativeRecordingLimits": "Exact native speech and strict actual Work screen identity/camera continuity acceptance pass; physical-device and OS-picker coverage remain unclaimed.",
+    "communicationContinuation": "evidence/2026-10-10/post-dispatch-communication-acceptance/verification.json",
+    "publicProfileHover": "evidence/2026-10-09/resumed-goal/verification.json",
+    "finalBuild": "evidence/2026-10-10/inquiry-journey/final-build-receipt.json",
+    "sharedNativeHoverCard": "evidence/2026-10-10/shared-ui-native-update/verification.json"
+  },
+  "latestNativeSpeech": {
+    "checkedAt": "2026-10-10T02:53:34.352Z",
+    "status": "verified_integrated_native_source",
+    "evidence": "evidence/2026-10-10/native-source-speech-summary/participant-proof.json",
+    "runId": "e33ce4a1-12f6-40f2-8b97-fe79dbf9e487",
+    "nativeSpeechEndpoint": "14041",
+    "integratedCli": "../live-video-streaming/services/transcription-worker/scripts/speech-cli.py",
+    "sourceActivation": "evidence/2026-10-10/native-source-update/verification.json",
+    "nativeTranscriptStatus": "ready",
+    "nativeSummaryStatus": "failed",
+    "nativeMediaHashUnchanged": true
+  },
+  "latestNativeRecordingSource": {
+    "status": "verified_actual_work_actor_acceptance",
+    "evidence": "evidence/2026-10-10/native-host-recording-update/activation.json",
+    "sourceVerification": "evidence/2026-10-10/native-host-recording-update/source-verification.json",
+    "nativeMediaStoreAndPortsPreserved": true,
+    "bffRestarted": false,
+    "workActorAcceptance": "evidence/2026-10-10/native-work-screen-acceptance/verification.json",
+    "sdkProvenance": "evidence/2026-10-10/native-work-screen-acceptance/native-sdk-fix/source-provenance.json",
+    "recordingId": "2026-10-10T03-07-00-042Z-da0b3f80"
+  },
+  "currentRequiredWork": [
+    "Add governed-page filtering with both existing page authority and recording participation, preserving room rules and pagination.",
+    "Persist exact validated call/session/channel association in native join and resolve recordings using it.",
+    "Implement recording-bound playback capabilities through native token machinery; retain range seeking and explicit share links. Do not install the live middleware as a superficial fix.",
+    "Pass initial capture intentions through the native hook and support listening without device permission when both are off; acquire only on enable.",
+    "Carry native segment timestamps through CLI/HTTP and platform parsing with explicit text-only fallback; per-person attribution is separate."
+  ],
+  "latestInquiryJourney": {
+    "status": "verified_local_with_explicit_fixture_limits",
+    "reportedRoute": "/iq/projects/p-observability?scope=mine",
+    "observed": "User screenshots show a selected person mention in Initiative chat, followed by a sent message in Huddle dialogue and an unsent /invite mention. Delivery destination and invitation intent need explicit feedback.",
+    "serviceContinuity": "User confirmed the huddle ended. Fresh native media and pipeline idle checks passed; BFF/Vite activated with native packages and original deck recovery. All 142 stored chat messages preserved exactly; ended-call ephemeral membership is not claimed.",
+    "scope": "No message or invitation to a real recipient will be sent by this audit; no job will be dispatched merely to test the UI.",
+    "jobPreparation": "evidence/2026-10-10/inquiry-journey/job-preparation/verification.json",
+    "evidence": "evidence/2026-10-10/initiative-inquiry/verification.json",
+    "jobAssistant": "evidence/2026-10-10/inquiry-journey/job-assistant/verification.json",
+    "finalInstalledPackageBrowser": "evidence/2026-10-10/inquiry-journey/final-actor-pack-browser.log",
+    "result": "Explicit destination, native persisted acknowledgement, retained drafts and private inquiry actions. Same-call invitations use native correlated requested/accepted/failed state; no positive delivery/offline receipt is claimed. Existing Caleb text was persisted and was never resent. Canonical work-item preparation preserves authority; run questions stay beside the job.",
+    "limits": [
+      "Inquiry transports and call hosts are inert fixtures; no actual recipients were contacted.",
+      "Computer-job rendering uses a nonpersisted GET fixture; actual home session, capability and read-only supervisor routes are used. No computer job was dispatched."
+    ],
+    "runDraftRefresh": "evidence/2026-10-10/inquiry-journey/run-draft-refresh-verification.json",
+    "tailAndIdentity": "evidence/2026-10-10/inquiry-tail-scope/verification.json",
+    "assessmentIdentity": "evidence/2026-10-10/dimension-draft-identity/verification.json",
+    "dispatchActivation": "evidence/2026-10-10/inquiry-journey/dispatch-activation.json"
+  },
+  "latestCoordinatedActivation": "evidence/2026-10-10/coordinated-native-activation/verification.json",
+  "latestOriginalDeckRecovery": "evidence/2026-10-10/post-dispatch-deck-repair-acceptance/verification.json",
+  "overnightContinuation": {
+    "deadline": "2026-10-10T09:50:00Z",
+    "status": "local_runner_active",
+    "directory": ".scratch/overnight-continuation-20261010",
+    "method": "Native same-thread queued continuation after quiet idle; bounded caffeinate; stop marker; no competing thread or interruption.",
+    "requires": "Local machine powered on and Codex app running",
+    "verifiedTransport": "First same-thread queued continuation reached the active root with marker e81ef98f-5c2f-44a2-8754-f8fe66f681a0; scheduler remains active until 09:50Z.",
+    "firstContinuationObservedAt": "2026-10-10T04:54:14.402581+00:00"
+  },
+  "latestSharedComposerActorIsolation": {
+    "status": "verified_native_and_installed",
+    "sourceEvidence": "evidence/2026-10-10/shared-composer-actor-drafts/verification.json",
+    "installedEvidence": "evidence/2026-10-10/coordinated-native-activation/actor-pack-installed.json",
+    "scope": "Native persistent composer drafts are scoped to known actor and logical draft key. Unknown identity never reads/writes drafts; legacy unscoped bytes remain untouched. 300 native tests and final mounted inquiry fixtures pass."
+  },
+  "latestPresentationLabels": "evidence/2026-10-10/communication-deck-label-acceptance/verification.json",
+  "nativeFollowupReconciliation": "evidence/2026-10-10/inquiry-journey/native-followup-reconciliation.json",
+  "latestRetiredHuddleDrafts": {
+    "status": "verified_local_with_fixture_limits",
+    "provider": "evidence/2026-10-10/huddle-retired-draft/verification.json",
+    "consumer": "evidence/2026-10-10/initiative-retired-huddle/verification.json",
+    "behavior": "Exact identity/call drafts survive call end in memory; prior destination disabled; explicit text recovery appends without overwriting; original files/page retained until discard; pending sends await confirmation."
+  },
+  "lastUpdatedAt": "2026-10-10T04:43:13.387932+00:00",
+  "latestGovernedRecordingList": {
+    "status": "tested_candidate_not_activated",
+    "evidence": "evidence/2026-10-10/native-governed-recording-list/verification.json",
+    "tests": "9 focused and 75 existing route/authority checks pass; strict typecheck passes; old source fails five new assertions."
+  },
+  "morningProjectFiles": {
+    "status": "verified_local_ui",
+    "evidence": "evidence/2026-10-10/morning-project-files/verification.json",
+    "remainingHuddleChat": "Current native call chat grant helper separately requires Social grants. UI routing fixed; server permission mismatch not yet fixed/activated.",
+    "automaticContinuation": "Stopped at elapsed overnight deadline; newer user steering authorizes this manual follow-up."
+  }
+}

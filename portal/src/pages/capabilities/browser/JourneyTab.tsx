@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Button, Card, CardHeader, ChoiceList, ChoiceRow, Inline, InlineAlert, InlinePlaceholder, Input, MetaLine, SectionLabel, SegmentedControl, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { Button, Card, CardHeader, ChoiceList, ChoiceRow, Inline, InlineAlert, InlinePlaceholder, Input, MetaLine, SectionLabel, SegmentedControl, Stack, T } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../../lib/capabilities';
 import { useFetch } from '../../../hooks/useFetch';
 import { toastError } from '../../../lib/toastStore';
@@ -8,7 +8,6 @@ import { JourneyTimeline } from './JourneyTimeline';
 import { SESSIONS_URL, closeSession, journeyUrl, launchSession, navigateSession } from './browserApi';
 import { openSessions } from './browserFormat';
 import type { BrowserSession, JourneyStep } from './types';
-import { T } from '../Text';
 import { UnavailableNotice } from '../../../components/UnavailableNotice';
 
 const VIEW_OPTIONS = [

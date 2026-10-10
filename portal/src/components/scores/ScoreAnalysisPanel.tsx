@@ -171,7 +171,7 @@ export function ScoreAnalysisPanel() {
               {analysis.correlations.map((c) => (
                 <Stack key={`${c.a}-${c.b}`} gap="none">
                   <MetaLine size="xs" tone="secondary" items={[`${SIGNAL_LABEL[c.a] ?? c.a} ↔ ${SIGNAL_LABEL[c.b] ?? c.b}`]} />
-                  <EntityCell label={num(c.spearman)} labelClassName="text-[15px] tabular-nums" className="mt-0.5" />
+                  <EntityCell label={num(c.spearman)} labelClassName=" tabular-nums" className="mt-0.5" />
                   <MetaLine size="xs" items={[strength(c.spearman)]} />
                 </Stack>
               ))}
@@ -251,7 +251,7 @@ export function ScoreAnalysisPanel() {
 
           {analysis.stderr && (
             <details className="border-t border-border">
-              <summary className="px-3.5 py-2 text-[11px] text-text-tertiary cursor-pointer select-none">
+              <summary className="text-xs px-3.5 py-2 text-text-tertiary cursor-pointer select-none">
                 Sandbox output
               </summary>
               <MetaLine

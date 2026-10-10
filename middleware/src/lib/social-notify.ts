@@ -23,6 +23,8 @@
 // `notify*` helpers below; the socket producers (row 4, DMs; row 6, missed
 // calls) live in the gateway, which is the only thing that sees those frames.
 
+import { dmLobbyMembers } from '@connorhoehnslalom/realtime-modules/call';
+import type { AuthorityScope } from '@connorhoehnslalom/realtime-modules/server';
 import { getUser, listUsers } from '../providers/identity.js';
 
 /** What the library's `NotificationService.notifyUser` accepts (its `NotificationInput`). */
@@ -291,7 +293,7 @@ export async function notifyApprovalRequested(ev: ApprovalRequestEvent): Promise
 // ── Row 9: pipeline runs ────────────────────────────────────────────────────
 
 /** The run statuses that produce an item (design §3.4 row 9). */
-export const PIPELINE_NOTIFY_STATUSES = ['awaiting_approval', 'completed', 'failed'] as const;
+export const PIPELINE_NOTIFY_STATUSES = ['awaiting_approval', 'completed', 'failed', 'cancelled'] as const;
 export type PipelineNotifyStatus = (typeof PIPELINE_NOTIFY_STATUSES)[number];
 
 export interface PipelineRunEvent {
@@ -304,6 +306,8 @@ export interface PipelineRunEvent {
   /** The definition's effective approver roles (its own, else the tenant default). */
   approverRoles: readonly string[];
   error?: string | null;
+  /** The user who caused the move (a cancel); never notified about their own action. */
+  actorId?: string | null;
 }
 
 /** Roles that can decide a step whatever it names (lib/pipeline-definitions.ts `canDecide`), minus the cross-tenant admin. */
@@ -332,12 +336,13 @@ export async function notifyPipelineRun(ev: PipelineRunEvent): Promise<string[]>
   try {
     if (!sink) return [];
     if (!(PIPELINE_NOTIFY_STATUSES as readonly string[]).includes(ev.status)) return [];
-    const recipients = [...(ev.triggeredBy ? [ev.triggeredBy] : []), ...(await pipelineApprovers(ev.approverRoles))];
+    const recipients = [...(ev.triggeredBy ? [ev.triggeredBy] : []), ...(await pipelineApprovers(ev.approverRoles))]
+      .filter((u) => u !== ev.actorId);
     if (!recipients.length) return [];
     const what = ev.definitionTitle || ev.definitionId || ev.runId;
     const status = ev.status as PipelineNotifyStatus;
     const title = status === 'awaiting_approval' ? `${what} is waiting on an approval`
-      : status === 'completed' ? `${what} finished` : `${what} failed`;
+      : status === 'completed' ? `${what} finished` : status === 'cancelled' ? `${what} was cancelled` : `${what} failed`;
     const body = status === 'failed' && ev.error ? snippet(ev.error)
       : status === 'awaiting_approval' ? `Approved by ${ev.approverRoles.join(' or ') || 'the tenant default'}`
       : `Run ${ev.runId}`;
@@ -360,13 +365,195 @@ export async function notifyPipelineRun(ev: PipelineRunEvent): Promise<string[]>
 export function parseDmLobby(name: string): { tenant: string; members: string[] } | null {
   const m = /^([a-z][a-z0-9-]*):dm:(.+)$/.exec(name);
   if (!m) return null;
-  const members = m[2]!.split(':').filter(Boolean);
-  return members.length ? { tenant: m[1]!, members } : null;
+  const members = dmLobbyMembers(name);
+  return members ? { tenant: m[1]!, members } : null;
 }
 
-/** Where a conversation in `tenant` opens. Social DMs have their own page; elsewhere, the tenant's home. */
-export function conversationHref(tenant: string, lobby: string): string {
+/**
+ * The page a call's lobby or originating channel belongs to, for every tenant's page huddles
+ * (`orgiq:initiative:<id>`, `assessment:team:TEAM-…`, an assessment document call, `pipelines:run:<id>`).
+ * Only the canonical shapes; null for anything else (the caller then falls back to the tenant's home).
+ */
+export function pageHuddleHref(lobby: string, channel?: string | null): string | null {
+  const initiative = /^orgiq:initiative:([^\s/?#]{1,128})$/.exec(lobby) ?? /^initiative:([^\s/?#]{1,128})$/.exec(channel ?? '');
+  if (initiative) return `/iq/projects/${encodeURIComponent(initiative[1]!)}`;
+  const team = /^assessment:team:(TEAM-[A-Za-z0-9-]{1,120})$/.exec(lobby);
+  if (team) return `/assessment/teams/${encodeURIComponent(team[1]!)}`;
+  const run = /^pipelines:run:([^\s/?#]{1,256})$/.exec(lobby);
+  if (run) return `/pipelines/runs/${encodeURIComponent(run[1]!)}`;
+  const doc = /^assessment-document:(\/assessment\/[a-z-]+\?doc=[^\s]+)$/.exec(channel ?? '');
+  if (doc) return doc[1]!;
+  return null;
+}
+
+/** Where a conversation in `tenant` opens. Social DMs have their own page; a page huddle opens its page; elsewhere, the tenant's home. */
+export function conversationHref(tenant: string, lobby: string, channel?: string | null): string {
   if (tenant === 'social') return `/social/dms/${encodeURIComponent(lobby)}`;
+  const page = pageHuddleHref(lobby, channel);
+  if (page && hrefInsideTenant(tenant, page)) return page;
   if (tenant === 'assessment') return '/assessment/teams';
+  if (tenant === 'pipelines') return '/pipelines/runs';
   return '/iq/projects';
+}
+
+// ── orgiq: work assigned, budget envelope granted ───────────────────────────
+
+/** The orgiq user linked to an org-graph person (`app_users.person_id`), if any. */
+export async function userForPerson(personId: string | null | undefined): Promise<string | null> {
+  if (!personId) return null;
+  try {
+    return (await listUsers()).find((u) => u.personId === personId)?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export interface WorkItemAssignedEvent {
+  workItemId: string;
+  title: string;
+  projectId: string;
+  /** The new assignee, a person id (`work_items.assignee_id`). */
+  assigneePersonId: string;
+  /** The session user who made the change. */
+  actorId: string | null;
+}
+
+/** A work item's assignee changed to someone else → that person's user, not the actor. */
+export async function notifyWorkItemAssigned(ev: WorkItemAssignedEvent): Promise<void> {
+  try {
+    if (!sink) return;
+    const userId = await userForPerson(ev.assigneePersonId);
+    if (!userId || userId === ev.actorId) return;
+    const by = ev.actorId ? ` by ${await displayName(ev.actorId)}` : '';
+    await notify([userId], {
+      id: `work-assigned:${ev.workItemId}:${userId}`,
+      type: 'system',
+      title: `Assigned to you: ${snippet(ev.title, 80)}`,
+      body: `Assigned${by}`,
+      payload: { tenant: 'orgiq', kind: 'work-assigned', workItemId: ev.workItemId, projectId: ev.projectId, actorId: ev.actorId },
+      action: { label: 'Open the initiative', href: `/iq/projects/${encodeURIComponent(ev.projectId)}` },
+    });
+  } catch (err) {
+    console.warn(`[social-notify] work-assigned producer failed: ${(err as Error).message}`);
+  }
+}
+
+export interface BudgetGrantEvent {
+  grantId: string;
+  initiativeId: string;
+  sprintId: string;
+  granteePersonId: string;
+  amountUsd: number;
+  actorId: string | null;
+}
+
+/** A sprint envelope was granted → the grantee's user, not the granting release manager. */
+export async function notifyBudgetGranted(ev: BudgetGrantEvent): Promise<void> {
+  try {
+    if (!sink) return;
+    const userId = await userForPerson(ev.granteePersonId);
+    if (!userId || userId === ev.actorId) return;
+    await notify([userId], {
+      id: `budget-grant:${ev.grantId}`,
+      type: 'system',
+      title: `You were granted a $${ev.amountUsd.toLocaleString('en-US')} sprint envelope`,
+      body: `Initiative ${ev.initiativeId}, sprint ${ev.sprintId}`,
+      payload: { tenant: 'orgiq', kind: 'budget-grant', grantId: ev.grantId, initiativeId: ev.initiativeId, sprintId: ev.sprintId, actorId: ev.actorId },
+      action: { label: 'Open the initiative', href: `/iq/projects/${encodeURIComponent(ev.initiativeId)}` },
+    });
+  } catch (err) {
+    console.warn(`[social-notify] budget-grant producer failed: ${(err as Error).message}`);
+  }
+}
+
+// ── Mentions in tenant discussions (orgiq / pipelines / assessment) ─────────
+
+/** Where each discussion family's thread opens in the portal, or null when it cannot be named. */
+export async function tenantDiscussionLink(bare: string): Promise<{ tenant: 'orgiq' | 'assessment' | 'pipelines'; href: string; label: string; place: string } | null> {
+  const m = /^(orgiq:initiative|orgiq:work|pipelines:run|pipelines:def|assessment:doc|assessment:team):(\S+)$/.exec(bare);
+  if (!m) return null;
+  const id = m[2]!;
+  switch (m[1]) {
+    case 'orgiq:initiative':
+      return { tenant: 'orgiq', href: `/iq/projects/${encodeURIComponent(id)}`, label: 'Open the discussion', place: 'an initiative discussion' };
+    case 'orgiq:work': {
+      const { getWorkItem } = await import('../providers/work-items.js');
+      const item = await getWorkItem(id);
+      if (!item?.projectId) return null;
+      return { tenant: 'orgiq', href: `/iq/projects/${encodeURIComponent(item.projectId)}?tab=work&item=${encodeURIComponent(id)}&view=comments`, label: 'Open the discussion', place: 'a work item discussion' };
+    }
+    case 'pipelines:run':
+      return { tenant: 'pipelines', href: `/pipelines/runs/${encodeURIComponent(id)}`, label: 'Open the run', place: 'a run discussion' };
+    case 'pipelines:def':
+      return { tenant: 'pipelines', href: `/pipelines/definitions?open=${encodeURIComponent(id)}`, label: 'Open the definition', place: 'a definition discussion' };
+    case 'assessment:team':
+      return { tenant: 'assessment', href: `/assessment/teams/${encodeURIComponent(id)}?tab=discussion`, label: 'Open the team discussion', place: 'a team discussion' };
+    default:
+      return { tenant: 'assessment', href: assessmentDocumentHref(id, 'editor'), label: 'Open the document chat', place: 'a document chat' };
+  }
+}
+
+/** May `userId` read this family's chat right now? Fresh directory read, the
+ * family's own read authority (live-principal's check), then any explicit
+ * conversation membership rows. False on any doubt. */
+export async function currentlyReadsTenantChannel(userId: string, bare: string, scope?: AuthorityScope): Promise<boolean> {
+  try {
+    const { tenantChannelFamily } = await import('./tenant-channels.js');
+    const { holdsChannelAuthority } = await import('./live-principal.js');
+    const family = tenantChannelFamily(bare);
+    if (!family || !family.services.has('chat')) return false;
+    const user = await getUser(userId, { authoritative: true });
+    const roles = user?.grants[family.tenant] ?? [];
+    if (!user || !roles.length) return false;
+    let ok = false;
+    for (const role of roles) {
+      const session = { sub: userId, tenant: family.tenant, role, grants: user.grants, epoch: user.epoch, iat: 0, name: user.displayName } as unknown as Parameters<typeof holdsChannelAuthority>[0];
+      if (await holdsChannelAuthority(session, family.read)) { ok = true; break; }
+    }
+    if (!ok) return false;
+    // The REST read's 404 half (a team that no longer exists), as the gateway asks it.
+    if (family.channelResource) {
+      const { pageResourceVisible } = await import('./page-resources.js');
+      if (!await pageResourceVisible(family.channelResource, bare)) return false;
+    }
+    const { socialChat } = await import('./social-chat.js');
+    const chat = socialChat(); await chat.ready;
+    // One send's readers share its membership read (realtime-modules 0.108
+    // plugin scope); a change during the send makes this a fresh read.
+    const rows = await chat.membershipStore.listMembers(bare, scope?.active ? { scope } : {});
+    return !rows.length || rows.some((row) => row.userId === userId && row.removedAt == null);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * `@<name>` in a message on an orgiq/pipelines/assessment discussion channel:
+ * resolved against the people holding a grant in the channel's tenant, then
+ * each is asked the family's current read authority — someone who cannot open
+ * the link is never notified. Never the sender; deduped; recipients never come
+ * from the message body beyond the resolved names.
+ */
+export async function notifyTenantChannelMention(ev: { channel: string; sender: string; senderName?: string; text: string; scope?: AuthorityScope }): Promise<string[]> {
+  try {
+    if (!sink || !ev.text.includes('@')) return [];
+    const link = await tenantDiscussionLink(ev.channel);
+    if (!link) return [];
+    const candidates = (await resolveMentions(ev.text, link.tenant)).filter((u) => u !== ev.sender);
+    const readers: string[] = [];
+    for (const userId of new Set(candidates)) if (await currentlyReadsTenantChannel(userId, ev.channel, ev.scope)) readers.push(userId);
+    if (!readers.length) return [];
+    const name = await displayName(ev.sender, ev.senderName);
+    return await notify(readers, {
+      type: 'mention',
+      title: `${name} mentioned you in ${link.place}`,
+      body: snippet(ev.text) || 'New message',
+      channel: ev.channel,
+      payload: { tenant: link.tenant, kind: 'mention', channel: ev.channel, actorId: ev.sender, actorName: name },
+      action: { label: link.label, href: link.href },
+    });
+  } catch (err) {
+    console.warn(`[social-notify] tenant mention failed: ${(err as Error).message}`);
+    return [];
+  }
 }

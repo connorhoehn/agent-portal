@@ -65,6 +65,8 @@ export interface SocialCall {
   outcome: 'ringing' | 'answered' | 'missed' | 'declined' | 'cancelled';
   startedAt: string;
   durationMs?: number;
+  /** Each named person's portrait, added by the BFF (null → initials). */
+  avatars?: Record<string, string | null>;
 }
 
 export type SocialSource = 'platform' | 'mock';
@@ -274,20 +276,20 @@ export function callBackTargets(lobby: string, me: string): string[] | null {
 
 // ── Contacts ────────────────────────────────────────────────────────────────
 
-export interface ContactRow { userId: string; displayName: string; roles: string[]; online: boolean; idle: boolean }
+export interface ContactRow { userId: string; displayName: string; roles: string[]; online: boolean; idle: boolean; avatarUrl?: string }
 
 /**
  * The roster with presence: people here now first (you first among them),
  * then everyone else, by name.
  */
 export function contactRows(
-  people: ReadonlyArray<{ userId: string; displayName: string; roles: string[] }>,
+  people: ReadonlyArray<{ userId: string; displayName: string; roles: string[]; avatarUrl?: string | null }>,
   present: ReadonlyArray<{ id: string; idle?: boolean }>,
   me: string,
 ): ContactRow[] {
   const here = new Map(present.map((p) => [p.id, !!p.idle]));
   return people
-    .map((p) => ({ userId: p.userId, displayName: p.displayName, roles: [...p.roles], online: here.has(p.userId), idle: here.get(p.userId) ?? false }))
+    .map((p) => ({ userId: p.userId, displayName: p.displayName, roles: [...p.roles], online: here.has(p.userId), idle: here.get(p.userId) ?? false, ...(p.avatarUrl ? { avatarUrl: p.avatarUrl } : {}) }))
     .sort((a, b) => Number(b.online) - Number(a.online) || Number(b.userId === me) - Number(a.userId === me) || a.displayName.localeCompare(b.displayName));
 }
 

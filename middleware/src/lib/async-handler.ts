@@ -13,6 +13,12 @@ export class ValidationError extends AppError {
   constructor(message: string) { super(400, message); }
 }
 
+/** A BFF-owned session/provenance refusal, distinct from an upstream 401. */
+export class SessionInvalidError extends AppError {
+  public readonly code = 'SESSION_INVALID';
+  constructor(message = 'The session is no longer current. Sign in again.') { super(401, message); }
+}
+
 export class NotFoundError extends AppError {
   constructor(message = 'Not found') { super(404, message); }
 }
@@ -33,7 +39,7 @@ export function errorHandler(
 ): void {
   if (res.headersSent) { next(err); return; }
   if (err instanceof AppError) {
-    res.status(err.status).json({ error: err.message });
+    res.status(err.status).json({ error: err.message, ...(err instanceof SessionInvalidError ? { code: err.code } : {}) });
     return;
   }
   console.error('[middleware] unhandled error:', err);

@@ -21,7 +21,7 @@ import { exec } from '../providers/aurora.js';
 import { config } from '../config.js';
 import {
   getBot, createBotRun, finalizeBotRun, setPausedReason, markBotRan, countRunningRuns,
-  dispatchedSpendInWindow, runCostSamples,
+  dispatchedSpendInWindow, runCostSamples, mockRunBackedSettlements,
   type BotRun, type Bot,
 } from '../providers/bots.js';
 // Read-only imports. providers/budgets.ts owns the envelope's ledger shape and
@@ -41,7 +41,10 @@ import { asModelProvider } from './run-cost.js';
 import { dispatchGovernedRun } from './sdlc-pipeline.js';
 import { runDevboxShell } from './project-runner.js';
 import { resolveDevboxArn, devboxDataClient } from './devbox-arn.js';
-import { registerBox, getBoxBySession, appendEvent } from './devbox-fleet.js';
+import { registerBox, getBoxBySession, appendEvent, removeBox, type BoxStatus } from './devbox-fleet.js';
+
+/** A workspace in one of these states has someone in it — see ensureWorkspace. */
+const BUSY_BOX_STATUSES: ReadonlySet<BoxStatus> = new Set<BoxStatus>(['provisioning', 'running', 'waiting']);
 import { playDispatchedRun } from './mock-bot-runner.js';
 import { normalizeRuntimeSessionId } from './runtime-session.js';
 import type { ForecastConfidence } from './bot-estimate.js';
@@ -676,7 +679,11 @@ export type DispatchGrantDecision =
   | { kind: 'allow' }
   /** The route answers 403 — a missing grant is missing authorization, not a
    *  forecast, so there is no confirmFlag to override it. */
-  | { kind: 'deny'; reason: string };
+  | { kind: 'deny'; reason: string }
+  /** The route answers 503: unavailable grant authority cannot authorize spend. */
+  | { kind: 'unavailable'; reason: string };
+
+const GRANT_AUTHORITY_UNAVAILABLE = 'Sprint access could not be verified. No work was started. Try again when access is available.';
 
 /**
  * Whether this principal is authorized to dispatch against THIS initiative at
@@ -717,10 +724,8 @@ export function decideGrantScopedDispatch(input: {
  * Resolve, for the grant-scoped check, whether the caller holds an ACTIVE grant
  * on an initiative: session subject → person → any active grant here. Mirrors
  * loadEnvelope's resolution (active = the grant's sprint is `active`, or the
- * grant is sprint-less and therefore standing), and its null-means-do-not-brake
- * posture: no session, no person_id (a platform operator is not an SME), or a
- * grants read that throws all return null, so the route enforces nothing rather
- * than fabricating a denial an authz check must never invent.
+ * grant is sprint-less and therefore standing). Missing identity returns null;
+ * a failed authoritative read returns unavailable. Neither authorizes an SME.
  *
  * `hasAnyGrant` is the second signal decideGrantScopedDispatch needs: whether
  * the caller holds ANY grant here at all (active or not). An SME whose only
@@ -731,7 +736,8 @@ export function decideGrantScopedDispatch(input: {
 export async function resolveActiveGrant(
   orgProjectId: string,
   sessionSub: string | undefined,
-): Promise<{ hasActiveGrant: boolean; hasAnyGrant: boolean; initiativeName: string | null } | null> {
+): Promise<{ hasActiveGrant: boolean; hasAnyGrant: boolean; initiativeName: string | null }
+  | { kind: 'unavailable'; reason: string } | null> {
   if (!sessionSub) return null;
   try {
     const user = await getUser(sessionSub);
@@ -747,7 +753,7 @@ export async function resolveActiveGrant(
     };
   } catch (err) {
     console.warn(`[bots] could not resolve grant-scoped dispatch for ${orgProjectId}:`, (err as Error).message);
-    return null;
+    return { kind: 'unavailable', reason: GRANT_AUTHORITY_UNAVAILABLE };
   }
 }
 
@@ -763,8 +769,12 @@ export async function grantScopedDispatchVerdict(
   orgProjectId: string,
   session: { sub?: string; role?: string } | undefined,
 ): Promise<DispatchGrantDecision> {
+  // Allocators and platform operators are governed by their existing capability
+  // and money gates; only an SME spends against an authoritative sprint grant.
+  if (session?.role !== 'sme') return { kind: 'allow' };
   const grantCtx = await resolveActiveGrant(orgProjectId, session?.sub);
-  if (!grantCtx) return { kind: 'allow' };
+  if (!grantCtx) return { kind: 'unavailable', reason: GRANT_AUTHORITY_UNAVAILABLE };
+  if ('kind' in grantCtx) return grantCtx;
   return decideGrantScopedDispatch({
     role: session?.role,
     hasActiveGrant: grantCtx.hasActiveGrant,
@@ -803,37 +813,56 @@ async function ensureWorkspace(
   { ok: true; sessionId: string; boxId: string } | { ok: false; error: string }
 > {
   const existing = project.sessionId ? getBoxBySession(project.sessionId) : null;
-  if (project.sessionId && existing) return { ok: true, sessionId: project.sessionId, boxId: existing.id };
+  // A codebase's workspace is reused only while nobody is working in it. Two
+  // dispatches against one codebase used to land in ONE checkout at once: the
+  // second run edited the tree under the first, and commit-per-capture then
+  // pinned a mixture of both runs' work to whichever capture came first. A
+  // busy workspace (a run in flight, a run waiting on its operator, a microVM
+  // still coming up) gets a sibling checkout in a fresh session instead.
+  const busy = existing != null && BUSY_BOX_STATUSES.has(existing.status);
+  if (project.sessionId && existing && !busy) return { ok: true, sessionId: project.sessionId, boxId: existing.id };
 
   const arn = await resolveDevboxArn();
   if (!arn) return { ok: false, error: 'the devbox runtime is not deployed' };
 
   // Keep the project's session id when it satisfies the runtime's ≥33-char
   // rule — the workspace may still hold the checkout — else mint a fresh one.
-  const sessionId = normalizeRuntimeSessionId(project.sessionId);
+  // A busy workspace's id is exactly the one not to keep.
+  const sessionId = normalizeRuntimeSessionId(busy ? undefined : project.sessionId);
+
+  // The box is minted BEFORE the clone, as `provisioning`: the clone is what
+  // boots the microVM, and a computer that exists in the fleet while it comes
+  // up is the honest picture — the lab shows it arriving rather than popping
+  // into existence already busy. A failed clone REMOVES it again, which is what
+  // keeps the old rule ("register only once the clone succeeded"): no
+  // live-looking entry survives for a workspace with no checkout, so the
+  // registry check at the top can never trust a failed clone on the next fire.
+  // `provisioning` is busy, so a second dispatch arriving mid-clone gets its
+  // own workspace rather than this half-made one.
+  const minted = !getBoxBySession(sessionId);
+  const box = registerBox({
+    sessionId,
+    ...(attribution?.ownerId ? { ownerId: attribution.ownerId } : {}),
+    ...(attribution?.projectId ? { projectId: attribution.projectId } : {}),
+    ...(minted ? { status: 'provisioning' as const } : {}),
+  });
+  const unmint = (): void => { if (minted) removeBox(box.id); };
 
   const { command, redacted } = await buildCloneCommand(project);
   let output = '';
   try {
     output = await runDevboxShell(devboxDataClient(), arn, sessionId, command);
   } catch (err) {
+    unmint();
     return { ok: false, error: `clone failed: ${(err as Error).message}` };
   }
   if (CLONE_FAILURE.test(output)) {
     const line = output.split('\n').find((l) => CLONE_FAILURE.test(l)) ?? output.slice(-200);
     console.warn(`[bots] clone failed for ${project.repoFullName}: ${line.trim()} (${redacted})`);
+    unmint();
     return { ok: false, error: `clone failed: ${line.trim()}` };
   }
 
-  // Register the box only once the clone succeeded. Registering first would
-  // leave a live-looking fleet entry for a workspace with no checkout, and the
-  // sessionId+registry check at the top would then trust it on the next fire —
-  // a failed clone poisoning every later dispatch.
-  const box = registerBox({
-    sessionId,
-    ...(attribution?.ownerId ? { ownerId: attribution.ownerId } : {}),
-    ...(attribution?.projectId ? { projectId: attribution.projectId } : {}),
-  });
   await markCloned(project.id, sessionId);
   return { ok: true, sessionId, boxId: box.id };
 }
@@ -1075,12 +1104,13 @@ export function decideDispatch(
  * the agent — delivers the result.
  */
 export function renderWorkItemPrompt(
-  item: Pick<WorkItem, 'id' | 'type' | 'title' | 'description' | 'labels' | 'storyPoints'>,
+  item: Pick<WorkItem, 'id' | 'key' | 'type' | 'title' | 'description' | 'labels' | 'storyPoints'>,
   instruction?: string,
 ): string {
+  const reference = item.key ? `${item.key} [${item.id}]` : item.id;
   const preamble = item.storyPoints != null
-    ? `Work item ${item.id} (${item.type}, ${item.storyPoints} pts)`
-    : `Work item ${item.id} (${item.type})`;
+    ? `Work item ${reference} (${item.type}, ${item.storyPoints} pts)`
+    : `Work item ${reference} (${item.type})`;
   // Title FIRST, identifier under it. `lib/sdlc-pipeline.ts::titleFrom` names a
   // captured change after the prompt's first line, so the other order filled
   // the review queue with rows called "Work item wi-auth-e2-b3 (bug, 2 pts)" —
@@ -1389,7 +1419,9 @@ async function simulateMarketplaceDispatch(input: {
     // fireBot's payload, minus botId — there is no standing mission behind a
     // marketplace dispatch. requiresReview is false because nothing is
     // captured to review: see the completion below.
-    payload: { prompt: input.prompt, requiresReview: false, model: input.model },
+    payload: { prompt: input.prompt, requiresReview: false, model: input.model,
+      workItemId: item.id, workItemTitle: item.title,
+      initiativeId: item.projectId, initiativeName: item.projectName },
     ...(input.actor ? { createdBy: input.actor } : {}),
   });
   if (!job) {
@@ -1556,59 +1588,12 @@ async function settleSimulatedRun(input: {
 // ─── Reconciliation ───────────────────────────────────────────────────────────
 
 /**
- * Settle running bot_runs whose underlying run or job has finished.
- *
- * The dispatch paths are fire-and-forget (a governed run finishes on its own;
- * a queue job is the dispatcher's), so nothing calls back into the bot layer
- * when they end. This poll closes the loop: terminal status and cost flow back
- * onto the bot_run, plus — for governed runs — the change request and PR it
- * produced, so the bot's Outcomes tab links into the review queue.
+ * Settle finished governed runs — the run-backed arm of reconcileBotRuns, fed
+ * either by the SQL join or, offline, by mockRunBackedSettlements in the same
+ * row shape. Returns how many bot_runs it settled.
  */
-/** A governed run that has been 'running' this long is dead, not slow. Real
- *  devbox runs finish in a minute or two, and the devbox box reaper caps a box
- *  at 60 min — so 30 min is comfortably past any live run and safely under the
- *  box ceiling. Env-tunable for a lab that wants a tighter or looser leash. */
-const STALE_RUN_MINUTES = parseInt(process.env['BOT_STALE_RUN_MINUTES'] ?? '30', 10);
-
-export async function reconcileBotRuns(): Promise<{ settled: number }> {
-  if (config.mock.aurora) return { settled: 0 };
+async function settleRunBacked(runBacked: Record<string, unknown>[]): Promise<number> {
   let settled = 0;
-
-  // Stale-run reaper — the arm that was missing. A run-backed bot_run only
-  // settles once its agent_project_run reaches done/failed; if that run itself
-  // hangs (a devbox that never called back — the catch-up-on-boot pass did
-  // exactly this, leaving three runs 'running' for 90 minutes), nothing below
-  // could ever settle it, and each one held a slot of the global concurrency
-  // ceiling until every dispatch 429'd. Fail the hung agent_project_run first,
-  // so the run-backed arm below settles its bot_run in this same pass.
-  await exec(
-    `UPDATE agent_project_runs
-        SET status = 'failed', error = 'run exceeded the ${STALE_RUN_MINUTES}-minute ceiling — reaped as stale',
-            finished_at = NOW()
-      WHERE status = 'running'
-        AND started_at < NOW() - INTERVAL '${STALE_RUN_MINUTES} minutes'`,
-  );
-
-  // Governed runs. The lateral takes the newest change request for the run —
-  // a re-review appends reviews, not changes, so one run has at most one.
-  // The bot's per-run budget joins in so the soft cap can be judged against
-  // the actual cost the moment it is known.
-  const runBacked = await exec(
-    `SELECT br.id, br.work_item_id, r.status AS run_status, r.cost_usd::float8 AS cost_usd,
-            r.files_changed, r.error AS run_error, cr.change_id, cr.pr_url,
-            b.budget_per_run_usd::float8 AS budget_per_run_usd
-       FROM bot_runs br
-       JOIN agent_project_runs r ON r.id = br.run_id
-       LEFT JOIN bots b ON b.id = br.bot_id
-       LEFT JOIN LATERAL (
-         SELECT c.id AS change_id, c.pr_url
-           FROM agent_change_requests c
-          WHERE c.run_id = br.run_id
-          ORDER BY c.created_at DESC LIMIT 1
-       ) cr ON TRUE
-      WHERE br.status = 'running' AND br.run_id IS NOT NULL
-        AND r.status IN ('done','failed')`,
-  );
   for (const row of runBacked) {
     // Per-row: one bad row (deleted work item, transient Data API error) must
     // not strand every other finished run at 'running'.
@@ -1659,6 +1644,68 @@ export async function reconcileBotRuns(): Promise<{ settled: number }> {
       console.warn(`[bots] reconcile failed for bot_run ${toStr(row['id'])}:`, (err as Error).message);
     }
   }
+  return settled;
+}
+
+/**
+ * Settle running bot_runs whose underlying run or job has finished.
+ *
+ * The dispatch paths are fire-and-forget (a governed run finishes on its own;
+ * a queue job is the dispatcher's), so nothing calls back into the bot layer
+ * when they end. This poll closes the loop: terminal status and cost flow back
+ * onto the bot_run, plus — for governed runs — the change request and PR it
+ * produced, so the bot's Outcomes tab links into the review queue.
+ */
+/** A governed run that has been 'running' this long is dead, not slow. Real
+ *  devbox runs finish in a minute or two, and the devbox box reaper caps a box
+ *  at 60 min — so 30 min is comfortably past any live run and safely under the
+ *  box ceiling. Env-tunable for a lab that wants a tighter or looser leash. */
+const STALE_RUN_MINUTES = parseInt(process.env['BOT_STALE_RUN_MINUTES'] ?? '30', 10);
+
+export async function reconcileBotRuns(): Promise<{ settled: number }> {
+  // Offline, only the governed-run arm has anything to settle: the simulated
+  // dispatch settles its own job-backed row (settleSimulatedRun), and no
+  // in-process run outlives a reset. Its rows come from the fixtures in the
+  // SQL's own shape, so the settle loop below is the one the real path runs.
+  if (config.mock.aurora) return { settled: await settleRunBacked(await mockRunBackedSettlements()) };
+  let settled = 0;
+
+  // Stale-run reaper — the arm that was missing. A run-backed bot_run only
+  // settles once its agent_project_run reaches done/failed; if that run itself
+  // hangs (a devbox that never called back — the catch-up-on-boot pass did
+  // exactly this, leaving three runs 'running' for 90 minutes), nothing below
+  // could ever settle it, and each one held a slot of the global concurrency
+  // ceiling until every dispatch 429'd. Fail the hung agent_project_run first,
+  // so the run-backed arm below settles its bot_run in this same pass.
+  await exec(
+    `UPDATE agent_project_runs
+        SET status = 'failed', error = 'run exceeded the ${STALE_RUN_MINUTES}-minute ceiling — reaped as stale',
+            finished_at = NOW()
+      WHERE status = 'running'
+        AND started_at < NOW() - INTERVAL '${STALE_RUN_MINUTES} minutes'`,
+  );
+
+  // Governed runs. The lateral takes the newest change request for the run —
+  // a re-review appends reviews, not changes, so one run has at most one.
+  // The bot's per-run budget joins in so the soft cap can be judged against
+  // the actual cost the moment it is known.
+  const runBacked = await exec(
+    `SELECT br.id, br.work_item_id, r.status AS run_status, r.cost_usd::float8 AS cost_usd,
+            r.files_changed, r.error AS run_error, cr.change_id, cr.pr_url,
+            b.budget_per_run_usd::float8 AS budget_per_run_usd
+       FROM bot_runs br
+       JOIN agent_project_runs r ON r.id = br.run_id
+       LEFT JOIN bots b ON b.id = br.bot_id
+       LEFT JOIN LATERAL (
+         SELECT c.id AS change_id, c.pr_url
+           FROM agent_change_requests c
+          WHERE c.run_id = br.run_id
+          ORDER BY c.created_at DESC LIMIT 1
+       ) cr ON TRUE
+      WHERE br.status = 'running' AND br.run_id IS NOT NULL
+        AND r.status IN ('done','failed')`,
+  );
+  settled += await settleRunBacked(runBacked);
 
   // Queue jobs. awaiting_review counts as done for the bot — the work is
   // finished; what remains is the human decision, which lives on the Work

@@ -19,9 +19,60 @@ member #9 (Findings empty-state control exists for sme), hr-admin #1
 ## Open
 
 #12, #13 and #14 were all re-audited on 2026-09-07 and closed — see the
-Closed section. Nothing is open for this role right now.
+Closed section. #15–#23 were found on the 2026-10-01 headless re-walk
+(u-nora, Chromium 1680×940, own dev:mock stack).
 
 ## Closed
+
+25. ~~Search › Connections (`/iq/explore` lands here): a mouse cannot click or hover a node on the all-types graph.~~ **Closed 2026-10-06 12:50** — re-observed with real mouse clicks (Playwright click() and hover; ui-components 2.418.0): the record graph node buttons compute pointer-events auto, elementFromPoint over a node returns the node, and a click took the graph from 53–55 to 15 nodes ("1 selected", zoom 54% to 97%); a second click made "2 selected".
+
+26. ~~People org graph: after two or three picks the drawing sits on the 40% zoom floor with unreadable captions and can run under the detail card.~~ **Closed 2026-10-06 12:50** — re-observed with real mouse clicks: people-graph picks re-fit at 109% / 90% / 90% (three picks) and 107% for a single pick, not the 40% floor; the selected person is on screen and legible, earlier far picks scroll out of view by design.
+
+23. ~~Search › Connections graph node labels are clamped and the hover title does not carry the label.~~ **Closed 2026-10-06 12:50** — re-observed: every clamped record-graph caption sits in a button whose title leads with the record name and carries the full caption, nodes now receive hover, and a selected long-titled node prints its whole caption on three lines. Titles read from the attribute, not a native tooltip.
+
+19. **"Approve + record a passing dry run" records no dry run.**
+    `/iq/promotions` → Retry the Data API through an Aurora cold start →
+    Approve: toast "Approved", then `POST /api/promotions/promo-aurora-cold-start/promote`
+    → 409 "a skill needs a completed dry-run of runbook:promo-aurora-cold-start
+    — start one from /pipelines/runbooks". The candidate is left Approved
+    with "Dry run: Not recorded", the button keeps its label, and the route it
+    names is in the pipelines tenant, where u-nora holds no grant.
+    `promotions/PromotionsPage.tsx` (button label / promote flow) and the
+    promote route's message.
+
+    *Re-checked 2026-10-06 13:05: not re-run: it needs Approve, which writes to the shared mock; stays open.*
+
+    *Closed 2026-10-06 12:45 (headless Chromium 1680x940, shared dev:mock, ui-components 2.418.0, u-nora): the button now reads "Record approval" and its next step says a skill also needs a completed dry-run before promotion. Clicking it: toast "Approval recorded", status "Approval: Recorded · Dry run: Not recorded", and the promote call answers 409 "the approval is recorded, so promote again once that dry-run has completed" — no longer claims to record a dry run and no longer points to /pipelines/runbooks. Mock reset afterwards. The 409 does still show once as a network 4xx.*
+
+
+24. **Initiative Overview: work-graph node names are cut with an ellipsis and have no hover title.**
+    Repro: u-nora, `/iq/projects/p-observability` (Overview), scroll to the
+    "Shared work graph". The clipped-text sweep reports 6 leaf labels clipped, e.g.
+    "Span-metrics connector feeding RED dashboards" has 130px of the 292px it
+    needs and renders "Span-metrics conn…"; "Metric cardinality budgets" 130 of
+    155. The node's `aria-label` carries the full text
+    ("Span-metrics connector feeding RED dashboards, idl…") but nothing has a
+    `title`, so a sighted reader cannot recover the cut name without opening
+    the node. First seen on the 2026-10-06 re-walk; the earlier logs of this
+    surface recorded the sweep as clean, so the graph is new since then.
+    Suspect the graph composite fed from `portal/src/pages/project-detail`
+    (the Overview graph panel) and the library's node renderer.
+
+    *Closed 2026-10-06 14:10 (ui-components 2.416.0, headless Chromium 1680x940, u-nora): the work-graph node header now carries a `title` holding the full name. The sweep still reports the strings clipped by their single-line ellipsis box (e.g. "Span-metrics connector feeding RED dashboards" 130 of 292px) but every one is titled with its whole text, the deliberate ellipsis-with-hover pattern the protocol accepts. Checked by reading the `title` attribute, not by a physical hover (headless).*
+
+15. ~~The initiative tables do not fit their pane at 1680px.~~ **Closed 2026-10-06 13:05** — re-observed as u-nora at 1680px: the table box is 948px and the table is 948px on All initiatives, on Sprints and on My initiatives (was 969 / 1081 / 948 in a 948 box), so Updated and Spend in window are fully visible.
+
+16. ~~Initiative Agents tab clips its spend hint.~~ **Closed 2026-10-06 13:05** — re-observed as u-nora: `/iq/projects/p-observability?tab=agents` clipped-text sweep reports 0; the spend strip reads AGENT SPEND $0.00 · RUNS 2 · COMPLETED 0 with no cut hint.
+
+17. ~~Inbox "New run" does not show the composer.~~ **Closed 2026-10-06 13:05** — re-observed as u-nora: "New run" is now a button at the top right of the Inbox; it opens `/iq/work/queue?compose=1` with the Title field focused and the composer 428px from the top of the viewport.
+
+18. ~~"2 running" in the header has no counterpart on Automate.~~ **Closed 2026-10-06 13:05** — re-observed as u-nora: the header Fleet indicator reads "2 agent runs in progress, 3 cloud computers, 0 local computers", and Automate › Runs lists the same two ("Span-metrics connector feeding RED dashboards", "Collector OOMs under burst ingest when queue is unbounded") under "Running now outside the queue — 2 dispatched runs from initiative work items".
+
+20. ~~A 404 on a detail URL reads as an outage, sometimes in a broken sentence.~~ **Closed 2026-10-06 13:05** — re-observed as u-nora: `/iq/library/nope-not-real`, `/iq/designs/nope-not-real` and `/iq/promotions/zz-bogus` read "Asset not found", "Design not found" and "Candidate not found" with a back link, and with `session-bundles` on its empty scenario the configuration page shows its own "No configuration preview / No session bundle has been published yet…" (scenario restored).
+
+21. ~~Session config's "Review changes" has nothing to review.~~ **Closed 2026-10-06 13:05** — re-observed as u-nora: the update row now reads "Triage a flaky test · In configuration v2 → Library v3 · Show details"; opened, it says "The bundle records which version it ships, not that version's content, so no content diff is available here, and nothing is applied from this page." with an "Open library skill →" link.
+
+22. ~~Asset promotions has no h1.~~ **Closed 2026-10-06 13:05** — re-observed as u-nora: /iq/distillation/review?view=promotions has an h1 "Asset promotions", and with a candidate open the h1 is the candidate's title.
 
 12. ~~A failed turn that started from a FROM YOUR WORK card shows a Retry
     button that does nothing.~~ **Closed 2026-09-07 16:33** — every send path

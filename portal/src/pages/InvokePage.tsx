@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useMemo, useCallback, type ReactNode } from 'react';
-import { useSearchParams, useNavigate, Link } from 'react-router';
+import { useSearchParams, useNavigate, useLocation, Link } from 'react-router';
 import { useAgentStream } from '@connorhoehnslalom/realtime-modules/agent-streaming/client';
 import type { Message as AgentMessage } from '@connorhoehnslalom/realtime-modules/agent-streaming/client';
 import {
@@ -22,14 +22,14 @@ import {
   inactiveNavItemClassName,
   SuggestionCard,
   ThinkingBlock,
-  WorkflowStepper,
+  WorkflowStepper, T,
 } from '@connorhoehnslalom/ui-components/shared';
 import { ScopeHeader, ViewportFillRegion } from '@connorhoehnslalom/ui-components';
-import { ChatPanel } from '@connorhoehnslalom/ui-components/social';
+import { ChannelThread } from '../components/chat/ConversationThread';
+import { useSession } from '../lib/auth';
 import { useFetch } from '../hooks/useFetch';
 import { useUrlState } from '../lib/useUrlState';
 import { Markdown } from '../components/Markdown';
-import { T } from './Text';
 import { canonicalKey } from './agentFleetRows.ts';
 import {
   fetchSessionMessages, rememberSession, recallSession, forgetSession,
@@ -39,7 +39,7 @@ import {
   sortPeople, buildMentionRegexes, findMentionedPeople, generateFollowUps,
   type GraphEntities, type GraphPerson,
 } from '../lib/orgMentions';
-import { usePresence, useChat } from '@connorhoehnslalom/realtime-modules/client';
+import { usePresence } from '@connorhoehnslalom/realtime-modules/client';
 import { PresenceAvatarGroup } from '../components/shell/PresenceAvatarGroup';
 import { deriveSources, extractSources } from '../components/chat/answerSources';
 import { useCapabilities } from '../lib/capabilities';
@@ -48,8 +48,9 @@ import { friendlyToolName } from '../components/chat/toolCallSummary';
 import { coalesceAssistantMessages } from '../components/chat/coalesceMessages';
 import { collapseFailedTurn } from '../components/chat/collapseFailedTurn';
 import { FeedbackControl } from '../components/chat/FeedbackControl';
-import { describeTurnError } from '../components/chat/turnError';
+import { agentInvokeFetch } from '../components/chat/agentInvokeFetch';
 import { readSearchEvidence, linkSearchCitations } from './search/searchModel';
+import { claimDeepLinkPrompt, createTurnGate } from './search/turnGate';
 import type { SearchRef } from './search/searchTypes';
 import { UnavailableNotice } from '../components/UnavailableNotice';
 
@@ -132,20 +133,6 @@ function answerInvocationId(msg: unknown): string | undefined {
 // request on purpose, and the hook specifically skips setting `error` for an
 // AbortError — wrapping it into a plain Error would turn a deliberate cancel
 // into a spurious "could not reach the agent" banner.
-async function agentInvokeFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-  let res: Response;
-  try {
-    res = await fetch(input, init);
-  } catch (err) {
-    if ((err as { name?: string } | null)?.name === 'AbortError') throw err;
-    throw new Error(describeTurnError(0));
-  }
-  if (res.ok) return res;
-  let bodyText: string | undefined;
-  try { bodyText = await res.clone().text(); } catch { /* no body to read — describeTurnError handles undefined */ }
-  throw new Error(describeTurnError(res.status, bodyText));
-}
-
 interface AgentDef {
   id: string;
   name: string;
@@ -181,6 +168,10 @@ interface SessionSummary {
 // several id spellings the runtime cache registers.
 const WRITE_AGENT_RE = /(graph[-_]builder|ingestion|scoring)/;
 const isWriteAgent = (agentId: string): boolean => WRITE_AGENT_RE.test(agentId.toLowerCase());
+// The devbox runtime is a computer, not an org agent: offering it is the
+// ManageDevbox capability's call, the same gate the Computers surfaces use.
+const DEVBOX_AGENT_RE = /devbox/;
+const isDevboxAgent = (agentId: string): boolean => DEVBOX_AGENT_RE.test(agentId.toLowerCase());
 
 export interface SearchConversationAPI {
   transcript: ReactNode;
@@ -208,7 +199,7 @@ function InvokePage({ renderWorkspace, renderAnswerEvidence, contextRefs = [], o
   onSubmitted?: (query: string) => void;
 } = {}) {
   // Tenant-prefixed: the BFF gateway refuses any channel outside `<tenant>:` (2026-09-29).
-  const { roster: peers } = usePresence('orgiq:invoke');
+  const { roster: peers } = usePresence('orgiq:invoke', { join: true });
   // `/api/agents` answers `{ agents, degraded?, error? }` — an object, not a
   // bare array, so that a failed ListAgentRuntimes can say so instead of
   // arriving as an empty fleet. Here the fleet only fills a selector; the
@@ -231,13 +222,14 @@ function InvokePage({ renderWorkspace, renderAnswerEvidence, contextRefs = [], o
   const { can } = useCapabilities();
 
   // Hide the write agents from the selector unless the caller holds
-  // ManageIngest. While capabilities are still loading, can() is false, so the
+  // ManageIngest, and the devbox unless they hold ManageDevbox. While capabilities are still loading, can() is false, so the
   // conservative default hides them (better than flashing an option the server
   // will 403). Read agents always stay listed.
   const canIngest = can('ManageIngest');
+  const canDevbox = can('ManageDevbox');
   const visibleAgents = useMemo(
-    () => (canIngest ? agents : agents?.filter((a) => !isWriteAgent(a.id))),
-    [agents, canIngest],
+    () => agents?.filter((a) => (canIngest || !isWriteAgent(a.id)) && (canDevbox || !isDevboxAgent(a.id))),
+    [agents, canIngest, canDevbox],
   );
 
   // ?agent=<id> — the chosen agent, distinct from `?agentId=` below (a
@@ -335,6 +327,15 @@ function InvokePage({ renderWorkspace, renderAnswerEvidence, contextRefs = [], o
         });
     },
   });
+  // Every send goes through `runTurn`, never `sendMessage` directly: the hook
+  // starts a second run on the same transcript if asked (see turnGate.ts).
+  const [turnGate] = useState(createTurnGate);
+  const runTurn = useCallback((text: string): boolean => {
+    const token = turnGate.tryBegin();
+    if (token === null) return false;
+    void sendMessage(text).finally(() => turnGate.end(token));
+    return true;
+  }, [sendMessage, turnGate]);
   const [input, setInput] = useState('');
   const [suggestionSeed, setSuggestionSeed] = useState(0);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -356,15 +357,13 @@ function InvokePage({ renderWorkspace, renderAnswerEvidence, contextRefs = [], o
     refresh: refreshSessions,
   } = useFetch<{ sessions: SessionSummary[]; memoryUnavailable?: string }>('/api/sessions', 15000);
   const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
   const navigate = useNavigate();
 
-  // Session-scoped chat sidebar (feature-flagged via VITE_ORGIQ_CHAT_ENABLED).
-  // Channel is `orgiq:session:<sessionId>` when a session is active, otherwise
-  // falls back to a generic invoke channel so the hook is never called with an
-  // empty string. When CHAT_ENABLED is false the hook still runs (hooks can't
-  // be conditional) but the sidebar is not rendered.
-  const chatChannel = sessionId ? `orgiq:session:${sessionId}` : 'orgiq:invoke';
-  const chat = useChat(chatChannel);
+  // Session-scoped chat sidebar (feature-flagged via VITE_ORGIQ_CHAT_ENABLED): the session's own
+  // `orgiq:session:<sessionId>` thread, joined only while the sidebar is drawn.
+  const chatChannel = sessionId ? `orgiq:session:${sessionId}` : null;
+  const { session } = useSession();
 
   const selectedAgent = agents?.find(a => a.id === selectedId);
 
@@ -472,14 +471,14 @@ function InvokePage({ renderWorkspace, renderAnswerEvidence, contextRefs = [], o
   // turns too, since it reads the same ref.
   const send = useCallback((text: string, refs?: SearchRef[], agentId?: string) => {
     const trimmed = text.trim();
-    if (!trimmed || isStreaming) return;
+    if (!trimmed || isStreaming || turnGate.busy()) return;
     sentAgentRef.current = agentId ?? (renderWorkspace ? selectedId : null);
     sentContextRef.current = refs ?? contextRef.current;
     onSubmitted?.(trimmed);
     lastTurnRef.current = trimmed;
     setRetried(false);
-    void sendMessage(trimmed);
-  }, [isStreaming, sendMessage, onSubmitted, renderWorkspace, selectedId]);
+    runTurn(trimmed);
+  }, [isStreaming, runTurn, turnGate, onSubmitted, renderWorkspace, selectedId]);
 
   const handleSend = () => {
     if (!input.trim() || isStreaming) return;
@@ -492,10 +491,10 @@ function InvokePage({ renderWorkspace, renderAnswerEvidence, contextRefs = [], o
   // whatever (if anything) is currently sitting in the composer.
   const handleRetry = useCallback(() => {
     const text = lastTurnRef.current;
-    if (!text || isStreaming) return;
+    if (!text || isStreaming || turnGate.busy()) return;
     setRetried(true);
-    void sendMessage(text);
-  }, [isStreaming, sendMessage]);
+    runTurn(text);
+  }, [isStreaming, runTurn, turnGate]);
 
   // Mirror the hook's `error` into a turn-failure banner, skipping the case
   // already covered by `historyError` above (a session LOAD failure, not a
@@ -511,6 +510,7 @@ function InvokePage({ renderWorkspace, renderAnswerEvidence, contextRefs = [], o
   // Library hook's loadHistory(sid) handles the fetch via the historyFetch
   // option above (configured at the useAgentStream() call site).
   async function loadSession(sid: string) {
+    turnGate.release(); // loadHistory aborts the stream in flight
     await loadHistory(sid);
   }
 
@@ -563,8 +563,9 @@ function InvokePage({ renderWorkspace, renderAnswerEvidence, contextRefs = [], o
     forgetSession('invoke');
     setHistoryError(null);
     setEmptyTranscriptSessionId(null);
+    turnGate.release(); // reset aborts the stream in flight
     reset();
-  }, [reset]);
+  }, [reset, turnGate]);
 
   const sessions = useMemo(() => {
     const server = sessionList?.sessions ?? [];
@@ -626,14 +627,19 @@ function InvokePage({ renderWorkspace, renderAnswerEvidence, contextRefs = [], o
   // (fetched above), so this waits one render for that fetch to settle
   // before firing rather than sending an unfleshed-out prompt; a fetch that
   // fails (`graphFetchError`) is not worth blocking on, so the prompt still
-  // sends, just without the names. Runs once, then strips both params so a
-  // reload doesn't re-fire it.
+  // sends, just without the names. Asked once per history entry, then both
+  // params are stripped so a reload doesn't re-fire it: the effect re-runs
+  // when `graph` lands, and the strip below is a router transition, so it can
+  // still see `prompt` after asking (the double send of distillation DEFECTS
+  // #23) — `claimDeepLinkPrompt` is what makes it once.
   useEffect(() => {
     const p = searchParams.get('prompt');
     if (!p) return;
     const focusParam = searchParams.get('focus');
     const focusIds = focusParam ? focusParam.split(',').map((s) => s.trim()).filter(Boolean) : [];
     if (focusIds.length > 0 && !graph && !graphFetchError) return; // wait for names to resolve
+    if (turnGate.busy()) return; // asked once the turn in flight ends (isStreaming below)
+    if (!claimDeepLinkPrompt(location.key, p)) return;
     let resolved = PROMPT_SLUGS[p] ?? p;
     if (focusIds.length > 0 && graph) {
       const names = focusIds
@@ -646,9 +652,9 @@ function InvokePage({ renderWorkspace, renderAnswerEvidence, contextRefs = [], o
     next.delete('focus');
     if (renderWorkspace) { next.set('q', p); next.set('tab', 'answer'); }
     setSearchParams(next, { replace: true });
-    void sendMessage(resolved);
+    runTurn(resolved);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams.get('prompt'), searchParams.get('focus'), graph, graphFetchError]);
+  }, [searchParams.get('prompt'), searchParams.get('focus'), graph, graphFetchError, location.key, isStreaming]);
 
   // ── The Find-Help merge: Ask IS the org search ────────────────────────────
   //
@@ -822,7 +828,7 @@ function InvokePage({ renderWorkspace, renderAnswerEvidence, contextRefs = [], o
                     name: tc.name === 'search_context' ? 'Search context' : friendlyToolName(tc.name),
                     done: Boolean(tc.result),
                   }))}
-                  agentName={renderWorkspace ? 'Org Assistant' : selectedAgent?.name ?? 'Agent'}
+                  agentName={renderWorkspace ? 'Work Assistant' : selectedAgent?.name ?? 'Agent'}
                   renderMarkdown={(content) => renderMessageContent(renderWorkspace ? linkSearchCitations(content, readSearchEvidence(msg.toolCalls)) : content, false)}
                 />
                 {renderWorkspace && msg.role === 'assistant' && renderAnswerEvidence?.(msg.toolCalls)}
@@ -860,7 +866,7 @@ function InvokePage({ renderWorkspace, renderAnswerEvidence, contextRefs = [], o
                 args: tc.args,
               }))}
               streaming
-              agentName={renderWorkspace ? 'Org Assistant' : selectedAgent?.name ?? 'Agent'}
+              agentName={renderWorkspace ? 'Work Assistant' : selectedAgent?.name ?? 'Agent'}
               renderMarkdown={(content) => renderMessageContent(content, true)}
             />
           )}
@@ -963,7 +969,7 @@ function InvokePage({ renderWorkspace, renderAnswerEvidence, contextRefs = [], o
         >
           <Stack gap="none" className="h-full min-h-0 min-w-0">
             <ScopeHeader variant="crumbs" breadcrumbs={[
-              { label: 'Org' }, { label: 'Ask' },
+              { label: 'Engage' }, { label: 'Ask' },
               { label: sessions.find(s => s.sessionId === sessionId)?.title || (sessionId ? 'Conversation' : 'New session') },
             ]} />
             <Inline gap="none" wrap={false} align="stretch" className="flex-1 min-h-0">
@@ -1064,7 +1070,7 @@ function InvokePage({ renderWorkspace, renderAnswerEvidence, contextRefs = [], o
                 ...(d.sourceUri ? { href: d.sourceUri } : {}),
               }))}
               askLabel="Ask about them"
-              onAsk={() => sendMessage(`Tell me about ${p.name}'s work related to "${lastAsked}" — what they've done, and whether they're the right person to approach.`)}
+              onAsk={() => runTurn(`Tell me about ${p.name}'s work related to "${lastAsked}" — what they've done, and whether they're the right person to approach.`)}
               onOpen={() => navigate(`/iq/explore?focus=${encodeURIComponent(p.id)}`)}
             />
           ))}
@@ -1078,16 +1084,8 @@ function InvokePage({ renderWorkspace, renderAnswerEvidence, contextRefs = [], o
             Session Chat
           </SectionLabel>
           <Stack gap="none" className="flex-1 overflow-hidden">
-            <ChatPanel
-              messages={chat.messages.map(m => ({
-                id: m.id,
-                clientId: m.clientId,
-                content: m.message,
-                timestamp: m.timestamp,
-                displayName: (m.metadata?.displayName as string | undefined) ?? m.clientId,
-              }))}
-              onSend={chat.sendMessage}
-            />
+            {/* `/summarize` here reads the session thread under its own gateway authority (orgiq:session). */}
+            {chatChannel && <ChannelThread key={chatChannel} channel={chatChannel} maySend={!!session?.sub} title="Session chat" data-testid="session-chat" />}
           </Stack>
         </Stack>
       )}

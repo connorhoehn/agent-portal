@@ -19,9 +19,8 @@ import {
   TableHead,
   TableRow,
   TableTd,
-  TableTh,
+  TableTh, T,
 } from '@connorhoehnslalom/ui-components/shared';
-import { T } from './Text';
 import { streamStatusLabel } from '../../lib/streamStatus';
 
 interface AuthzEvent {
@@ -91,15 +90,15 @@ function AuthzLogPage() {
       title="Authorization Log"
       description={`Live AVP decisions. Updates over SSE. Buffer holds last ${MAX_EVENTS} events; restart middleware to reset.`}
       actions={
-        <Inline gap="sm" align="center" className="text-[11px]">
+        <Inline gap="sm" align="center">
           <StatusDot
             color={streaming ? 'var(--color-success)' : 'var(--color-text-tertiary)'}
             label={streamStatusLabel(streaming, connectedOnce)}
             size="sm"
           />
-          <T className="text-text-tertiary">·</T>
-          <T><strong className="text-success">{allowCount}</strong> allow</T>
-          <T><strong className="text-danger">{denyCount}</strong> deny</T>
+          <T size="sm" className="text-text-tertiary">·</T>
+          <T size="sm"><T weight="semibold" className="text-success">{allowCount}</T> allow</T>
+          <T size="sm"><T weight="semibold" className="text-danger">{denyCount}</T> deny</T>
         </Inline>
       }
     >
@@ -148,14 +147,14 @@ function AuthzLogPage() {
               Clear
             </Button>
           )}
-          <T className="ml-auto text-[12px] text-text-tertiary">
+          <T size="xs" className="ml-auto text-text-tertiary">
             showing {filtered.length} of {events.length}
           </T>
         </Inline>
       </Card>
 
       <Card padding="md">
-        <Table>
+        <Table size="sm">
           <TableHead>
             <TableRow>
               <TableTh>Time</TableTh>
@@ -192,16 +191,16 @@ function AuthzLogPage() {
                 <TableTd className="font-mono">
                   {e.sub}
                   {e.actor && (
-                    <T title={`Masquerade — real identity: ${e.actor}`} className="ml-1.5 text-[10px] text-warning">
+                    <T size="xs" title={`Masquerade — real identity: ${e.actor}`} className="ml-1.5 text-warning">
                       via {e.actor}
                     </T>
                   )}
                 </TableTd>
                 <TableTd className="font-mono text-text-secondary">{e.tenant ?? ''}</TableTd>
                 <TableTd className="font-mono">{e.role}</TableTd>
-                <TableTd className="font-medium">{e.action}</TableTd>
+                <TableTd>{e.action}</TableTd>
                 <TableTd className="font-mono text-text-secondary">{e.path ?? ''}</TableTd>
-                <TableTd className="text-text-tertiary text-[11px]">{e.reason ?? ''}</TableTd>
+                <TableTd className="text-text-tertiary">{e.reason ?? ''}</TableTd>
               </TableRow>
             ))}
           </TableBody>

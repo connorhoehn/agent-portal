@@ -37,7 +37,16 @@ export type MatchReason = typeof MATCH_REASONS[keyof typeof MATCH_REASONS];
 export interface SearchEdge { id: string; source: string; target: string; label: string }
 export interface SearchResponse {
   query: string; results: SearchRecord[]; counts: Record<SearchRecordType | 'all', number>;
-  total: number; related: SearchRecord[]; edges: SearchEdge[]; partial?: string[];
+  total: number;
+  /**
+   * True when `total` and `counts` are floors, not exact: every source is read
+   * through a bounded window (initiatives/work/decisions/assets 200, knowledge
+   * 1000, the people graph's own cap), and a full window — or a source that
+   * failed to read, or a dropped conflicting row — means rows existed that were
+   * never scored. `partial` names which source caused it.
+   */
+  totalIsLowerBound: boolean;
+  related: SearchRecord[]; edges: SearchEdge[]; partial?: string[];
 }
 export interface SearchOptions { q?: string; type?: SearchRecordType | 'all'; scope?: string; limit?: number; offset?: number; sort?: SearchSort }
 export const searchKey = (ref: SearchRef): string => `${ref.type}:${ref.id}`;
@@ -134,7 +143,7 @@ export async function searchRecords(principal: PrincipalRef, opts: SearchOptions
   });
   work.forEach(w => {
     const ref: SearchRef = { type: 'work', id: w.id };
-    add({ ...ref, title: w.title, description: w.summary ?? w.description ?? undefined, status: w.blockedReason || w.labels?.includes('blocked') ? 'blocked' : w.status, subtitle: [w.projectName, w.assigneeName].filter(Boolean).join(' · '), href: `/iq/projects/${enc(w.projectId)}?tab=work&item=${enc(w.id)}`, sourceRefs: [initiative(w.projectId)], updatedAt: isoOrUndefined(w.updatedAt) });
+    add({ ...ref, title: w.title, description: w.summary ?? w.description ?? undefined, status: w.blockedReason || w.labels?.includes('blocked') ? 'blocked' : w.status, subtitle: [w.key, w.projectName, w.assigneeName].filter(Boolean).join(' · '), href: `/iq/projects/${enc(w.projectId)}?tab=work&item=${enc(w.id)}`, sourceRefs: [initiative(w.projectId)], updatedAt: isoOrUndefined(w.updatedAt) });
     edge(initiative(w.projectId), ref, 'includes');
     if (w.assigneeId) edge(person(w.assigneeId), ref, 'assigned to');
     if (w.parentId) edge({ type: 'work', id: w.parentId }, ref, 'includes');
@@ -230,7 +239,11 @@ export async function searchRecords(principal: PrincipalRef, opts: SearchOptions
   validEdges.forEach(e => { if (visible.has(e.source)) neighbors.add(e.target); if (visible.has(e.target)) neighbors.add(e.source); });
   const related = available.filter(r => neighbors.has(searchKey(r)) && !visible.has(searchKey(r))).slice(0, 100).map(r => (scores.get(searchKey(r)) ?? 0) > 0 ? annotate(r) : r);
   related.forEach(r => visible.add(searchKey(r)));
-  return { query: opts.q ?? '', results, counts, total: filtered.length, related, edges: validEdges.filter(e => visible.has(e.source) && visible.has(e.target)), ...(partial.length ? { partial: [...new Set(partial)] } : {}) };
+  // `total` is the requested type's match count — the same number its tab
+  // badge shows — counted over the records the bounded source reads returned.
+  // Any partial read makes it (and every count) a floor, and the response says so.
+  const total = counts[!opts.type || opts.type === 'all' ? 'all' : opts.type];
+  return { query: opts.q ?? '', results, counts, total, totalIsLowerBound: partial.length > 0, related, edges: validEdges.filter(e => visible.has(e.source) && visible.has(e.target)), ...(partial.length ? { partial: [...new Set(partial)] } : {}) };
 }
 
 /** Resolve context afresh on the server; client titles and URLs are never trusted. */

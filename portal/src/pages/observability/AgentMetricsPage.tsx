@@ -9,11 +9,10 @@ import {
   TableTh,
   TableTd,
   Chip,
-  PageSection,
+  PageSection, T,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { formatTokenCount } from '../../lib/format';
-import { T } from './Text';
 
 interface Invocation {
   id: string;
@@ -99,26 +98,26 @@ function AgentMetricsPage() {
       title="Per-Agent Metrics"
       description="Derived from recent invocations (live) + Bedrock log (~30s lag, 60min window)"
       actions={
-        <T className="text-[11px] text-[var(--color-text-tertiary)]">
+        <T size="xs" className="text-[var(--color-text-tertiary)]">
           {rows.length} agent{rows.length !== 1 ? 's' : ''}
         </T>
       }
     >
       <Card padding="md">
         {rows.length === 0 ? (
-          <InlinePlaceholder align="center" className="p-6 text-[12px]">
+          <InlinePlaceholder align="center" className="text-xs p-6">
             No agent activity in the recent window. Invoke an agent to populate this view.
           </InlinePlaceholder>
         ) : (
-          <Table>
+          <Table size="sm">
             <TableHead>
               <TableRow>
                 <TableTh>Agent</TableTh>
-                <TableTh>Invocations</TableTh>
-                <TableTh>Avg Latency</TableTh>
-                <TableTh>Tokens (in / out)</TableTh>
-                <TableTh>Errors</TableTh>
-                <TableTh>Blocked</TableTh>
+                <TableTh numeric>Invocations</TableTh>
+                <TableTh numeric>Avg Latency</TableTh>
+                <TableTh numeric>Tokens (in / out)</TableTh>
+                <TableTh numeric>Errors</TableTh>
+                <TableTh numeric>Blocked</TableTh>
                 <TableTh>Health</TableTh>
               </TableRow>
             </TableHead>
@@ -129,35 +128,25 @@ function AgentMetricsPage() {
                 const healthy = errRate === 0 && blockedRate < 0.1;
                 return (
                   <TableRow key={r.agentName}>
-                    <TableTd className="text-[12px] font-medium whitespace-nowrap">
+                    <TableTd className="whitespace-nowrap">
                       {r.agentName}
                     </TableTd>
-                    <TableTd className="text-[12px]">{r.invocations}</TableTd>
-                    <TableTd className="text-[11px] text-[var(--color-text-tertiary)]">
+                    <TableTd numeric>{r.invocations}</TableTd>
+                    <TableTd numeric className="text-[var(--color-text-tertiary)]">
                       {r.invocations > 0 ? `${(r.avgLatencyMs / 1000).toFixed(2)}s` : '—'}
                     </TableTd>
-                    <TableTd className="text-[11px] text-[var(--color-text-tertiary)]">
+                    <TableTd numeric className="text-[var(--color-text-tertiary)]">
                       {r.tokensIn + r.tokensOut > 0
                         ? `${formatTokenCount(r.tokensIn)} / ${formatTokenCount(r.tokensOut)}`
                         : '—'}
                     </TableTd>
-                    <TableTd className="text-[12px]">
-                      <T className={r.errors > 0 ? 'text-[var(--color-danger)]' : ''}>
+                    <TableTd numeric title={r.invocations > 0 ? `${(errRate * 100).toFixed(0)}% of invocations` : undefined}>
+                      <T size="sm" className={r.errors > 0 ? 'text-[var(--color-danger)]' : ''}>
                         {r.errors}
                       </T>
-                      {r.invocations > 0 && (
-                        <T className="text-[11px] text-[var(--color-text-tertiary)] ml-1.5">
-                          ({(errRate * 100).toFixed(0)}%)
-                        </T>
-                      )}
                     </TableTd>
-                    <TableTd className="text-[12px]">
+                    <TableTd numeric title={r.invocations > 0 ? `${(blockedRate * 100).toFixed(0)}% of invocations` : undefined}>
                       {r.blocked}
-                      {r.invocations > 0 && (
-                        <T className="text-[11px] text-[var(--color-text-tertiary)] ml-1.5">
-                          ({(blockedRate * 100).toFixed(0)}%)
-                        </T>
-                      )}
                     </TableTd>
                     <TableTd>
                       {r.invocations === 0 ? (

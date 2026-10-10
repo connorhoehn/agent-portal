@@ -1,0 +1,1 @@
+{"service":"platform-api","version":"0.1.0","status":"degraded","checks":[{"name":"dynamodb","ok":true,"durationMs":2},{"name":"redis","ok":true,"durationMs":1},{"name":"build","ok":true,"durationMs":0},{"name":"model","ok":true,"durationMs":1,"degraded":true,"details":"Model unavailable — no ANTHROPIC_API_KEY is set on this deployment"}],"timestamp":"2026-10-05T00:29:30.086Z"}

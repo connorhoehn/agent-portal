@@ -67,7 +67,7 @@ Run → Steps → Artifact → Events. Extra required fields:
    author never sees Approve / Cancel / Configuration, operator never sees
    New definition / Configuration.
 7. Write the log. If something is wrong, `verdict: fail — <what>` and keep
-   going; do not fix pages mid-audit (a page edit stales every log that
+   going; do not fix pages mid-audit (a page edit can stale every log that
    names it). Collect defects in `docs/pipelines-journeys/<role>/DEFECTS.md`.
 
 ## Log format
@@ -134,15 +134,10 @@ social-api-status: 403            # required once social is registered
 verdict: pass
 ```
 
-## `pages:` (required)
+## `pages:` and freshness
 
-Every log carries a `pages:` line naming the files and/or directories its
-surface renders from, comma-separated. Freshness is judged per log against
-the content digest of those entries, recorded in
-`docs/pipelines-journeys/.pages-sha` by `--seal` after a real walk. Name
-files, not the tenant directory, and leave shared children out — naming
-them puts every log under a global rule. A digest that moves is a change;
-an mtime that moves alone is not (see `docs/orgiq-journeys/PROTOCOL.md`).
+Freshness and sealing follow [docs/journeys.md](../journeys.md): a log is stale when the rendered contract of a route its `url:` names changed since its walk was sealed (sweep measurements, gate, the assertions of the specs that cover it), and only `scripts/journeys/seal.sh <dir>`, after a walk, seals it. A `pages:` line is optional: it is the basis only for a log that names
+no route.
 
 ## Measuring a surface from the console — two traps that invent defects
 

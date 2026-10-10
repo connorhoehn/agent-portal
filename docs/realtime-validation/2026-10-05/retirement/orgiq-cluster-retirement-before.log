@@ -1,0 +1,49 @@
+
+> @connorhoehn/realtime-modules@0.103.0 test
+> jest --runInBand test/server/redis-router.integration.test.ts -t retires a fenced|fences a disconnected
+
+FAIL test/server/redis-router.integration.test.ts
+  ● RedisRealtimeRouter / native peer transport › retires a fenced node without changing shared accepted seats, then recovers the user on a peer
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 0
+
+      Array [
+        "a-7c6044d8-03f0-4474-ac92-db2f55e58950",
+    -   "b-85579a5d-d007-4dc8-8534-1d813e3bf0f2",
+      ]
+
+      532 |         await eventually(() => !b.router.isReady());
+      533 |         await b.handle.dispose();
+    > 534 |         expect((await a.calls.getCall(callId))?.participantClientIds.sort()).toEqual([alice.id, bob.id].sort());
+          |                                                                              ^
+      535 |         expect(await a.calls.isAccepted(callId)).toBe(true); expect(ended).toEqual([]);
+      536 |         const c = await boot('c'), returned = await connect(c, 'bob');
+      537 |         returned.ws.send(JSON.stringify({ service: 'call', action: 'participant-state', callId, lobbyName,
+
+      at Object.<anonymous> (test/server/redis-router.integration.test.ts:534:78)
+
+  ● RedisRealtimeRouter / native peer transport › fences a disconnected peer transport permanently even while command leases remain available
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: false
+    Received: true
+
+      546 |         expect(b.router.isReady()).toBe(true);
+      547 |         b.unavailable();
+    > 548 |         expect(b.router.isReady()).toBe(false);
+          |                                    ^
+      549 |         expect(await b.router.sendToClient(bob.id, { type: 'test', id: 'retired-transport' })).toBe(false);
+      550 |         expect(await a.router.sendToClient(bob.id, { type: 'test', id: 'retired-destination' })).toBe(false);
+      551 |         await delay(350);
+
+      at Object.<anonymous> (test/server/redis-router.integration.test.ts:548:36)
+
+Test Suites: 1 failed, 1 total
+Tests:       2 failed, 25 skipped, 27 total
+Snapshots:   0 total
+Time:        4.715 s, estimated 6 s
+Ran all test suites matching test/server/redis-router.integration.test.ts with tests matching "retires a fenced|fences a disconnected".

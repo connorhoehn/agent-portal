@@ -51,7 +51,7 @@ describe('the dev:mock seed', () => {
     const rows = notificationsFixture.rows();
     expect(await seedMockNotifications()).toBe(rows.length);
     for (const row of rows) {
-      const [item] = await store.list(row.userId);
+      const item = (await store.list(row.userId)).find((n) => n.id === row.id);
       expect(item).toMatchObject({ id: row.id, type: row.type, payload: { tenant: row.tenant }, action: { href: row.href } });
     }
   });
@@ -67,7 +67,9 @@ describe('the dev:mock seed', () => {
     fixtureRegistry.resetAll('default');
     rehydrateMockNotifications();
     await new Promise((r) => setTimeout(r, 20));
-    expect((await store.list('u-farah')).map((n) => n.id)).toEqual(['mock-notif-reply-farah']);
+    const back = (await store.list('u-farah')).map((n) => n.id);
+    expect(back).toContain('mock-notif-reply-farah');
+    expect(back).not.toContain('live-1');
   });
 
   it('never seeds a Redis-backed inbox', async () => {

@@ -34,16 +34,16 @@ slice). Where those left something open, this file decides it and says so
 scripts/validate-pipelines-tenant.sh                 # the whole definition of done (P0 → E)
 scripts/validate-pipelines-tenant.sh --phase=P0      # one lane; phases are cumulative
 scripts/validate-pipelines-tenant.sh --quick         # skip jest, vite build, the venv test, neighbour judges
-scripts/validate-pipelines-tenant.sh --seal          # record journey-log digests — only after a real walk
+scripts/journeys/seal.sh docs/pipelines-journeys/<dir>  # seal journey logs — only after a real walk (docs/journeys.md)
 scripts/validate-pipelines-tenant.sh --no-time       # skip the time gate (off unless PIPELINES_UNTIL=HH is set)
 ```
 
 It prints every failing check, then `N CHECK(S) FAILING (judged through
 phase X)`. `--quick` never turns a missing file green: a test that does not
 exist fails in quick mode too; only the *running* of present suites is
-skipped. `--seal` has the same meaning as in the assessment judge — it
-records the content digest of each log's `pages:` sources, so it is run once
-after a walk, never to make a red freshness line go away.
+skipped. Journey freshness and sealing follow docs/journeys.md (the
+validator's `--seal` is retired; `scripts/journeys/seal.sh <dir>` seals one
+directory after its walk, never to make a red freshness line go away).
 
 ## Cast (decided here)
 
@@ -225,8 +225,9 @@ The social half is gated on `social` appearing in `session.ts` `TENANTS`,
 because lane S0 is running in parallel and a walk into a tenant that does
 not exist proves nothing. The judge says which case it is on every run.
 
-Every log carries `pages:` and is held to its recorded content digest
-(`docs/pipelines-journeys/.pages-sha`, written only by `--seal`).
+Every log is held to its walked routes' rendered contract as sealed in
+`docs/pipelines-journeys/.contract-sha` (docs/journeys.md; written only by
+`scripts/journeys/seal.sh`).
 
 ### Neighbour judges (non-quick)
 

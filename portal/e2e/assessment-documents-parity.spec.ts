@@ -1,4 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
+import { seedPreJoin } from './preJoin';
+import { demoSession, signIn } from './realSession';
 
 // The judge's browser half for docs/assessment-documents-parity-goal.md.
 // Runs against a stack whose middleware can mint document grants — start it
@@ -17,27 +19,6 @@ const CANVAS = '.ProseMirror:not(.chat-composer-input)';
 // Fake camera/microphone for the in-document call (worker-scoped, so file-level).
 test.use({ viewport: { width: 1672, height: 941 }, ...(process.env.PARITY_BASE_URL ? { baseURL: process.env.PARITY_BASE_URL } : {}),
   launchOptions: { args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'] } });
-
-async function signIn(page: Page, userId = 'u-farah') {
-  await page.goto('/');
-  const status = await page.evaluate(async (id) => (await fetch('/api/session/login', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
-    body: JSON.stringify({ userId: id }),
-  })).status, userId);
-  expect(status, 'demo login').toBe(200);
-}
-
-/** The cookie-less demo persona (not in the picker): into the assessment tenant, optionally as another of its roles. */
-async function signInAsDemo(page: Page, role?: string) {
-  await page.goto('/');
-  const post = (path: string, body: object) => page.evaluate(async ({ path, body }) => (await fetch(path, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify(body),
-  })).status, { path, body });
-  expect(await post('/api/session/tenant', { tenant: 'assessment' }), 'demo tenant switch').toBe(200);
-  if (role) expect(await post('/api/session/role', { role }), `demo role ${role}`).toBe(200);
-  const me = await page.evaluate(async () => (await fetch('/api/session/me', { credentials: 'include' })).json());
-  expect(me.sub, 'the demo persona').toBe('demo-user');
-}
 
 const PROMPT = 'prompt:classify-transcript.md';
 
@@ -59,7 +40,8 @@ const FALLBACK = 'Document collaboration is unavailable';
 test('assessment workspace page opens in the shared document editor frame', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
-  await signIn(page);
+  await page.goto('/');
+  await signIn(page, 'u-farah');
   await page.goto(`/assessment/workspace?doc=${encodeURIComponent(DOC)}`);
 
   const shell = page.getByTestId('document-shell');
@@ -107,7 +89,8 @@ test('assessment workspace page opens in the shared document editor frame', asyn
 test('a prompt page opens in the canvas frame for the demo user, never the reader fallback', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
-  await signInAsDemo(page);
+  await page.goto('/');
+  await demoSession(page, { tenant: 'assessment' });
   await page.goto(`/assessment/prompts?doc=${encodeURIComponent(PROMPT)}`);
   const shell = page.getByTestId('document-shell');
   await expect(shell).toBeVisible({ timeout: 20_000 });
@@ -117,7 +100,9 @@ test('a prompt page opens in the canvas frame for the demo user, never the reade
   await expect(page.locator(`${CANVAS}[contenteditable="false"]`)).toBeVisible();
   await page.screenshot({ path: `${OUT}/parity-journey-prompt-demo-reader.png` });
 
-  await signInAsDemo(page, 'lead-assessor');
+  await page.goto('/');
+
+  await demoSession(page, { tenant: 'assessment', role: 'lead-assessor' });
   await page.goto(`/assessment/prompts?doc=${encodeURIComponent(PROMPT)}`);
   await expect(page.locator(`${CANVAS}[contenteditable="true"]`)).toBeVisible({ timeout: 20_000 });
   await expect(page.getByTestId('canvas-document-toolbar')).toBeVisible();
@@ -140,7 +125,8 @@ test('a prompt page opens in the canvas frame for the demo user, never the reade
 test('the rail, the All documents list and the document conversation match the reference', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
-  await signIn(page);
+  await page.goto('/');
+  await signIn(page, 'u-farah');
   await page.goto(`/assessment/workspace?doc=${encodeURIComponent(DOC)}`);
   const shell = page.getByTestId('document-shell');
   await expect(shell).toBeVisible({ timeout: 20_000 });
@@ -206,9 +192,11 @@ test.describe('two people on one document', () => {
     test.setTimeout(180_000);
     const people = await Promise.all(['u-farah', 'u-jonas'].map(async userId => {
       const context = await browser.newContext({ viewport: { width: 1672, height: 941 }, baseURL, permissions: ['camera', 'microphone'] });
+      await seedPreJoin(context);
       const page = await context.newPage();
       const errors: string[] = [];
       page.on('pageerror', error => errors.push(error.message));
+      await page.goto('/');
       await signIn(page, userId);
       await page.goto(`/assessment/workspace?doc=${encodeURIComponent(DOC)}`);
       await expect(page.getByTestId('document-shell')).toBeVisible({ timeout: 20_000 });
@@ -283,14 +271,19 @@ test.describe('two people on one document', () => {
     if (await notice.isVisible()) test.skip(true, `Calls are not configured on this stack: ${await notice.innerText()}`);
     await expect(toast).toContainText('Farah Osei is calling');
     await jonas.page.getByTestId('incoming-call-accept').click();
-    await expect(jonas.page.getByTestId('document-call-slot')).toBeVisible({ timeout: 20_000 });
-    await expect(farah.page.getByTestId('document-call-slot')).toBeVisible({ timeout: 20_000 });
-    await expect(farahShell.getByRole('button', { name: 'Leave call' })).toBeVisible();
-    await expect(jonas.page.getByTestId('document-call-slot')).toContainText('2 people', { timeout: 20_000 });
+    // The call UI is the shell footer's HuddleBar (ShellCallHost), not an in-page slot.
+    for (const person of [jonas, farah]) {
+      const dock = person.page.getByTestId('shell-call-dock');
+      await expect(dock).toBeVisible({ timeout: 20_000 });
+      await expect(dock).not.toContainText('No huddle here');
+      await expect(dock.getByRole('button', { name: 'Leave' })).toBeVisible();
+    }
+    await expect(jonas.page.getByTestId('shell-call-dock')).toContainText('2', { timeout: 20_000 });
+    await expect(farah.page.getByTestId('shell-call-dock')).toContainText('2', { timeout: 20_000 });
     await jonas.page.screenshot({ path: `${OUT}/parity-journey-call.png` });
     // Leave: Jonas first, then Farah (the call may end for whoever is left alone).
-    await jonasShell.getByRole('button', { name: 'Leave call' }).click({ timeout: 5_000 });
-    await farahShell.getByRole('button', { name: 'Leave call' }).click({ timeout: 5_000 }).catch(() => undefined);
+    await jonas.page.getByTestId('shell-call-dock').getByRole('button', { name: 'Leave' }).click({ timeout: 5_000 });
+    await farah.page.getByTestId('shell-call-dock').getByRole('button', { name: 'Leave' }).click({ timeout: 5_000 }).catch(() => undefined);
     await expect(jonasShell.getByRole('button', { name: /^Call$/ })).toBeVisible({ timeout: 10_000 });
 
     for (const person of people) {
@@ -311,6 +304,7 @@ test.describe('two people on one document', () => {
 // journeys defect #17 — a reader used to get a real drafter run and an Apply
 // that refused only after the click).
 test('a reader gets the dock in Chat, with Agent mode off', async ({ page }) => {
+  await page.goto('/');
   await signIn(page, 'u-asha');
   await page.goto(`/assessment/workspace?doc=${encodeURIComponent(DOC)}`);
   await expect(page.locator(CANVAS)).toBeVisible({ timeout: 20_000 });
@@ -325,7 +319,8 @@ test('a reader gets the dock in Chat, with Agent mode off', async ({ page }) => 
 test('an agent-mode instruction lands in the canvas as a proposed edit', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
-  await signIn(page);
+  await page.goto('/');
+  await signIn(page, 'u-farah');
   await page.goto(`/assessment/workspace?doc=${encodeURIComponent(DOC)}`);
   const canvas = page.locator(CANVAS);
   await expect(page.locator(`${CANVAS}[contenteditable="true"]`)).toBeVisible({ timeout: 20_000 });
@@ -353,6 +348,8 @@ test('an agent-mode instruction lands in the canvas as a proposed edit', async (
   await apply.click();
   await expect(canvas).toContainText('Next step: confirm an owner for each practice before the scoring window opens.');
   await expect(strip.getByTestId('document-agent-edit-applied')).toBeVisible();
+  // The new text is separated from the sentence it follows.
+  expect(await canvas.innerText()).toMatch(/\S\s+Next step: confirm an owner/);
   await page.screenshot({ path: `${OUT}/parity-journey-agent-applied.png` });
 
   // Undo the applied edit (the editor has focus after Apply).

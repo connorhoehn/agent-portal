@@ -256,6 +256,23 @@ describe('IAM scoping that is easy to widen by accident', () => {
     );
   });
 
+  test('the chat path can write and read its memory — and only the one memory it is given', () => {
+    // routes/agents.ts records every turn through providers/memory.ts
+    // (CreateEvent / ListEvents / ListSessions). MEMORY_ID was set while the
+    // role had none of these, so a deployed chat answered and kept no history.
+    const statements = Object.values<any>(closedTemplate.findResources('AWS::IAM::Policy')).flatMap(
+      (p) => (p.Properties?.PolicyDocument?.Statement ?? []) as any[],
+    );
+    const memory = statements.find((s) => s.Sid === 'AgentCoreMemoryEvents');
+    assert.ok(memory, 'expected an AgentCoreMemoryEvents statement');
+    for (const action of ['bedrock-agentcore:CreateEvent', 'bedrock-agentcore:ListEvents', 'bedrock-agentcore:ListSessions']) {
+      assert.ok(memory.Action.includes(action), `${action} missing`);
+    }
+    const resource = JSON.stringify(memory.Resource);
+    assert.ok(resource.includes(':memory/') && resource.includes('orgiq_memory-ABCDEF'), resource);
+    assert.ok(!resource.includes('memory/*'), 'memory events must not be granted on every memory');
+  });
+
   test('iam:PassRole is limited to the KB service role, passed only to Bedrock', () => {
     const statements = Object.values<any>(closedTemplate.findResources('AWS::IAM::Policy')).flatMap(
       (p) => (p.Properties?.PolicyDocument?.Statement ?? []) as any[],

@@ -1,0 +1,23 @@
+
+== component discipline (per-area ratchets) ==
+  ✓ portal/src (all): raw 0, button 0, style 7 (all at budget)
+  ✓ components/runs: raw 0, button 0, style 0 (all at budget)
+  ✓ components/codebases: raw 0, button 0, style 0 (all at budget)
+  ✓ components/scores: raw 0, button 0, style 4 (all at budget)
+  ✓ components/marketplace: raw 0, button 0, style 0 (all at budget)
+  ✓ components/ingest: raw 0, button 0, style 0 (all at budget)
+  ✓ components/canary: raw 0, button 0, style 1 (all at budget)
+  ✓ components/shell: raw 0, button 0, style 0 (all at budget)
+  ✓ components/knowledge: raw 0, button 0, style 0 (all at budget)
+  ✓ components/sdlc: raw 0, button 0, style 0 (all at budget)
+  ✓ components/kb: raw 0, button 0, style 2 (all at budget)
+  ✓ components/observability: raw 0, button 0, style 0 (all at budget)
+  ✓ pages: raw 0, button 0, style 0 (all at budget)
+
+== queued composites stay small ==
+  ✓ 12 queued composites, each ≤ 8 raw elements
+
+== realtime-modules alias bridge ==
+  ✓ vite alias + tsconfig paths map @connorhoehn/realtime-modules
+
+ALL CHECKS PASS — every gated area is at or under its raw/button/style budget.

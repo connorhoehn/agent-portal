@@ -1,0 +1,337 @@
+{
+  "at": "2026-10-03T23:42:42.883Z",
+  "options": {
+    "url": "ws://gateway:3001/ws",
+    "sockets": 40,
+    "calls": 5,
+    "groupSizes": [
+      2
+    ],
+    "holdSeconds": 60,
+    "scenario": "restart",
+    "secret": "custom",
+    "json": "/results/orgiq-restart-fixed.json",
+    "serverPid": null,
+    "healthUrl": "http://gateway:3001/api/health",
+    "rampPerSec": 50,
+    "chatEverySec": 30,
+    "stateEverySec": 20,
+    "spreadSeconds": 2,
+    "org": "social",
+    "origin": null,
+    "soakSeconds": 38,
+    "restartAfterSeconds": 5,
+    "recoveryTimeoutSeconds": 25,
+    "restartContainer": "orgiq-soak-gateway",
+    "redisContainer": "orgiq-soak-redis",
+    "sampleContainer": "orgiq-soak-gateway",
+    "driverContainer": "orgiq-soak-driver-restart",
+    "tokenTtlSeconds": 600
+  },
+  "results": [
+    {
+      "scenario": "restart",
+      "groupSize": 2,
+      "calls": 5,
+      "sockets": 40,
+      "holdSeconds": 60,
+      "soak": {
+        "requestedSeconds": 38,
+        "tokenTtlSeconds": 600,
+        "startedAt": "2026-10-03T23:42:00.528Z",
+        "expiredBeforeReconnect": 0,
+        "elapsedSeconds": 38,
+        "completed": true
+      },
+      "recoveries": [
+        {
+          "kind": "gateway-restart",
+          "startedAt": "2026-10-03T23:42:05.536Z",
+          "durationSeconds": 5,
+          "outageSeconds": 3.2,
+          "sockets": {
+            "expected": 40,
+            "recovered": 40,
+            "ms": {
+              "n": 40,
+              "p50": 3619.6,
+              "p95": 3980.2,
+              "p99": 4018.7,
+              "max": 4018.7
+            }
+          },
+          "callStatus": {
+            "expected": 10,
+            "recovered": 10
+          },
+          "participantStates": {
+            "expected": 10,
+            "recovered": 10
+          },
+          "chat": {
+            "expected": 30,
+            "recovered": 30
+          },
+          "presence": {
+            "expected": 30,
+            "republished": 30,
+            "expectedPeerDeliveries": 30,
+            "peerDeliveries": 30
+          },
+          "complete": true,
+          "error": null
+        }
+      ],
+      "unexpectedDisconnects": 0,
+      "runTag": "7e55",
+      "durationS": 47.7,
+      "rampSeconds": 0.8,
+      "connect": {
+        "ok": 80,
+        "fail": 0,
+        "failReasons": {},
+        "ms": {
+          "n": 80,
+          "p50": 1.1,
+          "p95": 1.9,
+          "p99": 4.8,
+          "max": 4.8
+        }
+      },
+      "established": 5,
+      "failedCalls": [],
+      "latencyMs": {
+        "inviteToIncoming": {
+          "n": 5,
+          "p50": 1.8,
+          "p95": 1.9,
+          "p99": 1.9,
+          "max": 1.9
+        },
+        "acceptToAccepted": {
+          "n": 5,
+          "p50": 1.5,
+          "p95": 1.7,
+          "p99": 1.7,
+          "max": 1.7
+        },
+        "chatDelivery": {
+          "n": 108,
+          "p50": 1.9,
+          "p95": 5.5,
+          "p99": 5.9,
+          "max": 6.1
+        }
+      },
+      "chat": {
+        "sent": 108,
+        "delivered": 108,
+        "expectedSenders": 30,
+        "sendingUsers": 30,
+        "deliveredUsers": 30
+      },
+      "crossDeliveries": {
+        "call": 0,
+        "chat": 0,
+        "presence": 0,
+        "samples": []
+      },
+      "unexpectedEnded": {
+        "count": 0,
+        "callsEnded": 0,
+        "samples": []
+      },
+      "answeredElsewhere": 0,
+      "denied": {
+        "count": 0,
+        "samples": []
+      },
+      "otherErrors": {
+        "count": 0,
+        "byMessage": {}
+      },
+      "notifications": {
+        "total": 0,
+        "missedCall": 0
+      },
+      "doubleAccept": null,
+      "glare": null,
+      "churn": null,
+      "frames": {
+        "in": 839,
+        "out": 498,
+        "byKind": {
+          "presence.set": 200,
+          "chat.joined": 60,
+          "presence.subscribed": 60,
+          "presence.update": 90,
+          "call.active-call": 40,
+          "chat.message": 216,
+          "chat.sent": 108,
+          "call.invite": 5,
+          "call.accepted": 5,
+          "call.participant-state": 45,
+          "call.user-status": 10
+        }
+      },
+      "server": {
+        "pid": null,
+        "container": "orgiq-soak-gateway",
+        "memorySource": "docker-working-set",
+        "sampleErrors": 0,
+        "rssMb": {
+          "peak": 119.6,
+          "last": 111.5
+        },
+        "cpuPct": {
+          "peak": 6.1,
+          "mean": 2.2,
+          "p95": 6.1
+        },
+        "healthMs": {
+          "n": 86,
+          "p50": 1.4,
+          "p95": 2.5,
+          "p99": 3.2,
+          "max": 3.2,
+          "errors": 0,
+          "plannedOutageErrors": 4
+        },
+        "slowHealth": []
+      },
+      "clientEventLoopMs": {
+        "p50": 10.3,
+        "p99": 12.7,
+        "max": 13.3
+      },
+      "verdict": [
+        {
+          "name": "sockets connect",
+          "ok": true,
+          "measured": "80/80",
+          "limit": "100%"
+        },
+        {
+          "name": "calls established",
+          "ok": true,
+          "measured": "5/5",
+          "limit": "all"
+        },
+        {
+          "name": "invite→incoming p95",
+          "ok": true,
+          "measured": 1.9,
+          "limit": "< 250 ms"
+        },
+        {
+          "name": "invite→incoming p99",
+          "ok": true,
+          "measured": 1.9,
+          "limit": "< 1000 ms"
+        },
+        {
+          "name": "accept→accepted p95",
+          "ok": true,
+          "measured": 1.7,
+          "limit": "< 250 ms"
+        },
+        {
+          "name": "chat delivery p95",
+          "ok": true,
+          "measured": 5.5,
+          "limit": "< 300 ms, with paired-sender evidence"
+        },
+        {
+          "name": "background chat coverage",
+          "ok": true,
+          "measured": "30/30",
+          "limit": "all paired senders reach their peer"
+        },
+        {
+          "name": "cross-call/channel deliveries",
+          "ok": true,
+          "measured": 0,
+          "limit": "0"
+        },
+        {
+          "name": "answered-elsewhere outside scenario 4",
+          "ok": true,
+          "measured": 0,
+          "limit": "0"
+        },
+        {
+          "name": "ended before scripted hang-up",
+          "ok": true,
+          "measured": 0,
+          "limit": "0"
+        },
+        {
+          "name": "unplanned socket disconnects",
+          "ok": true,
+          "measured": 0,
+          "limit": "0"
+        },
+        {
+          "name": "AUTHZ_CHANNEL_DENIED",
+          "ok": true,
+          "measured": 0,
+          "limit": "0"
+        },
+        {
+          "name": "event-loop proxy (/api/health p99)",
+          "ok": true,
+          "measured": 3.2,
+          "limit": "< 50 ms"
+        },
+        {
+          "name": "health errors outside planned outage",
+          "ok": true,
+          "measured": 0,
+          "limit": "0"
+        },
+        {
+          "name": "server memory peak",
+          "ok": true,
+          "measured": 119.6,
+          "limit": "< 700 MiB"
+        },
+        {
+          "name": "container samples",
+          "ok": true,
+          "measured": 0,
+          "limit": "no errors, at least one sample"
+        },
+        {
+          "name": "bounded soak completed",
+          "ok": true,
+          "measured": 38,
+          "limit": ">= 38s"
+        },
+        {
+          "name": "expired sockets at reauthentication",
+          "ok": true,
+          "measured": 0,
+          "limit": "0"
+        },
+        {
+          "name": "soak protocol errors",
+          "ok": true,
+          "measured": 0,
+          "limit": "0"
+        },
+        {
+          "name": "gateway-restart 1: complete recovery",
+          "ok": true,
+          "measured": "40/40 sockets; 10/10 call statuses; 5s",
+          "limit": "100% authenticated sockets, original call membership, peer state, chat and presence"
+        },
+        {
+          "name": "one planned gateway restart",
+          "ok": true,
+          "measured": 1,
+          "limit": "1"
+        }
+      ]
+    }
+  ]
+}

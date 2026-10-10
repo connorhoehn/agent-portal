@@ -49,6 +49,7 @@ import {
   departments as mockDepartments,
 } from '../mock/people.js';
 import { mockScores } from '../mock/scores.js';
+import { mockAvatarUrl } from '../mock/avatars.js';
 import {
   mockSkills, mockPersonSkills, mockProjects, mockProjectContributions,
 } from '../mock/graph-taxonomy.js';
@@ -289,6 +290,24 @@ async function fetchSkillsByPerson(): Promise<Map<string, string[]>> {
 // M" rather than silently claiming the graph is complete.
 const PEOPLE_GRAPH_LIMIT = 500;
 
+/**
+ * people.avatar_url by id — a guarded side read, not a column on the graph
+ * queries: the column is additive (schema/orgiq_schema.sql), and a cluster
+ * that predates it must lose faces (initials), not the org graph. `ids`
+ * narrows the read; omitted means every person with a portrait.
+ */
+async function fetchAvatarsById(ids?: string[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  try {
+    if (ids && ids.length === 0) return out;
+    const params = (ids ?? []).map((id, i) => strParam(`av${i}`, id));
+    const where = ids ? ` AND id IN (${params.map((p) => `:${p.name}`).join(', ')})` : '';
+    const rows = await exec(`SELECT id, avatar_url FROM people WHERE avatar_url IS NOT NULL${where}`, params);
+    for (const r of rows) out.set(toStr(r.id), toStr(r.avatar_url));
+  } catch { /* column absent — pre-avatar schema */ }
+  return out;
+}
+
 async function fetchPeopleCount(): Promise<number> {
   const rows = await exec(`SELECT count(*)::int AS n FROM people`);
   return toNumber(rows[0]?.n, 0);
@@ -303,7 +322,7 @@ async function fetchAllPeople(limit: number = PEOPLE_GRAPH_LIMIT): Promise<Perso
       LIMIT :lim`,
     [intParam('lim', Math.max(1, Math.min(limit, PEOPLE_GRAPH_LIMIT)))],
   );
-  const skills = await fetchSkillsByPerson();
+  const [skills, avatars] = await Promise.all([fetchSkillsByPerson(), fetchAvatarsById()]);
   return rows.map<Person>((r) => {
     const id = toStr(r.id);
     return {
@@ -313,6 +332,7 @@ async function fetchAllPeople(limit: number = PEOPLE_GRAPH_LIMIT): Promise<Perso
       department: toStr(r.team),
       skills: skills.get(id) ?? [],
       influenceScore: clamp01(toNumber(r.influence, 0)),
+      avatarUrl: avatars.get(id) ?? null,
       presence: generatePresence(id),
     };
   });
@@ -571,7 +591,7 @@ async function realFetchPersonGraph(personId: string): Promise<PersonDetail | nu
   }
 
   const otherIds = Array.from(byOther.keys());
-  const others = new Map<string, { id: string; name: string; title: string }>();
+  const others = new Map<string, { id: string; name: string; title: string; avatarUrl: string | null }>();
   if (otherIds.length > 0) {
     // Build a parameterized IN-list. RDS Data API doesn't support arrays of strings,
     // so emit :p0, :p1, ... and bind each.
@@ -583,9 +603,11 @@ async function realFetchPersonGraph(personId: string): Promise<PersonDetail | nu
     );
     for (const pr of peopleRows) {
       const id = toStr(pr.id);
-      others.set(id, { id, name: toStr(pr.name), title: toStr(pr.title) });
+      others.set(id, { id, name: toStr(pr.name), title: toStr(pr.title), avatarUrl: null });
     }
   }
+  const avatars = await fetchAvatarsById([personId, ...otherIds]);
+  for (const other of others.values()) other.avatarUrl = avatars.get(other.id) ?? null;
 
   const connections = Array.from(byOther.entries()).map(([otherId, w]) => ({
     source: personId,
@@ -602,6 +624,7 @@ async function realFetchPersonGraph(personId: string): Promise<PersonDetail | nu
     department: toStr(r.team),
     skills: skillsRows.map((s) => toStr(s.skill_name)).filter(Boolean),
     influenceScore: clamp01(toNumber(r.influence, 0)),
+    avatarUrl: avatars.get(personId) ?? null,
     scoredAt: r.scored_at ?? null,
     connections,
   };
@@ -1146,7 +1169,7 @@ const mockPeopleByDept = (): Department[] =>
 function cappedGraphPeople(): { nodes: Person[]; peopleTotal: number } {
   const people = graphPeople.rows();
   return {
-    nodes: people.slice(0, PEOPLE_GRAPH_LIMIT).map(p => ({ ...p, presence: generatePresence(p.id) })),
+    nodes: people.slice(0, PEOPLE_GRAPH_LIMIT).map(p => ({ ...p, avatarUrl: mockAvatarUrl(p.id), presence: generatePresence(p.id) })),
     peopleTotal: people.length,
   };
 }
@@ -1241,10 +1264,10 @@ async function mockFetchPersonGraph(personId: string): Promise<PersonDetail | nu
       const other = peopleById.get(otherId);
       return {
         ...r,
-        otherPerson: other ? { id: other.id, name: other.name, title: other.title } : null,
+        otherPerson: other ? { id: other.id, name: other.name, title: other.title, avatarUrl: mockAvatarUrl(other.id) } : null,
       };
     });
-  return { ...p, scoredAt: null, connections };
+  return { ...p, avatarUrl: mockAvatarUrl(p.id), scoredAt: null, connections };
 }
 
 /**

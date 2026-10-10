@@ -5,12 +5,12 @@
 // nothing creates an initiative by hand (they come from ingestion), so a +
 // would be a button with no action (V2).
 //
-// A hook rather than a component because the frame's rail is several slots
-// (title, count, actions, header, body, footer) and because the list route's
-// pane reads the same list: `useInitiativeListRail()` returns the slots to
-// spread into `<InitiativesExplorer>` plus the read and the URL state behind
-// them, so the page never fetches the list twice or keeps a second copy of
-// `?scope=`.
+// A hook rather than a component because the rail is one value of the library
+// rail model (`ListRail`: title, count, actions, header, body, footer, label)
+// and because the list route's pane reads the same list:
+// `useInitiativeListRail()` returns the rail to hand to `<InitiativesExplorer>`
+// plus the read and the URL state behind it, so the page never fetches the
+// list twice or keeps a second copy of `?scope=`.
 //
 // URL state (shared by both routes): `?scope=all|mine` (default by role —
 // leaders land on everyone, everyone else on their own slice), `?q=`,
@@ -20,9 +20,11 @@
 // "N+" when the capped page came back full (then no header count at all), and
 // a failed read shows the failure, never "Nothing linked yet".
 
+import { landingScope } from './initiativeNavigation';
 import { useMemo, type ReactNode } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import {
+  Button,
   DropdownMenu,
   EmptyState,
   GroupedList,
@@ -39,7 +41,7 @@ import { useDebouncedSearch } from '../../hooks/useDebouncedSearch';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { useSession } from '../../lib/auth';
 import { useUrlState } from '../../lib/useUrlState';
-import type { ExplorerRailSlots } from './InitiativesExplorer';
+import type { ListRail } from '@connorhoehnslalom/ui-components';
 import {
   RAIL_NO_MATCH,
   buildInitiativeList,
@@ -95,8 +97,8 @@ export interface InitiativeListRailOptions {
 }
 
 export interface InitiativeListRail {
-  /** Spread into `<InitiativesExplorer>`. */
-  slots: ExplorerRailSlots;
+  /** The list rail (`<InitiativesExplorer rail>`). */
+  rail: ListRail;
   lens: InitiativeLens;
   scope: InitiativeScope;
   setScope: (next: InitiativeScope) => void;
@@ -141,7 +143,7 @@ export function useInitiativeListRail(opts: InitiativeListRailOptions = {}): Ini
   const isLeader = LEADER_ROLES.has(session?.role ?? '');
   const [scope] = useUrlState<InitiativeScope>(
     'scope',
-    (raw) => (raw === 'all' || raw === 'mine' ? raw : (opts.defaultScope ?? (isLeader ? 'all' : 'mine'))),
+    (raw) => (raw === 'all' || raw === 'mine' ? raw : (opts.defaultScope ?? landingScope(searchParams) ?? (isLeader ? 'all' : 'mine'))),
     (v) => v,
   );
   const [statusFilter, setStatusFilter] = useUrlState<string>('status', (raw) => raw ?? 'all', (v) => (v === 'all' ? null : v));
@@ -279,7 +281,7 @@ export function useInitiativeListRail(opts: InitiativeListRailOptions = {}): Ini
           <Stack gap="xs" data-testid="initiative-rail-empty">
             <T className="text-[13px] font-medium leading-5">{copy.title}</T>
             <T wrap className="text-[13px] leading-5 text-text-secondary">{copy.body}</T>
-            {copy.action && <button type="button" className="self-start text-left text-[13px] font-medium leading-5 text-primary hover:underline focus-visible:outline-2 focus-visible:outline-primary" onClick={() => setScope('all')}>{copy.action.label} →</button>}
+            {copy.action && <Button variant="link" size="sm" className="self-start px-0 text-left text-[13px] font-medium leading-5" onClick={() => setScope('all')}>{copy.action.label} →</Button>}
           </Stack>
         </Padded>
       );
@@ -320,29 +322,28 @@ export function useInitiativeListRail(opts: InitiativeListRailOptions = {}): Ini
     }
   }
 
-  const slots: ExplorerRailSlots = {
-    scope,
-    lens,
-    railTitle: lens === 'sprints' ? 'Sprints' : scope === 'all' ? 'All initiatives' : 'My initiatives',
-    ...(lens === 'initiatives' && count != null ? { railCount: count } : {}),
-    railActions: lens === 'initiatives' ? (
-      <DropdownMenu
-        trigger={<MoreIcon size={18} />}
-        triggerLabel="Initiative list options"
-        triggerClassName="h-8 w-8 border-transparent px-0 py-0 text-text-secondary"
-        align="end"
-        sections={menu}
-      />
-    ) : undefined,
-    railHeader: header,
-    rail: body,
-    railFooter: footer ? <T className="text-[13px] text-text-secondary" data-testid="initiative-rail-footer">{footer}</T> : undefined,
-    collapsible: true,
-    railLabel: lens === 'sprints' ? 'sprints' : 'initiatives',
+  const rail: ListRail = {
+    title: lens === 'sprints' ? 'Sprints' : scope === 'all' ? 'All initiatives' : 'My initiatives',
+    ...(lens === 'initiatives' && count != null ? { count } : {}),
+    ...(lens === 'initiatives' ? {
+      actions: (
+        <DropdownMenu
+          trigger={<MoreIcon size={18} />}
+          triggerLabel="Initiative list options"
+          triggerClassName="h-8 w-8 border-transparent px-0 py-0 text-text-secondary"
+          align="end"
+          sections={menu}
+        />
+      ),
+    } : {}),
+    header,
+    body,
+    ...(footer ? { footer: <T className="text-[13px] text-text-secondary" data-testid="initiative-rail-footer">{footer}</T> } : {}),
+    label: lens === 'sprints' ? 'sprints' : 'initiatives',
   };
 
   return {
-    slots,
+    rail,
     lens,
     scope,
     setScope,

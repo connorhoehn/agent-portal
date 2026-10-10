@@ -8,6 +8,7 @@
 # docs/mock-floor.md § "The judge". Read that before loosening anything here.
 set -u
 cd "$(dirname "$0")/.."
+source scripts/lib/judges.sh  # jg_*: static gates run once per tree state
 REPO="$PWD"
 MW="$REPO/middleware"
 QUICK=0; for a in "$@"; do case "$a" in --quick) QUICK=1;; esac; done
@@ -101,7 +102,7 @@ strip_comments() {
 
 # ─────────────────────────────────────────────────────────────────────────────
 section "builds"
-if (cd "$MW" && npx tsc --noEmit >"$TMP/tsc.log" 2>&1); then ok "middleware tsc"; else
+if jg_mw_tsc >"$TMP/tsc.log" 2>&1; then ok "middleware tsc"; else
   fail "middleware: tsc errors"
   head -5 "$TMP/tsc.log" | while read -r l; do note "$l"; done
 fi

@@ -46,6 +46,13 @@ function pairCommand(code: string): string {
   return `node tools/local-compute-worker.mjs --pair ${code} --base ${base}`;
 }
 
+/** CodeBlock pins its Copy button over the top-right corner of the block and
+ *  scrolls one long line sideways under it, so the tail of the pairing
+ *  command (the --base origin) sat beneath the button and past the edge.
+ *  These commands are pasted whole, so the whole of each must be readable:
+ *  wrap it, and keep the text clear of the button. */
+const COMMAND_BLOCK_CLASS = '[&_pre]:pr-16 [&_pre]:whitespace-pre-wrap [&_pre]:[overflow-wrap:anywhere]';
+
 /** The worker command, verbatim from tools/local-compute-worker.mjs's header. */
 export const WORKER_COMMAND = 'node tools/local-compute-worker.mjs';
 
@@ -182,7 +189,11 @@ export function PairMachineDialog({ open, onClose, onPaired }: { open: boolean; 
           <Button variant="secondary" size="sm" onClick={() => { void mint(); }} disabled={minting || Boolean(claimed)}>
             New code
           </Button>
-          <Button variant="primary" size="sm" onClick={onClose}>Done</Button>
+          {/* The dialog's initial focus. Without a `data-autofocus` the Modal
+              focuses its first control, which was "New code" — and opening
+              the dialog mints a code, which disables that button a moment
+              later, so focus fell to <body>. Done never disables. */}
+          <Button variant="primary" size="sm" onClick={onClose} data-autofocus>Done</Button>
         </Inline>
       )}
     >
@@ -198,7 +209,7 @@ export function PairMachineDialog({ open, onClose, onPaired }: { open: boolean; 
             <SectionLabel as="div">Pairing code</SectionLabel>
             <CodeBlock code={pairing.code} language="text" copyButton ariaLabel="Pairing code" />
             <SectionLabel as="div">Run this on the machine you want in the fleet</SectionLabel>
-            <CodeBlock code={pairCommand(pairing.code)} language="bash" copyButton ariaLabel="Pairing command" />
+            <CodeBlock code={pairCommand(pairing.code)} language="bash" copyButton ariaLabel="Pairing command" className={COMMAND_BLOCK_CLASS} />
             <MetaLine
               size="xs"
               items={[
@@ -219,7 +230,7 @@ export function PairMachineDialog({ open, onClose, onPaired }: { open: boolean; 
               <MetaLine size="sm" items={[claimed.label ? `${claimed.label} claimed the code` : 'A machine claimed the code']} />
             </Inline>
             <SectionLabel as="div">2 · Start its worker — same machine, same checkout</SectionLabel>
-            <CodeBlock code={WORKER_COMMAND} language="bash" copyButton ariaLabel="Worker command" />
+            <CodeBlock code={WORKER_COMMAND} language="bash" copyButton ariaLabel="Worker command" className={COMMAND_BLOCK_CLASS} />
             <MetaLine
               size="xs"
               items={[

@@ -1,9 +1,10 @@
 // What actually made it into the index.
 
 import {
+  T,
   Card,
   CardHeader,
-  EntityCell,
+  Inline,
   InlinePlaceholder,
   Stack,
   Table,
@@ -49,7 +50,7 @@ export function DocumentsTab({ kb }: { kb: KbRegistryEntry }) {
             {kb.bedrockKbId ? 'No documents ingested yet.' : 'KB not yet provisioned.'}
           </InlinePlaceholder>
         ) : (
-          <Table>
+          <Table size="sm">
             <TableHead>
               <TableRow>
                 <TableTh>Document</TableTh>
@@ -60,10 +61,13 @@ export function DocumentsTab({ kb }: { kb: KbRegistryEntry }) {
               {docs.map((doc) => (
                 <TableRow key={doc.id}>
                   <TableTd>
-                    <EntityCell label={doc.title ?? doc.source ?? doc.id} id={doc.source ?? undefined} />
+                    <Inline gap="sm" align="center" wrap={false}>
+                      <T as="span" size="sm" weight="semibold" className="truncate">{doc.title ?? doc.source ?? doc.id}</T>
+                      {doc.source && doc.title && <T as="span" size="xs" tone="tertiary" className="font-mono truncate">{doc.source}</T>}
+                    </Inline>
                   </TableTd>
-                  <TableTd className="whitespace-nowrap text-[11px] text-text-tertiary">
-                    {formatDate(doc.ingestedAt)}
+                  <TableTd className="whitespace-nowrap">
+                    <T as="span" size="xs" tone="tertiary">{formatDate(doc.ingestedAt)}</T>
                   </TableTd>
                 </TableRow>
               ))}

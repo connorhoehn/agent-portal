@@ -1,0 +1,45 @@
+{
+  "scope": "read-only, warmed 50-socket pools; counterbalanced route order; not application capacity acceptance",
+  "results": [
+    {
+      "route": "direct",
+      "requests": 1000,
+      "concurrency": 50,
+      "elapsedMs": 372.99520699999994,
+      "meanMs": 13.448522804999996,
+      "p95Ms": 45.75604700000031,
+      "p99Ms": 51.028659999999945,
+      "maxMs": 57.69973899999968
+    },
+    {
+      "route": "host",
+      "requests": 1000,
+      "concurrency": 50,
+      "elapsedMs": 291.93679599999996,
+      "meanMs": 12.833149228000012,
+      "p95Ms": 38.14729599999964,
+      "p99Ms": 50.13907100000006,
+      "maxMs": 50.53878200000008
+    },
+    {
+      "route": "host",
+      "requests": 1000,
+      "concurrency": 50,
+      "elapsedMs": 326.16927899999973,
+      "meanMs": 14.819201136999993,
+      "p95Ms": 47.78935000000001,
+      "p99Ms": 69.29963700000008,
+      "maxMs": 69.85097399999995
+    },
+    {
+      "route": "direct",
+      "requests": 1000,
+      "concurrency": 50,
+      "elapsedMs": 314.10054500000024,
+      "meanMs": 11.819953806999976,
+      "p95Ms": 59.11008000000038,
+      "p99Ms": 70.86297899999954,
+      "maxMs": 72.64661400000023
+    }
+  ]
+}

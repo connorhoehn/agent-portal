@@ -1,6 +1,6 @@
 import type { ReactElement } from 'react';
 import { useNavigate } from 'react-router';
-import { Button, Inline } from '@connorhoehnslalom/ui-components/shared';
+import { Button, StatusPill } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 
 interface KBHealthEntry {
@@ -39,10 +39,10 @@ function derive(data: KBHealthResponse): { severity: Severity; count: number; la
   return { severity: 'degraded', count: data.pending, label: data.pending > 0 ? `${data.pending} pending` : 'no KBs' };
 }
 
-const PALETTE: Record<Severity, { bg: string; border: string; text: string; dot: string }> = {
-  healthy:  { bg: 'var(--color-success-bg)', border: 'var(--color-success-border)', text: 'var(--color-success)', dot: 'var(--color-success)' },
-  degraded: { bg: 'var(--color-warning-bg)', border: 'var(--color-warning-border)', text: 'var(--color-warning)', dot: 'var(--color-warning)' },
-  failed:   { bg: 'var(--color-danger-bg)',  border: 'var(--color-danger-border)',  text: 'var(--color-danger)',  dot: 'var(--color-danger)'  },
+const TONE: Record<Severity, 'success' | 'warning' | 'danger'> = {
+  healthy: 'success',
+  degraded: 'warning',
+  failed: 'danger',
 };
 
 const SYMBOL: Record<Severity, string> = {
@@ -63,7 +63,6 @@ export function KBHealthBadge(): ReactElement | null {
   if (!data) return null;
 
   const { severity, label } = derive(data);
-  const c = PALETTE[severity];
   // Name the actual problems in the tooltip — "1 broken" is only useful if the
   // operator can see which KB and why without navigating.
   const problems = data.kbs
@@ -73,21 +72,14 @@ export function KBHealthBadge(): ReactElement | null {
   const tooltip = problems ? `KB health — ${label}\n${problems}` : `KB health: ${label} — click to view`;
 
   return (
-    // `c` is the severity palette — border, background, text and dot all come
-    // from it at run time, so those four stay inline. Everything static about
-    // the pill is a class, and the tags are primitives.
     <Button
       variant="ghost"
       size="sm"
       onClick={() => navigate('/admin/knowledge')}
       title={tooltip}
-      className="gap-[5px] px-2 py-[3px] rounded-xl border text-[11px] font-semibold leading-snug tracking-[0.01em] whitespace-nowrap"
-      style={{ borderColor: c.border, background: c.bg, color: c.text }}
+      className="p-0 border-0 whitespace-nowrap"
     >
-      <Inline as="span" gap="none" className="text-[10px] leading-none" style={{ color: c.dot }}>
-        {SYMBOL[severity]}
-      </Inline>
-      <Inline as="span" gap="none">{label}</Inline>
+      <StatusPill tone={TONE[severity]} label={label} icon={SYMBOL[severity]} size="sm" />
     </Button>
   );
 }

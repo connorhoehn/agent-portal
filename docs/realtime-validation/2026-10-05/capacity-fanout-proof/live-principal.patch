@@ -1,0 +1,117 @@
+--- /private/tmp/claude-501/-Users-connorhoehn-Projects-aws-agentcore/7aad70e9-0960-4a75-a575-96e73121111d/scratchpad/live-principal.before.ts	2026-10-05 20:06:03
++++ middleware/src/lib/live-principal.ts	2026-10-05 20:07:51
+@@ -142,6 +142,28 @@
+   } catch (error) { observer.dispose(); throw error; }
+ }
+ 
++// Fan-out shares one durable read only while it is still queued. Recipients of
++// one router pass call the authorizer in one synchronous map, but each used to
++// await directory reads first and therefore reached the membership store in
++// different ticks, each paying its own strongly consistent Query. Starting the
++// proof before those awaits lets MirroredMembershipStore combine the reads that
++// have not yet dispatched. The proof's change observer is registered at that
++// earlier start, so the fence window only grows; the result is still gated by
++// the fresh directory principal, policy and the final observer check.
++function signedSubject(ctx: Context): string | null {
++  return ctx && typeof ctx.userId === 'string' && ctx.userId ? ctx.userId : null;
++}
++function startSocialMembershipProof(channel: string, userId: string): Promise<SocialMembershipProof> {
++  const proof = currentSocialMembershipProof(channel, userId);
++  // Every early proof may be abandoned on a denial path; its rejection is
++  // observed here and still reaches any caller that awaits it.
++  proof.catch(() => undefined);
++  return proof;
++}
++function releaseSocialMembershipProof(proof: Promise<SocialMembershipProof> | null): void {
++  void proof?.then(settled => settled.dispose(), () => undefined);
++}
++
+ export interface LiveChannelAuthorization {
+   kind: 'subscribe' | 'publish'; clientId: string; channel: string; ctx: Context;
+ }
+@@ -152,13 +174,20 @@
+ /** Requires the async-aware public router; never pass to a boolean-only hook. */
+ export async function authorizeLiveGatewayChannel(args: LiveChannelAuthorization, guards: LiveChannelGuards): Promise<boolean> {
+   let membership: SocialMembershipProof | null = null;
++  let early: Promise<SocialMembershipProof> | null = null;
+   try {
+-    let principal = await getLivePrincipal(args.ctx);
+     const base = guards.baseChannel(args.channel);
++    const signed = signedSubject(args.ctx);
++    if (base.startsWith('social:') && signed) early = startSocialMembershipProof(base, signed);
++    let principal = await getLivePrincipal(args.ctx);
+     if (base.startsWith('social:')) {
+       const allowedRole = await socialActionRole(principal.session, args.kind === 'subscribe' ? 'ViewSocial' : 'PostMessage');
+       if (allowedRole === null) return false;
+-      membership = await currentSocialMembershipProof(base, principal.session.sub);
++      // The proof answers for the signed subject; the directory must confirm
++      // that exact subject is current before its answer can count.
++      if (!early || principal.session.sub !== signed) return false;
++      const pending = early; early = null;
++      membership = await pending;
+       if (!membership.allows()) return false;
+       principal = await getLivePrincipal(args.ctx);
+       if (!principal.session.grants.social?.includes(allowedRole) || !membership.allows()) return false;
+@@ -167,7 +196,7 @@
+     // still decide the resource, using only refreshed tenant grant keys.
+     return guards.guard(principal.auth, args.channel, args.kind);
+   } catch { return false; }
+-  finally { membership?.dispose(); }
++  finally { membership?.dispose(); releaseSocialMembershipProof(early); }
+ }
+ 
+ export interface LiveCallGuards {
+@@ -184,17 +213,28 @@
+ }
+ async function liveCallDecision(ctx: Context, action: string, data: Record<string, unknown>, guards: LiveCallGuards, receiving: boolean): Promise<boolean> {
+   let membership: SocialMembershipProof | null = null;
++  const early: { current: { lobby: string; proof: Promise<SocialMembershipProof> } | null } = { current: null };
+   try {
+-    let principal = await getLivePrincipal(ctx);
+     let payload = data ?? {};
+     const nested = payload.data;
+     if (payload.callId == null && payload.lobbyName == null && nested && typeof nested === 'object' && !Array.isArray(nested)) {
+       payload = { ...(nested as Record<string, unknown>), ...payload };
+     }
+-    if (action === 'invite' && payload.callerId !== principal.session.sub) return false;
+     const explicit = typeof payload.lobbyName === 'string' && payload.lobbyName ? payload.lobbyName : null;
+     const callId = typeof payload.callId === 'string' && payload.callId ? payload.callId : null;
+-    const stored = callId ? await guards.getLobby(callId) : null;
++    const signed = signedSubject(ctx);
++    // Start the lobby lookup and, once the lobby is known, its membership
++    // proof before the directory awaits, so every recipient socket of one
++    // call frame joins the same not-yet-dispatched read (see above).
++    const begin = (lobby: string | null): void => {
++      if (!early.current && signed && lobby?.startsWith('social:')) early.current = { lobby, proof: startSocialMembershipProof(lobby, signed) };
++    };
++    begin(explicit);
++    const lookup = callId ? guards.getLobby(callId) : Promise.resolve(null);
++    lookup.then(stored => { if (!explicit) begin(stored); }, () => undefined);
++    let principal = await getLivePrincipal(ctx);
++    if (action === 'invite' && payload.callerId !== principal.session.sub) return false;
++    const stored = await lookup;
+     // A frame cannot rename an existing Social call into a less restricted
+     // source lobby to bypass its current action or membership authority.
+     if (stored && explicit && stored !== explicit) return false;
+@@ -204,7 +244,10 @@
+     if (lobby?.startsWith('social:')) {
+       socialRole = await socialActionRole(principal.session, receiving ? 'ViewSocial' : 'StartCall');
+       if (socialRole === null) return false;
+-      membership = await currentSocialMembershipProof(lobby, principal.session.sub);
++      const started = early.current;
++      if (!started || started.lobby !== lobby || principal.session.sub !== signed) return false;
++      early.current = null;
++      membership = await started.proof;
+       if (!membership.allows()) return false;
+     }
+     // Both the public call lookup and policy/membership I/O may outlive a
+@@ -213,5 +256,8 @@
+     if (socialRole && !principal.session.grants.social?.includes(socialRole)) return false;
+     return (!membership || membership.allows()) && (!lobby || guards.guard(principal.auth, lobby));
+   } catch { return false; }
+-  finally { membership?.dispose(); }
++  finally {
++    membership?.dispose();
++    releaseSocialMembershipProof(early.current?.proof ?? null);
++  }
+ }

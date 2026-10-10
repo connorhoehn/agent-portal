@@ -26,7 +26,8 @@ program-owner #12 (owner menu ignoring Escape), program-owner #16 (bounce to
 ## Open
 
 #24, #29 and #30 were all re-audited and closed — see the Closed section.
-Nothing is open for this role right now.
+#31–#36 were closed on 2026-10-06 (see Closed). #37–#39 were found on the
+2026-10-06 11:50 headless re-walk (Chromium 1680x940, shared dev:mock, u-vera).
 
 ## Follow-up (filed with a reason, not blocking a surface verdict)
 
@@ -35,7 +36,128 @@ None of them stops the surface answering the question it exists for, and each
 is either a second-order route or a cosmetic squeeze at the audit width, so
 they are filed rather than left Open.
 
+- **2026-10-08 re-walk, `/iq/search` (ask, explore; all five roles).** The page title sits on the trail's row instead of under it (trail x=488, h1 "Search" x=525, both top 80px, h1 14px/600 - the inline `ScopeHeader`, search-workspace decision 9); rule: layout-cascade `title`, listed in `portal/e2e/layout-cascade-baseline.ts`. The shell rail label is 16px and the SEARCH rail label 13px on a 32px pitch; the type-scale ledger tracks `scale rail 13/500`, `scale rail 13/600`, `siblings rail 12|11` for the route. Both are tracked ratchets, so they do not fail the walk.
+
 ## Closed
+
+40. ~~Search › Connections (`/iq/explore` lands here): a mouse cannot click or hover a node on the all-types graph.~~ **Closed 2026-10-06 12:50** — re-observed with real mouse clicks (Playwright click() and hover; ui-components 2.418.0): the record graph node buttons compute pointer-events auto, elementFromPoint over a node returns the node, and a click took the graph from 53–55 to 15 nodes ("1 selected", zoom 54% to 97%); a second click made "2 selected".
+
+41. ~~People org graph: after two or three picks the drawing sits on the 40% zoom floor with unreadable captions and can run under the detail card.~~ **Closed 2026-10-06 12:50** — re-observed with real mouse clicks: people-graph picks re-fit at 101% / 90% / 90% (three picks) and 99% for a single pick, not the 40% floor; the selected person is on screen and legible, earlier far picks scroll out of view by design. One click timed out on Playwright's stability wait in the first pass and passed on rerun.
+
+37. **Scores: the StatStrip "Updated" hint is cut mid-sentence with no way to read it.**
+    `/iq/scores` as org-leader — the fifth tile reads "no scoring run yet — an HR admin c…"
+    (200px of 249px, overflow hidden, no `title`, no `aria-label`). The tail ("…can start
+    one") is the part that says what to do. For hr-admin the same tile reads "run the
+    scoring agent" and fits. Suspect `portal/src/pages/ScoresPage.tsx` / the shared
+    `StatStripItem` `hint` (see the StatStrip row in docs/ui-components-queue.md). Repro:
+    sign in as u-vera, open /iq/scores at 1680px, run the PROTOCOL clipped-text sweep.
+
+    *Closed 2026-10-06 12:45 (headless Chromium 1680x940, shared dev:mock, ui-components 2.418.0, u-vera): the Updated tile still renders its hint cut at 200px of 249px, but the tile now carries the whole sentence as its title, so hover reads "no scoring run yet — an HR admin can start one".*
+
+38. **Settings logs two 404 console errors on every load.** `/settings` (org-leader and
+    hr-admin) — `GET http://localhost:3001/metrics` and `GET http://localhost:3001/cluster`
+    both answer 404 each time the page mounts; the page renders normally around them.
+    Both URLs are at the BFF root, not under `/api`. Suspect a cluster/metrics probe
+    in `portal/src/pages/SettingsPage.tsx` (or a component it mounts). Repro: open
+    /settings with the console open.
+
+    *Closed 2026-10-06 12:45 (headless Chromium 1680x940, shared dev:mock, ui-components 2.418.0, u-vera): /settings loads with 0 console errors and 0 4xx responses; nothing requests /metrics or /cluster at the BFF root.*
+
+
+39. **Initiative detail: six work-graph node headers are cut with no title.**
+    `/iq/projects/p-observability` Overview tab, 1,250–1,830px down the page — "obs-nightly-maintenance"
+    (130px of 150px), "Metric cardinality budgets" (130/155), "obs-nightly-maintenance run"
+    (130/173), "Span-metrics connector feeding RED dashb…" (130/292), "Sprint 98 — Span
+    metrics + decom…" (130/204). Overflow hidden, no `title`/`aria-label` on the text or an
+    ancestor. The work-graph stream is being changed by another agent, so re-check after
+    that lands. Suspect the node header in `portal/src/pages/project-detail`.
+
+    *Closed 2026-10-06 14:10 (ui-components 2.416.0, headless Chromium 1680x940, u-vera): the work-graph node header now carries a `title` holding the full name. The sweep still reports the strings clipped by their single-line ellipsis box (e.g. "Span-metrics connector feeding RED dashboards" 130 of 292px) but every one is titled with its whole text, the deliberate ellipsis-with-hover pattern the protocol accepts. Checked by reading the `title` attribute, not by a physical hover (headless).*
+
+31. **Initiatives: the program table no longer fits at 1680px — the Updated
+    column is cut.** `/iq/projects` — the view list (All / My / Sprints) now
+    renders as its own 219px "Initiative views" column at x 200, with the
+    explorer pushed to x 420 and the pane to x 684, so the table wrapper is
+    948px for a 969px table: the header reads "UPDATEI" and cells "1h ag" /
+    "1d ag", the rest reachable only by scrolling the table sideways. The
+    detail page nests the same view list inside the explorer (nav at x 220
+    inside the explorer at x 200), as the previous initiatives.jpg did on the
+    list page too. Fits at 1920px (1188/1188). Suspect
+    `portal/src/pages/ProjectsPage.tsx` / `pages/projects/InitiativesExplorer.tsx`
+    / `pages/projects/InitiativeListRail.tsx` (how the list page mounts the
+    views). Repro: `/iq/projects` at 1680x940 as u-vera → right edge of the
+    table.
+    **Closed 2026-10-06 11:55** — re-observed as u-vera (org-leader), headless Chromium 1680x940. The program table now fits its pane: no `overflow-x:auto` wrapper wider than its client width (measured, none), the Updated column is replaced by a status pill with a relative time beneath it ("1h ago"), and the Spend (MTD) column reads in full at the pane edge. One-row filter-free header above the table, first `tbody tr` at 302px.
+
+32. **Asset promotions: "Find a candidate" drops keystrokes.**
+    `/iq/promotions` → `/iq/distillation/review?view=promotions` — typing
+    "zzznope" at 250ms per key leaves "zzp" in the box and `q=zzpe` in the
+    URL, so the list never filters; a `?q=zzznope` URL does filter ("No
+    candidates in this view"). The box is a controlled `SearchInput` whose
+    value round-trips through the URL on every key
+    (`portal/src/pages/promotions/PromotionsPage.tsx:308`,
+    `onChange={(value) => setFilter('q', value)}` → `setParams`). Repro: type
+    any word into "Find a candidate" and read the box.
+    **Closed 2026-10-06 11:55** — re-observed as u-vera. Typing "zzznope" into "Find a candidate" at 250ms per key leaves the box reading `zzznope` and the URL `?view=promotions&q=zzznope`; the list reads "No candidates in this view".
+
+33. **A not-found reads as an outage, and several error lines are not
+    sentences.** `portal/src/components/UnavailableNotice.tsx:66` appends
+    "<source>, so this is unknown rather than empty." to every error,
+    including a 404, and offers Try again. Seen: `/iq/designs/des-nope` ("404
+    Not Found — design review not found. Design reviews are read from Aurora,
+    so this is unknown rather than empty."), `/iq/library/lib-nope`,
+    `/iq/distillation/review?view=promotions&item=cand-nope`, and Session
+    settings with no bundle (404 "no live session bundle"), which is an empty
+    state, not a failure. Where `source` is a noun phrase the line is broken:
+    "Design reviews, so this is unknown rather than empty."
+    (`pages/designs/DesignsPage.tsx:108`), "Promotion candidates, so this is…"
+    (`pages/promotions/PromotionsPage.tsx:311,322`), "Session bundle provider,
+    so this is…" (`pages/local-compute/ConfigurationPage.tsx:98`). Repro: any
+    of the URLs above; for the bundle, `POST /api/__mock/scenario
+    {"fixture":"session-bundles","scenario":"empty"}` then
+    `/iq/local-compute/configuration`.
+    **Closed 2026-10-06 11:55** — re-observed as u-vera. /iq/designs/des-nope reads "Design not found / No design review has the id "des-nope". / ← All designs"; /iq/library/lib-nope reads "Asset not found … ← All assets"; ?item=cand-nope reads "Candidate not found … ← All asset promotions" — none offers Try again. With session-bundles on its empty scenario (that fixture only, restored afterwards) Session settings reads "No configuration preview / No session bundle has been published yet, so sessions run with the settings baked into their image." — a sentence, an empty state, no retry.
+
+34. **Local compute: opening "Pair a machine" loses keyboard focus.**
+    `/iq/local-compute` → Enter on "Pair a machine": the dialog calls focus()
+    on its "New code" button (instrumented), the button is then disabled
+    while the code is minted, and `document.activeElement` ends on <body>
+    (document visible, rAF firing — not the headless artefact). Tab does
+    enter the dialog and Escape returns focus correctly. Suspect
+    `portal/src/pages/local-compute/PairMachineDialog.tsx` (initial focus on
+    a control that disables itself).
+    **Closed 2026-10-06 11:55** — re-observed as u-vera. Enter on "Pair a machine" opens the dialog with `document.activeElement` on its "Done" button (two forced frames); Tab goes to "Copy code"; Escape closes it and focus returns to "Pair a machine".
+
+35. **Computer Lab requests a shell for a role it already knows cannot have
+    one.** `/admin/devbox` as org-leader (ManageDevbox false per
+    `/api/session/capabilities`): on load the auto-focused pane POSTs
+    `/api/devbox/sess-mock-rachel-scratch-…/shell-url` → 403, logged as a
+    console error, and paints "error · Forbidden" with a "reattach" action
+    that cannot succeed — under a banner that already says this role cannot
+    drive the fleet. Suspect `portal/src/pages/admin/DevboxPage.tsx` (the lab
+    should not auto-attach without the capability).
+    **Closed 2026-10-06 11:55** — re-observed as u-vera. /admin/devbox loads with zero console errors and no response >= 400; the pane reads "No shell for your role — opening one needs computer access (ManageDevbox)… Showing this computer's activity instead." and no shell-url request is made.
+
+36. **Prompt Studio: leaving the editor drops focus; the list cuts every
+    name with no title.** `/iq/prompts` — Enter on Edit focuses the
+    template; Escape or Cancel closes the editor and focus ends on <body>.
+    `EditPanel.tsx`'s rAF hand-back does call focus() on the connected
+    `[data-prompt-edit-trigger]` button (instrumented) and focus is lost
+    after it, so the view re-renders that button after the hand-back. The
+    list column (`pages/capabilities/prompts/PromptSidebar.tsx`, rows are
+    role=radio buttons) cuts all six names and descriptions — 12 strings,
+    e.g. "orgiq-supervisor-system-…" 179px of 210px — with no title or
+    aria-label carrying the full text.
+
+Follow-up from the same walk (real, not blocking a verdict): the
+Distillation rail paints "Runs" in the danger colour with no text saying
+why (`pages/distillation/moduleNavModel.ts:60`, accent from the Activity
+health); the Asset promotions view and the library record page have no H1;
+the Pair dialog's command tail runs under its Copy button; Session settings'
+disclosure hints keep reading "Show value" / "Show command" when open; the
+composer's "/agent" list offers Devbox to org-leader, who has no
+ManageDevbox (not exercised).
+    **Closed 2026-10-06 11:55** — re-observed as u-vera. Prompt Studio: Enter on Edit focuses "Prompt template", Escape returns focus to the Edit button; Enter on Test then Escape returns focus to Test (after forced frames, re-read after a second wait). The six prompt rows wrap instead of cutting — the clipped-text sweep over the radio rows finds 0 cut strings.
 
 30. **Ask's work starters clip the initiative name — the one word that says
     which initiative the card is about.** `/iq/invoke` —

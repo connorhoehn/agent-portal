@@ -5,7 +5,9 @@
 // the portal is fully navigable in offline / local dev without Aurora.
 
 import { randomUUID } from 'node:crypto';
-import { displayNameForSubject } from './identity.js';
+import { displayNameForSubject, getUser } from './identity.js';
+import type { ChatMessage } from '@connorhoehnslalom/realtime-modules/chat';
+import { restCommentMessage, workThreadChannel } from '../lib/work-thread.js';
 import { type SqlParameter } from '@aws-sdk/client-rds-data';
 import { exec } from './aurora.js';
 import { config } from '../config.js';
@@ -26,7 +28,8 @@ import { decisionRows } from '../mock/decisions.js';
 import {
   workItems,
   nextMockWorkItemId,
-  MOCK_EPOCH as FIXTURE_MOCK_EPOCH,
+  MOCK_EPOCH,
+  nextMockWorkItemKey,
 } from '../mock/work-items.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -42,6 +45,8 @@ export type PrStatus = 'open' | 'draft' | 'merged' | 'closed';
 
 export interface WorkItem {
   id: string;
+  /** Immutable public reference for commits/PRs. Null before the key migration. */
+  key?: string | null;
   projectId: string;
   projectName: string;
   parentId: string | null;
@@ -262,7 +267,7 @@ function boolParam(name: string, value: boolean): SqlParameter {
 
 /** Every read projects the same column list, including the two that were dead. */
 const ITEM_COLUMNS = `
-      wi.id, wi.project_id, p.name AS project_name,
+      wi.id, to_jsonb(wi)->>'work_item_key' AS work_item_key, wi.project_id, p.name AS project_name,
       wi.parent_id, wi.type, wi.title, wi.description,
       wi.status, wi.priority, wi.labels,
       wi.story_points, wi.sprint_id, wi.estimated_cost_usd,
@@ -740,6 +745,7 @@ function rowToWorkItem(r: Record<string, unknown>): WorkItem {
   }
   return {
     id: String(r['id'] ?? ''),
+    key: r['work_item_key'] != null ? String(r['work_item_key']) : null,
     projectId: String(r['project_id'] ?? ''),
     projectName: String(r['project_name'] ?? ''),
     parentId: r['parent_id'] != null ? String(r['parent_id']) : null,
@@ -817,7 +823,7 @@ export function buildWorkItemTree(items: WorkItem[]): WorkItemTree[] {
  * The fixed "today" every seeded `D(n)` offset is written against.
  * Re-exported from the fixture so providers/activity.ts keeps one import site.
  */
-export const MOCK_EPOCH = FIXTURE_MOCK_EPOCH;
+export { MOCK_EPOCH };
 
 /**
  * Replay a seeded timestamp's "n before the reference point" offset from real
@@ -1158,6 +1164,7 @@ export async function createWorkItem(data: CreateWorkItemInput): Promise<WorkIte
   const now = clock.nowIso();
   const item: WorkItem = {
     id,
+    key: nextMockWorkItemKey(data.projectId),
     projectId: data.projectId,
     // Same rule as the seeded rows: the name comes from the initiative list,
     // never from the caller. A blank here put an unlabelled row on the board.
@@ -1420,6 +1427,9 @@ export async function addWorkItemComment(
   body: string,
   opts: { authorId?: string | null; isSystem?: boolean } = {},
 ): Promise<void> {
+  // The table is audit history now: a human comment is a message on the work
+  // item's thread (createWorkItemComment, lib/work-thread.ts), never a row here.
+  if (opts.isSystem !== true) throw new Error('work_item_comments is audit-only; a human comment belongs on the orgiq:work thread');
   if (config.mock.aurora) {
     // This used to `return` — a write that reported success and stored
     // nothing. The one comment `dev:mock` actually produces is the settle
@@ -1671,85 +1681,161 @@ function personTitle(id: string | null): string | null {
   return id ? mockPeople.find((p) => p.id === id)?.title ?? null : null;
 }
 
-export async function listWorkItemComments(
-  workItemId: string,
-): Promise<{ comments: WorkItemCommentView[]; total: number }> {
-  let comments: WorkItemCommentView[];
+/** Who wrote a REST comment: the session's user, stamped by the server. */
+export interface CommentAuthor { userId: string; displayName: string; personId: string }
+
+/** How much of a thread the REST read returns (oldest dropped first). */
+export const WORK_THREAD_READ_LIMIT = 1000;
+
+async function personTitles(ids: string[]): Promise<Map<string, { name: string | null; title: string | null }>> {
+  const out = new Map<string, { name: string | null; title: string | null }>();
+  const unique = [...new Set(ids)];
+  if (!unique.length) return out;
   if (config.mock.aurora) {
-    comments = workItemComments.rows()
-      .filter((c) => c.workItemId === workItemId)
-      .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+    for (const id of unique) out.set(id, { name: personName(id), title: personTitle(id) });
+    return out;
+  }
+  const params = unique.map((id, i) => strParam(`p${i}`, id));
+  const rows = await safeExec(`SELECT id, name, title FROM people WHERE id IN (${unique.map((_, i) => `:p${i}`).join(', ')})`, params);
+  for (const r of rows) out.set(String(r['id']), { name: r['name'] != null ? String(r['name']) : null, title: r['title'] != null ? String(r['title']) : null });
+  return out;
+}
+
+/**
+ * The thread's messages one reader sees: the store's per-channel listing
+ * (the same `ChatStore.listMessages` the gateway's history serves from), under
+ * that reader's history floor (strictly after `historyFrom`), deletions dropped
+ * (routes/chat-pins.ts messageVisible — the one visibility rule). A floor
+ * lookup that fails is a refusal, not an open history.
+ */
+async function visibleThread(workItemId: string, viewerUserId: string | null, limit = WORK_THREAD_READ_LIMIT): Promise<ChatMessage[]> {
+  const { socialChat } = await import('../lib/social-chat.js');
+  const { historyFloor, messageVisible } = await import('../routes/chat-pins.js');
+  const chat = socialChat(); await chat.ready;
+  const channel = workThreadChannel(workItemId);
+  const floor = viewerUserId ? await historyFloor(channel, viewerUserId) : null;
+  const legacy = (await chat.chatStore.listMessages(channel, limit)).filter((m) => messageVisible(m, floor));
+  const item = await getWorkItem(workItemId);
+  if (!item) return legacy;
+  const initiativeChannel = `orgiq:initiative:${item.projectId}`;
+  const initiativeFloor = viewerUserId ? await historyFloor(initiativeChannel, viewerUserId) : null;
+  const contextual = (await chat.chatStore.listMessages(initiativeChannel, limit)).filter(m => {
+    const page = m.metadata?.['pageReference'] as { kind?: string; id?: string } | undefined;
+    return page?.kind === 'work-item' && page.id === workItemId && messageVisible(m, initiativeFloor);
+  });
+  return [...legacy, ...contextual].sort((a, b) => a.timestamp.localeCompare(b.timestamp) || a.id.localeCompare(b.id));
+}
+
+const threadMeta = (m: ChatMessage, k: string) => (typeof m.metadata?.[k] === 'string' ? m.metadata[k] as string : null);
+/** A human comment on the thread: everything but a system-flagged row. */
+const isThreadComment = (m: ChatMessage) => m.metadata?.['system'] !== true;
+
+/** Each message's author person: its provenance, or — a socket send carries none — the sender's user row. */
+async function threadPeople(messages: ChatMessage[]): Promise<(m: ChatMessage) => string | null> {
+  const people = new Map<string, string | null>();
+  for (const m of messages) {
+    if (!threadMeta(m, 'authorPersonId') && m.userId && !people.has(m.userId)) people.set(m.userId, (await getUser(m.userId))?.personId ?? null);
+  }
+  return (m) => threadMeta(m, 'authorPersonId') ?? (m.userId ? people.get(m.userId) ?? null : null);
+}
+
+/** The thread's messages as comment rows, under the viewer's history floor (strictly after `historyFrom`). */
+async function threadComments(workItemId: string, viewerUserId: string | null): Promise<WorkItemCommentView[]> {
+  const messages = await visibleThread(workItemId, viewerUserId);
+  const personOf = await threadPeople(messages);
+  const directory = await personTitles(messages.map(personOf).filter((p): p is string => !!p));
+  return messages.map((m) => {
+    const personId = personOf(m);
+    return {
+      id: threadMeta(m, 'commentId') ?? m.id,
+      workItemId,
+      authorId: personId,
+      authorName: threadMeta(m, 'displayName') ?? (personId ? directory.get(personId)?.name ?? null : null),
+      authorTitle: personId ? directory.get(personId)?.title ?? null : null,
+      body: m.message,
+      isSystem: m.metadata?.['system'] === true,
+      createdAt: m.timestamp,
+    };
+  });
+}
+
+/**
+ * What `v_work_item_summary.comment_count` used to count from the table: the
+ * item's human comments — now read from its ONE store, the thread, as this
+ * reader sees it — plus the newest one's instant. Same rule as the comment
+ * feed's `total`, so a "N comments" pill and the Discussion tab cannot disagree.
+ */
+export interface WorkThreadSummary { commentCount: number; lastCommentAt: string | null }
+
+export async function workThreadSummary(workItemId: string, viewerUserId: string | null): Promise<WorkThreadSummary> {
+  const comments = (await visibleThread(workItemId, viewerUserId)).filter(isThreadComment);
+  let last: string | null = null;
+  for (const m of comments) if (!last || m.timestamp > last) last = m.timestamp;
+  return { commentCount: comments.length, lastCommentAt: last };
+}
+
+/** The audit half: is_system rows of work_item_comments (status changes, run settlements). */
+async function auditComments(workItemId: string): Promise<WorkItemCommentView[]> {
+  if (config.mock.aurora) {
+    return workItemComments.rows()
+      .filter((c) => c.workItemId === workItemId && c.isSystem)
       .map((c) => ({
         id: c.id, workItemId: c.workItemId, authorId: c.authorId,
         authorName: personName(c.authorId), authorTitle: personTitle(c.authorId),
-        body: c.body, isSystem: c.isSystem, createdAt: c.createdAt,
+        body: c.body, isSystem: true, createdAt: c.createdAt,
       }));
-  } else {
-    const rows = await safeExec(
-      `SELECT c.id, c.work_item_id, c.author_id, p.name AS author_name, p.title AS author_title,
-              c.body, c.is_system, c.created_at::text AS created_at
-         FROM work_item_comments c
-         LEFT JOIN people p ON p.id = c.author_id
-        WHERE c.work_item_id = :wid
-        ORDER BY c.created_at ASC, c.id ASC`,
-      [strParam('wid', workItemId)],
-    );
-    comments = rows.map((r) => ({
-      id: String(r['id'] ?? ''),
-      workItemId: String(r['work_item_id'] ?? ''),
-      authorId: r['author_id'] != null ? String(r['author_id']) : null,
-      authorName: r['author_name'] != null ? String(r['author_name']) : null,
-      authorTitle: r['author_title'] != null ? String(r['author_title']) : null,
-      body: String(r['body'] ?? ''),
-      isSystem: r['is_system'] === true,
-      createdAt: utcIso(r['created_at']),
-    }));
-  }
-  const total = comments.filter((c) => !c.isSystem).length;
-  return { comments, total };
-}
-
-export async function createWorkItemComment(
-  workItemId: string,
-  authorId: string,
-  body: string,
-): Promise<WorkItemCommentView> {
-  if (config.mock.aurora) {
-    const row = {
-      id: `wic-${randomUUID()}`,
-      workItemId,
-      authorId,
-      body,
-      isSystem: false,
-      createdAt: clock.nowIso(),
-    };
-    workItemComments.rows().push(row);
-    return {
-      id: row.id, workItemId, authorId, authorName: personName(authorId), authorTitle: personTitle(authorId),
-      body, isSystem: false, createdAt: row.createdAt,
-    };
   }
   const rows = await safeExec(
-    `WITH ins AS (
-       INSERT INTO work_item_comments (work_item_id, author_id, body, is_system)
-       VALUES (:wid, :author, :body, FALSE)
-       RETURNING id, work_item_id, author_id, body, is_system, created_at
-     )
-     SELECT ins.id, ins.work_item_id, ins.author_id, ins.body, ins.is_system, ins.created_at,
-            p.name AS author_name, p.title AS author_title
-       FROM ins LEFT JOIN people p ON p.id = ins.author_id`,
-    [strParam('wid', workItemId), strParam('author', authorId), strParam('body', body)],
+    `SELECT c.id, c.work_item_id, c.author_id, p.name AS author_name, p.title AS author_title,
+            c.body, c.is_system, c.created_at::text AS created_at
+       FROM work_item_comments c
+       LEFT JOIN people p ON p.id = c.author_id
+      WHERE c.work_item_id = :wid AND c.is_system
+      ORDER BY c.created_at ASC, c.id ASC`,
+    [strParam('wid', workItemId)],
   );
-  const r = rows[0]!;
-  return {
+  return rows.map((r) => ({
     id: String(r['id'] ?? ''),
     workItemId: String(r['work_item_id'] ?? ''),
     authorId: r['author_id'] != null ? String(r['author_id']) : null,
     authorName: r['author_name'] != null ? String(r['author_name']) : null,
     authorTitle: r['author_title'] != null ? String(r['author_title']) : null,
     body: String(r['body'] ?? ''),
-    isSystem: false,
+    isSystem: true,
     createdAt: utcIso(r['created_at']),
+  }));
+}
+
+/**
+ * A work item's comment feed: its ONE thread `orgiq:work:<id>` (human
+ * discussion, migrated history included — lib/migrate-work-comments.ts) beside
+ * the table's audit events, oldest first. `viewerUserId` applies that reader's
+ * history floor to the thread.
+ */
+export async function listWorkItemComments(
+  workItemId: string,
+  viewerUserId: string | null = null,
+): Promise<{ comments: WorkItemCommentView[]; total: number }> {
+  const [thread, audit] = await Promise.all([threadComments(workItemId, viewerUserId), auditComments(workItemId)]);
+  const comments = [...thread, ...audit].sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
+  const total = comments.filter((c) => !c.isSystem).length;
+  return { comments, total };
+}
+
+/** A REST comment: a message on the work item's thread, sender stamped from the session's user. Never a table row. */
+export async function createWorkItemComment(
+  workItemId: string,
+  author: CommentAuthor,
+  body: string,
+): Promise<WorkItemCommentView> {
+  const { postThreadMessage } = await import('../lib/social-chat.js');
+  const at = config.mock.aurora ? clock.nowIso() : new Date().toISOString();
+  const message = restCommentMessage({ workItemId, userId: author.userId, displayName: author.displayName, personId: author.personId, body, at });
+  await postThreadMessage(message);
+  const title = (await personTitles([author.personId])).get(author.personId)?.title ?? null;
+  return {
+    id: message.id, workItemId, authorId: author.personId, authorName: author.displayName, authorTitle: title,
+    body, isSystem: false, createdAt: at,
   };
 }
 
@@ -1851,7 +1937,7 @@ function itemActivity(r: ItemEvent): ProjectActivityItem {
  * are NOT reprojected — the fixture takes them from the clock already, and a
  * comment written by a dispatch is a real instant.
  */
-function mockProjectActivity(projectId: string, limit: number): ProjectActivityItem[] {
+async function mockProjectActivity(projectId: string, limit: number, viewerUserId: string | null): Promise<ProjectActivityItem[]> {
   const items = mockWorkItems().filter((i) => i.projectId === projectId);
   const byId = new Map(items.map((i) => [i.id, i] as const));
   const personName = (id: string | null): string | null =>
@@ -1860,8 +1946,10 @@ function mockProjectActivity(projectId: string, limit: number): ProjectActivityI
   // `JOIN work_items w ON w.id = c.work_item_id WHERE w.project_id = :pid` —
   // an inner join, so a comment whose item this initiative does not own is not
   // this initiative's activity.
+  // The table's arm is its audit rows only; human comments come from each
+  // item's thread (threadActivity), the one store they live in.
   const comments = workItemComments.rows()
-    .filter((c) => byId.has(c.workItemId))
+    .filter((c) => byId.has(c.workItemId) && c.isSystem)
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
     .slice(0, limit)
     .map((c) => {
@@ -1888,19 +1976,65 @@ function mockProjectActivity(projectId: string, limit: number): ProjectActivityI
       prUrl: item.prUrl, prStatus: item.prStatus,
     }));
 
-  return [...comments, ...events]
+  const threads = await threadActivity(
+    items.map((i) => ({ id: i.id, title: i.title, prUrl: i.prUrl, prStatus: i.prStatus })), viewerUserId, limit);
+
+  return [...comments, ...threads, ...events]
     .sort((a, b) => b.at.localeCompare(a.at))
     .slice(0, limit);
 }
 
+/** Reads per round when the feed walks an initiative's threads. */
+const THREAD_FEED_CONCURRENCY = 8;
+/** An initiative's threads the feed reads at most (most recently touched items first). */
+export const THREAD_FEED_MAX_ITEMS = 200;
+
+interface ThreadFeedItem { id: string; title: string; prUrl: string | null; prStatus: string | null }
+
+/**
+ * The comment arm of the activity feed: each item's thread `orgiq:work:<id>`
+ * (human comments, migrated history included), newest `limit` per thread, under
+ * the viewer's history floor — the same reader rule as the item's own
+ * Discussion tab. The table no longer holds a human comment written after the
+ * migration, so counting it would hide every new one.
+ */
+async function threadActivity(items: ThreadFeedItem[], viewerUserId: string | null, limit: number): Promise<ProjectActivityItem[]> {
+  const out: ProjectActivityItem[] = [];
+  const walk = items.slice(0, THREAD_FEED_MAX_ITEMS);
+  for (let i = 0; i < walk.length; i += THREAD_FEED_CONCURRENCY) {
+    const round = walk.slice(i, i + THREAD_FEED_CONCURRENCY);
+    const read = await Promise.all(round.map(async (item) => {
+      const messages = (await visibleThread(item.id, viewerUserId)).filter(isThreadComment)
+        .sort((a, b) => b.timestamp.localeCompare(a.timestamp)).slice(0, limit);
+      return { item, messages };
+    }));
+    for (const { item, messages } of read) {
+      if (!messages.length) continue;
+      const personOf = await threadPeople(messages);
+      const names = await personTitles(messages.map(personOf).filter((p): p is string => !!p));
+      for (const m of messages) {
+        const personId = personOf(m);
+        const directoryName = personId ? names.get(personId)?.name ?? null : null;
+        out.push(commentActivity({
+          id: threadMeta(m, 'commentId') ?? m.id, workItemId: item.id, body: m.message, isSystem: false,
+          at: m.timestamp, authorId: personId, authorName: threadMeta(m, 'displayName') ?? directoryName,
+          title: item.title, prUrl: item.prUrl, prStatus: item.prStatus,
+        }));
+      }
+    }
+  }
+  return out.sort((a, b) => b.at.localeCompare(a.at)).slice(0, limit);
+}
+
 export async function getProjectActivity(
   projectId: string,
-  opts: { limit?: number } = {},
+  opts: { limit?: number; viewerUserId?: string | null } = {},
 ): Promise<ProjectActivityItem[]> {
   const limit = Math.min(Math.max(opts.limit ?? 25, 1), 100);
-  if (config.mock.aurora) return mockProjectActivity(projectId, limit);
+  const viewerUserId = opts.viewerUserId ?? null;
+  if (config.mock.aurora) return mockProjectActivity(projectId, limit, viewerUserId);
 
-  // Comments (human + system audit rows) joined to their work item.
+  // The table's arm: audit rows only (status changes, run settlements).
   const commentRows = await exec(
     `SELECT c.id, c.body, c.is_system, c.created_at::text AS at,
             c.author_id, p.name AS author_name,
@@ -1908,11 +2042,24 @@ export async function getProjectActivity(
        FROM work_item_comments c
        JOIN work_items w ON w.id = c.work_item_id
        LEFT JOIN people p ON p.id = c.author_id
-      WHERE w.project_id = :pid
+      WHERE w.project_id = :pid AND c.is_system
       ORDER BY c.created_at DESC
       LIMIT :lim`,
     [strParam('pid', projectId), intParam('lim', limit)],
   );
+
+  // The thread arm walks the initiative's items, most recently touched first.
+  const threadItems = (await exec(
+    `SELECT w.id, w.title, w.pr_url, w.pr_status
+       FROM work_items w
+      WHERE w.project_id = :pid
+      ORDER BY COALESCE(w.completed_at, w.updated_at, w.created_at) DESC, w.id
+      LIMIT :lim`,
+    [strParam('pid', projectId), intParam('lim', THREAD_FEED_MAX_ITEMS)],
+  )).map((r) => ({
+    id: String(r['id']), title: String(r['title']),
+    prUrl: r['pr_url'] ? String(r['pr_url']) : null, prStatus: r['pr_status'] ? String(r['pr_status']) : null,
+  }));
 
   // Work-item lifecycle events. completed_at wins over updated_at so a finished
   // item reads as "completed", not "updated".
@@ -1937,7 +2084,7 @@ export async function getProjectActivity(
       id: String(r['id']),
       workItemId: String(r['work_item_id']),
       body: String(r['body']),
-      isSystem: r['is_system'] === true,
+      isSystem: true, // the statement above selects is_system rows only
       at: String(r['at']),
       authorId: r['author_id'] ? String(r['author_id']) : null,
       authorName: r['author_name'] ? String(r['author_name']) : null,
@@ -1960,6 +2107,8 @@ export async function getProjectActivity(
       prStatus: r['pr_status'] ? String(r['pr_status']) : null,
     }));
   }
+
+  activity.push(...await threadActivity(threadItems, viewerUserId, limit));
 
   return activity
     .sort((a, b) => b.at.localeCompare(a.at))

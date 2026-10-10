@@ -1,0 +1,54 @@
+/* Domain names wrap instead of competing with badges for the title line. */
+.assessment-dimension-layout [data-testid="assessment-dimension-master-detail-rail-header"] {
+  height: 44px;
+  padding-left: 16px;
+  border-bottom: 0;
+}
+.assessment-dimension-layout [data-testid="assessment-dimension-master-detail-rail-title"] {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+}
+.assessment-dimension-layout [data-testid="assessment-dimension-master-detail-rail-title"] > span:first-child {
+  overflow: visible;
+  text-overflow: clip;
+}
+.assessment-dimension-layout [data-testid="dimension-rail-filter"] { font-size: 12px; }
+.assessment-dimension-list { padding: 0 8px 8px; }
+.assessment-dimension-list [data-row-id] {
+  padding: 9px 8px;
+  border-radius: 6px;
+}
+.assessment-dimension-list [data-focus-key^="r:"] {
+  align-items: flex-start;
+  gap: 8px;
+}
+.assessment-dimension-list [data-focus-key^="r:"] > span[aria-hidden="true"] { display: none; }
+.assessment-dimension-list [data-testid^="dimension-rail-row-icon-"] { padding-top: 1px; }
+.assessment-dimension-list .dimension-rail-number {
+  min-width: 18px;
+  font-variant-numeric: tabular-nums;
+  line-height: 20px;
+}
+.assessment-dimension-list [data-focus-key^="r:"] .truncate[title] {
+  overflow: visible;
+  white-space: normal;
+  text-overflow: clip;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+}
+.assessment-dimension-list [data-testid^="dimension-rail-row-subline-"] {
+  overflow: visible;
+  white-space: normal;
+}
+.assessment-dimension-list .dimension-rail-metadata { gap: 4px 8px; margin-top: 3px; }
+.assessment-dimension-list .dimension-rail-confidence { white-space: nowrap; }
+.assessment-dimension-list [data-focus-key^="g:"] {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 20px;
+  padding-top: 12px;
+  padding-bottom: 6px;
+}
+.assessment-dimension-list [data-focus-key^="g:"] > .truncate { white-space: normal; }

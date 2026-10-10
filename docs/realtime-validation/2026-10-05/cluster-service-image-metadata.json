@@ -1,0 +1,57 @@
+{
+  "buildx.build.provenance": {
+    "builder": {
+      "id": ""
+    },
+    "buildType": "https://mobyproject.org/buildkit@v1",
+    "materials": [
+      {
+        "uri": "pkg:docker/node@22-slim?platform=linux%2Farm64",
+        "digest": {
+          "sha256": "43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c"
+        }
+      }
+    ],
+    "invocation": {
+      "configSource": {
+        "entryPoint": "Dockerfile"
+      },
+      "parameters": {
+        "frontend": "dockerfile.v0",
+        "args": {
+          "context:locked_libraries": "local:locked_libraries",
+          "frontend.caps": "moby.buildkit.frontend.contexts+forward",
+          "sharedkey:localdir:locked_libraries": ".docker-libraries:b0a0f9b33f7e0b47",
+          "target": "production"
+        },
+        "locals": [
+          {
+            "name": "context"
+          },
+          {
+            "name": "dockerfile"
+          },
+          {
+            "name": "locked_libraries"
+          }
+        ]
+      },
+      "environment": {
+        "platform": "linux/arm64"
+      }
+    }
+  },
+  "buildx.build.ref": "colima/colima/y41z0iotaz2wtmp05sjlq33ud",
+  "containerimage.config.digest": "sha256:f560752a458d945df7d9932e18bfb67a25c6e13c8416b1658acb02bc8dda5368",
+  "containerimage.descriptor": {
+    "mediaType": "application/vnd.docker.distribution.manifest.v2+json",
+    "digest": "sha256:14ac9ead48a94a2111fadf296943554880a125348dfe182c23537c692d76f7c1",
+    "size": 2663,
+    "platform": {
+      "architecture": "arm64",
+      "os": "linux"
+    }
+  },
+  "containerimage.digest": "sha256:14ac9ead48a94a2111fadf296943554880a125348dfe182c23537c692d76f7c1",
+  "image.name": "docker.io/library/orgiq-middleware:cluster-service-validation"
+}

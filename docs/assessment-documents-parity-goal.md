@@ -224,8 +224,8 @@ dock (`lib/conversationCall` `ConversationCallDock`) — no second call stack.
 The lobby is **`<tenant>:doc:<doc>`** (`assessment:doc:page:100002`; long ids
 hashed like the chat channel), one per document; it rings the others on the
 page (awareness). **Call** / **Leave call** is the shared `DocumentHeader`'s
-call control; the live call docks in the page margin
-(`VideoDockSlot` as `CanvasDocumentView gutterLead`). The invite carries the
+call control; the live call shows in the shell footer's `HuddleBar`
+(`shell-call-dock`, fed by `ShellCallHost`; the in-page `document-call-slot` was retired 2026-10-06 by design). The invite carries the
 document's URL, so Accept on any assessment page opens it
 (`AssessmentLayout` `DocumentCallNavigator`; only in-app `/assessment/…?doc=`
 paths). An unavailable call says why when pressed.
@@ -325,13 +325,74 @@ Decision 8 of "Document pane parity" below.
   the sync one. The reply is the drafter's envelope `{summary, content,
   format: "markdown", source_spans, draft, published}` (`validate_document_output`).
 - **The proposal and Apply.** A send opens a `streaming` proposal anchored to
-  the selection (replace) or the caret (insert); the finished reply makes it
-  `ready`. Apply re-reads the page: a replacement lands only if the same text
+  the selection (replace) or the caret (insert). A finished reply is persisted
+  as ready draft metadata through `/api/assessment/knowledge/doc/proposals`;
+  readers with current assessment access recover it after reload or in
+  another browser. The BFF stamps its actor/time/version, checks current
+  identity epochs and grants, resolves the existing source-to-canvas mapping,
+  and requires canonical write policy for mutations. An unsaved reply stays
+  visible with a retry explanation. Apply first claims the stored version,
+  so another tab cannot insert the same proposal. It then re-reads the page:
+  a replacement lands only if the same text
   is still at the same range (a collaborator may have changed it — otherwise
   it asks to reselect), an insertion at the caret it was asked at; the
   markdown goes in as paragraphs / headings through the canvas editor's
-  `insertContentAt`, so it is an ordinary Yjs change (undo works). Discard
-  drops it; Discard while streaming cancels the turn.
+  `insertContentAt`, so it is an ordinary Yjs change (undo works). Completion
+  waits for the canonical document provider's actual saved acknowledgement;
+  storing proposal metadata is never reported as a document save. A failed
+  confirmation can be retried without inserting again. A receipt in the same
+  Yjs transaction records the proposal, claim version and actor. Reload
+  recovery reconfirms that matching receipt through a fresh save
+  acknowledgement before completing; an idle snapshot alone is insufficient.
+  Discard persists a versioned decision; Discard while streaming cancels the
+  turn. Claims are
+  never automatically returned to ready, because a lost browser might already
+  have inserted the edit. The new Aurora table is additive and not deployed.
+- **Revise a ready draft (2026-10-01).** The installed strip's `Revise…`
+  sends feedback with the prior draft as separate structured context. The
+  original selection, text and caret remain the target even if the editor's
+  current selection moved. Connected page text supplies context when available;
+  the readable source mirror supplies it otherwise. Empty source context and
+  oversized requests are refused before invocation. No content is inserted.
+  `POST /api/assessment/knowledge/doc/proposals/:proposalId/revision?id=<source>`
+  accepts only the preceding version, instruction, content and optional summary.
+  It checks current identity, grants and canonical write policy, then updates
+  a ready row through source/document/id/version CAS. The original target,
+  source and author remain unchanged; the version advances and `decidedBy`
+  records the reviser until a later decision. A matching same-actor retry of
+  the preceding version returns the stored result without another event.
+  Fresh revisions emit metadata-only `knowledge.proposal.changed`; the
+  existing notification continues to point at the same draft. They send no
+  extra owner notification and never claim a canonical document save.
+  Stop or generation failure restores the latest stored draft. A transient
+  revision-save failure retains its generated text separately, with Retry
+  reusing the same content/version rather than generating again. A definitive
+  refusal refreshes current metadata; another editor's Apply, Discard or
+  revision cannot be overwritten. Revise waits while an initial draft is unsaved.
+- **The ready notification (Social design §3.4).** A newly stored ready
+  draft and each successful decision announce `knowledge.proposal.changed`
+  (metadata only, no proposed text in the tenant-wide SSE stream). Only a new
+  ready draft sends the canonical lifecycle owner an `approval-requested`
+  item linked to the document. The existing notification
+  seam checks current assessment grants. Duplicate create retries announce
+  nothing twice; a failed durable write announces nothing. An unavailable
+  gateway or failed notification cannot turn a stored draft into a failed write.
+  The notification's exact target is independently readable through
+  `GET /api/assessment/knowledge/doc/proposals/:proposalId?id=<source>`:
+  `{documentId, proposal, canEdit}` includes applied/discarded metadata and
+  bypasses the capped active list. The resolver checks the current identity
+  epoch, role grant, source and canonical mapping on each read; missing or
+  wrong-source targets return 404. A locked, mismatched or unavailable write
+  policy leaves the draft readable with `canEdit: false`. The read emits no
+  proposal announcements, notifications or decisions. The portal consumes
+  `?proposal=<id>`, opens Editor and focuses the exact target once per
+  navigation. Applied/discarded targets and read-only drafts show their content
+  without mutation controls. Lookup failures offer Retry; a missing target
+  leaves unrelated edits available. Selecting another document clears the
+  proposal parameter. Old-target responses are ignored and delayed refreshes
+  cannot replace a newer successful decision with stale actions. The provider/route
+  suites passed 51 tests after adding exact-target regressions; they use the
+  registered memory fixture and SQL command double, without an Aurora write.
 - **The editor hand-off.** `publishDocumentEditor(sourceId, editor)` from
   `CanvasDocumentPane`'s `onEditorReady` (null on unmount); until a pane
   publishes one the hook reads TipTap's own `dom.editor` back-reference
@@ -340,20 +401,44 @@ Decision 8 of "Document pane parity" below.
   is a registered fixture (`document-agent-edits`; `empty` → the drafter's
   `{agent, error}` envelope) read from the structured input; `source_spans`
   quote the given page verbatim. Jest: `mock/__tests__/document-agent-edits.test.ts`.
+  Completed draft metadata uses registered `assessment.document-proposals`
+  rows, and mock reset clears them. This mock does not replace the canonical
+  canvas/workflow services or their write policy. Provider and route tests
+  cover reader recovery, grant/epoch/tenant denial, policy locks, concurrent
+  claims, response-loss confirmation retries and duplicate-safe notification;
+  SQL behavior is checked with a command double, without a live Aurora write.
+  Before Revise, the backend proposal/broker suites passed 89 tests and the pure
+  portal edit/client suites passed 24. Twelve headless browser contract
+  journeys passed for reload/peer recovery, failed Discard with retry, reader
+  action gating, exact targets beyond 100 rows, applied/discarded previews,
+  missing/failed lookups, source navigation and delayed responses after a
+  newer navigation or Discard decision. No page errors occurred. Real login,
+  source documents and explorer navigation run against the offline middleware.
+  Those browser checks explicitly stub the proposal
+  API and unavailable canonical services; they do not validate a real
+  canonical Apply/save or deployment.
+  Revise validation passes 70 provider tests, 18 direct registered Express
+  handler contracts, 37 pure portal model/client tests and middleware/portal
+  typechecks. Provider and handler checks omit the unrelated global HTTP
+  listener in a temporary test configuration; the standard HTTP suites remain
+  intact. The expanded browser spec discovers 25 cases (12 existing, 13 new),
+  but none were rerun after Revise: this sandbox denies local HTTP/socket
+  binding. New cases cover original targets, reload/peer recovery, Stop/failure,
+  save Retry and response loss, concurrent decisions and reader/terminal gating.
 - **Journey:** `an agent-mode instruction lands in the canvas as a proposed
   edit` — u-farah on `page:100002`, caret in the first paragraph, an Agent
   instruction → the strip ("Insert at cursor", the preview) → Apply → the
   text in the canvas → undone again. The conversation test (and
   `e2e/document-chat.spec.ts`) now picks Chat from the mode menu first.
   Screenshots `parity-journey-agent-proposal.png`, `-agent-applied.png`.
-- **Open, asserted:** the pane must call `useDocumentAgentEdit(node.id, title)`
-  beside `useDocumentConversation`, pass `agentEdit={agentEdit}` to
-  `DocumentComposerDock` and `proposal: agentEdit.strip` in the frame. Until
-  then the dock runs its own and carries the strip above its composer row —
-  the validator fails that line.
+- **Composition, asserted:** the pane calls `useDocumentAgentEdit(node.id, title)`
+  beside `useDocumentConversation`, passes `agentEdit={agentEdit}` to
+  `DocumentComposerDock` and `proposal: agentEdit.strip` in the frame. The
+  validator enforces this composition.
 - **Not done:** the drafter has no selection-scoped edit mode; the closest
   contract (`suggest-confluence-content`) is used with an instruction that
-  asks for the replacement only. Revise… (`onRevise`) is not wired.
+  asks for the replacement only. Live Revise browser verification remains
+  pending until the local HTTP stack can run.
 
 ## Document pane parity (2026-09-29, evening)
 

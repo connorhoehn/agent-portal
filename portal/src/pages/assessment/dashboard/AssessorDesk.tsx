@@ -13,11 +13,11 @@ import {
   DotMeter,
   ErrorState,
   Inline,
-  Input,
   LoadingState,
   MetaLine,
   PageHeader,
   PresenceAvatars,
+  SearchInput,
   SegmentedControl,
   Tooltip,
   Select,
@@ -26,7 +26,6 @@ import {
   T,
   type ChipTone,
 } from '@connorhoehnslalom/ui-components/shared';
-import { WorkflowTimeline } from './WorkflowTimeline';
 import { UnavailableNotice } from '../../../components/UnavailableNotice';
 import { Can } from '../../../lib/capabilities';
 import {
@@ -78,8 +77,8 @@ function CertificationCell({ team }: { team: TeamSummary }) {
       </Chip>
       <MetaLine size="xs" tone="secondary" items={[`${cert.at_or_above_target}/${cert.applicable} at L${cert.target_level}`]} />
       {claims > 0 && (
-        <Chip size="xs" tone="warning" title="Dimensions whose claim sits above what verification reached">
-          {claims} claim{claims === 1 ? '' : 's'} open
+        <Chip size="xs" tone="warning" title={`${claims} claim${claims === 1 ? '' : 's'} open — dimensions whose claim sits above what verification reached`}>
+          {claims} open
         </Chip>
       )}
     </Inline>
@@ -111,6 +110,16 @@ export function AssessorDesk({
   // that would read as a genuinely empty program.
   const dash = (v: React.ReactNode): React.ReactNode => (degraded ? '—' : v);
 
+  const stripItems = [
+    { label: hasFilters || cohort !== ALL ? `of ${teams.length} team${teams.length === 1 ? '' : 's'}` : (summary.teams === 1 ? 'team' : 'teams'), value: dash(summary.teams) },
+    {
+      label: summary.targetLevel === null ? 'verified' : `verified at L${summary.targetLevel}`,
+      value: summary.targetLevel === null ? '—' : dash(summary.verifiedAtTarget),
+    },
+    { label: 'claims open', value: dash(summary.claimsOpen), ...(!degraded && summary.claimsOpen > 0 ? { tone: 'danger' as const } : {}) },
+    { label: 'questions open', value: dash(summary.questionsOpen), ...(!degraded && summary.questionsOpen > 0 ? { tone: 'danger' as const } : {}) },
+  ];
+
   return (
     <Stack gap="md">
       <PageHeader
@@ -123,30 +132,20 @@ export function AssessorDesk({
         )}
       />
 
-      <StatStrip
-        aria-label="Program summary"
-        items={[
-          { label: 'Teams', value: dash(summary.teams), hint: cohort === ALL ? 'in the program' : `in ${motionFor(cohort).title}` },
-          {
-            label: summary.targetLevel === null ? 'Verified' : `Verified at L${summary.targetLevel}`,
-            value: summary.targetLevel === null ? '—' : dash(summary.verifiedAtTarget),
-            hint: summary.targetLevel === null ? 'nothing assessed yet' : 'teams with a dimension at target',
-          },
-          { label: 'Claims open', value: dash(summary.claimsOpen), tone: !degraded && summary.claimsOpen > 0 ? 'danger' : 'default', hint: 'claimed above what evidence verifies' },
-          { label: 'Questions open', value: dash(summary.questionsOpen), tone: !degraded && summary.questionsOpen > 0 ? 'danger' : 'default', hint: 'waiting on a person' },
-        ]}
-      />
-
       {degraded ? (
-        <UnavailableNotice
-          error={degraded}
-          what="the team roster"
-          source="Teams are read from the assessment database"
-          onRetry={onRetry}
-        />
+        <>
+          <StatStrip aria-label="Program summary" variant="line" size="sm" items={stripItems} />
+          <UnavailableNotice
+            error={degraded}
+            what="the team roster"
+            source="Teams are read from the assessment database"
+            onRetry={onRetry}
+          />
+        </>
       ) : (
         <>
-          <Inline wrap align="center" gap="sm">
+          <Inline wrap align="center" gap="md">
+            <StatStrip aria-label="Program summary" variant="line" size="sm" items={stripItems} />
             <SegmentedControl
               size="sm"
               aria-label="Assessment motion"
@@ -157,34 +156,31 @@ export function AssessorDesk({
             <Select
               size="sm"
               className="w-44"
+              aria-label="Status"
               value={status}
               onChange={(e) => setStatus(e.target.value)}
               options={[{ value: ALL, label: 'All statuses' }, ...statuses.map((s) => ({ value: s, label: formatTeamStatus(s) }))]}
-            />
-            <Input
-              size="sm"
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by team name or ID…"
-              className="w-[280px]"
             />
             {hasFilters && (
               <Button variant="ghost" size="sm" onClick={() => { setSearch(''); setStatus(ALL); }}>
                 Clear filters
               </Button>
             )}
-            <MetaLine
-              size="xs"
-              tone="tertiary"
-              className="ml-auto"
-              items={[`${rows.length} of ${teams.length} team${teams.length === 1 ? '' : 's'}`, 'sorted by fewest dimensions at target']}
+            <SearchInput
+              size="sm"
+              className="ml-auto w-64 shrink-0"
+              value={search}
+              onChange={setSearch}
+              onClear={() => setSearch('')}
+              placeholder="Search by team name or ID…"
+              aria-label="Search teams"
             />
           </Inline>
 
           <DataTable<TeamSummary>
             data={rows}
             keyField={(t) => t.id}
+            size="sm"
             onRowClick={(t) => onSelectTeam(t.id)}
             striped
             // A full-page desk view over every team in the program — 20 is a
@@ -198,12 +194,13 @@ export function AssessorDesk({
             sortable: true,
             // DataTable rows with onRowClick are keyboard-reachable on their
             // own now (tabIndex + Enter/Space), so the name cell is plain text.
-            render: (t) => (
-              <Stack gap="none" align="start">
-                <T className="font-semibold text-text-primary">{t.name}</T>
-                <MetaLine size="xs" tone="tertiary" items={[t.id, t.assessment_lead || 'no lead yet']} />
-              </Stack>
-            ),
+            render: (t) => <T size="sm" weight="medium">{t.name}</T>,
+          },
+          { key: 'id', header: 'ID', sortable: true, render: (t) => <T size="xs" tone="tertiary">{t.id}</T> },
+          {
+            key: 'lead',
+            header: 'Lead',
+            render: (t) => <T size="sm" tone={t.assessment_lead ? 'primary' : 'tertiary'}>{t.assessment_lead || 'no lead yet'}</T>,
           },
           {
             key: 'cohort',
@@ -216,15 +213,19 @@ export function AssessorDesk({
             key: 'dimensions_assessed',
             header: 'Assessed',
             sortable: true,
-            align: 'right',
+            numeric: true,
             render: (t) => (
-              <DotMeter
-                value={t.dimensions_total > 0 ? t.dimensions_assessed / t.dimensions_total : 0}
-                segments={10}
-                showPercent={false}
-                note={`${t.dimensions_assessed}/${t.dimensions_total}`}
-                tone="surface"
-              />
+              // DotMeter is a block; the Inline puts it flush right like the
+              // column's other numbers.
+              <Inline justify="end" wrap={false}>
+                <DotMeter
+                  value={t.dimensions_total > 0 ? t.dimensions_assessed / t.dimensions_total : 0}
+                  segments={10}
+                  showPercent={false}
+                  note={`${t.dimensions_assessed}/${t.dimensions_total}`}
+                  tone="surface"
+                />
+              </Inline>
             ),
           },
           {
@@ -258,16 +259,17 @@ export function AssessorDesk({
             key: 'workflow_step',
             header: 'Step',
             sortable: true,
-            width: '150px',
-            render: (t) => (
-              t.workflow_steps && t.workflow_steps.length > 0 ? (
-                <WorkflowTimeline steps={t.workflow_steps} testId={`workflow-stepper-${t.id}`} />
-              ) : (
-                <Chip size="xs" tone="neutral" title={`Step ${t.workflow_step} of 6`}>
+            width: '130px',
+            render: (t) => {
+              const ladder = t.workflow_steps && t.workflow_steps.length > 0
+                ? t.workflow_steps.map((w) => `${w.done ? '✓' : w.active ? '●' : '○'} ${w.step} · ${w.label}`).join('\n')
+                : `Step ${t.workflow_step} of 6`;
+              return (
+                <Chip size="xs" tone="neutral" title={ladder}>
                   {t.workflow_step}/6 · {t.workflow_step_label}
                 </Chip>
-              )
-            ),
+              );
+            },
           },
           {
             key: 'contributors',
@@ -285,7 +287,7 @@ export function AssessorDesk({
             key: 'followups_open',
             header: 'Questions',
             sortable: true,
-            align: 'right',
+            numeric: true,
             render: (t) => (
               t.followups_open > 0
                 ? <Chip tone="warning" size="xs">{t.followups_open} open</Chip>
@@ -300,7 +302,7 @@ export function AssessorDesk({
               return <Chip size="xs" tone={ACTION_TONE[next.kind]} dot="static">{next.label}</Chip>;
             },
           },
-          { key: 'updated_at', header: 'Updated', sortable: true, render: (t) => fmtDate(t.updated_at) },
+          { key: 'updated_at', header: 'Updated', sortable: true, numeric: true, render: (t) => fmtDate(t.updated_at) },
             ]}
           />
         </>

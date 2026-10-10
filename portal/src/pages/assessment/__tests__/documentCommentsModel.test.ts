@@ -5,7 +5,7 @@ import {
   hrefFromCallChannel, openThreadCount, type PlatformComment,
 } from '../knowledge/documentCommentsModel.ts';
 
-const base = { documentId: 'd', color: '#4A90D9' };
+const base = { documentId: 'd', color: 'rgb(74 144 217)' };
 const anchor = { v: 1, key: 'body', start: 'AAE=', end: 'AAI=', quote: 'Partially met' };
 const rows: PlatformComment[] = [
   { ...base, commentId: 'kc-rubric-02', text: 'Reply', userId: 'u-farah', displayName: 'Farah Osei', timestamp: '2026-09-24T10:00:00.000Z', parentCommentId: 'kc-rubric-01', importedFrom: 'assessment_knowledge_comments' },
@@ -45,11 +45,11 @@ test('the import notice speaks only when earlier comments have not moved', () =>
 test('the byline is everyone else on the canvas, one entry per person across tabs', () => {
   const people = awarenessPeople([
     [1, { user: { id: 'u-farah', name: 'Farah Osei', color: 'teal' } }],
-    [2, { user: { id: 'u-jonas', name: 'Jonas Lindqvist', color: '#2563eb' } }],
+    [2, { user: { id: 'u-jonas', name: 'Jonas Lindqvist', color: 'rgb(37 99 235)' } }],
     [3, { user: { id: 'u-jonas', name: 'Jonas Lindqvist' } }],
     [4, { cursor: null }],
   ], 'u-farah');
-  assert.deepEqual(people, [{ id: 'u-jonas', name: 'Jonas Lindqvist', color: '#2563eb', clientIds: [2, 3] }]);
+  assert.deepEqual(people, [{ id: 'u-jonas', name: 'Jonas Lindqvist', color: 'rgb(37 99 235)', clientIds: [2, 3] }]);
 });
 
 test('the call lobby is tenant-prefixed, one per document; the invite carries only an in-app document URL', () => {

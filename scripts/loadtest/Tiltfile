@@ -1,0 +1,7 @@
+# Run `node scripts/docker/prepare-libraries.mjs` first. This Compose project
+# owns only the isolated soak resources and loopback ports 13061 / 16379.
+docker_compose('compose.yaml', project_name='orgiq-soak')
+dc_resource('redis', labels=['soak'])
+# A source edit during a soak must not become an unplanned gateway restart.
+# Rebuild explicitly with `tilt --port 10361 trigger gateway` between runs.
+dc_resource('gateway', resource_deps=['redis'], labels=['soak'], trigger_mode=TRIGGER_MODE_MANUAL)

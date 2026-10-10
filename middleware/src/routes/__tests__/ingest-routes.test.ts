@@ -28,6 +28,7 @@ jest.mock('../../config.js', () => ({
   config: {
     region: 'us-east-1',
     foundation: { documentsBucket: 'orgiq-documents-test' },
+    mock: { aurora: false },
   },
 }));
 jest.mock('../../providers/knowledge-base.js', () => ({

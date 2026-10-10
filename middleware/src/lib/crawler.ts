@@ -16,6 +16,7 @@ import { appendJourneyStep, recordCapabilityEvent } from './invocations.js';
 import { config } from '../config.js';
 import { extractFromScreenshot } from './vision-extractor.js';
 import { crawlSessionRows } from '../mock/ingest-crawls.js';
+import { mockRestartMirror } from '../mock/restart-state.js';
 import type {
   CrawlEvent,
   CrawlMode,
@@ -58,7 +59,7 @@ let mockSeeded = false;
 function ensureMockSeeded(): void {
   if (!config.mock.aurora || mockSeeded) return;
   mockSeeded = true;
-  for (const row of crawlSessionRows.rows()) {
+  for (const row of (mockRestartMirror('crawlSessions')?.map(([, row]) => row) as CrawlSession[] | undefined) ?? crawlSessionRows.rows()) {
     // Deep-ish copy: `pages` is the array callers push into during a live
     // run, and the fixture's own array must stay untouched so a reset can
     // rebuild from it.

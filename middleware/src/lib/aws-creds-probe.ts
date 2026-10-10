@@ -23,6 +23,7 @@
 // pinning a dead connection.
 
 import { STSClient, GetCallerIdentityCommand } from '@aws-sdk/client-sts';
+import { createHealthProbe } from './health-probe.js';
 
 const TTL_MS = 60_000;
 
@@ -33,22 +34,20 @@ export interface CredsStatus {
 }
 
 let client: STSClient | null = null;
-let cached: { status: CredsStatus; checkedAt: number } | null = null;
-
-export async function checkAwsCredentials(): Promise<CredsStatus> {
-  const now = Date.now();
-  if (cached && now - cached.checkedAt < TTL_MS) return cached.status;
-
-  if (!client) client = new STSClient({});
+const probe = createHealthProbe(TTL_MS, async () => {
+  if (!client) client = new STSClient({ maxAttempts: 1,
+    requestHandler: { connectionTimeout: 2_000, requestTimeout: 5_000, throwOnRequestTimeout: true } });
   try {
-    await client.send(new GetCallerIdentityCommand({}));
-    cached = { status: { ok: true }, checkedAt: now };
+    await client.send(new GetCallerIdentityCommand({}), { abortSignal: AbortSignal.timeout(8_000) });
+    return { ok: true };
   } catch (err) {
     const name = (err as { name?: string }).name ?? 'UnknownError';
     // Drop the dead client. This does not recover a re-login on its own (see
     // the note above) — the process has to restart for that.
     client = null;
-    cached = { status: { ok: false, error: name }, checkedAt: now };
+    return { ok: false, error: name };
   }
-  return cached.status;
-}
+}, error => (error as { name?: string }).name ?? 'UnknownError');
+
+export const checkAwsCredentials = probe.check;
+export const readAwsCredentialsStatus = probe.snapshot;

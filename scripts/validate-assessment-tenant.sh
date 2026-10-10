@@ -14,9 +14,11 @@
 set -u
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
+source scripts/lib/judges.sh  # jg_*: static gates run once per tree state
 
 QUICK=0; NO_TIME=0
-SEAL=0; for a in "$@"; do case "$a" in --seal) SEAL=1;; esac; done
+source scripts/lib/journeys.sh  # jr_*: journey freshness (docs/journeys.md)
+jr_refuse_seal_flag "$@"
 for a in "$@"; do
   case "$a" in
     --quick) QUICK=1 ;;
@@ -33,16 +35,16 @@ section() { printf '\n== %s ==\n' "$1"; }
 # 1. Type + test + build gates. A tenant that does not compile is not done.
 # ─────────────────────────────────────────────────────────────────────────────
 section "middleware"
-if (cd middleware && npx tsc --noEmit >/dev/null 2>&1); then ok "tsc clean"; else fail "middleware: tsc errors"; fi
+if jg_mw_tsc >/dev/null 2>&1; then ok "tsc clean"; else fail "middleware: tsc errors"; fi
 if [ "$QUICK" = 0 ]; then
   if (cd middleware && npx jest --silent >/dev/null 2>&1); then ok "jest green"; else fail "middleware: jest failures"; fi
 fi
 
 section "portal"
-if (cd portal && npx tsc --noEmit >/dev/null 2>&1); then ok "tsc clean"; else fail "portal: tsc errors"; fi
+if jg_portal_tsc >/dev/null 2>&1; then ok "tsc clean"; else fail "portal: tsc errors"; fi
 if (cd portal && node --test 'src/pages/**/__tests__/*.test.ts' 2>&1 | grep -qE '^ℹ fail 0$'); then ok "node tests green"; else fail "portal: node test failures"; fi
 if [ "$QUICK" = 0 ]; then
-  if (cd portal && npx vite build 2>&1 | grep -q '✓ built'); then ok "vite build"; else fail "portal: vite build fails"; fi
+  if jg_vite_build 2>&1 | grep -q '✓ built'; then ok "vite build"; else fail "portal: vite build fails"; fi
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -55,7 +57,8 @@ fi
 # ─────────────────────────────────────────────────────────────────────────────
 section "component discipline (portal/src/pages/assessment)"
 PAGES="portal/src/pages/assessment"
-RAW_RE='<(div|p|span|h[1-6]|ul|ol|li|section|nav|article|table|tr|td|th|button|a|label|input|textarea|select|form|code|pre)( [^>]*)?className='
+source scripts/lib/discipline.sh  # the one raw-element counter (brace-aware), shared with validate-component-discipline.sh
+RAW_RE=$DC_RAW_RE
 MAX_RAW_ELEMENTS=0
 
 # A raw element is permitted in exactly one kind of file: a local composite
@@ -68,16 +71,14 @@ QUEUED_MAX_PER_FILE=8
 # Only rows that say "Composed locally in `<file>`" mint an exemption — a
 # row that merely names the pages where a library gap was worked around
 # must not exempt those pages from the discipline check.
-QUEUED_FILES=$(grep -oE "Composed locally in \`portal/src/pages/assessment/[A-Za-z0-9_/.-]+\.tsx\`" "$QUEUE" 2>/dev/null | grep -oE "portal/src/pages/assessment/[A-Za-z0-9_/.-]+\.tsx" | sort -u)
-page_files() { find "$PAGES" -name '*.tsx' | sort | grep -vxF -f <(printf '%s\n' $QUEUED_FILES) ; }
-count_in() { local re="$1"; shift; local n=0; for f in "$@"; do c=$(grep -oE "$re" "$f" | wc -l | tr -d ' '); n=$((n+c)); done; echo "$n"; }
-PAGE_FILES=$(page_files)
-n_div=$(count_in '<div( [^>]*)?className=' $PAGE_FILES)
-n_btn=$(count_in '<button' $PAGE_FILES)
-n_sty=$(count_in 'style=\{\{' $PAGE_FILES)
-n_raw=$(count_in "$RAW_RE" $PAGE_FILES)
+QUEUED_FILES=$(dc_queued_files "$PAGES/")
+PAGE_FILES=$(dc_area_files "$PAGES" "$PAGES/")
+n_div=$(dc_count_re '<div( [^>]*)?className=' $PAGE_FILES)
+n_btn=$(dc_count_re '<button' $PAGE_FILES)
+n_sty=$(dc_count_re 'style=\{\{' $PAGE_FILES)
+n_raw=$(dc_count_raw $PAGE_FILES)
 q_over=""
-for f in $QUEUED_FILES; do [ -f "$f" ] || continue; c=$(grep -oE "$RAW_RE" "$f" | wc -l | tr -d ' '); [ "$c" -le "$QUEUED_MAX_PER_FILE" ] || q_over="$q_over ${f#$PAGES/}($c)"; done
+for f in $QUEUED_FILES; do [ -f "$f" ] || continue; c=$(dc_count_raw "$f"); [ "$c" -le "$QUEUED_MAX_PER_FILE" ] || q_over="$q_over ${f#$PAGES/}($c)"; done
 n_queued=$(printf '%s\n' $QUEUED_FILES | grep -c . || true)
 [ -z "$q_over" ] && ok "$n_queued queued composites, each ≤ $QUEUED_MAX_PER_FILE raw elements" || fail "queued composite over the per-file cap of $QUEUED_MAX_PER_FILE:$q_over"
 [ "$n_div" = 0 ] && ok "no raw <div className> (0)" || fail "raw <div className> in pages: $n_div (must be 0 — use Stack/Inline/Card/RailSection/DetailSection/PageSection)"
@@ -85,7 +86,7 @@ n_queued=$(printf '%s\n' $QUEUED_FILES | grep -c . || true)
 [ "$n_sty" = 0 ] && ok "no inline style={{}} (0)" || fail "inline style={{}} in pages: $n_sty (must be 0)"
 if [ "$n_raw" -le "$MAX_RAW_ELEMENTS" ]; then ok "raw styled elements: $n_raw (budget $MAX_RAW_ELEMENTS)"; else
   fail "raw styled elements: $n_raw > budget $MAX_RAW_ELEMENTS — worst files:"
-  for f in $PAGE_FILES; do c=$(grep -oE "$RAW_RE" "$f" | wc -l | tr -d ' '); [ "$c" -gt 0 ] && printf '      %4d  %s\n' "$c" "${f#$PAGES/}"; done | sort -rn | head -8
+  for f in $PAGE_FILES; do c=$(dc_count_raw "$f"); [ "$c" -gt 0 ] && printf '      %4d  %s\n' "$c" "${f#$PAGES/}"; done | sort -rn | head -8
 fi
 # The library's own wrapped realtime components break the production build
 # (tiptap peer); the plain primitives are the sanctioned path until upstream
@@ -136,56 +137,17 @@ done; done
 total=$(( ${#ROLES[@]} * ${#SURFACES[@]} ))
 [ "$jmissing" = 0 ] && ok "all $total role×surface logs present" || fail "$jmissing of $total journey logs missing (roles: ${ROLES[*]}; surfaces: ${SURFACES[*]})"
 [ "$jbad" = 0 ] && ok "every present log passes all fields" || fail "$jbad journey logs fail a required field"
-# Freshness, per surface: an audit of code that has since changed is not an
-# audit — but a global "newest page edit" rule stales all 63 logs for a
-# one-line fix on one page, which is how this check spent a day red without
-# telling anyone WHICH audit was actually out of date. A log is judged
-# against the recorded content digest of the files/dirs its own `pages:` line
-# names (see PROTOCOL.md); a log with no `pages:` line falls back to hashing
-# the full assessment source set. Normal validation never records evidence.
-# Only audit logs are held to freshness: the role×surface logs and the
-# isolation logs. PROTOCOL.md, DEFECTS.md and fixtures are not audits.
-# Retired-tenant isolation archives document deleted code, not the current
-# product. The active role matrix above and active isolation checks below
-# remain mandatory; archived source paths cannot acquire a fresh digest.
+# Freshness (docs/journeys.md): a log is stale when the rendered contract of
+# a route it walked changed since its walk was sealed — not when a file under
+# the route was touched, which is how a one-line refactor used to stale all 63
+# logs. Only audit logs are held to it: the role×surface logs, the isolation
+# logs and the stretch proofs (a log naming no route keeps its `pages:`
+# digest). PROTOCOL.md, DEFECTS.md and fixtures are not audits. Retired-tenant
+# isolation archives document deleted code, not the current product. Only
+# scripts/journeys/seal.sh <dir> records a seal, after a walk.
 if [ -d "$JDIR" ]; then
-
-# ── Freshness is about CONTENT, not mtime ────────────────────────────────
-# See docs/orgiq-journeys/PROTOCOL.md § "Freshness is about content": on
-# 2026-09-07 a bulk operation stamped 134 portal source files with one
-# identical mtime while changing none of them (the dev server logged no HMR
-# update for any), and logs "went stale" against edits that never happened.
-# A digest that moves is a change; an mtime that moves alone is not.
-SHA_CACHE="$JDIR/.pages-sha"
-pages_sha() {
-  local out="" ; IFS=',' read -ra items <<< "$1"
-  for d in "${items[@]}"; do d=$(echo "$d" | tr -d ' '); [ -n "$d" ] || continue
-    if [ -f "$d" ]; then out="$out$(shasum -a 256 "$d" 2>/dev/null)"; continue; fi
-    [ -d "$d" ] || { echo "Missing audit source: $d" >&2; return 1; }
-    local files; files=$(find "$d" -name '*.tsx' 2>/dev/null | sort)
-    [ -n "$files" ] || { echo "No audit source files in $d" >&2; return 1; }
-    out="$out$(printf '%s\n' "$files" | xargs shasum -a 256 2>/dev/null)"
-  done
-  [ -n "$out" ] || { echo "No audit source files found" >&2; return 1; }
-  printf '%s' "$out" | shasum -a 256 | cut -d' ' -f1
-}
-sha_recorded() { grep -F "$1 " "$SHA_CACHE" 2>/dev/null | tail -1 | cut -d' ' -f2; }
-sha_record() {
-  [ -f "$SHA_CACHE" ] || : > "$SHA_CACHE"
-  grep -vF "$1 " "$SHA_CACHE" > "$SHA_CACHE.tmp" 2>/dev/null || : > "$SHA_CACHE.tmp"
-  printf '%s %s\n' "$1" "$2" >> "$SHA_CACHE.tmp"
-  sort -o "$SHA_CACHE" "$SHA_CACHE.tmp" && rm -f "$SHA_CACHE.tmp"
-}
-  stale=0; stale_names=""
-  for f in $(find "$JDIR" -name '*.md' ! -name 'PROTOCOL.md' ! -name 'DEFECTS.md' ! -path '*/fixtures/*' ! -path '*/isolation/archived-*/*' 2>/dev/null); do
-    pages=$(grep -iE '^pages: *' "$f" | head -1 | sed -E 's/^pages: *//')
-    cur_sha=$(pages_sha "${pages:-$PAGES_FALLBACK}") || { stale=$((stale+1)); stale_names="$stale_names ${f#$JDIR/}(invalid-pages)"; continue; }
-    if [ "$(sha_recorded "$f")" != "$cur_sha" ]; then
-      stale=$((stale+1)); stale_names="$stale_names ${f#$JDIR/}(content-digest)"
-    fi
-    [ "$SEAL" = 1 ] && sha_record "$f" "$cur_sha"
-  done
-  [ "$stale" = 0 ] && ok "journey logs match their recorded source content" || fail "$stale journey logs have missing or different source digests — re-audit them:$stale_names"
+  jr_freshness "$JDIR" $(find "$JDIR" -name '*.md' ! -name 'PROTOCOL.md' ! -name 'DEFECTS.md' ! -path '*/fixtures/*' ! -path '*/isolation/archived-*/*' 2>/dev/null | sort)
+  jr_report
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -262,11 +224,19 @@ pal=$(grep -c "tenant: 'assessment'" portal/src/components/shell/portalCommands.
 # component Computer-Lab chrome; the ≥3 floor is here so a rename OUT of that
 # vocabulary fails loudly instead of emptying the check.
 SHELL_LAYOUT=portal/src/components/shell/Layout.tsx
-compute_mounts=$(grep -oE '<[A-Za-z]*(Devbox|Compute|Machine)[A-Za-z]*' "$SHELL_LAYOUT" | tr -d '<' | sort -u)
+compute_mounts=$(grep -oE '<[A-Za-z]*(Devbox|Compute|Machine|Fleet)[A-Za-z]*' "$SHELL_LAYOUT" | tr -d '<' | sort -u)
 n_compute=$(printf '%s\n' "$compute_mounts" | grep -c . | tr -d ' ')
 ungated=""
 for c in $compute_mounts; do
-  grep -qE "session\?\.tenant === 'orgiq' && <$c\b" "$SHELL_LAYOUT" || ungated="$ungated $c"
+  if [ "$c" = FleetIndicator ]; then
+    # The grouped presence badge (replaced LocalComputeBadge) mounts bare and
+    # gates itself: its local segment polls only behind useOrgiqShellPolls and
+    # its cloud segment requires tenant === 'orgiq'.
+    FI=portal/src/components/shell/FleetIndicator.tsx
+    grep -q "session?.tenant === 'orgiq'" "$FI" && grep -q "useLocalNodes" "$FI" || ungated="$ungated $c"
+  else
+    grep -qE "session\?\.tenant === 'orgiq' && <$c\b" "$SHELL_LAYOUT" || ungated="$ungated $c"
+  fi
 done
 if [ "$n_compute" -lt 3 ]; then
   fail "only $n_compute Computer-Lab component(s) found in $SHELL_LAYOUT (expect >=3 — the dock, the quick-switch and the presence badge); a rename out of the Devbox/Compute/Machine vocabulary would hide an ungated one"

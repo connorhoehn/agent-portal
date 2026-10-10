@@ -14,6 +14,9 @@
 //   - a call you answered: `accepted`, naming its host as the caller;
 //   - either side's hang-up: `ended`.
 //
+// A tenant page huddle's lobby (`orgiq:initiative:<id>` …) is reported by the
+// shell's PageHuddleCallLog (lib/pageCalls.ts), not from here.
+//
 // Pure: `callLogEvents` builds the bodies, `reportCallLogEvents` posts them
 // fire-and-forget (a lost report costs one history row, never the call).
 
@@ -28,6 +31,8 @@ export interface CallLogEventBody {
   callerName?: string;
   targetUserIds: string[];
   lobbyName: string;
+  /** The moment the fact happened, when it is not "now" (a page huddle's join is reported late). */
+  at?: string;
 }
 
 export interface CallHostEventLike {
@@ -85,7 +90,7 @@ export async function reportCallLogEvents(
       await doFetch(`${opts.baseUrl}/api/calls/log/events`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ ...event, at: new Date().toISOString() }),
+        body: JSON.stringify({ ...event, at: event.at ?? new Date().toISOString() }),
       });
     }
   } catch {

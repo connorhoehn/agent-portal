@@ -12,6 +12,7 @@ import type { CrawlTarget, CrawlSession } from './crawler-types.js';
 import { startCrawl } from './crawler.js';
 import { config } from '../config.js';
 import { crawlTargetRows } from '../mock/ingest-crawl-targets.js';
+import { mockRestartMirror } from '../mock/restart-state.js';
 
 // `process.cwd()`, NOT `import.meta.url` — the same trap and the same fix as
 // `routes/mock-control.ts::bootHandlerSha`: this module is compiled by the
@@ -92,7 +93,7 @@ export function initCrawlTargets(): void {
     // never write back into the registered fixture, or a demo edit would
     // survive a `POST /api/__mock/reset`. See `rehydrateMockCrawlTargets`
     // below for how the copy gets rebuilt on reset.
-    targets = crawlTargetRows.rows().map((t) => ({ ...t }));
+    targets = (mockRestartMirror('crawlTargets') as CrawlTarget[] | undefined) ?? crawlTargetRows.rows().map((t) => ({ ...t }));
     console.log(`[crawl-targets] loaded ${targets.length} mock target(s)`);
     // registerTask is a no-op under mock (see its own guard), so this loop
     // is inert — kept so the code path matches the real one rather than

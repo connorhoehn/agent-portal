@@ -257,6 +257,13 @@ services:
       # fallback by default. A forged/expired OrgIQ token is refused (401)
       # even while SKIP_AUTH is on.
       - REALTIME_JWT_SECRET=${SOCIAL_REALTIME_JWT_SECRET:-orgiq-dev-realtime}
+      # Per-resource lobby admission (docs/social-calls-plan.md, "Lobby
+      # admission at platform-api"): every OrgIQ-token lobby also asks the
+      # BFF's POST /api/realtime/lobby-access with the caller's bearer, and
+      # orgiq:/assessment:/social:/pipelines: lobbies refuse any other caller.
+      # On here; platform-api's own default is off.
+      - LOBBY_AUTHORITY_REQUIRED=${SOCIAL_LOBBY_AUTHORITY_REQUIRED:-true}
+      - LOBBY_AUTHORITY_URL=${SOCIAL_LOBBY_AUTHORITY_URL:-http://host.docker.internal:3001/api/realtime/lobby-access}
       - COGNITO_REGION=${SOCIAL_COGNITO_REGION:-us-east-1}
       - COGNITO_USER_POOL_ID=${SOCIAL_COGNITO_USER_POOL_ID:-us-east-1_localdev000}
       - REDIS_ENDPOINT=social-redis

@@ -5,6 +5,7 @@ import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { asyncHandler, ValidationError } from '../lib/async-handler.js';
 import { initSSE, writeSSE, endSSE } from '../lib/sse.js';
 import { config } from '../config.js';
+import { MOCK_SCREENSHOT_PNG } from '../mock/ingest-crawls.js';
 import {
   getKb,
   lookupKb,
@@ -470,6 +471,12 @@ ingestRouter.get('/crawl/:id/page/:idx/screenshot', asyncHandler(async (req, res
 
   const bucket = config.foundation.documentsBucket;
   const key = (page as { s3ScreenshotKey?: string | null }).s3ScreenshotKey ?? null;
+  if (config.mock.aurora && key) {
+    res.setHeader('Content-Type', 'image/png');
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.send(MOCK_SCREENSHOT_PNG);
+    return;
+  }
   if (!bucket || !key) { res.status(404).json({ error: 'Screenshot not available' }); return; }
 
   try {

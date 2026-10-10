@@ -1,0 +1,3 @@
+# Dashboards that may draw card-variant StatStrip / StatCard tiles (count-layout-drift.py cardstat).
+# A list or report page uses StatStrip variant="line" size="sm". Paths are suffixes of portal/src files.
+pages/observability/SummaryPage.tsx  # the observability Overview dashboard

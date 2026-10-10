@@ -55,7 +55,7 @@ export type FreezeClock = (at: Date | string) => () => void;
  * others exist so an audit never has to damage shared state to see an empty
  * table or an error state.
  */
-export type ScenarioName = 'default' | 'empty' | 'error' | 'large' | 'fresh';
+export type ScenarioName = 'default' | 'empty' | 'error' | 'large' | 'fresh' | 'demo' | 'distillation-demo';
 
 export interface Scenario {
   name: ScenarioName;

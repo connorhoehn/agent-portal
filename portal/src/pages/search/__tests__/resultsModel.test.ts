@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { groupResults, openLabelFor, parseSort, resultsFooter } from '../resultsModel.ts';
+import { countedLabel, groupResults, openLabelFor, parseSort, partialSourcesTitle, resultsFooter } from '../resultsModel.ts';
 import type { SearchRecord } from '../searchTypes.ts';
 
 const records: SearchRecord[] = [
@@ -31,6 +31,8 @@ test('footer copy names the scope and pluralises honestly', () => {
   assert.equal(resultsFooter(2, 'Design System API'), '2 results in Design System API');
   assert.equal(resultsFooter(1, null), '1 result');
   assert.equal(resultsFooter(12), '12 results');
+  assert.equal(resultsFooter(1, null, true), '1+ results');
+  assert.equal(resultsFooter(200, 'Auth Migration', true), '200+ results in Auth Migration');
 });
 
 test('scoped row actions and sort parsing', () => {
@@ -39,4 +41,18 @@ test('scoped row actions and sort parsing', () => {
   assert.equal(parseSort('recent'), 'recent');
   assert.equal(parseSort('bogus'), 'relevance');
   assert.equal(parseSort(null), 'relevance');
+});
+
+// A partial read (a failed or capped source) makes every server count a floor:
+// the tab, the rail and the group headings must all say so, like the footer.
+test('a count that is a floor reads "N+" everywhere a count is drawn', () => {
+  assert.deepEqual(countedLabel('Results', 44), { label: 'Results', count: 44 });
+  assert.deepEqual(countedLabel('Results', 44, true), { label: 'Results 44+' });
+  assert.deepEqual(countedLabel('Decisions', 0, true), { label: 'Decisions 0+' });
+  assert.deepEqual(countedLabel('Decisions', undefined, true), { label: 'Decisions' });
+  const groups = groupResults(records, { person: 1, initiative: 1, work: 2, knowledge: 1 }, type => `?type=${type}`, true);
+  assert.deepEqual(groups.map(group => group.label), ['People, at least', 'Initiatives, at least', 'Work, at least', 'Knowledge, at least']);
+  assert.equal(groupResults(records, { work: 2 }, type => `?type=${type}`)[2].label, 'Work');
+  assert.equal(partialSourcesTitle(['Approved design decisions unavailable']), 'One source is incomplete — counts are minimums');
+  assert.equal(partialSourcesTitle(['Work source window is limited', 'Decisions unavailable']), '2 sources are incomplete — counts are minimums');
 });

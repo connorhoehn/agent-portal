@@ -3,6 +3,7 @@
 # newsroom tenant is gone everywhere it can execute. --quick skips jest/build.
 set -u
 cd "$(dirname "$0")/.."
+source scripts/lib/judges.sh  # jg_*: static gates run once per tree state
 QUICK=0; for a in "$@"; do case "$a" in --quick) QUICK=1;; esac; done
 FAILS=()
 ok()   { printf '  ✓ %s\n' "$1"; }
@@ -55,12 +56,12 @@ section "docs"
 grep -qE "OUTSIDE_ROLES=\(member sme program-owner org-leader hr-admin\)" scripts/validate-assessment-tenant.sh && ok "assessment validator isolation matrix = 5 orgiq roles" || fail "scripts/validate-assessment-tenant.sh still audits reporter/editor"
 
 section "builds and suites"
-if (cd middleware && npx tsc --noEmit >/dev/null 2>&1); then ok "middleware tsc"; else fail "middleware: tsc errors"; fi
-if (cd portal && npx tsc --noEmit >/dev/null 2>&1); then ok "portal tsc"; else fail "portal: tsc errors"; fi
+if jg_mw_tsc >/dev/null 2>&1; then ok "middleware tsc"; else fail "middleware: tsc errors"; fi
+if jg_portal_tsc >/dev/null 2>&1; then ok "portal tsc"; else fail "portal: tsc errors"; fi
 if [ "$QUICK" = 0 ]; then
   if (cd middleware && npx jest >/dev/null 2>&1); then ok "middleware jest"; else fail "middleware: jest failures"; fi
   if (cd portal && node --test 'src/**/__tests__/*.test.ts' >/dev/null 2>&1); then ok "portal node tests"; else fail "portal: node tests failing"; fi
-  if (cd portal && npx vite build >/dev/null 2>&1); then ok "portal vite build"; else fail "portal: vite build failed"; fi
+  if jg_vite_build >/dev/null 2>&1; then ok "portal vite build"; else fail "portal: vite build failed"; fi
   if scripts/validate-assessment-tenant.sh --quick --no-time >/dev/null 2>&1; then ok "assessment validator still passes"; else fail "assessment validator regressed"; fi
   if scripts/validate-distillation.sh --quick >/dev/null 2>&1; then ok "distillation validator still passes"; else fail "distillation validator regressed"; fi
 fi

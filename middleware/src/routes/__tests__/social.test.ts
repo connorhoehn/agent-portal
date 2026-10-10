@@ -75,9 +75,11 @@ describe('requireTenant(social) — outside roles', () => {
 describe('GET /api/social/summary', () => {
   afterEach(() => socialSurfaces.reset());
 
-  for (const role of ['participant', 'moderator', 'community-admin'] as Role[]) {
+  // Each role as the seed user who actually holds it: the gate reads the directory's CURRENT grants
+  // (lib/social-authority.ts), so a cookie claiming a role the directory does not grant is refused.
+  for (const [role, sub] of [['participant', 'u-sana'], ['moderator', 'u-lena'], ['community-admin', 'u-mira']] as Array<[Role, string]>) {
     it(`social/${role} reads the summary`, async () => {
-      const res = await request(appAs({ role, tenant: 'social', sub: 'u-sana' })).get('/api/social/summary');
+      const res = await request(appAs({ role, tenant: 'social', sub })).get('/api/social/summary');
       expect(res.status).toBe(200);
       expect(res.body.tenant).toBe('social');
     });
