@@ -77,12 +77,12 @@ test('hide, restore, dim and settings persist only for the exact signed identity
   await page.getByRole('button', { name: 'Dim sample Today strip' }).click(); await expect(summary(page)).toHaveAttribute('data-dimmed', 'true');
   expect(await summary(page).evaluate(element => Number(getComputedStyle(element).opacity))).toBe(.8);
   await page.getByRole('button', { name: 'Hide sample Today strip' }).click(); await expect(summary(page)).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Restore sample Today strip' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Restore sample Today strip' })).toBeFocused();
   await page.reload(); await expect(page.getByRole('button', { name: 'Restore sample Today strip' })).toBeVisible();
   await fixture.identity('other-reader', 'orgiq'); await expect(summary(page)).toBeVisible(); await expect(summary(page)).not.toHaveAttribute('data-dimmed', 'true');
   await fixture.identity('fixture-reader', 'assessment'); await expect(summary(page)).toBeVisible();
   await fixture.identity('fixture-reader', 'orgiq'); await expect(page.getByRole('button', { name: 'Restore sample Today strip' })).toBeVisible();
-  await page.getByRole('button', { name: 'Restore sample Today strip' }).click(); await expect(summary(page)).toHaveAttribute('data-dimmed', 'true');
+  await page.getByRole('button', { name: 'Restore sample Today strip' }).click(); await expect(summary(page)).toBeFocused(); await expect(summary(page)).toHaveAttribute('data-dimmed', 'true');
   await settings(page); await expect(page.getByRole('dialog')).toContainText('Saved for your identity in this workspace');
   expect(fixture.errors).toEqual([]); expect(fixture.mutations).toEqual([]);
 });

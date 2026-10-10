@@ -40,6 +40,8 @@ function TodayStrip({ storageKey, tenant, activeCall }: { storageKey: string | n
   const [pageVisible, setPageVisible] = useState(() => !document.hidden);
   const root = useRef<HTMLDivElement>(null), trigger = useRef<HTMLButtonElement>(null), toolbar = useRef<HTMLDivElement>(null);
   const leaveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const restore = useRef<HTMLButtonElement>(null);
+  const pendingFocus = useRef(false);
   const [anchor, setAnchor] = useState<{ left: number; bottom: number } | null>(null);
   const hint = useId();
   const reducedMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
@@ -79,11 +81,16 @@ function TodayStrip({ storageKey, tenant, activeCall }: { storageKey: string | n
     setFocused(next instanceof Node && (!!root.current?.contains(next) || !!toolbar.current?.contains(next)));
   }
   function update(next: Partial<TodayPreferences>) { setPrefs(value => ({ ...value, ...next })); }
-  function hide() { update({ hidden: true }); setPanel(null); setHovered(false); setFocused(false); }
+  useLayoutEffect(() => {
+    if (!pendingFocus.current) return;
+    pendingFocus.current = false;
+    (prefs.hidden ? restore.current : trigger.current)?.focus();
+  }, [prefs.hidden]);
+  function hide() { pendingFocus.current = true; update({ hidden: true }); setPanel(null); setHovered(false); setFocused(false); }
 
   return <div ref={root} className="footer-today" data-compact={compact || undefined} data-call={activeCall || undefined} data-hidden={prefs.hidden || undefined} data-testid="footer-today"
     onMouseEnter={enter} onMouseLeave={leave} onFocusCapture={() => setFocused(true)} onBlurCapture={event => blur(event.relatedTarget)}>
-    {prefs.hidden ? <Tooltip content="Restore sample Today strip"><IconButton aria-label="Restore sample Today strip" size="sm" icon={<EyeIcon size={14} />} onClick={() => update({ hidden: false })} /></Tooltip>
+    {prefs.hidden ? <Tooltip content="Restore sample Today strip"><IconButton ref={restore} aria-label="Restore sample Today strip" size="sm" icon={<EyeIcon size={14} />} onClick={() => { pendingFocus.current = true; update({ hidden: false }); }} /></Tooltip>
       : <Button ref={trigger} variant="ghost" size="sm" className="footer-today-summary" data-dimmed={prefs.dimmed || undefined}
         aria-label={current ? `Demo today: ${current.label}. ${current.summary}` : 'Demo today: no sample categories selected'}
         aria-describedby={hint} aria-haspopup="dialog" aria-expanded={panel === 'detail'}
