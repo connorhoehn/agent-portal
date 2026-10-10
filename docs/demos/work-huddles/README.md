@@ -1,5 +1,7 @@
 # Work huddle demo rehearsal
 
+> **Current completion status (October 10, 19:08 UTC):** source is merged and pushed to main across the application and shared repositories. The end-to-end meeting goal is still open. Actual Whisper/Codex processing and participant-scoped artifact/search reads passed in isolated storage; live SFU-to-gateway-to-card delivery and primary runtime activation remain unverified. The latest read-only check found one active recording, two media participants and three producers, so no running services were restarted. See the [current completion audit](meeting-processing-audit-20261010.md#current-completion-audit-after-main-consolidation) before using historical candidate/publication sections below.
+
 The current [meeting-processing audit](meeting-processing-audit-20261010.md)
 tracks transcription, summarization, post-call progress and searchable project
 recordings separately. A terminal pipeline failure is not a successful summary;

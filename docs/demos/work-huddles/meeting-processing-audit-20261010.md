@@ -276,3 +276,37 @@ services, original media and application data were not activated or changed.
 The receipt retains exact native source hashes and these boundaries. This owned
 success supersedes the earlier failed transaction attempt while preserving its
 dated failure and cleanup limitation above.
+
+
+## Current completion audit after main consolidation
+
+This section supersedes historical branch and activation status above. App main
+`30133a60`, ui-components main `e7a42a4f`, realtime-modules main `57d8a1b4`,
+platform-api main `65761509`, and live-video-streaming main `90e023b3` contain
+the consolidated implementation. Main publication does not establish runtime
+activation. The primary application stays on its fully merged runtime branch
+because its backend is watched and memory-backed.
+
+| Explicit outcome | Inspected evidence | Completion judgment |
+| --- | --- | --- |
+| Audit the huddle guide and its acceptance commands | Current observer source, strict acceptance rules, automatic-finalizer receipt, cross-read/search receipt and live native media reads | Audit updated; the acceptance command must fence the exact processing attempt, including the claim-to-enqueue gap. Ten regression checks and observer syntax check pass. |
+| Transcribe video automatically | Signed webhook → native finalize → automatic child → real Whisper; persisted 11 timestamped segments in owned DynamoDB | Proven for owned storage/fixture media transport; actual primary SFU integration is not established. |
+| Summarize and attach to the recording | Automatic receipt records a real Codex subscription result, ready artifacts, duplicate replay preservation and two participant reads | Proven in the owned pipeline; not yet verified in the running application. |
+| Show processing after the meeting ends | Native RecordingActivityCard and app PostCallRecording/useRecordingRead source; prior isolated browser cases | UI uses authorized five-second polling. The receipt reports zero native chat cards, and no production realtime delivery is proven. It must not be described as verified realtime push. |
+| Make recording artifacts searchable and associated with initiatives/projects and supported document/team contexts | Current recording-search implementation, four actual persisted-artifact cross-read/search checks, document-context integration evidence | Canonical associations and permission filtering pass owned checks. Directory/Cedar remain synthetic in that acceptance; live user search is outstanding. |
+| Preserve original work and current session | Read-only native stats and each channel's recording state at 19:07:48 UTC; primary API/Vite processes unchanged | One recording remains active, with two participants and three producers. No restart, call stop or live data mutation was performed. |
+
+The observer now projects `processingAttemptId` from both recording metadata and
+pipeline context. When the recording has an attempt ID, only that exact attempt
+can satisfy terminal or successful processing acceptance. A missing newly
+registered run remains unfinished, even when an old run completed successfully.
+Legacy records retain the existing newest-run fallback.
+
+Remaining end-to-end acceptance requires a state-preserving runtime handoff,
+then an authorized speaking-call journey through actual capture/finalization,
+processing UI, saved playback/transcript/summary and participant-scoped search.
+Work initiative lobbies currently have no native chat-card mapping. Their live
+chat uses separate gateway authority, so adding a string mapping alone is not a
+valid delivery integration. The current local five-second status observer is
+not evidence of server-pushed recording events. Existing recorded media and
+memory-only session activity must survive any activation.

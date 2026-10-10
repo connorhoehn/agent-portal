@@ -36,7 +36,7 @@ const speechCount=row=>{try{return JSON.parse(row.transcriptJson??'null')?.segme
         participants:(rec.participants??[]).map(p=>pick(p,['userId','displayName'])),
         tracks:(rec.tracks??[]).map(t=>pick(t,['legId','participantId','kind','durationMs','startedAtMs','endedAtMs','endReason','size'])),
         composedBytes:rec.composedSegment?.size,transcriptError:safeError(rec.transcriptError),
-        summaryRunId:rec.summaryRunId,summaryChars:typeof rec.summaryMarkdown==='string'?rec.summaryMarkdown.trim().length:0,
+        processingAttemptId:rec.processingAttemptId,summaryRunId:rec.summaryRunId,summaryChars:typeof rec.summaryMarkdown==='string'?rec.summaryMarkdown.trim().length:0,
         transcriptSpeechSegments:speechCount(rec),summaryError:safeError(rec.summaryError)});
     }
     cursor=result.cursor;if(!cursor)break;
@@ -46,7 +46,7 @@ const speechCount=row=>{try{return JSON.parse(row.transcriptJson??'null')?.segme
     for(const run of await pipelineRunRepo.listByPipeline(pipelineId,{limit:200})){
       const ctx=run.checkpoint?.context??{};
       if(ctx.lobbyName!==lobby||Date.parse(ctx.startedAt??run.startedAt)<since)continue;
-      pipelines.push({...pick(run,['pipelineId','runId','status','startedAt','completedAt','lastEventAt']),recordingId:ctx.recordingId,error:safeError(run.error),
+      pipelines.push({...pick(run,['pipelineId','runId','status','startedAt','completedAt','lastEventAt']),recordingId:ctx.recordingId,processingAttemptId:ctx.processingAttemptId,error:safeError(run.error),
         steps:Object.entries(run.stepsSummary??{}).map(([id,step])=>({id,...pick(step,['status','durationMs','completedAt']),attempts:step.attempts?.length,error:safeError(step.error)}))});
     }
   }

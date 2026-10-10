@@ -12,7 +12,10 @@ export function recordingPipelineAcceptance(recordings, pipelines, sfuRows, {
       && run.pipelineId === 'recording-finalize' && run.status === 'completed'));
   const currentRun = recording => {
     const runs = pipelines.filter(run => run.recordingId === recording.recordingId
-      && run.pipelineId === 'call-transcription');
+      && run.pipelineId === 'call-transcription'
+      // Enqueue claims a new attempt before its run/checkpoint is visible.
+      // An older terminal run cannot settle that newly pending generation.
+      && (!recording.processingAttemptId || run.processingAttemptId === recording.processingAttemptId));
     const latest = runs.sort((a, b) => (Date.parse(b.startedAt) || 0) - (Date.parse(a.startedAt) || 0))[0];
     if (recording.summaryRunId && latest?.runId !== recording.summaryRunId) return undefined;
     return latest;

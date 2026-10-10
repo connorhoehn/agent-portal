@@ -44,3 +44,25 @@ test('duplicates and unrelated composed media do not satisfy expected recordings
   assert.equal(check([recording, recording], [finalize, run], sfu, { expected: 2, requireSummary: true }).observationFinished, false);
   assert.equal(check([recording], [finalize, run], [{ channelArn: 'other', recordings: sfu[0].recordings }], { requireSummary: true }).observationFinished, false);
 });
+
+
+test('a claimed generation cannot settle from an old run before the new run is registered', () => {
+  const row = { ...recording, processingAttemptId: 'generation-new', summaryRunId: undefined,
+    transcriptStatus: 'pending', summaryStatus: 'pending' };
+  const runs = [finalize, { ...run, processingAttemptId: 'generation-old' }];
+  const result = check([row], runs, sfu, { waitPipeline: true });
+  assert.equal(result.withTerminalTranscription, 0);
+  assert.equal(result.observationFinished, false);
+});
+test('a generation-bound recording requires the exact attempt in observed run metadata', () => {
+  const row = { ...recording, processingAttemptId: 'generation-new' };
+  assert.equal(strict(row).observationFinished, false);
+  assert.equal(strict(row, [finalize, { ...run, processingAttemptId: 'generation-old' }]).observationFinished, false);
+  assert.equal(strict(row, [finalize, { ...run, processingAttemptId: 'generation-new' }]).observationFinished, true);
+});
+test('the exact failed attempt settles observation without passing summary acceptance', () => {
+  const row = { ...recording, processingAttemptId: 'generation-new', summaryStatus: 'failed' };
+  const runs = [finalize, { ...run, processingAttemptId: 'generation-new', status: 'failed' }];
+  assert.equal(check([row], runs, sfu, { waitPipeline: true }).observationFinished, true);
+  assert.equal(strict(row, runs).observationFinished, false);
+});
