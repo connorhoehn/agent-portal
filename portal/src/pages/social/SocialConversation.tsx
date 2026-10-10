@@ -346,6 +346,7 @@ function SocialConversationInner({
       {pinState.fetchedShown && <InlineAlert tone="info">Showing the pinned message alongside the latest conversation. Messages between them are not loaded.</InlineAlert>}
       <WrappedConversationSurface
         className="min-h-0 min-w-0 flex-1"
+        headerClassName="px-4 py-2"
         name={name}
         {...(description ? { description } : {})}
         {...(online !== undefined ? { online } : {})}
@@ -375,7 +376,7 @@ function SocialConversationInner({
             return page && typeof message.id === 'string' && channel.startsWith('social:dm:')
               ? <DmPageReference channel={channel} messageId={message.id} page={page} /> : null;
           }}
-          fill showHeader={false} disabled={!ready} onReply={quote.start} typingUsers={threadChat.typingUsers}
+          fill flushComposer showHeader={false} disabled={!ready} onReply={quote.start} typingUsers={threadChat.typingUsers}
           threaded={!channel.startsWith('social:dm:')} readReceipts={receipts.receipts} readReceiptsEnabled={receipts.enabled} {...(unreadFrom ? { unreadFrom } : {})}
           composer={<ConversationComposer channel={channel} chat={threadChat} context={{ kind: 'conversation', id: channel, title: name }}
             capabilities={{ maySend, mayAttach: !onSendText }} offline={ready || !maySend ? null : unavailableReason}
@@ -384,7 +385,7 @@ function SocialConversationInner({
             modePlaceholders={{ chat: placeholder }} onSearchPeople={onSearchPeople} draftKey={`social:${channel}`}
             {...(draft !== undefined ? { draft } : {})} {...(onDraftChange ? { onDraftChange } : {})}
             answersFocus={focusTarget} onReveal={() => { if (viewNow.current.view !== 'chat') viewNow.current.onViewChange('chat'); }}
-            label={`Message ${name}`} data-testid="social-chat-composer-dock" composerTestId="social-chat-composer" />} />}
+            className="[--dock-inset:1rem]" label={`Message ${name}`} data-testid="social-chat-composer-dock" composerTestId="social-chat-composer" />} />}
       </WrappedConversationSurface>
     </Stack>
   );

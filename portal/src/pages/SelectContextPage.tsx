@@ -9,8 +9,8 @@
 //     than every row in app_users, because the point is to demo a persona, not
 //     to browse a directory.
 //
-// This page is THE tenant boundary: there is no inline tenant switching inside
-// a workspace — the menu's "Switch workspace…" hard-navigates back here.
+// This page and the header tenant menu share the same authoritative boundary.
+// The chooser can pick a role; the compact header menu switches tenants only.
 // Entering a workspace hard-navigates via enterContext, which re-mints the
 // cookie for the new tenant AND scrubs the previous tenant's client caches
 // (auth.tsx → clearTenantScopedCaches). Making that exit legible here is part

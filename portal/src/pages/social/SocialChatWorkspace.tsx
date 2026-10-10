@@ -33,7 +33,7 @@ import { useLocation, useNavigate, useParams, useSearchParams } from 'react-rout
 import { ViewportFillRegion } from '@connorhoehnslalom/ui-components';
 import {
   ActivePeopleGrid, AddPeoplePicker, ChannelMentionsPanel, ConversationRail, CreateChannelDialog, CreateTeamDialog, MembersPanel,
-  NewConversationPanel, RAIL_SECTION_CONTENT_INSET, TeamChannelTree, useRailSectionMemory,
+  NewConversationPanel, RAIL_SECTION_CONTENT_INSET, RailSectionHeader, TeamChannelTree, useRailSectionMemory,
   type ActivePerson, type ConversationRailSection, type CreateChannelDialogInput, type CreateTeamDialogInput, type RailSelection,
 } from '@connorhoehnslalom/ui-components/social';
 import {
@@ -230,7 +230,9 @@ export default function SocialChatWorkspace({ route, embedding }: { route: Socia
   // ── Presence, inbox, calls ────────────────────────────────────────────
   // The shell owns this subscription across routes. A second reader hook's
   // cleanup would unsubscribe that shared connection when this page unmounts.
-  const here = useEmbeddedSocial()?.presencePeople ?? [];
+  const embeddedSocial = useEmbeddedSocial();
+  const here = embeddedSocial?.presencePeople ?? [];
+  const presenceReady = embeddedSocial?.presenceReady === true;
   const online = useMemo(() => new Set(here.filter((p) => !p.idle).map((p) => p.id)), [here]);
   const people = useMemo(() => activeNow(here, me), [here, me]);
 
@@ -270,8 +272,8 @@ export default function SocialChatWorkspace({ route, embedding }: { route: Socia
   const rail = useRailSectionMemory(RAIL_MEMORY_KEY, { defaultFolded: DEFAULT_FOLDED, opened: route === 'teams' ? ['Teams'] : route === 'rooms' ? ['Rooms'] : [] });
   const rows = useMemo(() => withPresence([
     ...dmRailItems(conversations, lobby, me, roster),
-    ...channelRailItems(channels),
-  ], online).filter((item) => matchesRailFilter(item, query)), [conversations, lobby, me, roster, channels, online, query]);
+    ...(route === 'dms' ? [] : channelRailItems(channels)),
+  ], online).filter((item) => matchesRailFilter(item, query)), [conversations, lobby, me, roster, channels, online, query, route]);
   // Controlled: the tree mounts before the teams load, and an uncontrolled
   // tree takes its open set from the first render (none). Open unless folded.
   const tree = useMemo(() => teamTreeItems(teams).map((t) => ({ ...t, expanded: !rail.collapsedSections[`team:${t.teamId}`] })), [teams, rail.collapsedSections]);
@@ -421,17 +423,17 @@ export default function SocialChatWorkspace({ route, embedding }: { route: Socia
   const teamsReadPending = !teamsFetch.data && (teamsFetch.isLoading || !!teamsFetch.error);
   const sections: ConversationRailSection[] = [
     {
-      // The rail draws the heading (its fold and count) over the people grid.
-      id: 'active-now', label: 'Active now', heading: true, count: activeTiles.length, 'data-testid': 'social-active-now',
-      node: <ActivePeopleGrid
+      // Presence is always visible, independent of persisted disclosure state.
+      id: 'active-now', label: 'Active now', 'data-testid': 'social-active-now',
+      node: <><RailSectionHeader label="Active now" {...(presenceReady ? { count: activeTiles.length } : {})} presentational={false} /><ActivePeopleGrid
         people={activeTiles}
-        emptyLabel="Nobody is sharing work or online right now."
+        emptyLabel={presenceReady ? 'Nobody is sharing work or online right now.' : 'Live presence is unavailable.'}
         maxVisible={8}
         onSelectPerson={(userId) => { void startDm(userId); }}
         {...(embedding?.onSelectSharedWork ? { onSelectSharedWork: embedding.onSelectSharedWork } : {})}
         className={RAIL_SECTION_CONTENT_INSET}
         data-testid="social-active-now"
-      />,
+      /></>,
     },
     ...(embedding?.railSections?.(railContext) ?? []),
     {
@@ -480,13 +482,15 @@ export default function SocialChatWorkspace({ route, embedding }: { route: Socia
         { id: 'recordings', label: 'Recordings', icon: <PlayCircleIcon size={15} /> },
       ]}
       conversations={rows}
-      beforeList={(channelsFetch.error || dmsFetch.error) && <Stack gap="xs" className={RAIL_SECTION_CONTENT_INSET}>
+      beforeList={((route !== 'dms' && channelsFetch.error) || dmsFetch.error) && <Stack gap="xs" className={RAIL_SECTION_CONTENT_INSET}>
         <SocialReadStatus source="Direct messages" read={dmsFetch} retry={dmsFetch.refresh} testId="social-dms-read-status" />
-        <SocialReadStatus source="Channels" read={channelsFetch} retry={channelsFetch.refresh} testId="social-channels-read-status" />
+        {route !== 'dms' && <SocialReadStatus source="Channels" read={channelsFetch} retry={channelsFetch.refresh} testId="social-channels-read-status" />}
       </Stack>}
       sectionOrder="dms-first"
-      sections={sections}
+      sections={route === 'dms' ? sections.filter(section => section.id === 'active-now') : sections}
       {...rail.railProps}
+      sectionLayout={route === 'dms' ? ['dms', 'active-now'] : rail.railProps.sectionLayout ?? ['dms', ...sections.map(section => section.id), 'channels']}
+      {...(route === 'dms' ? { onSectionLayoutChange: undefined } : {})}
       maxVisible={8}
       selected={embedding?.pane ? null : selected}
       onSelect={(selection) => {
@@ -517,7 +521,7 @@ export default function SocialChatWorkspace({ route, embedding }: { route: Socia
           }],
         } : {}),
       }}
-      emptyLabel={conversationRailEmptyLabel([dmsFetch, channelsFetch], query)}
+      emptyLabel={conversationRailEmptyLabel(route === 'dms' ? [dmsFetch] : [dmsFetch, channelsFetch], query)}
       data-testid="social-chat-rail"
     />
   );
@@ -723,7 +727,7 @@ export default function SocialChatWorkspace({ route, embedding }: { route: Socia
       <ViewportFillRegion className="flex min-w-0" data-testid="social-chat-workspace">
         {railNode}
         {embedding ? (
-          <SectionContent breadcrumbs={embedding.breadcrumbs} title={embedding.title} body="fill" {...headerDensity.headerProps}
+          <SectionContent breadcrumbs={embedding.breadcrumbs} title={embedding.title} body="fill" inset="conversation" {...headerDensity.headerProps}
             {...(embedding.actions ? { actions: embedding.actions } : {})} data-testid="communication-content">
             <Stack as="section" aria-label={PAGE_TITLE[route]} gap="sm" className="min-h-0 min-w-0 flex-1 overflow-hidden" ref={headerDensity.contentRef} data-testid="social-chat-pane">
               {alerts()}
@@ -731,7 +735,7 @@ export default function SocialChatWorkspace({ route, embedding }: { route: Socia
             </Stack>
           </SectionContent>
         ) : (
-          <Stack as="section" aria-label={PAGE_TITLE[route]} gap="sm" className="min-h-0 min-w-0 flex-1 overflow-hidden px-5 py-4" data-testid="social-chat-pane">
+          <Stack as="section" aria-label={PAGE_TITLE[route]} gap="sm" className="min-h-0 min-w-0 flex-1 overflow-hidden" data-testid="social-chat-pane">
             {alerts()}
             {pane()}
           </Stack>

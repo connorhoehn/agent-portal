@@ -49,11 +49,9 @@ interface SessionContextValue {
    * ssoRequired) — a real sign-in is required, no demo fallback. */
   ssoRequired: boolean;
   setRole: (role: string) => Promise<void>;
-  /** Switch account (tenant) AND role in one step. This is the ONLY tenant
-   * switch the portal exposes, and it belongs to the /workspaces chooser — there
-   * is deliberately no inline setTenant: switching workspaces goes back
-   * through the chooser so the boundary stays authoritative. */
-  enterContext: (tenant: Tenant, role: string, to?: string) => Promise<void>;
+  /** Authoritative tenant boundary shared by the header and workspace chooser.
+   * Omit role to retain the server-selected eligible role in the destination. */
+  enterContext: (tenant: Tenant, role?: string, to?: string) => Promise<void>;
   login: (userId: string) => Promise<void>;
   masquerade: (userId: string) => Promise<void>;
   stopMasquerade: () => Promise<void>;
@@ -274,31 +272,41 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     window.location.assign(window.location.pathname + window.location.search);
   }), [withIdentityChange]);
 
-  // Set the account (tenant) and role together, then enter that workspace. The
-  // role must be held in the target tenant — the chooser only offers held ones.
-  // (There is intentionally no standalone setTenant: the /workspaces chooser is
-  // the only tenant boundary, so inline switching can't bypass it.)
-  const enterContext = useCallback((tenant: Tenant, role: string, to?: string) => withIdentityChange(async () => {
-    await post('/api/session/tenant', { tenant });
-    await post('/api/session/role', { role });
-    // Crossing the tenant boundary: drop the previous workspace's cached data
-    // before the new tenant re-drives from its freshly re-minted cookie.
-    clearTenantScopedCaches();
-    // …and then re-mark the pick. The chooser calls markContextChosen() just
-    // before calling us, but that marker lives in the sessionStorage the scrub
-    // above wipes — so the call was dead, and a person who had just chosen a
-    // workspace was sent straight back to the chooser by the very next home
-    // resolution (`/`, or any guard fallback landing them there). Same `sub`
-    // only: a different identity carries a different one, and login/logout
-    // still clearContextChosen() outright.
-    if (subRef.current) markContextChosen(subRef.current);
-    // Switching account redirects to that tenant's front door so the whole
-    // app re-drives from the freshly re-minted session cookie. The route is
-    // lib/tenantHome's, not a second opinion about where people belong —
-    // unless the caller names a page INSIDE that tenant (an embedded
-    // "Open in Social" link, design §4.6); anything else falls back home.
-    window.location.assign(to && to.startsWith(`${tenantHome(tenant).split('/').slice(0, 2).join('/')}/`) ? to : tenantHome(tenant));
-  }), [withIdentityChange]);
+  // Both switchers use the same server-checked boundary and cache reset.
+  // A tenant-only selection keeps the eligible role chosen by the server;
+  // the full workspace chooser can additionally select an explicitly held role.
+  const enterContext = useCallback(async (tenant: Tenant, role?: string, to?: string) => {
+    let tenantChanged = false;
+    const actor = subRef.current;
+    try {
+      await withIdentityChange(async () => {
+        await post('/api/session/tenant', { tenant });
+        tenantChanged = true;
+        if (role) await post('/api/session/role', { role });
+        // Crossing the tenant boundary: drop the previous workspace's cached
+        // data before re-driving from its freshly re-minted cookie.
+        clearTenantScopedCaches();
+        if (actor) markContextChosen(actor);
+        // The shared tenant home owns the destination; explicit deep links
+        // must stay inside that tenant's route family.
+        window.location.assign(to && to.startsWith(`${tenantHome(tenant).split('/').slice(0, 2).join('/')}/`) ? to : tenantHome(tenant));
+      });
+    } catch (error) {
+      if (tenantChanged) {
+        // The first POST already replaced the cookie. A refused role must not
+        // leave the old tenant's session or cached data painted underneath it.
+        // Refresh only after the identity-write fence has settled; /me owns
+        // the resulting tenant/role, and its normal failure path denies access.
+        clearTenantScopedCaches();
+        if (actor) markContextChosen(actor);
+        subRef.current = '';
+        setSession(null); setSessionStatus('loading'); setIsLoading(true);
+        await refresh();
+      }
+      // A refreshed fallback role is not success for the requested role.
+      throw error;
+    }
+  }, [withIdentityChange, refresh]);
 
   const login = useCallback((userId: string) => withIdentityChange(async () => {
     await post('/api/session/login', { userId });

@@ -19,7 +19,8 @@
 // collapses it back into the footer's hidden thumbnail strip.
 import { useId, useLayoutEffect, useRef } from 'react';
 import { conversationCallDockProps } from '@connorhoehnslalom/realtime-modules/client/video';
-import { Button, IconButton, Inline, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { Button, IconButton, Inline, Stack, Tooltip } from '@connorhoehnslalom/ui-components/shared';
+import { FooterTodayStrip } from './FooterTodayStrip';
 import { SettingsGearIcon } from '@connorhoehnslalom/ui-components';
 import { useSidePaneHost } from '@connorhoehnslalom/ui-components';
 import { HuddleBar, type HuddleBarMedia, type HuddleBarPhase } from '@connorhoehnslalom/ui-components/video';
@@ -32,6 +33,7 @@ import { EmbeddedSocialEntry } from './EmbeddedSocial';
 import { HuddleReactionBar, useHuddleChatToggle } from './HuddleChat';
 import { ShellCallMedia } from './ShellCallHost';
 import { callScopeKey, hasJoinedCall } from './callShellModel';
+import './socialFooter.css';
 
 const noop = () => {};
 const JOINED_PHASES = ['connecting', 'live', 'reconnecting'];
@@ -47,6 +49,13 @@ const bareToggle = (control: { on: boolean; onToggle: () => void; permission?: H
   ...(control.disabledReason ? { disabledReason: control.disabledReason } : {}),
 });
 
+function DeviceSettings({ onClick, disabled = false }: { onClick(): void; disabled?: boolean }) {
+  return <Tooltip content="Check microphone and camera" placement="top">
+    <IconButton variant="ghost" size="sm" className="shell-footer-settings" aria-label="Device settings"
+      icon={<SettingsGearIcon size={15} />} onClick={onClick} disabled={disabled} data-testid="shell-footer-check-devices" />
+  </Tooltip>;
+}
+
 /** The huddle half of the row; renders nothing without a drawn call (Start call stays on its page). */
 function FooterCall({ mediaOpen, onToggleMedia }: { mediaOpen: boolean; onToggleMedia(): void }) {
   const host = useCallHost();
@@ -61,7 +70,7 @@ function FooterCall({ mediaOpen, onToggleMedia }: { mediaOpen: boolean; onToggle
   // While the full call bar is on screen (above a composer, or the page's call
   // block) it owns mic, camera and Leave/Cancel: the footer is the status only,
   // so nothing is drawn twice (the user: "two cancel buttons and duplicated controls").
-  const barShown = placement === 'page' || placement === 'block';
+  const barShown = inComposer || placement === 'page' || placement === 'block';
   if (!host?.lobby || !callDrawn(host.call.phase, true)) return null;
   const call = host.call;
   const title = /huddle$/i.test(host.lobby.title) ? host.lobby.title : `${host.lobby.title} huddle`;
@@ -102,10 +111,10 @@ function FooterCall({ mediaOpen, onToggleMedia }: { mediaOpen: boolean; onToggle
       {joined && !over && <HuddleReactionBar />}
       
       {call.phase === 'failed' && <Button variant="secondary" size="sm" onClick={() => void call.rejoin()} data-testid="shell-footer-rejoin">Rejoin</Button>}
-      {!barShown && <Button variant="ghost" size="sm" className="w-[26px] !px-0" aria-label="Device settings" title="Check devices" onClick={host.checkDevices} data-testid="shell-footer-check-devices"><SettingsGearIcon size={14} /></Button>}
+      {!barShown && <DeviceSettings onClick={host.checkDevices} />}
     </>}
     {...(barShown && !over ? {} : { onLeave: () => void call.leave(), leaveLabel })}
-    className="min-w-0 flex-1 border-l border-border"
+    className="shell-collaboration-bar min-w-0 flex-1 border-l border-border"
     data-testid="shell-call-dock"
   />;
 }
@@ -135,8 +144,8 @@ function FooterIdle() {
     onToggleChat={() => { pane.reveal(); focus.request({ mode: 'chat', target: { kind: 'discussion' } }); }}
     chatLabel="Message"
     {...(messageReason ? { chatDisabledReason: messageReason } : {})}
-    extras={<Button variant="ghost" size="sm" className="w-[26px] !px-0" aria-label="Device settings" title="Check devices" onClick={() => host?.checkDevices()} disabled={!host} data-testid="shell-footer-check-devices"><SettingsGearIcon size={14} /></Button>}
-    className="min-w-0 flex-1 border-l border-border"
+    extras={<DeviceSettings onClick={() => host?.checkDevices()} disabled={!host} />}
+    className="shell-collaboration-bar min-w-0 flex-1 border-l border-border"
     data-testid="shell-footer-context"
   />;
 }
@@ -161,11 +170,12 @@ export function SocialFooter() {
       document.documentElement.style.removeProperty('--shell-collaboration-floor');
     };
   }, []);
-  return <Stack as="footer" ref={footer} gap="none" aria-label="Social and huddle" className="shrink-0 border-t border-border bg-surface"
+  return <Stack as="footer" ref={footer} gap="none" aria-label="Social and huddle" className="shell-social-footer shrink-0 border-t border-border bg-surface"
     data-testid="shell-footer">
     <ShellCallMedia id={mediaId} />
     <Inline gap="md" align="center" justify="between" wrap={false} className="min-h-11 min-w-0 overflow-x-auto px-4 py-1" data-testid="shell-footer-row">
       <EmbeddedSocialEntry />
+      <FooterTodayStrip activeCall={drawn} />
       {drawn
         ? <FooterCall mediaOpen={!!media?.open} onToggleMedia={() => media?.toggle()} />
         : <FooterIdle />}

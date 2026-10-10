@@ -20,8 +20,10 @@ for (const actor of [{ id: 'u-layla', role: 'sme' }, { id: 'u-vera', role: 'memb
     await expect(detail).toBeVisible();
     await expect(detail.getByRole('heading', { name: 'Stop duplicate alerts during a dependency outage', exact: true })).toBeVisible();
     await detail.getByRole('tab', { name: 'Activity', exact: true }).click();
-    const prepare = detail.getByTestId('work-item-prepare-job');
-    await expect(prepare).toHaveAccessibleName(actor.role === 'sme' ? 'Prepare computer job' : 'View computer job setup');
+    await expect(detail.locator('.work-item-metadata').getByTestId('work-item-prepare-job')).toHaveCount(0);
+    await detail.getByTestId('initiative-header-menu-trigger').click();
+    const prepare = page.getByTestId('work-item-prepare-job');
+    await expect(prepare).toHaveAccessibleName(actor.role === 'sme' ? 'Prepare job' : 'View job setup');
     await prepare.click();
     await expect(detail.getByRole('tab', { name: 'Brief', exact: true })).toHaveAttribute('aria-selected', 'true');
     const setup = detail.getByTestId('run-setup');
@@ -29,7 +31,7 @@ for (const actor of [{ id: 'u-layla', role: 'sme' }, { id: 'u-vera', role: 'memb
     await expect(setup.getByTestId('run-setup-summary')).toBeFocused();
     await expect(page.getByTestId('initiative-composer')).toHaveCount(1);
     if (actor.role === 'member') {
-      await expect(setup.getByTestId('run-draft-access')).toContainText('Dispatch needs an SME or leader role');
+      await expect(setup.getByTestId('run-draft-access')).toContainText('An SME or leader authorizes jobs');
       await expect(setup.getByTestId('run-draft-dispatch')).toBeDisabled();
     }
     await expect(page).toHaveURL(/item=wi-obs-e2-b4/);

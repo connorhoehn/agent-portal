@@ -27,7 +27,7 @@ import {
   SidePane, usePaneState, useSidePane, type PaneStateControl, type PaneTabSpec, type PersonDetail, type PersonEvidenceDocument,
 } from '@connorhoehnslalom/ui-components';
 import {
-  ActivityIcon, Button, Chip, DocumentIcon, EmptyState, Inline, InlineAlert, KeyValue, LoadingState, MetaLine, PageSection, Stack, StatusPill, T,
+  ActivityIcon, Button, Card, Chip, DocumentIcon, EmptyState, IconButton, Inline, InlineAlert, KeyValue, LoadingState, MetaLine, PageSection, Stack, StatusPill, T, Tooltip,
 } from '@connorhoehnslalom/ui-components/shared';
 import { ConversationViewsSlot } from '../../components/chat/useChatPins';
 import { ConversationPaneBody, useConversationPane } from '../../components/shell/ConversationPane';
@@ -42,6 +42,7 @@ import type { OverviewModel } from '../project-detail/overviewModel';
 import type { ProjectDecision } from '../project-detail/types';
 import { InitiativeFacts, type InitiativeFactsInput } from './InitiativeDetailsCard';
 import { jobIsLive, logLines, type LogJob } from './initiativePaneModel';
+import { isDetailsShortcut } from './detailsShortcut';
 
 /** The initiative pane's tabs: three resting tabs, and a record tab per kind a link on the page opens. */
 export const INITIATIVE_PANE_TABS: readonly PaneTabSpec[] = [
@@ -73,6 +74,16 @@ export function useInitiativePane(projectId: string | null): InitiativePaneContr
     tabs: INITIATIVE_PANE_TABS, defaultTab: 'discussion', params, setParams,
     rememberKey: 'initiative.pane.tab', restore: { when: sidePane.visible, subject: projectId }, onOpen: sidePane.reveal,
   });
+  useEffect(() => {
+    if (!projectId) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (!isDetailsShortcut(event)) return;
+      event.preventDefault();
+      pane.open('details');
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [projectId, pane.open]);
   return {
     pane,
     tab: pane.tab as InitiativePaneTab,
@@ -121,12 +132,8 @@ export function InitiativeSidePane(props: InitiativeSidePaneProps) {
       trailing={<Inline gap="xs" align="center" wrap={false}>
         <Inline ref={setViewsSlot} gap="none" align="center" wrap={false} hidden={tab !== 'discussion'} className="shrink-0" data-testid="initiative-pane-views" />
         {tab === 'details' && <>
-          <Button variant="ghost" size="sm" onClick={props.onOpenDocuments} title="Open initiative docs and files in the main workspace" data-testid="initiative-details-docs">
-            <DocumentIcon size={14} /><T as="span" size="xs">Docs & files</T>
-          </Button>
-          <Button variant="ghost" size="sm" onClick={props.onOpenActivity} title="Open initiative activity in the main workspace" data-testid="initiative-details-activity">
-            <ActivityIcon size={14} /><T as="span" size="xs">Activity</T>
-          </Button>
+          <Tooltip content="Docs and files"><IconButton variant="ghost" size="sm" onClick={props.onOpenDocuments} aria-label="Open initiative docs and files" icon={<DocumentIcon size={14} />} data-testid="initiative-details-docs" /></Tooltip>
+          <Tooltip content="Activity"><IconButton variant="ghost" size="sm" onClick={props.onOpenActivity} aria-label="Open initiative activity" icon={<ActivityIcon size={14} />} data-testid="initiative-details-activity" /></Tooltip>
         </>}
       </Inline>}
       data-testid="initiative-pane">
@@ -142,7 +149,7 @@ export function InitiativeSidePane(props: InitiativeSidePaneProps) {
       {tab !== 'discussion' && tab !== 'agent' && (
         // One inset (16px, the pane header's): every tab's body.
         <Stack gap="sm" className="min-h-0 flex-1 overflow-y-auto px-4 py-3 @container" data-testid={`initiative-pane-${tab}`}>
-          {tab === 'details' && <DetailsTab {...props} />}
+          {tab === 'details' && <InitiativeDetailsSummary {...props} />}
           {tab === 'log' && id && <LogTab jobId={id} />}
           {tab === 'decision' && id && <DecisionTab id={id} decisions={props.decisions} onOpenWorkItem={props.onOpenWorkItem} onOpenDecisions={props.onOpenDecisions} />}
           {tab === 'person' && id && <PersonTab personId={id} onClose={() => control.open('discussion')}
@@ -155,30 +162,34 @@ export function InitiativeSidePane(props: InitiativeSidePaneProps) {
 
 // ─── Details ────────────────────────────────────────────────────────────────
 
-function DetailsTab({ facts, overview, onOpenWorkItem }: InitiativeSidePaneProps) {
+export function InitiativeDetailsSummary({ facts, overview, onOpenWorkItem }: Pick<InitiativeSidePaneProps, 'facts' | 'overview' | 'onOpenWorkItem'>) {
   const ready = overview.state === 'ready' ? overview : null;
   const next = ready?.upNext[0] ?? null;
   const risks = ready?.attention ?? [];
+  const action = risks[0] ?? next;
   const openItem = (href: string) => {
     const item = new URLSearchParams(href.split('?')[1] ?? '').get('item');
     if (item) onOpenWorkItem(item);
   };
   return (
     <>
-      {facts.project.summary && <T size="sm" tone="secondary" wrap as="p" data-testid="initiative-details-summary">{facts.project.summary}</T>}
+      {facts.project.summary && <T size="sm" tone="secondary" wrap as="p" className="line-clamp-2" title={facts.project.summary} data-testid="initiative-details-summary">{facts.project.summary}</T>}
       <InitiativeFacts input={facts} />
-      <Stack gap="xs">
-        <T size="xs" weight="semibold" tone="secondary">NEXT WORK</T>
-        {next ? <Button variant="ghost" size="sm" className="!h-auto justify-start rounded-lg border border-border !px-3 !py-2 text-left" onClick={() => openItem(next.href)}>
-          <Stack gap="none" className="text-left"><T size="sm" weight="medium" wrap>{next.title}</T><Inline gap="sm">{next.key && <Chip size="xs" tone="neutral" mono>{next.key}</Chip>}<T size="xs" tone="secondary">{next.assigneeName ?? 'Unassigned'} · {next.points}</T></Inline></Stack>
-        </Button> : <T size="xs" tone="secondary">{overview.state === 'loading' ? 'Loading work…' : overview.state === 'error' ? 'Work could not be read.' : 'Nothing waiting.'}</T>}
-      </Stack>
-      {ready && risks.length === 0 && <T size="sm" tone="secondary">Nothing is blocked.</T>}
-      {risks.length > 0 && <Stack gap="xs"><T size="xs" weight="semibold" tone="secondary">NEEDS ATTENTION · {risks.length}</T>
-        {risks.slice(0, 3).map(risk => <Button key={risk.id} variant="ghost" size="sm" className="!h-auto justify-start rounded-lg bg-warning-bg !px-3 !py-2 text-left" onClick={() => openItem(risk.href)}>
-          <Stack gap="none" className="text-left"><T size="sm" weight="medium" wrap>{risk.title}</T><Inline gap="sm">{risk.key && <Chip size="xs" tone="neutral" mono>{risk.key}</Chip>}{risk.reason && <T size="xs" tone="secondary" wrap>{risk.reason}</T>}</Inline></Stack>
-        </Button>)}
-      </Stack>}
+      {action && <Card className="border-primary/20 bg-primary/5 px-3 py-2" data-testid="initiative-details-action">
+        <Stack gap="xs">
+          <Inline justify="between" align="center" gap="sm">
+            <T size="xs" weight="semibold" tone="secondary">{risks.length ? 'Needs attention' : 'Up next'}</T>
+            <T as="span" size="xs"><Button variant="link" size="sm" onClick={() => openItem(action.href)} aria-label={`Open work item ${action.key ?? action.title}`}>Open work</Button></T>
+          </Inline>
+          <T size="sm" weight="medium" wrap className="line-clamp-2" title={action.title}>{action.title}</T>
+          <Inline gap="sm" align="center">
+            {action.key && <Chip size="xs" tone="neutral" mono>{action.key}</Chip>}
+            <T size="xs" tone="secondary" className="truncate">{action.assigneeName ?? 'Unassigned'}{action.points ? ` · ${action.points}` : ''}</T>
+          </Inline>
+          {'reason' in action && action.reason && <T size="xs" tone="secondary" wrap className="line-clamp-2" title={action.reason}>{action.reason}</T>}
+        </Stack>
+      </Card>}
+      {!ready && <T size="xs" tone="secondary">{overview.state === 'loading' ? 'Loading work…' : 'Work could not be read.'}</T>}
     </>
   );
 }

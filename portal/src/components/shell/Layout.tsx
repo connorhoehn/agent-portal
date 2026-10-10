@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router';
 import {
-  ChannelHeader,
   CommandPalette,
   CommandPaletteHint,
   CommandPaletteProvider,
@@ -47,12 +46,16 @@ import { ConversationInputProvider } from '@connorhoehnslalom/ui-components/soci
 import { useFetch } from '../../hooks/useFetch';
 import { useSession } from '../../lib/auth';
 import { Breadcrumbs } from './Breadcrumbs';
+import { AmbientVisitorTargets } from '../ambient/AmbientVisitor';
+import { TenantSwitcher } from './TenantSwitcher';
 import { MasqueradeMenu } from './MasqueradeMenu';
 import { FleetIndicator } from './FleetIndicator';
 import { ActivityBell } from './ActivityBell';
 import { useOrgiqShellPolls, useRefreshSessionOnDeny } from './orgiqShellPolls';
 import { usePortalCommands, usePortalDynamicCommands, groupRank } from './portalCommands';
 import { useDiscussionUnread } from './useDiscussionUnread';
+import { useSharedNotifications } from './SharedNotifications';
+import { navigationActivity } from './navActivity';
 import { discussionCommandLabel, railCount } from './discussionUnreadModel';
 import { DevboxQuickSwitch, type PaletteScope } from './DevboxQuickSwitch';
 import { brandMarkUri, gradientStops } from './brandMark';
@@ -179,8 +182,8 @@ const NAV_ITEMS: NavItem[] = [
   // (channels, DMs) → MEET (calls, rooms) → PEOPLE → LIBRARY (recordings) →
   // SYSTEM. Every social role reads every page (ViewSocial); writes are gated
   // inside them, so no row names roles.
-  { path: '/social/channels',      label: 'Channels',        tenant: 'social', group: 'Talk' },
   { path: '/social/dms',           label: 'Direct messages', tenant: 'social', group: 'Talk' },
+  { path: '/social/channels',      label: 'Channels',        tenant: 'social', group: 'Talk' },
   { path: '/social/calls',         label: 'Calls',           tenant: 'social', group: 'Meet' },
   { path: '/social/rooms',         label: 'Rooms',           tenant: 'social', group: 'Meet' },
   { path: '/social/contacts',      label: 'Contacts',        tenant: 'social', group: 'People' },
@@ -348,6 +351,7 @@ function ShellLayout() {
   // Page discussions with new messages (server-counted, re-gated per read):
   // a badge on the rail door each sits behind, and a palette row per thread.
   const discussionUnread = useDiscussionUnread();
+  const inbox = useSharedNotifications();
   const commands = useMemo(
     () => [
       ...rawCommands,
@@ -412,11 +416,15 @@ function ShellLayout() {
   // Combine the tenant + platform items and order them by rail group
   // (Build → OrgIQ → Operate → System). Array.sort is stable, so items keep
   // their definition order within a group.
-  const subNavItems: SubNavItem[] = [...navItems, ...platformItems]
+  const visibleItems = [...navItems, ...platformItems];
+  const activities = navigationActivity({ tenant: session?.tenant ?? '', actorId: session?.sub ?? '',
+    hasSocialGrant: !!session?.grants.social?.length, visiblePaths: visibleItems.map(item => item.path) }, inbox.notifications, discussionUnread);
+  const subNavItems: SubNavItem[] = visibleItems
     .map((i) => ({
       path: i.path,
       label: i.label,
       ...(i.group ? { group: i.group } : {}),
+      ...(activities[i.path] ? { activity: activities[i.path] } : {}),
       // The blocked-on-a-human count rides the Delivery door now that the
       // Work queue lives behind it rather than beside it.
       // Each door also counts the page discussions behind it with new messages.
@@ -472,13 +480,9 @@ function ShellLayout() {
             user lands on the page content without walking the header, the
             rail and the nested rail first (WCAG 2.4.1, Bypass Blocks). */}
         <SkipLink targetId="main-content" />
-        <ChannelHeader
-          as="header"
-          className="shell-header"
-          avatarUrl={brandMark}
-          name={tenantLabel}
-          online={health?.status === 'ok' && !credsExpired && !dbDown && !checkingHealth}
-          actions={
+        <AmbientVisitorTargets scope={shellRef} selector='[data-shell-nav] > div > aside:first-child nav > section:has(> button[aria-expanded="true"])' />
+        <Inline as="header" justify="between" align="center" wrap className="shell-header px-4 border-b border-border shrink-0">
+          <TenantSwitcher label={tenantLabel} avatarUrl={brandMark} healthy={health?.status === 'ok' && !credsExpired && !dbDown && !checkingHealth} />
             <Inline gap="md" wrap>
               <DropdownMenu
                 trigger="Navigation"
@@ -514,8 +518,7 @@ function ShellLayout() {
               <ActivityBell />
               <MasqueradeMenu />
             </Inline>
-          }
-        />
+        </Inline>
         <Stack gap="none" className="flex-1 min-h-0" data-shell-nav
           data-primary-rail={rails.primary} data-section-rail={rails.section} data-drill-depth={rails.depth}>
           <SubNavLayout

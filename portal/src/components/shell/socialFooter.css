@@ -1,0 +1,44 @@
+/* Presentation only: the native HuddleBar keeps its call state, controls,
+   responsive labels and disabled reasons. These accents follow every tenant. */
+.shell-social-footer {
+  background: color-mix(in srgb, var(--color-primary) 2%, var(--color-surface));
+}
+.shell-social-footer .shell-collaboration-bar {
+  gap: 12px;
+  padding: 3px 0 3px 12px;
+}
+.shell-social-footer .shell-collaboration-bar > div:first-child { max-width: 55%; }
+.shell-social-footer .shell-collaboration-bar > div:last-child {
+  gap: 4px;
+  padding: 3px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--color-primary) 4%, var(--color-surface));
+}
+.shell-social-footer button[data-variant="ghost"],
+.shell-social-footer .shell-collaboration-bar button[data-variant="secondary"] {
+  color: var(--color-text-primary);
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+.shell-social-footer button[data-variant="ghost"]:hover:not(:disabled),
+.shell-social-footer .shell-collaboration-bar button[data-variant="secondary"]:hover:not(:disabled) {
+  color: var(--color-text-primary);
+  background: var(--color-surface-hover);
+}
+.shell-social-footer .shell-collaboration-bar button[aria-pressed="true"] {
+  color: var(--color-text-primary);
+  background: color-mix(in srgb, var(--color-primary) 12%, var(--color-surface));
+}
+.shell-social-footer .shell-collaboration-bar button[aria-pressed="true"]:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-primary) 18%, var(--color-surface));
+}
+.shell-social-footer .shell-footer-settings {
+  width: 26px;
+  height: 26px;
+  color: var(--color-text-secondary);
+}
+.shell-social-footer button:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
