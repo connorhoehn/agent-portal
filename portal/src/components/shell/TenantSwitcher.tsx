@@ -7,7 +7,7 @@ import { useCallHost } from '../../lib/conversationCall';
 import { useGatewayFrames } from '../../lib/gatewayFrames';
 import './tenantSwitcher.css';
 const LABELS: Record<Tenant, string> = { orgiq: 'Work', assessment: 'Assessment', social: 'Social', pipelines: 'Pipelines' };
-export function TenantSwitcher({ label, avatarUrl, healthy }: { label: string; avatarUrl?: string; healthy: boolean }) {
+export function TenantSwitcher({ label, healthy }: { label: string; healthy: boolean }) {
   const { session, sessionStatus, enterContext } = useSession();
   const inbox = useSharedNotifications();
   const { connectionState } = useGatewayFrames();
@@ -52,7 +52,7 @@ export function TenantSwitcher({ label, avatarUrl, healthy }: { label: string; a
       if (e.key === 'ArrowDown' && e.target === trigger.current) { e.preventDefault(); setOpen(true); requestAnimationFrame(() => root.current?.querySelector<HTMLButtonElement>('[role="dialog"] button')?.focus()); } }}>
     <button ref={trigger} type="button" className="tenant-switcher-trigger" aria-label={`${label}: switch tenant`} aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? id : undefined}
       onClick={() => { clearTimeout(timer.current); setOpen(true); }}>
-      <span className="tenant-brand-avatar">{avatarUrl ? <img src={avatarUrl} alt="" /> : <span>{label.slice(0, 2)}</span>}
+      <span className="tenant-brand-planet" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.25"><circle cx="12" cy="12" r="6.5" /><ellipse cx="12" cy="12" rx="11" ry="3.5" transform="rotate(-22 12 12)" /></svg>
         {healthy && <span className="tenant-brand-orbit" aria-hidden="true"><span /></span>}
       </span><span className="tenant-brand-label">{label}</span>
     </button>

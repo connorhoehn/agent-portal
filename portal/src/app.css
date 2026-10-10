@@ -934,7 +934,7 @@ tbody tr:focus-within .row-reveal,
 [data-call-stream="screen"] video { object-fit: contain !important; }
 [data-dock-item="true"]:has([data-call-stream="screen"]) > .absolute.inset-x-0 > svg:last-child { display: none; }
 [data-testid="brief-table"] [data-testid*="key-value"] { min-width: 0; }
-.shell-header { min-height: 60px; padding-block: 10px; }
+.shell-header { min-height: 44px; padding-block: 4px; }
 .shell-header h2 { font-size: 20px; line-height: 26px; }
 
 /* The initiative conversation reads from the top, like a discussion log, with

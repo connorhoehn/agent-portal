@@ -58,7 +58,6 @@ import { useSharedNotifications } from './SharedNotifications';
 import { navigationActivity } from './navActivity';
 import { discussionCommandLabel, railCount } from './discussionUnreadModel';
 import { DevboxQuickSwitch, type PaletteScope } from './DevboxQuickSwitch';
-import { brandMarkUri, gradientStops } from './brandMark';
 import { ToastHost } from './ToastHost';
 import { ComputeDock } from '@connorhoehnslalom/ui-components/compute';
 import { tenantEnabled } from '../../lib/features';
@@ -438,12 +437,7 @@ function ShellLayout() {
   const checkingHealth = healthPending(health?.awsCredentials) || healthPending(health?.datastore);
   const tenantLabel = TENANT_LABELS[session?.tenant ?? 'orgiq'];
 
-  // The tenant mark: the brand gradient's stops, read from this shell's own
-  // computed tokens (they live on the [data-tenant] element, so a tenant or
-  // theme switch re-reads them), drawn as an SVG data URI for ChannelHeader —
-  // which would otherwise hash the label into a colour unrelated to the brand.
   const shellRef = useRef<HTMLDivElement>(null);
-  const [brandMark, setBrandMark] = useState<string | undefined>(undefined);
 
   // The tenant marker ALSO goes on <html>, mirroring how `data-theme` is set
   // (lib/preferences.ts). It has to: custom properties inherit downward only,
@@ -460,15 +454,7 @@ function ShellLayout() {
   useEffect(() => {
     document.documentElement.setAttribute('data-tenant', tenantAttr);
   }, [tenantAttr]);
-  useEffect(() => {
-    const el = shellRef.current;
-    if (!el) return;
-    const cs = getComputedStyle(el);
-    const stops = gradientStops(cs.getPropertyValue('--background-image-brand-gradient'));
-    const brand = cs.getPropertyValue('--color-brand').trim();
-    const [from, to] = stops ?? [brand, brand];
-    setBrandMark(from ? brandMarkUri(tenantLabel, from, to) : undefined);
-  }, [tenantLabel, session?.tenant]);
+
 
   return (
     <ConversationInputProvider>
@@ -482,7 +468,7 @@ function ShellLayout() {
         <SkipLink targetId="main-content" />
         <AmbientVisitorTargets scope={shellRef} selector='[data-shell-nav] > div > aside:first-child nav > section:has(> button[aria-expanded="true"])' />
         <Inline as="header" justify="between" align="center" wrap className="shell-header px-4 border-b border-border shrink-0">
-          <TenantSwitcher label={tenantLabel} avatarUrl={brandMark} healthy={health?.status === 'ok' && !credsExpired && !dbDown && !checkingHealth} />
+          <TenantSwitcher label={tenantLabel} healthy={health?.status === 'ok' && !credsExpired && !dbDown && !checkingHealth} />
             <Inline gap="md" wrap>
               <DropdownMenu
                 trigger="Navigation"
