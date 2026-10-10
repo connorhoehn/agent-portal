@@ -50,14 +50,11 @@ test('clicking a person explores their neighbourhood and keeps them in view; cli
   await expect(page).toHaveURL(/selection=([^&]*(%2C|,)){2}/);
 });
 
-test('restored Explore controls: presence filter, relationship lens, capped-aware count, detail in the URL', async ({ page }) => {
+test('Explore keeps relationship lens, capped-aware count and detail without presenting generated daily status as presence', async ({ page }) => {
   await page.goto('/iq/search?type=person&tab=connections&detail=p-002&selection=person:p-002');
   const panel = page.getByTestId('search-people-graph');
   await expect(page.getByTestId('search-person-card')).toBeVisible();
-  await panel.getByRole('button', { name: 'Filter by presence' }).click();
-  await expect(page.getByRole('menuitem').filter({ hasText: /In Office · \d+/ })).toBeVisible();
-  await page.getByRole('menuitem').filter({ hasText: /In Office · \d+/ }).click();
-  await expect(panel.getByRole('button', { name: 'Filter by presence' })).toContainText('In Office');
+  await expect(panel.getByRole('button', { name: 'Filter by presence' })).toHaveCount(0);
   await panel.getByRole('radio', { name: 'Hierarchy' }).click();
   await expect(page).toHaveURL(/entities=hierarchy/);
   await expect(panel.getByTestId('search-people-count')).toContainText(/hierarchy edges/);

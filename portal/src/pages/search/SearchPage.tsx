@@ -2,22 +2,23 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { useNavigate, useSearchParams } from 'react-router';
 import {
   CanvasPaneLayout, CitedRecordList, ConnectionPathStrip, DepartmentChips, DepartmentInsightStrip, ExpandIcon, ExplorerLayout, GraphSearchBox,
-  ORG_FIT_MIN_ZOOM, OrgGraph, RailNavList, RailSection, RecordGraph, RecordGraphCard, RecordResultList, ScopeHeader, ViewportFillRegion,
+  ORG_FIT_MIN_ZOOM, OrgGraph, RailNavList, RailSection, RecordGraph, RecordGraphCard, ScopeHeader, ViewportFillRegion,
   SidePane, useSidePaneHost, findConnectionPath, indexBusFactorFindings, paneRecordKey, parsePaneRecord, readPaneState, recordResultKey, visiblePaneTabs, writePaneState,
   type PaneState, type PaneTabSpec, type PathHop,
   type GraphDepartment, type GraphRelationship, type OrgGraphPerson, type PersonDetail, type PersonEvidenceDocument,
   type OrgGraphHandle, type RailNavListItem, type RecordGraphEdge, type RecordGraphRecord,
 } from '@connorhoehnslalom/ui-components';
 import {
-  Banner, Breadcrumbs, Button, DropdownMenu, EmptyState, FilterChip, IconButton, Inline, Input, LoadingState,
-  SegmentedControl, Stack, StatusDot, T, useHeaderDensity, useRailFold,
+  Banner, Breadcrumbs, Button, ChatIcon, CloseIcon, DropdownMenu, EmptyState, FilterChip, GraphIcon, IconButton, Inline, Input, LoadingState,
+  SegmentedControl, Stack, T, Tooltip, useHeaderDensity, useRailFold,
 } from '@connorhoehnslalom/ui-components/shared';
 import InvokePage, { type SearchConversationAPI } from '../InvokePage';
 import { RangeSliderFrame } from '../RangeSliderFrame';
 import { useFetch } from '../../hooks/useFetch';
 import { useSession } from '../../lib/auth';
 import { DirectoryPersonCard as PersonDetailCard } from '../../components/people/DirectoryPersonCard';
-import { publicSearchRecord } from './publicSearchRecord';
+import { publicSearchRecord, publicSearchResult } from './publicSearchRecord';
+import { useSearchPeoplePresentation } from './useSearchPeoplePresentation';
 import { useHuddleChat } from '../../components/shell/HuddleChat';
 import { useDialogueRailFold } from '../../components/shell/useDialogueRailFold';
 import { SearchComposer } from './SearchComposer';
@@ -26,8 +27,10 @@ import { searchWorkflows } from './searchWorkflows';
 import {
   assistantStripText, nextQueryAfterSend, nextTabAfterSend, parseRecordKeys, readSearchEvidence, readSearchEdges, searchTitle,
 } from './searchModel';
-import { countedLabel, groupResults, openLabelFor, parseSort, partialSourcesTitle, resultsFooter } from './resultsModel';
+import { countedLabel, groupResults, parseSort, partialSourcesTitle, resultsFooter } from './resultsModel';
 import { recordKey, SEARCH_LABELS, SEARCH_TYPES, type SearchRecord, type SearchRecordType, type SearchResponse, type SearchTab } from './searchTypes';
+import { SearchControls, searchControlsMenu, type SearchControlsProps } from './SearchControls';
+import { SearchResults } from './SearchResults';
 
 
 interface SavedSearch {
@@ -55,9 +58,6 @@ function paneParams(state: PaneState): Record<string, string | null> {
   const written = writePaneState(new URLSearchParams(), state, PANE_CLOSED);
   return { pane: written.get('pane'), paneRecord: written.get('paneRecord') };
 }
-
-/** One family for every header control: 28px, 13px/500, secondary ink (decision 9). */
-const HEADER_CONTROL='h-7 px-2.5 text-[13px] font-medium text-text-secondary hover:text-text-primary';
 
 export default function SearchPage() {
   const [params, setParams] = useSearchParams();
@@ -241,7 +241,9 @@ function SearchWorkspace({ api }: {api: SearchConversationAPI}) {
   const scopeOptions=[{id:'',title:'Workspace'},...(scopes?.results??[]).map(r=>({id:r.id,title:r.title})),...(scope&&!scopes?.results.some(r=>r.id===scope)?[{id:scope,title:scopeName??scope}]:[])];
   const title=(query&&searchTitle(query))||(view==='org'&&tab==='connections'?'People & connections':'Search');
   const link=(label:string,href:string)=>({label,href,onClick:(event:MouseEvent)=>{if(!isPlainClick(event))return;event.preventDefault();navigate(href);}});
-  const crumbs=[{label:'Engage'},...(title!=='Search'||scope?[link('Search','/iq/search')]:[]),...(scope?[link(scopeName??scope,`/iq/projects/${encodeURIComponent(scope)}`)]:[])];
+  const crumbs=scope
+    ? [link('Initiatives','/iq/projects'),link(scopeName??scope,`/iq/projects/${encodeURIComponent(scope)}`)]
+    : title!=='Search' ? [link('Search','/iq/search')] : [];
   // Decision 9 amendment: the one-row form only while it fits. A trail past
   // Work › Search › title (a scope, or a selection explored on Connections or
   // in the pane) takes its own row and reads whole — the library Breadcrumbs
@@ -252,23 +254,14 @@ function SearchWorkspace({ api }: {api: SearchConversationAPI}) {
   const longTrail=Boolean(scope||selectionCrumb);
   const queryHref=searchHref({selection:null,detail:null,pane:null,paneRecord:null,context:null});
   const trail=[...crumbs,...(selectionCrumb?[link(title,queryHref),{label:selectionCrumb}]:[{label:title}])];
+  const searchControlProps:SearchControlsProps={scope,scopeName,scopeOptions,type,sort,onChange:update};
   const paneHeader=<Stack gap="none" className="shrink-0">
     {longTrail&&<Breadcrumbs data-testid="search-trail" items={trail} separator="›" size="sm" className="px-6 pt-2" />}
     <ScopeHeader variant="inline" {...headerDensity.headerProps} className="border-b border-border" data-testid="search-header"
       {...(longTrail?{}:{breadcrumbs:crumbs})} title={selectionCrumb??title} titleHint={query||undefined}
       tabs={[{id:'results',...countedLabel('Results',data&&!error?data.counts.all:undefined,data?.totalIsLowerBound),...(data?.partial?.length?{dot:'warning' as const}:{})},{id:'answer',label:'Answer'},{id:'connections',label:'Connections'}]}
       activeTab={tab} onTabChange={value=>update({tab:value})}
-      controls={<Inline gap="xs" align="center" wrap={false} data-testid="search-chips">
-        <DropdownMenu align="end" triggerLabel="Search scope" triggerTestId="search-scope" triggerClassName={HEADER_CONTROL} trigger={<T as="span">{scope?`In: ${scopeName}`:'Workspace'} ▾</T>}
-          sections={[{items:[
-            ...(scope?[{label:'Search entire workspace',onSelect:()=>update({scope:null,offset:null})}]:[]),
-            ...scopeOptions.map(option=>({label:option.title,active:option.id===scope,onSelect:()=>update({scope:option.id||null,offset:null})})),
-          ]}]} />
-        <DropdownMenu align="end" triggerLabel={type==='all'?'Add a filter':'Record type filter'} triggerTestId="search-type" triggerClassName={HEADER_CONTROL} trigger={<T as="span">{type==='all'?'+ Filter':`Type: ${SEARCH_LABELS[type]} ▾`}</T>}
-          sections={[{label:'Record type',items:(['all',...SEARCH_TYPES] as Array<SearchRecordType|'all'>).map(kind=>({label:kind==='all'?'Any type':SEARCH_LABELS[kind],active:kind===type,onSelect:()=>update({type:kind==='all'?null:kind,offset:null})}))}]} />
-        <DropdownMenu align="end" triggerLabel="Sort results" triggerTestId="search-sort" triggerClassName={HEADER_CONTROL} trigger={<T as="span">{sort==='recent'?'Recent':'Relevance'} ▾</T>}
-          sections={[{items:[{label:'Relevance',active:sort==='relevance',onSelect:()=>update({sort:null,offset:null})},{label:'Recent',active:sort==='recent',onSelect:()=>update({sort:'recent',offset:null})}]}]} />
-      </Inline>}
+      controls={<SearchControls {...searchControlProps} />} controlsMenu={searchControlsMenu(searchControlProps)}
       menuLabel="Search actions"
       menu={[{items:[
         {label:'Save search',onSelect:()=>setSaveName(query),...(!query?{disabled:true,disabledReason:'Search for something first.'}:{})},
@@ -285,30 +278,30 @@ function SearchWorkspace({ api }: {api: SearchConversationAPI}) {
   </Stack>;
 
   // ── Results ────────────────────────────────────────────────────────────────
-  const groups=data&&!error?groupResults(data.results.map(record=>publicSearchRecord(record, session?.role === 'hr-admin')),data.counts,kind=>searchHref({type:kind,tab:'results'}),data.totalIsLowerBound):[];
+  const presentedResults=useSearchPeoplePresentation(data&&!error?data.results:[]);
+  const groups=data&&!error?groupResults(presentedResults.map(record=>publicSearchResult(record, session?.role === 'hr-admin')),data.counts,kind=>searchHref({type:kind,tab:'results'}),data.totalIsLowerBound):[];
   const resultKeys=(data?.results??[]).map(recordKey);
   const results=<Stack gap="sm" className="flex-1 min-h-0 overflow-auto px-6 py-3" data-testid="search-results">
     {!!data?.partial?.length&&<Banner variant="warning" title={partialSourcesTitle(data.partial)} data-testid="search-partial-sources">{data.partial.join(' · ')}</Banner>}
-    <RecordResultList aria-label="Search results" groups={groups} selectedKeys={selected}
+    <SearchResults aria-label="Search results" groups={groups} selectedKeys={selected}
       onToggleSelect={record=>{const key=recordResultKey(record);setSelection(selected.includes(key)?selected.filter(k=>k!==key):[...selected,key]);}}
       onOpen={record=>navigate(record.href)}
-      {...(scope?{openLabel:(record)=>openLabelFor(record.type)}:{})}
       highlightTerms={query.split(/\s+/).filter(term=>term.length>1)}
       loading={isLoading&&!data} error={error??null} onRetry={refresh}
       emptyState={query||scope?{title:'No matching records',description:'Try another phrase or clear a filter.'}:{title:'Search your workspace',description:'Find people, initiatives, work, decisions, and knowledge.'}}
-      footer={data&&!error&&data.total?<Inline gap="sm" align="center" wrap><T as="span">{resultsFooter(data.total,scopeName,data.totalIsLowerBound)}</T>{scope&&<Button variant="link" size="sm" className="whitespace-nowrap" data-testid="search-scope-all" onClick={()=>update({scope:null,offset:null})}>Search entire workspace</Button>}</Inline>:undefined}
+      footer={data&&!error&&data.total?<Inline gap="sm" align="center" wrap><T as="span" size="xs">{resultsFooter(data.total,scopeName,data.totalIsLowerBound)}</T>{scope&&<Button variant="link" size="sm" className="whitespace-nowrap text-xs" data-testid="search-scope-all" onClick={()=>update({scope:null,offset:null})}>Search entire workspace</Button>}</Inline>:undefined}
       hint="Select results to ask about them or view their connections." />
     {!!data?.total&&data.total>PAGE_SIZE&&<Inline justify="between" gap="sm">
       <T className="text-xs text-text-tertiary">{offset+1}–{Math.min(offset+PAGE_SIZE,data.total)} of {data.total}{data.totalIsLowerBound?'+':''}</T>
       <Inline gap="xs"><Button size="sm" variant="secondary" disabled={!offset} onClick={()=>update({offset:String(Math.max(0,offset-PAGE_SIZE))})}>Previous</Button><Button size="sm" variant="secondary" disabled={offset+PAGE_SIZE>=data.total} onClick={()=>update({offset:String(offset+PAGE_SIZE)})}>Next</Button></Inline>
     </Inline>}
     {scope&&!!resultKeys.length&&!selected.length&&<Inline gap="sm">
-      <Button size="sm" variant="secondary" onClick={()=>askAbout(resultKeys.slice(0,30))}>Ask about these results ↗</Button>
-      <Button size="sm" variant="secondary" onClick={()=>update({tab:'connections',selection:resultKeys.slice(0,30).join(',')})}>View connections ↗</Button>
+      <Tooltip content="Ask about these results" placement="top"><Button size="sm" variant="ghost" className="text-xs" aria-label="Ask about these results" onClick={()=>askAbout(resultKeys.slice(0,30))}><ChatIcon size={14} />Ask</Button></Tooltip>
+      <Tooltip content="View connections between these results" placement="top"><Button size="sm" variant="ghost" className="text-xs" aria-label="View connections" onClick={()=>update({tab:'connections',selection:resultKeys.slice(0,30).join(',')})}><GraphIcon size={14} />Connections</Button></Tooltip>
     </Inline>}
     {selected.length>0&&<Inline className="sticky bottom-0 bg-surface border-t border-border py-2" justify="between" data-testid="search-selection-bar">
       <T className="text-xs">{selected.length} selected</T>
-      <Inline gap="xs"><Button size="sm" variant="ghost" onClick={()=>setSelection([])}>Clear</Button><Button size="sm" onClick={askSelection}>Ask about selection →</Button></Inline>
+      <Inline gap="xs"><Tooltip content="Clear selection" placement="top"><IconButton size="md" variant="ghost" aria-label="Clear selection" icon={<CloseIcon size={14} />} onClick={()=>setSelection([])} /></Tooltip><Tooltip content="Ask about selection" placement="top"><Button size="sm" className="text-xs" aria-label="Ask about selection" onClick={askSelection}><ChatIcon size={14} />Ask</Button></Tooltip></Inline>
     </Inline>}
   </Stack>;
 
@@ -454,11 +447,6 @@ type BusFactorFinding = Parameters<typeof indexBusFactorFindings>[0][number];
 // the tab. Cap the canvas and say so.
 const GRAPH_NODE_CAP = 200;
 const LENS_EDGES: Record<string, string[]> = { hierarchy: ['mentors', 'reports_to'], skills: ['expert_in_common'], projects: ['collaborates'] };
-const PRESENCE_FACETS = [
-  { key: 'office' as const, label: 'In Office', dot: 'var(--color-success)', states: ['office'] },
-  { key: 'remote' as const, label: 'Remote', dot: 'var(--color-info)', states: ['wfh', 'travel'] },
-  { key: 'away' as const, label: 'Away', dot: 'var(--color-warning)', states: ['pto', 'vacation', 'sick'] },
-];
 
 /** Keep the strongest `topK` edges per person above `minStrength`. */
 function strongestEdges(edges: GraphRelationship[], topK: number, minStrength: number) {
@@ -546,7 +534,6 @@ function PeopleConnections({ graph, selectedKeys, focusIds, showWholeOrg, onShow
     media.addEventListener('change', update);
     return () => media.removeEventListener('change', update);
   }, []);
-  const [presenceFilter, setPresenceFilter] = useState<'office' | 'remote' | 'away' | null>(null);
   const [pinnedPath, setPinnedPath] = useState<PathHop[] | null>(null);
   const lensTypes = LENS_EDGES[lens ?? ''];
   const selectedIds = useMemo(() => new Set(selectedKeys.filter(key => key.startsWith('person:')).map(key => key.slice(7))), [selectedKeys]);
@@ -565,7 +552,7 @@ function PeopleConnections({ graph, selectedKeys, focusIds, showWholeOrg, onShow
   const { data: detail, isLoading: detailLoading, error: detailError } = useFetch<PersonDetail>(detailId ? `/api/graph/people/${encodeURIComponent(detailId)}` : null);
   const { data: evidence } = useFetch<{ documents: PersonEvidenceDocument[] }>(detailId ? `/api/graph/people/${encodeURIComponent(detailId)}/evidence` : null);
   const { data: findings, error: findingsError } = useFetch<{ findings: BusFactorFinding[] }>(
-    activeDepartment || rareSkillsOpen ? '/api/work/findings?status=open&sweep=bus_factor&limit=200' : null,
+    showInfluence && (activeDepartment || rareSkillsOpen) ? '/api/work/findings?status=open&sweep=bus_factor&limit=200' : null,
   );
   const findingsIndex = useMemo(() => findings ? indexBusFactorFindings(findings.findings) : null, [findings]);
   // The selected people and their direct neighbours, over every relationship;
@@ -575,12 +562,13 @@ function PeopleConnections({ graph, selectedKeys, focusIds, showWholeOrg, onShow
   const focused = useMemo(() => showWholeOrg ? { people: data?.nodes ?? [], relationships: lensEdges }
     : focusOrgPeople(data?.nodes ?? [], lensEdges, focusIds), [data, lensEdges, focusIds, showWholeOrg]);
   const people = useMemo(() => focused.people.slice(0, GRAPH_NODE_CAP), [focused]);
+  // The graph's daily office/remote field is generated data, not live presence.
+  const drawingPeople = useMemo(() => people.map(person => ({ ...person, presence: 'unknown' as const })), [people]);
   const edges = useMemo(() => {
     const kept = new Set(people.map(p => p.id));
     return strongestEdges(focused.relationships.filter(e => kept.has(e.source) && kept.has(e.target)), topK, lensTypes ? 0 : minStrength);
   }, [focused, people, topK, minStrength, lensTypes]);
   const capped = focused.people.length > GRAPH_NODE_CAP;
-  const presenceFacet = PRESENCE_FACETS.find(f => f.key === presenceFilter);
   const focusMissing = !showWholeOrg && focusIds.length > 0 && !people.length;
   const path = useMemo(() => {
     if (!data || selectedIds.size !== 2) return null;
@@ -624,29 +612,23 @@ function PeopleConnections({ graph, selectedKeys, focusIds, showWholeOrg, onShow
       <RangeSliderFrame className="text-xs" label="Top-K" ariaLabel="Top K relationships per person" min={1} max={10} value={topK} onChange={setTopK} valueLabel={topK} />
       <RangeSliderFrame className="text-xs" label="Min strength" ariaLabel="Minimum relationship strength" min={0} max={100} value={Math.round(minStrength * 100)} onChange={v => setMinStrength(v / 100)} valueLabel={minStrength.toFixed(2)} />
       <Inline gap="xs" align="center" className="ml-auto">
-        {focusIds.length > 0 && <Button size="sm" variant="ghost" aria-pressed={showWholeOrg} onClick={() => onShowWholeOrgChange(!showWholeOrg)}>{showWholeOrg ? 'Focus selection' : 'Show whole org'}</Button>}
+        {focusIds.length > 0 && <Button size="sm" variant="ghost" className="text-xs" aria-pressed={showWholeOrg} onClick={() => onShowWholeOrgChange(!showWholeOrg)}>{showWholeOrg ? 'Focus selection' : 'Show whole org'}</Button>}
         {selectedIds.size > 0 && <T className="text-xs text-primary">{selectedIds.size} selected</T>}
-        <Button size="sm" variant="secondary" disabled={!selectedIds.size} onClick={() => { setPeople([], null); setActiveDepartment(null); }}>Clear</Button>
-        <Button size="sm" disabled={!selectedIds.size} onClick={() => onAsk([...selectedIds].map(id => `person:${id}`))}>Ask about selection →</Button>
+        <Tooltip content="Clear selection" placement="top"><IconButton size="md" variant="ghost" aria-label="Clear selection" disabled={!selectedIds.size} icon={<CloseIcon size={14} />} onClick={() => { setPeople([], null); setActiveDepartment(null); }} /></Tooltip>
+        <Tooltip content="Ask about selection" placement="top"><Button size="sm" className="text-xs" aria-label="Ask about selection" disabled={!selectedIds.size} onClick={() => onAsk([...selectedIds].map(id => `person:${id}`))}><ChatIcon size={14} />Ask</Button></Tooltip>
       </Inline>
     </Inline>
     <Inline gap="xs" align="center" className="pb-2 shrink-0">
       <DepartmentChips departments={data.departments} people={data.nodes} activeDepartment={activeDepartment}
         onToggle={(name, memberIds) => { setActiveDepartment(name); setPeople(name ? memberIds : [], null); }} />
-      <FilterChip active={rareSkillsOpen} size="sm" onClick={() => setRareSkillsOpen(open => !open)}>⚠ Rare skills · org-wide</FilterChip>
+      {showInfluence && <FilterChip active={rareSkillsOpen} size="sm" onClick={() => setRareSkillsOpen(open => !open)}>⚠ Rare skills · org-wide</FilterChip>}
       <SegmentedControl size="sm" aria-label="Relationship lens" value={lensTypes ? lens ?? '' : ''} onChange={value => onLensChange(value || null)}
         options={[{ value: '', label: 'All' }, { value: 'hierarchy', label: 'Hierarchy' }, { value: 'skills', label: 'Skills' }, { value: 'projects', label: 'Projects' }]} />
-      <DropdownMenu triggerLabel="Filter by presence" triggerTitle="Filter by presence"
-        trigger={<Inline as="span" gap="xs" align="center">{presenceFacet && <StatusDot color={presenceFacet.dot} size="xs" />}<T className="text-xs">{presenceFacet ? presenceFacet.label : 'Today'} ▾</T></Inline>}
-        sections={[{ items: PRESENCE_FACETS.map(({ key, label, dot, states }) => ({
-          label: `${label} · ${data.nodes.filter(n => states.includes(n.presence ?? 'unknown')).length}`, icon: <StatusDot color={dot} size="xs" />,
-          active: presenceFilter === key, onSelect: () => setPresenceFilter(presenceFilter === key ? null : key),
-        })) }]} />
       <T className="ml-auto text-xs text-text-tertiary" data-testid="search-people-count"
         title={capped ? `${people.length} of ${total} people — capped for canvas performance, use search or a selection to narrow it instead` : undefined}>
         {people.length < total ? `${people.length} / ${total}` : total} people{capped ? ' (capped)' : ''} · {edges.length}{lensTypes ? ` ${lens}` : ''} edges</T>
     </Inline>
-    {(activeDepartment || rareSkillsOpen) && <DepartmentInsightStrip department={activeDepartment} people={data.nodes}
+    {showInfluence && (activeDepartment || rareSkillsOpen) && <DepartmentInsightStrip department={activeDepartment} people={data.nodes}
       busFactorFindings={findingsIndex} busFactorFindingsUnavailable={Boolean(findingsError)}
       onFocusPerson={id => { setActiveDepartment(null); setRareSkillsOpen(false); focusPerson(id); }}
       onNavigate={(href, event) => { if (!isPlainClick(event)) return; event.preventDefault(); navigate(href); }} />}
@@ -672,7 +654,7 @@ function PeopleConnections({ graph, selectedKeys, focusIds, showWholeOrg, onShow
         onFocusPerson={id => { setPeople([...selectedIds, id], id); }}
         onAsk={id => onAsk([`person:${id}`])} askLabel={person => `Ask about ${person.name.split(' ')[0]}`} />
       </Stack> : null}>
-      <OrgGraph ref={graphHandle} data-testid="search-org-graph" aria-label="Organization graph" people={people} relationships={edges} departments={data.departments}
+      <OrgGraph ref={graphHandle} data-testid="search-org-graph" aria-label="Organization graph" people={drawingPeople} relationships={edges} departments={data.departments}
         // focusIds is what the automatic fit centres on when the drawing
         // overflows; without it the fit start-aligned the drawing beside the
         // legend and a selected person could sit past the right edge (D9,
@@ -686,7 +668,6 @@ function PeopleConnections({ graph, selectedKeys, focusIds, showWholeOrg, onShow
         // it; the library's own one-hop trim on top dropped 3 of 11 people the
         // counter and the person card still named (D10).
         multiSelectIds={selectedIds} spotlightIds={selectedIds} focusIds={fitFocusIds} pruneToFocus={false} minFitZoom={fitFocusIds.length ? ORG_FIT_MIN_ZOOM : ORG_OVERVIEW_FIT_ZOOM} fitInset={{ top: 24, right: 24, bottom: 40 }} layout={layout} showInfluence={showInfluence}
-        {...(presenceFilter ? { presenceFilter } : {})}
         onToggleMultiSelect={id => {
           if (selectedIds.has(id)) setPeople([...selectedIds].filter(item => item !== id), detailId === id ? null : undefined);
           else setPeople([...selectedIds, id], id);

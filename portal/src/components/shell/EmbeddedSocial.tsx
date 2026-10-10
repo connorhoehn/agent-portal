@@ -26,6 +26,8 @@ export interface EmbeddedSocialContextValue {
   available: boolean; actorId: string | null; people: readonly SocialPerson[]; conversations: readonly SocialDm[];
   selected: string | null; canSend: boolean; unavailableReason: string | null; onlineCount: number;
   presencePeople: ReturnType<typeof presenceAvatarUsers>;
+  /** Signed source, fresh directory authority and matching connected transport. */
+  presenceReady: boolean;
   me: { userId: string; displayName: string } | null; authorityVerified: boolean; canMessagePeople: boolean;
   openMessage(): void; openDm(userId: string): Promise<boolean>;
   /** Immutable peer capture; resolves true only after a persisted gateway receipt. */
@@ -160,7 +162,7 @@ export function EmbeddedSocialProvider({ children }: { children: ReactNode }) {
     selected: current ? state.selected : null, canSend: !unavailableReason && !state.pending && !state.opening,
     me: snapshot?.me ?? null, authorityVerified: current && state.authorityVerified,
     canMessagePeople: !unavailableReason && !state.pending && !state.opening,
-    unavailableReason, onlineCount: online.size, presencePeople, state: current ? state : IDLE, controller,
+    unavailableReason, onlineCount: online.size, presencePeople, presenceReady: transportReady, state: current ? state : IDLE, controller,
     openMessage: () => controller.openMessage(), openDm: userId => controller.openDm(userId).then(Boolean),
     sendToPerson: (userId, text, page) => transportReady ? controller.sendToPerson(userId, text, page) : Promise.resolve(false),
     pageChannel, pageOpen: pageView && state.open,
