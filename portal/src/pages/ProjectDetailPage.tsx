@@ -278,6 +278,7 @@ function ProjectDetailPage() {
   const [pendingIds, setPendingIds] = useState<ReadonlySet<string>>(new Set());
   // The run draft's current choices, for the collapsed Run setup's hint.
   const [runChoice, setRunChoice] = useState<RunChoice | null>(null);
+  const [prepareJobRequest, setPrepareJobRequest] = useState<{ itemId: string; revision: number } | null>(null);
   // "Draft with agent" puts the criteria workflow in the composer; the counter
   // keys the composer so a second press re-seeds it.
   const [composerSeed, setComposerSeed] = useState<{ itemId: string; text: string; n: number } | null>(null);
@@ -548,20 +549,17 @@ function ProjectDetailPage() {
   const facts: InitiativeFactsInput = {
     project,
     statusLabel,
-    ownerName,
-    smes: smes.map((c) => c.name),
-    repo: repoHref ? { label: project.repoFullName ?? repoHref.replace(/^https?:\/\/(www\.)?github\.com\//, ''), href: repoHref } : null,
-    counts: {
-      work: treeRead && !workFailure ? allRows.length : null,
-      decisions: decisions ? decisions.length : null,
-      contributors: contributors.length,
-    },
+    owner: ownerName ? { name: ownerName, avatarUrl: ownerAvatar } : null,
+    smes: smes.map((c) => ({ name: c.name, avatarUrl: c.avatarUrl ?? undefined })),
   };
-  const detailsTrigger = <InitiativeDetailsTrigger input={facts} onOpenDetails={() => paneControl.open('details')} />;
+  const detailsTrigger = <InitiativeDetailsTrigger onOpenDetails={() => paneControl.open('details')} />;
   const headerMenu = [{
         // Creating work is dispatch-gated server-side (POST /work-items), so
         // a role without it is not offered the menu entries.
         items: [
+          ...(current ? [{ label: canDispatch ? 'Prepare job' : 'View job setup',
+            'data-testid': 'work-item-prepare-job',
+            onSelect: () => setPrepareJobRequest(previous => ({ itemId: current.id, revision: (previous?.revision ?? 0) + 1 })) }] : []),
           ...(canDispatch && current ? [{ label: `New story in ${current.epicTitle}`, onSelect: () => setCreating({ parentId: current.epicId, parentTitle: current.epicTitle }) }] : []),
           ...(canDispatch ? [{ label: 'New epic', onSelect: () => setCreating({ parentId: null, parentTitle: null }) }] : []),
           { label: 'Initiative details', onSelect: () => paneControl.open('details') },
@@ -620,9 +618,7 @@ function ProjectDetailPage() {
         {...headerDensity.headerProps}
         breadcrumbs={trail}
         title={project.name}
-        // The details card: hover or focus the info glyph; click opens the
-        // pane's Details. It leads with the summary, so in compact density
-        // it is where the description is read.
+        // The info action and Shift+I reveal the same far-right Details pane.
         info={detailsTrigger}
         badge={headerStatus}
         {...(project.summary ? { description: project.summary } : {})}
@@ -783,6 +779,7 @@ function ProjectDetailPage() {
       // A focused item's header is only the action cluster, on the item's own
       // title row — nothing between the trail and the item's title.
       headActions={header}
+      prepareJobRequest={prepareJobRequest}
       thread={thread}
       decisions={decisionsRead}
       contributors={contributors}

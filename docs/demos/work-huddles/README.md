@@ -295,7 +295,11 @@ During the pre-activation idle inspection, an agent's unvalidated inspector clea
 
 The new API process is healthy. A fresh read-only browser visit opens the original Observability deck, displays its real rendered slide with no stuck loading state, and reports no browser errors. The durable deck file is byte-for-byte identical to its pre-recovery backup. The native recording service was not restarted or changed. No real call, message, invitation or computer job was created during acceptance. Private browser/test evidence is preserved under the same local scratch directory.
 
-Search composer notices now live behind the small warning icon beside context chips. Agent/Chat stays first. File toolbars share themed native view icons, refresh, Workspace and accessible tooltips. Frontend-only changes were applied to the running primary app; recording pipeline activation remains pending as described in the meeting-processing audit.
+## October 10 file controls and composer notices
+
+Work project files and Assessment document libraries now share themed icon view controls, hover/focus tooltips, a compact refresh action, and a Workspace shortcut. Search keeps its Agent/Chat control first; the warning icon beside the context chips contains non-blocking notices. Hover or focus previews the list; click opens a persistent popover. The memory/history advisory no longer occupies a separate footer row. Delivery failures remain visible.
+
+Validated with three isolated browser toolbar cases (Work, Assessment, narrow dark theme), the composer notice interaction/layout case, and portal typecheck. The running Search page received the frontend changes through HMR and the notice list was inspected without restarting any backend or submitting a message. Native recording pipeline candidate changes remain separate from this frontend update.
 
 
 ## October 10 Search presentation audit
@@ -328,3 +332,23 @@ the owned automatic finalizer transaction/model proof now passes, while real
 SFU/gateway/card delivery and live journey acceptance remain pending. See the
 [automatic proof](evidence/2026-10-10/native-meeting-pipeline/automatic-finalizer-proof.json)
 for exact fixture boundaries.
+
+## October 10 native recording integration checkpoint
+
+The isolated native acceptance now starts from an actual signed completion webhook rather than a preseeded recording or a manual transcription helper. The native finalizer, DynamoDB transactions and automatic child pipeline produced 11 segment-timed Whisper transcript entries and a genuine Codex subscription summary. Replaying the completion preserved the exact ready row and artifacts with one speech request, one model request and one automatic generation. Two synthetic accepted participants could read the saved summary; a nonparticipant could not. Six actual Dynamo checks and nine actual Redis checks also passed.
+
+Published candidates: app `b95b2ecf` (`feat/meeting-recording-pipeline-20261010`), native platform `6576150` (`feat/meeting-pipeline-20261010`), and realtime SDK `3c7fb5c` (`feat/meeting-call-binding-20261010`). The app candidate adds exact Assessment document provenance, current-source authorization, document Recordings tabs and source-scoped search. Its document/recording UI passed 16 isolated browser cases and five unit cases; app/native typechecks passed. The supported browser command in that checkout is `cd portal && node node_modules/@playwright/test/cli.js test --config playwright.recording.config.ts`, which manages an isolated server on 5283 and denies unmocked API traffic.
+
+These remain candidate integrations, not activation in the memory-backed primary API. The automatic proof used synthetic seats and immutable media HTTP transport, not a new SFU call. Native lifecycle events were observed, but Work initiative chat-card mapping is absent (`cards: 0`); production realtime delivery is not established. UI processing status was separately checked with inert browser fixtures and native polling. Work-graph deliveries were intercepted. All owned test containers, tunnels, model and speech processes were cleaned up; original primary services and saved media were untouched. Sanitized native evidence is committed under `platform-api/docs/work-huddle-candidates/automatic-finalize-20261010/`; raw artifacts remain private.
+
+## October 10 shell and preparation refinements
+
+The tenant brand opens a compact list of other server-authorized workspaces. It sends the existing tenant transition without choosing a role; the right account menu remains the role switcher. Tenant rows show identity marks and real inbox unread activity or a quiet information tooltip when live updates are unavailable. A canonical active call blocks the transition even if media has failed. Hover, keyboard, empty/refused destinations and tenant-only request boundaries passed isolated browser checks.
+
+The ambient mouse is reusable on a supplied header, footer or rail element through `AmbientVisitor`; the shell opts in only expanded primary rail sections. It uses the element and scrolling ancestors as clipping bounds, small two-pose running motion and a dark-theme directional lamp. Delayed and parked poses hide both mouse and lamp; a focused browser regression verifies there are no stationary beams in idle rows. Reduced motion and the existing stored preference unmount animation measurement.
+
+Footer Huddle and Message actions share neutral, readable ink and native call behavior. The enabled Huddle label passed a computed 4.5:1 minimum contrast check in resting, hover and focus states across all four tenant themes in light and dark. The footer keeps one accessible Leave action when a full native call bar is already in the composer, page or standalone block. These are intercepted presentation fixtures, not new real calls.
+
+Prepare job now lives in the focused work item's existing actions menu. Status and priority use native selectors. Its compact setup keeps the instruction, codebase/model, cap and forecast together; saving an estimate is separate from reviewing and authorizing a job. Same-item tab navigation retains the instruction and cap; a new work item resets them. Nine isolated browser cases and typecheck passed; the [verification receipt](evidence/2026-10-10/prepare-job-redesign/verification.json) states the exact source, fixture and remaining actual-role acceptance limits.
+
+The footer Today strip is now implemented as an explicitly labeled local demo: prioritized reviews, agenda, goal progress, automation summaries and budget notices. Its monochrome floating controls support hide/restore, dim, speed, pause and category settings, with preferences isolated by actor and workspace. No live automation or budget data is connected and no actions are dispatched. Browser acceptance is pending the combined native UI package; five preference and rotation checks pass.

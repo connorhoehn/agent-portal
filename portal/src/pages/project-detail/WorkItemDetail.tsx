@@ -31,13 +31,12 @@ import {
   type WorkMetaOption,
   type WorkPerson,
 } from '@connorhoehnslalom/ui-components';
-import { ArrowRightIcon, Banner, Button, ChevronIcon, Chip, DropdownMenu, Inline, Stack, StatusPill } from '@connorhoehnslalom/ui-components/shared';
+import { ArrowRightIcon, Banner, Button, Chip, Inline, Select, Stack } from '@connorhoehnslalom/ui-components/shared';
 import { DEVBOX_MODELS } from '../../lib/devboxModels';
 import type { BotRun } from '../bots/BotsPage';
 import {
   BRIEF_BODY,
   BRIEF_TITLE,
-  RUN_SETUP_TITLE,
   WHY_TITLE,
   buildBrief,
   itemFlags,
@@ -86,6 +85,7 @@ const PR_STATUS: Record<string, { label: string; tone: 'info' | 'neutral' | 'suc
 const modelLabel = (id: string) => DEVBOX_MODELS.find((m) => m.id === id)?.label ?? id;
 
 export type DetailTab = 'brief' | 'docs' | 'history';
+export interface PrepareJobRequest { itemId: string; revision: number }
 
 /** How a thread read reads when it has nothing to show. */
 function threadEmpty(loading: boolean, error: string | null, what: string, empty: string): string {
@@ -156,6 +156,8 @@ export interface WorkItemDetailProps {
   /** Right of the title row — the initiative's actions (presence, search,
    *  call, repository, ⋯), so nothing stacks between the trail and the title. */
   headActions?: ReactNode;
+  /** An explicit action from the existing header menu, scoped to its work item. */
+  prepareJobRequest?: PrepareJobRequest | null;
 }
 
 export function WorkItemDetail({
@@ -178,16 +180,23 @@ export function WorkItemDetail({
   discussion,
   liveNotes = null,
   headActions,
+  prepareJobRequest,
 }: WorkItemDetailProps) {
   const readOnly = canEdit ? undefined : 'Your role cannot edit work items';
-  const statusLabel = STATUS_OPTIONS.find(option => option.value === item.status)?.label ?? item.status;
-  const statusTone = ({ open: 'neutral', in_progress: 'info', in_review: 'warning', done: 'success', cancelled: 'danger' } as const)[item.status];
   // An editor with no criteria yet can also write them by hand; the list
   // opens under the table once asked for. Keyed by item so it never carries.
   const [writingCriteriaFor, setWritingCriteriaFor] = useState<string | null>(null);
   const [runSetupFor, setRunSetupFor] = useState<string | null>(null);
   const [focusRunSetup, setFocusRunSetup] = useState(false);
   const runSetupElement = useRef<HTMLDivElement>(null);
+  const handledPrepareRequest = useRef<PrepareJobRequest | null>(null);
+  useEffect(() => {
+    if (!prepareJobRequest || prepareJobRequest.itemId !== item.id || handledPrepareRequest.current === prepareJobRequest) return;
+    handledPrepareRequest.current = prepareJobRequest;
+    setRunSetupFor(item.id);
+    setFocusRunSetup(true);
+    onTabChange('brief');
+  }, [prepareJobRequest, item.id, onTabChange]);
   useEffect(() => {
     if (!focusRunSetup || tab !== 'brief' || runSetupFor !== item.id) return;
     runSetupElement.current?.scrollIntoView({ block: 'nearest' });
@@ -297,14 +306,10 @@ export function WorkItemDetail({
         <Inline gap="sm" align="center" wrap key="work-metadata" className="work-item-metadata">
         <Chip size="sm" tone="neutral" mono>{item.key ?? item.id}</Chip>
         <Chip size="sm" tone={item.type === 'bug' ? 'danger' : 'info'}>{item.type === 'bug' ? 'Bug' : 'Story'}</Chip>
-        {canEdit ? <DropdownMenu triggerLabel="Change work status" triggerVariant="link" triggerClassName="!px-0 !py-0"
-          trigger={<Inline gap="xs" align="center"><StatusPill label={statusLabel} tone={statusTone} /><ChevronIcon size={12} dir="down" /></Inline>}
-          sections={[{ items: STATUS_OPTIONS.map(option => ({ id: option.value, label: option.label, onSelect: () => onPatch({ status: option.value as WorkItem['status'] }) })) }]}
-          triggerTestId="work-item-status" />
-          : <StatusPill label={statusLabel} tone={statusTone} />}
         <WorkItemMetaBar
           layout="default"
-          priorityStyle="tag"
+          status={{ value: item.status, options: STATUS_OPTIONS, readOnlyReason: readOnly,
+            onChange: value => onPatch({ status: value as WorkItem['status'] }) }}
           flags={itemFlags(item)}
           points={{ value: item.storyPoints, max: 21, readOnlyReason: readOnly, onChange: (v) => onPatch({ storyPoints: v }) }}
           owner={{
@@ -313,15 +318,12 @@ export function WorkItemDetail({
             onSearchPeople: (q) => people.filter((p) => p.name.toLowerCase().includes(q.trim().toLowerCase())),
             onChange: (p) => onPatch({ assigneeId: p?.id ?? null, assigneeName: p?.name ?? null }),
           }}
-          priority={{ value: item.priority, options: PRIORITY_OPTIONS, readOnlyReason: readOnly, onChange: (v) => onPatch({ priority: v as WorkItem['priority'] }) }}
         />
-        <Button variant="secondary" size="sm"
-          aria-label={canEdit ? 'Prepare computer job' : 'View computer job setup'}
-          title="Review the instruction, codebase and estimate for this work item"
-          onClick={() => { setRunSetupFor(item.id); setFocusRunSetup(true); onTabChange('brief'); }}
-          data-testid="work-item-prepare-job">
-          {canEdit ? 'Prepare job' : 'View job setup'}
-        </Button>
+        <Select size="sm" chevron="custom" aria-label="Priority" value={item.priority}
+          options={PRIORITY_OPTIONS.map(option => ({ value: option.value, label: `${option.label} priority` }))}
+          disabled={!canEdit} title={readOnly} className="w-auto" wrapperClassName="w-auto"
+          onChange={event => onPatch({ priority: event.target.value as WorkItem['priority'] })}
+          data-testid="work-item-priority" />
         </Inline>,
       ]}
       tabs={[
@@ -396,19 +398,6 @@ export function WorkItemDetail({
                 <KeyValue layout="row" divided labelWidth="w-72" items={briefItems} aria-label={BRIEF_TITLE} />
               </DetailSection>
             )}
-            <div ref={runSetupElement}>
-            <Disclosure
-              variant="plain"
-              size="md"
-              summary={RUN_SETUP_TITLE}
-              hint={runSetup.hint}
-              open={runSetupFor === item.id}
-              onToggle={open => setRunSetupFor(open ? item.id : null)}
-              data-testid="run-setup"
-            >
-              {runSetup.body}
-            </Disclosure>
-            </div>
           </>
         )}
         {tab === 'docs' && <WorkDocumentLinks workItemId={item.id} canEdit={canEdit} />}
@@ -420,6 +409,15 @@ export function WorkItemDetail({
             error={thread.commentsError ? `The item's history could not be read: ${thread.commentsError}` : null}
           />
         )}
+        {/* Keep this item's unsent plan across Brief/Docs/Activity switches.
+            RunDraft's item key still starts a new plan for a different item. */}
+        <div ref={runSetupElement} hidden={tab !== 'brief'}>
+          <Disclosure variant="plain" size="md" summary="Prepare job" hint={runSetup.hint}
+            open={runSetupFor === item.id} onToggle={open => setRunSetupFor(open ? item.id : null)}
+            data-testid="run-setup">
+            {runSetup.body}
+          </Disclosure>
+        </div>
       </Stack>
     </Stack>
   );

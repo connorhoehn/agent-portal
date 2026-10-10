@@ -1,8 +1,6 @@
-// The run draft inside a work item's collapsed "Run setup" (W15): which model,
-// which codebase, what the agent should do, what it should cost, and the two
-// acts — record the estimate, or authorize a run. The library's RunDraftPanel
-// draws it; this file only feeds it. The instruction lives here now (D6): the
-// docked composer only asks the org agent, it never prepares a run.
+// Prepare a computer job beside its work item. Keep the instruction visible
+// and the estimate separate from the unsaved plan. The docked composer asks
+// the org agent; this form prepares the choices for the authorization drawer.
 //
 // Authorizing opens the EstimateDrawer rather than POSTing here. The drawer is
 // where the four dispatch refusals (codebase pick, run cap, allocation,
@@ -10,8 +8,8 @@
 // drift from the first. The choices made here are handed to it prefilled.
 
 import { useEffect, useMemo, useState } from 'react';
-import { RunDraftPanel, type RunDraftStatus, type RunEstimate } from '@connorhoehnslalom/ui-components';
-import { BranchIcon, FormField, Textarea } from '@connorhoehnslalom/ui-components/shared';
+import { AccessNotice, formatEstimate, type RunEstimate } from '@connorhoehnslalom/ui-components';
+import { Button, FormField, Inline, NumberInput, Select, Stack, Textarea } from '@connorhoehnslalom/ui-components/shared';
 import {
   storedEstimateFor,
   type EstimateProvenance,
@@ -136,12 +134,6 @@ function RunDraftForItem({
   const est = useWorkEstimate(item, model, agentProjectId, canDispatch);
   const { cost, duration } = asEstimates(item, est, canDispatch);
   const modelLabel = DEVBOX_MODELS.find((m) => m.id === model)?.label ?? model;
-  const codebase = codebases.find((c) => c.id === agentProjectId) ?? null;
-
-  const status: RunDraftStatus = run?.status === 'running' ? 'running'
-    : est.stored ? 'saved'
-    : instruction.trim() ? 'unsaved'
-    : 'no-draft';
 
   async function save() {
     if (!est.estimate || saving) return;
@@ -169,94 +161,74 @@ function RunDraftForItem({
     : item.storyPoints == null ? 'Size this item first'
     : item.status !== 'open' ? 'Only work that is up next can be dispatched'
     : undefined;
+  const saveBlocked = !canDispatch ? 'Your role cannot record estimates'
+    : est.stored ? `Already recorded on ${modelLabel}`
+    : !est.estimate ? 'No forecast to record yet'
+    : undefined;
+  const capHint = capUsd != null && est.estimate && est.estimate.costUsdP75 > capUsd
+    ? 'Below forecast; review will ask you to confirm.'
+    : 'Optional maximum cost for this run.';
 
   return (
-    <RunDraftPanel
-      status={status}
-      // No target line when no codebase is readable: `null` would print the
-      // library's "No workflow chosen", which is not what is missing here.
-      target={codebases.length === 0
-        ? undefined
-        : {
-            mark: <BranchIcon size={22} />,
-            title: codebase?.repoFullName ?? 'Choose a codebase',
-            subtitle: 'Where the agent works',
-          }}
-      fields={[
-        {
-          id: 'model',
-          label: 'Model',
-          value: model,
-          options: DEVBOX_MODELS.map((m) => ({ value: m.id, label: m.label })),
-          onChange: setModel,
-        },
-        ...(codebases.length > 1
-          ? [{
-              id: 'codebase',
-              label: 'Codebase',
-              value: agentProjectId ?? '',
-              placeholder: 'Choose…',
-              options: codebases.map((c) => ({ value: c.id, label: c.repoFullName })),
-              onChange: (v: string) => setAgentProjectId(v || null),
-            }]
-          : []),
-      ]}
-      advanced={(
-        <FormField label="Instruction" hint="What done looks like — carried into the authorize step.">
-          {(wiring) => (
-            <Textarea
-              {...wiring}
-              minRows={3}
-              autoResize
-              value={instruction}
-              onChange={(e) => setInstruction(e.target.value)}
-              placeholder="Tell the agent what done looks like…"
-              disabled={!canDispatch}
-              data-testid="run-draft-instruction"
-            />
-          )}
+    <Stack gap="md" data-testid="run-draft-panel">
+      <FormField label="Instruction" hint="What should the agent change, and how will you verify it?">
+        {wiring => <Textarea {...wiring} minRows={3} autoResize value={instruction}
+          onChange={event => setInstruction(event.target.value)}
+          placeholder="Describe the change and what done looks like…"
+          disabled={!canDispatch} data-testid="run-draft-instruction" />}
+      </FormField>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <FormField label="Codebase">
+          {wiring => <Select {...wiring} size="sm" value={agentProjectId ?? ''}
+            options={codebases.map(c => ({ value: c.id, label: c.repoFullName }))}
+            placeholder={codebases.length ? 'Choose a codebase…' : 'No readable codebase'}
+            disabled={codebases.length === 0}
+            onChange={event => setAgentProjectId(event.target.value || null)} />}
         </FormField>
-      )}
-      advancedLabel="Instruction"
-      cost={cost}
-      duration={duration}
-      // A 'prior' forecast is a static per-tier bracket, not history: the
-      // panel shows it marked low confidence rather than hiding it.
-      confidence={est.estimate
-        ? { sampleSize: est.estimate.sampleCount, basis: est.estimate.basis === 'prior' ? 'prior' : 'runs' }
-        : null}
-      budget={{
-        unit: 'usd',
-        usd: capUsd,
-        onChange: setCapUsd,
-        hint: capUsd != null && est.estimate && est.estimate.costUsdP75 > capUsd
-          ? 'Below the forecast — the dispatch will ask you to confirm'
-          : 'Not started if forecast above this',
-        ...(canDispatch ? {} : { disabledReason: 'Your role cannot dispatch agents' }),
-      }}
-      access={!canDispatch
-        ? {
-            tone: 'info',
-            title: 'Dispatch needs an SME or leader role',
-            body: 'You can read this item and its plan; an SME with a sprint grant here, or a release manager, authorizes runs.',
-          }
-        : showGrantCue
-        ? {
-            tone: 'warning',
-            title: 'Sprint access required',
-            body: 'You hold no active sprint grant on this initiative, so a dispatch would be refused.',
-            action: { label: 'Open sprints', href: '/iq/sprints' },
-          }
-        : null}
-      onSave={() => { void save(); }}
-      saving={saving}
-      saveDisabledReason={!canDispatch ? 'Your role cannot record estimates'
-        : est.stored ? `Already recorded on ${modelLabel}`
-        : !est.estimate ? 'No forecast to record yet'
-        : undefined}
-      onDispatch={() => onAuthorize({ model, agentProjectId, capUsd, instruction })}
-      dispatchDisabledReason={blocked}
-      error={est.error && item.storyPoints != null ? est.error : null}
-    />
+        <FormField label="Model">
+          {wiring => <Select {...wiring} size="sm" value={model}
+            options={DEVBOX_MODELS.map(m => ({ value: m.id, label: m.label }))}
+            onChange={event => setModel(event.target.value)} />}
+        </FormField>
+        <FormField label="Run cap" hint={capHint}>
+          {wiring => <NumberInput {...wiring} size="sm" min={0} step={0.05} unit="USD"
+            value={capUsd ?? undefined} placeholder="No cap" disabled={!canDispatch}
+            onChange={setCapUsd} onClear={() => setCapUsd(null)}
+            data-testid="run-draft-budget-input" />}
+        </FormField>
+        <FormField label="Forecast" data-testid="run-draft-forecast" hint={est.estimate && <span className="text-text-tertiary">
+            {est.stored ? 'Recorded estimate · ' : ''}
+            {est.estimate.basis === 'prior'
+              ? 'Prior forecast · low confidence'
+              : `${est.estimate.sampleCount} prior ${est.estimate.sampleCount === 1 ? 'run' : 'runs'}`}
+          </span>}>
+          {wiring => <output id={wiring.id} aria-describedby={wiring['aria-describedby']} className="block py-1 text-sm text-text-primary">
+            {est.error ? 'Forecast unavailable' : formatEstimate(cost)}{cost.kind === 'range' && duration.kind === 'range' ? ` · ${formatEstimate(duration)}` : ''}
+          </output>}
+        </FormField>
+      </div>
+      {!canDispatch && <AccessNotice tone="info" title="An SME or leader authorizes jobs"
+        body="An SME needs a sprint grant here; a release manager can authorize directly." data-testid="run-draft-access" />}
+      {canDispatch && showGrantCue && <AccessNotice tone="warning" title="Sprint access required"
+        body="You have no active sprint grant on this initiative."
+        action={{ label: 'Open sprints', href: '/iq/sprints' }} data-testid="run-draft-access" />}
+      {est.error && item.storyPoints != null && <p role="alert" className="text-xs text-danger">{est.error}</p>}
+      <Inline gap="sm" wrap className="justify-between border-t border-border pt-3">
+        <p className="text-xs text-text-tertiary">
+          {run?.status === 'running' ? 'A job is running for this item. ' : ''}
+          {canDispatch && blocked ? `${blocked}.` : 'Nothing starts until you authorize.'}
+        </p>
+        <Inline gap="sm" wrap>
+          <Button variant="secondary" size="sm" disabled={saving || !!saveBlocked} title={saveBlocked}
+            onClick={() => { void save(); }} data-testid="run-draft-save">
+            {saving ? 'Saving estimate…' : 'Save estimate'}
+          </Button>
+          <Button size="sm" disabled={!!blocked} title={blocked}
+            onClick={() => onAuthorize({ model, agentProjectId, capUsd, instruction })} data-testid="run-draft-dispatch">
+            Review &amp; authorize
+          </Button>
+        </Inline>
+      </Inline>
+    </Stack>
   );
 }

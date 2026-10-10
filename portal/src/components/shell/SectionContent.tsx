@@ -31,6 +31,8 @@ export interface SectionHeaderProps {
   density?: Density;
   collapsed?: boolean;
   onToggleCollapsed?: () => void;
+  /** A conversation owns its header/message gutters and full-width dock. */
+  inset?: 'page' | 'conversation';
 }
 
 /**
@@ -38,7 +40,7 @@ export interface SectionHeaderProps {
  * content column's first rows, on a flush page and (as `ListRailLayout`'s
  * `header`) right of a page's list rail.
  */
-export function SectionHeader({ breadcrumbs, controls, link, title, description, badge, actions, density, collapsed = false, onToggleCollapsed }: SectionHeaderProps) {
+export function SectionHeader({ breadcrumbs, controls, link, title, description, badge, actions, density, collapsed = false, onToggleCollapsed, inset = 'page' }: SectionHeaderProps) {
   const hangs = !!(controls || link);
   const compact = density === 'compact';
   return (
@@ -53,7 +55,7 @@ export function SectionHeader({ breadcrumbs, controls, link, title, description,
         {...(link ? { link } : {})}
         data-testid="section-crumbs"
       />
-      {!collapsed && <Stack gap="none" className={`shrink-0 px-6 ${compact ? 'pb-2 pt-1' : `pb-4 ${hangs ? UNDER_CRUMBS_BAND_WITH_CONTROLS : UNDER_CRUMBS_BAND}`}`} data-section-title>
+      {!collapsed && <Stack gap="none" className={`shrink-0 ${inset === 'conversation' ? 'px-4' : 'px-6'} ${compact ? 'pb-2 pt-1' : `pb-4 ${hangs ? UNDER_CRUMBS_BAND_WITH_CONTROLS : UNDER_CRUMBS_BAND}`}`} data-section-title>
         <PageHeader
           title={title}
           {...(density ? { density } : {})}
@@ -81,7 +83,7 @@ export function SectionContent({
       <SectionHeader {...header} />
       <Stack
         gap="md"
-        className={body === 'fill' ? 'min-h-0 min-w-0 flex-1 px-6 pb-6' : 'min-h-0 min-w-0 flex-1 overflow-auto px-6 pb-6'}
+        className={`min-h-0 min-w-0 flex-1 ${body === 'scroll' ? 'overflow-auto ' : ''}${header.inset === 'conversation' ? '' : 'px-6 pb-6'}`}
         data-section-body
       >
         {children}
