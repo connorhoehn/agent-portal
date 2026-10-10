@@ -123,7 +123,7 @@ function FooterCall({ mediaOpen, onToggleMedia }: { mediaOpen: boolean; onToggle
  * The footer's pre-call half: the page's social context (what it registered
  * with the call host), the page's own Start (the host runs the same start its
  * call button runs — no second call path) and Message. Nothing else. A page
- * with no context says so and disables both actions with the reason.
+ * without a call omits the context label; unavailable actions retain their reasons.
  */
 function FooterIdle() {
   const host = useCallHost();
@@ -136,7 +136,8 @@ function FooterIdle() {
   const messageReason = !lobby ? 'No huddle here to message'
     : composerMounted || pane.registered ? undefined : 'Start the huddle to message it, or open a page with a conversation';
   return <HuddleBar
-    name={lobby?.title ?? 'No huddle here'}
+    name={lobby?.title ?? 'Huddle actions'}
+    showContext={false}
     phase="idle"
     {...(startReason ? { startDisabledReason: startReason } : {})}
     {...(host?.startBound ? { onStart: host.startBound } : { onStart: noop })}

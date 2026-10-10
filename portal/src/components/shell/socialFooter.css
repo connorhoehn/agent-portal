@@ -5,10 +5,14 @@
 }
 .shell-social-footer .shell-collaboration-bar {
   gap: 12px;
+  justify-content: flex-end;
   padding: 3px 0 3px 12px;
 }
 .shell-social-footer .shell-collaboration-bar > div:first-child { max-width: 55%; }
+/* Idle controls have no status label, including during a shared-package refresh. */
+.shell-social-footer .shell-collaboration-bar[data-phase="idle"] > [data-testid$="-status"] { display: none; }
 .shell-social-footer .shell-collaboration-bar > div:last-child {
+  margin-left: 0;
   gap: 4px;
   padding: 3px;
   border-radius: 10px;

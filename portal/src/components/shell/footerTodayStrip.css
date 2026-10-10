@@ -1,10 +1,11 @@
 /* The demo takes spare footer space; the native call dock always wins. */
-.footer-today { flex: 0 1 360px; min-width: 0; color: var(--color-text-primary); }
+.footer-today { flex: 0 1 420px; min-width: 0; color: var(--color-text-primary); border-inline-start: 1px solid var(--color-border); padding-inline-start: 12px; }
 .footer-today-summary { width: 100%; min-width: 0; justify-content: flex-start; color: var(--color-text-primary); }
 .footer-today-summary[data-dimmed] { opacity: .8; }
 .footer-today-demo { font-size: 12px; font-weight: 600; flex-shrink: 0; }
 .footer-today-copy { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
 .footer-today-copy strong { font-weight: 400; }
+.footer-today-description { font-style: italic; }
 .footer-today[data-compact] { flex: 0 0 auto; }
 .footer-today[data-compact] .footer-today-description { display: none; }
 .footer-today[data-call] .footer-today-copy { display: none; }
