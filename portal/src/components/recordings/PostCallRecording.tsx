@@ -29,8 +29,13 @@ function Monitor({ actorId, tenant }: { actorId: string; tenant: string }) {
     // The native host may clear self/lobby on leave before its terminal phase.
     // The signed-session keyed boundary remains authoritative for this saved call.
     if ((host?.self?.userId && host.self.userId !== actorId) || (host?.tenant && host.tenant !== tenant)) { joined.current = null; setEnded(null); return; }
-    if (host?.self?.userId === actorId && host.tenant === tenant && ['live', 'reconnecting'].includes(phase) && callId && lobby && recordingHref(lobby)) joined.current = { callId, lobby, title: title ?? 'Huddle', bindingUnavailable: binding?.callId === callId && binding.status === 'unavailable' };
-    if (['ended', 'idle', 'failed'].includes(phase) && joined.current) { setEnded(joined.current); joined.current = null; }
+    if (host?.self?.userId === actorId && host.tenant === tenant && ['live', 'reconnecting'].includes(phase) && callId && lobby && recordingHref(lobby)) {
+      joined.current = { callId, lobby, title: title ?? 'Huddle', bindingUnavailable: binding?.callId === callId && binding.status === 'unavailable' };
+      setEnded(previous => previous?.callId === callId ? null : previous);
+    }
+    // Native media errors can report "failed" while the gateway still owns
+    // the active call. Wait for the call to clear before claiming it ended.
+    if (!callId && ['ended', 'idle', 'failed'].includes(phase) && joined.current) { setEnded(joined.current); joined.current = null; }
   }, [phase, callId, lobby, title, actorId, tenant, host?.self?.userId, host?.tenant, binding?.callId, binding?.status]);
   return ended ? <PostCallRecording key={`${ended.callId}:${ended.lobby}`} ended={ended} onDismiss={() => setEnded(null)} /> : null;
 }

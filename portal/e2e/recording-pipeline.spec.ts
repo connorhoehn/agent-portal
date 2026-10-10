@@ -1,7 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 test.use({ baseURL: 'http://127.0.0.1:5283', viewport: { width: 1280, height: 900 } });
 type Mode = 'awaiting' | 'transcribing' | 'summarizing' | 'partial' | 'ready' | 'unknown';
-interface FixtureState { actor: string; tenant: 'orgiq' | 'assessment'; exact: boolean; mode: Mode; denied?: boolean; holdTranscript?: Promise<void>; holdDetail?: Promise<void>; requests: string[]; media?: boolean }
+interface FixtureState { actor: string; tenant: 'orgiq' | 'assessment'; exact: boolean; mode: Mode; denied?: boolean; holdTranscript?: Promise<void>; holdDetail?: Promise<void>; holdSearch?: Promise<void>; searchDenied?: boolean; searchPartial?: boolean; requests: string[]; media?: boolean }
 const session = (state: FixtureState) => ({ sub: state.actor, name: 'Fixture Reviewer', tenant: state.tenant, role: 'member', grants: { [state.tenant]: ['member'] }, switchable: { [state.tenant]: ['member'] }, availableRoles: ['member'], availableTenants: [state.tenant], masquerading: null });
 function row(state: FixtureState, id = 'recording-exact') {
   const transcriptStatus = state.mode === 'awaiting' ? undefined : state.mode === 'transcribing' ? 'processing' : 'ready';
@@ -19,6 +19,13 @@ async function mount(page: Page, state: FixtureState, query = '') {
     const request = route.request(), url = new URL(request.url()), path = url.pathname; state.requests.push(`${request.method()} ${path}`);
     if (path === '/api/session/me') return route.fulfill({ json: session(state) });
     if (path === '/api/session/realtime-token') return route.fulfill({ json: { token: `inert-${state.actor}`, expiresAt: '2099-10-10T12:00:00Z', platformApiUrl: 'http://127.0.0.1:5283/fixture-platform' } });
+    if (path === '/api/assessment/recordings/search') {
+      const actor = state.actor, query = url.searchParams.get('q');
+      if (state.holdSearch) await state.holdSearch;
+      if (state.searchDenied) return route.fulfill({ status: 403, json: { error: 'Assessment team is not accessible' } });
+      if (url.searchParams.get('teamId') !== 'TEAM-005' || state.tenant !== 'assessment') return route.fulfill({ status: 400, json: { error: 'Wrong recording search scope' } });
+      return route.fulfill({ json: { query, results: [{ id: 'recording-exact', type: 'recording', title: 'Notifications review', description: `Saved summary for ${actor}: ${query}`, subtitle: 'Notifications Service', href: '/assessment/teams/TEAM-005?tab=documents&recording=recording-exact' }], total: 1, counts: { all: 1, recording: 1 }, ...(state.searchPartial ? { totalIsLowerBound: true, partial: ['recordings'] } : {}) } });
+    }
     if (path === '/api/initiative-decks') return route.fulfill({ json: [] });
     if (path === '/api/people/shared') return route.fulfill({ json: { me: { userId: state.actor, displayName: 'Fixture Reviewer' }, people: [] } });
     if (path === '/fixture-platform/api/recordings') return route.fulfill({ json: { items: [row(state, 'recording-neighbour'), ...(state.exact ? [row(state)] : [])], cursor: null } });
@@ -175,4 +182,54 @@ test('unconfirmed native binding is retained only in optional postcall details, 
   await expect(status).toContainText('The native call could not confirm its recording association.');
   await expect(status).toContainText('No other call has been substituted.');
   expect(errors).toEqual([]);
+});
+
+test('media failure and recovery do not announce that an active call ended', async ({ page }) => {
+  const data = state({ exact: true, mode: 'ready' });
+  const errors = await mount(page, data);
+  await page.getByRole('button', { name: 'Show joined fixture call' }).click();
+  await expect(page.getByTestId('fixture-phase')).toHaveText('live');
+  await page.getByRole('button', { name: 'Fail media while call remains active' }).click();
+  await expect(page.getByTestId('fixture-phase')).toHaveText('failed');
+  await expect(page.getByTestId('postcall-recording')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Reconnect active call' }).click();
+  await expect(page.getByTestId('fixture-phase')).toHaveText('reconnecting');
+  await expect(page.getByTestId('postcall-recording')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Show joined fixture call' }).click();
+  await expect(page.getByTestId('fixture-phase')).toHaveText('live');
+  await expect(page.getByTestId('postcall-recording')).toHaveCount(0);
+  await page.getByRole('button', { name: 'End and clear native host' }).click();
+  await expect(page.getByTestId('postcall-recording')).toContainText('Recording, transcript and summary ready');
+  expect(errors).toEqual([]);
+});
+
+test('Assessment searches saved recording content in team scope and opens the exact recording', async ({ page }) => {
+  const data = state({ tenant: 'assessment', exact: true, mode: 'ready', searchPartial: true });
+  const errors = await mount(page, data);
+  await page.getByRole('textbox', { name: 'Search recording content' }).fill('rollback window');
+  const results = page.getByTestId('recording-content-results');
+  await expect(results).toContainText('Saved summary for fixture-reader: rollback window');
+  await expect(results).toContainText('These results may be incomplete');
+  await results.getByText('Notifications review', { exact: true }).click();
+  await expect(page.getByTestId('fixture-route')).toHaveText('/assessment/teams/TEAM-005?tab=documents&recording=recording-exact');
+  await expect(page.getByTestId('recording-summary-attachment')).toContainText('Validate the rollback window');
+  expect(data.requests.some(value => value.includes('/api/search'))).toBe(false);
+  expect(errors).toEqual([]);
+});
+
+test('Assessment recording search drops an in-flight response when the signed-in actor changes', async ({ page }) => {
+  let release!: () => void;
+  const data = state({ tenant: 'assessment', exact: true, mode: 'ready', holdSearch: new Promise<void>(resolve => { release = resolve; }) });
+  await mount(page, data);
+  await page.getByRole('textbox', { name: 'Search recording content' }).fill('private phrase');
+  await expect.poll(() => data.requests.some(value => value.includes('/api/assessment/recordings/search'))).toBe(true);
+  data.actor = 'replacement-reader'; data.holdSearch = undefined; data.searchDenied = true;
+  await page.getByRole('button', { name: 'Refresh fixture identity' }).click();
+  await expect(page.getByTestId('fixture-actor')).toHaveText('replacement-reader');
+  release();
+  await expect(page.getByRole('textbox', { name: 'Search recording content' })).toHaveValue('');
+  await expect(page.getByTestId('recording-content-results')).toHaveCount(0);
+  await page.getByRole('textbox', { name: 'Search recording content' }).fill('private phrase');
+  await expect(page.getByTestId('recording-content-search')).toContainText('Recording content could not be searched');
+  await expect(page.getByTestId('recording-content-search')).not.toContainText('Saved summary for fixture-reader');
 });

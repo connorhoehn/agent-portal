@@ -3,9 +3,11 @@ import { useSearchParams } from 'react-router';
 import { RecordingActivityCard } from '@connorhoehnslalom/ui-components/social';
 import { Button, Inline, InlineAlert, LoadingState, Stack, T } from '@connorhoehnslalom/ui-components/shared';
 import { useSession } from '../../lib/auth';
+import { FileRefreshAction } from '../files/FileToolbar';
 import { createInitiativeRecordingsClient, readInitiativeRecordings, type RecordingPage } from '../../pages/projects/initiativeRecordingApi';
 import { recordingIsProcessing, recordingProcessingLabel, recordingStage } from './recordingState';
 import { RecordingDetail } from './RecordingDetail';
+import { RecordingContentSearch } from './RecordingContentSearch';
 import { useRecordingRead } from './useRecordingRead';
 
 import { RECORDING_CHANGED_EVENT } from './recordingEvents';
@@ -20,6 +22,7 @@ function RecordingShelf({ lobby, subjectName, preview = false, onOpen }: { lobby
   const client = useMemo(() => createInitiativeRecordingsClient({ scopeLabel: 'page' }), []);
   const [params] = useSearchParams();
   const selectedId = preview ? null : params.get('recording');
+  const [searchActive, setSearchActive] = useState(false);
   const read = useRecordingRead(selectedId ? null : lobby, signal => readInitiativeRecordings(client, lobby, signal), page => page.items.some(recordingIsProcessing) ? 5000 : null);
   const [older, setOlder] = useState<RecordingPage | null>(null), [olderBusy, setOlderBusy] = useState(false), [olderError, setOlderError] = useState<string | null>(null);
   const olderRequest = useRef<AbortController | null>(null);
@@ -44,9 +47,11 @@ function RecordingShelf({ lobby, subjectName, preview = false, onOpen }: { lobby
     <Inline gap="sm" align="center" justify="between" wrap><T size="sm" weight="semibold">Recorded huddles</T>
       <Inline gap="sm">{preview ? <Button variant="link" size="sm" className="text-xs" onClick={() => onOpen(null)}>All recordings</Button>
         : selectedId ? <Button variant="link" size="sm" className="text-xs" onClick={() => onOpen(null)}>Back to docs & recordings</Button>
-        : <Button variant="link" size="sm" className="text-xs" disabled={read.loading} onClick={refresh}>Refresh</Button>}</Inline>
+        : <FileRefreshAction label="Refresh recorded huddles" refreshing={read.loading} onRefresh={refresh} />}</Inline>
     </Inline>
+    {!preview && !selectedId && <RecordingContentSearch lobby={lobby} onActive={setSearchActive} />}
     {selectedId ? <RecordingDetail key={selectedId} id={selectedId} lobby={lobby} subjectName={subjectName} client={client} />
+      : searchActive ? null
       : read.error ? <InlineAlert tone="warning">{read.error}</InlineAlert>
       : read.timedOut && !read.value ? <InlineAlert tone="info">Recordings could not be checked yet. Refresh to try again.</InlineAlert>
       : read.loading ? <LoadingState label="Loading recorded huddles…" />
@@ -58,8 +63,8 @@ function RecordingShelf({ lobby, subjectName, preview = false, onOpen }: { lobby
           onOpen={onOpen} onOpenTranscript={onOpen} className="max-w-none [&_button[data-testid$=-thumb]]:w-32" />
         <Inline gap="sm" align="center" justify="between" wrap><T size="xs" tone="secondary" role="status">{recordingProcessingLabel(row)}</T><Button variant="link" size="sm" className="text-xs" onClick={() => onOpen(row.recordingId)}>View recording details</Button></Inline>
       </Stack>)}</Stack>}
-    {read.timedOut && <InlineAlert tone="info">Processing is taking longer than expected. Refresh to check again.</InlineAlert>}
-    {olderError && <InlineAlert tone="warning">{olderError}</InlineAlert>}
-    {!selectedId && !preview && cursor && <Button variant="link" size="sm" className="text-xs" disabled={olderBusy} onClick={() => void loadOlder()}>Load older recordings</Button>}
+    {!searchActive && read.timedOut && <InlineAlert tone="info">Processing is taking longer than expected. Refresh to check again.</InlineAlert>}
+    {!searchActive && olderError && <InlineAlert tone="warning">{olderError}</InlineAlert>}
+    {!searchActive && !selectedId && !preview && cursor && <Button variant="link" size="sm" className="text-xs" disabled={olderBusy} onClick={() => void loadOlder()}>Load older recordings</Button>}
   </Stack>;
 }

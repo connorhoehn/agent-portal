@@ -70,6 +70,20 @@ function publicRecord(record: RecordingSearchRecord, tokens: string[] = []): Sea
   const start = Math.max(0, firstHit - 160);
   return { ...visible, description: `${start ? '…' : ''}${searchText.slice(start, start + 1200)}${start + 1200 < searchText.length ? '…' : ''}` };
 }
+/** Search only an already-authorized bounded recording projection. Assessment
+ * uses its own ViewAssessment gate; this performs no Work-domain reads. */
+export function recordingSearchResponse(projection: { records: RecordingSearchRecord[]; partial: string[] }, opts: SearchOptions): SearchResponse {
+  const tokens = terms(opts.q ?? '');
+  const scores = new Map(projection.records.map(record => [record.id, score(record, tokens)]));
+  const relevance = (a: SearchRecord, b: SearchRecord) => (scores.get(b.id) ?? 0) - (scores.get(a.id) ?? 0) || a.title.localeCompare(b.title) || a.id.localeCompare(b.id);
+  const recent = (a: SearchRecord, b: SearchRecord) => (a.updatedAt && b.updatedAt ? b.updatedAt.localeCompare(a.updatedAt) : a.updatedAt ? -1 : b.updatedAt ? 1 : 0) || relevance(a, b);
+  const matches = projection.records.filter(record => (scores.get(record.id) ?? 0) > 0).sort(opts.sort === 'recent' ? recent : relevance);
+  const counts = Object.fromEntries([...SEARCH_TYPES, 'all'].map(type => [type, type === 'recording' || type === 'all' ? matches.length : 0])) as SearchResponse['counts'];
+  return { query: opts.q ?? '', results: matches.slice(opts.offset ?? 0, (opts.offset ?? 0) + (opts.limit ?? 50)).map(record => {
+    const reason = textReason(record, tokens);
+    return { ...publicRecord(record, tokens), ...(reason ? { matchReason: reason } : {}), ...(tokens.length ? { highlights: tokens.filter(token => textOf(record).includes(token)) } : {}) };
+  }), total: matches.length, counts, totalIsLowerBound: projection.partial.length > 0, related: [], edges: [], ...(projection.partial.length ? { partial: projection.partial } : {}) };
+}
 /** The text half of score(): which part of the record the query hit. */
 function textReason(record: SearchRecord, tokens: string[]): MatchReason | undefined {
   if (!tokens.length) return undefined;

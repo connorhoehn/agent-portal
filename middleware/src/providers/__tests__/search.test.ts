@@ -15,7 +15,7 @@ import { listDesignReviews, getDesignThread } from '../design-reviews.js';
 import { listDecisions } from '../decisions.js';
 import { listItems } from '../distillation.js';
 import { listAssets } from '../prompt-library.js';
-import { searchRecords, resolveSearchRecords, resolveSearchContext } from '../search.js';
+import { searchRecords, resolveSearchRecords, resolveSearchContext, recordingSearchResponse } from '../search.js';
 import { listRecordingSearchRecords, resolveRecordingSearchRecord } from '../recording-search.js';
 const principal = { sub: 'member', role: 'member', tenant: 'orgiq' };
 const mock = (fn: unknown) => fn as jest.Mock;
@@ -50,6 +50,16 @@ test('native recording text is searchable and scoped, but only an excerpt leaves
   expect(JSON.stringify(result)).not.toContain('searchText');
   expect((await searchRecords(principal)).results.some(r => 'searchText' in r)).toBe(false);
   expect(result.edges).toContainEqual(expect.objectContaining({ source: 'initiative:auth', target: 'recording:rec-native' }));
+});
+test('recording-only projection searches full artifacts with bounded public snippets and honest lower-bound counts', () => {
+  const projection = { records: [{ type: 'recording' as const, id: 'team-rec', title: 'Notifications Service huddle', href: '/assessment/teams/TEAM-005?tab=documents&recording=team-rec', searchText: `${'quiet '.repeat(400)}The exact notification receipt is durable`, updatedAt: '2026-10-10T10:00:00Z' }], partial: ['Recordings source window is limited'] };
+  const response = recordingSearchResponse(projection, { q: 'notification receipt', limit: 10, offset: 0 });
+  expect(response.results[0]?.description).toContain('notification receipt');
+  expect(response.results[0]?.description?.length).toBeLessThanOrEqual(1202);
+  expect(response.counts).toMatchObject({ all: 1, recording: 1, initiative: 0, person: 0 });
+  expect(response.totalIsLowerBound).toBe(true); expect(response.edges).toEqual([]);
+  expect(JSON.stringify(response)).not.toContain('searchText');
+  expect(recordingSearchResponse(projection, { q: 'unrelated' }).results).toEqual([]);
 });
 test('recording read failures disclose a partial source and selected context is re-resolved', async () => {
   mock(listRecordingSearchRecords).mockRejectedValue(new Error('native unavailable'));

@@ -2,10 +2,12 @@ jest.mock('../../lib/live-principal.js', () => ({ currentLiveSession: jest.fn(as
 jest.mock('../../lib/gateway/authority.js', () => ({ admitLobbyRead: jest.fn(async () => 'ok') }));
 jest.mock('../../lib/realtime-token.js', () => ({ realtimeSigningSecret: jest.fn(() => 'synthetic-key'), realtimeClaims: jest.fn(s => ({ sub: s.sub, org: s.tenant, epoch: s.epoch, act: s.act })), signRealtimeToken: jest.fn(async claims => ({ token: `synthetic-${claims.sub}` })) }));
 jest.mock('../projects.js', () => ({ getProject: jest.fn(async () => ({ id: 'p-observability', name: 'Observability Platform' })) }));
+jest.mock('../assessment.js', () => ({ getTeamDetail: jest.fn(async (id: string) => ({ team: { id, name: 'Notifications Service' } })) }));
 import { AppError } from '../../lib/async-handler.js';
 import { currentLiveSession } from '../../lib/live-principal.js';
 import { admitLobbyRead } from '../../lib/gateway/authority.js';
 import { realtimeClaims } from '../../lib/realtime-token.js';
+import { getTeamDetail } from '../assessment.js';
 import { listRecordingSearchRecords, resolveRecordingSearchRecord } from '../recording-search.js';
 const session = { sub: 'u-nora', name: 'Nora', tenant: 'orgiq', role: 'member', iat: 123, epoch: 4, grants: { orgiq: ['member'] } };
 const row = { recordingId: 'rec-1', lobbyName: 'orgiq:initiative:p-observability', startedAt: '2026-10-10T10:00:00Z', endedAt: '2026-10-10T10:01:00Z', transcriptStatus: 'ready', summaryStatus: 'ready', summaryRunId: 'run-1', stage: 'ready' };
@@ -35,6 +37,50 @@ test('reads participant-owned native artifacts with current identity and canonic
   expect(fetcher.mock.calls.every(([, opts]) => opts.method === 'GET' && opts.headers.Authorization === 'Bearer synthetic-u-nora')).toBe(true);
   expect(admitLobbyRead).toHaveBeenCalledTimes(2);
   expect(realtimeClaims).toHaveBeenCalledWith(session);
+});
+const assessment = { ...session, tenant: 'assessment', role: 'assessor', grants: { assessment: ['assessor'] } };
+const teamRow = { ...row, recordingId: 'team-rec', lobbyName: 'assessment:team:TEAM-005' };
+function useTeamRecording(rows = [teamRow]) {
+  fetcher.mockImplementation(async (url: string) => {
+    if (url.includes('?limit=')) return response({ items: rows, cursor: null });
+    if (url.endsWith('/transcript')) return response({ segments: [{ text: 'notification pipeline needs a durable receipt', speakerLabel: 'Assessor', startMs: 0, endMs: 1 }] });
+    if (url.endsWith('/summary')) return response('# Follow-up\nPreserve the durable receipt.', 200, { 'X-Summary-Status': 'ready' });
+    return response(teamRow);
+  });
+}
+test('Assessment explicitly projects only its participant-owned team artifacts and canonical team destination', async () => {
+  useTeamRecording([teamRow, { ...row, recordingId: 'work-rec' }, { ...teamRow, recordingId: 'doc-rec', lobbyName: 'assessment:doc:page:100002' }]);
+  const result = await listRecordingSearchRecords(assessment, 'TEAM-005', 'assessment');
+  expect(result.records).toHaveLength(1);
+  expect(result.records[0]).toMatchObject({ id: 'team-rec', title: 'Notifications Service huddle · 2026-10-10', href: '/assessment/teams/TEAM-005?tab=documents&recording=team-rec' });
+  expect(result.records[0]?.sourceRefs).toBeUndefined();
+  expect(result.records[0]?.searchText).toContain('durable receipt');
+  expect(fetcher.mock.calls.every(([, opts]) => opts.headers.Authorization === 'Bearer synthetic-u-nora')).toBe(true);
+  expect(fetcher.mock.calls.some(([url]) => /\/(work-rec|doc-rec)(\/|$)/.test(url))).toBe(false);
+  await expect(listRecordingSearchRecords(assessment)).rejects.toMatchObject({ status: 503 });
+});
+test('Assessment context resolves exact ID only after native participant and team authority, scoped team cannot be swapped', async () => {
+  useTeamRecording();
+  expect(await resolveRecordingSearchRecord(assessment, 'team-rec', 'TEAM-005', 'assessment')).toMatchObject({ type: 'recording', id: 'team-rec' });
+  expect(await resolveRecordingSearchRecord(assessment, 'team-rec', 'TEAM-006', 'assessment')).toBeNull();
+  const count = fetcher.mock.calls.length;
+  await expect(resolveRecordingSearchRecord(session, 'team-rec', 'TEAM-005', 'assessment')).rejects.toMatchObject({ status: 503 });
+  expect(fetcher).toHaveBeenCalledTimes(count);
+});
+test('Assessment denied/deleted team or revoked native participation exposes neither title nor artifact text', async () => {
+  useTeamRecording(); mock(admitLobbyRead).mockResolvedValue('denied');
+  expect((await listRecordingSearchRecords(assessment, undefined, 'assessment')).records).toEqual([]);
+  expect(fetcher.mock.calls.some(([url]) => url.endsWith('/transcript'))).toBe(false);
+  mock(admitLobbyRead).mockResolvedValue('ok'); mock(getTeamDetail).mockResolvedValueOnce(null);
+  expect((await listRecordingSearchRecords(assessment, undefined, 'assessment')).records).toEqual([]);
+  useTeamRecording(); const original = fetcher.getMockImplementation()!; let details = 0;
+  fetcher.mockImplementation(async (url, opts) => url.endsWith('/team-rec') && ++details === 2 ? response({}, 404) : original(url, opts));
+  expect((await listRecordingSearchRecords(assessment, undefined, 'assessment')).records).toEqual([]);
+});
+test('Assessment identity revoked during native reads rejects the whole projection', async () => {
+  useTeamRecording();
+  mock(currentLiveSession).mockResolvedValueOnce(assessment).mockRejectedValue(new AppError(401, 'Session revoked'));
+  await expect(listRecordingSearchRecords(assessment, undefined, 'assessment')).rejects.toMatchObject({ status: 401 });
 });
 test('host denial prevents any transcript, summary, result or project title read', async () => {
   mock(admitLobbyRead).mockResolvedValue('denied');

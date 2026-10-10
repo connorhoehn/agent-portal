@@ -987,3 +987,9 @@ tbody tr:focus-within .row-reveal,
   .document-sidebar [data-testid$="-menu"] { display: flex; }
 }
 [data-testid="knowledge-workspace"][data-rail-collapsed="true"] [data-testid="knowledge-explorer-divider"] { display: none; }
+
+/* Search notices follow the mode and context, including the native idle row. */
+.search-composer-advisories [data-idle-row] > [data-testid$="-mode-pill"] { order: -3; }
+.search-composer-advisories [data-idle-row] > [data-testid$="-references"] { order: -2; }
+.search-composer-advisories [data-idle-row] > [data-testid$="-mode-row-start"] { order: -1; }
+.search-composer-advisories [data-testid$="-modes"] > [data-testid$="-mode-row-start"] { order: 1; }

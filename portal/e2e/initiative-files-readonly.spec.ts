@@ -17,10 +17,10 @@ test('project files show the saved presentation with bounded cards and a unified
   const cards = await files.getByTestId('initiative-file').evaluateAll(elements => elements.map(e => ({ width: e.getBoundingClientRect().width, height: e.getBoundingClientRect().height })));
   expect(cards.length).toBeGreaterThan(0); expect(cards.every(card => card.width <= 322 && card.height <= 150)).toBe(true);
   await page.screenshot({ path: test.info().outputPath('files-cards-wide.png') });
-  await files.getByRole('button', { name: 'List', exact: true }).click(); await expect(files.getByTestId('initiative-files-list')).toBeVisible();
+  await files.getByRole('radio', { name: 'List', exact: true }).click(); await expect(files.getByTestId('initiative-files-list')).toBeVisible();
   await files.getByLabel('File type').selectOption('presentation'); await expect(files.getByTestId('initiative-file')).toHaveCount(1);
   await files.getByLabel('Search project files').fill('no matching fixture text'); await expect(files.getByText('No matching files', { exact: true })).toBeVisible();
-  await files.getByLabel('Search project files').fill(''); await files.getByRole('button', { name: 'Cards', exact: true }).click();
+  await files.getByLabel('Search project files').fill(''); await files.getByRole('radio', { name: 'Cards', exact: true }).click();
   await page.setViewportSize({ width: 1024, height: 768 }); await expect(saved).toBeVisible();
   const bounds = await files.evaluate(e => ({ width: e.clientWidth, scrollWidth: e.scrollWidth })); expect(bounds.scrollWidth).toBeLessThanOrEqual(bounds.width + 1);
   await page.screenshot({ path: test.info().outputPath('files-cards-narrow.png') });

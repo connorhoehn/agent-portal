@@ -3,7 +3,7 @@
 import { useSyncExternalStore } from 'react';
 import { createCallBlockHost, type CallBlockCall, type CallBlockModules } from '@connorhoehnslalom/ui-components/integrations/realtime';
 import { conversationCallDockProps } from '@connorhoehnslalom/realtime-modules/client/video';
-let phase: 'idle' | 'live' = 'idle';
+let phase: 'idle' | 'live' | 'failed' | 'reconnecting' = 'idle';
 const listeners = new Set<() => void>();
 const prohibited = () => { throw new Error('Inert recording fixture forbids actions.'); };
 export const fixtureLifecycle = { setPhase(next: typeof phase) { phase = next; for (const listener of listeners) listener(); } };
@@ -12,7 +12,7 @@ const calls = createCallBlockHost({
   LVSProvider: ({ children }: { children?: import('react').ReactNode }) => <>{children}</>,
   useConversationCall: () => {
     const current = useSyncExternalStore(listener => { listeners.add(listener); return () => { listeners.delete(listener); }; }, () => phase);
-    return { phase: current, recordingBinding: location.search.includes('binding=unavailable') ? { status: 'unavailable', callId: 'call-exact' } : undefined, call: current === 'live' ? { callId: 'call-exact', host: 'fixture-reader', startedAt: 1, participantCount: 1, participants: [] } : null,
+    return { phase: current, recordingBinding: location.search.includes('binding=unavailable') ? { status: 'unavailable', callId: 'call-exact' } : undefined, call: current !== 'idle' ? { callId: 'call-exact', host: 'fixture-reader', startedAt: 1, participantCount: 1, participants: [] } : null,
       error: null, callingTo: null, elapsedMs: 0, activeSpeakerId: null, self: { audioOn: false, cameraOn: false, screenSharing: false },
       devices: { prefs: {}, set: prohibited, list: { microphones: [], cameras: [], speakers: [], permission: { microphone: 'unavailable', camera: 'unavailable' } } },
       start: async () => prohibited(), accept: async () => prohibited(), rejoin: async () => prohibited(), leave: async () => {}, toggleMic: prohibited, toggleCamera: prohibited, toggleScreenShare: prohibited,

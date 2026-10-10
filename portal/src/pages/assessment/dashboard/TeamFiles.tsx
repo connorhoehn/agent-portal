@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
-import { Banner, Button, Inline, LoadingState, Stack, T } from '@connorhoehnslalom/ui-components/shared';
+import { Banner, Button, LoadingState, Stack, T } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../../hooks/useFetch';
 import { deckPaths, type DeckSummary } from '../decks/decksApi';
 import { DocumentLibrary } from '../knowledge/DocumentLibrary';
@@ -27,8 +27,9 @@ export function TeamFiles({ teamId, teamName }: { teamId: string; teamName: stri
   }} />;
   if (Boolean(params.get('recording'))) return <Stack gap="sm" className="min-h-0 overflow-y-auto p-4">{recordings}</Stack>;
   return <Stack gap="md" className="min-h-0 overflow-y-auto"><DocumentLibrary sections={sections} files={files} title="Documents & files"
-    description={<Inline gap="sm" align="center" wrap><T size="sm" tone="secondary">Presentations for {teamName} and shared Workspace documents.</T>
-      <Button variant="link" size="sm" onClick={() => void navigate('/assessment/workspace?view=library')}>Browse Workspace</Button></Inline>}
+    description={<T size="sm" tone="secondary">Presentations for {teamName} and shared Workspace documents.</T>}
+    onRefresh={() => { decks.refresh(); tree.refresh(); }} refreshing={decks.isLoading || tree.isLoading}
+    onOpenWorkspace={() => void navigate('/assessment/workspace?view=library')}
     notices={notices} documentHref={workspaceDocumentHref} onSelect={id => void navigate(workspaceDocumentHref(id))} />
     <Stack gap="none" className="px-4 pb-4">{recordings}</Stack></Stack>;
 }

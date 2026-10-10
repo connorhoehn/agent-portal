@@ -32,6 +32,7 @@ import { assessmentDocumentHref, notificationSinkActive, notifyDocumentComment }
 import { runReadHandlers } from './pipelines.js';
 import { assessmentDecksRouter } from './assessment-decks.js';
 import { assessmentDraftsRouter } from './assessment-drafts.js';
+import { assessmentRecordingSearchRouter } from './assessment-recording-search.js';
 import type { Cohort, MotionConfig, ScoringLogEntry } from '../mock/assessment.js';
 
 export const assessmentRouter: Router = Router();
@@ -58,6 +59,7 @@ assessmentRouter.use((req, res, next) => {
 });
 
 const viewGate = requireAction('ViewAssessment');
+assessmentRouter.use('/recordings', assessmentRecordingSearchRouter);
 const scoreGate = requireAction('ScoreAssessment');
 const approveGate = requireAction('ApproveException');
 const configGate = requireAction('ManageAssessmentConfig');
