@@ -368,6 +368,7 @@ function SearchWorkspace({ api }: {api: SearchConversationAPI}) {
   // conversation's thread is in the right pane (the user, 2026-10-07: the pane keeps the dialogue only).
   const composer=<Stack ref={composerRef} gap="none" className="shrink-0 min-w-0" data-testid="search-composer-dock">
     <SearchComposer calls={!paneHosted} value={api.input} onChange={api.setInput} onSubmit={submit} disabled={busy||api.isStreaming}
+      advisories={api.historyUnavailable ? [{ id: 'session-history', title: 'Session history unavailable', description: 'Memory is not configured. This conversation will not be saved after you leave.' }] : []}
       agents={api.agents.filter(agent=>!/(^|[-_])assessment[-_]/i.test(agent.id))}
       references={[...scopeReference,...references]}
       onRemoveReference={key=>key===scopeKey&&!attached.some(r=>recordKey(r)===key)?update({scope:null,offset:null}):update({context:attached.filter(r=>recordKey(r)!==key).map(recordKey).join(',')||null})}
@@ -377,7 +378,6 @@ function SearchWorkspace({ api }: {api: SearchConversationAPI}) {
       onAddReference={record=>update({context:[...new Set([...attached.map(recordKey),recordKey(record)])].join(',')})}
       workflows={workflows} onWorkflow={row=>{if(!row.disabled){api.setInput(row.prompt);focusComposer();}}}
     />
-    {!paneHosted&&api.historyUnavailable&&<T className="px-5 pb-3 pt-1 text-xs text-text-tertiary">Session history is unavailable until memory is configured.</T>}
   </Stack>;
 
   // ── The right pane (pane 4): the conversation and the record tab ─────────────
@@ -399,7 +399,7 @@ function SearchWorkspace({ api }: {api: SearchConversationAPI}) {
           {hasTurns
             ? <AnswerGraphContext.Provider value={paneGraph}>{api.transcript}</AnswerGraphContext.Provider>
             : <EmptyState title={paneSubject?`Ask about ${paneSubject}`:'Ask the Work Assistant'}
-                description={api.historyUnavailable?'Replies appear here. Session history is unavailable until memory is configured, so this conversation is not kept after you leave.':'Replies appear here, beside the graph.'} />}
+                description="Replies appear here, beside the graph." />}
         </Stack>}
   </SidePane>;
 

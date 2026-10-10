@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { Button, DocumentIcon, Inline, InlineAlert, LoadingState, SearchInput, Select, Stack, T } from '@connorhoehnslalom/ui-components/shared';
-import { FileCards, FileViewToggle, type FileView } from '../../components/files/FileCards';
+import { FileCards, type FileView } from '../../components/files/FileCards';
+import { FileToolbar } from '../../components/files/FileToolbar';
 import { useSession } from '../../lib/auth';
 import { documentRecordHref, readWorkDocuments } from '../../lib/workDocuments';
 import { absoluteTime, durationLabel } from '../../lib/relativeTime';
@@ -71,14 +72,12 @@ function Files({ projectId, projectName, itemIds, workspaceHref, onOpenRecording
     finally { if (!abort.signal.aborted) setOlderBusy(false); }
   }
   return <Stack gap="md" data-testid="initiative-files">
-    <Inline gap="sm" align="center" justify="between" wrap className="border-b border-border pb-3" data-testid="initiative-files-toolbar">
-      <Inline gap="sm" wrap><SearchInput size="sm" value={query} onChange={setQuery} onClear={() => setQuery('')} placeholder="Search project files" aria-label="Search project files" className="w-56" />
-        <Select size="sm" className="!w-36" aria-label="File type" value={kind} onChange={event => setKind(event.target.value)} options={[{ value: 'all', label: 'All files' }, { value: 'document', label: 'Documents' }, { value: 'presentation', label: 'Presentations' }, { value: 'recording', label: 'Recordings' }]} />
-      </Inline>
-      <Inline gap="xs" wrap><FileViewToggle value={view} onChange={setView} />
-        <Button size="sm" variant="ghost" disabled={read.pending} onClick={() => { setOlderBusy(false); setRefresh(n => n + 1); }}>Refresh</Button>
-        <Button size="sm" variant="secondary" onClick={() => navigate(workspaceHref)}>Open workspace</Button></Inline>
-    </Inline>
+    <FileToolbar view={view} onViewChange={setView} refreshing={read.pending}
+      onRefresh={() => { setOlderBusy(false); setRefresh(n => n + 1); }} onOpenWorkspace={() => navigate(workspaceHref)}
+      label="Project file controls" testId="initiative-files-toolbar">
+      <SearchInput size="sm" value={query} onChange={setQuery} onClear={() => setQuery('')} placeholder="Search project files" aria-label="Search project files" className="min-w-0 flex-1" />
+      <Select size="sm" className="!w-36" aria-label="File type" value={kind} onChange={event => setKind(event.target.value)} options={[{ value: 'all', label: 'All files' }, { value: 'document', label: 'Documents' }, { value: 'presentation', label: 'Presentations' }, { value: 'recording', label: 'Recordings' }]} />
+    </FileToolbar>
     {read.failures.length > 0 && <InlineAlert tone="warning">{read.failures.join(', ')} could not be read. Other available files are shown. Use Refresh to retry.</InlineAlert>}
     {read.pending ? <LoadingState label="Loading project files…" /> : <>
       <T size="xs" tone="secondary">{shown.length} {shown.length === 1 ? 'file' : 'files'}{query || kind !== 'all' ? ' matching this view' : ' in this initiative'}</T>

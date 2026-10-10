@@ -30,7 +30,8 @@ import {
   type DocumentResultItem,
   type DropdownMenuSection,
 } from '@connorhoehnslalom/ui-components/shared';
-import { FileCards, FileViewToggle, type FileView } from '../../../components/files/FileCards';
+import { FileCards, type FileView } from '../../../components/files/FileCards';
+import { FileToolbar } from '../../../components/files/FileToolbar';
 import { libraryRows, type LibraryFile } from './documentLibraryModel';
 import type { KnowledgeSection } from './types';
 
@@ -56,9 +57,12 @@ export interface DocumentLibraryProps {
   onDismissUploadError?: () => void;
   /** Where New and Upload put a draft — "Workspace drafts". */
   draftSectionTitle?: string;
+  onRefresh?: () => void;
+  refreshing?: boolean;
+  onOpenWorkspace?: () => void;
 }
 
-export function DocumentLibrary({ sections, files = [], title = 'All documents', description, notices, initialType, documentHref, onOpenFile, onSelect, onNewPage, onUpload, uploading, uploadError, onDismissUploadError, draftSectionTitle }: DocumentLibraryProps) {
+export function DocumentLibrary({ sections, files = [], title = 'All documents', description, notices, initialType, documentHref, onOpenFile, onSelect, onNewPage, onUpload, uploading, uploadError, onDismissUploadError, draftSectionTitle, onRefresh, refreshing, onOpenWorkspace }: DocumentLibraryProps) {
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
   const [view, setView] = useState<FileView>('list');
@@ -117,10 +121,11 @@ export function DocumentLibrary({ sections, files = [], title = 'All documents',
       {description}
       {notices}
       {uploadError && <Banner variant="error" onDismiss={onDismissUploadError} data-testid="document-upload-error">{uploadError}</Banner>}
-      <Inline gap="sm" align="center" wrap data-testid="document-list-controls">
-        <SearchInput size="md" value={query} onChange={setQuery} onClear={() => setQuery('')} placeholder="Search documents and files"
+      <FileToolbar view={view} onViewChange={setView} onRefresh={onRefresh} refreshing={refreshing} onOpenWorkspace={onOpenWorkspace}
+        label="Document file controls" testId="document-list-controls">
+        <SearchInput size="sm" value={query} onChange={setQuery} onClear={() => setQuery('')} placeholder="Search documents and files"
           aria-label="Search documents" className="min-w-0 flex-1" data-testid="document-search-input" />
-        <FilterPopover trigger="icon" size="md" icon={<SlidersIcon />} label="Filter documents" activeCount={activeFilters}
+        <FilterPopover trigger="icon" size="sm" icon={<SlidersIcon />} label="Filter documents" activeCount={activeFilters}
           onClear={clearFilters} placement="bottom-end" data-testid="document-filters">
           <Stack gap="md">
             <Stack gap="xs">
@@ -139,8 +144,7 @@ export function DocumentLibrary({ sections, files = [], title = 'All documents',
             </Stack>
           </Stack>
         </FilterPopover>
-        <FileViewToggle value={view} onChange={setView} />
-      </Inline>
+      </FileToolbar>
       <Inline gap="xs" align="center" className="text-sm text-text-secondary" data-testid="document-list-count">
         <T aria-live="polite" data-testid="document-result-count">{`${visible.length} result${visible.length === 1 ? '' : 's'}`}</T>
         <T aria-hidden="true">·</T>

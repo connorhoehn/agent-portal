@@ -37,7 +37,7 @@ test('native Assessment files reads, document breadcrumb and legacy deck routes 
   await expect(page.getByText(/and shared Workspace documents\./)).toBeVisible();
   for (const deck of teamDecks) await expect(page.getByTestId('document-result-list')).toContainText(deck.title);
   await page.screenshot({ path: test.info().outputPath('native-team-files.png') });
-  await page.getByRole('group', { name: 'File view' }).getByRole('button', { name: 'Cards', exact: true }).click();
+  await page.getByRole('radiogroup', { name: 'File view' }).getByRole('radio', { name: 'Cards', exact: true }).click();
   const cards = page.getByTestId('document-result-cards');
   await expect(cards).toContainText('Rubric Overview');
   const dimensions = await page.getByTestId('document-file-card').evaluateAll(nodes => nodes.map(node => ({ width: node.getBoundingClientRect().width, height: node.getBoundingClientRect().height })));

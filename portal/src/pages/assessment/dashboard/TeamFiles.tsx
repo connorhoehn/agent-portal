@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router';
-import { Banner, Button, Inline, LoadingState, T } from '@connorhoehnslalom/ui-components/shared';
+import { Banner, Button, LoadingState, T } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../../hooks/useFetch';
 import { deckPaths, type DeckSummary } from '../decks/decksApi';
 import { DocumentLibrary } from '../knowledge/DocumentLibrary';
@@ -21,7 +21,8 @@ export function TeamFiles({ teamId, teamName }: { teamId: string; teamName: stri
     {tree.error && <Banner variant="error">Workspace documents are unavailable: {tree.error} <Button size="sm" variant="link" onClick={tree.refresh}>Retry documents</Button></Banner>}
   </>;
   return <DocumentLibrary sections={sections} files={files} title="Documents & files"
-    description={<Inline gap="sm" align="center" wrap><T size="sm" tone="secondary">Presentations for {teamName} and shared Workspace documents.</T>
-      <Button variant="link" size="sm" onClick={() => void navigate('/assessment/workspace?view=library')}>Browse Workspace</Button></Inline>}
+    description={<T size="sm" tone="secondary">Presentations for {teamName} and shared Workspace documents.</T>}
+    onRefresh={() => { decks.refresh(); tree.refresh(); }} refreshing={decks.isLoading || tree.isLoading}
+    onOpenWorkspace={() => void navigate('/assessment/workspace?view=library')}
     notices={notices} documentHref={workspaceDocumentHref} onSelect={id => void navigate(workspaceDocumentHref(id))} />;
 }

@@ -1,15 +1,13 @@
 import type { ReactNode } from 'react';
-import { Button, DocumentIcon, Inline, Stack, T } from '@connorhoehnslalom/ui-components/shared';
+import { Button, DocumentIcon, Inline, ListIcon, SegmentedControl, SplitViewIcon, Stack, T } from '@connorhoehnslalom/ui-components/shared';
 
 export type FileView = 'cards' | 'list';
 
 /** Presentation only: each tenant retains its own readers, filters and destinations. */
 export function FileViewToggle({ value, onChange }: { value: FileView; onChange(view: FileView): void }) {
-  return <Inline gap="xs" role="group" aria-label="File view">
-    {(['cards', 'list'] as const).map(view => <Button key={view} size="sm"
-      variant={value === view ? 'secondary' : 'ghost'} aria-pressed={value === view}
-      onClick={() => onChange(view)}>{view === 'cards' ? 'Cards' : 'List'}</Button>)}
-  </Inline>;
+  return <SegmentedControl size="sm" tone="accent" iconOnly aria-label="File view"
+    value={value} onChange={next => onChange(next as FileView)}
+    options={[{ value: 'cards', label: 'Cards', icon: <SplitViewIcon /> }, { value: 'list', label: 'List', icon: <ListIcon /> }]} />;
 }
 
 export interface FileCardItem {

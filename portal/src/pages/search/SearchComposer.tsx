@@ -28,6 +28,7 @@ import { usePeopleMessage } from './peopleMessage';
 import { peopleFromRecordKeys, searchCallChannel } from '../../lib/conversationCallModel';
 import { useHuddleComposerRecipient } from '../../components/shell/HuddleComposerDock';
 import { useCallBlock, useCallHost } from '../../lib/conversationCall';
+import { ComposerAdvisories, type ComposerAdvisory } from '../../components/chat/ComposerAdvisories';
 
 export interface SearchComposerProps {
   value: string;
@@ -49,6 +50,7 @@ export interface SearchComposerProps {
   /** Draw the Start call / Message row (default). The shell's right pane
    *  passes false: the footer owns calls there (decision 9 amendment). */
   calls?: boolean;
+  advisories?: readonly ComposerAdvisory[];
 }
 function draftOf(text: string): RichChatDraft {
   const escaped = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -77,7 +79,7 @@ function markdownOf(html: string): string {
   }
   return Array.from(body.childNodes).map(render).join('').trim();
 }
-export function SearchComposer({ value, onChange, onSubmit, disabled, agents, references, onRemoveReference, onSearchContext, contextSuggestions, knownPeople = [], onAddReference, workflows = [], onWorkflow, calls = true }: SearchComposerProps) {
+export function SearchComposer({ value, onChange, onSubmit, disabled, agents, references, onRemoveReference, onSearchContext, contextSuggestions, knownPeople = [], onAddReference, workflows = [], onWorkflow, calls = true, advisories = [] }: SearchComposerProps) {
   const { chat: huddle, recipient: huddleRecipient } = useHuddleComposerRecipient();
   const host = useCallHost();
   const huddleDock = useCallBlock(huddle?.callId ? host?.lobby?.channel ?? null : null, { compact: true });
@@ -164,9 +166,9 @@ export function SearchComposer({ value, onChange, onSubmit, disabled, agents, re
       recipients={huddleRecipient ? [huddleRecipient] : []} recipient={huddleRecipient?.id ?? null} answersFocus
       claim={{ label: 'the Search composer' }}
       mode={chatting ? 'chat' : 'agent'} onModeChange={next => { if (next === 'agent' || next === 'chat') setMode(next); }}
-      modeRowStart={chatting ? <Inline gap="xs" wrap={false}><T size="xs" tone="secondary">To:</T><T size="xs" weight="medium">Huddle</T></Inline> : undefined}
+      modeRowStart={chatting ? <Inline gap="xs" wrap={false}><T size="xs" tone="secondary">To:</T><T size="xs" weight="medium">Huddle</T></Inline> : <ComposerAdvisories notices={advisories} />}
       presentation="document" label="Search composer" inputLabel="Search question" data-testid="search-composer" composerTestId="search-rich-composer"
-      className="@container mx-auto w-full max-w-5xl bg-transparent pt-0 [--dock-inset:0px]"
+      className={`@container mx-auto w-full max-w-5xl bg-transparent pt-0 [--dock-inset:0px] ${chatting ? '' : 'search-composer-advisories'}`}
       composerRef={editorRef} allowEmoji={false} disabled={!chatting && !!disabled} callBlock={dock} defaultMode="agent"
       modePlaceholders={{ agent: 'Search, or ask a question — # for context, /agent to choose an agent…' }}
       submitLabel={{ agent: 'Send' }} maxInputHeight="min(10rem, 25dvh)"
