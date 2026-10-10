@@ -1,5 +1,8 @@
-This directory holds the portal's local build of `@connorhoehnslalom/ui-components` 2.439.0 with the shared HoverCard viewport fix. `package.json` and `package-lock.json` resolve the checked-in tarball here, so installation does not depend on a temporary worktree or an unpublished release.
+The portal consumes checked-in archives built from the consolidated shared repositories:
 
-The base is exactly the portal's previous pin, `2a9f10c5cd4a10823b9669a43cf87b0ed3f1a9a4`. The patch beside the tarball changes the native shared component and adds placement tests. It preserves the component's public props, hover timing, pinning, focus, Escape and non-modal behavior. No public-API change, package publication or version bump is included.
+- ui-components 2.440.0: main `e7a42a4fc772760c8271d8cee99a1a9a05456500`; archive SHA-256 `ca4bb18704495a29d473cd463d36fbd3f35faaec372c7bdb21263b8b7f7bcbd2`.
+- realtime-modules 0.115.0: main `57d8a1b424382b856389ae65a78662fc89a630aa`; archive SHA-256 `cf1fd6456cddb295f143bd13abbc7489f8516b72e0f1d3855056e84957de52e8`.
 
-The provenance JSON records the source commit, patch and artifact hashes. To rebuild, apply the patch to a native ui-components worktree at that commit, run its tests, `npm run lint` and `npm run build`, then run `npm pack --ignore-scripts`. Replace the named artifact and regenerate the dependency lock with a normal npm installation before verifying the portal. The source and demo TypeScript gate are separate from the optional static-style guard; existing guard violations are recorded in the verification receipt.
+ActivityTicker, notification icon actions, message hover placement, composer bounds, prejoin layout and shared controls belong to ui-components. The app supplies scoped data, navigation and preferences. Vite patches to compiled shared components have been removed. The Today content remains an explicitly labeled local demo.
+
+Native source/dist/package parity, focused native tests, portal typecheck/build and isolated browser checks passed. The optional native static style guard retains 16 inherited unrelated violations. Historical archives/provenance are retained for reproducibility.

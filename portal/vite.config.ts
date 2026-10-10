@@ -2,8 +2,6 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { resolve } from 'path';
-import { tenantPrejoin } from './patches/tenantPrejoin';
-import { sharedComposer } from './patches/sharedComposer';
 
 // The API target. Node resolves `localhost` to ::1 first, and another
 // project's server listening on IPv6 :3001 silently answers every /api call
@@ -26,7 +24,7 @@ export default defineConfig(async () => ({
   define: {
     global: 'globalThis',
   },
-  plugins: [tenantPrejoin(), sharedComposer(), react(), tailwindcss()],
+  plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
       '@': resolve(__dirname, './src'),

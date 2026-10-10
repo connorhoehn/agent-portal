@@ -40,11 +40,11 @@ test('demo is visible in spare footer space with native floating icons, anchored
   const toolbar = page.getByRole('toolbar', { name: 'Sample Today controls' });
   await expect(toolbar.getByRole('button')).toHaveCount(6);
   for (const button of await toolbar.getByRole('button').all()) { await expect(button.locator('svg')).toHaveCount(1); await expect(button).toHaveText(''); }
-  const footerBox = (await page.getByTestId('shell-footer-row').boundingBox())!, toolsBox = (await toolbar.boundingBox())!;
-  expect(toolsBox.y + toolsBox.height).toBeLessThanOrEqual(footerBox.y + 4);
+  const toolsBox = (await toolbar.boundingBox())!;
+  expect(toolsBox.y + toolsBox.height).toBeLessThanOrEqual((await summary(page).boundingBox())!.y + 1);
   await summary(page).click(); const detail = page.getByRole('dialog', { name: 'Sample Today details' });
   await expect(detail).toContainText('No live activity is connected'); await expect(detail).toContainText('Sample:');
-  expect((await detail.boundingBox())!.y + (await detail.boundingBox())!.height).toBeLessThan(footerBox.y + 1);
+  expect((await detail.boundingBox())!.y + (await detail.boundingBox())!.height).toBeLessThan((await summary(page).boundingBox())!.y);
   await page.screenshot({ path: test.info().outputPath('today-demo-details.png') });
   await detail.getByRole('button', { name: 'Open workspace' }).click(); await expect(page.getByTestId('today-location')).toHaveText('/iq/projects');
   expect(fixture.errors).toEqual([]); expect(fixture.mutations).toEqual([]);
@@ -103,7 +103,19 @@ test('reduced motion stays manual and an empty category selection has a clear re
 
 test('ticker yields to native active call controls and vanishes at narrow widths without footer height or horizontal drift', async ({ page }) => {
   await page.clock.install(); const fixture = await mount(page);
-  const footer = page.getByTestId('shell-footer'), idleHeight = (await footer.boundingBox())!.height;
+  const footer = page.getByTestId('shell-footer');
+  async function noTickerHeightDrift() {
+    const before = (await footer.boundingBox())!.height;
+    // Compare the same native call state with and without the ticker. Live
+    // controls legitimately differ from idle; the ticker must add no height.
+    const without = await page.getByTestId('footer-today').evaluate(element => {
+      const previous = element.style.display; element.style.display = 'none';
+      try { return element.closest('footer')!.getBoundingClientRect().height; }
+      finally { element.style.display = previous; }
+    });
+    expect(Math.round(before)).toBe(Math.round(without));
+  }
+  await noTickerHeightDrift();
   await page.screenshot({ path: test.info().outputPath('today-footer-wide.png') });
   await page.getByRole('button', { name: 'Toggle inert huddle' }).click();
   await expect(page.getByTestId('footer-today')).toHaveAttribute('data-call', 'true');
@@ -115,7 +127,7 @@ test('ticker yields to native active call controls and vanishes at narrow widths
     const leave = dock.getByTestId('shell-call-dock-leave'), box = (await leave.boundingBox())!;
     expect(box.x).toBeGreaterThanOrEqual(0); expect(box.x + box.width).toBeLessThanOrEqual(width);
     if (width <= 780) await expect(page.getByTestId('footer-today')).toBeHidden();
-    expect(Math.round((await footer.boundingBox())!.height)).toBe(Math.round(idleHeight));
+    await noTickerHeightDrift();
     expect(await page.getByTestId('shell-footer-row').evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
   }
   await page.screenshot({ path: test.info().outputPath('today-footer-narrow-call.png') });

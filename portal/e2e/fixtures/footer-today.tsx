@@ -1,4 +1,5 @@
 // Mounted production footer; all identities/calls below are inert fixtures.
+import '@connorhoehnslalom/ui-components/styles.css';
 import '../../src/app.css';
 import { useState, useSyncExternalStore } from 'react';
 import { createRoot } from 'react-dom/client';

@@ -1,0 +1,72 @@
+{
+  "scope": "Isolated main consolidation compatibility; no primary runtime activation",
+  "sourceFiles": [
+    {
+      "path": "middleware/src/lib/gateway/env.ts",
+      "gitIndexBaselineSha256": "150a51b063ed0f0f1f3da1bade3aa1f358d2d7eec7c196396b350852d3786c24",
+      "finalFileSha256": "150a51b063ed0f0f1f3da1bade3aa1f358d2d7eec7c196396b350852d3786c24"
+    },
+    {
+      "path": "middleware/src/lib/realtime-gateway.ts",
+      "gitIndexBaselineSha256": "c28a9bd9fb19cddb5ea984c59e2a2feb4606911083f4e126c0f769485ed61b9d",
+      "finalFileSha256": "c28a9bd9fb19cddb5ea984c59e2a2feb4606911083f4e126c0f769485ed61b9d"
+    },
+    {
+      "path": "middleware/src/lib/distillation-realtime.ts",
+      "gitIndexBaselineSha256": "2a530c060f524cba8778bee1c95154a13876b5c50c1a887c5face994e21ba83c",
+      "finalFileSha256": "2a530c060f524cba8778bee1c95154a13876b5c50c1a887c5face994e21ba83c"
+    },
+    {
+      "path": "middleware/src/lib/__tests__/realtime-gateway-routing.test.ts",
+      "gitIndexBaselineSha256": "ee8f4188760a6cf95fd83844a2523b95a6c9310d8792cb787b4c31ea5f520c17",
+      "finalFileSha256": "ee8f4188760a6cf95fd83844a2523b95a6c9310d8792cb787b4c31ea5f520c17"
+    },
+    {
+      "path": "middleware/src/lib/__tests__/realtime-gateway-fanout.test.ts",
+      "gitIndexBaselineSha256": "9332adb4703c7205f87c3f470811ca99ca53899fe6266e5b32ce0085d4fed647",
+      "finalFileSha256": "9332adb4703c7205f87c3f470811ca99ca53899fe6266e5b32ce0085d4fed647"
+    },
+    {
+      "path": "infra/lib/middleware-service-stack.ts",
+      "gitIndexBaselineSha256": "09d72858ffeb36940c0c040da025e8b720d30cf1cb5c58bc5a3a1ddd914eaa3c",
+      "finalFileSha256": "09d72858ffeb36940c0c040da025e8b720d30cf1cb5c58bc5a3a1ddd914eaa3c"
+    },
+    {
+      "path": "infra/test/realtime-capacity.test.ts",
+      "gitIndexBaselineSha256": "c1f3f2bc130858a20de95c2ccbec43279c1c371fce89aea1705c39ae6902babe",
+      "finalFileSha256": "c1f3f2bc130858a20de95c2ccbec43279c1c371fce89aea1705c39ae6902babe"
+    },
+    {
+      "path": "docs/realtime-gateway-routing-compatibility.md",
+      "gitIndexBaselineSha256": "e5f7e496ba46f524609d58d1c118ae0bce137d9c147f3d0e660560c554425866",
+      "finalFileSha256": "e5f7e496ba46f524609d58d1c118ae0bce137d9c147f3d0e660560c554425866"
+    }
+  ],
+  "verification": {
+    "routingParserAndStartup": "5 passed",
+    "redisLiteProtocolAndDeadlines": "8 passed",
+    "nativeLeasedSocketFanoutFinal": "4 passed, 0 skipped, 20.308 seconds",
+    "middlewareTypecheck": "PASS",
+    "diffCheck": "PASS",
+    "infraSynth": "Not accepted: attempted while root-owned npm ci extraction was incomplete; root will run after completion"
+  },
+  "nativeSocketAuthority": "Explicit synthetic directory/policy fixtures; real native leased routers, HTTP/WebSocket servers and dedicated loopback Redis. No provisioned actor or live tenant acceptance claimed.",
+  "changes": [
+    "Legacy REALTIME_FANOUT=redis uses the current native leased router for both gateway transports; explicit canonical setting wins",
+    "Redis URL alone keeps local routing; invalid settings and missing explicit Redis dependency fail closed",
+    "Sync attachments reject silent peer routing fallback",
+    "Connected Redis store without URL logs safely instead of dereferencing null",
+    "Cloud one-task safeguard unchanged; stale comments and assertion updated"
+  ],
+  "resourceCleanup": {
+    "name": "codex-gateway-merge-redis-20261010-1449",
+    "removed": true,
+    "cleanupExitCode": 0
+  },
+  "excluded": [
+    "No primary application source or service changes",
+    "No real calls/messages/jobs/grants",
+    "No legacy router activation",
+    "No deployment/scale-out assertion"
+  ]
+}

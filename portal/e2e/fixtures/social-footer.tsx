@@ -1,5 +1,6 @@
 // Production footer/native controls with explicit inert call state. No media,
 // gateway, API mutations, or message sends are performed by this fixture.
+import '@connorhoehnslalom/ui-components/styles.css';
 import '../../src/app.css';
 import { StrictMode, useSyncExternalStore } from 'react';
 import { createRoot } from 'react-dom/client';

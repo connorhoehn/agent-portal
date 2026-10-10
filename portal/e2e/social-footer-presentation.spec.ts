@@ -1,5 +1,4 @@
 import { expect, test, type Page } from '@playwright/test';
-test.use({ baseURL: 'http://127.0.0.1:5183' });
 async function mount(page: Page, query = '') {
   const errors: string[] = [], mutations: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
