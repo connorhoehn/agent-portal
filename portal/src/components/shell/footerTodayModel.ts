@@ -26,11 +26,11 @@ export function readTodayPreferences(raw: string | null): TodayPreferences {
   } catch { return { ...DEFAULT_TODAY_PREFERENCES, categories: [...TODAY_CATEGORIES] }; }
 }
 export const TODAY_SAMPLES: ReadonlyArray<{ category: TodayCategory; label: string; summary: string; detail: string }> = [
-  { category: 'review', label: 'Needs review', summary: 'A draft is ready for your review', detail: 'Sample: review a proposed draft before accepting any changes.' },
-  { category: 'agenda', label: 'Agenda', summary: 'Make time for a team check-in', detail: 'Sample: an upcoming check-in would appear here when calendar activity is connected.' },
-  { category: 'goals', label: 'Goals', summary: 'Choose the next step toward a goal', detail: 'Sample: a goal update would help you choose what to work on next.' },
-  { category: 'automation', label: 'Automation', summary: 'An automation summary is ready', detail: 'Sample: review an automation result before deciding whether to act on it.' },
-  { category: 'budget', label: 'Budget', summary: 'Review a sample spending notice', detail: 'Sample: a spending notice would appear here. No live budget or usage is connected.' },
+  { category: 'review', label: 'Needs review', summary: '2 agent drafts need your decision', detail: 'Sample: two proposed changes are ready for review. Check the work and its evidence before approving the next step.' },
+  { category: 'agenda', label: 'Agenda', summary: 'Project review at 2 PM · 3 work items', detail: 'Sample: a project review at 2 PM covers three work items. A connected agenda would open the meeting and its shared work.' },
+  { category: 'goals', label: 'Goals', summary: 'Weekly goal · 3 of 5 milestones complete', detail: 'Sample: three of five milestones are complete. The next milestone depends on reviewing the outstanding agent drafts.' },
+  { category: 'automation', label: 'Automation', summary: '8 agents · 3 finished · 2 need review · 3 planning', detail: 'Sample: eight agents have work in progress. Of three finished runs, two succeeded and one needs attention; two other runs await review and three are planning.' },
+  { category: 'budget', label: 'Budget', summary: 'Daily budget · 20% used ($829)', detail: 'Sample: $829 of a $4,145 daily budget has been used. No live budget is connected, and this preview cannot request or authorize additional spending.' },
 ];
 export function todayRotationAllowed(options: { paused: boolean; quiet: boolean; engaged: boolean; reducedMotion: boolean; pageVisible: boolean; activeCall: boolean; count: number }): boolean {
   return options.count > 1 && !options.paused && !options.quiet && !options.engaged && !options.reducedMotion && options.pageVisible && !options.activeCall;
