@@ -6,7 +6,7 @@ const initial = { sub: 'u-vera', name: 'Vera Green', role: 'org-leader', tenant:
   grants: { orgiq: ['org-leader'], social: ['participant'] }, switchable: { orgiq: ['org-leader'], social: ['participant'] },
   availableRoles: ['org-leader'], availableTenants: ['orgiq', 'social'], masquerading: null };
 
-async function fixture(page: Page, ownedPane = false, centralComposer = false) {
+async function fixture(page: Page, ownedPane = false, centralComposer = false, denied = false) {
   let session = { ...initial };
   const errors: string[] = [];
   const people = [{ userId: 'u-vera', displayName: 'Vera Green' }, { userId: 'u-nora', displayName: 'Nora Chang' }];
@@ -26,6 +26,7 @@ async function fixture(page: Page, ownedPane = false, centralComposer = false) {
   // The resolver names the call's chat channel and roster; messages are
   // gateway chat, answered below by an in-page stand-in for the chat service.
   await page.route('**/api/calls/*/chat**', async route => {
+    if (denied) return route.fulfill({ status: 403, json: { error: 'This call is no longer available to your current session' } });
     const callId = new URL(route.request().url()).pathname.split('/')[3]!, channel = `orgiq:huddle:${callId}`;
     return route.fulfill({ json: { callId, channel, revision: 1, participants: people, messages: [], canSend: true, historyFrom: '2026-10-03T10:00:00Z' } });
   });
@@ -51,7 +52,7 @@ async function fixture(page: Page, ownedPane = false, centralComposer = false) {
   await expect(page.getByTestId('shell-call-dock-chat')).toHaveCount(1);
   await page.getByTestId('shell-call-dock-chat').click();
   await expect(page.getByTestId(ownedPane ? 'fixture-owned-pane' : 'huddle-chat-panel')).toBeVisible();
-  if (!ownedPane) await expect(page.getByTestId('huddle-chat-participants')).toHaveText('Vera Green, Nora Chang');
+  if (!ownedPane && !denied) await expect(page.getByTestId('huddle-chat-participants')).toHaveText('Vera Green, Nora Chang');
   // The chat service's answers to this page's frames: join → joined + history;
   // send → the stored echo, then `sent` once persisted (unless held or failed).
   await page.evaluate(() => {
@@ -234,5 +235,16 @@ test('shared page composer keeps page, agent and huddle drafts separate with one
   await expect(input).toHaveText('Call draft follows me');
   await expect(composer.getByRole('button', { name: 'Send', exact: true })).toBeDisabled();
   expect(await setup.posts()).toEqual([]);
+  expect(setup.errors).toEqual([]);
+});
+
+
+test('a denied conversation shows recovery without contradictory loading text', async ({ page }) => {
+  const setup = await fixture(page, false, false, true);
+  await expect(page.getByTestId('huddle-chat-error')).toContainText('This call is no longer available');
+  await expect(page.getByTestId('huddle-chat-loading')).toHaveCount(0);
+  await expect(page.getByTestId('huddle-chat-refresh')).toBeEnabled();
+  await expect(page.getByRole('textbox', { name: 'Huddle message', exact: true })).toHaveCount(0);
+  expect(await setup.posts()).toHaveLength(0);
   expect(setup.errors).toEqual([]);
 });

@@ -12,7 +12,7 @@ import { DeckComposer } from './DeckComposer';
 import { DeckRunProgress } from './DeckRunProgress';
 import type { DeckEditorDocument, DeckEditorExtras } from './DeckEditorPage';
 import { DeckRevisionConflictError, type DeckDetailCore, type DeckReviseResult, type DeckRunState } from './deckApi';
-import { failedLastRun, generatingIds, hasPendingRun, isRunFinished, openRevisionId, runFailureMessage } from './decksModel';
+import { failedLastRun, generatingIds, hasPendingRun, isRunFinished, openRevisionId, runFailureMessage, revisionSeq } from './decksModel';
 import { useCapabilities } from '../../lib/capabilities';
 import { useSession } from '../../lib/auth';
 import { InitiativeAgentPanel, type InitiativeAgentHandle } from '../../pages/projects/InitiativeAgentPanel';
@@ -67,10 +67,10 @@ export function useDeckAgentRun<D extends DeckDetailCore & { title: string }>(do
   const projectId = deck && 'projectId' in deck && typeof deck.projectId === 'string' ? deck.projectId : '';
   const ask = (text: string, ctx: PresentationInstructContext, withReference: boolean, generatedTitle?: string): boolean | string => {
     if (!canAsk) return ready ? askUnavailableReason : 'Access is still loading.';
-    if (!deck || !spec) return 'The presentation is still loading.';
+    if (!deck || !spec || !specRevisionId) return 'The presentation is still loading.';
     const captured = deckQuestionRequest({ deckId, title: deck.title, revisionId: specRevisionId ?? revisionId,
       spec, question: text, slideId: ctx.slideId, generatedTitle, withReference, dirty: dirtyRef.current,
-      records: projectId ? [{ type: 'initiative', id: projectId }] : [],
+      versionLabel: `v${revisionSeq(deck.revisions, specRevisionId)}`,
     });
     if (!captured) return false;
     const accepted = questions.current?.submit(captured) ?? 'The presentation assistant is still loading.';

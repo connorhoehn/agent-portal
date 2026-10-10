@@ -160,7 +160,7 @@ export default function RunDetailPage({ apiBase = '/api/pipelines/runs', listPat
             <PipelineDiscussion channel={runChannel(run.id)} focusTarget />
           </DetailSection>
         )}
-        {realtime && live && <PipelineRunLive runId={run.id} pipelineId={run.definitionId ?? ''} recordedStatus={run.status} onMoved={refresh} />}
+        {realtime && live && <PipelineRunLive key={run.id} runId={run.id} pipelineId={run.definitionId ?? ''} recordedStatus={run.status} onMoved={refresh} />}
         {realtime && live ? (
           <ChannelActivity channel={runChannel(run.id)} title="Events" recorded={recorded} visibleCount={8} data-testid="pipeline-events" />
         ) : (

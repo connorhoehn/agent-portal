@@ -175,15 +175,17 @@ it('repeated registration and another actual seat preserve a current participant
   expect((await get()).body.messages.map((m: { id: string }) => m.id)).toEqual([first.id]);
 });
 
-it('requires current Social embedding grants and never substitutes the work dispatch gate', async () => {
+it('admits a current Work seat without Social grants or work dispatch permission, and revokes a retired Work grant', async () => {
   users.get('bob')!.grants.social = [];
-  expect((await get('bob')).status).toBe(403);
-  await expect(runtime.assertSeat(CALL, 'b')).rejects.toMatchObject({ status: 403 });
-  expect(isAllowed).toHaveBeenCalledWith({ sub: 'alice', tenant: 'social', role: 'participant' }, 'PostMessage');
-  jest.mocked(isAllowed).mockImplementation(async (_p, action) => action === 'ViewSocial');
-  expect((await get()).body.canSend).toBe(false);
-  await expect(runtime.assertSeat(CALL, 'a')).resolves.toBeUndefined();
-  await expect(runtime.assertSeat(CALL, 'a', true)).rejects.toMatchObject({ status: 403 });
+  users.get('alice')!.grants.social = [];
+  jest.mocked(isAllowed).mockResolvedValue(false);
+  expect((await get('bob')).body).toMatchObject({ channel: CHANNEL, canSend: true });
+  await expect(runtime.assertSeat(CALL, 'b', true)).resolves.toBeUndefined();
+  expect(isAllowed).not.toHaveBeenCalledWith(expect.objectContaining({ tenant: 'social' }), expect.anything());
+  expect(isAllowed).not.toHaveBeenCalledWith(expect.anything(), 'DispatchAgentRun');
+  users.get('bob')!.grants.orgiq = [];
+  expect((await get('bob')).status).toBe(401);
+  await expect(runtime.assertSeat(CALL, 'b', true)).rejects.toMatchObject({ status: 401 });
 });
 
 it('replaces a deleted reference with an unavailable marker on replay', async () => {

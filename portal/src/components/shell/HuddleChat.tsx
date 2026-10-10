@@ -467,7 +467,7 @@ export function HuddleChatBody() {
   if (!runtime) {
     return <Stack gap="none" className="min-h-0 flex-1">
       {error}
-      <T size="sm" tone="tertiary" className="m-3" wrap data-testid="huddle-chat-loading">{chat.unavailableReason ?? 'Loading the huddle conversation…'}</T>
+      {!state.error && <T size="sm" tone="tertiary" className="m-3" wrap data-testid="huddle-chat-loading">{chat.unavailableReason ?? 'Loading the huddle conversation…'}</T>}
     </Stack>;
   }
   return <Stack gap="none" className="min-h-0 flex-1">

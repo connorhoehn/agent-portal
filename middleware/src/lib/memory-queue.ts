@@ -60,6 +60,15 @@ export class MemoryMessageQueue implements MessageQueue {
     return () => this.listeners.delete(listener);
   }
 
+  async inspect(queue: string) {
+    const def = this.defs.get(queue);
+    if (!def) return null;
+    const now = this.opts.now(), rows = this.opts.rows().filter(row => row.queue === queue);
+    return { ready: rows.filter(row => row.visible_at_ms <= now).length,
+      inFlight: rows.filter(row => row.visible_at_ms > now).length,
+      delayed: 0, fifo: def.fifo, visibilityTimeoutSeconds: def.visibilityTimeoutSeconds };
+  }
+
   async ensureQueue(def: QueueDefinition): Promise<void> {
     this.defs.set(def.name, def);
   }

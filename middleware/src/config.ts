@@ -79,6 +79,7 @@ export const config = {
   messageQueue: {
     url: env('MESSAGE_QUEUE_URL'),
     serviceId: env('MESSAGE_QUEUE_SERVICE_ID', 'orgiq-middleware'),
+    observedQueues: env('PIPELINES_QUEUE_NAMES'),
     secret: env('MESSAGE_QUEUE_AUTH_SECRET'),
     mock: flag('MOCK_QUEUE'),
   },

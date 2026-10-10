@@ -43,11 +43,11 @@ const SOCIAL_LABELS: Record<string, string> = {
   channels: 'Channels', dms: 'Direct messages', calls: 'Calls', rooms: 'Rooms', contacts: 'Contacts',
   teams: 'Teams', profile: 'Profile', recordings: 'Recordings', 'work-graph': 'Work graph', configuration: 'Configuration', settings: 'Social settings',
 };
-const PIPELINES_GROUPS: Record<string, string> = {
+const PIPELINES_GROUPS: Record<string, string> = { queues: 'Runs',
   definitions: 'Catalog', runbooks: 'Catalog', runs: 'Runs', approvals: 'Runs', artifacts: 'Runs',
   decks: 'Runs', activity: 'Runs', communication: 'Runs', agents: 'Sources', bots: 'Sources', commands: 'Sources', configuration: 'System', settings: 'System',
 };
-const PIPELINES_LABELS: Record<string, string> = {
+const PIPELINES_LABELS: Record<string, string> = { queues: 'Queues',
   definitions: 'Definitions', runbooks: 'Runbooks', runs: 'Runs', approvals: 'Approvals', artifacts: 'Artifacts', decks: 'Run reports', activity: 'Work graph', communication: 'Communication',
   agents: 'Agents', bots: 'Bots', commands: 'Commands', configuration: 'Configuration', settings: 'Pipeline settings',
 };

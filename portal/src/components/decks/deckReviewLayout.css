@@ -1,0 +1,19 @@
+/* Native compact slots keep slides dominant without mounting another input,
+   media sink, or draft store. These rules affect presentation review only. */
+.deck-review-compact header[data-testid$="-header"] { padding-top: 6px; }
+.deck-review-compact [data-testid$="-head-row"] > div:has([data-testid$="-title-group"]) {
+  flex-direction: row; align-items: center; column-gap: 8px;
+}
+.deck-review-compact [data-testid$="-kind"] { width: 28px; height: 28px; }
+.deck-review-compact [data-testid$="-toolbar"] { padding-block: 4px; }
+.deck-review-compact .deck-reader-toolbar { flex-wrap: nowrap; min-width: 0; overflow-x: auto; }
+.deck-review-compact .deck-reader-toolbar > * { flex-shrink: 0; }
+.deck-review-compact .deck-reader-toolbar-spacer { flex: 1 1 auto; }
+.deck-review-compact .deck-reader-surface { min-height: 160px; padding-block: 4px; }
+.deck-review-compact .deck-reader-viewport { padding-block: 4px; }
+.initiative-composer-dock.deck-composer-backdrop.deck-composer-review { padding: 4px 8px; }
+.deck-composer-review [data-testid="deck-composer-dock"] { --dock-inset: 0px; }
+@media (max-width: 700px) {
+  .deck-review-compact .deck-reader-rail { flex-basis: 112px; }
+  .deck-review-compact .deck-document-actions { gap: 4px; }
+}

@@ -10,7 +10,7 @@ import { SourceChips } from '../../components/chat/SourceChips';
 import { friendlyToolName } from '../../components/chat/toolCallSummary';
 import { linkSearchCitations, readSearchEvidence } from '../search/searchModel';
 import { createTurnGate } from '../search/turnGate';
-import type { InitiativeAgentRequest } from './initiativeAgentRequest';
+import { initiativeAgentBody, presentationReadReceipt, type InitiativeAgentRequest } from './initiativeAgentRequest';
 
 export interface InitiativeAgentHandle {
   submit(request: InitiativeAgentRequest): boolean | string;
@@ -48,13 +48,7 @@ export function InitiativeAgentPanel({ ref, projectId, onOpenWorkItem, assistant
         ? AbortSignal.any([abort.current.signal, ...(init?.signal ? [init.signal] : [])])
         : init?.signal,
     }),
-    buildBody: (message, { sessionId }) => ({
-      message,
-      ...(sessionId ? { sessionId } : {}),
-      // The server resolves these IDs under the current principal; client
-      // titles and page descriptors never become authorization/context data.
-      ...(currentRequest.current?.records.length ? { selection: { records: currentRequest.current.records } } : {}),
-    }),
+    buildBody: (message, { sessionId }) => initiativeAgentBody(message, currentRequest.current, sessionId ?? undefined),
   });
   const { messages, steps, activeToolCalls, streamingText, isStreaming, error, sendMessage } = stream;
 
@@ -70,6 +64,9 @@ export function InitiativeAgentPanel({ ref, projectId, onOpenWorkItem, assistant
     setStartedAt(Date.now());
     setElapsed(0);
     followOutput.current = true;
+    // Keep the captured prompt as the transcript key: repeating the same
+    // question on another slide cannot relabel the earlier turn. buildBody
+    // sends only the raw question plus typed IDs to the server.
     void sendMessage(captured.prompt).finally(() => { gate.end(token); abort.current = null; });
     return true;
   };
@@ -94,8 +91,8 @@ export function InitiativeAgentPanel({ ref, projectId, onOpenWorkItem, assistant
   // A tool is complete when its result arrives, not when argument streaming
   // ends. Named phases and attached-context reads are observed stream events.
   const progress = [
-    ...turnTools.filter(tool => !steps.length || tool.name === 'search_context').map(tool => ({
-      name: tool.name === 'search_context' ? 'Read attached context' : friendlyToolName(tool.name),
+    ...turnTools.filter(tool => !steps.length || ['search_context', 'presentation_context'].includes(tool.name)).map(tool => ({
+      name: tool.name === 'presentation_context' ? 'Read selected presentation content' : tool.name === 'search_context' ? 'Read attached context' : friendlyToolName(tool.name),
       done: tool.result !== undefined,
     })),
     ...steps.map(step => ({ name: stepLabel(step.name), done: step.status === 'done' })),
@@ -136,8 +133,13 @@ export function InitiativeAgentPanel({ ref, projectId, onOpenWorkItem, assistant
         </Stack>;
         const answer = deriveSources({ content: message.content, toolCalls: message.toolCalls });
         const evidence = readSearchEvidence(message.toolCalls);
+        const presentation = presentationReadReceipt(message.toolCalls);
         return <Stack key={message.id} gap="sm">
           <Markdown>{linkSearchCitations(answer.cleaned.replace(/<thinking>[\s\S]*?(<\/thinking>|$)/g, ''), evidence)}</Markdown>
+          {presentation && <T size="xs" tone="secondary" wrap data-testid="presentation-read-receipt">
+            {presentation.provenance === 'visible-draft' ? 'Visible draft read' : 'Saved presentation content read'}: {presentation.title}
+            {presentation.scope !== 'deck' ? ` › ${presentation.slideTitles.join(', ')}` : ' · whole presentation'} · {presentation.revisionId}
+          </T>}
           {!!evidence.length && <Inline gap="xs" wrap aria-label="Referenced records">
             {evidence.map(record => <Button key={`${record.type}:${record.id}`} size="sm" variant="secondary" className="max-w-full"
               onClick={() => record.type === 'work' && record.href.split('?')[0] === `/iq/projects/${projectId}` ? onOpenWorkItem(record.id) : navigate(record.href)}>
@@ -149,7 +151,7 @@ export function InitiativeAgentPanel({ ref, projectId, onOpenWorkItem, assistant
       })}
       {isStreaming && <MessageBubble role="assistant" agentName={assistantTitle} streaming
         content={extractSources(streamingText).cleaned.replace(/<thinking>[\s\S]*?(<\/thinking>|$)/g, '')}
-        toolCalls={activeToolCalls.map(tool => ({ id: tool.id, name: tool.name === 'search_context' ? 'Read attached context' : friendlyToolName(tool.name), done: tool.done }))}
+        toolCalls={activeToolCalls.map(tool => ({ id: tool.id, name: tool.name === 'presentation_context' ? 'Read selected presentation content' : tool.name === 'search_context' ? 'Read attached context' : friendlyToolName(tool.name), done: tool.done }))}
         renderMarkdown={content => <Markdown>{content}</Markdown>} />}
       {error && <InlineAlert tone="error">
         <Stack gap="sm"><T size="sm" weight="semibold">Agent task failed</T><T size="sm" wrap>{error}</T><Button size="sm" variant="secondary" disabled={isStreaming} onClick={() => { if (latest) submit(latest); }}>Retry this task</Button></Stack>

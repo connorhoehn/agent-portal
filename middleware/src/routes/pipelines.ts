@@ -49,7 +49,14 @@ import {
 } from '../providers/pipeline-definitions.js';
 import { decideDryRunGate } from '../providers/promotions.js';
 
+import { readPipelineQueues } from '../lib/pipeline-queues.js';
+
 export const pipelinesRouter = Router();
+
+pipelinesRouter.get('/queues', requireAction('ViewPipelines'), asyncHandler(async (_req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  res.json(await readPipelineQueues());
+}));
 
 pipelinesRouter.get('/summary', requireAction('ViewPipelines'), asyncHandler(async (_req, res) => {
   const body: TenantSummary = {

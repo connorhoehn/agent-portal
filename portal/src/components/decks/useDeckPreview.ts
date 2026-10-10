@@ -27,15 +27,19 @@ export function useDeckPreview(
   useEffect(() => () => {
     if (timer.current) clearTimeout(timer.current);
     controller.current?.abort();
+    // StrictMode replays effects after cleanup. A cancelled request is not a
+    // cached result; let the reader request the same spec again.
+    lastKey.current = null;
   }, []);
 
   const request = useCallback((spec: DeckSpec) => {
     const key = deckRenderKey(spec);
-    if (key === lastKey.current && !failed.current) return;
-    lastKey.current = key;
+    const requestKey = `${deckId}\0${key}`;
+    if (requestKey === lastKey.current && !failed.current) return;
+    lastKey.current = requestKey;
     if (timer.current) clearTimeout(timer.current);
     controller.current?.abort();
-    const hit = cache.current.get(key);
+    const hit = cache.current.get(requestKey);
     if (hit) {
       failed.current = false;
       setState({ preview: hit.slides, renderedKey: key });
@@ -47,10 +51,16 @@ export function useDeckPreview(
     timer.current = setTimeout(() => {
       const ctl = new AbortController();
       controller.current = ctl;
+      const timeout = setTimeout(() => {
+        if (ctl.signal.aborted) return;
+        failed.current = true;
+        setState({ preview: { error: 'The slide preview took too long. Retry preview to try again.' }, renderedKey: null });
+        ctl.abort();
+      }, 45_000);
       render(deckId, spec, ctl.signal).then((result) => {
         if (ctl.signal.aborted) return;
         const slides: PresentationPreview = { slides: result.slides };
-        cache.current.set(key, { slides, warnings: result.warnings });
+        cache.current.set(requestKey, { slides, warnings: result.warnings });
         failed.current = false;
         setState({ preview: slides, renderedKey: key });
         warn.current?.(result.warnings);
@@ -58,7 +68,7 @@ export function useDeckPreview(
         if (ctl.signal.aborted) return;
         failed.current = true;
         setState({ preview: { error: err instanceof Error ? err.message : 'The preview could not be drawn.' }, renderedKey: null });
-      });
+      }).finally(() => clearTimeout(timeout));
     }, DECK_PREVIEW_DEBOUNCE_MS);
   }, [deckId, render]);
 

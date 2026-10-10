@@ -18,12 +18,13 @@ import { DeckPresenceSource } from './useDeckPresence';
 import { useDeckPreview } from './useDeckPreview';
 import { useDeckDownload, useDeckSlideTitle } from './useDeckEditorHelpers';
 import type { DeckPreviewResult, DeckSpec } from './deckApi';
-import { useCallBlock } from '../../lib/conversationCall';
+import { useCallBlock, useCallHost } from '../../lib/conversationCall';
 import { HuddleComposerDock } from '../shell/HuddleComposerDock';
 import { DeckReader } from './DeckReader';
 import { DeckPresentationDialog } from './DeckPresentationDialog';
 import { useComposerFocus } from '@connorhoehnslalom/ui-components/social/rich-composer';
 import { useCrumbLabel } from '../../lib/crumbLabels';
+import './deckReviewLayout.css';
 
 /** What an extras hook may read and drive: the shared document state. */
 export interface DeckEditorDocument<D> {
@@ -111,6 +112,8 @@ function DeckEditorDocumentPage<D extends DeckDocumentShape & { title: string }>
     bind: huddle ? { title: huddle.title } : null,
     documents: deck ? [{ id: deckId, title: deck.title }] : [],
   });
+  const callHost = useCallHost();
+  const compactReview = call.holds && !!callHost && !['ended', 'failed'].includes(callHost.call.phase);
   const extras = useExtras?.({ deckId, deck, revisionId, specRevisionId, setRevisionId, spec, dirtyRef, reload, setConflict }) ?? NO_EXTRAS;
   const huddlePage = huddle?.channel.startsWith('orgiq:initiative:') ? { kind: 'initiative' as const, id: huddle.channel.slice('orgiq:initiative:'.length) } : undefined;
   const { preview, renderedKey, request } = useDeckPreview(deckId, setWarnings, previewDeck);
@@ -174,6 +177,31 @@ function DeckEditorDocumentPage<D extends DeckDocumentShape & { title: string }>
     ...slide, title: spec.slides.find(own => own.id === slide.id)?.title ?? slide.title,
   })) : [];
   const presentSlideIndex = Math.max(0, presentationSlides.findIndex(slide => slide.id === presentSlideId));
+  const fileActions = (
+    <Inline gap="xs" align="center" wrap={false} className="deck-document-actions" role={compactReview && cannotEdit ? undefined : 'toolbar'} aria-label="Presentation file actions">
+      {!cannotEdit && extras.footer && <Button size="sm" variant="ghost" disabled={!composerFocus.present}
+        onClick={() => composerFocus.request({ mode: 'agent' })} title="Focus the presentation conversation">Chat & agent</Button>}
+      <DropdownMenu trigger={<Inline gap="xs" align="center" wrap={false}><HistoryIcon size={14} /><T size="xs" weight="medium">{currentVersion}</T></Inline>}
+        triggerLabel="Presentation versions" triggerVariant="default" align="end"
+        sections={[{ label: 'Saved versions', items: editorRevisions.map(revision => ({
+          id: revision.id, label: `v${revisionSeq(deck.revisions, revision.id)}`, description: revision.label,
+          active: revision.id === revisionId, disabled: revision.specAvailable === false || dirty || saving,
+          disabledReason: revision.specAvailable === false ? 'Slide content unavailable · Metadata only' : dirty ? 'Save your changes before switching versions.' : saving ? 'Saving this version…' : undefined,
+          onSelect: () => { setSaveError(null); selectRevision(revision.id); },
+        })) }]} />
+      {!cannotEdit && <Button size="sm" variant="primary" disabled={saveDisabled} title={saveHint}
+        aria-label={saving ? 'Saving presentation' : `Save as ${nextRevisionLabel(deck.revisions)}`}
+        onClick={() => { void saveChanges(); }} data-testid={`${testIdPrefix}-save`}>{saving ? 'Saving…' : 'Save'}</Button>}
+      {revisionId && <Button size="sm" variant="secondary" disabled={dirty || saving || downloading} onClick={download} aria-label={downloading ? 'Downloading .pptx' : 'Download .pptx'}
+        title={dirty ? 'Save your changes before downloading.' : 'Download the saved PowerPoint version'} data-testid={`${testIdPrefix}-download`}>
+        <DownloadIcon size={14} /><T as="span" size="xs">{downloading ? 'Downloading…' : 'PPTX'}</T>
+      </Button>}
+      {revisionId && shareable && (
+        <ShareToSocialAction deckId={deckId} revisionId={revisionId} fileName={deckFileName(deck.title, revisionSeq(deck.revisions, revisionId))}
+          fileUrl={fileUrl(deckId, revisionId)} disabled={dirty || saving} />
+      )}
+    </Inline>
+  );
   const frame = (parts: PresentationEditorFrame) => (
     <EditorShell
       title={deck.title}
@@ -182,34 +210,10 @@ function DeckEditorDocumentPage<D extends DeckDocumentShape & { title: string }>
       {...collab.shellProps}
       {...(cannotEdit ? { statusPill: <T as="span" size="xs" tone="secondary">View only</T> }
         : saveState ? { saveState: { ...saveState, detail: saving ? 'Saving…' : dirty ? 'Unsaved changes' : 'All changes saved' } } : {})}
-      headActions={(
-        <Inline gap="xs" align="center" wrap={false} className="deck-document-actions" role="toolbar" aria-label="Presentation file actions">
-          {!cannotEdit && extras.footer && <Button size="sm" variant="ghost" disabled={!composerFocus.present}
-            onClick={() => composerFocus.request({ mode: 'agent' })} title="Focus the presentation conversation">Chat & agent</Button>}
-          <DropdownMenu trigger={<Inline gap="xs" align="center" wrap={false}><HistoryIcon size={14} /><T size="xs" weight="medium">{currentVersion}</T></Inline>}
-            triggerLabel="Presentation versions" triggerVariant="default" align="end"
-            sections={[{ label: 'Saved versions', items: editorRevisions.map(revision => ({
-              id: revision.id, label: `v${revisionSeq(deck.revisions, revision.id)}`, description: revision.label,
-              active: revision.id === revisionId, disabled: revision.specAvailable === false || dirty || saving,
-              disabledReason: revision.specAvailable === false ? 'Slide content unavailable · Metadata only' : dirty ? 'Save your changes before switching versions.' : saving ? 'Saving this version…' : undefined,
-              onSelect: () => { setSaveError(null); selectRevision(revision.id); },
-            })) }]} />
-          {!cannotEdit && <Button size="sm" variant="primary" disabled={saveDisabled} title={saveHint}
-            aria-label={saving ? 'Saving presentation' : `Save as ${nextRevisionLabel(deck.revisions)}`}
-            onClick={() => { void saveChanges(); }} data-testid={`${testIdPrefix}-save`}>{saving ? 'Saving…' : 'Save'}</Button>}
-          {revisionId && <Button size="sm" variant="secondary" disabled={dirty || saving || downloading} onClick={download} aria-label={downloading ? 'Downloading .pptx' : 'Download .pptx'}
-            title={dirty ? 'Save your changes before downloading.' : 'Download the saved PowerPoint version'} data-testid={`${testIdPrefix}-download`}>
-            <DownloadIcon size={14} /><T as="span" size="xs">{downloading ? 'Downloading…' : 'PPTX'}</T>
-          </Button>}
-          {revisionId && shareable && (
-            <ShareToSocialAction deckId={deckId} revisionId={revisionId} fileName={deckFileName(deck.title, revisionSeq(deck.revisions, revisionId))}
-              fileUrl={fileUrl(deckId, revisionId)} disabled={dirty || saving} />
-          )}
-        </Inline>
-      )}
+      headActions={compactReview && cannotEdit ? null : fileActions}
       surface="workspace" toolbar={parts.toolbar}
       {...(parts.footer ? { footer: parts.footer } : {})}
-      className="min-h-0 flex-1" data-testid={`${testIdPrefix}-shell`}
+      className={`min-h-0 flex-1 deck-review-workspace${compactReview ? ' deck-review-compact' : ''}`} data-testid={`${testIdPrefix}-shell`}
     >
       {notices}
       {collab.followBar}
@@ -221,7 +225,7 @@ function DeckEditorDocumentPage<D extends DeckDocumentShape & { title: string }>
     <>
       <DeckPresenceSource deckId={deckId} tenant={tenant} selectedSlideId={collab.selectedSlideId} slideTitle={slideTitle} editing={dirty} onChange={collab.setPresence} />
       {extras.assistant}
-      {cannotEdit ? <DeckReader spec={spec} preview={preview} previewCurrent={previewCurrent} onRequestPreview={request}
+      {cannotEdit ? <DeckReader compactReview={compactReview} fileActions={compactReview ? fileActions : null} spec={spec} preview={preview} previewCurrent={previewCurrent} onRequestPreview={request}
         slideViewers={collab.presence.slideViewers} selectSlideRequest={collab.selectSlideRequest}
         onSelectedSlideChange={collab.setSelectedSlideId} onNavigateSlide={collab.selectSlide} renderFrame={frame}
         footer={ctx => extras.footer ? extras.footer(ctx) : <HuddleComposerDock dock={call.block} page={huddlePage} />}

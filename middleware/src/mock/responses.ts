@@ -9,6 +9,7 @@
 import { defineFixture, fixtureRegistry } from './core/index.js';
 import { documentEditReply } from './document-agent-edits.js';
 import type { WorkItem } from '../providers/work-items.js';
+import { presentationQuestionPreview } from './presentation-question.js';
 
 export interface MockResponse {
   keywords: string[];
@@ -138,6 +139,8 @@ const defaultResponse: MockResponse = {
 };
 
 export function selectMockResponse(message: string, structuredInput?: Record<string, unknown>): MockResponse {
+  const presentation = presentationQuestionPreview(structuredInput?.presentationQuestion);
+  if (presentation) return presentation;
   // A document's composer dock sends the drafter's document-command payload
   // (the runtime's structured input); its reply is the drafter's edit
   // envelope, with no tool calls (the drafter emits its validated answer as

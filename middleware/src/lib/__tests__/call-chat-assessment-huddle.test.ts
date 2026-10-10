@@ -7,7 +7,7 @@ jest.mock('../page-resources.js', () => ({ pageResourceVisible: jest.fn() }));
 // huddle conversation an OrgIQ call does (the team page's in-page block shows
 // it beside the tiles): ordinary gateway chat on `orgiq:huddle:<callId>`,
 // admitted only to current seats whose session stands in the lobby's tenant
-// and holds the Social grant. Page references (initiative/work) stay OrgIQ's.
+// and retains the team's host read authority. Page references stay OrgIQ's.
 import express from 'express';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -64,9 +64,9 @@ beforeEach(async () => {
   previousSecret = process.env['REALTIME_JWT_SECRET']; process.env['REALTIME_JWT_SECRET'] = SECRET;
   clients = [];
   sessions = new Map([
-    ['ana', session('ana', 'assessment', 'assessor', { assessment: ['assessor'], social: ['participant'] })],
-    ['bea', session('bea', 'assessment', 'assessor', { assessment: ['assessor'], social: ['participant'] })],
-    ['cy', session('cy', 'assessment', 'assessor', { assessment: ['assessor'], social: ['participant'] })],
+    ['ana', session('ana', 'assessment', 'assessor', { assessment: ['assessor'] })],
+    ['bea', session('bea', 'assessment', 'assessor', { assessment: ['assessor'] })],
+    ['cy', session('cy', 'assessment', 'assessor', { assessment: ['assessor'] })],
     // An OrgIQ session with a Social grant: never a seat of an assessment huddle.
     ['oz', session('oz', 'orgiq', 'member', { orgiq: ['member'], social: ['participant'] })],
   ]);

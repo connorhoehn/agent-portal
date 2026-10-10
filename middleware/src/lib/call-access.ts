@@ -6,7 +6,9 @@ import { AppError } from './async-handler.js';
 import { currentDocumentSessionEpoch, documentSessionId } from './document-session.js';
 import { getUser } from '../providers/identity.js';
 import { DEMO_SUB, demoFallbackAllowed, type Grants, type Session } from './session.js';
-import { isAllowed } from './authz.js';
+import { holdsChannelAuthority } from './live-principal.js';
+import { tenantChannelFamily } from './tenant-channels.js';
+import { pageResourceVisible } from './page-resources.js';
 
 export interface CallAuthority { displayName: string; grants: Grants }
 /** The tenants whose sockets page pins (OrgIQ only) and huddle chat resolve. */
@@ -87,7 +89,8 @@ export interface CallAccessOptions {
 export async function activeCallParticipant(opts: CallAccessOptions, callId: string, session: Session): Promise<{
   call: ActiveCallStateView; authority: CallAuthority; clientIds: string[];
 }> {
-  const authority = await (opts.authority ?? (value => currentCallAuthority(value, HUDDLE_CHAT_TENANTS)))(session);
+  const readAuthority = opts.authority ?? (value => currentCallAuthority(value, HUDDLE_CHAT_TENANTS));
+  const authority = await readAuthority(session);
   const call = await opts.calls.getCall(callId);
   if (!call) throw new AppError(404, 'Call is no longer active');
   // A huddle belongs to its lobby's tenant; a session standing elsewhere is not a seat of it.
@@ -99,13 +102,27 @@ export async function activeCallParticipant(opts: CallAccessOptions, callId: str
   const clientIds = call.participantClientIds.filter((_, index) => connected[index] && callProvenance(connected[index]!) === key);
   if (!clientIds.length || !opts.lobbyAllowed({ userId: session.sub, org: session.tenant, role: session.role,
     tenants: Object.keys(authority.grants) }, call.lobbyName)) throw new AppError(403, 'Join this call before opening its conversation');
-  return { call, authority, clientIds };
+  // A distributed connection-directory read can outlive identity revocation.
+  const latest = await readAuthority(session);
+  if (!opts.lobbyAllowed({ userId: session.sub, org: session.tenant, role: session.role,
+    tenants: Object.keys(latest.grants) }, call.lobbyName)) throw new AppError(403, 'Join this call before opening its conversation');
+  return { call, authority: latest, clientIds };
 }
 
-/** Social embedding evaluates the current grants without changing context. */
-export async function currentCallChatGrant(session: Session, authority: CallAuthority, action: 'ViewSocial' | 'PostMessage'): Promise<boolean> {
-  for (const role of authority.grants['social'] ?? []) {
-    if (await isAllowed({ sub: session.sub, tenant: 'social', role }, action)) return true;
-  }
-  return false;
+/**
+ * A seated huddle participant speaks and chats under the stored lobby's read
+ * authority. This is neither Social embedding nor a page-discussion write:
+ * an OrgIQ member may join/chat without PostMessage or DispatchAgentRun.
+ * The action selectors are kept for the runtime's read/write contract; both
+ * require the same lobby authority, with the actual seat checked separately.
+ */
+export async function currentCallChatGrant(session: Session, authority: CallAuthority, _action: 'ViewSocial' | 'PostMessage',
+  lobbyName: string): Promise<boolean> {
+  const tenant = huddleLobbyTenant(lobbyName);
+  if (!tenant || session.tenant !== tenant || !authority.grants[tenant]?.includes(session.role)) return false;
+  const family = tenantChannelFamily(lobbyName);
+  // DMs have no tenant family; the caller's ID membership is lobbyGuard's.
+  if (!family) return tenant === 'orgiq' && /^orgiq:dm:[^:]+(?::[^:]+)+$/.test(lobbyName);
+  if (!family.lobby || family.tenant !== tenant || !await holdsChannelAuthority({ ...session, grants: authority.grants }, family.read)) return false;
+  return !family.lobbyResource || await pageResourceVisible(family.lobbyResource, lobbyName);
 }

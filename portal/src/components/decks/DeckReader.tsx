@@ -2,7 +2,7 @@
 // Compose its supported viewing primitives in the same host frame instead.
 // This reader receives no document mutation, save or agent-revise callback.
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
-import { Button, EmptyState, Inline, LoadingState, T, Textarea } from '@connorhoehnslalom/ui-components/shared';
+import { Button, DropdownMenu, EmptyState, Inline, LoadingState, T, Textarea } from '@connorhoehnslalom/ui-components/shared';
 import { Filmstrip, SlideStage, canSaveDeck,
   type DeckSlide, type DeckSpec, type PresentationEditorFrame, type PresentationEditorProps,
   type PresentationFooterContext, type PresentationPreview, type SlideListItem,
@@ -14,6 +14,9 @@ import './DeckReader.css';
 interface ReaderSlide { id: string; title: string; svg?: string; slide?: DeckSlide; generated: boolean }
 export interface DeckReaderProps {
   spec: DeckSpec;
+  /** Active call review keeps one toolbar and defaults notes closed. */
+  compactReview?: boolean;
+  fileActions?: ReactNode;
   preview: PresentationPreview;
   /** The supplied images were rendered from this exact saved specification. */
   previewCurrent?: boolean;
@@ -30,11 +33,13 @@ export interface DeckReaderProps {
 const noop = () => {};
 const svgUri = (svg: string) => `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 
-export function DeckReader({ spec, preview, previewCurrent = true, onRequestPreview, slideViewers, selectSlideRequest,
+export function DeckReader({ spec, compactReview = false, fileActions, preview, previewCurrent = true, onRequestPreview, slideViewers, selectSlideRequest,
   onSelectedSlideChange, onNavigateSlide, renderFrame, footer, 'data-testid': testId = 'deck-reader',
 }: DeckReaderProps) {
   const [selectedId, setSelectedId] = useState(spec.slides[0]?.id ?? '');
-  const [outline, setOutline] = useState(false), [notes, setNotes] = useState(true);
+  const [outline, setOutline] = useState(false);
+  const [notesChoice, setNotesChoice] = useState<boolean | null>(null);
+  const notes = notesChoice ?? !compactReview;
   const [zoom, setZoom] = useState('fit'), [presenting, setPresenting] = useState(false);
   const viewport = useRef<HTMLDivElement>(null);
   const [available, setAvailable] = useState({ width: 800, height: 420 });
@@ -89,21 +94,30 @@ export function DeckReader({ spec, preview, previewCurrent = true, onRequestPrev
     ? Math.max(120, Math.min(1024, available.width, available.height * 16 / 9))
     : 960 * Number(zoom) / 100;
   const toolbar = <Inline gap="xs" align="center" wrap className="deck-reader-toolbar" role="toolbar" aria-label="Presentation viewing tools">
-    <Button size="sm" variant={outline ? 'secondary' : 'primary'} onClick={() => setOutline(false)} aria-pressed={!outline}>Slides</Button>
+    {!compactReview && <><Button size="sm" variant={outline ? 'secondary' : 'primary'} onClick={() => setOutline(false)} aria-pressed={!outline}>Slides</Button>
     <Button size="sm" variant={outline ? 'primary' : 'secondary'} onClick={() => setOutline(true)} aria-pressed={outline}>Outline</Button>
-    <span className="deck-reader-toolbar-divider" aria-hidden="true" />
+    <span className="deck-reader-toolbar-divider" aria-hidden="true" /></>}
     <Button size="sm" variant="ghost" aria-label="Previous slide" disabled={index === 0} onClick={() => step(index - 1)}>←</Button>
     <T as="span" size="xs" className="deck-reader-position" data-testid={`${testId}-position`}>Slide {current ? index + 1 : 0} of {slides.length}</T>
     <Button size="sm" variant="ghost" aria-label="Next slide" disabled={index >= slides.length - 1} onClick={() => step(index + 1)}>→</Button>
-    <label className="deck-reader-zoom"><span className="sr-only">Slide zoom</span>
+    {!compactReview && <><label className="deck-reader-zoom"><span className="sr-only">Slide zoom</span>
       <select aria-label="Slide zoom" value={zoom} onChange={event => setZoom(event.target.value)}>
         <option value="fit">Fit</option><option value="75">75%</option><option value="100">100%</option><option value="125">125%</option>
       </select>
     </label>
-    <Button size="sm" variant="secondary" aria-pressed={notes} onClick={() => setNotes(value => !value)}>Notes</Button>
+    <Button size="sm" variant="secondary" aria-pressed={notes} onClick={() => setNotesChoice(!notes)}>Notes</Button></>}
     <span className="deck-reader-toolbar-spacer" />
-    <Button size="sm" variant="ghost" disabled={!composerFocus.present} onClick={() => composerFocus.request({ mode: 'agent' })} title="Focus the presentation conversation">Chat & agent</Button>
+    {!compactReview && <Button size="sm" variant="ghost" disabled={!composerFocus.present} onClick={() => composerFocus.request({ mode: 'agent' })} title="Focus the presentation conversation">Chat & agent</Button>}
+    {compactReview && <DropdownMenu trigger="View" triggerLabel="Presentation view options" triggerVariant="default" sections={[{ items: [
+      { label: 'Slide thumbnails', active: !outline, onSelect: () => setOutline(false) },
+      { label: 'Outline', active: outline, onSelect: () => setOutline(true) },
+      { label: 'Speaker notes', active: notes, onSelect: () => setNotesChoice(!notes) },
+      { label: 'Fit slide', active: zoom === 'fit', onSelect: () => setZoom('fit') },
+      { label: 'Actual size', active: zoom === '100', onSelect: () => setZoom('100') },
+      { label: 'Chat & agent', disabled: !composerFocus.present, onSelect: () => composerFocus.request({ mode: 'agent' }) },
+    ] }]} />}
     <Button size="sm" variant="primary" disabled={!current?.svg} onClick={() => setPresenting(true)}>Present</Button>
+    {fileActions}
   </Inline>;
   const items: SlideListItem[] = spec.slides.map(slide => ({ slide, thumbnailSvg: slides.find(item => item.id === slide.id)?.svg, uncited: false }));
   const surface = <div className="deck-reader-surface" data-testid={testId}>

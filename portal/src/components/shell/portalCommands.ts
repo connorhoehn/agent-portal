@@ -292,6 +292,7 @@ const PAGES: PageEntry[] = [
     keywords: ['definition', 'pipeline', 'version', 'dag'] },
   { label: 'Runbooks',           hint: 'Runbooks awaiting a dry-run',         path: '/pipelines/runbooks',                         tenant: 'pipelines', group: 'Catalog',
     keywords: ['runbook', 'skill', 'dry-run', 'promotion'] },
+  { label: 'Queues', hint: 'Backlog, in-flight work and dead-letter queues', path: '/pipelines/queues', tenant: 'pipelines', group: 'Runs', keywords: ['queue', 'message-queue', 'backlog', 'dlq', 'realtime'] },
   { label: 'Runs',               hint: 'Every run, its steps and status',     path: '/pipelines/runs',                             tenant: 'pipelines', group: 'Runs',
     keywords: ['run', 'job', 'execution', 'status', 'ledger'] },
   { label: 'Work graph',         hint: 'Runs, steps and approvals for the day, not the run ledger', path: '/pipelines/activity',                       tenant: 'pipelines', group: 'Runs',

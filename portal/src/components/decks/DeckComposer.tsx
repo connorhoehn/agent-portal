@@ -13,6 +13,7 @@ import { ConversationComposer } from '../../lib/conversationComposer';
 import { useHuddleComposerRecipient } from '../shell/HuddleComposerDock';
 import { useCallBlock, useCallHost } from '../../lib/conversationCall';
 import { initiativeFromChannel } from '../../lib/conversationCallModel';
+import './deckReviewLayout.css';
 import type { PresentationInstructContext, PresentationInstructResult } from '@connorhoehnslalom/ui-components/doc-editor';
 
 export interface DeckComposerProps {
@@ -42,6 +43,7 @@ export function DeckComposer({ deckId, deckTitle, selectedSlideId, slideNumber, 
     return !withReference ? null : projectId ? { kind: 'initiative' as const, id: projectId } : undefined;
   }, [channel, withReference]);
   const { chat: huddle, recipient } = useHuddleComposerRecipient(page);
+  const compactReview = !!huddle?.callId;
   const call = useCallBlock(huddle?.callId ? channel ?? null : null, { compact: true });
   const [mode, setMode] = useState<'agent' | 'chat'>('agent');
   const [intent, setIntent] = useState<'ask' | 'edit'>('ask');
@@ -92,7 +94,7 @@ export function DeckComposer({ deckId, deckTitle, selectedSlideId, slideNumber, 
       ] }]} /> : <T as="span" size="xs" tone="secondary">{asking ? 'Ask' : 'Edit'}</T>;
 
   return (
-    <div className="initiative-composer-dock deck-composer-backdrop shrink-0">
+    <div className={`initiative-composer-dock deck-composer-backdrop shrink-0${compactReview ? ' deck-composer-review' : ''}`} data-review-density={compactReview ? 'compact' : 'comfortable'}>
     <ConversationComposer
       channel={null}
       context={chatting && huddle ? { kind: 'conversation', id: huddle.callId!, title: '',
@@ -116,11 +118,11 @@ export function DeckComposer({ deckId, deckTitle, selectedSlideId, slideNumber, 
       console={false}
       working={!chatting && working}
       status={chatting ? null : status}
-      suggestions={chatting ? [] : asking ? ['Summarize this slide', 'Explain the figures', 'What should we discuss next?'] : hints}
+      suggestions={chatting || compactReview ? [] : asking ? ['Summarize this slide', 'Explain the figures', 'What should we discuss next?'] : hints}
       onSuggestion={(suggestion) => { void run(suggestion); }}
       modePlaceholders={{ agent: asking ? `Ask about ${scope}…` : selectedSlideId ? `Tell the agent what to change on slide ${slideNumber ?? ''}…`.replace(' …', '…') : 'Tell the agent what to change across the whole deck…' }}
-      presentation="document" label="Presentation conversation" inputLabel="Presentation message"
-      maxInputHeight="min(8rem, 20dvh)" className="@container bg-surface pt-0 [--dock-inset:0px]"
+      presentation={compactReview ? 'compact' : 'document'} {...(compactReview ? { responsive: 'pane' as const } : {})} label="Presentation conversation" inputLabel="Presentation message"
+      maxInputHeight={compactReview ? 'min(4rem, 10dvh)' : 'min(8rem, 20dvh)'} className="@container bg-surface pt-0 [--dock-inset:0px]"
       data-testid="deck-composer-dock"
       composerTestId="deck-composer"
     />

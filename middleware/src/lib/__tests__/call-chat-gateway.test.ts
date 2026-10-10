@@ -28,6 +28,8 @@ import { callChatRouter } from '../../routes/call-chat.js';
 import { chatPinsRouter } from '../../routes/chat-pins.js';
 import { errorHandler } from '../async-handler.js';
 import { signRealtimeToken, realtimeClaims } from '../realtime-token.js';
+import { admitPublish, admitSubscribe } from '../gateway/authority.js';
+import { sessionGatewayContext } from '../live-principal.js';
 import { getUser } from '../../providers/identity.js';
 import { getProject } from '../../providers/projects.js';
 import { getWorkItem } from '../../providers/work-items.js';
@@ -76,7 +78,7 @@ beforeEach(async () => {
   uploads = { ...gatewayUploadConfig({ GATEWAY_UPLOADS: 'on' } as NodeJS.ProcessEnv), dir: mkdtempSync(joinPath(tmpdir(), 'huddle-uploads-')) };
   process.env['GATEWAY_UPLOADS'] = 'on'; process.env['GATEWAY_UPLOAD_DIR'] = uploads.dir;
   sessions = new Map(['alice', 'bob', 'charlie', 'dora'].map(sub => [sub, { sub, name: `${sub} cookie`, tenant: 'orgiq', role: 'member', epoch: 0,
-    grants: { orgiq: ['member'], social: ['participant'] }, iat: Math.floor(Date.now() / 1000) } as Session]));
+    grants: { orgiq: ['member'] }, iat: Math.floor(Date.now() / 1000) } as Session]));
   // Dora is signed in to another tenant, with a Social grant but no OrgIQ one.
   sessions.set('dora', { ...sessions.get('dora')!, tenant: 'assessment', role: 'assessor', grants: { assessment: ['assessor'], social: ['participant'] } });
   jest.mocked(getUser).mockImplementation(async id => sessions.has(id) ? { id, displayName: `${id} Directory`, epoch: 0,
@@ -118,6 +120,11 @@ async function startCall() {
 it('carries persisted, acknowledged huddle chat with canonical references, receipts, typing and reactions only between seats', async () => {
   const { alice, bob, charlie, bobOtherTab } = await startCall();
   await join(alice); await join(bob);
+  // Speaking/chatting in an admitted Work call does not acquire Social or
+  // initiative-discussion write authority. These participants have only Work.
+  expect((await request(app).get(`/api/calls/${callId}/chat`).set('x-user', 'bob')).body).toMatchObject({ channel, canSend: true });
+  expect(await admitSubscribe(sessionGatewayContext(sessions.get('bob')!), 'social:ch:auth-migration')).toBe(false);
+  expect(await admitPublish(sessionGatewayContext(sessions.get('bob')!), lobbyName)).toBe(false);
   // An invited but unanswered person, another tab of a seated person, and a
   // token from another tenant cannot join, read, send, type or react.
   for (const outsider of [charlie, bobOtherTab]) {
@@ -254,8 +261,8 @@ it('starts a late joiner at the join boundary, and departure removes the subscri
   expect((await request(app).get(`/api/calls/${callId}/chat`).set('x-user', 'bob')).status).toBe(403);
   expect((await request(app).get('/api/chat/pins').set('x-user', 'bob').query({ channel })).status).toBe(403);
   expect(await backend.chatStore.listMessages(channel, 10)).toHaveLength(3);
-  // A revoked Social grant is refused on the next frame, even for a current seat.
-  sessions.set('charlie', { ...sessions.get('charlie')!, grants: { orgiq: ['member'] } });
+  // A revoked host grant is refused on the next frame, even for a current seat.
+  sessions.set('charlie', { ...sessions.get('charlie')!, grants: { social: ['participant'] } });
   expect(errorCode(await refusal(charlie, () => send(charlie, 'Revoked', { clientDeliveryId: 'revoked' })))).toBe('HUDDLE_CHAT_DENIED');
   await expect(callChatRuntime().assertMember(callId, sessions.get('alice')!, true)).resolves.toBeUndefined();
 }, 30000);

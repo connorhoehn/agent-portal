@@ -44,7 +44,8 @@ export interface CallChatSnapshot {
 }
 export type CallChatPageReference = ({ status: 'available' } & CanonicalCallPage) | ({ status: 'unavailable' } & CallPageDescriptor);
 interface Seat { clientId: string; session: Session; authority: CallAuthority }
-interface Control { generation: number; ended: boolean; departed: Set<string>; seats: Map<string, number>; users: Map<string, string>; until: number }
+interface Control { generation: number; ended: boolean; departed: Set<string>; seats: Map<string, number>; users: Map<string, string>;
+  lobbyName: string | null; provenance: Map<string, string>; until: number }
 class CallMembershipChanged extends AppError {
   constructor() { super(409, 'Call membership changed. Refresh the conversation.'); }
 }
@@ -83,7 +84,8 @@ export class CallChatRuntime implements CallLifecycleObserver {
   private control(callId: string): Control {
     let control = this.controls.get(callId);
     if (!control || control.until <= this.now()) {
-      control = { generation: 0, ended: false, departed: new Set(), seats: new Map(), users: new Map(), until: 0 };
+      control = { generation: 0, ended: false, departed: new Set(), seats: new Map(), users: new Map(),
+        lobbyName: null, provenance: new Map(), until: 0 };
       this.controls.set(callId, control);
     }
     control.until = this.now() + 4 * 60 * 60 * 1000;
@@ -104,14 +106,14 @@ export class CallChatRuntime implements CallLifecycleObserver {
       if (!(error instanceof CallMembershipChanged)) throw error;
     }
   }
-  private grant = (session: Session, authority: CallAuthority, action: 'ViewSocial' | 'PostMessage') =>
-    (this.opts.grant ?? currentCallChatGrant)(session, authority, action);
+  private grant = (session: Session, authority: CallAuthority, action: 'ViewSocial' | 'PostMessage', lobbyName: string) =>
+    (this.opts.grant ?? currentCallChatGrant)(session, authority, action, lobbyName);
   private async participant(callId: string, session: Session, write = false) {
     this.check(callId);
     const result = await activeCallParticipant(this.opts, callId, session);
-    if (!await this.grant(session, result.authority, 'ViewSocial')
-      || (write && !await this.grant(session, result.authority, 'PostMessage'))) {
-      throw new AppError(403, write ? 'Your Social grants do not allow huddle messages' : 'Your Social grants do not allow huddle chat');
+    if (!await this.grant(session, result.authority, 'ViewSocial', result.call.lobbyName)
+      || (write && !await this.grant(session, result.authority, 'PostMessage', result.call.lobbyName))) {
+      throw new AppError(403, 'This call is no longer available to your current session');
     }
     const current = await this.opts.calls.getCall(callId); this.check(callId);
     if (!current) throw new AppError(404, 'Call is no longer active');
@@ -122,7 +124,21 @@ export class CallChatRuntime implements CallLifecycleObserver {
     const clientIds = current.participantClientIds.filter((id, index) => !this.control(callId).departed.has(id)
       && connections[index] && callProvenance(connections[index]!) === provenance);
     if (!clientIds.length || current.lobbyName !== result.call.lobbyName) throw new AppError(403, NOT_JOINED);
-    return { ...result, call: current, clientIds, state };
+    // Policy/resource and connection reads can outlive a host-grant revoke,
+    // epoch change, or departure. Re-read the signed authority and seat after
+    // them; no positive result from the first lookup owns this final check.
+    const latest = await activeCallParticipant(this.opts, callId, session); this.check(callId);
+    if (latest.call.lobbyName !== current.lobbyName) throw new AppError(403, NOT_JOINED);
+    if (!await this.grant(session, latest.authority, 'ViewSocial', latest.call.lobbyName)
+      || (write && !await this.grant(session, latest.authority, 'PostMessage', latest.call.lobbyName))) {
+      throw new AppError(403, 'This call is no longer available to your current session');
+    }
+    const finalAuthority = await (this.opts.authority ?? huddleAuthority)(session); this.check(callId);
+    const admittedIds = clientIds.filter(id => latest.clientIds.includes(id) && !this.control(callId).departed.has(id));
+    if (!admittedIds.length) throw new AppError(403, NOT_JOINED);
+    const control = this.control(callId); control.lobbyName = latest.call.lobbyName;
+    for (const id of admittedIds) control.provenance.set(id, provenance);
+    return { ...latest, authority: finalAuthority, clientIds: admittedIds, state };
   }
   private async seats(callId: string): Promise<Seat[]> {
     this.check(callId);
@@ -266,7 +282,7 @@ export class CallChatRuntime implements CallLifecycleObserver {
   /**
    * The reader (or, with `write`, sender) authority for a SESSION: an actual
    * connected seat with this session's provenance, an active history floor,
-   * and the huddle's Social grant. For REST callers (resolver, /summarize,
+   * and the huddle's current host-lobby authority. For REST callers (resolver, /summarize,
    * pins, upload bytes), which have no connection of their own.
    */
   async assertMember(callId: string, session: Session, write = false): Promise<void> {
@@ -275,8 +291,8 @@ export class CallChatRuntime implements CallLifecycleObserver {
   }
   /**
    * The gateway's channel authority for one CONNECTION: it is a current,
-   * non-departed seat of this call, its session holds the huddle's Social
-   * grant (PostMessage to publish), and its person is an active member. Fenced
+   * non-departed seat of this call, its session may still use the host lobby,
+   * and its person is an active member. Fenced
    * by the seat epoch: a departure or re-registration while this check awaits
    * denies it, so a delayed read cannot restore access after Leave.
    */
@@ -339,7 +355,7 @@ export class CallChatRuntime implements CallLifecycleObserver {
     const pages = new Map<string, Promise<CallChatPageReference>>();
     const messages = await Promise.all(stored.filter(message => this.visible(message, floor)).map(message => this.render(callId, message, pages)));
     const seats = await this.seats(callId);
-    const canSend = await this.grant(session, actor.authority, 'PostMessage');
+    const canSend = await this.grant(session, actor.authority, 'PostMessage', actor.call.lobbyName);
     // Canonical/resource reads can outlive revocation, leave, or end.
     const current = await this.participant(callId, session); this.fence(callId, generation);
     if (!current.state.members[session.sub]?.active) throw new AppError(403, NOT_JOINED);
@@ -371,9 +387,8 @@ export class CallChatRuntime implements CallLifecycleObserver {
     if (!session) return null;
     const callId = frame.callId;
     if (frame.type === 'call-chat' && frame.action === 'ended') {
-      const authority = await (this.opts.authority ?? huddleAuthority)(session);
       const state = await this.opts.state.get(callId);
-      return state.ended && await this.grant(session, authority, 'ViewSocial')
+      return state.ended && await this.terminalParticipant(callId, clientId, session)
         ? { type: 'call-chat', action: 'ended', callId, channel: callChatChannel(callId), revision: state.revision } : null;
     }
     if (frame.type !== 'call-chat' || frame.action !== 'members') return null;
@@ -381,6 +396,20 @@ export class CallChatRuntime implements CallLifecycleObserver {
     const seats = await this.seats(callId);
     const current = await this.participant(callId, session);
     return { ...frame, revision: current.state.revision, participants: this.peers(seats) };
+  }
+  /** Content-free terminal metadata is only for a previously admitted seat. */
+  private async terminalParticipant(callId: string, clientId: string, session: Session): Promise<boolean> {
+    const control = this.controls.get(callId);
+    if (!control?.ended || !control.lobbyName || control.departed.has(clientId)
+      || control.provenance.get(clientId) !== callProvenance(session)) return false;
+    const authority = await (this.opts.authority ?? huddleAuthority)(session);
+    if (!this.opts.lobbyAllowed({ userId: session.sub, org: session.tenant, role: session.role,
+      tenants: Object.keys(authority.grants) }, control.lobbyName)
+      || !await this.grant(session, authority, 'ViewSocial', control.lobbyName)) return false;
+    // A late policy/resource receipt cannot emit to a retired identity.
+    await (this.opts.authority ?? huddleAuthority)(session);
+    const current = await resolveConnectedCallSession(this.opts.router, clientId);
+    return !!current && callProvenance(current) === callProvenance(session);
   }
   private async broadcastMembers(callId: string) {
     const generation = this.control(callId).generation;
@@ -404,8 +433,7 @@ export class CallChatRuntime implements CallLifecycleObserver {
     for (const clientId of participantClientIds) {
       const session = await resolveConnectedCallSession(this.opts.router, clientId); if (!session) continue;
       try {
-        const authority = await (this.opts.authority ?? huddleAuthority)(session);
-        if (await this.grant(session, authority, 'ViewSocial')) await this.opts.router.sendToClient(clientId,
+        if (await this.terminalParticipant(callId, clientId, session)) await this.opts.router.sendToClient(clientId,
           { type: 'call-chat', action: 'ended', callId, channel: callChatChannel(callId), revision: state.revision });
       } catch { /* Terminal metadata contains no message or page contents. */ }
     }

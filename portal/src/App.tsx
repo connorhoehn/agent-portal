@@ -65,6 +65,7 @@ const PipelinesArtifactsPage = lazy(() => import('./pages/pipelines/ArtifactsPag
 const PipelinesDefinitionsPage = lazy(() => import('./pages/pipelines/DefinitionsPage'));
 const PipelinesRunbooksPage = lazy(() => import('./pages/pipelines/RunbooksPage'));
 const PipelinesApprovalsPage = lazy(() => import('./pages/pipelines/ApprovalsPage'));
+const PipelinesQueuesPage = lazy(() => import('./pages/pipelines/QueuesPage'));
 const PipelinesSourcesPage = lazy(() => import('./pages/pipelines/SourcesPage'));
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
 const KnowledgeHomePage = lazy(() => import('./pages/knowledge/KnowledgeHomePage'));
@@ -349,6 +350,7 @@ export function App() {
           >
             <Route index element={<Navigate to="runs" replace />} />
             <Route path="definitions" element={<Page element={<PipelinesDefinitionsPage />} />} />
+            <Route path="queues" element={<Page element={<PipelinesQueuesPage />} />} />
             <Route path="runbooks" element={<Page element={<PipelinesRunbooksPage />} />} />
             <Route path="runs" element={<Page element={<PipelinesRunsPage />} />} />
             <Route path="runs/:id" element={<Page element={<PipelinesRunDetailPage />} />} />
