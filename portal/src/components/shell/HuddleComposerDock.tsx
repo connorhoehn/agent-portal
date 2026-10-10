@@ -24,6 +24,37 @@ export function useHuddleComposerRecipient(page?: CallPageDescriptor | null) {
   return { chat, recipient };
 }
 
+/** A page discussion and the current call share one input, with separate drafts.
+ * The call ID is part of the recipient identity so a later call cannot inherit it.
+ */
+export function usePageHuddleComposer(defaultMode: 'chat' | 'agent' = 'chat') {
+  const { chat, recipient } = useHuddleComposerRecipient(null);
+  const [chosen, setChosen] = useState('discussion');
+  const [mode, setMode] = useState<'chat' | 'agent'>(defaultMode);
+  const huddleSelected = mode === 'chat' && chosen.startsWith('huddle:');
+  const retired = chat?.retiredDrafts.find(row => `huddle:${row.scope.callId}` === chosen);
+  const current = chosen === recipient?.id;
+  return {
+    recipient,
+    editorKey: huddleSelected ? chosen : 'page',
+    unavailableHuddle: huddleSelected && (!current || !!recipient?.unavailableReason),
+    composerProps: {
+      recipient: chosen,
+      mode,
+      onModeChange: (value: string) => { if (value === 'chat' || value === 'agent') setMode(value); },
+      onRecipientChange: (id: string) => {
+        setChosen(id);
+        if (id === 'discussion') chat?.closeMessage();
+      },
+      ...(huddleSelected && chat && current ? {
+        draft: chat.draft, onDraftChange: chat.setDraft, persistDraft: false,
+      } : huddleSelected && retired && chat ? {
+        draft: retired.draft, onDraftChange: (draft: typeof retired.draft) => chat.updateRetiredDraft(retired.scope.callId, draft), persistDraft: false,
+      } : {}),
+    },
+  };
+}
+
 /** A presentation without an agent dock still gets the central call composer. */
 export function HuddleComposerDock({ dock, page }: { dock?: ReactNode; page?: CallPageDescriptor | null }) {
   const [withReference, setWithReference] = useState(true);

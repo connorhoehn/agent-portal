@@ -20,7 +20,7 @@ import { useGatewayOptional, type useReactions } from '@connorhoehnslalom/realti
 import { composerDraftOf, useComposerFocus, useComposerFocusReveal, useThreadInput, type MentionCandidate, type RichChatComposerHandle, type RichChatDraft } from '@connorhoehnslalom/ui-components/social/rich-composer';
 import { PageReferenceCard } from '../chat/PageReferenceCard';
 import { ConversationThread, useConversation, type ConversationRuntime } from '../chat/ConversationThread';
-import { ChatSidePanelFrame, ReactionOverlay, ReactionPicker, SidePaneSplit, SplitPane, useSidePaneHost } from '@connorhoehnslalom/ui-components';
+import { ChatSidePanelFrame, ReactionOverlay, ReactionPicker, SidePaneSplit, useSidePaneHost } from '@connorhoehnslalom/ui-components';
 import { AtIcon, Button, DocumentAddIcon, FloatingPanel, IconButton, Inline, InlineAlert, InlinePopover, Stack, T } from '@connorhoehnslalom/ui-components/shared';
 import { aboveFooterEnd, useFooterAnchorKey } from './footerPanel';
 import { useSession } from '../../lib/auth';
@@ -62,7 +62,7 @@ export interface HuddleChatContextValue {
   closeMessage(): void;
   /** The pane composer's draft and page reference, kept at shell scope per identity and call. */
   draft: RichChatDraft;
-  setDraft(draft: RichChatDraft): void;
+  setDraft(draft: RichChatDraft, previous?: RichChatDraft): void;
   /** Unsent local drafts from this exact signed identity's former calls; no call access is granted. */
   retiredDrafts: readonly RetiredHuddleDraft[];
   updateRetiredDraft(callId: string, draft: RichChatDraft): void;
@@ -192,7 +192,10 @@ export function HuddleChatProvider({ children }: { children: ReactNode }) {
   const retiredDrafts = useMemo(() => draftMemory.retired(draftIdentity, scope), [draftMemory, draftSnapshot, draftIdentity, scope]);
   const sameDraftScope = useCallback(() => latestDraftScope.current.scopeKey === scopeKey
     && latestDraftScope.current.identityKey === draftIdentity, [scopeKey, draftIdentity]);
-  const setDraft = useCallback((next: RichChatDraft) => {
+  const setDraft = useCallback((next: RichChatDraft, previous?: RichChatDraft) => {
+    // An editor unmounted during a send may acknowledge its old submission
+    // with an empty draft. Only that exact revision may be cleared.
+    if (previous && !next.html && !next.files.length && previous !== draftRef.current) return;
     if (sameDraftScope() && draftMemory.setDraft(draftIdentity, scope, next)) draftRef.current = next;
   }, [sameDraftScope, draftMemory, draftIdentity, scope]);
   const setPage = useCallback((next: CallPageDescriptor | null) => {
@@ -485,7 +488,7 @@ export function HuddleChatBody() {
             const { displayName: _name, ...extra } = out.metadata;
             return confirmed(out.text.trim(), draftPage, extra);
           } }],
-        draft: chat.draft, onDraftChange: next => chat.setDraft(next), composerRef: composer, onSearchPeople: searchPeople, contextChip: false, inputLabel: 'Huddle message',
+        draft: chat.draft, onDraftChange: chat.setDraft, composerRef: composer, onSearchPeople: searchPeople, contextChip: false, inputLabel: 'Huddle message',
         // The full card keeps the strip (mention, attach page, files) in view, as the pane always showed it.
         expanded: true,
         references: pageReferences, onRemoveReference: () => chat.setPage(null),
@@ -533,58 +536,34 @@ function CallMediaPanel({ onClose, title, count }: { onClose(): void; title: str
   </ChatSidePanelFrame>;
 }
 
-/**
- * The shell's right split pane — the library `SidePaneSplit` (ui-components
- * 2.438 pane model): the page on the left; on the right, from the top, the
- * huddle's media grid (while the footer's media toggle has it open and no
- * page block holds the media), the page's own pane (a page registers it with
- * the library `SidePane`: an initiative's Discussion/Details/Docs, Search's
- * Ask about selection; open state and ratio remembered per device under
- * `shell.conversation-pane`), and the huddle chat. With none of them showing
- * the page takes the whole width and no divider renders. The shell's
- * `SidePaneProvider` (Layout.tsx) holds the host; the rail rule reads it
- * through `useSidePaneHost()`.
- *
- * `inPage`: the same split inside a page block (the assessment dimension
- * composer), beside the block's media grid and composer. It shows the huddle
- * chat whenever a huddle chat exists and neither the shell pane nor the
- * popped-out panel holds it; its × hides it for this block. That block's
- * composer addresses the huddle, so this chat is the thread only (one input
- * per conversation, the library ConversationInputProvider).
- */
-export function HuddleChatSplit({ children, inPage = false }: { children: ReactNode; inPage?: boolean }) {
+/** The shell fallback for pages without an owned conversation pane. Media
+ * stays with the central composer when that page has claimed it. */
+export function HuddleChatSplit({ children }: { children: ReactNode }) {
   const chat = useHuddleChat();
   const host = useCallHost();
   const media = useCallMediaPanel();
   const pageHoldsMedia = useCallBlockPageClaimed();
   const pane = useSidePaneHost();
-  const [dismissed, setDismissed] = useState<string | null>(null);
-  // A page block that would show the huddle chat beside its composer
-  // (`inPage`) defers to the shell's right pane whenever a page pane is open
-  // there: the huddle chat then stacks under the page's pane (the user's
-  // composer keeps its full width and its To: switch), never beside it.
-  const inPageHost = useContext(InPageHuddleContext);
-  const [inPageCount, setInPageCount] = useState(0);
-  const registerInPage = useCallback(() => { setInPageCount((n) => n + 1); return () => setInPageCount((n) => n - 1); }, []);
-  useEffect(() => (inPage && inPageHost ? inPageHost() : undefined), [inPage, inPageHost]);
-  const deferToPane = inPage && pane.asked;
   // The footer's Message (and any other focus request for the page's own
   // conversation) brings the pane on screen before a composer takes the caret.
   const { registered, reveal } = pane;
   useComposerFocusReveal(request => {
-    if (!request.target || request.target.kind === 'discussion') reveal();
-  }, !inPage && registered);
+    if (request.mode !== 'chat') return;
+    if (request.target?.kind === 'huddle') chat?.openPane({ focus: false });
+    else if (!request.target || request.target.kind === 'discussion') {
+      if (request.target?.kind === 'discussion') chat?.closeMessage();
+      if (registered) reveal();
+    }
+  }, !chat?.paneOwned);
 
   // ── The huddle ───────────────────────────────────────────────────────────
-  const shown = !!chat?.callId && (inPage
-    ? !deferToPane && chat.view === 'closed' && dismissed !== chat.callId
-    : !chat.paneOwned && (chat.view === 'pane' || (inPageCount > 0 && pane.asked && chat.view === 'closed' && dismissed !== chat.callId)));
-  const mediaShown = !inPage && !!media?.open && !pageHoldsMedia;
+  const shown = !!chat?.callId && !chat.paneOwned && chat.view === 'pane';
+  const mediaShown = !!media?.open && !pageHoldsMedia;
   const chatPane = shown && chat
     ? <ChatSidePanelFrame title="Huddle chat" subtitle={participantsLine(chat)}
-      onClose={inPage || chat.view === 'closed' ? () => setDismissed(chat.callId) : chat.closeMessage}
-      onOpenFullPage={chat.popOut} className={`${inPage ? 'h-full' : 'min-h-0 flex-1'} border-l border-border bg-surface`}
-      data-testid={inPage ? 'huddle-chat-inpage' : 'huddle-chat-panel'}>
+      onClose={chat.closeMessage}
+      onOpenFullPage={chat.popOut} className="min-h-0 flex-1 border-l border-border bg-surface"
+      data-testid="huddle-chat-panel">
       <Stack gap="none" className="h-full min-h-0">
         {mediaShown && <CallMediaGrid />}
         <T className="sr-only" data-testid="huddle-chat-participants">{chat.state.participants.map(person => person.displayName).join(', ')}</T>
@@ -592,23 +571,14 @@ export function HuddleChatSplit({ children, inPage = false }: { children: ReactN
       </Stack>
     </ChatSidePanelFrame>
     : null;
-  if (inPage) {
-    return <SplitPane primary={children} secondary={chatPane} defaultRatio={0.6} minPrimaryPx={320} minSecondaryPx={260}
-      dividerLabel="Resize composer and huddle chat" className="min-h-0" data-testid="huddle-chat-inpage-split" />;
-  }
   const lobbyTitle = host?.lobby?.title ?? 'Huddle';
   const mediaPanel = mediaShown && !chatPane
     ? <CallMediaPanel onClose={() => media?.setOpen(false)} title={/huddle$/i.test(lobbyTitle) ? lobbyTitle : `${lobbyTitle} huddle`}
         count={host?.call.call?.participants?.filter(p => p.state === 'in-call' || p.state === 'reconnecting').length ?? 0} />
     : null;
-  return <InPageHuddleContext.Provider value={registerInPage}>
-    <SidePaneSplit before={mediaPanel} after={chatPane} paneTestId="page-conversation-pane"
-      dividerLabel="Resize page and conversation" data-testid="shell-split">{children}</SidePaneSplit>
-  </InPageHuddleContext.Provider>;
+  return <SidePaneSplit before={mediaPanel} after={chatPane} paneTestId="page-conversation-pane"
+      dividerLabel="Resize page and conversation" data-testid="shell-split">{children}</SidePaneSplit>;
 }
-
-/** The shell split's registry of page blocks that carry an in-page huddle chat (they defer to the right pane while a page pane is open). */
-const InPageHuddleContext = createContext<(() => () => void) | null>(null);
 
 /** The popped-out huddle chat (the pane's ↗), floating above the footer. */
 export function HuddleChatPanel() {

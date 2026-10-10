@@ -49,11 +49,10 @@ import { DimensionRailControls, DimensionRailList } from './DimensionRail';
 import { DimensionDetailHeader } from './DimensionDetailHeader';
 import { LevelBadge } from './LevelBadge';
 import { EvidenceDraftsPanel } from './EvidenceDraftsPanel';
-import { HuddleChatSplit, useHuddleChat } from '../../../components/shell/HuddleChat';
+import { usePageHuddleComposer } from '../../../components/shell/HuddleComposerDock';
 import type { ConversationRuntime } from '../../../components/chat/ConversationThread';
 import { ConversationComposer } from '../../../lib/conversationComposer';
 import { useCallBlock, useCallHost } from '../../../lib/conversationCall';
-import { huddleChannel } from '../../../lib/huddleRoster';
 import { createDeck } from '../decks/decksApi';
 import { AGENT_COMMANDS, AGENT_HELP, composerAccess, dimensionPageReference, routeAgentText, teamDiscussionChannel } from './dimensionComposerModel';
 import { useCapabilities } from '../../../lib/capabilities';
@@ -418,8 +417,8 @@ interface DimensionMasterDetailProps {
  *   Agent  /summarize and /followups start the assessment drafter (the cards
  *          are the drafts panel's), /deck builds the team's review deck.
  *
- * While a huddle is on in this team's lobby the composer's call block carries
- * the bar and tiles and the huddle chat sits beside it as the thread only.
+ * The shared call block keeps tiles in the composer; the team's right pane
+ * switches between the team discussion and the current call transcript.
  */
 function DimensionFooter({ teamId, teamName, dimension, onChanged, cardsShownElsewhere, onDraft, command, active, conversation }: {
   teamId: string; teamName: string; dimension: { id: string; title: string }; onChanged: () => void; cardsShownElsewhere: boolean;
@@ -431,11 +430,10 @@ function DimensionFooter({ teamId, teamName, dimension, onChanged, cardsShownEls
   const access = composerAccess({ mayRead: can('ViewAssessment'), canScore: can('ScoreAssessment'), canRunAgent: can('RunAssessmentAgent') });
   const channel = teamDiscussionChannel(teamId);
   const host = useCallHost();
-  const huddle = useHuddleChat();
+  const huddleComposer = usePageHuddleComposer('agent');
   const [note, setNote] = useState<string | null>(null);
   const reference = useMemo(() => dimensionPageReference({ id: teamId, name: teamName }, dimension), [teamId, teamName, dimension]);
   const huddleLive = !!host?.lobby && host.lobby.lobbyName === channel && !['idle', 'ended', 'failed'].includes(host.call.phase);
-  const huddleChat = huddleLive && huddle?.callId ? huddleChannel(huddle.callId) : null;
   // The call bar and tiles above the input, from the caller's ring to the ended notice.
   const { block } = useCallBlock(channel, { enabled: active });
   const runAgent = async (text: string): Promise<boolean | string> => {
@@ -453,21 +451,22 @@ function DimensionFooter({ teamId, teamName, dimension, onChanged, cardsShownEls
   };
   const composer = (
     <ConversationComposer
+      key={huddleComposer.editorKey}
       channel={channel}
       chat={conversation?.chat ?? null}
       context={{ kind: 'conversation', id: reference.id, title: '', reference: { id: reference.id, label: reference.label, page: reference.page } }}
       capabilities={{ maySend: access.canChat, ...(access.readOnlyReason ? { readOnlyReason: access.readOnlyReason } : {}),
-        agent: { allowed: access.canAgent, reason: 'Your role cannot run the assessment agent' } }}
+        agent: { allowed: access.canAgent && !huddleComposer.unavailableHuddle, reason: huddleComposer.unavailableHuddle ? 'Choose a current destination before changing this draft’s mode.' : 'Your role cannot run the assessment agent' } }}
       offline={conversation && !conversation.connected ? 'The realtime gateway is not connected, so the discussion is unavailable.' : null}
       // The draft belongs to the signed person even before chat is ready.
       identity={session ? { userId: session.sub, displayName: session.name ?? session.sub } : null}
       recipients={[
         { id: 'discussion', label: 'Team discussion', channel, placeholder: 'Add to this team’s Discussion…',
           send: out => { conversation?.chat.sendMessage(out.text, out.metadata); setNote('Sent to the team’s Discussion.'); return !!conversation; } },
-        // The huddle stores no dimension reference (its BFF admits only initiative/work-item pages).
-        ...(huddleChat && huddle ? [{ id: 'huddle', label: `${huddle.title ?? 'Huddle'} · Huddle`, channel: huddleChat, carriesReference: false,
-          placeholder: 'Message this huddle…', unavailableReason: huddle.unavailableReason, send: (out: { text: string }) => huddle.send(out.text) }] : []),
+        // Call chat is the same destination and draft on every page, even after navigation.
+        ...(huddleComposer.recipient ? [huddleComposer.recipient] : []),
       ]}
+      {...huddleComposer.composerProps}
       defaultMode="agent"
       modePlaceholders={{ agent: '/summarize, /followups or /deck for this dimension…' }}
       commands={AGENT_COMMANDS.map(c => ({ trigger: c.trigger, label: c.label, hint: c.description, disabled: !access.canAgent, modes: ['agent' as const],
@@ -495,8 +494,8 @@ function DimensionFooter({ teamId, teamName, dimension, onChanged, cardsShownEls
       )}
       {access.readOnlyReason && <T size="xs" tone="secondary" className="px-5 pt-2" wrap data-testid="dimension-composer-read-only">{access.readOnlyReason}</T>}
       {note && <InlineAlert tone="info" className="mx-5" data-testid="dimension-composer-note" onDismiss={() => setNote(null)}>{note}</InlineAlert>}
-      {/* Live: the composer with the huddle chat beside it (the thread only). Idle: the composer alone. */}
-      {huddleLive ? <HuddleChatSplit inPage>{composer}</HuddleChatSplit> : composer}
+      {/* TeamScorecard owns the single right pane for both conversations. */}
+      {composer}
     </Stack>
   );
 }

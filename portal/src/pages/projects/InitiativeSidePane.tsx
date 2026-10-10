@@ -30,8 +30,7 @@ import {
   ActivityIcon, Button, Chip, DocumentIcon, EmptyState, Inline, InlineAlert, KeyValue, LoadingState, MetaLine, PageSection, Stack, StatusPill, T,
 } from '@connorhoehnslalom/ui-components/shared';
 import { ConversationViewsSlot } from '../../components/chat/useChatPins';
-import { useComposerFocusReveal } from '@connorhoehnslalom/ui-components/social/rich-composer';
-import { HuddleChatBody, useHuddleChat } from '../../components/shell/HuddleChat';
+import { ConversationPaneBody, useConversationPane } from '../../components/shell/ConversationPane';
 import { DirectoryPersonCard as PersonDetailCard } from '../../components/people/DirectoryPersonCard';
 import { useFetch } from '../../hooks/useFetch';
 import { useSession } from '../../lib/auth';
@@ -109,21 +108,14 @@ export interface InitiativeSidePaneProps {
 export function InitiativeSidePane(props: InitiativeSidePaneProps) {
   const { control, discussion, subtitle } = props;
   const { tab, recordId: id } = control;
-  const huddle = useHuddleChat();
-  const sidePane = useSidePane();
-  const registerPaneOwner = huddle?.registerPaneOwner;
-  useComposerFocusReveal(request => {
-    if (request.target?.kind === 'huddle' || request.target?.kind === 'discussion') control.open('discussion');
-  });
-  useEffect(() => registerPaneOwner?.(), [registerPaneOwner]);
-  const inHuddle = !!huddle?.callId && huddle.view === 'pane';
-  useEffect(() => { if (inHuddle) sidePane.reveal(); }, [inHuddle, sidePane.reveal]);
+  const conversationPane = useConversationPane({ onReveal: () => control.open('discussion') });
+  const { huddle, inHuddle } = conversationPane;
   // The conversation's views (Chat / Pinned / Files / Calls) sit at the right end
   // of this one tab row as an icon switcher (useChatPins ConversationViewsSlot),
   // shown while Discussion is the tab — never a second tab bar under this one.
   const [viewsSlot, setViewsSlot] = useState<HTMLElement | null>(null);
   return (
-    <SidePane title={tab === 'discussion' && inHuddle ? 'Huddle dialogue' : TAB_LABEL[tab]} subtitle={tab === 'discussion' && inHuddle ? huddle.title : subtitle} closeLabel="Collapse discussion" explores={control.pane.away}
+    <SidePane title={tab === 'discussion' && inHuddle ? 'Huddle dialogue' : TAB_LABEL[tab]} subtitle={tab === 'discussion' && inHuddle ? huddle?.title : subtitle} closeLabel="Collapse discussion" explores={control.pane.away}
       paneId="initiative-dialogue" widthPx={{ min: 480, max: 960 }}
       tabs={control.pane.tabs.map(t => t.id === 'discussion' && inHuddle ? { ...t, label: 'Huddle' } : t)} value={tab} onValueChange={control.pane.select}
       trailing={<Inline gap="xs" align="center" wrap={false}>
@@ -140,7 +132,11 @@ export function InitiativeSidePane(props: InitiativeSidePaneProps) {
       data-testid="initiative-pane">
       {/* The thread stays subscribed while another detail tab is selected. */}
       <Stack gap="none" className="min-h-0 flex-1" hidden={tab !== 'discussion'} data-testid="initiative-pane-discussion">
-        <ConversationViewsSlot.Provider value={viewsSlot}>{inHuddle ? <HuddleChatBody /> : discussion}</ConversationViewsSlot.Provider>
+        <ConversationViewsSlot.Provider value={viewsSlot}>
+          <ConversationPaneBody pane={conversationPane} pageLabel="Initiative discussion">
+            <ConversationViewsSlot.Provider value={inHuddle ? null : viewsSlot}>{discussion}</ConversationViewsSlot.Provider>
+          </ConversationPaneBody>
+        </ConversationViewsSlot.Provider>
       </Stack>
       <Stack gap="none" className="min-h-0 flex-1" hidden={tab !== 'agent'} data-testid="initiative-pane-agent">{props.agent}</Stack>
       {tab !== 'discussion' && tab !== 'agent' && (

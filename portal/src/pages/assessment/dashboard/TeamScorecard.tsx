@@ -52,6 +52,8 @@ import {
   useHeaderDensity,
   type StatStripItem,
 } from '@connorhoehnslalom/ui-components/shared';
+import { usePageHuddleComposer } from '../../../components/shell/HuddleComposerDock';
+import { ConversationPaneBody, useConversationPane } from '../../../components/shell/ConversationPane';
 import { WorkGraphActivity } from '../../../components/work-graph/WorkGraphActivity';
 import { useShellBreadcrumbItems } from '../../../components/shell/Breadcrumbs';
 import { Can, useCapabilities } from '../../../lib/capabilities';
@@ -119,6 +121,8 @@ export function TeamScorecard({ teamId, tab, onTabChange, revealDiscussion = fal
   // The right pane is the thread; its one input is in the content column — the
   // dimension composer on Certification, the team composer on the other tabs.
   const sidePane = useSidePane();
+  const conversationPane = useConversationPane({ enabled: loaded });
+  const huddleComposer = usePageHuddleComposer();
   const breadcrumbs = useShellBreadcrumbItems();
   const teamComposerShown = tab !== 'scorecard';
   // The team's huddle: its lobby is the team's channel (the footer's Huddle walks into it);
@@ -297,11 +301,18 @@ export function TeamScorecard({ teamId, tab, onTabChange, revealDiscussion = fal
       {channel && <ConversationOwner key={channel} channel={channel} maySend={mayRead} onChange={setConversation} />}
       {teamComposerShown && channel && conversation && (
         <Stack gap="none" className="shrink-0 px-6 pb-3 pt-2" data-testid="team-discussion-composer-dock">
-          <ConversationComposer channel={channel} chat={conversation.chat} context={{ kind: 'conversation', id: team.id, title: team.name }}
+          <ConversationComposer key={huddleComposer.editorKey} channel={channel} chat={conversation.chat} context={{ kind: 'conversation', id: team.id, title: team.name }}
             capabilities={{ maySend: mayRead, readOnlyReason: READER_REASON }} label="Team discussion composer"
             offline={conversation.connected ? null : 'The realtime gateway is not connected, so the discussion is unavailable.'}
             identity={{ userId: conversation.userId, displayName: conversation.displayName }} reply={conversation.quote}
             commands={conversation.commands} callBlock={teamBlock} modePlaceholders={{ chat: 'Message the team discussion…' }}
+            recipients={[
+              { id: 'discussion', label: 'Team discussion', channel,
+                send: out => { conversation.chat.sendMessage(out.text, out.metadata); return true; } },
+              ...(huddleComposer.recipient ? [huddleComposer.recipient] : []),
+            ]}
+            {...huddleComposer.composerProps}
+            claim={{ label: 'the team composer', enabled: teamComposerShown }}
             answersFocus={mayRead} onReveal={() => sidePane.reveal()}
             data-testid="team-discussion-composer" />
         </Stack>
@@ -309,12 +320,14 @@ export function TeamScorecard({ teamId, tab, onTabChange, revealDiscussion = fal
 
       {/* The right pane (the shell's fourth column, the library SidePane):
           the team discussion with its Chat / Pinned / Files / Calls views. */}
-      <SidePane title="Discussion" subtitle={team.name} closeLabel="Collapse discussion" data-testid="team-pane">
+      <SidePane title={conversationPane.inHuddle ? 'Huddle dialogue' : 'Discussion'} subtitle={conversationPane.inHuddle ? conversationPane.huddle?.title : team.name} closeLabel="Collapse discussion" data-testid="team-pane">
+        <ConversationPaneBody pane={conversationPane} pageLabel="Team discussion">
         <Stack gap="none" className="min-h-0 flex-1" data-testid="team-discussion">
           {conversation && <ConversationThread key={team.id} conversation={conversation} title="Team discussion" input="below" notices
             pins={{ canPin: mayRead }} attachments={mayRead} reactions renderMessageReferences={renderDimensionReference}
             data-testid="scope-discussion-panel" />}
         </Stack>
+        </ConversationPaneBody>
       </SidePane>
 
       <Drawer open={detailsOpen} onClose={() => setDetailsOpen(false)} title="Team details" width={420}>

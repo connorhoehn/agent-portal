@@ -6,7 +6,7 @@ const initial = { sub: 'u-vera', name: 'Vera Green', role: 'org-leader', tenant:
   grants: { orgiq: ['org-leader'], social: ['participant'] }, switchable: { orgiq: ['org-leader'], social: ['participant'] },
   availableRoles: ['org-leader'], availableTenants: ['orgiq', 'social'], masquerading: null };
 
-async function fixture(page: Page) {
+async function fixture(page: Page, ownedPane = false, centralComposer = false) {
   let session = { ...initial };
   const errors: string[] = [];
   const people = [{ userId: 'u-vera', displayName: 'Vera Green' }, { userId: 'u-nora', displayName: 'Nora Chang' }];
@@ -37,7 +37,7 @@ async function fixture(page: Page) {
       <script type="module" src="/e2e/fixtures/huddle-chat.tsx"></script></body></html>` });
   });
   page.on('pageerror', error => errors.push(error.message));
-  await page.goto('/iq/projects/p-auth-migration?tab=work&item=wi-cookie');
+  await page.goto(`/iq/projects/p-auth-migration?tab=work&item=wi-cookie${ownedPane ? '&ownedPane=1' : ''}${centralComposer ? '&centralComposer=1' : ''}`);
   await expect(page.getByTestId('fixture-platform-endpoint')).toHaveText('http://fixture-platform.invalid');
   await page.getByRole('button', { name: 'Start fixture call' }).click();
   await expect(page.getByTestId('fixture-call-phase')).toHaveText('calling');
@@ -50,8 +50,8 @@ async function fixture(page: Page) {
   }, callId);
   await expect(page.getByTestId('shell-call-dock-chat')).toHaveCount(1);
   await page.getByTestId('shell-call-dock-chat').click();
-  await expect(page.getByTestId('huddle-chat-panel')).toBeVisible();
-  await expect(page.getByTestId('huddle-chat-participants')).toHaveText('Vera Green, Nora Chang');
+  await expect(page.getByTestId(ownedPane ? 'fixture-owned-pane' : 'huddle-chat-panel')).toBeVisible();
+  if (!ownedPane) await expect(page.getByTestId('huddle-chat-participants')).toHaveText('Vera Green, Nora Chang');
   // The chat service's answers to this page's frames: join → joined + history;
   // send → the stored echo, then `sent` once persisted (unless held or failed).
   await page.evaluate(() => {
@@ -98,14 +98,14 @@ async function fixture(page: Page) {
 
 test('persisted retry retains huddle draft/reference and renders the exact canonical work item', async ({ page }) => {
   const setup = await fixture(page); await setup.fail();
-  await page.getByTestId('huddle-chat-panel').getByTestId('rich-chat-composer-input').fill('Please review the logout task');
+  await page.getByTestId('huddle-chat-panel').getByRole('textbox', { name: 'Huddle message', exact: true }).fill('Please review the logout task');
   await page.getByTestId('huddle-chat-attach-page').click();
-  await page.getByTestId('huddle-chat-panel').getByTestId('rich-chat-composer-send').click();
+  await page.getByTestId('huddle-chat-panel').getByRole('button', { name: 'Send', exact: true }).click();
   await expect(page.getByTestId('huddle-chat-error')).toContainText('storage is unavailable');
-  await expect(page.getByTestId('huddle-chat-panel').getByTestId('rich-chat-composer-input')).toHaveText('Please review the logout task');
-  await expect(page.getByTestId('huddle-chat-panel').locator('[data-testid="rich-chat-composer-context-label"], [data-testid="rich-chat-composer-references"]')).toContainText('Work item context');
-  await page.getByTestId('huddle-chat-panel').getByTestId('rich-chat-composer-send').click();
-  await expect(page.getByTestId('huddle-chat-panel').getByTestId('rich-chat-composer-input')).toHaveText('');
+  await expect(page.getByTestId('huddle-chat-panel').getByRole('textbox', { name: 'Huddle message', exact: true })).toHaveText('Please review the logout task');
+  await expect(page.getByTestId('huddle-chat-panel').getByText('Work item context', { exact: true })).toContainText('Work item context');
+  await page.getByTestId('huddle-chat-panel').getByRole('button', { name: 'Send', exact: true }).click();
+  await expect(page.getByTestId('huddle-chat-panel').getByRole('textbox', { name: 'Huddle message', exact: true })).toHaveText('');
   await expect(page.getByTestId('huddle-chat-reference-open')).toHaveText('Logout clears the legacy cookie');
   // The explicit retry reuses its delivery id, so a lost acknowledgement cannot store a second copy.
   const posts = await setup.posts() as Array<{ metadata: { clientDeliveryId: string; pageReference?: unknown } }>;
@@ -123,33 +123,35 @@ test('persisted retry retains huddle draft/reference and renders the exact canon
 
 test('navigation, close/reopen and same-actor refresh preserve one panel and its unsent reference', async ({ page }) => {
   const setup = await fixture(page);
-  await page.getByTestId('huddle-chat-panel').getByTestId('rich-chat-composer-input').fill('Draft kept while reviewing another page');
+  await page.getByTestId('huddle-chat-panel').getByRole('textbox', { name: 'Huddle message', exact: true }).fill('Draft kept while reviewing another page');
   await page.getByTestId('huddle-chat-attach-page').click();
   for (const label of ['Admin', 'Settings']) {
     await page.getByRole('link', { name: label, exact: true }).click();
     await expect(page.getByTestId('fixture-call-id')).toHaveText(setup.callId);
     await expect(page.getByTestId('huddle-chat-panel')).toHaveCount(1);
-    await expect(page.getByTestId('huddle-chat-panel').getByTestId('rich-chat-composer-input')).toHaveText('Draft kept while reviewing another page');
-    await expect(page.getByTestId('huddle-chat-panel').locator('[data-testid="rich-chat-composer-context-label"], [data-testid="rich-chat-composer-references"]')).toContainText('Work item context');
+    await expect(page.getByTestId('huddle-chat-panel').getByRole('textbox', { name: 'Huddle message', exact: true })).toHaveText('Draft kept while reviewing another page');
+    await expect(page.getByTestId('huddle-chat-panel').getByText('Work item context', { exact: true })).toContainText('Work item context');
   }
   await page.getByTestId('huddle-chat-panel-close').click();
   await page.getByTestId('shell-call-dock-chat').click();
   await page.getByRole('button', { name: 'Refresh fixture session' }).click();
-  await expect(page.getByTestId('huddle-chat-panel').getByTestId('rich-chat-composer-input')).toHaveText('Draft kept while reviewing another page');
+  await expect(page.getByTestId('huddle-chat-panel').getByRole('textbox', { name: 'Huddle message', exact: true })).toHaveText('Draft kept while reviewing another page');
   await expect(page.getByTestId('shell-call-dock')).toHaveCount(1); expect(setup.errors).toEqual([]);
 });
 
 test('delayed persisted receipt keeps a newer draft and reference-only messages send', async ({ page }) => {
   const setup = await fixture(page); await setup.hold();
-  await page.getByTestId('huddle-chat-panel').getByTestId('rich-chat-composer-input').fill('First');
-  await page.getByTestId('huddle-chat-panel').getByTestId('rich-chat-composer-send').click();
-  await expect(page.getByTestId('huddle-chat-panel').getByTestId('rich-chat-composer-send')).toHaveText('Sending…');
-  await page.getByTestId('huddle-chat-panel').getByTestId('rich-chat-composer-input').fill('Second'); await setup.release();
-  await expect(page.getByTestId('huddle-chat-panel').getByTestId('rich-chat-composer-send')).toHaveText('Send');
-  await expect(page.getByTestId('huddle-chat-panel').getByTestId('rich-chat-composer-input')).toHaveText('Second');
-  await page.getByTestId('huddle-chat-panel').getByTestId('rich-chat-composer-input').fill(''); await page.getByTestId('huddle-chat-attach-page').click();
-  await page.getByTestId('rich-chat-composer-send').click();
-  await expect(page.getByTestId('huddle-chat-panel').locator('[data-testid="rich-chat-composer-context-label"], [data-testid="rich-chat-composer-references"]')).toHaveCount(0);
+  await page.getByTestId('huddle-chat-panel').getByRole('textbox', { name: 'Huddle message', exact: true }).fill('First');
+  await page.getByTestId('huddle-chat-panel').getByRole('button', { name: 'Send', exact: true }).click();
+  await expect(page.getByTestId('huddle-chat-panel').getByRole('button', { name: 'Sending…', exact: true })).toHaveText('Sending…');
+  await page.getByTestId('huddle-chat-panel').getByRole('textbox', { name: 'Huddle message', exact: true }).fill('Second');
+  await expect(page.getByTestId('fixture-huddle-draft')).toContainText('Second');
+  await setup.release();
+  await expect(page.getByTestId('huddle-chat-panel').getByRole('button', { name: 'Send', exact: true })).toHaveText('Send');
+  await expect(page.getByTestId('huddle-chat-panel').getByRole('textbox', { name: 'Huddle message', exact: true })).toHaveText('Second');
+  await page.getByTestId('huddle-chat-panel').getByRole('textbox', { name: 'Huddle message', exact: true }).fill(''); await page.getByTestId('huddle-chat-attach-page').click();
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await expect(page.getByTestId('huddle-chat-panel').getByText('Work item context', { exact: true })).toHaveCount(0);
   const posts = await setup.posts() as Array<{ message: string; metadata: { pageReference?: unknown } }>;
   // A references-only send carries no text; the BFF stores the reference alone.
   expect(posts[1]?.message).toBe(''); expect(posts[1]?.metadata.pageReference).toEqual({ kind: 'work-item', id: 'wi-cookie' });
@@ -158,7 +160,7 @@ test('delayed persisted receipt keeps a newer draft and reference-only messages 
 
 test('an actor change clears the panel and a late old send cannot restore it', async ({ page }) => {
   const setup = await fixture(page); await setup.hold();
-  await page.getByTestId('huddle-chat-panel').getByTestId('rich-chat-composer-input').fill('Private old actor'); await page.getByTestId('huddle-chat-panel').getByTestId('rich-chat-composer-send').click();
+  await page.getByTestId('huddle-chat-panel').getByRole('textbox', { name: 'Huddle message', exact: true }).fill('Private old actor'); await page.getByTestId('huddle-chat-panel').getByRole('button', { name: 'Send', exact: true }).click();
   setup.replaceActor(); await page.getByRole('button', { name: 'Refresh fixture session' }).click();
   await expect(page.getByTestId('fixture-actor')).toHaveText('u-rachel');
   await expect(page.getByTestId('huddle-chat-panel')).toHaveCount(0);
@@ -168,15 +170,69 @@ test('an actor change clears the panel and a late old send cannot restore it', a
 });
 
 test('terminal chat frames disable sending and cannot be reopened by older roster hints', async ({ page }) => {
-  const setup = await fixture(page); await page.getByTestId('huddle-chat-panel').getByTestId('rich-chat-composer-input').fill('Unsent when huddle ends');
+  const setup = await fixture(page); await page.getByTestId('huddle-chat-panel').getByRole('textbox', { name: 'Huddle message', exact: true }).fill('Unsent when huddle ends');
   await page.evaluate(callId => {
     const receive = (window as unknown as { callFixture: { receive(frame: unknown): void } }).callFixture.receive;
     receive({ type: 'call-chat', action: 'ended', callId, channel: `orgiq:huddle:${callId}`, revision: 4 });
     receive({ type: 'call-chat', action: 'members', callId, channel: `orgiq:huddle:${callId}`, revision: 3,
       participants: [{ userId: 'u-vera', displayName: 'Vera' }] });
   }, setup.callId);
-  await expect(page.getByTestId('huddle-chat-panel').getByTestId('rich-chat-composer-send')).toBeDisabled();
+  await expect(page.getByTestId('huddle-chat-panel').getByRole('button', { name: 'Send', exact: true })).toBeDisabled();
   await expect(page.getByTestId('huddle-chat-error')).toHaveText('This huddle has ended.');
-  await expect(page.getByTestId('huddle-chat-panel').getByTestId('rich-chat-composer-input')).toHaveText('Unsent when huddle ends');
+  await expect(page.getByTestId('huddle-chat-panel').getByRole('textbox', { name: 'Huddle message', exact: true })).toHaveText('Unsent when huddle ends');
   expect(await setup.posts()).toHaveLength(0); expect(setup.errors).toEqual([]);
+});
+
+
+test('one owned pane switches page and huddle destinations without losing either draft', async ({ page }) => {
+  const setup = await fixture(page, true);
+  const pane = page.getByTestId('fixture-owned-pane');
+  const input = pane.getByRole('textbox', { name: 'Huddle message', exact: true });
+  await input.fill('Unsent huddle inquiry');
+  await pane.getByRole('tab', { name: 'Details', exact: true }).click();
+  await expect(pane).toContainText('Fixture details');
+  await page.getByTestId('shell-call-dock-chat').click();
+  await expect(input).toHaveText('Unsent huddle inquiry');
+  await pane.getByRole('button', { name: 'Page discussion', exact: true }).click();
+  await expect(page.getByLabel('Page discussion draft')).toBeVisible();
+  await page.getByLabel('Page discussion draft').fill('Unsent page inquiry');
+  await expect(page.getByTestId('huddle-chat-panel')).toHaveCount(0);
+  await expect(page.getByTestId('huddle-chat-inpage')).toHaveCount(0);
+  await pane.getByRole('button', { name: 'Huddle chat', exact: true }).click();
+  await expect(input).toHaveText('Unsent huddle inquiry');
+  await page.getByRole('button', { name: 'Open page discussion', exact: true }).click();
+  await expect(page.getByLabel('Page discussion draft')).toHaveValue('Unsent page inquiry');
+  await expect(page.getByTestId('fixture-call-id')).toHaveText(setup.callId);
+  expect(await setup.posts()).toEqual([]);
+  expect(setup.errors).toEqual([]);
+});
+
+
+test('shared page composer keeps page, agent and huddle drafts separate with one input', async ({ page }) => {
+  const setup = await fixture(page, true, true);
+  const composer = page.getByTestId('fixture-central-composer');
+  const input = composer.getByRole('textbox', { name: 'Fixture chat', exact: true });
+  await expect(input).toBeVisible();
+  await input.fill('Call draft follows me');
+  await page.getByRole('button', { name: 'Open page discussion', exact: true }).click();
+  await expect(input).toHaveText('');
+  await input.fill('Page draft stays here');
+  await page.getByTestId('shell-call-dock-chat').click();
+  await expect(input).toHaveText('Call draft follows me');
+  await page.getByRole('button', { name: 'Ask fixture agent', exact: true }).click();
+  await expect(input).toHaveText('Page draft stays here');
+  await input.fill('Agent question stays on page');
+  await page.getByTestId('shell-call-dock-chat').click();
+  await expect(input).toHaveText('Call draft follows me');
+  await expect(page.getByTestId('fixture-owned-pane').getByRole('textbox', { name: 'Huddle message' })).toHaveCount(0);
+  await expect(page.locator('[contenteditable="true"]:visible')).toHaveCount(1);
+  await page.evaluate(callId => {
+    (window as unknown as { callFixture: { receive(frame: unknown): void } }).callFixture.receive({
+      type: 'call-chat', action: 'ended', callId, channel: `orgiq:huddle:${callId}`, revision: 4,
+    });
+  }, setup.callId);
+  await expect(input).toHaveText('Call draft follows me');
+  await expect(composer.getByRole('button', { name: 'Send', exact: true })).toBeDisabled();
+  expect(await setup.posts()).toEqual([]);
+  expect(setup.errors).toEqual([]);
 });
