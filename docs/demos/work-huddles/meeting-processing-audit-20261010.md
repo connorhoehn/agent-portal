@@ -9,7 +9,7 @@ complete. Implementation is isolated from the running, memory-backed app.
 | --- | --- | --- |
 | Native video transcription | Owned native PipelineExecutor run processed the preserved synthetic MP4 through Whisper and persisted 11 engine-timestamped speech segments. Media hash is unchanged. | Activate the candidate timestamp service only after a safe service handoff. Attribution remains mixed-call audio, not speaker diarization. |
 | Successful meeting summary | The same owned native run used the Codex CLI subscription bridge and saved a nonempty, grounded summary against that recording. Transcript and summary both reached ready. Stale attempts and changed settled results were rejected. | Native participant retrieval and Work search passed for two owned identities; safe activation in the running application remains. |
-| Processing immediately after meeting end | Shared Work/Assessment recording components cover saving, transcription, summary and terminal states. Eight owned browser fixtures pass, including a cleared call host and late identity changes. | Finish canonical gateway-seat/media binding and finalizer resolution. Fixture lifecycle tests do not prove actual gateway delivery. |
+| Processing immediately after meeting end | Shared Work/Assessment recording components cover saving, transcription, summary and terminal states. Eight owned browser fixtures pass, including a cleared call host and late identity changes. | Canonical gateway-seat/media binding and strict finalizer resolution are implemented and checked. Fixture lifecycle tests do not prove actual gateway delivery. |
 | Attach artifacts to recording | Native persistence passes; shared detail shows transcript and summary beside the recording. A failed summary preserves ready transcript and video. | Native participant API acceptance passed. Integrated activation remains. |
 | Search and project context | Candidate Work search reads participant-authorized native artifacts with fresh host checks and exact initiative links. Discovery and hydration are bounded and report incomplete results. | Owned persisted-artifact search, native nonparticipant denial and revoked-epoch rejection pass (4 checks). Directory and Cedar use explicit synthetic fixtures. This is read-through search, not a durable vector index. |
 | Preserve reviewed work and originals | Implementation and owned acceptance use isolated checkouts/storage. The original video is unchanged. No live call, grant or saved deck was changed by this run. | Preserve the memory-backed application through a supported handoff before activation; no complete supported checkpoint endpoint has been found. |
@@ -108,11 +108,12 @@ successful media join alone cannot claim a binding.
 
 Finalization uses the complete channel history and recorded identities. It does
 not choose the newest call in a Work or Assessment lobby. Missing, conflicting
-or ambiguous proof remains unresolved. In particular, legacy screen-share source
-IDs have no durable parent-seat proof; a matching user name or `:screen` suffix
-is insufficient. Those recordings may retain their authorized artifacts without
-appearing as a confirmed exact-call match. A future native signed source-to-seat
-mapping is needed for that case.
+or ambiguous proof remains unresolved. New native WHIP recordings preserve the signed token participant ID separately
+from the camera/screen transport ID. Every recorded leg must match that signed
+seat and its authenticated user; mixed audio/video provenance is rejected. This
+lets new screen-share tracks resolve to the same call without interpreting a
+`:screen` suffix. Legacy recordings and mesh/stream-key sources without signed
+seat metadata remain unresolved; no historical recording is relabeled.
 
 The primary app API is memory-backed. Its supported mock-state endpoint exposes
 counts and boot metadata, not a complete restorable snapshot, and periodic
@@ -146,3 +147,52 @@ and [ready](evidence/2026-10-10/native-meeting-pipeline/recording-attachments-re
 and [compact Assessment](evidence/2026-10-10/native-meeting-pipeline/assessment-recording-compact.png)
 fixtures are preserved. These images demonstrate component behavior in fixtures,
 not live human-call acceptance.
+
+
+The [backend receipt](evidence/2026-10-10/native-meeting-pipeline/backend-verification.json)
+includes actual isolated DynamoDB acceptance of the binding write: first write,
+idempotent retry, conflicting call, leave and changed connection. Its two tests
+passed. The separate [artifact/search receipt](evidence/2026-10-10/native-meeting-pipeline/cross-read-search-proof.json)
+records four passing checks using the genuinely generated artifacts and clearly
+identifies the synthetic directory/Cedar authority fixtures.
+
+
+## Published source and final verification
+
+These commits are published on feature branches; they are not merged or activated
+in the shared local stack:
+
+| Repository | Branch | Commit |
+| --- | --- | --- |
+| aws-agentcore | `feat/meeting-recording-pipeline-20261010` | `0ce0ec92` (implementation; documentation follow-up follows) |
+| platform-api | `feat/meeting-pipeline-20261010` | `cbec174` |
+| realtime-modules | `feat/meeting-call-binding-20261010` | `849477f` |
+| ui-components | `fix/meeting-recording-search-native` | `4f95fc40` |
+| live-video-streaming | `feat/meeting-timestamps-20261010` | `90e023b` (includes timestamp commit `6aec9da`) |
+
+The final platform source build and typecheck pass. Its recording lane passes
+214 focused cases; the overlapping route/repository lane passes 220 cases with
+6 skipped. These overlapping counts must not be added together. Middleware
+passes 92 tests. Actual isolated Dynamo binding passes 2 tests; actual generated
+artifact cross-read/search passes 4. The shared UI passes 30 focused tests and
+8 browser fixture cases, plus its build and typecheck. The native UI package
+passes 10,826 tests with 2 skipped.
+
+The [native source receipt](evidence/2026-10-10/native-meeting-pipeline/native-source-verification.json)
+preserves final source hashes and scope limits. The actual Whisper/Codex pipeline
+proof predates the last signed-seat and replay-access hardening; those later
+changes have focused source/repository coverage, not a new live-call acceptance.
+Governed replay currently includes trusted recorded users. A listener-only
+attendee with no recorded media is not newly granted playback by this change.
+Historical recordings missing signed-seat metadata remain unresolved.
+
+The [LVS receipt](evidence/2026-10-10/native-meeting-pipeline/lvs-signed-seat-validation.json)
+records the published signed-seat follow-up. LVS focused recording/WHIP checks pass 21 tests, and source syntax checks pass
+170 files. Its full unit runner passes 226 files and fails 2 unchanged suites:
+`api/channels/createRetry.test.js` and `anti-stampede-multi-pod.test.js`.
+The latter uses an optional local Redis connection and unique expiring fixture
+keys; it is not an inert test despite the runner's no-dependencies banner.
+The failures are documented rather than represented as a successful full run.
+Owned validation services have been stopped; source worktrees remain for review
+and integration. Original media, saved decks, and primary service state were
+preserved during this implementation pass.
