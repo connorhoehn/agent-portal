@@ -1,0 +1,26 @@
+[
+  [
+    {
+      "kind": "audio",
+      "bytesSent": 62498,
+      "packetsSent": 1528
+    },
+    {
+      "kind": "video",
+      "bytesSent": 694449,
+      "packetsSent": 833
+    }
+  ],
+  [
+    {
+      "kind": "audio",
+      "bytesSent": 72658,
+      "packetsSent": 1503
+    },
+    {
+      "kind": "video",
+      "bytesSent": 503650,
+      "packetsSent": 625
+    }
+  ]
+]

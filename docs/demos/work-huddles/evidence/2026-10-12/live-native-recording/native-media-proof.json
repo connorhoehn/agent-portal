@@ -1,0 +1,26 @@
+{
+  "recordingId": "2026-10-12T15-34-01-581Z-002b89a2",
+  "sha256": "c08c0f0f6ddc421456af3759d1945c0a996651a05733874dfc8a47acf7becdb1",
+  "bytes": 962481,
+  "probe": {
+    "programs": [],
+    "stream_groups": [],
+    "streams": [
+      {
+        "codec_name": "h264",
+        "codec_type": "video"
+      },
+      {
+        "codec_name": "aac",
+        "codec_type": "audio"
+      }
+    ],
+    "format": {
+      "duration": "30.564000",
+      "size": "962481"
+    }
+  },
+  "composeStatus": "ok",
+  "allInputsRetained": true,
+  "allSeatsNativeSigned": true
+}

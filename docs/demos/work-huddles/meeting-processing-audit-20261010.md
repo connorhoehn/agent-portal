@@ -342,3 +342,36 @@ No primary API, frontend, SFU or stored media was changed. This establishes the
 native event-to-status and browser consumer boundaries separately. It does not
 claim a fresh end-to-end SFU call, automatic transcription/model run, or primary
 runtime activation. Those remain outstanding under the original objective.
+
+
+## October 12: actual SFU capture through processing and status
+
+[Live native acceptance](evidence/2026-10-12/live-native-recording/verification.json)
+now connects two actual Chromium RTP publishers, native JWT media seats, real
+SFU/ffmpeg capture and composition, the actual signed completion webhook,
+automatic native finalize/transcription executors, Whisper, Codex subscription
+summarization, owned DynamoDB persistence, and authenticated native EventBus
+status reads. No recording row was pre-seeded and no manual transcription
+helper started the child. The final run stored six engine-timestamped segments
+and a 666-character summary; both recorded participants read that exact summary,
+and a nonparticipant was denied. Thirteen status responses include the actual
+pending → processing → ready progression. The final 30.564-second H.264/AAC
+recording decodes in full with no ffmpeg errors and retains both signed seats.
+
+This exposed a native timing bug: stopRecording stamped the recording and
+still-open participant timelines after waiting for ffmpeg and uploads. A
+30-second capture therefore claimed roughly 40 seconds and composition reported
+`degraded` despite retaining both tracks. The fix captures the end boundary
+before draining, preserves earlier participant departures, and keeps operational
+finalization metrics separate. Both single-process and multi-leg regression
+cases fail before the fix and pass after it. Twenty-three clock/identity tests,
+25 recording-manager checks, and 28 composition checks pass. The repeated live
+run reports composition `ok`.
+
+Browser input is prepared speech plus animated canvases, not physical devices.
+Gateway acceptance and host directory/Cedar authority remain explicit fixtures;
+production Raft/RunPersistence bootstrap, the application's rendered card and
+application search are not exercised in this run. Chat/work-graph delivery is
+intercepted. Primary services and original media remain untouched. This replaces
+the earlier fixture-media limitation for the isolated native pipeline, while
+preserving those remaining application acceptance boundaries.

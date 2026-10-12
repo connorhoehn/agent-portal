@@ -1,0 +1,35 @@
+{
+  "status": "passed",
+  "date": "2026-10-12",
+  "nativeProof": "proof.json",
+  "beforeFix": {
+    "composeStatus": "degraded",
+    "mediaDurationSeconds": "30.533333",
+    "reason": "Manifest/timeline included ffmpeg shutdown and upload time after capture stopped."
+  },
+  "afterFix": {
+    "composeStatus": "ok",
+    "segments": 6,
+    "summaryChars": 666,
+    "statusResponses": 13,
+    "wholeMediaDecodeExitCode": 0,
+    "wholeMediaDecodeStderrBytes": 0
+  },
+  "tests": {
+    "clockAndSignedSeat": 23,
+    "recordingManager": 25,
+    "composition": 28,
+    "clockRegressionBeforeFix": "Both cases failed: expected 12:00:30, actual 12:00:47 after simulated drain/upload delay."
+  },
+  "sourceSHA256": {
+    "live-video-streaming/src/recording/RecordingManager.js": "ddeee173a80da5a4965e04688b6471f04ca7816616d73047ec828d684f5e7d84",
+    "live-video-streaming/test/recording-stop-clock.test.js": "333ce463a86a848694f0d731e8f021317db4783a32d169fd8e70618b2306dcd4",
+    "platform-api/scripts/meeting-live-acceptance.cjs": "ed953415db68f271700ec2d82e5952cca6d376f3533c0ff4f9d9260339b10a83"
+  },
+  "runtime": "Only owned isolated services activated. Primary API, frontend and original media server unchanged.",
+  "remaining": "Production gateway/host authorization, primary application card and application search are not exercised by this harness; original goal is not marked complete.",
+  "sourceCommits": {
+    "platform-api": "1cf2fc8ba21125a89e113251001647de4701d06a",
+    "live-video-streaming": "4efbd69a4f325d3925146b460b782cd4c86d2675"
+  }
+}

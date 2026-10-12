@@ -1,0 +1,51 @@
+{
+  "status": "passed",
+  "sourceSHA256": "ed953415db68f271700ec2d82e5952cca6d376f3533c0ff4f9d9260339b10a83",
+  "mediaSHA256": "c08c0f0f6ddc421456af3759d1945c0a996651a05733874dfc8a47acf7becdb1",
+  "mediaBytes": 962481,
+  "composeStatus": "ok",
+  "actualBrowserRTP": true,
+  "actualNativeSignedMediaSeats": true,
+  "actualSFUCapture": true,
+  "actualNativeCompletionWebhook": true,
+  "actualFinalizeExecutor": true,
+  "automaticNativeChild": true,
+  "actualNativeDynamoTransactions": true,
+  "actualWhisper": true,
+  "actualCodexSubscription": true,
+  "actualNativeEventBusStatusHTTP": true,
+  "recordingRowPreSeeded": false,
+  "manualTranscriptionHelperCalled": false,
+  "callId": "live-call-797b274f-cf81-4127-9789-6471f0d2e4ac",
+  "recordingId": "2026-10-12T15-34-01-581Z-002b89a2",
+  "lobbyName": "orgiq:initiative:owned-live-797b274f-cf81-4127-9789-6471f0d2e4ac",
+  "sessionId": "live-session-797b274f-cf81-4127-9789-6471f0d2e4ac",
+  "parentRunId": "f9d524dc-7319-4ab7-ba12-7e6ebabac461",
+  "childRunId": "055f2b60-127f-47f9-8b34-864cedad7c85",
+  "processingAttemptId": "5e2648d9-da7c-4f67-a21b-0b515143181c",
+  "segments": 6,
+  "summaryChars": 666,
+  "transcriptSHA256": "bf012d4e5be650c68478d40e151d7ea4b136437a4a077af59f5295e74795928a",
+  "summarySHA256": "633ae37f24cfcde537527e2c12ee1fe21ba8d2cf9af17cbe4987772e8d4ef721",
+  "statusResponses": 13,
+  "readResults": [
+    {
+      "userId": "owned-live-one",
+      "isParticipant": true,
+      "exactSummarySHA256": "633ae37f24cfcde537527e2c12ee1fe21ba8d2cf9af17cbe4987772e8d4ef721"
+    },
+    {
+      "userId": "owned-live-two",
+      "isParticipant": true,
+      "exactSummarySHA256": "633ae37f24cfcde537527e2c12ee1fe21ba8d2cf9af17cbe4987772e8d4ef721"
+    }
+  ],
+  "nonparticipantDenied": true,
+  "boundaries": [
+    "Browser capture uses prepared speech WAV and animated canvas; no physical devices.",
+    "Native JWT seats and media are actual; accepted gateway call provenance and host directory authority are explicitly isolated fixtures.",
+    "Actual native PipelineExecutor/EventBus/Redis/WAL and DynamoDB run; production Raft and RunPersistence bootstrap are not exercised.",
+    "Chat/work-graph delivery is intercepted; primary application card rendering and search are not exercised in this harness.",
+    "Primary application, original media and existing services remain unchanged."
+  ]
+}
