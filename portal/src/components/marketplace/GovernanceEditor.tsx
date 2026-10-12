@@ -18,7 +18,7 @@
 
 import { useState } from 'react';
 import {
-  Button, Chip, DropdownMenu, MetaLine, type DropdownMenuSection,
+  Button, Chip, DropdownMenu, EditIcon, MetaLine, type DropdownMenuSection,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { toastError, toastInfo } from '../../lib/toastStore';
@@ -139,10 +139,9 @@ export function OwnerEditor({ projectId, contributors, ownerId, ownerName, onOwn
 
   return (
     <DropdownMenu
-      trigger="✎"
+      trigger={<EditIcon size={14} aria-hidden="true" />}
       triggerLabel="Change who runs this initiative"
       triggerTitle="Change who runs this initiative"
-      triggerClassName="border-none bg-transparent px-0.5 py-0 text-[11px] leading-none text-text-tertiary hover:text-primary hover:bg-transparent"
       sections={sections}
     />
   );

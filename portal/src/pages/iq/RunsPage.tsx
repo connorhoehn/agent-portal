@@ -9,13 +9,13 @@
 // palette and the route admit exactly who the API serves
 // (docs/nav-server-tier-decisions.md).
 
-import { CollectionPage } from '@connorhoehnslalom/ui-components/shared';
 import { RunsLedger } from '../../components/runs/RunsLedger';
+import { RunCollectionPage } from '../../components/runs/RunCollectionPage';
 
 export default function IqRunsPage() {
   return (
-    <CollectionPage data-testid="iq-runs" title="Runs" description="What this workspace's bots, agents and queue ran, and where each run stands.">
-      <RunsLedger endpoint="/api/runs" detailBase="/iq/runs" data-testid="iq-runs-table" />
-    </CollectionPage>
+    <RunCollectionPage data-testid="iq-runs" title="Runs" description="What this workspace's bots, agents and queue ran, and where each run stands.">
+      <RunsLedger endpoint="/api/runs" detailBase="/iq/runs" fill data-testid="iq-runs-table" />
+    </RunCollectionPage>
   );
 }

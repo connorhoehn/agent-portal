@@ -226,7 +226,7 @@ export function ConversationThread({ conversation, title, readOnlyReason = null,
       threaded {...(unreadFrom ? { unreadFrom } : {})} readReceipts={receipts.receipts} readReceiptsEnabled={receipts.enabled} disabled={!connected}
       onReply={input === 'below' ? undefined : elsewhere ? (elsewhere.replies ? message => { quote.start(message); owner.focus(true); } : undefined) : quote.start}
       {...(renderMessageReferences ? { renderMessageReferences } : {})} typingUsers={typingUsers ?? chat.typingUsers}
-      composer={field} />
+      flushComposer={input !== 'below' && !elsewhere} composer={field} />
   );
   return (
     <Stack gap="sm" className={fill ? 'min-h-0 flex-1' : 'min-h-[16rem]'} data-testid={testId}>

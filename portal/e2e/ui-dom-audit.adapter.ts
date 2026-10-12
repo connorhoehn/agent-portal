@@ -1,5 +1,6 @@
 /** Repository binding for the portable $ui-dom-audit skill. No duplicated route list. */
 import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { expect, type Page } from '@playwright/test';
 import { signIn } from './realSession';
@@ -8,13 +9,14 @@ import { staticInventory, paramInventory, PARAM_ROUTES, OBSERVED_ROUTES, resolve
 const repo = fileURLToPath(new URL('../../', import.meta.url));
 const selectors = {
   codeLabels: 'button code, button .font-mono:not(kbd), [role="button"] code, [role="button"] .font-mono:not(kbd)',
-  railCaptionLabels: '[data-testid="social-chat-rail-scroll"] button[aria-expanded]:not([aria-haspopup]) > span',
+  railCaptionLabels: '[data-testid="social-chat-rail-scroll"] button[aria-expanded]:not([aria-haspopup]) > span, button[data-heading="label"][data-focus-key^="g:"] > span',
+  railItemLabels: '[data-ui-text="rail-item"]',
   conversationLabels: '[data-testid="conversation-row"] > span:nth-of-type(2) > span:first-child > span:first-child',
   conversationMetadata: '[data-testid="conversation-time"], [data-testid="conversation-mention"], [data-testid="conversation-unread"]',
   decorativeText: '[aria-hidden="true"]',
   rowMenuGlyphs: '[data-testid*="-row-menu-"][aria-haspopup] > span',
   keyboardHints: 'kbd', captions: '[data-ui-text="caption"], [data-testid^="social-active-now-person-"] > span:last-child',
-  tenantControl: 'button[aria-label$=": switch tenant"]', tickerControl: '[data-testid="footer-today"] > button', avatarControl: '[data-testid="presence-avatar"], button[aria-label$=" more users"], [title].rounded-full',
+  tenantControl: 'button[aria-label$=": switch tenant"]', tickerControl: '[data-testid="footer-today"] > button', avatarControl: '[data-testid="presence-avatar"], button[aria-label$=" more users"], [data-ui-text="avatar"]',
   header: '.shell-header', footer: '[data-testid="shell-footer"]', footerRow: '[data-testid="shell-footer-row"]',
   shellColumns: '[data-shell-nav] > div',
   nestedColumns: 'div:has(> [data-subnav-content]):not([data-shell-nav] > div)',
@@ -28,7 +30,9 @@ const selectors = {
   composers: '[data-composer-surface]', nestedComposers: '[data-composer-surface] [data-composer-surface]',
   // Explicit content hosts, rather than the immediate padded parent: catches
   // an extra wrapper inset that otherwise makes a narrow shelf look correct.
-  composerBoundary: '[data-testid$="-pane-column"], [data-testid="social-chat-pane"], [data-section-content], [data-testid="shell-split-primary"], [data-subnav-content], [data-testid="page-conversation-pane"]',
+  // Embedded ledgers use their PageSection; full-page ledgers use the actual
+  // content column. Never use the ledger/command host as its own boundary.
+  composerBoundary: 'section:has(> [data-collection-command-boundary="embedded"]), [data-testid$="-pane-column"], [data-testid="social-chat-pane"], [data-section-content], [data-testid="shell-split-primary"], [data-subnav-content], [data-testid="page-conversation-pane"]',
   rightPane: '[data-testid="page-conversation-pane"]',
   conversationState: '[data-composer-surface], [data-testid="social-channel-not-joined"], [data-testid="social-shared-work"]',
 };
@@ -43,7 +47,7 @@ async function ready(page: Page, spec: InventoryRoute & { required?: string[] })
 }
 export default {
   baseURL: process.env.UI_AUDIT_BASE_URL ?? 'http://127.0.0.1:5183', selectors,
-  revision: () => ({ commit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo, encoding: 'utf8' }).trim(), sourceDigest: sourceDigest(), dirty: Boolean(execFileSync('git', ['status', '--porcelain'], { cwd: repo, encoding: 'utf8' }).trim()) }),
+  revision: () => ({ uiComponents: JSON.parse(readFileSync(new URL('../node_modules/@connorhoehnslalom/ui-components/package.json', import.meta.url), 'utf8')).version, commit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo, encoding: 'utf8' }).trim(), sourceDigest: sourceDigest(), dirty: Boolean(execFileSync('git', ['status', '--porcelain'], { cwd: repo, encoding: 'utf8' }).trim()) }),
   async cases(options: { tenant?: string; path?: string; all?: boolean }) {
     let routes: InventoryRoute[] = [...staticInventory(), ...paramInventory(), ...OBSERVED_ROUTES.map(r => ({ tenant: r.tenant, path: r.template.replace(':id', encodeURIComponent(r.id ?? r.fallback ?? 'missing')), pattern: r.pattern, source: 'param' as const, kind: /communication|social\/dms/.test(r.pattern) ? 'chat' as const : 'record' as const }))];
     if (options.tenant) routes = routes.filter(r => r.tenant === options.tenant);
@@ -67,7 +71,13 @@ export default {
         return [list, chat, record].filter(Boolean);
       }) as InventoryRoute[];
     }
-    return routes.map(r => ({ ...r, actor: `${r.tenant}:${r.user ?? SWEEP_USER}`, required: ['$header', '$footer', '$shellColumns', ...(r.judges?.includes('table') ? ['$tables'] : []), ...(r.kind === 'chat' && r.source === 'param' ? ['$conversationState'] : []), ...(/social\/dms\//.test(r.path) || /projects\/:id$/.test(r.pattern ?? '') ? ['$composers'] : [])] }));
+    return routes.map(r => ({ ...r, actor: `${r.tenant}:${r.user ?? SWEEP_USER}`,
+      // Inspected shared RunsLedger consumers and existing contextual composers.
+      // Other route families stay visibly unclassified until their policy is reviewed.
+      composerExpectation: /^(\/pipelines\/runs(?:\/[^/]+)?|\/iq\/runs|\/assessment\/runs)$/.test(new URL(r.path, 'http://audit.local').pathname)
+        || /social\/dms\//.test(r.path) || /projects\/:id$/.test(r.pattern ?? '') ? { mode: 'required' as const } : undefined,
+      required: ['$header', '$footer', '$shellColumns', ...(r.judges?.includes('table') ? ['$tables'] : []), ...(r.kind === 'chat' && r.source === 'param' ? ['$conversationState'] : [])],
+    }));
   },
   authenticate: (context: Parameters<typeof signIn>[0], spec: InventoryRoute) => signIn(context, spec.user ?? SWEEP_USER, { tenant: spec.tenant }),
   async resolveCases(context: any, cases: any[]) {
@@ -82,6 +92,15 @@ export default {
     await page.evaluate(value => { localStorage.setItem('theme', value); document.documentElement.dataset.theme = value; }, theme);
   },
   ready,
+  async composerExpectation(page: Page, spec: InventoryRoute & { composerExpectation?: { mode: 'required' | 'exempt'; reason?: string } }) {
+    if (spec.composerExpectation) return spec.composerExpectation;
+    if (spec.kind === 'chat' && spec.source === 'param') {
+      if (await page.getByTestId('social-channel-not-joined').isVisible()) return { mode: 'exempt', reason: 'Channel membership is required before the user can compose messages; join-required state is visible.' };
+      if (await page.getByTestId('social-shared-work').isVisible()) return { mode: 'exempt', reason: 'The active shared-work view displays contextual work; its message composer is outside this view.' };
+      return { mode: 'required' };
+    }
+    return undefined;
+  },
   async describe(page: Page) {
     return { conversation: await page.getByTestId('social-channel-not-joined').isVisible() ? 'join-required' : await page.getByTestId('social-shared-work').isVisible() ? 'shared-work' : await page.locator(selectors.composers).first().isVisible() ? 'composer' : 'not-present' };
   },
@@ -101,6 +120,23 @@ export default {
     }
     const filter = page.getByRole('button', { name: /^Filters(?: \(\d+ active\))?$/ });
     if (await filter.count() === 1 && await filter.isVisible()) states.push({ name: 'filters-open', enter: async p => { await p.getByRole('button', { name: /^Filters(?: \(\d+ active\))?$/ }).click(); await expect(p.getByRole('dialog').last()).toBeVisible(); } });
+    const commandHost = page.getByTestId('collection-command-host');
+    if (await commandHost.count() === 1 && await commandHost.isVisible()) states.push({ name: 'commands-help', enter: async p => {
+      await p.getByTestId('collection-command-host').locator('[contenteditable="true"]').click();
+      await p.getByRole('button', { name: 'Available runs commands', exact: true }).click();
+      await expect(p.getByRole('dialog', { name: 'Available runs commands', exact: true })).toBeVisible();
+    } });
+    const owner = page.getByRole('button', { name: 'Change who runs this initiative', exact: true });
+    if (await owner.count() === 1 && await owner.isVisible()) states.push({ name: 'owner-menu', enter: async p => {
+      const trigger = p.getByRole('button', { name: 'Change who runs this initiative', exact: true });
+      await trigger.click();
+      await expect(p.getByRole('menu', { name: 'Change who runs this initiative' })).toBeVisible();
+      await p.keyboard.press('Escape');
+      await expect(trigger).toBeFocused();
+      await expect(p.getByRole('menu', { name: 'Change who runs this initiative' })).toBeHidden();
+      await trigger.click();
+      await expect(p.getByRole('menu', { name: 'Change who runs this initiative' })).toBeVisible();
+    } });
     const info = page.getByRole('button', { name: /^(Initiative details|Open initiative details|Show details)$/ });
     if (await info.count() === 1 && await info.isVisible()) states.push({ name: 'details-pane', required: ['$rightPane'], enter: async p => { await p.getByRole('button', { name: /^(Initiative details|Open initiative details|Show details)$/ }).click(); await expect(p.locator(selectors.rightPane)).toBeVisible(); } });
     return states;

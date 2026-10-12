@@ -1,0 +1,74 @@
+// Reusable input host: a collection declares its commands, scope and actions.
+// It never invents a chat channel, invokes an unrelated agent or executes a
+// proposed mutation before the user confirms that specific operation.
+import { useRef, useState } from 'react';
+import { ConfirmDialog, IconButton, InlinePopover, InfoIcon, Stack, T, Tooltip } from '@connorhoehnslalom/ui-components/shared';
+import { ConversationComposer } from '../../lib/conversationComposer';
+
+export interface CollectionCommandResult {
+  message: string;
+  confirmation?: { title: string; body: string; label: string; confirm(): Promise<string> };
+}
+export interface CollectionCommandAdapter {
+  id: string;
+  label: string;
+  examples: readonly string[];
+  scopeNote: string;
+  placeholder: string;
+  execute(text: string): CollectionCommandResult | Promise<CollectionCommandResult>;
+}
+
+/** A page with no declared adapter must omit the host and document why in its
+ * route audit contract. Merely rendering an input is not supported coverage. */
+export function CollectionCommandHost({ adapter, disabled = false }: { adapter: CollectionCommandAdapter; disabled?: boolean }) {
+  const [notice, setNotice] = useState<{ text: string; tone: 'info' | 'danger' } | null>(null);
+  const [pending, setPending] = useState<CollectionCommandResult['confirmation']>();
+  const [busy, setBusy] = useState(false);
+  const locked = useRef(false);
+  const helpRef = useRef<HTMLButtonElement>(null);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const submit = async (text: string) => {
+    if (disabled || locked.current || pending) return false;
+    locked.current = true; setBusy(true);
+    try {
+      const result = await adapter.execute(text);
+      setNotice({ text: result.message, tone: 'info' });
+      setPending(result.confirmation);
+      return true;
+    } catch (error) {
+      setNotice({ text: error instanceof Error ? error.message : 'The command could not be completed.', tone: 'danger' });
+      return false;
+    } finally { locked.current = false; setBusy(false); }
+  };
+  return <Stack gap="none" className="shrink-0 min-w-0" data-testid="collection-command-host" data-collection-command={adapter.id}>
+    <ConversationComposer channel={null} context={{ kind: 'document', id: adapter.id, title: adapter.label }}
+      capabilities={{ maySend: false, agent: { allowed: true } }} defaultMode="agent" mode="agent"
+      offModes={{ chat: 'This input controls the table; it does not post to a conversation', terminal: 'This table has no terminal' }}
+      label={`${adapter.label} commands`} inputLabel={`${adapter.label} command`} presentation="compact"
+      data-testid="collection-command-composer" composerTestId="collection-command-input"
+      modePlaceholders={{ agent: adapter.placeholder }}
+      submitLabel={{ agent: 'Apply' }} answersFocus disabled={disabled || busy || !!pending}
+      allowEmoji={false} persistDraft={false} onAgent={submit}
+      modeRowEnd={<><Tooltip content="Supported table commands"><IconButton ref={helpRef} size="sm" aria-label={`Available ${adapter.label.toLowerCase()} commands`}
+        icon={<InfoIcon size={14} />} aria-haspopup="dialog" aria-expanded={helpOpen} onClick={() => setHelpOpen(!helpOpen)} /></Tooltip>
+        <InlinePopover open={helpOpen} onClose={() => setHelpOpen(false)} trigger={helpRef}
+          aria-label={`Available ${adapter.label.toLowerCase()} commands`} className="max-w-md p-4">
+          <Stack gap="sm"><T size="sm" weight="semibold">Table commands</T>
+            <T size="xs" tone="secondary">Filter, search or refresh this table. Use the phrases below for available actions.</T>
+            <ul className="flex flex-col gap-1">{adapter.examples.map(example => <li key={example}><T size="sm">{example}</T></li>)}</ul>
+            <T size="xs" tone="secondary">{adapter.scopeNote}</T>
+          </Stack>
+        </InlinePopover></>}
+      status={notice ? { ...notice, onDismiss: () => setNotice(null), 'data-testid': 'collection-command-result' } : null} />
+    <ConfirmDialog open={!!pending} title={pending?.title ?? 'Confirm operation'} body={pending?.body ?? ''}
+      confirmLabel={pending?.label ?? 'Confirm'} cancelLabel="Keep it" tone="destructive"
+      onCancel={() => { setPending(undefined); setNotice({ text: 'Operation dismissed. Nothing was changed.', tone: 'info' }); }}
+      onConfirm={() => {
+        if (!pending || locked.current) return;
+        const action = pending; setPending(undefined); locked.current = true; setBusy(true);
+        void action.confirm().then(text => setNotice({ text, tone: 'info' }), error => setNotice({
+          text: error instanceof Error ? error.message : 'The operation failed.', tone: 'danger',
+        })).finally(() => { locked.current = false; setBusy(false); });
+      }} />
+  </Stack>;
+}
