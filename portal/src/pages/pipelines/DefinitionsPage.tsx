@@ -7,7 +7,8 @@
 // Table-first: one compact filter row, then the DataTable above the fold.
 
 import {
-  CollectionPage,
+  CollectionToolbar,
+  Stack,
   Banner,
   Chip,
   DataTable,
@@ -16,6 +17,9 @@ import {
 } from '@connorhoehnslalom/ui-components/shared';
 import { useState } from 'react';
 import { useSearchParams } from 'react-router';
+import { CollectionCommandPage } from '../../components/collections/CollectionCommandPage';
+import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';
+import { pipelineCollectionAdapter } from './pipelineCollectionCommands';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { PipelineRunStatusChip } from '../../components/runs/PipelineRunParts';
 import { useFetch } from '../../hooks/useFetch';
@@ -67,6 +71,8 @@ export default function DefinitionsPage() {
   );
   const all = data?.definitions ?? [];
   const rows = all.filter((d) => matchesDefinition(d, query));
+  const adapter = pipelineCollectionAdapter('definitions', { setQuery, setFilter: setKind, refresh,
+    scopeNote: 'Search uses the loaded definition catalog. Kind changes refetch the catalog; search, paging and sorting remain table controls. Commands do not run or change definitions.' });
 
   const open = (id: string | null) => {
     const next = new URLSearchParams(params);
@@ -75,13 +81,15 @@ export default function DefinitionsPage() {
   };
 
   return (
-    <CollectionPage data-testid="pipelines-definitions" title="Definitions" description="What can run: every bot, assessment command, runbook and agent, with its triggers, steps and runs."
-      toolbar={{ label: 'Definition filters', search: { value: query, onChange: setQuery, placeholder: 'Search definitions', 'aria-label': 'Search definitions' },
+    <CollectionCommandPage data-testid="pipelines-definitions" title="Definitions" description="What can run: every bot, assessment command, runbook and agent, with its triggers, steps and runs.">
+      <Stack gap="none" className="min-h-0 min-w-0 flex-1">
+      <Stack gap="md" className="min-h-0 flex-1 overflow-auto px-[var(--ui-page-gutter)]">
+      <CollectionToolbar {...{ label: 'Definition filters', search: { value: query, onChange: setQuery, placeholder: 'Search definitions', 'aria-label': 'Search definitions' },
         filters: [{ id: 'kind', label: 'Kind', value: kind, onChange: setKind, options: DEFINITION_KIND_OPTIONS }],
         summary: data ? `${rows.length} of ${all.length} definitions` : undefined,
         notices: data ? [`Unnamed approvers default to ${data.defaultApproverRole}.`] : [],
         onRefresh: refresh, refreshing: isLoading,
-      }}>
+      }} />
 
       {data && data.unavailable.length > 0 && (
         <Banner variant="warning">
@@ -103,6 +111,9 @@ export default function DefinitionsPage() {
         />
       )}
       <DefinitionDrawer id={openId} onClose={() => open(null)} onChanged={refresh} />
-    </CollectionPage>
+    </Stack>
+      <CollectionCommandHost adapter={adapter} />
+      </Stack>
+    </CollectionCommandPage>
   );
 }

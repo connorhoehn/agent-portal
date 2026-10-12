@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { selectAuditRoutes } from './ui-dom-audit.routes.ts';
+import { selectAuditRoutes, matchesAuditLocation } from './ui-dom-audit.routes.ts';
 const routes = [
   { path: '/pipelines/runs', source: 'static' },
   { path: '/pipelines/runs/seed', pattern: '/pipelines/runs/:id', source: 'param' },
@@ -37,4 +37,16 @@ test('colon in concrete query does not turn path into template selection', () =>
   const [selected] = selectAuditRoutes(routes, '/pipelines/runs?query=state:failed');
   assert.equal(selected.path, '/pipelines/runs?query=state:failed');
   assert.equal(selected.auditPreservePath, true);
+});
+
+test('route readiness preserves requested views and selections', () => {
+  assert.equal(matchesAuditLocation('/pipelines/definitions?open=agent%3Aone', 'http://localhost/pipelines/definitions?open=agent%3Aone&sort=name'), true);
+  assert.equal(matchesAuditLocation('/pipelines/definitions?open=agent%3Aone', '/pipelines/definitions'), false);
+  assert.equal(matchesAuditLocation('/pipelines/communication?view=shared', '/pipelines/communication?view=chat'), false);
+  assert.equal(matchesAuditLocation('/pipelines/runs?state=failed&state=running', '/pipelines/runs?state=failed'), false);
+});
+test('only the documented tenant root alias is allowed, including its query', () => {
+  assert.equal(matchesAuditLocation('/pipelines?status=failed', '/pipelines/runs?status=failed'), true);
+  assert.equal(matchesAuditLocation('/pipelines?status=failed', '/pipelines/runs'), false);
+  assert.equal(matchesAuditLocation('/pipelines/configuration', '/pipelines/runs'), false);
 });

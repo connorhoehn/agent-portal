@@ -18,3 +18,16 @@ export function selectAuditRoutes<T extends { path: string; pattern?: string }>(
   // Never silently turn a miss into a broader prefix/substring sweep.
   return parameterized ? [{ ...parameterized, path: requested.pathname + requested.search, auditPreservePath: true }] : [];
 }
+
+/** Preserve the requested view/selection while allowing unrelated app-added parameters. */
+export function matchesAuditLocation(requestedPath: string, actualURL: string): boolean {
+  const requested = new URL(requestedPath, 'http://audit.local');
+  const actual = new URL(actualURL, 'http://audit.local');
+  const expectedPath = requested.pathname === '/pipelines' ? '/pipelines/runs' : requested.pathname;
+  if (actual.pathname !== expectedPath) return false;
+  return [...new Set(requested.searchParams.keys())].every(key => {
+    const expected = requested.searchParams.getAll(key);
+    const values = actual.searchParams.getAll(key);
+    return expected.length === values.length && expected.every((value, index) => value === values[index]);
+  });
+}

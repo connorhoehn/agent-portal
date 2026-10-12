@@ -7,7 +7,8 @@
 // workspace, commands in assessment, agents by deployment.
 
 import {
-  CollectionPage,
+  CollectionToolbar,
+  Stack,
   Banner,
   Chip,
   DataTable,
@@ -19,6 +20,9 @@ import { useNavigate } from 'react-router';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { PipelineRunStatusChip } from '../../components/runs/PipelineRunParts';
 import { useFetch } from '../../hooks/useFetch';
+import { useSession } from '../../lib/auth';
+import { CollectionCommandPage } from '../../components/collections/CollectionCommandPage';
+import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';
 import {
   SOURCE_KINDS,
   definitionHref,
@@ -28,6 +32,7 @@ import {
   type PipelineDefinition,
   type SourcePageId,
 } from '../../lib/pipelineDefinitions';
+import { pipelineCollectionAdapter, resolvePipelineCollectionTarget } from './pipelineCollectionCommands';
 import { relativeTime } from '../../lib/relativeTime';
 
 const str = (v: unknown): string => (typeof v === 'string' && v ? v : '—');
@@ -92,6 +97,11 @@ const PAGES: Record<SourcePageId, { title: string; description: string; noun: st
 };
 
 export default function SourcesPage({ source }: { source: SourcePageId }) {
+  const { session } = useSession();
+  return <SourcesWorkspace source={source} key={`${source}:${session?.sub}:${session?.tenant}:${session?.role}`} />;
+}
+
+function SourcesWorkspace({ source }: { source: SourcePageId }) {
   const navigate = useNavigate();
   const page = PAGES[source];
   const { data, error, isLoading, refresh } = useFetch<DefinitionsResponse>(
@@ -101,13 +111,26 @@ export default function SourcesPage({ source }: { source: SourcePageId }) {
   const all = data?.definitions ?? [];
   const rows = all.filter((d) => matchesDefinition(d, query));
 
+  const adapter = pipelineCollectionAdapter(source, {
+    setQuery, refresh,
+    scopeNote: 'Search uses loaded registry names, IDs, descriptions and owners across table pages. Open uses one exact visible title or ID. This registry is read-only; launching, editing and pausing definitions are not commands.',
+    open(target) {
+      if (!data || isLoading || error) throw new Error('Wait for the registry to load successfully before opening a record.');
+      const row = resolvePipelineCollectionTarget(target, rows);
+      navigate(definitionHref(row.id));
+      return `Opened ${row.title}.`;
+    },
+  });
+
   return (
-    <CollectionPage data-testid={`pipelines-source-${source}`} title={page.title} description={page.description}
-      toolbar={{ label: `${page.title} filters`, search: { value: query, onChange: setQuery, placeholder: `Search ${page.noun}`, 'aria-label': `Search ${page.noun}` },
+    <CollectionCommandPage data-testid={`pipelines-source-${source}`} title={page.title} description={page.description}>
+      <Stack gap="none" className="min-h-0 min-w-0 flex-1">
+      <Stack gap="md" className="min-h-0 flex-1 overflow-auto px-[var(--ui-page-gutter)]">
+      <CollectionToolbar {...{ label: `${page.title} filters`, search: { value: query, onChange: setQuery, placeholder: `Search ${page.noun}`, 'aria-label': `Search ${page.noun}` },
         summary: data ? `${rows.length} ${page.noun} · ${all.reduce((n, d) => n + d.runCount, 0)} recorded runs` : undefined,
         notices: ['This source registry is read-only.'],
         onRefresh: refresh, refreshing: isLoading,
-      }}>
+      }} />
 
       {data && data.unavailable.length > 0 && (
         <Banner variant="warning">
@@ -128,6 +151,9 @@ export default function SourcesPage({ source }: { source: SourcePageId }) {
           emptyMessage={query.trim() ? `No ${page.noun} match "${query.trim()}".` : page.empty}
         />
       )}
-    </CollectionPage>
+      </Stack>
+      <CollectionCommandHost adapter={adapter} />
+      </Stack>
+    </CollectionCommandPage>
   );
 }

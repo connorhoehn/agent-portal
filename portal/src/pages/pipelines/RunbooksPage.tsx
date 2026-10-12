@@ -6,7 +6,8 @@
 // queue; a row opens the runbook's definition.
 
 import {
-  CollectionPage,
+  CollectionToolbar,
+  Stack,
   Banner,
   Chip,
   ConfirmDialog,
@@ -16,7 +17,11 @@ import {
   PlayCircleIcon,
   type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
+import { useState } from 'react';
 import { useNavigate } from 'react-router';
+import { CollectionCommandPage } from '../../components/collections/CollectionCommandPage';
+import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';
+import { pipelineCollectionAdapter, filterRunbooks } from './pipelineCollectionCommands';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { PipelineRunStatusChip } from '../../components/runs/PipelineRunParts';
 import { useFetch } from '../../hooks/useFetch';
@@ -60,13 +65,24 @@ export default function RunbooksPage() {
   const { data, error, isLoading, refresh } = useFetch<RunbooksResponse>('/api/pipelines/runbooks', 30_000);
   const dryRun = useDryRun(() => refresh());
   const canRun = ready && can('RunPipeline');
-  const rows = data?.runbooks ?? [];
+  const [query, setQuery] = useState('');
+  const [filter, setFilter] = useState('');
+  const all = data?.runbooks ?? [];
+  const rows = filterRunbooks(all, query, filter);
+  const adapter = pipelineCollectionAdapter('runbooks', { setQuery, setFilter, refresh,
+    scopeNote: 'Search and promotion filters use loaded runbooks across table pages. Passed means a completed dry-run; promoted runbooks have a separate filter. Commands never start a dry-run or promote a runbook.' });
 
   return (
-    <CollectionPage data-testid="pipelines-runbooks" title="Runbooks" description="Runbooks on their way to becoming skills. A runbook becomes a skill only after a completed dry-run of its own definition."
-      toolbar={{ label: 'Runbooks summary', summary: data ? `${rows.length} runbooks · ${rows.filter(r => r.runbook.promotionToSkill.ok).length} with a completed dry-run` : undefined,
+    <CollectionCommandPage data-testid="pipelines-runbooks" title="Runbooks" description="Runbooks on their way to becoming skills. A runbook becomes a skill only after a completed dry-run of its own definition.">
+      <Stack gap="none" className="min-h-0 min-w-0 flex-1">
+      <Stack gap="md" className="min-h-0 flex-1 overflow-auto px-[var(--ui-page-gutter)]">
+      <CollectionToolbar {...{ label: 'Runbook filters', search: { value: query, onChange: setQuery, placeholder: 'Search runbooks', 'aria-label': 'Search runbooks' },
+        filters: [{ id: 'promotion', label: 'Promotion', value: filter, onChange: setFilter, options: [
+          { value: '', label: 'All runbooks' }, { value: 'passed', label: 'Dry-run passed' },
+          { value: 'needs-dry-run', label: 'Needs dry-run' }, { value: 'promoted', label: 'Promoted' },
+        ] }], summary: data ? `${rows.length} of ${all.length} runbooks · ${rows.filter(r => r.runbook.promotionToSkill.ok).length} with a completed dry-run` : undefined,
         onRefresh: refresh, refreshing: isLoading,
-      }}>
+      }} />
 
       {data && !canRun && <MetaLine size="xs" tone="tertiary" items={['dry-runs are started by authors and operators']} />}
       {data && data.unavailable.length > 0 && (
@@ -96,7 +112,7 @@ export default function RunbooksPage() {
               data-testid="pipelines-runbook-dry-run"
             />
           ) : null) : undefined}
-          emptyMessage="No runbooks — nothing on the promotion ladder has reached the runbook rung."
+          emptyMessage={query || filter ? 'No runbooks match these filters.' : 'No runbooks — nothing on the promotion ladder has reached the runbook rung.'}
         />
       )}
       <ConfirmDialog
@@ -108,6 +124,9 @@ export default function RunbooksPage() {
         onConfirm={dryRun.confirmNow}
         onCancel={dryRun.dismiss}
       />
-    </CollectionPage>
+    </Stack>
+      <CollectionCommandHost adapter={adapter} />
+      </Stack>
+    </CollectionCommandPage>
   );
 }

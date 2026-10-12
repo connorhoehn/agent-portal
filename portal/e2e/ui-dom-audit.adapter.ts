@@ -4,7 +4,8 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { expect, type Page } from '@playwright/test';
 import { signIn } from './realSession';
-import { selectAuditRoutes } from './ui-dom-audit.routes';
+import { selectAuditRoutes, matchesAuditLocation } from './ui-dom-audit.routes';
+import { pipelineComposerPolicy } from './ui-dom-audit.policies';
 import { staticInventory, paramInventory, PARAM_ROUTES, OBSERVED_ROUTES, resolveParam, SWEEP_USER, sourceDigest, type InventoryRoute } from './route-inventory';
 
 const repo = fileURLToPath(new URL('../../', import.meta.url));
@@ -38,6 +39,10 @@ const selectors = {
   rightPane: '[data-testid="page-conversation-pane"]',
   conversationState: '[data-composer-surface], [data-testid="social-channel-not-joined"], [data-testid="social-shared-work"]',
 };
+async function assertRoute(page: Page, spec: InventoryRoute) {
+  // The tenant root intentionally opens Runs. Other redirects cannot certify the requested page.
+  await expect.poll(() => matchesAuditLocation(spec.path, page.url()), { message: `Expected audit route and selected view: ${spec.path}` }).toBe(true);
+}
 async function ready(page: Page, spec: InventoryRoute & { required?: string[] }) {
   await expect(page.locator(selectors.header)).toBeVisible();
   await expect(page.locator('html')).toHaveAttribute('data-tenant', spec.tenant);
@@ -46,8 +51,15 @@ async function ready(page: Page, spec: InventoryRoute & { required?: string[] })
   if (spec.required?.includes('$composers')) await expect(page.locator(selectors.composers).first()).toBeVisible({ timeout: 15000 });
   if (spec.judges?.includes('table')) await expect(page.locator(selectors.tables).first()).toBeVisible();
   await expect(page.locator('[data-testid="datatable-loading-row"]')).toHaveCount(0);
+  // Absence of a loading indicator can precede the lazy page mounting. Wait
+  // for the actual configuration control before classifying its form policy.
+  if (new URL(spec.path, 'http://audit.local').pathname === '/pipelines/configuration') {
+    await expect(page.getByTestId('pipelines-default-approver')).toBeVisible();
+  }
+  await assertRoute(page, spec);
 }
 export default {
+  assertRoute,
   baseURL: process.env.UI_AUDIT_BASE_URL ?? 'http://127.0.0.1:5183', selectors,
   revision: () => ({ uiComponents: JSON.parse(readFileSync(new URL('../node_modules/@connorhoehnslalom/ui-components/package.json', import.meta.url), 'utf8')).version, commit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo, encoding: 'utf8' }).trim(), sourceDigest: sourceDigest(), dirty: Boolean(execFileSync('git', ['status', '--porcelain'], { cwd: repo, encoding: 'utf8' }).trim()) }),
   async cases(options: { tenant?: string; path?: string; all?: boolean }) {
@@ -66,8 +78,8 @@ export default {
     return routes.map(r => ({ ...r, actor: `${r.tenant}:${r.user ?? SWEEP_USER}`,
       // Inspected shared RunsLedger consumers and existing contextual composers.
       // Other route families stay visibly unclassified until their policy is reviewed.
-      composerExpectation: /^(\/pipelines\/runs(?:\/[^/]+)?|\/iq\/runs|\/assessment\/runs|\/social\/contacts)$/.test(new URL(r.path, 'http://audit.local').pathname)
-        || /social\/dms\//.test(r.path) || /projects\/:id$/.test(r.pattern ?? '') ? { mode: 'required' as const } : undefined,
+      composerExpectation: pipelineComposerPolicy(r.path) ?? (/^(\/pipelines\/runs(?:\/[^/]+)?|\/iq\/runs|\/assessment\/runs|\/social\/contacts)$/.test(new URL(r.path, 'http://audit.local').pathname)
+        || /social\/dms\//.test(r.path) || /projects\/:id$/.test(r.pattern ?? '') ? { mode: 'required' as const } : undefined),
       required: ['$header', '$footer', '$shellColumns', ...(r.judges?.includes('table') ? ['$tables'] : []), ...(r.kind === 'chat' && r.source === 'param' ? ['$conversationState'] : [])],
     }));
   },
@@ -76,7 +88,11 @@ export default {
     return Promise.all(cases.map(async spec => {
       if (spec.auditPreservePath) return spec;
       const param = [...PARAM_ROUTES, ...OBSERVED_ROUTES].find(p => p.pattern === spec.pattern);
-      return param ? { ...spec, path: await resolveParam(param, async url => { const response = await context.request.get(url); if (!response.ok()) throw new Error(`Route discovery ${url}: ${response.status()}`); return response.json(); }) } : spec;
+      if (!param) return spec;
+      const path = await resolveParam(param, async url => { const response = await context.request.get(url); if (!response.ok()) throw new Error(`Route discovery ${url}: ${response.status()}`); return response.json(); });
+      // Only an actual 404 can classify a missing report, never an arbitrary load failure.
+      const report = /^\/pipelines\/decks\/[^/]+$/.test(path) ? await context.request.get(`/api${path}`) : null;
+      return { ...spec, path, auditMissingDeck: report?.status() === 404 };
     }));
   },
   async theme(page: Page, theme: string) {
@@ -84,7 +100,18 @@ export default {
     await page.evaluate(value => { localStorage.setItem('theme', value); document.documentElement.dataset.theme = value; }, theme);
   },
   ready,
-  async composerExpectation(page: Page, spec: InventoryRoute & { composerExpectation?: { mode: 'required' | 'exempt'; reason?: string } }) {
+  async composerExpectation(page: Page, spec: InventoryRoute & { auditMissingDeck?: boolean; composerExpectation?: { mode: 'required' | 'exempt'; reason?: string } }) {
+    if (spec.tenant === 'pipelines') {
+      const policy = pipelineComposerPolicy(spec.path, {
+        graph: await page.locator('[data-testid=work-activity-canvas], [data-testid=work-graph-canvas], [data-testid=work-graph-empty]').first().isVisible(),
+        communicationOverview: await page.getByTestId('communication-overview').isVisible(),
+        socialAccessRequired: await page.getByTestId('communication-no-social').isVisible(),
+        configurationForm: await page.getByTestId('pipelines-default-approver').isVisible(),
+        settingsPlaceholder: await page.getByTestId('pipelines-empty-settings').isVisible(),
+        missingDeck: !!spec.auditMissingDeck && await page.getByText("Couldn't open the report", { exact: true }).isVisible(),
+      });
+      if (policy) return policy;
+    }
     if (spec.composerExpectation) return spec.composerExpectation;
     if (spec.kind === 'chat' && spec.source === 'param') {
       if (await page.getByTestId('social-channel-not-joined').isVisible()) return { mode: 'exempt', reason: 'Channel membership is required before the user can compose messages; join-required state is visible.' };

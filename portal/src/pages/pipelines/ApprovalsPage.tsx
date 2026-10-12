@@ -8,7 +8,7 @@
 // buttons — absent from the DOM, not disabled.
 
 import {
-  CollectionPage,
+  CollectionToolbar,
   Banner,
   BranchIcon,
   Button,
@@ -42,9 +42,12 @@ import {
   type ApprovalRequest,
 } from '../../lib/pipelineDefinitions';
 import { runHref } from '../../lib/pipelineRuns';
+import { pipelineCollectionAdapter, resolvePipelineCollectionTarget } from './pipelineCollectionCommands';
 import { relativeTime } from '../../lib/relativeTime';
 import { toastError, toastSuccess } from '../../lib/toastStore';
 import { writeJson } from '../../lib/writeJson';
+import { CollectionCommandPage } from '../../components/collections/CollectionCommandPage';
+import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';
 
 interface ApprovalsResponse { approvals: ApprovalRequest[]; total: number; unavailable: Array<{ source: string; error: string }> }
 
@@ -61,6 +64,11 @@ const COLUMNS: DataTableColumn<ApprovalRequest>[] = [
 ];
 
 export default function ApprovalsPage() {
+  const { session } = useSession();
+  return <ApprovalsWorkspace key={`${session?.sub}:${session?.tenant}:${session?.role}`} />;
+}
+
+function ApprovalsWorkspace() {
   const navigate = useNavigate();
   const { session } = useSession();
   const { can, ready } = useCapabilities();
@@ -68,10 +76,24 @@ export default function ApprovalsPage() {
   const [openId, setOpenId] = useState<string | null>(null);
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
-  const rows = data?.approvals ?? [];
-  const open = rows.find((a) => a.id === openId) ?? null;
+  const [query, setQuery] = useState('');
+  const all = data?.approvals ?? [];
+  const rows = all.filter(a => [a.id, a.title, a.question, a.stepId, a.source, approvalSourceLabel(a.source)]
+    .some(value => value.toLowerCase().includes(query.trim().toLowerCase())));
+  const open = all.find((a) => a.id === openId) ?? null;
   const holdsApprove = ready && can('ApproveStep');
   const mayDecide = open ? holdsApprove && canDecide(session?.role, open.requiredRoles) : false;
+
+  const adapter = pipelineCollectionAdapter('approvals', {
+    setQuery, refresh,
+    scopeNote: 'Search uses loaded waiting steps, questions, IDs and sources across table pages. Open shows one exact visible step for review. Approve and reject remain explicit permission-checked actions in its drawer; this input records no decision.',
+    open(target) {
+      if (!data || isLoading || error) throw new Error('Wait for approvals to load successfully before opening a step.');
+      const row = resolvePipelineCollectionTarget(target, rows);
+      setOpenId(row.id); setNote('');
+      return `Opened ${row.title} for review. No decision was recorded.`;
+    },
+  });
 
   async function decide(decision: 'approve' | 'reject') {
     if (!open) return;
@@ -87,11 +109,13 @@ export default function ApprovalsPage() {
   }
 
   return (
-    <CollectionPage data-testid="pipelines-approvals" title="Approvals" description="Steps waiting on a person — a job at review, a change the gates held, an agent’s question."
-      toolbar={{ label: 'Approvals summary', summary: data ? `${rows.length} waiting` : undefined,
+    <CollectionCommandPage data-testid="pipelines-approvals" title="Approvals" description="Steps waiting on a person — a job at review, a change the gates held, an agent’s question.">
+      <Stack gap="none" className="min-h-0 min-w-0 flex-1">
+      <Stack gap="md" className="min-h-0 flex-1 overflow-auto px-[var(--ui-page-gutter)]">
+      <CollectionToolbar {...{ label: 'Approvals filters', search: { value: query, onChange: setQuery, placeholder: 'Search approvals', 'aria-label': 'Search approvals' }, summary: data ? `${rows.length} waiting` : undefined,
         notices: holdsApprove ? [] : ['Operators and pipeline admins decide these.'],
         onRefresh: refresh, refreshing: isLoading,
-      }}>
+      }} />
 
       {data && data.unavailable.length > 0 && (
         <Banner variant="warning">
@@ -109,9 +133,12 @@ export default function ApprovalsPage() {
           loading={isLoading && !data}
           pageSize={25}
           onRowClick={(a) => { setOpenId(a.id); setNote(''); }}
-          emptyMessage="Nothing is waiting on a person."
+          emptyMessage={query.trim() ? 'No approvals match this search.' : 'Nothing is waiting on a person.'}
         />
       )}
+      </Stack>
+      <CollectionCommandHost adapter={adapter} disabled={busy} />
+      </Stack>
       <Drawer
         open={open !== null}
         onClose={() => setOpenId(null)}
@@ -159,6 +186,6 @@ export default function ApprovalsPage() {
           </Stack>
         )}
       </Drawer>
-    </CollectionPage>
+    </CollectionCommandPage>
   );
 }

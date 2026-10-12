@@ -3,7 +3,8 @@
 // §Pages). Read from GET /api/pipelines/artifacts; a row opens its run.
 
 import {
-  CollectionPage,
+  CollectionToolbar,
+  Stack,
   Banner,
   Chip,
   DataTable,
@@ -12,6 +13,9 @@ import {
 } from '@connorhoehnslalom/ui-components/shared';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
+import { CollectionCommandPage } from '../../components/collections/CollectionCommandPage';
+import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';
+import { pipelineCollectionAdapter, filterArtifacts } from './pipelineCollectionCommands';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { PipelineRunStatusChip } from '../../components/runs/PipelineRunParts';
 import { useFetch } from '../../hooks/useFetch';
@@ -46,17 +50,23 @@ interface ArtifactsResponse {
 export default function ArtifactsPage() {
   const navigate = useNavigate();
   const [kind, setKind] = useState('');
+  const [query, setQuery] = useState('');
   const { data, error, isLoading, refresh } = useFetch<ArtifactsResponse>(
     `/api/pipelines/artifacts?limit=500${kind ? `&kind=${encodeURIComponent(kind)}` : ''}`, 60_000,
   );
-  const rows = data?.artifacts ?? [];
+  const all = data?.artifacts ?? [];
+  const rows = filterArtifacts(all, query);
+  const adapter = pipelineCollectionAdapter('artifacts', { setQuery, setFilter: setKind, refresh,
+    scopeNote: 'Search matches loaded artifact titles, IDs, run IDs and workspaces, limited to the latest 500 returned artifacts. Kind changes refetch that server filter. Commands do not change artifacts or start runs.' });
 
   return (
-    <CollectionPage data-testid="pipelines-artifacts" title="Artifacts" description="What runs produced — changes, documents, scores and transcripts."
-      toolbar={{ label: 'Artifact filters', filters: [{ id: 'kind', label: 'Artifact kind', value: kind, onChange: setKind, options: KIND_OPTIONS }],
+    <CollectionCommandPage data-testid="pipelines-artifacts" title="Artifacts" description="What runs produced — changes, documents, scores and transcripts.">
+      <Stack gap="none" className="min-h-0 min-w-0 flex-1">
+      <Stack gap="md" className="min-h-0 flex-1 overflow-auto px-[var(--ui-page-gutter)]">
+      <CollectionToolbar {...{ label: 'Artifact filters', search: { value: query, onChange: setQuery, placeholder: 'Search artifacts', 'aria-label': 'Search artifacts' }, filters: [{ id: 'kind', label: 'Artifact kind', value: kind, onChange: setKind, options: KIND_OPTIONS }],
         summary: data ? showingLabel(rows.length, data.total, 'artifacts') : undefined,
         onRefresh: refresh, refreshing: isLoading,
-      }}>
+      }} />
 
       {data && data.unavailable.length > 0 && (
         <Banner variant="warning">
@@ -74,9 +84,12 @@ export default function ArtifactsPage() {
           loading={isLoading && !data}
           pageSize={25}
           onRowClick={(a) => { if (a.runId) navigate(runHref('/pipelines/runs', a.runId)); }}
-          emptyMessage={kind ? 'No artifact of this kind.' : 'No artifacts recorded yet.'}
+          emptyMessage={kind || query ? 'No artifacts match these filters.' : 'No artifacts recorded yet.'}
         />
       )}
-    </CollectionPage>
+    </Stack>
+      <CollectionCommandHost adapter={adapter} />
+      </Stack>
+    </CollectionCommandPage>
   );
 }
