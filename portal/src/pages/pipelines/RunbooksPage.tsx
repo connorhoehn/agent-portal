@@ -6,7 +6,7 @@
 // queue; a row opens the runbook's definition.
 
 import { useNavigate } from 'react-router';
-import {
+import { Toolbar, Tooltip, RepeatIcon,
   Banner, Chip, ConfirmDialog, DataTable, IconButton, MetaLine, PageHeader, PlayCircleIcon, Stack, StatStrip, type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
@@ -51,11 +51,12 @@ export default function RunbooksPage() {
   const rows = data?.runbooks ?? [];
 
   return (
-    <Stack gap="md" data-testid="pipelines-runbooks">
-      <PageHeader
+    <Stack gap="md" className="min-w-0" data-testid="pipelines-runbooks">
+      <PageHeader density="compact"
         title="Runbooks"
         description="Runbooks on their way to becoming skills. A runbook becomes a skill only after a completed dry-run of its own definition."
       />
+      <Toolbar aria-label="Runbooks summary" wrap className="px-0" end={<Tooltip content="Refresh"><IconButton size="sm" aria-label="Refresh" icon={<RepeatIcon />} onClick={refresh} disabled={isLoading} /></Tooltip>}>
       {data && (
         <StatStrip
           aria-label="Runbook summary"
@@ -67,6 +68,7 @@ export default function RunbooksPage() {
           ]}
         />
       )}
+      </Toolbar>
       {data && !canRun && <MetaLine size="xs" tone="tertiary" items={['dry-runs are started by authors and operators']} />}
       {data && data.unavailable.length > 0 && (
         <Banner variant="warning">

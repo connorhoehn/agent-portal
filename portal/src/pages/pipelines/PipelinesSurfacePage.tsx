@@ -8,8 +8,8 @@ import { PIPELINES_SURFACES, type PipelinesSurfaceId } from './pipelinesSurfaces
 export default function PipelinesSurfacePage({ surface }: { surface: PipelinesSurfaceId }) {
   const s = PIPELINES_SURFACES[surface];
   return (
-    <Stack gap="lg" data-testid={`pipelines-page-${s.id}`}>
-      <PageHeader
+    <Stack gap="md" className="min-w-0" data-testid={`pipelines-page-${s.id}`}>
+      <PageHeader density="compact"
         title={s.title}
         description={s.description}
         badge={<Chip tone="neutral" size="xs">Coming in lane {s.phase}</Chip>}

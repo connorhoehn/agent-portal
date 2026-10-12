@@ -4,7 +4,7 @@
 
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
-import { Button, Checkbox, DetailSection, FormField, InlineAlert, Inline, Input, Modal, Stack, Text } from '@connorhoehnslalom/ui-components/shared';
+import { IconButton, Tooltip, DocumentAddIcon, T, EmptyState, LoadingState, Button, Checkbox, DetailSection, FormField, InlineAlert, Inline, Input, Modal, Stack } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../../hooks/useFetch';
 import { useCapabilities } from '../../../lib/capabilities';
 import { toastError, toastSuccess } from '../../../lib/toastStore';
@@ -38,15 +38,17 @@ export function RunReportDecks({ runId, runTitle }: { runId: string; runTitle: s
   return (
     <DetailSection
       title="Report decks" hint={`${rows.length}`} data-testid="pipeline-run-decks"
-      {...(can('RunPipeline') ? { actions: <Button size="sm" variant="secondary" onClick={() => setOpen(true)} data-testid="run-deck-generate">Run report deck</Button> } : {})}
+      {...(can('RunPipeline') ? { actions: <Tooltip content="Run report deck"><IconButton size="sm" aria-label="Run report deck" icon={<DocumentAddIcon />} onClick={() => setOpen(true)} data-testid="run-deck-generate" /></Tooltip> } : {})}
     >
-      {rows.length === 0
-        ? <Text className="text-sm text-[var(--color-text-muted)]">No report deck for this run yet. Every number in one comes from the run record.</Text>
+      {decks.error ? <InlineAlert tone="error">Report decks could not be loaded. <Button size="sm" variant="link" onClick={decks.refresh}>Retry</Button></InlineAlert>
+        : !decks.data && decks.isLoading ? <LoadingState label="Loading report decks…" />
+        : rows.length === 0
+        ? <EmptyState align="start" title="No report decks yet" description="Build a report from this run’s recorded results." />
         : <Stack gap="xs">
           {rows.map((d) => (
             <Inline key={d.id} gap="sm" align="center">
-              <Button size="sm" variant="ghost" onClick={() => navigate(runDeckPaths.page(d.id))} data-testid="run-deck-open">{d.title}</Button>
-              <Text className="text-xs text-[var(--color-text-muted)]">{d.latestRevision?.label ?? 'no version'}</Text>
+              <Button size="sm" variant="link" onClick={() => navigate(runDeckPaths.page(d.id))} data-testid="run-deck-open">{d.title}</Button>
+              <T size="xs" tone="secondary">{d.latestRevision?.label ?? 'no version'}</T>
             </Inline>
           ))}
         </Stack>}
@@ -54,8 +56,8 @@ export function RunReportDecks({ runId, runTitle }: { runId: string; runTitle: s
         open={open} onClose={() => setOpen(false)} title="Run report deck" maxWidth={480}
         footer={(
           <Inline gap="sm" justify="end">
-            <Button variant="ghost" onClick={() => setOpen(false)} disabled={busy}>Cancel</Button>
-            <Button variant="primary" onClick={() => void submit()} disabled={busy} data-testid="run-deck-submit">{busy ? 'Building…' : 'Build deck'}</Button>
+            <Button size="sm" variant="ghost" onClick={() => setOpen(false)} disabled={busy}>Cancel</Button>
+            <Button size="sm" variant="primary" onClick={() => void submit()} disabled={busy} data-testid="run-deck-submit">{busy ? 'Building…' : 'Build deck'}</Button>
           </Inline>
         )}
       >

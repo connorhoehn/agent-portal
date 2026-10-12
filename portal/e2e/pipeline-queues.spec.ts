@@ -16,6 +16,7 @@ test('metadata-only queue view keeps partial failures visible and transport dist
   await page.goto('/__pipeline-queues');
   const root = page.getByTestId('pipelines-queues');
   await expect(root.getByText('Message-queue service', { exact: true })).toBeVisible();
+  await root.getByRole('button', { name: 'About queue delivery' }).click();
   await expect(root.getByText('Realtime disconnected', { exact: true })).toBeVisible();
   await expect(root.getByText('Unavailable', { exact: true })).toBeVisible();
   await root.getByText('distill-compact-l2', { exact: true }).click();

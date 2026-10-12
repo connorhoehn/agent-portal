@@ -11,7 +11,7 @@
 // `?day=YYYY-MM-DD` picks another day in the viewer's zone.
 
 import { useNavigate, useSearchParams } from 'react-router';
-import { Button, PageHeader, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { IconButton, Tooltip, ListIcon, PageHeader, Stack } from '@connorhoehnslalom/ui-components/shared';
 import { WorkGraphActivity } from '../../components/work-graph/WorkGraphActivity';
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
@@ -21,17 +21,17 @@ export default function PipelinesActivityPage() {
   const navigate = useNavigate();
   const day = params.get('day');
   return (
-    <Stack gap="md" data-testid="pipelines-activity">
-      <PageHeader
+    <Stack gap="md" className="min-w-0" data-testid="pipelines-activity">
+      <PageHeader density="compact"
         title="Work graph"
         description="Runs, their steps, approvals waiting on a person and run report decks across every pipeline, for the day."
-        actions={<Button variant="secondary" size="sm" data-testid="pipelines-activity-runs" onClick={() => navigate('/pipelines/runs')}>All runs</Button>}
+        actions={<Tooltip content="All runs"><IconButton size="sm" aria-label="All runs" icon={<ListIcon />} data-testid="pipelines-activity-runs" onClick={() => navigate('/pipelines/runs')} /></Tooltip>}
       />
       <WorkGraphActivity
         subject={{ kind: 'pipelines' }}
         mode="full"
         {...(day && DAY.test(day) ? { day } : {})}
-        className="h-[calc(100vh-18rem)] min-h-[480px]"
+        className="h-[calc(100dvh-12rem)] min-h-[320px]"
       />
     </Stack>
   );

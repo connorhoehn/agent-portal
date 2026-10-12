@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useGatewayOptional } from '@connorhoehnslalom/realtime-modules/client';
-import { Banner, Button, Chip, DataTable, Inline, KeyValue, PageHeader, PageSection, SearchInput, Stack, StatStrip, T, type DataTableColumn } from '@connorhoehnslalom/ui-components/shared';
+import { Toolbar, IconButton, Tooltip, RepeatIcon, ListIcon, BranchIcon, CollapsibleSection, Banner, Chip, DataTable, Inline, KeyValue, PageHeader, PageSection, SearchInput, Stack, StatStrip, T, type DataTableColumn } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { queueTotal, type PipelineQueue, type PipelineQueuesResponse } from '../../lib/pipelineQueues';
@@ -26,13 +26,13 @@ export default function QueuesPage() {
   const work = rows.filter(row => !row.deadLetter);
   const dlqs = rows.filter(row => row.deadLetter);
   const incomplete = rows.filter(row => row.state !== 'available' || !row.snapshot || Object.values(row.snapshot).some(value => value == null));
-  return <Stack gap="md" data-testid="pipelines-queues">
-    <PageHeader title="Queues" description="Delivery backlog, work in flight, and failed deliveries." actions={<Button size="sm" variant="secondary" onClick={refresh}>Refresh</Button>} />
-    <Inline gap="sm" wrap align="center">
+  return <Stack gap="md" className="min-w-0" data-testid="pipelines-queues">
+    <PageHeader density="compact" title="Queues" description="Delivery backlog, work in flight, and failed deliveries." />
+    <Toolbar aria-label="Queue filters" wrap className="px-0" end={<Tooltip content="Refresh"><IconButton size="sm" aria-label="Refresh" icon={<RepeatIcon />} onClick={refresh} disabled={isLoading} /></Tooltip>}>
       <Chip size="xs" tone={data?.backend === 'memory' ? 'warning' : 'neutral'}>{data ? data.backend === 'http' ? 'Message-queue service' : 'In-process queue' : 'Checking transport'}</Chip>
       <T size="xs" tone="secondary">{data ? `Checked ${new Date(data.observedAt).toLocaleTimeString()} · refreshes every 15s` : 'Reading queue metadata…'}</T>
-      <SearchInput size="sm" className="ml-auto w-64" aria-label="Search queues" placeholder="Search queues" value={query} onChange={setQuery} onClear={() => setQuery('')} />
-    </Inline>
+      <SearchInput size="sm" className="w-full max-w-64" aria-label="Search queues" placeholder="Search queues" value={query} onChange={setQuery} onClear={() => setQuery('')} />
+    </Toolbar>
     {data?.backend === 'memory' && <Banner variant="warning">These queues run inside the app process. Their messages do not survive a restart.</Banner>}
     {error && <UnavailableNotice error={error} what="queue metadata" source="Queue transport" onRetry={refresh} />}
     {data && !error && <>
@@ -44,7 +44,7 @@ export default function QueuesPage() {
       {incomplete.length > 0 && <T size="xs" tone="secondary" wrap>Some attributes are unavailable. A dash means unknown, not zero. Select a queue for its read status.</T>}
     </>}
     {!error && <DataTable data-testid="pipeline-queues-table" size="sm" columns={columns} data={rows.filter(row => `${row.name} ${row.purpose}`.toLowerCase().includes(query.toLowerCase()))}
-      keyField={row => row.name} loading={isLoading && !data} pageSize={20} onRowClick={row => setSelected(row.name)} emptyMessage={query ? 'No queues match this search.' : 'No queues registered.'} />}
+      keyField={row => row.name} loading={isLoading && !data} pageSize={25} onRowClick={row => setSelected(row.name)} emptyMessage={query ? 'No queues match this search.' : 'No queues registered.'} />}
     {row && !error && <PageSection title={row.name} description={row.purpose}>
       <Stack gap="sm" data-testid="pipeline-queue-details">
         {row.reason && <T size="sm" tone="secondary" wrap>{row.reason}</T>}
@@ -57,13 +57,13 @@ export default function QueuesPage() {
         <T size="xs" tone="secondary" wrap>Retry targets describe this app’s registration. Native queue settings may differ. This view reads metadata without taking messages from consumers.</T>
       </Stack>
     </PageSection>}
-    <PageSection title="How delivery and live progress connect">
+    <CollapsibleSection title="About queue delivery" density="compact">
       <Stack gap="sm">
         <Inline gap="sm" align="center" wrap><Chip size="xs" tone={gateway?.connectionState === 'connected' ? 'success' : 'warning'}>{gateway?.connectionState === 'connected' ? 'Realtime connected' : 'Realtime disconnected'}</Chip><T size="sm">Run progress uses realtime-modules.</T></Inline>
         <T size="sm" tone="secondary" wrap>Distillation workers consume the compaction queues and acknowledge successful passes. Failed deliveries retry and eventually move to their dead-letter queue.</T>
         <T size="sm" tone="secondary" wrap>The run ledger reads jobs, bot runs, and assessment commands. Run pages subscribe to authorized progress channels; queue counts are separate HTTP snapshots. A connected gateway does not prove workers are processing messages.</T>
-        <Inline gap="sm"><Button size="sm" variant="secondary" onClick={() => navigate('/pipelines/runs')}>View runs</Button><Button size="sm" variant="ghost" onClick={() => navigate('/pipelines/definitions')}>Definitions</Button></Inline>
+        <Inline gap="sm"><Tooltip content="View runs"><IconButton size="sm" aria-label="View runs" icon={<ListIcon />} onClick={() => navigate('/pipelines/runs')} /></Tooltip><Tooltip content="Definitions"><IconButton size="sm" aria-label="Definitions" icon={<BranchIcon />} onClick={() => navigate('/pipelines/definitions')} /></Tooltip></Inline>
       </Stack>
-    </PageSection>
+    </CollapsibleSection>
   </Stack>;
 }

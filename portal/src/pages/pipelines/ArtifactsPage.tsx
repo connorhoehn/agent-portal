@@ -4,8 +4,8 @@
 
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
-import {
-  Banner, Chip, DataTable, Inline, MetaLine, PageHeader, Select, Stack,
+import { Toolbar, IconButton, Tooltip, RepeatIcon,
+  Banner, Chip, DataTable, MetaLine, PageHeader, Select, Stack,
   type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
@@ -48,12 +48,12 @@ export default function ArtifactsPage() {
   const rows = data?.artifacts ?? [];
 
   return (
-    <Stack gap="md" data-testid="pipelines-artifacts">
-      <PageHeader title="Artifacts" description="What runs produced — changes, documents, scores and transcripts." />
-      <Inline gap="sm" wrap align="center">
-        <Select aria-label="Artifact kind" size="sm" className="w-44" value={kind} onChange={(e) => setKind(e.target.value)} options={KIND_OPTIONS} />
+    <Stack gap="md" className="min-w-0" data-testid="pipelines-artifacts">
+      <PageHeader density="compact" title="Artifacts" description="What runs produced — changes, documents, scores and transcripts." />
+      <Toolbar aria-label="Artifact filters" wrap className="px-0" end={<Tooltip content="Refresh"><IconButton size="sm" aria-label="Refresh" icon={<RepeatIcon />} onClick={refresh} disabled={isLoading} /></Tooltip>}>
+        <Select aria-label="Artifact kind" size="sm" className="w-full max-w-44" value={kind} onChange={(e) => setKind(e.target.value)} options={KIND_OPTIONS} />
         {data && <MetaLine size="xs" tone="tertiary" items={[showingLabel(rows.length, data.total, 'artifacts')]} />}
-      </Inline>
+      </Toolbar>
       {data && data.unavailable.length > 0 && (
         <Banner variant="warning">
           {`Not every source could be read — ${data.unavailable.map((u) => u.table).join(', ')}. Their artifacts are missing below, not absent.`}

@@ -8,8 +8,8 @@
 
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
-import {
-  Banner, Chip, DataTable, Inline, PageHeader, SearchInput, Stack, StatStrip, T, type DataTableColumn,
+import { Toolbar, IconButton, Tooltip, RepeatIcon,
+  Banner, Chip, DataTable, PageHeader, SearchInput, Stack, StatStrip, T, type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { relativeTime } from '../../lib/relativeTime';
@@ -91,9 +91,9 @@ export default function SourcesPage({ source }: { source: SourcePageId }) {
   const rows = all.filter((d) => matchesDefinition(d, query));
 
   return (
-    <Stack gap="md" data-testid={`pipelines-source-${source}`}>
-      <PageHeader title={page.title} description={page.description} badge={<Chip tone="neutral" size="xs">Read-only</Chip>} />
-      <Inline gap="md" align="center" wrap={false}>
+    <Stack gap="md" className="min-w-0" data-testid={`pipelines-source-${source}`}>
+      <PageHeader density="compact" title={page.title} description={page.description} badge={<Chip tone="neutral" size="xs">Read-only</Chip>} />
+      <Toolbar aria-label={`${page.title} filters`} wrap className="px-0" end={<Tooltip content="Refresh"><IconButton size="sm" aria-label="Refresh" icon={<RepeatIcon />} onClick={refresh} disabled={isLoading} /></Tooltip>}>
         {data && (
           <StatStrip
             aria-label={`${page.title} summary`}
@@ -105,8 +105,8 @@ export default function SourcesPage({ source }: { source: SourcePageId }) {
             ]}
           />
         )}
-        <SearchInput size="sm" className="ml-auto w-64 shrink-0" aria-label={`Search ${page.noun}`} placeholder={`Search ${page.noun}`} value={query} onChange={setQuery} onClear={() => setQuery('')} />
-      </Inline>
+        <SearchInput size="sm" className="w-full max-w-64" aria-label={`Search ${page.noun}`} placeholder={`Search ${page.noun}`} value={query} onChange={setQuery} onClear={() => setQuery('')} />
+      </Toolbar>
       {data && data.unavailable.length > 0 && (
         <Banner variant="warning">
           {`Not every source could be read — ${data.unavailable.map((u) => `${u.source}: ${u.error}`).join('; ')}.`}

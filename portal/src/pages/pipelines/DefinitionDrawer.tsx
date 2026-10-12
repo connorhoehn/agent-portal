@@ -6,7 +6,7 @@
 
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
-import {
+import { IconButton, Tooltip, PlayCircleIcon, CheckIcon,
   Button, ConfirmDialog, DataTable, DetailSection, Drawer, EmptyState, Inline, InlineAlert, KeyValue, LoadingState,
   MetaLine, Select, Stack, type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
@@ -98,9 +98,7 @@ export function DefinitionDrawer({ id, onClose, onChanged }: { id: string | null
         <Inline gap="sm" align="center">
           <PipelinePresence channel={defChannel(def.id)} />
           {canRun && canDryRun(def) && (
-            <Button size="sm" variant="primary" disabled={dryRun.busy === def.id} onClick={() => dryRun.start(def.id, def.title)} data-testid="pipelines-dry-run">
-              {dryRun.busy === def.id ? 'Starting…' : 'Dry-run'}
-            </Button>
+            <Tooltip content="Dry-run"><IconButton size="sm" aria-label="Dry-run" icon={<PlayCircleIcon />} disabled={dryRun.busy === def.id} onClick={() => dryRun.start(def.id, def.title)} data-testid="pipelines-dry-run" /></Tooltip>
           )}
         </Inline>
       ) : undefined}
@@ -141,8 +139,8 @@ export function DefinitionDrawer({ id, onClose, onChanged }: { id: string | null
                   onChange={(e) => setApprover(e.target.value)}
                   options={[{ value: '', label: 'Tenant default' }, ...(data?.approverRoleOptions ?? []).map((r) => ({ value: r, label: roleLabel(r) }))]}
                 />
-                <Button size="sm" variant="secondary" disabled={saving || approver === (def.approverRoles[0] ?? '')} onClick={() => void saveApprovers()}>
-                  {saving ? 'Saving…' : 'Record approvers'}
+                <Button size="sm" variant="primary" className="self-start" disabled={saving || approver === (def.approverRoles[0] ?? '')} onClick={() => void saveApprovers()}>
+                  <CheckIcon />{saving ? 'Saving…' : 'Record approvers'}
                 </Button>
               </Stack>
             </DetailSection>

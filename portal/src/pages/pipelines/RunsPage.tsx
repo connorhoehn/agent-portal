@@ -10,8 +10,8 @@
 
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
-import {
-  Banner, Button, Chip, DataTable, Inline, MetaLine, PageHeader, Select, Stack, T,
+import { IconButton, Tooltip, ActivityIcon, RepeatIcon, Toolbar,
+  Banner, Chip, DataTable, MetaLine, PageHeader, Select, Stack, T,
   type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
@@ -55,18 +55,18 @@ export default function RunsPage() {
   const filtered = Boolean(status || kind || contextTenant);
 
   return (
-    <Stack gap="md" data-testid="pipelines-runs">
-      <PageHeader
+    <Stack gap="md" className="min-w-0" data-testid="pipelines-runs">
+      <PageHeader density="compact"
         title="Runs"
         description="Every run, what it acted for, and where it stands."
-        actions={<Button variant="secondary" size="sm" data-testid="pipelines-runs-activity" onClick={() => navigate('/pipelines/activity')}>Activity</Button>}
+        actions={<Tooltip content="Work graph"><IconButton size="sm" aria-label="Work graph" icon={<ActivityIcon />} data-testid="pipelines-runs-activity" onClick={() => navigate('/pipelines/activity')} /></Tooltip>}
       />
-      <Inline gap="sm" wrap align="center">
-        <Select aria-label="Status" size="sm" className="w-44" value={status} onChange={(e) => setStatus(e.target.value)} options={STATUS_FILTER_OPTIONS} />
-        <Select aria-label="Kind" size="sm" className="w-44" value={kind} onChange={(e) => setKind(e.target.value)} options={KIND_FILTER_OPTIONS} />
-        <Select aria-label="Workspace" size="sm" className="w-44" value={contextTenant} onChange={(e) => setContextTenant(e.target.value)} options={TENANT_FILTER_OPTIONS} />
+      <Toolbar aria-label="Run filters" wrap className="px-0" end={<Tooltip content="Refresh"><IconButton size="sm" aria-label="Refresh" icon={<RepeatIcon />} onClick={refresh} disabled={isLoading} /></Tooltip>}>
+        <Select aria-label="Status" size="sm" className="w-full max-w-44" value={status} onChange={(e) => setStatus(e.target.value)} options={STATUS_FILTER_OPTIONS} />
+        <Select aria-label="Kind" size="sm" className="w-full max-w-44" value={kind} onChange={(e) => setKind(e.target.value)} options={KIND_FILTER_OPTIONS} />
+        <Select aria-label="Workspace" size="sm" className="w-full max-w-44" value={contextTenant} onChange={(e) => setContextTenant(e.target.value)} options={TENANT_FILTER_OPTIONS} />
         {data && <MetaLine size="xs" tone="tertiary" items={[showingLabel(runs.length, data.total, 'runs'), unlinkedNote(data.unlinked)]} />}
-      </Inline>
+      </Toolbar>
       {data && data.unavailable.length > 0 && (
         <Banner variant="warning">
           {`Not every source could be read — ${data.unavailable.map((u) => `${u.table}: ${u.error}`).join('; ')}. Runs from ${data.unavailable.length === 1 ? 'that table are' : 'those tables are'} missing below, not absent.`}

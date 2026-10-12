@@ -17,7 +17,7 @@
 
 import { useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
-import { Button, ConfirmDialog, DetailSection, EmptyState, Inline, InlineAlert, LoadingState, PageHeader, Stack, Tabs, useHeaderDensity } from '@connorhoehnslalom/ui-components/shared';
+import { IconButton, Tooltip, CloseIcon, Button, ConfirmDialog, DetailSection, EmptyState, Inline, InlineAlert, LoadingState, PageHeader, Stack, Tabs, useHeaderDensity } from '@connorhoehnslalom/ui-components/shared';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { useCapabilities } from '../../lib/capabilities';
 import { writeJson } from '../../lib/writeJson';
@@ -64,9 +64,8 @@ export default function RunDetailPage({ apiBase = '/api/pipelines/runs', listPat
   // The event stream is the gateway's while it is connected; the BFF's SSE is the offline fallback only.
   const live = eventsSource(useGatewayOptional()?.connectionState) === 'gateway';
   const recorded = useMemo(() => (run ? recordedRunActivity(run, steps) : []), [run, steps]);
-  // The header's density (library useHeaderDensity): the Activity graph is rich
-  // content — the one-row compact header; the run view keeps the full one.
-  const headerDensity = useHeaderDensity({ contentKind: onActivity ? 'graph' : 'detail', headerId: 'pipelines-run' });
+  // Both views share header geometry so switching tabs does not shift content.
+  const headerDensity = useHeaderDensity({ contentKind: 'graph', headerId: 'pipelines-run' });
   // The trail reads the run's title once it loads, not "Runs › Runs".
   useCrumbLabel(id, run?.context.title);
   // The run's huddle: its lobby is the run's channel; the footer's Huddle walks into it.
@@ -112,9 +111,7 @@ export default function RunDetailPage({ apiBase = '/api/pipelines/runs', listPat
             <Inline gap="sm" align="center">
               {realtime && <PipelinePresence channel={runChannel(run.id)} />}
               {canCancel && (
-                <Button size="sm" variant="secondary" data-testid="pipeline-run-cancel" disabled={cancelling} onClick={() => setConfirming(true)}>
-                  {cancelling ? 'Cancelling…' : 'Cancel run'}
-                </Button>
+                <Tooltip content="Cancel run"><IconButton size="sm" aria-label="Cancel run" icon={<CloseIcon />} data-testid="pipeline-run-cancel" disabled={cancelling} onClick={() => setConfirming(true)} /></Tooltip>
               )}
             </Inline>
           ),

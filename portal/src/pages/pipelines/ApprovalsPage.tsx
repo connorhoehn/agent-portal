@@ -9,7 +9,7 @@
 
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
-import {
+import { CheckIcon, CloseIcon, ListIcon, BranchIcon, Toolbar, IconButton, Tooltip, RepeatIcon,
   Banner, Button, Chip, DataTable, Drawer, InlineAlert, Inline, KeyValue, MetaLine, PageHeader, Stack, Textarea,
   type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
@@ -66,14 +66,16 @@ export default function ApprovalsPage() {
   }
 
   return (
-    <Stack gap="md" data-testid="pipelines-approvals">
-      <PageHeader title="Approvals" description="Steps waiting on a person — a job at review, a change the gates held, an agent's question." />
+    <Stack gap="md" className="min-w-0" data-testid="pipelines-approvals">
+      <PageHeader density="compact" title="Approvals" description="Steps waiting on a person — a job at review, a change the gates held, an agent's question." />
+      <Toolbar aria-label="Approvals summary" wrap className="px-0" end={<Tooltip content="Refresh"><IconButton size="sm" aria-label="Refresh" icon={<RepeatIcon />} onClick={refresh} disabled={isLoading} /></Tooltip>}>
       {data && (
         <MetaLine size="xs" tone="tertiary" items={[
           `${rows.length} waiting`,
           holdsApprove ? null : 'operators and pipeline admins decide these',
         ]} />
       )}
+      </Toolbar>
       {data && data.unavailable.length > 0 && (
         <Banner variant="warning">
           {`Not every gate could be read — ${data.unavailable.map((u) => `${u.source}: ${u.error}`).join('; ')}. Steps waiting there are missing below, not absent.`}
@@ -103,8 +105,8 @@ export default function ApprovalsPage() {
         data-testid="pipelines-approval-drawer"
         footer={open && mayDecide ? (
           <Inline gap="sm" justify="end">
-            <Button variant="danger" disabled={busy} onClick={() => void decide('reject')} data-testid="pipelines-approval-reject">Reject</Button>
-            <Button variant="primary" disabled={busy} onClick={() => void decide('approve')} data-testid="pipelines-approval-approve">Approve</Button>
+            <Button size="sm" variant="danger" disabled={busy} onClick={() => void decide('reject')} data-testid="pipelines-approval-reject"><CloseIcon />Reject</Button>
+            <Button size="sm" variant="primary" disabled={busy} onClick={() => void decide('approve')} data-testid="pipelines-approval-approve"><CheckIcon />Approve</Button>
           </Inline>
         ) : undefined}
       >
@@ -124,9 +126,9 @@ export default function ApprovalsPage() {
               ]}
             />
             <Inline gap="sm" wrap>
-              {open.runId && <Button size="sm" variant="ghost" onClick={() => navigate(runHref('/pipelines/runs', open.runId!))}>Open run</Button>}
+              {open.runId && <Tooltip content="Open run"><IconButton size="sm" aria-label="Open run" icon={<ListIcon />} onClick={() => navigate(runHref('/pipelines/runs', open.runId!))} /></Tooltip>}
               {open.definitionId?.startsWith('bot:') || open.definitionId?.startsWith('runbook:') ? (
-                <Button size="sm" variant="ghost" onClick={() => navigate(definitionHref(open.definitionId!))}>Open definition</Button>
+                <Tooltip content="Open definition"><IconButton size="sm" aria-label="Open definition" icon={<BranchIcon />} onClick={() => navigate(definitionHref(open.definitionId!))} /></Tooltip>
               ) : null}
             </Inline>
             {mayDecide ? (

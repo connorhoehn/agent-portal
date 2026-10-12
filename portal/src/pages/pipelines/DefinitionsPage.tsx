@@ -8,8 +8,8 @@
 
 import { useState } from 'react';
 import { useSearchParams } from 'react-router';
-import {
-  Banner, Chip, DataTable, Inline, MetaLine, PageHeader, SearchInput, Select, Stack, T, type DataTableColumn,
+import { Toolbar, IconButton, Tooltip, RepeatIcon,
+  Banner, Chip, DataTable, MetaLine, PageHeader, SearchInput, Select, Stack, T, type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { relativeTime } from '../../lib/relativeTime';
@@ -65,13 +65,13 @@ export default function DefinitionsPage() {
   };
 
   return (
-    <Stack gap="md" data-testid="pipelines-definitions">
-      <PageHeader title="Definitions" description="What can run: every bot, assessment command, runbook and agent, with its triggers, steps and runs." />
-      <Inline gap="sm" wrap align="center">
-        <SearchInput size="sm" className="w-64" aria-label="Search definitions" placeholder="Search definitions" value={query} onChange={setQuery} onClear={() => setQuery('')} />
-        <Select aria-label="Kind" size="sm" className="w-48" value={kind} onChange={(e) => setKind(e.target.value)} options={DEFINITION_KIND_OPTIONS} />
+    <Stack gap="md" className="min-w-0" data-testid="pipelines-definitions">
+      <PageHeader density="compact" title="Definitions" description="What can run: every bot, assessment command, runbook and agent, with its triggers, steps and runs." />
+      <Toolbar aria-label="Definition filters" wrap className="px-0" end={<Tooltip content="Refresh"><IconButton size="sm" aria-label="Refresh" icon={<RepeatIcon />} onClick={refresh} disabled={isLoading} /></Tooltip>}>
+        <SearchInput size="sm" className="w-full max-w-64" aria-label="Search definitions" placeholder="Search definitions" value={query} onChange={setQuery} onClear={() => setQuery('')} />
+        <Select aria-label="Kind" size="sm" className="w-full max-w-48" value={kind} onChange={(e) => setKind(e.target.value)} options={DEFINITION_KIND_OPTIONS} />
         {data && <MetaLine size="xs" tone="tertiary" items={[rows.length === all.length ? `${all.length} definitions` : `${rows.length} of ${all.length} definitions`, `unnamed approvers default to ${data.defaultApproverRole}`]} />}
-      </Inline>
+      </Toolbar>
       {data && data.unavailable.length > 0 && (
         <Banner variant="warning">
           {`Not every source could be read — ${data.unavailable.map((u) => `${u.source}: ${u.error}`).join('; ')}. Definitions from ${data.unavailable.length === 1 ? 'that source are' : 'those sources are'} missing below, not absent.`}

@@ -10,7 +10,7 @@
 // GET/PUT /api/pipelines/configuration; the PUT is ManagePipelineConfig.
 
 import { useEffect, useState } from 'react';
-import {
+import { CheckIcon, FormField,
   Button, ErrorState, InlineAlert, KeyValue, LoadingState, PageHeader, PageSection, Select, Stack,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
@@ -42,8 +42,8 @@ export default function ConfigurationPage() {
   };
 
   return (
-    <Stack gap="lg" data-testid="pipelines-configuration">
-      <PageHeader title="Configuration" description="How this workspace decides who approves a step." />
+    <Stack gap="md" className="min-w-0" data-testid="pipelines-configuration">
+      <PageHeader density="compact" title="Configuration" description="How this workspace decides who approves a step." />
       {error ? (
         <ErrorState title="Configuration unavailable" body={error} />
       ) : !data ? (
@@ -60,18 +60,18 @@ export default function ConfigurationPage() {
             ]} />
             {canEdit && (
               <Stack gap="sm">
-                <Select
+                <FormField label="Default approver role">{({ id }) => <Select id={id}
                   aria-label="Default approver role"
                   size="sm"
-                  className="w-56"
+                  className="w-full max-w-56"
                   value={role}
                   onChange={(e) => { setRole(e.target.value); setSaved(false); }}
                   options={data.approverRoleOptions.map((r) => ({ value: r, label: roleLabel(r) }))}
                   data-testid="pipelines-default-approver"
-                />
+                />}</FormField>
                 <Button size="sm" variant="primary" className="self-start" data-testid="pipelines-configuration-save"
                   disabled={saving || role === data.defaultApproverRole} onClick={() => { void save(); }}>
-                  {saving ? 'Saving…' : 'Save'}
+                  <CheckIcon />{saving ? 'Saving…' : 'Save'}
                 </Button>
               </Stack>
             )}
