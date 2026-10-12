@@ -177,8 +177,9 @@ export const LIST_PAGES: readonly ListPage[] = [
  *  shared admin's session epoch under every other walker). Enterprise /
  *  Workspace / Prompts / Rules are document explorers and /iq/work/changes a
  *  feed of review cards — rule 1's non-tabular lists, not here. */
-export const TABLE_USERS: Readonly<Record<'orgiq' | 'assessment' | 'pipelines', string>> = { orgiq: 'u-operator', assessment: 'u-farah', pipelines: 'u-dara' };
-export const TABLE_ROUTES: ReadonlyArray<{ tenant: 'orgiq' | 'assessment' | 'pipelines'; path: string; stats?: boolean }> = [
+export const TABLE_USERS: Readonly<Record<Tenant, string>> = { orgiq: 'u-operator', assessment: 'u-farah', pipelines: 'u-dara', social: 'u-theo' };
+export const TABLE_ROUTES: ReadonlyArray<{ tenant: Tenant; path: string; stats?: boolean }> = [
+  { tenant: 'social', path: '/social/contacts' },
   { tenant: 'assessment', path: '/assessment/teams', stats: true },
   { tenant: 'assessment', path: '/assessment/submissions', stats: true },
   { tenant: 'assessment', path: '/assessment/reports', stats: true },

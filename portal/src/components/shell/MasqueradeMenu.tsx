@@ -97,7 +97,7 @@ export function MasqueradeMenu() {
         <Inline as="span" gap="xs" align="center" wrap={false} className="whitespace-nowrap">
           <StatusDot aria-hidden color={roleColor(session.role)} size="sm" />
           <Inline as="span" gap="none" className="font-medium">{session.name}</Inline>
-          <Inline as="span" gap="none" className="text-text-tertiary text-[11px]">
+          <Inline as="span" gap="none" data-ui-text="caption" className="text-text-tertiary text-[11px]">
             · {roleLabel(session.role)}{session.masquerading ? ' · masquerade' : ''} <span aria-hidden="true">▾</span>
           </Inline>
         </Inline>
