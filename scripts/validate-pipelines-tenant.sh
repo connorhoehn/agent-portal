@@ -293,7 +293,7 @@ section "P0 · pages ($PAGES)"
 n_pages=$(find "$PAGES" -name '*.tsx' 2>/dev/null | wc -l | tr -d ' ')
 if [ "$n_pages" -lt 3 ]; then fail "$PAGES holds $n_pages .tsx files — the Runs, run-detail and Artifacts pages are owed in P0 (a discipline check over nothing is not a pass)"; fi
 for pg in RunsPage RunDetailPage ArtifactsPage; do [ -f "$PAGES/$pg.tsx" ] || fail "$PAGES/$pg.tsx missing"; done
-[ -f "$PAGES/RunsPage.tsx" ] && { has "DataTable" "$PAGES/RunsPage.tsx" && ok "Runs page is a DataTable" || fail "$PAGES/RunsPage.tsx renders no DataTable"; }
+[ -f "$PAGES/RunsPage.tsx" ] && { has "RunsLedger" "$PAGES/RunsPage.tsx" && has "DataTable" "portal/src/components/runs/RunsLedger.tsx" && ok "Runs uses the shared DataTable ledger" || fail "Runs must use the shared DataTable ledger"; }
 [ -f "$PAGES/RunDetailPage.tsx" ] && { has "RunTimeline" "$PAGES/RunDetailPage.tsx" && ok "run detail uses RunTimeline" || fail "$PAGES/RunDetailPage.tsx does not render RunTimeline"; }
 [ -f "$PAGES/ArtifactsPage.tsx" ] && { has "DataTable" "$PAGES/ArtifactsPage.tsx" && ok "Artifacts page is a DataTable" || fail "$PAGES/ArtifactsPage.tsx renders no DataTable"; }
 t_miss=""; for tid in pipeline-run pipeline-steps pipeline-artifacts pipeline-events; do

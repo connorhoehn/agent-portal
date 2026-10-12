@@ -7,23 +7,44 @@
 // the tenant keeps no second approval store. Authors see the queue, not the
 // buttons — absent from the DOM, not disabled.
 
-import { useState } from 'react';
-import { useNavigate } from 'react-router';
-import { CheckIcon, CloseIcon, ListIcon, BranchIcon, Toolbar, IconButton, Tooltip, RepeatIcon,
-  Banner, Button, Chip, DataTable, Drawer, InlineAlert, Inline, KeyValue, MetaLine, PageHeader, Stack, Textarea,
+import {
+  CollectionPage,
+  Banner,
+  BranchIcon,
+  Button,
+  CheckIcon,
+  Chip,
+  CloseIcon,
+  DataTable,
+  Drawer,
+  IconButton,
+  Inline,
+  InlineAlert,
+  KeyValue,
+  ListIcon,
+  MetaLine,
+  Stack,
+  Textarea,
+  Tooltip,
   type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
-import { useFetch } from '../../hooks/useFetch';
-import { useCapabilities } from '../../lib/capabilities';
-import { useSession } from '../../lib/auth';
-import { relativeTime } from '../../lib/relativeTime';
-import { writeJson } from '../../lib/writeJson';
-import { toastError, toastSuccess } from '../../lib/toastStore';
+import { useState } from 'react';
+import { useNavigate } from 'react-router';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
-import { runHref } from '../../lib/pipelineRuns';
+import { useFetch } from '../../hooks/useFetch';
+import { useSession } from '../../lib/auth';
+import { useCapabilities } from '../../lib/capabilities';
 import {
-  approvalSourceLabel, approverSummary, canDecide, definitionHref, type ApprovalRequest,
+  approvalSourceLabel,
+  approverSummary,
+  canDecide,
+  definitionHref,
+  type ApprovalRequest,
 } from '../../lib/pipelineDefinitions';
+import { runHref } from '../../lib/pipelineRuns';
+import { relativeTime } from '../../lib/relativeTime';
+import { toastError, toastSuccess } from '../../lib/toastStore';
+import { writeJson } from '../../lib/writeJson';
 
 interface ApprovalsResponse { approvals: ApprovalRequest[]; total: number; unavailable: Array<{ source: string; error: string }> }
 
@@ -66,16 +87,12 @@ export default function ApprovalsPage() {
   }
 
   return (
-    <Stack gap="md" className="min-w-0" data-testid="pipelines-approvals">
-      <PageHeader density="compact" title="Approvals" description="Steps waiting on a person — a job at review, a change the gates held, an agent's question." />
-      <Toolbar aria-label="Approvals summary" wrap className="px-0" end={<Tooltip content="Refresh"><IconButton size="sm" aria-label="Refresh" icon={<RepeatIcon />} onClick={refresh} disabled={isLoading} /></Tooltip>}>
-      {data && (
-        <MetaLine size="xs" tone="tertiary" items={[
-          `${rows.length} waiting`,
-          holdsApprove ? null : 'operators and pipeline admins decide these',
-        ]} />
-      )}
-      </Toolbar>
+    <CollectionPage data-testid="pipelines-approvals" title="Approvals" description="Steps waiting on a person — a job at review, a change the gates held, an agent’s question."
+      toolbar={{ label: 'Approvals summary', summary: data ? `${rows.length} waiting` : undefined,
+        notices: holdsApprove ? [] : ['Operators and pipeline admins decide these.'],
+        onRefresh: refresh, refreshing: isLoading,
+      }}>
+
       {data && data.unavailable.length > 0 && (
         <Banner variant="warning">
           {`Not every gate could be read — ${data.unavailable.map((u) => `${u.source}: ${u.error}`).join('; ')}. Steps waiting there are missing below, not absent.`}
@@ -86,7 +103,6 @@ export default function ApprovalsPage() {
       ) : (
         <DataTable
           data-testid="pipelines-approvals-table"
-          size="sm"
           data={rows}
           columns={COLUMNS}
           keyField={(a) => a.id}
@@ -143,6 +159,6 @@ export default function ApprovalsPage() {
           </Stack>
         )}
       </Drawer>
-    </Stack>
+    </CollectionPage>
   );
 }

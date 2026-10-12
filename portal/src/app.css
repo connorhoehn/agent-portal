@@ -24,7 +24,7 @@
 
   --color-text-primary: #0f172a;
   --color-text-secondary: #475569;
-  --color-text-tertiary: #94a3b8;
+  --color-text-tertiary: #64748b;
 
   /* ── Surface layers ─────────────────────────────────────────────────
      Four distinct tones, so a card reads as a card and a rail as a rail.
@@ -548,8 +548,8 @@ tbody tr:focus-within .row-reveal,
    layouts pass `contentAs="section"` (one `<main>` landmark per page), so
    this targets SubNavLayout's content-pane class rather than the `<main>`
    tag — the class is unique to that pane. */
-[data-shell-nav] > div > main .flex-1.min-w-0.overflow-auto.p-6 {
-  padding: 0 0 0 1.5rem;
+[data-shell-nav] > div > main [data-subnav-content] {
+  padding: 0 0 0 var(--ui-page-gutter);
 }
 /* A flush page — a workspace that brings its own header and panes, like the
    initiative page — marks its root `data-shell-flush`. The shell then gives it
@@ -563,9 +563,9 @@ tbody tr:focus-within .row-reveal,
   display: none;
 }
 /* Distillation's nested workspace owns its spacing and scrolling. */
-[data-shell-nav] [data-testid="distillation-module"] section[aria-label="Distillation"].flex-1.min-w-0.overflow-auto.p-6,
-[data-shell-nav] [data-initiative-stack] section[aria-label="Initiatives workspace"].flex-1.min-w-0.overflow-auto.p-6,
-[data-shell-nav] [data-testid="stacked-catalog"] section.flex-1.min-w-0.overflow-auto.p-6 {
+[data-shell-nav] [data-testid="distillation-module"] section[aria-label="Distillation"][data-subnav-content],
+[data-shell-nav] [data-initiative-stack] section[aria-label="Initiatives workspace"][data-subnav-content],
+[data-shell-nav] [data-testid="stacked-catalog"] section[data-subnav-content] {
   padding: 0;
   overflow: hidden;
   min-height: 0;
@@ -644,7 +644,7 @@ tbody tr:focus-within .row-reveal,
 }
 
 /* Build pages retain a full-height module menu beside lists and records. */
-[data-shell-nav] [data-testid="build-section"] section.flex-1.min-w-0.overflow-auto.p-6 {
+[data-shell-nav] [data-testid="build-section"] section[data-subnav-content] {
   padding: 0;
   overflow: hidden;
   min-height: 0;
@@ -656,14 +656,14 @@ tbody tr:focus-within .row-reveal,
 [data-testid="agent-library-table"] td { overflow: hidden; }
 
 /* Ask uses the same flush module rail while its transcript scrolls independently. */
-[data-shell-nav] [data-testid="ask-workspace"] section[aria-label="Conversation"].flex-1.min-w-0.overflow-auto.p-6 {
+[data-shell-nav] [data-testid="ask-workspace"] section[aria-label="Conversation"][data-subnav-content] {
   padding: 0;
   overflow: hidden;
   min-height: 0;
 }
 
 /* Search keeps one conversation mounted across its three views. */
-[data-shell-nav] [data-testid="search-workspace"] section[aria-label="Search workspace"].flex-1.min-w-0.overflow-auto.p-6 {
+[data-shell-nav] [data-testid="search-workspace"] section[aria-label="Search workspace"][data-subnav-content] {
   padding: 0;
   overflow: hidden;
   min-height: 0;
@@ -680,86 +680,6 @@ tbody tr:focus-within .row-reveal,
 .work-overview-striped-rows > ul > li:nth-child(odd):not([data-tone]) {
   background: var(--color-surface);
 }
-
-/* Shared discussion frame: title grows, bringing minimize beside close rather
-   than leaving one action beside the subtitle and the other at the far edge. */
-[data-testid="page-conversation-pane"] > header {
-  padding-block: 6px;
-}
-[data-testid="page-conversation-pane"] > header > :first-child {
-  flex: 1;
-  min-width: 0;
-}
-[data-testid="page-conversation-pane"] > header > :first-child > :first-child {
-  flex: 1;
-  min-width: 0;
-}
-[data-testid="page-conversation-pane"] > header button {
-  width: 28px;
-  height: 28px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  color: var(--color-text-secondary);
-  background: var(--color-surface);
-}
-[data-testid="page-conversation-pane"] > header button:hover {
-  color: var(--color-text-primary);
-  background: var(--color-surface-hover);
-}
-[data-testid="initiative-pane-header-row"] {
-  min-height: 44px;
-  padding-block: 6px;
-  column-gap: 12px;
-}
-
-/* Shared by every ConversationComposer, using the active tenant's brand and
-   theme. Existing central call docks paint it once around the whole shelf. */
-:is(.initiative-composer-dock, .conversation-composer-backdrop) {
-  position: relative;
-  isolation: isolate;
-  width: 100%;
-  background: linear-gradient(to bottom, transparent, color-mix(in srgb, var(--color-primary) 8%, var(--color-surface-panel)) 45%, var(--color-surface-panel));
-  overflow: clip;
-}
-.initiative-composer-dock { padding: 30px 20px 20px; }
-.conversation-composer-backdrop:not(:where(.initiative-composer-dock *)) {
-  /* Compact chat presets have zero inset; leave a visible edge for the sky. */
-  padding-block: 14px;
-  padding-inline: max(12px, var(--dock-inset, 0px));
-}
-:is(.initiative-composer-dock, .conversation-composer-backdrop)::before {
-  content: '';
-  position: absolute;
-  inset: -20px;
-  z-index: 0;
-  background-image:
-    radial-gradient(circle at 18% 24%, color-mix(in srgb, var(--color-primary) 65%, transparent) 1.5px, transparent 3px),
-    radial-gradient(circle at 72% 65%, color-mix(in srgb, var(--color-primary) 45%, transparent) 1.2px, transparent 2.5px),
-    radial-gradient(circle at 38% 80%, color-mix(in srgb, var(--color-primary) 40%, transparent) 1px, transparent 2px),
-    radial-gradient(circle, color-mix(in srgb, var(--color-text-tertiary) 18%, transparent) .65px, transparent 1px);
-  background-size: 97px 73px, 151px 109px, 181px 137px, 13px 13px;
-  mask-image: linear-gradient(#0004, #000 20%);
-  pointer-events: none;
-  animation: composer-star-drift 4s ease-in-out infinite alternate;
-}
-:is(.initiative-composer-dock, .conversation-composer-backdrop)::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  background-image:
-    radial-gradient(ellipse 1.5px 6px at 12% 75%, color-mix(in srgb, var(--color-primary) 70%, transparent) 15%, transparent 100%),
-    radial-gradient(ellipse 6px 1.5px at 12% 75%, color-mix(in srgb, var(--color-primary) 70%, transparent) 15%, transparent 100%),
-    radial-gradient(ellipse 1.5px 5px at 83% 40%, color-mix(in srgb, var(--color-primary) 55%, transparent) 15%, transparent 100%),
-    radial-gradient(ellipse 5px 1.5px at 83% 40%, color-mix(in srgb, var(--color-primary) 55%, transparent) 15%, transparent 100%);
-  background-size: 211px 97px, 211px 97px, 277px 131px, 277px 131px;
-  animation: composer-star-twinkle 1.8s ease-in-out infinite alternate;
-}
-:is(.initiative-composer-dock, .conversation-composer-backdrop) > * { position: relative; z-index: 1; }
-.initiative-composer-dock .conversation-composer-backdrop { background: transparent; overflow: visible; }
-.initiative-composer-dock .conversation-composer-backdrop::before,
-.initiative-composer-dock .conversation-composer-backdrop::after { content: none; }
 
 /* A conversation preview is a distinct modal, not another composer layered
    over the work. The backdrop is dimmed/blurred by the shared Modal. */
@@ -782,32 +702,6 @@ tbody tr:focus-within .row-reveal,
 }
 @keyframes messages-preview-drift { to { transform: translate(16px, -12px); opacity: .2; } }
 @media (prefers-reduced-motion: reduce) { .messages-overview-sky::before { animation: none; } }
-@keyframes composer-star-drift {
-  from { transform: translate3d(-8px, 5px, 0); opacity: .55; }
-  to { transform: translate3d(8px, -5px, 0); opacity: .9; }
-}
-@keyframes composer-star-twinkle {
-  from { opacity: .2; transform: translate3d(0, 2px, 0); }
-  to { opacity: .8; transform: translate3d(0, -2px, 0); }
-}
-@media (prefers-reduced-motion: reduce) {
-  :is(.initiative-composer-dock, .conversation-composer-backdrop)::before,
-  :is(.initiative-composer-dock, .conversation-composer-backdrop)::after { animation: none; }
-}
-.initiative-composer-dock :is([data-testid="initiative-composer"], [data-testid="search-composer"], [data-testid="deck-huddle-composer"], [data-testid="deck-composer-dock"]) {
-  background: transparent;
-  padding-top: 0;
-  --dock-inset: 0px;
-}
-.initiative-composer-dock [data-testid$="-dock-slot"],
-.initiative-composer-dock [data-testid="shell-call-media"] section[data-phase] {
-  background: transparent;
-  border-top: 0;
-}
-.initiative-composer-dock :is([data-testid="initiative-composer"], [data-testid="search-composer"], [data-testid="deck-huddle-composer"], [data-testid="deck-composer-dock"]) > :last-child {
-  box-shadow: 0 8px 28px -12px color-mix(in srgb, var(--color-text-primary) 24%, transparent);
-}
-
 /* Shared bounded file cards for Work and Assessment libraries. */
 .file-card-grid {
   display: grid;
@@ -936,16 +830,6 @@ tbody tr:focus-within .row-reveal,
 [data-testid="brief-table"] [data-testid*="key-value"] { min-width: 0; }
 .shell-header { min-height: 44px; padding-block: 4px; }
 .shell-header h2 { font-size: 20px; line-height: 26px; }
-
-/* The initiative conversation reads from the top, like a discussion log, with
-   a compact gutter. Its input stays in the central dock. */
-[data-testid="scope-discussion-panel"] [data-testid="chat-panel-messages"] > div,
-[data-testid="huddle-thread"] [data-testid="chat-panel-messages"] > div {
-  margin-top: 0;
-  padding: 8px 12px;
-}
-[data-testid="scope-discussion-panel"] [data-testid="chat-day-separator"],
-[data-testid="huddle-thread"] [data-testid="chat-day-separator"] { padding-block: 4px; }
 
 .work-prejoin { position: relative; }
 .work-prejoin::before {

@@ -1,3 +1,4 @@
+import { ComposerSurface } from '@connorhoehnslalom/ui-components/shared';
 // The deck's footer composer: the library's ConversationComposer with a
 // `document` context and no conversation, the way realtime-examples'
 // PresentationEditorPage does
@@ -6,15 +7,15 @@
 // huddle enables Chat in this same input. Edit uses the tenant's existing
 // saved-version revise route; Ask uses the host's read-only agent stream.
 
-import { useCallback, useMemo, useState } from 'react';
-import type { ComposerStatus, RichChatDraft } from '@connorhoehnslalom/ui-components/social/rich-composer';
+import type { PresentationInstructContext, PresentationInstructResult } from '@connorhoehnslalom/ui-components/doc-editor';
 import { DropdownMenu, Inline, T } from '@connorhoehnslalom/ui-components/shared';
-import { ConversationComposer } from '../../lib/conversationComposer';
-import { useHuddleComposerRecipient } from '../shell/HuddleComposerDock';
+import type { ComposerStatus, RichChatDraft } from '@connorhoehnslalom/ui-components/social/rich-composer';
+import { useCallback, useMemo, useState } from 'react';
 import { useCallBlock, useCallHost } from '../../lib/conversationCall';
 import { initiativeFromChannel } from '../../lib/conversationCallModel';
+import { ConversationComposer } from '../../lib/conversationComposer';
+import { useHuddleComposerRecipient } from '../shell/HuddleComposerDock';
 import './deckReviewLayout.css';
-import type { PresentationInstructContext, PresentationInstructResult } from '@connorhoehnslalom/ui-components/doc-editor';
 
 export interface DeckComposerProps {
   deckId: string;
@@ -94,7 +95,7 @@ export function DeckComposer({ deckId, deckTitle, selectedSlideId, slideNumber, 
       ] }]} /> : <T as="span" size="xs" tone="secondary">{asking ? 'Ask' : 'Edit'}</T>;
 
   return (
-    <div className={`initiative-composer-dock deck-composer-backdrop shrink-0${compactReview ? ' deck-composer-review' : ''}`} data-review-density={compactReview ? 'compact' : 'comfortable'}>
+    <ComposerSurface compact={compactReview} data-review-density={compactReview ? 'compact' : 'comfortable'}>
     <ConversationComposer
       channel={null}
       context={chatting && huddle ? { kind: 'conversation', id: huddle.callId!, title: '',
@@ -122,10 +123,10 @@ export function DeckComposer({ deckId, deckTitle, selectedSlideId, slideNumber, 
       onSuggestion={(suggestion) => { void run(suggestion); }}
       modePlaceholders={{ agent: asking ? `Ask about ${scope}…` : selectedSlideId ? `Tell the agent what to change on slide ${slideNumber ?? ''}…`.replace(' …', '…') : 'Tell the agent what to change across the whole deck…' }}
       presentation={compactReview ? 'compact' : 'document'} {...(compactReview ? { responsive: 'pane' as const } : {})} label="Presentation conversation" inputLabel="Presentation message"
-      maxInputHeight={compactReview ? 'min(4rem, 10dvh)' : 'min(8rem, 20dvh)'} className="@container bg-surface pt-0 [--dock-inset:0px]"
+      maxInputHeight={compactReview ? 'min(4rem, 10dvh)' : 'min(8rem, 20dvh)'} className="@container"
       data-testid="deck-composer-dock"
       composerTestId="deck-composer"
     />
-    </div>
+    </ComposerSurface>
   );
 }

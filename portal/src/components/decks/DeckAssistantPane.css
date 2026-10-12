@@ -2,9 +2,6 @@
    presentation uses its same mounted pane as an overlay, leaving the slide
    workspace and persistent composer at their full width. */
 @media (max-width: 1199px) {
-  .initiative-composer-dock.deck-composer-backdrop {
-    padding: 8px 12px;
-  }
 
   [data-testid="shell-split"]:has([data-testid="deck-assistant-pane"]) {
     position: relative;

@@ -2,18 +2,22 @@
 // documents, scoring logs, job transcripts (docs/pipelines-tenant-goal.md
 // §Pages). Read from GET /api/pipelines/artifacts; a row opens its run.
 
-import { useState } from 'react';
-import { useNavigate } from 'react-router';
-import { Toolbar, IconButton, Tooltip, RepeatIcon,
-  Banner, Chip, DataTable, MetaLine, PageHeader, Select, Stack,
+import {
+  CollectionPage,
+  Banner,
+  Chip,
+  DataTable,
+  MetaLine,
   type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
-import { useFetch } from '../../hooks/useFetch';
-import { relativeTime } from '../../lib/relativeTime';
-import { showingLabel } from '../../lib/format';
+import { useState } from 'react';
+import { useNavigate } from 'react-router';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { PipelineRunStatusChip } from '../../components/runs/PipelineRunParts';
+import { useFetch } from '../../hooks/useFetch';
+import { showingLabel } from '../../lib/format';
 import { artifactKindLabel, runHref, type PipelineArtifact } from '../../lib/pipelineRuns';
+import { relativeTime } from '../../lib/relativeTime';
 
 const KIND_OPTIONS = [
   { value: '', label: 'Any kind' },
@@ -48,12 +52,12 @@ export default function ArtifactsPage() {
   const rows = data?.artifacts ?? [];
 
   return (
-    <Stack gap="md" className="min-w-0" data-testid="pipelines-artifacts">
-      <PageHeader density="compact" title="Artifacts" description="What runs produced — changes, documents, scores and transcripts." />
-      <Toolbar aria-label="Artifact filters" wrap className="px-0" end={<Tooltip content="Refresh"><IconButton size="sm" aria-label="Refresh" icon={<RepeatIcon />} onClick={refresh} disabled={isLoading} /></Tooltip>}>
-        <Select aria-label="Artifact kind" size="sm" className="w-full max-w-44" value={kind} onChange={(e) => setKind(e.target.value)} options={KIND_OPTIONS} />
-        {data && <MetaLine size="xs" tone="tertiary" items={[showingLabel(rows.length, data.total, 'artifacts')]} />}
-      </Toolbar>
+    <CollectionPage data-testid="pipelines-artifacts" title="Artifacts" description="What runs produced — changes, documents, scores and transcripts."
+      toolbar={{ label: 'Artifact filters', filters: [{ id: 'kind', label: 'Artifact kind', value: kind, onChange: setKind, options: KIND_OPTIONS }],
+        summary: data ? showingLabel(rows.length, data.total, 'artifacts') : undefined,
+        onRefresh: refresh, refreshing: isLoading,
+      }}>
+
       {data && data.unavailable.length > 0 && (
         <Banner variant="warning">
           {`Not every source could be read — ${data.unavailable.map((u) => u.table).join(', ')}. Their artifacts are missing below, not absent.`}
@@ -64,7 +68,6 @@ export default function ArtifactsPage() {
       ) : (
         <DataTable
           data-testid="pipelines-artifacts-table"
-          size="sm"
           data={rows}
           columns={COLUMNS}
           keyField={(a) => a.id}
@@ -74,6 +77,6 @@ export default function ArtifactsPage() {
           emptyMessage={kind ? 'No artifact of this kind.' : 'No artifacts recorded yet.'}
         />
       )}
-    </Stack>
+    </CollectionPage>
   );
 }

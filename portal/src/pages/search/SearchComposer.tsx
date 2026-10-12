@@ -1,3 +1,4 @@
+import { ComposerSurface } from '@connorhoehnslalom/ui-components/shared';
 // The Search composer (goal decision 6): the library `ConversationComposer` —
 // the same composer as the initiative pages — in its `document` presentation,
 // Agent asks Search; a joined huddle enables Chat on the same central input.
@@ -15,20 +16,20 @@
 // Beside it, Message opens a social DM with the one selected person
 // (./peopleMessage.tsx — lane E, docs/social-tenant-design.md §4.6).
 
+import { Inline, T } from '@connorhoehnslalom/ui-components/shared';
+import type { ComposedMessage, ConversationCommand, RichChatComposerHandle, RichChatDraft } from '@connorhoehnslalom/ui-components/social/rich-composer';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
-import { Inline, Stack, T } from '@connorhoehnslalom/ui-components/shared';
-import type { ComposedMessage, ConversationCommand, RichChatComposerHandle, RichChatDraft } from '@connorhoehnslalom/ui-components/social/rich-composer';
-import { ConversationComposer } from '../../lib/conversationComposer';
-import { recordKey, SEARCH_LABELS, type SearchRecord } from './searchTypes';
-import { parseSearchCommand, type SearchAgent } from './searchCommands';
-import { searchWorkflowCommands, searchWorkflowIn, type SearchWorkflowRow } from './searchWorkflows';
-import { usePeopleCall } from '../projects/peopleCall';
-import { usePeopleMessage } from './peopleMessage';
-import { peopleFromRecordKeys, searchCallChannel } from '../../lib/conversationCallModel';
+import { ComposerAdvisories, type ComposerAdvisory } from '../../components/chat/ComposerAdvisories';
 import { useHuddleComposerRecipient } from '../../components/shell/HuddleComposerDock';
 import { useCallBlock, useCallHost } from '../../lib/conversationCall';
-import { ComposerAdvisories, type ComposerAdvisory } from '../../components/chat/ComposerAdvisories';
+import { peopleFromRecordKeys, searchCallChannel } from '../../lib/conversationCallModel';
+import { ConversationComposer } from '../../lib/conversationComposer';
+import { usePeopleCall } from '../projects/peopleCall';
+import { usePeopleMessage } from './peopleMessage';
+import { parseSearchCommand, type SearchAgent } from './searchCommands';
+import { recordKey, SEARCH_LABELS, type SearchRecord } from './searchTypes';
+import { searchWorkflowCommands, searchWorkflowIn, type SearchWorkflowRow } from './searchWorkflows';
 
 export interface SearchComposerProps {
   value: string;
@@ -156,7 +157,7 @@ export function SearchComposer({ value, onChange, onSubmit, disabled, agents, re
     const text = parsed.prefix ? (formatted.startsWith(parsed.prefix) ? formatted.slice(parsed.prefix.length).trim() : parsed.text) : formatted || parsed.text;
     setError(''); return (await onSubmit(text, parsed.agentId)) !== false;
   };
-  return <Stack gap="none" className="min-w-0 initiative-composer-dock">
+  return <ComposerSurface>
     <ConversationComposer channel={null} context={chatting && huddle ? { kind: 'conversation', id: huddle.callId!, title: '',
       reference: huddle.page ? { id: `${huddle.page.kind}:${huddle.page.id}`, label: `${huddle.page.kind === 'work-item' ? 'Work item' : 'Initiative'} context`, page: huddle.page } : null,
     } : { kind: 'search', id: 'search', title: 'Search' }}
@@ -168,7 +169,7 @@ export function SearchComposer({ value, onChange, onSubmit, disabled, agents, re
       mode={chatting ? 'chat' : 'agent'} onModeChange={next => { if (next === 'agent' || next === 'chat') setMode(next); }}
       modeRowStart={chatting ? <Inline gap="xs" wrap={false}><T size="xs" tone="secondary">To:</T><T size="xs" weight="medium">Huddle</T></Inline> : <ComposerAdvisories notices={advisories} />}
       presentation="document" label="Search composer" inputLabel="Search question" data-testid="search-composer" composerTestId="search-rich-composer"
-      className={`@container mx-auto w-full max-w-5xl bg-transparent pt-0 [--dock-inset:0px] ${chatting ? '' : 'search-composer-advisories'}`}
+      className={`@container ${chatting ? '' : 'search-composer-advisories'}`}
       composerRef={editorRef} allowEmoji={false} disabled={!chatting && !!disabled} callBlock={dock} defaultMode="agent"
       modePlaceholders={{ agent: 'Search, or ask a question — # for context, /agent to choose an agent…' }}
       submitLabel={{ agent: 'Send' }} maxInputHeight="min(10rem, 25dvh)"
@@ -209,5 +210,5 @@ export function SearchComposer({ value, onChange, onSubmit, disabled, agents, re
         lastText.current = text; onChange(text);
       }}
     />
-  </Stack>;
+  </ComposerSurface>;
 }

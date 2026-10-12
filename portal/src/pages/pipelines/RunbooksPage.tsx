@@ -5,18 +5,30 @@
 // Dry-run (RunPipeline holders only) queues a governed run on the existing
 // queue; a row opens the runbook's definition.
 
-import { useNavigate } from 'react-router';
-import { Toolbar, Tooltip, RepeatIcon,
-  Banner, Chip, ConfirmDialog, DataTable, IconButton, MetaLine, PageHeader, PlayCircleIcon, Stack, StatStrip, type DataTableColumn,
+import {
+  CollectionPage,
+  Banner,
+  Chip,
+  ConfirmDialog,
+  DataTable,
+  IconButton,
+  MetaLine,
+  PlayCircleIcon,
+  type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
-import { useFetch } from '../../hooks/useFetch';
-import { useCapabilities } from '../../lib/capabilities';
-import { relativeTime } from '../../lib/relativeTime';
+import { useNavigate } from 'react-router';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { PipelineRunStatusChip } from '../../components/runs/PipelineRunParts';
+import { useFetch } from '../../hooks/useFetch';
+import { useCapabilities } from '../../lib/capabilities';
 import {
-  canDryRun, definitionHref, promotionVerdict, rungLabel, type RunbookRow,
+  canDryRun,
+  definitionHref,
+  promotionVerdict,
+  rungLabel,
+  type RunbookRow,
 } from '../../lib/pipelineDefinitions';
+import { relativeTime } from '../../lib/relativeTime';
 import { useDryRun } from './useDryRun';
 
 interface RunbooksResponse { runbooks: RunbookRow[]; total: number; unavailable: Array<{ source: string; error: string }> }
@@ -51,24 +63,11 @@ export default function RunbooksPage() {
   const rows = data?.runbooks ?? [];
 
   return (
-    <Stack gap="md" className="min-w-0" data-testid="pipelines-runbooks">
-      <PageHeader density="compact"
-        title="Runbooks"
-        description="Runbooks on their way to becoming skills. A runbook becomes a skill only after a completed dry-run of its own definition."
-      />
-      <Toolbar aria-label="Runbooks summary" wrap className="px-0" end={<Tooltip content="Refresh"><IconButton size="sm" aria-label="Refresh" icon={<RepeatIcon />} onClick={refresh} disabled={isLoading} /></Tooltip>}>
-      {data && (
-        <StatStrip
-          aria-label="Runbook summary"
-          variant="line"
-          size="sm"
-          items={[
-            { label: rows.length === 1 ? 'runbook' : 'runbooks', value: rows.length },
-            { label: 'with a completed dry-run', value: rows.filter((r) => r.runbook.promotionToSkill.ok).length },
-          ]}
-        />
-      )}
-      </Toolbar>
+    <CollectionPage data-testid="pipelines-runbooks" title="Runbooks" description="Runbooks on their way to becoming skills. A runbook becomes a skill only after a completed dry-run of its own definition."
+      toolbar={{ label: 'Runbooks summary', summary: data ? `${rows.length} runbooks · ${rows.filter(r => r.runbook.promotionToSkill.ok).length} with a completed dry-run` : undefined,
+        onRefresh: refresh, refreshing: isLoading,
+      }}>
+
       {data && !canRun && <MetaLine size="xs" tone="tertiary" items={['dry-runs are started by authors and operators']} />}
       {data && data.unavailable.length > 0 && (
         <Banner variant="warning">
@@ -80,7 +79,6 @@ export default function RunbooksPage() {
       ) : (
         <DataTable
           data-testid="pipelines-runbooks-table"
-          size="sm"
           data={rows}
           columns={BASE_COLUMNS}
           keyField={(r) => r.id}
@@ -110,6 +108,6 @@ export default function RunbooksPage() {
         onConfirm={dryRun.confirmNow}
         onCancel={dryRun.dismiss}
       />
-    </Stack>
+    </CollectionPage>
   );
 }

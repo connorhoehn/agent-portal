@@ -29,8 +29,6 @@ cellbutton	portal/src/pages/observability/ApprovalQueuePage.tsx	2	pages/observab
 cellbutton	portal/src/pages/observability/DriftPage.tsx	1	pages/observability	2026-10-21
 cellbutton	portal/src/pages/observability/harness/HarnessHomePage.tsx	1	pages/observability	2026-10-21
 glyphbutton	portal/src/components/shell/ToastHost.tsx	1	components/shell	2026-10-21
-lonesearch	portal/src/pages/identity/UsersPage.tsx	1	pages/identity	2026-10-21
-lonesearch	portal/src/pages/social/ContactsPage.tsx	1	pages/social	2026-10-21
 pxtype	portal/src/components/canary/CanaryDeploymentsView.tsx	2	components/canary	2026-10-21
 pxtype	portal/src/components/canary/DecisionHistoryPanel.tsx	3	components/canary	2026-10-21
 pxtype	portal/src/components/canary/DecisionRow.tsx	4	components/canary	2026-10-21

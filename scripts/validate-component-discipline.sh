@@ -223,6 +223,13 @@ local_fn=$(grep -lE "^(async )?function (signIn|signin|login|logIn|loginAs|signI
 [ -z "$local_login" ] && ok "no spec posts /api/session/login itself" || fail "specs sign in on their own (use e2e/realSession.ts):$(echo $local_login | sed 's#portal/e2e/##g')"
 [ -z "$local_fn" ] && ok "no spec declares its own signIn/login function" || fail "specs declare a local sign-in function (use e2e/realSession.ts):$(echo $local_fn | sed 's#portal/e2e/##g')"
 
+section "UI inheritance contracts (composition, shell provider, packaged runtime)"
+if node scripts/audit-ui-inheritance.cjs --check; then
+  ok "shared collection/composer contracts and installed UI archive agree"
+else
+  fail "UI inheritance contract failed (see audit-ui-inheritance.cjs output)"
+fi
+
 if [ "$REPORT" = 1 ]; then
   section "report — every area, including ungated ones"
   printf '  %-34s %5s %5s %5s %5s\n' area raw div btn style

@@ -11,8 +11,6 @@
 .deck-review-compact .deck-reader-toolbar-spacer { flex: 1 1 auto; }
 .deck-review-compact .deck-reader-surface { min-height: 160px; padding-block: 4px; }
 .deck-review-compact .deck-reader-viewport { padding-block: 4px; }
-.initiative-composer-dock.deck-composer-backdrop.deck-composer-review { padding: 4px 8px; }
-.deck-composer-review [data-testid="deck-composer-dock"] { --dock-inset: 0px; }
 @media (max-width: 700px) {
   .deck-review-compact .deck-reader-rail { flex-basis: 112px; }
   .deck-review-compact .deck-document-actions { gap: 4px; }

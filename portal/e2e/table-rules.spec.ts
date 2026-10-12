@@ -175,13 +175,18 @@ async function measure(page: Page, route: string): Promise<RouteReport> {
       const px = Number.parseFloat(cs.fontSize);
       if (px > 20 || (px >= 15 && Number(cs.fontWeight) >= 600)) oversized.push(`${cs.fontSize}/${cs.fontWeight} ${text(n).slice(0, 40)}`);
     }
-    // A search field must share its row with the strip or other controls.
+    // A search field must share the collection row when other controls exist.
     const loneSearch: string[] = [];
     const controls = [...root.querySelectorAll('button, select, [role="combobox"], [role="tablist"], [data-testid="stat-strip-cluster"], input')]
       .filter(visible);
     [...root.querySelectorAll('input[type="text"], input[type="search"], input:not([type])')]
       .filter((i) => visible(i) && !i.closest('table') && !i.closest('[role="dialog"]') && !i.closest('nav'))
       .forEach((input) => {
+        // DataTable's simple searchable mode now draws the canonical
+        // CollectionToolbar. A list with no other controls needs no fake
+        // companion; multiple toolbar rows still fail the geometric check.
+        const collection = input.closest('[data-toolbar-variant="collection"]');
+        if (collection && root.querySelectorAll('[role="toolbar"]').length === 1) return;
         const r = input.getBoundingClientRect();
         const wrap = input.parentElement!;
         const beside = controls.some((c) => {

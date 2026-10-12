@@ -4,11 +4,12 @@
 // to an <img>-usable object URL; `prepare` lands files first and returns the
 // message text plus the metadata citing only what the gateway confirmed (a
 // card's Post — a deck file, a diagram — goes through the same path).
-import { createElement, useCallback, type ComponentProps } from 'react';
 import * as client from '@connorhoehnslalom/realtime-modules/client';
+import { ComposerSurface } from '@connorhoehnslalom/ui-components/shared';
 import { attachmentOnlyText, createConversationComposer, useConversationUploads } from '@connorhoehnslalom/ui-components/social/rich-composer';
-import { CallBlock, callDrawn, useCallHost } from './conversationCall';
+import { createElement, useCallback, type ComponentProps } from 'react';
 import { useMentionCandidates } from '../components/chat/useMentionCandidates';
+import { CallBlock, callDrawn, useCallHost } from './conversationCall';
 
 const BoundConversationComposer = createConversationComposer(client);
 /** Every tenant's composer shares the same branded particle backdrop. Agent
@@ -20,15 +21,15 @@ export function ConversationComposer(props: ComponentProps<typeof BoundConversat
   // is not the signed-in workspace. The endpoint owns that directory scope.
   const mentions = useMentionCandidates(!props.onSearchPeople, { userId: props.identity?.userId,
     key: props.channel ?? props.context.id });
-  return createElement(BoundConversationComposer, { ...props, console: false,
+  return createElement(ComposerSurface, null, createElement(BoundConversationComposer, { ...props, console: false,
     // A central/external input needs the same directory as a thread's input.
     // Social's explicit member-only lookup keeps its existing membership flow.
     onSearchPeople: props.onSearchPeople ?? mentions,
     // A call remains its original huddle while the page changes. Its one media
     // sink follows the visible composer, including another initiative's page.
     callBlock: activeCall ? createElement(CallBlock, { placement: 'composer', compact: true }) : props.callBlock,
-    className: [props.className, 'conversation-composer-backdrop', activeCall && 'conversation-call-composer'].filter(Boolean).join(' '),
-  });
+    className: [props.className, activeCall && 'conversation-call-composer'].filter(Boolean).join(' '),
+  }));
 }
 
 /** Resolves a bearer-authenticated attachment download to an <img>-usable source (a thread's images). */

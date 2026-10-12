@@ -38,9 +38,10 @@ Classes (each a ratchet in validate-component-discipline.sh):
                thing; its only control is an IconButton (docs/layout-cascade.md
                "Tables"). Secondary facts go to a meta column, a Chip with a
                title, or the row's detail pane.
-  lonesearch   a DataTable with `searchable`: the library draws that field on a
-               row of its own above the table. Search sits in ONE row with the
-               line stat strip and the filters (SearchInput size="sm").
+  lonesearch   a searchable DataTable alongside a page-local Toolbar or
+               CollectionToolbar: two competing control rows. Standalone
+               searchable DataTable uses CollectionToolbar since 2.440.2 and
+               inherits its geometry; it is no longer inherently a violation.
   tablesize    a `<DataTable` or `<Table` drawn off the 44px one-line step: an
                explicit `size` other than sm. Since ui-components 2.440 the
                shell's `<DensityProvider density="compact">` (portal/src/main.tsx)
@@ -224,7 +225,7 @@ for f in sorted(root.rglob('*.tsx')):
             for _ in PX.findall(cls):
                 hits['pxtype'].append(f'{rel}:{ln}')
         attrs = top_attrs(tag)
-        if name == 'DataTable' and re.search(r'(?<![\w-])searchable(?![\w-])(?!=\{\})', attrs):
+        if name == 'DataTable' and re.search(r'(?<![\w-])searchable(?![\w-])(?!=\{\})', attrs) and re.search(r'<(?:Toolbar|CollectionToolbar)(?=[\s/>])', s):
             hits['lonesearch'].append(f'{rel}:{ln}')
         if name in ('DataTable', 'Table') and re.search(r'(?<![\w-])size=', attrs) and not re.search(r'size=["\']sm["\']', attrs):
             hits['tablesize'].append(f'{rel}:{ln}')

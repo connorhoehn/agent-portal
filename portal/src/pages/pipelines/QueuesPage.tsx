@@ -1,9 +1,9 @@
+import { useGatewayOptional } from '@connorhoehnslalom/realtime-modules/client';
+import { Banner, BranchIcon, Chip, CollapsibleSection, CollectionPage, DataTable, IconButton, Inline, KeyValue, ListIcon, PageSection, Stack, StatStrip, T, Tooltip, type DataTableColumn } from '@connorhoehnslalom/ui-components/shared';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
-import { useGatewayOptional } from '@connorhoehnslalom/realtime-modules/client';
-import { Toolbar, IconButton, Tooltip, RepeatIcon, ListIcon, BranchIcon, CollapsibleSection, Banner, Chip, DataTable, Inline, KeyValue, PageHeader, PageSection, SearchInput, Stack, StatStrip, T, type DataTableColumn } from '@connorhoehnslalom/ui-components/shared';
-import { useFetch } from '../../hooks/useFetch';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
+import { useFetch } from '../../hooks/useFetch';
 import { queueTotal, type PipelineQueue, type PipelineQueuesResponse } from '../../lib/pipelineQueues';
 
 const count = (value: number | null | undefined) => value == null ? '—' : value.toLocaleString();
@@ -26,13 +26,13 @@ export default function QueuesPage() {
   const work = rows.filter(row => !row.deadLetter);
   const dlqs = rows.filter(row => row.deadLetter);
   const incomplete = rows.filter(row => row.state !== 'available' || !row.snapshot || Object.values(row.snapshot).some(value => value == null));
-  return <Stack gap="md" className="min-w-0" data-testid="pipelines-queues">
-    <PageHeader density="compact" title="Queues" description="Delivery backlog, work in flight, and failed deliveries." />
-    <Toolbar aria-label="Queue filters" wrap className="px-0" end={<Tooltip content="Refresh"><IconButton size="sm" aria-label="Refresh" icon={<RepeatIcon />} onClick={refresh} disabled={isLoading} /></Tooltip>}>
-      <Chip size="xs" tone={data?.backend === 'memory' ? 'warning' : 'neutral'}>{data ? data.backend === 'http' ? 'Message-queue service' : 'In-process queue' : 'Checking transport'}</Chip>
-      <T size="xs" tone="secondary">{data ? `Checked ${new Date(data.observedAt).toLocaleTimeString()} · refreshes every 15s` : 'Reading queue metadata…'}</T>
-      <SearchInput size="sm" className="w-full max-w-64" aria-label="Search queues" placeholder="Search queues" value={query} onChange={setQuery} onClear={() => setQuery('')} />
-    </Toolbar>
+  return <CollectionPage data-testid="pipelines-queues" title="Queues" description="Delivery backlog, work in flight, and failed deliveries."
+      toolbar={{ label: 'Queue filters', search: { value: query, onChange: setQuery, placeholder: 'Search queues', 'aria-label': 'Search queues' },
+        summary: data ? `${rows.length} queues · ${data.backend === 'http' ? 'Message-queue service' : 'In-process queue'}` : 'Reading queue metadata…',
+        notices: data ? [`Checked ${new Date(data.observedAt).toLocaleTimeString()}. Refreshes every 15 seconds.`] : [],
+        onRefresh: refresh, refreshing: isLoading,
+      }}>
+
     {data?.backend === 'memory' && <Banner variant="warning">These queues run inside the app process. Their messages do not survive a restart.</Banner>}
     {error && <UnavailableNotice error={error} what="queue metadata" source="Queue transport" onRetry={refresh} />}
     {data && !error && <>
@@ -43,7 +43,7 @@ export default function QueuesPage() {
       ]} />
       {incomplete.length > 0 && <T size="xs" tone="secondary" wrap>Some attributes are unavailable. A dash means unknown, not zero. Select a queue for its read status.</T>}
     </>}
-    {!error && <DataTable data-testid="pipeline-queues-table" size="sm" columns={columns} data={rows.filter(row => `${row.name} ${row.purpose}`.toLowerCase().includes(query.toLowerCase()))}
+    {!error && <DataTable data-testid="pipeline-queues-table" columns={columns} data={rows.filter(row => `${row.name} ${row.purpose}`.toLowerCase().includes(query.toLowerCase()))}
       keyField={row => row.name} loading={isLoading && !data} pageSize={25} onRowClick={row => setSelected(row.name)} emptyMessage={query ? 'No queues match this search.' : 'No queues registered.'} />}
     {row && !error && <PageSection title={row.name} description={row.purpose}>
       <Stack gap="sm" data-testid="pipeline-queue-details">
@@ -65,5 +65,5 @@ export default function QueuesPage() {
         <Inline gap="sm"><Tooltip content="View runs"><IconButton size="sm" aria-label="View runs" icon={<ListIcon />} onClick={() => navigate('/pipelines/runs')} /></Tooltip><Tooltip content="Definitions"><IconButton size="sm" aria-label="Definitions" icon={<BranchIcon />} onClick={() => navigate('/pipelines/definitions')} /></Tooltip></Inline>
       </Stack>
     </CollapsibleSection>
-  </Stack>;
+  </CollectionPage>;
 }

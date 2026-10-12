@@ -261,8 +261,9 @@ tenants; nothing on a list page decides its own table style.
    (`DocumentResultList` on the document explorers, which the
    documents-parity judge owns), never a hand-made table.
 2. **One line per row, 44px.** Every body row is exactly 44px and every row
-   of a table is the same height. `size="sm"` gives the cell its height and
-   `whitespace-nowrap`; nothing inside a cell may make it taller.
+   of a table is the same height. The shell's compact DensityProvider gives
+   cells this height and `whitespace-nowrap` without a per-page size prop.
+   Nothing inside a cell may make it taller.
 3. **A cell holds exactly one thing:** text, one pill (`Chip`/`StatusPill`),
    a number, an avatar with its name, or `IconButton`s. Never a second line
    (no `Stack`, no `MetaLine` under a value, no two block children), and
@@ -289,12 +290,12 @@ tenants; nothing on a list page decides its own table style.
 7. **Selection only with a bulk action.** A checkbox column appears only
    when the page offers a bulk action on the selection (and only to roles
    that may run it).
-8. **One controls row.** The stat strip (`StatStrip variant="line"
-   size="sm"`, 14/600 values — never the card variant on a list page), the
-   filters and the search (`SearchInput size="sm"`, pushed to the row's end)
-   share ONE row above the table. DataTable's `searchable` draws a lone
-   field on a row of its own, so a list page filters its rows with
-   `hooks/useRowSearch.ts` instead.
+8. **One controls row.** CollectionPage owns the title and spacing;
+   CollectionToolbar owns search, filters, count, advisory popup and icon
+   actions. Pages provide data, permissions and handlers. DataTable's
+   `searchable` now uses that same toolbar internally; use it for a simple
+   searchable list, or supply one external CollectionToolbar for search plus
+   filters/actions. Do not stack both toolbars.
 9. **Empty is the table's own empty row** (`emptyMessage`), not a card in
    place of the table — except the first-run empty state of a page with
    nothing yet (an `EmptyState` with the action that fills it).
@@ -306,12 +307,54 @@ tenants; nothing on a list page decides its own table style.
 and a due date — read by `validate-component-discipline.sh`):
 `stackedcell` (rule 3, second line), `cellbutton` (rule 3, a text `Button` in
 a `TableTd`, a column `render` or `rowActions`), `tablesize` (rules 1–2, a
-`DataTable`/`Table` without `size="sm"`), `lonesearch` (rule 8, DataTable
-`searchable`) and `cardstat` (rule 8). In the browser,
+`DataTable`/`Table` with an explicit size other than sm), `lonesearch`
+(rule 8, DataTable `searchable` alongside another toolbar) and `cardstat` (rule 8). In the browser,
 `portal/e2e/table-rules.spec.ts` walks every list route (the inventory's `TABLE_ROUTES`) as
 each tenant's own manager and fails a body row over 44px or rows of unequal
 height, a bordered text button in a cell, a cell whose text sits on two
 lines (measured by each text node's own range), a numeric/date column whose
 content does not end at the cell's right padding edge, a header off 12/600 caps, a
 last column outside the table's box, a stat value off 14/600 or a card
-strip's 17px figures, and a search field with nothing beside it.
+strip's 17px figures, and competing search/filter rows. A simple searchable list uses one shared
+CollectionToolbar even when search is its only control.
+
+
+## Inheritance audit (2026-10-12)
+
+Run `node scripts/audit-ui-inheritance.cjs --check` after `npm ci` in
+`portal`. `--list` gives source locations; `--json` produces a machine-readable
+inventory. The component-discipline gate invokes the same check.
+
+The audit separates review candidates from enforced contracts:
+
+| Pattern | Why it recurs | Ownership / verification |
+| --- | --- | --- |
+| Local control sizing and class/style overrides | Shared primitives can still be restyled differently on every page | Control geometry lives in ui-components; review explicit sizes for intentional exceptions |
+| CSS targeting library internals or test IDs | A markup change silently breaks page-specific fixes | Add a semantic prop or shared variant; keep domain/media positioning separate from visual policy |
+| Repeated title/toolbar/table compositions | Changing one page leaves its copies behind | CollectionPage and CollectionToolbar; RunsLedger composes the shared ledger across Work, Pipelines and Assessment |
+| Fixture-only or local density providers | Tests look correct while the real application uses other defaults | main.tsx wraps the actual App; live-shell browser tests verify inherited dimensions |
+| Stale archive or installed dependency | Correct source never reaches the browser | Compare vendor archive SHA-512 with lockfile and every archived file with the installed package |
+| Source-shape checks demanding local markup | Tests accidentally reward duplication | Validate shared composition and rendered behavior; Runs no longer needs a local DataTable literal |
+
+Enforced now: the real compact provider wraps App; all three run surfaces use
+RunsLedger; Pipeline collection pages use CollectionPage without geometry
+class/style overrides on audited controls; composer surface CSS stays in the
+library; archive, lockfile and installed UI agree. The inventory is broader
+than those contracts and is **not** a list of confirmed bugs.
+
+`portal/e2e/ui-inheritance.spec.ts` signs into the real shell across Pipelines,
+Work, Social and Assessment. It changes a single shared token and checks the
+rendered controls/table insets on different routes, tests filter interaction,
+and checks the composer backdrop reaches its shelf bounds. CDP metrics are
+attached for diagnosis, not presented as a performance benchmark.
+
+The remaining review queue is visible in `--list`: eight local collection
+compositions, control overrides, and CSS reaching into shared markup. The
+older discipline gate also has pre-existing raw-element, density-size and
+session-helper violations; this change does not raise their budgets. Review
+these by component family and state (loading, empty, error, permission,
+light/dark, narrow width), not by repeatedly patching individual screenshots.
+
+Compact headers with a leading back control align that control/title group
+to the trail. The browser judge measures the actual group edge, so adding
+an accessible back action does not require a route-specific pixel exception.

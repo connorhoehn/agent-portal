@@ -1,9 +1,9 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { ComposerSurface, Inline, T } from '@connorhoehnslalom/ui-components/shared';
 import type { ConversationRecipient } from '@connorhoehnslalom/ui-components/social/rich-composer';
-import { Inline, T } from '@connorhoehnslalom/ui-components/shared';
+import { useMemo, useState, type ReactNode } from 'react';
+import type { CallPageDescriptor } from '../../lib/callPages';
 import { ConversationComposer } from '../../lib/conversationComposer';
 import { huddleChannel } from '../../lib/huddleRoster';
-import type { CallPageDescriptor } from '../../lib/callPages';
 import { useHuddleChat } from './HuddleChat';
 
 /** The same call recipient and shell-owned draft on every workspace surface. */
@@ -61,7 +61,7 @@ export function HuddleComposerDock({ dock, page }: { dock?: ReactNode; page?: Ca
   const { chat, recipient } = useHuddleComposerRecipient(withReference ? page : null);
   const selectedPage = withReference ? page === undefined ? chat?.page ?? null : page : null;
   if (!chat?.callId || !recipient) return null;
-  return <div className="initiative-composer-dock shrink-0" data-testid="deck-huddle-composer-dock">
+  return <ComposerSurface data-testid="deck-huddle-composer-dock">
     <ConversationComposer channel={null} context={{ kind: 'conversation', id: chat.callId, title: '',
       reference: selectedPage ? { id: `${selectedPage.kind}:${selectedPage.id}`, label: `${selectedPage.kind === 'work-item' ? 'Work item' : 'Initiative'} context`, page: selectedPage } : null }}
       capabilities={{ maySend: chat.canSend, agent: { allowed: false, reason: 'Use the presentation editor to update this deck.' } }}
@@ -71,6 +71,6 @@ export function HuddleComposerDock({ dock, page }: { dock?: ReactNode; page?: Ca
       onRemoveReference={() => setWithReference(false)}
       modeRowStart={<Inline gap="xs" wrap={false}><T size="xs" tone="secondary">To:</T><T size="xs" weight="medium">Huddle</T></Inline>}
       presentation="document" label="Presentation huddle composer" inputLabel="Huddle message" allowEmoji={false} data-testid="deck-huddle-composer"
-      maxInputHeight="min(8rem, 20dvh)" className="@container bg-surface pt-0 [--dock-inset:0px]" />
-  </div>;
+      maxInputHeight="min(8rem, 20dvh)" className="@container" />
+  </ComposerSurface>;
 }

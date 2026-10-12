@@ -6,19 +6,29 @@
 //
 // Table-first: one compact filter row, then the DataTable above the fold.
 
+import {
+  CollectionPage,
+  Banner,
+  Chip,
+  DataTable,
+  T,
+  type DataTableColumn,
+} from '@connorhoehnslalom/ui-components/shared';
 import { useState } from 'react';
 import { useSearchParams } from 'react-router';
-import { Toolbar, IconButton, Tooltip, RepeatIcon,
-  Banner, Chip, DataTable, MetaLine, PageHeader, SearchInput, Select, Stack, T, type DataTableColumn,
-} from '@connorhoehnslalom/ui-components/shared';
-import { useFetch } from '../../hooks/useFetch';
-import { relativeTime } from '../../lib/relativeTime';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { PipelineRunStatusChip } from '../../components/runs/PipelineRunParts';
-import { kindLabel } from '../../lib/pipelineRuns';
+import { useFetch } from '../../hooks/useFetch';
 import {
-  DEFINITION_KIND_OPTIONS, approverSummary, matchesDefinition, triggerSummary, type DefinitionsResponse, type PipelineDefinition,
+  DEFINITION_KIND_OPTIONS,
+  approverSummary,
+  matchesDefinition,
+  triggerSummary,
+  type DefinitionsResponse,
+  type PipelineDefinition,
 } from '../../lib/pipelineDefinitions';
+import { kindLabel } from '../../lib/pipelineRuns';
+import { relativeTime } from '../../lib/relativeTime';
 import { DefinitionDrawer } from './DefinitionDrawer';
 
 const COLUMNS: DataTableColumn<PipelineDefinition>[] = [
@@ -65,13 +75,14 @@ export default function DefinitionsPage() {
   };
 
   return (
-    <Stack gap="md" className="min-w-0" data-testid="pipelines-definitions">
-      <PageHeader density="compact" title="Definitions" description="What can run: every bot, assessment command, runbook and agent, with its triggers, steps and runs." />
-      <Toolbar aria-label="Definition filters" wrap className="px-0" end={<Tooltip content="Refresh"><IconButton size="sm" aria-label="Refresh" icon={<RepeatIcon />} onClick={refresh} disabled={isLoading} /></Tooltip>}>
-        <SearchInput size="sm" className="w-full max-w-64" aria-label="Search definitions" placeholder="Search definitions" value={query} onChange={setQuery} onClear={() => setQuery('')} />
-        <Select aria-label="Kind" size="sm" className="w-full max-w-48" value={kind} onChange={(e) => setKind(e.target.value)} options={DEFINITION_KIND_OPTIONS} />
-        {data && <MetaLine size="xs" tone="tertiary" items={[rows.length === all.length ? `${all.length} definitions` : `${rows.length} of ${all.length} definitions`, `unnamed approvers default to ${data.defaultApproverRole}`]} />}
-      </Toolbar>
+    <CollectionPage data-testid="pipelines-definitions" title="Definitions" description="What can run: every bot, assessment command, runbook and agent, with its triggers, steps and runs."
+      toolbar={{ label: 'Definition filters', search: { value: query, onChange: setQuery, placeholder: 'Search definitions', 'aria-label': 'Search definitions' },
+        filters: [{ id: 'kind', label: 'Kind', value: kind, onChange: setKind, options: DEFINITION_KIND_OPTIONS }],
+        summary: data ? `${rows.length} of ${all.length} definitions` : undefined,
+        notices: data ? [`Unnamed approvers default to ${data.defaultApproverRole}.`] : [],
+        onRefresh: refresh, refreshing: isLoading,
+      }}>
+
       {data && data.unavailable.length > 0 && (
         <Banner variant="warning">
           {`Not every source could be read — ${data.unavailable.map((u) => `${u.source}: ${u.error}`).join('; ')}. Definitions from ${data.unavailable.length === 1 ? 'that source are' : 'those sources are'} missing below, not absent.`}
@@ -82,7 +93,6 @@ export default function DefinitionsPage() {
       ) : (
         <DataTable
           data-testid="pipelines-definitions-table"
-          size="sm"
           data={rows}
           columns={COLUMNS}
           keyField={(d) => d.id}
@@ -93,6 +103,6 @@ export default function DefinitionsPage() {
         />
       )}
       <DefinitionDrawer id={openId} onClose={() => open(null)} onChanged={refresh} />
-    </Stack>
+    </CollectionPage>
   );
 }

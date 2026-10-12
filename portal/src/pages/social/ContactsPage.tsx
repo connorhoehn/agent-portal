@@ -8,17 +8,29 @@
 // `PresenceAvatars`. From a person: Message opens (or reopens) your DM with
 // them; Call rings them into `social:dm:<ids>` through the shell's call host.
 
-import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router';
 import {
-  Button, Chip, DataTable, EmptyState, ErrorState, Inline, InlineAlert, LoadingState, PageHeader, PageSection, PresenceAvatars, Stack, Text,
+  CollectionPage,
+  Button,
+  Chip,
+  DataTable,
+  EmptyState,
+  ErrorState,
+  Inline,
+  InlineAlert,
+  LoadingState,
+  PageSection,
+  PresenceAvatars,
+  Stack,
+  Text,
   type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
+import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router';
+import { useEmbeddedSocial } from '../../components/shell/EmbeddedSocial';
 import { useFetch } from '../../hooks/useFetch';
 import { useSession } from '../../lib/auth';
 import { useCapabilities } from '../../lib/capabilities';
 import { writeJson } from '../../lib/writeJson';
-import { useEmbeddedSocial } from '../../components/shell/EmbeddedSocial';
 import { dmHref, type SocialPerson } from './socialChat';
 import { contactRows, roleLabel, type ContactRow } from './socialPlatform';
 import { useSocialCall } from './useSocialCall';
@@ -65,8 +77,7 @@ export default function ContactsPage() {
   ];
 
   return (
-    <Stack gap="lg" data-testid="social-contacts-page">
-      <PageHeader title="Contacts" description="The people in this workspace, and who is around right now." />
+    <CollectionPage data-testid="social-contacts-page" title="Contacts" description="The people in this workspace, and who is around right now.">
       {(problem || call.notice) && (
         <InlineAlert tone="warning" onDismiss={() => { setProblem(null); call.clearNotice(); }}>{problem ?? call.notice}</InlineAlert>
       )}
@@ -102,6 +113,6 @@ export default function ContactsPage() {
           />
         </Stack>
       )}
-    </Stack>
+    </CollectionPage>
   );
 }

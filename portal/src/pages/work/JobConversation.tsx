@@ -1,13 +1,14 @@
+import { ComposerSurface } from '@connorhoehnslalom/ui-components/shared';
+import type { RichChatDraft } from '@connorhoehnslalom/ui-components/social/rich-composer';
 import { useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
-import type { RichChatDraft } from '@connorhoehnslalom/ui-components/social/rich-composer';
-import { ConversationComposer } from '../../lib/conversationComposer';
-import { useCapabilities } from '../../lib/capabilities';
-import { useSession } from '../../lib/auth';
-import { useCallBlock, useCallHost } from '../../lib/conversationCall';
-import type { CallPageDescriptor } from '../../lib/callPages';
-import { useHuddleComposerRecipient } from '../../components/shell/HuddleComposerDock';
 import { DeckAssistantPane } from '../../components/decks/DeckAssistantPane';
+import { useHuddleComposerRecipient } from '../../components/shell/HuddleComposerDock';
+import { useSession } from '../../lib/auth';
+import type { CallPageDescriptor } from '../../lib/callPages';
+import { useCapabilities } from '../../lib/capabilities';
+import { useCallBlock, useCallHost } from '../../lib/conversationCall';
+import { ConversationComposer } from '../../lib/conversationComposer';
 import { InitiativeAgentPanel, type InitiativeAgentHandle } from '../projects/InitiativeAgentPanel';
 import { jobAgentRequest, type JobQuestionContext } from './jobAgentRequest';
 
@@ -37,7 +38,7 @@ export function JobConversation({ job }: { job: JobQuestionContext }) {
       question={<InitiativeAgentPanel key={`${session?.sub}:${canAsk}`} ref={questions} projectId={projectId}
         assistantTitle="Run assistant" emptyTitle="Ask about this computer job"
         onOpenWorkItem={id => navigate(projectId ? `/iq/projects/${encodeURIComponent(projectId)}?${new URLSearchParams({ tab: 'work', item: id })}` : '/iq/projects')} />} />
-    <div className="initiative-composer-dock deck-composer-backdrop sticky bottom-0 z-10 shrink-0" data-testid="job-composer-dock">
+    <ComposerSurface className="sticky bottom-0 z-10" data-testid="job-composer-dock">
       <ConversationComposer channel={null}
         context={{ kind: 'conversation', id: `job:${job.id}`, title: '', reference: withReference ? { id: job.id, label: job.title, ...(page ? { page } : {}) } : null }}
         capabilities={{ maySend: !!chat?.canSend, agent: { allowed: canAsk, reason: unavailable } }}
@@ -56,7 +57,7 @@ export function JobConversation({ job }: { job: JobQuestionContext }) {
         callBlock={chat?.callId ? call.block : null} claim={{ label: 'the computer job composer' }} answersFocus
         modePlaceholders={{ agent: 'Ask about this run…' }} inputLabel="Run message" label="Computer job conversation"
         presentation="document" data-testid="job-conversation" composerTestId="job-composer"
-        maxInputHeight="min(8rem, 20dvh)" className="@container bg-surface pt-0 [--dock-inset:0px]" />
-    </div>
+        maxInputHeight="min(8rem, 20dvh)" className="@container" />
+    </ComposerSurface>
   </>;
 }

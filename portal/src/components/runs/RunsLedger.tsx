@@ -1,33 +1,35 @@
-// The run ledger as a table, for the Runs sections embedded in the other
-// tenants (docs/social-tenant-design.md §5.1, lane E): /iq/runs over the orgiq
-// façade /api/runs (context.tenant = orgiq) and the assessment Activity page
-// over /api/assessment/pipeline-runs (context.tenant = assessment). It is the
-// pipelines tenant's own Runs page composition (pages/pipelines/RunsPage.tsx:
-// the same columns, filter row, banner and DataTable), lifted so the façades
-// draw runs the same way; that page keeps its inline copy for now, because its
-// judge pins a DataTable in the page file itself. The façade decides which runs
-// exist; this draws them.
-//
-// Table-first: one compact filter row (status · kind · workspace when the
-// ledger spans workspaces), then the DataTable. A source table that could not
-// be read is named in a banner — an unreadable ledger never renders as an
-// empty one.
+// One run ledger for Pipeline, Work and Assessment. Tenant endpoints own authority;
+// columns, filtering, loading and row navigation are shared here.
 
-import { useState } from 'react';
-import { useNavigate } from 'react-router';
 import {
-  Banner, Chip, DataTable, Inline, MetaLine, Select, Stack, T,
+  Banner,
+  Chip,
+  CollectionToolbar,
+  DataTable,
+  Stack,
+  T,
+  type CollectionAction,
   type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
+import { useState } from 'react';
+import { useNavigate } from 'react-router';
 import { useFetch } from '../../hooks/useFetch';
+import { showingLabel, usd } from '../../lib/format';
+import {
+  KIND_FILTER_OPTIONS,
+  STATUS_FILTER_OPTIONS,
+  TENANT_FILTER_OPTIONS,
+  kindLabel,
+  runHref,
+  runsQuery,
+  sourceStatusNote,
+  unlinkedNote,
+  type PipelineRun,
+  type RunListResponse,
+} from '../../lib/pipelineRuns';
 import { relativeTime } from '../../lib/relativeTime';
-import { usd, showingLabel } from '../../lib/format';
 import { UnavailableNotice } from '../UnavailableNotice';
 import { PipelineRunStatusChip } from './PipelineRunParts';
-import {
-  KIND_FILTER_OPTIONS, STATUS_FILTER_OPTIONS, TENANT_FILTER_OPTIONS, kindLabel, runHref, runsQuery, sourceStatusNote, unlinkedNote,
-  type PipelineRun, type RunListResponse,
-} from '../../lib/pipelineRuns';
 
 function columns(showWorkspace: boolean): DataTableColumn<PipelineRun>[] {
   return [
@@ -53,6 +55,7 @@ function columns(showWorkspace: boolean): DataTableColumn<PipelineRun>[] {
 export interface RunsLedgerProps {
   /** The list endpoint: /api/pipelines/runs, /api/runs or /api/assessment/pipeline-runs. */
   endpoint: string;
+  actions?: CollectionAction[];
   /** Where a row opens (`<detailBase>/<id>`); null — rows do not open. */
   detailBase: string | null;
   /** The ledger spans workspaces (the pipelines tenant): show the Workspace column and filter. */
@@ -61,7 +64,7 @@ export interface RunsLedgerProps {
   'data-testid': string;
 }
 
-export function RunsLedger({ endpoint, detailBase, showWorkspace = false, pageSize = 25, 'data-testid': testId }: RunsLedgerProps) {
+export function RunsLedger({ actions, endpoint, detailBase, showWorkspace = false, pageSize = 25, 'data-testid': testId }: RunsLedgerProps) {
   const navigate = useNavigate();
   const [status, setStatus] = useState('');
   const [kind, setKind] = useState('');
@@ -73,15 +76,14 @@ export function RunsLedger({ endpoint, detailBase, showWorkspace = false, pageSi
   const filtered = Boolean(status || kind || (showWorkspace && contextTenant));
 
   return (
-    <Stack gap="md">
-      <Inline gap="sm" wrap align="center">
-        <Select aria-label="Status" size="sm" className="w-44" value={status} onChange={(e) => setStatus(e.target.value)} options={STATUS_FILTER_OPTIONS} />
-        <Select aria-label="Kind" size="sm" className="w-44" value={kind} onChange={(e) => setKind(e.target.value)} options={KIND_FILTER_OPTIONS} />
-        {showWorkspace && (
-          <Select aria-label="Workspace" size="sm" className="w-44" value={contextTenant} onChange={(e) => setContextTenant(e.target.value)} options={TENANT_FILTER_OPTIONS} />
-        )}
-        {data && <MetaLine size="xs" tone="tertiary" items={[showingLabel(runs.length, data.total, 'runs'), unlinkedNote(data.unlinked)]} />}
-      </Inline>
+    <Stack gap="none" className="min-w-0 gap-[var(--ui-section-gap)]">
+      <CollectionToolbar label="Run filters" filters={[
+        { id: 'status', label: 'Status', value: status, onChange: setStatus, options: STATUS_FILTER_OPTIONS },
+        { id: 'kind', label: 'Kind', value: kind, onChange: setKind, options: KIND_FILTER_OPTIONS },
+        ...(showWorkspace ? [{ id: 'workspace', label: 'Workspace', value: contextTenant, onChange: setContextTenant, options: TENANT_FILTER_OPTIONS }] : []),
+      ]} summary={data ? showingLabel(runs.length, data.total, 'runs') : undefined}
+        notices={data && unlinkedNote(data.unlinked) ? [unlinkedNote(data.unlinked)] : []}
+        actions={actions} onRefresh={refresh} refreshing={isLoading} />
       {data && data.unavailable.length > 0 && (
         <Banner variant="warning">
           {`Not every source could be read — ${data.unavailable.map((u) => `${u.table}: ${u.error}`).join('; ')}. Runs from ${data.unavailable.length === 1 ? 'that table are' : 'those tables are'} missing below, not absent.`}
@@ -92,7 +94,6 @@ export function RunsLedger({ endpoint, detailBase, showWorkspace = false, pageSi
       ) : (
         <DataTable
           data-testid={testId}
-          size="sm"
           data={runs}
           columns={columns(showWorkspace)}
           keyField={(r) => r.id}

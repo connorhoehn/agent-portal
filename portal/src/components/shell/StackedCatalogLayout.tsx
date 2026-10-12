@@ -1,7 +1,7 @@
-import type { ReactNode } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router';
 import { ListRailLayout, ScopeHeader, ViewportFillRegion } from '@connorhoehnslalom/ui-components';
 import { GroupedList, PageSection, Stack, SubNavLayout, activeNavItemClassName, inactiveNavItemClassName, type SubNavItem } from '@connorhoehnslalom/ui-components/shared';
+import type { ReactNode } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router';
 import { UNDER_CRUMBS_BAND } from './headerRhythm';
 import { SectionHeader } from './SectionContent';
 
@@ -58,7 +58,7 @@ export function StackedCatalogLayout({
   ];
   const content = catalogOverview && !selectedId ? <Stack gap="none" className="h-full min-h-0">
     <ScopeHeader variant="crumbs" breadcrumbs={[{ label: group }, { label: title }]} />
-    <Stack gap="none" className={`min-h-0 flex-1 overflow-auto px-6 pb-6 ${UNDER_CRUMBS_BAND}`} data-testid="catalog-overview">
+    <Stack gap="none" className={`min-h-0 flex-1 overflow-auto px-[var(--ui-page-gutter,1.5rem)] pb-[var(--ui-page-gutter,1.5rem)] ${UNDER_CRUMBS_BAND}`} data-testid="catalog-overview">
       <PageSection title={title}
         {...(overviewDescription ? { description: overviewDescription } : {})}
         {...(overviewActions ? { actions: overviewActions } : {})}>
@@ -86,7 +86,7 @@ export function StackedCatalogLayout({
     }}
     data-testid="catalog-explorer"
   >
-    <Stack gap="md" className="min-w-0 w-full overflow-x-auto px-6 pb-6">{children}</Stack>
+    <Stack gap="md" className="min-w-0 w-full overflow-x-auto px-[var(--ui-page-gutter,1.5rem)] pb-[var(--ui-page-gutter,1.5rem)]">{children}</Stack>
   </ListRailLayout>;
   return (
     <ViewportFillRegion bottomGap={0} data-testid="stacked-catalog">

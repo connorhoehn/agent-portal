@@ -22,26 +22,26 @@
 // hand-off instead; `input="below"` is a page whose composer sits right under
 // the thread (no input, no hand-off).
 
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { WrappedChatPanel, type WrappedChatPanelProps } from '@connorhoehnslalom/ui-components/integrations/realtime';
-import { ThreadInputHandoff, useThreadInput, type ConversationComposerProps } from '@connorhoehnslalom/ui-components/social/rich-composer';
-import { Button, DensityProvider, EmptyState, Inline, InlineAlert, LoadingState, LockIcon, Stack, T } from '@connorhoehnslalom/ui-components/shared';
 import { useChat, useChatReadReceipts, useGatewayOptional, useReactions } from '@connorhoehnslalom/realtime-modules/client';
+import { WrappedChatPanel, type WrappedChatPanelProps } from '@connorhoehnslalom/ui-components/integrations/realtime';
+import { Button, EmptyState, Inline, InlineAlert, LoadingState, LockIcon, Stack, T } from '@connorhoehnslalom/ui-components/shared';
+import { ThreadInputHandoff, useThreadInput, type ConversationComposerProps } from '@connorhoehnslalom/ui-components/social/rich-composer';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useChannelFiles } from '../../hooks/useChannelFiles';
+import { useMessagePortraits } from '../../hooks/useMessagePortraits';
+import { usePageCalls, usePeopleNames } from '../../hooks/usePageCalls';
+import { useUnreadBoundary } from '../../hooks/useUnreadBoundary';
 import { useSession } from '../../lib/auth';
 import { ConversationComposer, useAttachmentSource } from '../../lib/conversationComposer';
-import { useConversationSummarize, type ConversationSummarize } from './useConversationSummarize';
-import { useChatPins } from './useChatPins';
-import { useChannelFiles } from '../../hooks/useChannelFiles';
-import { usePageCalls, usePeopleNames } from '../../hooks/usePageCalls';
-import { PageCallsView } from '../calls/PageCallsView';
 import { isPageCallLobby } from '../../lib/pageCalls';
-import { useMentionCandidates } from './useMentionCandidates';
-import { useChatForward } from './useChatForward';
-import { useUnreadBoundary } from '../../hooks/useUnreadBoundary';
+import { PageCallsView } from '../calls/PageCallsView';
 import { OFFLINE_REASON, isConnected } from './chatConnection';
-import { useMessagePortraits } from '../../hooks/useMessagePortraits';
-import { useConversationReadState } from './useConversationReadState';
 import type { ConversationReadState } from './conversationReadState';
+import { useChatForward } from './useChatForward';
+import { useChatPins } from './useChatPins';
+import { useConversationReadState } from './useConversationReadState';
+import { useConversationSummarize, type ConversationSummarize } from './useConversationSummarize';
+import { useMentionCandidates } from './useMentionCandidates';
 
 /** Said to a reader who may see the thread but not post. */
 export const READ_ONLY_REASON = 'You can read and filter messages. Your current role cannot post.';
@@ -191,12 +191,12 @@ export function ConversationThread({ conversation, title, readOnlyReason = null,
   const canWrite = maySend && !readOnlyReason && !readPending && !readError;
   const field = input === 'below' ? <Fragment />
     : elsewhere ? <ThreadInputHandoff label={elsewhere.label} onFocus={() => owner.focus()} {...(testId ? { 'data-testid': `${testId}-input-elsewhere` } : {})} />
-    : <DensityProvider value="compact"><ConversationComposer channel={channel} chat={chat} context={{ kind: 'conversation', id: channel, title }}
+    : <ConversationComposer channel={channel} chat={chat} context={{ kind: 'conversation', id: channel, title }}
         capabilities={{ maySend: canWrite, ...(readOnlyReason ? { readOnlyReason } : {}), mayAttach: attachments && canWrite }}
         offline={connected ? null : OFFLINE_REASON} identity={{ userId, displayName }} commands={summarize.commands} reply={quote}
         draftKey={`${channel}:summarizable`} modePlaceholders={{ chat: placeholder ?? 'Write a message, or /summarize…' }}
         {...(onSearchPeople ? { onSearchPeople } : {})}
-        {...(testId ? { 'data-testid': `${testId}-composer-dock`, composerTestId: `${testId}-composer` } : {})} {...composer} /></DensityProvider>;
+        {...(testId ? { 'data-testid': `${testId}-composer-dock`, composerTestId: `${testId}-composer` } : {})} {...composer} />;
   const gateway = useGatewayOptional();
   const noMessages = chat.messages.length === 0 && summarize.localMessages.length === 0;
   const waitingState = readError ? <Inline gap="sm" align="start" wrap={false} role="status"
@@ -222,7 +222,7 @@ export function ConversationThread({ conversation, title, readOnlyReason = null,
     <WrappedChatPanel key={channel} chat={pinned.chat} attachmentSrc={a => srcFor(a)} {...(reactions && canWrite ? { reactions: conversation.reactions } : {})}
       {...(pinned.messagePins ? { pins: pinned.messagePins } : {})} currentUserId={userId} displayName={displayName}
       editable={editable && canWrite && connected} {...(forward.onForwardMessage && canWrite ? { onForwardMessage: forward.onForwardMessage } : {})}
-      {...(fill ? { fill: true } : {})} showHeader={false} {...(summarize.localMessages.length ? { localMessages: summarize.localMessages } : {})}
+      {...(fill ? { fill: true } : {})} showHeader={false} contentAlign={input === 'below' || elsewhere ? 'start' : 'end'} {...(summarize.localMessages.length ? { localMessages: summarize.localMessages } : {})}
       threaded {...(unreadFrom ? { unreadFrom } : {})} readReceipts={receipts.receipts} readReceiptsEnabled={receipts.enabled} disabled={!connected}
       onReply={input === 'below' ? undefined : elsewhere ? (elsewhere.replies ? message => { quote.start(message); owner.focus(true); } : undefined) : quote.start}
       {...(renderMessageReferences ? { renderMessageReferences } : {})} typingUsers={typingUsers ?? chat.typingUsers}

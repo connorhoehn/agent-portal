@@ -15,7 +15,7 @@ test('metadata-only queue view keeps partial failures visible and transport dist
   await page.route('**/__pipeline-queues', route => route.fulfill({ contentType: 'text/html', body: `<!doctype html><html><body><div id="root"></div><script type="module">import RefreshRuntime from '/@react-refresh'; RefreshRuntime.injectIntoGlobalHook(window); window.$RefreshReg$=()=>{}; window.$RefreshSig$=()=>type=>type; window.__vite_plugin_react_preamble_installed__=true;</script><script type="module" src="/e2e/fixtures/pipeline-queues.tsx"></script></body></html>` }));
   await page.goto('/__pipeline-queues');
   const root = page.getByTestId('pipelines-queues');
-  await expect(root.getByText('Message-queue service', { exact: true })).toBeVisible();
+  await expect(root.getByRole('toolbar', { name: 'Queue filters' }).getByText('3 queues · Message-queue service', { exact: true })).toBeVisible();
   await root.getByRole('button', { name: 'About queue delivery' }).click();
   await expect(root.getByText('Realtime disconnected', { exact: true })).toBeVisible();
   await expect(root.getByText('Unavailable', { exact: true })).toBeVisible();

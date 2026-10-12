@@ -6,18 +6,29 @@
 // row opens its definition. Nothing here writes: bots are managed in the org
 // workspace, commands in assessment, agents by deployment.
 
+import {
+  CollectionPage,
+  Banner,
+  Chip,
+  DataTable,
+  T,
+  type DataTableColumn,
+} from '@connorhoehnslalom/ui-components/shared';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
-import { Toolbar, IconButton, Tooltip, RepeatIcon,
-  Banner, Chip, DataTable, PageHeader, SearchInput, Stack, StatStrip, T, type DataTableColumn,
-} from '@connorhoehnslalom/ui-components/shared';
-import { useFetch } from '../../hooks/useFetch';
-import { relativeTime } from '../../lib/relativeTime';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { PipelineRunStatusChip } from '../../components/runs/PipelineRunParts';
+import { useFetch } from '../../hooks/useFetch';
 import {
-  SOURCE_KINDS, definitionHref, matchesDefinition, triggerSummary, type DefinitionsResponse, type PipelineDefinition, type SourcePageId,
+  SOURCE_KINDS,
+  definitionHref,
+  matchesDefinition,
+  triggerSummary,
+  type DefinitionsResponse,
+  type PipelineDefinition,
+  type SourcePageId,
 } from '../../lib/pipelineDefinitions';
+import { relativeTime } from '../../lib/relativeTime';
 
 const str = (v: unknown): string => (typeof v === 'string' && v ? v : '—');
 
@@ -91,22 +102,13 @@ export default function SourcesPage({ source }: { source: SourcePageId }) {
   const rows = all.filter((d) => matchesDefinition(d, query));
 
   return (
-    <Stack gap="md" className="min-w-0" data-testid={`pipelines-source-${source}`}>
-      <PageHeader density="compact" title={page.title} description={page.description} badge={<Chip tone="neutral" size="xs">Read-only</Chip>} />
-      <Toolbar aria-label={`${page.title} filters`} wrap className="px-0" end={<Tooltip content="Refresh"><IconButton size="sm" aria-label="Refresh" icon={<RepeatIcon />} onClick={refresh} disabled={isLoading} /></Tooltip>}>
-        {data && (
-          <StatStrip
-            aria-label={`${page.title} summary`}
-            variant="line"
-            size="sm"
-            items={[
-              { label: rows.length === all.length ? page.noun : `of ${all.length} ${page.noun}`, value: rows.length },
-              { label: 'recorded runs', value: all.reduce((n, d) => n + d.runCount, 0) },
-            ]}
-          />
-        )}
-        <SearchInput size="sm" className="w-full max-w-64" aria-label={`Search ${page.noun}`} placeholder={`Search ${page.noun}`} value={query} onChange={setQuery} onClear={() => setQuery('')} />
-      </Toolbar>
+    <CollectionPage data-testid={`pipelines-source-${source}`} title={page.title} description={page.description}
+      toolbar={{ label: `${page.title} filters`, search: { value: query, onChange: setQuery, placeholder: `Search ${page.noun}`, 'aria-label': `Search ${page.noun}` },
+        summary: data ? `${rows.length} ${page.noun} · ${all.reduce((n, d) => n + d.runCount, 0)} recorded runs` : undefined,
+        notices: ['This source registry is read-only.'],
+        onRefresh: refresh, refreshing: isLoading,
+      }}>
+
       {data && data.unavailable.length > 0 && (
         <Banner variant="warning">
           {`Not every source could be read — ${data.unavailable.map((u) => `${u.source}: ${u.error}`).join('; ')}.`}
@@ -117,7 +119,6 @@ export default function SourcesPage({ source }: { source: SourcePageId }) {
       ) : (
         <DataTable
           data-testid={`pipelines-source-${source}-table`}
-          size="sm"
           data={rows}
           columns={page.columns}
           keyField={(d) => d.id}
@@ -127,6 +128,6 @@ export default function SourcesPage({ source }: { source: SourcePageId }) {
           emptyMessage={query.trim() ? `No ${page.noun} match "${query.trim()}".` : page.empty}
         />
       )}
-    </Stack>
+    </CollectionPage>
   );
 }

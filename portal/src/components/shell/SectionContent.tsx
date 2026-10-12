@@ -9,9 +9,9 @@
 // Initiatives list draws (264px, caption title + count chip, search header,
 // grouped rows, footer) — and `SectionHeader` as its `header`, so the content
 // column (trail first, then the title, then the record) starts after it.
-import type { ComponentProps, ReactNode } from 'react';
 import { ScopeHeader } from '@connorhoehnslalom/ui-components';
 import { PageHeader, Stack, type Density } from '@connorhoehnslalom/ui-components/shared';
+import type { ComponentProps, ReactNode } from 'react';
 import { UNDER_CRUMBS_BAND, UNDER_CRUMBS_BAND_WITH_CONTROLS } from './headerRhythm';
 
 type ScopeHeaderProps = ComponentProps<typeof ScopeHeader>;
@@ -40,7 +40,7 @@ export interface SectionHeaderProps {
  * content column's first rows, on a flush page and (as `ListRailLayout`'s
  * `header`) right of a page's list rail.
  */
-export function SectionHeader({ breadcrumbs, controls, link, title, description, badge, actions, density, collapsed = false, onToggleCollapsed, inset = 'page' }: SectionHeaderProps) {
+export function SectionHeader({ breadcrumbs, controls, link, title, description, badge, actions, density, collapsed = false, onToggleCollapsed }: SectionHeaderProps) {
   const hangs = !!(controls || link);
   const compact = density === 'compact';
   return (
@@ -55,7 +55,7 @@ export function SectionHeader({ breadcrumbs, controls, link, title, description,
         {...(link ? { link } : {})}
         data-testid="section-crumbs"
       />
-      {!collapsed && <Stack gap="none" className={`shrink-0 ${inset === 'conversation' ? 'px-4' : 'px-6'} ${compact ? 'pb-2 pt-1' : `pb-4 ${hangs ? UNDER_CRUMBS_BAND_WITH_CONTROLS : UNDER_CRUMBS_BAND}`}`} data-section-title>
+      {!collapsed && <Stack gap="none" className={`shrink-0 px-[var(--ui-page-gutter,1.5rem)] ${compact ? 'pb-2 pt-1' : `pb-4 ${hangs ? UNDER_CRUMBS_BAND_WITH_CONTROLS : UNDER_CRUMBS_BAND}`}`} data-section-title>
         <PageHeader
           title={title}
           {...(density ? { density } : {})}
@@ -83,7 +83,7 @@ export function SectionContent({
       <SectionHeader {...header} />
       <Stack
         gap="md"
-        className={`min-h-0 min-w-0 flex-1 ${body === 'scroll' ? 'overflow-auto ' : ''}${header.inset === 'conversation' ? '' : 'px-6 pb-6'}`}
+        className={`min-h-0 min-w-0 flex-1 ${body === 'scroll' ? 'overflow-auto ' : ''}${header.inset === 'conversation' ? '' : 'px-[var(--ui-page-gutter,1.5rem)] pb-[var(--ui-page-gutter,1.5rem)]'}`}
         data-section-body
       >
         {children}

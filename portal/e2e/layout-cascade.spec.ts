@@ -92,7 +92,14 @@ async function measure(page: Page): Promise<Measure> {
       const b = h.getBoundingClientRect();
       const cs = getComputedStyle(h);
       const hidden = b.width <= 1 || b.height <= 1 || cs.clip === 'rect(0px, 0px, 0px, 0px)' || cs.clipPath === 'inset(50%)';
-      title = { left: Math.round(b.left), top: Math.round(b.top), hidden, text: (h.textContent ?? '').slice(0, 60) };
+      // A compact PageHeader may lead with its back control. The header
+      // group aligns to the trail; its title text naturally follows the icon.
+      // Measure that real leading control, not a hard-coded pixel exemption.
+      const row = h.closest('[data-testid$="-row"]');
+      const leading = row?.firstElementChild;
+      const backLink = leading?.matches('a[aria-label]') ? leading : leading?.querySelector('a[aria-label]');
+      const back = backLink && leading?.nextElementSibling?.contains(h) ? backLink : null;
+      title = { left: Math.round(back?.getBoundingClientRect().left ?? b.left), top: Math.round(b.top), hidden, text: (h.textContent ?? '').slice(0, 60) };
     }
     return {
       landed: location.pathname + location.search,

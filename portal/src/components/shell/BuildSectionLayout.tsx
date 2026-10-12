@@ -1,7 +1,7 @@
-import type { ComponentProps, ReactNode } from 'react';
-import { Link, useLocation } from 'react-router';
 import { ScopeHeader, ViewportFillRegion } from '@connorhoehnslalom/ui-components';
 import { Stack, SubNavLayout, activeNavItemClassName, inactiveNavItemClassName, type SubNavItem } from '@connorhoehnslalom/ui-components/shared';
+import type { ComponentProps, ReactNode } from 'react';
+import { Link, useLocation } from 'react-router';
 import { useShellBreadcrumbItems } from './Breadcrumbs';
 import { isBuildNavActive } from './buildNavigation';
 import { UNDER_CRUMBS_BAND } from './headerRhythm';
@@ -57,7 +57,7 @@ export function BuildSectionLayout({
         })}>
         <Stack gap="none" className="h-full min-h-0 min-w-0">
           <ScopeHeader variant="crumbs" breadcrumbs={suppliedBreadcrumbs ?? breadcrumbs} />
-          <Stack gap="none" className={contentPadding === 'none' ? 'min-h-0 min-w-0 flex-1 overflow-hidden' : `min-h-0 flex-1 overflow-auto px-6 pb-6 ${UNDER_CRUMBS_BAND}`} data-testid="build-section-content">{children}</Stack>
+          <Stack gap="none" className={contentPadding === 'none' ? 'min-h-0 min-w-0 flex-1 overflow-hidden' : `min-h-0 flex-1 overflow-auto px-[var(--ui-page-gutter,1.5rem)] pb-[var(--ui-page-gutter,1.5rem)] ${UNDER_CRUMBS_BAND}`} data-testid="build-section-content">{children}</Stack>
         </Stack>
       </SubNavLayout>
     </Stack>

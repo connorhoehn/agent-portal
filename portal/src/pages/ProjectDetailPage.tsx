@@ -1,3 +1,4 @@
+import { ComposerSurface } from '@connorhoehnslalom/ui-components/shared';
 // An initiative, inside the shared Initiatives frame (InitiativesExplorer):
 // the explorer column on the left, the pane on the right with the
 // initiative's header band over it and the docked composer
@@ -15,99 +16,91 @@
 // models in ./project-detail (overviewModel, briefModel, composerPrompts,
 // workListModel), none of which has React in it.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import {
-  DetailSection,
   useSidePane,
-  WorkTableView,
   WorkListView,
+  WorkTableView,
   type WorkListViewProps,
 } from '@connorhoehnslalom/ui-components';
 import {
   Button,
-  DropdownMenu,
-  EmptyState,
   CodeIcon,
   DocumentIcon,
+  DropdownMenu,
+  EmptyState,
   ErrorState,
   IconButton,
   Inline,
   LoadingState,
   Modal,
   PageHeader,
-  SearchIcon,
-  Tooltip,
   PageSection,
+  SearchIcon,
   Select,
   Stack,
   StatusPill,
-  Tabs,
   T,
+  Tabs,
+  Tooltip,
   useHeaderDensity,
   type BreadcrumbItem,
   type HeaderPeopleGroup,
 } from '@connorhoehnslalom/ui-components/shared';
-import { useFetch } from '../hooks/useFetch';
-import { useDebouncedSearch } from '../hooks/useDebouncedSearch';
-import { useUrlState } from '../lib/useUrlState';
-import { useCapabilities } from '../lib/capabilities';
-import { useSession } from '../lib/auth';
-import { githubRepoUrl } from '../lib/repoLink';
-import { DEVBOX_MODELS } from '../lib/devboxModels';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
+import { ConversationOwner, ConversationThread } from '../components/chat/ConversationThread';
 import { EstimateDrawer, type EstimateProvenance } from '../components/marketplace/EstimateDrawer';
 import { OwnerEditor } from '../components/marketplace/GovernanceEditor';
 import { useInitiativeAgentActivity } from '../components/marketplace/InitiativeAgentRail';
-import type { BotRun } from './bots/BotsPage';
-import { InitiativesExplorer } from './projects/InitiativesExplorer';
-import { ScopePresence } from './projects/ScopePresence';
-import { WorkGraphActivity } from '../components/work-graph/WorkGraphActivity';
 import { RecentWorkActivity } from '../components/work-graph/RecentWorkActivity';
-import { scopePresenceChannel } from './projects/scopePresenceModel';
-import { useInitiativeListRail } from './projects/InitiativeListRail';
-import { initiativeBreadcrumbs, initiativeHref } from './projects/initiativeNavigation';
-import { InitiativeComposer } from './projects/InitiativeComposer';
-import { InitiativeAgentPanel, type InitiativeAgentHandle } from './projects/InitiativeAgentPanel';
-import { useInitiativeCall } from './projects/InitiativeCall';
-import { ConversationOwner, ConversationThread } from '../components/chat/ConversationThread';
-import type { WorkThread } from './projects/workThread';
-import { InitiativeSidePane, useInitiativePane } from './projects/InitiativeSidePane';
-import { InitiativeFiles } from './projects/InitiativeFiles';
-import { InitiativeRecordings } from './projects/InitiativeRecordings.tsx';
-import { InitiativeDetailsTrigger, type InitiativeFactsInput } from './projects/InitiativeDetailsCard';
-import { scopeDiscussionChannel } from './projects/scopeDiscussionModel';
-import { postInitiativeComment } from './projects/initiativeComment';
-import { workConversationReferences } from './projects/workConversationContext';
-import { initiativeConversationMessages, type InitiativeConversationFilter } from './projects/initiativeConversationModel';
-import { useInitiativeSocialChannel } from './projects/InitiativeDiscussion';
+import { WorkGraphActivity } from '../components/work-graph/WorkGraphActivity';
+import { useDebouncedSearch } from '../hooks/useDebouncedSearch';
+import { useFetch } from '../hooks/useFetch';
+import { useSession } from '../lib/auth';
+import { useCapabilities } from '../lib/capabilities';
+import { DEVBOX_MODELS } from '../lib/devboxModels';
+import { githubRepoUrl } from '../lib/repoLink';
+import { toastError } from '../lib/toastStore';
+import { useUrlState } from '../lib/useUrlState';
+import { HttpError, sendJson } from '../lib/writeJson';
+import type { BotRun } from './bots/BotsPage';
 import { AddNoteDialog, LinkDecisionDialog } from './project-detail/BriefDialogs';
+import { briefFacts, runSetupHint } from './project-detail/briefModel';
+import { workflowPrompt, type ComposerSetup, type ComposerSubject } from './project-detail/composerPrompts';
 import { ContributorsTable } from './project-detail/ContributorsTable';
 import { DecisionQueue } from './project-detail/DecisionQueue';
 import { InitiativeOverview } from './project-detail/InitiativeOverview';
 import { InitiativeRail } from './project-detail/InitiativeRail';
 import { NewItemForm, type NewItemDraft } from './project-detail/NewItemForm';
-import { RunDraft, type RunChoice } from './project-detail/RunDraft';
-import { WorkItemDetail, type DetailTab, type WorkItemPatch } from './project-detail/WorkItemDetail';
-import { useWorkItemThread } from './project-detail/useWorkItemThread';
 import { buildOverview } from './project-detail/overviewModel';
-import { briefFacts, runSetupHint } from './project-detail/briefModel';
-import { workflowPrompt, type ComposerSetup, type ComposerSubject } from './project-detail/composerPrompts';
-import {
-  NO_FILTERS,
-  WORK_GROUPS,
-  WORK_SORT_OPTIONS,
-  activeFilterCount,
-  ownerOptions,
-  toWorkListItem,
-  workRows,
-  type WorkFilterState,
-  type WorkSort,
-} from './project-detail/workListModel';
 import {
   flattenWorkItems,
   hasActiveGrantOnInitiative,
   runsByWorkItem,
 } from './project-detail/projectFormat';
+import { RunDraft, type RunChoice } from './project-detail/RunDraft';
+import type {
+Codebase,
+MyScopedSprintsResponse,
+ProjectDecision,
+ProjectDetail,
+WorkItem,
+WorkItemStatus,
+WorkItemTree,
+} from './project-detail/types';
+import { useWorkItemThread } from './project-detail/useWorkItemThread';
+import { WorkItemDetail, type DetailTab, type WorkItemPatch } from './project-detail/WorkItemDetail';
+import {
+  activeFilterCount,
+  NO_FILTERS,
+  ownerOptions,
+  toWorkListItem,
+  WORK_GROUPS,
+  WORK_SORT_OPTIONS,
+  workRows,
+  type WorkFilterState,
+  type WorkSort,
+} from './project-detail/workListModel';
 import {
   dropFromTree,
   insertChild,
@@ -115,17 +108,24 @@ import {
   mapTree,
   surfaceWriteError,
 } from './project-detail/writeJson';
-import { HttpError, sendJson } from '../lib/writeJson';
-import { toastError } from '../lib/toastStore';
-import type {
-  Codebase,
-  MyScopedSprintsResponse,
-  ProjectDecision,
-  ProjectDetail,
-  WorkItem,
-  WorkItemStatus,
-  WorkItemTree,
-} from './project-detail/types';
+import { InitiativeAgentPanel, type InitiativeAgentHandle } from './projects/InitiativeAgentPanel';
+import { useInitiativeCall } from './projects/InitiativeCall';
+import { postInitiativeComment } from './projects/initiativeComment';
+import { InitiativeComposer } from './projects/InitiativeComposer';
+import { initiativeConversationMessages, type InitiativeConversationFilter } from './projects/initiativeConversationModel';
+import { InitiativeDetailsTrigger, type InitiativeFactsInput } from './projects/InitiativeDetailsCard';
+import { useInitiativeSocialChannel } from './projects/InitiativeDiscussion';
+import { InitiativeFiles } from './projects/InitiativeFiles';
+import { useInitiativeListRail } from './projects/InitiativeListRail';
+import { initiativeBreadcrumbs, initiativeHref } from './projects/initiativeNavigation';
+import { InitiativeRecordings } from './projects/InitiativeRecordings.tsx';
+import { InitiativesExplorer } from './projects/InitiativesExplorer';
+import { InitiativeSidePane, useInitiativePane } from './projects/InitiativeSidePane';
+import { scopeDiscussionChannel } from './projects/scopeDiscussionModel';
+import { ScopePresence } from './projects/ScopePresence';
+import { scopePresenceChannel } from './projects/scopePresenceModel';
+import { workConversationReferences } from './projects/workConversationContext';
+import type { WorkThread } from './projects/workThread';
 
 // Re-exported from its original home so anything importing the grant predicate
 // off this module keeps working; the implementation now lives in projectFormat.
@@ -842,7 +842,7 @@ function ProjectDetailPage() {
         collapsible
         combinedNavigation
         focusedWork={focusedWork}
-        composer={<Stack gap="none" className="initiative-composer-dock" data-testid="initiative-central-composer"><Stack gap="none" className="relative mx-auto w-full max-w-5xl">{composer}</Stack></Stack>}
+        composer={<ComposerSurface data-testid="initiative-central-composer">{composer}</ComposerSurface>}
         breadcrumbs={initiativeBreadcrumbs({ search: searchParams, scope: listRail.scope, project, tab: wantedItem ? tab : 'overview', item: current?.key ?? undefined })
           .filter((crumb) => !['Plan', 'All initiatives', 'My initiatives', ...(current ? ['Work'] : [])].includes(crumb.label))}
         paneHeader={focusedWork ? undefined : pageHeader}
