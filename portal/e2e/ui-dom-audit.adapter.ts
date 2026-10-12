@@ -4,10 +4,12 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { expect, type Page } from '@playwright/test';
 import { signIn } from './realSession';
+import { selectAuditRoutes } from './ui-dom-audit.routes';
 import { staticInventory, paramInventory, PARAM_ROUTES, OBSERVED_ROUTES, resolveParam, SWEEP_USER, sourceDigest, type InventoryRoute } from './route-inventory';
 
 const repo = fileURLToPath(new URL('../../', import.meta.url));
 const selectors = {
+  graphDetailLabels: '[data-ui-text="graph-detail"]', graphMetadataLabels: '[data-ui-text="graph-metadata"]', activePersonCaptions: '[data-ui-text="active-person-caption"]',
   codeLabels: 'button code, button .font-mono:not(kbd), [role="button"] code, [role="button"] .font-mono:not(kbd)',
   railCaptionLabels: '[data-testid="social-chat-rail-scroll"] button[aria-expanded]:not([aria-haspopup]) > span, button[data-heading="label"][data-focus-key^="g:"] > span',
   railItemLabels: '[data-ui-text="rail-item"]',
@@ -51,17 +53,7 @@ export default {
   async cases(options: { tenant?: string; path?: string; all?: boolean }) {
     let routes: InventoryRoute[] = [...staticInventory(), ...paramInventory(), ...OBSERVED_ROUTES.map(r => ({ tenant: r.tenant, path: r.template.replace(':id', encodeURIComponent(r.id ?? r.fallback ?? 'missing')), pattern: r.pattern, source: 'param' as const, kind: /communication|social\/dms/.test(r.pattern) ? 'chat' as const : 'record' as const }))];
     if (options.tenant) routes = routes.filter(r => r.tenant === options.tenant);
-    if (options.path) {
-      const requested = options.path.startsWith('/') && !options.path.includes(':') ? new URL(options.path, 'http://audit.local') : null;
-      const exact = requested ? routes.find(r => {
-        if (!r.pattern) return false;
-        const segments = r.pattern.split('/');
-        const actual = requested.pathname.split('/');
-        return segments.length === actual.length && segments.every((segment, index) => segment.startsWith(':') || segment === actual[index]);
-      }) : null;
-      if (exact) routes = [{ ...exact, path: requested!.pathname + requested!.search, auditPreservePath: true } as InventoryRoute];
-      else routes = routes.filter(r => r.path.includes(options.path!) || r.pattern?.includes(options.path!));
-    }
+    if (options.path) routes = selectAuditRoutes(routes, options.path);
     if (!options.all && !options.path) {
       routes = [...new Set(routes.map(r => r.tenant))].flatMap(tenant => {
         const own = routes.filter(r => r.tenant === tenant && r.source !== 'param');
@@ -74,7 +66,7 @@ export default {
     return routes.map(r => ({ ...r, actor: `${r.tenant}:${r.user ?? SWEEP_USER}`,
       // Inspected shared RunsLedger consumers and existing contextual composers.
       // Other route families stay visibly unclassified until their policy is reviewed.
-      composerExpectation: /^(\/pipelines\/runs(?:\/[^/]+)?|\/iq\/runs|\/assessment\/runs)$/.test(new URL(r.path, 'http://audit.local').pathname)
+      composerExpectation: /^(\/pipelines\/runs(?:\/[^/]+)?|\/iq\/runs|\/assessment\/runs|\/social\/contacts)$/.test(new URL(r.path, 'http://audit.local').pathname)
         || /social\/dms\//.test(r.path) || /projects\/:id$/.test(r.pattern ?? '') ? { mode: 'required' as const } : undefined,
       required: ['$header', '$footer', '$shellColumns', ...(r.judges?.includes('table') ? ['$tables'] : []), ...(r.kind === 'chat' && r.source === 'param' ? ['$conversationState'] : [])],
     }));
@@ -123,8 +115,12 @@ export default {
     const commandHost = page.getByTestId('collection-command-host');
     if (await commandHost.count() === 1 && await commandHost.isVisible()) states.push({ name: 'commands-help', enter: async p => {
       await p.getByTestId('collection-command-host').locator('[contenteditable="true"]').click();
-      await p.getByRole('button', { name: 'Available runs commands', exact: true }).click();
-      await expect(p.getByRole('dialog', { name: 'Available runs commands', exact: true })).toBeVisible();
+      const trigger = p.getByTestId('collection-command-host').getByRole('button', { name: /^Available .+ commands$/ });
+      await expect(trigger).toHaveCount(1);
+      const label = await trigger.getAttribute('aria-label');
+      if (!label) throw new Error('Command help trigger must have an accessible label');
+      await trigger.click();
+      await expect(p.getByRole('dialog', { name: label, exact: true })).toBeVisible();
     } });
     const owner = page.getByRole('button', { name: 'Change who runs this initiative', exact: true });
     if (await owner.count() === 1 && await owner.isVisible()) states.push({ name: 'owner-menu', enter: async p => {

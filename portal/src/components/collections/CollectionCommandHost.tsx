@@ -1,4 +1,4 @@
-// Reusable input host: a collection declares its commands, scope and actions.
+// Reusable input host: each collection declares its commands, scope and actions.
 // It never invents a chat channel, invokes an unrelated agent or executes a
 // proposed mutation before the user confirms that specific operation.
 import { useRef, useState } from 'react';

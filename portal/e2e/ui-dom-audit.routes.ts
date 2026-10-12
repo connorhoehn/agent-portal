@@ -1,0 +1,20 @@
+/** Select audit routes without widening a user-supplied concrete URL. */
+export function selectAuditRoutes<T extends { path: string; pattern?: string }>(routes: readonly T[], query: string): Array<T & { auditPreservePath?: boolean }> {
+  // Non-URL filters are intentionally broad (e.g. "runs" matches list/detail).
+  if (!query.startsWith('/')) return routes.filter(r => r.path.includes(query) || r.pattern?.includes(query));
+  const requested = new URL(query, 'http://audit.local');
+  const segments = requested.pathname.split('/');
+  // An explicit inventory template selects that route family and lets the
+  // existing resolver choose its seeded record. It is not a literal URL.
+  if (segments.some(segment => segment.startsWith(':'))) return routes.filter(r => r.pattern === requested.pathname || r.path === requested.pathname);
+  const samePath = routes.filter(r => new URL(r.path, 'http://audit.local').pathname === requested.pathname);
+  const literal = samePath.find(r => new URL(r.path, 'http://audit.local').search === requested.search) ?? samePath[0];
+  const parameterized = literal ?? routes.find(r => {
+    if (!r.pattern) return false;
+    const pattern = r.pattern.split('/');
+    return pattern.length === segments.length && pattern.every((segment, index) => segment.startsWith(':') || segment === segments[index]);
+  });
+  // Unknown absolute paths select nothing: the runner fails empty coverage.
+  // Never silently turn a miss into a broader prefix/substring sweep.
+  return parameterized ? [{ ...parameterized, path: requested.pathname + requested.search, auditPreservePath: true }] : [];
+}

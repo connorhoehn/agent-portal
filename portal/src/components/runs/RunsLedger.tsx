@@ -33,7 +33,7 @@ import { PipelineRunStatusChip } from './PipelineRunParts';
 import { useCapabilities } from '../../lib/capabilities';
 import { useSession } from '../../lib/auth';
 import { writeJson } from '../../lib/writeJson';
-import { CollectionCommandHost, type CollectionCommandAdapter } from './CollectionCommandHost';
+import { CollectionCommandHost, type CollectionCommandAdapter } from '../collections/CollectionCommandHost';
 import { EMPTY_RUN_FILTERS, parseRunCommand, resolveRunCommand, runCommandExamples, type RunFilters } from './runCommands';
 
 function columns(showWorkspace: boolean): DataTableColumn<PipelineRun>[] {

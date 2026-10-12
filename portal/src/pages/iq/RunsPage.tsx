@@ -10,12 +10,12 @@
 // (docs/nav-server-tier-decisions.md).
 
 import { RunsLedger } from '../../components/runs/RunsLedger';
-import { RunCollectionPage } from '../../components/runs/RunCollectionPage';
+import { CollectionCommandPage } from '../../components/collections/CollectionCommandPage';
 
 export default function IqRunsPage() {
   return (
-    <RunCollectionPage data-testid="iq-runs" title="Runs" description="What this workspace's bots, agents and queue ran, and where each run stands.">
+    <CollectionCommandPage data-testid="iq-runs" title="Runs" description="What this workspace's bots, agents and queue ran, and where each run stands.">
       <RunsLedger endpoint="/api/runs" detailBase="/iq/runs" fill data-testid="iq-runs-table" />
-    </RunCollectionPage>
+    </CollectionCommandPage>
   );
 }

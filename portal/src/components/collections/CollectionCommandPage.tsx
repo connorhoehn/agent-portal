@@ -4,7 +4,7 @@ import { useShellBreadcrumbItems } from '../shell/Breadcrumbs';
 
 /** The shell provides a full content column; only the title and the table
  * retain reading gutters. The command surface reaches the column/footer. */
-export function RunCollectionPage(props: ComponentProps<typeof CollectionPage>) {
+export function CollectionCommandPage(props: ComponentProps<typeof CollectionPage>) {
   const breadcrumbs = useShellBreadcrumbItems();
   return <Stack gap="none" className="h-full min-h-0 min-w-0" data-shell-flush>
     <div className="shrink-0 px-[var(--ui-page-gutter)] pt-[var(--ui-page-gutter)]">
