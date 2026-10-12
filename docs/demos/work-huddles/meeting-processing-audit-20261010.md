@@ -375,3 +375,30 @@ application search are not exercised in this run. Chat/work-graph delivery is
 intercepted. Primary services and original media remain untouched. This replaces
 the earlier fixture-media limitation for the isolated native pipeline, while
 preserving those remaining application acceptance boundaries.
+
+
+## October 12 — recording interactivity and lifecycle audit
+
+Fixed a status observer that permanently switched to polling after one network
+failure. It now reconnects with a 1–30 second bounded backoff, rechecks current
+metadata/authorization on failures, and schedules its next request only after
+releasing the in-flight guard. Hidden tabs and unmounted scopes still stop work;
+terminal cards stop subscribing. Server status reads now release subscriptions
+on disconnect or timeout even if an authority read stalls.
+
+CDP instrumentation in the recording browser suite measures request counts,
+interaction-to-paint, event-to-paint, long tasks, task duration, and layout count
+at normal and 4× throttled CPU. Both cases inject one network failure, establish
+one held status request, open the details UI while it waits, deliver the ready
+revision, and check that requests stop at completion. Measurements and source
+hashes are in `recording-interactivity-audit-20261012.json`.
+
+All 16 browser cases pass using main's pinned ui-components/realtime packages in
+an isolated dependency copy; portal typecheck passes. Platform validation adds
+68 Jest checks, six harness lifecycle/failure checks, and a passing build. The
+browser uses the real React hooks/components with explicit HTTP/authority
+fixtures. Its measurements are local rendering/interactivity evidence, not
+production network latency or a new native media/inference run. The prior live
+native evidence remains unchanged. Primary services and memory-backed session
+were preserved; activation and the complete live application search flow remain
+separate verification boundaries.

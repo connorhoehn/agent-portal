@@ -12,29 +12,39 @@ export function useRecordingStatus(id: string | null, lobby: string, client: Ini
     let active: AbortController | null = null;
     let revision: string | null = null;
     let running = false;
-    let stopped = false;
+    let failures = 0;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const hidden = () => document.visibilityState === 'hidden';
     const until = Date.now() + 20 * 60_000;
     const read = async () => {
-      if (running || stopped || controller.signal.aborted || hidden() || Date.now() >= until) return;
+      if (running || controller.signal.aborted || hidden() || Date.now() >= until) return;
       running = true;
       const request = new AbortController(); active = request;
+      let nextDelay = 250;
       const timeout = setTimeout(() => request.abort(), 30_000);
       try {
         const next = await client.status(id, lobby, revision, request.signal);
         if (request.signal.aborted || controller.signal.aborted) return;
         if (revision !== next) callback.current();
         revision = next;
-        // Rate bound empty/immediate wakes, without delaying native events.
-        timer = setTimeout(() => { void read(); }, 250);
+        failures = 0;
       } catch {
-        // Normal polling remains authoritative when the event path is unavailable.
-        if (!request.signal.aborted) { stopped = true; callback.current(); }
-        else if (!controller.signal.aborted && !hidden()) timer = setTimeout(() => { void read(); }, 1000);
+        // A temporary outage must not permanently downgrade the session to
+        // polling. Recheck authorization immediately, then reconnect with
+        // bounded backoff while the normal metadata reader remains active.
+        if (!request.signal.aborted && !controller.signal.aborted) {
+          failures = Math.min(failures + 1, 6);
+          callback.current();
+        }
+        nextDelay = Math.min(30_000, 1000 * 2 ** Math.max(0, failures - 1));
       } finally {
         clearTimeout(timeout); running = false;
         if (active === request) active = null;
+        // Schedule only after releasing the in-flight guard. This also covers
+        // a hide/show transition while an aborted response is settling.
+        if (!controller.signal.aborted && !hidden() && Date.now() < until) {
+          timer = setTimeout(() => { void read(); }, nextDelay);
+        }
       }
     };
     const visibility = () => {

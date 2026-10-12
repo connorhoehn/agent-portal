@@ -1,7 +1,9 @@
-import { test, expect, type Page } from '@playwright/test';
+import { writeFile } from 'node:fs/promises';
+import { type Page } from '@playwright/test';
+import { test, expect } from './cdpTest';
 test.use({ baseURL: 'http://127.0.0.1:5283', viewport: { width: 1280, height: 900 } });
 type Mode = 'awaiting' | 'transcribing' | 'summarizing' | 'partial' | 'ready' | 'unknown';
-interface FixtureState { nativeStatus?: boolean; holdStatus?: Promise<void>; actor: string; tenant: 'orgiq' | 'assessment'; exact: boolean; mode: Mode; denied?: boolean; holdTranscript?: Promise<void>; holdDetail?: Promise<void>; holdSearch?: Promise<void>; searchDenied?: boolean; searchPartial?: boolean; requests: string[]; media?: boolean }
+interface FixtureState { statusFailures?: number; nativeStatus?: boolean; holdStatus?: Promise<void>; actor: string; tenant: 'orgiq' | 'assessment'; exact: boolean; mode: Mode; denied?: boolean; holdTranscript?: Promise<void>; holdDetail?: Promise<void>; holdSearch?: Promise<void>; searchDenied?: boolean; searchPartial?: boolean; requests: string[]; media?: boolean }
 const session = (state: FixtureState) => ({ sub: state.actor, name: 'Fixture Reviewer', tenant: state.tenant, role: 'member', grants: { [state.tenant]: ['member'] }, switchable: { [state.tenant]: ['member'] }, availableRoles: ['member'], availableTenants: [state.tenant], masquerading: null });
 function row(state: FixtureState, id = 'recording-exact') {
   const transcriptStatus = state.mode === 'awaiting' ? undefined : state.mode === 'transcribing' ? 'processing' : 'ready';
@@ -31,6 +33,7 @@ async function mount(page: Page, state: FixtureState, query = '') {
     if (path === '/fixture-platform/api/recordings') return route.fulfill({ json: { items: [row(state, 'recording-neighbour'), ...(state.exact ? [row(state)] : [])], cursor: null } });
     if (path === '/fixture-platform/api/recordings/recording-exact') { if (state.holdDetail) await state.holdDetail; return route.fulfill(state.denied ? { status: 403, json: { error: 'Not a participant' } } : { json: row(state) }); }
     if (path === '/fixture-platform/api/recordings/recording-exact/status' && state.nativeStatus) {
+      if (state.statusFailures) { state.statusFailures--; return route.abort('failed'); }
       if (url.searchParams.has('after') && state.holdStatus) await state.holdStatus;
       if (state.denied) return route.fulfill({ status: 403, json: { error: 'Access revoked' } });
       return route.fulfill({ json: { recordingId: 'recording-exact', lobbyName: row(state).lobbyName,
@@ -288,4 +291,68 @@ test('revoked native status immediately rechecks and hides saved detail without 
   await expect(page.getByTestId('initiative-recording-detail')).toContainText('not available to your account');
   await expect(page.getByTestId('recording-transcript-attachment')).toHaveCount(0);
   expect(errors).toEqual([]);
+});
+
+
+for (const cpuRate of [1, 4]) test(`CDP: status reconnects and paints promptly (${cpuRate}x CPU)`, async ({ page, context }) => {
+  const cdp = await context.newCDPSession(page);
+  await cdp.send('Performance.enable');
+  await cdp.send('Emulation.setCPUThrottlingRate', { rate: cpuRate });
+  await cdp.send('Network.enable');
+  const statusRequests: string[] = [];
+  cdp.on('Network.requestWillBeSent', event => { if (new URL(event.request.url).pathname.endsWith('/status')) statusRequests.push(event.requestId); });
+  let wake!: () => void;
+  const held = new Promise<void>(resolve => { wake = resolve; });
+  const data = state({ exact: true, mode: 'summarizing', nativeStatus: true, statusFailures: 1, holdStatus: held });
+  const errors = await mount(page, data);
+  await page.getByRole('button', { name: 'Show joined fixture call' }).click();
+  await page.getByRole('button', { name: 'End and clear native host' }).click();
+  const card = page.getByTestId('postcall-recording');
+  await expect(card).toContainText('Creating summary');
+  // No fake clock: prove event observation recovers, rather than relying on
+  // the separate five-second metadata polling loop for completion.
+  await expect.poll(() => statusRequests.length, { timeout: 4000 }).toBeGreaterThanOrEqual(3);
+  const inputStart = await page.evaluate(() => performance.now());
+  await card.getByRole('button', { name: 'Details', exact: true }).click();
+  await expect(card.getByRole('button', { name: 'Details', exact: true })).toHaveAttribute('aria-expanded', 'true');
+  const inputPaint = await page.evaluate(() => new Promise<number>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve(performance.now())))));
+  const interactionToPaintMs = inputPaint - inputStart;
+  expect(interactionToPaintMs).toBeLessThan(1000);
+  const idleRequests = statusRequests.length;
+  await page.waitForTimeout(600);
+  expect(statusRequests.length).toBe(idleRequests);
+  await page.evaluate(() => {
+    const samples = { start: performance.now(), painted: 0, longTasks: [] as number[] };
+    (window as any).__recordingPerf = samples;
+    const tasks = new PerformanceObserver(list => samples.longTasks.push(...list.getEntries().map(entry => entry.duration)));
+    tasks.observe({ type: 'longtask' });
+    const observer = new MutationObserver(() => {
+      if (document.querySelector('[data-testid="postcall-recording"]')?.textContent?.includes('Recording, transcript and summary ready')) {
+        observer.disconnect();
+        requestAnimationFrame(() => requestAnimationFrame(() => { samples.painted = performance.now(); tasks.disconnect(); }));
+      }
+    });
+    observer.observe(document.body, { subtree: true, childList: true, characterData: true });
+  });
+  const before = await cdp.send('Performance.getMetrics');
+  data.mode = 'ready'; wake();
+  await expect(card).toContainText('Recording, transcript and summary ready');
+  await page.waitForFunction(() => (window as any).__recordingPerf.painted > 0);
+  const sample = await page.evaluate(() => (window as any).__recordingPerf);
+  const after = await cdp.send('Performance.getMetrics');
+  const metric = (data: typeof before, name: string) => data.metrics.find(row => row.name === name)?.value ?? 0;
+  const report = { boundary: 'Real production React hooks and card; isolated HTTP status/authority fixtures; CDP network and rendering metrics. No production latency claim.',
+    cpuThrottle: cpuRate, interactionToPaintMs, eventToPaintMs: sample.painted - sample.start, longTasksMs: sample.longTasks, statusRequests: statusRequests.length,
+    taskDurationMs: (metric(after, 'TaskDuration') - metric(before, 'TaskDuration')) * 1000,
+    layoutCount: metric(after, 'LayoutCount') - metric(before, 'LayoutCount') };
+  const reportPath = test.info().outputPath('recording-cdp-performance.json');
+  await writeFile(reportPath, JSON.stringify(report, null, 2));
+  await test.info().attach('recording-cdp-performance', { path: reportPath, contentType: 'application/json' });
+  expect(report.eventToPaintMs).toBeLessThan(1000);
+  expect(report.longTasksMs.filter((duration: number) => duration > 200)).toEqual([]);
+  expect(errors).toEqual([]);
+  const doneRequests = statusRequests.length;
+  await page.waitForTimeout(500);
+  expect(statusRequests.length).toBe(doneRequests);
+  await cdp.detach();
 });
