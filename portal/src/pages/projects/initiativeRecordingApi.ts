@@ -83,6 +83,14 @@ export function createInitiativeRecordingsClient(options: {
     return body;
   }
   return {
+    async status(id: string, lobby: string, revision: string | null, signal: AbortSignal): Promise<string> {
+      const query = revision ? `?after=${encodeURIComponent(revision)}` : '';
+      const body = await request<{ recordingId?: unknown; lobbyName?: unknown; revision?: unknown }>(`/api/recordings/${encodeURIComponent(id)}/status${query}`, signal);
+      if (body.recordingId !== id || body.lobbyName !== lobby || typeof body.revision !== 'string' || !/^[a-f0-9]{64}$/.test(body.revision)) {
+        throw new Error('The recording status response is invalid.');
+      }
+      return body.revision;
+    },
     async page(cursor: string | null, signal: AbortSignal): Promise<RecordingPage> {
       const query = new URLSearchParams({ limit: '40' });
       if (cursor) query.set('cursor', cursor);

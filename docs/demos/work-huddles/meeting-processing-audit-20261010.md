@@ -310,3 +310,35 @@ chat uses separate gateway authority, so adding a string mapping alone is not a
 valid delivery integration. The current local five-second status observer is
 not evidence of server-pushed recording events. Existing recorded media and
 memory-only session activity must survive any activation.
+
+
+## Event-driven status acceptance
+
+Platform main `989fabf` adds an authenticated, participant-scoped status endpoint
+backed by the existing native pipeline EventBus. Long-poll requests wake on
+matching call/recording events or the current native run. Each response repeats
+token validation and current participant/host access checks. Event payloads and
+artifact bodies never leave that channel; the app rechecks normal metadata and
+artifact endpoints. A 25-second resync handles missed events and the existing
+finite five-second polling remains a fallback.
+
+The post-call indicator and recording detail consume this endpoint. They pause
+while hidden, abort on actor/scope changes and re-read without clearing the
+visible card. A status refusal immediately triggers an authorized metadata
+recheck so revoked content is hidden without waiting for the fallback timer.
+
+Evidence: 12 focused native checks include actual distributed-core EventBus
+publication → authenticated HTTP response, expiry during a wait, participant and
+host revocation, unrelated events, subscription races and cleanup. Pub/sub and
+recording/host authority are explicitly isolated fixtures. The existing native
+recording route suite passed 43 cases. Eighteen browser cases cover existing
+recording/document journeys plus immediate event-driven completion and denial;
+the new cases freeze time and advance only 300 ms, below the five-second poll.
+Fifteen client checks pass. Both source typechecks and builds pass; OpenAPI
+coverage now includes status and the existing call-seat binding endpoint.
+
+The user chose **preserve the current session; continue isolated integration**.
+No primary API, frontend, SFU or stored media was changed. This establishes the
+native event-to-status and browser consumer boundaries separately. It does not
+claim a fresh end-to-end SFU call, automatic transcription/model run, or primary
+runtime activation. Those remain outstanding under the original objective.

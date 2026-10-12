@@ -1,7 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 test.use({ baseURL: 'http://127.0.0.1:5283', viewport: { width: 1280, height: 900 } });
 type Mode = 'awaiting' | 'transcribing' | 'summarizing' | 'partial' | 'ready' | 'unknown';
-interface FixtureState { actor: string; tenant: 'orgiq' | 'assessment'; exact: boolean; mode: Mode; denied?: boolean; holdTranscript?: Promise<void>; holdDetail?: Promise<void>; holdSearch?: Promise<void>; searchDenied?: boolean; searchPartial?: boolean; requests: string[]; media?: boolean }
+interface FixtureState { nativeStatus?: boolean; holdStatus?: Promise<void>; actor: string; tenant: 'orgiq' | 'assessment'; exact: boolean; mode: Mode; denied?: boolean; holdTranscript?: Promise<void>; holdDetail?: Promise<void>; holdSearch?: Promise<void>; searchDenied?: boolean; searchPartial?: boolean; requests: string[]; media?: boolean }
 const session = (state: FixtureState) => ({ sub: state.actor, name: 'Fixture Reviewer', tenant: state.tenant, role: 'member', grants: { [state.tenant]: ['member'] }, switchable: { [state.tenant]: ['member'] }, availableRoles: ['member'], availableTenants: [state.tenant], masquerading: null });
 function row(state: FixtureState, id = 'recording-exact') {
   const transcriptStatus = state.mode === 'awaiting' ? undefined : state.mode === 'transcribing' ? 'processing' : 'ready';
@@ -30,6 +30,12 @@ async function mount(page: Page, state: FixtureState, query = '') {
     if (path === '/api/people/shared') return route.fulfill({ json: { me: { userId: state.actor, displayName: 'Fixture Reviewer' }, people: [] } });
     if (path === '/fixture-platform/api/recordings') return route.fulfill({ json: { items: [row(state, 'recording-neighbour'), ...(state.exact ? [row(state)] : [])], cursor: null } });
     if (path === '/fixture-platform/api/recordings/recording-exact') { if (state.holdDetail) await state.holdDetail; return route.fulfill(state.denied ? { status: 403, json: { error: 'Not a participant' } } : { json: row(state) }); }
+    if (path === '/fixture-platform/api/recordings/recording-exact/status' && state.nativeStatus) {
+      if (url.searchParams.has('after') && state.holdStatus) await state.holdStatus;
+      if (state.denied) return route.fulfill({ status: 403, json: { error: 'Access revoked' } });
+      return route.fulfill({ json: { recordingId: 'recording-exact', lobbyName: row(state).lobbyName,
+        revision: (state.mode === 'ready' ? 'b' : 'a').repeat(64) } });
+    }
     if (path.endsWith('/playback-token') && request.method() === 'POST') return route.fulfill({ json: state.media ? { mediaState: 'playable', composedUrl: 'http://127.0.0.1:5283/e2e/fixtures/assets/recording-preview.mp4' } : { mediaState: 'unavailable' } });
     if (path.endsWith('/transcript')) {
       const actor = state.actor;
@@ -247,4 +253,39 @@ test('Assessment recording search drops an in-flight response when the signed-in
   await page.getByRole('textbox', { name: 'Search recording content' }).fill('private phrase');
   await expect(page.getByTestId('recording-content-search')).toContainText('Recording content could not be searched');
   await expect(page.getByTestId('recording-content-search')).not.toContainText('Saved summary for fixture-reader');
+});
+
+
+test('native status wake updates a post-call card before its five-second fallback poll', async ({ page }) => {
+  await page.clock.install(); await page.clock.pauseAt(new Date());
+  let wake!: () => void;
+  const held = new Promise<void>(resolve => { wake = resolve; });
+  const data = state({ exact: true, mode: 'summarizing', nativeStatus: true, holdStatus: held });
+  const errors = await mount(page, data);
+  await page.getByRole('button', { name: 'Show joined fixture call' }).click();
+  await page.getByRole('button', { name: 'End and clear native host' }).click();
+  const card = page.getByTestId('postcall-recording');
+  await expect(card).toContainText('Creating summary');
+  await expect.poll(() => data.requests.filter(path => path.endsWith('/status')).length).toBeGreaterThan(0);
+  await page.clock.runFor(300);
+  await expect.poll(() => data.requests.filter(path => path.endsWith('/status')).length).toBeGreaterThan(1);
+  data.mode = 'ready'; wake();
+  await expect(card).toContainText('Recording, transcript and summary ready');
+  expect(errors).toEqual([]);
+});
+
+
+test('revoked native status immediately rechecks and hides saved detail without waiting for polling', async ({ page }) => {
+  await page.clock.install(); await page.clock.pauseAt(new Date());
+  let wake!: () => void; const held = new Promise<void>(resolve => { wake = resolve; });
+  const data = state({ exact: true, mode: 'summarizing', nativeStatus: true, holdStatus: held });
+  const errors = await mount(page, data, '?recording=recording-exact');
+  await expect(page.getByTestId('recording-transcript-attachment')).toContainText('Exact saved transcript');
+  await expect.poll(() => data.requests.filter(path => path.endsWith('/status')).length).toBeGreaterThan(0);
+  await page.clock.runFor(300);
+  await expect.poll(() => data.requests.filter(path => path.endsWith('/status')).length).toBeGreaterThan(1);
+  data.denied = true; wake();
+  await expect(page.getByTestId('initiative-recording-detail')).toContainText('not available to your account');
+  await expect(page.getByTestId('recording-transcript-attachment')).toHaveCount(0);
+  expect(errors).toEqual([]);
 });

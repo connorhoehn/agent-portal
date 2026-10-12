@@ -6,6 +6,7 @@ import { absoluteTime, durationLabel } from '../../lib/relativeTime';
 import { recordingPlaybackUrl, timedRecordingReactions, type InitiativeRecordingsClient } from '../../pages/projects/initiativeRecordingApi';
 import { progressDelay, recordingIsProcessing, recordingProcessingLabel } from './recordingState';
 import { useRecordingRead } from './useRecordingRead';
+import { useRecordingStatus } from './useRecordingStatus';
 import { notifyRecordingRead } from './recordingEvents';
 
 export function RecordingDetail({ id, lobby, client, subjectName }: { id: string; lobby: string; client: InitiativeRecordingsClient; subjectName: string }) {
@@ -14,6 +15,7 @@ export function RecordingDetail({ id, lobby, client, subjectName }: { id: string
   const [mediaError, setMediaError] = useState(false);
   const metadata = useRecordingRead(id, signal => client.detail(id, lobby, signal), row => recordingIsProcessing(row) ? 5000 : null);
   const row = metadata.error ? null : metadata.value;
+  useRecordingStatus(!metadata.error && !metadata.timedOut && (!row || recordingIsProcessing(row)) ? id : null, lobby, client, metadata.recheck);
   const statusKey = row && !metadata.error ? JSON.stringify([row.recordingId, row.composeStatus, row.transcriptStatus, row.summaryStatus, row.processingAttemptId, row.summaryRunId]) : null;
   useEffect(() => { if (statusKey) notifyRecordingRead(lobby, 'detail'); }, [statusKey, lobby]);
   // Verify the exact native subject before requesting any asset. Every route

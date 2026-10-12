@@ -143,3 +143,15 @@ test('playback preserves native signed URLs and accepts separate token without r
   assert.equal(recordingPlaybackUrl({ mediaState: 'unavailable', token: 'no-media' }), null);
   assert.equal(recordingPlaybackUrl({ mediaState: 'playable', composedUrl: 'javascript:invalid' }), null);
 });
+
+
+test('status waits use the authenticated native endpoint and reject a different recording scope', async () => {
+  let requested = '';
+  const client = createInitiativeRecordingsClient({ source: { get: async () => ({ token: 'actor', expiresAt: '2099', platformApiUrl: 'https://platform.invalid' }) },
+    fetchImpl: (async (url, init) => { requested = String(url); assert.equal(new Headers(init?.headers).get('Authorization'), 'Bearer actor');
+      return Response.json({ recordingId: 'exact', lobbyName: lobby, revision: 'b'.repeat(64) }); }) as typeof fetch });
+  assert.equal(await client.status('exact', lobby, 'a'.repeat(64), signal()), 'b'.repeat(64));
+  assert.equal(requested, `https://platform.invalid/api/recordings/exact/status?after=${'a'.repeat(64)}`);
+  await assert.rejects(client.status('other', lobby, null, signal()), /invalid/);
+  await assert.rejects(client.status('exact', 'orgiq:initiative:other', null, signal()), /invalid/);
+});

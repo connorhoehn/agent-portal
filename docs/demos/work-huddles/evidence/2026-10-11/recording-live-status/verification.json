@@ -1,0 +1,23 @@
+{
+  "nativeCommit": "989fabf",
+  "nativeFocusedTests": 12,
+  "nativeExistingRecordingRouteTests": 43,
+  "browserTests": 18,
+  "clientTests": 15,
+  "typechecks": "passed",
+  "builds": "passed",
+  "primaryActivation": false,
+  "userConstraint": "Preserve current session; continue isolated integration",
+  "limits": [
+    "Native EventBus is actual; pub/sub transport and authorities are isolated fixtures",
+    "Browser APIs are intercepted; no real SFU capture or model invocation in this acceptance"
+  ],
+  "sourceSha256": {
+    "portal/src/components/recordings/useRecordingStatus.ts": "3de094e2a394559ec1917d88e3ebe9b6e4a214976137ef593eb52641f74c942d",
+    "portal/src/components/recordings/useRecordingRead.ts": "7229f2663cdb81c1fb7a6784a376a0e54c053ca0ff2c748fe45bd835ac40f22d",
+    "portal/src/components/recordings/PostCallRecording.tsx": "6960e096603ecb4644506c1ab268b09e6d48a6c239828b3c88098f1fb56dc3a5",
+    "portal/src/components/recordings/RecordingDetail.tsx": "9ecb060c66ac6265e03be2e42c6ebbfa32e136ae6abd600c490c125cfb1d5f2e",
+    "portal/src/pages/projects/initiativeRecordingApi.ts": "94c76247559edd8238e162b5d0cccaf02e1e9b280ecfba3e063d8ff62ef50aa0",
+    "portal/e2e/recording-pipeline.spec.ts": "d5fa281b90da574386138c1d644c884bf23fe5116e0b498e242d1274dae143bd"
+  }
+}

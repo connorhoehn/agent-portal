@@ -8,6 +8,7 @@ import { callScopeKey } from '../shell/callShellModel';
 import { createInitiativeRecordingsClient, recordingForCall, type InitiativeRecording } from '../../pages/projects/initiativeRecordingApi';
 import { recordingHref, recordingIsProcessing, recordingProcessingLabel, recordingStage } from './recordingState';
 import { useRecordingRead } from './useRecordingRead';
+import { useRecordingStatus } from './useRecordingStatus';
 import { RECORDING_CHANGED_EVENT, notifyRecordingRead } from './recordingEvents';
 import { documentRecordingNavigation, type DocumentRecordingNavigation } from './documentRecordingContext';
 
@@ -55,6 +56,7 @@ export function PostCallRecording({ ended, onDismiss }: { ended: EndedCall; onDi
     exact.current = row; return row;
   }, row => !row || recordingIsProcessing(row) ? 5000 : null);
   const row = observed.error ? null : observed.value;
+  useRecordingStatus(!observed.error && !observed.timedOut && (!row || recordingIsProcessing(row)) ? exact.current?.recordingId ?? null : null, ended.lobby, client, observed.recheck);
   const statusKey = row ? JSON.stringify([row.recordingId, row.composeStatus, row.transcriptStatus, row.summaryStatus]) : null;
   useEffect(() => {
     if (statusKey) notifyRecordingRead(ended.lobby, 'postcall');
